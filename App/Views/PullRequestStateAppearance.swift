@@ -18,10 +18,10 @@ enum PullRequestStateAppearance {
 
     static func color(of state: PullRequestState) -> Color {
         switch state {
-        case .open: .green
+        case .open: Palette.ok
         case .draft: .secondary
         case .merged: .purple
-        case .closed: .red
+        case .closed: Palette.crit
         }
     }
 }

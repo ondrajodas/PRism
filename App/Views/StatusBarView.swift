@@ -88,10 +88,10 @@ struct ServiceHealthDot: View {
     private var tint: Color {
         switch report.state {
         case .unknown: .secondary
-        case .operational: .green
-        case .incident: .yellow
+        case .operational: Palette.ok
+        case .incident: Palette.stale
         // Bez sítě je červená jako selhání — červená říká „nefunguje“, důvod říká věta.
-        case .failing, .offline: .red
+        case .failing, .offline: Palette.crit
         }
     }
 

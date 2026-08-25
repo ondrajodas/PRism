@@ -12,28 +12,34 @@ import SwiftUI
 enum ReviewStateAppearance {
     /// Barva stavu.
     ///
-    /// **Akcent a mint jdou z palety, zbytek škály ze systému** — a ta hranice je vědomá (#309).
-    /// Do #309 tu stálo, že se bere sémantická systémová barva, „protože se přizpůsobí režimu
-    /// a při změně akcentu systému jde `accentColor` s ní“. **Obojí padlo:** `Color(light:dark:)`
-    /// se režimu přizpůsobí taky, takže první polovina nebyla důvod pro systém — a druhá je
-    /// zrovna to, co se u #298 zamítlo. Akcent je jediná barva, kterou si okno drží samo (stojí na
-    /// ní identita aplikace a spektrum reviewerů), takže se se systémem měnit **nemá**. Ono to
-    /// stejně nefungovalo, jak ten komentář sliboval: `.tint(Palette.accent)` z kořene okna na
-    /// `Color.accentColor` nezabírá, takže odznak kreslil systémovou modrou i v okně, které je
-    /// jinak celé fialové.
+    /// **Celá škála jde z palety** (#432) — `ok`, `find`, `crit`, `stale`, akcent a mint. Ze
+    /// systému zůstává jedině `.secondary`, a to proto, že to není barva ze škály, ale „nemám co
+    /// říct“: neutrální šedá, která se řídí kontrastem okolí.
     ///
-    /// `.green`, `.orange`, `.red`, `.yellow` a `.secondary` **zůstávají systémové**. Převod celé
-    /// škály na `Palette.ok`/`find`/`crit`/`stale` je jiná otázka a jinde v repu se zodpovídá
-    /// měřením (#218 kapsle stavu, #277 diff); „mají to i tokeny“ samo o sobě důvod není, protože
-    /// zelenou a červenou bere ze systému ještě pár desítek míst v `App/`. Převést je zrovna tady
-    /// by z tohohle souboru udělalo výjimku, ne pravidlo.
+    /// **Změna proti #309**, kde tady stálo, že z palety jdou jen akcent a mint a že převod
+    /// zbytku „je jiná otázka, která se zodpovídá měřením“. To měření je hotové a otočilo to:
+    /// systémové `.green`/`.red`/`.orange` jsou navržené jako **výplň** tlačítka s bílým textem,
+    /// ne jako barva textu na tlumeném washi, takže na kapsli stavu vyšly ve světlém režimu na
+    /// **1,63 až 2,70** (a `3 nálezy` na systémové oranžové na **1,85**, tedy nejhůř z celé škály)
+    /// — pod hranicí čitelnosti. Tokeny jsou na tohle použití ztmavené a dají **3,05 až 3,77**;
+    /// čísla i prahy jsou v `PillTypesettingTests`, včetně toho, proč je to měření dolní odhad.
+    /// Je to tatáž třída jako u `zastaralé` (#383) a `dismissed` (#309), jen zbytek výčtu.
+    ///
+    /// Argument z #309, který padl s ní: „zelenou a červenou bere ze systému ještě pár desítek
+    /// míst v `App/`, takže převod zrovna tady by z tohohle souboru udělal výjimku“. #432 převedlo
+    /// **všechna ta místa naráz**, takže se z výjimky stalo pravidlo — hlídá ho `StatusScaleTests`.
+    ///
+    /// Co z #309 **platí dál**: akcent je jediná barva, kterou si okno drží samo (stojí na ní
+    /// identita aplikace a spektrum reviewerů), takže se se systémem měnit **nemá** —
+    /// a `.tint(Palette.accent)` z kořene okna na `Color.accentColor` stejně nezabírá, takže by
+    /// odznak kreslil systémovou modrou v okně, které je jinak celé fialové.
     static func color(of state: ReviewState, blocking: Int = 0) -> Color {
         switch state {
         case .notStarted, .queued, .cloning: .secondary
         // Akcent, ne mint: běžící review je to, co aplikace **dělá**, a návrh to kreslí jako
         // `.pill.run`, tedy v akcentu. Mint je konstatování — viz `Palette.mint`.
         case .running: Palette.accent
-        case .clean: .green
+        case .clean: Palette.ok
         // Vlastní barva, ne zelená ani oranžová: vyřízeno to je, ale ne tím, že by bylo
         // čisto — a od nálezů, které čekají, se to musí poznat i bez čtení textu.
         //
@@ -45,19 +51,19 @@ enum ReviewStateAppearance {
         // Blokující nález je červený jako selhání schválně (#172): obojí znamená „tímhle se
         // musíš zabývat teď“, kdežto oranžová znamená „něco se našlo“. Do #172 se tyhle dvě
         // situace v řádku nedaly rozeznat vůbec.
-        case .completed: blocking > 0 ? .red : .orange
+        case .completed: blocking > 0 ? Palette.crit : Palette.find
         // Nedoběhlé běhy zůstávají červené **bez ohledu na nálezy**. Oranžová znamená „něco
         // se našlo“, kdežto tady je hlavní zpráva, že běh neskončil — `timeout · 0` oranžově
         // by vypadalo jako výsledek, a přitom je to selhání.
-        case .checkoutFailed, .failed, .timedOut, .interrupted: .red
+        case .checkoutFailed, .failed, .timedOut, .interrupted: Palette.crit
         // **Okrová, ne červená ani zelená** (#383). Neprůkazné review neselhalo — session
         // doběhla —, takže červená by o něm lhala; a zelená by lhala opačným směrem. Je to
         // tatáž třída jako `stale`: výsledek, který se nedá použít, jen z jiného důvodu.
         // Sdílený odstín je schválně, protože sdílené je i to, co se s tím dělá (pustit znovu);
         // rozeznat se to má **textem**, který u obou stojí vedle puntíku.
         //
-        // **Z palety, ne systémová `.yellow`** — a je to výjimka z pravidla o pár řádků výš
-        // („zbytek škály ze systému“), která se opírá o dvě věci, ne o vkus. **Návrh** má
+        // **Z palety, ne systémová `.yellow`** — do #432 to byla výjimka z pravidla „zbytek škály
+        // ze systému“, dneska je to to pravidlo. Opírá se o dvě věci, ne o vkus. **Návrh** má
         // `.pill.stale { color: var(--stale) }`, tedy `#9A6700`, takže systémová žlutá je odchylka
         // od schváleného mockupu — srovnat to s ním bránu nepotřebuje (#283). A **měření**:
         // odznak je text na vlastní kapsli (`color.opacity(0.15)`), a systémová `#FFCC00` na ní má
@@ -80,9 +86,9 @@ enum ReviewStateAppearance {
     /// jedné věci (odznak a díl proužku), takže se nesmí lišit ani o odstín.
     static func color(of outcome: ReviewerShare.Outcome) -> Color {
         switch outcome {
-        case .blocking: .red
-        case .findings: .orange
-        case .clean: .green
+        case .blocking: Palette.crit
+        case .findings: Palette.find
+        case .clean: Palette.ok
         case .dismissed: Palette.mint
         case .inconclusive: .secondary
         }

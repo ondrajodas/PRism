@@ -46,7 +46,7 @@ struct FindingNavigationView: View {
     private var dot: some View {
         Image(systemName: navigation.isComplete ? "checkmark.circle.fill" : "circle.fill")
             .font(.system(size: 7))
-            .foregroundStyle(navigation.isComplete ? Color.green : Color.red)
+            .foregroundStyle(navigation.isComplete ? Palette.ok : Palette.crit)
     }
 
     /// `1 z 3 nálezů` — pozice tučně, jak to má návrh (`.lbl b`).
@@ -89,13 +89,13 @@ struct FindingNavigationView: View {
         Button { onlyBlocking.toggle() } label: {
             Text(verbatim: "jen blokující")
                 .font(.system(size: 10.5, weight: onlyBlocking ? .semibold : .regular))
-                .foregroundStyle(onlyBlocking ? Color.red : Palette.ink2)
+                .foregroundStyle(onlyBlocking ? Palette.crit : Palette.ink2)
                 .lineLimit(1)
                 .fixedSize()
                 .padding(.horizontal, 7)
                 .padding(.vertical, 1)
                 .background(
-                    onlyBlocking ? AnyShapeStyle(Color.red.opacity(0.15)) : AnyShapeStyle(Palette.raised),
+                    onlyBlocking ? AnyShapeStyle(Palette.crit.opacity(0.15)) : AnyShapeStyle(Palette.raised),
                     in: .capsule
                 )
                 .contentShape(.capsule)

@@ -49,6 +49,11 @@ by se zhoršila čitelnost obarveného kódu. **Od #298 z ní jde i „klikni se
 té doby dvě různé barvy — fialové tlačítko v bublině u kódu (#283) a systémově modrý odkaz v tabulce
 nálezů, protože `.buttonStyle(.link)` si akcent okna nebere. Teď je barva jedna a **tvar zůstává
 různý**, jak ho má návrh: v bublině plocha, v tabulce holý text, který se opakuje na každém řádku.
+**Od #432 z palety jde celá sémantická škála** (`ok`, `find`, `crit`, `stale`): systémová zelená
+a červená je navržená jako výplň ovládacího prvku s bílým textem, kdežto tady je to text na tlumeném
+podkladu — čtyři kapsle kvůli tomu měly ve světlém režimu kontrast 1,63 až 2,70 a systémová oranžová
+1,85; po převodu je nejnižší hodnota 3,05. Ze systému zůstává `.secondary` („nemám co říct“),
+purpurová u mergnutého PR a modrá u přejmenovaného souboru.
 **Od #309 má akcent dvojici**: `mint`. Akcent je to, co se nabízí udělat nebo co zrovna běží, mint
 to, co se jen konstatuje — odznak shody `2×`, `✓ v mém review`, počet rozdělaných review ve stavovém
 řádku, odmítnuté review. Do té doby měly stavy barvu akcí, a osm z nich dokonce systémovou modrou:

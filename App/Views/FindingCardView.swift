@@ -104,7 +104,7 @@ struct FindingCardView: View {
         Label("blokuje", systemImage: "exclamationmark.triangle.fill")
             .labelStyle(.titleAndIcon)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(.red)
+            .foregroundStyle(Palette.crit)
             .fixedSize()
             .layoutPriority(2)
             .help("Blokující nález — kvůli němu se PR nemerguje")
@@ -170,7 +170,7 @@ struct FindingCardView: View {
     /// každý něco jiného.
     private var accent: Color {
         if row.dismissal != nil { return .secondary }
-        return row.isBlocking ? .red : .orange
+        return row.isBlocking ? Palette.crit : Palette.find
     }
 }
 

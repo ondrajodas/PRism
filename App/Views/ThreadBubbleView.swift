@@ -177,11 +177,13 @@ struct ThreadBubbleView: View {
     /// z návrhu, ale bez mono řezu a s vlastním odsazením. Odznak proto vyrostl na obě strany —
     /// o 2 body na výšku (14 → 16) a o 3 až 15 na šířku.
     ///
-    /// **Barvy se nemění.** `vyřešeno` má systémovou zelenou a `zastaralé` `Palette.line` z důvodu
-    /// o dva řádky níž; #404 je o sazbě.
+    /// **Barva je od #432 z palety** (`Palette.ok`), `zastaralé` má `Palette.line` z důvodu o dva
+    /// řádky níž. #404 byl o sazbě a barvy nechal být — systémová `.green` na tomhle washi měla ve
+    /// světlém režimu kontrast **1,63**, tedy nejnižší z devíti měřených kapslí; čísla jsou
+    /// v `PillTypesettingTests`.
     private var resolvedBadge: some View {
         Text("vyřešeno")
-            .designPill(tint: .green, background: .green.opacity(0.18))
+            .designPill(tint: Palette.ok, background: Palette.ok.opacity(0.18))
     }
 
     /// Podklad je `line`, ne `raised`: odznak leží v hlavičce, která na `raised` už je,

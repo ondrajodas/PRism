@@ -151,7 +151,7 @@ struct StaleHeadView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(Palette.stale)
                     .font(.caption)
                 Text("Nálezy jsou proti")
                 sha(findingsHead)

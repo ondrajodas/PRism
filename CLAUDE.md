@@ -818,6 +818,21 @@ Zvlášť stojí za přečtení, než sáhneš na:
   A **kontrast paletového tokenu netvrdí nic o kresbě**: `DiffPaletteTests` ho měřily celou dobu
   a procházely, protože měřily `Palette.ink`, kdežto do textu se nenasazoval. K měření barvy proto
   patří i tvrzení, že se ta barva **do textu dostane** (`DiffBlockCompositionTests`).
+- **Sémantická škála se kreslí z palety, nikdy ze systému** (#432). `ok`, `find`, `crit`, `stale` —
+  systémová `.green`/`.red`/`.orange`/`.yellow` je navržená jako **výplň** ovládacího prvku s bílým
+  textem, kdežto tady je barva ze škály skoro vždycky **text nebo glyf na tlumeném washi**. Stálo to
+  čtyři kapsle s kontrastem **1,63 až 2,70** ve světlém režimu (po převodu 3,05 až 3,77) a u tří
+  z nich to bylo tiché od #172. Grep, který **musí vyjít prázdný** (hlídá ho `StatusScaleTests`,
+  filtr zahazuje komentáře, ve kterých se ta jména vysvětlují):
+
+  ```bash
+  grep -rnE '\.(green|red|yellow|orange)([^A-Za-z0-9_]|$)' App | grep -vE ':[0-9]+: *///?'
+  ```
+
+  Ze systému **zůstávají tři věci**: `.secondary` (není barva ze škály, ale „nemám co říct“),
+  `.purple` u `merged` (3,42, a purpurovou má paleta jen jako vyhrazený akcent) a `.blue`
+  u `renamed` — ta je na **2,85**, tedy zapsaná mezera, ne záměr; podrobnosti u obojího jsou
+  v `StatusScaleTests`. **Kontrast se měří z nakreslené bitmapy, ne z tokenu** — viz bod výš.
 - **Fokus do textového pole se nastavuje `.task` s jedním `Task.yield()`** (#184, potřetí #392).
   Přiřazení ve **stejném průchodu**, ve kterém pole vzniká, SwiftUI zahodí: `onAppear`, `task` bez
   yieldu i `defaultFocus($x, true)` daly `AXFocused = false` **navždycky**, ne později (změřeno

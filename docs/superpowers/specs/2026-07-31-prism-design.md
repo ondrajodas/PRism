@@ -3177,3 +3177,27 @@ místě zákres a aplikace liší schválně — kdyby se měl srovnat, musel by
 v zákresu u **obou** nabídek už od sekce 24 a v aplikaci není ani u jedné. Je to mezera po #392, ne po
 #413 — spravit ji má jedno issue nad oběma nabídkami, protože půlka opravy tady by nechala labely
 s nápovědou a reviewery bez ní.
+
+### Záznam rozhodnutí — sémantická škála z palety (#432)
+
+Dotažení toho, co #404 vědomě odložilo, a **otočení rozhodnutí z #309** („zbytek
+`ReviewStateAppearance` zůstává systémový“, řádek v záznamu #309 výš). Otočilo to měření, které
+tehdy chybělo: čtyři kapsle na systémové zelené a červené měly ve světlém režimu kontrast
+**1,63 až 2,70**, a k nim se při sweepu našla systémová oranžová na **1,85**, tedy nejhorší z celé
+škály. Je to zase jen srovnání aplikace s tím, co v mockupu **už nakreslené je** (`.pill.ok`,
+`.pill.crit`, `.pill.find`, `.pill.stale`), takže bez schvalovací brány.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Převedla se celá škála v `App/`, ne ty čtyři kapsle ze zadání** | Opravit jen `vyřešeno`, `schválil`, `vyžádal změny` a `3 nálezy · 1 blokuje`, jak je issue vyjmenovalo | Zadání říká „oprav třídu, ne výskyt“ a ta třída je celý `App/`: **45 míst ve 25 souborech**. Kdyby se opravily jen ty čtyři, zůstala by v jednom `switch`i dvě škály vedle sebe (`blocking > 0 ? Palette.crit : .orange`) — a tentýž `.orange` je na tom **hůř** než všechny čtyři vyjmenované. Argument z #309 („převod zrovna tady by z tohohle souboru udělal výjimku“) tím padl obráceně, než jak byl myšlený: výjimkou se stal systém |
+| **Oranžová je součást převodu, i když v zadání není** | Držet se doslova zelené, červené a okrové z issue | Změřeno: `3 nálezy` na systémové oranžové má **1,85**, tedy pod všemi čtyřmi kapslemi z issue. Nechat to tam znamená vydat opravu čitelnosti, po které je nejméně čitelná kapsle v okně ta, o které se nemluvilo — a v témže `switch`i o řádek výš |
+| **`.secondary` zůstává systémová** | Převést i ji, ať je „všechno z palety“ doslova | Není to barva ze škály, ale **„nemám co říct“** — poloprůhledná neutrála, která se skládá s podkladem a řídí se kontrastem okolí. Token by z ní udělal tvrzení o odstínu tam, kde je smysl v jeho nepřítomnosti |
+| **`.purple` u `merged` zůstává** | Dát mu `Palette.accent`, jedinou purpurovou v paletě | Měření mu dává **3,42 / 5,71**, tedy nad hranicí — není ve třídě, kterou #432 opravuje. A akcent je vyhrazený tomu, **co aplikace dělá** (`.pill.run`, spektrum reviewerů), takže by mergnutá událost na ose dostala barvu běžícího review. Nová purpurová v paletě je změna mockupu, ne srovnání s ním |
+| **`.blue` zůstává, ale je zapsaná jako mezera** | Převést ji na `Palette.alertNote`; nebo ji zamlčet | Naměřeno **2,85 / 6,57**, tedy ve světlém režimu pod hranicí — je to reálná vada, jen mimo třídu #432 (dvě ikony, ne kapsle). `alertNote` má v paletě napsané, že „modrou okno jinde nemá, takže se nemá s čím splést“; půjčit si ji sem znamená to pravidlo zrušit, a to je rozhodnutí o mockupu, ne oprava kontrastu. Patří to do vlastního issue, které projde bránou na vzhled — a do té doby je to číslo v `StatusScaleTests`, ne mlčení |
+| **Pravidlo hlídá guard nad zdrojáky** (`StatusScaleTests`) | Nechat to na prazích v `PillTypesettingTests`, které měří kresbu | Prahy měří **devět kapslí**, ne 45 míst; nová systémová barva v kartě nebo v prázdném stavu se do nich nedostane. Kolikrát je něco zapsané, se za běhu zjistit nedá — je to tatáž konstrukce jako `SingleWayOutTests` a `GlobalAppearanceTests`, ze stejného důvodu. Prahy zůstávají vedle něj: guard o čitelnosti neříká nic |
+| **V tmavém režimu se rezerva vědomě obětovala** | Nechat tmavou větev systémovou a přebarvit jen světlou | Dvě různé škály podle režimu jsou dvě místa, kde se to dá rozejít — a paleta je „jeden zdroj“ (#180). Cena je změřená a je malá: nejvíc ztratí `čisté` (6,26 → 5,55), nejnižší tmavá hodnota po převodu je 3,90 (`vyžádal změny`), tedy pořád s rezervou nad 3 |
+| **Před/po se doložilo renderem, ne jen čísly** | Pauza na proklikání aplikace | Změna je **odstín na pěti obrazovkách**, takže se dá položit vedle sebe: tentýž `PillRenderProbe` před převodem a po něm dá dva snímky v obou režimech, ze kterých je vidět i to, že se nezměnilo nic dalšího. Čísla z bitmapy k tomu říkají, o kolik — a obojí unese popis PR, takže se u toho nemusí sedět u obrazovky |
+
+**Co se nezměnilo:** krytí washů (0,15 u nálezů a ve frontě, 0,18 v konverzaci), popisky, sazba ani
+geometrie — mění se jedině hodnota barvy. `Palette.mint` a `Palette.stale` zůstávají tam, kam je
+daly #309 a #383; tohle je zbytek téhož výčtu, ne jeho revize.

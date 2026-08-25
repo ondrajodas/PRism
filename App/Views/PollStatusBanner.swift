@@ -49,14 +49,14 @@ struct PollStatusBanner: View {
                 symbol: "hourglass",
                 headline: "GitHub omezuje dotazy — zkusím to v \(time(retryAt))",
                 detail: freshness,
-                tint: .orange
+                tint: Palette.find
             )
         case .failing(let since, let reason):
             Content(
                 symbol: "exclamationmark.triangle",
                 headline: "Neaktuální — obnovení se nedaří od \(time(since))",
                 detail: reason.userDescription,
-                tint: .red
+                tint: Palette.crit
             )
         }
     }

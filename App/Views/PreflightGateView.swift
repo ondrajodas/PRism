@@ -66,7 +66,7 @@ private struct ToolStatusRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
             Image(systemName: isSatisfied ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(isSatisfied ? Color.green : Color.red)
+                .foregroundStyle(isSatisfied ? Palette.ok : Palette.crit)
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: 5) {
@@ -160,7 +160,7 @@ private struct CommandToCopy: View {
                 .textSelection(.enabled)
             Button(action: copy) {
                 Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                    .foregroundStyle(didCopy ? Color.green : .secondary)
+                    .foregroundStyle(didCopy ? Palette.ok : .secondary)
             }
             .buttonStyle(.plain)
             .help("Kopírovat příkaz")

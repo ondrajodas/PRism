@@ -78,7 +78,7 @@ struct ConversationView: View {
                     Image(systemName: "exclamationmark.triangle")
                 }
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Palette.find)
                 .lineLimit(1)
             }
         }

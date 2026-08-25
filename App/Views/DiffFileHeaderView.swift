@@ -73,7 +73,7 @@ struct DiffFileHeaderView: View {
     @ViewBuilder private var findingsPill: some View {
         let counts = Policy.fileFindings(in: findings, categories: blockingCategories)
         if let text = Self.badgeLabel(blocking: counts.blocking, total: counts.total) {
-            pill(text.label, color: text.isBlocking ? .red : Palette.ink2)
+            pill(text.label, color: text.isBlocking ? Palette.crit : Palette.ink2)
         }
     }
 

@@ -100,7 +100,7 @@ struct AppNoticesView: View {
     private func notice(_ text: String, icon: String) -> some View {
         Label(text, systemImage: icon)
             .font(.caption)
-            .foregroundStyle(.orange)
+            .foregroundStyle(Palette.find)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

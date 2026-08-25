@@ -326,7 +326,7 @@ struct DashboardView: View {
                 .font(.system(size: 30, weight: .semibold))
                 .tracking(-0.9)
                 .monospacedDigit()
-                .foregroundStyle(isAlarm ? Color.red : Palette.ink)
+                .foregroundStyle(isAlarm ? Palette.crit : Palette.ink)
             foot()
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.ink2)
@@ -384,7 +384,7 @@ struct DashboardView: View {
     /// ten zápis přidá jinde. Pravidlo „`Dneska stálo` nemá hover stav“ patří k obrysu, ne k zapisovateli.
     private func border(_ card: DashboardCard, isAlarm: Bool, isClickable: Bool) -> Color {
         if isClickable, hoveredCard == card { return Palette.accent }
-        return isAlarm ? Color.red.mix(with: Palette.line, by: 0.6) : Palette.line
+        return isAlarm ? Palette.crit.mix(with: Palette.line, by: 0.6) : Palette.line
     }
 
     /// Kolik místa si šipka bere z popisku karty: `12` bodů glyfu a `13` odsazení z návrhu, tedy

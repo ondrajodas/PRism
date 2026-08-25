@@ -4244,7 +4244,8 @@ systémovými 11 s odsazením 2, tady s `.caption2` s odsazením 1. V pruhu se z
 je kapsle to nejvyšší, takže výška pruhu je z ní — hlídá se stropem nad dvěma bublinami nad týmiž
 daty, s kapslí `blokuje` a bez ní.
 
-**Kontrast se měřil z bitmapy, ne z tokenů** (#393, #366), a **našel mezeru, kterou #404 neopravuje**:
+**Kontrast se měřil z bitmapy, ne z tokenů** (#393, #366), a **našel mezeru, kterou #404
+neopravuje** (vyřídilo ji #432):
 čtyři kapsle berou systémovou zelenou a červenou a ve světlém režimu jsou pod třemi — `vyřešeno`
 **1,63**, `schválil` **1,70**, `vyžádal změny` 2,52, `3 nálezy · 1 blokuje` 2,70. Škálu drží
 `ReviewStateAppearance`, jehož vlastní zdůvodnění z #309 říká, že převod zbytku na tokeny je jiná
@@ -4337,3 +4338,55 @@ do nabídky (`remember(_:in:)`) padnou tři tvrzení včetně toho o dorovnání
 devětatřicetiznakovém jménu. **Neověřené testy:** že `⌥↵` v popoveru doopravdy dojde do pole
 (testovací host nedostane aktivaci, změřeno u #392) a chování `POST /labels` proti živému API —
 brána je ve slotové konfiguraci vypnutá schválně.
+
+### #432 — sémantická škála se kreslí z palety, ne ze systému
+
+Dotažení mezery, kterou našlo měření u #404: čtyři kapsle brala systémová zelená a červená a ve
+světlém režimu měly kontrast **pod 3** — `vyřešeno` **1,63**, `schválil` **1,70**, `vyžádal změny`
+2,52, `3 nálezy · 1 blokuje` 2,70. Návrh má na těch místech `--ok` a `--crit`, takže je to
+srovnání aplikace s tím, co v mockupu **už nakreslené je** (jako #283, #348, #366 a #404), a bez
+schvalovací brány.
+
+**Opravila se třída, ne ty čtyři výskyty**: `45 míst ve 25 souborech` `App/` bralo zelenou,
+červenou, oranžovou nebo žlutou ze systému. Nejhorší z nich přitom v zadání ani nebyla —
+`3 nálezy` na systémové oranžové má **1,85**, tedy méně než všechny čtyři vyjmenované, a sedí
+v témže `switch`i o řádek výš (`blocking > 0 ? crit : find`). Nechat ji tam by znamenalo vydat
+opravu čitelnosti, po které je nejméně čitelná kapsle v okně ta, o které se nemluvilo.
+
+**Otočilo to rozhodnutí z #309** („zbytek `ReviewStateAppearance` zůstává systémový, protože
+zelenou s červenou bere ze systému ještě padesát míst — převést zrovna tenhle enum by z něj udělalo
+výjimku“). Ten argument platí, jen se otočil: převedlo se všech 45 míst, takže výjimkou se stal
+systém. Naměřené hodnoty ve světlém režimu, kresba z bitmapy: 1,63 → **3,05**, 1,70 → **3,19**,
+2,52 → **3,49**, 2,70 → **3,77**, 1,85 → **3,36**, 1,80 → **3,44** (`čisté`). V tmavém režimu je to
+u tří kapslí výměna **dolů** (nejvíc `čisté`, 6,26 → 5,55) a je zapsaná, ne zamlčená: tmavá větev
+palety je tmavší než systémová škála, takže se platí rezervou tam, kde jí bylo dost. Nejnižší
+hodnota po převodu je v tmavém režimu 3,90 (`vyžádal změny`).
+
+**Ze systému zůstávají tři věci a u každé je důvod v `StatusScaleTests`.** `.secondary` není barva
+ze škály, ale „nemám co říct“. `.purple` u `merged` má **3,42**, tedy nad hranicí — a purpurovou má
+paleta jen jako vyhrazený akcent, kterým se kreslí běžící review. `.blue` u `renamed` ve stromu
+a `moved` u přenosu draftu je na **2,85**, tedy pod hranicí: je to reálná vada, ale mimo třídu #432
+(dvě ikony, ne kapsle) a mockup pro ni token nemá — `alertNote` má v paletě napsané, že modrou okno
+jinde nemá. Patří to do vlastního issue, které projde bránou na vzhled; do té doby je to **číslo
+v testu, ne mlčení**.
+
+**Hlídají to dvě různá tvrzení, protože ani jedno nestačí samo.** `StatusScaleTests` čte zdrojáky
+a tvrdí, že v `App/` není `.green`, `.red`, `.yellow` ani `.orange` (kolikrát je něco zapsané, se za
+běhu zjistit nedá) — a k tomu na hodnotách, že škála vrací doopravdy token. Prahy
+v `PillTypesettingTests` měří kresbu z bitmapy; guard nad zdrojáky o čitelnosti neříká nic a prahy
+zas nevidí kartu ani prázdný stav. Hledání se u guardu muselo naučit dvě věci: **nepísmeno za
+jehlou** (jinak je `color.redComponent` porušení pravidla) a **číslo řádku z původního souboru**
+(první podoba hlásila řádek v textu bez komentářů, tedy o 68 řádků mimo).
+
+**Vidět je to z renderu, ne z pauzy**: tentýž `PillRenderProbe` před převodem a po něm dá dva
+snímky v obou režimech, ze kterých je rozdíl vidět bez čtení čísel — a hlavně to, že se nezměnilo
+nic dalšího (sazba, krytí washů, popisky, geometrie). Krytí zůstává 0,15 u nálezů a ve frontě, 0,18
+v konverzaci.
+
+Testů **3974**, z toho **4 nová tvrzení** (tři v `StatusScaleTests`, jedno u proužku reviewerů)
+a dva nové vzorky kontrastu (`3 nálezy`, `čisté`), které #404 neměřilo. Vloženými regresemi ověřené
+obě strany: s vrácenou `.green` v `ThreadBubbleView` spadne guard nad zdrojáky, s vrácenou
+systémovou barvou ve vzorku spadne práh (1,63 proti 3,0). **Neověřené:** nic — `SlotCleanupTests`
+spadly v jednom plném běhu na tom, že si běžící hlavní instance přepsala `com.ondrajodas.prism.plist`
+uprostřed měření (3 bajty), samostatně i v dalším plném běhu jsou zelené; je to třída, kterou řeší
+#411, ne tahle změna.

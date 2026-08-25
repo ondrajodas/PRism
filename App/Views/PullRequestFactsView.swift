@@ -26,9 +26,12 @@ struct PullRequestFactsView: View {
                                     : .system(size: 13, weight: .semibold)
                             )
                             .monospacedDigit()
-                            // Zastaralá sha je žlutá jako stav `zastaralé` v řádku fronty —
-                            // stejná škála v celém okně.
-                            .foregroundStyle(tile.isStale ? Color.yellow : Palette.ink)
+                            // Zastaralá sha je okrová jako stav `zastaralé` v řádku fronty —
+                            // stejná škála v celém okně, a od #432 doslova tentýž token
+                            // (`Palette.stale`). Do #432 tu stála systémová `.yellow`, takže
+                            // ta věta o „stejné škále“ přestala platit ve chvíli, kdy #383
+                            // převedlo řádek fronty na token — a nikdo si toho nevšiml.
+                            .foregroundStyle(tile.isStale ? Palette.stale : Palette.ink)
                         if let note = tile.note {
                             Text(verbatim: "· \(note)")
                                 .font(.system(size: 11))

@@ -80,10 +80,10 @@ struct DraftPanel: View {
             Image(systemName: "exclamationmark.triangle.fill")
         }
         .font(.caption)
-        .foregroundStyle(.orange)
+        .foregroundStyle(Palette.find)
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.1), in: .rect(cornerRadius: 6))
+        .background(Palette.find.opacity(0.1), in: .rect(cornerRadius: 6))
     }
 
     /// Věta se mění podle toho, jestli je proti čemu kontrolovat: bez diffu nebo bez známé hlavy
@@ -428,7 +428,7 @@ struct DraftPanel: View {
                     }
                     Text(verbatim: preview(of: comment))
                         .font(.caption)
-                        .foregroundStyle(comment.body.isEmpty ? .orange : .secondary)
+                        .foregroundStyle(comment.body.isEmpty ? Palette.find : .secondary)
                         .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

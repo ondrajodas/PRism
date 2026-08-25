@@ -90,9 +90,9 @@ struct EmptyStateView: View {
 
     private var color: Color {
         switch nature {
-        case .calm: .green
+        case .calm: Palette.ok
         case .waiting: Palette.accent
-        case .failure: .red
+        case .failure: Palette.crit
         }
     }
 }

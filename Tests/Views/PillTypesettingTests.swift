@@ -144,26 +144,35 @@ struct PillTypesettingTests {
     /// v profilu displeje, takže se hodnoty z palety a z kresby nerovnají (u #366 vyšel `crit`
     /// v bitmapě 0,799/0,292/0,272 proti 0,812/0,133/0,180).
     ///
-    /// **Práh je u každé kapsle vlastní a je to naměřená hodnota**, ne kulaté číslo: čtyři z těch
-    /// kapslí berou **systémovou** škálu (`.green`, `.red` z `badgeColor(of:)` a z
-    /// `ReviewStateAppearance`) a ve světlém režimu jsou pod třemi — `vyřešeno` má **1,63**.
-    /// #404 na tom nic nemění (mění sazbu), a převod celé škály na tokeny je podle
-    /// `ReviewStateAppearance` **jiná otázka, která se zodpovídá měřením** — takže tady se to
-    /// změří a zapíše, ať se to dá vyřídit zvlášť, a hlídá se, že se to **nezhorší**.
+    /// **Práh je u každé kapsle vlastní a je to naměřená hodnota**, ne kulaté číslo.
     ///
-    /// Naměřeno (světlý / tmavý), kresba v profilu displeje převedená do sRGB:
+    /// **Od #432 bere celá škála tokeny.** Do té doby čtyři z těch kapslí kreslily **systémovou**
+    /// škálu (`.green`, `.red` z `badgeColor(of:)` a z `ReviewStateAppearance`) a ve světlém režimu
+    /// byly pod třemi — `vyřešeno` mělo **1,63**. #404 na tom nic neměnilo (měnilo sazbu) a nechalo
+    /// to tady zapsané k vyřízení zvlášť; #432 ten převod udělalo a tahle sada teď hlídá výsledek.
     ///
-    /// | kapsle | odstín | světlý | tmavý |
+    /// Naměřeno (světlý / tmavý), kresba v profilu displeje převedená do sRGB. Sloupec **před** je
+    /// hodnota se systémovou barvou, **po** s tokenem — u kapslí, které se u #432 neměnily, je to
+    /// jedno číslo:
+    ///
+    /// | kapsle | odstín | světlý před → po | tmavý před → po |
     /// |---|---|---|---|
-    /// | fronta, `3 nálezy · 1 blokuje` | systémová `.red` | 2,70 | 4,48 |
+    /// | fronta, `3 nálezy · 1 blokuje` | `.red` → `Palette.crit` | **2,70 → 3,77** | 4,48 → 4,55 |
+    /// | fronta, `3 nálezy` | `.orange` → `Palette.find` | **1,85 → 3,36** | 5,94 → 5,75 |
+    /// | fronta, `čisté` | `.green` → `Palette.ok` | **1,80 → 3,44** | 6,26 → 5,55 |
     /// | bublina, `blokuje` | `Palette.crit` | 3,65 | 4,16 |
     /// | tabulka, `irelevantní` | `Palette.ink2` na `raised` | 4,08 | 6,47 |
-    /// | vlákno, `vyřešeno` | systémová `.green` | **1,63** | 4,73 |
+    /// | vlákno, `vyřešeno` | `.green` → `Palette.ok` | **1,63 → 3,05** | 4,73 → 4,19 |
     /// | vlákno, `zastaralé` | `Palette.ink2` na `line` | 3,66 | 5,26 |
     /// | vlákno, `+12` | `Palette.stale` | 2,91 | 4,56 |
     /// | konverzace, `já` | `Palette.ink` na akcentu | 12,27 | 8,40 |
-    /// | konverzace, `schválil` | systémová `.green` | **1,70** | 5,26 |
-    /// | konverzace, `vyžádal změny` | systémová `.red` | 2,52 | 3,84 |
+    /// | konverzace, `schválil` | `.green` → `Palette.ok` | **1,70 → 3,19** | 5,26 → 4,67 |
+    /// | konverzace, `vyžádal změny` | `.red` → `Palette.crit` | **2,52 → 3,49** | 3,84 → 3,90 |
+    ///
+    /// **V tmavém režimu je to u tří z nich výměna dolů** (6,26 → 5,55 u `čisté` je největší), a je
+    /// to vědomé: tmavá větev palety je tmavší než systémová škála, takže se platí rezervou tam,
+    /// kde jí bylo dost, za čitelnost tam, kde nebyla vůbec. Nejnižší hodnota po převodu je
+    /// **3,05** proti **1,63** před ním.
     ///
     /// Prahy leží kus pod těmi hodnotami, ať sada spadne na zhoršení, ne na zaokrouhlení; tatáž
     /// kázeň jako v `MintTokenTests`.
@@ -328,10 +337,28 @@ struct PillTypesettingTests {
         Sample(
             name: "fronta / blokující stav",
             label: "3 nálezy · 1 blokuje",
-            tint: .red,
-            wash: Color.red.opacity(0.15),
+            tint: Palette.crit,
+            wash: Palette.crit.opacity(0.15),
             plate: Palette.surface,
-            floor: 2.5
+            floor: 3.7
+        ),
+        // Nálezy bez blokujícího a čistý běh **přibyly u #432**: oranžová byla z celé škály na tom
+        // nejhůř (1,85) a v tabulce chyběla, protože #404 měřilo jen ty kapsle, které se sázely.
+        Sample(
+            name: "fronta / nálezy",
+            label: "3 nálezy",
+            tint: Palette.find,
+            wash: Palette.find.opacity(0.15),
+            plate: Palette.surface,
+            floor: 3.3
+        ),
+        Sample(
+            name: "fronta / čisté",
+            label: "čisté",
+            tint: Palette.ok,
+            wash: Palette.ok.opacity(0.15),
+            plate: Palette.surface,
+            floor: 3.4
         ),
         Sample(
             name: "bublina / blokuje",
@@ -352,10 +379,10 @@ struct PillTypesettingTests {
         Sample(
             name: "vlákno / vyřešeno",
             label: "vyřešeno",
-            tint: .green,
-            wash: Color.green.opacity(0.18),
+            tint: Palette.ok,
+            wash: Palette.ok.opacity(0.18),
             plate: Palette.raised,
-            floor: 1.5
+            floor: 3.0
         ),
         Sample(
             name: "vlákno / zastaralé",
@@ -381,25 +408,24 @@ struct PillTypesettingTests {
             plate: Palette.raised,
             floor: 8.0
         ),
-        // Verdikty v kartě konverzace berou systémovou škálu (`badgeColor(of:)`), ne tokeny —
-        // #404 to nemění, takže se měří to, co se doopravdy kreslí. `dismissed` mezi vzorky
-        // **není**: má `.secondary`, tedy poloprůhlednou barvu, u které by naměřený kontrast
-        // popisoval stav před #404 stejně jako po něm.
+        // Verdikty v kartě konverzace (`badgeColor(of:)`) brala do #432 systémová škála; od #432
+        // jsou to tokeny jako všude jinde. `dismissed` mezi vzorky **není**: má `.secondary`, tedy
+        // poloprůhlednou barvu, u které by naměřený kontrast popisoval stav před stejně jako po.
         Sample(
             name: "konverzace / schválil",
             label: "schválil",
-            tint: .green,
-            wash: Color.green.opacity(0.18),
+            tint: Palette.ok,
+            wash: Palette.ok.opacity(0.18),
             plate: Palette.chrome,
-            floor: 1.6
+            floor: 3.1
         ),
         Sample(
             name: "konverzace / vyžádal změny",
             label: "vyžádal změny",
-            tint: .red,
-            wash: Color.red.opacity(0.18),
+            tint: Palette.crit,
+            wash: Palette.crit.opacity(0.18),
             plate: Palette.chrome,
-            floor: 2.4
+            floor: 3.4
         ),
     ]
 

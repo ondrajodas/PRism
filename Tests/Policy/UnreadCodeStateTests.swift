@@ -130,8 +130,13 @@ struct UnreadCodeStateTests {
         #expect(Set(labels).isDisjoint(with: Set(others)))
         #expect(ReviewStateAppearance.label(of: .inconclusive(reason: .unreadCode)) == "kód nepřečten")
         // Ne zelená a ne červená: session doběhla, takže „selhalo“ by lhalo, a „čisté“ taky.
-        #expect(ReviewStateAppearance.color(of: .inconclusive(reason: .unreadCode)) != .green)
-        #expect(ReviewStateAppearance.color(of: .inconclusive(reason: .unreadCode)) != .red)
+        //
+        // **Porovnává se s barvou těch dvou stavů, ne se systémovou `.green`/`.red`** (#432): od
+        // převodu škály na tokeny by tvrzení o systémových barvách procházelo samo sebou, protože
+        // je nekreslí ani jeden stav.
+        let unread = ReviewStateAppearance.color(of: .inconclusive(reason: .unreadCode))
+        #expect(unread != ReviewStateAppearance.color(of: .clean))
+        #expect(unread != ReviewStateAppearance.color(of: .failed(detail: "boom")))
     }
 
     // MARK: - Falešný poplach

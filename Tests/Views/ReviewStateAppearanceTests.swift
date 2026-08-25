@@ -13,8 +13,13 @@ struct ReviewStateAppearanceTests {
 
         #expect(ReviewStateAppearance.label(of: state) == "3 nálezy")
         #expect(ReviewStateAppearance.label(of: state, blocking: 1) == "3 nálezy · 1 blokuje")
-        #expect(ReviewStateAppearance.color(of: state) == .orange)
-        #expect(ReviewStateAppearance.color(of: state, blocking: 1) == .red)
+        // Od #432 **z palety**, ne systémové `.orange`/`.red`: kapsle je text na tlumeném washi
+        // a systémová škála je navržená jako výplň s bílým textem — ve světlém režimu z ní vyšlo
+        // 1,85 a 2,70. Čísla i prahy jsou v `PillTypesettingTests`.
+        #expect(ReviewStateAppearance.color(of: state) == Palette.find)
+        #expect(ReviewStateAppearance.color(of: state, blocking: 1) == Palette.crit)
+        #expect(ReviewStateAppearance.color(of: state) != .orange)
+        #expect(ReviewStateAppearance.color(of: state, blocking: 1) != .red)
     }
 
     @Test("Bez blokujících odznak nenaroste o nulu")
@@ -27,8 +32,11 @@ struct ReviewStateAppearanceTests {
         // Říkají opak jedno o druhém, takže se nesmí potkat ani v textu, ani v barvě.
         #expect(ReviewStateAppearance.label(of: .clean) == "čisté")
         #expect(ReviewStateAppearance.label(of: .failed(detail: "boom")) == "selhalo")
-        #expect(ReviewStateAppearance.color(of: .clean) == .green)
-        #expect(ReviewStateAppearance.color(of: .failed(detail: "boom")) == .red)
+        #expect(ReviewStateAppearance.color(of: .clean) == Palette.ok)
+        #expect(ReviewStateAppearance.color(of: .failed(detail: "boom")) == Palette.crit)
+        // A ani jedna z nich není ta systémová, ze které se to u #432 převádělo.
+        #expect(ReviewStateAppearance.color(of: .clean) != .green)
+        #expect(ReviewStateAppearance.color(of: .failed(detail: "boom")) != .red)
     }
 
     @Test("Odmítnuté není čisté")
@@ -64,10 +72,10 @@ struct ReviewStateAppearanceTests {
     func anUnfinishedRunStaysRed() {
         // Oranžová znamená „něco se našlo". U timeoutu a přerušení je ale hlavní zpráva ta,
         // že běh neskončil — `timeout · 0` oranžově by vypadalo jako výsledek, a je to selhání.
-        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 0)) == .red)
-        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 2)) == .red)
-        #expect(ReviewStateAppearance.color(of: .interrupted(findings: 0)) == .red)
-        #expect(ReviewStateAppearance.color(of: .interrupted(findings: 2)) == .red)
+        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 0)) == Palette.crit)
+        #expect(ReviewStateAppearance.color(of: .timedOut(findings: 2)) == Palette.crit)
+        #expect(ReviewStateAppearance.color(of: .interrupted(findings: 0)) == Palette.crit)
+        #expect(ReviewStateAppearance.color(of: .interrupted(findings: 2)) == Palette.crit)
         // A stejnou barvu jako ostatní selhání — vedou jinam, ale obojí je „tohle neskončilo".
         #expect(
             ReviewStateAppearance.color(of: .timedOut(findings: 2))
@@ -117,14 +125,31 @@ struct ReviewStateAppearanceTests {
 
     @Test("Díl proužku má barvu podle výsledku")
     func everyShareHasItsColour() {
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.blocking) == .red)
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.findings) == .orange)
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.clean) == .green)
+        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.blocking) == Palette.crit)
+        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.findings) == Palette.find)
+        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.clean) == Palette.ok)
         // Odmítnuté má stejnou barvu jako `ReviewState.dismissed` — řádek a odznak nesmí
         // o tomtéž říkat každý něco jiného.
         #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed) == Palette.mint)
         #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed)
             == ReviewStateAppearance.color(of: .dismissed(findings: 1)))
         #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.inconclusive) == .secondary)
+    }
+
+    /// **Proužek a odznak berou tutéž škálu, a od #432 je celá z palety** — proužek na hraně řádku
+    /// je plná plocha, takže tam kontrast textu nehrozí; kdyby ale zůstal systémový, řekly by dvě
+    /// kresby jednoho běhu barvou něco jiného. To je ta vada, kterou #383 našlo u `inconclusive`.
+    ///
+    /// `.secondary` u `inconclusive` v proužku **není výjimka z toho pravidla**: není to barva ze
+    /// škály, ale „nemám co říct“ — a proto se drží kontrastem okolí, ne tokenem.
+    @Test("Proužek nebere ze systému nic ze škály")
+    func theShareKeepsAwayFromTheSystemScale() {
+        for outcome in [ReviewerShare.Outcome.blocking, .findings, .clean, .dismissed] {
+            let color = ReviewStateAppearance.color(of: outcome)
+            #expect(color != .red)
+            #expect(color != .orange)
+            #expect(color != .green)
+            #expect(color != .yellow)
+        }
     }
 }
