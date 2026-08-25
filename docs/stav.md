@@ -3815,8 +3815,8 @@ i měření (`TextWidth.pill(_:)`), stejně jako `TextWidth.miniButton` bere ře
 Mono stojí **4 až 9,4 bodu** na šířku (naměřeno na čtyřech stavech PR) a je o **bod nižší** (řádek 12
 proti 13), takže hlavička nemůže povyrůst; přetečení hlídá `OverviewWidthTests` v pásmu 128–1180.
 
-**Zbylá část třídy se vědomě odložila** (#404): pět dalších kapslí v okně má v návrhu `.pill`
-a v aplikaci nemono sazbu — `ReviewStateBadge` (`.caption`, 6/2), pilulky nálezů ve
+**Zbylá část třídy se vědomě odložila** (#404, dotažené později): pět dalších kapslí v okně mělo
+v návrhu `.pill` a v aplikaci nemono sazbu — `ReviewStateBadge` (`.caption`, 6/2), pilulky nálezů ve
 `FindingCardView`, `FindingTableRowView` a `FindingBubbleView` (`.caption2`, 5/1) a odznaky
 v `ThreadBubbleView` a `ConversationEntryView` (10,5 bez mono, 6/1). Jsou to **tři jiné metriky na
 pěti obrazovkách** a jedna z nich sedí v bublině, jejíž výšku si blok kódu měří sám (#236), takže by
@@ -4218,3 +4218,54 @@ nemá kde vzít, a je to ověřené vloženou regresí. Ověření v provozu je 
 
 Na obrazovce se nemění nic (změřeno A/B na běžící slotové aplikaci: diff, osa konverzace, strom
 souborů i `Dění` mají stejné rozvržení před i po). Testů **3922** (3 nové).
+
+
+**Zbytek nemono kapslí sjednocený s návrhem (issue #404).** Dotažení toho, co #348 vědomě odložilo:
+pět míst, která návrh kreslí jako `.pill`, a aplikace je měla nemono. Zase jen srovnání s tím, co
+v mockupu **už nakreslené je**, tedy bez schvalovací brány — jako #283 a #348. Od téhle změny si
+`designPill(tint:background:)` bere **třináct souborů** (17 míst) a metrika zůstává na jednom.
+
+Tři jiné metriky šly pryč: `.caption` s odsazením 6/2 u odznaku fronty, `.caption2` s 5/1 u pilulek
+nálezů (karta, tabulka, bublina) a `10,5 bez mono` s 6/1 u odznaků v konverzaci. Odznak kontroly
+v `FindingCardView` u toho přestal mít vlastní kopii sazby — byl to zrovna ten výskyt, který se
+u #348 přehlédl.
+
+**Odznak fronty potřebuje `lineLimit(1)` i `fixedSize()`, a je to změřené, ne odvozené.**
+`lineLimit(1)` zalomení zabrání, ale místo něj **zkracuje**: bez `fixedSize` se v řádku o 320 bodech
+srazily dva nejdelší stavy o **20 a 33 bodů**, tedy na `3 nález…`. Vyloučilo to i první podobu toho
+testu — ta měřila jen výšku a procházela i s odebraným `fixedSize()`. Cena mono je tady 10 až
+**48 bodů** (`timeout · 2 · 1 blokuje` 116 → 164), takže se měří v řádku, ne na kapsli samotné:
+`fittingSize` odpoví tou šířkou, kterou hostujícímu view někdo dal, kdežto o skutečnou se odznak
+pere s titulkem PR. Kapsle v **tabulce** `fixedSize` naopak nedostala — sedí ve sloupci se
+spočítanou šířkou (92 bodů, nejdelší popisek `irelevantní` 86).
+
+**Výška vyrostla o bod** (15 → 16), na rozdíl od #348, kde o bod klesla: tam se srovnávalo se
+systémovými 11 s odsazením 2, tady s `.caption2` s odsazením 1. V pruhu se značkou u bubliny nálezu
+je kapsle to nejvyšší, takže výška pruhu je z ní — hlídá se stropem nad dvěma bublinami nad týmiž
+daty, s kapslí `blokuje` a bez ní.
+
+**Kontrast se měřil z bitmapy, ne z tokenů** (#393, #366), a **našel mezeru, kterou #404 neopravuje**:
+čtyři kapsle berou systémovou zelenou a červenou a ve světlém režimu jsou pod třemi — `vyřešeno`
+**1,63**, `schválil` **1,70**, `vyžádal změny` 2,52, `3 nálezy · 1 blokuje` 2,70. Škálu drží
+`ReviewStateAppearance`, jehož vlastní zdůvodnění z #309 říká, že převod zbytku na tokeny je jiná
+otázka, která se zodpovídá měřením; je tedy změřená a zapsaná, a do vyřízení se hlídá, že se
+nezhorší. Kapsle na paletových tokenech jsou 2,91 až 4,08 ve světlém a 4,16 až 6,47 v tmavém.
+
+**Dvě věci se pojmenovaly tokenem, aniž by se změnil vzhled.** Odznak `já` dostal barvu textu
+`Palette.ink` (do #404 dědil `primary`, a `labelColor` je poloprůhledná — tatáž past jako u textu
+diffu, #393) a jeho wash se změnil z `.tint.opacity(0.18)` na `Palette.accent.opacity(0.18)`.
+V okně je to **tatáž barva**, protože `.tint` se na kořeni nasazuje jako `Palette.accent` — ale mimo
+okno dědění padalo na systémovou modrou, což je zrovna ta záměna, kterou řešila #309 u odznaku `2×`.
+Kontrast `já` je **12,27 / 8,40**, a má vlastní tvrzení: společný práh by výměnu `ink` za `ink3`
+nechytil.
+
+**Dvě věci se vědomě nesjednotily.** `Bot` v konverzaci zůstává nemono, i když ho tabulka v #404
+vyjmenovala: návrh ho kreslí jako `.tl-line .botchip` (`font-size: 10px`, **žádná `font-family`**),
+tedy schválně nemono, ze stejného důvodu jako `.state-chip` v hlavičce PR — je to vlastnost účtu
+vedle avataru, ne stav ani počet. A `⚠ blokuje` v kartě nálezu zůstává `Label` s ikonou: kapsle to
+není (nemá plochu), takže převod by znamenal zahodit tu ikonu, a to je změna obrazovky, ne sazby.
+Obojí patří do téhož issue jako barvy.
+
+Testů **3879** (10 nových a jedna sonda, která kreslí všech pět míst na jedno plátno v obou
+režimech). Vloženými regresemi ověřené dvě věci: odebrané `fixedSize()` srazí odznak o 20 a 33
+bodů, a vrácená ruční sazba `vyřešeno` v `ThreadBubbleView` shodí guard nad zdrojáky.
