@@ -11,10 +11,17 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi 28 sekcí. Většina kreslí jednu
-obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má poznámky (`.notes`), proč je to
-tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se nesmí slít*, *Kde jsem si vybral,
-a co to stálo*, *Co by se muselo přepsat*.
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **32** sekcí. To číslo patří ke
+každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
+stálo 28, kdežto sekcí bylo 30:
+
+```bash
+grep -c '<section class="section" id="s' docs/navrh.html
+```
+
+Většina sekcí kreslí jednu obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má
+poznámky (`.notes`), proč je to tak; zbytek rozhodnutí vysvětluje — *Dvanáct stavů, které se
+nesmí slít*, *Kde jsem si vybral, a co to stálo*, *Co by se muselo přepsat*.
 
 **Čte se po stránkách, ne jako svitek** (#332). Rozcestník vlevo je poskládaný jako aplikace —
 okno, sedm záložek pull requestu v pořadí z `PullRequestTab`, dialogy, poruchy, rozhodnutí —
