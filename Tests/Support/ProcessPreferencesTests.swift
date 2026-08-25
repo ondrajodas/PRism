@@ -62,6 +62,10 @@ struct ProcessPreferencesTests {
     func scratchDefaultsGetAFreshNameEveryTime() throws {
         let first = try ScratchDefaults("processPreferences")
         let second = try ScratchDefaults("processPreferences")
+        defer {
+            first.remove()
+            second.remove()
+        }
 
         #expect(first.name != second.name)
         #expect(first.name.hasPrefix("cz.prism.tests.processPreferences."))
@@ -74,6 +78,7 @@ struct ProcessPreferencesTests {
     @Test("Zápis do vlastní suity nejde do domény procesu")
     func writingToTheScratchSuiteKeepsTheProcessDomainClean() throws {
         let scratch = try ScratchDefaults("processPreferences")
+        defer { scratch.remove() }
         let key = "scratchProbe-\(UUID().uuidString)"
 
         scratch.store.set(1_180.0, forKey: key)

@@ -43,6 +43,7 @@ struct AgentPromptRenderProbe {
         // přepisovala šířku panelu, kterou si nastavil člověk — a `removeObject` po ní ji smazal
         // úplně, takže po jednom ručním spuštění sondy byl panel v aplikaci zpátky na výchozí.
         let scratch = try ScratchDefaults("agentPromptPanelWidth")
+        defer { scratch.remove() }
         for panelWidth in [300.0, 240.0, 520.0] {
             scratch.store.set(panelWidth, forKey: "findingsPanelWidth")
             let url = directory.appending(path: "zadani-panel-sirka-\(Int(panelWidth)).png")
@@ -158,6 +159,7 @@ struct AgentPromptRenderProbe {
         // `rendersThePanelAndTheSheet` a #411. Bez ní by se kreslila šířka, kterou má nastavený
         // člověk u stroje, a poslední snímek by ji přepsal.
         let scratch = try ScratchDefaults("agentPromptPanelWidth")
+        defer { scratch.remove() }
 
         try renderPanel(store: store, named: "nepredano", in: directory, storage: scratch.store)
 
