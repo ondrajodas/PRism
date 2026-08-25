@@ -4532,7 +4532,14 @@ co z toho platí pro testy:
   jen kladnost — `NaN` je hodnota, kterou skutečné `NSFont` vydá, a `Int(NaN)` shodí proces;
 - **ve zprávě u tvrzení, která na metrice stojí, je `FontMetric.shared.tally`** — počet měření,
   kolikrát zaskočila náhradní cesta a **jaká hodnota se zamítla**. U #327 se z pádu nedalo poznat,
-  jestli metrika vrátila nulu, nebo `NaN`; příště to bude v té zprávě.
+  jestli metrika vrátila nulu, nebo `NaN`; příště to bude v té zprávě;
+- **sonda nesmí `NaN` minout, a to je vlastní past** (nález Copilota na #439). `FontMetricProbe`
+  měla histogram klíčovaný `Double` a anomálii jako `value <= 0` — jenže `NaN` se nerovná sám sobě,
+  takže by v takovém klíči zakládal **novou položku při každém čtení** (sonda jich udělá tři miliony),
+  a `NaN <= 0` je **nepravda**, takže by sonda tiše minula zrovna ten druh vady, na kterou je.
+  Přihrádka je proto **vypsaná hodnota** (`nan` je jedna položka) a o anomálii rozhoduje
+  `Policy.usableFontMetric(_:)`, tedy tatáž funkce jako v aplikaci. Nástroj, který měří jiné pravidlo
+  než to, které se drží, měří něco jiného, než o čem si myslíme.
 
 **Ověřeno vložením regrese** (obě zvlášť, nad kopií):
 
