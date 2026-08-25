@@ -820,7 +820,10 @@ kliknutím na řádek, který od té chvíle v nabídce je.
 Kdyby ho nesla každá položka, čtrnáct řádků by opakovalo totéž a předpona by ořezala to jediné, čím
 se od sebe liší. Od šesti položek je nad seznamem **hledání**: psaní filtruje, `↑↓` vybírají, `↵`
 potvrdí, `esc` zavře — a filtruje se podle toho, co je v řádku vidět (jméno, login, slug, jméno
-labelu). Pravidlo shody je **totéž jako v paletě ⌘K**: bez diakritiky, bez ohledu na velikost
+labelu). **Ty klávesy jsou od #434 napsané v patce nabídky** (`↑↓ vybírá`, `↵ přepne` / `vyžádá`,
+`esc zavře`); nad prázdným výsledkem patka není, protože tam by dvě z těch tří slibovaly klávesu,
+po které se nic nestane. `⌥↵` v ní není schválně — zakládání nového labelu má zkratku napsanou
+přímo u své akce. Pravidlo shody je **totéž jako v paletě ⌘K**: bez diakritiky, bez ohledu na velikost
 písmen, víc slov jako „a zároveň“ a silnější shoda nahoru. Hledání **nezakládá** — co se v nabídce
 nenajde, nejde vybrat. Reviewer
 se vyžádá **jedním pojmenovaným kliknutím** (`Vyžádat review od …`) z lidí a **týmů**, které na repo

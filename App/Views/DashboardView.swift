@@ -455,11 +455,19 @@ struct DashboardView: View {
         .clipShape(.rect(cornerRadius: 12))
     }
 
-    /// Popisek vpravo v hlavičce bloku. **Odkaz jen s cílem** — text v barvě akcentu, po kterém se
-    /// nic nestane, je tatáž lež jako karta bez cíle (#371), jen menší.
+    /// Popisek vpravo v hlavičce bloku. **Tlačítko jen s cílem**, barva je u obou stejná.
     ///
-    /// Barvu i ukazováček nese `AccentLinkButtonStyle`, tedy tentýž styl jako `co se hlásí ↗`
-    /// v hlavičce sekce `Dění`: systémové `.link` kreslí modrou mimo paletu návrhu.
+    /// Akcent nese `.block > header .more` z návrhu a je v něm **každý** ten popisek, klikatelný
+    /// nebo ne — kdo ho tady u neklikatelné varianty vymění za `Palette.ink2`, mění návrh, ne kód
+    /// (nález Copilota na #443; ta barva je v repu od #181 a od #443 se nemění).
+    ///
+    /// Klikatelnou variantu proto neodlišuje barva, ale **chování**: `AccentLinkButtonStyle` přidá
+    /// ukazováček a ztlumení při zmáčknutí a k tomu jde nápověda, co se po kliknutí stane. Ten styl
+    /// je tentýž jako u `co se hlásí ↗` v hlavičce sekce `Dění`, protože systémové `.link` kreslí
+    /// modrou mimo paletu návrhu.
+    ///
+    /// Že `podle závažnosti` a `7 dní` **nikam nevedou**, je starší rozhodnutí (#181): jiné řazení
+    /// a jiné okno jsou vlastní issue a šipka nad akcí, která nikam nevede, je horší než žádná.
     @ViewBuilder private func blockMore(_ title: String?, section: RailSection?) -> some View {
         if let title {
             if let section {
@@ -472,6 +480,7 @@ struct DashboardView: View {
                 // patka pod blokem, takže má i říkat totéž.
                 .help(DashboardDestination.section(section).help)
             } else {
+                // Akcent i tady, protože ho má návrh — viz doc komentář výš.
                 Text(verbatim: title)
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Palette.accent)

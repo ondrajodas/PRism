@@ -183,6 +183,30 @@ struct PickerSearchTests {
         #expect(Policy.pickerShowsSearch(count: .max))
     }
 
+    // MARK: - Kdy se kreslí patka s nápovědou kláves (#434)
+
+    /// **Nad prázdným výsledkem patka není** — návrh ji tak kreslí (sekce 24) a je to i jediné
+    /// možné chování: ze tří jejích položek by nad prázdnem dvě lhaly.
+    @Test(
+        "Patka se kreslí jedině nad neprázdným seznamem",
+        arguments: [(0, false), (1, true), (2, true), (34, true)]
+    )
+    func drawsTheKeyHintsOnlyOverRows(count: Int, shows: Bool) {
+        #expect(Policy.pickerShowsKeyHints(rowCount: count) == shows)
+    }
+
+    /// **Tvrzení o tom, že se něco NEstane**: právě v tom stavu, ve kterém patka není, taky není
+    /// co vybrat — `↑↓ vybírá` a `↵ …` by tedy byly dvě věty o klávesách, po kterých se nic
+    /// nestane. Ty dvě funkce se **musí shodnout** a rozejít se můžou potichu: patka je stav okna,
+    /// kdežto tohle je číslo.
+    @Test("Kde není co vybrat, tam se nápověda nekreslí")
+    func neverPromisesKeysThatDoNothing() {
+        for count in [-1, 0, 1, 7] {
+            let selectable = Policy.pickerSelection(from: 0, step: 0, count: count) != nil
+            #expect(Policy.pickerShowsKeyHints(rowCount: count) == selectable, "počet \(count)")
+        }
+    }
+
     // MARK: - Nabídka reviewerů a labelů
 
     /// **Filtruje se podle toho, co je v řádku vidět** — u člověka login, u týmu slug. Kdyby filtr

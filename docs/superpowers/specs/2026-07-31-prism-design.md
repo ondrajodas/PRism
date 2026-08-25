@@ -3178,6 +3178,41 @@ v zákresu u **obou** nabídek už od sekce 24 a v aplikaci není ani u jedné. 
 #413 — spravit ji má jedno issue nad oběma nabídkami, protože půlka opravy tady by nechala labely
 s nápovědou a reviewery bez ní.
 
+### Záznam rozhodnutí — řádek diffu se ptá na geometrii jen tam, kde ji má kdo přečíst (#438)
+
+**Zadání vinilo diff pod jiným tabem a měření to vyvrátilo.** `DiffLineView` četl svůj rámeček
+bezpodmínečně (`onGeometryChange`), přitom slouží jedině tažení rozsahu (#110) — a `of:` closure
+běží **uvnitř aktualizace grafu**, tedy i v tom kole, ve kterém se nepřeloží ani jedno tělo. Ve
+dvou záchvatech #361 to bylo **369 546** a **711 018** zásahů `DiffLine.geometry`, v obou
+s Konverzací vepředu. Odkud jsou, řekla sonda
+(`IdleDiffSpinProbe.lineGeometryOrigin`, tatáž cesta před i po):
+
+| Scéna vepředu | `DiffLine.geometry` před | po |
+|---|---|---|
+| diff (split, 13 souborů, tisíce řádků) | **0** | 0 |
+| osa konverzace (60 vláken s `diffHunk`em) | **242** | **0** |
+
+Diff se tedy neptá **ani když je vepředu**: `DiffView` slévá řádky do bloků
+(`DiffRow.blocked(_:)`), takže v něm `DiffLineView` nekreslí ani jeden řádek — kreslí ho **úryvek
+u vlákna na ose** (`ThreadSnippetView`), a ten je vepředu právě v těch záchvatech. Poměr sedí
+i v číslech: v sondě 242 zásahů proti 461 dotazům na `ConversationRow.id`, v záchvatu 369 546
+proti milionům.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Podmínka se přesunula před čtení** (`reportsFrame`) | (a) nekreslit diff, když jeho tab není vepředu; (b) nechat ho složený a „zastavit akce geometrie“, když není vidět | Obojí opravuje něco, co se neděje: obsah tabu je `switch` v `PullRequestDetailView`, takže pod jinou záložkou v hierarchii **není** — a měření to potvrzuje z druhé strany (`DiffPairBlockRow.geometry` se ozve jen s diffem vepředu). (b) by navíc žádalo **nového pozorovatele viditelnosti**, tedy ten samý omyl obráceně (#252, #350). Podmínka přitom v repu byla odjakživa, jen se vyhodnocovala **až v akci**, tedy po čtení |
+| **Podmínka se ptá na identitu **i** na krabici** | Jen `dragID != nil`, jak to stálo v `guard` v akci | Krabice je ten, kdo hodnotu čte; bez ní se rámeček počítá pro nikoho i s identitou. Obojí je **dané volajícím a konstantní** po celý život řádku (v diffu vždycky, na ose nikdy), takže se větev nepřepíná za běhu — a `note(_:)` rozbaluje tutéž dvojici, aby podmínka nebyla na dvou místech |
+| **`dragAnchor` v podmínce **není**** | Přidat i „řádek unese komentář“ — je to táž třída informace a ušetřilo by to zbylé řádky | Řádek bez kotvy se hlásí s **prázdným seznamem**, a právě to vyklízí zastaralé plochy pod ním (`DiffRowFrames.note(_:covering:of:)`). Kdyby se nehlásil, zůstaly by v krabici plochy z předchozího rozvržení a tažení by chytalo řádky vedle — přesně ta chyba, kterou #110 popisuje jako „vybere se i další 2–3 pod kurzorem“ |
+| **Test je nad zdrojáky, ne za běhu** | Sonda, která postaví scénu, spustí rozvržení a spočítá zásahy přes `RenderDiagnostics` | Práce, jejíž výsledek nikdo nepřevezme, po sobě **nenechá nic pozorovatelného** — jediná stopa je počitadlo v `RenderDiagnostics.current`, a to je **globál procesu**. Test, který do něj zapíše, umí položit `RenderDiagnosticsTests` (tvrdí `current == nil`) a `main` je pak falešně červený; to je pravidlo z #367 a #411, ne pohodlnost. Čísla proto měří sonda za `PRISM_MEASURE` a `DiffLineGeometryTests` drží tu strukturu, ze které plynou — tatáž konstrukce jako `LazyIdealSizeTests` |
+| **Scéna měření má skutečné hunky a 60 vláken** | Použít syntetickou osu, kterou sonda má (300 komentářů) | V ní **není ani jedno vlákno**, takže by se `DiffLineView` nevykreslil vůbec a sonda by hlásila nulu **před i po** — zelenou zprávu o tom, že se nic neměřilo. Hunky se berou z `conversation-diff-hunks.json` (skutečná odpověď) a opakují se s novou identitou: rozhoduje počet řádků v seznamu, ne jejich různost |
+| **#361 to nezavírá** | Vydat to jako opravu záchvatu — `GeometryActionBinder` byl na ose **kořenem 3 ze 6** odebraných zásobníků a po opravě je **0 ze 6** | Kolo z #361 se v harnessu nepodařilo vyrobit ani jednou za třináct kol, takže „přestane vznikat“ se doložit nedá. Doložené je **zlevnění** a to, že jeden kořen aktualizace grafu z osy zmizel; víc tvrdit znamená zapsat do repa domněnku, na kterou se příští session spolehne (tatáž mez jako u `fillingSlot()`) |
+| **`DiffLineView` zůstává, i když ho diff nekreslí** | Zahodit `.line` a `.pair` řádky z cesty kreslení, když stejně vždycky projdou `blocked(_:)` | Je to **model, ze kterého se bloky skládají**, a sazbu řádku sdílí s úryvkem na ose (#158) — druhý renderer téhož by se rozešel a barvy by na dvou místech okna znamenaly něco jiného. Vyklizení téhle cesty je vlastní zadání, ne přílepek k výkonové opravě |
+
+**Co se nezměnilo:** kresba (na obrazovce není vidět nic — `onGeometryChange` do rozvržení nezasahuje,
+proto je v repu místo `GeometryReader`u), tažení rozsahu v diffu (to obsluhují bloky, `DiffBlockRowView`
+a `DiffPairBlockRowView`, kterých se změna netýká) ani hák diagnostiky — `GraphSite.lineGeometry`
+zůstává zapojený, jen se ozývá z té jediné větve, která rámeček někomu předá.
+
 ### Záznam rozhodnutí — sémantická škála z palety (#432)
 
 Dotažení toho, co #404 vědomě odložilo, a **otočení rozhodnutí z #309** („zbytek

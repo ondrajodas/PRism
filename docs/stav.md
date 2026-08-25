@@ -4553,6 +4553,43 @@ Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **
 v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí); zbytek přidal
 mezitím mergnutý `main`.
 
+### #438 — geometrii řádku diffu nepočítá diff, ale úryvek na ose
+
+**Na tomhle není co vidět** — mění se, co se počítá, ne co je na obrazovce; `onGeometryChange` do
+rozvržení nezasahuje, a proto je v repu místo `GeometryReader`u.
+
+Zadání vycházelo z toho, že `DiffLine.geometry` (**369 546** a **711 018** zásahů ve dvou záchvatech
+#361, v obou vepředu Konverzace) počítá **diff pod jiným tabem**. Měření to vyvrátilo. Sonda
+`IdleDiffSpinProbe.lineGeometryOrigin` projede kolečkem tutéž scénu ve dvou záložkách:
+
+| Vepředu | před | po |
+|---|---|---|
+| diff (split, 13 souborů, tisíce řádků) | **0** | 0 |
+| osa konverzace (60 vláken s `diffHunk`em) | **242** | **0** |
+
+Diff se neptá **ani když je vepředu**, a není to o viditelnosti: `DiffView` slévá řádky do bloků
+(`DiffRow.blocked(_:)`), takže v něm `DiffLineView` nekreslí ani jeden řádek. Zásahy jsou z osy —
+úryvek u vlákna (`ThreadSnippetView`, #158) kreslí `DiffLineView` řádek po řádku a rámeček z něj
+nemá kdo převzít, protože na ose se netáhne. Poměr sedí: 242 proti 461 dotazům na
+`ConversationRow.id` v sondě, 369 546 proti milionům v záchvatu.
+
+**Oprava je posun podmínky, která v repu byla odjakživa**: `guard let dragID` se vyhodnocoval až
+v **akci**, tedy po čtení. Nově je před ním (`reportsFrame` — identita **i** krabice), takže se
+`onGeometryChange` na ose vůbec nepřipojí. `dragAnchor` v té podmínce schválně **není**: řádek bez
+kotvy se hlásí s prázdným seznamem a právě tím vyklízí zastaralé plochy pod sebou, bez čehož by
+tažení chytalo řádky vedle (#110).
+
+**#361 to nezavírá.** Nové je jedno pozorování: `GeometryActionBinder` byl na ose kořenem **3 ze 6**
+odebraných zásobníků a po opravě je **0 ze 6**, tedy z osy zmizel jeden kořen aktualizace grafu. Že
+tím kolo přestane vznikat, se doložit nedá — v harnessu se za třináct kol nevyrobilo ani jednou.
+
+Testů **4006**, z toho **5 nových** (`DiffLineGeometryTests`) plus scénář sondy, který se v běžném
+běhu přeskočí. Tvrdí se to nad zdrojáky schválně: práce, jejíž výsledek nikdo nepřevezme, nenechá
+nic pozorovatelného a jediná stopa je počitadlo v `RenderDiagnostics.current` — globál procesu, do
+kterého test zapisovat nesmí (#367, #411). **Ověřeno vloženou regresí v obou podobách**: s
+`reportsFrame` na `true` spadne tvrzení o podmínce a sonda vydá zase 242, s `onGeometryChange`
+vráceným do řetězce `row` spadne tvrzení o větvi.
+
 ### M12 — Ergonomie okna (milník #14)
 
 Tři issues z jedné dávky, u kterých je rozvrh naopak krátký: **#441** (klávesové zkratky),
@@ -4561,6 +4598,38 @@ jdou **souběžně**, žádná nestojí na jiné. Milník mají proto, že rozvr
 naráz“ — je jediná věc, která tu informaci udrží napříč sessions; `Průběžné` je koš bez pořadí.
 Jediná vazba: #441 chce mít `⌘R` zakázané, dokud běží obnovení, a `AppStore.isRefreshing` v repu
 už je, takže na #442 nečeká. Nakreslené jsou #442 a #443 v sekcích 32 a 31 návrhu.
+
+### #434 — nabídky v panelu dostaly patku s nápovědou kláves
+
+Návrh kreslí `.pkr-foot` u **obou** nabídek v panelu (sekce 24) a v aplikaci nebyla ani u jedné —
+mezera po #392, kterou #413 vědomě nechalo. Návrh se nemění, takže to bylo srovnání s tím, co
+v mockupu už nakreslené je, a šlo se rovnou.
+
+Patka je jedna třída v CSS a od #434 je i **jedno místo v kódu**: `PickerFooter` drží plochu (horní
+linka `--line-soft`, podklad `--panel-2`, odsazení `6 × 11`, mezera `12`) a používají ji obě její
+náplně — nápověda kláves i patka potvrzení nového labelu, která tam do #434 měla vlastní kopii těch
+čtyř hodnot. Obsah nápovědy je `↑↓ vybírá`, `↵ přepne` (u reviewerů `vyžádá`), `esc zavře`; liší se
+tedy **jediné slovo**.
+
+**Nad prázdným výsledkem se patka nekreslí**, a je to jak v zákresu (nabídka s `.pkr-empty` ji nemá),
+tak jediná možnost, která nelže: `pickerSelection` nad prázdnem vrátí `nil`, takže by dvě ze tří
+položek slibovaly klávesu, po které se nic nestane. Rozhodnutí drží `Policy.pickerShowsKeyHints(rowCount:)`
+a k němu tvrzení, že se s `pickerSelection` **shodne** — rozejít se to umí potichu, protože patka je
+stav okna, kdežto tohle jsou dvě čísla.
+
+**`⌥↵` v patce schválně není.** Zakládání nového labelu má zkratku napsanou u akce samotné a návrh to
+tak kreslí i v tom stavu, kde ta akce je (sekce 26): patka i tam nese tři položky. Čtvrtá položka by
+navíc neplatila ve třech ze čtyř stavů nabídky.
+
+**Změřeno, ne odhadnuto** (zadání to žádalo výslovně): patka chce **194 b** (`přepne`), resp. **195 b**
+(`vyžádá`) z 300, které má `.pkr` — rezerva 105 bodů. U nabídky reviewerů, která šířku nemá danou
+rámcem, se tím **přirozená šířka posunula ze 145 na 195**: patka je v ní od #434 nejširší prvek.
+Zapsané je to tak, jak to vyšlo, ne jak to bylo zamýšlené — tvrdí se, že nabídka nepřeteče za 300 ze
+zákresu, ne že s ní patka nehne, protože druhé by bylo nepravdivé.
+
+**Co se v harnessu ověřit nedá:** že ty klávesy fungují. Testovací host nedostane aktivaci (změřeno
+u #392), takže nemá key okno a stisk nemá kam sednout — zvlášť u `⌥↵`, které je na poli, ne na okně.
+Ověřuje to člověk na běžící aplikaci a je to podmínka toho, že patka smí ty klávesy tvrdit.
 
 ### #443 — pět řádků dění na dashboardu
 

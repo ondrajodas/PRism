@@ -2523,7 +2523,9 @@ otevřít“ nemají kde splynout.
 **Háky sedí tam, kde v kole doopravdy jsme** (`GraphSite`, `RenderDiagnostics.inGraph(_:)`): dotazy
 na identitu líných seznamů (`DiffRow.id`, `FileDiff.id`, `ConversationRow.id` — u osy konverzace je
 to **jediná** přítomnost aplikace v kole) a čtení geometrie v diffu (`of:` closury v
-`DiffPairBlockRowView`, `DiffBlockRowView`, `DiffLineView`, `DiffView`). Identita jde přes
+`DiffPairBlockRowView`, `DiffBlockRowView`, `DiffLineView`, `DiffView`). U `DiffLineView` se ten hák
+od #438 ozývá **jen z té větve, která rámeček někomu předá** (viz sekce níž) — v ose konverzace, kde
+se ta čísla nasbírala, tedy z aplikace nevede vůbec. Identita jde přes
 `diagnosedID` v extension u diagnostiky, ne přes úpravu `id` v modelu, a **vrací tutéž hodnotu** —
 jinak by líný seznam se zapnutou diagnostikou přerovnal obsah a měřilo by se něco jiného než bez
 ní. Že je každé vyjmenované místo doopravdy zapojené, tvrdí test nad zdrojáky
@@ -2582,6 +2584,48 @@ transformace** — `CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTrans
 projížděním je to očekávané (obsah se posouvá), takže **to samo o sobě příčinu #361 netvrdí**; cenné
 je to jako srovnávací tvar: v záchvatu se z týchž řádků pozná, jestli se transformace mění i tehdy,
 když se nikam neroluje.
+
+#### Řádek diffu se ptá na geometrii jen tam, kde ji má kdo přečíst (#438)
+
+`DiffLineView` měl `onGeometryChange` **bezpodmínečně**, přitom ten rámeček slouží jedině tažení
+rozsahu (#110): píše se do `DiffRowFrames`, a to jen tehdy, když má řádek identitu (`dragID`)
+a krabici (`rangeDrag.box`). Podmínka v kódu byla odjakživa — v `guard` uvnitř **akce**, tedy až
+**po** čtení. `of:` closure přitom běží uvnitř aktualizace grafu (tabulka `GraphProbe` výš), takže
+se počítala i v tom kole, ve kterém se nepřeloží ani jedno tělo: ve dvou záchvatech #361
+**369 546** a **711 018** zásahů `DiffLine.geometry`, v obou druhá nejčastější položka v celém kole.
+
+**Zadání #438 to připisovalo diffu pod jiným tabem; měření to vyvrátilo.**
+`IdleDiffSpinProbe.lineGeometryOrigin` projede kolečkem tutéž scénu ve dvou záložkách:
+
+| Vepředu | `DiffLine.geometry` před | po |
+|---|---|---|
+| diff (split, 13 souborů) | **0** | 0 |
+| osa konverzace (60 vláken s `diffHunk`em) | **242** | **0** |
+
+Diff se neptá **ani když je vepředu**, a je to vlastnost kreslení, ne viditelnosti: `DiffView` slévá
+řádky do bloků (`DiffRow.blocked(_:)`, `blockedPairs(_:)`), takže `DiffLineView` v diffu nekreslí
+ani jeden řádek — text bloku sází `NSTextView` a rámečky hlásí **blok** (#252). Zásahy jsou z osy:
+úryvek u vlákna (`ThreadSnippetView`, #158) kreslí `DiffLineView` řádek po řádku a rámeček z něj
+nemá kdo převzít — na ose se netáhne. Sedí to i poměrem: v sondě 242 proti 461 dotazům na
+`ConversationRow.id`, v záchvatu 369 546 proti milionům.
+
+Řádek proto od #438 vydá `onGeometryChange` **jen ve větvi `reportsFrame`** (obojí: identita
+i krabice). Tři věci, které na tom stojí:
+
+- **Podmínka není nad měnícím se stavem.** Obojí dává volající a je to konstantní po celý život
+  řádku — v diffu vždycky (`DiffRowView`, `DiffPairView`), na ose nikdy (`ThreadSnippetView`), takže
+  se větev nepřepíná za běhu a `@State` v řádku nemá jak propadnout.
+- **`dragAnchor` v podmínce být nesmí.** Řádek, který komentář neunese, se hlásí s **prázdným
+  seznamem** — a právě tím vyklízí zastaralé plochy pod sebou (`DiffRowFrames.note(_:covering:of:)`).
+  Bez toho hlášení by v krabici zůstaly plochy z minulého rozvržení a tažení by chytalo řádky vedle.
+- **Kolo z #361 to nezavírá.** Doložené je zlevnění a jedna věc navíc:
+  `GeometryActionBinder<_GeometryActionModifier<CGRect>>` byl na ose **kořenem 3 ze 6** odebraných
+  zásobníků a po opravě je **0 ze 6**, tedy z osy zmizel jeden kořen aktualizace grafu. Že tím kolo přestane vznikat, se
+  tvrdit nedá — v harnessu se za třináct kol nevyrobilo ani jednou.
+
+**Na obrazovce není vidět nic** a plyne to z toho, proč je v repu `onGeometryChange` místo
+`GeometryReader`u: měří, do rozvržení nezasahuje. Tažení rozsahu v diffu obsluhují bloky
+(`DiffBlockRowView`, `DiffPairBlockRowView`), kterých se změna netýká.
 
 ## `RepoCheckout` (`App/Checkout/`)
 
@@ -7572,7 +7616,9 @@ Nad odesílatelností draftu (#68) platí:
 - **Prázdný login se do sekce nedostane.** Autora review může GitHub vynechat (smazaný účet)
   a řádek bez jména se v panelu nedá odlišit od chyby kresby — a hlavně se nedá vyžádat.
 - **`Policy.pickerRank(of:query:)`, `filteredPicker(_:query:text:)` a `pickerSelection(from:step:count:)`**
-  — hledání v nabídkách `+ label` a `+ reviewer` (`App/Policy/PickerSearch.swift`).
+  — hledání v nabídkách `+ label` a `+ reviewer` (`App/Policy/PickerSearch.swift`). Vedle nich
+  `pickerShowsSearch(count:canCreate:)` (odkdy je nad seznamem hledací pole) a od #434
+  `pickerShowsKeyHints(rowCount:)` (jestli se pod ním kreslí patka s nápovědou kláves).
 
   **Pravidlo shody se dělí s paletou ⌘K** (#184): `searchRange` a `searchStartsWord` jsou tytéž
   funkce (kvůli tomu se z `CommandPaletteSearch` zvedly na `internal`) a dělení dotazu na slova taky
@@ -7915,6 +7961,30 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   fokusovat.
 - **Prázdný výsledek filtru je čtvrtý stav nabídky**, ne první: vedle něj existuje nenačteno,
   prázdné repo a porucha, a každý má vlastní větu. Prázdná plocha by vypadala jako spadlé načítání.
+- **Klávesy jsou od #434 napsané v patce** (`.pkr-foot`, sekce 24) — `↑↓ vybírá`, `↵ přepne`
+  (u reviewerů `vyžádá`), `esc zavře`. Do #434 nebyla ani u jedné nabídky, přitom se v nich od #392
+  a #413 nasbíralo dost kláves, aby se nedaly uhodnout. Plochu drží `PickerFooter` a je to **jedno
+  místo pro obě náplně té třídy**: nápovědu i patku potvrzení nového labelu. Dvě kopie odsazení by
+  se rozešly potichu a jediné, co by z toho bylo vidět, je jinak vysoká patka v jedné z nabídek.
+
+  **Nad prázdným výsledkem se nekreslí** (`Policy.pickerShowsKeyHints(rowCount:)`) a je to jak
+  v zákresu, tak věcně jediná možnost: `pickerSelection` nad prázdnem vrátí `nil`, takže by dvě ze
+  tří položek slibovaly klávesu, po které se nic nestane. Hlídá to tvrzení, že se ty dvě funkce
+  shodnou.
+
+  **`⌥↵` v patce schválně není** — zakládání má zkratku napsanou **u akce samotné** (`.nl-add .keys`)
+  a návrh to tak kreslí i v tom stavu, kde ta akce je (sekce 26): patka i tam nese tři položky.
+  V patce by to byla čtvrtá položka, která ve třech ze čtyř stavů nabídky neplatí.
+
+  **Pro čtečku obrazovky je patka jedna věta a položkám nic nebere**: `accessibilityElement(children:
+  .ignore)` plus vlastní popisek, protože `↑↓` je pro čtečku dvojice znaků. Celá věta u položky
+  (#392) platí dál — patka je zkratka pro oko, ne náhrada popisku.
+
+  **Rozměr je změřený, ne odhadnutý**: patka chce **194 b** (`přepne`), resp. **195 b** (`vyžádá`)
+  z 300, které má `.pkr`. U nabídky reviewerů, která si šířku neurčuje rámcem, je od #434 **nejširší
+  prvek** — přirozená šířka se posunula ze 145 (nadpis) na 195. Není to regrese: `.pkr` má v zákresu
+  300, takže užší nabídka je odchylka na druhou stranu a 195 je jí blíž. Měří to
+  `PickerKeyHintsTests`.
 - **Dokud snímek nedorazil, je `+ label` zakázaný.** Sada se posílá celá, takže bez snímku nemá
   z čeho vzniknout — a tlačítko, po kterém se nic nestane, je horší než zakázané. Vysvětlení u něj
   mluví o načítání, ne o bráně; jsou to dva různé důvody.

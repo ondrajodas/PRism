@@ -638,6 +638,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     nevrátí něco, co v nabídce nebylo** — tedy že se ani hledáním nedá vyrobit label, který repo
     nezná. K tomu kurzor: **ořezává, necyklí**, a ořezává i bez pohybu, protože index z předchozího
     dotazu může být za koncem.
+
+    Od #434 je v téže sadě i **patka s nápovědou kláves**, a to nejcennější tvrzení je zase to
+    o tom, co se **nestane**: `pickerShowsKeyHints(rowCount:)` a `pickerSelection(from:step:count:)`
+    se musí shodnout, tedy nad prázdným seznamem se nesmí nakreslit nápověda ke klávesám, po kterých
+    se nic nestane. Rozejít se to umí potichu — patka je stav okna, kdežto tohle jsou dvě čísla.
+  - **`PickerKeyHintsTests`** (#434) — **rozměr patky, ne pravidlo**, a měří se **dvěma měřidly,
+    protože každé odpovídá na jinou otázku**. `fittingSize` řekne, kolik místa si patka řekne (194 b
+    pro `přepne`, 195 b pro `vyžádá` z 300, které má `.pkr`), tedy **kolik zbývá** — a to je jediné,
+    z čeho se pozná, jestli se tam vejde ještě delší sloveso. `OverflowProbe` řekne, jestli něco
+    přeteklo **za hranu**, což je u nabídky labelů jediná možná otázka: má pevný rámec 300 bodů,
+    takže obsah za ním přeteče vizuálně, aniž by se velikost změnila. Prohání se i stavem, ve kterém
+    je pod seznamem akce `Založit „…“` — tam je patka poslední prvek a nemá pod sebou nic, co by
+    přesah ukrojilo.
+
+    Jedno tvrzení je zapsané **podle toho, co se změřilo, ne podle toho, co bylo v úmyslu**: patka
+    nabídku reviewerů (která šířku nemá danou rámcem) **rozšířila** ze 145 na 195 bodů, protože je
+    v ní od #434 nejširší prvek. Tvrdí se proto, že nepřeteče **za** 300 ze zákresu, ne že nabídkou
+    nehne — druhé by bylo nepravdivé.
+
+    **Co se v harnessu ověřit nedá:** že ty klávesy doopravdy fungují. Testovací host nedostane
+    aktivaci (změřeno u #392), takže nemá key okno a stisk nemá kam sednout — zvlášť u `⌥↵`, které
+    je na poli, ne na okně. Ověřuje to člověk na běžící aplikaci; patka smí tvrdit jen to, co takhle
+    ověřené je.
   - **`PanelHeadNoticeTests`** — že panel u staršího commitu **nekreslí nálezy jako platné**. Věta se
     testuje jako text z `Policy` (jmenuje obě sha a u neshody říká, že o kódu na obrazovce nemluví),
     a k tomu se **tři stavy notice musí nakreslit různě**. Porovnávají se **surové bajty bitmapy, ne
@@ -1813,6 +1836,26 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `LazySubviewPlacements` a jediný `changed` vstup je **transformace**
   (`CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTransform` v ose). Nad projížděním je to
   očekávané, takže **příčinu #361 to netvrdí** — cenné je to jako srovnávací tvar pro záchvat.
+
+  **Odkud se berou dotazy na geometrii řádku diffu** (#438) měří tatáž sonda scénářem
+  `lineGeometryOrigin`: projede kolečkem dvě záložky nad toutéž scénou a vypíše počty. Zadání #438
+  vinilo diff pod jiným tabem, měření to vyvrátilo — s **diffem vepředu** se `DiffLine.geometry`
+  neozve ani jednou (`DiffView` slévá řádky do bloků, takže tam `DiffLineView` nekreslí nic),
+  kdežto **osa konverzace** s 60 vlákny dá **242** zásahů, po opravě **0**. Osa proto musí mít
+  vlákna s `diffHunk`em (`Self.threaded(count:)` ze `conversation-diff-hunks.json`): syntetická osa
+  ze `synthetic(comments:)` je jen komentáře, takže by úryvek nevznikl a sonda by hlásila nulu před
+  i po — zelenou zprávu o tom, že se nic neměřilo.
+
+  **Co se z toho nedá udělat test:** práce, jejíž výsledek nikdo nepřevezme, po sobě nenechá nic
+  pozorovatelného. Jediná stopa je počitadlo v `RenderDiagnostics.current`, a to je **globál
+  procesu** — test, který do něj zapíše, umí položit `RenderDiagnosticsTests` (tvrdí `current == nil`)
+  a `main` je pak falešně červený (#367, #411). Strukturu proto drží `DiffLineGeometryTests` nad
+  zdrojáky: `onGeometryChange` je v `DiffLineView` **jednou** a jen ve větvi `reportsFrame`, ta
+  podmínka se ptá na identitu řádku **i** na krabici, úryvek na ose nepředává ani jedno a diff
+  předává obojí (to je kontrola měřidla — bez ní by nula znamenala i „rámeček nehlásí nikdo“).
+  **Ověřeno vloženou regresí v obou podobách**: s `reportsFrame` na `true` spadne tvrzení
+  o podmínce a sonda vydá zase 242, s `onGeometryChange` vráceným do řetězce `row` spadne tvrzení
+  o větvi.
 
   Co se z testů poznat nedá: jak to vypadá v **záznamu skutečné instance**. Ověřeno spuštěním
   (`PRism-a`, `./bin/run.sh --diagnose`): za hlavičkou sezení je řádek
