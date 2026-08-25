@@ -4553,6 +4553,43 @@ Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **
 v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí); zbytek přidal
 mezitím mergnutý `main`.
 
+### #438 — geometrii řádku diffu nepočítá diff, ale úryvek na ose
+
+**Na tomhle není co vidět** — mění se, co se počítá, ne co je na obrazovce; `onGeometryChange` do
+rozvržení nezasahuje, a proto je v repu místo `GeometryReader`u.
+
+Zadání vycházelo z toho, že `DiffLine.geometry` (**369 546** a **711 018** zásahů ve dvou záchvatech
+#361, v obou vepředu Konverzace) počítá **diff pod jiným tabem**. Měření to vyvrátilo. Sonda
+`IdleDiffSpinProbe.lineGeometryOrigin` projede kolečkem tutéž scénu ve dvou záložkách:
+
+| Vepředu | před | po |
+|---|---|---|
+| diff (split, 13 souborů, tisíce řádků) | **0** | 0 |
+| osa konverzace (60 vláken s `diffHunk`em) | **242** | **0** |
+
+Diff se neptá **ani když je vepředu**, a není to o viditelnosti: `DiffView` slévá řádky do bloků
+(`DiffRow.blocked(_:)`), takže v něm `DiffLineView` nekreslí ani jeden řádek. Zásahy jsou z osy —
+úryvek u vlákna (`ThreadSnippetView`, #158) kreslí `DiffLineView` řádek po řádku a rámeček z něj
+nemá kdo převzít, protože na ose se netáhne. Poměr sedí: 242 proti 461 dotazům na
+`ConversationRow.id` v sondě, 369 546 proti milionům v záchvatu.
+
+**Oprava je posun podmínky, která v repu byla odjakživa**: `guard let dragID` se vyhodnocoval až
+v **akci**, tedy po čtení. Nově je před ním (`reportsFrame` — identita **i** krabice), takže se
+`onGeometryChange` na ose vůbec nepřipojí. `dragAnchor` v té podmínce schválně **není**: řádek bez
+kotvy se hlásí s prázdným seznamem a právě tím vyklízí zastaralé plochy pod sebou, bez čehož by
+tažení chytalo řádky vedle (#110).
+
+**#361 to nezavírá.** Nové je jedno pozorování: `GeometryActionBinder` byl na ose kořenem **3 ze 6**
+odebraných zásobníků a po opravě je **0 ze 6**, tedy z osy zmizel jeden kořen aktualizace grafu. Že
+tím kolo přestane vznikat, se doložit nedá — v harnessu se za třináct kol nevyrobilo ani jednou.
+
+Testů **4006**, z toho **5 nových** (`DiffLineGeometryTests`) plus scénář sondy, který se v běžném
+běhu přeskočí. Tvrdí se to nad zdrojáky schválně: práce, jejíž výsledek nikdo nepřevezme, nenechá
+nic pozorovatelného a jediná stopa je počitadlo v `RenderDiagnostics.current` — globál procesu, do
+kterého test zapisovat nesmí (#367, #411). **Ověřeno vloženou regresí v obou podobách**: s
+`reportsFrame` na `true` spadne tvrzení o podmínce a sonda vydá zase 242, s `onGeometryChange`
+vráceným do řetězce `row` spadne tvrzení o větvi.
+
 ### M12 — Ergonomie okna (milník #14)
 
 Tři issues z jedné dávky, u kterých je rozvrh naopak krátký: **#441** (klávesové zkratky),

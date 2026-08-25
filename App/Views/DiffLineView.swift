@@ -38,7 +38,47 @@ struct DiffLineView: View {
     /// diffu je pruh ikon, ve kterém se ztratí kód.
     @State private var isHovered = false
 
+    /// **Geometrie se čte jen tam, kde ji má kdo přečíst** (#438).
+    ///
+    /// Rámeček řádku slouží jedině tažení rozsahu (#110), takže když se řádek tažení neúčastní,
+    /// je celý ten výpočet prací, jejíž výsledek nikdo nepřevezme — a `of:` closure
+    /// u `onGeometryChange` běží **uvnitř aktualizace grafu**, tedy i v kole, ve kterém se
+    /// nepřeloží ani jedno tělo. Podmínka v repu byla odjakživa (`guard let dragID` v akci), jen
+    /// se vyhodnocovala **až po** čtení.
+    ///
+    /// Není to `if` nad měnícím se stavem: obojí je dané volajícím a je konstantní po celý život
+    /// řádku — v diffu je rámeček i krabice vždycky (`DiffRowView`, `DiffPairView`), v úryvku
+    /// u vlákna na ose nikdy (`ThreadSnippetView`). Větev se tedy nepřepíná za běhu.
     var body: some View {
+        if reportsFrame {
+            // Rámeček řádku pro tažení (#110) — v souřadnicích **obsahu**, takže se scrollováním
+            // nemění a přeměřování se nespouští. Píše se do neobservable schránky, viz `DiffRowFrames`.
+            row.onGeometryChange(for: CGRect.self) {
+                RenderDiagnostics.inGraph(.lineGeometry)
+                return $0.frame(in: .named(DiffView.contentSpace))
+            } action: { note($0) }
+        } else {
+            row
+        }
+    }
+
+    /// Hlásí tenhle řádek svůj rámeček do krabice pro tažení?
+    ///
+    /// Obojí musí platit naráz: bez `dragID` se nemá co zapsat pod jakou identitou, bez krabice
+    /// není kam. Je to **táž dvojice**, kterou rozbaluje `note(_:)` — jedna podmínka na dvou
+    /// místech by se rozešla a projevilo by se to jako tažení, které přeskakuje řádky.
+    private var reportsFrame: Bool { dragID != nil && rangeDrag.box != nil }
+
+    /// Zapíše rámeček řádku do krabice pro tažení.
+    private func note(_ rect: CGRect) {
+        guard let dragID, let box = rangeDrag.box else { return }
+        // Jeden řádek je z pohledu krabice blok o jednom řádku; řádek, na který se komentovat
+        // nedá, se nehlásí a tím z krabice vypadne (#252).
+        let rows = dragAnchor.map { [DiffRowFrames.Entry(id: dragID, rect: rect, anchor: $0)] } ?? []
+        box.frames.note(rows, covering: rect, of: box.subject)
+    }
+
+    private var row: some View {
         HStack(alignment: .top, spacing: 0) {
             // Prázdné místo pro pilulku s ikonkou — ta visí v overlay, takže sama šířku nezabere.
             // **Vlevo od čísel** (vyžádané při zkoušení #157): mezi čísly a kódem působila jako
@@ -72,18 +112,6 @@ struct DiffLineView: View {
         // u **každého** řádku, i tam, kde se komentovat nedá.
         .overlay { draftButton }
         .onHover { isHovered = $0 }
-        // Rámeček řádku pro tažení (#110) — v souřadnicích **obsahu**, takže se scrollováním
-        // nemění a přeměřování se nespouští. Píše se do neobservable schránky, viz `DiffRowFrames`.
-        .onGeometryChange(for: CGRect.self) {
-            RenderDiagnostics.inGraph(.lineGeometry)
-            return $0.frame(in: .named(DiffView.contentSpace))
-        } action: { rect in
-            guard let dragID else { return }
-            // Jeden řádek je z pohledu krabice blok o jednom řádku; řádek, na který se komentovat
-            // nedá, se nehlásí a tím z krabice vypadne (#252).
-            let rows = dragAnchor.map { [DiffRowFrames.Entry(id: dragID, rect: rect, anchor: $0)] } ?? []
-            if let box = rangeDrag.box { box.frames.note(rows, covering: rect, of: box.subject) }
-        }
         // **Tažení rozsahu visí na celém řádku, ne na sloupci s čísly** — a je to návrat k #110,
         // ke kterému mě dohnalo zkoušení #157. Přesun do sloupce vypadal správně (GitHub to tak
         // má, a hlavně: nad kódem se od #157 vybírá text), ale **přestalo se u toho zvýrazňovat**

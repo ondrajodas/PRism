@@ -712,12 +712,36 @@ struct IdleDiffSpinProbe {
         }
     }
 
-    private func measureGraphSites(_ name: String, tab: PullRequestTab) async throws {
+    /// **Odkud se v okně berou dotazy na geometrii řádku diffu** (#438).
+    ///
+    /// Zadání #438 stálo na tom, že `DiffLine.geometry` (369 546 zásahů v jednom záchvatu, vepředu
+    /// Konverzace) počítá **diff pod jiným tabem**. Odpovědět se na to dá jedině měřením, protože
+    /// z kódu to není vidět ani z jedné strany: `DiffView` slévá řádky do bloků
+    /// (`DiffRow.blocked(_:)`), takže `DiffLineView` v diffu nekreslí ani jeden řádek — kdežto
+    /// úryvek u vlákna na ose (`ThreadSnippetView`) ho kreslí pro **každý** řádek hunku.
+    ///
+    /// Měří se proto obě záložky nad toutéž scénou: diff vepředu a osa s vlákny, která mají
+    /// `diffHunk`. Rozhoduje řádek `DiffLine.geometry` ve výpisu `MĚŘENÍ instrumentace …`.
+    @Test("Odkud se berou dotazy na geometrii řádku diffu")
+    func lineGeometryOrigin() async throws {
+        try await measureGraphSites("diff vepředu", tab: .filesChanged)
+        try await measureGraphSites(
+            "osa s vlákny",
+            tab: .conversation,
+            conversation: try Self.threaded(count: 60)
+        )
+    }
+
+    private func measureGraphSites(
+        _ name: String,
+        tab: PullRequestTab,
+        conversation: Conversation? = nil
+    ) async throws {
         let (store, cache) = try await prepared(big: true, full: true)
         defer { _ = cache }
         if tab == .conversation {
             store.conversationStates[pr] = .loaded(
-                Self.synthetic(comments: 300),
+                conversation ?? Self.synthetic(comments: 300),
                 updatedAt: Self.summary.updatedAt
             )
         }
@@ -895,6 +919,45 @@ struct IdleDiffSpinProbe {
             reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
             threads: ConversationPage(items: [], total: 0, hasNextPage: false),
             comments: ConversationPage(items: items, total: items.count, hasNextPage: false),
+            events: ConversationPage(items: [], total: 0, hasNextPage: false)
+        )
+    }
+
+    /// Osa složená z **vláken s úryvkem kódu** (#438) — dnes jediné místo v aplikaci, kde se
+    /// `DiffLineView` doopravdy kreslí: v diffu se řádky slévají do bloků (`DiffRow.blocked(_:)`),
+    /// kdežto úryvek na ose kreslí řádek po řádku.
+    ///
+    /// Hunky i komentáře jsou **skutečné** (`conversation-diff-hunks.json`), jen se opakují s novou
+    /// identitou — měří se počet řádků v seznamu, ne jejich různost.
+    private static func threaded(count: Int) throws -> Conversation {
+        let text = try Fixture.text("gh/conversation-diff-hunks.json")
+        let response = try GhOutput.decoder.decode(GhConversationResponse.self, from: Data(text.utf8))
+        let source = try response.conversation(
+            id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13084)
+        ).threads.items
+        // Bez vláken s hunkem by se sonda dívala na osu bez jediného úryvku a nula by netvrdila nic
+        // — tatáž past jako počet bloků kódu v okně.
+        let origin = try #require(source.first { $0.diffHunk?.isEmpty == false })
+        let threads = (0..<count).map { index in
+            ReviewThread(
+                id: "t\(index)",
+                path: origin.path,
+                line: origin.line,
+                originalLine: origin.originalLine,
+                side: origin.side,
+                isResolved: origin.isResolved,
+                isOutdated: origin.isOutdated,
+                canResolve: origin.canResolve,
+                canUnresolve: origin.canUnresolve,
+                diffHunk: origin.diffHunk,
+                comments: origin.comments
+            )
+        }
+        return Conversation(
+            viewer: "octocat",
+            reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
+            threads: ConversationPage(items: threads, total: threads.count, hasNextPage: false),
+            comments: ConversationPage(items: [], total: 0, hasNextPage: false),
             events: ConversationPage(items: [], total: 0, hasNextPage: false)
         )
     }
