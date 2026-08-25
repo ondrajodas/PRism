@@ -70,6 +70,12 @@ struct ReviewerPickerView: View {
                 .frame(maxWidth: 320)
                 .frame(height: min(Double(filtered.count) * 26 + 7, 320))
             }
+            // Nápověda kláves (#434) — sekce 24 ji kreslí u **obou** nabídek. Liší se jediné
+            // slovo: `↵` tady review **vyžádá**, u labelů přepne. Nad prázdným výsledkem se
+            // nekreslí, rozhoduje `Policy`.
+            if Policy.pickerShowsKeyHints(rowCount: filtered.count) {
+                PickerKeyHints(confirm: "vyžádá")
+            }
         }
         .task { await load() }
     }

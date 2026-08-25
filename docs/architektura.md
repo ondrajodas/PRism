@@ -7523,7 +7523,9 @@ Nad odesílatelností draftu (#68) platí:
 - **Prázdný login se do sekce nedostane.** Autora review může GitHub vynechat (smazaný účet)
   a řádek bez jména se v panelu nedá odlišit od chyby kresby — a hlavně se nedá vyžádat.
 - **`Policy.pickerRank(of:query:)`, `filteredPicker(_:query:text:)` a `pickerSelection(from:step:count:)`**
-  — hledání v nabídkách `+ label` a `+ reviewer` (`App/Policy/PickerSearch.swift`).
+  — hledání v nabídkách `+ label` a `+ reviewer` (`App/Policy/PickerSearch.swift`). Vedle nich
+  `pickerShowsSearch(count:canCreate:)` (odkdy je nad seznamem hledací pole) a od #434
+  `pickerShowsKeyHints(rowCount:)` (jestli se pod ním kreslí patka s nápovědou kláves).
 
   **Pravidlo shody se dělí s paletou ⌘K** (#184): `searchRange` a `searchStartsWord` jsou tytéž
   funkce (kvůli tomu se z `CommandPaletteSearch` zvedly na `internal`) a dělení dotazu na slova taky
@@ -7866,6 +7868,30 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   fokusovat.
 - **Prázdný výsledek filtru je čtvrtý stav nabídky**, ne první: vedle něj existuje nenačteno,
   prázdné repo a porucha, a každý má vlastní větu. Prázdná plocha by vypadala jako spadlé načítání.
+- **Klávesy jsou od #434 napsané v patce** (`.pkr-foot`, sekce 24) — `↑↓ vybírá`, `↵ přepne`
+  (u reviewerů `vyžádá`), `esc zavře`. Do #434 nebyla ani u jedné nabídky, přitom se v nich od #392
+  a #413 nasbíralo dost kláves, aby se nedaly uhodnout. Plochu drží `PickerFooter` a je to **jedno
+  místo pro obě náplně té třídy**: nápovědu i patku potvrzení nového labelu. Dvě kopie odsazení by
+  se rozešly potichu a jediné, co by z toho bylo vidět, je jinak vysoká patka v jedné z nabídek.
+
+  **Nad prázdným výsledkem se nekreslí** (`Policy.pickerShowsKeyHints(rowCount:)`) a je to jak
+  v zákresu, tak věcně jediná možnost: `pickerSelection` nad prázdnem vrátí `nil`, takže by dvě ze
+  tří položek slibovaly klávesu, po které se nic nestane. Hlídá to tvrzení, že se ty dvě funkce
+  shodnou.
+
+  **`⌥↵` v patce schválně není** — zakládání má zkratku napsanou **u akce samotné** (`.nl-add .keys`)
+  a návrh to tak kreslí i v tom stavu, kde ta akce je (sekce 26): patka i tam nese tři položky.
+  V patce by to byla čtvrtá položka, která ve třech ze čtyř stavů nabídky neplatí.
+
+  **Pro čtečku obrazovky je patka jedna věta a položkám nic nebere**: `accessibilityElement(children:
+  .ignore)` plus vlastní popisek, protože `↑↓` je pro čtečku dvojice znaků. Celá věta u položky
+  (#392) platí dál — patka je zkratka pro oko, ne náhrada popisku.
+
+  **Rozměr je změřený, ne odhadnutý**: patka chce **194 b** (`přepne`), resp. **195 b** (`vyžádá`)
+  z 300, které má `.pkr`. U nabídky reviewerů, která si šířku neurčuje rámcem, je od #434 **nejširší
+  prvek** — přirozená šířka se posunula ze 145 (nadpis) na 195. Není to regrese: `.pkr` má v zákresu
+  300, takže užší nabídka je odchylka na druhou stranu a 195 je jí blíž. Měří to
+  `PickerKeyHintsTests`.
 - **Dokud snímek nedorazil, je `+ label` zakázaný.** Sada se posílá celá, takže bez snímku nemá
   z čeho vzniknout — a tlačítko, po kterém se nic nestane, je horší než zakázané. Vysvětlení u něj
   mluví o načítání, ne o bráně; jsou to dva různé důvody.

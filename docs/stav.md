@@ -4561,3 +4561,35 @@ jdou **souběžně**, žádná nestojí na jiné. Milník mají proto, že rozvr
 naráz“ — je jediná věc, která tu informaci udrží napříč sessions; `Průběžné` je koš bez pořadí.
 Jediná vazba: #441 chce mít `⌘R` zakázané, dokud běží obnovení, a `AppStore.isRefreshing` v repu
 už je, takže na #442 nečeká. Nakreslené jsou #442 a #443 v sekcích 32 a 31 návrhu.
+
+### #434 — nabídky v panelu dostaly patku s nápovědou kláves
+
+Návrh kreslí `.pkr-foot` u **obou** nabídek v panelu (sekce 24) a v aplikaci nebyla ani u jedné —
+mezera po #392, kterou #413 vědomě nechalo. Návrh se nemění, takže to bylo srovnání s tím, co
+v mockupu už nakreslené je, a šlo se rovnou.
+
+Patka je jedna třída v CSS a od #434 je i **jedno místo v kódu**: `PickerFooter` drží plochu (horní
+linka `--line-soft`, podklad `--panel-2`, odsazení `6 × 11`, mezera `12`) a používají ji obě její
+náplně — nápověda kláves i patka potvrzení nového labelu, která tam do #434 měla vlastní kopii těch
+čtyř hodnot. Obsah nápovědy je `↑↓ vybírá`, `↵ přepne` (u reviewerů `vyžádá`), `esc zavře`; liší se
+tedy **jediné slovo**.
+
+**Nad prázdným výsledkem se patka nekreslí**, a je to jak v zákresu (nabídka s `.pkr-empty` ji nemá),
+tak jediná možnost, která nelže: `pickerSelection` nad prázdnem vrátí `nil`, takže by dvě ze tří
+položek slibovaly klávesu, po které se nic nestane. Rozhodnutí drží `Policy.pickerShowsKeyHints(rowCount:)`
+a k němu tvrzení, že se s `pickerSelection` **shodne** — rozejít se to umí potichu, protože patka je
+stav okna, kdežto tohle jsou dvě čísla.
+
+**`⌥↵` v patce schválně není.** Zakládání nového labelu má zkratku napsanou u akce samotné a návrh to
+tak kreslí i v tom stavu, kde ta akce je (sekce 26): patka i tam nese tři položky. Čtvrtá položka by
+navíc neplatila ve třech ze čtyř stavů nabídky.
+
+**Změřeno, ne odhadnuto** (zadání to žádalo výslovně): patka chce **194 b** (`přepne`), resp. **195 b**
+(`vyžádá`) z 300, které má `.pkr` — rezerva 105 bodů. U nabídky reviewerů, která šířku nemá danou
+rámcem, se tím **přirozená šířka posunula ze 145 na 195**: patka je v ní od #434 nejširší prvek.
+Zapsané je to tak, jak to vyšlo, ne jak to bylo zamýšlené — tvrdí se, že nabídka nepřeteče za 300 ze
+zákresu, ne že s ní patka nehne, protože druhé by bylo nepravdivé.
+
+**Co se v harnessu ověřit nedá:** že ty klávesy fungují. Testovací host nedostane aktivaci (změřeno
+u #392), takže nemá key okno a stisk nemá kam sednout — zvlášť u `⌥↵`, které je na poli, ne na okně.
+Ověřuje to člověk na běžící aplikaci a je to podmínka toho, že patka smí ty klávesy tvrdit.

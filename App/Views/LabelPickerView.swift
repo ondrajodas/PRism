@@ -114,6 +114,11 @@ struct LabelPickerView: View {
             .frame(height: min(Double(filtered.count) * 24 + 7, 320))
         }
         if let offer { newLabelAction(offer) }
+        // Patka **až za akcí k založení**, jak ji kreslí sekce 26 — je to spodní hrana nabídky,
+        // takže pod ní nesmí být nic. `⌥↵` v ní schválně není, důvod je u `PickerKeyHints`.
+        if Policy.pickerShowsKeyHints(rowCount: filtered.count) {
+            PickerKeyHints(confirm: "přepne")
+        }
     }
 
     /// Akce `Založit „…“` **pod děličem**.
@@ -228,7 +233,9 @@ struct LabelPickerView: View {
     /// `dvě volání` není ozdoba — je to jediné místo, kde je vidět, že tvrdá podmínka č. 5 pro
     /// tuhle akci neplatí, a proto se pak dá pochopit i věta o tom, že se založilo a nepřidalo.
     private func footer(for label: PullRequestLabel) -> some View {
-        HStack(spacing: 12) {
+        // Plocha patky je `PickerFooter`, tedy **tatáž jako u nápovědy kláves** (#434): návrh na to
+        // má jednu třídu (`.pkr-foot`) a dvě kopie odsazení by se rozešly potichu.
+        PickerFooter {
             Button("Zpět") { confirming = nil }
                 .buttonStyle(.mini)
             Spacer(minLength: 7)
@@ -245,10 +252,6 @@ struct LabelPickerView: View {
             // něčím nevratným, takže se nemá muset dohledávat z chipu nad tlačítkem.
             .accessibilityLabel("založit label \(label.name) v repozitáři \(repo.description) a přidat ho na PR")
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
-        .background(Palette.chrome)
-        .overlay(alignment: .top) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
     // MARK: - Data
