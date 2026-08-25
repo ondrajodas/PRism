@@ -1054,6 +1054,29 @@ Zásady, které platí všude:
   grep -rn 'NSApp.appearance\|NSApplication.shared.appearance' Tests |
       grep -vE ':[0-9]+: *//' | grep -v GlobalAppearanceTests
   ```
+- **`UserDefaults` je tentýž případ, a přežije běh** (#411). Do #411 měl testovací host bundle ID
+  hlavní instance, takže `@AppStorage` i `UserDefaults.standard` v testech zapisovaly **do nastavení,
+  které se používá** — ležela tam velikost sheetu, návštěvy u vymyšlených PR i „poslední viděné
+  vydání“. Od #411 je výchozí `PRISM_SLOT` v projektu `.testhost` (identitu aplikace stanoví
+  `bin/run.sh`, který ho předává **vždycky, i prázdný**), takže host běží jako
+  `com.ondrajodas.prism.testhost`. Kdo potřebuje `UserDefaults`, bere si **`ScratchDefaults`** —
+  jméno s `UUID`, protože pojmenovaná doména je sdílená **napříč procesy**, a úklid po sobě
+  (`removePersistentDomain` prázdný plist nechá a po smazání zevnitř procesu se **vrátí koncem
+  procesu**; maže se proto i z podprocesu). Sada, která tvrdí něco o úklidu, si hlavní instanci
+  **vyrábí** v podstrčeném `HOME` — nečte tu skutečnou, protože do její domény píše běžící aplikace
+  (naměřeno 6 296 → 6 343 B a **dvakrát falešně červený `main`**). Hlídají to
+  `ProcessPreferencesTests`; podrobnosti i zamítnuté cesty v
+  [`docs/testovani.md`](docs/testovani.md). Grepy, které **musí vyjít prázdné** (guard soubor se
+  odečítá, hledané řetězce v něm stojí jako literály):
+
+  ```bash
+  # `--include`, protože stráž čte zdrojáky: v `Tests/Fixtures/` leží skutečný diff, ve kterém
+  # to jméno stojí legitimně (je to náš `project.pbxproj` z doby přejmenování).
+  grep -rn --include='*.swift' 'UserDefaults.standard\|UserDefaults(suiteName: "' Tests |
+      grep -vE ':[0-9]+: *//' | grep -v ProcessPreferencesTests
+  grep -rn --include='*.swift' '"com.ondrajodas.prism"\|/Applications/PRism.app' Tests |
+      grep -vE ':[0-9]+: *//' | grep -v ProcessPreferencesTests
+  ```
 - **Testy se nespouštějí rourou do `grepu`** — viz *Příkazy* níž, umí to zaseknout na neurčito.
 
 ## Příkazy

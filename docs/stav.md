@@ -4391,3 +4391,45 @@ systémovou barvou ve vzorku spadne práh (1,63 proti 3,0). **Neověřené:** ni
 spadly v jednom plném běhu na tom, že si běžící hlavní instance přepsala `com.ondrajodas.prism.plist`
 uprostřed měření (3 bajty), samostatně i v dalším plném běhu jsou zelené; je to třída, kterou řeší
 #411, ne tahle změna.
+
+### #411 — testovací host přestal být hlavní instancí
+
+Do #411 běžel `xcodebuild test` jako `com.ondrajodas.prism`, protože slotovou příponu dosazoval
+teprve `bin/run.sh`. Všechno, co v testu prošlo `@AppStorage` nebo `UserDefaults.standard`, tedy
+zapisovalo **do nastavení, které se doopravdy používá** — a nebyla to teorie: v uživatelově doméně
+ležela uložená velikost sheetu z regresního experimentu u #327 a v nové doméně hosta se po prvním
+běhu objevily **návštěvy u vymyšlených PR** (`cli/cli#1` s časem z roku 1970) i
+`releaseNotes.lastSeenTag`. Ta druhá dvojice je podstatná pro rozhodnutí: nejde z testovacího kódu,
+ale z **výchozích argumentů** `AppStore` a `ReleaseNotesModel`, takže stráž nad `Tests/` by ji
+nechytila.
+
+**Opravou je jedna hodnota v `project.pbxproj`**: výchozí `PRISM_SLOT = ".testhost"`. Identitu
+aplikace stanoví `bin/run.sh` (předává `PRISM_SLOT` vždycky, i prázdný), takže výchozí hodnota platí
+právě pro build, který si o identitu neřekl. Host tedy běží jako `com.ondrajodas.prism.testhost`
+a hlavní instance i sloty zůstávají, čím byly (ověřeno na nainstalovaném `PRism-b.app`:
+`com.ondrajodas.prism.b`). Zamítnuté cesty i změřené slepé uličky — `PRODUCT_BUNDLE_IDENTIFIER`
+testovacího targetu (bundle je hostovaný, `Bundle.main` je aplikace), podmínka podle `ACTION`
+(u `build` i `test` je to `build`), vlastní konfigurace pro testovací akci (druhý strom produktů),
+vrstva v kódu s detekcí testů (chyba se platí uživatelovým nastavením) — jsou
+v [`testovani.md`](testovani.md).
+
+Zbylé dva projevy téže třídy ta hodnota neřeší, takže mají svoje opravy. **Vlastní suita s pevným
+jménem je globál napříč procesy** (souběžné běhy tří slotů si přepisovaly klíč, `1180` tam, kde se
+tvrdí `nil`) — jméno proto skládá `ScratchDefaults` z `UUID` a uklízí po sobě i prázdný plist. Že to
+je potřeba, se ukázalo hned: po samotném `removePersistentDomain` se prázdný soubor **vrátí koncem
+procesu**, takže první plný běh byl zelený a pět souborů na disku; druhý, s mazáním z podprocesu,
+nechal **nula**. A **sada, která tvrdí něco o úklidu, si hlavní instanci vyrábí** v podstrčeném
+`HOME` místo toho, aby čtla tu skutečnou — do její domény píše běžící aplikace (6 296 → 6 343 B),
+což byl **dvakrát falešně červený `main`**.
+
+Na obrazovce se nemění nic — je to celé test target a jedna hodnota v projektu. Testů **3978**,
+z toho **8 nových** (`ProcessPreferencesTests`), tři plné běhy zelené. Vloženými regresemi ověřeno
+pět věcí: `UserDefaults.standard` v testu, suita pojmenovaná literálem, jméno domény i cesta
+k nainstalovanému bundlu v testu, `PRISM_SLOT` vrácený na `""` a mazání mimo slot ve
+`bin/slot-cleanup.sh`. **Co se testem hlídat nedá** a zůstává na ruční kontrole: že po plném běhu
+nezůstala na stroji doména `cz.prism.tests.*` — souběžné běhy slotů mají svoje rozdělané, takže by
+tvrzení „nic tu není“ bylo červené podle toho, kdo běží vedle.
+
+Jak často se do toho šláplo, je vidět na sousedním záznamu: [#432](#432--sémantická-škála-se-kreslí-z-palety-ne-ze-systému)
+skončil v jednom plném běhu červeně na tomtéž přepsaném plistu (3 bajty) a musel to odepsat jako
+cizí třídu. Tohle je ta třída.

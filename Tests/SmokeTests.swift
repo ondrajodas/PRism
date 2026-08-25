@@ -5,8 +5,13 @@ import Testing
 
 /// Smoke testy scaffoldu. Nedělají nic chytrého — ověřují, že se testy linkují proti
 /// app bundlu a že se do něj propsaly build settings. Když se projekt rozbije, padá tohle.
+///
+/// **Hostitel se od #411 nejmenuje jako aplikace**, a je to celý ten fígl: výchozí `PRISM_SLOT`
+/// v projektu je `.testhost`, takže `UserDefaults.standard` v testech není nastavení uživatele.
+/// Hodnotu pro hlavní instanci a slot dosazuje `bin/run.sh`. Proč to tak je a co na tom stojí,
+/// hlídají `ProcessPreferencesTests`.
 @Test func appBundleIdentifierMatchesProjectSetting() {
-    #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.prism")
+    #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.prism.testhost")
 }
 
 /// Název je jeden napříč vším — hlídá, že se v bundlu neobjeví jiný než `PRism`.

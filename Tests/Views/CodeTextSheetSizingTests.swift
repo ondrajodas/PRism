@@ -20,11 +20,16 @@ import Testing
 /// - **Jeden klíč pro obě velikosti** by znamenal, že roztažený log otevírá takhle i hunk o devíti
 ///   řádcích. To je ten test, který tvrdí, že se něco **nestalo**.
 ///
-/// **`UserDefaults` procesu se nepoužívá, a je to tvrdá podmínka, ne zdvořilost** (#367):
-/// `@AppStorage` dostane **v každém testu** vlastní suite přes `defaultAppStorage(_:)`, protože
-/// testovací host má bundle ID **hlavní instance** (slotová přípona vzniká až v `bin/run.sh`, ne při
-/// buildu). Zápis odsud by tedy šel do nastavení, které uživatel doopravdy používá. Suite se na
-/// konci maže.
+/// **`UserDefaults` procesu se nepoužívá, a je to tvrdá podmínka, ne zdvořilost** (#367, upraveno
+/// #411): `@AppStorage` dostane **v každém testu vlastní doménu** přes `defaultAppStorage(_:)`,
+/// a její jméno je unikátní na běh (`ScratchDefaults`) — pojmenovaná doména je totiž sdílená
+/// **napříč procesy**, takže si při souběžném běhu tří slotů dvě sady s pevným jménem přepisovaly
+/// klíče (změřeno u #420: `1 180` tam, kde se tvrdí `nil`).
+///
+/// Do #411 tady stálo, že důvod je bundle ID hlavní instance u testovacího hosta; od #411 má host
+/// vlastní (`com.ondrajodas.prism.testhost`, viz `ProcessPreferencesTests`), takže **do nastavení
+/// uživatele odsud nevede cesta ani omylem**. Vlastní doména se tím ale nestává zbytečnou —
+/// doména hosta je jedna pro všechny souběžné běhy.
 @Suite("Velikost sheetu s kódem v okně", .serialized)
 @MainActor
 struct CodeTextSheetSizingTests {
@@ -36,8 +41,9 @@ struct CodeTextSheetSizingTests {
 
     @Test("Sheet má tažný okraj a podlahu svého profilu", arguments: [CodeText.Kind.hunk, .log])
     func theSheetIsResizable(kind: CodeText.Kind) async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let scene = try await open(kind: kind, store: store)
         defer { scene.close() }
@@ -55,8 +61,9 @@ struct CodeTextSheetSizingTests {
     /// číslo podlahy.
     @Test("Bez uložené velikosti se sheet otevře v ideální šířce", arguments: [CodeText.Kind.hunk, .log])
     func opensAtTheIdealWidth(kind: CodeText.Kind) async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let scene = try await open(kind: kind, store: store)
         defer { scene.close() }
@@ -74,8 +81,9 @@ struct CodeTextSheetSizingTests {
     /// změřeno u #358).
     @Test("Natažená velikost se uloží a příští otevření ji vezme")
     func remembersTheDraggedSize() async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let first = try await open(kind: .hunk, store: store)
         let opened = first.sheet.frame
@@ -106,8 +114,9 @@ struct CodeTextSheetSizingTests {
     /// o devíti řádcích — a naopak stažený hunk nesmí zúžit log.
     @Test("Hunk nezdědí velikost natažená u logu")
     func keepsTheTwoProfilesApart() async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let log = try await open(kind: .log, store: store)
         let widened = CGSize(width: log.sheet.frame.width - 240, height: log.sheet.frame.height - 60)
@@ -135,8 +144,9 @@ struct CodeTextSheetSizingTests {
     /// nejmenší možný.
     @Test("Otevření bez tažení neuloží nic", arguments: [CodeText.Kind.hunk, .log])
     func openingAloneStoresNothing(kind: CodeText.Kind) async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let scene = try await open(kind: kind, store: store)
         let ideal = Policy.codeSheetSizing(kind: kind, screen: NSScreen.main?.visibleFrame.size).ideal
@@ -170,8 +180,6 @@ struct CodeTextSheetSizingTests {
     }
 
     // MARK: - Scéna
-
-    private static let suite = "cz.prism.tests.codeSheetSizing"
 
     /// Kam se postaví hostitelské okno — pod dolní hranu **té obrazovky, ze které si sheet počítá
     /// ideál**. Viz `open(kind:store:)`.
@@ -215,11 +223,10 @@ struct CodeTextSheetSizingTests {
         }
     }
 
-    /// Prázdná suita pro `@AppStorage`. **Maže se cizí instancí**, ne tou vrácenou: instance, která
-    /// si smaže vlastní doménu, si ji odebere i z prohledávaného seznamu a hodnoty pak nedrží.
-    private func scratchStore() throws -> UserDefaults {
-        UserDefaults().removePersistentDomain(forName: Self.suite)
-        return try #require(UserDefaults(suiteName: Self.suite))
+    /// Prázdná doména pro `@AppStorage` — **vlastní na každý test a s jménem na jeden běh**
+    /// (`ScratchDefaults`, #411). Uklidí se sama, i když test spadne, a maže i plist po sobě.
+    private func scratchStore() throws -> ScratchDefaults {
+        try ScratchDefaults("codeSheetSizing")
     }
 
     /// Okno s otevřeným sheetem. Drží se v něm i hostitelské okno, aby ho nikdo neuklidil dřív, než

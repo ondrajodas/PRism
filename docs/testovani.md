@@ -4344,6 +4344,102 @@ hostitel, takže by to na příčinu nedosáhlo vůbec. Zámek nad globálem v t
 hostitel žádný zámek nedrží, a k tomu je to sdílený stav navíc. Test smazat — je to tvrzení
 o tom, že se něco **nestalo**, tedy nejcennější druh testu v tomhle repu; přesunulo se, ne zahodilo.
 
+### `UserDefaults` je tentýž případ, a měl tři projevy (#411)
+
+Doména `UserDefaults` procesu patří do téže třídy jako `NSApp.appearance` — je to jedna hodnota na
+celý testovací host a **testu nepatří**. Do #411 to bylo o řád horší než u vzhledu, protože ta
+hodnota **přežije běh**: testovací host měl bundle ID hlavní instance (slotová přípona vznikala
+teprve v `bin/run.sh`), takže `xcodebuild test` běžel jako `com.ondrajodas.prism` a všechno, co
+v testu prošlo `@AppStorage` nebo `UserDefaults.standard`, zapisovalo **do nastavení, které se
+doopravdy používá**.
+
+Naměřené projevy byly tři a každý vypadal jako jiná vada:
+
+| Projev | Jak se to poznalo |
+|---|---|
+| **Z testů do provozu.** Uložená hodnota z testu je ta, se kterou se aplikaci příště otevře okno | U #327 zůstala v `com.ondrajodas.prism` velikost sheetu z regresního experimentu; při opravě #411 tam vedle toho ležely **návštěvy u vymyšlených PR** (`cli/cli#1` s časem z roku 1970) a `releaseNotes.lastSeenTag`, tedy „poslední viděné vydání“ nastavené testem |
+| **Z provozu do testů.** Sada tvrdí něco o souboru, do kterého píše **běžící aplikace** | `SlotCleanupTests` brala otisk `com.ondrajodas.prism.plist` před úklidem a po něm: 6 296 → 6 343, 6 563 → 6 566, 7 263 → 7 266 B, a velikost se pak **vrací**. Izolovaně 9/9 za 0,1 s, v plném běhu (40–67 s) **dvakrát falešně červený `main`**. Rozhodovala délka běhu, ne obsah změny |
+| **Napříč procesy.** Vlastní suita s **pevným** jménem je globál stejně jako doména procesu | `cz.prism.tests.codeSheetSizing` a `cz.prism.tests.rawSessionSheetSizing` si při souběžném běhu tří slotů přepisovaly klíče: `store.object(forKey: "rawSessionSheetWidth") → 1180` tam, kde se tvrdí `nil`. Izolovaně obě sady procházely |
+
+**Řeší to výchozí `PRISM_SLOT` v `project.pbxproj`, ne vrstva v kódu.** Identitu aplikace stanoví
+`bin/run.sh` (předává `PRISM_SLOT` na příkazové řádce vždycky, i prázdný), takže výchozí hodnota
+platí právě pro build, který si o identitu neřekl — a od #411 je to `.testhost`. Testovací host
+tedy běží jako `com.ondrajodas.prism.testhost` a do nastavení uživatele odsud nevede cesta ani
+omylem. Detaily jsou v README, sekce *Paralelní vývoj — sloty*.
+
+**Proč zrovna takhle** — tři měření, která to rozhodla:
+
+- **`PRODUCT_BUNDLE_IDENTIFIER` testovacího targetu je slepá cesta**, i když se to nabízí jako
+  první. Bundle testů je **hostovaný**, takže `Bundle.main` je aplikace: `UserDefaults.standard`
+  se řídí jejím identifikátorem a na tom, jak se jmenuje `.xctest`, nezáleží.
+- **Podmíněné nastavení podle akce nejde** — `xcodebuild -showBuildSettings` hlásí `ACTION = build`
+  u `build` i u `test`, takže se ta dvě od sebe v projektu odlišit nedají.
+- **Vlastní konfigurace pro testovací akci schématu by fungovala, ale je moc drahá**: druhý strom
+  produktů (`Build/Products/Test/`) znamená dvojí build v každém stromě, druhý hostitelský bundle
+  v databázi LaunchServices (třída #139) a `Debug` zadrátovaný v `bin/*.sh`. Za to, co obstará
+  jedna hodnota v projektu, se to nevyplatí.
+
+**Vrstva v kódu (`UserDefaults.prism` s detekcí testů) je zamítnutá** ze dvou důvodů. Znamenala by
+podmínku „běžím v testu?“ v produkčním kódu, jejíž **chyba se platí uživatelovým nastavením** (falešně
+kladná detekce v nainstalované aplikaci = tichá ztráta všeho, co si proklikal). A neuzavřela by tu
+třídu: leak z ledgerů (`pullRequests.lastVisits`) nejde z testovacího kódu, ale z **výchozích
+argumentů** v aplikaci, takže by ho stráž nad `Tests/` nechytila a `@AppStorage` bez `store:` by
+zůstalo mimo. Výchozí `PRISM_SLOT` naopak platí na všechno naráz, včetně toho, co se napíše příště.
+
+**Vlastní doména se tím ale nestává zbytečnou.** Doména hosta je jedna pro souběžné běhy tří slotů,
+takže kdo potřebuje `UserDefaults`, bere si **`ScratchDefaults`** (`Tests/Support/`): jméno
+`cz.prism.tests.<k čemu>.<UUID>`, tedy unikátní na běh, a úklid po sobě. `@AppStorage` se do ní
+nasadí přes `defaultAppStorage(_:)` na to view, které se měří.
+
+**Úklid té domény má tři kroky a druhý z nich není zjevný.** `removePersistentDomain(forName:)`
+nechá prázdný plist (42 B) — to je pas z #399 — ale hlavně: po smazání **zevnitř procesu** se ten
+prázdný soubor **vrátí, jakmile proces skončí**. V prvním plném běhu po #411 takhle zůstalo **pět**
+souborů, přesně těch, do kterých se zapisovalo, a `#expect` uvnitř testu přitom prošel: za živa
+soubor po `rm` není ani po dvou sekundách, doflushuje ho `cfprefsd` až při zániku procesu. Sonda
+(scratchpad, sedm variant) našla dvě, po kterých se nevrátí — pustit instanci suity z ruky **dřív**,
+než se doména maže, a smazat doménu **z jiného procesu**. `ScratchDefaults` dělá to druhé
+(`/usr/bin/defaults delete`), protože v `deinit` se odkaz na vlastní pole pustit nedá. Po druhém
+plném běhu zbylo **nula** souborů.
+
+**Co se hlídá čím.** Runtime tvrzení je jedno a je to to nejcennější: `Bundle.main.bundleIdentifier`
+**není** `com.ondrajodas.prism` (`ProcessPreferencesTests`) — kdyby někdo `PRISM_SLOT` z projektu
+smazal, spadne to hned, kdežto ušpiněné nastavení se pozná až za týden. Zbytek je nad zdrojáky,
+tatáž konstrukce jako `GlobalAppearanceTests`:
+
+| Tvrzení | Co drží |
+|---|---|
+| Žádný soubor v `Tests/` nepíše `UserDefaults.standard` | Doména hosta je pořád jedna pro tři souběžné běhy |
+| Žádný soubor v `Tests/` nepojmenuje suitu literálem (`UserDefaults(suiteName: "…"`) | Třetí projev z tabulky výš; jméno skládá `ScratchDefaults` z `UUID` |
+| Žádný soubor v `Tests/` nejmenuje `"com.ondrajodas.prism"` ani `/Applications/PRism.app` | Druhý projev: do obojího píše někdo jiný — do plistu běžící aplikace, do bundlu každé `bin/run.sh` po mergi. **Jméno plistu se nehlídá**, protože `com.ondrajodas.prism.plist` je zrovna to jméno, které si musí dát **vyrobená** hlavní instance |
+| `bin/run.sh` má `SLOT_ARGS` a předává je | Druhá polovina té izolace. Bez toho by si hlavní instance vzala `.testhost`, tedy prázdné nastavení, propadlá TCC povolení a druhý PRism v LaunchServices |
+
+**Hlavní instance se v `SlotCleanupTests` vyrábí, ne čte** — je to ta oprava druhého projevu.
+Skript si cache i plist skládá z `${HOME}`, takže dostane **podstrčený `HOME`** a v něm cache
+`PRism` a plist `com.ondrajodas.prism.plist`, které vyrobil test; porovnává se **obsah**, ne
+velikost, což je silnější než původní otisk. Dvě věci u toho nejsou zjevné:
+
+- **`defaults` `HOME` ignoruje** (změřeno: zápis pod podstrčeným domovem skončil v tom skutečném,
+  cestu skládá `cfprefsd`, ne klient). Doména se proto testuje dál ve skutečném `HOME`, na slotu
+  s `UUID` — a je to **jediný** test v té sadě, který tam běží.
+- **Bez pozitivní kontroly by ta tvrzení byla prázdná**: nedotčené soubory znamenají i „skript se
+  na ně nepodíval“. Kontrolou je `Cache slotu se smaže`, která v tomtéž podstrčeném domově maže
+  cache slotu vedle vyrobené hlavní instance.
+
+**Ověřeno vložením regrese, a to z pěti stran.** (1) Test, který si uloží do `UserDefaults.standard`
+→ padne stráž nad zdrojáky. (2) Suita pojmenovaná literálem → padne. (3) `"com.ondrajodas.prism"`
+a `/Applications/PRism.app` v testu → padnou dvě tvrzení. (4) `PRISM_SLOT` v projektu vrácený na
+`""` → padne `Testovací host neběží v doméně aplikace` (`"com.ondrajodas.prism" != "com.ondrajodas.prism"`),
+a nic jiného. (5) `rm -f "${HOME}/Library/Application Support/PRism/findings.json"` v
+`bin/slot-cleanup.sh` → padnou **oba** testy s vyrobenou hlavní instancí i strukturní tvrzení
+o mazání mimo slot. Vybraná cesta té regrese je schválně taková, která ve skutečném `HOME`
+neexistuje — vložená regrese nesmí umět smazat data, kvůli kterým se testuje.
+
+**Co se z toho testem hlídat nedá.** Že po plném běhu nezůstane na stroji žádná doména
+`cz.prism.tests.*`, se ověřuje **rukou** (`ls ~/Library/Preferences | grep cz.prism`), ne testem:
+souběžné běhy tří slotů mají svoje soubory rozdělané, takže by tvrzení „nic tu není“ bylo červené
+podle toho, kdo běží vedle — a to je zrovna ta třída, kterou #411 opravuje. Platí u toho i to, že
+zabitý běh (⌃C) úklid nespustí a jeden soubor po sobě nechat může.
+
 ## Jak si zkontrolovat, jak view vypadá
 
 **Screenshot běžící aplikace dostaneš** — od #181, kdy terminálu přibylo oprávnění Screen

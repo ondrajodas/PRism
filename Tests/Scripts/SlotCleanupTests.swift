@@ -19,6 +19,18 @@ import Testing
 /// v `BundleLibraryTests`, tady je předmětem cache, doména a to, co skript odmítne. Dvě výjimky
 /// jsou schválně obě chybové větve — kontrola, která hlásí jen výjimečně, se musí pustit i v tom
 /// výjimečném stavu (#61).
+///
+/// **Hlavní instance se v téhle sadě vyrábí, ne čte** (#411, mění #398). Do #411 se tvrzení „úklid
+/// slotu tam nesáhl“ opíralo o otisk **skutečné** hlavní instance, tedy i o velikost
+/// `~/Library/Preferences/com.ondrajodas.prism.plist` — a do toho souboru píše **běžící aplikace**,
+/// která je na tomhle stroji spuštěná celý den. Naměřeno na plných bězích: 6 296 → 6 343,
+/// 6 563 → 6 566, 7 263 → 7 266 B, a velikost se pak **vrací**, takže se během běhu jen přepíše.
+/// Izolovaně sada procházela 9/9 za 0,1 s, v plném běhu (40–67 s) byla **dvakrát falešně červená**.
+/// Rozhodovala délka běhu, ne obsah změny.
+///
+/// Otisk se proto bere z **podstrčeného `HOME`** (`MainInstanceDecoy`), kde cache i plist hlavní
+/// instance vyrobí test — má tedy pod kontrolou obojí konec tvrzení a čte jen svoje soubory.
+/// Ověřuje se u toho **obsah, ne velikost**, což je silnější než původní podoba.
 @Suite("Úklid slotu")
 struct SlotCleanupTests {
     private static let repoRoot = URL(filePath: #filePath)
@@ -36,30 +48,65 @@ struct SlotCleanupTests {
 
     private func cleanup(
         _ arguments: [String],
-        lsregister: String = "/usr/bin/true"
+        lsregister: String = "/usr/bin/true",
+        home: URL? = nil
     ) async throws -> ProcessResult {
-        try await SubprocessRunner().run(
+        var environment = ["PRISM_LSREGISTER": lsregister]
+        if let home {
+            environment["HOME"] = home.path
+        }
+        return try await SubprocessRunner().run(
             Self.script,
             arguments: arguments,
-            environment: ["PRISM_LSREGISTER": lsregister],
+            environment: environment,
             timeout: .seconds(300)
         )
     }
 
-    /// Existence a velikost toho, co patří hlavní instanci. Bere se před úklidem a po něm; když se
-    /// změní, znamená to, že úklid slotu sáhl tam, kam nikdy sahat nesmí.
-    private func mainInstanceFingerprint() -> [String] {
-        let paths = [
-            "/Applications/PRism.app",
-            home.appending(path: "Library/Application Support/PRism").path,
-            home.appending(path: "Library/Preferences/com.ondrajodas.prism.plist").path,
-        ]
-        return paths.map { path in
-            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
-                return "\(path): není"
+    /// Vyrobená hlavní instance v podstrčeném `HOME`: cache a plist **na těch jménech, která hlavní
+    /// instance doopravdy má**. Skript si obojí skládá z `${HOME}`, takže se mu dá dát jiný domov
+    /// a tvrzení „nesáhl na hlavní instanci“ vést nad soubory, do kterých nikdo jiný nepíše.
+    ///
+    /// **Doména v `UserDefaults` se takhle podstrčit nedá, a je to změřené** — `defaults` `HOME`
+    /// ignoruje (zápis pod podstrčeným domovem skončil v tom skutečném, protože cestu skládá
+    /// `cfprefsd`, ne klient). Nevadí: doména se testuje zvlášť na slotu s `UUID`
+    /// (`deletesUserDefaultsDomainAndLeftoverPlist`) a hlavní instance se tady poznává po cestách.
+    ///
+    /// **Že skript ten podstrčený domov doopravdy používá, tvrdí `deletesSlotCache`** — bez toho
+    /// pozitivního kontrolního testu by byla všechna tvrzení níž prázdná, protože nedotčené soubory
+    /// by znamenaly i „skript se na ně nikdy nepodíval“.
+    private struct MainInstanceDecoy {
+        /// Drží se, aby se složka smazala až s testem.
+        let root: TemporaryDirectory
+        let cache: URL
+        let plist: URL
+
+        static let cacheContent = "{\"nálezy\":\"nesmí se smazat\"}"
+        static let plistContent = "<plist>proklikané nastavení</plist>"
+
+        init() throws {
+            root = try TemporaryDirectory()
+            cache = root.url.appending(path: "Library/Application Support/PRism")
+            plist = root.url.appending(path: "Library/Preferences/com.ondrajodas.prism.plist")
+            try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: plist.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Self.cacheContent.write(to: cache.appending(path: "findings.json"), atomically: true, encoding: .utf8)
+            try Self.plistContent.write(to: plist, atomically: true, encoding: .utf8)
+        }
+
+        /// Obsah obojího, jak ho po sobě našel test. Porovnává se **obsah**, ne velikost: soubor
+        /// přepsaný na stejnou délku by jinak prošel.
+        func fingerprint() -> [String] {
+            [cache.appending(path: "findings.json"), plist].map { url in
+                (try? String(contentsOf: url, encoding: .utf8)) ?? "není"
             }
-            let size = (attributes[.size] as? NSNumber)?.intValue ?? -1
-            return "\(path): \(size)"
+        }
+
+        var untouched: Bool {
+            fingerprint() == [Self.cacheContent, Self.plistContent]
         }
     }
 
@@ -70,14 +117,14 @@ struct SlotCleanupTests {
     /// „Uklízím slot“ nevypíše.
     @Test("Bez slotu se neuklízí nic")
     func refusesEmptySlot() async throws {
-        let before = mainInstanceFingerprint()
+        let decoy = try MainInstanceDecoy()
 
-        let result = try await cleanup([""])
+        let result = try await cleanup([""], home: decoy.root.url)
 
         #expect(result.exitCode == 1)
         #expect(result.standardError.contains("hlavní instance"))
         #expect(!result.standardOutput.contains("Uklízím"))
-        #expect(mainInstanceFingerprint() == before)
+        #expect(decoy.untouched, "Hlavní instance se změnila: \(decoy.fingerprint())")
     }
 
     @Test("Slot se znakem mimo bundle ID se odmítne")
@@ -101,32 +148,36 @@ struct SlotCleanupTests {
     /// nenainstaloval, uklízí prázdno. Nesmí z toho být chyba a hlavní instance se toho netkne.
     @Test("Slot, po kterém nic nezbylo, projde a hlavní instanci se nedotkne")
     func cleansSlotThatLeftNothing() async throws {
-        let before = mainInstanceFingerprint()
+        let decoy = try MainInstanceDecoy()
 
-        let result = try await cleanup([scratchSlot()])
+        let result = try await cleanup([scratchSlot()], home: decoy.root.url)
 
         #expect(result.exitCode == 0)
         #expect(result.standardOutput.contains("bundle: v /Applications nebyl"))
         #expect(result.standardOutput.contains("cache: nebyla"))
         #expect(result.standardOutput.contains("doména v UserDefaults: nebyla"))
-        #expect(mainInstanceFingerprint() == before)
+        #expect(decoy.untouched, "Hlavní instance se změnila: \(decoy.fingerprint())")
     }
 
     // MARK: - Cache a doména
 
+    /// **Zároveň pozitivní kontrola k podstrčenému `HOME`**: cache leží vedle vyrobené hlavní
+    /// instance a smazat se má jen ta slotová. Bez tohohle testu by tvrzení „hlavní instance je
+    /// nedotčená“ mohla projít i tehdy, kdyby skript o podstrčeném domovu vůbec nevěděl.
     @Test("Cache slotu se smaže")
     func deletesSlotCache() async throws {
+        let decoy = try MainInstanceDecoy()
         let slot = scratchSlot()
-        let cache = home.appending(path: "Library/Application Support/PRism-\(slot)")
+        let cache = decoy.root.url.appending(path: "Library/Application Support/PRism-\(slot)")
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         try "{}".write(to: cache.appending(path: "config.json"), atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: cache) }
 
-        let result = try await cleanup([slot])
+        let result = try await cleanup([slot], home: decoy.root.url)
 
         #expect(result.exitCode == 0)
         #expect(result.standardOutput.contains("smazáno: \(cache.path)"))
         #expect(!FileManager.default.fileExists(atPath: cache.path))
+        #expect(decoy.untouched, "Hlavní instance se změnila: \(decoy.fingerprint())")
     }
 
     /// #399 celé: doména **přežije smazání bundlu i cache**, takže by příští slot na tomtéž písmenu
@@ -134,6 +185,12 @@ struct SlotCleanupTests {
     /// vyndal. A `defaults delete` po sobě nechá **prázdný plist** (42 B), na kterém `defaults read`
     /// hlásí, že doména neexistuje; ověřit se to proto musí **zpětným čtením obojího**, ne
     /// návratovým kódem.
+    ///
+    /// **Tenhle jediný test běží ve skutečném `HOME`** (#411): `defaults` `HOME` ignoruje —
+    /// změřeno, zápis pod podstrčeným domovem skončil v tom skutečném, protože cestu skládá
+    /// `cfprefsd`, ne klient. Skript by tedy hledal plist jinde, než kam ho `defaults` položil,
+    /// a test by tvrdil něco o prázdnu. Bezpečné to je proto, že slot má `UUID`: doména i soubor
+    /// jsou naše a nikdo jiný je nemá.
     @Test("Doména v UserDefaults i prázdný plist po ní zmizí")
     func deletesUserDefaultsDomainAndLeftoverPlist() async throws {
         let slot = scratchSlot()

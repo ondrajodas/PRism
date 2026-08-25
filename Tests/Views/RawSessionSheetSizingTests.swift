@@ -18,12 +18,15 @@ import Testing
 ///   proto při každém otevření uložil 720×420 a od druhého otevření by se sheet otevíral nejmenší
 ///   možný. To je ten test, který tvrdí, že se něco **nestalo**.
 ///
-/// **`UserDefaults` procesu se nepoužívá, a je to tady tvrdá podmínka, ne zdvořilost** (#367):
-/// `@AppStorage` dostane **v každém testu** vlastní suite přes `defaultAppStorage(_:)`, protože
-/// testovací host má bundle ID **hlavní instance** (slotová přípona vzniká až v `bin/run.sh`, ne při
-/// buildu). Zápis odsud tedy jde do nastavení, které uživatel doopravdy používá — a jednou už tak
-/// skončil: uložená velikost z jednoho běhu shodila tenhle test v tom příštím a `SlotCleanupTests`
-/// nahlásily, že se změnil plist hlavní instance. Suite se na konci maže.
+/// **`UserDefaults` procesu se nepoužívá, a je to tady tvrdá podmínka, ne zdvořilost** (#367,
+/// upraveno #411): `@AppStorage` dostane **v každém testu vlastní doménu** přes
+/// `defaultAppStorage(_:)` a její jméno je unikátní na běh (`ScratchDefaults`).
+///
+/// Původní důvod byl, že testovací host má bundle ID hlavní instance — a jednou to tak doopravdy
+/// skončilo: uložená velikost z jednoho běhu shodila tenhle test v tom příštím a `SlotCleanupTests`
+/// nahlásily, že se změnil plist hlavní instance. Od #411 má host vlastní doménu, takže tudy cesta
+/// do nastavení uživatele nevede; vlastní doména tady zůstává proto, že **doména hosta je jedna
+/// pro souběžné běhy tří slotů** (změřeno u #420: `1 180` tam, kde se tvrdí `nil`).
 @Suite("Velikost sheetu s přepisem", .serialized)
 @MainActor
 struct RawSessionSheetSizingTests {
@@ -42,8 +45,9 @@ struct RawSessionSheetSizingTests {
 
     @Test("Sheet má tažný okraj a podlahu z Policy")
     func theSheetIsResizable() async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let scene = try await open(store: store)
         defer { scene.close() }
@@ -59,8 +63,9 @@ struct RawSessionSheetSizingTests {
     /// Ideální šířka se **uplatní**. Bez `presentationSizing(.fitted)` by tady stálo 720.
     @Test("Bez uložené velikosti se sheet otevře v ideální šířce")
     func opensAtTheIdealWidth() async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let scene = try await open(store: store)
         defer { scene.close() }
@@ -81,8 +86,9 @@ struct RawSessionSheetSizingTests {
     /// změřeno u #358).
     @Test("Natažená velikost se uloží a příští otevření ji vezme")
     func remembersTheDraggedSize() async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let first = try await open(store: store)
         let opened = first.sheet.frame
@@ -116,8 +122,9 @@ struct RawSessionSheetSizingTests {
     /// nejmenší možný.
     @Test("Otevření bez tažení neuloží nic")
     func openingAloneStoresNothing() async throws {
-        let store = try scratchStore()
-        defer { UserDefaults().removePersistentDomain(forName: Self.suite) }
+        let scratch = try scratchStore()
+        let store = scratch.store
+        defer { scratch.remove() }
 
         let scene = try await open(store: store)
         let expected = Policy.rawSessionSheetSize(
@@ -135,13 +142,10 @@ struct RawSessionSheetSizingTests {
 
     // MARK: - Scéna
 
-    private static let suite = "cz.prism.tests.rawSessionSheetSizing"
-
-    /// Prázdná suita pro `@AppStorage`. **Maže se cizí instancí**, ne tou vrácenou: instance, která
-    /// si smaže vlastní doménu, si ji odebere i z prohledávaného seznamu a hodnoty pak nedrží.
-    private func scratchStore() throws -> UserDefaults {
-        UserDefaults().removePersistentDomain(forName: Self.suite)
-        return try #require(UserDefaults(suiteName: Self.suite))
+    /// Prázdná doména pro `@AppStorage` — **vlastní na každý test a s jménem na jeden běh**
+    /// (`ScratchDefaults`, #411). Uklidí se sama, i když test spadne, a maže i plist po sobě.
+    private func scratchStore() throws -> ScratchDefaults {
+        try ScratchDefaults("rawSessionSheetSizing")
     }
 
     /// Okno s otevřeným sheetem. Drží se v něm i hostitelské okno, aby ho nikdo neuklidil dřív, než
