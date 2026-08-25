@@ -179,10 +179,10 @@ struct ReviewPanel: View {
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .help("Složit panel (⌘2)")
+            .help(Policy.shortcutHelp("Složit panel", .reviewPanel))
             .accessibilityLabel("Složit panel")
             Spacer(minLength: 4)
-            Text(verbatim: "⌘2")
+            Text(verbatim: Policy.windowShortcut(.reviewPanel).display)
                 .font(.system(size: 9.5, design: .monospaced))
                 .padding(.horizontal, 4)
                 .foregroundStyle(Palette.ink3)
@@ -282,8 +282,10 @@ struct ReviewPanel: View {
                     many: "komentářů v mém review"
                 ))
         }
-        guard !parts.isEmpty else { return "Rozložit panel (⌘2)" }
-        return "\(parts.joined(separator: " · ")) — rozložit panel (⌘2)"
+        // Zkratka je z katalogu (#441), ne napsaná vedle — jinak by se s klávesou rozešla.
+        let shortcut = Policy.windowShortcut(.reviewPanel).display
+        guard !parts.isEmpty else { return "Rozložit panel (\(shortcut))" }
+        return "\(parts.joined(separator: " · ")) — rozložit panel (\(shortcut))"
     }
 
     private func stripMark(_ text: String, tint: Color, background: Color) -> some View {

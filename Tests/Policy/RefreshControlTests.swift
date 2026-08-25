@@ -18,7 +18,8 @@ struct RefreshControlTests {
         #expect(!control.isSpinning)
         #expect(control.isEnabled)
         #expect(control.label == "Obnovit")
-        #expect(control.help == "Obnovit seznam")
+        // Zkratka v závorce je z katalogu (#441), jak ji kreslí návrh — ne opsaná vedle klávesy.
+        #expect(control.help == "Obnovit seznam (⌘R)")
     }
 
     @Test("Po dobu dotazu se točí prstýnek a klik neprojde")

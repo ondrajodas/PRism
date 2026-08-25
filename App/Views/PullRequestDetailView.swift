@@ -816,10 +816,10 @@ struct PullRequestDetailView: View {
     @ViewBuilder private var shortcuts: some View {
         // `⌥⇧↓` je pro SwiftUI **tatáž zkratka** jako `⌥↓`, proto jedno tlačítko a shift až
         // v akci — viz `isShiftDown`.
-        Button("Další nález") { step(.forward, onlyBlocking: isShiftDown ? true : nil) }
-            .keyboardShortcut(.downArrow, modifiers: .option)
-        Button("Předchozí nález") { step(.backward) }
-            .keyboardShortcut(.upArrow, modifiers: .option)
+        WindowShortcutButtons(action: .nextFinding) {
+            step(.forward, onlyBlocking: isShiftDown ? true : nil)
+        }
+        WindowShortcutButtons(action: .previousFinding) { step(.backward) }
         // Panel jde složit i rozložit **stejnou zkratkou** (#182), jak to má návrh v liště
         // nad diffem. Zkratka bydlí tady, ne v `DiffView`: panel je vidět ve víc tabech,
         // kdežto lišta jen u diffu — a přepínač, který v půlce okna nefunguje, je horší
@@ -828,16 +828,35 @@ struct PullRequestDetailView: View {
         // **V tabech bez panelu je zakázaná** (#294), a je to tatáž úvaha: složit něco, co v okně
         // není, se nedá poznat od rozbité zkratky — a hlavně by to potichu přestavělo tab, do
         // kterého se člověk vrátí. Zakázané tlačítko klávesu nebere, takže propadne dál.
-        Button("Panel s mým review") {
+        WindowShortcutButtons(
+            action: .reviewPanel,
+            isEnabled: store.detailTab(for: pullRequest.id).showsReviewPanel
+        ) {
             withAnimation(.snappy(duration: 0.15)) {
                 store.isReviewPanelExpanded.toggle()
             }
         }
-        .keyboardShortcut("2", modifiers: .command)
-        .disabled(!store.detailTab(for: pullRequest.id).showsReviewPanel)
         backFromCommitShortcut
         submitShortcut
         agentPromptShortcut
+        cancelReviewShortcut
+    }
+
+    /// `⌘.` zastaví běžící review na PR, který je v okně (#441).
+    ///
+    /// **Zakázaná, dokud nic neběží.** Zastavit něco, co neběží, je akce bez následku — a taková
+    /// se od rozbité klávesy nedá odlišit. Zakázané tlačítko klávesu nebere, takže propadne dál.
+    ///
+    /// Kontrola nálezů (#150) vlastní zkratku **nemá**: běží ve stejném okně, ale je to druhá
+    /// session s vlastním tlačítkem, a jedna klávesa, která by podle stavu zastavila jednou tohle
+    /// a jindy tamto, by nikdy neřekla, co udělá.
+    private var cancelReviewShortcut: some View {
+        WindowShortcutButtons(
+            action: .cancelReview,
+            isEnabled: store.isReviewing(pullRequest.id)
+        ) {
+            store.cancelReview(for: pullRequest.id)
+        }
     }
 
     /// `⌘⇧P` — sestavit zadání pro agenta (#333), jak to má návrh v hlavičce panelu.
@@ -856,12 +875,13 @@ struct PullRequestDetailView: View {
     /// nálezy předat **nedají vůbec**, což tvrdá podmínka č. 5 nežádá: nemají se tvářit jako
     /// platné, ne zmizet.
     private var agentPromptShortcut: some View {
-        Button("Sestavit zadání pro agenta") {
+        WindowShortcutButtons(
+            action: .agentPrompt,
+            isEnabled: canComposeAgentPrompt && promptSheet == nil && !store.isPaletteOpen
+        ) {
             store.revealAgentPrompt(in: pullRequest.id)
             promptSheet = store.agentPromptSelection(for: pullRequest.id)
         }
-        .keyboardShortcut("p", modifiers: [.command, .shift])
-        .disabled(!canComposeAgentPrompt || promptSheet != nil || store.isPaletteOpen)
     }
 
     private var canComposeAgentPrompt: Bool {
@@ -879,9 +899,9 @@ struct PullRequestDetailView: View {
     /// takže propadne dál — tentýž vzorec jako u `⌘⏎` a `⌘2`. Sheety se tady nevyjmenovávají,
     /// protože jsou to vlastní okna a klávesu si berou samy; hlídají se jen stavy z tohohle okna.
     private var backFromCommitShortcut: some View {
-        Button("Zpět na seznam commitů") { store.closeCommit(in: pullRequest.id) }
-            .keyboardShortcut(.cancelAction)
-            .disabled(!canCloseCommit)
+        WindowShortcutButtons(action: .backFromCommit, isEnabled: canCloseCommit) {
+            store.closeCommit(in: pullRequest.id)
+        }
     }
 
     private var canCloseCommit: Bool {
@@ -912,7 +932,12 @@ struct PullRequestDetailView: View {
         NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
     }
 
-    /// `⌘⏎` otevře **potvrzení odeslání**, nic neodesílá (#151).
+    /// `⌘⏎` — a od #441 i `⌃⏎` — otevře **potvrzení odeslání**, nic neodesílá (#151).
+    ///
+    /// **`⌃⏎` je druhá klávesa, ne náhrada.** Přibyla proto, že `⌘⏎` si v tomhle okně bere i paleta
+    /// ⌘K (otevřít výsledek na GitHubu), takže nad otevřenou paletou je tahle zkratka zakázaná —
+    /// `⌃⏎` se s ní nepotká vůbec. Zakázané jsou přitom **obě naráz a za týchž podmínek**: jsou to
+    /// dvě tlačítka s jednou akcí, ne dvě akce.
     ///
     /// Tvrdá podmínka č. 1: review odchází dvěma kliknutími na dvou různých tlačítkách (#68)
     /// a zkratka je obejít nesmí. Volá proto tutéž akci jako tlačítko v panelu — tu, která jen
@@ -933,9 +958,12 @@ struct PullRequestDetailView: View {
     /// odeslání, tedy zrovna to okno, které se omylem otevřít nemá. Zakázané tlačítko klávesu
     /// nebere, takže propadne paletě.
     private var submitShortcut: some View {
-        Button("Otevřít potvrzení odeslání") { draftActions.send() }
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(submission != nil || !canOpenSubmission || store.isPaletteOpen)
+        WindowShortcutButtons(
+            action: .openSubmission,
+            isEnabled: submission == nil && canOpenSubmission && !store.isPaletteOpen
+        ) {
+            draftActions.send()
+        }
     }
 
     /// Dá se potvrzení vůbec otevřít? Rozhoduje `Policy`, ne tohle view — na totéž se ptá
@@ -1609,6 +1637,9 @@ struct PullRequestDetailView: View {
             Button("Zrušit", systemImage: "stop.circle") {
                 store.cancelReview(for: pullRequest.id)
             }
+            // Zkratka `⌘.` (#441) je jinak vidět jedině v paletě ⌘K — a k běžícímu review se
+            // chodí sem, ne tam.
+            .help(Policy.shortcutHelp("Zastavit běžící review", .cancelReview))
         } else {
             Button("Spustit review", systemImage: "play.circle") {
                 store.startReview(for: pullRequest.id)

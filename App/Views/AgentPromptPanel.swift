@@ -75,7 +75,7 @@ struct AgentPromptPanel: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Palette.ink)
             Spacer(minLength: 4)
-            Text(verbatim: "⌘⇧P")
+            Text(verbatim: Policy.windowShortcut(.agentPrompt).display)
                 .font(.system(size: 9.5, design: .monospaced))
                 .padding(.horizontal, 4)
                 .foregroundStyle(Palette.ink3)

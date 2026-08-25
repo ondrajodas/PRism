@@ -37,13 +37,14 @@ záložky nic nezahodí.**
 záložce znamená běžící review, takže „pracuje se“ má v okně jeden tvar. Platí to **i pro
 automatický tik**: je to stav aplikace, ne odezva na tlačítko. Po tu dobu tlačítko klik nebere
 (rozhoduje o tom `Policy.refreshControl`, ze kterého si podmínku bere i `AppStore.refresh()`,
-takže druhý dotaz nepustí ani paleta ⌘K), rozměr tlačítka se přitom nemění (27 × 25), aby
+takže druhý dotaz nepustí ani paleta ⌘K ani `⌘R`), rozměr tlačítka se přitom nemění (27 × 25), aby
 hlavička neposkočila. Do té doby bylo obnovování vidět **jen na dashboardu** (`ptám se…`
 v pravém horním koutu), tedy jen z domácí záložky — kdo byl v záložce pull requestu, četl klik
 bez odezvy jako klik, který nezabral.
 
 **Pruhem se přepíná `⌃Tab` a `⌃⇧Tab`** (#245) — dokola a **včetně domácí záložky**, protože se na
 ni chodí nejčastěji (je za ní fronta) a bez ní by zkratka nad jediným otevřeným PR nedělala nic.
+Dočtenou záložku zavře **`⌃W`** (#441).
 Pořadí je pořadí pruhu, ne pořadí použití. Funguje to i **s kurzorem v rozepsaném review**:
 změřeno, že se do textu nevloží tabulátor ani nepřeskočí fokus — key equivalent tlačítka se
 vyhodnocuje dřív, než se klávesa dostane k textovému editoru. Zkratky stojí v nápovědě u domácí
@@ -1311,6 +1312,57 @@ GitHub neumí — v payloadu review se nedá říct „tenhle je odpověď na ta
 ještě nemá identitu, na kterou by šlo odkázat. Odpovědět jde na vlákno, které z odeslaného
 komentáře vznikne.
 
+### Klávesové zkratky okna (#441)
+
+Okno mělo zkratky jen na část toho, co se v něm dělá denně. Od #441 má i to nejčastější rukou:
+zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, který nemá cenu dokoukat.
+
+| Zkratka | Co udělá |
+|---|---|
+| `⌘K` | command palette |
+| `⌃⇥` / `⌃⇧⇥` | sousední záložka, dokola a včetně domácí |
+| `⌃W` | zavřít záložku pull requestu (nic se tím nezahodí) |
+| `⌘R` | obnovit seznam |
+| `⌃1`–`⌃5` | sekce railu: `Přehled`, `Fronta`, `Moje PR`, `Rozdělaná`, `Dění` |
+| `⌥↓` / `⌥↑` | další / předchozí nález, `⌥⇧↓` další blokující |
+| `⌘1` / `⌘2` | strom souborů u diffu / panel s mým review |
+| `⌘⏎` nebo `⌃⏎` | otevřít **potvrzení** odeslání review |
+| `⌘⇧P` | sestavit zadání pro agenta |
+| `⌘.` | zastavit běžící review na PR v okně |
+| `⎋` | zpět na seznam commitů |
+| `⌘⇧R` / `⌘⇧D` | z dashboardu: pustit review na vše, co neběželo / dopsat rozdělané |
+| `⌘,` | nastavení |
+
+**`⌃W`, ne `⌘W`** — `⌘W` patří systému (zavře okno). Ze stejného důvodu jsou na `Control`u i sekce
+railu: `⌘1` a `⌘2` jsou uvnitř PR strom souborů a panel.
+
+**Na české klávesnici mají sekce railu druhou klávesu.** `keyboardShortcut` páruje na **znak**,
+a pod `1`–`5` je v české mapě `+ ě š č ř` — samotné `⌃1` na ní tedy nezabere vůbec. Aplikace proto
+registruje obě: `⌃1`+`⌃+`, `⌃2`+`⌃ě`, `⌃3`+`⌃š`, `⌃4`+`⌃č`, `⌃5`+`⌃ř`. Dvě tlačítka se **stejnou
+akcí a jinou klávesou** jsou v pořádku; dvě se **stejnou kombinací** ne — vyhraje to zaregistrované
+později, a pozná se to jedině tím, že jedna ze zkratek „nefunguje“ (#151, #184).
+
+**`⌃⏎` je druhá klávesa k `⌘⏎`, ne náhrada** — a otevírá **potvrzení**, neodesílá (tvrdá podmínka
+č. 1). Přibylo proto, že `⌘⏎` si bere i paleta ⌘K, takže nad otevřenou paletou je zkratka detailu
+zakázaná; `⌃⏎` se s ní nepotká. V samotném potvrzovacím sheetu zkratka na odeslání **není a nebude**.
+
+**Zakázaná zkratka klávesu nebere a propadne dál** — `⌃W` na domácí záložce, `⌘R` po dobu dotazu,
+`⌘.` nad PR, na kterém nic neběží, `⌘2` v tabech bez panelu. Zkratka, po které se nic nestane, je
+totiž k nerozeznání od rozbité aplikace.
+
+Dvě věci na tom řídí systém, ne aplikace: **`⌃1`–`⌃5` může sebrat Mission Control** (`Přepnout na
+plochu N`), a pak se k oknu událost nedostane vůbec — buď se ta systémová zkratka vypne, nebo se
+použije česká varianta, na kterou Mission Control nesahá. A **`⌘.` je v Cocoa druhé jméno pro
+Escape**: nad běžícím review vyhraje naše zastavení (klávesové ekvivalenty tlačítek se vyhodnocují
+dřív), ale tam, kde je zakázané, se `⌘.` chová jako `⎋`.
+
+Kombinace jsou v aplikaci na **jednom místě** (katalog v `Policy`) a nápovědy tlačítek, kapsle
+v hlavičce i řádky palety si popisku **odvozují** z něj (`Obnovit seznam (⌘R)`, jak to kreslí
+návrh), takže nakreslená zkratka nemůže tvrdit něco jiného než klávesa.
+Že se žádné dvě kombinace neopakují, tvrdí test;
+že klávesy doopravdy chodí, se v harnessu ověřit nedá (testovací host nedostane aktivaci, takže
+nemá key okno) — to zkouší člověk na běžící aplikaci, na české i anglické mapě.
+
 ### Command palette ⌘K (#184)
 
 **Jedno pole na všechno.** S pěti PR a sedmi soubory je klikání únosné, s dvaceti už ne —
@@ -1358,9 +1410,12 @@ zapnutý.
 **Akce, ne jen navigace**: pustit review na otevřený PR (nebo ho zrušit, když běží), přepnout
 pohled na diff, složit panel s mým review, otevřít sekci railu, obnovit seznam, otevřít
 nastavení. Nabízí se **jen to, co by něco udělalo** — bez otevřeného PR tedy nic, co na PR visí.
-Kreslená zkratka je **vždycky ta skutečná** (`⌘2`, `⌘,`); návrh měl u „pustit review“ `⌘⇧R`, což
-v aplikaci dělá něco jiného (pustit review na vše, co neběželo, z dashboardu), takže se
-nenakreslila.
+Kreslená zkratka je **vždycky ta skutečná** — od #441 se **nekreslí opsaná, ale odvozená**
+z katalogu zkratek, takže se s klávesou nedá rozejít: `⌘2` u panelu, `⌃1`–`⌃5` u sekcí railu,
+`⌘R` u obnovení, `⌘.` u zrušení běžícího review a `⌘,` u nastavení. Návrh měl u „pustit review“
+`⌘⇧R`, což v aplikaci dělá něco jiného (pustit review na vše, co neběželo, z dashboardu), takže se
+nenakreslila. U sekcí se kreslí **číslicová** varianta (`⌃1`); česká (`⌃+`) je druhé tlačítko na
+tutéž akci a v jednom řádku by z jedné kapsle udělala dvě.
 
 **Odsud nic neodchází.** Paleta nemá přístup k `ReviewPublishing` a nepřidává druhou cestu ven;
 jediná věc, kterou pouští, je read-only reviewer.
