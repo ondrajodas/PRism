@@ -999,7 +999,8 @@ final class AppStore {
     /// Podklad pro dashboard (#181). Počítá se **z paměti store**, žádné nové čtení z disku.
     ///
     /// Od #331 nese i kartu `Moje PR`, takže dovnitř jdou i moje loginy, cesta k načtené konverzaci
-    /// a to, jestli se vlastní PR vůbec sledují — všechno z paměti, jako zbytek.
+    /// a to, jestli se vlastní PR vůbec sledují — a od #443 i blok `Dění` se záznamem, značkou
+    /// poslední návštěvy a důvodem prázdna. Všechno z paměti, jako zbytek.
     var dashboard: Dashboard {
         Policy.dashboard(
             pullRequests: pullRequests,
@@ -1015,7 +1016,13 @@ final class AppStore {
             // takže musí dostat tytéž vstupy — jinak by nad jedním seznamem stála dvě čísla.
             handoff: handoff(for:),
             head: head(of:),
-            tracksOwnSource: tracksOwnPullRequests
+            tracksOwnSource: tracksOwnPullRequests,
+            // Dění (#443) — pět nejnovějších řádků do bloku v pravém sloupci. Z **paměti** a v témže
+            // snímku: záznam i značka už v store leží kvůli sekci v railu, takže se pro dashboard
+            // nic nedotahuje. Značka jde dovnitř jako vstup — posouvá ji jedině `syncActivityVisit()`.
+            activity: activityEvents,
+            lastVisit: activityVisitSnapshot,
+            activityEmpty: activityEmptyState
         )
     }
 

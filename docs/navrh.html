@@ -1247,6 +1247,20 @@ footer.end {
   background: var(--panel-3); color: var(--ink-3);
 }
 
+/* Úzký tvar řádku pro blok dění **na dashboardu** (sekce 31). Sekce `Dění` ho nepoužívá —
+   tam je místo na celou událost. Rozdíl je v obsahu, ne ve stylu: zůstává titulek, `repo#číslo`
+   a čas, kdežto podrobnost („přišly 3 commity“), sha, chip `bez banneru` i cíl (`→ Nálezy`)
+   se v tomhle sloupci vynechávají. Bez toho ořezu se řádek do 456 bodů nevejde: se vším všudy
+   měl 42 až 66 bodů (dva až tři řádky), takhle má 24, tedy jednu řádku jako v sekci.
+
+   `nowrap` je proto podmínka, ne úprava: se zalomením by se ten ořez neprojevil, jen by se
+   text přelil na druhou řádku. Ustupuje **titulek** (ořízne se), protože `repo#číslo` a čas
+   jsou krátké a jsou to souřadnice — podle nich se pozná, čeho se to týká. */
+.tl-line.slim { flex-wrap: nowrap; min-width: 0; }
+.tl-line.slim > .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-line.slim > .slug { flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+.tl-line.slim > .ago { flex: none; }
+
 /* seskupené commity */
 .tl-commits {
   margin-top: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -3342,7 +3356,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   <section class="section" id="s31">
     <div class="section-head">
-      <div class="eyebrow">31 — Přehled · pět řádků dění na dashboardu</div>
+      <div class="eyebrow">31 — Přehled · pět řádků dění v pravém sloupci</div>
       <h2>Co se stalo, aniž bych se musel přepnout</h2>
       <p class="muted">
         Sekce 27 dala dění vlastní obrazovku a zůstává to tak: je to místo, kde se v dění
@@ -3358,29 +3372,54 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         se za posledním řádkem nic nestalo, nebo jestli se tam jen nevešlo.
       </p>
       <p class="muted">
-        <b>Přes celou šířku, ne v pravém sloupci pod <em>Co teď</em>.</b> Řádek dění nese pět
-        údajů — co se stalo, čeho se to týká, kdy, jestli o tom byl banner a kam vede. Pravý
-        sloupec je <code>1fr</code> z <code>1.45fr 1fr</code>, takže z okna o 1240 bodech na něj
-        zbyde <b>456</b>, kdežto dashboard má celý <b>1134</b>. <b>Změřeno nad tímhle dokumentem</b>,
-        ne odhadnuto: těch pět řádků se v pravém sloupci zalomí (<b>42, 42, 42, 66 a 42 bodů</b>
-        místo jednotných 24) a blok z nich vyroste na <b>380 bodů</b> — tedy výš, než je celý levý
-        sloupec s oběma frontami (321). Přes celou šířku má blok <b>266</b> a každý řádek se vejde
-        na jeden. Stojí proto <b>pod oběma sloupci</b> a řádek zůstává <b>týž</b>, jaký kreslí
-        sekce 27 — dvě podoby jedné události by se rozešly stejně, jako by se rozešly dvě podoby
-        řádku fronty.
+        <b>Stojí v pravém sloupci pod <em>Co teď</em>, protože tam je místo, které nikdo
+        nevyužívá.</b> Změřeno nad tímhle dokumentem: levý sloupec s oběma frontami je
+        <b>578 bodů</b> vysoký, pravý s legendou a akcemi <b>153</b> — pod ním tedy zbývá
+        <b>425 bodů prázdna</b>. Blok dění má 266, takže se do něj vejde a pravý sloupec doroste
+        na 419, pořád o 159 bodů kratší než levý. Pod oběma sloupci by naopak začínal až
+        <b>pod</b> tou dírou, tedy o obrazovku níž, než kde se člověk dívá.
+      </p>
+      <p class="muted">
+        <b>Cenou je užší řádek, a ta cena se platí obsahem, ne zalomením.</b> Pravý sloupec je
+        <code>1fr</code> z <code>1.45fr 1fr</code>, tedy <b>456 bodů</b> z 1134. Celý řádek ze
+        sekce 27 se do nich nevejde — má 42 až 66 bodů, tedy dvě až tři patra. V bloku na
+        dashboardu proto zůstává <b>titulek, <code>repo#číslo</code> a čas</b>, kdežto
+        podrobnost („přišly 3 commity“), sha, chip <code>bez banneru</code> i cíl
+        (<code>→ Nálezy</code>) se vynechávají. Řádek pak má <b>24 bodů</b>, tedy jednu řádku
+        jako v sekci, a to i u nejdelšího titulku — ten se <b>ořízne</b>, protože
+        <code>repo#číslo</code> a čas jsou souřadnice, podle kterých se pozná, čeho se to týká.
       </p>
       <p class="muted">
         <b>Bez pruhu <em>Tady jsem skončil</em> a bez dělení po dnech.</b> Obojí patří tam, kde
         se čte odshora dolů; tady je pět řádků, takže by pruh dělil pět řádků na dvě hromádky
         a hlavička dne by k nim přidala šestý řádek textu. Nepřečtené proto nese <b>počet
         v nadpisu</b> a den <b>čas u řádku</b>: co je starší než dnešek, se píše
-        <code>včera v 07:58</code>, ne <code>v 07:58</code> — v sekci ten den nese hlavička
-        bloku, tady ho nemá kdo nést.
+        <code>včera v 7:58</code>, ne <code>v 7:58</code> — v sekci ten den nese hlavička bloku,
+        tady ho nemá kdo nést.
       </p>
     </div>
 
-    <div class="pane new">
-      <div class="tag"><i></i>Dashboard · pod oběma sloupci</div>
+    <div class="pane new" style="max-width: 456px;">
+      <div class="tag"><i></i>Pravý sloupec dashboardu · 456 b, tedy skutečná šířka</div>
+
+      <div class="block">
+        <header><span>Nálezy podle reviewera</span><span class="more">7 dní</span></header>
+        <div class="legend">
+          <div class="leg"><span class="sw" style="background: var(--crit);"></span><span>php-review</span><span class="n">11</span></div>
+          <div class="leg"><span class="sw" style="background: var(--find);"></span><span>security-review</span><span class="n">4</span></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <header><span>Co teď</span></header>
+        <div class="acts">
+          <div class="act"><span class="ico">▸</span><span>Pustit review na vše, co neběželo</span><span class="kbd">⌘⇧R</span></div>
+          <div class="act"><span class="ico">✎</span><span>Dopsat review pro vault#85</span><span class="kbd">⌘2</span></div>
+        </div>
+      </div>
+
+      <!-- Dění je **třetí blok** téhož sloupce, ne pás pod oběma sloupci. Řádek je v úzkém
+           tvaru (`.tl-line.slim`): titulek, `repo#číslo`, čas — a nic dalšího. -->
       <div class="block">
         <header>
           <span>Dění · 3 nové</span>
@@ -3390,62 +3429,55 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div class="tl">
           <div class="tl-item">
             <span class="tl-dot warn">⟲</span>
-            <div class="tl-line">
-              <b>Nálezy zastaraly</b> — přišly 3 commity, hlava je teď
-              <span class="sha">9c1f0ab</span>
-              <span>keboola/vault#85</span>
+            <div class="tl-line slim">
+              <span class="who"><b>Nálezy zastaraly</b></span>
+              <span class="slug">keboola/vault#85</span>
               <span class="ago">před 2 min</span>
-              <span class="fd-to">→ Commity</span>
             </div>
           </div>
 
           <div class="tl-item">
             <span class="tl-dot acc">💬</span>
-            <div class="tl-line">
-              <span><b>odinuv</b>: opravdu to potřebuje ten mutex?</span>
-              <span>· a 1 review od Copilota</span>
-              <span>keboola/app-project-restore#91</span>
+            <div class="tl-line slim">
+              <span class="who"><b>odinuv</b>: opravdu to potřebuje ten mutex?</span>
+              <span class="slug">keboola/app-project-restore#91</span>
               <span class="ago">před 15 min</span>
-              <span class="fd-to">→ Konverzace</span>
             </div>
           </div>
 
           <div class="tl-item">
             <span class="tl-dot crit">!</span>
-            <div class="tl-line">
-              <b>3 nálezy · 1 blokuje</b> <span>· php-review, security-review</span>
-              <span>keboola/vault#85</span>
+            <div class="tl-line slim">
+              <span class="who"><b>3 nálezy · 1 blokuje</b></span>
+              <span class="slug">keboola/vault#85</span>
               <span class="ago">před 20 min</span>
-              <span class="fd-to">→ Nálezy</span>
             </div>
           </div>
 
           <div class="tl-item">
             <span class="tl-dot acc">↓</span>
-            <div class="tl-line">
-              <b>Nový PR k review</b> <span>· chore: modernize dependencies (Symfony 8-ready)</span>
-              <span>keboola/vault#85 · odinuv</span>
+            <div class="tl-line slim">
+              <span class="who"><b>Nový PR k review</b></span>
+              <span class="slug">keboola/vault#85</span>
               <span class="ago">před hodinou</span>
-              <span class="fd-to">→ Přehled</span>
             </div>
           </div>
 
           <!-- Pátý řádek je ze včerejška, a proto nese den. Na dashboardu není hlavička dne,
-               která ho nese v sekci 27, takže `v 07:58` by tvrdilo, že to bylo dneska ráno. -->
+               která ho nese v sekci 27, takže `v 7:58` by tvrdilo, že to bylo dneska ráno. -->
           <div class="tl-item">
             <span class="tl-dot ok">✓</span>
-            <div class="tl-line">
-              <b>Čisté review</b> <span>· 3 skilly · 1,04 $</span>
-              <span class="botchip">bez banneru</span>
-              <span>keboola/job-queue-api#402</span>
-              <span class="ago">včera v 07:58</span>
-              <span class="fd-to">→ Průběh</span>
+            <div class="tl-line slim">
+              <span class="who"><b>Čisté review</b></span>
+              <span class="slug">keboola/job-queue-api#402</span>
+              <span class="ago">včera v 7:58</span>
             </div>
           </div>
         </div>
 
         <div class="more-rows">Zobrazit celé dění <span class="count">+37</span> →</div>
       </div>
+
       <p style="font-size: 13.5px; color: var(--ink-2);">
         Nadpis nese počet nepřečtených, patka zbytek záznamu. Klik na řádek vede tam, kam vede
         v sekci — do záložky pull requestu a v ní do toho tabu, kterého se událost týká; klik na
@@ -3462,7 +3494,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       obsah pro obrazovku, na kterou jsem přišel schválně. Na dashboardu z nich zbude <b>ta
       jedna věta</b>, a kdo chce tlačítka, jde do sekce patkou.
     </p>
-    <div class="pane">
+    <div class="pane" style="max-width: 456px;">
       <div class="tag"><i></i>Klid · záznam je v pořádku a nic nepřišlo</div>
       <div class="block">
         <header>
@@ -3490,20 +3522,33 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div class="note">
         <span class="num">97</span>
         <span class="body">
-          <b>Dění je pod tím, co hoří teď</b>
-          <span>Pořadí obrazovky je <em>karty → fronty a Co teď → dění</em>, a je to pořadí
-          otázek: co je akutní, co s tím udělám, co se stalo. Nahoru se dění dát nedá — je to
-          minulost a ta nemá vytlačit rozhodnutí.</span>
+          <b>Dění zaplňuje díru, nezakládá novou</b>
+          <span>Pravý sloupec je o <b>425 bodů</b> kratší než levý, takže pod <em>Co teď</em>
+          zbývá plocha, na které není nic. Pás přes celou šířku pod oběma sloupci by naopak
+          začínal <b>až pod</b> tou dírou — dole na obrazovce, kam se člověk nedívá, a s dírou
+          nad sebou. První zákres to měl takhle a opravilo se to <b>až na běžící aplikaci</b>,
+          protože prázdné místo je vidět v okně, ne v poznámce.</span>
         </span>
       </div>
       <div class="note">
         <span class="num">98</span>
         <span class="body">
+          <b>Úzký sloupec se platí obsahem, ne zalomením</b>
+          <span>Řádek nese titulek, <code>repo#číslo</code> a čas; podrobnost, sha, chip
+          <em>bez banneru</em> i cíl zůstávají v sekci. Zalomit řádek do dvou pater by bylo
+          levnější napsat, ale pět takových řádků je <b>380 bodů</b> místo 266 a hlavně se v nich
+          přestane číst to podstatné. Ustupuje titulek — ořízne se —, protože souřadnice
+          <code>repo#číslo</code> je to, podle čeho se pozná, čeho se to týká.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">99</span>
+        <span class="body">
           <b>Sekce se tím neruší</b>
           <span>V sekci 27 stálo, že dění je <em>sekce, ne blok na dashboardu</em> — a platí to
           dál v tom, co se tím myslelo: rolovat, číst po dnech a dohledávat se chodí do sekce.
           Na dashboardu je <b>ukázka</b>, která nemá vlastní prázdné obrazovky, vlastní pruh
-          poslední návštěvy ani vlastní řádek. Kdyby si je někdy pořídila, je to znamení, že
+          poslední návštěvy ani celý řádek. Kdyby si je někdy pořídila, je to znamení, že
           jsou dvě dění.</span>
         </span>
       </div>
@@ -3603,7 +3648,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     <div class="notes">
       <div class="note">
-        <span class="num">99</span>
+        <span class="num">100</span>
         <span class="body">
           <b>Jeden tvar pro „pracuje se“</b>
           <span>Prstýnek už v okně jeden je — na záložce s běžícím review. Druhý tvar (pulzující
@@ -3612,7 +3657,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         </span>
       </div>
       <div class="note">
-        <span class="num">100</span>
+        <span class="num">101</span>
         <span class="body">
           <b>Kdo se ptá, nemá dvakrát</b>
           <span>Po dobu otáčení tlačítko klik nebere a <code>⌘R</code> je zakázané. Zakázaná

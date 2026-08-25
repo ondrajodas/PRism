@@ -33,6 +33,10 @@ struct DashboardFooterSeparatorTests {
     /// **jedna nad patkou** a obrys dole — tedy osm. Blok `Moje PR` je prázdný (vlastní PR ve
     /// scénáři žádné nejsou), takže z něj jsou tři: obrys, hlavička, obrys. Celkem jedenáct.
     ///
+    /// **Blok `Dění` (#443) se do toho počtu nepromítá**, a je to schválně: stojí v **pravém**
+    /// sloupci pod `Co teď`, kdežto vzorek jde přes levý (viz `bands(in:)`). Kdyby ho tenhle počet
+    /// zahrnoval, znamenalo by to, že se blok kreslí jinam, než kam ho návrh dal.
+    ///
     /// Počet je v tvrzení schválně: bez něj by test prošel i tehdy, kdyby se patka nenakreslila
     /// vůbec — deset stejně silných čar je taky „všechny stejně silné“.
     private static let expectedLines = 11

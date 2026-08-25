@@ -35,11 +35,42 @@ struct ActivityFeedDay: Identifiable, Hashable, Sendable {
     let rows: [ActivityFeedRow]
 }
 
+/// Jak se u řádku dění napíše čas (#443).
+///
+/// **Rozhodnutí, ne hotový text u obou podob.** Relativní stáří se v okně přepočítává samo
+/// (`Text(_:format:)`), takže řetězec z `Policy` by zamrzl na tom, kdy se poskládal — kdežto
+/// u hodin je den součástí rozhodnutí a skládat ho ve view by znamenalo dvě místa, která si to
+/// počítají sama.
+enum ActivityTimeLabel: Hashable, Sendable {
+    /// `před 2 min` — text skládá view, protože se sám přepočítává.
+    case relative
+    /// Hotový text: `v 7:58`, `včera v 7:58`, `20. srpna v 7:58`.
+    case absolute(String)
+}
+
+/// Kde řádek dění stojí (#443) — a co z toho pro něj plyne.
+///
+/// **Jeden příznak, ne dva.** Obě věci, kterými se ty dvě podoby liší, plynou z **místa**, ne
+/// z události: kolik je na řádek místa (sekce má celou šířku okna, blok na dashboardu 456 bodů)
+/// a kdo nese den u času (v sekci hlavička dne, na dashboardu nikdo). Dva nezávislé booleany by
+/// šlo nastavit křížem a vznikla by z toho třetí podoba, kterou návrh nekreslí.
+enum ActivityRowPlace: Hashable, Sendable {
+    /// Sekce `Dění` (#414) — celá událost na celé šířce okna, den nese hlavička dne.
+    case section
+    /// Blok `Dění` na dashboardu (#443) — úzký tvar (`.tl-line.slim`) a den u času.
+    case dashboard
+}
+
 /// Co se ukáže, když v dění nic není (#414).
 ///
-/// **Tři prázdna, která se nesmí slít**, ze stejného důvodu jako `čisté review` a `review se
-/// nepovedlo`: první znamená klid, druhé dvě „bannery nechodí“ — a každé se spravuje jinde.
-enum ActivityEmptyState: Hashable, Sendable {
+/// **Čtyři prázdna, která se nesmí slít**, ze stejného důvodu jako `čisté review` a `review se
+/// nepovedlo`: první znamená klid, druhé ztracenou historii a poslední dvě „bannery nechodí“ —
+/// a každé se spravuje jinde.
+///
+/// `CaseIterable` je od #443 a je to tvrzení, ne pohodlí: blok na dashboardu z každého z nich dělá
+/// **jednu větu** a test se ptá, jestli je těch vět tolik, kolik je případů. Bez výčtu by pátý stav
+/// mohl tiše splynout s klidem.
+enum ActivityEmptyState: Hashable, CaseIterable, Sendable {
     /// Nic se nestalo. Klid, ne porucha.
     case calm
     /// Soubor se záznamem byl, ale nepřečetl se — **historie je ztracená**. Vlastní stav proto, že
@@ -563,6 +594,31 @@ extension Policy {
     /// čas se v okně **přepočítává sám** a řetězec z `Policy` by zamrzl na tom, kdy se poskládal.
     static func showsRelativeTime(of date: Date, now: Date) -> Bool {
         now.timeIntervalSince(date) < relativeActivityWindow
+    }
+
+    /// Čas u řádku dění — a jestli si k němu řádek nese **den** (#443).
+    ///
+    /// Den nese řádek jedině na **dashboardu**. V sekci ho nese **hlavička dne** (`Dnes`, `Včera`,
+    /// `čtvrtek 20. srpna`), takže se u řádku píše jen `v 7:58`; blok na dashboardu je jeden
+    /// a bez dělení po dnech, takže by tam včerejší událost vypadala jako dnešní ráno.
+    ///
+    /// **Jedno rozhodnutí pro obě obrazovky.** Dvě místa, která si to počítají sama, se rozejdou
+    /// právě v tom, co je vidět jen jeden den v roce; formát je proto tentýž jako u `visitLabel`
+    /// (`v 7:58`, `včera v 7:58`, `20. srpna v 7:58`) a jde o **totéž** čtení dne, takže se ty
+    /// dva popisky na jedné obrazovce nemají čím rozejít.
+    static func activityTime(
+        of date: Date,
+        now: Date,
+        at place: ActivityRowPlace,
+        calendar: Calendar = .current
+    ) -> ActivityTimeLabel {
+        if showsRelativeTime(of: date, now: now) { return .relative }
+        // Výčtem, ne `if`em: třetí místo, kde se dění kreslí, si tím vynutí rozhodnutí, jestli si
+        // den nese samo — tichý default by u něj znamenal `v 7:58` u včerejška.
+        switch place {
+        case .section: return .absolute("v \(date.formatted(.dateTime.hour().minute()))")
+        case .dashboard: return .absolute(visitLabel(date, now: now, calendar: calendar))
+        }
     }
 
     /// Věta pod nadpisem sekce. Druhá půlka mluví o **značce poslední návštěvy**, protože ta

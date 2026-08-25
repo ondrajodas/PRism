@@ -4650,6 +4650,71 @@ z dávky snímků hlavičky pořízených hned po startu je na prvních prstýne
 stejné poloze. Testů **4021** (devět nových); nápovědu se zkratkou `Obnovit seznam (⌘R)`, kterou
 kreslí návrh, přidá #441, protože do té doby by uváděla zkratku, která v okně není.
 
+### #443 — pět řádků dění na dashboardu
+
+Sekce `Dění` (#414) je dobré místo, **když se do ní jde** — jenže se do ní muselo napřed přepnout,
+aby se zjistilo, jestli je do čeho koukat: odznak v railu říká počet, ne co se stalo. Dashboard je
+jediná obrazovka, na kterou se člověk podívá, aniž by se ptal, takže na něm od #443 stojí **pět
+nejnovějších řádků** dění a cesta do celé sekce (návrh, sekce 31).
+
+**Třetí blok pravého sloupce, pod `Co teď`** — a je to **změna proti prvnímu zadání i prvnímu
+zákresu**, ne to, co bylo napsané. Původně měl blok stát pod oběma sloupci přes celou šířku; poznalo
+se **až na běžící aplikaci**, že je to špatně, protože prázdné místo je vidět v okně, ne v poznámce.
+Změřeno nad mockupem: levý sloupec s oběma frontami je **578 bodů** vysoký a pravý s legendou
+a akcemi **153**, takže pod ním zbývalo **425 bodů prázdna** a pás přes celou šířku by začínal *až
+pod* ním — dole na obrazovce, kam se nikdo nedívá. Blok má **266 bodů**, pravý sloupec s ním doroste
+na **419** a pořád zůstane o 159 kratší než levý.
+
+**Cenou je úzký tvar řádku a ta cena se platí obsahem, ne zalomením.** Pravý sloupec je `1fr`
+z `1.45fr 1fr`, tedy 456 bodů, a celá událost se do nich nevejde — má **42 až 66 bodů**, dvě až tři
+patra. V bloku proto zůstává **titulek, `repo#číslo` a čas**; podrobnost („přišly 3 commity“), sha,
+chip `bez banneru`, autor i cíl (`→ Nálezy`) se vynechávají a zůstávají v sekci. Řádek pak má **24
+bodů**, jednu řádku jako v sekci. **Nezalamuje se**: co se nevejde, ořízne **titulek**, protože
+`repo#číslo` a čas jsou souřadnice, podle kterých se pozná, čeho se to týká — a že ustoupí zrovna
+titulek, drží `layoutPriority` na obou souřadnicích (`flex: none` z návrhu).
+
+**Ukázka a rozcestník, ne druhé dění.** Sekce zůstává tím, čím je — rolovat, číst po dnech
+a dohledávat se chodí tam. Blok proto nemá vlastní pruh `Tady jsem skončil`, vlastní hlavičky dní
+ani vlastní řádek: kreslí **týž `ActivityRowView`** jako sekce, jen v úzkém tvaru, a je vyčleněný do
+vlastního souboru spolu s osou (`ActivityTimeline`). V hlavičce `ActivityFeedView` do té doby stálo,
+že dění blokem na dashboardu **není**; ukázalo se, že ta ukázka je právě to, co chybělo, a ten
+komentář je přepsaný i s důvodem.
+
+**Značku poslední návštěvy blok neposouvá** — a je to to nejcennější tvrzení celého issue, protože
+by se rozbilo potichu: kdyby ji posunul pohled na domácí záložku, vynulovalo by se nepřečtené
+a odznak v railu by zmizel, aniž bych něco přečetl. Drží to `isActivityVisible` (rail **a** domácí
+záložka), takže dashboard tou podmínkou neprojde, a testuje se to i přes klik na řádek — jediné
+místo v tom bloku, které se storu vůbec dotýká.
+
+**Rozhodnutí, která k tomu patřila:**
+
+- **Jeden příznak na místo, ne dva booleany** (`ActivityRowPlace`). Úzký tvar i den u času plynou
+  z **místa**, ne z události, takže dva nezávislé příznaky by šlo nastavit křížem a vznikla by z toho
+  třetí podoba, kterou návrh nekreslí.
+- **Den u času** (`Policy.activityTime(of:now:at:)`). V sekci nese den hlavička dne, tady ho nemá kdo
+  nést, takže by `v 7:58` u včerejší události tvrdilo dnešní ráno. Formát je tentýž jako
+  u `visitLabel` (`v 7:58`, `včera v 7:58`, `20. srpna v 7:58`) a rozhodnutí je **jedno** — dva
+  výpočty téhož by se rozešly právě v tom, co je vidět jeden den v roce. Relativní podobu
+  (`před 2 min`) skládá dál view, protože se v okně přepočítává sama.
+- **Blok je součástí `Dashboard`**, ne vlastní getter: view si dashboard bere jednou za překreslení,
+  takže druhý getter by znamenal druhý průchod záznamem při každém průchodu tělem.
+- **Patka je `DashboardBlock.Footer`** z #371, ne nový typ. Tvar i chování jsou totéž (text, počet
+  zbylých, sekce), takže druhá kresba patky by se s tou první rozešla v odsazení a v čáře nad ní.
+- **`celé dění →` v hlavičce je odkaz, ostatní popisky v hlavičkách bloků zůstávají popisky.** Text
+  v barvě akcentu, po kterém se nic nestane, je tatáž lež jako karta bez cíle (#371), jen menší.
+- **Prázdno je jedna věta, ale pořád čtyři různé.** Ze tří prázdných obrazovek sekce zbude důvod;
+  tlačítka (zapnout hlášení, otevřít Nastavení systému) patří tam, kam jsem přišel schválně, a cesta
+  k nim vede tím odkazem v hlavičce. Klid, ztracená historie a dvě mlčení se nesmí slít ani tady.
+- **`LazyVStack` sem nepatří** — pět řádků je strop z `Policy`, ne odhad, takže líný seznam by za
+  měřenou velikost (#361) platil tam, kde se nejhorší případ vejde na obrazovku.
+
+Testů **4070** po sloučení s #441, všechny zelené (samotná větev jich měla 4051): `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
+čtyři prázdna), tři tvrzení ve `AppStoreFeedTests` a pět v `ActivityRowShapeTests` — ta měří úzký
+tvar **dvěma měřidly**: výškou to, že se vejde na jednu řádku a plný řádek ne, a přirozenou šířkou
+to, co v něm **není**. Ověřeno vložením regrese dvakrát (vrácená podrobnost s cílem, zahozený
+`lineLimit`). `DashboardFooterSeparatorTests` počítají dál **jedenáct** čar — blok stojí v pravém
+sloupci a jejich vzorek jde přes levý, takže by změněný počet znamenal, že se kreslí jinam.
+
 ### #441 — zkratky na to, co se v okně dělá denně
 
 **#441 je hotové.** Přibylo pět zkratek: `⌃W` (zavřít záložku pull requestu), `⌘R` (obnovit

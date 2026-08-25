@@ -21,7 +21,10 @@ struct DashboardView: View {
     /// **`nil` je „nikde“, ne „`Dneska stálo`“**: karta bez cíle hover vůbec nehlásí, takže se do
     /// tohohle stavu nedostane a nemá čím zesvětlit rámeček.
     @State private var hoveredCard: DashboardCard?
-    /// Patka bloku pod kurzorem (#371), klíčovaná sekcí, do které vede — dvě patky, dvě sekce.
+    /// Patka bloku pod kurzorem (#371), klíčovaná sekcí, do které vede — každá patka jinam.
+    ///
+    /// Od #443 jsou to **tři** možné patky (fronta, moje PR, dění), takže je klíč tím jediným, co je
+    /// od sebe drží. Pojmenovaný stav `isFooterHovered` by u třetí patky rozsvítil všechny.
     @State private var hoveredFooter: RailSection?
 
     var body: some View {
@@ -416,16 +419,21 @@ struct DashboardView: View {
             VStack(spacing: 12) {
                 block("Nálezy podle reviewera", more: "7 dní") { reviewerLegend(dashboard.reviewers) }
                 block("Co teď") { actions(dashboard.drafts.pullRequest) }
+                activity(dashboard.activity)
             }
         }
     }
 
-    /// Blok s hlavičkou. `more` je popisek vpravo v hlavičce — v návrhu je to odkaz, tady
-    /// **jen popisek**: obojí, co by pod ním bylo (jiné řazení, jiné okno), je vlastní issue,
-    /// a šipka nad akcí, která nikam nevede, je horší než žádná.
+    /// Blok s hlavičkou. `more` je popisek vpravo v hlavičce, `moreSection` cíl jeho kliknutí.
+    ///
+    /// **Odkaz jedině tam, kde má kam vést.** U fronty (`podle závažnosti`) a legendy (`7 dní`) je
+    /// to v návrhu odkaz, ale tady jen popisek: obojí, co by pod ním bylo (jiné řazení, jiné okno),
+    /// je vlastní issue a šipka nad akcí, která nikam nevede, je horší než žádná. U bloku `Dění`
+    /// (#443) cíl je — `celé dění →` vede do páté položky railu, tedy tam, kam patka.
     private func block(
         _ title: String,
         more: String? = nil,
+        moreSection: RailSection? = nil,
         @ViewBuilder content: () -> some View
     ) -> some View {
         VStack(spacing: 0) {
@@ -433,11 +441,7 @@ struct DashboardView: View {
                 Text(verbatim: title)
                     .font(.system(size: 12.5, weight: .semibold))
                 Spacer(minLength: 8)
-                if let more {
-                    Text(verbatim: more)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(Palette.accent)
-                }
+                blockMore(more, section: moreSection)
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
@@ -449,6 +453,39 @@ struct DashboardView: View {
             RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 1)
         }
         .clipShape(.rect(cornerRadius: 12))
+    }
+
+    /// Popisek vpravo v hlavičce bloku. **Tlačítko jen s cílem**, barva je u obou stejná.
+    ///
+    /// Akcent nese `.block > header .more` z návrhu a je v něm **každý** ten popisek, klikatelný
+    /// nebo ne — kdo ho tady u neklikatelné varianty vymění za `Palette.ink2`, mění návrh, ne kód
+    /// (nález Copilota na #443; ta barva je v repu od #181 a od #443 se nemění).
+    ///
+    /// Klikatelnou variantu proto neodlišuje barva, ale **chování**: `AccentLinkButtonStyle` přidá
+    /// ukazováček a ztlumení při zmáčknutí a k tomu jde nápověda, co se po kliknutí stane. Ten styl
+    /// je tentýž jako u `co se hlásí ↗` v hlavičce sekce `Dění`, protože systémové `.link` kreslí
+    /// modrou mimo paletu návrhu.
+    ///
+    /// Že `podle závažnosti` a `7 dní` **nikam nevedou**, je starší rozhodnutí (#181): jiné řazení
+    /// a jiné okno jsou vlastní issue a šipka nad akcí, která nikam nevede, je horší než žádná.
+    @ViewBuilder private func blockMore(_ title: String?, section: RailSection?) -> some View {
+        if let title {
+            if let section {
+                Button { store.show(.section(section)) } label: {
+                    Text(verbatim: title)
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+                .buttonStyle(AccentLinkButtonStyle())
+                // Nápověda přes `DashboardDestination`, ne vlastní větou — odkaz vede tam, kam
+                // patka pod blokem, takže má i říkat totéž.
+                .help(DashboardDestination.section(section).help)
+            } else {
+                // Akcent i tady, protože ho má návrh — viz doc komentář výš.
+                Text(verbatim: title)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Palette.accent)
+            }
+        }
     }
 
     /// Fronta v dashboardu je **týž řádek jako v seznamu** (#172), ne druhá varianta: dvě
@@ -614,6 +651,73 @@ struct DashboardView: View {
     nonisolated static func legendOutcome(of share: ReviewerShareOfFindings) -> ReviewerShare.Outcome {
         if share.findings > 0 { return .findings }
         return share.isConclusive ? .clean : .inconclusive
+    }
+
+    // MARK: - Dění
+
+    /// Blok `Dění` (#443) — pět nejnovějších řádků a cesta do sekce.
+    ///
+    /// **Třetí blok pravého sloupce, pod `Co teď`** (návrh, poznámka 97). Zaplňuje díru, kterou
+    /// tam nikdo nevyužíval: změřeno nad mockupem, že levý sloupec s oběma frontami je 578 bodů
+    /// vysoký a pravý s legendou a akcemi 153 — pod ním tedy zbývalo 425 bodů prázdna. Blok má 266,
+    /// takže pravý sloupec doroste na 419 a pořád zůstane o 159 kratší než levý. Pás pod oběma
+    /// sloupci by naopak začínal **až pod** tou dírou, tedy dole na obrazovce, kam se nikdo nedívá.
+    ///
+    /// **Cenou je úzký řádek** (`ActivityRowPlace.dashboard`): pravý sloupec je `1fr` z
+    /// `1.45fr 1fr`, tedy 456 bodů, a celý řádek ze sekce se do nich nevejde. Co se vynechává a co
+    /// zůstává, je u `ActivityRowView.slimLine`.
+    ///
+    /// **A je poslední, ne první**: pořadí obrazovky je *karty → fronty a Co teď → dění*, tedy
+    /// pořadí otázek „co je akutní, co s tím udělám, co se stalo“. Dění je minulost a ta nemá
+    /// vytlačit rozhodnutí.
+    private func activity(_ activity: DashboardActivity) -> some View {
+        block(activity.title, more: "celé dění →", moreSection: .activity) {
+            activityRows(activity)
+        }
+    }
+
+    /// Řádky bloku `Dění` — nebo jedna věta, když v záznamu nic není.
+    ///
+    /// **`LazyVStack` sem nepatří.** Pět řádků je strop z `Policy`, ne odhad, takže líný seznam by
+    /// za měřenou velikost (#361) platil tam, kde se nejhorší případ vejde na obrazovku.
+    ///
+    /// **Bez pruhu `Tady jsem skončil` a bez dělení po dnech**: nad pěti řádky by pruh dělil pět
+    /// řádků na dvě hromádky a hlavička dne by přidala šestý řádek textu. Nepřečtené proto nese
+    /// počet v nadpisu a den čas u řádku (`ActivityRowPlace.dashboard`).
+    @ViewBuilder private func activityRows(_ activity: DashboardActivity) -> some View {
+        if let explanation = activity.emptyExplanation {
+            // Bez osy: svislá čára jde přes celý blok, takže by u jediné věty stála čára, na které
+            // nic nevisí. Odsazení 13 je totéž jako u prázdné fronty vedle.
+            Text(verbatim: explanation)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Palette.ink2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(13)
+        } else {
+            // **Jedny hodiny na celý blok** (nález Copilota na #418): `store.time.now` uvnitř
+            // `ForEach`e by je vzalo pětkrát, takže by se dva řádky ze stejné minuty mohly rozejít
+            // o vteřinu — a s ní i o hranici mezi `před 2 min` a `v 07:58`.
+            let now = store.time.now
+            VStack(spacing: 0) {
+                ActivityTimeline {
+                    ForEach(activity.rows) { event in
+                        // Klik dělá **totéž co v sekci** (#409) — jedním vstupním bodem přes store.
+                        // Řádek, který vede jen na GitHub, si prohlížeč otevře sám.
+                        ActivityRowView(
+                            event: event,
+                            now: now,
+                            place: .dashboard,
+                            open: { store.show($0) }
+                        )
+                    }
+                }
+                if let footer = activity.footer {
+                    // Čára je tady, a jedna — tatáž úvaha jako u patky fronty (#371).
+                    separator
+                    footerRow(footer)
+                }
+            }
+        }
     }
 
     // MARK: - Co teď
