@@ -3685,9 +3685,12 @@ jednou** — stack zjišťuje pružnost dítěte tím, že se ho ptá s `nil`, `
 
 | Podoba místa | Dotazů na velikost celkem | Z toho `nil` (ideál) | Z toho `0`/`∞` (průzkum) | Se skutečnou velikostí |
 |---|---|---|---|---|
-| `frame(maxWidth: .infinity, maxHeight: .infinity)` | **33** | 4 | 25 | 4 |
-| `frame(idealWidth: 0, maxWidth: .infinity, idealHeight: 0, maxHeight: .infinity)` | 29 | **0** | 25 | 4 |
+| `frame(maxWidth: .infinity, maxHeight: .infinity)` | **29–33** | 2–4 | ~21 | 4 |
+| `frame(idealWidth: 0, maxWidth: .infinity, idealHeight: 0, maxHeight: .infinity)` | 29 | **0** | ~21 | 4 |
 | `fillingSlot()` (`GeometryReader` + `frame(width:height:)`) | **4** | **0** | **0** | 3 (+1 nulový) |
+
+Přesný počet se mezi běhy o pár liší (kolik dotazů `nil` pošle okno), **druh dotazů ne** — a právě
+na druhu ta věc stojí, takže se v testu tvrdí on, ne číslo.
 
 **Podstatná není cena, ale kdo do čeho zapisuje.** Poslední jméno v té řadě je
 `measureEstimates(**updatingPosition**:…)`: dotaz na velikost líného seznamu **mění jeho stav**.
@@ -3717,8 +3720,8 @@ věc, kterou mají všechny záchvaty společnou kromě samotného `LazySubviewP
 **Zamítnutá varianta: vyplněný ideál.** Nabízelo se nechat pružný rámec a jen mu vyplnit
 `idealWidth`/`idealHeight`, aby na „jak velký bys chtěl být“ odpověděl sám. Podle tabulky výš to
 **nestačí**: `nil` dotaz zmizí, průzkum `0`/`∞` zůstane celý, takže zápis do líného seznamu zůstane
-taky — jen s jinými argumenty. Do repa se to proto nedostalo a v `FillingSlot.swift` je to
-zapsané.
+taky — jen s jinými argumenty. Do repa se to proto nedostalo a v `FillingSlot.swift` je to zapsané;
+sonda ten scénář **měří dál** (`TimelineShape.declaredIdeal`), aby to nebyl dohad.
 
 **Kde `fillingSlot()` je** (výčet hlídá `LazyIdealSizeTests`):
 

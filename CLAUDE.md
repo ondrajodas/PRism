@@ -643,8 +643,8 @@ Zvlášť stojí za přečtení, než sáhneš na:
 
   **A líný seznam ve `ScrollView`u rozměr nevyjednává vůbec** (#361) — dostane ho změřený
   (`fillingSlot()`). Stack zjišťuje pružnost dětí tím, že se jich ptá na velikost s `nil`, `0`
-  a `∞`, a pružný rámec ty dotazy **předá dolů**: naměřeno **33 dotazů** na jedno rozvržení, z toho
-  jen **4** se skutečnou velikostí; se změřenou výškou zbydou **4** dotazy. Podstatná není cena,
+  a `∞`, a pružný rámec ty dotazy **předá dolů**: naměřeno **29–33 dotazů** na jedno rozvržení, z toho
+  jen **4** se skutečnou velikostí; se změřenou výškou zbydou **4** dotazy celkem. Podstatná není cena,
   ale že na každý z nich odpovídá `LazyVStack` funkcí `measureEstimates(**updatingPosition**:…)`,
   tedy **zápisem** do téže měnitelné krabice (`_LazyLayoutViewCache.withMutableCacheState`), ze
   které kreslí `placeSubviews` — a změněné fáze položek z ní jdou do grafu zvenčí

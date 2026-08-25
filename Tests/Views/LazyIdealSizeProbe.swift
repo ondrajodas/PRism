@@ -27,13 +27,20 @@ import Testing
 /// A ta funkce se jmenuje `measureEstimates(**updatingPosition**:…)`, takže ten dotaz do stavu
 /// líného seznamu **zapisuje**; ve stejném kole ho čte a přepisuje `placeSubviews`.
 ///
-/// Sonda proto počítá tři čísla: dotazy na **ideální** výšku, dotazy s **danou** výškou a dotazy
-/// na identitu řádku. Scénáře jsou dva a druhý je zároveň kontrola měřidla:
+/// **A neptá se jednou.** Stack zjišťuje pružnost dítěte tím, že se ho ptá s `nil`, `0` a `∞`, takže
+/// se do líného seznamu propadne celý ten průzkum. Sonda proto vypisuje **histogram navržených
+/// velikostí**, ne jedno číslo: bez něj se nepozná, jestli dotaz na ideál zmizel, nebo se jen
+/// převlékl za dotaz s nulovou výškou. K tomu počítá dotazy na identitu řádku, tedy tu cestu,
+/// na které leželo 7,1 milionu zásahů `ConversationRow.id`.
 ///
-/// - `pružná výška` — `.frame(maxHeight: .infinity)` nad `ScrollView`em uvnitř `VStack`u, tedy
-///   podoba, kterou aplikace měla do #361;
-/// - `změřená výška` — tentýž strom, jen `ScrollView` dostane výšku **změřenou**
-///   (`GeometryReader`), takže se dotaz na ideální velikost k němu nedostane vůbec.
+/// Scénáře jsou tři a první z nich je kontrola měřidla:
+///
+/// - `pružná výška` — `.frame(maxWidth: .infinity, maxHeight: .infinity)` nad `ScrollView`em uvnitř
+///   `VStack`u, tedy podoba, kterou aplikace měla do #361;
+/// - `vyplněný ideál` — pružný rámec s vyplněným `idealWidth`/`idealHeight`. Je tady schválně,
+///   i když v repu není: je to **zamítnutá varianta** a bez čísla by to byl dohad;
+/// - `změřená výška` — `fillingSlot()`, tedy to, co v repu je: rozměr z `GeometryReader`u, takže
+///   se k `ScrollView`u nedostane ani dotaz na ideál, ani průzkum.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`. Tvrzení, které z toho zbylo do každodenního
 /// běhu, je `LazyIdealSizeTests`.
@@ -114,10 +121,11 @@ struct LazyIdealSizeProbe {
 enum TimelineShape: String, CaseIterable {
     /// `.frame(maxHeight: .infinity)` — podoba, kterou aplikace měla do #361.
     case flexible = "pružná výška"
-    /// `fillingSlot()` z aplikace — týž pružný rámec, jen s vyplněným ideálem, takže na „jak
-    /// velký bys chtěl být“ odpovídá rámec sám, bez dotazu dolů.
+    /// Týž pružný rámec, jen s vyplněným ideálem, takže na „jak velký bys chtěl být“ odpovídá rámec
+    /// sám. **Zamítnutá varianta** — v `App/` není, tady zůstává jako měřený důvod, proč nestačí.
     case declaredIdeal = "vyplněný ideál"
-    /// Výška změřená `GeometryReader`em.
+    /// `fillingSlot()` z aplikace — rozměr změřený `GeometryReader`em. Bere se **modifikátor**,
+    /// ne jeho kopie: kdyby se změnil, změří se ta změna.
     case measured = "změřená výška"
 }
 
@@ -138,13 +146,12 @@ struct TimelineShapedList: View {
             case .flexible:
                 list.frame(maxWidth: .infinity, maxHeight: .infinity)
             case .declaredIdeal:
-                list.fillingSlot()
+                list.frame(
+                    idealWidth: 0, maxWidth: .infinity,
+                    idealHeight: 0, maxHeight: .infinity
+                )
             case .measured:
-                // `GeometryReader` si ideální velikost dítěte **nezjišťuje** — vrací, co se mu
-                // navrhlo —, takže se dotaz na ideální výšku k `ScrollView`u nedostane.
-                GeometryReader { proxy in
-                    list.frame(width: proxy.size.width, height: proxy.size.height)
-                }
+                list.fillingSlot()
             }
             Text(verbatim: "composer").padding(9).frame(maxWidth: .infinity, alignment: .leading)
         }

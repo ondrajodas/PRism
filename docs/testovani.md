@@ -5026,13 +5026,15 @@ Devátý záchvat u #361 dal poprvé zásobník hořícího kola a v něm dvojic
 líného seznamu (podrobnosti a čísla v [`docs/architektura.md`](architektura.md), sekce
 `fillingSlot()`). Co se k tomu měří a čím:
 
-- **`Tests/Views/LazyIdealSizeProbe.swift`** (`PRISM_MEASURE=1`) — kolik dotazů na velikost dostane
+- **`Tests/Views/LazyIdealSizeProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1` — bez toho
+  prefixu se proměnná do testovacího procesu z `xcodebuild` nedostane a suita se **tiše přeskočí**) — kolik dotazů na velikost dostane
   `ScrollView` s `LazyVStack`em na jedno rozvržení, rozepsané na `nil` (ideál), `0`/`∞` (průzkum
   pružnosti) a skutečnou velikost. Scéna je **tvaru osy konverzace** (lišta / seznam / composer
   v jednom `VStack`u), 300 řádků s hodně různými výškami a zalomeným textem. Počítá se v `Layout`u
   o jednom dítěti (`SizeQuestionReport`) — jiná cesta, jak se ze SwiftUI dozvědět „na tohle se
-  někdo ptal jako na ideální rozměr“, nevede. Výsledek: **33 dotazů** u pružného rámce, **4**
-  se změřenou velikostí; a **29** u vyplněného ideálu, což je ta zamítnutá varianta.
+  někdo ptal jako na ideální rozměr“, nevede. Výsledek: **29–33 dotazů** u pružného rámce
+  (přesný počet se mezi běhy o pár liší, druh dotazů ne), **4** se změřenou velikostí a **29**
+  u vyplněného ideálu, což je ta zamítnutá varianta — sonda ji měří dál, aby to nebyl dohad.
 - **`Tests/Views/LazyIdealSizeTests.swift`** (běží vždycky) — tvrdí to samé kvalitativně a **tím
   modifikátorem z aplikace**: s `fillingSlot()` nepřijde k línému seznamu ani `nil`, ani `∞`, ani
   jich nepřijde víc než pět. První test suity je **kontrola měřidla** (pružný rámec ty dotazy

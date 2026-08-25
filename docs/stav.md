@@ -4200,13 +4200,13 @@ vzorku** — tedy ten `_External -> State, changed`, který instrumentace vypsal
 **Co se z toho dá opravit:** druhý zapisovatel do stavu líného seznamu. Pružný rámec nad
 `ScrollView`em předává dolů všechny dotazy, kterými se stack ptá na pružnost dítěte (`nil`, `0`,
 `∞`), a `LazyVStack` na každý z nich odpovídá funkcí `measureEstimates(**updatingPosition**:…)`,
-tedy zápisem do téže měnitelné krabice, ze které kreslí `placeSubviews`. Naměřeno **33 dotazů** na
+tedy zápisem do téže měnitelné krabice, ze které kreslí `placeSubviews`. Naměřeno **29–33 dotazů** na
 jedno rozvržení, z toho jen 4 se skutečnou velikostí; se změřeným rozměrem (`fillingSlot()`) zbydou
-**4**. Ta řada je v hořícím kole doopravdy: 1524 z 13 479 vzorků v devátém záchvatu, 4274 z 19 930
+**4** celkem. Ta řada je v hořícím kole doopravdy: 1524 z 13 479 vzorků v devátém záchvatu, 4274 z 19 930
 v sedmém — v obou tabech, takže to není vlastnost jedné obrazovky.
 
 **Zamítnuto měřením, ne úvahou:** vyplnit pružnému rámci `idealWidth`/`idealHeight` (dotaz `nil`
-zmizí, průzkum `0`/`∞` zůstane celý — 29 dotazů proti 33), a chybějící pojmenovaný prostor
+zmizí, průzkum `0`/`∞` zůstane celý — 29 dotazů proti 29–33, tedy nic), a chybějící pojmenovaný prostor
 u `frame(in: .named(DiffView.contentSpace))` v úryvku na ose (s prostorem i bez něj **přesně** 2000
 výpočtů hodnoty a 0,072 s CPU, tedy k nerozeznání).
 

@@ -50,7 +50,7 @@ struct LazyIdealSizeTests {
     /// nic, na co by líný seznam odpovídal o jiné velikosti, než na jaké se doopravdy kreslí.
     @Test("fillingSlot() pošle líným seznamem jen skutečnou velikost")
     func fillingSlotForwardsOnlyTheRealSize() throws {
-        let counter = try layout(shape: .declaredIdeal)
+        let counter = try layout(shape: .measured)
         #expect(
             !counter.proposals.contains(where: { $0.contains("nil") }),
             "dotaz na ideální velikost prošel k línému seznamu: \(counter.proposalSummary)"
@@ -87,8 +87,10 @@ struct LazyIdealSizeTests {
         ]
         for view in views {
             let code = try source(of: view)
+            // Hledá se **`fillingSlot(`**, ne `fillingSlot()` (nález Copilota na #435): modifikátor
+            // bere `alignment`, takže by test padal na volání s argumentem, i když je na místě.
             #expect(
-                code.contains("fillingSlot()"),
+                code.contains("fillingSlot("),
                 "\(view) drží líný seznam ve stacku, ale rozměr si nenechává změřit"
             )
         }
