@@ -13,7 +13,7 @@ struct Dashboard: Hashable, Sendable {
     let drafts: DraftsCard
     /// Podíl reviewerů na nálezech za posledních pár dní.
     let reviewers: [ReviewerShareOfFindings]
-    /// Blok `Dění` pod oběma sloupci (#443) — pět nejnovějších řádků a cesta do sekce.
+    /// Blok `Dění` v pravém sloupci pod `Co teď` (#443) — pět nejnovějších řádků a cesta do sekce.
     ///
     /// **Je součástí téhož snímku schválně.** `DashboardView` si dashboard bere jednou za
     /// překreslení, takže vlastní getter na tenhle blok by znamenal druhý průchod záznamem dění při

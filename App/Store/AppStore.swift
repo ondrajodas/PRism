@@ -1017,7 +1017,7 @@ final class AppStore {
             handoff: handoff(for:),
             head: head(of:),
             tracksOwnSource: tracksOwnPullRequests,
-            // Dění (#443) — pět nejnovějších řádků do bloku pod sloupci. Z **paměti** a v témže
+            // Dění (#443) — pět nejnovějších řádků do bloku v pravém sloupci. Z **paměti** a v témže
             // snímku: záznam i značka už v store leží kvůli sekci v railu, takže se pro dashboard
             // nic nedotahuje. Značka jde dovnitř jako vstup — posouvá ji jedině `syncActivityVisit()`.
             activity: activityEvents,
