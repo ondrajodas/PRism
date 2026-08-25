@@ -4549,5 +4549,6 @@ napsaný takhle. Nové je: sonda (`LazySelfReferenceProbe`, tři měření), gua
 aby se ta chyba s řádky neopakovala. **Třináctý** neúspěšný pokus kolo vyrobit: scéna tvaru celého
 tabu s 300 uzly má po zastavení pumpy 0,000 s CPU ze 4 s.
 
-Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **3980**: dvě nová tvrzení
-v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí).
+Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **4000**: dvě nová tvrzení
+v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí); zbytek přidal
+mezitím mergnutý `main`.
