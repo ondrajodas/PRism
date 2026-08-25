@@ -28,16 +28,32 @@ struct LogTailHeightTests {
         LogTailTextView.height(forLines: lines, fontSize: fontSize, lineSpacing: spacing, limit: limit)
     }
 
-    /// Proti **layout manageru**, ne proti spočítané konstantě: kdyby se výška řádku brala odjinud
+    /// Výška řádku, ze které se ta aritmetika skládá — **z `FontMetric`, ne z vlastního
+    /// `NSLayoutManager`u** (#407).
+    ///
+    /// Do #407 si ji obě tvrzení, která ji potřebují, čítala každé samo. Pod souběžným buildem tří
+    /// slotů z toho dvakrát z deseti byl **falešně červený `main`**: výška okýnka vyšla o **tři
+    /// řádky** vedle (36 bodů, tedy 3 × 12), protože jedno ze dvou čtení metriky v procesu dalo
+    /// jinou hodnotu než to druhé — a `LogTailTextView.height(forLines:…)` porovnává právě tohle
+    /// číslo s tím, které si spočítá test. Se sdíleným měřidlem je to **totéž číslo z jednoho
+    /// měření**, takže se rozejít nemá čím.
+    private var lineHeight: CGFloat {
+        FontMetric.shared.lineHeight(of: LogTailTextView.font(size: fontSize)) + spacing
+    }
+
+    /// Proti **metrice fontu**, ne proti spočítané konstantě: kdyby se výška řádku brala odjinud
     /// než z fontu, vyšla by tady jiná — a přesně to je ta chyba, kterou #236 popisuje.
     @Test("Výška vychází z metriky fontu, kterým se kreslí")
     func usesTheDrawingFontMetric() {
-        let manager = NSLayoutManager()
-        let lineHeight = manager.defaultLineHeight(for: LogTailTextView.font(size: fontSize)) + spacing
-
         // Tři řádky se do stropu vejdou, takže se dá tvrdit přesná hodnota.
         let expected = 3 * lineHeight + 2 * LogTailTextView.inset.height
-        #expect(abs(height(3) - expected - LogTailTextView.horizontalScrollerHeight) <= 1.0)
+        #expect(
+            abs(height(3) - expected - LogTailTextView.horizontalScrollerHeight) <= 1.0,
+            """
+            výška tří řádků: \(height(3)), čekáno \(expected + LogTailTextView.horizontalScrollerHeight) \
+            — \(FontMetric.shared.tally)
+            """
+        )
     }
 
     @Test("Krátký log si nebere víc, než potřebuje")
@@ -66,8 +82,6 @@ struct LogTailHeightTests {
     /// jen zopakoval konstantu.
     @Test("Strop je celý počet řádků")
     func capIsAWholeNumberOfLines() {
-        let manager = NSLayoutManager()
-        let lineHeight = manager.defaultLineHeight(for: LogTailTextView.font(size: fontSize)) + spacing
         let usable = limit - 2 * LogTailTextView.inset.height - LogTailTextView.horizontalScrollerHeight
         let lines = (usable / lineHeight).rounded(.down)
         #expect(

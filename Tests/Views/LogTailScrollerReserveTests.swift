@@ -32,8 +32,11 @@ struct LogTailScrollerReserveTests {
     /// logu (`keboola/job-queue-daemon`, 2 258 znaků).
     private let longLine = String(repeating: "x", count: 2_258)
 
+    /// Výška řádku z `FontMetric` (#407) — jedno měřidlo na proces, stejné jako v aplikaci
+    /// a v `LogTailHeightTests`. Vlastní `NSLayoutManager` tu byl do #407 a je to tatáž třída, kvůli
+    /// které padal plný běh: dvě čtení metriky písma v jednom procesu se pod zátěží umí rozejít.
     private var lineHeight: CGFloat {
-        NSLayoutManager().defaultLineHeight(for: LogTailTextView.font(size: fontSize)) + spacing
+        FontMetric.shared.lineHeight(of: LogTailTextView.font(size: fontSize)) + spacing
     }
 
     /// **Tohle je to tvrzení, na kterém #347 stálo.** Zábor se nebere z API, ale z rozdílu výšky

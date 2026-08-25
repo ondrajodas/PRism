@@ -226,10 +226,10 @@ struct CheckLogRoomProbe {
         return NSHostingView(rootView: view).fittingSize.height
     }
 
-    /// Kolik řádků logu se do stropu vejde — z metriky **toho** fontu, kterým se kreslí (#236).
+    /// Kolik řádků logu se do stropu vejde — z metriky **toho** fontu, kterým se kreslí (#236),
+    /// a z **jednoho měřidla** (`FontMetric`, #407).
     private func lines(in limit: CGFloat) -> Int {
-        let manager = NSLayoutManager()
-        let lineHeight = manager.defaultLineHeight(for: LogTailTextView.font(size: CheckDetailView.logFontSize))
+        let lineHeight = FontMetric.shared.lineHeight(of: LogTailTextView.font(size: CheckDetailView.logFontSize))
             + CheckDetailView.logLineSpacing
         let usable = limit - 2 * LogTailTextView.inset.height - LogTailTextView.horizontalScrollerHeight
         return Int((usable / lineHeight).rounded(.down))

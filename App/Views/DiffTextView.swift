@@ -286,7 +286,7 @@ final class DiffTextView: NSTextView {
         rect.origin.x += textContainerOrigin.x
         rect.origin.y += textContainerOrigin.y
         // Prázdný řádek nemá glyfy, takže by vyšel nulově vysoký — vezme se výška písma.
-        if rect.height == 0 { rect.size.height = layoutManager.defaultLineHeight(for: font ?? .systemFont(ofSize: 12)) }
+        if rect.height == 0 { rect.size.height = FontMetric.shared.lineHeight(of: font ?? .systemFont(ofSize: 12)) }
         return rect
     }
 
@@ -448,7 +448,7 @@ final class DiffTextView: NSTextView {
         for (index, line) in lines.enumerated() {
             guard let rect = frame(ofLine: index), rect.intersects(dirtyRect) else { continue }
             // Čísla u **prvního** vizuálního řádku zalomeného kódu, ne na jeho středu.
-            let top = NSRect(x: 0, y: rect.minY, width: gutterWidth, height: font.boundingRectForFont.height + 2)
+            let top = NSRect(x: 0, y: rect.minY, width: gutterWidth, height: FontMetric.shared.boundingHeight(of: font) + 2)
 
             if numberColumns > 1 {
                 draw(number: line.oldNumber, in: top, column: 0, font: font)
@@ -639,10 +639,13 @@ final class DiffTextView: NSTextView {
     }
 
     /// Výška jednoho řádku textu — **bez insetu**, ten platí na blok, ne na řádek.
+    ///
+    /// Metrika je z `FontMetric` (#407). Do té doby to byla dvojice: `defaultLineHeight` z layout
+    /// manageru view, a když ho view ještě nemělo, výška obalového rámce — tedy **dvě různá čísla
+    /// pro jednu výšku řádku**, mezi kterými rozhodovalo to, jak daleko je view v sestavování.
+    /// Jedno měřidlo tu volbu ruší; hodnota je ta z layout manageru, protože podle ní se sází.
     var singleLineHeight: Double {
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        guard let layoutManager else { return font.boundingRectForFont.height }
-        return layoutManager.defaultLineHeight(for: font)
+        FontMetric.shared.lineHeight(of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular))
     }
 
     /// Rozměr kontejneru pro danou šířku view: co zbude za gutterem. Ve sloupci dvojice neomezený —

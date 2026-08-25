@@ -3194,7 +3194,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `SinceLastVisitView` | Pruh „co se změnilo od minule“ nahoře v `Přehledu` (#173, sazba #226 a #284) — odrážky po částech a pod nimi odznak `nálezy zastaraly` s tlačítky `Pustit review znovu` a `Ukázat, co přibylo` |
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
 | `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
-| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, u kapsle z `DesignPill` (#348), aby se měření a kresba nemohly rozejít |
+| `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, u kapsle z `DesignPill` (#348), aby se měření a kresba nemohly rozejít. **Šířka jednoho popisku, ne metrika písma** — ta má vlastní měřidlo (`FontMetric`), protože se dá zapamatovat na proces; klíčem je tady text, takže by z cache byla přihrádka na každý popisek |
+| `FontMetric` | **Jediné místo, kde se čte metrika písma** (#407): šířka znaku, výška řádku a obalový rámec. Jedno měření na proces (`shared`, mez 64 hodnot, klíč `(jméno, velikost, druh)`), tři cesty (`measured` → `fresh` → `derived`) **opakované až čtyřikrát s milisekundovou odmlkou**, a **nula se nepamatuje** — vada je přechodná a vadný je *objekt* písma. Náhradní měření **nesmí sázet text**: sazba tím písmem položí proces uvnitř CoreTextu. `tally` (počty měření, opakování a zamítnutá hodnota) čte sonda a zprávy u tvrzení. Viz *Metrika písma na jednom místě* |
 | `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a od #404 si ji bere **třináct souborů** (17 volání); řez je `DesignPill.font` (AppKit) a **kreslí se i měří tímtéž** (`Font(_:)`, `TextWidth.pill(_:)`). `lineLimit` v ní **není** (rozhoduje o něm volající). Bere `Color`, ne `ShapeStyle` — kdo dědil `.tint`, musí barvu pojmenovat. Viz *Kapsle stavu na jednom místě* |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka **jako pozadí** (#375, ne pružná výška v řádku) a obsah vpravo; slévá za sebou jdoucí commity |
@@ -3502,6 +3503,51 @@ Co u #404 vyšlo z měření a není zjevné:
   semibold), takže v kartě stojí nemono varování vedle mono kapsle `vyřešeno`. Kapsle to není —
   nemá plochu —, takže do zadání #404 nespadá; převést by znamenalo zahodit tu ikonu, a to je
   změna obrazovky, ne sazby.
+
+### Metrika písma na jednom místě (#407)
+
+`FontMetric` je jediné místo v `App/`, kde se čte metrika písma — `maximumAdvancement`,
+`defaultLineHeight` a `boundingRectForFont`. Do #407 to bylo **pět míst**: `LogTailTextView`
+(výška řádku okýnka), `SelectableCodeView` a `DiffToolbar` (šířka znaku, obojí `static let`)
+a v `DiffTextView` dvakrát — z toho jednou jako **dvojice** (`defaultLineHeight` z layout manageru
+view, a když ho view ještě nemělo, výška obalového rámce), tedy dvě různá čísla na jednu výšku řádku
+podle toho, jak daleko bylo view v sestavování.
+
+**Proč to má jedno místo.** V testovacím hostu pod zátěží se metrika písma umí **rozejít mezi dvěma
+čteními v jednom procesu** a jedno z nich vyjde nulové: `CommitPanelRoomTests` z toho měly
+`both → 0` proti `treeOnly → 35` (víc místa a méně znaků) a `LogTailHeightTests` výšku o tři řádky
+vedle. Léčby byly tři a každá v jiné sadě (#367, #348, #327) — čtvrtá by o tom musela vědět taky.
+Čím se to prokázalo a co ta nula doopravdy je, je v
+[`docs/testovani.md`](testovani.md), sekce *Metrika písma je tentýž kořen v jiné podobě (#407)*.
+
+Co na tom typu není zjevné:
+
+- **Měří se pod zámkem, ne vedle něj.** Dvě vlákna, která minou zapamatovanou hodnotu naráz, by
+  změřila dvakrát — a „jedno měření na proces“ je zrovna to, co se má držet. Zámek je držený
+  mikrosekundy a nic uvnitř se na `FontMetric` nevolá zpátky.
+- **Nezdařené měření se nepamatuje.** Zapamatovaná nula je horší než vrácená, protože
+  `SelectableCodeView.characterWidth` i `DiffToolbar.characterWidth` jsou `static let`, tedy jedno
+  měření **navždycky**.
+- **Pořadí cest je součást opravy.** `fresh` (písmo postavené znovu z deskriptoru) je druhá, protože
+  naměřená příčina je vadný **objekt** písma; `derived` je poslední, protože její čísla jsou jen meze
+  (u šířky znaku horní, u obalového rámce dolní).
+- **Celý řetěz se opakuje, a to je ta věc, kterou tam dalo měření.** V osmém z deseti plných běhů
+  vyšly u mono 13 **všechny tři cesty nulové** a **totéž písmo dalo o zlomek sekundy později 8,036**.
+  Vada tedy netrvá: v tom okamžiku nepomůže jiná cesta, pomůže zkusit to **později**. Čtyři pokusy
+  s **milisekundovou** odmlkou — bez ní je to tentýž stav přečtený čtyřikrát, protože celý řetěz je
+  pár mikrosekund. Cena je nejvýš 3 ms jednou za písmo a proces, a jedině když měření selhává; odmlka
+  je **pod zámkem** schválně, aby druhé vlákno nezměřilo mezitím podruhé.
+- **Náhradní měření nesmí sázet text.** První podoba měla u šířky znaku vysázet `0` — a sazba tím
+  písmem, u kterého selhalo přímé čtení, **položila celý běh** výjimkou z CoreTextu. Poslední cesta
+  se proto ptá jedině na čísla, která má `NSFont` sám u sebe.
+- **Klíč je `(jméno písma, velikost, druh metriky)`**, ne objekt písma: jméno nese i řez, takže se dvě
+  různá písma nemají jak potkat. Písma lišící se **jen maticí** by se slila — aplikace žádné takové
+  nestaví.
+- **Mez 64 hodnot, při překročení se zahodí celá sada** — tatáž úvaha jako u `SyntaxRunCache`
+  (#224): cache bez vyjmenované meze je únik paměti s odkladem. Aplikace měří jednotky písem.
+- **Rozhodnutí „jde to použít?“ je v `Policy.usableFontMetric(_:)`**, čistá funkce. Hlídá `isFinite`,
+  ne jen kladnost: `NaN` je hodnota, kterou skutečné `NSFont` vydá (změřeno na písmu s nekonečnou
+  maticí), a `Int(NaN)` shodí proces, kdežto nulu zavře `guard` v `Policy.charactersPerSide`.
 
 ### Command palette ⌘K (#184)
 

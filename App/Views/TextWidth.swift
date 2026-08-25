@@ -13,6 +13,11 @@ import AppKit
 ///
 /// **Měří se skutečným písmem, ne odhadem znaků**: česká věta má jinou šířku než anglická
 /// a `count × 7` by se rozešlo hned u prvního delšího popisku.
+///
+/// **Šířka jednoho konkrétního popisku, ne metrika písma.** Co je vlastnost samotného písma —
+/// šířka znaku, výška řádku, obalový rámec —, má vlastní měřidlo (`FontMetric`, #407), protože se
+/// to dá **zapamatovat na proces**: klíčem je písmo, kterých je v aplikaci hrstka. Tady je klíčem
+/// text, takže by z cache byla přihrádka na každý popisek, jaký se kdy vysázel.
 enum TextWidth {
     /// Šířka jednoho řádku, zaokrouhlená nahoru — půl bodu dolů znamená o znak víc, než se vejde.
     static func of(_ value: String, font: NSFont) -> CGFloat {

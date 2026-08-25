@@ -183,9 +183,8 @@ struct DiffToolbar: View {
     }
 
     /// Šířka jednoho znaku písma, kterým se sází kód. Mono písmo má všechny znaky stejně široké,
-    /// takže stačí změřit jeden — a `maximumAdvancement` u něj vrací tutéž hodnotu.
-    private static let characterWidth = NSFont.monospacedSystemFont(
-        ofSize: NSFont.systemFontSize,
-        weight: .regular
-    ).maximumAdvancement.width
+    /// takže stačí změřit jeden — a metriku vydá `FontMetric` (#407), ne vlastní čtení.
+    private static let characterWidth = FontMetric.shared.characterWidth(
+        of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    )
 }
