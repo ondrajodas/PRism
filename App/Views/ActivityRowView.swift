@@ -6,20 +6,19 @@ import SwiftUI
 /// je celý řádek — cíl je v něm napsaný, takže by tlačítko jen na šipce znamenalo cíl, na který se
 /// nedá kliknout.
 ///
-/// **Jedna podoba pro sekci i pro dashboard** (#443). Vyčleněné ze `ActivityFeedView` proto, že
+/// **Jeden řádek pro sekci i pro dashboard** (#443). Vyčleněné ze `ActivityFeedView` proto, že
 /// blok na dashboardu kreslí **týž** řádek: dvě podoby jedné události by se rozešly stejně, jako by
-/// se rozešly dvě podoby řádku fronty. Liší se jediná věc, a je to `showsDay` — viz níž.
+/// se rozešly dvě podoby řádku fronty. Liší se jediné, a je to `place` — viz níž.
 struct ActivityRowView: View {
     let event: ActivityEvent
     /// Hodiny obrazovky, ne `Date()` — viz `ActivityFeedView.now`.
     let now: Date
-    /// Nese si řádek **den** u času? (#443)
+    /// Kde ten řádek stojí (#443) — v sekci, nebo v bloku na dashboardu.
     ///
-    /// V sekci ne: den nese hlavička bloku (`Dnes`, `Včera`, `čtvrtek 20. srpna`). Na dashboardu je
-    /// blok jeden a bez dělení po dnech, takže by `v 07:58` u včerejší události tvrdilo, že to bylo
-    /// dneska ráno. Rozhodnutí, co z toho plyne za text, je v `Policy.activityTime` — tady se jen
-    /// říká, jestli den někdo nese za řádek.
-    var showsDay = false
+    /// Rozhoduje o **obsahu** (úzký tvar vynechává podrobnost, sha, chip `bez banneru`, autora
+    /// i cíl) a o tom, jestli si řádek nese **den** u času. Obojí plyne z místa, ne z události,
+    /// takže je to jeden příznak — viz `ActivityRowPlace`.
+    var place: ActivityRowPlace = .section
     let open: (ActivityEvent) -> Void
     /// Odkaz ven otevírá **view**, ne store — jako v paletě ⌘K. Store se o prohlížeči nemá co
     /// dozvědět a jediný řádek, který ho potřebuje, je ten, který v okně nemá kam vést.
@@ -45,7 +44,10 @@ struct ActivityRowView: View {
     private var face: some View {
         HStack(alignment: .top, spacing: 8) {
             dot
-            line
+            switch place {
+            case .section: line
+            case .dashboard: slimLine
+            }
         }
     }
 
@@ -95,11 +97,44 @@ struct ActivityRowView: View {
         .frame(minHeight: 24, alignment: .center)
     }
 
+    /// Úzký tvar řádku pro blok na dashboardu (`.tl-line.slim`, návrh sekce 31).
+    ///
+    /// **Rozdíl je v obsahu, ne ve stylu**: zůstává titulek, `repo#číslo` a čas, kdežto podrobnost
+    /// („přišly 3 commity“), sha, chip `bez banneru`, autor i cíl (`→ Nálezy`) se vynechávají
+    /// a zůstávají v sekci. Bez toho ořezu se řádek do 456 bodů pravého sloupce nevejde: se vším
+    /// všudy má 42 až 66 bodů (dvě až tři patra), takhle 24 — jednu řádku jako v sekci.
+    ///
+    /// **Nezalamuje se, ustupuje titulek.** `layoutPriority` je tady `flex: none` z návrhu:
+    /// `repo#číslo` a čas dostanou svou šířku první, protože jsou krátké a jsou to **souřadnice**,
+    /// podle kterých se pozná, čeho se to týká. Na titulek zbyde zbytek a ořízne se — bez těch
+    /// priorit by `HStack` krátil všechny tři naráz a useknul by zrovna souřadnice.
+    ///
+    /// `Spacer` na konci drží řádek přes celou šířku bloku: klikatelný je celý, ne jen text.
+    private var slimLine: some View {
+        HStack(spacing: 7) {
+            Text(verbatim: event.headline)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(isDimmed ? Palette.ink2 : Palette.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            // Mono jako každý jiný slug v návrhu (`.tl-line.slim > .slug`) — v úzkém řádku je to
+            // to jediné, čím se dvě události od sebe na první pohled poznají.
+            Text(verbatim: event.pullRequest.description)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Palette.ink2)
+                .lineLimit(1)
+                .layoutPriority(1)
+            time.layoutPriority(1)
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 24, alignment: .center)
+    }
+
     /// Čas u řádku. Relativní stáří skládá **view**, protože se v okně přepočítává samo; hotový
     /// text hodin (i se dnem, když si ho řádek nese) skládá `Policy.activityTime`.
     @ViewBuilder private var time: some View {
         Group {
-            switch Policy.activityTime(of: event.at, now: now, carriesDay: showsDay) {
+            switch Policy.activityTime(of: event.at, now: now, at: place) {
             case .relative: Text(event.at, format: .relative(presentation: .named))
             case .absolute(let label): Text(verbatim: label)
             }
@@ -148,6 +183,11 @@ struct ActivityRowView: View {
     }
 
     /// Pro čtečku obrazovky celá věta: řádek se skládá z kusů, které samostatně neříkají nic.
+    ///
+    /// **Věta je celá i v úzkém tvaru**, tedy včetně toho, co se v něm nekreslí. Není to lež —
+    /// podrobnost i cíl v události jsou a klik doopravdy vede tam, kam věta říká; ořez je úspora
+    /// **místa na obrazovce**, a to je věc, kterou čtečka nemá. Tatáž úvaha jako u nápovědy: v úzkém
+    /// řádku je tooltip jediné místo, kde se cíl dá přečíst.
     private var accessibilityLabel: String {
         [
             event.headline,

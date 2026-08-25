@@ -141,35 +141,35 @@ extension DashboardActivityTests {
 
 extension DashboardActivityTests {
     /// **Kvůli tomuhle to rozhodnutí je v `Policy`.** V sekci nese den hlavička bloku, na dashboardu
-    /// ho nemá kdo nést — takže by `v 07:58` u včerejší události tvrdilo, že to bylo dneska ráno.
-    @Test("Řádek s dnem dopisuje den, řádek bez něj ne")
+    /// ho nemá kdo nést — takže by `v 7:58` u včerejší události tvrdilo, že to bylo dneska ráno.
+    @Test("Řádek na dashboardu dopisuje den, řádek v sekci ne")
     func writesTheDayOnlyWhenTheRowCarriesIt() {
         let yesterday = now.addingTimeInterval(-86_400)
 
-        let carried = Policy.activityTime(of: yesterday, now: now, carriesDay: true, calendar: calendar)
-        let borne = Policy.activityTime(of: yesterday, now: now, carriesDay: false, calendar: calendar)
+        let carried = Policy.activityTime(of: yesterday, now: now, at: .dashboard, calendar: calendar)
+        let borne = Policy.activityTime(of: yesterday, now: now, at: .section, calendar: calendar)
 
         #expect(carried == .absolute(Policy.visitLabel(yesterday, now: now, calendar: calendar)))
         #expect(carried == .absolute("včera v \(yesterday.formatted(.dateTime.hour().minute()))"))
         #expect(borne == .absolute("v \(yesterday.formatted(.dateTime.hour().minute()))"))
     }
 
-    /// Dnešní událost den nedostane ani na dashboardu: `dnes v 07:58` je slovo navíc v řádku, ve
+    /// Dnešní událost den nedostane ani na dashboardu: `dnes v 7:58` je slovo navíc v řádku, ve
     /// kterém se o místo perou čtyři další údaje.
-    @Test("Dnešní čas den nedostane ani s příznakem")
+    @Test("Dnešní čas den nedostane ani na dashboardu")
     func skipsTheDayForToday() {
         let morning = now.addingTimeInterval(-5 * 60 * 60)
         let clock = "v \(morning.formatted(.dateTime.hour().minute()))"
 
-        #expect(Policy.activityTime(of: morning, now: now, carriesDay: true, calendar: calendar) == .absolute(clock))
-        #expect(Policy.activityTime(of: morning, now: now, carriesDay: false, calendar: calendar) == .absolute(clock))
+        #expect(Policy.activityTime(of: morning, now: now, at: .dashboard, calendar: calendar) == .absolute(clock))
+        #expect(Policy.activityTime(of: morning, now: now, at: .section, calendar: calendar) == .absolute(clock))
     }
 
     /// Starší než včerejšek dostane datum, ne „předevčírem“ — tentýž formát jako popisek návštěvy.
     @Test("Starší než včerejšek dostane datum")
     func writesTheDateForOlderRows() {
         let older = now.addingTimeInterval(-3 * 86_400)
-        let label = Policy.activityTime(of: older, now: now, carriesDay: true, calendar: calendar)
+        let label = Policy.activityTime(of: older, now: now, at: .dashboard, calendar: calendar)
 
         #expect(label == .absolute(Policy.visitLabel(older, now: now, calendar: calendar)))
         guard case .absolute(let text) = label else { return }
@@ -178,13 +178,13 @@ extension DashboardActivityTests {
     }
 
     /// Čerstvá událost zůstává relativní **na obou obrazovkách**: text si skládá view, protože se
-    /// v okně přepočítává sám, a příznak dne na to nesmí sáhnout.
-    @Test("Do dvou hodin je čas relativní bez ohledu na příznak")
+    /// v okně přepočítává sám, a místo na to nesmí sáhnout.
+    @Test("Do dvou hodin je čas relativní na obou místech")
     func staysRelativeInsideTheWindow() {
         let fresh = now.addingTimeInterval(-120)
 
-        #expect(Policy.activityTime(of: fresh, now: now, carriesDay: true, calendar: calendar) == .relative)
-        #expect(Policy.activityTime(of: fresh, now: now, carriesDay: false, calendar: calendar) == .relative)
+        #expect(Policy.activityTime(of: fresh, now: now, at: .dashboard, calendar: calendar) == .relative)
+        #expect(Policy.activityTime(of: fresh, now: now, at: .section, calendar: calendar) == .relative)
     }
 
     /// Hranice okna je tatáž jako v sekci (`showsRelativeTime`), takže se ty dvě obrazovky nemají
@@ -193,7 +193,7 @@ extension DashboardActivityTests {
     func sharesTheRelativeWindow() {
         for offset in [-60.0, -7100, -7300, -86_400] {
             let date = now.addingTimeInterval(offset)
-            let isRelative = Policy.activityTime(of: date, now: now, carriesDay: true, calendar: calendar) == .relative
+            let isRelative = Policy.activityTime(of: date, now: now, at: .dashboard, calendar: calendar) == .relative
 
             #expect(isRelative == Policy.showsRelativeTime(of: date, now: now))
         }

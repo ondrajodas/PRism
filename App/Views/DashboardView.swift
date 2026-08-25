@@ -36,7 +36,6 @@ struct DashboardView: View {
                 head(dashboard)
                 cards(dashboard)
                 columns(dashboard)
-                activity(dashboard.activity)
             }
             .padding(.horizontal, 26)
             .padding(.top, 22)
@@ -420,6 +419,7 @@ struct DashboardView: View {
             VStack(spacing: 12) {
                 block("Nálezy podle reviewera", more: "7 dní") { reviewerLegend(dashboard.reviewers) }
                 block("Co teď") { actions(dashboard.drafts.pullRequest) }
+                activity(dashboard.activity)
             }
         }
     }
@@ -657,15 +657,19 @@ struct DashboardView: View {
 
     /// Blok `Dění` (#443) — pět nejnovějších řádků a cesta do sekce.
     ///
-    /// **Pod oběma sloupci, přes celou šířku**, ne v pravém sloupci pod `Co teď`. Řádek nese pět
-    /// údajů (co se stalo, čeho se to týká, kdy, jestli o tom byl banner a kam vede) a pravý sloupec
-    /// je `1fr` z `1.45fr 1fr`. Změřeno nad mockupem: v 456 bodech se řádky zalomí (42, 42, 42, 66
-    /// a 42 místo jednotných 24) a blok vyroste na 380 bodů, tedy výš než celý levý sloupec s oběma
-    /// frontami (321); přes celou šířku (1134) má 266 a každý řádek se vejde na jeden.
+    /// **Třetí blok pravého sloupce, pod `Co teď`** (návrh, poznámka 97). Zaplňuje díru, kterou
+    /// tam nikdo nevyužíval: změřeno nad mockupem, že levý sloupec s oběma frontami je 578 bodů
+    /// vysoký a pravý s legendou a akcemi 153 — pod ním tedy zbývalo 425 bodů prázdna. Blok má 266,
+    /// takže pravý sloupec doroste na 419 a pořád zůstane o 159 kratší než levý. Pás pod oběma
+    /// sloupci by naopak začínal **až pod** tou dírou, tedy dole na obrazovce, kam se nikdo nedívá.
     ///
-    /// **A je poslední, ne první** (návrh, poznámka 97): pořadí obrazovky je *karty → fronty a Co
-    /// teď → dění*, tedy pořadí otázek „co je akutní, co s tím udělám, co se stalo“. Dění je
-    /// minulost a ta nemá vytlačit rozhodnutí.
+    /// **Cenou je úzký řádek** (`ActivityRowPlace.dashboard`): pravý sloupec je `1fr` z
+    /// `1.45fr 1fr`, tedy 456 bodů, a celý řádek ze sekce se do nich nevejde. Co se vynechává a co
+    /// zůstává, je u `ActivityRowView.slimLine`.
+    ///
+    /// **A je poslední, ne první**: pořadí obrazovky je *karty → fronty a Co teď → dění*, tedy
+    /// pořadí otázek „co je akutní, co s tím udělám, co se stalo“. Dění je minulost a ta nemá
+    /// vytlačit rozhodnutí.
     private func activity(_ activity: DashboardActivity) -> some View {
         block(activity.title, more: "celé dění →", moreSection: .activity) {
             activityRows(activity)
@@ -679,7 +683,7 @@ struct DashboardView: View {
     ///
     /// **Bez pruhu `Tady jsem skončil` a bez dělení po dnech**: nad pěti řádky by pruh dělil pět
     /// řádků na dvě hromádky a hlavička dne by přidala šestý řádek textu. Nepřečtené proto nese
-    /// počet v nadpisu a den čas u řádku (`showsDay`).
+    /// počet v nadpisu a den čas u řádku (`ActivityRowPlace.dashboard`).
     @ViewBuilder private func activityRows(_ activity: DashboardActivity) -> some View {
         if let explanation = activity.emptyExplanation {
             // Bez osy: svislá čára jde přes celý blok, takže by u jediné věty stála čára, na které
@@ -702,7 +706,7 @@ struct DashboardView: View {
                         ActivityRowView(
                             event: event,
                             now: now,
-                            showsDay: true,
+                            place: .dashboard,
                             open: { store.show($0) }
                         )
                     }

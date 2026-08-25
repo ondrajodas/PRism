@@ -131,7 +131,8 @@ struct ActivityFeedView: View {
     /// `Tady jsem skončil` — na dashboardu žádný není, protože pět řádků nemá co dělit na dvě
     /// hromádky.
     ///
-    /// **Den nese hlavička bloku**, takže si ho řádek nese jen na dashboardu (`showsDay`).
+    /// **Den nese hlavička bloku a místo je tu na celou událost**, takže řádek zůstává
+    /// `ActivityRowPlace.section` — úzký tvar i den u času má jen dashboard.
     private func timeline(_ day: ActivityFeedDay) -> some View {
         ActivityTimeline {
             ForEach(day.rows) { row in

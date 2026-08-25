@@ -417,17 +417,41 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   položek a pět řádků vypadá platně, ať v nich stojí cokoli) a že duplicita nezabere řádek ani se
   nepočítá do patky. Nadpis počítá **nepřečtené z celého záznamu**, ne z nakreslených řádků (dvacet
   položek, jedenáct nových, pět řádků), nula se nepíše a počet se skloňuje. **Den u času** se ověřuje
-  z obou stran: s příznakem `včera v 07:58`, bez něj `v 07:58`, dnešek den nedostane ani s příznakem,
-  starší dostane datum a čerstvá událost zůstane relativní **na obou obrazovkách** — a hranice okna
-  se porovnává přímo se `showsRelativeTime`, aby se ty dvě obrazovky nemohly rozejít v tom, odkdy se
-  píše hodinami. **Čtyři prázdna, čtyři různé věty** (tvrdí se, že je jich tolik, kolik je případů
-  `allCases`), ztracená historie o klidu nemluví a zakázané se pozná od vypnutého.
+  z obou stran: na dashboardu `včera v 7:58`, v sekci `v 7:58`, dnešek den nedostane ani na
+  dashboardu, starší dostane datum a čerstvá událost zůstane relativní **na obou obrazovkách** —
+  a hranice okna se porovnává přímo se `showsRelativeTime`, aby se ty dvě obrazovky nemohly rozejít
+  v tom, odkdy se píše hodinami. **Čtyři prázdna, čtyři různé věty** (tvrdí se, že je jich tolik,
+  kolik je případů `allCases`), ztracená historie o klidu nemluví a zakázané se pozná od vypnutého.
 
   Ve store: strop je **o kresbě, ne o množině** (sedm položek → pět řádků, patka `+2`, nadpis
   i odznak sedm) a blok kreslí **tytéž položky** jako sekce, jen useknuté.
 
-  Čar v levém sloupci dashboardu je proto od #443 **čtrnáct místo jedenácti**
-  (`DashboardFooterSeparatorTests`) — prázdný blok `Dění` přidá obrys, hlavičku a obrys.
+  **Úzký tvar řádku** (`ActivityRowShapeTests`) se měří **dvěma různými měřidly, a to schválně** —
+  jedno bez druhého by prošlo i nad rozbitou verzí:
+
+  - **výškou** to, kvůli čemu úzký tvar vůbec je: v 456 bodech pravého sloupce se řádek vejde na
+    jednu řádku (24 b, strop v testu 28) a **plný řádek ze sekce ne** — u všech pěti položek ze
+    sekce 31 návrhu;
+  - **přirozenou šířkou** (`fittingSize.width` bez vnějšího rámce) to, co v něm **není**: podrobnost,
+    sha, chip `bez banneru`, autor ani cíl. Výška na tuhle otázku odpovědět neumí — úzký řádek se
+    nezalamuje, takže vrácený chip by ji nezvedl ani o bod, jen by ukousl kus titulku. Každé z těch
+    tvrzení má **druhou stranu v sekci**, kde se ta věc kreslit má, jinak by prošla verze, která ji
+    nekreslí nikde; a nad tím vším stojí jedno tvrzení opačné (titulek a `repo#číslo` šířku **mění**),
+    aby bylo vidět, že měřidlo není slepé.
+
+  Dvě věci, na které se u toho naráží. `Spacer(minLength: 0)` na konci řádku přirozenou šířku
+  nerozbíjí: `fittingSize` se ptá nespecifikovaným návrhem a spacer na něj odpoví nulou (kdyby ne,
+  spadlo by právě to opačné tvrzení). A **`fittingSize` vrací celé body**, takže se dvojice pro
+  „cíl se nekreslí“ vybírá podle délky popisku, ne podle druhu: `→ Nálezy` proti `GitHub ↗` vyšlo
+  v sekci **371 : 371**, kdežto `→ Konverzace` je o pět znaků delší a rozdíl přežije zaokrouhlení.
+
+  **Ověřeno vložením regrese, dvakrát:** s podrobností a cílem vrácenými do úzkého řádku spadla tři
+  tvrzení z pěti (výška 32 až 80 bodů místo 24), a se zahozeným `lineLimit(1)` u titulku spadla
+  výška u nejdelší položky (45 b) — tedy přesně ten stav, kdy se řádek místo ořezu zalomí.
+
+  Čar v levém sloupci dashboardu zůstává **jedenáct** (`DashboardFooterSeparatorTests`) a je to
+  tvrzení, ne opomenutí: blok `Dění` stojí v **pravém** sloupci, kdežto vzorek jde přes levý. Kdyby
+  se do počtu promítl, znamenalo by to, že se kreslí jinam, než kam ho návrh dal.
 
   **Ověřeno vložením regrese, dvakrát:** posun značky při vstupu (`guard visible || wasActivityVisible`)
   shodil dva testy — `Vstup do sekce značku neposune` i `Klik na tutéž sekci značku nehýbe` —,

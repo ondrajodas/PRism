@@ -76,9 +76,9 @@ za posledních sedm dní. Pod kartami jsou **dvě fronty pod sebou** (#331): `Č
 seřazené **podle závažnosti**, ne podle času, a pod ní `Moje PR`; vedle nich rozpad nálezů podle
 revieweera za týden a blok `Co teď` s akcemi: pustit review na všechno, co neběželo (ptá se na
 potvrzení — je to jediné kliknutí v aplikaci, které utratí víc než jednu session), nebo se vrátit
-k nejstaršímu rozdělanému review. **Pod oběma sloupci je od #443 blok `Dění`** — pět nejnovějších
-řádků toho, co se na pull requestech stalo, a cesta do celé sekce. Nic se pro to nedotahuje; všechna
-ta čísla už v aplikaci byla, jen roztroušená.
+k nejstaršímu rozdělanému review. **Pod `Co teď` je od #443 třetí blok pravého sloupce, `Dění`** —
+pět nejnovějších řádků toho, co se na pull requestech stalo, a cesta do celé sekce. Nic se pro to
+nedotahuje; všechna ta čísla už v aplikaci byla, jen roztroušená.
 
 **Karta `Čeká na mě` a blok `Čeká na moje review` počítají od #332 jen cizí PR**, karta a blok
 `Moje PR` jen vlastní; `Rozdělaná review` počítá dál obojí. Podrobně je to níž, u sekce `Moje PR`.
@@ -259,16 +259,23 @@ a **vypnutý přepínač** (jde se do nastavení aplikace). Klid a mlčící apl
 stejného důvodu jako `čisté review` a `review se nepovedlo` — a nad ztracenou historií by klidné
 „nic se nestalo“ tvrdilo víc, než data unesou.
 
-**Na dashboardu je z toho vidět pět nejnovějších řádků** (#443), pod oběma sloupci a přes celou
-šířku. Do té doby se do sekce muselo napřed **přepnout**, aby se zjistilo, jestli je do čeho koukat
-— odznak v railu říká počet, ne co se stalo. Blok je **ukázka a rozcestník**, ne druhé místo, kde se
-dá v dění zůstat: nemá vlastní pruh `Tady jsem skončil`, nekreslí se v něm hlavičky dní a
-z prázdných obrazovek sekce v něm zbude **jedna věta** (tlačítka, kterými se mlčení spraví, patří do
-sekce). Nadpis nese počet nepřečtených — `Dění · 3 nové` —, patka zbytek záznamu
-(`Zobrazit celé dění +37 →`) a `celé dění →` v hlavičce i patka vedou do páté sekce railu. Řádek je
-**týž** jako v sekci a klik na něj dělá totéž; liší se jedinou věcí — nese si **den** u času
-(`včera v 07:58`), protože ho tady na rozdíl od sekce nemá kdo nést. **Značku poslední návštěvy blok
-neposouvá**, jinak by se nepřečtené vynulovalo tím, že jsem se podíval na domácí záložku.
+**Na dashboardu je z toho vidět pět nejnovějších řádků** (#443) — třetí blok pravého sloupce, pod
+`Co teď`. Do té doby se do sekce muselo napřed **přepnout**, aby se zjistilo, jestli je do čeho
+koukat: odznak v railu říká počet, ne co se stalo. Blok je **ukázka a rozcestník**, ne druhé místo,
+kde se dá v dění zůstat: nemá vlastní pruh `Tady jsem skončil`, nekreslí se v něm hlavičky dní
+a z prázdných obrazovek sekce v něm zbude **jedna věta** (tlačítka, kterými se mlčení spraví, patří
+do sekce). Nadpis nese počet nepřečtených — `Dění · 3 nové` —, patka zbytek záznamu
+(`Zobrazit celé dění +37 →`) a `celé dění →` v hlavičce i patka vedou do páté sekce railu.
+**Značku poslední návštěvy blok neposouvá**, jinak by se nepřečtené vynulovalo tím, že jsem se
+podíval na domácí záložku.
+
+Řádek je **týž `ActivityRowView`** jako v sekci, ale v **úzkém tvaru**: pravý sloupec má 456 bodů,
+což je na celou událost málo (změřeno nad návrhem: 42 až 66 bodů, tedy dvě až tři patra). Nese proto
+**titulek, `repo#číslo` a čas** — a podrobnost („přišly 3 commity“), sha, chip `bez banneru`, autora
+i cíl (`→ Nálezy`) vynechává; ty zůstávají v sekci. **Nezalamuje se**: co se nevejde, ořízne
+**titulek**, protože `repo#číslo` a čas jsou souřadnice, podle kterých se pozná, čeho se to týká.
+Čas si tady na rozdíl od sekce nese i **den** (`včera v 7:58`) — v sekci ho nese hlavička dne, tady
+by ho nikdo nenesl. Klik dělá totéž co v sekci.
 
 **Filtry sekce nemá**, dokud není co filtrovat: den je nadpis bloku a strop 200 položek znamená, že
 se dá projít. Odškrtávátka po druzích by teď byla ovládání nad ničím.

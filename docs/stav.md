@@ -4657,19 +4657,28 @@ aby se zjistilo, jestli je do čeho koukat: odznak v railu říká počet, ne co
 jediná obrazovka, na kterou se člověk podívá, aniž by se ptal, takže na něm od #443 stojí **pět
 nejnovějších řádků** dění a cesta do celé sekce (návrh, sekce 31).
 
-**Pod oběma sloupci, přes celou šířku**, ne v pravém sloupci pod `Co teď`. Čísla jsou z mockupu
-změřená, ne odhadnutá: v pravém sloupci (456 b z `1.45fr 1fr`) se pět řádků zalomí — 42, 42, 42, 66
-a 42 bodů místo jednotných 24 — a blok vyroste na **380 b**, tedy výš než celý levý sloupec s oběma
-frontami (321). Přes celou šířku (1134 b) má blok **266 b** a každý řádek se vejde na jeden. Blok je
-u toho **poslední na obrazovce**: pořadí *karty → fronty a Co teď → dění* je pořadí otázek a minulost
-nemá vytlačit rozhodnutí.
+**Třetí blok pravého sloupce, pod `Co teď`** — a je to **změna proti prvnímu zadání i prvnímu
+zákresu**, ne to, co bylo napsané. Původně měl blok stát pod oběma sloupci přes celou šířku; poznalo
+se **až na běžící aplikaci**, že je to špatně, protože prázdné místo je vidět v okně, ne v poznámce.
+Změřeno nad mockupem: levý sloupec s oběma frontami je **578 bodů** vysoký a pravý s legendou
+a akcemi **153**, takže pod ním zbývalo **425 bodů prázdna** a pás přes celou šířku by začínal *až
+pod* ním — dole na obrazovce, kam se nikdo nedívá. Blok má **266 bodů**, pravý sloupec s ním doroste
+na **419** a pořád zůstane o 159 kratší než levý.
+
+**Cenou je úzký tvar řádku a ta cena se platí obsahem, ne zalomením.** Pravý sloupec je `1fr`
+z `1.45fr 1fr`, tedy 456 bodů, a celá událost se do nich nevejde — má **42 až 66 bodů**, dvě až tři
+patra. V bloku proto zůstává **titulek, `repo#číslo` a čas**; podrobnost („přišly 3 commity“), sha,
+chip `bez banneru`, autor i cíl (`→ Nálezy`) se vynechávají a zůstávají v sekci. Řádek pak má **24
+bodů**, jednu řádku jako v sekci. **Nezalamuje se**: co se nevejde, ořízne **titulek**, protože
+`repo#číslo` a čas jsou souřadnice, podle kterých se pozná, čeho se to týká — a že ustoupí zrovna
+titulek, drží `layoutPriority` na obou souřadnicích (`flex: none` z návrhu).
 
 **Ukázka a rozcestník, ne druhé dění.** Sekce zůstává tím, čím je — rolovat, číst po dnech
 a dohledávat se chodí tam. Blok proto nemá vlastní pruh `Tady jsem skončil`, vlastní hlavičky dní
-ani vlastní řádek: kreslí **týž `ActivityRowView`** jako sekce, jen vyčleněný do vlastního souboru
-spolu s osou (`ActivityTimeline`). V hlavičce `ActivityFeedView` do té doby stálo, že dění blokem na
-dashboardu **není**; ukázalo se, že ta ukázka je právě to, co chybělo, a ten komentář je přepsaný
-i s důvodem.
+ani vlastní řádek: kreslí **týž `ActivityRowView`** jako sekce, jen v úzkém tvaru, a je vyčleněný do
+vlastního souboru spolu s osou (`ActivityTimeline`). V hlavičce `ActivityFeedView` do té doby stálo,
+že dění blokem na dashboardu **není**; ukázalo se, že ta ukázka je právě to, co chybělo, a ten
+komentář je přepsaný i s důvodem.
 
 **Značku poslední návštěvy blok neposouvá** — a je to to nejcennější tvrzení celého issue, protože
 by se rozbilo potichu: kdyby ji posunul pohled na domácí záložku, vynulovalo by se nepřečtené
@@ -4679,10 +4688,13 @@ místo v tom bloku, které se storu vůbec dotýká.
 
 **Rozhodnutí, která k tomu patřila:**
 
-- **Den u času** (`Policy.activityTime(of:now:carriesDay:)`). V sekci nese den hlavička bloku, tady
-  ho nemá kdo nést, takže by `v 07:58` u včerejší události tvrdilo dnešní ráno. Formát je tentýž
-  jako u `visitLabel` (`v 07:58`, `včera v 07:58`, `20. srpna v 07:58`) a rozhodnutí je **jedno** —
-  dva výpočty téhož by se rozešly právě v tom, co je vidět jeden den v roce. Relativní podobu
+- **Jeden příznak na místo, ne dva booleany** (`ActivityRowPlace`). Úzký tvar i den u času plynou
+  z **místa**, ne z události, takže dva nezávislé příznaky by šlo nastavit křížem a vznikla by z toho
+  třetí podoba, kterou návrh nekreslí.
+- **Den u času** (`Policy.activityTime(of:now:at:)`). V sekci nese den hlavička dne, tady ho nemá kdo
+  nést, takže by `v 7:58` u včerejší události tvrdilo dnešní ráno. Formát je tentýž jako
+  u `visitLabel` (`v 7:58`, `včera v 7:58`, `20. srpna v 7:58`) a rozhodnutí je **jedno** — dva
+  výpočty téhož by se rozešly právě v tom, co je vidět jeden den v roce. Relativní podobu
   (`před 2 min`) skládá dál view, protože se v okně přepočítává sama.
 - **Blok je součástí `Dashboard`**, ne vlastní getter: view si dashboard bere jednou za překreslení,
   takže druhý getter by znamenal druhý průchod záznamem při každém průchodu tělem.
@@ -4696,6 +4708,9 @@ místo v tom bloku, které se storu vůbec dotýká.
 - **`LazyVStack` sem nepatří** — pět řádků je strop z `Policy`, ne odhad, takže líný seznam by za
   měřenou velikost (#361) platil tam, kde se nejhorší případ vejde na obrazovku.
 
-Testů **4036**, všechny zelené: `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
-čtyři prázdna) a tři tvrzení ve `AppStoreFeedTests`. `DashboardFooterSeparatorTests` počítá od #443
-**čtrnáct** čar místo jedenácti — prázdný blok `Dění` přidá obrys, hlavičku a obrys.
+Testů **4051**, všechny zelené: `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
+čtyři prázdna), tři tvrzení ve `AppStoreFeedTests` a pět v `ActivityRowShapeTests` — ta měří úzký
+tvar **dvěma měřidly**: výškou to, že se vejde na jednu řádku a plný řádek ne, a přirozenou šířkou
+to, co v něm **není**. Ověřeno vložením regrese dvakrát (vrácená podrobnost s cílem, zahozený
+`lineLimit`). `DashboardFooterSeparatorTests` počítají dál **jedenáct** čar — blok stojí v pravém
+sloupci a jejich vzorek jde přes levý, takže by změněný počet znamenal, že se kreslí jinam.

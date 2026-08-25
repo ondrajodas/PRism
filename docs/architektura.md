@@ -3206,7 +3206,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`) a uvnitř rámu ikony**, jak ho kreslí návrh — viz *Odznak v railu* |
 | `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
-| `DashboardView` | Startovní obrazovka (#181): pozdrav, **pět karet** (#331), **dvě fronty pod sebou** (`Čeká na moje review` a `Moje PR`), legenda reviewerů a `Co teď`. Věta pod pozdravem je od #332 **dvojitá** (fronta + „na kolika vlastních je co předat agentovi“), jak ji kreslí návrh; nenačtená fronta druhou větu nedostane a číslo se píše **číslicí**, ne slovem jako v mockupu — zbytek okna to dělá stejně. Akcentový proužek nese od #331 karta `Moje PR`, ne `Rozdělaná review` — dva proužky vedle sebe by přestaly znamenat, která karta je ta o mně. Od #371 kreslí blok **nejvýš pět řádků** a pod nimi patku se zbytkem (`Policy.dashboardBlock`), a **čtyři karty z pěti vedou do své sekce** — šipka vpravo nahoře, rámeček v akcentu na hover, ukazováček; `Dneska stálo` nedostane nic z toho, protože nemá kam vést. Popisek karty se šipce **uhýbá odsazením** (`arrowRoom`) a je na jeden řádek: v úzkém okně by se pod ni zalomil a s ním by narostla výška celé řady karet. Od #443 stojí **pod oběma sloupci** blok `Dění` (`DashboardActivity`) — přes celou šířku, pět nejnovějších řádků, `celé dění →` v hlavičce a patka `Zobrazit celé dění +N →`; řádek je **týž `ActivityRowView`** jako v sekci, jen si nese den u času |
+| `DashboardView` | Startovní obrazovka (#181): pozdrav, **pět karet** (#331), **dvě fronty pod sebou** (`Čeká na moje review` a `Moje PR`), legenda reviewerů a `Co teď`. Věta pod pozdravem je od #332 **dvojitá** (fronta + „na kolika vlastních je co předat agentovi“), jak ji kreslí návrh; nenačtená fronta druhou větu nedostane a číslo se píše **číslicí**, ne slovem jako v mockupu — zbytek okna to dělá stejně. Akcentový proužek nese od #331 karta `Moje PR`, ne `Rozdělaná review` — dva proužky vedle sebe by přestaly znamenat, která karta je ta o mně. Od #371 kreslí blok **nejvýš pět řádků** a pod nimi patku se zbytkem (`Policy.dashboardBlock`), a **čtyři karty z pěti vedou do své sekce** — šipka vpravo nahoře, rámeček v akcentu na hover, ukazováček; `Dneska stálo` nedostane nic z toho, protože nemá kam vést. Popisek karty se šipce **uhýbá odsazením** (`arrowRoom`) a je na jeden řádek: v úzkém okně by se pod ni zalomil a s ním by narostla výška celé řady karet. Od #443 stojí v **pravém sloupci pod `Co teď`** blok `Dění` (`DashboardActivity`) — pět nejnovějších řádků, `celé dění →` v hlavičce a patka `Zobrazit celé dění +N →`; řádek je **týž `ActivityRowView`** jako v sekci, jen v úzkém tvaru (`ActivityRowPlace.dashboard`) |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
 | `DashboardCountdown` | Samotný odpočet — `za 43s znovu`, **bez mezery mezi číslem a jednotkou** (#260). Formát je náš (systémový mezeru má a nejde vyndat), takt dává `TimelineView`, takže se přepočítává jen tenhle `Text`. Text i rozvrh jsou statické funkce, aby se daly otestovat |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
@@ -6361,7 +6361,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.activityLog(_:adding:limit:)`, `Policy.activityLimit` | Vložení do záznamu (#414): od nejnovějšího, bez duplicit, se stropem **200 položek**. **Jedno místo pro disk i paměť** — dvě implementace by znamenaly jiný záznam na obrazovce než v souboru |
 | `Policy.activityFeed(_:since:now:calendar:)`, `Policy.unreadActivity(_:since:)`, `Policy.activityBadge(unread:isActive:)` | Řádky dění po dnech se značkou poslední návštěvy, počet nepřečtených a odznak sekce (#414). **Bez značky je nové všechno** (opačně než u konverzace); odznak na aktivní sekci mlčí, protože by v railu překryl ikonu |
 | `Policy.destination(of:)`, `Policy.tone(of:)`, `Policy.symbol(of:)`, `Policy.showsSilentChip(_:announced:)`, `Policy.gitHubURL(of:)` | Co se u řádku dění kreslí a kam vede (#414). Chip **bez banneru** jen u druhů, které banner umí; jediný druh vede z aplikace **ven**, a adresa se skládá z identity, protože shrnutí v paměti být nemusí |
-| `Policy.showsRelativeTime(of:now:)`, `Policy.activityTime(of:now:carriesDay:calendar:)` | Čas u řádku dění (#414, #443) — relativní do dvou hodin, pak hodinami, a **jestli si řádek nese den** (`ActivityTimeLabel`). V sekci ho nese hlavička bloku, na dashboardu ho nemá kdo nést, takže by `v 07:58` u včerejší události tvrdilo dnešní ráno. Relativní podobu skládá **view**, protože se v okně přepočítává sama |
+| `Policy.showsRelativeTime(of:now:)`, `Policy.activityTime(of:now:at:calendar:)` | Čas u řádku dění (#414, #443) — relativní do dvou hodin, pak hodinami, a **jestli si řádek nese den** (`ActivityTimeLabel`, `ActivityRowPlace`). V sekci ho nese hlavička dne, na dashboardu ho nemá kdo nést, takže by `v 7:58` u včerejší události tvrdilo dnešní ráno. Relativní podobu skládá **view**, protože se v okně přepočítává sama |
 | `Policy.activityHeaderSentence(lastVisit:hasEvents:now:calendar:)`, `Policy.visitLabel(_:now:calendar:)`, `Policy.showsRelativeTime(of:now:)`, `Policy.commitsAfter(_:in:)`, `Policy.activityEmptyState(…)` | Věta v hlavičce dění, popisek návštěvy (jedno místo pro větu i pruh), kdy se čas píše relativně, počet commitů po hlavě nálezů a **čtyři prázdna, která se nesmí slít** (#414) |
 | `Policy.activityNotification(for:activity:)`, `Policy.activityHeadline(_:)` | Text hlášky „ozval se někdo na mém PR“ (#335): titulek s počtem a druhem, pod ním **ta nejnovější věta** a na třetím řádku PR. Titulek skládá **totéž místo** jako text v řádku seznamu (`od minule`), aby se ty dvě věty nerozešly |
 | `Policy.agentPromptItems(findings:dismissals:conversation:)` | Všechno, co se dá na vlastním PR předat agentovi (#333) → `[AgentPromptItem]`. **Nefiltruje podle voleb** — z téhož seznamu se počítají i čísla u vypnutých voleb. Vynechá jedině prázdnou obálku review (bez verdiktu i bez prózy), stejně jako `overview` |
@@ -6750,7 +6750,7 @@ místo, kde ty události zůstanou. Zakreslené v **sekci 27 návrhu**.
 | `AppStore+Feed` | `App/Store/` | kdy se zapisuje, co je v paměti, kdy se posouvá značka, klik na řádek, dotaz na hlavy z tiku (#420) |
 | `Policy` (`StaleHeadProbe.swift`) | `App/Policy/` | koho se tik zeptá na hlavu a co z odpovědi plyne (#420) — dvě čisté funkce |
 | `ActivityFeedView` | `App/Views/` | obrazovka: bloky po dnech, pruh návštěvy, čtyři prázdna |
-| `ActivityRowView`, `ActivityTimeline` | `App/Views/` | **jeden řádek a jedna osa pro obě obrazovky** (#443) — sekce i blok na dashboardu; liší se jediné, a to `showsDay` |
+| `ActivityRowView`, `ActivityTimeline` | `App/Views/` | **jeden řádek a jedna osa pro obě obrazovky** (#443) — sekce i blok na dashboardu; liší se jediné, a to `place` (úzký tvar a den u času) |
 | `Policy` (`DashboardActivity.swift`) | `App/Policy/` | blok `Dění` na dashboardu (#443): strop, nadpis s počtem, patka, věta místo řádků |
 
 **Záznam je na disku a mez je vidět v typu.** `DeliveredNotification` je v paměti schválně (#138) —
@@ -6880,25 +6880,37 @@ vlastního řádku. Kdyby si je pořídil, jsou to dvě dění. Do #443 stálo v
 že dění blokem na dashboardu **není**; ukázalo se, že ta ukázka je právě to, co chybí, a ten komentář
 je proto přepsaný i s důvodem.
 
-Pět věcí, které se u něj nemají rozbít:
+Šest věcí, které se u něj nemají rozbít:
 
 - **Značku poslední návštěvy blok neposouvá.** Posouvá ji jedině odchod ze sekce
   (`syncActivityVisit()`); kdyby ji posunul pohled na domácí záložku, vynulovalo by se nepřečtené
   a odznak v railu by zmizel, aniž bych něco přečetl. Drží to `isActivityVisible` (rail **a** domácí
   záložka), takže dashboard tou podmínkou neprojde — a je na to test (`AppStoreFeedTests`).
-- **Pod oběma sloupci, přes celou šířku.** Řádek nese pět údajů a pravý sloupec je `1fr`
-  z `1.45fr 1fr`. Změřeno nad mockupem: ve 456 bodech se řádky zalomí (42, 42, 42, 66 a 42 místo
-  jednotných 24) a blok vyroste na **380 bodů**, tedy výš než celý levý sloupec s oběma frontami
-  (321); přes celou šířku (1134) má **266** a každý řádek se vejde na jeden. **A je poslední**
-  (poznámka 97): pořadí obrazovky je *karty → fronty a Co teď → dění*, tedy pořadí otázek — minulost
-  nemá vytlačit rozhodnutí.
+- **Třetí blok pravého sloupce, pod `Co teď`** (poznámka 97) — zaplňuje díru, kterou tam nikdo
+  nevyužíval. Změřeno nad mockupem: levý sloupec s oběma frontami je **578 bodů** vysoký a pravý
+  s legendou a akcemi **153**, takže pod ním zbývalo **425 bodů prázdna**. Blok má **266**, pravý
+  sloupec s ním doroste na **419** a pořád zůstane o 159 kratší než levý. **Pás pod oběma sloupci
+  byl první zákres a bylo to špatně**: začínal by *až pod* tou dírou, tedy dole na obrazovce, kam se
+  nikdo nedívá — a poznalo se to teprve na běžící aplikaci, protože prázdné místo je vidět v okně,
+  ne v poznámce. Pořadí obrazovky (*karty → fronty a Co teď → dění*) se tím nemění: dění je minulost
+  a zůstává poslední.
 - **Řádek je týž `ActivityRowView`.** Vyčleněný ze `ActivityFeedView` do vlastního souboru spolu
   s osou (`ActivityTimeline`): dvě podoby jedné události by se rozešly stejně, jako by se rozešly dvě
-  podoby řádku fronty. Liší se **jediná věc** — `showsDay`.
-- **Den u času.** V sekci ho nese hlavička bloku (`Dnes`, `Včera`, `čtvrtek 20. srpna`), tady ho
-  nemá kdo nést, takže by `v 07:58` u včerejší události tvrdilo dnešní ráno. Rozhoduje o tom
-  `Policy.activityTime(of:now:carriesDay:)` a je to **jedno místo**: dva výpočty téhož by se rozešly
-  právě v tom, co je vidět jeden den v roce.
+  podoby řádku fronty. Liší se **jediná věc** — `place` (`ActivityRowPlace`).
+- **Cenou je úzký tvar řádku, a ta cena se platí obsahem, ne zalomením.** Pravý sloupec je `1fr`
+  z `1.45fr 1fr`, tedy **456 bodů** z 1134, a celá událost se do nich nevejde: má **42 až 66 bodů**,
+  tedy dvě až tři patra. V bloku proto zůstává **titulek, `repo#číslo` a čas** a podrobnost, sha,
+  chip `bez banneru`, autor i cíl se vynechávají — řádek pak má **24 bodů**, jednu řádku jako
+  v sekci. **Nezalamuje se**: co se nevejde, ořízne **titulek** (`lineLimit(1)` a `.tail`), protože
+  `repo#číslo` a čas jsou souřadnice, podle kterých se pozná, čeho se to týká. Že ustoupí zrovna
+  titulek, drží `layoutPriority` na slugu a času — je to `flex: none` z návrhu; bez něj by `HStack`
+  krátil všechny tři naráz.
+- **Den u času.** V sekci ho nese hlavička dne (`Dnes`, `Včera`, `čtvrtek 20. srpna`), tady ho
+  nemá kdo nést, takže by `v 7:58` u včerejší události tvrdilo dnešní ráno. Rozhoduje o tom
+  `Policy.activityTime(of:now:at:)` a je to **jedno místo**: dva výpočty téhož by se rozešly
+  právě v tom, co je vidět jeden den v roce. **Jeden příznak, ne dva** — úzký tvar i den plynou
+  z místa, ne z události, takže je nese `ActivityRowPlace`; dva booleany by šly nastavit křížem
+  a vznikla by z toho třetí podoba, kterou návrh nekreslí.
 - **Bez pruhu `Tady jsem skončil` a bez dělení po dnech.** Nad pěti řádky by pruh dělil pět řádků na
   dvě hromádky a hlavička dne by přidala šestý řádek textu. Nepřečtené nese **počet v nadpisu**
   (`Dění · 3 nové`, totéž číslo jako odznak v railu) a den čas u řádku. **`LazyVStack` sem taky
@@ -7190,8 +7202,8 @@ Nad nálezy platí navíc:
     skákala na totéž místo jako `Čeká na mě`. `Dneska stálo` nevede nikam a nemá ani ukazováček, ani
     hover: karta, po které se nic nestane, je lež o tom, co okno umí (tatáž úvaha, kvůli které #331
     nekreslí `Prompt →` u řádku bez akce). **Patka bloku dělá totéž co karta nad ním.**
-  - **Pod oběma sloupci stojí od #443 blok `Dění`** — pět nejnovějších řádků a cesta do páté sekce
-    railu. Je to **ukázka a rozcestník**, ne druhé místo, kde se dá v dění zůstat, a hlavně:
+  - **Třetí blok pravého sloupce je od #443 `Dění`** — pět nejnovějších řádků a cesta do páté
+    sekce railu. Je to **ukázka a rozcestník**, ne druhé místo, kde se dá v dění zůstat, a hlavně:
     **značku poslední návštěvy neposouvá.** Podrobnosti i změřená čísla jsou v sekci *Dění* níž.
   - **Příští tik je odpočet, poslední zůstává absolutní** (#237, otáčí #181) —
     `poslední tik 09:41 · za 43s znovu`. Odpočet **se nesmí platit přepočtem dashboardu**, takže se

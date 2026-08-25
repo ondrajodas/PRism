@@ -8,9 +8,11 @@ import Testing
 /// vedle sekce 31 návrhu.
 ///
 /// Existuje proto, že `DashboardFooterSeparatorTests` odpovídá na „kolik je čar a jsou stejně
-/// silné“, kdežto otázka „vejde se řádek dění přes celou šířku na jeden“ je otázka na vzhled — a ta
-/// se z čísla nepozná. Zvlášť u téhle změny: celé rozhodnutí *pod sloupci, ne v pravém sloupci*
-/// stojí na tom, že se pět údajů v řádku **nezalomí**, a to se dá posoudit jedině okem.
+/// silné“ a `ActivityRowShapeTests` na „vejde se úzký řádek na jednu řádku a co v něm není“,
+/// kdežto otázka *jak to vedle sebe vypadá* se z čísla nepozná. Zvlášť u téhle změny: blok stojí
+/// v **pravém sloupci pod `Co teď`**, tedy v 456 bodech, a jestli je useknutý titulek pořád
+/// k něčemu — a jestli `repo#číslo` s časem opravdu ustoupily jemu, ne naopak — se dá posoudit
+/// jedině okem.
 ///
 /// **`NSHostingView` a `cacheDisplay`, ne `ImageRenderer`**: dashboard je `ScrollView` a ten se
 /// offscreen nerasterizuje (změřeno u #237).
@@ -22,8 +24,9 @@ import Testing
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
 )
 struct DashboardActivityRenderProbe {
-    /// Šířka okna z návrhu (dashboard má v mockupu 1134 bodů obsahu) a k ní úzká, na které se pozná
-    /// zalomení řádku — právě to je ten stav, kvůli kterému blok nestojí v pravém sloupci.
+    /// Šířka okna z návrhu (dashboard má v mockupu 1134 bodů obsahu) a k ní užší okno, ve kterém
+    /// pravý sloupec spadne pod 456 bodů — právě tam se pozná, jestli se ořezává titulek, nebo
+    /// souřadnice.
     private let widths: [CGFloat] = [1240, 900]
 
     /// Prázdný blok se posuzuje taky: je to jediné místo, kde z celé sekce zbude jedna věta, a věta
@@ -93,6 +96,9 @@ struct DashboardActivityRenderProbe {
     }
 
     /// Store s frontou a se záznamem dění, jak ho kreslí sekce 31 — pět řádků a patka `+37`.
+    ///
+    /// Fronta má sedm PR schválně: levý sloupec je pak vysoký jako v mockupu, takže je na obrázku
+    /// vidět i to, kvůli čemu se blok stěhoval — kolik prázdna pod `Co teď` zbývalo.
     private func store(_ scenario: Scenario) async -> AppStore {
         let queue = (1...7).map { number in
             PullRequestSummary(
@@ -106,7 +112,7 @@ struct DashboardActivityRenderProbe {
         }
         // **Hodiny musí jít teď**, i když jsou falešné: `Text(_:format: .relative)` se počítá proti
         // skutečnému kalendáři, kdežto `Policy.activityTime` proti `store.time.now`. S výchozím
-        // rokem 1970 by ty dvě odpovědi mířily každá jinam a `včera v 07:58` by se v renderu
+        // rokem 1970 by ty dvě odpovědi mířily každá jinam a `včera v 7:58` by se v renderu
         // ukázalo jako `včera` — tedy zrovna to, kvůli čemu sonda vznikla.
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success(queue)),
@@ -119,7 +125,9 @@ struct DashboardActivityRenderProbe {
     }
 
     /// Položky ze sekce 31 doslova — a pátá **ze včerejška**, protože právě na ní je vidět den
-    /// u času (`včera v 07:58`), tedy jediná věc, kterou se řádek na dashboardu od řádku v sekci liší.
+    /// u času (`včera v 7:58`). Podrobnost, sha, chip `bez banneru` i autor v nich zůstávají
+    /// schválně, i když je úzký tvar nekreslí: sonda tím ukazuje, že se **vynechávají při kresbě**,
+    /// ne že by v záznamu nebyly.
     private static var events: [ActivityEvent] {
         let now = Date()
         var events = [
@@ -186,7 +194,7 @@ struct DashboardActivityRenderProbe {
         return events
     }
 
-    /// Včera v 07:58 — ten okamžik z mockupu, ne „o den zpátky“: den se dopisuje podle kalendáře,
+    /// Včera v 7:58 — ten okamžik z mockupu, ne „o den zpátky“: den se dopisuje podle kalendáře,
     /// takže odečtení 24 hodin by v době kolem půlnoci padlo na dnešek.
     private static func yesterdayMorning(before now: Date) -> Date {
         let calendar = Calendar.current
