@@ -145,15 +145,26 @@ struct ContentView: View {
     }
 
     private var headerActions: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: HeaderButtonMetrics.spacing) {
             paletteButton
-            headerButton("sparkles", label: ReleaseNotesWindow.title, help: "Co se v které verzi změnilo") {
+            HeaderButton(
+                symbol: "sparkles",
+                label: ReleaseNotesWindow.title,
+                help: "Co se v které verzi změnilo"
+            ) {
                 openWindow(id: ReleaseNotesWindow.id)
             }
-            headerButton("arrow.clockwise", label: "Obnovit", help: "Obnovit seznam") {
+            // Podobu i to, jestli tlačítko bere klik, rozhoduje `Policy.refreshControl` (#442).
+            // Je to **jediné místo**, ze kterého se ta podmínka čte: bere si ji odsud
+            // i `AppStore.refresh()` a #441 z ní vyrobí povolení pro zkratku `⌘R`.
+            RefreshButton(isRefreshing: store.isRefreshing) {
                 Task { await store.refresh() }
             }
-            headerButton("gearshape", label: "Nastavení", help: "Nastavení aplikace (⌘,)") {
+            HeaderButton(
+                symbol: "gearshape",
+                label: "Nastavení",
+                help: "Nastavení aplikace (⌘,)"
+            ) {
                 openSettings()
             }
         }
@@ -216,26 +227,6 @@ struct ContentView: View {
         case .openSettings: openSettings()
         case nil: break
         }
-    }
-
-    /// `label` je **povinný**, ne odvozený z ikony: VoiceOver by u ikonového tlačítka jinak
-    /// přečetl jméno symbolu (`sparkles`), což uživateli neřekne nic.
-    private func headerButton(
-        _ symbol: String,
-        label: String,
-        help: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13))
-                .frame(width: 27, height: 25)
-                .foregroundStyle(Palette.ink2)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(label)
     }
 
     /// Obsah okna: domácí záložka, nebo otevřené review.

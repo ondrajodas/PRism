@@ -88,7 +88,7 @@ struct IdleWindowSpinProbe {
         defer { window.orderOut(nil) }
         _ = spinMainRunLoop(seconds: 1.0)
 
-        let ring = try #require(Self.ring(in: controller.view))
+        let ring = try #require(controller.view.firstDescendant(ofType: SpinningRingView.self))
         let url = directory.appending(path: "prsten.png")
         let rep = try #require(ring.bitmapImageRepForCachingDisplay(in: ring.bounds))
         ring.cacheDisplay(in: ring.bounds, to: rep)
@@ -126,14 +126,6 @@ struct IdleWindowSpinProbe {
         return String(format: "%.2f (tichý kruh %.2f)",
                       Double(strong) / Double(steps),
                       Double(pale) / Double(steps))
-    }
-
-    private static func ring(in view: NSView) -> SpinningRingView? {
-        if let ring = view as? SpinningRingView { return ring }
-        for child in view.subviews {
-            if let ring = ring(in: child) { return ring }
-        }
-        return nil
     }
 
     /// Okno s detailem PR **na obrazovce**, přes `NSHostingController` — tedy tou cestou, kterou

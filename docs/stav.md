@@ -4631,6 +4631,25 @@ zákresu, ne že s ní patka nehne, protože druhé by bylo nepravdivé.
 u #392), takže nemá key okno a stisk nemá kam sednout — zvlášť u `⌥↵`, které je na poli, ne na okně.
 Ověřuje to člověk na běžící aplikaci a je to podmínka toho, že patka smí ty klávesy tvrdit.
 
+### #442 — obnovování je vidět i na tlačítku, ne jen na dashboardu
+
+**#442 je hotové.** Dokud běží dotaz na GitHub, kreslí se v tlačítku `⟳` v hlavičce okna
+`SpinningRing` — **týž** prstýnek, jaký na záložce znamená běžící review (nový by znamenal, že se
+„pracuje se“ čte v jednom okně dvěma tvary, a hlavně by otevřel past z #350). Platí to i pro
+automatický tik: rozhoduje `AppStore.isRefreshing`, ne to, kdo dotaz spustil.
+
+Podmínka „zakázáno, dokud se ptáme“ leží **na jednom místě** (`Policy.refreshControl`) a čtou ji
+tři cesty: podoba a `disabled` tlačítka, `AppStore.refresh()` jako pojistka proti druhému dotazu
+(tutéž akci nabízí paleta ⌘K i `Zkusit znovu` v prázdném stavu, takže samotné zašedlé tlačítko by
+nestačilo) a **#441 si odsud vezme povolení pro `⌘R`** — tím se ta vazba z rozvrhu vyřídila.
+`PollingService.refresh()` guard nedostal: smyčka si ho volá sama a je sekvenční.
+
+Rozměr tlačítka se nehnul (27 × 25, `HeaderButtonMetrics`) a je na to tvrzení nad `fittingSize`
+obou stavů — hlavička nemá poskočit tím, že se aplikace ptá. Ověřeno i na běžící aplikaci:
+z dávky snímků hlavičky pořízených hned po startu je na prvních prstýnek a na dalších šipka, ve
+stejné poloze. Testů **4021** (devět nových); nápovědu se zkratkou `Obnovit seznam (⌘R)`, kterou
+kreslí návrh, přidá #441, protože do té doby by uváděla zkratku, která v okně není.
+
 ### #443 — pět řádků dění na dashboardu
 
 Sekce `Dění` (#414) je dobré místo, **když se do ní jde** — jenže se do ní muselo napřed přepnout,
