@@ -4677,6 +4677,6 @@ místo v tom bloku, které se storu vůbec dotýká.
 - **`LazyVStack` sem nepatří** — pět řádků je strop z `Policy`, ne odhad, takže líný seznam by za
   měřenou velikost (#361) platil tam, kde se nejhorší případ vejde na obrazovku.
 
-Testů **4024**, všechny zelené: `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
+Testů **4036**, všechny zelené: `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
 čtyři prázdna) a tři tvrzení ve `AppStoreFeedTests`. `DashboardFooterSeparatorTests` počítá od #443
 **čtrnáct** čar místo jedenácti — prázdný blok `Dění` přidá obrys, hlavičku a obrys.
