@@ -36,6 +36,23 @@ extension View {
     /// z toho tři se skutečnou velikostí. `GeometryReader` totiž svoje dítě na velikost neptá
     /// vůbec — vrací, co se navrhlo —, takže ty průzkumné dotazy končí u něj.
     ///
+    /// ## Kolo z #361 to ale nezastavilo, a je to změřené (třinácté kolo)
+    ///
+    /// Tenhle modifikátor je **zlevnění, ne oprava** a text výš se dá číst jako opak, takže tady je
+    /// to naměřené doslova. `measureEstimates` z hořícího kola **neodešel**: podíl na vzorcích
+    /// hlavního vlákna byl **11,3 %** v devátém záchvatu (1524 z 13 479, ještě pružný rámec),
+    /// **11,2 %** v jedenáctém (1046 z 9330, už s `fillingSlot()`) a **13,2 %** ve dvanáctém
+    /// (2173 z 16 486). Co spadlo, je cena: dotazů na `ConversationRow.id` bylo 7,1 M → 3,6 M
+    /// → 2,3 M.
+    ///
+    /// Zbývající dotaz **nejde odstranit žádným tvarem téhle štěrbiny**, protože o velikost si říká
+    /// `ScrollView` sám: `ScrollViewUtilities.sizeThatFits(in:contentComputer:axes:)` se ptá svého
+    /// obsahu, aby zjistil svou šířku. Změřeno na třech podobách (`LazySelfReferenceProbe`) —
+    /// pružný rámec, `fillingSlot()` i `GeometryReader` **bez** vnitřního rámce mají ten dotaz
+    /// všechny; **zarovnání v tom tedy nehraje roli**. Mění se jen to, odkud se ptá: pružný rámec
+    /// si ho odpovídá jako **kořen** aktualizace (30 z 30 vzorků), měřená štěrbina **vnořeně**
+    /// uvnitř cizí aktualizace (18 z 18).
+    ///
     /// ## Zamítnutá varianta: vyplněný ideál
     ///
     /// Nabízelo se nechat pružný rámec a jen mu vyplnit `idealWidth`/`idealHeight` na nulu, aby

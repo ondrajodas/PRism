@@ -3830,6 +3830,87 @@ tam modifikátor taky.
 se ho nepodařilo vyrobit ani jednou (viz [`docs/testovani.md`](docs/testovani.md)). Ověřená je
 **vazba**: že se ten druhý zapisovatel v aplikaci nemá kde vzít.
 
+#### Nezastavilo to nic, a je to změřené (#361, třinácté kolo)
+
+Dvanáctý záchvat běžel na buildu s `fillingSlot()` a hořel stejně, takže odstavce výš se musí číst
+jako **zlevnění, ne oprava**. Naměřeno na třech záchvatech, vždy jako **největší nezanořený uzel**
+proti počtu vzorků hlavního vlákna:
+
+| | 9. (`v1.1.166`, pružný rámec) | 11. (`v1.1.170`, `fillingSlot`) | 12. (`v1.1.170`) |
+|---|---|---|---|
+| vzorky hlavního vlákna | 13 479 | 9 330 | 16 486 |
+| `measureEstimates` | 1 524 (**11,3 %**) | 1 046 (**11,2 %**) | 2 173 (**13,2 %**) |
+| `updateItemPhases` → `value_set` | 1 617 (12,0 %) | 738 (7,9 %) | 919 (5,6 %) |
+| `ConversationRow.id` za záchvat | 7,1 M | 3,6 M | 2,3 M |
+
+Takže dolů šla **cena** (dotazy na identitu na třetinu), ne ten zápis. Do třináctého kola stálo
+v zadání i v komentáři na issue, že `measureEstimates` z kola zmizel („35 z 21 834“); byla to
+**chyba čtení** `sample`u — 35 je počet **řádků se vzorem** ve stromu volání a 21 834 počet
+**řádků souboru**. Ten jeden uzel nese 1046 vzorků. Postup, jak se to čte správně, je
+v [`docs/testovani.md`](docs/testovani.md).
+
+**Ten dotaz na velikost neodstraní žádný tvar té štěrbiny.** O velikost si totiž říká `ScrollView`
+sám — `ScrollViewUtilities.sizeThatFits(in:contentComputer:axes:)` se ptá svého obsahu, aby zjistil
+**svou** šířku —, takže mezi ním a `LazyVStack`em není co vypnout. Změřeno sondou
+`LazySelfReferenceProbe` na scéně tvaru osy (300 řádků, pumpa špinící rozvržení, 60 vzorků
+evaluačního zásobníku):
+
+| Podoba místa | Dotaz na velikost seznamu jako **kořen** | …**vnořeně** v cizí aktualizaci | `LazySubview*` v grafu |
+|---|---|---|---|
+| `frame(maxWidth: .infinity, maxHeight: .infinity)` | **30** | 0 | 30 |
+| `fillingSlot()` | 0 | **18** | 31 |
+| `GeometryReader` **bez** vnitřního rámce | 0 | **18** | 31 |
+| `VStack` místo `LazyVStack`u | 0 | 0 | **0** |
+
+Dvě věci z té tabulky. **Zarovnání v tom nehraje roli** — třetí řádek nemá co centrovat, a dotaz
+tam přesto je, takže „`_FrameLayout` se ptá kvůli `alignment`“ je vyloučené. A **mění se jedině
+odkud se ptá**: pružný rámec si ho odpovídá jako vlastní kořen aktualizace, měřená štěrbina vnořeně.
+Kdo přesně je ten vnější kořen, **není stabilní** (naměřeno `LazySubviewPrefetcher`,
+`AnimatableAttribute<EdgeInsets>` i `ScrollViewChildSafeArea`, a mění se i s tvarem scény), takže se
+tvrdit dá jen to slabší.
+
+**Co je `_External -> State`: fáze položky, ne náš zápis.** Zadání třináctého kola ho vedlo jako
+kandidáta na „třetí pohon“, protože roste ve všech třech záchvatech (182 → 313 → 382) spolu
+s `DynamicLayoutComputer<_HStackLayout>` (180 → 312 → 365). Je to ale **downstream toho zápisu
+z `LazyLayoutViewCache`**, a stojí na tom trojí: v každém zásobníku je jich **pět a každý má
+u sebe layout computer** té položky v konstantním odstupu čísel uzlů (1288 B v aplikaci, 676 B
+v harnessu); pětka je řádově počet **viditelných** uzlů osy; a `AG::Graph::value_set` je v celém
+vzorku **jediný** a leží pod `updateItemPhases()`. `DynamicLayoutComputer<_HStackLayout>` je pak
+prostě `HStack` v `ConversationNodeView` — v harnessu, kde je řádkem pružný rámec, stojí na tom
+místě `UnaryLayoutComputer<_FlexFrameLayout>`. **Třetí pohon z aplikace tedy nikdo nenašel, protože
+tam není**; ten, co kolo krmí, je pořád ten uvnitř SwiftUI.
+
+**Třetí největší kus toho kola je naše linka osy, a doteď ho nikdo nepojmenoval.** Za
+`LazySubviewPlacements` a `measureEstimates` stojí
+
+```
+SecondaryLayerGeometryQuery.value.getter
+  ViewDimensions.subscript.getter
+    LayoutEngineBox.explicitAlignment(_:at:)
+      ViewLayoutEngine.explicitAlignment(_:at:)
+```
+
+tedy **2 149 z 16 486** vzorků (13,0 %) ve dvanáctém záchvatu a 1 033 z 9 330 (11,1 %)
+v jedenáctém. `SecondaryLayerGeometryQuery` je geometrie druhé vrstvy, tedy
+`ConversationNodeView`: `.background(alignment: .topLeading) { line }`. Zarovnání pozadí si žádá
+`ViewDimensions[.leading]` a `[.top]` na hlavní vrstvě, a ta je `HStack`, takže se dotaz propadne
+do jeho layout engine — u **každého** viditelného uzlu a v **každém** kole.
+
+Nechává se to tak, a je to rozhodnutí, ne opomenutí. Je to **práce v kole, ne jeho pohon**, a je to
+úvaha ze struktury, ne z měření: dotaz na zarovnání jen **čte** geometrii, nemá akci a nezapisuje do
+grafu nic — v `changed` vstupech hořícího kola není ani v jednom ze tří záchvatů. A alternativa je
+vrátit linku do `ZStack`u, což je pružná výška v řádku líného seznamu, tedy zakázaná třída, kvůli
+které se to u #375 z `ZStack`u zrovna stěhovalo. Zapsané je to proto, aby se u čtrnáctého kola
+nehledalo odznova, co je těch 13 % vzorků pod `explicitAlignment`.
+
+**Zbývající možnost, i s cenou: přestat na ose používat líný seznam.** Je to jediná podoba, u které
+se ta vazba nemá kde utvořit (poslední řádek tabulky: v grafu ani jeden `LazySubview*` atribut).
+Cena změřená na téže scéně: **první rozvržení 300 uzlů 2,2–3,4 ms proti 32–35 ms** a dotazů na
+identitu 7,6× — a to s obyčejným `Text`em, ne s markdownem, takže na skutečné konverzaci (strop
+je 100 položek na kategorii, viz `ConversationQuery.pageSize`) by to bylo horší. Do repa se to
+proto **nedostalo**: je to stutter při každém otevření tabu proti záchvatu, který přijde občas,
+a diffu (sedmý záchvat, tab `Soubory`) by to nepomohlo vůbec.
+
 Jak to drží pohromadě:
 
 - `availableWidth(_:)` ustaví konkrétní šířku pro podstrom. Je **jediné místo**, kde se měří —
