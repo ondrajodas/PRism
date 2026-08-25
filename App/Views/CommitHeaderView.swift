@@ -66,7 +66,7 @@ struct CommitHeaderView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.accentLink)
-        .help("Zpátky na seznam commitů (⎋)")
+        .help(Policy.shortcutHelp("Zpátky na seznam commitů", .backFromCommit))
     }
 
     /// Zpráva, sha a odkaz ven.

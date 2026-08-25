@@ -307,6 +307,43 @@ struct WindowShortcutsTests {
         #expect(found == allowed)
     }
 
+    /// Kombinace se **nekreslí literálem** — druhá půlka téže stráže.
+    ///
+    /// Tuhle třídu našel u #441 až Copilot: tooltip panelu se převedl na katalog, ale kapsle
+    /// vedle něj kreslila `⌘2` pořád natvrdo. `keyboardShortcut(` to nechytá, protože kapsle
+    /// žádnou zkratku neregistruje — jenom o ní **tvrdí**, a rozejít se s klávesou umí potichu.
+    ///
+    /// Hledá se `⌘` a `⌥` v řetězcovém literálu, protože ty dva glyfy v aplikaci neznamenají nic
+    /// jiného než zkratku. `⌃` a `⇧` ne: první je v `AgentPromptPickList` **šipka rozbalení**
+    /// a druhý stojí v próze o `⇧ kliku` v diffu.
+    ///
+    /// Výčet je **jmenovitý** a každý řádek má svůj důvod — tatáž konstrukce jako `SingleWayOutTests`.
+    @Test("Kombinace kláves se nekreslí literálem")
+    func drawnCombinationsComeFromTheCatalog() throws {
+        let allowed: Set<String> = [
+            // Katalog sám — tady ty glyfy vznikají.
+            "Policy/WindowShortcuts.swift",
+            // `⌘,` registruje scéna `Settings`, ne okno, takže v katalogu kolizí nemá co dělat.
+            "Policy/CommandPaletteSearch.swift",
+            "Publish/PublishError.swift",
+            "Views/ContentView.swift",
+            // Paleta ⌘K je překryv, který existuje jen otevřený — `⌘↵` je její vlastní klávesa.
+            "Views/CommandPaletteView.swift",
+            // `⌥↵` u zakládání labelu (#413) sedí na **poli** v popoveru, ne na okně.
+            "Views/LabelPickerView.swift",
+        ]
+
+        var found: Set<String> = []
+        for source in try sources() {
+            for line in TextLines.content(source.code)
+            where line.range(of: "\"[^\"]*[⌘⌥][^\"]*\"", options: .regularExpression) != nil {
+                found.insert(source.path)
+            }
+        }
+
+        #expect(found == allowed)
+    }
+
     // MARK: - Čtení zdrojáků
 
     private struct Source {

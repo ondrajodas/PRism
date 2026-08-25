@@ -198,7 +198,7 @@ struct ContentView: View {
     /// kdo si přečetl release notes.
     private var paletteButton: some View {
         Button { store.togglePalette() } label: {
-            Text(verbatim: "⌘K")
+            Text(verbatim: Policy.windowShortcut(.palette).display)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Palette.ink3)
                 .padding(.horizontal, 9)
@@ -208,7 +208,7 @@ struct ContentView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help("Najít nález, soubor, pull request nebo akci (⌘K)")
+        .help(Policy.shortcutHelp("Najít nález, soubor, pull request nebo akci", .palette))
         .accessibilityLabel("Najít")
     }
 

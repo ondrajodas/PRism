@@ -182,7 +182,7 @@ struct ReviewPanel: View {
             .help(Policy.shortcutHelp("Složit panel", .reviewPanel))
             .accessibilityLabel("Složit panel")
             Spacer(minLength: 4)
-            Text(verbatim: "⌘2")
+            Text(verbatim: Policy.windowShortcut(.reviewPanel).display)
                 .font(.system(size: 9.5, design: .monospaced))
                 .padding(.horizontal, 4)
                 .foregroundStyle(Palette.ink3)

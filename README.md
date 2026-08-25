@@ -1337,9 +1337,10 @@ použije česká varianta, na kterou Mission Control nesahá. A **`⌘.` je v Co
 Escape**: nad běžícím review vyhraje naše zastavení (klávesové ekvivalenty tlačítek se vyhodnocují
 dřív), ale tam, kde je zakázané, se `⌘.` chová jako `⎋`.
 
-Kombinace jsou v aplikaci na **jednom místě** (katalog v `Policy`) a nápovědy tlačítek i řádky
-palety si popisku **odvozují** z něj (`Obnovit seznam (⌘R)`, jak to kreslí návrh), takže nakreslená
-zkratka nemůže tvrdit něco jiného než klávesa. Že se žádné dvě kombinace neopakují, tvrdí test;
+Kombinace jsou v aplikaci na **jednom místě** (katalog v `Policy`) a nápovědy tlačítek, kapsle
+v hlavičce i řádky palety si popisku **odvozují** z něj (`Obnovit seznam (⌘R)`, jak to kreslí
+návrh), takže nakreslená zkratka nemůže tvrdit něco jiného než klávesa.
+Že se žádné dvě kombinace neopakují, tvrdí test;
 že klávesy doopravdy chodí, se v harnessu ověřit nedá (testovací host nedostane aktivaci, takže
 nemá key okno) — to zkouší člověk na běžící aplikaci, na české i anglické mapě.
 

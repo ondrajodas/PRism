@@ -4680,7 +4680,10 @@ kreslí návrh — do #441 by uváděla klávesu, která v okně není.
 zkratka na odeslání není a nebude. Zakázané je přitom s `⌘⏎` naráz a za týchž podmínek — jsou to
 dvě tlačítka s jednou akcí, ne dvě akce.
 
-Testů **4039** (osmnáct nových, dvě upravená). Ověřeno **vloženou regresí** z obou stran: kolize
+Testů **4040** (devatenáct nových, dvě upravená). Devatenáctý přibyl po Copilotovi a je z nich
+nejužitečnější: hlídá, že se kombinace **nekreslí literálem**. Ta první stráž ho nechytala, protože
+nakreslená kapsle žádnou klávesu neregistruje — jen o ní tvrdí. Tímhle způsobem zůstalo `⌘2`
+natvrdo v hlavičce panelu, `⌘K` v kapsli hlavičky okna a `⎋` v nápovědě commitu. Ověřeno **vloženou regresí** z obou stran: kolize
 `⌘K` shodí tvrzení o duplicitě, literální `keyboardShortcut` v `ContentView` shodí stráž nad
 zdrojáky. **Co se v harnessu ověřit nedá:** že klávesy fungují — testovací host nedostane aktivaci
 (#392), takže nemá key okno a stisk nemá kam sednout. Poslední kolo dělá člověk na běžící

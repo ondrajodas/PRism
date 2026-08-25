@@ -863,9 +863,10 @@ Zvlášť stojí za přečtení, než sáhneš na:
   vedle klávesy. Dvě tlačítka se **stejnou akcí a jinou klávesou** jsou naopak v pořádku — česká
   klávesnice má pod `1`–`5` znaky `+ ě š č ř`, takže `⌃1` na ní bez druhé varianty nezabere vůbec.
 
-  Hlídá to `WindowShortcutsTests` (kolize, počet, zakázané stavy) a stráž nad zdrojáky
-  s **jmenovitým** výčtem výjimek — sheety, vlastní scény a paleta si klávesu berou samy, takže
-  `grep -rn 'keyboardShortcut(' App` je **výčet k posouzení, ne prázdný**. Že klávesa doopravdy
+  Hlídá to `WindowShortcutsTests` (kolize, počet, zakázané stavy) a **dvě** stráže nad zdrojáky
+  s jmenovitým výčtem výjimek: kde se zkratka **registruje** (`grep -rn 'keyboardShortcut(' App`)
+  a kde se **kreslí** (`⌘`/`⌥` v řetězcovém literálu) — druhá proto, že nakreslená kapsle žádnou
+  klávesu neregistruje, jen o ní tvrdí. Obojí je **výčet k posouzení, ne prázdný**. Že klávesa doopravdy
   zabere, se v harnessu ověřit nedá (host nedostane aktivaci, #392) — to zkouší člověk, a u zkratek
   s číslicí **na obou mapách**.
 - **Fokus do textového pole se nastavuje `.task` s jedním `Task.yield()`** (#184, potřetí #392).

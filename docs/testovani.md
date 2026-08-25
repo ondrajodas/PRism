@@ -6130,6 +6130,11 @@ Co z toho stojí za zapamatování:
   a paletě, které si klávesu berou samy. Komentáře se zahazují stejně jako v grepech z `CLAUDE.md`.
   Ověřeno vloženou regresí: literální `.keyboardShortcut("j", modifiers: .command)` v `ContentView`
   ji shodí.
+- **Stráže jsou dvě a chytají různé věci.** Ta první `keyboardShortcut(`, ta druhá `⌘` nebo `⌥`
+  v **řetězcovém literálu**. Druhá přibyla až po Copilotovi: tooltip panelu se převedl na katalog,
+  ale kapsle vedle něj kreslila `⌘2` natvrdo — a to první stráž nechytá, protože kapsle žádnou
+  klávesu neregistruje. Ověřeno vloženou regresí (vrácené `Text(verbatim: "⌘2")` v `ReviewPanel`
+  ji shodí).
 - **Systémové kombinace zůstávají volné** (`⌘W`, `⌘Q`, `⌘M`, `⌘H`, `⌘,`). Je to jediné místo, kde je
   z testu vidět, proč se záložka zavírá `⌃W`.
 - **Zakázané stavy se testují jako čisté funkce**: `Policy.closableTab(in:)` výčtem (domácí záložka

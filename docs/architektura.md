@@ -3513,8 +3513,14 @@ Co katalog drží a co se u něj nemá rozbít:
 - **Katalog je jen o hlavním okně.** Sheety, okno nastavení, okno novinek, uvítací brána a překryv
   palety v něm nejsou: berou si klávesu samy a s oknem se nepotkají. Tam, kde by se překryly
   (`⌘⏎` a `⎋` nad otevřenou paletou), je zkratka okna **zakázaná** — zakázané tlačítko klávesu
-  nebere a propadne dál. Že se kombinace nepíše nikde jinde, tvrdí stráž nad zdrojáky
-  s **jmenovitým** výčtem výjimek (tatáž konstrukce jako `SingleWayOutTests`).
+  nebere a propadne dál.
+- **Stráž nad zdrojáky je dvojí, a je to schválně.** Jedna hlídá, kde se zkratka **registruje**
+  (`keyboardShortcut(`), druhá, kde se **kreslí** (`⌘` nebo `⌥` v řetězcovém literálu). Ta druhá
+  přibyla proto, že první nechytá kapsli: nakreslené `⌘2` žádnou klávesu neregistruje, jen o ní
+  tvrdí — a přesně tohle u #441 zůstalo v hlavičce panelu a našel to až Copilot. Obojí má
+  **jmenovitý** výčet výjimek (tatáž konstrukce jako `SingleWayOutTests`) a obojí je ověřené
+  vloženou regresí. `⌃` a `⇧` se v té druhé stráži nehledají: `⌃` je v `AgentPromptPickList`
+  šipka rozbalení a `⇧` stojí v próze o `⇧ kliku` v diffu.
 
 Co v okně je (dvacet akcí):
 
