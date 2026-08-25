@@ -46,6 +46,10 @@ struct ConversationAxisFeedbackTests {
     static let forbidden = [
         "onGeometryChange",
         "onContinuousHover",
+        // **`onHover` je ve výčtu, i když je u něj gatování jen předpokládané** (#358): právě proto
+        // tam patří. `onContinuousHover` ho jako podřetězec neobsahuje, takže jsou to dvě různá
+        // tvrzení, ne jedno napsané dvakrát.
+        "onHover",
         "GeometryReader",
         "ViewThatFits",
         "ScrollViewReader",

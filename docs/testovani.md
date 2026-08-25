@@ -5451,13 +5451,14 @@ odstavec.
 Dvanáctý záchvat hořel na buildu **s** `fillingSlot()`, takže sekce výš popisuje **zlevnění, ne
 opravu**. Co se u třináctého kola měřilo a čím:
 
-- **`Tests/Views/LazySelfReferenceProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1`) — tři testy,
-  každý na jednu otázku. `stacksOnTheTimeline` bere **evaluační zásobník AttributeGraphu**
+- **`Tests/Views/LazySelfReferenceProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1`) — čtyři
+  testy, každý na jednu otázku. `stacksOnTheTimeline` bere **evaluační zásobník AttributeGraphu**
   (`GraphProbe`) z getteru identity řádku a rozdělí vzorky na to, jestli je dotaz na velikost
   seznamu vlastní **kořen** aktualizace, nebo je **vnořený** v cizí. `burnsAfterThePumpStops`
-  zkouší scénu tvaru **celého tabu** (hranice obsahu s `GeometryReader`em a předanou šířkou, uzly
-  tvaru `ConversationNodeView` včetně linky v `background`) rozhořet a měří CPU **po zastavení
-  pumpy**. `eagerLayoutCost` měří, co by stálo se líného seznamu vzdát (střídavě A/B/A/B, #274).
+  a `burnsAfterTheDataStops` zkouší scénu tvaru **celého tabu** (hranice obsahu s `GeometryReader`em
+  a předanou šířkou, uzly tvaru `ConversationNodeView` včetně linky v `background`) rozhořet a měří
+  CPU **po zastavení pumpy** — první špiní rozvržení, druhý **přidává řádky**.
+  `eagerLayoutCost` měří, co by stálo se líného seznamu vzdát (střídavě A/B/A/B, #274).
   Čísla jsou v [`docs/architektura.md`](architektura.md), sekce `fillingSlot()`.
 - **`Tests/Views/ConversationAxisFeedbackTests.swift`** (běží vždycky) — drží **vyloučení**, ne
   opravu: v uzlu osy (`ConversationNodeView`, `ConversationEntryView`, `ThreadBubbleView`,
@@ -5473,8 +5474,30 @@ opravu**. Co se u třináctého kola měřilo a čím:
 na identitu za 3 s** — líný seznam se po změně krytí nepřerovná vůbec, takže nebylo co vzorkovat.
 Teprve odsazení lišty o bod dá 12 000 dotazů za 3 s.
 
-**A třinácté kolo je třináctý neúspěšný pokus scénu rozhořet**: po zastavení pumpy **0,000 s CPU ze
-4 s** ve všech čtyřech podobách, i s 300 uzly tvaru osy a s hranicí obsahu jako v aplikaci.
+**A třinácté kolo je třináctý a čtrnáctý neúspěšný pokus scénu rozhořet**: po zastavení pumpy
+**0,000 s CPU ze 4 s** ve všech čtyřech podobách, i s 300 uzly tvaru osy a s hranicí obsahu jako
+v aplikaci — a stejně tak, když pumpa místo rozvržení **přidávala řádky**.
+
+**Ten druhý scénář je z předehry v záznamu, ne z nápadu.** Poslední tři sekundy před zdí
+(`hang10-diag.log`) totiž **nejsou** zašpiněné rozvržení, ale průchod tělem **odshora**:
+
+```
+15:37:35  39 kol, 0,440 s CPU, body: ConversationNodeView=10 ConversationEntryView=8
+                                     PullRequestDetailView=3 ContentView=2 ConversationView=2
+                                     MarkdownText=2 ActivityFeedView=1
+          graf: ConversationRow.id=60          ← ještě normální, a zásobník už má tvar kola
+15:37:36  67 kol, 0,655 s CPU, body: ConversationNodeView=7 …
+          graf: ConversationRow.id=66
+15:37:37  33 kol, 0,573 s CPU, body: ConversationNodeView=4 ConversationEntryView=3 MarkdownText=1
+          graf: ConversationRow.id=18069       ← a tady to ujede
+15:37:38   0 kol, 1,054 s CPU — zeď
+```
+
+Dvě věci z toho pro čtrnácté kolo. **Ten osmirámcový zásobník je v kole i ve zdravé sekundě** (:35
+a :36 ho mají a `ConversationRow.id` je 60 a 66), takže sám o sobě není příznak — patologická je
+**frekvence**. A předehrou je **průchod tělem `ContentView` a `PullRequestDetailView`**, tedy změna
+ve storu, ne pohyb myší: ve zdroji dění je vidět i `ActivityFeedView`, což ukazuje na tik pollingu.
+Napodobit se to zatím **nepovedlo** (viz odstavec výš), ale hledat se má tam.
 
 #### `sample` je strom, takže součet řádků není podíl
 

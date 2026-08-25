@@ -21,15 +21,16 @@ import Testing
 /// #0 LazyLayoutComputer<LazyVStackLayout>         ← vrchol: ptá se na velikost téhož seznamu
 /// ```
 ///
-/// Sonda měří tři věci, každou kvůli jiné otázce:
+/// Sonda měří čtyři věci, každou kvůli jiné otázce:
 ///
 /// 1. **Odkud se ten dotaz na velikost bere** (`stacksOnTheTimeline`). Odpověď: pružný rámec si ho
 ///    odpovídá **jako kořen** (30 z 30 vzorků), `fillingSlot()` i `GeometryReader` bez rámce
 ///    **vnořeně** (18 z 18) — tedy uvnitř cizí aktualizace. `VStack` místo `LazyVStack`u nemá
 ///    v grafu ani jeden `LazySubview*` atribut, takže se ta vazba nemá kde utvořit.
-/// 2. **Hoří to i offscreen** (`burnsAfterThePumpStops`). Odpověď: **ne** — po zastavení pumpy
-///    0,000 s CPU ze 4 s ve všech čtyřech podobách. Je to **třináctý** neúspěšný pokus scénu
-///    rozhořet, takže „už to netuhne“ se pořád tvrdit nedá.
+/// 2. **Hoří to i offscreen** (`burnsAfterThePumpStops` a `burnsAfterTheDataStops`). Odpověď:
+///    **ne** — po zastavení pumpy 0,000 s CPU ze 4 s, a to jak když pumpa špinila **rozvržení**,
+///    tak když **přidávala řádky** (druhé je napodobení toho, co je v záznamu vidět těsně před
+///    zdí). Jsou to pokusy **třináctý a čtrnáctý**, takže „už to netuhne“ se pořád tvrdit nedá.
 /// 3. **Co by stálo vzdát se líného seznamu** (`eagerLayoutCost`) — jediná varianta, u které kolo
 ///    z #361 nemá z čeho vzniknout. Odpověď: první rozvržení 300 uzlů **2,2–3,4 ms proti
 ///    32–35 ms** (a to s obyčejným `Text`em, ne s markdownem), dotazů na identitu 7,6×.
@@ -105,6 +106,47 @@ struct LazySelfReferenceProbe {
                 + " \(collector.identity) dotazů na identitu, \(collector.stacks.count) vzorků,"
                 + " vnořených dotazů na velikost \(collector.nestedSizeQueries)")
             for line in collector.digest { print("SONDA TAB \(shape.rawValue): \(line)") }
+        }
+    }
+
+    /// Poslední tři sekundy před zdí (dvanáctý záchvat, `hang10-diag.log`) mají tvar, který doteď
+    /// nikdo nezkusil napodobit — **není to zašpiněné rozvržení, je to průchod tělem odshora**:
+    ///
+    /// ```
+    /// 15:37:35  39 kol, 0,440 s CPU, body: ConversationNodeView=10 ConversationEntryView=8
+    ///                                      PullRequestDetailView=3 ContentView=2 ConversationView=2
+    ///                                      MarkdownText=2 ActivityFeedView=1
+    ///           graf: ConversationRow.id=60          ← ještě normální
+    /// 15:37:37  33 kol, 0,573 s CPU, body: ConversationNodeView=4 …
+    ///           graf: ConversationRow.id=18069       ← a tady to ujede
+    /// 15:37:38   0 kol, 1,054 s CPU — zeď
+    /// ```
+    ///
+    /// Sonda proto zkouší to samé: pumpa **mění data**, ne odsazení lišty — přidává řádky, takže se
+    /// `ForEach` přeskládá a projde se tělem odshora. Pak se pumpa zastaví a měří se, jestli to hoří
+    /// dál. Kdyby ano, je kolo z #361 poprvé v harnessu.
+    @Test("Hoří osa dál, když se přestanou přidávat řádky?")
+    func burnsAfterTheDataStops() throws {
+        for shape in [SelfRefShape.flexible, .measured] {
+            let collector = GraphStackCollector()
+            let window = show(
+                rootView: GrowingTimeline(collector: collector, shape: shape),
+                width: 900,
+                height: 700
+            )
+            defer {
+                collector.pump?.invalidate()
+                window.orderOut(nil)
+            }
+            _ = spinMainRunLoop(seconds: 3)
+            collector.pump?.invalidate()
+            collector.pump = nil
+            collector.reset()
+            let cpu = spinMainRunLoop(seconds: 4)
+            print("SONDA DATA \(shape.rawValue): pumpa zastavená, CPU"
+                + " \(String(format: "%.3f", cpu)) s ze 4 s,"
+                + " \(collector.identity) dotazů na identitu, \(collector.stacks.count) vzorků")
+            for line in collector.digest { print("SONDA DATA \(shape.rawValue): \(line)") }
         }
     }
 
@@ -378,6 +420,59 @@ struct TabShapedTimeline: View {
     private var nodes: some View {
         ForEach(rows, id: \.sampledID) { row in
             NodeShapedRow(row: row)
+        }
+    }
+
+    private var rows: [SampledRow] {
+        (0..<rowCount).map { SampledRow(index: $0, collector: collector) }
+    }
+}
+
+/// Tentýž tvar jako `TabShapedTimeline`, ale pumpa **mění data**: každý tik přidá řádek, takže se
+/// `ForEach` přeskládá a projde se tělem odshora — jako když na ose přistane tik pollingu.
+struct GrowingTimeline: View {
+    let collector: GraphStackCollector
+    let shape: SelfRefShape
+
+    @State private var rowCount = 200
+
+    var body: some View {
+        HStack(spacing: 0) {
+            GeometryReader { proxy in
+                axis
+                    .availableWidth(proxy.size.width)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .modifier(SelfRefPump(collector: collector) { rowCount += 1 })
+    }
+
+    private var axis: some View {
+        VStack(spacing: 0) {
+            Text(verbatim: "lišta").padding(9).frame(maxWidth: .infinity, alignment: .leading)
+            Rectangle().fill(.gray).frame(height: 1)
+            switch shape {
+            case .flexible:
+                timeline.frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .readerOnly:
+                GeometryReader { _ in timeline }
+            case .measured, .eager:
+                timeline.fillingSlot()
+            }
+            Text(verbatim: "composer").padding(9).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var timeline: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(rows, id: \.sampledID) { row in
+                    NodeShapedRow(row: row)
+                }
+            }
+            .padding(16)
+            .narrowingWidth(by: 32)
         }
     }
 

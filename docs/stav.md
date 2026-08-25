@@ -4535,6 +4535,13 @@ stojí **32–35 ms proti 2,2–3,4 ms** a to s obyčejným `Text`em, ne s markd
 tab `Soubory`) by to nepomohlo. Do repa se to proto nedostalo; je to rozhodnutí k posouzení, ne
 mezera.
 
+**Nové je i to, co je v záznamu těsně před zdí.** Poslední tři sekundy dvanáctého záchvatu nejsou
+zašpiněné rozvržení, ale **průchod tělem odshora** (`ContentView=2 PullRequestDetailView=3
+ConversationView=2 ActivityFeedView=1`), přičemž `ConversationRow.id` je ještě 60 a osmirámcový
+zásobník kola už tam je — ten je tedy i ve **zdravé** sekundě a patologická je jen frekvence
+(60 → 66 → 18 069 → zeď). Předehra ukazuje na **změnu ve storu**, nejspíš tik pollingu; napodobit
+se to ale nepovedlo (čtrnáctý neúspěšný pokus, viz `burnsAfterTheDataStops`).
+
 **#361 zůstává otevřené a oprava z tohohle kola žádná není** — to je celý výsledek a je záměrně
 napsaný takhle. Nové je: sonda (`LazySelfReferenceProbe`, tři měření), guard nad vyloučením
 (`ConversationAxisFeedbackTests` — v uzlu osy není `onGeometryChange`, `onContinuousHover`,
@@ -4542,5 +4549,5 @@ napsaný takhle. Nové je: sonda (`LazySelfReferenceProbe`, tři měření), gua
 aby se ta chyba s řádky neopakovala. **Třináctý** neúspěšný pokus kolo vyrobit: scéna tvaru celého
 tabu s 300 uzly má po zastavení pumpy 0,000 s CPU ze 4 s.
 
-Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **3979**: dvě nová tvrzení
-v `ConversationAxisFeedbackTests` a tři měření sondy (ta se v běžném běhu přeskočí).
+Na obrazovce se nemění nic — je to měření, dokumentace a testy. Testů **3980**: dvě nová tvrzení
+v `ConversationAxisFeedbackTests` a čtyři měření sondy (ta se v běžném běhu přeskočí).
