@@ -415,6 +415,51 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v `UserDefaults` (`defaults write com.ondrajodas.prism.<slot> activity.lastVisit <ISO>`). Sekce je
   ve `ScrollView`, takže offscreen render nestačí (viz *Jak si zkontrolovat, jak view vypadá*)
   a fotí se **skutečné okno podle ID**.
+- **Zastaralé nálezy z tiku (#420)** — tři sady, a **cenná polovina jsou tvrzení o počtu volání**.
+  Rozbije se to potichu: v okně vypadá stejně, jestli se aplikace zeptala jednou, nebo dvanáctkrát,
+  jen se ten rozdíl platí každou minutu.
+
+  `Policy` výčtem (`StaleHeadProbeTests`): koho se tik zeptá — PR s uloženými nálezy, kterému se
+  pohnul `updatedAt`, a **nikoho jiného**. Negativní tvrzení jsou tři: **klidný tik se neptá**
+  (nepohnuté `updatedAt`), **PR bez nálezů se neptá** (není co zastarat) a **vlastní PR se neptá
+  nikdy** — u toho se rovnou tvrdí i `Policy.isReported(.staleFindings, on: .mine) == false`, aby
+  bylo vidět, že je to brána #332, ne úspora. Dál že se po startu (prázdná razítka) zeptá na
+  všechny naráz, že strop **uřízne konec** seznamu (ne začátek — vstup je od naposledy změněného)
+  a že je zapsaný literálem. K tomu porovnání sha výčtem: rozchod s nálezy, čisté review (rozchod
+  **je**, `hasFindings` není), shodná sha, chybějící záznam a **chybějící hlava** — „nevím“ se nesmí
+  kreslit jako „zastaralo“.
+
+  Dotaz a odpověď (`PullRequestHeadsQueryTests`): že tři PR z tří repozitářů jsou **jeden** argument
+  `query=` se třemi aliasy a **žádný `pr3`**, že hodnoty jdou přes `-F` (devět kusů) a jméno repa
+  **v dokumentu není** (jinak by se do něj vlepovalo z konfigurace), že si dotaz říká o datum hlavy
+  i o `oid` k jeho ověření, a že alias je **pozice**, ne `owner/name#číslo` (pomlčky a tečky ve
+  jménech repozitářů nejsou platné GraphQL jméno).
+
+  Fixtures jsou **skutečné odpovědi z veřejných repozitářů** (`cli/cli`, `microsoft/terminal`,
+  `vercel/next.js`), sebrané tím dotazem, který posílá aplikace. Ta druhá (`pr-heads-partial.json`)
+  je **partial failure z živého API**: dotaz na tři PR, ze kterých dvě neexistují, vrátil data
+  prvního, `errors` ke zbytku a `gh` skončil kódem 1 — přesně ten stav, kvůli kterému gateway
+  nenulový kód nebere jako selhání volání. Vymyslet by se nedal, protože z něj je podstatné právě
+  to, co `gh` udělá se stdoutem. Neshoda `oid` s `headRefOid` se naopak testuje **inline JSONem**
+  a je u toho napsané proč: na živém API se nestává (změřeno na dvanácti PR).
+
+  `GhGateway` proti fake runneru (`GhGatewayTests`): **jedno spuštění `gh` na tři PR**, prázdný
+  seznam **nespustí nic**, částečná odpověď s nenulovým kódem se **nezahodí**, nenulový kód **bez
+  dat** je chyba a rozbitá odpověď je `malformedOutput`, ne prázdná mapa.
+
+  `AppStore` proti skutečnému `ActivityLog`u (`AppStoreStaleHeadTests`): že posunutá hlava dá řádek
+  **už z tiku** (a s detailem `hlava je teď`, protože o commitech se z tiku nemluví), že řádek nese
+  **datum commitu, ne okamžik zjištění** (fixture má hlavu dva dny starou, takže rozdíl je vidět) a
+  že se bez data hlavy datuje zjištěním. A pět negativních: **jeden dotaz na celou frontu** (tři PR
+  = jedno volání se třemi identifikátory, `detailRequests` prázdné), **klidný druhý a třetí tik se
+  neptá**, **bez záznamu dění se neptá vůbec**, **selhaný dotaz razítko neposune** (příští tik
+  zkusí znovu) a **chybějící odpověď razítko nedostane** (`headProbes` zůstane prázdné). Restart
+  se hraje druhým storem nad tímtéž souborem: zeptá se znovu, ale řádek **nezdvojí ani
+  nepředatuje** — identita nese hlavu.
+
+  **Vnořené pole ve fake gateway je součást kontraktu.** `headRequests` je `[[PRIdentifier]]`, ne
+  plochý seznam, protože právě to dovolí odlišit jedno volání na tři PR od tří volání — a plochý
+  seznam by ten rozdíl neuměl vyjádřit.
 - **Konverzace** — proti fixtures, které jsou surové odpovědi z veřejných PR `cli/cli`
   sebrané **tím dotazem, který posílá aplikace** (`ConversationQuery.document`). Kdyby se
   sbíraly jinak, testovaly by tvar, který v provozu nikdy nepřijde; ověřené je to i tak, že
@@ -2681,6 +2726,46 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `try #require(pole.map { try #require($0) }.max())` skončí na
   `recursive expansion of macro 'require'`, což vypadá jako chyba v makru, ne v našem zápisu.
   Rozdělit to na dva příkazy stačí.
+
+  **Pruh, který jede s výřezem (#428), se testuje ze dvou stran.** Rozhodnutí je čistá funkce
+  (`DiffScrollerPinTests` nad `Policy.pinnedScrollerY`) a vyjmenovává se **vyčerpávajícím výčtem**:
+  blok celý vidět, přesahující dolů, přesahující nahoru i dolů, se třemi viditelnými řádky (a o bod
+  méně), mimo výřez a bez známé výšky řádku. K tomu **průjezd celým posunem** po jednom bodu, který
+  tvrdí tři věci, jež se u jedné polohy tvrdit nedají: pruh **nikdy neopustí blok**, v připíchnutém
+  pásmu se hýbe **o krok** (spojitá funkce, ne skoky) a hranice obou pásem jsou spočitatelné — první
+  připíchnutí na třech řádcích, poslední o bod dřív, než pás bloku vjede do výřezu.
+
+  Druhá strana je **scéna, jaká je v okně** (`DiffScrollerRideTests`): SwiftUI `ScrollView`
+  s `LazyVStack`em bloků v okně mimo obrazovku. Rolování se dělá **posunem vnějšího clip view**
+  (`scroll(to:)` s `constrainBoundsRect` + `reflectScrolledClipView`), protože přesně to je jev, na
+  který aplikace poslouchá — syntetické scroll eventy se do aplikace nedostanou vůbec a událost
+  s fází se zasekne v `nextEventMatchingMask:` (#422, #325).
+
+  Reference **není** `Policy.pinnedScrollerY` (tou se poloha počítá, takže by test opisoval sám sebe),
+  ale hrana vnějšího clip view a dolní hrana bloku, **obojí převedené do okna**. Okno je
+  nepřevrácené, takže `min` z pravidla je v něm `max`: `pruh = max(hrana výřezu, dolní hrana bloku)`.
+  Test si u toho počítá, kolikrát projel kterou situaci, a **vyžaduje všechny tři** — na hraně
+  výřezu, ve vlastním pásu a pod třemi řádky; jinak by tvrzení platila o průjezdu, ve kterém se nic
+  nedělo.
+
+  Dva testy jsou na to, co se má **NEstát**. *„Výška bloku se posunem nemění“* tvrdí přes celý
+  průjezd jedinou výšku a k tomu, že řádky plus svislý inset plus pás **dají** výšku bloku — tím se
+  do něj skládá i rezervace z #422, takže ji nejde odebrat, aniž by spadl. A *„rolování nepřekládá
+  tělo“* měří průchody tělem řádku, `updateNSView`, nasazení bloku i sazbu: dvacet posunů po deseti
+  bodech (v pásmu, kde do výřezu žádný další blok nevjede) nepřidalo **ani jeden** průchod z žádného
+  z těch čtyř počitadel. Že měřidlo počítá, drží tvrzení, že se pruh v bloku posunul přesně o těch
+  200 bodů.
+
+  Ověřeno **třemi vloženými regresemi** a každá padá jinde: bez `min(…)` v pravidle padne 400 tvrzení
+  v průjezdu, 28 v okenní scéně a *„blok celý vidět“* (pruh vyjede pod blok, `1073 <= 683`); bez
+  rezervace pásu ve `height(forWidth:)` padne 114 tvrzení o výšce; a bez uplatnění polohy v
+  `DiffPairScrollView.tile()` padne 29 tvrzení o hraně výřezu — tedy přesně to rozvržení, po kterém
+  AppKit scroller vrací na dolní hranu.
+
+  **Kresba pruhu do harnessu nepatří a je to změřené**: legacy scroller se do `cacheDisplay(in:to:)`
+  nekreslí — nad červeným dokumentem vyjde pod připíchnutým pruhem tatáž barva jako vedle něj —
+  a `CGWindowListCreateImage` na macOS 26 není. Testům proto zůstávají **čísla** (poloha scrolleru,
+  výška bloku, počty průchodů) a to, jak pruh při rolování vypadá, se posuzuje na běžícím okně.
 
   **Jak to vypadá, se ověřilo renderem** — `NSView` do bitmapy, viz *Jak si zkontrolovat, jak view
   vypadá*. U #236 na to `NSView` nestačilo: přetečení vzniká teprve tím, jak SwiftUI poskládá blok
@@ -4992,6 +5077,47 @@ A tři věci k mechanice sond obecně:
   (`com.ondrajodas.prism`), takže `@AppStorage` i `VisitLedger` z hostované scény míří do nastavení
   toho PRismu, který se používá. U #361 to byly návštěvy `cli/cli#13084` a `diffTreeExpanded`; nic
   z toho nevadí, ale vědět se to má.
+
+### Dotazy na velikost líného seznamu (#361, desáté kolo)
+
+Devátý záchvat u #361 dal poprvé zásobník hořícího kola a v něm dvojici zapisovatelů do stavu
+líného seznamu (podrobnosti a čísla v [`docs/architektura.md`](architektura.md), sekce
+`fillingSlot()`). Co se k tomu měří a čím:
+
+- **`Tests/Views/LazyIdealSizeProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1` — bez toho
+  prefixu se proměnná do testovacího procesu z `xcodebuild` nedostane a suita se **tiše přeskočí**) — kolik dotazů na velikost dostane
+  `ScrollView` s `LazyVStack`em na jedno rozvržení, rozepsané na `nil` (ideál), `0`/`∞` (průzkum
+  pružnosti) a skutečnou velikost. Scéna je **tvaru osy konverzace** (lišta / seznam / composer
+  v jednom `VStack`u), 300 řádků s hodně různými výškami a zalomeným textem. Počítá se v `Layout`u
+  o jednom dítěti (`SizeQuestionReport`) — jiná cesta, jak se ze SwiftUI dozvědět „na tohle se
+  někdo ptal jako na ideální rozměr“, nevede. Výsledek: **29–33 dotazů** u pružného rámce
+  (přesný počet se mezi běhy o pár liší, druh dotazů ne), **4** se změřenou velikostí a **29**
+  u vyplněného ideálu, což je ta zamítnutá varianta — sonda ji měří dál, aby to nebyl dohad.
+- **`Tests/Views/LazyIdealSizeTests.swift`** (běží vždycky) — tvrdí to samé kvalitativně a **tím
+  modifikátorem z aplikace**: s `fillingSlot()` nepřijde k línému seznamu ani `nil`, ani `∞`, ani
+  jich nepřijde víc než pět. První test suity je **kontrola měřidla** (pružný rámec ty dotazy
+  poslat musí) a třetí je **výčet míst** čtený ze zdrojáků, jako u `SingleWayOutTests`.
+  Ověřeno **vložením regrese**: s `frame(maxWidth: .infinity, maxHeight: .infinity)` uvnitř
+  `FillingSlot` spadne na `520×∞` a na počtu dotazů (6 proti 3).
+
+Dvě věci na tom měření nejsou zjevné:
+
+- **`nil×nil` v harnessu nepřijde ani u pružného rámce.** Scéna je rozvržená jednou a na konkrétní
+  velikost, takže dotaz na ideál pošle jen okno (`fittingSize`) — sonda s oknem ho vidí 2×, test
+  offscreen nikdy. Tvrdí se proto průzkum `0`/`∞`, a to je i ten důležitější z těch dvou: vyplněný
+  ideál `nil` odstraní a průzkum ne.
+- **Kolo samo se tím nereprodukovalo.** Nečinné okno má v obou podobách **0,000 s CPU ze 4 s**,
+  a to i se 300 zalomenými řádky různých výšek. Je to tedy test **vazby**, ne test „už to netuhne“;
+  to druhé se za devět záchvatů napsat nepodařilo (viz tabulky níž).
+
+**Co se u desátého kola vylučovalo a vyšlo negativně:** `frame(in: .named(…))` nad prostorem, který
+v předcích **není**. Vypadalo to na kandidáta, protože `DiffLineView` kreslí i `ThreadSnippetView`
+na ose konverzace, kde `DiffView.contentSpace` nikdo nezakládá — a v hořícím kole má
+`DiffLine.geometry` 711 018 zásahů při otevřené `Konverzaci`. Změřeno sondou (60 řádků, 80×
+zašpiněný graf): **s prostorem i bez něj přesně 2000 výpočtů hodnoty, 0 akcí, 25 různých hodnot
+a 0,072 s CPU** — tedy k nerozeznání. Chybějící prostor je proto v tom kole **následek** (rámeček
+se počítá, protože se řádek přerovnává), ne jeho zdroj. Sonda se nezachovala, zůstává tenhle
+odstavec.
 
 ### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
 

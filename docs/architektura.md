@@ -21,6 +21,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
 | `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav, **popis** (`body`) |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
+| `PullRequestHead` | Hlava PR a **kdy vznikla** (#420) — odpověď dávkového dotazu na `headRefOid`. **Vlastní model vedle `PullRequest`**, ne jeho zúžení: detail je odpověď na „všechno o tomhle PR“ pro jeden pull request, tohle je jedna otázka pro celou frontu naráz. `committedAt == nil` znamená „datum nevíme“, ne dnešek |
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Výchozí dvojice je `Source.reviewRequested` a `Source.mine` (#330) |
 | `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
@@ -587,6 +588,9 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   v *Trvalý vodorovný pruh ve split pohledu*: rozhodnutí „pruh je“ i rezervace jeho 17 bodů žije
   v `DiffPairBlockContainer` (jedno místo, pravidlo z #236), styl drží `DiffPairScrollView`
   a šířku dokumentu `DiffTextView.naturalWidth`.
+- **A od #428 ten pruh jede s výřezem** — sedí na dolní hraně **viditelné části svého bloku**
+  (`y = min(vlastní pás, hrana výřezu − 17)`). Výška bloku se tím nemění, mění se jen
+  `frame.origin.y` scrolleru; podrobnosti níž, v *Pruh, který jede s výřezem*.
 - **Výběr žije jen v jednom sloupci** a ruší se **při stisknutí**, ne až při puštění: dvě modré
   selekce vedle sebe po celou dobu tažení tvrdí, že je vybrané obojí. `textViewDidChangeSelection`
   na to nestačí (chodí s hotovým výběrem) a zůstává jen jako záloha pro výběr klávesnicí.
@@ -637,7 +641,8 @@ kódu na `NSTextView`**, protože SwiftUI `Text` selekci přes víc řádků ned
   a táhne se ve druhé. Do #252 na tom stál `HStack` se dvěma `Spacer`y a plocha vycházela o půl bodu
   vlevo (nález Copilota na #272). Je to tatáž úvaha jako u šířky pro měření výšky (#236).
 
-Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené:
+Devatenáct pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne přečtené (poslední tři
+přidalo #428; číslo v téhle větě bylo do té doby o jedenáct pastí pozadu):
 
 | Past | Jak se projevila |
 |---|---|
@@ -656,6 +661,9 @@ Osm pastí AppKitu a SwiftUI, které to stálo — všechny **změřené**, ne p
 | Overlay scroller **nakreslí 0 pixelů**, i když API tvrdí, že je vidět | `isHidden = false`, `alphaValue = 1.0` a `knobProportion = 0.333` má i s `autohidesScrollers = false` — a přesto v nečinném okně není. Z `isHidden` se proto o kresbě nedá usoudit nic; rozhoduje pás výšky, který si plocha vezme (#422) |
 | `usedRect(for:)` umí zahrnout **extra line fragment**, a ten je široký jako celý kontejner | Text končící `\n` (tedy každá půlka s prázdným posledním řádkem, což je každá šrafovaná strana dvojice) dal v neomezeném kontejneru šířku **10 000 000** místo 10. Dokument 22 000× širší než okýnko (`knobProportion` 4,49 × 10⁻⁵): knob velikosti vlasu a rolování do prázdna (#422). Kdy se fragment započítá, se řídit nedá — šířka se proto počítá **výčtem fragmentů**, ten ho nevydá. Do výšky naopak patří, je to skutečný řádek |
 | `NSClipView.scroll(to:)` **neomezuje** na dokument | Je to zápis počátku, takže se plocha poslušně posune i za obsah (`documentVisibleRect.maxX` 10 249 nad dokumentem 1 058) — v testu z toho vyjde zeleno nad jakoukoli šířkou. Omezení dělá `constrainBoundsRect(_:)`, tedy to, co AppKit sám používá při tažení za knob (#422) |
+| `NSScrollView` **je flipped**, `NSClipView` sám o sobě ne | `y` v ploše roste **dolů** a vodorovný scroller stojí na `frame.height − 17` (změřeno: plocha 200 b vysoká má scroller na `y: 183`). Proto se poloha připíchnutého pruhu počítá v souřadnicích **plochy** a ne v okně (#428); `NSClipView.isFlipped` se řídí dokumentem, takže se na něj usuzovat nedá — u SwiftUI `HostingScrollView`u vyjde `true`, nad obyčejným `NSView`em `false` |
+| `tile()` vrací scroller na dolní hranu — a zavolá se i z rozvržení nadřazeného view | Připíchnutá poloha se proto musí zapsat **znovu právě tam** (změřeno: z 183 zpátky na 283 po `tile()` i po `layoutSubtreeIfNeeded()` na hostu). Zápis z volajícího by po první změně šířky okna zmizel (#428) |
+| Legacy scroller **se nekreslí do `cacheDisplay(in:to:)`** | Nad červeným dokumentem vyjde pod pruhem tatáž barva jako vedle něj, takže se offscreen renderem nedá ověřit ani jeho poloha, ani průhlednost jeho drážky (#428, potvrzuje pozorování z #422). `CGWindowListCreateImage` na macOS 26 není — kresba pruhu tedy patří člověku, testům zůstávají čísla |
 | Nastavení `textContainer.size` si AppKit vyloží jako změnu geometrie a **sám zavolá `setFrameSize`** | Měření výšky je dotaz na **budoucí** šířku, takže mu ten zpětný hovor změřenou šířku hned přepsal tou současnou — a měřilo se o jednu šířku pozadu (blok o dvou dlouhých řádcích si při 300 pt řekl o 36 pt a nakreslil 162). Řeší to stráž `isMeasuring` a to, že se šířka kontejneru nastavuje jen při změně (#236) |
 
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
@@ -765,6 +773,63 @@ souřadnicích) — nakreslené je to tak i v návrhu (poznámka 45) a přišpen
 ho z rolovací plochy, tedy jiný zákres. A **pohled pod sebou zůstává zalamovací**: pruh by v něm byl
 17 bodů na blok za nic, protože zalomený řádek se přečte celý bez rolování. Je na to test, protože
 je to volba ze tří možností, ne opomenutí.
+
+### Pruh, který jede s výřezem (#428)
+
+U dlouhého bloku je jeho dolní hrana pod dolní hranou okna, takže pruh z #422 nebyl vidět zrovna
+tam, kde je nejvíc potřeba — přeteče **9,6 %** bloků (33 ze 343 z 48 PR) a jejich pás leží pod hranou
+okna o **229 b** (medián, p90 533). Zakresleno v **sekci 30** návrhu. Pravidlo je jedna věta:
+
+```
+y = min(vlastní pás, hrana výřezu − pás)
+```
+
+**Jedna spojitá funkce posunu, ne dva stavy.** Dokud blok hranu výřezu přesahuje, vyhrává druhý člen
+a poloha pruhu **v okně** se rolováním nemění; jak se pás bloku do výřezu dostane, vyhraje první člen
+a pruh jde dál rychlostí kódu. Přechod není animace — vyjde z toho minima sám. **Pruh přitom nikdy
+neopustí svůj blok**, takže na hraně výřezu stojí nejvýš jeden (ten, který k ní dosahuje) a otázka
+„komu patří“ se rozpouští, nerozhoduje.
+
+| Kde | Co drží |
+|---|---|
+| `Policy.pinnedScrollerY(ofBlock:in:band:rowHeight:)` | **Celé rozhodnutí** jako čistá funkce: minimum, heuristika tří řádků a nic jiného. Vrací `y` **v souřadnicích bloku** (nula je horní hrana, `y` roste dolů) |
+| `DiffPairBlockContainer.viewDidMoveToWindow()` | Pozorovatel — `boundsDidChange` **vnějšího** clip view, jeden na viditelný blok. Odhlašuje se bezpodmínečně, protože líný seznam kontejnery recykluje |
+| `DiffPairBlockContainer.pinnedScrollerY()` | Převod souřadnic a `nil` ve dvou případech: blok **mimo rolovací plochu** a blok **bez pruhu** (`showsScroller(forWidth:)` je `false` — bez pruhu není pás rezervovaný, takže by skrytý scroller sedl na poslední řádek kódu) |
+| `DiffPairScrollView.pinnedScrollerY` | **Jediné místo, které rámec scrolleru zapisuje** — a zapisuje ho jen při změně. Znovu se uplatní v `tile()` |
+
+**Souřadnice se počítají v ploše sloupce, a to je celý trik.** `NSScrollView` **je flipped**
+(změřeno) a plocha je vysoká jako celý blok, takže její `bounds` **je** rámec bloku s nulou na horní
+hraně — přesně soustava, ve které se dá výsledek zapsat scrolleru do `frame.origin.y`. Výřez do ní
+srovná `convert(_:from:)`, ať je vnější clip view flipped, nebo ne. Prostor obsahu diffu
+(`DiffView.contentSpace`) by k témuž musel jít přes `DiffBlockPlacement`, tedy přes SwiftUI —
+zbytečná druhá cesta k údaji, který AppKit má.
+
+**Výška bloku se posunem nemění, a to je podmínka.** Rezervace 17 b zůstává tam, kde ji #422
+nechalo (`height(forWidth:)`); připíchnutím se mění **jen** `frame.origin.y` scrolleru. Měnit výšku
+znamená přerovnat líný seznam při každém snímku. Alternativa „ubrat výřezu 17 b, dokud dlouhý blok
+sahá na hranu“ je zamítnutá v zákresu: inset, který přichází a odchází, hýbe veškerým kódem pod
+kurzorem.
+
+**Poloha nesmí do observable stavu** — tatáž past jako u polohy bloku (#252) a u hoveru (#358).
+`pinnedScrollerY` je proto obyčejná vlastnost `NSView`u, kterou nikdo nesleduje, a obsluha
+pozorovatele je **aritmetika a dva zápisy rámců**: nula zápisů do stavu, nula přerolování, nula
+zneplatnění grafu. Změřeno na scéně s `ScrollView`em: dvacet posunů po deseti bodech nepřidalo ani
+jeden průchod tělem, ani jednu aktualizaci `updateNSView` a ani jedno nasazení bloku.
+
+**Jediná heuristika je pojmenovaná:** pod **třemi** viditelnými řádky bloku se pruh nepřišpendlí
+a zůstane ve svém pásu (tedy mimo obrazovku) — jinak by zakryl polovinu toho mála, co z bloku vidět
+je. Tři je odhad, ne měření, a je to jediné číslo v téhle změně bez měřidla. Padá do ní i blok, který
+z výřezu vyjel celý (viditelná výška nula), takže se na to nemusí ptát druhá podmínka.
+
+**Připíchnutý pruh zakrývá 17 b = 1,06 řádku** — prakticky ten řádek, který hrana okna stejně řeže.
+Podklad má **neprůhledný být**, a kreslí si ho legacy scroller sám: vlastní vrstva pod pruhem by byl
+prvek navíc, a těch je v diffu nula (#252). Ověřit to jde jedině okem — legacy scroller se do
+bitmapy z `cacheDisplay(in:to:)` nekreslí vůbec (změřeno, viz tabulka pastí).
+
+**Autohide zůstává beze změny** (#422): blok, který se do šířky vejde, pruh nemá. Poskakující prvek
+z toho nevzniká právě proto, že pruh **nemění vlastníka** — při přejezdu z bloku s pruhem na blok bez
+pruhu nic nezmizí na místě: pruh odjede nahoru se svým blokem a další přijede zdola takový, jaký je.
+Na hraně okna proto někdy nic není a je to správná odpověď, ne chybějící prvek.
 
 ### Stráž v `updateNSView` (#393)
 
@@ -3637,6 +3702,86 @@ tabulky výš patří:
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'
 ```
 
+### `fillingSlot()` — líný seznam rozměr nevyjednává vůbec (#361)
+
+Devátý záchvat u #361 dal poprvé **celý zásobník hořícího kola**, a v něm tuhle řadu:
+
+```
+StackLayout.UnmanagedImplementation.prioritize(_:proposedSize:)
+  _FlexFrameLayout.sizeThatFits(in:context:child:)
+    ScrollViewLayoutComputer.Engine.sizeThatFits(_:)
+      _PaddingLayout.sizeThatFits(in:context:child:)
+        LazyVStackLayout.sizeThatFits(proposedSize:subviews:context:cache:)
+          LazyStack<>.measureEstimates(updatingPosition:index:minor:subviews:cache:)
+            _LazyLayout_Subviews.apply(from:style:to:) → ForEachList.applyNodes → ConversationRow.id
+```
+
+Přeloženo do kódu je to jedna cesta v `ConversationView`: `VStack` rozděluje výšku, takže se ptá
+pružného rámce nad osou na velikost, ten se zeptá `ScrollView`u a ten `LazyVStack`u. **A neptá se
+jednou** — stack zjišťuje pružnost dítěte tím, že se ho ptá s `nil`, `0` a `∞`. Naměřeno sondou
+`LazyIdealSizeProbe` nad scénou tvaru osy konverzace (300 řádků, okno 520×380):
+
+| Podoba místa | Dotazů na velikost celkem | Z toho `nil` (ideál) | Z toho `0`/`∞` (průzkum) | Se skutečnou velikostí |
+|---|---|---|---|---|
+| `frame(maxWidth: .infinity, maxHeight: .infinity)` | **29–33** | 2–4 | ~21 | 4 |
+| `frame(idealWidth: 0, maxWidth: .infinity, idealHeight: 0, maxHeight: .infinity)` | 29 | **0** | ~21 | 4 |
+| `fillingSlot()` (`GeometryReader` + `frame(width:height:)`) | **4** | **0** | **0** | 3 (+1 nulový) |
+
+Přesný počet se mezi běhy o pár liší (kolik dotazů `nil` pošle okno), **druh dotazů ne** — a právě
+na druhu ta věc stojí, takže se v testu tvrdí on, ne číslo.
+
+**Podstatná není cena, ale kdo do čeho zapisuje.** Poslední jméno v té řadě je
+`measureEstimates(**updatingPosition**:…)`: dotaz na velikost líného seznamu **mění jeho stav**.
+Sahá na tutéž měnitelnou krabici (`_LazyLayoutViewCache.withMutableCacheState`, ve vzorku v obou
+cestách) jako `placeSubviews`, a změněné fáze položek z ní jdou do grafu **zvenčí** — druhá
+transakce ve stejném kole:
+
+```
+GraphHost.runTransaction
+  GraphMutation.apply() … LazyLayoutCacheItem.AllItemsPhaseMutation
+    LazyLayoutViewCache.updateItemPhases()
+      LazyLayoutViewCache.updateItemPhase(_:)
+        AG::Graph::value_set(…)          ← jediný externí zápis v celém vzorku
+          AG::Graph::propagate_dirty(…)
+```
+
+To je přesně ten `_External -> State, changed`, který devátý záchvat vypsal jako změněný vstup
+`LazySubviewPlacements` (a k němu `ScrollViewChildTransform` a `UnaryChildGeometry<_PaddingLayout>`,
+tedy **posunutý scroll** — v sedmém záchvatu je vidět i
+`LazySubviewPlacements.makeAnchorTranslationIfNeeded`). Dva zapisovatelé jedné krabice se v jednom
+kole nemusí shodnout, a pak se to kolo nemá kde zastavit.
+
+Kolik toho v hořícím kole je: **1524 z 13 479** vzorků hlavního vlákna v devátém záchvatu (tab
+`Konverzace`), **4274 z 19 930** v sedmém (tab `Soubory`) — v obou tedy ta řada je, a to je jediná
+věc, kterou mají všechny záchvaty společnou kromě samotného `LazySubviewPlacements`.
+
+**Zamítnutá varianta: vyplněný ideál.** Nabízelo se nechat pružný rámec a jen mu vyplnit
+`idealWidth`/`idealHeight`, aby na „jak velký bys chtěl být“ odpověděl sám. Podle tabulky výš to
+**nestačí**: `nil` dotaz zmizí, průzkum `0`/`∞` zůstane celý, takže zápis do líného seznamu zůstane
+taky — jen s jinými argumenty. Do repa se to proto nedostalo a v `FillingSlot.swift` je to zapsané;
+sonda ten scénář **měří dál** (`TimelineShape.declaredIdeal`), aby to nebyl dohad.
+
+**Kde `fillingSlot()` je** (výčet hlídá `LazyIdealSizeTests`):
+
+| Místo | Který stack se ptal |
+|---|---|
+| `ConversationView.timeline` | `VStack` osy (lišta / osa / composer) |
+| `DiffView.files` | `HStack` (strom souborů / diff) |
+| `FileTreeView` | `VStack` sloupce se stromem |
+| `ActivityFeedView` | `VStack` okna v `HomeView` |
+| `ReviewPanel.cards` | `VStack` (věta o hlavě / karty) |
+| `FindingsTableView` | `VStack` tabu `Nálezy` |
+
+**Kde naopak nepatří:** `CommitListView`, `ReviewProgressView` a `StepFeedView`. Jejich `ScrollView`
+je korunou svého view a rozměr dostává rámcem (`frame(width:height:)` z obsahu záložky,
+`frame(height:)` u živého výpisu kroků z #325), takže se na ideál nikdo neptá — ověřeno tou samou
+sondou: `frame(width:height:)` průzkumné dotazy neposílá. Kdyby nad ně někdo vložil stack, patří
+tam modifikátor taky.
+
+**Co to nedokazuje.** Že kolo z #361 přestane vznikat, se v harnessu ověřit nedá — za devět záchvatů
+se ho nepodařilo vyrobit ani jednou (viz [`docs/testovani.md`](docs/testovani.md)). Ověřená je
+**vazba**: že se ten druhý zapisovatel v aplikaci nemá kde vzít.
+
 Jak to drží pohromadě:
 
 - `availableWidth(_:)` ustaví konkrétní šířku pro podstrom. Je **jediné místo**, kde se měří —
@@ -6388,7 +6533,8 @@ místo, kde ty události zůstanou. Zakreslené v **sekci 27 návrhu**.
 | `Policy` (`ActivityFeed.swift`) | `App/Policy/` | **všechno rozhodování** — brána, skládání textu, vložení do záznamu, strop, co je nepřečtené, dny, prázdno |
 | `ActivityLog` | `App/Store/` | soubor `activity.json` v kořeni cache, aktor, strop **200 položek** |
 | `ActivityVisitLedger` | `App/Store/` | značka poslední návštěvy v předvolbách (`activity.lastVisit`) |
-| `AppStore+Feed` | `App/Store/` | kdy se zapisuje, co je v paměti, kdy se posouvá značka, klik na řádek |
+| `AppStore+Feed` | `App/Store/` | kdy se zapisuje, co je v paměti, kdy se posouvá značka, klik na řádek, dotaz na hlavy z tiku (#420) |
+| `Policy` (`StaleHeadProbe.swift`) | `App/Policy/` | koho se tik zeptá na hlavu a co z odpovědi plyne (#420) — dvě čisté funkce |
 | `ActivityFeedView` | `App/Views/` | obrazovka: bloky po dnech, osa s puntíky, pruh návštěvy, tři prázdna |
 
 **Záznam je na disku a mez je vidět v typu.** `DeliveredNotification` je v paměti schválně (#138) —
@@ -6416,13 +6562,12 @@ cizí aktivita) a **dva se dopočítávají bez jediného volání navíc**:
 - **`leftQueue`** je doplněk k `newcomers(in:)` nad **tímtéž** snímkem. `AnnouncedPullRequests`
   proto od #414 vrací `QueueChanges` (příchody i odchody) jedním voláním: snímek se dotazem
   přepisuje, takže druhé volání by se ptalo už proti přepsanému stavu a vrátilo prázdno.
-- **`staleFindings`** čte `staleFindings(for:)` — tedy to jedno místo, které porovnává sha (#284) —
-  a počet commitů z už načteného seznamu (`Policy.commitsAfter`). **Zapisuje se z `loadDetail`**, ne
-  z tiku, a je to vědomé omezení: `PullRequestSummary` ze searche `headSha` nenese (`gh search prs`
-  ho neumí), takže by za tikem musel stát `gh pr view` na každé PR — tedy N+1 past, kvůli které se
-  netahá ani detail. Rozchod se tak zapíše teprve ve chvíli, kdy se na PR podívám nebo nad ním něco
-  poběží; **přínos je, že od té chvíle zůstane** (dneska je to žlutý proužek, který zmizí
-  s obrazovkou). Tikem to umí až vlastní issue.
+- **`staleFindings`** čte `Policy.staleFindings(of:head:)` — tedy to jedno místo, které porovnává
+  sha (#284) — a počet commitů z už načteného seznamu (`Policy.commitsAfter`). Do #420 se zapisovalo
+  **jedině z `loadDetail`**, protože `PullRequestSummary` ze searche `headSha` nenese; od #420 to
+  pozná i **tik**, a to jedním dávkovým dotazem na celou frontu (viz níž). Cesta přes `loadDetail`
+  zůstává — ví o rozchodu **s počtem commitů** a je to jediná cesta u PR, na které se dotaz
+  nedostal.
 
 **Zamítnuté s důvodem:** spadlé CI (checky se tahají až při zobrazení PR, `loadDetail` z #306, takže
 by za tím musel stát vlastní polling — nový zdroj, ne zápis toho, co proteklo) a poruchy aplikace
@@ -6505,6 +6650,71 @@ soubor i prázdný záznam dají obojí prázdný seznam, takže by nad ztraceno
 dekódováním** (`Data(contentsOf:)` vyhodí u obojího): první spuštění je normální stav, ne porucha.
 Kreslí to prázdný stav sekce, ne stavový řádek — je to odpověď na otázku, kterou si člověk klade
 zrovna nad tou obrazovkou.
+
+### Zastaralé nálezy z tiku (#420)
+
+Novinka *nálezy zastaraly* byla od #414 v dění nakreslená a fungovala, jenže se zapsala teprve
+tehdy, když aplikace novou hlavu **poznala** — tedy při otevření PR nebo při běhu review. To je
+zrovna ten okamžik, kdy je rozchod vidět i bez dění (hlavička nad taby o něm mluví), takže
+**novinka, která přijde jedině tehdy, když se koukám, přináší nulu**. Od #420 to pozná tik.
+
+**Jak to jde bez `N+1`:** `gh search prs` `headSha` nenese, ale to, co z detailu dělá `N+1` past,
+není hlava — je to **volání na PR**. GraphQL bere víc aliasovaných kořenových polí v jednom
+dokumentu, takže `headRefOid` pro celou frontu je **jedno** volání bez ohledu na to, z kolika
+repozitářů fronta je (u téhle instalace devět až jedenáct). Skládá to `PullRequestHeadsQuery`,
+posílá `GhGateway.fetchHeads(of:)`.
+
+Cena se drží třemi věcmi naráz, a je to tatáž škola jako u rozhlídky po diskuzi (#335):
+
+| Co drží cenu | Jak | Změřeno |
+|---|---|---|
+| **Jedno volání, ne jedno na PR ani na repozitář** | aliasovaný dokument, `cost` nezávisí na počtu | 12 aliasů z 10 repozitářů: **1 bod z 5000/h**, 1,25–2,59 s, 1,9 kB. 24 aliasů: **pořád 1 bod**, 1,25–1,96 s, 4,9 kB |
+| **Předfiltr `updatedAt` je zadarmo** | ptáme se jen na PR, jehož `updatedAt` se posunul od posledního dotazu (`AppStore.headProbes`) | na klidný den **nula volání** — prázdný seznam se nespouští |
+| **Jen PR s uloženými nálezy, a jen cizí** | `reviewRecords` v paměti; `Policy.pullRequests(_:ownedBy: .theirs)` | z fronty zbyde hrstka; vlastní PR se neptá **nikdy**, protože o nich se nehlásí (#332) |
+
+**Strop 20 PR na dotaz** (`Policy.staleHeadProbeLimit`) ohraničuje **velikost dokumentu**, ne počet
+volání — cena je podle měření na počtu aliasů nezávislá. Co se nevejde, dojde na příští tik, protože
+razítko dostane jedině PR, na kterou se **doopravdy ptalo** a odpověď dorazila.
+
+**Řádek nese čas události, ne čas zjištění.** Nálezy zastaraly ve chvíli, kdy vznikla nová hlava,
+takže dotaz si říká i o `committedDate` toho commitu (`PullRequestHead.committedAt`) a
+`Policy.staleFindingsActivity` datuje řádek jím. Bez toho by po každém spuštění aplikace vypadalo,
+že práce z minulého týdne zastarala dneska — a restartuje se po každém mergi. Rozhoduje o tom
+**`Policy`**, ne `??` na volajícím: obě cesty (dotažený detail přes `Policy.commitDate(of:in:)`,
+dávkový dotaz přes `committedAt`) musí datovat stejně, jinak by měl tentýž rozchod dvě data podle
+toho, kdo si ho všiml první.
+
+Dvě věci, které z toho plynou a nejsou zjevné:
+
+- **`commits(last: 1)` je jediná drahá část dotazu.** Bez ní přijde odpověď za ~0,94 s, s ní za
+  1,25–2,15 s (měřeno střídavě A/B/A/B, `cost` je v obou případech 1). Platí se to jedině v tiku,
+  ve kterém se doopravdy ptáme. `oid` je v ní kvůli **ověření**, že poslední commit spojení je
+  opravdu ta hlava (změřeno na dvanácti PR, že se shoduje u všech); neshoda znamená **datum nevíme**,
+  ne datum cizího commitu.
+- **Řádek nalezený se zpožděním padne do svého dne**, tedy pod značku poslední návštěvy, a nepočítá
+  se jako nepřečtený. Je to vědomá cena: druhé razítko (událost pro kresbu, zjištění pro nepřečtené)
+  by rozbilo invariant, na kterém stojí pruh `Tady jsem skončil` — nové položky jsou **předpona**
+  seznamu (`Policy.activityFeed`). V běžném provozu ta situace nevzniká, protože aplikace běží
+  a rozdíl mezi událostí a zjištěním je nejvýš jeden tik.
+
+**O commitech se z tiku nemluví.** Kolik jich po hlavě nálezů přišlo, se dopočítat dá
+(`Policy.commitsAfter`), jenže ze seznamu commitů — a ten se tahá až s detailem, takže by to byla
+zpátky ta `N+1` past. Řádek z tiku proto řekne jen `hlava je teď <sha>`; číslo, které by se nemělo
+o co opřít, je horší než žádné. Řádek z `loadDetail` počet má, a protože identita je klíčovaná
+hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
+
+**Selhání a chybějící odpovědi:**
+
+- **Celý dotaz selhal** → razítka se neposunou, takže příští tik zkusí znovu (tatáž nesymetrie jako
+  u razítka rozhlídky, #335). Do okna se to **nehlásí**: nic v něm netvrdí, že hlavy zná, a stav
+  GitHubu drží stavový řádek z pollingu (`gitHubCall`). Jediný následek je řádek o tik později.
+- **Jedna PR neodpověděla** (přejmenované repo, smazaný pull request, chybějící právo) → `gh` skončí
+  nenulově, ale data ostatních pošle, takže se odpověď **nezahazuje** (tentýž případ jako
+  `gh pr checks`, #209). Ta jedna PR v mapě prostě není a razítko nedostane — „nevíme“ se nesmí
+  zapsat jako „zjištěno“, jinak by se na ni nezeptalo, dokud se `updatedAt` nepohne.
+- **Bez záznamu dění se neptá vůbec.** Za zastaralé nálezy banner nechodí, takže je záznam jediný
+  konzument; podmínka je proto `activityLog != nil`, ne `watchesPullRequestActivity` (ta jmenuje
+  i notifikační centrum právě proto, že u ostatních druhů je druhým konzumentem).
 
 ### Které místo chce kterou množinu (#332)
 
@@ -7204,14 +7414,14 @@ Nad odesílatelností draftu (#68) platí:
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má dvacet metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvacet jedna** metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
 „čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané. Tři přidala
-#392: labely a reviewery PR a nabídky lidí a týmů k nim.)
+#392: labely a reviewery PR a nabídky lidí a týmů k nim. Jednu #420: hlavy víc PR jedním dotazem.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol (dvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
+| `GitHubGateway` | Protokol (dvacet jedna metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchHeads(of:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -7225,6 +7435,8 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
 | `PullRequestState(ghState:isDraft:)` | Mapování stavu — `gh` ho popisuje dvěma poli |
 | `GhPullRequestMetadata`, `GhLabel`, `GhReviewRequest`, `GhLatestReview`, `GhTeam` | Tvar `gh pr view --json labels,reviewRequests,latestReviews` a převod na `PullRequestMetadata` (#392). `GhReviewRequest` rozlišuje člověka od týmu **podle toho, které pole má** (`login` proti `slug`), ne podle `__typename` — z chybějícího pole se to pozná stejně a nemusí se pamatovat jméno GraphQL typu |
 | `AssignableUsersQuery`, `GhAssignableUsersResponse` | GraphQL dotaz na lidi, kteří na repo smí, a jeho odpověď (#392) |
+| `PullRequestHeadsQuery` | GraphQL dokument na hlavy **víc PR naráz** a jeho argumenty — čisté funkce (#420). Aliasy jsou **pozice v dotazu** (`pr0`, `pr1`, …), protože ve jménech repozitářů jsou pomlčky a tečky, které v GraphQL jménu být nesmí |
+| `GhPullRequestHeadsResponse` | Tvar té odpovědi a spárování se vstupním polem (#420). Aliasy nese **slovník**, ne pojmenovaná pole — kolik jich je, ví až volající |
 
 Čtyři věci, které se u toho nemají rozbít:
 
@@ -7234,6 +7446,14 @@ a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět 
   Dotahovat detail rovnou v gateway pro každý nalezený PR by z jednoho pollu udělalo N+1
   podprocesů — **kdy se detail dotáhne, rozhoduje polling** (#6), typicky jen u PR se
   změněným `updatedAt`.
+
+  **Samotnou hlavu ale jde vytáhnout dávkou** (#420, `fetchHeads(of:)`). To, co N+1 dělá z detailu,
+  není hlava, ale **volání na PR** — a GraphQL bere víc aliasovaných kořenových polí v jednom
+  dokumentu, takže se `headRefOid` (plus datum hlavy) pro celou frontu vejde do **jednoho** volání
+  bez ohledu na počet repozitářů. Změřeno na živém API: 12 aliasů z 10 repozitářů **1 bod z 5000/h**,
+  1,25–2,59 s, odpověď 1,9 kB; 24 aliasů **pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Nesmí se z toho stát
+  „tak se hlava tahá pořád“: na tik se ptá jedině `Policy.staleHeadProbe`, a to jen na to, co má
+  uložené nálezy a pohnulo se.
 - **Dotaz se posílá po argumentech a uvozovky se respektují** (`GhSearchQuery`).
   `gh search prs` bere každý argument jako jeden výraz a hodnotu s mezerou si sám
   uzávorkuje. Celý dotaz v jednom argumentu proto GitHub odmítne

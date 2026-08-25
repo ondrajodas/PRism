@@ -70,26 +70,21 @@ extension AppStore {
 
     // MARK: - Zastaralé nálezy (#174)
 
-    /// Rozešly se nálezy s hlavou PR? `nil` = nerozešly, nebo se to nedá říct.
+    /// Rozešly se nálezy s hlavou PR **z načteného detailu**? `nil` = nerozešly, nebo se to nedá
+    /// říct.
     ///
-    /// **Jediné místo, kde se ty dvě sha porovnávají** (#284). Čte to hlavička nad taby
-    /// (`StaleHeadView`) i odznak v pruhu „od tvé poslední návštěvy“, a obojí mluví o témže
-    /// stavu — dvě porovnání by znamenala dvě pravdy o jedné věci.
+    /// Čte to hlavička nad taby (`StaleHeadView`), odznak v pruhu „od tvé poslední návštěvy“ (#284)
+    /// i zápis do dění (#414) — a všechno to mluví o témže stavu, takže samotné **porovnání sha je
+    /// jedno** (`Policy.staleFindings(of:head:)`). Tady zůstává jen to, odkud se dnešní hlava bere:
+    /// z detailu. Druhý zdroj té sha je dávkový dotaz na hlavy (#420), který jde tou samou čistou
+    /// funkcí — dvě porovnání by znamenala dvě pravdy o jedné věci (tvrdá podmínka č. 5).
     ///
     /// Bez načteného detailu je odpověď `nil`, ne „zastaralo“: dokud neznáme dnešní hlavu,
     /// nevíme o rozchodu nic. Záznam bez review v mapě není vůbec, takže PR, na kterém se
     /// review nikdy nepustilo, tudy nikdy neprojde.
     func staleFindings(for pr: PRIdentifier) -> StaleFindings? {
-        guard
-            let record = reviewRecords[pr],
-            case .loaded(let detail, _) = detailState(for: pr),
-            record.headSha != detail.headSha
-        else { return nil }
-        return StaleFindings(
-            head: detail.headSha,
-            findingsHead: record.headSha,
-            hasFindings: !record.findings.isEmpty
-        )
+        guard case .loaded(let detail, _) = detailState(for: pr) else { return nil }
+        return Policy.staleFindings(of: reviewRecords[pr], head: detail.headSha)
     }
 
     // MARK: - Rozbalení bubliny (#185)

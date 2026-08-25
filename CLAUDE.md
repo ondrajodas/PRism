@@ -526,13 +526,13 @@ viz tvrdá podmínka č. 1.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** (včetně **týmů**) i nabídky k nim (#392). **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, **login přihlášeného účtu** (#330) a **labely s vyžádanými reviewery** (včetně **týmů**) i nabídky k nim (#392). Od #420 umí **hlavy víc PR jedním dotazem** (aliasovaný GraphQL) — search je nedává a per PR by to byla `N+1` past. **Pořád bez zápisu**: čtení je čtení, měnit label umí jedině `ReviewPublisher` | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326 — krok v ose je pokus, dokud nedorazí `tool_result`). Osa má **jeden strop pro živou i uloženou** podobu a odvozené údaje si počítá **při zápisu** (#325). Od #150 dvě podoby běhu — review a kontrola nálezů z minula (vlastní prompt, odpověď z posledního sdělení). Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a **dotažení textu issue** do zadání (#345, vlastní povolení i rozbor streamu). Od #327 umí transcript session i **přepsat k přečtení** (`TranscriptTranscriber`) — okno posledních 4 MB, strop 8 kB na událost, čte se `seek`em od konce | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Stav řádku podle checkoutu, blokující příznak, návrh verdiktu, detekce shody `2×`, řazení, filtr seznamu (#117), hledání v paletě ⌘K (#184), rozbalení bubliny nálezu (#185), odznak závažnosti u nálezu (#150), které záložky PR se kreslí a odznak `Kontrol` (#215), složení promptu review ze šablony (#281), jestli je co porovnat u „co přibylo“ (#284), s jakou
 velikostí se otevře sheet s kódem a kolik řádků se v něm nevešlo na šířku (#417, dva profily podle
-druhu obsahu), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), co udělat s klikem na notifikaci (#409), jestli se hover má zapsat do stavu (#358), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), jestli reviewer otevřel kód a co z toho plyne pro „čisto“ (#383), které dráhy mají rozbalený živý výpis kroků, jak vysoké je jeho okno a jestli je v něm co rolovat, jestli je odrolovaný na konec a co dělat s tím, co říká geometrie scrollu (#325), kde začíná okno transcriptu a kolik se z něj zahodí, jak se ořeže jedna událost a čím se ten ořez přizná, který stav sheetu co nabídne, s jakou velikostí se otevře a kdy se natažená velikost ukládá, i která dráha umí surovou session vůbec otevřít (#327), o čem se v **dění** hlásí vůbec a co z toho je řádek — jeho text, cíl, barva, chip `bez banneru`, vložení do záznamu se stropem 200, co je nepřečtené, jak se dělí po dnech a která ze tří prázdnot se kreslí (#414), řádek záznamu diagnostiky kreslení i rozbor evaluačního zásobníku AttributeGraphu, ze kterého se skládá (#361), co je v tom záznamu klid a co souhrn za minutu, jak se jmenuje uložený záznam předchozího sezení a který se maže (#412) | — |
+druhu obsahu), odkazy na zadání a soubor se zadáním pro reviewera (#120), proč zadání není celé a jméno nástroje, kterým se text issue tahá (#345), co udělat s osiřelou session po zabité aplikaci (#351), co udělat s klikem na notifikaci (#409), jestli se hover má zapsat do stavu (#358), kde v bloku diffu stojí vodorovný pruh, když blok přesahuje výřez (#428), kdo je v sekci reviewerů a s jakou odpovědí, jak se labely zalomí do dvou řádků a co se s nimi na kterém PR smí, proti kterému kódu nálezy platí, když vedle nich stojí commit, a co sedne na dotaz v nabídce panelu i odkdy v ní hledací pole vůbec je (#392, pravidlo shody sdílené s paletou ⌘K), řádky osy konverzace s uloženou identitou a značkou poslední návštěvy (#361), čí je PR podle autora (#330), co je v sekci `Moje PR` a co z toho čeká na tah (#331), koho automat **nikdy** nevydá a o čem se nehlásí notifikace (#332), složení zadání pro agenta z nálezů a konverzace a které segmenty panelu se kreslí (#333), co zbývá předat agentovi a jestli zadání po pushi zastaralo (#334), které položky jdou do zadání a proč ta zbylá ne — včetně **jediné heuristiky** v tom výběru (#377), strop řádků na blok dashboardu s textem patky a kam vede která karta (#371), co na vlastním PR udělal někdo jiný a na kolik PR se kvůli tomu smí zeptat (#335), slití sady nálezů z opakovaného `ReportFindings` (#381), jak dopadl pokus o nástroj a co se u kroku v ose kreslí (#326), jestli reviewer otevřel kód a co z toho plyne pro „čisto“ (#383), které dráhy mají rozbalený živý výpis kroků, jak vysoké je jeho okno a jestli je v něm co rolovat, jestli je odrolovaný na konec a co dělat s tím, co říká geometrie scrollu (#325), kde začíná okno transcriptu a kolik se z něj zahodí, jak se ořeže jedna událost a čím se ten ořez přizná, který stav sheetu co nabídne, s jakou velikostí se otevře a kdy se natažená velikost ukládá, i která dráha umí surovou session vůbec otevřít (#327), o čem se v **dění** hlásí vůbec a co z toho je řádek — jeho text, cíl, barva, chip `bez banneru`, vložení do záznamu se stropem 200, co je nepřečtené, jak se dělí po dnech a která ze tří prázdnot se kreslí (#414), na hlavy kterých PR se tik zeptá a co z odpovědi plyne pro zastaralé nálezy (#420), řádek záznamu diagnostiky kreslení i rozbor evaluačního zásobníku AttributeGraphu, ze kterého se skládá (#361), co je v tom záznamu klid a co souhrn za minutu, jak se jmenuje uložený záznam předchozího sezení a který se maže (#412) | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR a od #392 nastavit labely a vyžádat review na **vlastním** PR; volající jsou `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission` | `gh` CLI |
@@ -640,6 +640,25 @@ Zvlášť stojí za přečtení, než sáhneš na:
   ```
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
+
+  **A líný seznam ve `ScrollView`u rozměr nevyjednává vůbec** (#361) — dostane ho změřený
+  (`fillingSlot()`). Stack zjišťuje pružnost dětí tím, že se jich ptá na velikost s `nil`, `0`
+  a `∞`, a pružný rámec ty dotazy **předá dolů**: naměřeno **29–33 dotazů** na jedno rozvržení, z toho
+  jen **4** se skutečnou velikostí; se změřenou výškou zbydou **4** dotazy celkem. Podstatná není cena,
+  ale že na každý z nich odpovídá `LazyVStack` funkcí `measureEstimates(**updatingPosition**:…)`,
+  tedy **zápisem** do téže měnitelné krabice (`_LazyLayoutViewCache.withMutableCacheState`), ze
+  které kreslí `placeSubviews` — a změněné fáze položek z ní jdou do grafu zvenčí
+  (`AG::Graph::value_set` → `propagate_dirty`, jediný externí zápis v hořícím vzorku). Dva
+  zapisovatelé jedné krabice se v jednom kole nemusí shodnout. Ta řada je v hořícím kole doopravdy
+  vidět: **1524 z 13 479** vzorků hlavního vlákna v devátém záchvatu, **4274 z 19 930** v sedmém.
+  Zamítnutá varianta (vyplněný `idealWidth`/`idealHeight` u pružného rámce) **nestačí a je to
+  změřeno**: dotaz `nil×nil` zmizí, průzkum `0`/`∞` zůstane celý. Výčet šesti míst hlídá
+  `LazyIdealSizeTests`, čísla měří `LazyIdealSizeProbe`; podrobnosti v
+  [`docs/architektura.md`](docs/architektura.md).
+
+  ```bash
+  grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'    # šest míst + modifikátor sám
+  ```
 
   **Nevyjednává se ani počet prvků** (#252). Overlay nad blokem kódu měl plochu, gesto a čtení
   geometrie u **každého** řádku a strany — u šedesátiřádkového bloku přes čtyři stovky prvků,
@@ -792,6 +811,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
   vždycky, když je poslední řádek prázdný — a prázdná je každá šrafovaná strana dvojice), a ten je
   v neomezeném kontejneru široký **10 000 000** bodů. Kdy se započítá, se řídit nedá, takže z toho
   byl posuvník, který „někdy“ jel do prázdna.
+
+  **A když ten pruh jede s výřezem** (#428), mění se **jen `frame.origin.y` scrolleru**, nikdy výška
+  bloku: rezervace 17 b zůstává u dolní hrany, protože měnit výšku znamená přerovnat líný seznam při
+  každém snímku. Poloha je jedno minimum v `Policy` (`pinnedScrollerY`), pozorovatel je **jeden na
+  blok** (`boundsDidChange` vnějšího clip view — půlky se při rolování nehýbou) a do observable stavu
+  se nesahá (#252, #358). Dvě věci, které to o AppKitu stálo: `NSScrollView` **je flipped**, takže
+  `y` roste dolů a `bounds` plochy je rámec bloku s nulou nahoře; a `tile()` vrací scroller na dolní
+  hranu **i při rozvržení nadřazeného view**, takže se poloha musí uplatnit právě tam a nikde jinde.
 
   **A rozměr, ze kterého se počítá, se měří — nenasazuje se rámcem** (#325). Výška okna živého
   výpisu je `min(obsah, strop)`, takže stojí na výšce řádku; `frame(height:)` by ji ale srovnal

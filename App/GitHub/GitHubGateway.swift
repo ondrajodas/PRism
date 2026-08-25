@@ -36,6 +36,27 @@ protocol GitHubGateway: Sendable {
     /// Doplní metadata, která vyhledávání nedává — hlavně `headSha` a `baseSha`.
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest
 
+    /// Hlavy **víc pull requestů jedním voláním** (#420) — sha a kdy vznikla.
+    ///
+    /// Existuje proto, že `gh search prs` `headSha` nenese, takže se z tiku nedá poznat, že se
+    /// hlava posunula pod uloženými nálezy (tvrdá podmínka č. 5). Jedinou další cestou je
+    /// `fetchDetail(id:)` na každou PR, tedy `N+1` dotazů každou minutu — a to je ta past, kvůli
+    /// které se pollingem netahá ani detail, ani konverzace.
+    ///
+    /// **Jedno volání na celou frontu, ne jedno na repozitář.** Skládá to `PullRequestHeadsQuery`
+    /// z aliasovaných kořenových polí; změřeno na živém API, že 12 aliasů z 10 repozitářů stojí
+    /// **1 bod z 5000/h** (24 aliasů taky) a odpověď má 1,9 kB. Prázdný seznam se **na nic
+    /// neptá** — `query() { }` není platný dokument a nula PR nemá co vracet.
+    ///
+    /// **Částečná odpověď je odpověď.** PR, na kterou GitHub neodpoví (přejmenované repo, smazaný
+    /// pull request, chybějící právo), v mapě prostě **není** — `gh` u toho skončí nenulově, ale
+    /// data pošle, takže se jednou nedostupnou PR nemá proč zahodit zbytek fronty. „Nevíme“ se od
+    /// „hlava se neposunula“ musí poznat, jinak by se z chybějící odpovědi stalo tvrzení.
+    ///
+    /// **Dvacátá první čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — čtení je čtení
+    /// a gateway pořád nemá nic, čím by šlo něco odeslat.
+    func fetchHeads(of ids: [PRIdentifier]) async throws -> [PRIdentifier: PullRequestHead]
+
     /// Checky na PR (#209) — jak dopadly joby z GitHub Actions a další statusy.
     ///
     /// **Čtení, jako všechno ostatní tady**: restart workflow do aplikace nepatří (tvrdá

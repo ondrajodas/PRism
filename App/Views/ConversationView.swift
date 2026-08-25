@@ -36,8 +36,12 @@ struct ConversationView: View {
             Rectangle().fill(Palette.lineSoft).frame(height: 1)
             // Plochu pod osou (`--panel`) maluje detail PR pro všechny tři taby najednou,
             // ať se nemůžou rozejít. Composer a lišta si nad ní kreslí vlastní `chrome`.
+            // **Výška se měří, nevyjednává** (#361). `frame(maxHeight: .infinity)` tady předával
+            // líným seznamem osy všechny průzkumné dotazy `VStack`u na pružnost — a `LazyVStack`
+            // na ně odpovídá zápisem do svého stavu (`measureEstimates(updatingPosition:)`),
+            // tedy druhým zapisovatelem téže krabice, ze které kreslí `placeSubviews`.
             timeline
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .fillingSlot()
             // **Composer je pod osou, ne v ní**: zůstává na místě, i když se osou scrolluje,
             // a nezmizí zúžením filtru. Rozepsaná věta se nesmí schovat tím, na co se člověk
             // zrovna dívá.

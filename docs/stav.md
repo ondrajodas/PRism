@@ -4084,6 +4084,141 @@ zpátky **244 tvrzení** (u šrafované půlky `10000084.0 <= 94.0`) a bez zahoz
 při změně obsahu **7 tvrzení** na recyklaci kontejneru — krátký blok tam zdědí po dlouhém 1701,2
 místo 102,0.
 
+### #428 — vodorovný pruh jede s výřezem
+
+Pruh z #422 sedí na dolní hraně bloku, a ta je u dlouhého bloku pod dolní hranou okna: uživatelovými
+slovy *„když je ten soubor se změnou moc dlouhý a já chci zkontrolovat něco nahoře, tak musím dolů…
+posunout a nahoru“*. Změřeno, koho to potká — přes viditelnou část diffu (448 b) přeteče **9,6 %**
+bloků (33 ze 343 ze 48 mergnutých PR) a jejich pás leží pod hranou okna o **229 b** (medián, p90
+i nejvíc 533); v menším okně (400 b) je to 11,7 %. Zakresleno v **sekci 30** návrhu, vydáno tak, jak
+to zákres kreslí.
+
+**Celé pravidlo je jedna věta:** `y = min(vlastní pás, hrana výřezu − 17)`, tedy jedna spojitá funkce
+posunu, ne dva stavy. Dokud blok hranu výřezu přesahuje, stojí pruh **na ní** a jeho poloha v okně se
+rolováním nemění; jak se pás bloku do výřezu dostane, pruh v něm přistane a jde dál rychlostí kódu.
+Přechod není animace — vyjde z toho minima sám. Rozhodnutí je čistá funkce
+(`Policy.pinnedScrollerY`), takže se dá projet vyčerpávajícím výčtem i průjezdem po jednom bodu.
+
+**Otázka „komu pruh patří“ se rozpustila, nerozhodovala se.** Pruh nikdy neopustí svůj blok, takže na
+hraně výřezu může stát nejvýš jeden — ten, který k ní dosahuje —, a blok, jehož pás už je vidět, má
+pruh ve svém pásu. Rozhodnutí #422 (pruh na blok a na půlku) zůstalo nedotčené.
+
+**Prvků navíc nula, pozorovatelů jeden na blok.** Je to tentýž `NSScroller`, jen jinde nakreslený:
+mění se mu `frame.origin.y`. Pozorovatel sedí na `boundsDidChange` **vnějšího** clip view (půlky se
+při rolování nehýbou, hýbe se výřez) a jeho obsluha je aritmetika a dva zápisy rámců — nula zápisů do
+observable stavu, protože zpětná vazba z každého snímku, která píše do stavu, zavírá kolo (#252,
+#358). Změřeno: dvacet posunů po deseti bodech nepřidalo **ani jeden** průchod tělem, `updateNSView`,
+nasazení bloku ani sazbu.
+
+**Souřadnice se počítají v ploše sloupce**, a to je celý trik: `NSScrollView` **je flipped**
+(změřeno) a plocha je vysoká jako celý blok, takže její `bounds` je rámec bloku s nulou na horní
+hraně — přímo soustava, ve které se výsledek zapisuje scrolleru do rámce. Zapisuje ho **jedno
+místo** a znovu se uplatní v `tile()`: rozvržení plochy scroller vrací na dolní hranu (změřeno,
+z 183 na 283), takže zápis odjinud by po první změně šířky okna zmizel.
+
+**Výška bloku se posunem nemění** — rezervace 17 b zůstala tam, kde ji #422 nechalo. Alternativa
+„ubrat výřezu 17 b, dokud dlouhý blok sahá na hranu“ je zamítnutá v zákresu: inset, který přichází
+a odchází, hýbe veškerým kódem pod kurzorem. Připíchnutý pruh proto kód **zakrývá** (17 b = 1,06
+řádku, prakticky ten řádek, který hrana okna stejně řeže).
+
+**Jediná heuristika je pojmenovaná:** pod třemi viditelnými řádky bloku se pruh nepřišpendlí. Je to
+jediné číslo v téhle změně bez měřidla a je vypsané i v zákresu (poznámka 53); druhé se k němu
+nepřidávalo. Autohide zůstal beze změny, takže na hraně okna někdy nic nestojí — a je to správná
+odpověď, ne chybějící prvek, protože pruh nemění vlastníka.
+
+**Kresba pruhu se v harnessu ověřit nedá a je to změřené, ne odhad**: legacy scroller se do
+`cacheDisplay(in:to:)` nekreslí (nad červeným dokumentem vyjde pod pruhem tatáž barva jako vedle
+něj) a `CGWindowListCreateImage` na macOS 26 není. Testům proto zůstala čísla — poloha scrolleru
+v okně, výška bloku, počty průchodů —, a jak to při rolování vypadá, posoudil člověk na běžícím okně.
+Z toho jedna otevřená domněnka: **neprůhledný podklad** pruhu (poznámka 49) kreslí legacy drážka
+sama, a kdyby přes ni kód prosvítal, je to jeden řádek na `layer` toho scrolleru, ne nový prvek.
+
+Testů **3880** (12 nových: 8 nad čistou funkcí, 4 nad scénou s `ScrollView`em). Vloženými regresemi
+ověřené tři věci a každá padá jinde: bez `min(…)` padne 400 tvrzení v průjezdu, 28 v okenní scéně
+a *„blok celý vidět“* (pruh vyjede pod blok, `1073 <= 683`); bez rezervace pásu 114 tvrzení o výšce;
+bez uplatnění polohy v `tile()` 29 tvrzení o hraně výřezu.
+
+### #420 — zastaralých nálezů si všimne tik, ne až otevřené PR
+
+Odložený kus [#414](#414--dění-pátá-sekce-railu-ve-které-notifikace-zůstane). Novinka *nálezy
+zastaraly* v dění fungovala, jenže se zapsala teprve tehdy, když aplikace novou hlavu **poznala** —
+při `loadDetail` nebo při běhu review. To je zrovna ten okamžik, kdy je rozchod vidět i bez dění
+(hlavička nad taby ho říká), takže ta novinka nepřinášela nic. Zadání #414 přitom nové síťové volání
+na tik zakazovalo, protože `gh search prs` `headSha` nenese.
+
+**Rozhodla měřená věc, ne úvaha.** Zadání #420 dávalo tři možnosti a klíčová otázka byla, jestli se
+dá `headRefOid` pro celou frontu vytáhnout **jedním** dotazem, ne jedním na repozitář (u téhle
+instalace je jich devět až jedenáct). Dá: GraphQL bere víc aliasovaných kořenových polí v jednom
+dokumentu. Změřeno na živém API — 12 aliasů z 10 repozitářů **1 bod z 5000/h**, 1,25–2,59 s, odpověď
+1,9 kB; **24 aliasů pořád 1 bod**, 1,25–1,96 s, 4,9 kB. Cena je tedy v tom dotazu, ne v počtu PR,
+takže dotaz na repozitář by byl desetinásobek volání za tutéž odpověď. Nejmenší varianta ze zadání
+(nedělat to tikem a jen datovat řádek zpětně) prohrála právě na tom, že měření dovolilo víc.
+
+**Co to přidá na tik: na klidný den nula.** Ptá se `Policy.staleHeadProbe`, a to jedině na **cizí** PR
+(o vlastních se nehlásí, #332), na kterých leží **uložené nálezy** a kterým se od posledního dotazu
+pohnul **`updatedAt`** — bez toho posunu se hlava nemá čím změnit. Prázdný seznam se nespouští, takže
+z klidného tiku není ani podproces. V bouři je to **jeden** dotaz za tik (~60 bodů z 5000 za hodinu)
+a strop 20 PR na dokument.
+
+**Řádek nese čas vzniku hlavy, ne čas zjištění.** Dotaz si proto říká i o `committedDate` toho commitu
+a datuje jím řádek; bez toho by po každém spuštění aplikace vypadalo, že práce z minulého týdne
+zastarala dneska — a restartuje se po každém mergi. Stojí to `commits(last: 1)` v dotazu, tedy 0,94 s
+→ 1,25–2,15 s (měřeno střídavě A/B/A/B, `cost` v obou případech 1). `oid` v odpovědi je kvůli ověření,
+že poslední commit spojení je opravdu ta hlava (shodovalo se u všech dvanácti měřených PR); neshoda
+znamená **datum nevíme**, ne datum cizího commitu. Datuje o tom `Policy`, ne volající: rozchod umí
+najít dvě cesty a identita řádku je klíčovaná hlavou, takže by tentýž rozchod měl dvě data podle toho,
+kdo si ho všiml první.
+
+**Porovnání sha se nezdvojilo** — vytáhlo se z `AppStore.staleFindings(for:)` do
+`Policy.staleFindings(of:head:)` a store si nechal jen to, odkud dnešní hlavu bere (detail). Dávkový
+dotaz je **druhý zdroj té sha, ne druhá pravda o tom, co je zastaralé** (tvrdá podmínka č. 5).
+
+**Dvě vědomé ceny.** Řádek z tiku **o commitech nemluví** (`hlava je teď <sha>`): počet by se dal
+spočítat jen ze seznamu commitů, a ten se tahá s detailem — tedy zpátky ta `N+1` past. A řádek
+nalezený se zpožděním padne do **svého** dne, takže se nepočítá jako nepřečtený; druhé razítko by
+rozbilo invariant, na kterém stojí pruh `Tady jsem skončil` (nové položky jsou předpona seznamu).
+
+**Nenulový návratový kód `gh` u dávky není selhání volání**, a je to změřené: dotaz na tři PR, ze
+kterých dvě neexistují, vrátil data prvního, `errors` ke zbytku a kód 1. Ta odpověď je uložená jako
+fixture (`pr-heads-partial.json`), protože podstatné je právě to, co `gh` udělá se stdoutem. PR, která
+neodpověděla, v mapě **není** a razítko nedostane — „nevíme“ se nesmí zapsat jako „zjištěno“.
+
+Na obrazovce se nemění nic: řádek je nakreslený od #414, jen se objeví dřív. Testů **3918**
+(38 nových). Vloženými regresemi ověřené dvě věci: datování okamžikem zjištění shodí `Řádek nese datum
+commitu, ne okamžik zjištění` (a s ním restartový test), dotaz po jednotlivých PR shodí `Za tik jde
+jeden dotaz, ne dotaz na každé PR` s hláškou `(gateway.headRequests.count → 3) == 1`.
+
+### #361 — desáté kolo: líný seznam měl dva zapisovatele, teď má jeden (otevřené)
+
+**Poprvé se pracovalo z celého zásobníku hořícího kola, ne z re-armu.** Devátý záchvat
+(2026-08-25, tab `Konverzace`, 58 s nad 0,9 s CPU) měl `ConversationRow.id` 7 109 970× a v `sample`u
+dvě střídající se transakce: aktualizaci grafu (`LazySubviewPlacements.updateValue`) a **graf
+mutation** `LazyLayoutCacheItem.AllItemsPhaseMutation` → `LazyLayoutViewCache.updateItemPhases()` →
+`AG::Graph::value_set` → `propagate_dirty`. Ten `value_set` je **jediný externí zápis v celém
+vzorku** — tedy ten `_External -> State, changed`, který instrumentace vypsala jako změněný vstup.
+
+**Co se z toho dá opravit:** druhý zapisovatel do stavu líného seznamu. Pružný rámec nad
+`ScrollView`em předává dolů všechny dotazy, kterými se stack ptá na pružnost dítěte (`nil`, `0`,
+`∞`), a `LazyVStack` na každý z nich odpovídá funkcí `measureEstimates(**updatingPosition**:…)`,
+tedy zápisem do téže měnitelné krabice, ze které kreslí `placeSubviews`. Naměřeno **29–33 dotazů** na
+jedno rozvržení, z toho jen 4 se skutečnou velikostí; se změřeným rozměrem (`fillingSlot()`) zbydou
+**4** celkem. Ta řada je v hořícím kole doopravdy: 1524 z 13 479 vzorků v devátém záchvatu, 4274 z 19 930
+v sedmém — v obou tabech, takže to není vlastnost jedné obrazovky.
+
+**Zamítnuto měřením, ne úvahou:** vyplnit pružnému rámci `idealWidth`/`idealHeight` (dotaz `nil`
+zmizí, průzkum `0`/`∞` zůstane celý — 29 dotazů proti 29–33, tedy nic), a chybějící pojmenovaný prostor
+u `frame(in: .named(DiffView.contentSpace))` v úryvku na ose (s prostorem i bez něj **přesně** 2000
+výpočtů hodnoty a 0,072 s CPU, tedy k nerozeznání).
+
+**#361 zůstává otevřené a je to poctivé, ne opatrnost.** Kolo se v harnessu nepovedlo vyrobit ani
+podesáté (nečinné okno 0,000 s CPU ze 4 s i s 300 zalomenými řádky různých výšek), takže tvrdit
+„už to netuhne“ nelze. Tvrdí se **vazba**: `LazyIdealSizeTests` říká, že se ten druhý zapisovatel
+nemá kde vzít, a je to ověřené vloženou regresí. Ověření v provozu je používat aplikaci s
+`./bin/run.sh --diagnose` a koukat do `diagnostics.log`.
+
+Na obrazovce se nemění nic (změřeno A/B na běžící slotové aplikaci: diff, osa konverzace, strom
+souborů i `Dění` mají stejné rozvržení před i po). Testů **3922** (3 nové).
+
 
 **Zbytek nemono kapslí sjednocený s návrhem (issue #404).** Dotažení toho, co #348 vědomě odložilo:
 pět míst, která návrh kreslí jako `.pill`, a aplikace je měla nemono. Zase jen srovnání s tím, co
