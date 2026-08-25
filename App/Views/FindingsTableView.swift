@@ -40,6 +40,9 @@ struct FindingsTableView: View {
         ScrollView {
             content
         }
+        // **Rozměr se měří, nevyjednává** (#361): tabulka stojí ve `VStack`u pod hlavičkou tabu,
+        // takže by mu ten `VStack` posílal průzkumné dotazy na pružnost skrz na `LazyVStack`.
+        .fillingSlot()
         .task(id: pullRequest) {
             expanded = []
             expandedWithoutPlace = []

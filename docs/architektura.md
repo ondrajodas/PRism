@@ -3664,6 +3664,86 @@ tabulky výš patří:
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'
 ```
 
+### `fillingSlot()` — líný seznam rozměr nevyjednává vůbec (#361)
+
+Devátý záchvat u #361 dal poprvé **celý zásobník hořícího kola**, a v něm tuhle řadu:
+
+```
+StackLayout.UnmanagedImplementation.prioritize(_:proposedSize:)
+  _FlexFrameLayout.sizeThatFits(in:context:child:)
+    ScrollViewLayoutComputer.Engine.sizeThatFits(_:)
+      _PaddingLayout.sizeThatFits(in:context:child:)
+        LazyVStackLayout.sizeThatFits(proposedSize:subviews:context:cache:)
+          LazyStack<>.measureEstimates(updatingPosition:index:minor:subviews:cache:)
+            _LazyLayout_Subviews.apply(from:style:to:) → ForEachList.applyNodes → ConversationRow.id
+```
+
+Přeloženo do kódu je to jedna cesta v `ConversationView`: `VStack` rozděluje výšku, takže se ptá
+pružného rámce nad osou na velikost, ten se zeptá `ScrollView`u a ten `LazyVStack`u. **A neptá se
+jednou** — stack zjišťuje pružnost dítěte tím, že se ho ptá s `nil`, `0` a `∞`. Naměřeno sondou
+`LazyIdealSizeProbe` nad scénou tvaru osy konverzace (300 řádků, okno 520×380):
+
+| Podoba místa | Dotazů na velikost celkem | Z toho `nil` (ideál) | Z toho `0`/`∞` (průzkum) | Se skutečnou velikostí |
+|---|---|---|---|---|
+| `frame(maxWidth: .infinity, maxHeight: .infinity)` | **29–33** | 2–4 | ~21 | 4 |
+| `frame(idealWidth: 0, maxWidth: .infinity, idealHeight: 0, maxHeight: .infinity)` | 29 | **0** | ~21 | 4 |
+| `fillingSlot()` (`GeometryReader` + `frame(width:height:)`) | **4** | **0** | **0** | 3 (+1 nulový) |
+
+Přesný počet se mezi běhy o pár liší (kolik dotazů `nil` pošle okno), **druh dotazů ne** — a právě
+na druhu ta věc stojí, takže se v testu tvrdí on, ne číslo.
+
+**Podstatná není cena, ale kdo do čeho zapisuje.** Poslední jméno v té řadě je
+`measureEstimates(**updatingPosition**:…)`: dotaz na velikost líného seznamu **mění jeho stav**.
+Sahá na tutéž měnitelnou krabici (`_LazyLayoutViewCache.withMutableCacheState`, ve vzorku v obou
+cestách) jako `placeSubviews`, a změněné fáze položek z ní jdou do grafu **zvenčí** — druhá
+transakce ve stejném kole:
+
+```
+GraphHost.runTransaction
+  GraphMutation.apply() … LazyLayoutCacheItem.AllItemsPhaseMutation
+    LazyLayoutViewCache.updateItemPhases()
+      LazyLayoutViewCache.updateItemPhase(_:)
+        AG::Graph::value_set(…)          ← jediný externí zápis v celém vzorku
+          AG::Graph::propagate_dirty(…)
+```
+
+To je přesně ten `_External -> State, changed`, který devátý záchvat vypsal jako změněný vstup
+`LazySubviewPlacements` (a k němu `ScrollViewChildTransform` a `UnaryChildGeometry<_PaddingLayout>`,
+tedy **posunutý scroll** — v sedmém záchvatu je vidět i
+`LazySubviewPlacements.makeAnchorTranslationIfNeeded`). Dva zapisovatelé jedné krabice se v jednom
+kole nemusí shodnout, a pak se to kolo nemá kde zastavit.
+
+Kolik toho v hořícím kole je: **1524 z 13 479** vzorků hlavního vlákna v devátém záchvatu (tab
+`Konverzace`), **4274 z 19 930** v sedmém (tab `Soubory`) — v obou tedy ta řada je, a to je jediná
+věc, kterou mají všechny záchvaty společnou kromě samotného `LazySubviewPlacements`.
+
+**Zamítnutá varianta: vyplněný ideál.** Nabízelo se nechat pružný rámec a jen mu vyplnit
+`idealWidth`/`idealHeight`, aby na „jak velký bys chtěl být“ odpověděl sám. Podle tabulky výš to
+**nestačí**: `nil` dotaz zmizí, průzkum `0`/`∞` zůstane celý, takže zápis do líného seznamu zůstane
+taky — jen s jinými argumenty. Do repa se to proto nedostalo a v `FillingSlot.swift` je to zapsané;
+sonda ten scénář **měří dál** (`TimelineShape.declaredIdeal`), aby to nebyl dohad.
+
+**Kde `fillingSlot()` je** (výčet hlídá `LazyIdealSizeTests`):
+
+| Místo | Který stack se ptal |
+|---|---|
+| `ConversationView.timeline` | `VStack` osy (lišta / osa / composer) |
+| `DiffView.files` | `HStack` (strom souborů / diff) |
+| `FileTreeView` | `VStack` sloupce se stromem |
+| `ActivityFeedView` | `VStack` okna v `HomeView` |
+| `ReviewPanel.cards` | `VStack` (věta o hlavě / karty) |
+| `FindingsTableView` | `VStack` tabu `Nálezy` |
+
+**Kde naopak nepatří:** `CommitListView`, `ReviewProgressView` a `StepFeedView`. Jejich `ScrollView`
+je korunou svého view a rozměr dostává rámcem (`frame(width:height:)` z obsahu záložky,
+`frame(height:)` u živého výpisu kroků z #325), takže se na ideál nikdo neptá — ověřeno tou samou
+sondou: `frame(width:height:)` průzkumné dotazy neposílá. Kdyby nad ně někdo vložil stack, patří
+tam modifikátor taky.
+
+**Co to nedokazuje.** Že kolo z #361 přestane vznikat, se v harnessu ověřit nedá — za devět záchvatů
+se ho nepodařilo vyrobit ani jednou (viz [`docs/testovani.md`](docs/testovani.md)). Ověřená je
+**vazba**: že se ten druhý zapisovatel v aplikaci nemá kde vzít.
+
 Jak to drží pohromadě:
 
 - `availableWidth(_:)` ustaví konkrétní šířku pro podstrom. Je **jediné místo**, kde se měří —

@@ -5020,6 +5020,47 @@ A tři věci k mechanice sond obecně:
   toho PRismu, který se používá. U #361 to byly návštěvy `cli/cli#13084` a `diffTreeExpanded`; nic
   z toho nevadí, ale vědět se to má.
 
+### Dotazy na velikost líného seznamu (#361, desáté kolo)
+
+Devátý záchvat u #361 dal poprvé zásobník hořícího kola a v něm dvojici zapisovatelů do stavu
+líného seznamu (podrobnosti a čísla v [`docs/architektura.md`](architektura.md), sekce
+`fillingSlot()`). Co se k tomu měří a čím:
+
+- **`Tests/Views/LazyIdealSizeProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1` — bez toho
+  prefixu se proměnná do testovacího procesu z `xcodebuild` nedostane a suita se **tiše přeskočí**) — kolik dotazů na velikost dostane
+  `ScrollView` s `LazyVStack`em na jedno rozvržení, rozepsané na `nil` (ideál), `0`/`∞` (průzkum
+  pružnosti) a skutečnou velikost. Scéna je **tvaru osy konverzace** (lišta / seznam / composer
+  v jednom `VStack`u), 300 řádků s hodně různými výškami a zalomeným textem. Počítá se v `Layout`u
+  o jednom dítěti (`SizeQuestionReport`) — jiná cesta, jak se ze SwiftUI dozvědět „na tohle se
+  někdo ptal jako na ideální rozměr“, nevede. Výsledek: **29–33 dotazů** u pružného rámce
+  (přesný počet se mezi běhy o pár liší, druh dotazů ne), **4** se změřenou velikostí a **29**
+  u vyplněného ideálu, což je ta zamítnutá varianta — sonda ji měří dál, aby to nebyl dohad.
+- **`Tests/Views/LazyIdealSizeTests.swift`** (běží vždycky) — tvrdí to samé kvalitativně a **tím
+  modifikátorem z aplikace**: s `fillingSlot()` nepřijde k línému seznamu ani `nil`, ani `∞`, ani
+  jich nepřijde víc než pět. První test suity je **kontrola měřidla** (pružný rámec ty dotazy
+  poslat musí) a třetí je **výčet míst** čtený ze zdrojáků, jako u `SingleWayOutTests`.
+  Ověřeno **vložením regrese**: s `frame(maxWidth: .infinity, maxHeight: .infinity)` uvnitř
+  `FillingSlot` spadne na `520×∞` a na počtu dotazů (6 proti 3).
+
+Dvě věci na tom měření nejsou zjevné:
+
+- **`nil×nil` v harnessu nepřijde ani u pružného rámce.** Scéna je rozvržená jednou a na konkrétní
+  velikost, takže dotaz na ideál pošle jen okno (`fittingSize`) — sonda s oknem ho vidí 2×, test
+  offscreen nikdy. Tvrdí se proto průzkum `0`/`∞`, a to je i ten důležitější z těch dvou: vyplněný
+  ideál `nil` odstraní a průzkum ne.
+- **Kolo samo se tím nereprodukovalo.** Nečinné okno má v obou podobách **0,000 s CPU ze 4 s**,
+  a to i se 300 zalomenými řádky různých výšek. Je to tedy test **vazby**, ne test „už to netuhne“;
+  to druhé se za devět záchvatů napsat nepodařilo (viz tabulky níž).
+
+**Co se u desátého kola vylučovalo a vyšlo negativně:** `frame(in: .named(…))` nad prostorem, který
+v předcích **není**. Vypadalo to na kandidáta, protože `DiffLineView` kreslí i `ThreadSnippetView`
+na ose konverzace, kde `DiffView.contentSpace` nikdo nezakládá — a v hořícím kole má
+`DiffLine.geometry` 711 018 zásahů při otevřené `Konverzaci`. Změřeno sondou (60 řádků, 80×
+zašpiněný graf): **s prostorem i bez něj přesně 2000 výpočtů hodnoty, 0 akcí, 25 různých hodnot
+a 0,072 s CPU** — tedy k nerozeznání. Chybějící prostor je proto v tom kole **následek** (rámeček
+se počítá, protože se řádek přerovnává), ne jeho zdroj. Sonda se nezachovala, zůstává tenhle
+odstavec.
+
 ### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
 
 **`scroll(to:)` kolo z #361 nerozjede, a je to změřené** (1,28 s proti 1,30 s u #375, tedy nic).

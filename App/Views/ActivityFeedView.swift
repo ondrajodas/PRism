@@ -59,6 +59,9 @@ struct ActivityFeedView: View {
             .padding(.top, 22)
             .padding(.bottom, 20)
         }
+        // **Rozměr se měří, nevyjednává** (#361): obrazovka stojí ve `VStack`u okna, takže by
+        // jeho průzkumné dotazy na pružnost šly skrz na `LazyVStack` dní.
+        .fillingSlot()
         .background(Palette.surface)
     }
 
