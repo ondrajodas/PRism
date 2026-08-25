@@ -3194,7 +3194,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `SinceLastVisitLine`, `SinceLastVisitLines` | Odrážka po typovaných částech a jejich skládání (#284). Mimo view a testovatelné, jako `TimelineEventRow` |
 | `IncrementalDiffBar` | Lišta nad rozsahovým diffem (#284) — rozsah dvěma sha a cesta zpátky na celý diff. Podobu vybírá **spočítaná** šířka, ne `ViewThatFits` |
 | `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, u kapsle z `DesignPill` (#348), aby se měření a kresba nemohly rozejít |
-| `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a bere si ji sedm míst v okně; řez je `DesignPill.font` (AppKit) a **kreslí se i měří tímtéž** (`Font(_:)`, `TextWidth.pill(_:)`). `lineLimit` v ní **není** (rozhoduje o něm volající). Viz *Kapsle stavu na jednom místě* |
+| `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a od #404 si ji bere **třináct souborů** (17 volání); řez je `DesignPill.font` (AppKit) a **kreslí se i měří tímtéž** (`Font(_:)`, `TextWidth.pill(_:)`). `lineLimit` v ní **není** (rozhoduje o něm volající). Bere `Color`, ne `ShapeStyle` — kdo dědil `.tint`, musí barvu pojmenovat. Viz *Kapsle stavu na jednom místě* |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka **jako pozadí** (#375, ne pružná výška v řádku) a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -3248,7 +3248,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
 | `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
-| `ReviewStateBadge` | Odznak stavu review; texty podle specifikace |
+| `ReviewStateBadge` | Odznak stavu review; texty podle specifikace. Sazba je od #404 `designPill` (mono 10,5) a k ní `lineLimit(1)` **i** `fixedSize()` — v řádku fronty se odznak pere o místo s titulkem PR a mono je tam o 10 až 48 bodů širší |
 | `hiddenShortcuts(_:)`, `KeyEquivalent.backTab` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek, paletu i přepínání záložek (#245). `backTab` je tam proto, že `⌃⇧⇥` doručí `U+0019`, tedy jinou klávesu než `⇥` |
 | `CommandPaletteView`, `CommandPaletteRowView` | Command palette ⌘K (#184): pole, skupiny výsledků, zvýrazněná shoda v titulku, pruh s klávesami. Karta 560 bodů jako **překryv okna**, ne sheet |
 | `PullRequestStateAppearance` | Ikona a barva stavu **pull requestu** (ne review) — jedno místo pro řádek seznamu i pro paletu |
@@ -3456,12 +3456,50 @@ u systémových 11), takže hlavička karty nemůže povyrůst. V nejužším ta
 ořezává na `ote…` — je to **stav z doby před #348** (tam bylo `otev…`), tedy důsledek #291, ne
 téhle změny; rozhoduje o něm `ViewThatFits`, který v té šířce zahazuje relativní čas.
 
-**Zbytek třídy je otevřený jako #404**: pět dalších kapslí (`ReviewStateBadge`, pilulky nálezů ve
+**Zbytek třídy dotáhlo #404**: pět dalších kapslí (`ReviewStateBadge`, pilulky nálezů ve
 `FindingCardView`, `FindingTableRowView` a `FindingBubbleView`, odznaky v `ThreadBubbleView`
-a `ConversationEntryView`) má v návrhu `.pill` a v aplikaci nemono sazbu. Odložilo se to vědomě:
-jsou to **tři jiné metriky na pěti obrazovkách** a jedna z nich sedí v bublině, jejíž výšku si blok
-kódu měří sám (#236). `PullRequestHeaderView` do té třídy **nepatří** — `.state-chip` je nemono
-i v návrhu.
+a `ConversationEntryView`) mělo v návrhu `.pill` a v aplikaci nemono sazbu — tři jiné metriky
+(`.caption` 6/2, `.caption2` 5/1, `10,5 bez mono` 6/1) na pěti obrazovkách. Od #404 berou všechny
+`designPill`, takže volá **třináct souborů** (17 míst) a metrika zůstává na jednom.
+`PullRequestHeaderView` do té třídy **nepatří** — `.state-chip` je nemono i v návrhu.
+
+Co u #404 vyšlo z měření a není zjevné:
+
+- **Odznak fronty potřebuje `lineLimit(1)` i `fixedSize()`, a každý na něco jiného.** `lineLimit(1)`
+  brání zalomení, ale místo něj **zkracuje**, takže sám by z odznaku udělal `3 nález…`; neustoupit
+  vůbec umí až `fixedSize`. Změřeno vloženou regresí: bez `fixedSize` se dva nejdelší stavy
+  v řádku o 320 bodech srazily o **20 a 33 bodů**. Cena mono je tady 10 až 48 bodů
+  (`timeout · 2 · 1 blokuje` 116 → 164), tedy víc než u kapsle v hlavičce karty — proto se to
+  měří zvlášť (`PillTypesettingTests`).
+- **Kapsle v tabulce nálezů `fixedSize` naopak nedostala**: sedí ve sloupci se **spočítanou**
+  šířkou (`Policy.findingTableLayout`), takže o jejím místě rozhoduje `Policy`, ne vyjednávání
+  v řádku. Nejdelší popisek v tom sloupci je `irelevantní` (86 bodů mono ve sloupci 92).
+- **Výška kapsle o bod vyrostla, ne klesla** — na rozdíl od #348. Tam se srovnávalo se
+  systémovými 11 (řádek 13, odsazení 2 → 17), tady s `.caption2` (řádek 13, odsazení **1** → 15),
+  takže mono 10,5 s odsazením 2 dá 16. V pruhu se značkou u bubliny nálezu je kapsle to nejvyšší,
+  takže výška pruhu je z ní; hlídá se **stropem** (kapsle smí bublinu zvednout nejvýš o ten jeden
+  bod, kterým se liší od prózy vedle sebe).
+- **Barvy #404 nemění**, a je to vědomé: škálu odznaku fronty drží `ReviewStateAppearance`, jehož
+  vlastní zdůvodnění říká, že převod zbytku škály na tokeny je *jiná otázka, která se zodpovídá
+  měřením*. Měření z #404 je v `PillTypesettingTests` a **našlo mezeru**: čtyři kapsle na
+  systémové zelené a červené mají ve světlém režimu kontrast pod 3 (`vyřešeno` **1,63**,
+  `schválil` **1,70**, `vyžádal změny` 2,52, `3 nálezy · 1 blokuje` 2,70). Vyřizuje se zvlášť,
+  a do té doby se hlídá, že se to nezhorší.
+- **Dvě věci se pojmenovaly tokenem, aniž by se změnil vzhled**, protože `designPill` bere `Color`,
+  ne `ShapeStyle`: odznak `já` dostal barvu textu `Palette.ink` (do #404 dědil `primary`, a
+  `labelColor` je poloprůhledná — tatáž past jako u textu diffu, #393) a jeho wash se změnil
+  z `.tint.opacity(0.18)` na `Palette.accent.opacity(0.18)`. V okně je to **tatáž barva** (`.tint`
+  se na kořeni nasazuje jako `Palette.accent`), ale mimo okno padalo dědění na systémovou modrou —
+  což je zrovna ta záměna, kterou řešila #309 u odznaku `2×`. Kontrast `já` je **12,27 / 8,40**.
+- **`Bot` v konverzaci mono nedostal**, i když ho tabulka v #404 vyjmenovala: návrh ho kreslí jako
+  `.tl-line .botchip` (`font-size: 10px; padding: 0 5px`, **žádná `font-family`**), tedy schválně
+  nemono — je to vlastnost účtu vedle avataru, ne stav ani počet. Hlídá to vlastní tvrzení
+  (`DesignPillTests.leavesTheBotChipInTheUIFont`), protože „sjednotit kapsle“ je přesně to zadání,
+  při kterém se příště převede omylem.
+- **`FindingCardView.blockingWarning` zůstává `Label` s ikonou** (`⚠ blokuje`, `.caption2`
+  semibold), takže v kartě stojí nemono varování vedle mono kapsle `vyřešeno`. Kapsle to není —
+  nemá plochu —, takže do zadání #404 nespadá; převést by znamenalo zahodit tu ikonu, a to je
+  změna obrazovky, ne sazby.
 
 ### Command palette ⌘K (#184)
 
@@ -3663,6 +3701,86 @@ tabulky výš patří:
 ```bash
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'
 ```
+
+### `fillingSlot()` — líný seznam rozměr nevyjednává vůbec (#361)
+
+Devátý záchvat u #361 dal poprvé **celý zásobník hořícího kola**, a v něm tuhle řadu:
+
+```
+StackLayout.UnmanagedImplementation.prioritize(_:proposedSize:)
+  _FlexFrameLayout.sizeThatFits(in:context:child:)
+    ScrollViewLayoutComputer.Engine.sizeThatFits(_:)
+      _PaddingLayout.sizeThatFits(in:context:child:)
+        LazyVStackLayout.sizeThatFits(proposedSize:subviews:context:cache:)
+          LazyStack<>.measureEstimates(updatingPosition:index:minor:subviews:cache:)
+            _LazyLayout_Subviews.apply(from:style:to:) → ForEachList.applyNodes → ConversationRow.id
+```
+
+Přeloženo do kódu je to jedna cesta v `ConversationView`: `VStack` rozděluje výšku, takže se ptá
+pružného rámce nad osou na velikost, ten se zeptá `ScrollView`u a ten `LazyVStack`u. **A neptá se
+jednou** — stack zjišťuje pružnost dítěte tím, že se ho ptá s `nil`, `0` a `∞`. Naměřeno sondou
+`LazyIdealSizeProbe` nad scénou tvaru osy konverzace (300 řádků, okno 520×380):
+
+| Podoba místa | Dotazů na velikost celkem | Z toho `nil` (ideál) | Z toho `0`/`∞` (průzkum) | Se skutečnou velikostí |
+|---|---|---|---|---|
+| `frame(maxWidth: .infinity, maxHeight: .infinity)` | **29–33** | 2–4 | ~21 | 4 |
+| `frame(idealWidth: 0, maxWidth: .infinity, idealHeight: 0, maxHeight: .infinity)` | 29 | **0** | ~21 | 4 |
+| `fillingSlot()` (`GeometryReader` + `frame(width:height:)`) | **4** | **0** | **0** | 3 (+1 nulový) |
+
+Přesný počet se mezi běhy o pár liší (kolik dotazů `nil` pošle okno), **druh dotazů ne** — a právě
+na druhu ta věc stojí, takže se v testu tvrdí on, ne číslo.
+
+**Podstatná není cena, ale kdo do čeho zapisuje.** Poslední jméno v té řadě je
+`measureEstimates(**updatingPosition**:…)`: dotaz na velikost líného seznamu **mění jeho stav**.
+Sahá na tutéž měnitelnou krabici (`_LazyLayoutViewCache.withMutableCacheState`, ve vzorku v obou
+cestách) jako `placeSubviews`, a změněné fáze položek z ní jdou do grafu **zvenčí** — druhá
+transakce ve stejném kole:
+
+```
+GraphHost.runTransaction
+  GraphMutation.apply() … LazyLayoutCacheItem.AllItemsPhaseMutation
+    LazyLayoutViewCache.updateItemPhases()
+      LazyLayoutViewCache.updateItemPhase(_:)
+        AG::Graph::value_set(…)          ← jediný externí zápis v celém vzorku
+          AG::Graph::propagate_dirty(…)
+```
+
+To je přesně ten `_External -> State, changed`, který devátý záchvat vypsal jako změněný vstup
+`LazySubviewPlacements` (a k němu `ScrollViewChildTransform` a `UnaryChildGeometry<_PaddingLayout>`,
+tedy **posunutý scroll** — v sedmém záchvatu je vidět i
+`LazySubviewPlacements.makeAnchorTranslationIfNeeded`). Dva zapisovatelé jedné krabice se v jednom
+kole nemusí shodnout, a pak se to kolo nemá kde zastavit.
+
+Kolik toho v hořícím kole je: **1524 z 13 479** vzorků hlavního vlákna v devátém záchvatu (tab
+`Konverzace`), **4274 z 19 930** v sedmém (tab `Soubory`) — v obou tedy ta řada je, a to je jediná
+věc, kterou mají všechny záchvaty společnou kromě samotného `LazySubviewPlacements`.
+
+**Zamítnutá varianta: vyplněný ideál.** Nabízelo se nechat pružný rámec a jen mu vyplnit
+`idealWidth`/`idealHeight`, aby na „jak velký bys chtěl být“ odpověděl sám. Podle tabulky výš to
+**nestačí**: `nil` dotaz zmizí, průzkum `0`/`∞` zůstane celý, takže zápis do líného seznamu zůstane
+taky — jen s jinými argumenty. Do repa se to proto nedostalo a v `FillingSlot.swift` je to zapsané;
+sonda ten scénář **měří dál** (`TimelineShape.declaredIdeal`), aby to nebyl dohad.
+
+**Kde `fillingSlot()` je** (výčet hlídá `LazyIdealSizeTests`):
+
+| Místo | Který stack se ptal |
+|---|---|
+| `ConversationView.timeline` | `VStack` osy (lišta / osa / composer) |
+| `DiffView.files` | `HStack` (strom souborů / diff) |
+| `FileTreeView` | `VStack` sloupce se stromem |
+| `ActivityFeedView` | `VStack` okna v `HomeView` |
+| `ReviewPanel.cards` | `VStack` (věta o hlavě / karty) |
+| `FindingsTableView` | `VStack` tabu `Nálezy` |
+
+**Kde naopak nepatří:** `CommitListView`, `ReviewProgressView` a `StepFeedView`. Jejich `ScrollView`
+je korunou svého view a rozměr dostává rámcem (`frame(width:height:)` z obsahu záložky,
+`frame(height:)` u živého výpisu kroků z #325), takže se na ideál nikdo neptá — ověřeno tou samou
+sondou: `frame(width:height:)` průzkumné dotazy neposílá. Kdyby nad ně někdo vložil stack, patří
+tam modifikátor taky.
+
+**Co to nedokazuje.** Že kolo z #361 přestane vznikat, se v harnessu ověřit nedá — za devět záchvatů
+se ho nepodařilo vyrobit ani jednou (viz [`docs/testovani.md`](docs/testovani.md)). Ověřená je
+**vazba**: že se ten druhý zapisovatel v aplikaci nemá kde vzít.
 
 Jak to drží pohromadě:
 

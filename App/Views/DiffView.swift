@@ -98,7 +98,10 @@ struct DiffView: View {
                 // ho otevřel.
                 HStack(spacing: 0) {
                     tree(jumpingWith: proxy)
-                    files
+                    // **Rozměr se měří, nevyjednává** (#361) — jinak `HStack` posílá líným
+                    // seznamem diffu svoje průzkumné dotazy na pružnost a `LazyVStack` na každý
+                    // z nich odpovídá zápisem do svého stavu.
+                    files.fillingSlot()
                 }
             }
             .background(alignment: .topLeading) { treeShortcut }

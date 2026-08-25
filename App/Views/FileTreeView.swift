@@ -38,6 +38,9 @@ struct FileTreeView: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 10)
         }
+        // **Rozměr se měří, nevyjednává** (#361): strom stojí v `VStack`u sloupce, takže by mu
+        // ten `VStack` posílal svoje průzkumné dotazy na pružnost skrz na `LazyVStack`.
+        .fillingSlot()
     }
 }
 

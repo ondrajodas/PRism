@@ -691,6 +691,25 @@ Zvlášť stojí za přečtení, než sáhneš na:
   Tuhnoucí okno se diagnostikuje `sample`m běžícího procesu, ne odhadem — viz
   [`docs/testovani.md`](docs/testovani.md).
 
+  **A líný seznam ve `ScrollView`u rozměr nevyjednává vůbec** (#361) — dostane ho změřený
+  (`fillingSlot()`). Stack zjišťuje pružnost dětí tím, že se jich ptá na velikost s `nil`, `0`
+  a `∞`, a pružný rámec ty dotazy **předá dolů**: naměřeno **29–33 dotazů** na jedno rozvržení, z toho
+  jen **4** se skutečnou velikostí; se změřenou výškou zbydou **4** dotazy celkem. Podstatná není cena,
+  ale že na každý z nich odpovídá `LazyVStack` funkcí `measureEstimates(**updatingPosition**:…)`,
+  tedy **zápisem** do téže měnitelné krabice (`_LazyLayoutViewCache.withMutableCacheState`), ze
+  které kreslí `placeSubviews` — a změněné fáze položek z ní jdou do grafu zvenčí
+  (`AG::Graph::value_set` → `propagate_dirty`, jediný externí zápis v hořícím vzorku). Dva
+  zapisovatelé jedné krabice se v jednom kole nemusí shodnout. Ta řada je v hořícím kole doopravdy
+  vidět: **1524 z 13 479** vzorků hlavního vlákna v devátém záchvatu, **4274 z 19 930** v sedmém.
+  Zamítnutá varianta (vyplněný `idealWidth`/`idealHeight` u pružného rámce) **nestačí a je to
+  změřeno**: dotaz `nil×nil` zmizí, průzkum `0`/`∞` zůstane celý. Výčet šesti míst hlídá
+  `LazyIdealSizeTests`, čísla měří `LazyIdealSizeProbe`; podrobnosti v
+  [`docs/architektura.md`](docs/architektura.md).
+
+  ```bash
+  grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'    # šest míst + modifikátor sám
+  ```
+
   **Nevyjednává se ani počet prvků** (#252). Overlay nad blokem kódu měl plochu, gesto a čtení
   geometrie u **každého** řádku a strany — u šedesátiřádkového bloku přes čtyři stovky prvků,
   které líný seznam umisťuje znovu při každém přerovnání obsahu. Polohy přitom hlásí textové view,

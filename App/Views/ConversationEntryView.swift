@@ -40,6 +40,12 @@ struct ConversationEntryView: View {
             // **Odznak `Bot` u avataru, ne za větou.** Patří k tomu, kdo událost udělal —
             // a za větou se lepil na jméno toho, **komu** se review vyžádalo („od ondrajodas
             // Bot“), tedy tvrdil něco jiného, než co je pravda.
+            //
+            // **Do kapslí z #404 nepatří** — a je to změna proti tabulce v #404, která ho tam
+            // vyjmenovala. Návrh ho kreslí jako `.tl-line .botchip`
+            // (`font-size: 10px; padding: 0 5px`, žádná `font-family`), tedy **schválně nemono**,
+            // stejně jako `.state-chip` v hlavičce PR. Není to stav ani počet: je to vlastnost
+            // účtu vedle jeho avataru, takže mono by ho postavilo na roveň `schválil`.
             if row.isBot {
                 Text("Bot")
                     .font(.system(size: 10))
@@ -151,19 +157,15 @@ struct ConversationEntryView: View {
                 Text(verbatim: author)
                     .font(.system(size: 12, weight: .semibold))
                 if isMine(author) {
-                    Text("já")
-                        .font(.system(size: 10.5))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.tint.opacity(0.18), in: .capsule)
+                    mineBadge
                 }
                 if let badge {
+                    // `.pill.ok` / `.pill.idle` z návrhu (sekce *Konverzace*) — **sazba je
+                    // v `designPill`** (#404). Do #404 to bylo `10,5 bez mono`, tedy velikost
+                    // z návrhu bez jeho řezu; výška se tím nemění (odsazení tady bylo 2 už dřív),
+                    // šířka roste o 12 až 16 bodů.
                     Text(verbatim: badge.text)
-                        .font(.system(size: 10.5))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(badge.color.opacity(0.18), in: .capsule)
-                        .foregroundStyle(badge.color)
+                        .designPill(tint: badge.color, background: badge.color.opacity(0.18))
                 }
                 // **Čas až za mezerou, u pravé hrany** (`margin-left: auto` v návrhu).
                 // Nalepený na odznak se s ním četl jako jeden údaj.
@@ -229,6 +231,14 @@ struct ConversationEntryView: View {
     /// označilo za moje všechno bez autora. Stejné pravidlo jako v bublině vlákna.
     private func isMine(_ author: String) -> Bool {
         !viewer.isEmpty && author == viewer
+    }
+
+    /// `já` u vlastní karty — **tatáž kapsle jako v bublině vlákna** (#404), včetně toho, proč se
+    /// barva textu pojmenuje `Palette.ink` a proč wash zůstává akcentový (zdůvodnění je
+    /// u `ThreadBubbleView.mineBadge`, ať nestojí dvakrát).
+    private var mineBadge: some View {
+        Text("já")
+            .designPill(tint: Palette.ink, background: Palette.accent.opacity(0.18))
     }
 
     /// Odznak s verdiktem. **Popisek je z modelu** (`State.czechLabel`), tady se rozhoduje jen

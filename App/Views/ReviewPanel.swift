@@ -464,6 +464,9 @@ struct ReviewPanel: View {
             // nemá, a to je zrovna ta ztráta, kterou #392 řešila. Hodnota je z návrhu (0,52).
             .opacity(headNotice.dimsFindings ? 0.52 : 1)
         }
+        // **Rozměr se měří, nevyjednává** (#361): karty stojí ve `VStack`u pod větou o hlavě,
+        // takže by mu ten `VStack` posílal průzkumné dotazy na pružnost skrz na `LazyVStack`.
+        .fillingSlot()
     }
 
     // MARK: - Data

@@ -310,13 +310,17 @@ struct FindingTableRowView: View {
         return columns.reduce(0, +) + FindingTableLayout.spacing * Double(columns.count - 1)
     }
 
+    /// Kapsle z návrhu (`.pill`) — **sazba je v `designPill`**, ne tady (#404, zbytek třídy z #348).
+    /// Do #404 to byl `.caption2` s odsazením 5 a 1.
+    ///
+    /// **`fixedSize` sem nepatří**, na rozdíl od karty a bubliny: obě kapsle tabulky sedí ve
+    /// sloupci se **spočítanou** šířkou (`layout.severity` 92, `layout.reviewer` 132), takže
+    /// o jejich místě rozhoduje `Policy.findingTableLayout`, ne vyjednávání v řádku. Nejdelší
+    /// popisek v tom sloupci je `irelevantní` (86 bodů mono), takže se do 92 vejde — hlídá to
+    /// `PillTypesettingTests`.
     private func pill(_ text: String, tint: Color, background: Color) -> some View {
         Text(verbatim: text)
-            .font(.caption2)
+            .designPill(tint: tint, background: background)
             .lineLimit(1)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(background, in: .capsule)
-            .foregroundStyle(tint)
     }
 }

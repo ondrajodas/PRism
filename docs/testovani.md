@@ -2388,6 +2388,64 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v jednom testu se pod paralelní zátěží umí vyřešit jinak. Poznat se to dá jedině plným během:
   v jedné dávce takhle spadly `CommitPanelRoomTests` a `LogTailHeightTests` (o 36 bodů, tedy o tři
   řádky po 12), obojí zeleně v samostatném běhu.
+
+  **Od #404 je v téže sadě guard na zbylých pět míst** — že berou `designPill` **a** že v tom
+  souboru nezbyla druhá kapsle. Obojí je potřeba: samotné „bere“ by zůstalo pravdivé i tehdy, kdyby
+  vedle nové kapsle zůstala jedna se starým odsazením, a přesně takhle v `FindingCardView` ležel
+  odznak kontroly, který se u #348 přehlédl.
+
+  Hlídá se **`in: .capsule` mimo `designPill`**, ne zapsaná stará sazba, a to schválně: `.caption2`
+  i `10,5` v těch souborech zůstávají (nesou prózu vedle odznaku), kdežto kapsli tam po #404 kreslí
+  jedině `designPill`. Guard na `padding(.horizontal, 5)` by naopak spadl na první nesouvisející
+  odsazení, tedy hlídal by něco jiného, než co o sobě tvrdí. Povolená je **jedna** kapsle
+  v `ConversationEntryView` — `Bot` je `.botchip` z návrhu, tedy schválně nemono, a má na to vlastní
+  tvrzení, protože „sjednotit kapsle“ je zadání, při kterém se převede omylem. Ověřeno vložením
+  regrese (vrácená ruční sazba `vyřešeno` v `ThreadBubbleView`).
+- **Rozměry a kontrast kapslí po #404** — `PillTypesettingTests`. Dělí se od `DesignPillTests`
+  schválně: tam se tvrdí **kdo** kapsli bere, tady se měří, co se tou změnou pohnulo v okně.
+
+  **Šířka** se měří tam, kde je místo spočítané, ne odhadem: kapsle ve sloupci závažnosti tabulky
+  (`Policy.findingTableLayout(availableWidth: 648).severity`, tedy 92 bodů — `irelevantní` má 86)
+  a odznak fronty **v řádku, ne sám za sebe**. To druhé je podstatné: `fittingSize` na tu otázku
+  neodpoví, protože rámec nasazený zvenčí je tvrdý a hostující view pak hlásí tu šířku, kterou
+  dostalo. Měří se proto `onGeometryChange` uvnitř hostovaného okna nad řádkem, který má vedle
+  odznaku pružný titulek s `lineLimit(1)` — tedy tu trojici, ve které se o místo pere.
+
+  **Vložená regrese vyloučila i první podobu toho testu**, a je to ta poučnější polovina:
+  `lineLimit(1)` sám o sobě zalomení opravdu zabrání, takže test, který měřil jen **výšku**,
+  procházel i s odebraným `fixedSize()`. Zkrácení je jiná vada než zalomení a měří se šířkou — bez
+  `fixedSize` se dva nejdelší stavy srazily o **20 a 33 bodů**.
+
+  **Výška bubliny** se hlídá stropem, ne rovností: měří se dvě bubliny nad týmiž daty (kategorie
+  `correctness` a `style`, tedy s kapslí `blokuje` a bez ní) a kapsle smí bublinu zvednout nejvýš
+  o ten jeden bod, kterým se liší od prózy vedle sebe. Číslo se u toho nevymýšlí — kapsle je 16
+  bodů, `.caption2` 13.
+
+  **Kontrast se měří z bitmapy, ne z tokenů** (#393, #366): podklad je **nejčastější barva** ve
+  středním pásu nakreslené kapsle (tedy wash složený nad plátem přesně tak, jak se nakreslil),
+  odstín má vlastní kresbu v témž vzhledu. Odečítat podklad z polohy by znamenalo tvrdit, kde
+  v bitmapě co leží, a to se rozbije při první změně odsazení. Vedle kontrastu je druhé tvrzení,
+  že se **odstín dostane do textu**: nejsytější pixel v kapsli musí být blíž nakreslenému odstínu
+  než podkladu. Bez toho by kontrast mohl projít i u kapsle, které se `foregroundStyle` vynechalo —
+  a zrovna to je u odznaku `já` nová věc (do #404 barvu textu neměl).
+
+  **Nejsytější pixel je dolní odhad**, ne barva glyfu: při 10,5 semibold nepokryje stopa pera celý
+  pixel, takže se z něj kontrast počítat nedá (naměřeno 1,63 až 2,91 tam, kde nakreslené barvy dají
+  3,65 až 4,08). Proto se dvě otázky rozdělily — legibilitu měří **plné plochy**, přítomnost
+  odstínu v textu ten pixel.
+
+  Prahy jsou **per kapsle a naměřené**, ne kulaté: čtyři z nich berou systémovou škálu a ve světlém
+  režimu jsou pod třemi (`vyřešeno` 1,63, `schválil` 1,70, `vyžádal změny` 2,52,
+  `3 nálezy · 1 blokuje` 2,70). #404 to nemění, takže se to změřilo, zapsalo do tabulky u testu
+  a hlídá se, že se **nezhorší**; `já` má vlastní tvrzení s prahem 8,0 (naměřeno 12,27 / 8,40),
+  protože společný práh z tabulky by výměnu `ink` za `ink3` nechytil.
+
+  **Vzhled se vynucuje na vlastním okně** (#367), ne na `NSApp`.
+- **Sonda sazby kapslí (#404)** — `PillRenderProbe`: všech pět míst na **jednom plátně** v obou
+  režimech, aby se dalo vidět, že to je jedna rodina prvků. Na plátně je i dvojice, která se
+  sjednotit **nemá** (`Bot` a `.state-chip` v hlavičce PR) — bez ní by z obrázku nešlo poznat, jestli
+  je nemono chip vada, nebo záměr. Karta nálezu se kreslí v **300 bodech** (šířka panelu), ne v šířce
+  plátna: v širokém místě se o nic nepere. Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`).
 - **Cyklus a ikony režimů (#278)** — `AppAppearanceTests`: pořadí `světlý → tmavý → podle systému`
   a hlavně to, že je **uzavřené a projde všechny tři** (jinak by se do jednoho režimu klikáním nešlo
   dostat), tři **různé** ikony a to, že všechny tři symboly v systému existují — chybějící SF Symbol
@@ -5086,6 +5144,47 @@ A tři věci k mechanice sond obecně:
   (`com.ondrajodas.prism`), takže `@AppStorage` i `VisitLedger` z hostované scény míří do nastavení
   toho PRismu, který se používá. U #361 to byly návštěvy `cli/cli#13084` a `diffTreeExpanded`; nic
   z toho nevadí, ale vědět se to má.
+
+### Dotazy na velikost líného seznamu (#361, desáté kolo)
+
+Devátý záchvat u #361 dal poprvé zásobník hořícího kola a v něm dvojici zapisovatelů do stavu
+líného seznamu (podrobnosti a čísla v [`docs/architektura.md`](architektura.md), sekce
+`fillingSlot()`). Co se k tomu měří a čím:
+
+- **`Tests/Views/LazyIdealSizeProbe.swift`** (ručně, `TEST_RUNNER_PRISM_MEASURE=1` — bez toho
+  prefixu se proměnná do testovacího procesu z `xcodebuild` nedostane a suita se **tiše přeskočí**) — kolik dotazů na velikost dostane
+  `ScrollView` s `LazyVStack`em na jedno rozvržení, rozepsané na `nil` (ideál), `0`/`∞` (průzkum
+  pružnosti) a skutečnou velikost. Scéna je **tvaru osy konverzace** (lišta / seznam / composer
+  v jednom `VStack`u), 300 řádků s hodně různými výškami a zalomeným textem. Počítá se v `Layout`u
+  o jednom dítěti (`SizeQuestionReport`) — jiná cesta, jak se ze SwiftUI dozvědět „na tohle se
+  někdo ptal jako na ideální rozměr“, nevede. Výsledek: **29–33 dotazů** u pružného rámce
+  (přesný počet se mezi běhy o pár liší, druh dotazů ne), **4** se změřenou velikostí a **29**
+  u vyplněného ideálu, což je ta zamítnutá varianta — sonda ji měří dál, aby to nebyl dohad.
+- **`Tests/Views/LazyIdealSizeTests.swift`** (běží vždycky) — tvrdí to samé kvalitativně a **tím
+  modifikátorem z aplikace**: s `fillingSlot()` nepřijde k línému seznamu ani `nil`, ani `∞`, ani
+  jich nepřijde víc než pět. První test suity je **kontrola měřidla** (pružný rámec ty dotazy
+  poslat musí) a třetí je **výčet míst** čtený ze zdrojáků, jako u `SingleWayOutTests`.
+  Ověřeno **vložením regrese**: s `frame(maxWidth: .infinity, maxHeight: .infinity)` uvnitř
+  `FillingSlot` spadne na `520×∞` a na počtu dotazů (6 proti 3).
+
+Dvě věci na tom měření nejsou zjevné:
+
+- **`nil×nil` v harnessu nepřijde ani u pružného rámce.** Scéna je rozvržená jednou a na konkrétní
+  velikost, takže dotaz na ideál pošle jen okno (`fittingSize`) — sonda s oknem ho vidí 2×, test
+  offscreen nikdy. Tvrdí se proto průzkum `0`/`∞`, a to je i ten důležitější z těch dvou: vyplněný
+  ideál `nil` odstraní a průzkum ne.
+- **Kolo samo se tím nereprodukovalo.** Nečinné okno má v obou podobách **0,000 s CPU ze 4 s**,
+  a to i se 300 zalomenými řádky různých výšek. Je to tedy test **vazby**, ne test „už to netuhne“;
+  to druhé se za devět záchvatů napsat nepodařilo (viz tabulky níž).
+
+**Co se u desátého kola vylučovalo a vyšlo negativně:** `frame(in: .named(…))` nad prostorem, který
+v předcích **není**. Vypadalo to na kandidáta, protože `DiffLineView` kreslí i `ThreadSnippetView`
+na ose konverzace, kde `DiffView.contentSpace` nikdo nezakládá — a v hořícím kole má
+`DiffLine.geometry` 711 018 zásahů při otevřené `Konverzaci`. Změřeno sondou (60 řádků, 80×
+zašpiněný graf): **s prostorem i bez něj přesně 2000 výpočtů hodnoty, 0 akcí, 25 různých hodnot
+a 0,072 s CPU** — tedy k nerozeznání. Chybějící prostor je proto v tom kole **následek** (rámeček
+se počítá, protože se řádek přerovnává), ne jeho zdroj. Sonda se nezachovala, zůstává tenhle
+odstavec.
 
 ### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
 

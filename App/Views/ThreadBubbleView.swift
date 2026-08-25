@@ -172,13 +172,16 @@ struct ThreadBubbleView: View {
         return "\(first.author): \(first.body.singleLine)"
     }
 
+    /// Odznaky v hlavičce vlákna berou **sazbu z `designPill`** (#404, zbytek třídy z #348).
+    /// Do #404 to bylo `10,5 bez mono` s odsazením 6 a 1, tedy o půl kroku vedle: velikost
+    /// z návrhu, ale bez mono řezu a s vlastním odsazením. Odznak proto vyrostl na obě strany —
+    /// o 2 body na výšku (14 → 16) a o 3 až 15 na šířku.
+    ///
+    /// **Barvy se nemění.** `vyřešeno` má systémovou zelenou a `zastaralé` `Palette.line` z důvodu
+    /// o dva řádky níž; #404 je o sazbě.
     private var resolvedBadge: some View {
         Text("vyřešeno")
-            .font(.system(size: 10.5))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(.green.opacity(0.18), in: .capsule)
-            .foregroundStyle(.green)
+            .designPill(tint: .green, background: .green.opacity(0.18))
     }
 
     /// Podklad je `line`, ne `raised`: odznak leží v hlavičce, která na `raised` už je,
@@ -186,11 +189,7 @@ struct ThreadBubbleView: View {
     /// v něm není odznak vidět.
     private var outdatedBadge: some View {
         Text("zastaralé")
-            .font(.system(size: 10.5))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(Palette.line, in: .capsule)
-            .foregroundStyle(Palette.ink2)
+            .designPill(tint: Palette.ink2, background: Palette.line)
             .help("Řádek, u kterého vlákno vzniklo, v aktuálním diffu není")
     }
 
@@ -198,12 +197,28 @@ struct ThreadBubbleView: View {
     /// důvod jít na GitHub, „chybí 12“ ano.
     private var truncationBadge: some View {
         Text(verbatim: "+\(thread.comments.missing)")
-            .font(.system(size: 10.5))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(Palette.stale.opacity(0.18), in: .capsule)
-            .foregroundStyle(Palette.stale)
+            .designPill(tint: Palette.stale, background: Palette.stale.opacity(0.18))
             .help("Další komentáře se nevešly — otevři vlákno na GitHubu.")
+    }
+
+    /// `já` u vlastního komentáře — tatáž kapsle jako v kartě konverzace (#404).
+    ///
+    /// Dvě věci se u toho **pojmenovaly tokenem, aniž by se změnil vzhled**, a obě proto, že
+    /// `designPill` bere `Color`, ne `ShapeStyle`:
+    ///
+    /// - **barva textu**: do #404 tady žádná nebyla, takže odznak dědil `primary` z okolí. Bere se
+    ///   `Palette.ink`, ne `.primary` — `labelColor` je poloprůhledná a přes akcentový wash by se
+    ///   složila jinak než v návrhu, což je tatáž past jako u textu diffu (#393).
+    /// - **wash**: do #404 to bylo `.tint.opacity(0.18)`, tedy dědění z kořene okna. `.tint` se tam
+    ///   nasazuje jako `Palette.accent`, takže v okně je to **tatáž barva** — ale mimo okno (náhled,
+    ///   harness) padalo na systémovou modrou, což je zrovna ta záměna, kterou #309 řešila
+    ///   u odznaku `2×`. Pojmenovaná barva se navíc dá změřit.
+    ///
+    /// **Wash zůstává akcentový** — `já` je značka „tohle jsem psal já“, ne stav, takže si odstín
+    /// nepůjčuje od `.pill.run`.
+    private var mineBadge: some View {
+        Text("já")
+            .designPill(tint: Palette.ink, background: Palette.accent.opacity(0.18))
     }
 
     // MARK: - Komentář
@@ -217,11 +232,7 @@ struct ThreadBubbleView: View {
                 Text(verbatim: comment.author)
                     .font(.system(size: 12, weight: .semibold))
                 if isMine(comment) {
-                    Text("já")
-                        .font(.system(size: 10.5))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.tint.opacity(0.18), in: .capsule)
+                    mineBadge
                 }
                 Spacer(minLength: 8)
                 Text(comment.createdAt, format: .relative(presentation: .named))

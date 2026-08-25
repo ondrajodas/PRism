@@ -106,6 +106,59 @@ struct DesignPillTests {
         #expect(!overview.contains(".font(.system(size: 11))"))
     }
 
+    /// **Zbytek třídy z #348** (#404): pět míst, která návrh kreslí jako `.pill`, a aplikace je
+    /// měla nemono. Tvrdí se nad zdrojáky ze stejného důvodu jako u hlavičky karty — barvy se
+    /// nemění, takže v bitmapě není co rozlišovat; **rozměry** téže změny měří
+    /// `PillTypesettingTests`.
+    ///
+    /// Hlídá se obojí: že se sazba bere z `designPill` **a** že v tom souboru **nezbyla druhá
+    /// kapsle** (`in: .capsule` mimo `designPill`). Samotné „bere“ by zůstalo pravdivé i tehdy,
+    /// kdyby vedle nové kapsle zůstala jedna se starým odsazením — a přesně takhle v
+    /// `FindingCardView` ležel odznak kontroly, který se u #348 přehlédl.
+    ///
+    /// Hlídá se tvar `in: .capsule`, ne stará sazba: `.caption2` a `10,5` v těch souborech
+    /// **zůstávají** (nesou prózu vedle odznaku), kdežto kapsli tam po #404 kreslí jedině
+    /// `designPill`. Guard na zapsané odsazení by naopak spadl na první nesouvisející
+    /// `padding(.horizontal, 5)`, tedy hlídal by něco jiného, než co o sobě tvrdí.
+    ///
+    /// **Počet v názvu testu není** (nález Copilota na #431): tabulka v #404 vyjmenovává „pět míst“,
+    /// ale kapsle karty a odznak kontroly jsou v jednom řádku, takže souborů je **šest**. Číslo
+    /// v názvu by pak mátlo při hledání, které view je vlastně pokryté — rozhoduje seznam níž.
+    @Test("Zbylé kapsle berou sazbu z jednoho místa")
+    func drawsTheRemainingPillsFromTheSharedMetric() throws {
+        let places = [
+            "App/Views/ReviewStateBadge.swift",
+            "App/Views/FindingCardView.swift",
+            "App/Views/FindingTableRowView.swift",
+            "App/Views/FindingBubbleView.swift",
+            "App/Views/ThreadBubbleView.swift",
+            "App/Views/ConversationEntryView.swift",
+        ]
+        let sources = try appSources()
+        for path in places {
+            let code = try #require(sources.first { $0.path == path }, "\(path) se nenačetl").code
+            #expect(code.contains(".designPill(tint:"), "\(path) nebere kapsli z `designPill`")
+            // `ConversationEntryView` je výjimka **o jednu kapsli**: `Bot` je `.botchip`, viz níž.
+            let capsules = code.components(separatedBy: "in: .capsule").count - 1
+            let allowed = path.hasSuffix("ConversationEntryView.swift") ? 1 : 0
+            #expect(capsules == allowed, "\(path) kreslí \(capsules) kapslí mimo `designPill`")
+        }
+    }
+
+    /// **`Bot` do té třídy nepatří** — a je to vědomá odchylka od tabulky v #404, která ho tam
+    /// vyjmenovala. Návrh ho kreslí jako `.tl-line .botchip` (`font-size: 10px; padding: 0 5px`,
+    /// **žádná `font-family`**), tedy schválně nemono, stejně jako `.state-chip` v hlavičce PR.
+    ///
+    /// Tvrdí se to proto, že „sjednotit kapsle“ je přesně to zadání, při kterém se tenhle odznak
+    /// příště převede omylem — a v okně by pak `Bot` u avataru vypadal jako verdikt vedle jména.
+    /// Je to zároveň ta jedna kapsle, kterou guard výš v tom souboru povoluje.
+    @Test("Odznak Bot v konverzaci mono nemá")
+    func leavesTheBotChipInTheUIFont() throws {
+        let entry = try source(at: "App/Views/ConversationEntryView.swift")
+        #expect(entry.contains(".font(.system(size: 10))"), "`Bot` má být `.botchip`, tedy 10 bez mono")
+        #expect(entry.contains(".background(Palette.raised, in: .capsule)"), "`Bot` má mít podklad `.pill.idle`")
+    }
+
     /// **Metrika je zapsaná jednou.** Do #348 stálo `size: 10.5, weight: .semibold, design:
     /// .monospaced` na sedmi místech — šest z nich shodně a sedmé (hlavička karty) jinak. Rozejít
     /// se může jedině to, co je zapsané víckrát, takže guard hlídá počet zápisů, ne jejich obsah.
