@@ -31,7 +31,7 @@ struct SpinningRingTests {
         // vynuceného rozvržení by test tvrdil, že animace není, nad kódem, který ji přidá.
         hosting.layoutSubtreeIfNeeded()
 
-        let ring = try #require(Self.descendant(of: hosting))
+        let ring = try #require(hosting.firstDescendant(ofType: SpinningRingView.self))
         #expect(ring.isSpinningInCoreAnimation)
     }
 
@@ -84,13 +84,5 @@ struct SpinningRingTests {
         ring.apply(lineWidth: 8, isSpinning: true)
 
         #expect(ring.needsLayout)
-    }
-
-    private static func descendant(of view: NSView) -> SpinningRingView? {
-        if let ring = view as? SpinningRingView { return ring }
-        for child in view.subviews {
-            if let ring = descendant(of: child) { return ring }
-        }
-        return nil
     }
 }

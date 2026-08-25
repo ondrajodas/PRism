@@ -33,6 +33,15 @@ je obsahem domácí záložky, takže diff dostane celou šířku okna. Otevřen
 a tečka u záložky nese jeho stav; u běžícího se točí prstýnek, u rozdělaného je pero. **Zavření
 záložky nic nezahodí.**
 
+**Dokud se aplikace ptá GitHubu, točí se prstýnek i v tlačítku obnovení** (#442) — týž, jaký na
+záložce znamená běžící review, takže „pracuje se“ má v okně jeden tvar. Platí to **i pro
+automatický tik**: je to stav aplikace, ne odezva na tlačítko. Po tu dobu tlačítko klik nebere
+(rozhoduje o tom `Policy.refreshControl`, ze kterého si podmínku bere i `AppStore.refresh()`,
+takže druhý dotaz nepustí ani paleta ⌘K), rozměr tlačítka se přitom nemění (27 × 25), aby
+hlavička neposkočila. Do té doby bylo obnovování vidět **jen na dashboardu** (`ptám se…`
+v pravém horním koutu), tedy jen z domácí záložky — kdo byl v záložce pull requestu, četl klik
+bez odezvy jako klik, který nezabral.
+
 **Pruhem se přepíná `⌃Tab` a `⌃⇧Tab`** (#245) — dokola a **včetně domácí záložky**, protože se na
 ni chodí nejčastěji (je za ní fronta) a bez ní by zkratka nad jediným otevřeným PR nedělala nic.
 Pořadí je pořadí pruhu, ne pořadí použití. Funguje to i **s kurzorem v rozepsaném review**:

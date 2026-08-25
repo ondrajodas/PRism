@@ -1467,7 +1467,14 @@ final class AppStore {
     }
 
     /// Tlačítko „obnovit teď“ — tik mimo pořadí.
+    ///
+    /// **Druhý dotaz se během prvního nepustí** (#442), a rozhoduje o tom tatáž funkce, ze které
+    /// si tlačítko bere podobu (`Policy.refreshControl`). Zašedlé tlačítko je totiž jen půlka:
+    /// tutéž akci nabízí paleta ⌘K, prázdný stav seznamu (`Zkusit znovu`) a #441 k tomu přidá
+    /// zkratku `⌘R` — a druhý souběžný dotaz by ten první nezrychlil, jen by po sobě přepsal
+    /// stav pollingu a nechal `isRefreshing` viset o kolo dýl, než se aplikace doopravdy ptá.
     func refresh() async {
+        guard Policy.refreshControl(isRefreshing: isRefreshing).isEnabled else { return }
         await polling.refresh()
     }
 
