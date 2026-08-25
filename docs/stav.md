@@ -4477,13 +4477,15 @@ dolní). **Náhradní měření nesází text** — spadlý proces je horší ne
 to použít?“ je `Policy.usableFontMetric(_:)` a hlídá `isFinite`, ne jen kladnost: `NaN` je hodnota,
 kterou skutečné `NSFont` vydá (změřeno na písmu s nekonečnou maticí), a `Int(NaN)` shodí proces.
 
-V `App/` to sebralo **pět** míst, kde se metrika čítala samostatně, včetně jednoho, kde na jednu
-výšku řádku byla **dvě různá čísla** podle toho, jak daleko bylo view v sestavování
-(`DiffTextView.singleLineHeight`). Dvě sady v `Tests/` metriku pořád čtou samy
-(`PillTypesettingTests`, `CodeTextSheetSizingTests`) — soubory patřily souběžným větvím, takže se do
-nich nesahalo; je to tatáž třída a patří převést.
+Sebralo to **deset** míst, kde se metrika čítala samostatně: pět v `App/` — včetně jednoho, kde na
+jednu výšku řádku byla **dvě různá čísla** podle toho, jak daleko bylo view v sestavování
+(`DiffTextView.singleLineHeight`) — a pět v `Tests/`. Poslední dvě (`PillTypesettingTests`,
+`CodeTextSheetSizingTests`) přišly až po rebasu, kdy se souběžné větve mergly; do té doby patřily
+někomu jinému. Ta druhá je za zmínku: porovnávala `static let` konstantu se **svým** surovým čtením,
+tedy dvě čtení metriky v jednom procesu — přesně ta vada, jen ještě nespadlá.
 
-Testů **3982**, z toho **13 nových** (`FontMetricTests`). Vloženými regresemi ověřené dvě věci: bez
+Testů **3994**, z toho **13 nových** (`FontMetricTests`; zbytek přidal mezitím mergnutý `main`).
+Vloženými regresemi ověřené dvě věci: bez
 zapamatování hlásí `Metrika se měří jednou` 32 000 měření místo jednoho, a s vlastním
 `NSLayoutManager`em zpátky v `LogTailHeightTests` padne guard nad zdrojáky jmenovitě na tom souboru.
 

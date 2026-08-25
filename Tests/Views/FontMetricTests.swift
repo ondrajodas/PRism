@@ -232,30 +232,38 @@ struct FontMetricTests {
 
     // MARK: - Kde metrika smí bydlet
 
-    /// **V `App/` se metrika písma čte na jednom místě**, a tvrdí se to nad zdrojáky — za běhu se
-    /// „kolikrát je to v repu zapsané“ zjistit nedá. Tatáž konstrukce jako `GlobalAppearanceTests`
+    /// **Metrika písma se v repu čte na jednom místě**, a tvrdí se to nad zdrojáky — za běhu se
+    /// „kolikrát je to zapsané“ zjistit nedá. Tatáž konstrukce jako `GlobalAppearanceTests`
     /// a `SingleWayOutTests`, včetně zahazování řádkových komentářů: o metrice se v komentářích
     /// mluví na půltuctu míst a právě ta vysvětlení to pravidlo drží pochopitelné.
     ///
-    /// Do #407 to bylo **pět míst**: `LogTailTextView`, `SelectableCodeView`, `DiffToolbar`
-    /// a v `DiffTextView` dvakrát — z toho jednou jako dvojice `defaultLineHeight` / obalový rámec
-    /// podle toho, jak daleko bylo view v sestavování, tedy **dvě čísla na jednu výšku řádku**.
-    @Test("Metriku písma čte v App jediný soubor")
-    func onlyOneFileInTheAppReadsFontMetrics() throws {
-        let offenders = try appSources()
-            .filter { $0.path != "App/Views/FontMetric.swift" }
+    /// Do #407 to bylo **pět míst v `App/`** — `LogTailTextView`, `SelectableCodeView`, `DiffToolbar`
+    /// a v `DiffTextView` dvakrát, z toho jednou jako dvojice `defaultLineHeight` / obalový rámec
+    /// podle toho, jak daleko bylo view v sestavování, tedy **dvě čísla na jednu výšku řádku** —
+    /// a **pět v `Tests/`**.
+    ///
+    /// **Výjimky jsou dvě a obě metriku čtou proto, že se ptají na cesty**: tahle sada (porovnává je
+    /// mezi sebou) a `FontMetricProbe` (vypisuje je vedle sebe). Jiná v seznamu být nemá — kdo měří
+    /// rozměr, ptá se měřidla.
+    @Test("Metriku písma čtou v repu jen měřidlo a to, co ho zkouší")
+    func fontMetricsAreReadInOnePlace() throws {
+        let allowed = [
+            "App/Views/FontMetric.swift",
+            "Tests/Views/FontMetricTests.swift",
+            "Tests/Views/FontMetricProbe.swift",
+        ]
+        let offenders = try (sources(in: "App") + sources(in: "Tests"))
+            .filter { !allowed.contains($0.path) }
             .filter { source in Self.rawMetricReads.contains { source.code.contains($0) } }
             .map(\.path)
 
         #expect(offenders.isEmpty, "vlastní čtení metriky písma: \(offenders.joined(separator: ", "))")
     }
 
-    /// A **sady, které na té třídě padaly, si metriku nečtou samy.** Je to inkluzivní výčet
-    /// schválně: `FontMetricTests` a `FontMetricProbe` metriku čtou surově, protože se právě na
-    /// cesty ptají, a v `Tests/` leží i sady, které si ji zatím čtou samy (`PillTypesettingTests`,
-    /// `CodeTextSheetSizingTests`) — o těch je řeč v `docs/testovani.md`, a plošný zákaz by musel
-    /// mít v seznamu výjimek dva soubory, které se na tuhle třídu jen zatím nedostaly.
-    @Test("Sady, které na tom padaly, metriku nečtou samy")
+    /// A **sady, které na té třídě padaly, ji berou z měřidla** — tvrzení výš zakazuje surové čtení,
+    /// tohle tvrdí, odkud si tedy metriku vzaly. Bez něj by šlo pravidlo splnit i tím, že se tvrzení
+    /// o rozměru zahodí.
+    @Test("Sady, které na tom padaly, berou metriku z měřidla")
     func theSuitesThatFellTakeTheMetricFromOnePlace() throws {
         let places = [
             "Tests/Views/CommitPanelRoomTests.swift",
@@ -265,10 +273,7 @@ struct FontMetricTests {
             "Tests/Views/CheckLogRoomProbe.swift",
         ]
         for path in places {
-            let code = try code(at: path)
-            let own = Self.rawMetricReads.filter { code.contains($0) }
-            #expect(own.isEmpty, "\(path) si čte metriku sám: \(own.joined(separator: ", "))")
-            #expect(code.contains("FontMetric.shared"), "\(path) nebere metriku z `FontMetric`")
+            #expect(try code(at: path).contains("FontMetric.shared"), "\(path) nebere metriku z `FontMetric`")
         }
     }
 
@@ -315,15 +320,17 @@ struct FontMetricTests {
             .joined(separator: "\n")
     }
 
-    private func appSources() throws -> [Source] {
-        let root = Self.repository.appending(path: "App")
+    /// Zdrojáky pod jednou složkou repa, bez řádkových komentářů. Prázdný výsledek je chyba, ne
+    /// zelený test: guard, který nemá co čtou, tvrdí `isEmpty` na prázdnu.
+    private func sources(in folder: String) throws -> [Source] {
+        let root = Self.repository.appending(path: folder)
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else {
             throw SourceError.unreadable(root.path)
         }
         var files: [Source] = []
         for case let url as URL in walker where url.pathExtension == "swift" {
             let text = try String(contentsOf: url, encoding: .utf8)
-            let path = "App/" + url.path.replacingOccurrences(of: root.path + "/", with: "")
+            let path = folder + "/" + url.path.replacingOccurrences(of: root.path + "/", with: "")
             files.append(Source(path: path, code: Self.stripped(text)))
         }
         guard !files.isEmpty else { throw SourceError.unreadable(root.path) }

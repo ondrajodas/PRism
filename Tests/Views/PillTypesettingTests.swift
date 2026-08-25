@@ -21,11 +21,18 @@ import Testing
 @Suite("Sazba kapslí (#404)")
 @MainActor
 struct PillTypesettingTests {
-    /// Výška kapsle a řádek, který na jejím místě stál do #404 — **přečtené jednou za test** (#367).
-    /// Metrika písma je stav procesu, takže se v jednom testu nesmí čítat dvakrát.
-    private let pillHeight = NSLayoutManager().defaultLineHeight(for: DesignPill.font)
-        + 2 * DesignPill.verticalPadding
-    private let caption2Line = NSLayoutManager().defaultLineHeight(for: .preferredFont(forTextStyle: .caption2))
+    /// Výška kapsle a řádek, který na jejím místě stál do #404 — **z `FontMetric`** (#407).
+    ///
+    /// Do #407 se čítaly `NSLayoutManager`em jednou za test (#367). Bylo to léčení příznaku v téhle
+    /// sadě: metrika písma se v testovacím hostu pod zátěží umí přechodně nepovést, a jediné, co
+    /// s tím pomůže, je jedno měřidlo pro aplikaci i testy.
+    private var pillHeight: CGFloat {
+        FontMetric.shared.lineHeight(of: DesignPill.font) + 2 * DesignPill.verticalPadding
+    }
+
+    private var caption2Line: CGFloat {
+        FontMetric.shared.lineHeight(of: .preferredFont(forTextStyle: .caption2))
+    }
 
     // MARK: - Šířka: co má místo spočítané
 

@@ -4517,11 +4517,15 @@ proces, tři cesty (`measured` → `fresh` → `derived`), **opakování s odmlk
 nepamatuje**. Podrobnosti o cestách a naměřených mezích jsou v hlavičce toho souboru; sem patří to,
 co z toho platí pro testy:
 
-- **žádná sada si metriku nečte sama** — hlídá to `FontMetricTests` dvěma tvrzeními nad zdrojáky
-  (v `App/` smí `maximumAdvancement`, `defaultLineHeight` a `boundingRectForFont` znát jedině
-  `FontMetric.swift`; a sady, které na té třídě padaly, je nesmí znát vůbec). Zbylé dva výskyty
-  v `Tests/` (`PillTypesettingTests`, `CodeTextSheetSizingTests`) na #407 **zůstaly** — soubory
-  patřily souběžným větvím, takže se do nich nesahalo; je to tatáž třída a patří převést;
+- **žádná sada si metriku nečte sama** — hlídá to `FontMetricTests` dvěma tvrzeními nad zdrojáky.
+  První je **plošné**: `maximumAdvancement`, `defaultLineHeight` a `boundingRectForFont` smí v `App/`
+  i v `Tests/` znát jedině `FontMetric.swift`, tahle sada (porovnává cesty mezi sebou) a
+  `FontMetricProbe` (vypisuje je vedle sebe). Druhé tvrdí, že jmenované sady si metriku **berou
+  z měřidla** — bez něj by šlo pravidlo splnit i tím, že se tvrzení o rozměru zahodí. Převedeno je
+  **deset** míst: pět v `App/` a pět v `Tests/` (`CommitPanelRoomTests`, `LogTailHeightTests`,
+  `DesignPillTests`, `LogTailScrollerReserveTests`, `CheckLogRoomProbe`, k nim `PillTypesettingTests`
+  a `CodeTextSheetSizingTests` — ta druhá porovnávala `static let` konstantu se **svým** surovým
+  čtením, tedy dvě čtení v jednom procesu, což je ta vada přesně);
 - **`FontMetricTests` měří na vlastní instanci, ne na `shared`** — sdílené měřidlo plní i suity, které
   běží vedle, takže by se počty měření nedaly tvrdit, a vyprázdnit ho uprostřed plného běhu by
   znamenalo poslat ostatní sady měřit znovu;
