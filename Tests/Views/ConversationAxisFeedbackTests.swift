@@ -24,8 +24,10 @@ import Testing
 ///
 /// **Osa je čtyři soubory, ne celý tab.** `ConversationView` sám `GeometryReader` **má** —
 /// `fillingSlot()` je jím postavený a je tam schválně (#435). A `ThreadSnippetView` kreslí
-/// `DiffLineView`, který `onGeometryChange` má odjakživa; ten je vedený jako #438 a do tohohle
-/// výčtu proto nepatří. Hlídají se ty soubory, které skládají **uzel**.
+/// `DiffLineView`, který `onGeometryChange` **v souboru pořád má**; do tohohle výčtu ale nepatří,
+/// protože od #438 se ta closure na ose **nepřipojuje** — úryvek nedostane ani identitu řádku,
+/// ani krabici pro tažení, takže se rámeček nepočítá vůbec (změřeno: 242 zásahů → 0). Hlídá to
+/// `DiffLineGeometryTests`; tady se hlídají ty soubory, které skládají **uzel**.
 ///
 /// Konstrukce je tatáž jako u `SingleWayOutTests` a `GraphSiteWiringTests`: tvrdí se to nad
 /// zdrojáky a řádkové komentáře se zahazují, protože zrovna o těch vzorech se v repu píše v próze

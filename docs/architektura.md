@@ -2523,7 +2523,9 @@ otevřít“ nemají kde splynout.
 **Háky sedí tam, kde v kole doopravdy jsme** (`GraphSite`, `RenderDiagnostics.inGraph(_:)`): dotazy
 na identitu líných seznamů (`DiffRow.id`, `FileDiff.id`, `ConversationRow.id` — u osy konverzace je
 to **jediná** přítomnost aplikace v kole) a čtení geometrie v diffu (`of:` closury v
-`DiffPairBlockRowView`, `DiffBlockRowView`, `DiffLineView`, `DiffView`). Identita jde přes
+`DiffPairBlockRowView`, `DiffBlockRowView`, `DiffLineView`, `DiffView`). U `DiffLineView` se ten hák
+od #438 ozývá **jen z té větve, která rámeček někomu předá** (viz sekce níž) — v ose konverzace, kde
+se ta čísla nasbírala, tedy z aplikace nevede vůbec. Identita jde přes
 `diagnosedID` v extension u diagnostiky, ne přes úpravu `id` v modelu, a **vrací tutéž hodnotu** —
 jinak by líný seznam se zapnutou diagnostikou přerovnal obsah a měřilo by se něco jiného než bez
 ní. Že je každé vyjmenované místo doopravdy zapojené, tvrdí test nad zdrojáky
@@ -2582,6 +2584,48 @@ transformace** — `CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTrans
 projížděním je to očekávané (obsah se posouvá), takže **to samo o sobě příčinu #361 netvrdí**; cenné
 je to jako srovnávací tvar: v záchvatu se z týchž řádků pozná, jestli se transformace mění i tehdy,
 když se nikam neroluje.
+
+#### Řádek diffu se ptá na geometrii jen tam, kde ji má kdo přečíst (#438)
+
+`DiffLineView` měl `onGeometryChange` **bezpodmínečně**, přitom ten rámeček slouží jedině tažení
+rozsahu (#110): píše se do `DiffRowFrames`, a to jen tehdy, když má řádek identitu (`dragID`)
+a krabici (`rangeDrag.box`). Podmínka v kódu byla odjakživa — v `guard` uvnitř **akce**, tedy až
+**po** čtení. `of:` closure přitom běží uvnitř aktualizace grafu (tabulka `GraphProbe` výš), takže
+se počítala i v tom kole, ve kterém se nepřeloží ani jedno tělo: ve dvou záchvatech #361
+**369 546** a **711 018** zásahů `DiffLine.geometry`, v obou druhá nejčastější položka v celém kole.
+
+**Zadání #438 to připisovalo diffu pod jiným tabem; měření to vyvrátilo.**
+`IdleDiffSpinProbe.lineGeometryOrigin` projede kolečkem tutéž scénu ve dvou záložkách:
+
+| Vepředu | `DiffLine.geometry` před | po |
+|---|---|---|
+| diff (split, 13 souborů) | **0** | 0 |
+| osa konverzace (60 vláken s `diffHunk`em) | **242** | **0** |
+
+Diff se neptá **ani když je vepředu**, a je to vlastnost kreslení, ne viditelnosti: `DiffView` slévá
+řádky do bloků (`DiffRow.blocked(_:)`, `blockedPairs(_:)`), takže `DiffLineView` v diffu nekreslí
+ani jeden řádek — text bloku sází `NSTextView` a rámečky hlásí **blok** (#252). Zásahy jsou z osy:
+úryvek u vlákna (`ThreadSnippetView`, #158) kreslí `DiffLineView` řádek po řádku a rámeček z něj
+nemá kdo převzít — na ose se netáhne. Sedí to i poměrem: v sondě 242 proti 461 dotazům na
+`ConversationRow.id`, v záchvatu 369 546 proti milionům.
+
+Řádek proto od #438 vydá `onGeometryChange` **jen ve větvi `reportsFrame`** (obojí: identita
+i krabice). Tři věci, které na tom stojí:
+
+- **Podmínka není nad měnícím se stavem.** Obojí dává volající a je to konstantní po celý život
+  řádku — v diffu vždycky (`DiffRowView`, `DiffPairView`), na ose nikdy (`ThreadSnippetView`), takže
+  se větev nepřepíná za běhu a `@State` v řádku nemá jak propadnout.
+- **`dragAnchor` v podmínce být nesmí.** Řádek, který komentář neunese, se hlásí s **prázdným
+  seznamem** — a právě tím vyklízí zastaralé plochy pod sebou (`DiffRowFrames.note(_:covering:of:)`).
+  Bez toho hlášení by v krabici zůstaly plochy z minulého rozvržení a tažení by chytalo řádky vedle.
+- **Kolo z #361 to nezavírá.** Doložené je zlevnění a jedna věc navíc:
+  `GeometryActionBinder<_GeometryActionModifier<CGRect>>` byl na ose **kořenem 3 ze 6** odebraných
+  zásobníků a po opravě je **0 ze 6**, tedy z osy zmizel jeden kořen aktualizace grafu. Že tím kolo přestane vznikat, se
+  tvrdit nedá — v harnessu se za třináct kol nevyrobilo ani jednou.
+
+**Na obrazovce není vidět nic** a plyne to z toho, proč je v repu `onGeometryChange` místo
+`GeometryReader`u: měří, do rozvržení nezasahuje. Tažení rozsahu v diffu obsluhují bloky
+(`DiffBlockRowView`, `DiffPairBlockRowView`), kterých se změna netýká.
 
 ## `RepoCheckout` (`App/Checkout/`)
 

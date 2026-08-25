@@ -1812,6 +1812,26 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`CoordinateSpaceNameTransform` v diffu, `ScrollViewChildTransform` v ose). Nad projížděním je to
   očekávané, takže **příčinu #361 to netvrdí** — cenné je to jako srovnávací tvar pro záchvat.
 
+  **Odkud se berou dotazy na geometrii řádku diffu** (#438) měří tatáž sonda scénářem
+  `lineGeometryOrigin`: projede kolečkem dvě záložky nad toutéž scénou a vypíše počty. Zadání #438
+  vinilo diff pod jiným tabem, měření to vyvrátilo — s **diffem vepředu** se `DiffLine.geometry`
+  neozve ani jednou (`DiffView` slévá řádky do bloků, takže tam `DiffLineView` nekreslí nic),
+  kdežto **osa konverzace** s 60 vlákny dá **242** zásahů, po opravě **0**. Osa proto musí mít
+  vlákna s `diffHunk`em (`Self.threaded(count:)` ze `conversation-diff-hunks.json`): syntetická osa
+  ze `synthetic(comments:)` je jen komentáře, takže by úryvek nevznikl a sonda by hlásila nulu před
+  i po — zelenou zprávu o tom, že se nic neměřilo.
+
+  **Co se z toho nedá udělat test:** práce, jejíž výsledek nikdo nepřevezme, po sobě nenechá nic
+  pozorovatelného. Jediná stopa je počitadlo v `RenderDiagnostics.current`, a to je **globál
+  procesu** — test, který do něj zapíše, umí položit `RenderDiagnosticsTests` (tvrdí `current == nil`)
+  a `main` je pak falešně červený (#367, #411). Strukturu proto drží `DiffLineGeometryTests` nad
+  zdrojáky: `onGeometryChange` je v `DiffLineView` **jednou** a jen ve větvi `reportsFrame`, ta
+  podmínka se ptá na identitu řádku **i** na krabici, úryvek na ose nepředává ani jedno a diff
+  předává obojí (to je kontrola měřidla — bez ní by nula znamenala i „rámeček nehlásí nikdo“).
+  **Ověřeno vloženou regresí v obou podobách**: s `reportsFrame` na `true` spadne tvrzení
+  o podmínce a sonda vydá zase 242, s `onGeometryChange` vráceným do řetězce `row` spadne tvrzení
+  o větvi.
+
   Co se z testů poznat nedá: jak to vypadá v **záznamu skutečné instance**. Ověřeno spuštěním
   (`PRism-a`, `./bin/run.sh --diagnose`): za hlavičkou sezení je řádek
   `evaluační zásobník AttributeGraphu k dispozici`, tedy `dlopen` privátního frameworku prochází

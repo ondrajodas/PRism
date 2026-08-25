@@ -773,6 +773,14 @@ Zvlášť stojí za přečtení, než sáhneš na:
   nedosáhne; jediné bezpodmínečné místo (`PullRequestTabBar`, píše i tutéž hodnotu) a co k tomu
   zbývá doměřit je v [`docs/testovani.md`](docs/testovani.md).
 
+  **„Akce se nespustí“ ale neznamená „nestojí to nic“** (#438). V tomtéž měření se **hodnota
+  počítala 80×**, a `of:` closure běží **uvnitř aktualizace grafu** — tedy i v kole, ve kterém se
+  nepřeloží ani jedno tělo (**369 546** zásahů `DiffLine.geometry` v jednom záchvatu #361, a **ne
+  z diffu**: ten řádky slévá do bloků, takže je to z úryvku u vlákna na ose, kde rámeček nemá kdo
+  převzít). Modifikátor proto **nepřipojuj tam, kde výsledek nikdo nepřečte**, a podmínku dej
+  **před** čtení, ne do akce (242 → 0). Grep je **výčet k posouzení, ne prázdný** — u každého místa
+  se ptej, kdo tu hodnotu čte: `grep -rn 'onGeometryChange' App | grep -vE ':[0-9]+: *//'`
+
   **Harness na to nestačí a je to změřené, ne odhad**: syntetická `.mouseMoved` do okna
   (`sendEvent` i `NSApp.postEvent`) `onContinuousHover` **nevyvolá vůbec** — nula zásahů —, takže
   smyčku v testu zavřít nejde bez sebrání skutečné myši. Testuje se proto ta čistá funkce a hodnota,
