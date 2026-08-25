@@ -24,7 +24,10 @@ struct SelectableCodeView: NSViewRepresentable {
     /// změřit jeden — na tomhle systému 8,036 bodu pro mono 13 b. **Měří se na písmu**, protože je
     /// to hodnota fontu, ne konstanta aplikace; tatáž úvaha jako u lišty diffu (#188). Patička
     /// sheetu z ní počítá, kolik řádků se nevešlo na šířku.
-    static let characterWidth = font.maximumAdvancement.width
+    ///
+    /// Bere se z `FontMetric` (#407): je to `static let`, tedy **jedno měření na proces navždycky**,
+    /// takže nula z metriky by tady zůstala do konce běhu — a měřidlo ji nepamatuje.
+    static let characterWidth = FontMetric.shared.characterWidth(of: font)
 
     /// Písmo, kterým se sází — **jedno místo pro kresbu i pro měření**, jinak by se spočítaná
     /// kapacita řádku rozešla s tím, co se nakreslí (tatáž past jako u `MiniButtonStyle.labelFont`,

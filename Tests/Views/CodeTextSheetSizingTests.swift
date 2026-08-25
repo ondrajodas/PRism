@@ -176,7 +176,11 @@ struct CodeTextSheetSizingTests {
 
         #expect(textView.textContainerInset.width == Policy.codeSheetTextInset)
         #expect(textView.textContainer?.lineFragmentPadding == Policy.codeSheetFragmentPadding)
-        #expect(SelectableCodeView.characterWidth == SelectableCodeView.font.maximumAdvancement.width)
+        // Proti **měřidlu**, ne proti surovému `maximumAdvancement` (#407): `characterWidth` je
+        // `static let`, tedy jedno měření na proces, kdežto surové čtení vedle něj je druhé — a dvě
+        // čtení metriky v jednom procesu se pod zátěží umí rozejít. Tvrzení zůstává tímtéž: konstanta
+        // se měří **na tom písmu, kterým se sází**.
+        #expect(SelectableCodeView.characterWidth == FontMetric.shared.characterWidth(of: SelectableCodeView.font))
     }
 
     // MARK: - Scéna

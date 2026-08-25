@@ -25,30 +25,22 @@ struct CommitPanelRoomTests {
     private let panelDefault = 306.0
     private let panelFloor = 246.0
 
-    /// Šířka znaku mono písma, kterým se kód sází — **jedna hodnota na celý proces** (#367,
-    /// dotaženo u #327).
+    /// Šířka znaku mono písma, kterým se kód sází — **z `FontMetric`** (#407).
     ///
-    /// Původně to byla computed property, takže se v jednom testu čítala dvakrát a mohla vyjít
-    /// dvakrát jinak: v plném paralelním běhu z toho bylo `both → 0` proti `treeOnly → 35`, tedy
-    /// **víc místa a méně znaků**, což z monotónní funkce vyjít nemůže. #367 z ní udělalo `let`
-    /// instance, tedy jedno čtení **na test** — a to nestačilo: Swift Testing staví na každý test
-    /// vlastní instanci, takže se pod souběžným buildem několika slotů pořád trefil běh, ve kterém
-    /// `maximumAdvancement` vyšlo **nulové** a spadl jeden ze čtyř poměrů (`pod sebou: 0, vedle
-    /// sebe: 0`). Falešně červený `main` je horší než chybějící test, takže:
+    /// Tahle jedna hodnota má za sebou tři léčby a je to celý příběh #407. Původně to byla computed
+    /// property, takže se v jednom testu čítala dvakrát a mohla vyjít dvakrát jinak: v plném
+    /// paralelním běhu z toho bylo `both → 0` proti `treeOnly → 35`, tedy **víc místa a méně
+    /// znaků**, což z monotónní funkce vyjít nemůže. #367 z ní udělalo `let` instance (jedno čtení
+    /// **na test**), #327 `static let` s náhradním měřením (jedno čtení **na proces**) — a pořád to
+    /// byla léčba **v téhle sadě**, kterou si musela pamatovat i každá další. `LogTailHeightTests`
+    /// a `DesignPillTests` si ji pamatovaly každá po svém.
     ///
-    /// - hodnota je **`static`**, tedy jedno čtení na proces — všechna tvrzení suity pak porovnávají
-    ///   čísla z jednoho měřidla;
-    /// - a když metrika nevyjde, **změří se text**, ne aby se dělilo nulou. Že se náhradou nezmění
-    ///   čísla v dokumentaci, hlídá `theMeasuredCharacterWidthHoldsTheNumbers` — je to jediné místo,
-    ///   které tu hodnotu tvrdí.
-    private static let measuredCharacterWidth: Double = {
-        let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        let advance = font.maximumAdvancement.width
-        guard advance <= 0 else { return advance }
-        return NSAttributedString(string: "0", attributes: [.font: font]).size().width
-    }()
-
-    private var characterWidth: Double { Self.measuredCharacterWidth }
+    /// Odsud už je to **jedno volání**: měřidlo si hodnotu drží na proces, nikdy si nezapamatuje
+    /// nulu a má na ni tři nezávislé cesty. Sada tedy o metrice **nemusí vědět nic** — a to je ten
+    /// rozdíl mezi opravou třídy a opravou výskytu.
+    private var characterWidth: Double {
+        FontMetric.shared.characterWidth(of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular))
+    }
 
     private func charactersPerSide(_ width: Double, layout: DiffLayout) -> Int {
         Policy.charactersPerSide(
@@ -108,9 +100,13 @@ struct CommitPanelRoomTests {
     /// **Čísla v dokumentaci platí pro změřenou šířku znaku** (8,04 bodu). Je to jediné místo, kde
     /// se ta hodnota tvrdí — když se písmo v systému změní, spadne tenhle jeden test a řekne proč,
     /// místo aby se rozsypaly počty znaků v půlce suity.
+    ///
+    /// **Ve zprávě je i počet měření** (#407): kdyby se tahle třída měla ještě jednou vrátit, je
+    /// z pádu vidět, jestli metrika sáhla po náhradní cestě, nebo jestli se nepovedla vůbec — bez
+    /// toho je „šířka znaku: 0“ příznak bez příčiny, a přesně tak to u #327 vypadalo.
     @Test("Dokumentovaná čísla platí pro změřenou šířku znaku")
     func theMeasuredCharacterWidthHoldsTheNumbers() {
-        #expect(abs(characterWidth - 8.04) < 0.5, "šířka znaku: \(characterWidth)")
+        #expect(abs(characterWidth - 8.04) < 0.5, "šířka znaku: \(characterWidth), \(FontMetric.shared.tally)")
         #expect(DiffLineView.contentInset(for: .split) == 84)
         #expect(DiffLineView.contentInset(for: .unified) == 136)
     }

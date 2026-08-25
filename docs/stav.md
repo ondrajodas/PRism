@@ -4339,6 +4339,7 @@ devětatřicetiznakovém jménu. **Neověřené testy:** že `⌥↵` v popoveru
 (testovací host nedostane aktivaci, změřeno u #392) a chování `POST /labels` proti živému API —
 brána je ve slotové konfiguraci vypnutá schválně.
 
+
 ### #432 — sémantická škála se kreslí z palety, ne ze systému
 
 Dotažení mezery, kterou našlo měření u #404: čtyři kapsle brala systémová zelená a červená a ve
@@ -4433,3 +4434,65 @@ tvrzení „nic tu není“ bylo červené podle toho, kdo běží vedle.
 Jak často se do toho šláplo, je vidět na sousedním záznamu: [#432](#432--sémantická-škála-se-kreslí-z-palety-ne-ze-systému)
 skončil v jednom plném běhu červeně na tomtéž přepsaném plistu (3 bajty) a musel to odepsat jako
 cizí třídu. Tohle je ta třída.
+
+### #407 — metrika písma: nula z `NSFont`, tři léčby a jedno měřidlo
+
+**Na tomhle není co vidět** — je to testovací vrstva a měřidlo pod ní; na obrazovce se nemění nic.
+
+Zbytek třídy z #367: plný běh padal **dvakrát z deseti** na `CommitPanelRoomTests`
+a `LogTailHeightTests`, vždycky na metrice písma a vždycky zeleně, když se sada pustila samostatně.
+Tři léčby ležely na třech místech — jedno čtení za test (#367), totéž u `DesignPillTests` (#348),
+jedno čtení na proces s náhradním měřením (#327) —, takže si to musela pamatovat každá nová sada.
+
+**Co ta nula doopravdy je, se změřilo, ne odhadlo — a jsou to dvě věci.** Není to zastaralé číslo, je
+to **přechodně nepoužitelná metrika**: `NSFont.monospacedSystemFont(ofSize:weight:)` v testovacím
+hostu vydá instanci, u které `maximumAdvancement.width` nedá použitelnou hodnotu — a **sazba tímtéž
+objektem spadne uvnitř CoreTextu** (`NSInvalidArgumentException` z `TAttributes::ApplyFont` pod
+`NSAttributedString.size()`). Zachytila to **první podoba téhle opravy**, která měla jako náhradní
+měření vysázet `0`: sazba se pustila právě na tom vadném písmu a **položila celý běh** (169 testů
+ze 3 979). Nebýt toho pádu, zbyla by tichá záskočná hodnota a příčina by se pořád jen odhadovala.
+
+Druhé měření je konkrétnější a udělalo poslední kus opravy. V osmém z deseti plných běhů spadlo
+`CommitPanelRoomTests` na `šířka znaku: 0` a `tally` u té zprávy řekl proč:
+`měření 2, náhradní cesta 0×, nepovedlo se 1×, zamítnuto 0.0` a vedle toho `šířka znaku: 8.0361328125`.
+Tedy: **první měření vrátilo nulu na všech třech cestách** (nula, ne `NaN`, a nulu dalo i čerstvé
+písmo z deskriptoru) a **totéž písmo o zlomek sekundy později** dalo správnou hodnotu. Vada netrvá,
+takže žádná jiná cesta v tom okamžiku nepomůže — pomůže **zkusit to znovu později**. Odhalilo to
+mimochodem to, že se hodnota v chybové zprávě `#expect`u **čte znovu**: vedle sebe stálo, co tvrzení
+vidělo, a co je vidět teď.
+
+**Kde ta vada není** — čtyři sondy, žádná anomálie: teplé písmo v samostatném procesu (96 000
+čtení), závod na prvním rozřešení v 500 čerstvých procesech (57 600), čtenáři proti churnu ve font
+cache pod load 22 (3 041 433) a plný běh v testovacím hostu (3 242 670, `FontMetricProbe`). Čtení
+teplého písma to tedy není a hammerováním se to chytit nedá; je to rozřešení **konkrétního objektu**,
+a těch je za běh hrstka.
+
+Zbylo z toho `FontMetric` (`App/Views/FontMetric.swift`) — jediné místo v `App/`, kde se čte metrika
+písma: jedno měření na proces, mez 64 hodnot, tři cesty (`measured` → `fresh` → `derived`)
+**opakované až čtyřikrát s milisekundovou odmlkou**, a **nula se nepamatuje**. Každý ten kus je
+z měření: `fresh` staví písmo znovu z deskriptoru, protože vadný je ten objekt; opakování je tam,
+protože vada je přechodná (bez odmlky by to byl tentýž stav přečtený čtyřikrát — celý řetěz je pár
+mikrosekund); `derived` je poslední, protože její čísla jsou jen meze (u šířky znaku horní, u rámce
+dolní). **Náhradní měření nesází text** — spadlý proces je horší než červený test. Rozhodnutí „jde
+to použít?“ je `Policy.usableFontMetric(_:)` a hlídá `isFinite`, ne jen kladnost: `NaN` je hodnota,
+kterou skutečné `NSFont` vydá (změřeno na písmu s nekonečnou maticí), a `Int(NaN)` shodí proces.
+
+Sebralo to **deset** míst, kde se metrika čítala samostatně: pět v `App/` — včetně jednoho, kde na
+jednu výšku řádku byla **dvě různá čísla** podle toho, jak daleko bylo view v sestavování
+(`DiffTextView.singleLineHeight`) — a pět v `Tests/`. Poslední dvě (`PillTypesettingTests`,
+`CodeTextSheetSizingTests`) přišly až po rebasu, kdy se souběžné větve mergly; do té doby patřily
+někomu jinému. Ta druhá je za zmínku: porovnávala `static let` konstantu se **svým** surovým čtením,
+tedy dvě čtení metriky v jednom procesu — přesně ta vada, jen ještě nespadlá.
+
+Testů **3994**, z toho **13 nových** (`FontMetricTests`; zbytek přidal mezitím mergnutý `main`).
+Vloženými regresemi ověřené dvě věci: bez
+zapamatování hlásí `Metrika se měří jednou` 32 000 měření místo jednoho, a s vlastním
+`NSLayoutManager`em zpátky v `LogTailHeightTests` padne guard nad zdrojáky jmenovitě na tom souboru.
+
+K tomu **dvakrát deset plných běhů pod souběžnou zátěží** (čtyři paralelní optimalizované kompilace,
+load 10–22). Před opakováním 7 zelených z deseti a mezi červenými **ten jeden pád na metrice**, ze
+kterého se vada přečetla; s opakováním 8 zelených a **na metrice písma nespadlo nic**. Zbylé červené
+jsou cizí sady a jiná třída: `SlotCleanupTests` fingerprintují plist běžící hlavní instance (#411)
+a `AppStoreCommentTests` skončily na `PublishError.timedOut` po 65 s pod load 19. Všech sedm dotčených sad projde izolovaně za 9,4 s — to je ten způsob, jak se load-flake
+pozná od nálezu.
+

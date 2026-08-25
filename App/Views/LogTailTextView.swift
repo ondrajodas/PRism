@@ -209,8 +209,10 @@ struct LogTailTextView: NSViewRepresentable {
     /// Změřeno u #347 (`LogTailScrollerReserveTests`); kdo to bude chtít zpřesnit, musí spolu s tím
     /// posunout `CheckDetailView.logMaxHeight`, protože strop na tom stojí.
     nonisolated static func height(forLines lines: Int, fontSize: CGFloat, lineSpacing: CGFloat, limit: CGFloat) -> CGFloat {
-        let manager = NSLayoutManager()
-        let lineHeight = manager.defaultLineHeight(for: font(size: fontSize)) + lineSpacing
+        // Metrika z `FontMetric`, ne z vlastního `NSLayoutManager`u (#407): v testovacím hostu se
+        // dvě čtení téhož písma umí rozejít a jedno vyjít nulové — a výška okýnka se porovnává
+        // s tím, co si spočítá test, takže by z toho byl falešně červený `main`.
+        let lineHeight = FontMetric.shared.lineHeight(of: font(size: fontSize)) + lineSpacing
         let content = CGFloat(max(lines, 1)) * lineHeight + 2 * inset.height
         // Vodorovný scroller si ukusuje z výšky, takže se k obsahu přidává — jinak by na
         // zastropovaném okýnku zakrýval poslední řádek, tedy ten, kvůli kterému se log otevírá.

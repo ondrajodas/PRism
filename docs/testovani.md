@@ -702,9 +702,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Nerovnost ale nestačí, když se měřidlo mění uprostřed tvrzení** (#367). V plném běhu spadlo
   `Složení stromu i panelu dá nejvíc místa` na `(both → 0) > (treeOnly → 35)`, tedy na **víc místa
   a méně znaků** — z monotónní funkce to vyjít nemůže, takže se šířka znaku vyřešila mezi těmi dvěma
-  voláními jinak. Byla to computed property, tedy čtení stavu procesu při každém použití; teď se
-  bere **jednou za test** (`private let`). Je to tatáž třída jako vzhled hostitele: hodnota z globálu
-  se přečte jednou a tvrzení se porovnávají mezi sebou.
+  voláními jinak. Byla to computed property, tedy čtení metriky při každém použití; #367 z ní udělalo
+  `private let` (jedno čtení za test) a #327 `static let` s náhradním měřením (jedno na proces).
+
+  **Ani to nestačilo a od #407 se metrika čte odjinud** — z `FontMetric`, tedy z jednoho měřidla pro
+  aplikaci i testy. Sada o metrice nemusí vědět nic; co ta nula doopravdy je a čím je to změřené, je
+  v sekci *Metrika písma je tentýž kořen v jiné podobě (#407)*. Ve zprávě u tvrzení o šířce znaku
+  je proto od #407 i `FontMetric.shared.tally` — bez počtu měření je „šířka znaku: 0“ příznak
+  bez příčiny.
 
   Slib z `CLAUDE.md` je **120 znaků na stranu** a ten by se stromem i panelem chtěl okno
   **~2665 bodů**. Z toho plyne rozhodnutí: **nevynucuje se nic** — strom se složí ⌘1, panel ⌘2 —,
@@ -2352,8 +2357,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `0.799/0.292/0.272` proti `0.812/0.133/0.180` v sRGB — tedy 0,18 daleko. Tolerance, která by tohle
   přijala, by přijala i akcent, takže se tokeny vykreslí **týmž harnessem** jako vzorník čtyř ploch
   a srovnává se kresba s kresbou. Vzorník se drží mezi testy (`drawnTokens`), aby renderů nebylo
-  dvakrát tolik: metrika písma je stav procesu a `CommitPanelRoomTests` na ní pod paralelní zátěží
-  padají (viz *Globální stav procesu se v testech neměří*).
+  dvakrát tolik — pod paralelní zátěží je každý render navíc práce v procesu, ve kterém se o písmo
+  přetahují stovky suit (viz *Metrika písma je tentýž kořen v jiné podobě (#407)*).
 
   **Vyzkoušené vložením regrese ze dvou stran.** Se starým odznakem (akcent + `offset(x: 6, y: -2)`)
   padne 5 testů ze 6 — barevná tvrzení na tom, že v railu není ani jeden červený pixel. Se **samotným**
@@ -2383,11 +2388,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Že se hlavička v úzkém tabu nerozsype, tady **není** — na to je `OverviewWidthTests` (pásmo
   128–1180 bodů). Obojí je potřeba: přetečení je jiná chyba než jiná sazba.
 
-  **Výška řádku se čte jednou za test** (`pillLine`, `previousLine`), ne při každém tvrzení — je to
-  tentýž důvod jako u `CommitPanelRoomTests` po #367: metrika písma je stav procesu a dvě čtení
-  v jednom testu se pod paralelní zátěží umí vyřešit jinak. Poznat se to dá jedině plným během:
-  v jedné dávce takhle spadly `CommitPanelRoomTests` a `LogTailHeightTests` (o 36 bodů, tedy o tři
-  řádky po 12), obojí zeleně v samostatném běhu.
+  **Výška řádku je z `FontMetric`** (`pillLine`, `previousLine`), ne z vlastního `NSLayoutManager`u.
+  Do #407 se tady čítala **jednou za test** (#348) a bylo to léčení příznaku v nové sadě: každá další
+  sada by to musela vědět taky. Poznat se to dá jedině plným během — v jedné dávce takhle spadly
+  `CommitPanelRoomTests` a `LogTailHeightTests` (o 36 bodů, tedy o tři řádky po 12), obojí zeleně
+  v samostatném běhu. Proč to je jedno měřidlo a co ta nula je, viz *Metrika písma je tentýž kořen
+  v jiné podobě (#407)*.
 
   **Od #404 je v téže sadě guard na zbylých pět míst** — že berou `designPill` **a** že v tom
   souboru nezbyla druhá kapsle. Obojí je potřeba: samotné „bere“ by zůstalo pravdivé i tehdy, kdyby
@@ -3768,8 +3774,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   600–3 400 bodů, protože jednotlivé případy minou aritmetickou chybu uprostřed.
 
 - **Výška okýnka konce logu (#292, strop zvednutý u #303)** — `LogTailHeightTests`, výčtem. Počítá se
-  z metriky **toho** fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota proti
-  `NSLayoutManager`u. Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo
+  z metriky **toho** fontu, kterým se kreslí (#236), takže se dá tvrdit přesná hodnota — a od #407
+  proti **témuž měřidlu**, ze kterého ji bere aplikace (`FontMetric`), ne proti vlastnímu
+  `NSLayoutManager`u. Dvě čtení metriky v jednom procesu se totiž pod souběžným buildem tří slotů umí
+  rozejít a výška vyšla o **tři řádky** vedle; podrobnosti v *Metrika písma je tentýž kořen v jiné
+  podobě (#407)*. Co se dá pokazit potichu: **zastropovat i krátký log** (pod třířádkovým by zbylo
   445 bodů prázdna) a **nezastropovat dlouhý** (šest tisíc řádků naplno odtlačí seznam checků mimo
   obrazovku, tedy zrovna to, kvůli čemu se detail stěhoval z `Přehledu`). Regrese ověřená vložením
   regrese: vyndaný `min(limit, …)` položí sedm tvrzení.
@@ -4439,6 +4448,129 @@ neexistuje — vložená regrese nesmí umět smazat data, kvůli kterým se tes
 souběžné běhy tří slotů mají svoje soubory rozdělané, takže by tvrzení „nic tu není“ bylo červené
 podle toho, kdo běží vedle — a to je zrovna ta třída, kterou #411 opravuje. Platí u toho i to, že
 zabitý běh (⌃C) úklid nespustí a jeden soubor po sobě nechat může.
+
+### Metrika písma je tentýž kořen v jiné podobě (#407)
+
+Metrika písma **není** globální stav procesu jako `NSApp.appearance` — nikdo do ní nezapisuje. Vada
+je ale ze stejné rodiny a v plném běhu se projevovala stejně: **falešně červený `main`**, dvakrát
+z deseti, na cizích sadách (`CommitPanelRoomTests`, `LogTailHeightTests`), a **zeleně, když se sada
+pustila samostatně**. Rozdíl je v tom, kdo tu hodnotu mění: tam hostitel, tady **systém**.
+
+**Co ta nula je — změřeno, ne odhadnuto.** Je to **objekt písma bez použitelné metriky**, ne
+zastaralé číslo. Zachytilo se to při #407 na plném běhu v testovacím hostu:
+`NSFont.monospacedSystemFont(ofSize:weight:)` vrátil instanci, u které `maximumAdvancement.width`
+nedal použitelnou hodnotu — a **sazba tímtéž objektem spadla uvnitř CoreTextu**:
+
+```
+NSInvalidArgumentException: -[__NSPlaceholderDictionary initWithObjects:forKeys:count:]:
+    attempt to insert nil object from objects[0]
+  3 -[NSDictionary initWithDictionary:copyItems:]
+  5 TAttributes::ApplyFont(__CFDictionary const*, __CTFont const*, …)
+  9 CTLineCreateWithAttributedString
+ 14 -[NSAttributedString(NSStringDrawing) size]
+ 15 PRism.FontMetric.Route.derived(_:of:)
+```
+
+Zachytila to **první podoba opravy**, která měla jako náhradní měření *vysázet `0`* — takže se
+sazba pustila právě na tom písmu, u kterého hlavní čtení selhalo, a **položila celý běh** (proběhlo
+169 testů ze 3 979, zbytek xcodebuild vypsal jako failing). Nebýt toho pádu, zbyla by z toho jen
+tichá záskočná hodnota a příčina by se pořád jen odhadovala.
+
+**A ta vada je přechodná — to je druhé měření a je konkrétnější než všechno předchozí.** V osmém
+z deseti plných běhů pod zátěží spadlo `CommitPanelRoomTests` na `šířka znaku: 0` a `tally` u té
+zprávy řekl proč:
+
+```
+šířka znaku: 8.0361328125, měření 2, náhradní cesta 0×, nepovedlo se 1×, zamítnuto 0.0
+```
+
+Čte se to takhle: **první měření vrátilo nulu na všech třech cestách** (`nepovedlo se 1×`,
+`zamítnuto 0.0` — tedy nula, ne `NaN`; a nulu dala i cesta, která staví písmo znovu z deskriptoru),
+nezapamatovalo se — a **totéž písmo o zlomek sekundy později**, při skládání té chybové zprávy, dalo
+správných **8,0361328125** (`měření 2`). V tom okamžiku tedy nepomůže *žádná* jiná cesta; pomůže
+jedině **zkusit to znovu později**. Odsud pochází poslední kus opravy: řetěz cest se opakuje až
+čtyřikrát s **milisekundovou** odmlkou (bez ní je to tentýž stav přečtený čtyřikrát, celý řetěz je
+pár mikrosekund), tedy nejvýš 3 ms jednou za písmo a proces, a jedině když měření selhává.
+
+**Poučení o měřidle, které stojí za zapsání:** tuhle věc odhalilo to, že se v chybové zprávě
+`#expect`u hodnota **čte znovu**. Zpráva se skládá až po pádu, takže vedle sebe stálo „co tvrzení
+vidělo“ (0) a „co je vidět teď“ (8,036) — a z toho je rozdíl mezi *chybějící* a *přechodně
+nedostupnou* hodnotou vidět na jeden pohled. Kdyby v té zprávě byla jen naměřená hodnota bez
+`tally`, zbylo by z toho `šířka znaku: 0` a hledalo by se dál.
+
+**Kde ta vada není** (obojí změřeno, obojí vylučuje „metrika se rozešla mezi dvěma čteními“):
+
+| Sonda | Kolik čtení metriky | Anomálií |
+|---|---|---|
+| Samostatný proces, 16 vláken, teplé písmo | 96 000 | 0 |
+| Samostatný proces, závod na **prvním** rozřešení — 500 čerstvých procesů po 24–32 vláknech | 57 600 | 0 |
+| Samostatný proces, 8 čtenářů proti 8 churnerům ve font cache (tisíce velikostí), load 22 | 3 041 433 | 0 |
+| **Testovací host**, plný běh, 6 vláken, 6 cest, 45 s (`FontMetricProbe`) | 3 242 670 | 0 |
+
+Čtení teplého písma to tedy není a hammerováním se to chytit nedá — je to **rozřešení konkrétního
+objektu**, a těch je za běh hrstka.
+
+**Oprava je jedno měřidlo, ne třetí léčba.** Do #407 ležely tři: jedno čtení za test (#367), totéž
+u `DesignPillTests` (#348), jedno čtení na proces s náhradním měřením (#327) — a čtvrtá sada by si to
+musela pamatovat taky. Od #407 to je `FontMetric` (`App/Views/FontMetric.swift`): jedno měření na
+proces, tři cesty (`measured` → `fresh` → `derived`), **opakování s odmlkou** a **nula se
+nepamatuje**. Podrobnosti o cestách a naměřených mezích jsou v hlavičce toho souboru; sem patří to,
+co z toho platí pro testy:
+
+- **žádná sada si metriku nečte sama** — hlídá to `FontMetricTests` dvěma tvrzeními nad zdrojáky.
+  První je **plošné**: `maximumAdvancement`, `defaultLineHeight` a `boundingRectForFont` smí v `App/`
+  i v `Tests/` znát jedině `FontMetric.swift`, tahle sada (porovnává cesty mezi sebou) a
+  `FontMetricProbe` (vypisuje je vedle sebe). Druhé tvrdí, že jmenované sady si metriku **berou
+  z měřidla** — bez něj by šlo pravidlo splnit i tím, že se tvrzení o rozměru zahodí. Převedeno je
+  **deset** míst: pět v `App/` a pět v `Tests/` (`CommitPanelRoomTests`, `LogTailHeightTests`,
+  `DesignPillTests`, `LogTailScrollerReserveTests`, `CheckLogRoomProbe`, k nim `PillTypesettingTests`
+  a `CodeTextSheetSizingTests` — ta druhá porovnávala `static let` konstantu se **svým** surovým
+  čtením, tedy dvě čtení v jednom procesu, což je ta vada přesně);
+- **`FontMetricTests` měří na vlastní instanci, ne na `shared`** — sdílené měřidlo plní i suity, které
+  běží vedle, takže by se počty měření nedaly tvrdit, a vyprázdnit ho uprostřed plného běhu by
+  znamenalo poslat ostatní sady měřit znovu;
+- **vadné písmo se dá vyrobit maticí** a jedině tak: `scaleByX: 0` dá `maximumAdvancement` 0,0
+  (a čerstvé písmo z téhož deskriptoru 0,618, tedy záskok funguje), `scaleByX: .infinity` dá `NaN`
+  na všech třech cestách a **ve všech pokusech**, takže se na něm dá tvrdit i to, že se řetěz
+  doopravdy opakuje (a že to stojí odmlku). Proto `Policy.usableFontMetric(_:)` hlídá `isFinite`, ne
+  jen kladnost — `NaN` je hodnota, kterou skutečné `NSFont` vydá, a `Int(NaN)` shodí proces;
+- **ve zprávě u tvrzení, která na metrice stojí, je `FontMetric.shared.tally`** — počet měření,
+  kolikrát zaskočila náhradní cesta a **jaká hodnota se zamítla**. U #327 se z pádu nedalo poznat,
+  jestli metrika vrátila nulu, nebo `NaN`; příště to bude v té zprávě;
+- **sonda nesmí `NaN` minout, a to je vlastní past** (nález Copilota na #439). `FontMetricProbe`
+  měla histogram klíčovaný `Double` a anomálii jako `value <= 0` — jenže `NaN` se nerovná sám sobě,
+  takže by v takovém klíči zakládal **novou položku při každém čtení** (sonda jich udělá tři miliony),
+  a `NaN <= 0` je **nepravda**, takže by sonda tiše minula zrovna ten druh vady, na kterou je.
+  Přihrádka je proto **vypsaná hodnota** (`nan` je jedna položka) a o anomálii rozhoduje
+  `Policy.usableFontMetric(_:)`, tedy tatáž funkce jako v aplikaci. Nástroj, který měří jiné pravidlo
+  než to, které se drží, měří něco jiného, než o čem si myslíme.
+
+**Ověřeno vložením regrese** (obě zvlášť, nad kopií):
+
+1. **zapamatování pryč** (měřit v `FontMetric.value(_:of:)` pokaždé) → `Metrika se měří jednou`
+   hlásí `měření 32 000` místo 1;
+2. **vlastní čtení zpátky do sady** (`NSLayoutManager().defaultLineHeight` v `LogTailHeightTests`) →
+   padne `Sady, které na tom padaly, metriku nečtou samy`, a to jmenovitě na tom souboru.
+
+**Zátěž se vyrábí čtyřmi paralelními optimalizovanými kompilacemi** (load 10–22). Bundle se u nich
+nebuildí schválně: build aplikace ji na konci registruje v LaunchServices, takže by z každé zátěže
+zbyl záznam o cestě ve `/private/tmp` (#139).
+
+A k tomu **dvakrát deset plných běhů** — jeden zelený běh o téhle třídě nedokazuje nic, protože se
+projeví jednou z deseti. Výsledek je poučnější než „všechno zelené“:
+
+| Série | Zelené | Červené |
+|---|---|---|
+| před opakováním | 7 | **`CommitPanelRoomTests` na `šířka znaku: 0`** (to měření výš), a k tomu `SlotCleanupTests` a `CodeTextSheetSizingTests` |
+| s opakováním (výsledný kód) | 8 | `SlotCleanupTests` a `AppStoreCommentTests` |
+
+**Na metrice písma tedy ve druhé sérii nespadlo nic** — a co v ní spadlo, je jiná třída a cizí sada:
+`SlotCleanupTests` fingerprintují plist **běžící hlavní instance** (#411; naměřeno `7803` proti
+`7806` bajtům, tedy hodnota, kterou nám nikdo neslíbil — tatáž třída jako `NSApp.appearance` výš)
+a `AppStoreCommentTests` skončily na `PublishError.timedOut` po 65 s, tedy na stropu čekání pod
+load 19. Všech sedm dotčených sad **projde izolovaně za 9,4 s**, což je ten způsob, jak se to od
+skutečného nálezu pozná.
+
 
 ## Jak si zkontrolovat, jak view vypadá
 
