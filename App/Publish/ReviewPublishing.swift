@@ -9,10 +9,13 @@ import Foundation
 /// `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission`. Roste-li
 /// ten výčet, roste to, co aplikace umí odeslat, a to musí být vidět z jednoho grepu.
 ///
-/// Metody jsou **vyjmenované a je jich šest** (do #73 jedna, do #216 tři, do #392 čtyři). Každá
+/// Metody jsou **vyjmenované a je jich sedm** (do #73 jedna, do #216 tři, do #392 čtyři, do #413
+/// šest). Každá
 /// odpovídá jedné věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna,
-/// přepnout jeho vyřešení, napsat komentář pod PR, přeštítkovat svůj PR, vyžádat na něm review.
-/// Co tady být **nesmí**: approve mimo review, **merge**, **zavření PR** a **milník**. Roste-li
+/// přepnout jeho vyřešení, napsat komentář pod PR, přeštítkovat svůj PR, vyžádat na něm review,
+/// založit label, který repozitář ještě nezná.
+/// Co tady být **nesmí**: approve mimo review, **merge**, **zavření PR**, **milník** a **smazání
+/// labelu**. Roste-li
 /// tenhle výčet, roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru.
 ///
 /// **Komentář pod PR přibyl u #216** a je to vědomé rozšíření tvrdé podmínky č. 1, ne její
@@ -29,6 +32,19 @@ import Foundation
 /// a **zapsal se důvod**. Co se **nezměnilo**: brána je tatáž (`PublishScope`, `allowsPublishing`
 /// globálně i per repo — žádný druhý přepínač), výčet je krátký a na jednom místě, `GitHubGateway`
 /// zápis dál nemá a **v zákazu zůstává** approve mimo review, merge, zavření PR a milník.
+///
+/// **Založení labelu přibylo u #413** — sedmá metoda a **první, která zapisuje do repozitáře, ne do
+/// pull requestu**. Do té doby všech šest sahalo na PR nebo na diskuzi, tedy na věc, která je vratná
+/// jedním klikem nebo která se zavřením PR přestane týkat čehokoli dalšího; label vzniklý omylem
+/// **zůstane v repu navždycky**. Rozšířilo se to z téhož důvodu jako #73, #216 a #392: štítek, který
+/// v repozitáři ještě není, se jinak musí založit v prohlížeči — tedy tím odskokem, kvůli kterému
+/// #392 vzniklo. Co se **nezměnilo**: brána je tatáž, výčet je krátký a na jednom místě,
+/// `GitHubGateway` zápis dál nemá.
+///
+/// **`deleteLabel` se nepřidá.** Není to opomenutí, je to hranice. Smazání labelu je jediná akce
+/// v tomhle okně, po které nezůstane co opravit: label zmizí ze **všech** issues a PR, na kterých
+/// leží, a z aplikace se ta ztráta nedá ani ukázat. Nevratnost se proto vyvažuje **potvrzením**, ne
+/// opravnou akcí — a co se založí omylem, se maže tam, kde se i přebarvuje: na GitHubu.
 ///
 /// **Každá metoda si sama ověří bránu `PublishScope`** — proto všechny berou adresu, ze které
 /// se dá zjistit repo. Kdyby ji jedna z nich brát nemusela, existovala by cesta ven, která se
@@ -97,4 +113,27 @@ protocol ReviewPublishing: Sendable {
         teams: [String],
         on pullRequest: PRIdentifier
     ) async throws -> RequestedReview
+
+    /// Založí v repozitáři label, který v něm ještě není (#413). Vrací ho, jak ho potvrdil GitHub —
+    /// z odpovědi je vidět jméno i barva, které doopravdy vznikly.
+    ///
+    /// **Bere pull request, i když zapisuje do repozitáře.** Není to nekonzistence, je to pojistka:
+    /// zakládá se **kvůli** tomuhle PR a hned za tím jde `setLabels`, takže když PR otevřený není,
+    /// druhé volání by neprošlo — a v repozitáři by po tom zbyl label, který nikdo nechtěl. Pre-flight
+    /// je proto stejně široký jako u labelů (scope a stav PR, ne `headSha`) a **`pullRequest.repo` je
+    /// zároveň ta adresa, ze které si metoda ověří bránu**.
+    ///
+    /// **Barva se posílá vždycky.** Vybírá ji `Policy.labelColor(for:)` z jména, takže je z čeho ji
+    /// vzít při každém volání; kdyby byla volitelná, přiřadil by ji GitHub sám a náhled v potvrzení by
+    /// ukazoval barvu, která nevznikla.
+    ///
+    /// **Prázdné jméno se neodesílá** (`PublishError.blankLabelName`), stejnou sdílenou kontrolou
+    /// jako u odpovědi a komentáře. Label bez jména by GitHub odmítl 422, ale kontrola tady znamená,
+    /// že se nevolá nic — a nabídka nabízí jedině neprázdné jméno, takže by se to jinak nezkoušelo.
+    ///
+    /// **Smazat label odsud nejde a nepůjde**, viz úvod souboru.
+    func createLabel(
+        _ label: PullRequestLabel,
+        for pullRequest: PRIdentifier
+    ) async throws -> PullRequestLabel
 }

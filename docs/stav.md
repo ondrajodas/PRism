@@ -4269,3 +4269,71 @@ Obojí patří do téhož issue jako barvy.
 Testů **3879** (10 nových a jedna sonda, která kreslí všech pět míst na jedno plátno v obou
 režimech). Vloženými regresemi ověřené dvě věci: odebrané `fixedSize()` srazí odznak o 20 a 33
 bodů, a vrácená ruční sazba `vyřešeno` v `ThreadBubbleView` shodí guard nad zdrojáky.
+
+### #413 — nový label se zakládá z nabídky, druhým krokem
+
+Zakreslené v **sekci 26** návrhu a odsouhlasené. Nabídka za `+ label` byla od #392 uzavřená
+doopravdy: nesla jedině labely, které repozitář zná, protože z volného textu se dá omylem vyrobit
+label a ten už z repa sám nezmizí. Cena za to byl odskok do prohlížeče kvůli jedinému štítku — tedy
+zrovna ten odskok, kvůli kterému #392 vzniklo.
+
+**Mění to dvě tvrdé podmínky naráz a obojí je zapsané v `CLAUDE.md` i s důvodem.** Podmínka č. 1
+dostala **sedmou** metodu `ReviewPublishing` (`createLabel`), a je to **první, která zapisuje do
+repozitáře, ne do PR**: předchozích šest sahalo na věc vratnou jedním klikem nebo takovou, která se
+zavřením PR přestane týkat čehokoli dalšího, kdežto label vzniklý omylem zůstane v repu navždycky.
+`deleteLabel` se **nepřidá** — smazaný label zmizí ze všech issues a PR, na kterých leží, a aplikace
+tu ztrátu neumí ani ukázat; `SingleWayOutTests` ho hlídají jmenovitě vedle `merge`, `close`, approve
+mimo review a milníku. Souborů zůstává **šest**: zakládání je sedmá **metoda**, ne pátý volající.
+
+**Podmínka č. 5 (jedno atomické volání) pro tuhle jednu akci neplatí.** `POST /repos/{repo}/labels`
+a `PUT /issues/{n}/labels` se spojit nedají, takže existuje stav *label v repozitáři je, na PR není*.
+Zamítnuté bylo **samotné `Založit`** bez přidání: atomické by bylo, ale v devíti z deseti případů by
+po něm musel následovat klik na řádek v nabídce, tedy krok navíc za čistotu, kterou vidí jen
+dokumentace. Výjimka se proto platí viditelností: vlastní stav `createdNotAdded(name:error:)` (ne
+`failed`, které by tvrdilo, že se nestalo nic), zápis založeného labelu do nabídky **ještě před**
+druhým voláním (bez něj by řádek do restartu nebyl, protože `loadRepositoryLabels` se podruhé neptá),
+`dvě volání` v patce potvrzení a zákaz pustit mezi voláními cokoli dalšího.
+
+**Uzavřený zůstal seznam, ne nabídka.** Řádky nesou dál jen labely repozitáře a `↵` na vybraném pořád
+jen přepíná; založení je akce **pod děličem**, mimo dosah šipky dolů — jako řádek v seznamu by z ní
+byl nejpravděpodobnější omyl v celé obrazovce. Zkratka je **`⌥↵`** a bere ji **pole**, ne okno: `⌘↵`
+je v tomhle okně obsazená dvakrát (paleta ⌘K, potvrzení odeslání review) a #184 už jednou popsalo, že
+vyhraje ta zaregistrovaná později. Obsluha je **jeden** `onKeyPress(keys:)` s modifikátorem čteným
+z `KeyPress`, protože `modifiers` je množina, ve které stisk **smí** ležet, ne která musí sednout
+přesně — dva zápisy by se přebíjely.
+
+**Akce zmizí, když label toho jména existuje**, a shoda se posuzuje **týmž pravidlem jako hledání**
+(`Policy.pickerSameName` nad `searchOptions`), takže `Bug` se nezaloží vedle `bug`. Nabídne se naopak
+i tehdy, když seznam něco našel — `bug-ui` v repu, které zná `bug-ui-legacy`: podřetězec není tentýž
+label. Pět důvodů, proč se akce nekreslí, drží **jedna** funkce (`Policy.newLabelOffer`); pátý přibyl
+při implementaci a v zadání nebyl — **nenačtená nabídka**, protože bez seznamu z repa není proti čemu
+hledat duplikát, takže by `Bug` prošlo vedle `bug` jen kvůli nedotažené odpovědi.
+
+**Barvu vybírá aplikace podle jména** z šestnácti odstínů, které GitHub nabízí ve svém dialogu nového
+labelu, a **posílá se vždycky**, aby náhled nelhal. Počítá to vlastní FNV-1a, ne `hashValue`:
+Swiftové hashování je zaseté náhodně **při každém spuštění procesu**, takže tentýž label by po
+restartu vyšel jinak a „podle jména“ by bylo „podle náhody“. Vzorník je zamítnutý — ve 300bodovém
+popoveru je to třetí prvek, který si říká o šířku, kvůli hodnotě, na kterou se člověk podívá jednou.
+Hex v zákresu (`#FBCA04` u `design-debt`) je proto **ukázka, ne hodnota**: hash dává `#D4C5F9`, a je
+to data, ne token palety.
+
+**Potvrzení je druhá obrazovka téhož popoveru, ne sheet**, a nemá **výchozí akci** — poslední klik
+před něčím nevratným je klik (#68). Že se to do popoveru vejde, je změřené, ne odhadnuté:
+`NewLabelPickerWidthTests` měří **pixely za hranou** (popover má pevný rámec 300 bodů, takže přesah
+se rámce nedotkne) a prohání tím i jméno o 39 znacích ze zákresu — akce ho **zalomí, neořeže**.
+
+**Dvě odchylky od #392, obě k mockupu, ne od něj:** nabídka labelů má teď pevnou šířku 300 bodů
+(`.pkr`), aby obě obrazovky byly stejně široké a popover při přepnutí nepodskočil, a `Zavřít` u věty
+v panelu je `.mini`, jak ho kreslí zákres — systémové tlačítko bylo v 300bodovém panelu skoro tak
+vysoké jako celá věta. **Neuděláno schválně:** `.pkr-foot` s nápovědou kláves (`↑↓ vybírá`,
+`↵ přepne`, `esc zavře`) kreslí sekce 24 u **obou** nabídek a v aplikaci není ani u jedné — je to
+mezera po #392, ne po #413, takže ji má spravit jedno issue nad oběma nabídkami, ne půlka tady.
+
+Testů **3955**, z toho **37 nových** (změřeno na větvi před rebasem: 3868 → 3905, zbytek přidal
+mezitím mergnutý `main`). Vloženými regresemi ověřené dvě věci: bez zápisu
+do nabídky (`remember(_:in:)`) padnou tři tvrzení včetně toho o dorovnání kliknutím (protože
+`toggleLabel` label, který repo nezná, odmítne), a s `fixedSize()` místo
+`fixedSize(horizontal: false, vertical: true)` na jménu v akci padne sonda přetečení na
+devětatřicetiznakovém jménu. **Neověřené testy:** že `⌥↵` v popoveru doopravdy dojde do pole
+(testovací host nedostane aktivaci, změřeno u #392) a chování `POST /labels` proti živému API —
+brána je ve slotové konfiguraci vypnutá schválně.

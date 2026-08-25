@@ -7405,6 +7405,39 @@ Nad odesílatelností draftu (#68) platí:
   - **Kurzor ořezává, necyklí.** V nabídce, která se pod rukama filtruje, je přeskok z konce na
     začátek k nerozeznání od „šipka nic neudělala“; ořez se navíc uplatňuje i **bez pohybu**
     (`step: 0`), protože index z předchozího dotazu může být za koncem.
+- **`Policy.newLabelOffer(query:known:isLoaded:editing:)`** — nabídne se z dotazu **založení nového
+  labelu**, a jaký (#413, `App/Policy/NewLabelOffer.swift`). Vrací `PullRequestLabel?`, tedy hotový
+  label i s barvou; `nil` znamená, že se akce **nekreslí vůbec**.
+
+  Je to schválně **jedna** funkce s vyčerpávajícím výčtem důvodů, proč `nil`, protože zakládání
+  nahrazuje tu ochranu, kterou byla uzavřená nabídka — a výčet rozesetý po `if`ech ve view se nedá
+  otestovat. Pět důvodů: **nenačtená nabídka** (bez seznamu z repa není proti čemu hledat duplikát,
+  takže by `Bug` prošlo vedle `bug` jen kvůli nedotažené odpovědi), **prázdné jméno**, **jméno, které
+  už v repu je**, **cizí PR** a **vypnutá brána**. Prázdný **načtený** seznam je naopak odpověď: v repu
+  bez labelů se dá založit cokoli.
+
+  Dvě věci, které se u toho nemají rozbít:
+
+  - **Shoda existujícího jména je celý řetězec, ne podřetězec** (`Policy.pickerSameName`), ale
+    **pravidlo shody je tatáž `searchOptions`** jako u hledání. Z toho plyne obojí, co zákres chce:
+    `Bug` nabídku nedostane (tentýž label), kdežto `bug-ui` v repu, který zná `bug-ui-legacy`, ji
+    dostane — podřetězec není tentýž label, a kdyby o existenci rozhodoval, taková jména by nešla
+    založit vůbec.
+  - **Barva se počítá vlastním hashem, ne `hashValue`** (`Policy.labelColor(for:)` + `labelColors`).
+    Swiftové hashování je zaseté náhodně **při každém spuštění procesu**, takže tentýž label by po
+    restartu vyšel jinak a „podle jména“ by bylo „podle náhody“; FNV-1a je pár řádků a je stabilní.
+    Paleta je šestnáct hexů, které GitHub nabízí ve svém dialogu nového labelu — bez bílé, protože
+    puntík by na světlém podkladu splynul a obtažení `--line` je proti němu slabé. Hodnoty jsou
+    v testu **literálem**: kdyby se počítaly tou samou funkcí, tvrdil by test jen „funkce se rovná
+    sama sobě“.
+
+  **Vzorník barev je zamítnutý**: v 300bodovém popoveru je to třetí prvek, který si říká o šířku,
+  kvůli hodnotě, na kterou se člověk podívá jednou — a přebarvit label se chodí tam, kde se i maže.
+
+  **`Policy.pickerShowsSearch` dostalo `canCreate`** (#413). U labelů je pole **vždycky**, protože
+  jméno nového labelu se bere z dotazu: v repu se třemi labely by bez pole nešlo založit nic. Není to
+  druhý prah, je to výjimka s důvodem viditelným z parametru; u reviewerů se pravidlo nemění, protože
+  tam se nic nezakládá.
 - **`Policy.findingsHeadNotice(tab:findingsHead:openCommit:hasFindings:)`** — proti kterému kódu
   nálezy platí. Je to **tvrdá podmínka č. 5 přepsaná do věty**: v `Commitech` může vedle nálezů stát
   jiný commit, než na kterém vznikly, takže nad seznamem je klidná věta a u rozkliknutého staršího
@@ -7644,6 +7677,11 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   nabídka nemůže obsahovat volbu, kterou pak zápis odmítne.
 - **`fetchRepositoryLabels` je uzavřená množina, na které stojí celé rozhodnutí, že `+ label` není
   volný text.** Z volného textu se dá omylem vyrobit nový label a ten už z repozitáře sám nezmizí.
+
+  **Od #413 je uzavřený `seznam`, ne nabídka** — a ta množina je pořád k něčemu: je to to jediné,
+  proti čemu se pozná duplikát, takže bez ní se **nezakládá** (`Policy.newLabelOffer` chce
+  `isLoaded`). Řádky nesou dál jen labely repozitáře a `↵` na vybraném pořád jen přepíná; zakládání
+  má **vlastní plochu pod děličem** a vlastní klávesu.
 - **Prázdná odpověď je platný výsledek, ne porucha**: PR bez labelů i bez vyžádaných reviewerů je
   běžný. „Nepodařilo se to zjistit“ drží volající zvlášť (`MetadataState`) — u téhle sekce se ty dva
   stavy nesmí slít, protože podle prvního se sekce nekreslí a podle druhého se **nesmí dát měnit
@@ -7663,6 +7701,9 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   `searchFrom = 6`, takže se mohly rozejít potichu a bylo by z toho vidět jen to, že jedna nabídka
   pole má a druhá ne. Zároveň je to jediné, co se o tom poli dá tvrdit **číslem** — jestli v něm je
   fokus, je stav skutečného okna.
+
+  **U labelů je pole od #413 vždycky** (`canCreate: true`): jméno nového labelu se bere z dotazu,
+  takže bez pole by v repu se třemi labely nešlo založit nic. U reviewerů se práh nemění.
 - **Fokus je v poli hned po otevření, a dělá se `.task` s jedním `Task.yield()`.** Bez toho je
   nabídka „otevři, klikni a piš“, tedy o krok delší než ta, kterou nahradila. Přiřazení ve **stejném
   průchodu**, ve kterém pole vzniká, SwiftUI zahodí — změřeno u palety ⌘K (#184) accessibilitou na
@@ -7688,6 +7729,45 @@ odeslat, a měnit label umí jedině `ReviewPublisher`.
   u lidí), takže se nabídka po výpadku sítě netváří jako repo bez labelů. Seznam se u poruchy
   **nezapíše**, takže se další otevření nabídky ptá znovu — to je zároveň to „zkusit znovu“.
 
+Co k nabídce labelů přidalo **zakládání nového** (#413):
+
+- **Akce je pod děličem, ne řádek v seznamu.** Jako řádek by z ní byl nejpravděpodobnější omyl v celé
+  obrazovce: přidržená šipka dolů na konci filtrovaného seznamu by mířila na nevratnou věc. Kreslí se
+  **přerušovaně obtažená**, jako `+ label` a `čeká` u reviewera — přerušované je to, co se ještě
+  nestalo — a jméno v ní je **doslova, v uvozovkách a `--ink`**, protože je to jediná hodnota na
+  řádku, kterou má člověk zkontrolovat.
+- **Jméno se v akci zalomí, neořeže** (změřeno na 39 znacích: dva řádky, nic za okrajem). Je to
+  jediné místo před potvrzením, kde je jméno vidět celé, takže ořezat by znamenalo ořezat zrovna tu
+  informaci, kvůli které ten krok existuje.
+- **Zkratka je `⌥↵` a bere ji pole, ne okno.** `⌘↵` je v tomhle okně obsazená dvakrát (paleta ⌘K
+  otevírá výsledek na GitHubu, detail PR potvrzení odeslání) a #184 už jednou popsalo, čím to končí:
+  vyhraje ta, která se zaregistrovala později. `⌘N` patří `File > New Window` z `WindowGroup`.
+  Obsluha je **jeden** `onKeyPress(keys: [.return])`, ne dva zápisy: `modifiers` je množina, ve které
+  stisk **smí** ležet (výchozí `.all`), ne množina, která musí sednout přesně — dva zápisy by se
+  přebíjely. Bez zakládání se `⌥↵` **propustí** (`.ignored`); spolknutá klávesa, po které se nic
+  nestane, je k nerozeznání od zaseknuté nabídky.
+- **Potvrzení je druhá obrazovka téhož popoveru, ne sheet.** Přepnutí existujícího labelu zůstává
+  jedno kliknutí (#392 mu potvrzovací okno nedalo schválně) — potvrzuje se to, co vratné **není**,
+  a modální okno kvůli jednomu slovu by z panelu udělalo klikačku. Jsou na ní **čtyři věci a každá
+  odpovídá na jednu otázku**: chip s puntíkem a jménem (co se objeví), slug repozitáře (kam to jde),
+  hex (jaká bude barva) a výstraha (co po tom zůstane).
+- **Slug je pod chipem a v mono s pravým casingem**, ne v nadpisu: `PickerHeading` je
+  `textCase(.uppercase)`, takže `ondrajodas/PRism` by se vysázelo `ONDRAJODAS/PRISM` — a velká
+  písmena ve jméně repozitáře jsou data, ne dekorace.
+- **Potvrzení nemá výchozí akci.** Poslední klik před něčím nevratným je klik, tak jako u potvrzení
+  odeslání review (#68). V patce vedle tlačítek stojí `dvě volání` — je to jediné místo, kde je před
+  kliknutím vidět, že pro tuhle akci neplatí tvrdá podmínka č. 5.
+- **Nabídka má pevnou šířku 300 bodů** (`.pkr` z návrhu), ne `maxWidth`: obě obrazovky mají být
+  stejně široké, jinak popover při přepnutí poskočí — a rezervy v zákresu jsou naměřené na 300.
+  Nejdelší řádek potvrzení (barva s hexem) má 265 b z 278, které mezi okraji zbývají, takže se na
+  odhad spoléhat nedá; měří to `NewLabelPickerWidthTests`.
+- **Popover se po založení nezavírá.** Založený label se hned objeví v seznamu jako zaškrtnutý, takže
+  zavřený popover by schoval zrovna tu odpověď na to, jak to dopadlo. Je to tatáž úvaha jako u
+  přepínání (#392).
+- **`query` a `confirming` jsou v `LabelPickerView` `@State` s parametrem v memberwise initu, a je to
+  jen pro sondy.** Není to binding — sonda nemá klávesnici, takže druhou obrazovku jinak nevyfotí;
+  v aplikaci se ani jedno nepředává.
+
 ## `ReviewPublisher` (`App/Publish/`)
 
 **Jediná cesta, kterou z aplikace něco odejde na GitHub.** Vznikl v #67 a nahradil tvrdou
@@ -7695,15 +7775,15 @@ podmínku „nikdy nic neposílat“ pravidlem, které je vidět z kódu — viz
 
 | Typ | Co dělá |
 |---|---|
-| `ReviewPublishing` | Protokol se **šesti** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)`, `setLabels(_:on:)`, `requestReviewers(_:teams:on:)` |
+| `ReviewPublishing` | Protokol se **sedmi** metodami: `submit(_:)`, `reply(to:body:)`, `setResolved(_:of:)`, `comment(on:body:)`, `setLabels(_:on:)`, `requestReviewers(_:teams:on:)`, `createLabel(_:for:)` |
 | `GhReviewPublisher` | Implementace nad `gh`; pre-flight přes `GitHubGateway` |
 | `PublishScope` | Brána: smí se z tohohle repa odeslat? Skládá se z `Configuration`, výchozí stav **vypnuto** |
 | `PublishError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `PublishRequest` | Payload a argumenty review + `isSendable` (sdílená kontrola prázdného těla) — čisté funkce |
 | `ThreadRequest` | GraphQL mutace pro vlákna a jejich argumenty — čisté funkce |
 | `CommentRequest` | REST argumenty komentáře pod PR (#216) — čisté funkce |
-| `MetadataRequest` | REST argumenty labelů a vyžádání reviewera (#392) + payload sady labelů — čisté funkce |
-| `MetadataSubmission`, `MetadataActionState` | Čtvrtý volající publisheru a stav toho, co se právě odesílá (#392) |
+| `MetadataRequest` | REST argumenty labelů a vyžádání reviewera (#392) + payload sady labelů a **nového labelu** (#413) — čisté funkce |
+| `MetadataSubmission`, `MetadataActionState` | Čtvrtý volající publisheru a stav toho, co se právě odesílá (#392); od #413 i **zakládání labelu** a stav „založil se, nepřidal“ |
 | `GhRequestedReviewersResponse` | Tvar odpovědi `POST /pulls/{n}/requested_reviewers` — čte se z ní **jen** `requested_reviewers` |
 | `ThreadTarget`, `ThreadResolution` | Adresa vlákna (PR + `id`) a to, jak dopadlo přepnutí vyřešení |
 | `ThreadActionState`, `ThreadKey` | Co se s vláknem právě děje a klíč, pod kterým to drží `AppStore` |
@@ -7900,6 +7980,63 @@ Co na tom stojí:
 - **Odpověď na vyžádání nenese odpovědi ostatních**, jen `requested_reviewers`. Slévá to
   `Policy.reviewers(requested:keeping:)`, tedy tatáž funkce jako při čtení — bez ní by z panelu po
   jednom kliknutí zmizelo schválení, které tam bylo, nebo by se muselo volat `fetchMetadata` znovu.
+
+### Založení labelu (#413) — sedmá metoda, a první, která píše do repozitáře
+
+Vědomá změna tvrdé podmínky č. 1 **a č. 5 naráz**, ne obejití ani jedné. **Proč**: nabídka labelů
+byla do #413 uzavřená doopravdy, takže štítek, který v repozitáři ještě není, se musel založit
+v prohlížeči — tedy tím odskokem, kvůli kterému #392 vzniklo. Precedens je tentýž jako u #73, #216
+a #392: výčet cest ven se rozšířil, protože se ta věc dělá při review, a zapsal se důvod.
+
+Co je na téhle metodě jiné než na těch šesti před ní:
+
+- **Zapisuje do repozitáře, ne do PR**, takže omyl po sobě nechá **trvalý** následek: label vzniklý
+  omylem z repozitáře sám nezmizí. Předchozích šest sahalo na PR nebo na diskuzi, tedy na věc vratnou
+  jedním klikem nebo takovou, která se zavřením PR přestane týkat čehokoli dalšího.
+- **`deleteLabel` se nepřidá.** Není to opomenutí, je to hranice: smazaný label zmizí ze **všech**
+  issues a PR, na kterých leží, a aplikace tu ztrátu neumí ani ukázat. Nevratnost se proto vyvažuje
+  **potvrzením**, ne opravnou akcí; mazat i přebarvovat se chodí na GitHub. `SingleWayOutTests` ho
+  hlídají jmenovitě, vedle `merge`, `close`, approve mimo review a milníku.
+- **Bere `PRIdentifier`, i když adresa volání je jen repozitář** — a je to pojistka, ne
+  nekonzistence. Zakládá se **kvůli** tomu PR a hned za tím jde `setLabels`, takže na zavřeném PR by
+  druhé volání neprošlo a v repozitáři by po tom zbyl label, který nikdo nechtěl. Pre-flight je proto
+  stejně široký jako u labelů (scope a stav PR, ne `headSha`) a `pullRequest.repo` je zároveň ta
+  adresa, ze které si metoda ověří bránu.
+- **Bere `PullRequestLabel`, ne vlastní typ požadavku.** Druhý typ o dvou stejných polích by byl
+  druhé místo, kde se dá barva složit jinak; takhle je to **jedna hodnota**, kterou nakreslí náhled
+  v potvrzení a pošle publisher — náhled tedy nemůže lhát, protože je to tentýž label.
+- **Barva se posílá vždycky.** Kdyby byla volitelná, přiřadil by ji GitHub sám a náhled by ukazoval
+  barvu, která nevznikla. `description` se naopak neposílá — aplikace ho nemá kde nabrat a prázdný
+  popis je totéž jako žádný.
+- **Payload jde souborem**, jako sada labelů: jméno je text od člověka, takže projde JSONem
+  s uvozovkami, zalomením i emoji stejně jako cokoli jiného — a kódování zůstává na jednom místě.
+- **Prázdné jméno se nevolá** (`PublishError.blankLabelName`), tou samou sdílenou kontrolou
+  (`PublishRequest.isSendable`) jako odpověď a komentář.
+- **Duplikát má vlastní chybu** (`labelExists`), ne `unknown`: 422 `already_exists` je jediné selhání
+  zakládání, po kterém **není co spravovat** — label existuje, takže stačí otevřít nabídku znovu.
+  `Policy.newLabelOffer` na to nedosáhne, protože nabídka je snímek z chvíle otevření.
+
+**Dvě volání a mezistav.** `POST /repos/{repo}/labels` a `PUT /issues/{n}/labels` se spojit nedají,
+takže tvrdá podmínka č. 5 pro tuhle akci neplatí a existuje stav *label v repozitáři je, na PR není*.
+Zamítnuté bylo **samotné `Založit`** bez přidání: atomické by bylo, ale v devíti z deseti případů by
+po něm musel následovat klik na řádek v nabídce, tedy krok navíc za čistotu, kterou vidí jen
+dokumentace. Výjimka se proto platí **viditelností** (`AppStore.createLabel(_:on:)`):
+
+- **`MetadataActionState.createdNotAdded(name:error:)`, ne `failed`.** `failed` by tvrdilo, že se
+  nestalo nic. Případ nese **jméno** (aby se dalo napsat, o který label jde) i **chybu** (aby se dalo
+  napsat, proč druhé volání spadlo) — zákres kreslí jen tu první větu, ale je to jediné selhání
+  v tomhle panelu, které by jinak neřeklo důvod, a další krok se od důvodu odvozuje.
+- **Založený label se zapíše do nabídky ještě před druhým voláním** (`remember(_:in:)`).
+  `loadRepositoryLabels` se podruhé neptá, takže bez toho zápisu by řádek v nabídce až do restartu
+  nebyl — a věta „přidáš ho kliknutím“ by tvrdila víc, než data unesou. Zapisuje se **jen do už
+  načtené** nabídky: z `nil` by tím vzniklo tvrzení „repo zná právě jeden label“.
+- **Sada pro druhé volání se čte znovu**, ne z hodnoty před prvním voláním: mezi voláními se snímek
+  mohl načíst znovu (nové `updatedAt` z pollingu), a sada se posílá celá, takže starší základ by
+  sundal štítek, který mezitím někdo přidal. Skládá ji `Policy.toggledLabels`, ne tahle metoda.
+- **Mezi voláními se nepustí nic dalšího** (`isBusy` u `.creatingLabel`), takže PR nemá jak dostat
+  sadu, kterou první polovina ještě nedokončila.
+- **Když spadne první volání, mezistav nevzniká**: je to obyčejné `failed` a v nabídce po tom
+  nezůstane řádek, který neexistuje.
 
 ## Vrstva `Environment` (`App/Environment/`)
 

@@ -172,6 +172,87 @@ extension AppStore {
         }
     }
 
+    /// Založí nový label v repozitáři a hned ho přidá na PR — **dvě volání** (#413).
+    ///
+    /// **Tvrdá podmínka č. 5 (jedno atomické volání) pro tuhle akci neplatí** a je to vědomé:
+    /// `POST /repos/{repo}/labels` a `PUT /issues/{n}/labels` se spojit nedají, takže mezi nimi
+    /// existuje stav *label v repozitáři je, na PR není*. Zamítnutá alternativa je **samotné
+    /// `Založit`** bez přidání: atomické by bylo, ale v devíti z deseti případů by po něm musel
+    /// následovat klik na řádek v nabídce, tedy krok navíc za čistotu, kterou vidí jen dokumentace.
+    ///
+    /// Co za to platí: **selhání druhého volání nesmí vypadat jako selhání obojího**. Proto
+    /// `MetadataActionState.createdNotAdded`, ne `failed` — a proto se založený label zapíše do
+    /// nabídky ještě **před** druhým voláním, takže se to dá dorovnat jedním kliknutím.
+    func createLabel(_ label: PullRequestLabel, on pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        let editing = metadataEditing(for: id)
+        guard editing.isAllowed else { return }
+        guard let current = metadata(for: id) else { return }
+        // **Ověří se znovu tou samou funkcí, která akci nabízí.** Uzavřenost seznamu tady nepomůže
+        // (nový label v něm z definice není), takže je to jediné místo, kde se dá zkontrolovat, že
+        // se nezakládá prázdné jméno, duplikát ani barva vymyšlená mimo `Policy` — a jediná kontrola
+        // ve view je kontrola, kterou příští obrazovka obejde.
+        guard let offer = Policy.newLabelOffer(
+            query: label.name,
+            known: knownLabels(in: id.repo),
+            isLoaded: hasLoadedLabels(in: id.repo),
+            editing: editing
+        ), offer == label else { return }
+        guard let submission = metadataSubmission(for: id) else { return }
+        guard metadataActionStates[id]?.isBusy != true else { return }
+        metadataActionStates[id] = .creatingLabel
+
+        let created: PullRequestLabel
+        do {
+            created = try await submission.createLabel(label)
+        } catch let error as PublishError {
+            metadataActionStates[id] = .failed(error)
+            return
+        } catch {
+            metadataActionStates[id] = .failed(.unknown(error.localizedDescription))
+            return
+        }
+
+        // **Řádek v nabídce od téhle chvíle je.** `loadRepositoryLabels` se podruhé neptá (sada se
+        // v repu mezi dvěma kliknutími nemění), takže bez tohohle zápisu by se dorovnání kliknutím
+        // nedalo udělat až do restartu — a věta v panelu by tvrdila víc, než data unesou.
+        remember(created, in: id.repo)
+
+        // Základ se čte **znovu**, ne z hodnoty před prvním voláním: mezi voláními se snímek mohl
+        // načíst znovu (nové `updatedAt` z pollingu), a sada se posílá celá, takže starší základ by
+        // sundal štítek, který mezitím někdo přidal.
+        let base = metadata(for: id)?.labels ?? current.labels
+        guard let names = Policy.toggledLabels(
+            created,
+            on: base,
+            known: knownLabels(in: id.repo)
+        ) else {
+            // **Nesložená sada je taky mezistav, ne „nic“.** Dostat se sem jde: úklid cache
+            // (`pruneCaches`) zahazuje `repositoryLabels` podle toho, které PR chceme, takže mezi
+            // těmi dvěma voláními může nabídka zmizet — a `toggledLabels` pak label, který repo
+            // „nezná“, odmítne. Label ale v repozitáři **je**, takže `nil` by tady byla ta nejhorší
+            // možná odpověď: půlka se stala a v panelu by po tom nezůstalo nic.
+            metadataActionStates[id] = .createdNotAdded(
+                name: created.name,
+                error: .unknown("Nabídka labelů se mezitím zahodila, takže se přidání nezkusilo.")
+            )
+            return
+        }
+
+        do {
+            let labels = try await submission.setLabels(names)
+            metadataActionStates[id] = nil
+            apply(labels: labels, to: pullRequest)
+        } catch let error as PublishError {
+            metadataActionStates[id] = .createdNotAdded(name: created.name, error: error)
+        } catch {
+            metadataActionStates[id] = .createdNotAdded(
+                name: created.name,
+                error: .unknown(error.localizedDescription)
+            )
+        }
+    }
+
     /// Vyžádá review od jednoho člověka a zapíše, na koho se podle GitHubu čeká.
     /// **Jen z nabídky.** Kontrola je i tady, ne jen ve view: uzavřená množina je to jediné, co
     /// drží slib, že se nevyžádá review od někoho, komu to GitHub odmítne — a jediná kontrola ve
@@ -228,6 +309,18 @@ extension AppStore {
         // takže `requested_teams` je úplný stav toho, na kterých týmech PR leží.
         metadata.teams = requested.teams
         metadataStates[id] = .loaded(metadata, updatedAt: updatedAt)
+    }
+
+    /// Přidá právě založený label do nabídky repozitáře (#413).
+    ///
+    /// Zapisuje se **jen do už načtené** nabídky: z `nil` (nenačtená, nebo spadlé načtení) by tím
+    /// vzniklo tvrzení „repo zná právě jeden label“, což je nepravda. Nabídka je v tu chvíli načtená
+    /// vždycky — `Policy.newLabelOffer` bez toho akci nenabídne —, takže je to stráž, ne větev.
+    private func remember(_ label: PullRequestLabel, in repo: RepoID) {
+        guard var labels = repositoryLabels[repo] else { return }
+        guard !labels.contains(where: { $0.name == label.name }) else { return }
+        labels.append(label)
+        repositoryLabels[repo] = labels
     }
 
     /// Publisher se tu **nevyrábí** — jen se předá `gh`, read-only gateway a brána. Vzniká až

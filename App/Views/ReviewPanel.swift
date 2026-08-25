@@ -136,6 +136,9 @@ struct ReviewPanel: View {
                     PanelMetadataView(
                         state: metadata,
                         editing: metadataEditing,
+                        // Repo se bere z identity PR, ne z vlastního parametru — jedna pravda o tom,
+                        // kam se nový label založí (#413).
+                        repo: pullRequest.repo,
                         contentWidth: metadataContentWidth,
                         known: knownLabels,
                         candidates: reviewerCandidates,

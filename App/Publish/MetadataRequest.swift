@@ -30,10 +30,53 @@ enum MetadataRequest {
         ]
     }
 
+    /// Tělo `POST /repos/{repo}/labels` — nový label v repozitáři (#413).
+    ///
+    /// **Barva je povinná, ne volitelná.** Kdyby se vynechala, přiřadil by ji GitHub sám a náhled
+    /// v potvrzení by ukazoval barvu, která nevznikla; vybírá ji `Policy.labelColor(for:)`, takže je
+    /// z čeho ji vzít vždycky. `description` se **neposílá**: aplikace ho nemá kde nabrat a prázdný
+    /// popis je totéž jako žádný.
+    struct NewLabelPayload: Encodable, Equatable {
+        let name: String
+        /// Šestimístný hex **bez `#`**, jak ho chce API i jak ho drží `PullRequestLabel`.
+        let color: String
+
+        init(_ label: PullRequestLabel) {
+            name = label.name
+            color = label.color
+        }
+    }
+
+    /// Argumenty pro `POST /repos/{repo}/labels`.
+    ///
+    /// **Adresuje se repozitářem, ne PR** — je to jediné volání z `ReviewPublishing`, které nemíří na
+    /// pull request. Číslo PR by tady nemělo kam jít: label vzniká v repozitáři a na PR ho pak přidá
+    /// druhé volání.
+    ///
+    /// Payload jde **souborem**, jako sada labelů, a ne přes `-f name=…`: jméno je text, který napsal
+    /// člověk, takže projde JSONem s uvozovkami, zalomením i emoji stejně jako cokoli jiného — a
+    /// kódování zůstává na jednom místě (`encoded(_:)`) místo dvou cest, z nichž se jedna používá
+    /// jen tady.
+    static func newLabelArguments(in repo: RepoID, payload file: URL) -> [String] {
+        [
+            "api", "repos/\(repo)/labels",
+            "-X", "POST",
+            "--input", file.path(percentEncoded: false),
+        ]
+    }
+
     static func encoded(_ payload: LabelsPayload) throws -> Data {
+        try encoded(body: payload)
+    }
+
+    static func encoded(_ payload: NewLabelPayload) throws -> Data {
+        try encoded(body: payload)
+    }
+
+    private static func encoded(body: some Encodable) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(payload)
+        return try encoder.encode(body)
     }
 
     /// Argumenty pro `POST /pulls/{n}/requested_reviewers`.

@@ -223,10 +223,16 @@ struct PanelMetadataWidthTests {
     @Test("Bez načteného snímku je + label zakázaný")
     func theAddActionWaitsForTheSnapshot() throws {
         let width = contentWidth(300)
-        let loading = PanelMetadataView(state: .loading, editing: .allowed, contentWidth: width)
+        let loading = PanelMetadataView(
+            state: .loading,
+            editing: .allowed,
+            repo: Self.repo,
+            contentWidth: width
+        )
         let loaded = PanelMetadataView(
             state: .loaded(PullRequestMetadata(), updatedAt: Date(timeIntervalSince1970: 100)),
             editing: .allowed,
+            repo: Self.repo,
             contentWidth: width
         )
 
@@ -273,9 +279,13 @@ struct PanelMetadataWidthTests {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             editing: .allowed,
+            repo: repo,
             contentWidth: PanelMetadataView.contentWidth(inPanelOf: panelWidth),
             known: labels,
             candidates: [.person("odinuv"), .team("ajda-swimlane")]
         )
     }
+
+    /// Kam by šel nový label (#413). V těchhle tvrzeních se nekreslí — panel ho jen předává nabídce.
+    private static let repo = RepoID(owner: "keboola", name: "vault")
 }

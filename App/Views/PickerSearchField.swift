@@ -28,6 +28,8 @@ struct PickerSearchField: View {
     let move: (Int) -> Void
     /// Potvrzení vybraného řádku.
     let confirm: () -> Void
+    /// Co udělá `⌥↵` (#413). `nil` = nabídka nic nezakládá, takže se klávesa nechá projít dál.
+    var create: (() -> Void)?
 
     @FocusState private var isFocused: Bool
 
@@ -51,8 +53,24 @@ struct PickerSearchField: View {
                     move(-1)
                     return .handled
                 }
-                .onKeyPress(.return) {
-                    confirm()
+                // **Jeden handler na `↵` i `⌥↵`, ne dva** (#413). `onKeyPress(_:modifiers:)` bere
+                // `modifiers` jako množinu, ve které stisk **smí** ležet (výchozí `.all`), ne jako
+                // množinu, která musí sednout přesně — takže dva zápisy by se přebíjely a záleželo by
+                // na tom, který se zaregistroval později. Tvar `keys:` dává celý `KeyPress`, takže se
+                // modifikátor přečte a rozhodne se z něj **tady**, viditelně.
+                //
+                // `⌥↵` je na **poli**, ne okenní zkratka, tedy tou samou cestou jako šipky: `⌘↵` má
+                // v tomhle okně paleta ⌘K a potvrzení odeslání review, a #184 už jednou popsalo, čím
+                // dvě tlačítka s jednou zkratkou končí.
+                .onKeyPress(keys: [.return]) { press in
+                    guard press.modifiers.contains(.option) else {
+                        confirm()
+                        return .handled
+                    }
+                    // Bez zakládání se `⌥↵` **propustí**: spolknout klávesu, po které se nic nestane,
+                    // je k nerozeznání od zaseknuté nabídky.
+                    guard let create else { return .ignored }
+                    create()
                     return .handled
                 }
                 // Fokus **až po jednom průchodu smyčky**, a ten `Task.yield()` je to jediné, co
