@@ -254,10 +254,10 @@ struct ConversationEntryView: View {
     /// vymýšlet si k němu popisek by znamenalo tvrdit něco, co jsme nedostali.
     private func badgeColor(of state: SubmittedReview.State) -> Color? {
         switch state {
-        case .approved: .green
-        case .changesRequested: .red
+        case .approved: Palette.ok
+        case .changesRequested: Palette.crit
         case .dismissed: .secondary
-        case .pending: .orange
+        case .pending: Palette.find
         case .commented: nil
         }
     }
@@ -266,8 +266,8 @@ struct ConversationEntryView: View {
     /// jinak musí ptát porovnáním barev, a to se při první změně palety tiše rozejde.
     private func verdictColor(_ review: SubmittedReview) -> Color? {
         switch review.state {
-        case .approved: .green
-        case .changesRequested: .red
+        case .approved: Palette.ok
+        case .changesRequested: Palette.crit
         default: nil
         }
     }

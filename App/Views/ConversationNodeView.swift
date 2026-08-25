@@ -227,8 +227,8 @@ extension SubmittedReview {
     /// vypadat jako komentář. Barvu nese jedině schválení a vyžádané změny.
     var markerTint: Color? {
         switch state {
-        case .approved: .green
-        case .changesRequested: .red
+        case .approved: Palette.ok
+        case .changesRequested: Palette.crit
         default: nil
         }
     }

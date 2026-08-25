@@ -109,7 +109,7 @@ private struct FileTreeBranch: View {
                 // Puntík, ne text: v sloupci 210 bodů širokém je místo na cestu, ne na slovo.
                 // Barva je tatáž škála jako v řádku fronty a na kartě nálezu.
                 Circle()
-                    .fill(marker == .blocking ? Color.red : Color.orange)
+                    .fill(marker == .blocking ? Palette.crit : Palette.find)
                     .frame(width: 6, height: 6)
                     .help(marker == .blocking ? "Je tu blokující nález" : "Jsou tu nálezy")
             }
@@ -140,8 +140,8 @@ private struct FileTreeBranch: View {
     /// Barva ikony podle druhu změny. `nil` = beze změny odstínu (složka, upravený soubor).
     private func tint(of file: FileDiff) -> Color? {
         switch file.change {
-        case .added: .green
-        case .deleted: .red
+        case .added: Palette.ok
+        case .deleted: Palette.crit
         case .renamed: .blue
         case .modified: nil
         }

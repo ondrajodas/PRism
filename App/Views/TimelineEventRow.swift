@@ -46,7 +46,7 @@ struct TimelineEventRow {
     var tint: Color? {
         switch event.kind {
         case .merged: .purple
-        case .closed: .red
+        case .closed: Palette.crit
         case .forcePushed: Palette.stale
         default: nil
         }

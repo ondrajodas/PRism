@@ -1544,7 +1544,7 @@ struct PullRequestDetailView: View {
     private func incrementalDiffFailure(_ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Nepodařilo se zjistit, co přibylo", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
+                .foregroundStyle(Palette.find)
             Text(verbatim: detail)
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
@@ -1563,7 +1563,7 @@ struct PullRequestDetailView: View {
     private func diffFailure(_ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Diff se nepodařilo načíst", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
+                .foregroundStyle(Palette.find)
             Text(detail)
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
@@ -1670,7 +1670,7 @@ struct PullRequestDetailView: View {
     private func checkoutFailure(_ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Pracovní kopii se nepodařilo připravit", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.red)
+                .foregroundStyle(Palette.crit)
             // Text od `gitu` je to, z čeho se pozná, co dělat dál — proto celý
             // a k vybrání, ne zkrácený do jedné věty.
             Text(detail)
@@ -1684,7 +1684,7 @@ struct PullRequestDetailView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.red.opacity(0.08), in: .rect(cornerRadius: 8))
+        .background(Palette.crit.opacity(0.08), in: .rect(cornerRadius: 8))
     }
 
     private func prepare() {

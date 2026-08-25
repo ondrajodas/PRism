@@ -2434,15 +2434,47 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   3,65 až 4,08). Proto se dvě otázky rozdělily — legibilitu měří **plné plochy**, přítomnost
   odstínu v textu ten pixel.
 
-  Prahy jsou **per kapsle a naměřené**, ne kulaté: čtyři z nich berou systémovou škálu a ve světlém
-  režimu jsou pod třemi (`vyřešeno` 1,63, `schválil` 1,70, `vyžádal změny` 2,52,
-  `3 nálezy · 1 blokuje` 2,70). #404 to nemění, takže se to změřilo, zapsalo do tabulky u testu
-  a hlídá se, že se **nezhorší**; `já` má vlastní tvrzení s prahem 8,0 (naměřeno 12,27 / 8,40),
+  Prahy jsou **per kapsle a naměřené**, ne kulaté. Do #432 byly čtyři z nich pod třemi, protože ty
+  kapsle brala systémová škála (`vyřešeno` 1,63, `schválil` 1,70, `vyžádal změny` 2,52,
+  `3 nálezy · 1 blokuje` 2,70); #404 to neměnilo, jen změřilo a zapsalo. **#432 ten převod udělalo**
+  a tabulka u testu má od té doby dva sloupce — před a po (1,63 → 3,05, 1,70 → 3,19, 2,52 → 3,49,
+  2,70 → 3,77) —, takže se hlídá výsledek, ne jen to, že se nic nezhoršilo. Přibyly u toho dvě
+  kapsle, které #404 neměřilo: `3 nálezy` (systémová oranžová byla z celé škály nejhorší, **1,85**
+  → 3,36) a `čisté` (1,80 → 3,44). `já` má vlastní tvrzení s prahem 8,0 (naměřeno 12,27 / 8,40),
   protože společný práh z tabulky by výměnu `ink` za `ink3` nechytil.
 
+  **V tmavém režimu je to u tří kapslí výměna dolů** (nejvíc `čisté`, 6,26 → 5,55) a je zapsaná
+  jako naměřená, ne zamlčená: tmavá větev palety je tmavší než systémová škála, takže se platí
+  rezervou tam, kde jí bylo dost. Nejnižší hodnota po převodu je 3,05 proti 1,63 před ním.
+
   **Vzhled se vynucuje na vlastním okně** (#367), ne na `NSApp`.
+- **Sémantická škála je z palety, ne ze systému (#432)** — `StatusScaleTests`. Dvě různá tvrzení
+  vedle sebe, protože ani jedno nestačí samo: **nad zdrojáky** (`App/` neobsahuje `.green`, `.red`,
+  `.yellow` ani `.orange` — kolikrát je něco zapsané, se za běhu zjistit nedá; tatáž konstrukce
+  jako `GlobalAppearanceTests` a `SingleWayOutTests`, včetně zahazování řádkových komentářů) a **na
+  hodnotách** (`ReviewStateAppearance`, `VerdictAppearance` a `PullRequestStateAppearance` vracejí
+  doopravdy token, ne „něco, co není systémové“).
+
+  Tři věci na tom nejsou zjevné:
+
+  - **Hledá se s koncem identifikátoru za jehlou** (ne písmeno, číslice ani podtržítko), jinak
+    `color.redComponent` a `.redacted` vyjdou jako
+    porušení pravidla. Na to, že to hledání doopravdy hledá, je vlastní tvrzení — „nikde nic
+    nenašel“ projde i tehdy, když je sonda rozbitá.
+  - **Číslo řádku musí být z původního souboru.** První podoba hlásila číslo v textu bez komentářů,
+    tedy o desítky řádků mimo (vložená regrese poslala na řádek 118 místo 186) — hláška, která míří
+    špatně, je horší než hláška bez čísla.
+  - **Hlídá se `App/`, ne `Tests/`.** Testy o systémových barvách tvrdit **musí**
+    (`color != .green` je to, co spadne, když se převod vrátí), takže by je stejný zákaz zakázal.
+
+  **Ověřeno vloženou regresí z obou stran**: s vrácenou `.green` v `ThreadBubbleView` spadne guard
+  nad zdrojáky, a s vrácenou systémovou barvou ve vzorku `PillTypesettingTests` spadne práh (1,63
+  proti 3,0). Jedno bez druhého by nestačilo — guard nad zdrojáky o čitelnosti neříká nic a práh
+  ve vzorku nevidí, co kreslí okno.
 - **Sonda sazby kapslí (#404)** — `PillRenderProbe`: všech pět míst na **jednom plátně** v obou
-  režimech, aby se dalo vidět, že to je jedna rodina prvků. Na plátně je i dvojice, která se
+  režimech, aby se dalo vidět, že to je jedna rodina prvků. **U #432 posloužila i na barvy**:
+  tentýž běh před převodem a po něm dá dva snímky, ze kterých je rozdíl vidět bez čtení čísel —
+  a hlavně je z nich vidět, že se nezměnilo nic dalšího. Na plátně je i dvojice, která se
   sjednotit **nemá** (`Bot` a `.state-chip` v hlavičce PR) — bez ní by z obrázku nešlo poznat, jestli
   je nemono chip vada, nebo záměr. Karta nálezu se kreslí v **300 bodech** (šířka panelu), ne v šířce
   plátna: v širokém místě se o nic nepere. Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`).

@@ -125,10 +125,10 @@ struct ReviewSubmissionSheet: View {
             Image(systemName: "exclamationmark.triangle.fill")
         }
         .font(.callout)
-        .foregroundStyle(.orange)
+        .foregroundStyle(Palette.find)
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.1), in: .rect(cornerRadius: 6))
+        .background(Palette.find.opacity(0.1), in: .rect(cornerRadius: 6))
     }
 
     /// Tělo se ukazuje **tak, jak je napsané**, ne vyrenderované.
@@ -292,12 +292,12 @@ struct ReviewSubmissionSheet: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                 }
                 .font(.callout)
-                .foregroundStyle(.red)
+                .foregroundStyle(Palette.crit)
                 // Že draft zůstal, musí být **vidět**, ne v nápovědě: po červené hlášce se
                 // jinak čeká, že se rozepsaná práce ztratila, a člověk ji začne psát znovu.
                 Text(verbatim: aftermath(of: error))
                     .font(.caption)
-                    .foregroundStyle(error.mightHaveReachedGitHub ? .orange : .secondary)
+                    .foregroundStyle(error.mightHaveReachedGitHub ? Palette.find : .secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         case .sent(let review):
@@ -308,7 +308,7 @@ struct ReviewSubmissionSheet: View {
                 Image(systemName: "checkmark.circle.fill")
             }
             .font(.callout)
-            .foregroundStyle(.green)
+            .foregroundStyle(Palette.ok)
         }
     }
 
@@ -325,7 +325,7 @@ struct ReviewSubmissionSheet: View {
                 systemImage: "exclamationmark.triangle.fill"
             )
             .font(.caption)
-            .foregroundStyle(.orange)
+            .foregroundStyle(Palette.find)
         }
     }
 

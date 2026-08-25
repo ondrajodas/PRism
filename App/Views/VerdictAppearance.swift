@@ -27,16 +27,16 @@ extension ReviewDraft.Verdict {
     /// obrácený význam. Systémová modrá tu byla jediná barva, kterou si okno neurčuje samo —
     /// `.tint(Palette.accent)` z kořene na `Color.accentColor` nezabírá.
     ///
-    /// `.green` a `.red` zůstávají **systémové**, a je to vědomé, ne opomenutí: převést celou
-    /// sémantickou škálu na paletu je jiná otázka, kterou #218 a #277 zodpověděly měřením pro
-    /// kapsli stavu a pro diff. Ve zbytku `App/` se zelená a červená pořád berou ze systému na
-    /// desítkách míst, takže převod zrovna tady by z tohohle souboru udělal výjimku, ne pravidlo.
-    /// #309 řeší **akcent**, u kterého to pravidlo platí (`Palette.accent`) — a mint, který
-    /// vzniká teď.
+    /// **Zelená a červená jsou od #432 taky z palety** (`Palette.ok`, `Palette.crit`) — do té doby
+    /// tady stálo, že zůstávají systémové, „protože převod celé sémantické škály je jiná otázka,
+    /// kterou #218 a #277 zodpověděly měřením jen pro kapsli stavu a pro diff“. #432 tu otázku
+    /// zodpovědělo pro zbytek `App/` a odpověď je stejná: systémová škála je výplň tlačítka
+    /// s bílým textem, takže jako barva textu vychází ve světlém režimu pod 3. Zdůvodnění
+    /// s čísly je v `ReviewStateAppearance`.
     var tint: Color {
         switch self {
-        case .approve: .green
-        case .requestChanges: .red
+        case .approve: Palette.ok
+        case .requestChanges: Palette.crit
         case .comment: Palette.accent
         }
     }

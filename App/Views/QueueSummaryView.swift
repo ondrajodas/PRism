@@ -38,7 +38,7 @@ struct QueueSummaryView: View {
                     symbol: "exclamationmark.triangle.fill",
                     count: summary.blocking,
                     label: Plural.word(summary.blocking, one: "blokující", few: "blokující", many: "blokujících"),
-                    tint: .red,
+                    tint: Palette.crit,
                     help: "\(Plural.czech(summary.blocking, one: "pull request má", few: "pull requesty mají", many: "pull requestů má")) blokující nález"
                 )
             }

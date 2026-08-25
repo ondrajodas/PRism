@@ -25,7 +25,7 @@ struct DiffExpanderView: View {
             if let failure {
                 Text(failure)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.find)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .padding(.trailing, 16)

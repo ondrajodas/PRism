@@ -41,7 +41,7 @@ struct DraftTransferView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Review je psané proti staršímu commitu", systemImage: "exclamationmark.triangle.fill")
                 .font(.headline)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Palette.find)
             Text("Tady je vidět, co se stane s každým řádkovým komentářem. Po přenesení na \(head.prefix(7)) se ukáže payload a teprve pak se dá odeslat.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -96,13 +96,13 @@ struct DraftTransferView: View {
     private static func appearance(of state: DraftAnchorState) -> (text: String, symbol: String, color: Color) {
         switch state {
         case .fits:
-            ("sedí", "checkmark.circle.fill", .green)
+            ("sedí", "checkmark.circle.fill", Palette.ok)
         case .moved(let anchor):
             ("posunulo se na \(lines(of: anchor))", "arrow.down.circle.fill", .blue)
         case .uncertain:
-            ("nevím, co tam bylo", "questionmark.circle.fill", .orange)
+            ("nevím, co tam bylo", "questionmark.circle.fill", Palette.find)
         case .lost:
-            ("řádek v novém diffu není", "xmark.circle.fill", .red)
+            ("řádek v novém diffu není", "xmark.circle.fill", Palette.crit)
         }
     }
 

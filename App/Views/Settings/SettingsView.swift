@@ -181,7 +181,7 @@ struct SettingsView: View {
         if let failure = settings.saveFailure {
             Label(failure, systemImage: "exclamationmark.triangle")
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(Palette.find)
                 .lineLimit(1)
                 .help(failure)
         } else if let saved = settings.lastSaved {

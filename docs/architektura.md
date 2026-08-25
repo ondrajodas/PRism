@@ -106,8 +106,9 @@ Tři věci, které se u nich nemají rozbít:
   který se nedá použít, ne porucha) a v prázdném tabu nálezů stojí věta i s tím, čím to pustit
   znovu.
 
-  **Okrová jde z palety, ne ze systému, a je to výjimka z pravidla v `ReviewStateAppearance`**
-  („akcent a mint z palety, zbytek škály ze systému“). Opírá se o dvě věci: návrh má
+  **Okrová jde z palety, ne ze systému** — do #432 to byla výjimka z pravidla
+  v `ReviewStateAppearance` („akcent a mint z palety, zbytek škály ze systému“), od #432 je to to
+  pravidlo a výjimku má naopak `.secondary`. Opírá se o dvě věci: návrh má
   `.pill.stale { color: var(--stale) }`, takže systémová žlutá byla **odchylka od schváleného
   mockupu**, a odznak je text na vlastní kapsli — systémová `#FFCC00` na ní má ve světlém režimu
   kontrast **1,41** (na ploše 1,51), kdežto token **4,00** a 4,87; v tmavém je to výměna 9,28 →
@@ -3229,7 +3230,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt **předvyplněný návrhem z nálezů** (obtažený, s popiskem), tělo, seznam komentářů, `Odeslat review…` (u zastaralého `Zkontrolovat a odeslat…`). Obsah scrolluje, jen když se nevejde |
 | `ReviewSubmissionSheet` | Potvrzení odeslání: **kontrola kotev u zastaralého draftu** (#69), pak úplný výpis payloadu, průběh, typované chyby |
 | `DraftTransferView` | První stránka toho potvrzení: stav každé kotvy (sedí / posunulo se / nevím / ztraceno) a volba, co s ní |
-| `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení. `Komentář` bere od #309 `Palette.accent` (verdikt je volba, tedy akce); `.green`/`.red` zůstávají systémové vědomě — převod celé škály je jiná otázka a jinde v `App/` se zelená a červená berou ze systému na desítkách míst |
+| `VerdictAppearance` | Ikona a barva verdiktu — jedno místo pro panel i pro potvrzení. `Komentář` bere od #309 `Palette.accent` (verdikt je volba, tedy akce), schválení a vyžádání změn od #432 `Palette.ok` a `Palette.crit` — do té doby to byla systémová škála a stálo tady, že převod celé škály je jiná otázka |
 | `DraftActions`, `FileDraftActions` | Co se dá s draftem dělat; druhé svázané s jedním souborem diffu |
 | `DiffLineView` | Řádek souboru: dvě čísla (v buňce dvojice jedno, podle `side`), znak změny, obsah obarvený podle jazyka, tlačítko na komentář (na hover) |
 | `ReviewPanel` | Panel **napravo od diffu** (#182, do #242 `FindingsPanel`): segmenty `Nálezy`/`Moje review` — a na vlastním PR `Nálezy`/`Zadání` (#333, rozhoduje `Policy.reviewPanelTabs`) —, karty nálezů, prokliky do diffu a složení na proužek s počtem nálezů a značkou rozdělaného review. `Průběh` a zahození nálezů se u #242 odstěhovaly do záložek PR. **Kreslí se jen ve třech tabech** (#294, `PullRequestTab.showsReviewPanel`) — sám o tom nerozhoduje, podmínku má detail |
@@ -3480,11 +3481,12 @@ Co u #404 vyšlo z měření a není zjevné:
   takže výška pruhu je z ní; hlídá se **stropem** (kapsle smí bublinu zvednout nejvýš o ten jeden
   bod, kterým se liší od prózy vedle sebe).
 - **Barvy #404 nemění**, a je to vědomé: škálu odznaku fronty drží `ReviewStateAppearance`, jehož
-  vlastní zdůvodnění říká, že převod zbytku škály na tokeny je *jiná otázka, která se zodpovídá
+  vlastní zdůvodnění říkalo, že převod zbytku škály na tokeny je *jiná otázka, která se zodpovídá
   měřením*. Měření z #404 je v `PillTypesettingTests` a **našlo mezeru**: čtyři kapsle na
-  systémové zelené a červené mají ve světlém režimu kontrast pod 3 (`vyřešeno` **1,63**,
-  `schválil` **1,70**, `vyžádal změny` 2,52, `3 nálezy · 1 blokuje` 2,70). Vyřizuje se zvlášť,
-  a do té doby se hlídá, že se to nezhorší.
+  systémové zelené a červené měly ve světlém režimu kontrast pod 3 (`vyřešeno` **1,63**,
+  `schválil` **1,70**, `vyžádal změny` 2,52, `3 nálezy · 1 blokuje` 2,70).
+  **Vyřídilo to #432** převodem celé škály na tokeny (1,63 → 3,05 až 2,70 → 3,77); prahy v téže
+  sadě od té doby hlídají výsledek, ne jen to, že se nic nezhorší.
 - **Dvě věci se pojmenovaly tokenem, aniž by se změnil vzhled**, protože `designPill` bere `Color`,
   ne `ShapeStyle`: odznak `já` dostal barvu textu `Palette.ink` (do #404 dědil `primary`, a
   `labelColor` je poloprůhledná — tatáž past jako u textu diffu, #393) a jeho wash se změnil
@@ -6819,6 +6821,20 @@ Nad nálezy platí navíc:
     stojí na ní identita aplikace (hranol, spektrum reviewerů), a spektrum by se systémovým
     akcentem měnilo význam podle nastavení systému. Nasazuje se `tint`em **na kořen okna**, takže
     ho dědí odznaky i tlačítka uvnitř a nikde jinde se fialová nezadrátovává.
+  - **Sémantická škála jde celá z palety** (#432): `ok`, `find`, `crit`, `stale` — nikde v `App/`
+    se nekreslí systémová `.green`, `.red`, `.orange` ani `.yellow`. Do #432 to bylo naopak
+    (systém na desítkách míst, tokeny jako výjimka u `zastaralé` a `dismissed`) a stálo to
+    **čtyři kapsle s kontrastem 1,63 až 2,70** ve světlém režimu, tedy pod hranicí čitelnosti.
+    Důvod je v tom, na co je která barva navržená: systémová `.green`/`.red` je **výplň** ovládacího
+    prvku s bílým textem, kdežto tady je to skoro vždycky **text nebo glyf na tlumeném washi**
+    (`tint.opacity(0.15)`); tokeny jsou přesně na tohle ztmavené. Naměřené hodnoty před a po jsou
+    v `PillTypesettingTests`, pravidlo hlídá `StatusScaleTests` nad zdrojáky.
+
+    Ze systému **zůstávají tři věci a každá s důvodem**: `.secondary` (není barva ze škály, ale
+    „nemám co říct“ — drží se kontrastem okolí), `.purple` u `merged` (3,42 ve světlém, tedy nad
+    hranicí, a paleta purpurovou mimo vyhrazený akcent nemá) a `.blue` u `renamed` ve stromu
+    a `moved` u přenosu draftu — ta je ve světlém režimu na **2,85**, tedy pod hranicí, ale mimo
+    třídu #432 a mockup pro ni token nemá; je to zapsaná mezera, ne záměr.
   - Rozměry chrome jsou z návrhu doslova (hlavička 40 bodů, odsazení 13, mezera 14, záložka
     `5×11` s poloměrem 7) a **ověřené měřením**, ne odhadem — viz `docs/testovani.md`.
 - **Okno je rail plus záložky** (#180), ne `NavigationSplitView`. Seznam PR byl do té doby
