@@ -4708,7 +4708,7 @@ místo v tom bloku, které se storu vůbec dotýká.
 - **`LazyVStack` sem nepatří** — pět řádků je strop z `Policy`, ne odhad, takže líný seznam by za
   měřenou velikost (#361) platil tam, kde se nejhorší případ vejde na obrazovku.
 
-Testů **4051**, všechny zelené: `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
+Testů **4070** po sloučení s #441, všechny zelené (samotná větev jich měla 4051): `DashboardActivityTests` výčtem (strop, patka, nadpis, den u času,
 čtyři prázdna), tři tvrzení ve `AppStoreFeedTests` a pět v `ActivityRowShapeTests` — ta měří úzký
 tvar **dvěma měřidly**: výškou to, že se vejde na jednu řádku a plný řádek ne, a přirozenou šířkou
 to, co v něm **není**. Ověřeno vložením regrese dvakrát (vrácená podrobnost s cílem, zahozený
