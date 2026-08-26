@@ -3236,3 +3236,97 @@ tehdy chybělo: čtyři kapsle na systémové zelené a červené měly ve svět
 **Co se nezměnilo:** krytí washů (0,15 u nálezů a ve frontě, 0,18 v konverzaci), popisky, sazba ani
 geometrie — mění se jedině hodnota barvy. `Palette.mint` a `Palette.stale` zůstávají tam, kam je
 daly #309 a #383; tohle je zbytek téhož výčtu, ne jeho revize.
+
+## Záznam rozhodnutí — pravidla repa a pracovní postup (#447)
+
+Sem se u #447 přestěhovalo **zdůvodnění** pravidel, která platí v `CLAUDE.md`. Samotná pravidla
+zůstávají tam, kde byla, a **nezměnilo se ani jedno**; přestěhovaly se důvody, historie změn
+a naměřená čísla, tedy to, co je potřeba znát, až se bude pravidlo měnit — ne dřív, než se něco
+napíše. Důvod přesunu je zároveň první položkou níž.
+
+### `CLAUDE.md` se drží malý, a je to podmínka, ne estetika (#162, znovu #447)
+
+**Copilot si `CLAUDE.md` bere jako custom instructions — a tím si sám ucpává kontext.** Když
+spadne, do review napíše jen „Copilot encountered an error and was unable to review this pull
+request“; příčina je vidět **jen v logu akce**:
+
+```
+[customInstructions] Built 1 custom instruction(s) for ondrajodas/PRism; names=["CLAUDE.md"]
+Running detector: ccr[…;MaxPromptTokens=110000;…]
+Error: Prompt too big after adding PR context
+```
+
+Tehdy (#162) měl `CLAUDE.md` **315 kB**, takže sám o sobě sežral většinu ze 110 tisíc tokenů
+rozpočtu a na „PR context“ nezbylo. **Nerozhodovala proto velikost diffu**: #159 (12 kB) prošel,
+#160 (70 kB) i #161 (30 kB) spadly. Napřed to vypadalo na `AppStore.swift` (128 kB, byl v obou
+spadlých) — log ukázal, že to bylo jinak; byl to tenhle soubor, ne ten review.
+
+**První rozdělení do `docs/` (873bc29):** ze 316 kB zbylo 37 a Copilot od té doby běhal normálně
+(ověřeno na #230). Zůstalo z toho **pravidlo, ne výjimka**: soubor se drží malý a podrobnosti
+patří do `docs/`.
+
+**Druhé rozdělení (#447):** za půl roku narostl zpátky na **104,6 kB**, tedy přes hranici, kterou
+si pravidlo samo stanovilo („nad ~100 kB je čas rozdělovat znovu“). Šlo se podle téhož měřítka
+jako poprvé — `wc -c < CLAUDE.md` —, ne podle odhadu, a **spouštěčem byla ta hranice, ne spadlý
+Copilot**: čekat na první nedoběhnuté review by znamenalo platit za pravidlo, které už bylo
+zapsané. Co se stěhovalo, je vypsané v popisu PR k #447; co **zůstalo**, je vyjmenované přímo
+v `CLAUDE.md` — grepy, které se pouštějí před pushem, výčty tvrdých podmínek a věty pravidel.
+
+**Skončilo to na 66,5 kB, ne na 40 — a je to rozhodnutí, ne nedodělek.** Zadání mířilo
+orientačně na 37 kB, tedy na stav po prvním rozdělení. Poprvé se ale stěhovala **dokumentace**
+(popisy modulů, katalogy testů), zatímco teď zbyla po odstěhování všech vysvětlení, měření
+a historií jen tahle tři nestlačitelná pásma:
+
+- **výčty tvrdých podmínek**, které se podle zadání nesmí zkrátit ani o položku (sedm metod
+  `ReviewPublishing`, pět zakázaných akcí, sada nástrojů revieweera) — **9,7 kB**;
+- **dvacet grepů**, které se pouštějí před pushem, i s větou, co má vyjít a proč — v `docs/`
+  by je nikdo nespustil;
+- **věty samotných pravidel**. Repo jich má proti stavu po 873bc29 skoro dvojnásobek (za
+  půl roku ~290 issues), takže i po zkrácení každého pravidla na jednu větu s odkazem zabírají
+  přes 30 kB.
+
+Cesta k 40 kB proto vedla jedině přes **mazání pravidel**, ne přes stěhování vysvětlení — a to
+je jiná změna, která patří do vlastního issue a posuzuje se pravidlo po pravidle. Kontrolní
+číslo v `CLAUDE.md` je tedy dál **hranice 100 kB**, ne cíl 40; a 66,5 kB je od ní dost daleko na
+to, aby se dalo přirozeně růst dál.
+
+**Kdyby přesto spadl:** nepřepisuj kvůli tomu zadání ani nedělej umělé PR navíc — dokumentace
+musí jít se změnou v jednom commitu. Zbývá vlastní revize, a ta je stejně podmínkou pushnutí;
+napiš do popisu PR, že Copilot nedoběhl a proč, ať je z PR vidět, že kontrola nechyběla omylem.
+
+### Release notes jsou záznam jedné změny, ne deník projektu (#125)
+
+**Do #125** v `CLAUDE.md` stálo, že release je deník projektu a má popisovat progress. Deník
+nefungoval ze dvou důvodů:
+
+- **Stav zastará vydáním dalšího releasu** a nikdo ho zpětně neopraví — ve `v1.1.12` stálo, že
+  zbývá #69 a #110, což o dvě verze později nebyla pravda.
+- **V delších releasech utopil samotnou změnu**, které patřila půlka místa.
+
+Release je značka na časové ose, takže hodnotu má právě to, co je v ní neměnné: co přibylo, co se
+opravilo, co se rozhodlo jinak a proč, co se změřilo, co se zamítlo. Stávající releasy jsou podle
+toho pravidla přepsané zpětně. Kde projekt je, se pozná z issues a z
+[`docs/stav.md`](../../stav.md) — proto v release notes není žádná sekce `Kde jsme`, `Další krok`
+ani `Stav proti milníkům`.
+
+Tatáž úvaha zamítla i **jeden release za celou dávku** — viz
+[`docs/paralelni-vyvoj.md`](../../paralelni-vyvoj.md), *5. Merge, release, restart*.
+
+### Vlastní revize diffu je podmínka pushnutí, ne doporučení (#46)
+
+Není to úspora práce, je to úspora **času**: Copilot má latenci v minutách, takže každý nález,
+který by se našel vlastníma očima, stojí kolo navíc. U #46 z toho byla **čtyři kola a dvě z nich
+byla zbytečná** — a kdyby se po prvním reálném nálezu projela **celá třída** vzoru místo jednoho
+výskytu, ušetřila by se dvě kola ze čtyř. Odtud obojí: revize před `copilot-review.sh` a „oprav
+třídu, ne výskyt“.
+
+Ze stejného měření plyne, že **jedno kolo Copilota stačí**. Druhé se vyžádá jedině tehdy, když
+první průchod odhalil něco **strukturálního** — vzor, který se opravou mohl objevit i jinde, ne
+překlep. Točit to na jistotu je přesně to zdržení, kvůli kterému se to pravidlo měnilo.
+
+### Merge PR a zavření issue si Claude řídí sám (od 2026-08-01)
+
+Do té doby to byly věci, na které se ptal. Nepatří mezi tvrdé podmínky: zelené testy, vyřízené
+nálezy a hotové zadání issue jsou zjistitelný stav, kdežto dotaz na ně je kolo navíc u něčeho,
+co se dá ověřit. Co se **nezměnilo**: tvrdé podmínky se pořád mají ptát, a „když si nejsi jistý,
+jestli je hotovo, tak hotovo není“.

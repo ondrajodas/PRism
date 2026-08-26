@@ -1482,6 +1482,8 @@ zastaral hned další verzí.
 - [`docs/navrh.md`](docs/navrh.md) — jak se s mockupem pracuje: čím se čte, jak se
   aktualizuje; co mění vzhled, se do něj kreslí a schvaluje dřív, než na to vznikne issue
 - [`docs/claude-cli.md`](docs/claude-cli.md) — ověřené chování `claude` CLI
+- [`docs/github-cli.md`](docs/github-cli.md) — co v tomhle repu na `gh` padá a čím to
+  nahradit; jak se čte výsledek Copilota
 - [`docs/github-review-api.md`](docs/github-review-api.md) — ověřené chování zápisového
   review API GitHubu; podklad pro odesílání review (M6)
 - [CLAUDE.md](CLAUDE.md) — pravidla pro práci v tomto repu
@@ -2107,6 +2109,7 @@ docs/navrh.md             jak se s mockupem pracuje (čtení, aktualizace, schva
 docs/stav.md              co je hotové a co zbývá
 docs/paralelni-vyvoj.md   jak se vyřizuje seznam issues naráz — sloty, subagenti, milníky, merge
 docs/claude-cli.md        ověřené chování claude CLI (flagy, tvar eventů)
+docs/github-cli.md        co na gh v tomhle repu padá, čím to nahradit, jak číst Copilota
 docs/github-review-api.md ověřené chování zápisového review API GitHubu (spike k M6)
 docs/superpowers/specs/   návrh a specifikace
 CLAUDE.md                 pravidla pro práci v repu
