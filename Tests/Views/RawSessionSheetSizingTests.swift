@@ -187,7 +187,7 @@ struct RawSessionSheetSizingTests {
         )
         window.contentView = NSHostingView(rootView: Host(target: target, store: store))
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
 
         let attached = await waitUntil("sheet se otevřel") { window.attachedSheet != nil }
         #expect(attached, "Sheet se v okně neotevřel.")

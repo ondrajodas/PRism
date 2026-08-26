@@ -152,7 +152,7 @@ struct GraphProbeTests {
         )
         window.contentView = hosting
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         hosting.layoutSubtreeIfNeeded()
         _ = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds)
         return window

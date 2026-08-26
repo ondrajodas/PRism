@@ -259,8 +259,9 @@ pravidla jsou změřená proti sandboxu (`docs/github-review-api.md`, bod 8) a d
 uhádnout: rozsah smí přeskočit mezeru mezi hunky a pořadí konců GitHub hlídá jen na téže straně.
 
 Pohled vedle sebe hotový (issue #98) — `DiffLayout` v `App/Models/`, `DiffRow.pair`
-a `DiffRow.paired(_:)` v `App/Diff/DiffPairing.swift`, `DiffPairView`, přepínač v liště nad
-diffem, `global.diffLayout` v konfiguraci a `diffLayoutOverride` v `AppStore`. **Starý a nový
+a `DiffRow.paired(_:)` v `App/Diff/DiffPairing.swift`, přepínač v liště nad
+diffem, `global.diffLayout` v konfiguraci a `diffLayoutOverride` v `AppStore`. (Kreslil to
+`DiffPairView`; od #157 to dělá blok a od #446 je ten view smazaný — viz níž.) **Starý a nový
 obsah jde postavit proti sobě**, spárovaný po řádcích; všechno, co diff umí pod sebou, umí
 i vedle sebe (bubliny, rozbalení kontextu, obarvení, sbalování, skoky). Výchozí pohled je
 v nastavení a projeví se bez restartu, přepínač v liště je odchylka do zavření aplikace —
@@ -4883,6 +4884,99 @@ Testů **4098**, všechny zelené — z toho **21 nových**: `Policy` výčtem (
 že `▶` pouští týž příkaz, jaký kopíruje `⧉`, a že `cd` je s `&&`), tvar volání `osascript`u
 (příkaz jde jako argument, ne do skriptu) a to hlavní ze storu — **neotevřené okno skončí hláškou,
 ne tichem**.
+
+### #446 — diff kreslí kód jen bloky, a `DiffPairView` je pryč
+
+**Na tomhle není co vidět** — a právě to je tvrzení, které se muselo doložit. Kreslí se táž věc
+touž cestou; ubyl kód, ke kterému se od #157 nedostal ani jeden řádek.
+
+Zadání říkalo, že do `DiffRowView` z diffu nedojde ani `.line`, ani `.pair`, protože `DiffView`
+sype do `ForEach` **vždycky** výsledek `blocked(_:)`, resp. `blockedPairs(_:)`. **Půlka toho
+platí, půlka ne** — změřeno nad pěti skutečnými diffy z fixtures v obou pohledech:
+
+| Případ | Dojde ke kreslení? |
+|---|---|
+| `.pair` | **Nikdy** — ani mezi bublinami, které blok rozetnou |
+| `.line` | **Jednou**: poznámka `git`u (`\ No newline at end of file`) ve **split** pohledu |
+
+Ta výjimka je průsečík dvou rozhodnutí, která spolu nesouvisejí: `DiffRow.paired(_:)` `meta` řádek
+**nepáruje** (není to obsah souboru, takže nemá stranu — #98) a `blockedPairs(_:)` slévá **jen
+dvojice**. V pohledu pod sebou výjimka není, tam ji `blocked(_:)` sebere do bloku.
+
+**Smazal se proto `DiffPairView`** (sto řádků paralelního kreslení dvojice) a s ním dvě věci, které
+tím ztratily jediného volajícího: `DiffLineView.side` — volba „jsem buňka dvojice“, tedy tři větve,
+které nikdo nevyplnil — a `DiffMissingHatch` jako SwiftUI `Shape` (šrafu kreslí `DiffTextView`
+v AppKitu, zbyla geometrie `segments(in:)`). Větev `.line` naopak **zůstala**, protože je živá.
+
+**Případ `.pair` ve `switch`i zůstává, ale kreslí týž blok, ne `EmptyView`.** Enum se nezúžil, takže
+`DiffRowView` musí být vyčerpávající — a prázdno by byla tichá díra v diffu, kdyby se tam dvojice
+někdy dostala. Delegace je jeden řádek a je ověřená renderem: obě větve daly **bajt po bajtu tentýž
+PNG**.
+
+**Doloženo, že se na obrazovce nemění nic**: 14 offscreen snímků před změnou a po ní (tři soubory ×
+dva pohledy × dva režimy, plus úryvek u vlákna na ose), všechny hashe **shodné**. Že je ten render
+deterministický, se ověřilo třemi běhy nad nezměněným kódem.
+
+**Proč to není kosmetika:** u #438 se kvůli téhle mrtvé cestě hledal výkonový problém na špatném
+místě — zadání znělo „neviditelný diff počítá geometrii svých řádků“ a měření pak ukázalo, že diff
+se na geometrii řádku neptá ani vepředu. #438 vyklizení odložilo s poznámkou, že je to vlastní
+zadání; tohle je ono.
+
+Testů **4108**, všechny zelené — z toho **10 nových**: `DiffRenderedRowsTests` (nad daty i nad
+zdrojáky, s kontrolou měřidla z obou stran) a jeden případ v `DiffJumpTargetTests` na soubor, ve
+kterém poznámka `git`u bloky rozděluje. **Ověřeno vloženou regresí** v obou směrech: `EmptyView()`
+ve větvi `.pair` stráž shodí a před smazáním `DiffPairView` shodila tvrzení o jediném view.
+
+### #462 — plný běh testů se zasekával na animaci objevení okna
+
+**Na tomhle není co vidět** — je to celé v `Tests/` a v dokumentaci; `App/` se nemění ani o řádek.
+
+Plný `xcodebuild test` se zasekával na **třech posledních suitách** (`komentář pod PR`, `odpovídání
+do vláken`, `labely a reviewery`), tedy přesně na těch, které spouštějí podstrčený `gh` jako
+podproces, a v hostu se u toho nasbíralo **76 vláken v `-[NSAnimation _runBlocking]`**. Obcházelo se
+to během po polovinách. Vypadalo to jako rozbité testy a je to ten druh chyby, kvůli kterému v repu
+stojí pravidlo psát výstup do souboru — jednou už kvůli tomu padlo přes půl hodiny na hledání
+neexistující chyby.
+
+**Příčinou je ukázání okna, ne SwiftUI a ne obsah.** `orderFront` na okně s výchozí
+`animationBehavior` spustí animaci objevení, a ta na macOS běží jako `NSAnimation` v **threaded**
+režimu — tedy `dispatch_async` na globální root frontu, ze které si na celou dobu animace drží
+vlákno a odpovídá z něj display linku. Změřeno samostatnou sondou: 12 oken ukázaných naráz dá **25
+vláken procesu, z toho 14 v `_runBlocking`**; totéž s `animationBehavior = .none` dá **5 a 0**;
+tatáž dvojice vyjde i na `borderless` okně **bez jediného view**, a naopak 12 `NSHostingView`ů
+v neukázaných oknech nestojí nic. `Tests/Views/` přitom ukazovalo okno na **48 místech** a Swift
+Testing pouští suity paralelně.
+
+**A že to zaplatí `gh`, je taky změřené.** Pool má na tomhle stroji strop **75** pracovních vláken
+a `SubprocessRunner` z něj bere vlákna na blokující čtení pip. Při 80 obsazených vláknech (pool se
+zastaví na 76 — přesně to číslo z hlášení) se práce na téže privátní souběžné frontě dostane na
+procesor až za **28,0 s** místo **0,0001 s**, což je nad třicetisekundovým timeoutem `gh`. Odtud
+`PublishError.timedOut` u těch tří suit pod zátěží: **jedna příčina, dva projevy**, ne dvě různé
+věci.
+
+**Opravou je jeden helper a stráž nad zdrojáky.** Okno se v testech ukazuje jedině přes
+`orderFrontUnanimated()` (`Tests/Support/UnanimatedWindow.swift`), který napřed nastaví
+`animationBehavior = .none`; hlídá to `UnanimatedWindowTests` — nad **zdrojáky**, ne nad během, ze
+stejného důvodu jako u #367 (počet vláken procesu je vlastnost celého paralelního běhu, takže by
+tvrzení o něm padalo podle toho, kdo běžel vedle). `App/` se nemění schválně: animace objevení okna
+je v aplikaci v pořádku, otevírá se jich pár, ne padesát.
+
+**Co se nepovedlo prokázat, a je to zapsané:** samotné zaseknutí se nereprodukovalo — všech šest
+plných běhů (A/B/A/B/A/B) doběhlo, i ty bez opravy. Závěr proto stojí na mechanismu a na číslech,
+ne na pozorovaném rozdílu mezi zaseknutým a nezaseknutým během. Změřená je špička vláken hostitele
+(bez opravy 88 / 71 / 76, s opravou 42 / 57 / 54) a `_runBlocking` v opakovaných vzorcích — na
+poslední dvojici, kde oba měřiče běžely celou dobu, **8 bez opravy a 2 s opravou**. Ty dvě jsou
+okno **samotného hostitele** při startu, ne test: `-only-testing` na suitu bez jediného okna dá
+`_runBlocking = 1`.
+
+**Slabinou zůstává `SubprocessRunner`**: dokud čte `readToEnd()`, drží každé volání dvě vlákna
+sdíleného poolu, takže ho umí zdržet kdokoli, kdo pool obsadí. V aplikaci to nehrozí (oken je pár,
+paralelismus review drží `WorkCoordinator`), takže se produkční cesta nepřepisovala; cesta ven,
+kdyby to bylo potřeba, je bufferovat z `readabilityHandler`u jako `SubprocessStreamer`.
+
+Testů **4110**, z toho **2 nové** (`UnanimatedWindowTests`: stráž a pojistka, že doopravdy čte
+zdrojáky). Rozbor i obě tabulky měření jsou v [`testovani.md`](testovani.md), poznámka o poolu
+u podprocesů v [`architektura.md`](architektura.md).
 
 ### #452 — tab `Zeptat se`: rozhovor s Claudem nad pull requestem
 

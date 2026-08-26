@@ -94,7 +94,7 @@ struct DiffPairScrollerRenderProbe {
             )
             window.contentView = backdrop
             window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-            window.orderFront(nil)
+            window.orderFrontUnanimated()
             defer { window.orderOut(nil) }
             backdrop.layoutSubtreeIfNeeded()
 

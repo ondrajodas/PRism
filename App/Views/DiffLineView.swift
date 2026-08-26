@@ -1,18 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// Jeden řádek diffu: dvě čísla, znak změny a obsah. V pohledu vedle sebe jedna buňka
-/// dvojice — pak jen jedno číslo, viz `side`.
+/// Jeden řádek diffu **přes celou šířku**: obě čísla, znak změny a obsah.
+///
+/// **Buňku dvojice už nekreslí** (#446). Do té doby uměl i tu — jedno číslo místo dvou, pozadí
+/// za sebe nechával kreslit `DiffPairView` —, jenže do split pohledu se od #157 dostane jedině
+/// blok (`DiffPairBlockView`), takže tu volbu nikdo nevyplnil. Zbyly z ní tři větve, ze kterých
+/// se nedalo poznat, že jsou kulisa; proto je pryč a řádek má **jednu podobu**.
+///
+/// Dva živí volající: `ThreadSnippetView` (úryvek u vlákna, #158) a v diffu jediný případ, který
+/// se do bloku neslévá — poznámka `git`u ve split pohledu (`DiffRowView`, viz `DiffRenderedRowsTests`).
 struct DiffLineView: View {
     let line: DiffLine
-    /// Která čísla se ukazují a kdo kreslí pozadí.
-    ///
-    /// `nil` = pohled pod sebou: obě čísla vedle sebe a řádek si kreslí pozadí sám.
-    ///
-    /// `.left` / `.right` = jedna buňka pohledu vedle sebe: jedno číslo (staré vlevo, nové
-    /// vpravo) a pozadí kreslí `DiffPairView`. Buňka si ho kreslit nemůže — prázdná
-    /// protistrana i ta kratší musí být vysoká jako celý řádek, a to buňka o sobě neví.
-    var side: DiffSide?
     /// Jazyk souboru kvůli obarvení. `nil` = jednobarevný řádek.
     var language: Language?
     /// Co jde s řádkem udělat v rozdělaném review. `nil` = nic, tlačítko se nekreslí.
@@ -47,8 +46,8 @@ struct DiffLineView: View {
     /// se vyhodnocovala **až po** čtení.
     ///
     /// Není to `if` nad měnícím se stavem: obojí je dané volajícím a je konstantní po celý život
-    /// řádku — v diffu je rámeček i krabice vždycky (`DiffRowView`, `DiffPairView`), v úryvku
-    /// u vlákna na ose nikdy (`ThreadSnippetView`). Větev se tedy nepřepíná za běhu.
+    /// řádku — v diffu je rámeček i krabice vždycky (`DiffRowView`), v úryvku u vlákna na ose
+    /// nikdy (`ThreadSnippetView`). Větev se tedy nepřepíná za běhu.
     var body: some View {
         if reportsFrame {
             // Rámeček řádku pro tažení (#110) — v souřadnicích **obsahu**, takže se scrollováním
@@ -125,13 +124,12 @@ struct DiffLineView: View {
         .gesture(rangeGesture)
     }
 
-    /// Sloupec (nebo dva) s čísly řádků. Tažení rozsahu se odsud **neobsluhuje** — leží nad tím
-    /// `draftButton`, který zabírá celý sloupec (viz níž).
+    /// Dva sloupce s čísly řádků — staré a nové. Tažení rozsahu se odsud **neobsluhuje** — leží
+    /// nad tím `draftButton`, který zabírá celý sloupec (viz níž).
     private var numbers: some View {
         HStack(alignment: .top, spacing: 0) {
-            // V buňce dvojice je číslo jedno: vlevo staré, vpravo nové. Bez `side` obojí.
-            if side != .right { number(line.oldNumber) }
-            if side != .left { number(line.newNumber) }
+            number(line.oldNumber)
+            number(line.newNumber)
         }
     }
 
@@ -219,10 +217,8 @@ struct DiffLineView: View {
         }
     }
 
-    /// Šířka sloupce s čísly: v pohledu pod sebou dvě čísla, v buňce dvojice jedno.
-    private var gutterWidth: Double {
-        side == nil ? Self.numberColumn * 2 : Self.numberColumn
-    }
+    /// Šířka sloupce s čísly — dvě čísla vedle sebe.
+    private var gutterWidth: Double { Self.numberColumn * 2 }
 
     /// Kdy je tlačítko vidět: normálně na najetí myší, **při tažení jen na konci rozsahu**.
     /// Hover během tažení zůstává na řádku, kde se stisklo, takže bez tohohle by ikona svítila
@@ -245,13 +241,14 @@ struct DiffLineView: View {
                 // Řádek pod myší se dohledá ze souřadnic: gesto patří tomu řádku, ve kterém
                 // tažení začalo, takže o ostatních jinak neví. Když bod na žádný komentovatelný
                 // řádek nepadne (mezi soubory, na hlavičku hunku), zůstane rozsah, kde byl.
-                // Hledá se **jen ve svém sloupci** (ve split pohledu): tažení, které začalo
-                // vpravo, nemá skočit vlevo, když myš zajede vedle nebo když levá protistrana
-                // chybí. V pohledu pod sebou je `side` nil a hledá se všude.
+                // Hledá se **přes obě strany** (`on: nil`): řádek je přes celou šířku, takže se
+                // hledání nemá o co dělit. Ve sloupci hledá blok dvojic, který svou stranu zná
+                // z geometrie (`DiffGutterGeometry`) — tažení, které začalo vpravo, tak neskočí
+                // vlevo, když myš zajede vedle nebo když levá protistrana chybí.
                 //
                 // Když pod myší řádek není, posílá se `nil` — **ne začátek**. Dosazený začátek
                 // rozsah srazil na jeden řádek pokaždé, když myš přejela prázdnou protistranu.
-                rangeDrag.move(anchor, rangeDrag.box?.frames.anchor(at: value.location, on: side))
+                rangeDrag.move(anchor, rangeDrag.box?.frames.anchor(at: value.location, on: nil))
             }
             .onEnded { _ in rangeDrag.end() }
     }
@@ -376,25 +373,20 @@ struct DiffLineView: View {
         }
     }
 
-    /// V pohledu vedle sebe kreslí pozadí `DiffPairView` za celou dvojici, ne buňka — viz
-    /// `side`. Tady tedy nezbývá nic, aby se barvy nesčítaly.
-    ///
     /// **Pruh rozsahu leží nad barvou druhu řádku, ne pod ní** (#277). Do té doby to bylo obráceně
     /// (`.background(background).background(tint)` staví pruh **pod** pozadí) a fungovalo to jen
     /// proto, že pozadí bylo z dvanácti procent průhledné — pruh jím prosvítal. S vyčíslenou
     /// barvou by pod ní zmizel, a s ním jediná zpětná vazba o tom, co se zrovna vybírá. Blok kódu
     /// (`DiffTextView.drawRows`) kreslil v tomhle pořadí odjakživa, takže se tím obě cesty
     /// srovnaly na jedno.
-    @ViewBuilder private var background: some View {
-        if side == nil {
-            Self.background(of: line.kind)
-                .overlay(Self.tint(dragged: isInDraggedRange, saved: isInCommentRange))
-        }
+    private var background: some View {
+        Self.background(of: line.kind)
+            .overlay(Self.tint(dragged: isInDraggedRange, saved: isInCommentRange))
     }
 
     /// Pruh přes celý řádek u komentovaného rozsahu (#110) — jinak by u víceřádkového komentáře
     /// nebylo poznat, kam až sahá. Kreslí se **přes** pozadí druhu řádku, aby zůstalo vidět, co
-    /// je přidané a co odebrané; ve split pohledu ho stejně jako to pozadí kreslí dvojice.
+    /// je přidané a co odebrané; v blocích kódu ho stejně jako to pozadí kreslí `DiffTextView`.
     ///
     /// **Akcent z palety, ne `Color.accentColor`** (#309): systémová modrá byla i tady, jen ji
     /// dvanáct procent krytí schovalo natolik, že to nebylo vidět na první pohled — a nad zeleným
@@ -420,9 +412,9 @@ struct DiffLineView: View {
 
     /// Barva pozadí podle druhu řádku.
     ///
-    /// Statická schválně: tutéž barvu si bere `DiffPairView`, který ve split pohledu kreslí
-    /// pozadí za dvojici. Dvě palety by se rozešly a přidaný řádek by v jednom pohledu
-    /// vypadal jinak než v druhém.
+    /// Statická schválně: tutéž barvu si bere `DiffTextView`, který kreslí pozadí řádků v bloku
+    /// kódu. Dvě palety by se rozešly a přidaný řádek by v úryvku u vlákna vypadal jinak než
+    /// v diffu.
     ///
     /// **Z `Palette`, ne krytí nad podkladem** (#277) — proč a s jakými čísly, je u
     /// `Palette.diffAdded`.

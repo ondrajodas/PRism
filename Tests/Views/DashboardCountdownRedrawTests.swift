@@ -217,7 +217,7 @@ struct DashboardCountdownRedrawTests {
         let hosting = NSHostingView(rootView: view.frame(width: frame.width, height: frame.height))
         hosting.sizingOptions = []
         window.contentView = hosting
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         return window
     }
 

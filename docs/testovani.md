@@ -1512,6 +1512,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   pohledech; druhý test naopak tvrdí, že **bez** překladu se netrefí. Z té dvojice je pak poznat,
   jestli spadlo zadání, nebo kód. Plus že se řádek mimo blok mapuje sám na sebe (jinak by přestal
   fungovat skok na soubor) a že blok nezapomene ani jeden řádek, který spolkl.
+
+  **Od #446 k tomu patří soubor s poznámkou `git`u.** Ta ve split pohledu zůstane samostatným
+  `.line` a **rozděluje** kolem sebe bloky, takže je to jediné místo v diffu, kde slití není úplné
+  — a kdyby ho překlad nepokrýval, skok na řádek za ní by mířil na id, které v seznamu není.
+- **Co z diffu doopravdy dojde ke kreslení (#446)** — `DiffRenderedRowsTests`. Tvrdí se to
+  **nad daty i nad zdrojáky**, protože každá polovina sama o sobě jde obejít.
+
+  Nad daty: seznam se skládá **týmž výrazem, jakým se plní `ForEach`**
+  (`rows(of:layout:)` + `blocked(_:)`/`blockedPairs(_:)`) nad **pěti skutečnými diffy** z fixtures
+  v obou pohledech. `.pair` se ke kreslení nedostane **nikdy** — ani mezi bublinami, které blok
+  rozetnou, tedy zrovna tam, kde by osamocená dvojice mohla zbýt. `.line` **jednou**: poznámka
+  `git`u (`\ No newline at end of file`) ve split pohledu, protože ji `paired(_:)` nepáruje
+  a `blockedPairs(_:)` slévá jen dvojice. Ve stažených diffech poznámka není, takže je na ni
+  vlastní soubor **a vlastní test o tom, že ta nula výš je vlastnost fixtures, ne kódu**.
+
+  **Kontrola měřidla** je tam dvakrát: v mezikroku (`rows(of:layout: .split)`) dvojice **být
+  musí**, jinak by nula neznamenala nic, a test s bublinou tvrdí, že se blok doopravdy rozťal.
+
+  Nad zdrojáky (tatáž konstrukce jako `SingleWayOutTests`): že `DiffRowView` plní **jediný
+  volající jediným výrazem** — bez toho by tvrzení nad daty platila o funkci, kterou si testy
+  zavolaly samy —, že `DiffPairView` v aplikaci **není** a že nedosažitelná větev `.pair` kreslí
+  **týž blok**, ne prázdno. **Ověřeno vloženou regresí** (`EmptyView()` do té větve spadne)
+  a renderem: obě větve daly bajt po bajtu tentýž PNG.
 - **`Policy` — procházení nálezů (#187)** — vyčerpávajícím výčtem: bez kurzoru se jde jen
   dopředu, šipky drží pořadí diffu, na kraji není kam, odmítnutý nález se přeskočí a skupina
   bez platného nálezu vypadne celá. Tři případy, kvůli kterým to celé vzniklo: **nález bez místa
@@ -4516,6 +4539,134 @@ co tvrdit kromě toho, jak se to pozná: **žádná chyba kompilace, žádné `�
 test**, a druhý běh nad tímtéž commitem projde. Je to zátěž, ne rozbitý build — pustit znovu.
 Odstranění spinů (#296 vyndalo 56 míst, která na `yield()` točila procesor) tomu podle všeho pomáhá,
 ale **změřené to není**; kdyby se to vrátilo, tohle je záznam, u kterého se dá začít.
+
+## Zaseknutý plný běh: okno, které se objeví s animací (#462)
+
+Plný `xcodebuild test` se na tomhle stroji zasekával na **třech posledních suitách** — `komentář pod
+PR`, `odpovídání do vláken` a `labely a reviewery` —, tedy přesně na těch, které spouštějí
+podstrčený `gh` jako **podproces**. V hostu se u toho nasbíralo **76 vláken
+v `-[NSAnimation _runBlocking]`** a dispatch pool narazil na svůj strop. Obcházelo se to během po
+polovinách (`-only-testing` / `-skip-testing`).
+
+**Od `Early unexpected exit` výš se to pozná na první pohled a jsou to jiné věci:**
+
+| | zaseknutý běh (#462) | `Early unexpected exit` (#298) |
+|---|---|---|
+| kolik testů proběhlo | **tisíce**, výpis se zastaví uprostřed | **ani jeden** |
+| co je v logu | poslední `✔` a pak ticho, žádné `Test run with …` | `operation never finished bootstrapping` |
+| co dělá hostitel | **žije**, `ps -o %cpu` ~0 % (čeká) | už neběží |
+| co s tím | vzorkovat, viz níž | **pustit znovu**, je to zátěž |
+
+Když se běh zasekne, hostitel ještě žije — tak se z něj dá vytáhnout, na čem. Po zabití už ne:
+
+```bash
+PID=$(pgrep -f 'build.noindex/.*PRism.app/Contents/MacOS/PRism' | head -1)
+ps -M -p "$PID" | wc -l                    # kolik má vláken; nad ~75 je pool na stropě
+sample "$PID" 3 -file /tmp/host.txt
+grep -c '_runBlocking' /tmp/host.txt       # kolik jich sedí v animaci
+```
+
+**Pozor na `pgrep` ve víc slotech**: ten vzor sedne i na hostitele souběžného stromu, takže se do
+něj patří dopsat kus vlastní cesty. Jinak se změří cizí běh a vyjde z toho nesmysl.
+
+### Kdo ta vlákna drží
+
+Rozhoduje **ukázání okna**, ne SwiftUI a ne to, co je v okně. Samostatná sonda mimo repo (12 oken
+naráz a pak `sample` sám na sebe, `/usr/bin/sample <vlastní pid> 1`):
+
+| co sonda udělá | vláken procesu | z toho v `_runBlocking` |
+|---|---|---|
+| 12× `NSHostingView`, okno se **neukáže** | 5 | 0 |
+| 12× `orderFront(nil)`, výchozí `animationBehavior` | 25 | **14** |
+| 12× totéž na **borderless** okně **bez obsahu** | 25 | **14** |
+| 12× `orderFront(nil)` s `animationBehavior = .none` | **5** | **0** |
+| 12× `setFrame(_:display:animate: true)` | 8 | 1 |
+| 12× `beginSheet(_:completionHandler:)` | 7 | 1 |
+
+`NSAnimation` v threaded režimu je **`dispatch_async` na globální root frontu**, ze které si na celou
+dobu animace drží vlákno a odpovídá z něj display linku. V `sample`u je to tahle řada:
+
+```
+Thread_… DispatchQueue_19: com.apple.root.user-interactive-qos  (concurrent)
+  _dispatch_worker_thread2 → _dispatch_root_queue_drain → _dispatch_call_block_and_release
+    -[NSAnimation _runBlocking] → -[NSRunLoop runMode:beforeDate:] → __CFRunLoopRun
+      __CFMachPortPerform → CA::Display::DisplayLink::dispatch_items
+        -[_NSDisplayLinkForwarder displayLinkDidFire:] → -[NSAnimation _advanceTimeWithDisplayLink:]
+```
+
+`setFrame(display:animate:)` a `beginSheet` do téže třídy patří, ale **blokují volajícího**, takže
+z nich je vždycky jedna animace naráz. Nebezpečné je jen to, co se pouští po desítkách — a
+`Tests/Views/` ukazovalo okno na **48 místech**, přičemž Swift Testing pouští suity paralelně.
+
+### Kdo to zaplatí
+
+Pool má na tomhle stroji strop **75 pracovních vláken** a `SubprocessRunner` z něj bere vlákna na
+**blokující čtení pip** (`readToEnd()` na obou koncích, `SubprocessRunner.ioQueue`). Když je
+obsazený, čtení `gh` se vůbec nedostane na procesor. Změřeno druhou sondou — obsadit pool blokující
+prací a pak změřit, za jak dlouho se práce na téže privátní souběžné frontě **vůbec spustí**:
+
+| obsazených vláken | vláken procesu | latence `ioQueue` |
+|---|---|---|
+| 0 | 1 | **0,0001 s** |
+| 80 | **76** | **28,0 s** |
+
+Těch 76 je **strop poolu, ne počet zadané práce** — tedy přesně to číslo z hlášení. A 28 s je doba,
+po kterou si sonda vlákna držela; `gh` má v aplikaci timeout **30 s**, takže z toho v panelu vyjde
+`PublishError.timedOut`. **Je to jedna příčina a dva projevy**, ne dvě různé věci: `timedOut` u těch
+tří suit pod zátěží a zaseknutý plný běh mají tentýž kořen.
+
+### Co se s tím udělalo a jak se to hlídá
+
+Ukázat okno jde v `Tests/` **jedině přes `orderFrontUnanimated()`** (a
+`orderFrontRegardlessUnanimated()`) z `Tests/Support/UnanimatedWindow.swift`, který napřed nastaví
+`animationBehavior = .none`. Hlídá to `UnanimatedWindowTests` — stráž nad **zdrojáky**, ne nad
+během, z téhož důvodu jako u #367: počet vláken procesu je vlastnost **celého paralelního běhu**,
+takže tvrzení o něm padá podle toho, kdo běžel vedle. Grep z `CLAUDE.md` dělá totéž z příkazové
+řádky.
+
+Dvě věci na té stráži nejsou zjevné. Hledá se **bez tečky vpředu** (`orderFront(`, ne
+`.orderFront(`), protože v podtřídě `NSWindow` jde totéž volání napsat bez příjemce — a jména
+helperů tím netrpí, `orderFrontUnanimated(` na `orderFront(` nesedne. A **odečítají se dva
+soubory**, ne jeden: helper i stráž. Že v obou ten vzor doopravdy **sedí**, je druhé tvrzení té
+suity — bez něj by stráž zezelenala i tehdy, kdyby hledala řetězec, který v kódu není.
+
+**Aplikace se nemění.** Animace objevení okna je v `App/` v pořádku — otevírá se jich pár, ne
+padesát — a `grep -rn 'orderFront' App` je prázdný, takže na obrazovce není co vidět.
+
+Naměřeno na plném běhu, střídavě **A/B/A/B/A/B** (špička vláken hostitele z `ps -M` po 2 s;
+`_runBlocking` z opakovaných jednosekundových `sample`ů). Rozhodující je **poslední dvojice** — jen
+u ní běžely oba měřiče po celou dobu, a `sample` si sám bere procesor, takže špičky vláken jsou v ní
+vyšší než v prvních dvou:
+
+| běh | špička vláken hostitele | max `_runBlocking` |
+|---|---|---|
+| A1 bez opravy | **88** | neměřeno (jednorázový vzorek: 8) |
+| B1 s opravou | **42** | neměřeno |
+| A2 bez opravy | **71** | 7 (měřeno jen v závěru běhu) |
+| B2 s opravou | 57 | **0** |
+| **A3 bez opravy** | **76** | **8** |
+| **B3 s opravou** | **54** | **2** |
+
+Ty dva zbylé v `B3` **nejsou z testů**, a je to změřené, ne odhad: `-only-testing` na `UnanimatedWindowTests`
+(dva testy, žádné okno, 0,9 s) dá v hostiteli `_runBlocking = 1`. Je to okno **samotné aplikace**,
+která je hostitelem testů, při jejím startu — a to je jedno okno, tedy přesně ta velikost, která
+nikomu nevadí.
+
+### Co tím prokázané není
+
+**Samotné zaseknutí se u opravy nereprodukovalo.** Plný běh doběhl **ve všech** měřeních výš — i bez
+opravy —, takže „po opravě už se to nezasekne“ je závěr z **mechanismu a z čísel**, ne z pozorovaného
+rozdílu mezi zaseknutým a nezaseknutým během. Co je změřené: zdroj těch vláken (tabulka výš), cena
+obsazeného poolu pro `gh` (28 s proti 0,0001 s) a to, že po opravě nezbylo v celém běhu z testů
+**ani jedno** takové vlákno. Kdyby se zaseknutí vrátilo, je tohle první věc, kterou má smysl ve
+vzorku hledat — a pak už to nebude tohle.
+
+**`SubprocessRunner` zůstává na sdíleném poolu**, a je to zapsaná slabina, ne nedopatření. Blokující
+čtení pipy si bere vlákno z globální fronty, takže kdokoli jiný, kdo pool obsadí, umí `gh` a `git`
+zdržet až na timeout. V aplikaci to nehrozí ze stejného důvodu, proč se nemění `App/` (oken je pár
+a paralelismus review drží `WorkCoordinator`), takže se produkční cesta kvůli tomuhle issue
+nepřepisovala. Kdyby se to mělo řešit, cesta je **nedržet vlákno vůbec**: bufferovat výstup
+z `readabilityHandler`u, jako to dělá `SubprocessStreamer`, místo `readToEnd()`.
 
 ## Globální stav procesu se v testech neměří (#367)
 

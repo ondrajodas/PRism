@@ -124,7 +124,7 @@ struct FindingDuplicateProbe {
         window.contentView = hosting
         // Mimo obrazovku, ať sonda nikomu neskočí před oči.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         // Hierarchie se doskládá až po jednom kole smyčky, takže se výška bere znovu až za ní.
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         hosting.frame.size.height = hosting.fittingSize.height

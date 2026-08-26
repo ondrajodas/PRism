@@ -281,7 +281,7 @@ struct CodeTextSheetSizingTests {
         )
         window.contentView = NSHostingView(rootView: Host(content: content(kind: kind), store: store))
         window.setFrameOrigin(Self.origin)
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
 
         let attached = await waitUntil("sheet se otevřel") { window.attachedSheet != nil }
         #expect(attached, "Sheet se v okně neotevřel.")

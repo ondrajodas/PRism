@@ -165,7 +165,7 @@ struct SidebarRailTests {
         window.contentView = hosting
         // Mimo obrazovku, ať test nikomu neskočí před oči — vedle sebe běží víc instancí aplikace.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
         // Hierarchie se doskládá až za jedním kolem smyčky.
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))

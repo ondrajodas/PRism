@@ -730,6 +730,24 @@ Zásady, které platí všude:
       grep -vE ':[0-9]+: *//' | grep -v ProcessPreferencesTests
   grep -rn 'maximumAdvancement\|defaultLineHeight\|boundingRectForFont' App | grep -vE ':[0-9]+: *//'
   ```
+- **Okno se v testu ukazuje bez animace** (#462). `orderFront` na okně s výchozí
+  `animationBehavior` spustí `NSAnimation` v **threaded** režimu, tedy `-[NSAnimation _runBlocking]`
+  na **vlákně z globálního dispatch poolu**, které si drží po celou dobu animace. Rozhoduje ukázání
+  okna, ne SwiftUI a ne obsah (změřeno i na `borderless` okně bez view). Jedno okno nic neznamená,
+  **48 ukázaných oken v paralelním běhu ano**: pool má strop **75 vláken** a `SubprocessRunner` z něj
+  bere vlákna na blokující čtení pip — při 80 obsazených se práce na téže frontě dostane na procesor
+  až za **28 s** místo 0,0001 s, což je nad timeoutem `gh`. Odtud `PublishError.timedOut` **i**
+  zaseknutý plný běh na těch třech suitách, které `gh` spouštějí; je to **jedna příčina**.
+  Ukazuje se proto přes `orderFrontUnanimated()` z `Tests/Support/UnanimatedWindow.swift` a hlídá to
+  `UnanimatedWindowTests` ([rozbor i jak se zaseknutý běh pozná od `Early unexpected
+  exit`](docs/testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)). Grep, který
+  **musí vyjít prázdný** (helper i stráž se odečítají — v obou ta volání stojí legitimně):
+
+  ```bash
+  # Prefix `UnanimatedWindow` odečítá dva soubory: helper a stráž nad ním.
+  grep -rn 'orderFront(\|orderFrontRegardless(\|makeKeyAndOrderFront(' Tests |
+      grep -vE ':[0-9]+: *//' | grep -v UnanimatedWindow
+  ```
 - **Jak se v tomhle repu měří, je v [`docs/testovani.md`](docs/testovani.md)** — a než začneš
   měřit, přečti si to, protože každá z těch věcí už jednou vyrobila falešný výsledek: test, který
   čeká na jev, se **neváže na pevný okamžik** (#269,

@@ -171,7 +171,7 @@ struct StepFeedWindowTests {
             window.contentView = hosting
             // Mimo obrazovku, ať test nikomu neskočí před oči.
             window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-            window.orderFront(nil)
+            window.orderFrontUnanimated()
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
             scroll = try #require(Scene.scrollView(in: hosting), "výpis nemá scroll")
