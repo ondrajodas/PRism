@@ -18,6 +18,11 @@ struct ReviewProgressView: View {
     /// Cíl skládá **`Policy`, ne view** (`Policy.rawSessionTarget(of:slug:)`): rozhodnutí „bez
     /// `session_id` a bez pracovního stromu tlačítko není“ je pravidlo, ne `if` v kresbě.
     var showRawSession: ((RawSessionTarget) -> Void)?
+    /// Otevře session té dráhy v Terminálu (#453). `nil` = odsud se to neotevírá.
+    ///
+    /// Cíl skládá **`Policy`, ne view** (`Policy.terminalSession(of:)`), ze stejného důvodu jako
+    /// u `showRawSession`: „bez `session_id` a bez pracovního stromu tlačítko není“ je pravidlo.
+    var openInTerminal: ((TerminalSession) -> Void)?
     /// `owner/repo#412` do podtitulku sheetu.
     var slug = ""
 
@@ -76,7 +81,8 @@ struct ReviewProgressView: View {
                     copyCommand: copyCommand.map { copy in { copy(lane.skill) } },
                     feed: Policy.stepFeed(of: lane, expansion: expansion),
                     toggleFeed: { expansion = Policy.toggledStepFeed(expansion, of: lane.skill) },
-                    showRawSession: rawSession(of: lane)
+                    showRawSession: rawSession(of: lane),
+                    openInTerminal: terminal(of: lane)
                 )
             }
         }
@@ -90,6 +96,12 @@ struct ReviewProgressView: View {
             return nil
         }
         return { showRawSession(target) }
+    }
+
+    /// Akce, která dráze otevře session v Terminálu (#453). `nil` = není co obnovit.
+    private func terminal(of lane: ReviewerLane) -> (() -> Void)? {
+        guard let openInTerminal, let session = Policy.terminalSession(of: lane) else { return nil }
+        return { openInTerminal(session) }
     }
 
     /// **Ne `ContentUnavailableView`** (#182): ten se vystředí, nadpis vysází na velikost titulku

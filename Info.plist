@@ -44,6 +44,12 @@
 	     a v Docku zůstane prázdný obdélník. -->
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
+	<!-- `Otevřít session v Terminálu` (#453) posílá Apple event do `Terminal.app` (přes
+	     `osascript`). Bez tohohle klíče macOS event odmítne kódem -1743 a **ani se nezeptá**:
+	     TCC ho přisuzuje odpovědnému procesu, tedy aplikaci, ne tomu podprocesu — takže se
+	     účel musí říct tady, i když ho posílá `osascript`. Text jde do systémového dialogu. -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>PRism otevře session revieweera v Terminálu — pustí v něm claude --resume v pracovním stromu té session.</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>

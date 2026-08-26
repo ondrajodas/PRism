@@ -122,10 +122,10 @@ enum ClaudeCommand {
         return "cd \(quoted(worktree.path(percentEncoded: false))) && \(command)"
     }
 
-    /// Argument pro shell. Apostrof se v apostrofech uzavírá a otevírá znovu (`'\''`) — jinak by
-    /// prompt s apostrofem uzávorkování rozbil a příkaz by se vložil rozstřelený.
+    /// Argument pro shell. Od #453 z **jednoho místa** (`ShellQuoting`), protože totéž potřebuje
+    /// i `cd … && claude --resume …` pro Terminál — a dvě kopie téhle úvahy by se rozešly potichu.
     private static func quoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        ShellQuoting.quoted(value)
     }
 
     /// Prostředí session.
