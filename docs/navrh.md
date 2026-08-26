@@ -11,7 +11,7 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **34** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **35** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30:
 

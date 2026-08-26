@@ -985,6 +985,32 @@ tr.del mark.w { background: var(--del-hi); }
 }
 .ask-tip:hover { border-color: var(--accent); color: var(--accent); }
 
+/* --- vestavěný terminál (sekce 35) --------------------------------------------------
+   Zásuvka přes spodek okna, ne záložka: terminál má **stát vedle toho, na co se ptám**,
+   a záložka by diff schovala. Plocha je skutečný emulátor (PTY + VT), protože `claude`
+   je celoobrazovkový TUI — zjednodušený výpis by vypadal rozbitě.
+
+   Podklad je `--bg`, ne `--panel`: terminál není další panel okna, je to cizí plocha
+   uvnitř něj, a ta se má od chromu odlišit. */
+.term { display: flex; flex-direction: column; border-top: 1px solid var(--line); background: var(--bg); }
+.term-bar {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 12px; background: var(--panel-2);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 11.5px; color: var(--ink-2);
+}
+.term-bar .cwd { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.term-bar .sp { flex: 1; }
+.term-body {
+  padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  color: var(--ink); min-height: 150px;
+}
+.term-body .dim { color: var(--ink-3); }
+.term-body .acc { color: var(--accent); }
+.term-body .ok2 { color: var(--ok); }
+/* Kurzor stojí, protože statická kresba blikat nemá čím — v okně bliká. */
+.term-body .caret { display: inline-block; width: 7px; height: 13px; background: var(--ink); vertical-align: text-bottom; }
+
 .composer { margin-top: auto; border-top: 1px solid var(--line); padding: 11px; display: flex; flex-direction: column; gap: 9px; }
 .composer .ta {
   border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -2633,6 +2659,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="doc-cap">Dialogy a okna</div>
             <a class="doc-link" href="#odeslani" data-page="odeslani"><span class="t">Odeslání review</span></a>
             <a class="doc-link" href="#paleta" data-page="paleta"><span class="t">Command palette</span></a>
+            <a class="doc-link" href="#terminal" data-page="terminal"><span class="t">Terminál</span></a>
             <a class="doc-link" href="#nastaveni" data-page="nastaveni"><span class="t">Nastavení</span></a>
             <a class="doc-link" href="#novinky" data-page="novinky"><span class="t">Novinky</span></a>
             <a class="doc-link" href="#notifikace" data-page="notifikace"><span class="t">Notifikace</span></a>
@@ -2714,6 +2741,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <div class="rows">
             <a href="#odeslani"><span>Odeslání review</span></a>
             <a href="#paleta"><span>Command palette</span></a>
+            <a href="#terminal"><span>Terminál</span></a>
             <a href="#nastaveni"><span>Nastavení</span></a>
             <a href="#novinky"><span>Novinky</span></a>
             <a href="#notifikace"><span>Notifikace</span></a>
@@ -12000,6 +12028,180 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
 
         <div class="doc-move">
           <a class="prev" href="#odeslani"><span class="dir">← předchozí</span><span class="t">Odeslání review</span></a>
+          <a class="next" href="#terminal"><span class="dir">další →</span><span class="t">Terminál</span></a>
+        </div>
+      </div>
+
+      <div class="doc-page" id="terminal" data-title="Terminál">
+        <div class="doc-head">
+          <div class="doc-where"><span>Dialogy a okna</span><b>Terminál</b></div>
+          <h2>Terminál</h2>
+          <p class="doc-lede">Zásuvka pod diffem, ve které běží skutečný shell. Tady končí záruka „aplikace nemá čím odeslat“.</p>
+        </div>
+
+  <section class="section" id="s35">
+    <div class="section-head">
+      <div class="eyebrow">35 — Okno · vestavěný terminál</div>
+      <h2>Shell pod tím, na co se dívám</h2>
+      <p class="muted">
+        Sekce 34 nechala terminál venku a poslala do něj session jedním tlačítkem. Je to levné
+        a tvrdé podmínky se u toho nehnou, ale pořád to znamená <b>odejít z okna</b> — a když se
+        člověk potřebuje během review podívat na <code>git log</code>, pustit test nebo si dopsat otázku
+        do běžící session, odejde a vrátí se za deset minut. Terminál proto jde <b>dovnitř</b>:
+        zásuvka přes spodek okna, přepínaná <code>⌃`</code>.
+      </p>
+      <p class="muted">
+        <b>Zásuvka, ne devátá záložka.</b> Terminál má stát <b>vedle toho, na co se ptám</b> —
+        půlka jeho užitku je, že vidím diff a pod ním výstup příkazu. Záložka by diff schovala,
+        a tím by z terminálu udělala druhé okno, do kterého se stejně přepíná.
+      </p>
+      <p class="muted">
+        <b>Jen v záložce pull requestu, a pracovní adresář je jeho kopie repa.</b> Terminál bez
+        repozitáře je obyčejný shell a ten má člověk vedle; smysl mu dává až to, že startuje
+        <b>v tom checkoutu, na který se zrovna kouká</b> — v cache aplikace, nikdy v uživatelově
+        klonu (tvrdá podmínka č. 3 platí dál a beze změny).
+      </p>
+      <p class="muted">
+        <b>Je to skutečný emulátor, ne výpis.</b> <code>claude</code> je celoobrazovkový TUI —
+        kurzor, barvy, překreslování, změna velikosti —, takže pod tím musí být PTY a VT/xterm
+        emulace. Zjednodušený renderer by vypadal rozbitě a byl by to větší kus práce než vzít
+        hotový; je to <b>první závislost třetí strany</b> v tomhle repu a patří to do záznamu
+        rozhodnutí.
+      </p>
+    </div>
+
+    <div class="scroller">
+      <div class="win tall">
+        <div class="titlebar">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="tabstrip">
+            <div class="tab home"><span>⌂</span><span class="label">Přehled</span></div>
+            <div class="tab active">
+              <span class="dot" style="background: var(--crit);"></span>
+              <span class="label repo">vault#85</span>
+              <span class="x">×</span>
+            </div>
+            <div class="tab-add">+</div>
+          </div>
+          <div class="toolbtns">
+            <div class="tbtn key"><span>⌘K</span></div>
+            <div class="tbtn">✦</div>
+            <div class="tbtn">⟳</div>
+            <div class="tbtn">⚙</div>
+          </div>
+        </div>
+
+        <div class="subtabs">
+          <div class="stab">Přehled</div>
+          <div class="stab on">Změněné soubory <span class="cnt">8</span></div>
+          <div class="stab">Commity <span class="cnt">3</span></div>
+          <div class="stab">Konverzace <span class="cnt">12</span></div>
+          <div class="stab">Kontroly <span class="cnt">6</span></div>
+          <div class="tsep"></div>
+          <div class="stab">Nálezy <span class="cnt">3</span></div>
+          <div class="stab">Průběh</div>
+          <div class="tsep"></div>
+          <div class="stab">Zeptat se</div>
+        </div>
+
+        <!-- Diff zůstává vidět: to je celý důvod, proč je terminál zásuvka a ne záložka. -->
+        <div class="diffpane">
+          <div class="fhead" style="position: static;">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="sp"></span>
+            <span class="pill idle">pod sebou ⌄</span>
+          </div>
+          <table class="diff">
+            <tr class="hunk"><td colspan="3">@@ -78,9 +78,14 @@</td></tr>
+            <tr><td class="ln">79</td><td class="sg"></td><td class="code">    {</td></tr>
+            <tr class="del"><td class="ln">80</td><td class="sg">−</td><td class="code">        $row = $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key);</td></tr>
+            <tr class="add"><td class="ln">80</td><td class="sg">+</td><td class="code">        $row = $<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">get</span>($key)</td></tr>
+            <tr class="add"><td class="ln">81</td><td class="sg">+</td><td class="code">            ?? $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key);</td></tr>
+          </table>
+        </div>
+
+        <div class="term">
+          <div class="term-bar">
+            <span>Terminál</span>
+            <span class="cwd">~/Library/Application Support/PRism/checkouts/vault/85</span>
+            <!-- Kapsle říká pravdu o té ploše, ne o aplikaci: odsud jde všechno, co jde
+                 z terminálu. Je to protějšek `čte · neodesílá` v tabu `Zeptat se`. -->
+            <span class="pill crit">plná práva</span>
+            <span class="sp"></span>
+            <span class="pill run">claude --resume 8c1f…</span>
+            <span class="kbd">⌃`</span>
+            <span class="tbtn">⌄</span>
+          </div>
+          <div class="term-body">
+            <div class="dim">$ claude --resume 8c1f0ab2</div>
+            <div><span class="acc">✻</span> Navazuji na session z <span class="dim">10:41</span> · php-review · 14 kol</div>
+            <div>&nbsp;</div>
+            <div><span class="ok2">&gt;</span> proč jsi u toho timeoutu nehlásil nález?</div>
+            <div class="dim">  Přečetl jsem SecretClient.php:112 a timeout je tam nastavený</div>
+            <div class="dim">  na 30 s v konstruktoru, takže se na tuhle cestu nevztahuje…</div>
+            <div>&nbsp;</div>
+            <div><span class="ok2">&gt;</span> <span class="caret"></span></div>
+          </div>
+        </div>
+
+        <div class="statusbar">
+          <span class="sitem plain">Vše v pořádku</span>
+          <span class="sp"></span>
+          <span class="sitem">≥ 3,16 $</span>
+          <span class="sitem"><span class="d" style="background: var(--ok);"></span>Claude</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">109</span>
+        <span class="body">
+          <b>Tady končí „aplikace nemá čím odeslat“</b>
+          <span>A je to vědomá změna tvrdé podmínky č. 1, ne její obejití. Co zůstává pravda:
+          <b>aplikace sama</b> pořád nic neodesílá a <code>ReviewPublishing</code> je jediná cesta
+          ven <b>v jejím kódu</b>. Co přestává platit: že se to dá <b>dokázat testem</b> —
+          <code>gh pr merge</code> i <code>git push</code> jdou ze shellu a <code>SingleWayOutTests</code>
+          na ně nedosáhnou, protože ta cesta nevede přes kód aplikace. Kapsle <b>plná práva</b>
+          to říká na obrazovce, ne jen v dokumentaci.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">110</span>
+        <span class="body">
+          <b>Klávesy patří terminálu, ne oknu</b>
+          <span>Dokud má zásuvka fokus, <b>okenní zkratky na <code>Control</code> se nesmí
+          uplatnit</b>: <code>⌃W</code> v terminálu maže slovo, <code>⌃C</code> přerušuje běh,
+          <code>⌃1</code>–<code>⌃5</code> a <code>⌃⇥</code> patří tomu, co uvnitř běží. Globální
+          zůstává <b>jediná</b> — <code>⌃`</code>, kterou se zásuvka schová. Zkratka, která
+          uprostřed psaní zavře záložku, je horší než žádný terminál.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">111</span>
+        <span class="body">
+          <b>Zavření okna musí ten proces zabít</b>
+          <span>Tentýž závazek jako u revieweru (#264): co aplikace spustí, to i ukončí. Když
+          v zásuvce něco běží, ukončení se <b>zeptá</b> a po odpovědi pošle <code>SIGKILL</code>
+          — jinak shell osiří na <code>launchd</code> a běží dál (#351).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">112</span>
+        <span class="body">
+          <b>Co se stane s <code>▶</code> v Průběhu</b>
+          <span>Přestane otevírat <code>Terminal.app</code> a otevře <b>zásuvku</b> — session je
+          odteď v okně. <code>⧉</code> (zkopírovat <code>claude --resume</code>) <b>zůstává</b>:
+          kdo si session pouští v iTermu, tmuxu nebo na jiném stroji, potřebuje text. Sekce 34
+          se tím nepřekresluje, je záznamem toho, co bylo dřív.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+        <div class="doc-move">
+          <a class="prev" href="#paleta"><span class="dir">← předchozí</span><span class="t">Command palette</span></a>
           <a class="next" href="#nastaveni"><span class="dir">další →</span><span class="t">Nastavení</span></a>
         </div>
       </div>
