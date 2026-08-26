@@ -4756,3 +4756,51 @@ aplikaci, na české i anglické mapě — a s ním dvě věci, o kterých rozho
 umí sebrat Mission Control (`Přepnout na plochu N`) a `⌘.` je v Cocoa druhé jméno pro Escape,
 takže tam, kde je naše zastavení zakázané, se chová jako `⎋`. Obojí je zapsané v dokumentaci,
 protože z katalogu ani z testu to vidět není.
+
+### #361 — patnácté kolo: osa konverzace přestala používat líný seznam
+
+**Tohle je první kolo #361 s opravou.** Předchozích čtrnáct hledalo, **co graf špiní**; čtrnáctý
+záchvat na to odpověděl a odpověď zní, že to nešpiní nic z aplikace.
+
+**Co je v těch dvou vzorcích ze živého hoření.** Obě signatury jsou shodné (na rozdíl od tří
+vzorků u #350, které se vylučovaly): `LazySubviewPlacements.placeSubviews` **60,3 % / 60,5 %**
+vzorků hlavního vlákna, `ForEachState.forEachItem` 30,4 / 29,7 %, `updateItemPhases()` 7,1 / 6,8 %
+a `AG::Graph::value_set(` 6,8 / 6,7 %. Kruh je celý uvnitř SwiftUI — umístění položek zapíše fázi
+do grafu, zašpiněný graf si vyžádá další update, umisťuje se znovu. **Pohon zvenčí je nula**
+(žádný timer, `CVDisplayLink` ani hover) a **neběží ani jedno naše tělo**: ze 101, resp. 158 rámců
+aplikace jsou všechny kromě dvou vstupních bodů jen value-witness kopie `ConversationRow`.
+
+**Osa proto kreslí `VStack`.** Je to jediná podoba, u které se ta vazba nemá kde utvořit — v grafu
+nevznikne ani jeden `LazySubview*` atribut, což je změřené z obou stran (`LazyVStack` 2 vzorky ze 2,
+`VStack` 0). Zlevňování obsahu kola tím **končí**: #375, #379, #386, #393, #435 i #438 byly každý
+o kus levnější kolo a ani jeden z nich neměl co zastavit.
+
+**Cena je změřená a není malá** (`ConversationAxisShapeProbe`, skutečné `ConversationNodeView`,
+Debug, okno 1000×800): první rozvržení **44 uzlů 55 ms proti 5**, 150 uzlů 187 proti 5, 300 uzlů
+413 proti 5, 400 uzlů 614 proti 6; projíždění 150 × 40 pt **0,86 s proti 0,31 s** CPU. Únosné je to
+jedině proto, že **osa je shora omezená**: `ConversationQuery` bere `first: 100` ze čtyř seznamů
+a nestránkuje, takže víc než čtyři stovky uzlů odsud vyjít nemůže. Diff takovou mez nemá a líný
+seznam v něm **zůstává**.
+
+**`List` je změřený a zamítnutý.** První rozvržení má levné (78–112 ms bez ohledu na počet)
+a `LazySubview*` v grafu taky nemá, ale výška obsahu je u něj **odhad** (44 uzlů 4 876 pt proti
+6 745, 300 uzlů 11 020 proti 45 432), takže posuvník lže a poloha při projíždění skáče; syntetické
+gesto s ním navíc **nepohne vůbec**, takže se cena projíždění naší sondou změřit nedá; a jeho řádek
+nese vlastní chrome, tedy změnu vzhledu, která patří napřed do mockupu. Zůstává v sondě jako
+měřená varianta.
+
+**Co tím dokázané není:** že záchvat nepřijde. Kolo se v harnessu nepovedlo vyrobit ani počtrnáct,
+takže „po opravě nehořelo“ by bylo tvrzení bez zkoušky — a přesně to se v tomhle issue čtrnáctkrát
+nesmělo napsat. Doložené je **strukturálně**: ten zápis do grafu nemá na ose kdo udělat. A **diffu
+to nepomáhá** (7. záchvat hořel nad tabem `Soubory`), takže se tatáž třída kola může vrátit tam;
+tam se ale líný seznam vyhodit nedá, řádků jsou tisíce.
+
+Hlídá to `ConversationAxisEagerTests`: v `ConversationView` není `LazyVStack` ani jeho sourozenci,
+a ta mez se počítá **z plných stránek**, ne opisuje z konstanty. Ověřeno vložením regrese (vrácený
+`LazyVStack` shodí první tvrzení). Syntetická osa se přesunula do `ConversationFixture`, aby obě
+sondy měřily tentýž materiál.
+
+Testů **4077**, všechny zelené: tři nová tvrzení v `ConversationAxisEagerTests` a k tomu čtyři
+měření `ConversationAxisShapeProbe` (ta se v běžném běhu přeskočí); zbytek přidal mezitím mergnutý
+`main`. **Na obrazovce se nemění nic** — osa vypadá stejně (ověřeno rendrem `DetailTabRenderProbe`
+v obou šířkách), mění se jen to, kdy se uzly vyrábějí.

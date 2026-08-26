@@ -582,12 +582,9 @@ struct IdleDiffSpinProbe {
         }
     }
 
-    /// Kolik čeho v syntetické ose je. Pět tvarů po `index % 5`, viz `syntheticBody(_:)`.
+    /// Kolik čeho v syntetické ose je. Pět tvarů po `index % 5`, viz `ConversationFixture`.
     private static func shapes(of comments: Int) -> String {
-        let names = ["věta", "6 odstavců", "blok kódu", "4 odrážky", "2 odstavce s odkazem"]
-        return names.enumerated()
-            .map { index, label in "\(label): \((0..<comments).count { $0 % 5 == index })" }
-            .joined(separator: ", ")
+        ConversationFixture.shapes(of: comments)
     }
 
     /// Průchody tělem od nejčastějšího, jako je píše diagnostika do souboru — a **nuluje** je,
@@ -899,28 +896,11 @@ struct IdleDiffSpinProbe {
         return window
     }
 
-    /// Syntetická osa: komentáře s **různě vysokým** obsahem. Rozhoduje ta různost, ne počet —
-    /// líný seznam odhaduje zbytek obsahu z toho, co už umístil, takže stejně vysoké řádky by
-    /// mu odhadem nikdy nepohnuly.
-    /// `shift` posune tvary o pár míst, takže **tytéž komentáře vyjdou jinak vysoké**. Je to jediný
-    /// způsob, jak nechat počet i identitu na místě a rozejít jen odhad zbytku obsahu (#361).
+    /// Syntetická osa: komentáře s **různě vysokým** obsahem. Materiál je od patnáctého kola
+    /// #361 v `ConversationFixture`, protože z něj měří i `ConversationAxisShapeProbe` — dvě kopie
+    /// téhož by se rozešly první úpravou a čísla ze dvou sond by pak nešla číst vedle sebe.
     private static func synthetic(comments: Int, shift: Int = 0) -> Conversation {
-        let items = (0..<comments).map { index in
-            ThreadComment(
-                id: "c\(index)",
-                author: index % 3 == 0 ? "octocat" : "hubot",
-                body: syntheticBody(index + shift),
-                createdAt: Date(timeIntervalSince1970: 1_753_000_000 + Double(index) * 3600),
-                url: URL(string: "https://github.com/cli/cli/pull/13084#issuecomment-\(index)")!
-            )
-        }
-        return Conversation(
-            viewer: "octocat",
-            reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
-            threads: ConversationPage(items: [], total: 0, hasNextPage: false),
-            comments: ConversationPage(items: items, total: items.count, hasNextPage: false),
-            events: ConversationPage(items: [], total: 0, hasNextPage: false)
-        )
+        ConversationFixture.conversation(comments: comments, shift: shift)
     }
 
     /// Osa složená z **vláken s úryvkem kódu** (#438) — dnes jediné místo v aplikaci, kde se
@@ -960,24 +940,6 @@ struct IdleDiffSpinProbe {
             comments: ConversationPage(items: [], total: 0, hasNextPage: false),
             events: ConversationPage(items: [], total: 0, hasNextPage: false)
         )
-    }
-
-    /// Pět tvarů textu, aby se výšky uzlů lišily násobně — věta, odstavce, blok kódu, odrážky.
-    private static func syntheticBody(_ index: Int) -> String {
-        switch index % 5 {
-        case 0:
-            "Krátká věta."
-        case 1:
-            (0..<6)
-                .map { "Odstavec \($0) s **tučným** a `inline kódem`, dost dlouhý na to, aby se zalomil." }
-                .joined(separator: "\n\n")
-        case 2:
-            "```swift\n" + (0..<14).map { "    let value\($0) = compute(\($0))" }.joined(separator: "\n") + "\n```"
-        case 3:
-            "- první\n- druhá odrážka, o které je potřeba napsat víc než jedno slovo\n- třetí\n- čtvrtá"
-        default:
-            "Dva odstavce.\n\nDruhý nese odkaz na [issue](https://github.com/cli/cli/pull/13084)."
-        }
     }
 
     /// Okno se scénou **na obrazovce** — rozměr z té instance, na které se #361 chytila

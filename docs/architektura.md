@@ -4089,9 +4089,59 @@ nehledalo odznova, co je těch 13 % vzorků pod `explicitAlignment`.
 se ta vazba nemá kde utvořit (poslední řádek tabulky: v grafu ani jeden `LazySubview*` atribut).
 Cena změřená na téže scéně: **první rozvržení 300 uzlů 2,2–3,4 ms proti 32–35 ms** a dotazů na
 identitu 7,6× — a to s obyčejným `Text`em, ne s markdownem, takže na skutečné konverzaci (strop
-je 100 položek na kategorii, viz `ConversationQuery.pageSize`) by to bylo horší. Do repa se to
-proto **nedostalo**: je to stutter při každém otevření tabu proti záchvatu, který přijde občas,
-a diffu (sedmý záchvat, tab `Soubory`) by to nepomohlo vůbec.
+je 100 položek na kategorii, viz `ConversationQuery.pageSize`) by to bylo horší. Ve třináctém kole
+se to proto do repa **nedostalo**; **v patnáctém ano** — viz sekce níž.
+
+#### Patnácté kolo: osa líný seznam nemá (#361)
+
+Čtrnáctý záchvat je první, ze kterého se dá kruh přečíst celý, a rozhodl tím tu otevřenou otázku.
+Dva `sample`y ze **živého** hoření (100 % CPU, stav `R`) mají **shodnou signaturu**, takže se na
+rozdíl od tří vzorků u #350 nevylučují:
+
+| | vzorek A (5294) | vzorek B (7848) |
+|---|---|---|
+| `LazySubviewPlacements.placeSubviews` | 3192 · **60,3 %** | 4751 · **60,5 %** |
+| `ForEachState.forEachItem` | 1609 · 30,4 % | 2334 · 29,7 % |
+| `LazyLayoutViewCache.updateItemPhases()` | 377 · 7,1 % | 533 · 6,8 % |
+| `AG::Graph::value_set(` | 360 · 6,8 % | 522 · 6,7 % |
+
+**Kolo se zavírá samo uvnitř SwiftUI a my v něm nejsme**: umístění položek zapíše fázi do grafu
+(`updateItemPhases` → `value_set` → `propagate_dirty`), zašpiněný graf si vyžádá další update
+a umisťuje se znovu. Pohon zvenčí je nula (žádný `CFRunLoopTimer`, `CVDisplayLink` ani hover) a ze
+101, resp. 158 rámců `PRism.debug.dylib` jsou všechny kromě dvou vstupních bodů jen value-witness
+kopie `ConversationRow`. Zlevňovat obsah kola (#375, #379, #386, #393, #435, #438) tedy nemělo co
+zastavit — a čtrnáct kol to potvrdilo.
+
+Osa proto kreslí **`VStack`**, ne `LazyVStack`. Cena i výnos jsou změřené na **skutečných**
+`ConversationNodeView` (`ConversationAxisShapeProbe`, Debug, okno 1000×800):
+
+| Uzlů | `LazyVStack` | `VStack` | `List` |
+|---|---|---|---|
+| 44 | 5,4 ms | **55 ms** | 78 ms |
+| 150 | 5,0 | **187** | 78 |
+| 300 | 5,4 | **413** | 95 |
+| 400 | 5,8 | **614** | 112 |
+| projíždění 150 × 40 pt (300 uzlů) | 0,31 / 0,29 s | **0,86 / 0,85 s** | neměřitelné |
+| `LazySubview*` v evaluačním zásobníku | 2 vzorky ze 2 | **0** | 0 |
+
+**Na čem to stojí: osa je shora omezená.** `ConversationQuery` se ptá `first: 100` na každý ze
+čtyř seznamů a **nestránkuje**, takže uzlů nemůže být víc než čtyři stovky — cena prvního rozvržení
+má strop. Diff takovou mez nemá (tisíce řádků), a proto v něm `LazyVStack` **zůstává**; hlídá to
+`ConversationAxisEagerTests` (líný seznam v `ConversationView` + ta mez, spočítaná z plných
+stránek, ne opsaná z konstanty).
+
+**`List` je zamítnutý, i když čísla vypadají líp**, a jsou k tomu tři měřené důvody: výška obsahu
+je u něj **odhad** (44 uzlů 4 876 pt proti 6 745 u `VStack`u, 300 uzlů 11 020 proti 45 432), takže
+posuvník lže a poloha při projíždění skáče; **syntetické gesto s ním nepohne vůbec**, takže se cena
+projíždění naší sondou změřit nedá; a řádek `List`u nese vlastní chrome (výběr, oddělovače,
+pozadí), tedy změnu vzhledu, která patří napřed do mockupu. Zůstává jako měřená varianta pro
+případ, že by cena prvního rozvržení začala vadit.
+
+**Co to nedokazuje.** Že záchvat nepřijde. Kolo se v harnessu nepovedlo vyrobit ani počtrnáct,
+takže „po opravě nehořelo“ by bylo tvrzení bez zkoušky. Doložené je **strukturálně**: ten zápis do
+grafu nemá na ose kdo udělat, protože `LazySubview*` atributy tam nevzniknou. A **netýká se to
+diffu** — sedmý záchvat hořel nad tabem `Soubory` a tam líný seznam zůstává, takže se ta třída kola
+může vrátit tam.
 
 Jak to drží pohromadě:
 

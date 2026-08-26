@@ -719,6 +719,25 @@ Zvlášť stojí za přečtení, než sáhneš na:
   — zarovnání v tom nehraje roli. Mění se jen odkud: pružný rámec **jako kořen** aktualizace,
   měřená štěrbina **vnořeně**. Podrobnosti a čísla u `LazySelfReferenceProbe`.
 
+  **A od patnáctého kola osa líný seznam nemá vůbec** (#361). Čtrnáctý záchvat ukázal, že se kolo
+  zavírá **uvnitř SwiftUI** a bez nás: `placeSubviews` (60,3 % a 60,5 % vzorků ve dvou vzorcích ze
+  živého hoření) umístí položky, `updateItemPhases()` to zapíše do grafu (`value_set` →
+  `propagate_dirty`) a graf si vyžádá další umístění — pohon zvenčí nula, naše tělo v kole ani
+  jednou. Zlevnit se to proto nedá a osa kreslí `VStack`. **Pravidlo, které z toho zbývá: líný
+  seznam patří tam, kde je seznam neomezený** (diff — tisíce řádků), ne tam, kde má strop
+  (`ConversationQuery` bere `first: 100` ze čtyř seznamů, takže osa má nejvýš čtyři stovky uzlů).
+  Cena je změřená a není malá: první rozvržení **44 uzlů 55 ms proti 5**, 300 uzlů **413 proti 5**,
+  projíždění **0,86 s proti 0,31 s** CPU (Debug, skutečné uzly osy). `List` je změřený a zamítnutý
+  — výška obsahu je u něj odhad, takže posuvník lže. Hlídá to `ConversationAxisEagerTests`
+  (líný seznam **i** ta mez); čísla a zamítnuté varianty jsou u `ConversationAxisShapeProbe`.
+  **Nedokazuje to, že záchvat nepřijde** — kolo se v harnessu nepodařilo vyrobit ani počtrnáct,
+  doložené je jen to, že ten zápis nemá na ose kdo udělat. A **diffu to nepomáhá.**
+
+  ```bash
+  grep -n 'LazyVStack' App/Views/ConversationView.swift    # musí vyjít prázdný
+  grep -rn 'LazyVStack\|LazyVGrid' App | grep -vE ':[0-9]+: *//'    # výčet: má ten seznam strop?
+  ```
+
   **A `sample` je strom, takže součet řádků není podíl** — tohle stálo u #361 jedno celé kolo.
   „35 řádků z 21 834“ srovnávalo počet **řádků se vzorem** proti počtu **řádků souboru** a vyšlo
   z toho, že `measureEstimates` z kola zmizel; ve skutečnosti ten jeden uzel nese 1046 vzorků

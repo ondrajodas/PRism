@@ -5628,6 +5628,53 @@ a číslo na řádku je počet vzorků v tom podstromu. Z toho plynou dvě pasti
 Prakticky: najdi si řádek `Thread_… com.apple.main-thread` (to je jmenovatel), pak řádek s hledaným
 jménem a jeho hloubku podle odsazení, a ověř, že nad ním v témže podstromu tentýž vzor není.
 
+### Osa bez líného seznamu, a jak se měřila obě strany (#361, patnácté kolo)
+
+Čtrnáctý záchvat rozhodl, **co se má udělat**; tahle sekce je o tom, čím se změřilo, **co to
+stojí**. Sonda je `Tests/Views/ConversationAxisShapeProbe.swift` (ručně,
+`TEST_RUNNER_PRISM_MEASURE=1`) a od `LazySelfReferenceProbe` se liší jednou věcí, na které tady
+všechno stojí: **řádky jsou skutečné `ConversationNodeView`** nad skutečnými `ConversationRow`, ne
+tvar uzlu. Bez markdownu, avatarů a bublin vláken vyjde cena pevného stacku **o řád níž** (32–35 ms
+u syntetického `Text`u proti 413 ms u skutečné osy na 300 uzlech), takže by se rozhodovalo podle
+podhodnoceného čísla.
+
+Čtyři měření, každé na jinou otázku:
+
+| Test | Otázka | Odpověď |
+|---|---|---|
+| `firstLayoutCost` | co se za to platí | 44 uzlů **55 ms** proti 5, 300 uzlů **413** proti 5, 400 uzlů **614** proti 6 |
+| `scrollingCost` | co to udělá s projížděním | **0,86 / 0,85 s** CPU proti 0,31 / 0,29 s (150 × 40 pt, 300 uzlů) |
+| `graphUnderTheAxis` | zmizel ten zápis do grafu | `LazySubview*` v zásobníku: `LazyVStack` **2 ze 2** vzorků, `VStack` **0** |
+| `burnAfterScrolling` | nechová se pevný stack hůř | 0,00 % CPU po gestu u obou (a **nedokazuje to nic**, viz níž) |
+
+**Vedle času se vypisuje výška obsahu a počet prvků**, a je to kontrola měřidla, ne ozdoba: pevný
+stack má vyrobit **všechny** uzly (300 uzlů = 907 prvků, obsah 45 432 pt), líný jen viditelné
+(22 prvků). Kdyby to vyšlo obráceně, měří se něco jiného, než co se hledá.
+
+**Cena prvního rozvržení má strop, a ten je z dotazu.** `ConversationQuery` bere `first: 100` ze
+čtyř seznamů a **nestránkuje**, takže osa má nejvýš čtyři stovky uzlů. Testuje se to
+(`ConversationAxisEagerTests.theAxisIsBounded`) **z plných stránek**, ne z konstanty — kdyby
+`Policy.overview` začal skládat víc položek, než kolik jich přišlo, číslo by se rozešlo potichu.
+
+**`List` je v sondě schválně, i když v repu není.** Čísla má lákavá (první rozvržení 78–112 ms bez
+ohledu na počet, `LazySubview*` nula), ale výška obsahu je u něj **odhad** — 44 uzlů 4 876 pt proti
+6 745 u `VStack`u, 300 uzlů 11 020 proti 45 432 —, takže posuvník lže a poloha při projíždění skáče.
+A **naše gesto s ním nepohne vůbec** (`dojelo na 0` z obsahu 10 845), takže se cena projíždění
+změřit nedá; „je levnější“ se proto tvrdit nesmí. Zůstává jako měřená varianta pro případ, že by
+cena prvního rozvržení začala vadit.
+
+**Materiál je na jednom místě** (`Tests/Support/ConversationFixture.swift`): pět tvarů textu po
+`index % 5` (věta, šest odstavců, blok kódu, odrážky, odstavce s odkazem). Měří z něj i
+`IdleDiffSpinProbe`, takže se čísla obou sond dají číst vedle sebe; do patnáctého kola to byl
+privátní helper uvnitř jedné z nich a druhá kopie by se rozešla první úpravou.
+
+**Čeho se ta sonda nedotkne: záchvatu.** Kolo se nepovedlo vyrobit ani počtrnáct, takže „po opravě
+nehořelo“ tady nikde nestojí a stát nesmí. Ověřitelné je jen to strukturální (řádek
+`graphUnderTheAxis`) a **provozní**: používat aplikaci s `./bin/run.sh --diagnose` a koukat na řádek
+`HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU` v `<cache>/diagnostics.log`. Kdyby přišel další záchvat
+nad **Konverzací**, je to doklad, že se ta úvaha mýlila; nad **Soubory** ne — tam líný seznam
+zůstává (řádků jsou tisíce) a tatáž třída kola se tam vrátit může.
+
 ### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
 
 **`scroll(to:)` kolo z #361 nerozjede, a je to změřené** (1,28 s proti 1,30 s u #375, tedy nic).
