@@ -21,7 +21,9 @@ gh api repos/{owner}/{repo}/pulls/32 -X PATCH --input payload.json    # přepsat
 gh api repos/{owner}/{repo}/issues/447 -X PATCH -f state=closed -f state_reason=completed
 ```
 
-`gh pr create`, `gh pr list`, `gh pr merge` a `gh api` fungují normálně — zlobí jen ty dva.
+`gh pr create`, `gh pr list` a `gh api` fungují normálně — na `projectCards` zlobí jen ty dva.
+`gh pr merge` je **třetí případ, ale jiný**: z pracovního stromu skončí nenulově, a přesto
+mergne — viz *Merge z worktree* níž.
 
 **Jedna REST cesta chybí:** `POST pulls/comments/{id}/replies` vrací **404**. Odpověď na inline
 komentář se posílá jako `POST pulls/{n}/comments` s `in_reply_to`.
