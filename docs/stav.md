@@ -259,8 +259,9 @@ pravidla jsou změřená proti sandboxu (`docs/github-review-api.md`, bod 8) a d
 uhádnout: rozsah smí přeskočit mezeru mezi hunky a pořadí konců GitHub hlídá jen na téže straně.
 
 Pohled vedle sebe hotový (issue #98) — `DiffLayout` v `App/Models/`, `DiffRow.pair`
-a `DiffRow.paired(_:)` v `App/Diff/DiffPairing.swift`, `DiffPairView`, přepínač v liště nad
-diffem, `global.diffLayout` v konfiguraci a `diffLayoutOverride` v `AppStore`. **Starý a nový
+a `DiffRow.paired(_:)` v `App/Diff/DiffPairing.swift`, přepínač v liště nad
+diffem, `global.diffLayout` v konfiguraci a `diffLayoutOverride` v `AppStore`. (Kreslil to
+`DiffPairView`; od #157 to dělá blok a od #446 je ten view smazaný — viz níž.) **Starý a nový
 obsah jde postavit proti sobě**, spárovaný po řádcích; všechno, co diff umí pod sebou, umí
 i vedle sebe (bubliny, rozbalení kontextu, obarvení, sbalování, skoky). Výchozí pohled je
 v nastavení a projeví se bez restartu, přepínač v liště je odchylka do zavření aplikace —
@@ -4883,3 +4884,45 @@ Testů **4098**, všechny zelené — z toho **21 nových**: `Policy` výčtem (
 že `▶` pouští týž příkaz, jaký kopíruje `⧉`, a že `cd` je s `&&`), tvar volání `osascript`u
 (příkaz jde jako argument, ne do skriptu) a to hlavní ze storu — **neotevřené okno skončí hláškou,
 ne tichem**.
+
+### #446 — diff kreslí kód jen bloky, a `DiffPairView` je pryč
+
+**Na tomhle není co vidět** — a právě to je tvrzení, které se muselo doložit. Kreslí se táž věc
+touž cestou; ubyl kód, ke kterému se od #157 nedostal ani jeden řádek.
+
+Zadání říkalo, že do `DiffRowView` z diffu nedojde ani `.line`, ani `.pair`, protože `DiffView`
+sype do `ForEach` **vždycky** výsledek `blocked(_:)`, resp. `blockedPairs(_:)`. **Půlka toho
+platí, půlka ne** — změřeno nad pěti skutečnými diffy z fixtures v obou pohledech:
+
+| Případ | Dojde ke kreslení? |
+|---|---|
+| `.pair` | **Nikdy** — ani mezi bublinami, které blok rozetnou |
+| `.line` | **Jednou**: poznámka `git`u (`\ No newline at end of file`) ve **split** pohledu |
+
+Ta výjimka je průsečík dvou rozhodnutí, která spolu nesouvisejí: `DiffRow.paired(_:)` `meta` řádek
+**nepáruje** (není to obsah souboru, takže nemá stranu — #98) a `blockedPairs(_:)` slévá **jen
+dvojice**. V pohledu pod sebou výjimka není, tam ji `blocked(_:)` sebere do bloku.
+
+**Smazal se proto `DiffPairView`** (sto řádků paralelního kreslení dvojice) a s ním dvě věci, které
+tím ztratily jediného volajícího: `DiffLineView.side` — volba „jsem buňka dvojice“, tedy tři větve,
+které nikdo nevyplnil — a `DiffMissingHatch` jako SwiftUI `Shape` (šrafu kreslí `DiffTextView`
+v AppKitu, zbyla geometrie `segments(in:)`). Větev `.line` naopak **zůstala**, protože je živá.
+
+**Případ `.pair` ve `switch`i zůstává, ale kreslí týž blok, ne `EmptyView`.** Enum se nezúžil, takže
+`DiffRowView` musí být vyčerpávající — a prázdno by byla tichá díra v diffu, kdyby se tam dvojice
+někdy dostala. Delegace je jeden řádek a je ověřená renderem: obě větve daly **bajt po bajtu tentýž
+PNG**.
+
+**Doloženo, že se na obrazovce nemění nic**: 14 offscreen snímků před změnou a po ní (tři soubory ×
+dva pohledy × dva režimy, plus úryvek u vlákna na ose), všechny hashe **shodné**. Že je ten render
+deterministický, se ověřilo třemi běhy nad nezměněným kódem.
+
+**Proč to není kosmetika:** u #438 se kvůli téhle mrtvé cestě hledal výkonový problém na špatném
+místě — zadání znělo „neviditelný diff počítá geometrii svých řádků“ a měření pak ukázalo, že diff
+se na geometrii řádku neptá ani vepředu. #438 vyklizení odložilo s poznámkou, že je to vlastní
+zadání; tohle je ono.
+
+Testů **4108**, všechny zelené — z toho **10 nových**: `DiffRenderedRowsTests` (nad daty i nad
+zdrojáky, s kontrolou měřidla z obou stran) a jeden případ v `DiffJumpTargetTests` na soubor, ve
+kterém poznámka `git`u bloky rozděluje. **Ověřeno vloženou regresí** v obou směrech: `EmptyView()`
+ve větvi `.pair` stráž shodí a před smazáním `DiffPairView` shodila tvrzení o jediném view.

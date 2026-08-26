@@ -441,10 +441,12 @@ Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
   `meta` řádek, hlavička hunku a rozbalovací řádek.
 - **Přes celou šířku jde všechno, co stranu nemá**: hlavička hunku, rozbalovací řádek,
   bublina, poznámka i `meta` řádek (`\ No newline at end of file`) — ten není obsah souboru.
-- **Pozadí kreslí dvojice, ne buňka** (`DiffPairView`). Buňka se roztáhne jen na svůj obsah,
-  takže u kratší (a hlavně u chybějící) strany by pod ní prosvítalo okno a chybějící řádek by
-  vypadal jako mezera. Barvy si přitom obojí bere z `DiffLineView.background(of:)`, aby se
-  přidaný řádek nekreslil v jednom pohledu jinak než v druhém.
+- **Pozadí kreslí dvojice, ne buňka.** Buňka se roztáhne jen na svůj obsah, takže u kratší
+  (a hlavně u chybějící) strany by pod ní prosvítalo okno a chybějící řádek by vypadal jako
+  mezera. Barvy si přitom bere z `DiffLineView.background(of:)`, aby se přidaný řádek nekreslil
+  v jednom pohledu jinak než v druhém. **Od #157 to kreslí blok** (`DiffPairBlockView`), do té
+  doby `DiffPairView` — a ten je od #446 smazaný, protože se k němu od #157 nedostala ani jedna
+  dvojice (viz *Co z diffu doopravdy dojde ke kreslení*).
 - **Buňka se ptá za svou stranu, takže komentář vznikne tam, kam se kliklo**
   (`draft.action(for:on:)` a `LineAnchors`). Kontextový řádek unese **obě** strany — je v obou
   verzích souboru a `side: LEFT` na nezměněném řádku GitHub přijme (změřeno u #98 na živém API
@@ -475,7 +477,8 @@ Pohled **vedle sebe** (#98) je `DiffRow.pair(_, left:, right:)` a platí u něj:
   dvě věci ke stejnému kódu. Ve stejné polovině tedy stojí pod sebou.
 - **Nález a cizí vlákno zůstávají přes celou šířku**: nález stranu nemá vůbec (hlásí se proti
   nové verzi) a obojí nese delší text, který by se v půlce mačkal.
-- **Rozdělení šířky musí být stejné jako v `DiffPairView`** (dvě poloviny plus 1 pt na čáru),
+- **Rozdělení šířky musí být stejné jako v bloku dvojic**
+  (`DiffGutterGeometry.rightColumnX(inBlockOfWidth:)` — dvě poloviny plus 1 pt na čáru),
   jinak komentář přeteče do sloupce, kterého se netýká. Prázdná polovina si šířku **bere** —
   bez toho by se ta plná rozlila přes celý řádek a přestala ukazovat, kam patří.
 - **Odsazení bubliny se ve split pohledu krátí o sloupec s čísly** (104 → 52), aby nezačínala
@@ -671,18 +674,47 @@ přidalo #428; číslo v téhle větě bylo do té doby o jedenáct pastí pozad
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
 že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
 
-**V diffu se `DiffLineView` a `DiffPairView` už nekreslí** (bloky je nahradily), ale drží
-konstanty a barvy, které si bloky berou (`numberColumn`, `iconColumn`, `signColumn`,
-`contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`). Zůstávají
-proto jako **jediné místo, kde ty hodnoty jsou** — vyčlenit je do vlastního typu je úklid na potom,
-ne součást #157.
+### Co z diffu doopravdy dojde ke kreslení (#446)
 
-Jeden čtenář `DiffLineView` ale přibyl: **úryvek kódu u vlákna** (`ThreadSnippetView`, #216) kreslí
-řádky jím, takže barvy z něj jsou vidět i mimo diff. `DiffPairView` čtenáře nemá žádného — každou
-dvojici slévá `DiffRow.blockedPairs(_:)` do `pairBlock`u, takže případ `.pair` do `DiffRowView`
-nedojde. Drží se dál kvůli konstantám a proto, že je to jediný popis toho, jak dvojice vypadá bez
-bloku; když se v něm něco mění (jako barvy u #277), mění se to **spolu s blokem**, aby se ty dvě
-cesty nerozešly.
+`DiffView` sype do `ForEach` **vždycky** výsledek `DiffRow.blocked(_:)`, resp. `blockedPairs(_:)`
+(`DiffView.swift`, a totéž při hledání cíle skoku). Ty slévají **každý** `.line` do `.block`
+a **každou** `.pair` do `.pairBlock` — jediné, co je nespojí, je strop `DiffBlock.maxLines`
+(#223), a ten dělí blok na dva bloky, ne na řádky. Z toho plyne:
+
+| Případ `DiffRow` | Dojde do `DiffRowView`? |
+|---|---|
+| `.block`, `.pairBlock` | Ano — takhle se kreslí **všechen kód** |
+| `.pair` | **Ne, nikdy.** Je to mezikrok mezi `paired(_:)` a `blockedPairs(_:)` |
+| `.line` | **Jen ve split pohledu a jen jako poznámka `git`u** (`\ No newline at end of file`) |
+
+Ta poznámka je jediná výjimka a je to důsledek dvou rozhodnutí, která spolu nesouvisejí:
+`DiffRow.paired(_:)` `meta` řádek **nepáruje** (není to obsah souboru, takže nemá stranu — viz
+výš), a `blockedPairs(_:)` slévá **jen dvojice**. V pohledu pod sebou výjimka není: tam ji
+`blocked(_:)` sebere do bloku jako každý jiný řádek a kreslí se ztlumeně uvnitř textu.
+
+**`DiffPairView` proto u #446 zmizel.** Bylo to sto řádků paralelního kreslení dvojice, na které se
+od #157 nedostala ani jedna — a mrtvá cesta svádí k tomu se na ni spolehnout: u #438 se kvůli ní
+hledal výkonový problém na špatném místě. Případ `.pair` zůstává ve `switch`i (enum se nezúžil),
+ale kreslí se **týmž blokem** jako každá jiná dvojice, ne prázdnem: tichá díra v diffu je horší než
+řádek navíc. Ověřeno renderem — obě větve daly bajt po bajtu tentýž PNG.
+
+Spadly s tím dvě věci, které bez `DiffPairView` neměly volajícího:
+
+- **`DiffLineView.side`.** Byla to volba „jsem buňka dvojice“ (jedno číslo místo dvou, pozadí za
+  sebe nechává kreslit dvojice). Zbyly z ní tři větve, které nikdo nevyplnil, takže je řádek od
+  #446 **jednopodobový** — vždycky přes celou šířku a s oběma čísly.
+- **`DiffMissingHatch` jako SwiftUI `Shape`.** Šrafu prázdné protistrany kreslí `DiffTextView`
+  v AppKitu; `path(in:)` byl pro tu druhou cestu. Zůstala **jen geometrie** (`segments(in:)`),
+  což je stejně to jediné, co se sdílet mělo.
+
+**Konstanty a barvy v `DiffLineView` zůstávají** (`numberColumn`, `iconColumn`, `signColumn`,
+`contentInset(for:)`, `signColor(of:)`, `background(of:)`, `rangeTint`, `dragTint`) — jsou to
+hodnoty, které si berou bloky, a je to **jediné místo, kde jsou**. Vyčlenit je do vlastního typu je
+úklid na potom. Živí čtenáři samotného view jsou dva: **úryvek kódu u vlákna**
+(`ThreadSnippetView`, #216) a ta poznámka `git`u z tabulky výš.
+
+Hlídá to `DiffRenderedRowsTests` — nad **skutečnými** diffy z fixtures v obou pohledech, plus
+stráž nad zdrojáky, že `DiffRowView` plní jediné místo jediným výrazem.
 
 ### Trvalý vodorovný pruh ve split pohledu (#422)
 
@@ -2654,8 +2686,10 @@ nemá kdo převzít — na ose se netáhne. Sedí to i poměrem: v sondě 242 pr
 i krabice). Tři věci, které na tom stojí:
 
 - **Podmínka není nad měnícím se stavem.** Obojí dává volající a je to konstantní po celý život
-  řádku — v diffu vždycky (`DiffRowView`, `DiffPairView`), na ose nikdy (`ThreadSnippetView`), takže
-  se větev nepřepíná za běhu a `@State` v řádku nemá jak propadnout.
+  řádku — v diffu vždycky (`DiffRowView`), na ose nikdy (`ThreadSnippetView`), takže se větev
+  nepřepíná za běhu a `@State` v řádku nemá jak propadnout. (Do #446 to platilo i o `DiffPairView`;
+  ten je smazaný, takže tu podmínku vyplňuje jediný volající — viz *Co z diffu doopravdy dojde
+  ke kreslení*.)
 - **`dragAnchor` v podmínce být nesmí.** Řádek, který komentář neunese, se hlásí s **prázdným
   seznamem** — a právě tím vyklízí zastaralé plochy pod sebou (`DiffRowFrames.note(_:covering:of:)`).
   Bez toho hlášení by v krabici zůstaly plochy z minulého rozvržení a tažení by chytalo řádky vedle.
@@ -3298,8 +3332,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffToolbar` | Lišta nad diffem (#219): pohled, procházení nálezů, varování a `Rozbalit vše` s nabídkou. **Bez přepínačů sloupců** — ty se skládají u sebe |
 | `DiffLayoutPicker` | Přepínač pohledu — segment **s popisky** podle návrhu (`.segbtn`), ne `Picker(.segmented)` |
 | `DiffFileHeaderView`, `FilePathText` | Hlavička souboru (`.fhead`): celá cesta se **složkou tlumeně a jménem tučně**, odznak změny, kapsle s počtem nálezů, `+X −Y` |
-| `DiffRowView` | Jeden řádek diffu — hlavička hunku, řádek, dvojice, rozbalovací řádek nebo poznámka |
-| `DiffPairView` | Dvojice vedle sebe: dvě buňky `DiffLineView` se `side`, pozadí za celou dvojici, prázdná protistrana |
+| `DiffRowView` | Jeden řádek diffu — hlavička hunku, blok kódu, dvojice, rozbalovací řádek nebo poznámka. **Kód kreslí vždycky blok** (#446): `.pair` sem nedojde a `.line` jen jako poznámka `git`u ve splitu |
+| `DiffLineView` | Jeden řádek přes celou šířku — dvě čísla, znak změny, obsah. V diffu jen ta poznámka `git`u, jinak **úryvek u vlákna** (`ThreadSnippetView`). Drží konstanty a barvy, které si berou bloky |
 | `RangeDragActions`, `DiffRowFrames` | Tažení rozsahu komentáře (#110) — akce a rámečky řádků **mimo observable stav**; od #274 nese hlášení i klíč diffu, takže v krabici není víc než jeden |
 | `DiffExpanderView` | Rozbalovací řádek: šipky vlevo v místě čísel a počet skrytých řádků |
 | `FindingBubbleView` | Nálezy k jednomu řádku; u nálezu mimo diff nabídne jeho řádek dotáhnout, odmítnutý sbalí na jeden řádek s odznakem důvodu a `Vrátit`. Od #185 má **značku** (pruh s odznaky a náhledem) a rozbalený obsah pod ní — blokující je rozbalený rovnou. Od #283 jsou akce **řada malých tlačítek vlevo pod textem** |
@@ -4202,9 +4236,11 @@ Jak to drží pohromadě:
   To chce **blok s vnitřním odsazením** — v obráceném pořadí nedosáhne hlavička karty na její
   pravou hranu.
 
-**Co zatím pružné zůstalo:** poloviny v `DiffPairView`. `maxWidth: .infinity` tam drží **stejně
-široké sloupce**, takže `filling()` by každé polovině dalo plnou šířku a rozvržení by se rozsypalo.
-Potřebuje to krok „poloviční šířka“ a je to samostatná práce.
+**Co zatím pružné zůstalo:** poloviny s mými rozdělanými komentáři ve splitu
+(`DiffRowView.column(_:)`). `maxWidth: .infinity` tam drží **stejně široké sloupce**, takže
+`filling()` by každé polovině dalo plnou šířku a rozvržení by se rozsypalo. Potřebuje to krok
+„poloviční šířka“ a je to samostatná práce. (Do #446 tu stály i poloviny `DiffPairView`; ten je
+smazaný jako mrtvá cesta, úvaha ale platí dál — je to tentýž tvar.)
 
 **Když se vedle tabu něco přestane kreslit, šířka se nepřepočítává** (#294). Panel vpravo je
 **sourozenec** `GeometryReader`u v tom samém `HStack`u, takže jeho zmizení změní to, co se změří —
