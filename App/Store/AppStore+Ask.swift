@@ -11,10 +11,17 @@ extension AppStore {
     /// Rozhovor, jak ho zná okno. `nil` = z disku se ještě nečetl.
     func askConversation(for pr: PRIdentifier) -> AskConversation? { askConversations[pr] }
 
-    /// Rozepsaná otázka.
+    /// Rozepsaná otázka — **záloha pro přepnutí tabu**, ne pravda o tom, co je v poli.
+    ///
+    /// Pravdu drží `AskComposer` (#452): odsud se čte při objevení a sem se zapisuje při zmizení
+    /// a při odeslání. Mezitím se sem nesahá, protože zápis každého úhozu překresluje celý detail.
     func askDraft(for pr: PRIdentifier) -> String { askDrafts[pr] ?? "" }
 
-    func setAskDraft(_ text: String, for pr: PRIdentifier) { askDrafts[pr] = text }
+    /// Zapíše zálohu rozepsané otázky. Prázdná se **maže**, ať mapa nedrží záznam po každém PR,
+    /// jehož tab si někdo jen otevřel — tentýž vzor jako u komentáře pod PR (#216).
+    func setAskDraft(_ text: String, for pr: PRIdentifier) {
+        askDrafts[pr] = text.isEmpty ? nil : text
+    }
 
     /// Běží nad PR odpověď?
     func isAnswering(_ pr: PRIdentifier) -> Bool { askTasks[pr] != nil }
@@ -52,33 +59,68 @@ extension AppStore {
         }
     }
 
-    /// Předvyplní pole otázkou k odpíchnutí. **Jen předvyplní** — text se dá přepsat, takže se
-    /// z nápovědy nestane sada příkazů.
-    func useAskTip(_ tip: String, for pr: PRIdentifier) {
-        askDrafts[pr] = tip
-    }
-
-    /// Zeptá se na to, co je rozepsané v poli.
+    /// Zeptá se na otázku, kterou má člověk před sebou. Vrací, jestli se session doopravdy
+    /// spustila.
     ///
-    /// **Text si bere store, ne volající**, jako u komentáře pod PR (#216): jinak by šlo odeslat
-    /// něco jiného, než co je vidět. Otázka se do rozhovoru zapíše **hned**, ještě než session
-    /// naběhne — bublina má být vidět ve chvíli, kdy se klikne, a prstýnek pod ní říká, že se na
-    /// odpověď čeká.
-    func askQuestion(about pr: PRIdentifier) {
+    /// **Text bere volající, ne store** — a je to oprava, ne odchylka od vzoru u komentáře pod PR
+    /// (#216). Smysl toho pravidla je „odejde to, co je vidět“, a právě ten se okružní cestou přes
+    /// store porušoval: pole drží rozepsaný text u sebe a dolů ho posílá po odmlce, takže klik
+    /// trefený do té mezery odeslal **starší** otázku a rozepsanou vrátil zpátky do pole. Změřeno
+    /// v `AskComposerTests` (v bublině půlka otázky, v poli celá). Composer proto posílá to, co
+    /// v něm doopravdy je.
+    ///
+    /// **Pole si vyprázdní composer, ne store**, a je to tatáž úvaha: `askDrafts` je jen záloha
+    /// pro přepnutí tabu. Kdyby ho vyprázdnilo odeslání, klik na nabízenou otázku by smazal text,
+    /// který má člověk rozepsaný vedle — a ten se odsud nedá odlišit od té, kterou zrovna posílá.
+    ///
+    /// **Návratová hodnota je ta pojistka**, kvůli které to není `Void`: `false` znamená
+    /// „neodešlo“, a composer podle ní otázku v poli **nechá**. Přijít o napsanou otázku je horší
+    /// než ji tam mít po odeslání.
+    ///
+    /// Otázka se do rozhovoru zapíše **hned**, ještě než session naběhne — bublina má být vidět
+    /// ve chvíli, kdy se klikne, a prstýnek pod ní říká, že se na odpověď čeká.
+    @discardableResult
+    func askQuestion(_ question: String, about pr: PRIdentifier) -> Bool {
         // Během zavírání se nic nespouští (#264) — tatáž brána jako u review a kontroly nálezů.
         guard !isTerminating, asker != nil, askTasks[pr] == nil, askBlock(for: pr) == nil else {
-            return
+            return false
         }
-        let question = askDraft(for: pr).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty else { return }
+        let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
 
-        askDrafts[pr] = ""
         askActivity[pr] = nil
         // Hláška se maže **novou otázkou**, ne úspěšným zápisem (viz `writeAsk`): platí k jedné
         // výměně a nová otázka je ta chvíle, kdy přestává být aktuální.
         askFailure = nil
-        append(AskMessage(speaker: .mine, text: question, at: time.now), to: pr)
-        askTasks[pr] = Task { [weak self] in await self?.answer(question, about: pr) }
+        append(AskMessage(speaker: .mine, text: text, at: time.now), to: pr)
+        askTasks[pr] = Task { [weak self] in await self?.answer(text, about: pr) }
+        return true
+    }
+
+    /// `Nový rozhovor` — zahodí rozhovor i navázání a příští otázka začne načisto (#452).
+    ///
+    /// **Maže i to, co je na disku a co drží `--resume`**, ne jen obrazovku. Rozhovor, který
+    /// zmizel z okna a zůstal v cache, se vrátí přepnutím tabu; ponechané `sessionID` by naopak
+    /// navázalo novou otázku na vlákno, o kterém člověk řekl, že s ním končí — tedy přesně to,
+    /// kvůli čemu se na tlačítko sáhlo.
+    ///
+    /// **Běžící odpověď se zabije**, ne dopustí: session, která doběhne do zahozeného rozhovoru,
+    /// by do něj přidala bublinu odpovědi bez otázky. Zaplacená je tak jako tak (útrata se
+    /// zapisuje před kontrolou zrušení), takže se tím o účet nepřichází — jen o text, který
+    /// člověk zahodil vědomě.
+    ///
+    /// **Rozepsané otázky se to netýká** (`askDrafts` zůstávají): „načisto“ mluví o rozhovoru,
+    /// ne o větě, kterou má člověk zrovna v poli — a zahodit mu ji za něj by bylo to nejdražší,
+    /// co jde v tomhle tabu pokazit.
+    func resetAskConversation(for pr: PRIdentifier) {
+        askTasks[pr]?.cancel()
+        // Prázdný rozhovor **v mapě**, ne chybějící klíč: chybějící znamená „z disku se ještě
+        // nečetlo“ a `loadAskConversation` by ho po přepnutí tabu načetl zpátky.
+        askConversations[pr] = AskConversation(pullRequest: pr)
+        askActivity[pr] = nil
+        askFailure = nil
+        // Prázdný rozhovor `AskStore.save` **smaže**, takže tenhle zápis odklidí i soubor v cache.
+        persistAsk(for: pr)
     }
 
     /// Zrušení uživatelem. Session dostane `SIGKILL` a odpověď se neuloží — otázka v rozhovoru

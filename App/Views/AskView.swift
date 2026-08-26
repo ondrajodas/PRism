@@ -26,13 +26,19 @@ struct AskView: View {
     var draft: String = ""
     /// Proč se zeptat nedá. `nil` = dá se.
     var block: String?
-    var setDraft: (String) -> Void = { _ in }
-    var send: () -> Void = {}
-    var useTip: (String) -> Void = { _ in }
+    /// Uloží rozepsanou otázku do zálohy pro přepnutí tabu.
+    var persistDraft: (String) -> Void = { _ in }
+    /// Odešle otázku a řekne, jestli odešla. Jednou cestou pro pole i pro nabízenou otázku —
+    /// dvě by znamenaly dvě místa, kde se rozhoduje, co se pošle.
+    var send: (String) -> Bool = { _ in false }
     /// Zastaví běžící odpověď. `nil` = zastavit se nedá (náhledy a testy skládání).
     var cancel: (() -> Void)?
+    /// Zahodí rozhovor i session. `nil` = `Nový rozhovor` se nekreslí (náhledy a testy skládání).
+    var reset: (() -> Void)?
     /// Kam se dá skočit z odpovědi. `nil` = odkazy se nekreslí.
     var jump: ((AskReference) -> Void)?
+
+    @State private var isConfirmingReset = false
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
@@ -41,7 +47,24 @@ struct AskView: View {
             Rectangle().fill(Palette.lineSoft).frame(height: 1)
             log
                 .fillingSlot()
-            composer
+            AskComposer(
+                draft: draft,
+                block: block,
+                isAnswering: isAnswering,
+                persist: persistDraft,
+                send: send,
+                cancel: cancel
+            )
+        }
+        .confirmationDialog(
+            "Začít nový rozhovor?",
+            isPresented: $isConfirmingReset,
+            titleVisibility: .visible
+        ) {
+            Button("Začít znovu", role: .destructive) { reset?() }
+            Button("Zpět", role: .cancel) {}
+        } message: {
+            Text(verbatim: "Otázky i odpovědi se smažou a příští otázka se ptá načisto. Zpátky to nejde a zaplatí se znovu.")
         }
     }
 
@@ -66,11 +89,30 @@ struct AskView: View {
             Text(verbatim: "čte · neodesílá")
                 .designPill(tint: Palette.ink2, background: Palette.raised)
                 .help("Session čte kód ve své kopii repa. Na GitHub odeslat nic neumí.")
+            resetButton
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.chrome)
+    }
+
+    /// `Nový rozhovor` — tiché tlačítko vedle kapsle, ne akcentované: je to úklid, ne hlavní
+    /// akce.
+    ///
+    /// **V prázdném tabu se nekreslí vůbec**, ne zašedle (`AskTabContent.offersReset`): zašedlé
+    /// tlačítko tvrdí „tady se to dělá, jen teď ne“, kdežto tady prostě není co zahodit. Zašedlá
+    /// s důvodem patří jinam — tam, kde je vypnutá brána.
+    ///
+    /// **Ptá se**, ačkoli se v tomhle okně skoro nic nepotvrzuje: odpověď stála kolem dolaru
+    /// a smazaný rozhovor se nedá vrátit ani zopakovat za stejné peníze. Tatáž úvaha jako
+    /// u zakládání labelu (#413) — potvrzuje se to, co je **nevratné**, ne to, co je důležité.
+    @ViewBuilder private var resetButton: some View {
+        if content.offersReset, reset != nil {
+            Button("Nový rozhovor") { isConfirmingReset = true }
+                .buttonStyle(.mini)
+                .help("Zahodí rozhovor i navázanou session. Příští otázka se ptá načisto.")
+        }
     }
 
     /// Jeden chip (`.rchip`). Puntík má **jen** ten s blokujícím nálezem — u počtu komentářů by
@@ -144,15 +186,24 @@ struct AskView: View {
         .accessibilityLabel("odpovídá — \(activity)")
     }
 
-    /// Prázdná plocha by u rozhovoru znamenala „a co se mám ptát“. Místo ní tři otázky
-    /// k odpíchnutí — obyčejná tlačítka, která **jen předvyplní pole**, takže se dají přepsat.
+    /// Prázdná plocha by u rozhovoru znamenala „a co se mám ptát“. Místo ní otázky
+    /// k odpíchnutí — a **klik je rovnou odešle**, protože jedno kliknutí je celý jejich smysl.
+    ///
+    /// Do prvního proklikání otázku jen předvyplnily do pole; zahodilo se to, protože
+    /// předvyplněná otázka chce druhý klik na tomtéž místě, kde měl stačit první. Přepsat se dá
+    /// pořád — píše se do pole pod tím. Které otázky se nabízejí, rozhoduje `Policy.askTips` podle
+    /// toho, co na PR doopravdy je.
     private func emptyState(_ tips: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(verbatim: "Zatím ses na nic neptal. Třeba:")
                 .font(.system(size: 12.5))
                 .foregroundStyle(Palette.ink2)
             ForEach(tips, id: \.self) { tip in
-                Button { useTip(tip) } label: {
+                // Výsledek se zahazuje schválně: `false` znamená „neodešlo“ a composer podle něj
+                // nechává text v poli — tady se ale žádný text nezadával, takže není co nechávat.
+                // A stav, ve kterém by odeslání odmítlo, se sem nakreslit nedá: nabídka je jedině
+                // v prázdném tabu (`AskTabContent.empty`), kde nic neběží.
+                Button { _ = send(tip) } label: {
                     Text(verbatim: tip)
                         .font(.system(size: 12))
                         .foregroundStyle(Palette.ink2)
@@ -167,7 +218,7 @@ struct AskView: View {
                         .contentShape(.capsule)
                 }
                 .buttonStyle(.plain)
-                .help("Vloží otázku do pole — dá se přepsat.")
+                .help("Zeptá se na tohle. Spustí session nad kopií tohohle PR.")
             }
         }
         .padding(.horizontal, 16)
@@ -175,89 +226,8 @@ struct AskView: View {
         .filling(alignment: .leading)
     }
 
-    // MARK: - Composer
-
-    /// Pole a odesílací tlačítko na spodní hraně tabu (`.composer`).
-    ///
-    /// Věta u pole říká, co session smí — je to totéž tvrzení jako kapsle v liště, jen slovy,
-    /// a stojí tam, kde se rozhoduje o odeslání otázky.
-    private var composer: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            DraftTextEditor(
-                text: draft,
-                placeholder: "Zeptej se na cokoli v tomhle PR…",
-                minHeight: 46,
-                maxHeight: 46,
-                commit: setDraft
-            )
-            .disabled(block != nil)
-            controls
-        }
-        .padding(11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.chrome)
-        .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
-    }
-
-    private var controls: some View {
-        HStack(spacing: 9) {
-            Text(verbatim: "Čte kód ve své kopii repa. Odeslat na GitHub neumí.")
-                .font(.system(size: 11))
-                .foregroundStyle(Palette.ink3)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            // **Kreslená kapsle, ne `keyboardShortcut`.** Klávesu bere `Button` níž
-            // (`.defaultAction`), takže by druhá registrace téže kombinace byla ta past
-            // z #151 a #184 — v tomhle tabu je `⌘⏎` navíc **zakázané** zkratce okna
-            // (`Policy.claimsReturnShortcut`), aby se sem propadlo.
-            // A **jen když tu klávesu doopravdy někdo bere** — vedle `Zastavit` by kapsle
-            // tvrdila zkratku, která v tu chvíli nic nedělá.
-            if !isAnswering {
-                Text(verbatim: "⌘⏎")
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Palette.ink3)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Palette.raised, in: .rect(cornerRadius: 5))
-                    .accessibilityHidden(true)
-            }
-            // **Během odpovědi se z tlačítka stane `Zastavit`.** Jedna odpověď stojí kolem
-            // dolaru a běží minuty (změřeno, viz `docs/claude-cli.md`), takže „rozmyslel jsem si
-            // to“ nesmí znamenat čekat na konec — a zakázané `Zeptat se` vedle prstýnku je
-            // tlačítko, které v tu chvíli nedělá nic. Je to **tentýž ovládací prvek v jiném
-            // stavu**, ne druhé tlačítko: dvě vedle sebe by v úzkém composeru braly místo
-            // a jedno z nich by bylo vždycky zakázané.
-            if isAnswering, let cancel {
-                Button("Zastavit") { cancel() }
-                    .buttonStyle(.bordered)
-                    .font(.system(size: 12.5))
-                    .help("Zabije běžící session. Otázka v rozhovoru zůstane.")
-            } else {
-                Button("Zeptat se") { send() }
-                    .buttonStyle(.borderedProminent)
-                    .font(.system(size: 12.5))
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(!canSend)
-                    .help(sendHelp)
-            }
-        }
-    }
-
-    private var canSend: Bool {
-        block == nil && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isAnswering
-    }
-
     private var isAnswering: Bool {
         if case .thread(_, let isAnswering) = content { return isAnswering }
         return false
-    }
-
-    private var sendHelp: String {
-        if let block { return block }
-        if isAnswering { return "Počkej na odpověď — v jednom rozhovoru běží jedna session." }
-        if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Napiš otázku."
-        }
-        return "Spustí session nad kopií tohohle PR. Čte kód, nic neodesílá."
     }
 }

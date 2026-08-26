@@ -6,7 +6,7 @@ import Foundation
 /// (běžet může jedině to, na co se někdo zeptal) a stav, který se nedá napsat, se nedá ani
 /// omylem nakreslit.
 enum AskTabContent: Equatable, Sendable {
-    /// Nikdo se zatím na nic nezeptal — místo prázdné plochy tři otázky k odpíchnutí.
+    /// Nikdo se zatím na nic nezeptal — místo prázdné plochy otázky k odpíchnutí.
     ///
     /// Nese je **tenhle případ**, ne view: jsou to data, o kterých se rozhoduje, a rozhodnutí
     /// patří do `Policy`. Kdyby je držel view, nešlo by o nich nic tvrdit testem.
@@ -14,6 +14,19 @@ enum AskTabContent: Equatable, Sendable {
     /// Rozhovor. `isAnswering` znamená prstýnek **na místě příští bubliny** — odpověď přijde
     /// sem, tak ať je vidět, kde na ni čekat.
     case thread(messages: [AskMessage], isAnswering: Bool)
+
+    /// Kreslí se `Nový rozhovor`? (#452)
+    ///
+    /// **V prázdném tabu ne** — nemá co zahodit, a tlačítko, které v tu chvíli nedělá nic, je
+    /// otázka, na kterou obrazovka neodpovídá. Je to vlastnost **tohohle výčtu**, ne `if` ve
+    /// view: „je co zahodit“ je totéž rozhodnutí jako „co je na obrazovce“, takže se počítá tam,
+    /// kde se to rozhoduje, a dá se o něm něco tvrdit testem.
+    var offersReset: Bool {
+        switch self {
+        case .empty: false
+        case .thread: true
+        }
+    }
 }
 
 /// Jeden chip v pruhu `ví o tomhle PR:` (#452).
@@ -51,20 +64,46 @@ struct AskContextChip: Equatable, Sendable, Identifiable {
 }
 
 extension Policy {
-    /// Tři otázky k odpíchnutí v prázdném tabu — doslova ty z návrhu (sekce 33).
+    /// Otázky k odpíchnutí v prázdném tabu (#452).
     ///
-    /// **Nejsou to schopnosti, je to nápověda, co tab umí.** Jsou proto obyčejná tlačítka, která
-    /// jen předvyplní pole — text se dá přepsat, takže se z nich nestane sada příkazů, u kterých
-    /// by se člověk ptal, co se stane s tou čtvrtou otázkou.
+    /// **Klik je rovnou odešle** — jedno kliknutí je celý jejich smysl. Do prvního proklikání
+    /// otázku jen předvyplnily do pole a tady stálo, že se proto dají přepsat; zahodilo se to,
+    /// protože předvyplněná otázka chce po člověku **druhý klik na tomtéž místě**, kde měl stačit
+    /// první. Přepsat se dá pořád — jen se napíše do pole místo kliknutí na nabídku. Cena je
+    /// zaplacená session za jeden klik, a ta je vidět: každá bublina má u sebe útratu.
     ///
-    /// Pevné, ne odvozené z obsahu PR: otázka „Který z těch tří nálezů je doopravdy problém?“
-    /// je nápověda i tehdy, když jsou nálezy dva — a text, který se mění pod rukama, se přestane
-    /// číst jako příklad.
-    static let askTips = [
-        "Co v tomhle PR nejvíc riskuje?",
-        "Který z těch nálezů je doopravdy problém?",
-        "Co bych měl prověřit, než tohle schválím?",
-    ]
+    /// **Nabídka se řídí tím, co na PR je**, ne pevným seznamem. Otázka „Který z těch nálezů je
+    /// doopravdy problém?“ je nad PR bez nálezů dotaz na nic — nechá tedy session projít diff
+    /// a odpovědět „žádné tam nejsou“ za dolar. Skládá se proto z **týchž chipů**, které kreslí
+    /// pruh `ví o tomhle PR:`: dvě různá čísla o jedné věci na jedné obrazovce jsou horší než
+    /// jedna otázka míň, a jediná pojistka, která to uhlídá, je společný zdroj — ne dvě místa,
+    /// která počítají totéž.
+    ///
+    /// **Počet se píše číslicí**, i když ho návrh v próze vysází slovem („z těch tří nálezů“):
+    /// v pruhu nad tím stojí `3 nálezy`, takže shodu je vidět a dá se o ní něco tvrdit. Číslovka
+    /// slovem by znamenala druhou tabulku tvarů vedle `Plural` a překlad mezi dvěma zápisy téhož
+    /// čísla v každém testu.
+    static func askTips(context chips: [AskContextChip]) -> [String] {
+        let findings = chips.first { $0.kind == .findings }?.count ?? 0
+        return [
+            "Co v tomhle PR nejvíc riskuje?",
+            findingsTip(count: findings),
+            "Co bych měl prověřit, než tohle schválím?",
+        ]
+        .compactMap { $0 }
+    }
+
+    /// Otázka na nálezy — `nil`, když žádné nejsou.
+    ///
+    /// Jediný nález dostane vlastní větu: „Který z těch 1 nálezů“ je česky nesmysl a „Který
+    /// z těch nálezů“ by u jednoho tvrdilo, že je z čeho vybírat.
+    private static func findingsTip(count: Int) -> String? {
+        switch count {
+        case 0: nil
+        case 1: "Je ten jediný nález doopravdy problém?"
+        default: "Který z těch \(count) nálezů je doopravdy problém?"
+        }
+    }
 
     /// Co se v tabu kreslí.
     ///
@@ -72,9 +111,16 @@ extension Policy {
     /// zapisuje **dřív**, než se session spustí (viz `AppStore+Ask`), takže tenhle stav znamená
     /// „něco běží a nikdo se na nic nezeptal“ — tedy rozpor, ze kterého se nemá kreslit prstýnek
     /// nad prázdnem.
-    static func askTab(conversation: AskConversation?, isAnswering: Bool) -> AskTabContent {
+    ///
+    /// `context` jsou tytéž chipy, které se kreslí v pruhu `ví o tomhle PR:` — nabídka otázek
+    /// z nich vychází, aby nemohla tvrdit jiná čísla než pruh o kus výš.
+    static func askTab(
+        conversation: AskConversation?,
+        isAnswering: Bool,
+        context chips: [AskContextChip] = []
+    ) -> AskTabContent {
         let messages = conversation?.messages ?? []
-        guard !messages.isEmpty else { return .empty(tips: askTips) }
+        guard !messages.isEmpty else { return .empty(tips: askTips(context: chips)) }
         return .thread(messages: messages, isAnswering: isAnswering)
     }
 

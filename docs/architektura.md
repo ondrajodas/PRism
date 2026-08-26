@@ -2360,8 +2360,57 @@ Co je v okně a proč zrovna tak:
   pravdivé, ale v tom pruhu se čte jako selhání.
 - **`čte · neodesílá` a věta u composeru jsou v okně**, ne jen v dokumentaci. Práva, o kterých ví
   jenom `CLAUDE.md`, uživateli neřeknou nic.
-- **Prázdný tab nabízí tři otázky k odpíchnutí.** Jsou to obyčejná tlačítka, která **jen předvyplní
-  pole** — nápověda, co tab umí, ne sada příkazů.
+- **Prázdný tab nabízí otázky k odpíchnutí a klik je rovnou odešle** (změna proti první podobě
+  #452, kde jen předvyplnily pole). Zahodilo se to při prvním proklikání: předvyplněná otázka chce
+  po člověku **druhý klik na tomtéž místě**, kde měl stačit první. Přepsat se dá pořád — píše se do
+  pole pod tím, a cena jednoho kliknutí je vidět, protože každá bublina nese svou útratu. Jde to
+  **toutéž cestou jako pole** (`AppStore.askQuestion(_:about:)`), takže není druhé místo, kde se
+  rozhoduje, co se pošle — a **na rozepsanou otázku vedle to nesahá**: klik na nabídku není důvod
+  smazat větu, kterou má člověk v poli.
+- **Nabídka se řídí tím, co na PR je** (`Policy.askTips(context:)`). Otázka na nálezy se nad PR bez
+  nálezů **nenabízí**: ptala by se na nic a session by za dolar odpověděla „žádné tam nejsou“.
+  Skládá se z **týchž chipů**, které kreslí pruh `ví o tomhle PR:` — jedno pole se v
+  `PullRequestDetailView` spočítá jednou a jde do obojího, protože dvě různá čísla o jedné věci na
+  jedné obrazovce jsou horší než jedna otázka míň (a je to přesně ta třída chyby, kterou u tohohle
+  tabu jednou vyrobil materiál skládaný jinde než pruh). **Počet se píše číslicí**, i když ho návrh
+  v próze sází slovem: v pruhu nad tím stojí `3 nálezy`, takže je shoda vidět a dá se o ní něco
+  tvrdit testem. Jediný nález dostane vlastní větu — „Který z těch 1 nálezů“ je česky nesmysl.
+- **Composer drží text u sebe, ne ve storu** (`AskComposer`), a je to **oprava naměřené chyby**, ne
+  styl. Do té doby tam seděl `DraftTextEditor`, který text posílá dolů po **odmlce 400 ms** (rozdělané
+  review čtou bubliny v diffu, takže se každý úhoz zapisovat nedá). Jenže tady je to, co se odesílá,
+  **totéž pole**, do kterého se píše: klik trefený do té odmlky odeslal **starší** otázku a rozepsanou
+  dostal zpátky přes `onChange(of: text)`, takže v bublině byla půlka věty a v composeru celá.
+  Změřeno v `AskComposerTests` nad skutečným oknem, ne odvozeno.
+
+  Rozdělení rolí je teď: **pole je pravda**, `askDrafts` je **záloha pro přepnutí tabu** (čte se při
+  objevení, zapisuje se při zmizení a při odeslání) a `askQuestion(_:about:)` bere text **od
+  volajícího**. Není to odchylka od vzoru u komentáře pod PR (#216) — smysl toho pravidla je
+  „odejde to, co je vidět“, a právě ten okružní cesta porušovala. Podobu pole obě místa sdílejí přes
+  `DraftTextField`, aby se rámeček a nápověda nerozešly.
+
+  Tři věci, které z toho plynou a nejsou zjevné:
+
+  - **Odeslání vrací `Bool`.** `false` znamená „neodešlo“ a composer podle toho otázku v poli
+    **nechá** — přijít o napsanou otázku je horší než ji tam mít po odeslání. Vyprázdnění pole je
+    proto součást odeslání, ne úklid navíc, a děje se **jen po `true`**.
+  - **`askQuestion` `askDrafts` nemaže.** Kdyby ano, klik na nabízenou otázku by smazal rozepsanou
+    větu vedle — a odsud se ta dvě použití nedají odlišit. Zálohu srovná composer.
+  - **Tab má vlastní identitu podle PR** (`.id(pullRequest.id)` na `AskView`). Detail se mezi pull
+    requesty **znovupoužívá**, takže bez toho by si composer nechal rozepsanou otázku z předchozího
+    PR a při zmizení ji uložil do jeho zálohy.
+- **`Nový rozhovor` zahodí rozhovor i navázání** (`AppStore.resetAskConversation`) — a maže **i to,
+  co není vidět**: soubor v cache a `sessionID`. Rozhovor, který zmizel z okna a zůstal na disku, se
+  vrátí přepnutím tabu; ponechané `sessionID` by navázalo příští otázku na vlákno, se kterým člověk
+  skončil. Do mapy se zapisuje **prázdný rozhovor, ne chybějící klíč** (chybějící znamená „z disku
+  se ještě nečetlo“, takže by ho `loadAskConversation` načetl zpátky), běžící odpověď se **zabíjí**
+  (jinak by doběhla do zahozeného rozhovoru a přidala do něj bublinu bez otázky) a **rozepsané
+  otázky se to netýká** — „načisto“ mluví o rozhovoru, ne o větě, kterou má člověk v poli.
+
+  Tlačítko je tiché (`.mini`) vedle kapsle `čte · neodesílá`, **v prázdném tabu se nekreslí vůbec**
+  (`AskTabContent.offersReset` — není co zahodit, a zašedlé tlačítko by tvrdilo „tady se to dělá,
+  jen teď ne“) a **ptá se jednou větou**, ačkoli se v tomhle okně skoro nic nepotvrzuje: odpověď
+  stála kolem dolaru a smazaný rozhovor se nedá vrátit ani zopakovat za stejné peníze. Je to tatáž
+  úvaha jako u zakládání labelu (#413) — potvrzuje se to, co je **nevratné**, ne to, co je důležité.
 - **Během odpovědi se z tlačítka stane `Zastavit`.** Jedna odpověď stojí kolem dolaru a běží minuty,
   takže „rozmyslel jsem si to“ nesmí znamenat čekat na konec; zakázané `Zeptat se` vedle prstýnku je
   navíc tlačítko, které v tu chvíli nedělá nic. Je to **tentýž prvek v jiném stavu**, ne druhé
@@ -3434,7 +3483,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ThreadActions` | Co se dá dělat s vláknem — rozbalení, odpověď, vyřešení a důvod, proč odesílat nejde |
 | `MarkdownText` | Vykreslený Markdown z GitHubu — viz `App/Markdown/` |
 | `DraftCommentBubbleView` | Můj rozdělaný komentář u řádku: editor, odznak původu, vyjmutí. Ve split pohledu visí jen v půlce, které se týká |
-| `DraftTextEditor` | Textové pole draftu — odložený zápis a doručení při zmizení |
+| `DraftTextField` | **Podoba** textového pole — rámeček, nápověda na prvním znaku, strop výšky. Drží jen vzhled; kam se text ukládá, rozhoduje ten, kdo ho použije (#452) |
+| `DraftTextEditor` | Textové pole draftu — odložený zápis (400 ms) a doručení při zmizení. Pro composer, ze kterého se odesílá jedním klikem, se **nehodí**: mezi „co je vidět“ a „co store ví“ je celá ta odmlka (#452) |
 | `DraftPanel` | Tab `Moje review`: banner zastarání, verdikt **předvyplněný návrhem z nálezů** (obtažený, s popiskem), tělo, seznam komentářů, `Odeslat review…` (u zastaralého `Zkontrolovat a odeslat…`). Obsah scrolluje, jen když se nevejde |
 | `ReviewSubmissionSheet` | Potvrzení odeslání: **kontrola kotev u zastaralého draftu** (#69), pak úplný výpis payloadu, průběh, typované chyby |
 | `DraftTransferView` | První stránka toho potvrzení: stav každé kotvy (sedí / posunulo se / nevím / ztraceno) a volba, co s ní |

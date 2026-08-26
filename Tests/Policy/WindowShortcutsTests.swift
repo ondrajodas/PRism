@@ -304,7 +304,7 @@ struct WindowShortcutsTests {
             // tím tabem zakázaná (`Policy.claimsReturnShortcut`), takže se sem klávesa propadne.
             // Je to tentýž vzorec jako u palety o řádek výš — jen se místo překryvu rozhoduje
             // podle toho, který tab je na obrazovce.
-            "Views/AskView.swift",
+            "Views/AskComposer.swift",
         ]
 
         let found = Set(try sources().filter { $0.code.contains("keyboardShortcut(") }.map(\.path))
@@ -340,7 +340,7 @@ struct WindowShortcutsTests {
             // klávesu doopravdy registruje o pár řádků výš v tomtéž souboru. Kreslí se literálem
             // schválně: kombinace **není** v katalogu okna, protože ji tam registruje tab, ne
             // okno; do katalogu patří jedině to, co se může srazit napříč obrazovkami.
-            "Views/AskView.swift",
+            "Views/AskComposer.swift",
         ]
 
         var found: Set<String> = []

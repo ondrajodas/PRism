@@ -67,7 +67,10 @@ struct AskTabRenderProbe {
         let scenarios: [(name: String, view: AskView)] = [
             (
                 "prazdny",
-                AskView(content: Policy.askTab(conversation: nil, isAnswering: false), chips: Self.chips)
+                AskView(
+                    content: Policy.askTab(conversation: nil, isAnswering: false, context: Self.chips),
+                    chips: Self.chips
+                )
             ),
             (
                 "rozhovor",
@@ -76,6 +79,7 @@ struct AskTabRenderProbe {
                     chips: Self.chips,
                     activity: "čte nálezy…",
                     cancel: {},
+                    reset: {},
                     jump: { _ in }
                 )
             ),
@@ -85,6 +89,7 @@ struct AskTabRenderProbe {
                     content: .thread(messages: Array(Self.conversation.prefix(2)), isAnswering: false),
                     chips: Self.chips,
                     draft: "Co bych měl prověřit, než tohle schválím?",
+                    reset: {},
                     jump: { _ in }
                 )
             ),

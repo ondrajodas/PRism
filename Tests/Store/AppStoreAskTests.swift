@@ -54,9 +54,9 @@ struct AppStoreAskTests {
         )
     }
 
-    private func ask(_ store: AppStore, _ question: String) {
-        store.setAskDraft(question, for: pr)
-        store.askQuestion(about: pr)
+    @discardableResult
+    private func ask(_ store: AppStore, _ question: String) -> Bool {
+        store.askQuestion(question, about: pr)
     }
 
     private func waitUntilAnswered(_ store: AppStore) async {
@@ -81,8 +81,6 @@ struct AppStoreAskTests {
 
         #expect(messages(store).map(\.speaker) == [.mine])
         #expect(messages(store).first?.text == "proč se ten mutex bere?")
-        // A pole se vyprázdní, ať se táž otázka neodešle podruhé.
-        #expect(store.askDraft(for: pr).isEmpty)
 
         asker.releaseAll()
         await waitUntilAnswered(store)
@@ -346,5 +344,129 @@ struct AppStoreAskTests {
         await waitUntilAnswered(store)
 
         #expect(messages(store).map(\.speaker) == [.mine])
+    }
+
+    // MARK: - Nový rozhovor (#452)
+
+    /// `Nový rozhovor` musí zahodit **i to, co není vidět**: uložený soubor a `sessionID`, kterým
+    /// se navazuje. Rozhovor, který zmizel z okna a zůstal v cache, se vrátí přepnutím tabu;
+    /// ponechané `sessionID` by navázalo příští otázku na vlákno, se kterým člověk skončil.
+    @Test("Nový rozhovor smaže i soubor a navázání")
+    func resettingClearsTheFileAndTheSession() async {
+        let asks = AskStore(layout: layout)
+        let store = store(asker: FakeAskRunner(answers: [AskAnswer(text: "protože", sessionID: "s1")]), asks: asks)
+        ask(store, "proč?")
+        await waitUntilAnswered(store)
+        await waitUntil("rozhovor dosedne na disk", step: .milliseconds(10)) {
+            (try? await asks.load(for: pr))??.messages.count == 2
+        }
+
+        store.resetAskConversation(for: pr)
+        await waitUntil("soubor rozhovoru zmizí", step: .milliseconds(10)) {
+            !FileManager.default.fileExists(atPath: layout.askFile(for: pr).path())
+        }
+
+        #expect(messages(store).isEmpty)
+        #expect(store.askConversation(for: pr)?.sessionID == nil)
+        // A **prázdný v mapě, ne chybějící klíč**: chybějící znamená „z disku se ještě nečetlo“,
+        // takže by ho `loadAskConversation` po přepnutí tabu načetl zpátky.
+        #expect(store.askConversation(for: pr) != nil)
+        await store.loadAskConversation(for: pr)
+        #expect(messages(store).isEmpty)
+    }
+
+    /// Příští otázka po vymazání **nenaváže** — jde do session bez `--resume`, takže se materiál
+    /// složí znovu.
+    @Test("Po vymazání se příští otázka ptá načisto")
+    func theNextQuestionStartsFromScratch() async {
+        let asker = FakeAskRunner(answers: [
+            AskAnswer(text: "první", sessionID: "s1"),
+            AskAnswer(text: "druhá", sessionID: "s2"),
+        ])
+        let store = store(asker: asker)
+        ask(store, "první?")
+        await waitUntilAnswered(store)
+
+        store.resetAskConversation(for: pr)
+        ask(store, "druhá?")
+        await waitUntilAnswered(store)
+
+        #expect(asker.requests.map(\.resuming) == [nil, nil])
+        #expect(messages(store).map(\.text) == ["druhá?", "druhá"])
+    }
+
+    /// **Běžící odpověď se zabije**, jinak by doběhla do zahozeného rozhovoru a přidala do něj
+    /// bublinu odpovědi bez otázky.
+    @Test("Nový rozhovor zabije běžící odpověď")
+    func resettingKillsTheRunningAnswer() async {
+        let asker = FakeAskRunner(holdsUntilRelease: true)
+        let store = store(asker: asker)
+        ask(store, "proč?")
+        await waitUntil("session naběhne") { !asker.requests.isEmpty }
+
+        store.resetAskConversation(for: pr)
+        await waitUntil("běh skončí") { !store.isAnswering(pr) }
+        asker.releaseAll()
+        await settle()
+
+        #expect(messages(store).isEmpty, "do zahozeného rozhovoru něco přibylo")
+    }
+
+    /// **Rozepsané otázky se to netýká** — „načisto“ mluví o rozhovoru, ne o větě, kterou má
+    /// člověk zrovna v poli.
+    @Test("Nový rozhovor rozepsanou otázku nesní")
+    func resettingKeepsTheDraft() async {
+        let store = store(asker: FakeAskRunner())
+        ask(store, "proč?")
+        await waitUntilAnswered(store)
+        store.setAskDraft("a co ten timeout?", for: pr)
+
+        store.resetAskConversation(for: pr)
+
+        #expect(store.askDraft(for: pr) == "a co ten timeout?")
+    }
+
+    // MARK: - Otázka z nabídky
+
+    /// **Klik na nabízenou otázku ji rovnou odešle** — jde toutéž cestou jako pole, jen s textem
+    /// tlačítka. Dvě cesty by znamenaly dvě místa, kde se rozhoduje, co se pošle.
+    @Test("Nabízená otázka jde stejnou cestou jako pole")
+    func aSuggestedQuestionIsSentTheSameWay() async {
+        let asker = FakeAskRunner()
+        let store = store(asker: asker)
+        let tip = Policy.askTips(context: []).first!
+
+        #expect(store.askQuestion(tip, about: pr))
+        await waitUntilAnswered(store)
+
+        #expect(messages(store).first?.text == tip)
+        #expect(asker.requests.count == 1)
+    }
+
+    /// A **nesahá na rozepsanou otázku** vedle sebe: kliknutí na nabídku není důvod smazat větu,
+    /// kterou má člověk v poli.
+    @Test("Nabízená otázka nesmaže rozepsanou")
+    func aSuggestedQuestionKeepsTheDraft() async {
+        let store = store(asker: FakeAskRunner())
+        store.setAskDraft("a co ten timeout?", for: pr)
+
+        store.askQuestion(Policy.askTips(context: []).first!, about: pr)
+        await waitUntilAnswered(store)
+
+        #expect(store.askDraft(for: pr) == "a co ten timeout?")
+    }
+
+    /// **Tvrdí, že se něco NEstalo**: odmítnuté odeslání vrací `false`, a právě podle toho nechá
+    /// composer otázku v poli. Kdyby vracelo `true`, pole by se vyprázdnilo a napsaná otázka by
+    /// zmizela, aniž by se kdy odeslala.
+    @Test("Odmítnuté odeslání se přizná")
+    func arefusedSendSaysSo() async {
+        let store = store(asker: FakeAskRunner())
+
+        #expect(store.askQuestion("   \n ", about: pr) == false)
+        store.isTerminating = true
+        #expect(store.askQuestion("proč?", about: pr) == false)
+
+        #expect(messages(store).isEmpty)
     }
 }

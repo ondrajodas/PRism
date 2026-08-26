@@ -4924,6 +4924,37 @@ v téhle implementaci** a obě se opravily ještě před PR: materiál se sklád
 data unesou) a mrtvé `session_id` se nezahazovalo, takže rozbité navázání by rozhovor položilo
 napořád.
 
-Testů **4160**, všechny zelené — nových je šest sad kolem rozhovoru (`AskCommandTests`,
-`AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`) a k tomu
-stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam (#361).
+**Proklikání otočilo tři zapsaná rozhodnutí a našlo jednu chybu.** Nabízené otázky do té doby jen
+předvyplnily pole — odešle je teď **jeden klik**, protože předvyplněná otázka chce druhý klik na
+tomtéž místě, kde měl stačit první. Nabídka je navíc **odvozená z pruhu `ví o tomhle PR:`**, takže
+se otázka na nálezy nad PR bez nálezů nenabízí (ptala by se na nic) a nese **týž počet**, jaký
+hlásí chip — jedno pole chipů jde do obojího, protože dvě čísla o jedné věci na jedné obrazovce
+jsou ta třída chyby, kterou u tohohle tabu jednou vyrobil materiál skládaný jinde než pruh. A
+přibyl **`Nový rozhovor`** (napřed dokreslený a odsouhlasený v sekci 33 návrhu): zahodí rozhovor,
+soubor v cache i `sessionID`, ptá se jednou větou, protože zpátky se to nedá koupit, a v prázdném
+tabu se nekreslí.
+
+Ta chyba byla, že **odeslaná otázka zůstala v poli** — a stálo to za rozbor: store obě poloviny
+výměny dělal správně, rozbité to bylo **okružní cestou**. Composer používal `DraftTextEditor`, který
+text posílá dolů po **odmlce 400 ms** (rozdělané review čtou bubliny v diffu, takže se každý úhoz
+zapisovat nedá), jenže tady je to, co se odesílá, **totéž pole**, do kterého se píše: klik trefený
+do té odmlky odeslal **starší** otázku a rozepsanou dostal zpátky. Text proto drží composer
+(`AskComposer`), store dostane otázku **až při odeslání** a `askDrafts` je od té doby jen záloha pro
+přepnutí tabu. Odeslání vrací `Bool`, takže se pole vyprázdní **jen když otázka doopravdy odešla** —
+neodeslaná v něm zůstane.
+
+Testů **4171**, všechny zelené — nových je sedm sad kolem rozhovoru (`AskCommandTests`,
+`AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`,
+`AskComposerTests`) a k tomu stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam
+(#361). `AskComposerTests` jedou nad **skutečným oknem a skutečnou klávesou**
+(`window.performKeyEquivalent` s `⌘⏎`), protože `Button` je v tomhle okně kreslený SwiftUI a žádný
+`NSButton` v hierarchii není — a nad storem se o té chybě nedalo tvrdit nic.
+
+**Zeleno je z běhu po polovinách, a je u toho co zapsat.** Plný `xcodebuild test` se na tomhle
+stroji zasekne na **třech posledních suitách** (`AppStore — komentář pod PR`, `— odpovídání do
+vláken`, `— labely a reviewery`): v testovacím hostu se nasbírá **76 vláken v
+`-[NSAnimation _runBlocking]`** a dispatch pool narazí na soft limit 75, takže na zbytek už žádné
+vlákno nezbude (`sample` to hlásí větou *too many dispatch threads blocked in synchronous
+operations*). **Není to z #452** — změřeno se **zastashovanými** změnami, se stejným výsledkem na
+týchž třech suitách. Rozdělené na dvě poloviny (208 a 208 suit) doběhne obojí do 40 s a pokrytí je
+prokazatelně stejné: množina jmen suit z obou polovin je nadmnožinou té z plného běhu.

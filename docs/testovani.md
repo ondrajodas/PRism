@@ -1168,7 +1168,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`ReviewStateFromRecordTests`, `VerdictSuggestionTests`, `QueueRowTests`, `ReviewerChipTests`,
   `FindingsEmptyReasonTests`, `AppStoreRecoveryTests` a obě nové), protože `makeStoredRun` osu
   ve výchozím stavu nemá — a přesně to je ta situace, ve které se okno nesmí rozkřičet.
-- **Rozhovor nad PR (#452)** — pět sad a v každé jedno tvrzení, které se rozbije potichu.
+- **Rozhovor nad PR (#452)** — šest sad a v každé jedno tvrzení, které se rozbije potichu.
   `AskCommandTests` tvrdí **obě konstanty sady literálem** (tvrdá podmínka č. 2) a k tomu, že je
   **vlastní podmnožina** reviewerovy s rozdílem právě `ReportFindings` a `Skill`; porovnat povolení
   proti `AskCommand.allowedTools` by neznamenalo nic, protože rozšířenou konstantu by test poslušně
@@ -1188,6 +1188,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   kterém si nedrží handle (`persistAsk`, tentýž vzor jako u draftu), takže jediný jev, na který se
   dá čekat, je **soubor**. Ten task navíc čte hodnotu **až v sobě** — se snímkem v parametru by
   starší zápis mohl přebít novější a v souboru by po restartu chyběla odpověď.
+
+  **Composer se testuje přes skutečné okno a skutečnou klávesu** (`AskComposerTests`), a je to
+  jediný způsob, jak se o té chybě dalo něco tvrdit: store obě poloviny výměny dělal správně od
+  začátku (`AppStoreAskTests` tvrdí, že otázka doletí do rozhovoru) a otázka **přesto** po odeslání
+  zůstala v poli. Rozbité to bylo **okružní cestou** — pole drželo text u sebe a dolů ho posílalo po
+  odmlce 400 ms, takže klik trefený do té mezery odeslal starší otázku a rozepsanou dostal zpátky.
+  Nad storem se to napsat nedá, protože store o tom poli nic neví.
+
+  Čtyři věci, na které se u toho narazilo a stojí za zapamatování:
+
+  - **`Button` je v tomhle okně kreslený SwiftUI**, takže v hostované hierarchii **žádný `NSButton`
+    není** (ověřeno výpisem stromu — jsou tam jen views textového pole) a `accessibilityChildren()`
+    vrací prázdno. `performClick` tedy nemá na čem. Zabírá
+    **`window.performKeyEquivalent(with:)`** se syntetickým `⌘⏎`, a to i **bez aktivace aplikace**,
+    kterou testovací host nedostane (#392) — jako vedlejší efekt to tvrdí i to, že si `⌘⏎` v tomhle
+    tabu doopravdy bere `Zeptat se`.
+  - **Do pole se píše přes `didChangeText()`**, ne přiřazením do `string`: binding se v SwiftUI plní
+    z delegáta, takže samotné přiřazení by se do view nikdy nedostalo a test by tvrdil, že se nic
+    neztratilo, i kdyby se ztrácelo všechno.
+  - **Textové pole se hledá pokaždé znovu.** Prázdný tab a tab s rozhovorem jsou dvě různé větve,
+    takže si SwiftUI umí composer přestavět — uložená reference pak ukazuje na `NSTextView`, který na
+    obrazovce dávno není, a test nad ním tvrdí „pole se nevyprázdnilo“, i když se vyprázdnilo. Stálo
+    to jedno kolo hledání chyby, která tam nebyla.
+  - **Čeká se na jev, ne na okamžik** (#269), a hned dvakrát: mezi zápisem do pole a překreslením
+    tlačítka je jeden průchod SwiftUI (mačká se proto z `waitUntil`, dokud si klávesu někdo
+    nevezme — zašedlé tlačítko nic neodešle, takže opakování nevadí) a vyprázdnění pole je zase
+    průchod po akci tlačítka.
+
+  **Ověřeno vloženou regresí, ne zeleným během.** Když `submit()` posílá zálohu ze storu místo toho,
+  co je v poli, padnou dvě sady (odeslaná otázka do rozhovoru vůbec nedoletí a v poli zůstane);
+  když pole vyprazdňuje **bezpodmínečně**, padne `Otázka, která neodešla, v poli zůstane`.
 
   **Vzhled má sondu, ne tvrzení** (`AskTabRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`
   + `TEST_RUNNER_PRISM_RENDER_DIR`): tři stavy tabu ve dvou šířkách, aby se daly položit vedle

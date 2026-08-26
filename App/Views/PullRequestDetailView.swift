@@ -1407,21 +1407,32 @@ struct PullRequestDetailView: View {
     /// otázkami k odpíchnutí, nebo rozhovor s prstýnkem), a `AppStore` drží stav i cestu ven do
     /// session. View z toho jen kreslí.
     private var ask: some View {
-        AskView(
+        // **Jedno pole chipů pro pruh i pro nabídku otázek** (#452): kdyby se počítalo dvakrát,
+        // mohl by pruh hlásit `3 nálezy` a otázka se ptát na jiné číslo — a přesně tahle třída
+        // chyby už jednou u tohohle tabu byla (materiál se skládal jinde než pruh).
+        let chips = store.askContextChips(for: pullRequest.id)
+        return AskView(
             content: Policy.askTab(
                 conversation: store.askConversation(for: pullRequest.id),
-                isAnswering: store.isAnswering(pullRequest.id)
+                isAnswering: store.isAnswering(pullRequest.id),
+                context: chips
             ),
-            chips: store.askContextChips(for: pullRequest.id),
+            chips: chips,
             activity: store.askActivityLine(for: pullRequest.id),
             draft: store.askDraft(for: pullRequest.id),
             block: store.askBlock(for: pullRequest.id),
-            setDraft: { store.setAskDraft($0, for: pullRequest.id) },
-            send: { store.askQuestion(about: pullRequest.id) },
-            useTip: { store.useAskTip($0, for: pullRequest.id) },
+            persistDraft: { store.setAskDraft($0, for: pullRequest.id) },
+            send: { store.askQuestion($0, about: pullRequest.id) },
             cancel: { store.cancelAsk(for: pullRequest.id) },
+            reset: { store.resetAskConversation(for: pullRequest.id) },
             jump: { jumpToCode(file: $0.file, line: $0.line) }
         )
+        // **Vlastní identita podle PR**, a je to podmínka správnosti: detail se mezi pull requesty
+        // **znovupoužívá** (proto ty `.task(id: pullRequest.id)` výš), takže bez tohohle by si
+        // composer nechal rozepsanou otázku z předchozího PR a při zmizení ji uložil do jeho
+        // zálohy. `onDisappear` starého `AskView` přitom doběhne s uzávěry starého PR, takže se
+        // rozepsaná otázka uloží tam, kam patří.
+        .id(pullRequest.id)
     }
 
     /// Skok z odpovědi na místo v kódu (#452).

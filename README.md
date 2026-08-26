@@ -977,8 +977,22 @@ místě příští bubliny** i s tím, co session právě dělá (`čte SecretCl
 na **soubor a řádek** — pod prózou stojí kapsle `→ SecretClient.php:80` a klik skočí do `Změněných
 souborů` na to místo.
 
-**Prázdný tab nabízí tři otázky k odpíchnutí** jako přerušované kapsle — jen předvyplní pole, takže
-se dají přepsat. Nejsou to schopnosti, je to nápověda, co tab umí.
+**Prázdný tab nabízí otázky k odpíchnutí** jako přerušované kapsle a **klik je rovnou odešle** —
+jedno kliknutí je celý jejich smysl. Nejsou to schopnosti, je to nápověda, co tab umí; přepsat se
+dají tím, že se místo kliknutí napíše vlastní otázka do pole pod nimi. **Nabídka se řídí tím, co na
+PR doopravdy je**: když má pull request nálezy, je mezi otázkami ta, která je nechá prověřit, a se
+**stejným počtem**, jaký hlásí pruh `ví o tomhle PR:` o kus výš. Bez nálezů se nenabízí — ptala by
+se na nic.
+
+**Rozepsaná otázka přežije překliknutí tabu** i přepnutí na jiný PR: pole si ji drží samo a do
+paměti aplikace ji uloží, až když tab zmizí. Odeslaná otázka z pole **zmizí** (jinak by se dala
+odeslat a zaplatit podruhé), a když se neodešle, **zůstane** — přijít o napsanou otázku je horší
+než ji tam mít.
+
+**`Nový rozhovor`** vpravo nahoře zahodí rozhovor i navázanou session, takže příští otázka začíná
+načisto. Smaže i to, co není vidět — uložený rozhovor v cache a id session —, a proto **se ptá**:
+odpověď stála kolem dolaru a zpátky se nedá dostat ani zopakovat za stejné peníze. V prázdném tabu
+tlačítko není, protože nemá co zahodit; rozepsané otázky v poli se netýká.
 
 **Utrácí to, a je to vidět.** Cena každé odpovědi se počítá do `Dneska stálo` ve stavovém řádku
 jako všechno ostatní. **Strop se nedává** — sazbu si člověk řídí tím, kolik se ptá; skrytá útrata
