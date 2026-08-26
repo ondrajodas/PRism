@@ -167,9 +167,12 @@ struct LazySelfReferenceProbe {
                     defer: false
                 )
                 window.contentView = hosting
-                let started = Date()
-                hosting.layoutSubtreeIfNeeded()
-                times[shape, default: []].append(Date().timeIntervalSince(started) * 1000)
+                // Monotónní hodiny, ne `Date` — viz `ConversationAxisShapeProbe`.
+                let duration = ContinuousClock().measure { hosting.layoutSubtreeIfNeeded() }
+                times[shape, default: []].append(
+                    Double(duration.components.seconds) * 1000
+                        + Double(duration.components.attoseconds) / 1e15
+                )
                 collector.pump?.invalidate()
                 window.orderOut(nil)
             }

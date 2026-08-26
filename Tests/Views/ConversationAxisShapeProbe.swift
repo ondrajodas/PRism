@@ -205,9 +205,12 @@ struct ConversationAxisShapeProbe {
             defer: false
         )
         window.contentView = host
-        let started = Date()
-        host.layoutSubtreeIfNeeded()
-        let elapsed = Date().timeIntervalSince(started) * 1000
+        // **`ContinuousClock`, ne `Date`** (nález Copilota na #455): `Date` jde za systémovým
+        // časem, takže posun hodin (NTP, uspání stroje) by měřenou latenci rozvržení posunul
+        // nebo poslal do minusu. Tatáž úvaha jako u `RenderDiagnostics.monotonicSeconds()`.
+        let duration = ContinuousClock().measure { host.layoutSubtreeIfNeeded() }
+        let elapsed = Double(duration.components.seconds) * 1000
+            + Double(duration.components.attoseconds) / 1e15
         let content = Self.tallestScroller(in: host)?.documentView?.frame.height ?? 0
         let fact = "obsah \(Int(content)) pt, \(Self.descendants(of: host)) prvků"
         window.orderOut(nil)
