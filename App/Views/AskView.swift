@@ -12,10 +12,11 @@ import SwiftUI
 /// stovky (`ConversationQuery` se ptá `first: 100` na čtyři seznamy), kdežto tady je každá
 /// položka **zaplacená session**, takže pár desítek zpráv je hodně.
 ///
-/// **Změřeno, ne odvozeno** (`AskLogMeasurement`, Debug): první rozvržení stojí 24 ms u dvaceti
-/// bublin, 88 ms u stovky a 260 ms u tří set — proti 410 ms, které #361 naměřilo u tří set uzlů
-/// osy. Při reálném počtu otázek je to tedy pod třicet milisekund jednou při otevření tabu, a za
-/// to se nekreslí kolo `updateItemPhases` → `propagate_dirty`, kvůli kterému #361 líný seznam
+/// **Změřeno, ne odvozeno** (`AskLogMeasurement`, Debug, v okně): první rozvržení stojí 18 ms
+/// u dvaceti bublin, 87 ms u stovky a 242 ms u tří set — proti plochým 4,6 ms u líného seznamu
+/// a proti 413 ms, které #361 naměřilo u tří set uzlů osy a **se kterými se u ní pevný stack
+/// přijal**. Při reálném počtu otázek je to tedy pod dvacet milisekund jednou při otevření tabu,
+/// a za to se nekreslí kolo `updateItemPhases` → `propagate_dirty`, kvůli kterému #361 líný seznam
 /// z osy vyhodilo.
 struct AskView: View {
     let content: AskTabContent

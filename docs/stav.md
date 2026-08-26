@@ -4956,6 +4956,24 @@ přibyla bublina „Nepovedlo se…“ a po `Nový rozhovor` by přistála do pr
 a **zapsala ho zpátky na disk**. Rozhoduje o tom jedno místo pro obě cesty (`AppStore+Ask.handle`);
 ověřeno vloženou regresí.
 
+**Poslední kolo Copilota našlo dvě věci a obě byly reálné.** První byla **chybějící hranice cache
+v `AskStore`** — `contains` měl jen `delete`, takže `load` četl a `save` zapisoval po cestě, kterou
+symlink v rodičovské složce vyvede ven (tvrdá podmínka č. 3). Opravilo se to **jako třída**:
+pravidlo se svedlo do nového `CacheFile` a použily ho i `ReviewDraftStore` a `ReviewStore`, které tu
+mezeru měly taky — je to store, ze kterého se opisovalo. Ledgery pod kořenem cache stráž vědomě
+nedostaly (jejich soubory jsou přímé děti kořene, takže mezi kořenem a souborem není složka, která
+by mohla být odkazem); zůstává u nich odkaz na **samotném souboru** jako zapsaná mezera. Ověřeno
+vloženou regresí: bez té kontroly `save` cizí soubor mimo cache doopravdy přepsal a `delete` ho
+smazal.
+
+Druhá byla, že **měření rozhovoru jelo bez `NSWindow`u**, a dopadla zajímavěji. Mechanismus se
+potvrdil (`ScrollView` bez okna obsah nerozvrhne — bez okna vyjde `obsah 0 pt`), ale **závěr ne**:
+bez okna byl pevný stack **dražší**, ne levnější (300 bublin 283–308 ms proti 238–257 ms v okně)
+a počet vyrobených prvků byl **totožný** (907). Rozhodnutí „pevný `VStack`, ne líný seznam“ tedy
+z opraveného měření vychází stejně; čísla v okně jsou 18 ms u dvaceti bublin, 87 u stovky a 242
+u tří set, proti 413 ms, se kterými se pevný stack přijal u osy konverzace (#361). Měřidlo od té
+doby vypisuje **výšku obsahu a počet prvků**, protože zrovna tuhle chybu z časů poznat nejde.
+
 **Zeleno je z běhu po polovinách, a je u toho co zapsat.** Plný `xcodebuild test` se na tomhle
 stroji zasekne na **třech posledních suitách** (`AppStore — komentář pod PR`, `— odpovídání do
 vláken`, `— labely a reviewery`): v testovacím hostu se nasbírá **76 vláken v

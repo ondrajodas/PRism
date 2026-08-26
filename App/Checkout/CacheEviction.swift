@@ -253,8 +253,12 @@ extension CacheEviction {
     /// použití repa i zadání pro reviewera (#120). Vlastní kopie téhle kontroly v každém storu by
     /// znamenala, že se jedna z nich dřív nebo později rozejde, a „pracuje výhradně ve své cache“
     /// je tvrdá podmínka.
+    ///
+    /// Od #458 se ptá `CacheFile`, aby předpis „leží to v cache?“ nebyl na dvou místech. Zůstává
+    /// tady, protože razítko použití repa je **soubor, který smí být odkazem** — píše se `.atomic`
+    /// vedle klonu a odkaz na něm by se jen nahradil; `CacheFile.checked` by ho odmítl.
     static func insideCache(_ url: URL, of layout: CacheLayout) throws -> URL {
-        guard layout.contains(url) else {
+        guard CacheFile.isInsideCache(url, in: layout) else {
             throw CheckoutError.cacheUnavailable(
                 "Cesta \(url.path(percentEncoded: false)) vede mimo cache aplikace."
             )

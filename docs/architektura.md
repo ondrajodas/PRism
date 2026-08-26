@@ -2290,6 +2290,13 @@ a dneska se odnáší do prohlížeče nebo do terminálu. Řídí to `AppStore+
   ty nesmí platit pro kód, který už neexistuje. Otázka „proč se ten mutex bere“ ale pushem
   nezastará; klíčovat ji commitem by znamenalo, že rozhovor zmizí zrovna ve chvíli, kdy se k němu
   člověk vrací.
+- **Hranici cache si ověřují všechny tři cesty, ne jen mazání** (nález Copilota na #458). První
+  podoba `AskStore` opsala kontroly z `ReviewDraftStore` i s jeho mezerou: `contains` měl jen
+  `delete` a `isSymbolicLink` jen `load`, takže **`save` zapisoval a `load` četl** po cestě, kterou
+  symlink v rodičovské složce vyvede ven — a to je tvrdá podmínka č. 3. Ověřeno **vloženou
+  regresí**, ne úvahou: bez té kontroly `save` přepsal cizí soubor mimo cache a `delete` ho smazal
+  (`AskStoreTests`, suita *Rozhovor mimo cache*). Pravidlo bydlí v `CacheFile` — viz *Hranice
+  cache* níž.
 - **Čte se až při otevření PR, ne při startu.** Na rozdíl od draftů, které se čtou celé při startu
   kvůli indikátoru v seznamu: rozhovor v seznamu nic nemá, takže by se jinak při každém spuštění
   dekódovalo všechno, co si kdo kdy vyzkoušel. Chybějící klíč v mapě znamená „ještě jsme se
@@ -2899,6 +2906,29 @@ Věci, které se u toho nemají rozbít:
   té složky, ne jen složky. Filtr tam vědomě **není**: kdyby se soubory odfiltrovaly, zadání
   zavřeného PR by nesmazal nikdo. Nepřesné jméno metody je menší cena než neuklizený soubor;
   hlídají to dva testy v `CacheEvictionTests`.
+- **Hranice cache bydlí v `CacheFile`, ne v jednotlivých storech** (#458). Do té doby si ji každý
+  opsal sám — a pokaždé jinak: `ReviewStore` a `ReviewDraftStore` měly `contains` jen u mazání
+  a `isSymbolicLink` jen u čtení, `CacheTextFile` obojí, `AskStore` jen u mazání. Přesně ten vzor,
+  na který si `CLAUDE.md` stěžuje: *kontrola, která jinde v repu je, a tady chybí*. `CacheFile`
+  vydává **verdikt** (`Refusal.outsideCache` / `.symbolicLink`), ne hotovou chybu, takže si každý
+  store umí říct, o **který rozhovor nebo draft** jde — obecné „cesta vede mimo cache“ v panelu
+  nikomu neřekne, co se stalo. `CacheFile.checked` je throwing podoba pro volající, kteří vlastní
+  chybu nemají (`CacheTextFile`).
+
+  **Mazání chce jen `contains`, a je to rozdíl, ne nedůslednost.** `removeItem` nad odkazem smaže
+  **odkaz**, ne jeho cíl, takže je neškodné — a hlavně je to jediná cesta, jak takovou anomálii
+  z cache dostat pryč. Kdyby ji mazání odmítalo taky, zůstal by odkaz v cache navždycky
+  a `Nový rozhovor` by ho neuklidil.
+
+  **Co se u #458 vědomě nezměnilo:** `ReviewStore.save` dál bere odkaz na **samotném souboru** jako
+  prázdné místo a přepíše ho atomicky (zapsané rozhodnutí z #106, viz níž) — doplnila se u něj jen
+  ta chybějící polovina, tedy hranice. A **ledgery pod kořenem cache** (`SpendLedger`, `ActivityLog`,
+  `AnnouncedPullRequests`, `RunningSessions`, `HandoffLedger`, `AutoRunLedger`, `InterruptedRuns`,
+  `ConfigStore`) stráž nedostaly: jejich soubory jsou **přímé děti kořene**, takže mezi kořenem
+  a souborem není složka, která by mohla být odkazem, a `contains` by u nich byl vždycky pravdivý.
+  Zůstává u nich odkaz na samotném souboru — **zapsaná mezera**, ne záměr; všechny zapisují
+  `.atomic` (odkaz se nahradí, cíl zůstane) a čtou přes `try?`, takže by kontrola neměla kde být
+  vidět. Až se u některého objeví cesta, která na tom stojí, patří sem `CacheFile.refusal`.
 - **Zápis vedle klonu i vedle stromu jde přes `CacheEviction.insideCache`.** Je to jediná
   kontrolovaná cesta — používá ji razítko použití repa i `ReviewIntentStore` (#120). Symlink
   v rodičovské komponentě umí zápis vyvést mimo cache, a „pracuje výhradně ve své cache“ je tvrdá

@@ -107,6 +107,80 @@ struct AskStoreTests {
         await #expect(throws: (any Error).self) { try await store.load(for: pr) }
     }
 
+    /// **Symlink v rodičovské složce vyvede ven čtení, zápis i mazání** — a tady se tvrdí, že se
+    /// to nestalo (nález Copilota na #458; do té doby měla hranici jen `delete`).
+    ///
+    /// Je to ten druh testu, který `CLAUDE.md` označuje za nejcennější: tvrdí, že se něco
+    /// **NEstalo**. Kdyby kontrola vypadla, projde všechno ostatní — soubor se uloží, přečte
+    /// i smaže, jen o kus vedle, v cizí složce.
+    ///
+    /// Odkaz je na **složce**, ne na souboru: to je ten případ, který `CacheLayout.isSymbolicLink`
+    /// nezachytí (ptá se na samotný soubor) a chytá ho jedině `contains`, který rozbaluje rodiče.
+    @Suite("Rozhovor mimo cache")
+    struct OutsideTheCache {
+        private let cache: TemporaryDirectory
+        private let elsewhere: TemporaryDirectory
+        private let layout: CacheLayout
+        private let store: AskStore
+        private let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42)
+        /// Soubor, na který ten odkaz míří — cizí, tedy přesně to, na co se sahat nesmí.
+        private let stranger: URL
+
+        init() throws {
+            cache = try TemporaryDirectory()
+            elsewhere = try TemporaryDirectory()
+            layout = CacheLayout(root: cache.url)
+            store = AskStore(layout: layout)
+
+            // `ask/cli` je odkaz ven, takže `ask/cli/cli/42.json` leží po rozbalení v cizí složce.
+            let owner = layout.askFile(for: pr).deletingLastPathComponent().deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: owner.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: elsewhere.url.appending(path: "cli"),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createSymbolicLink(at: owner, withDestinationURL: elsewhere.url)
+
+            stranger = elsewhere.url.appending(path: "cli/42.json")
+            try Data(#"{"pullRequest":{"repo":{"owner":"cli","name":"cli"},"number":42},"messages":[]}"#.utf8)
+                .write(to: stranger)
+        }
+
+        private func conversation() -> AskConversation {
+            AskConversation(
+                pullRequest: pr,
+                messages: [AskMessage(speaker: .mine, text: "proč?", at: Date(timeIntervalSince1970: 0))]
+            )
+        }
+
+        @Test("Čtení mimo cache se odmítne, cizí soubor se nepřečte")
+        func loadRefuses() async throws {
+            await #expect(throws: AskStoreError.self) { try await store.load(for: pr) }
+        }
+
+        @Test("Zápis mimo cache se odmítne a cizí soubor zůstane, jaký byl")
+        func saveLeavesTheStrangerAlone() async throws {
+            let before = try Data(contentsOf: stranger)
+
+            await #expect(throws: AskStoreError.self) { try await store.save(conversation()) }
+
+            #expect(try Data(contentsOf: stranger) == before, "zápis sáhl mimo cache")
+        }
+
+        @Test("Mazání mimo cache cizí soubor nesmaže")
+        func deleteLeavesTheStrangerAlone() async throws {
+            try await store.delete(for: pr)
+
+            #expect(
+                FileManager.default.fileExists(atPath: stranger.path(percentEncoded: false)),
+                "mazání sáhlo mimo cache"
+            )
+        }
+    }
+
     /// **Klíčem je PR, ne `headSha`** (na rozdíl od nálezů) — proto je v cestě jen číslo.
     @Test("Cesta k rozhovoru nenese commit")
     func theFileIsKeyedByPullRequestOnly() {

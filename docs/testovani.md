@@ -1174,6 +1174,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   proti `AskCommand.allowedTools` by neznamenalo nic, protože rozšířenou konstantu by test poslušně
   přečetl. Dál že se `--resume` **posílá jen s neprázdným id** a že do dokladu „přečetl X“ jde jen
   `Read`, který **prošel** — odmítnutý nic nepřečetl a řádek nad bublinou je doklad.
+  `AskStoreTests` mají od #458 vlastní suitu *Rozhovor mimo cache*, která tvrdí, že se něco
+  **NEstalo**: za odkazovanou rodičovskou složkou se cizí soubor **nepřečte, nepřepíše ani
+  nesmaže**. Odkaz je na **složce**, ne na souboru — to je ten případ, který `isSymbolicLink`
+  nezachytí a chytá ho jedině `contains`. **Ověřeno vloženou regresí**: bez té kontroly padnou
+  všechny tři a `save` cizí soubor doopravdy přepíše. Tatáž suita je u `ReviewDraftStore`, protože
+  je to store, ze kterého se opisovalo.
   `AppStoreAskTests` hlídají tři věci, které mizí tiše: **druhá otázka navazuje** (`resuming` je id
   z první odpovědi a materiál se do promptu nedává znovu), **odpověď bez textu dostane bublinu
   s důvodem** (zaplacená session, o které se mlčí, vypadá jako by nebyla) a **rozhovor přežije
@@ -1232,9 +1238,25 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   + `TEST_RUNNER_PRISM_RENDER_DIR`): tři stavy tabu ve dvou šířkách, aby se daly položit vedle
   sekce 33 návrhu. Je to obrázková otázka — *sedí bublina na akcentu, je prstýnek na místě příští
   bubliny* —, na kterou měření neodpoví. A **rozhodnutí „pevný stack, ne líný seznam“ má vlastní
-  měření** (`AskLogMeasurement`, ruční): první rozvržení stojí 24 ms u dvaceti bublin, 88 ms
-  u stovky a 260 ms u tří set — proti 410 ms, které #361 naměřilo u tří set uzlů osy. Bez čísla by
-  to bylo opsané z jedné nebo druhé strany; osa i diff mají každý jinou odpověď a rozhoduje strop.
+  měření** (`AskLogMeasurement`, ruční, obě podoby A/B/A/B): první rozvržení stojí **18 ms
+  u dvaceti bublin, 87 ms u stovky a 242 ms u tří set**, proti plochým **4,6 ms** u líného seznamu
+  a proti **413 ms**, které #361 naměřilo u tří set uzlů osy — a **s těmi 413 ms se u osy pevný
+  stack přijal**. Bez čísla by to bylo opsané z jedné nebo druhé strany; osa i diff mají každý jinou
+  odpověď a rozhoduje strop.
+
+  **To měření jelo do #458 bez `NSWindow`u, a stojí za to vědět, jak to dopadlo.** Copilot na to
+  upozornil právem — `ScrollView` bez okna obsah **nerozvrhne** a tenhle repos to má popsané
+  u `AskTabRenderProbe` i `DetailTabRenderProbe`. Mechanismus se **potvrdil**: bez okna vyjde
+  `obsah 0 pt`, takže scroller o výšce dokumentu neví nic.
+
+  **Závěr „čísla jsou podhodnocená“ se ale nepotvrdil, a je to změřené, ne odhadnuté.** Bez okna
+  vyšel pevný stack **dražší** (300 bublin: 283 / 301 / 308 ms proti 242 / 238 / 257 ms v okně)
+  a **počet vyrobených prvků byl totožný** (907). Neúplné bylo tedy to, co scroller ví o svém
+  dokumentu, ne to, kolik práce si stack vyžádal — takže rozhodnutí zůstalo. Plyne z toho pravidlo,
+  ne jen oprava: **měřidlo vedle času vypisuje výšku obsahu a počet prvků** (jako
+  `ConversationAxisShapeProbe`), protože zrovna tuhle chybu nejde poznat z časů. A obráceně:
+  **„harness je nastavený špatně“ není totéž co „výsledek je špatně“** — obojí se musí změřit
+  zvlášť, jinak se kvůli správné námitce otočí správné rozhodnutí.
 
   **Jednu věc harness neověří: co ta session doopravdy stojí.** Změřilo se to spuštěním `claude`
   s týmiž argumenty nad tímhle repem — první otázka **$1,56 / 125 s**, navazující přes `--resume`

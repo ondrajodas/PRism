@@ -9,13 +9,9 @@ import Foundation
 /// `Read`em. Druhá kopie těch dvou kontrol by byla přesně ten vzor, na který si `CLAUDE.md`
 /// stěžuje: *kontrola, která jinde v repu je, a tady chybí*.
 ///
-/// Kontroly jsou dvě a **žádná nenahrazuje druhou**:
-///
-/// - `CacheLayout.contains` rozbaluje symlinky v **rodiči**, protože zápis (a mazání) přes odkaz
-///   v cestě sáhne na cíl, ne na odkaz;
-/// - `CacheLayout.isSymbolicLink` odmítá odkaz na **samotném souboru**. `contains` ho nezachytí,
-///   protože rozbaluje symlinky na obou stranách a cíl vyjde rovný cíli — a u čtení na tom záleží
-///   nejvíc: vrácená cesta jde do promptu, takže by odkaz poslal session číst **mimo cache**.
+/// Samotné pravidlo o hranici cache už tady **nebydlí** — je v `CacheFile`, protože ho vedle
+/// tohohle typu potřebují i stores s JSONem (nález Copilota na #458). Tady zbylo to, co je vlastní
+/// textovému souboru: atomický zápis a odpověď „je tam?“.
 enum CacheTextFile {
     /// Zapíše text a vrátí cestu, na kterou se má session podívat.
     ///
@@ -25,16 +21,11 @@ enum CacheTextFile {
     /// nedozví.
     @discardableResult
     static func write(_ text: String, to url: URL, in layout: CacheLayout) throws -> URL {
-        let checked = try CacheEviction.insideCache(url, of: layout)
-        // Změřeno u #120, že na zápisu **dnes** nestojí nic: `write(to:options: .atomic)` odkaz
-        // nahradí souborem a cíl nechá být, kdežto tentýž zápis **bez** `.atomic` cíl přepíše.
-        // Bezpečnost tedy visela na jednom příznaku u zápisu, což je slabší záruka než vyjmenovaná
-        // kontrola.
-        guard !layout.isSymbolicLink(checked) else {
-            throw CheckoutError.cacheUnavailable(
-                "Na cestě \(checked.path(percentEncoded: false)) leží symbolický odkaz."
-            )
-        }
+        // Obě kontroly hranice cache, a odkaz na souboru mezi nimi: změřeno u #120, že na zápisu
+        // **dnes** nestojí nic — `write(to:options: .atomic)` odkaz nahradí souborem a cíl nechá
+        // být, kdežto tentýž zápis **bez** `.atomic` cíl přepíše. Bezpečnost tedy visela na jednom
+        // příznaku u zápisu, což je slabší záruka než vyjmenovaná kontrola.
+        let checked = try CacheFile.checked(url, in: layout)
         try FileManager.default.createDirectory(
             at: checked.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -48,8 +39,7 @@ enum CacheTextFile {
     /// Cesta k souboru, **pokud na disku je**. Nic nezakládá a nikdy nevyhazuje — volající se ptá
     /// „je tam?“, ne „vyrob mi ho“.
     static func existing(_ url: URL, in layout: CacheLayout) -> URL? {
-        guard layout.contains(url),
-              !layout.isSymbolicLink(url),
+        guard CacheFile.refusal(for: url, in: layout) == nil,
               FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
         else { return nil }
         return url
