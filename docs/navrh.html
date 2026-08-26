@@ -930,6 +930,61 @@ tr.del mark.w { background: var(--del-hi); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
 }
 
+/* --- rozhovor v tabu `Zeptat se` (sekce 33) ------------------------------------------
+   **Bubliny, ne karty pod sebou.** První zákres používal `.tl-card` jako konverzace na PR —
+   jenže ta odpovídá na „kdo co kdy řekl na tomhle vlákně“ a čte se jako záznam. Rozhovor
+   se čte jinak: kdo mluví, se pozná **stranou a barvou**, ne hlavičkou se jménem u každé
+   zprávy, a bublina **nesmí být přes celou šířku** — právě to z ní dělá chat, ne log.
+
+   Moje bublina je na plném akcentu s textem v barvě panelu (tentýž pár jako `.state-chip`
+   a `.note .num`, takže drží kontrast v obou motivech — změřeno **6,14** ve světlém
+   a **5,64** v tmavém); Claudova je tichý podklad s okrajem. Ustupující roh na straně
+   mluvčího je jediná ozdoba, kterou si to bere.
+
+   `.ask-bub` je naholo **schválně**: je to základ jedné komponenty a `.ask-msg.mine .ask-bub`
+   je jeho varianta, ne cizí prvek. Grep na vnořená jména (`docs/navrh.md`) ho proto hlásí, a je
+   to falešný poplach — past z #390 byla v tom, že naholo psaná třída podstrčila styl **cizím**
+   komponentám, které si totéž jméno berou jako vnořené. Tohle jméno nemá nikdo jiný. */
+.ask-log {
+  padding: 16px; display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0;
+}
+.ask-msg { display: flex; flex-direction: column; gap: 4px; max-width: 78%; min-width: 0; }
+.ask-msg.mine { align-self: flex-end; align-items: flex-end; }
+.ask-bub {
+  border-radius: 14px; padding: 9px 13px;
+  font-size: 12.5px; line-height: 1.5;
+}
+.ask-msg.mine .ask-bub {
+  background: var(--accent); color: var(--panel); border-bottom-right-radius: 5px;
+}
+/* `code` uvnitř mojí bubliny se nemůže obarvit z `--accent-weak` — leželo by fialové na
+   fialovém. Bere proto průhledný podklad z barvy panelu, tedy světlý na světlém motivu
+   a tmavý na tmavém, přesně jako text kolem. */
+.ask-msg.mine .ask-bub code {
+  background: color-mix(in srgb, var(--panel) 22%, transparent); color: inherit;
+}
+.ask-msg.his .ask-bub {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-bottom-left-radius: 5px; color: var(--ink);
+}
+.ask-msg .ask-bub p + p { margin-top: 7px; }
+.ask-meta {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 10px; color: var(--ink-3);
+}
+/* Co si otevřel, stojí **nad** odpovědí a tiše: je to doklad, ne obsah. */
+.ask-tool { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-3); }
+.ask-tool .av { flex: none; }
+
+/* Otázky k odpíchnutí v prázdném tabu. Kapsle, ne řádky seznamu — mají vypadat jako něco,
+   co se dá vzít a přepsat, ne jako nabídka příkazů. */
+.ask-tip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px dashed var(--line); border-radius: 20px;
+  padding: 5px 11px; font-size: 12px; color: var(--ink-2); cursor: pointer;
+}
+.ask-tip:hover { border-color: var(--accent); color: var(--accent); }
+
 .composer { margin-top: auto; border-top: 1px solid var(--line); padding: 11px; display: flex; flex-direction: column; gap: 9px; }
 .composer .ta {
   border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -2567,6 +2622,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <a class="doc-link" href="#pr-kontroly" data-page="pr-kontroly"><span class="t">Kontroly</span></a>
             <a class="doc-link" href="#pr-nalezy" data-page="pr-nalezy"><span class="t">Nálezy</span></a>
             <a class="doc-link" href="#pr-prubeh" data-page="pr-prubeh"><span class="t">Průběh</span></a>
+            <a class="doc-link" href="#pr-zeptat-se" data-page="pr-zeptat-se"><span class="t">Zeptat se</span></a>
           </div>
           <div class="doc-group">
             <div class="doc-cap">Moje pull requesty</div>
@@ -2618,7 +2674,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       nepřekážejí: <em>jak to teď stojí</em>, <em>co se změnilo</em> a <em>co se dělo</em>.
     </p>
     <p class="muted" style="font-size: 14px;">
-      Katalog je úplný — je tu každá obrazovka, kterou aplikace umí ukázat: dashboard, sedm tabů
+      Katalog je úplný — je tu každá obrazovka, kterou aplikace umí ukázat: dashboard, osm tabů
       pull requestu, obě stránky potvrzení odeslání, paleta, nastavení, preflight brána,
       prázdné a chybové stavy, novinky a notifikace.
     </p>
@@ -2643,6 +2699,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <a href="#pr-kontroly"><span>Kontroly</span></a>
             <a href="#pr-nalezy"><span>Nálezy</span></a>
             <a href="#pr-prubeh"><span>Průběh</span></a>
+            <a href="#pr-zeptat-se"><span>Zeptat se</span></a>
           </div>
         </div>
         <div class="doc-card">
@@ -2685,7 +2742,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <span class="num">?</span>
             <span class="body"><b>Jedna obrazovka, jedna stránka</b>
               <span>Sekce se čtou po stránkách a rozcestník vlevo je poskládaný jako
-              aplikace — okno, sedm záložek pull requestu, dialogy. Do srpna 2026 to byl
+              aplikace — okno, osm záložek pull requestu, dialogy. Do srpna 2026 to byl
               jeden svitek, ve kterém pořadí sekcí znamenalo pořadí vzniku.</span></span>
           </div>
           <div class="note">
@@ -4095,6 +4152,8 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <span class="doc-tsep"></span>
             <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -5232,6 +5291,8 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <span class="doc-tsep"></span>
             <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -6875,6 +6936,8 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <span class="doc-tsep"></span>
             <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -8136,6 +8199,8 @@ projeví hned v tom dalším.</div>
             <span class="doc-tsep"></span>
             <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -8494,6 +8559,8 @@ projeví hned v tom dalším.</div>
             <span class="doc-tsep"></span>
             <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -9069,6 +9136,8 @@ er adding @template-covariant TValue to Basket::items().</div>
             <span class="doc-tsep"></span>
             <a class="doc-tab on" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -9316,6 +9385,8 @@ er adding @template-covariant TValue to Basket::items().</div>
             <span class="doc-tsep"></span>
             <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
             <a class="doc-tab on" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
           </nav>
         </div>
 
@@ -10500,8 +10571,380 @@ Secret Client
     </script>
   </section>
 
+
+  <section class="section" id="s34">
+    <div class="section-head">
+      <div class="eyebrow">34 — Průběh · živá session v Terminálu</div>
+      <h2>Do běžící session se dá vstoupit, jen ne uvnitř okna</h2>
+      <p class="muted">
+        V hlavičce každé dráhy je <code>⧉</code>, které <b>zkopíruje</b> <code>claude --resume …</code>
+        do schránky. Je to cesta ven do terminálu a byla úmyslně nejmenší možná — jenže na jejím
+        konci je pořád ještě přepnout se do Terminálu, vlepit a odentrovat. U session, která zrovna
+        běží a chová se divně, jsou to tři kroky navíc přesně ve chvíli, kdy jde o vteřiny.
+      </p>
+      <p class="muted">
+        Vedle kopírování proto stojí <code>▶</code> — <b>Otevřít v Terminálu</b>, které tentýž
+        příkaz rovnou pustí v <code>Terminal.app</code>. Kopírování <b>zůstává</b>: kdo si session
+        pouští jinde (iTerm, tmux, jiný stroj), potřebuje text, ne cizí okno.
+      </p>
+      <p class="muted">
+        <b>Tvrdé podmínky se tím nemění, a je to jádro téhle sekce.</b> Terminál je <b>mimo
+        aplikaci</b> — je to totéž, jako když si člověk ten příkaz vlepí sám, jen bez těch tří
+        kroků. Uvnitř okna žádný terminál nevzniká: <code>ReviewPublishing</code> zůstává jedinou
+        cestou ven z aplikace a plnou moc má session tam, kde ji člověk čeká — ve svém terminálu,
+        pod svým jménem, se svým <code>gh</code>. Tab <em>Zeptat se</em> (sekce 33) je pravý opak:
+        uvnitř okna, ale s vyjmenovanými právy.
+      </p>
+      <p class="muted">
+        <b>Nabízí se to jen tam, kde je co obnovit</b> — dokud session nemá <code>id</code>, není
+        co pustit a tlačítko se nekreslí (ne zašedle: u dráhy, která teprve čeká na slot, by
+        zašedlé tlačítko slibovalo něco, co přijde samo).
+      </p>
+    </div>
+
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Dnes · jen zkopírovat</div>
+        <div class="frame flat">
+          <div class="lane" style="border: 0;">
+            <header>
+              <span class="nm">php-review</span>
+              <span class="pill run">běží</span>
+              <span class="sp"></span>
+              <span class="meta">0:48 · 0,31 $ · 6 kol</span>
+              <span class="tbtn" title="claude --resume 8c1f…">⧉</span>
+            </header>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <code>⧉</code> vloží <code>claude --resume 8c1f…</code> do schránky. Zbytek je na mně.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · a rovnou otevřít</div>
+        <div class="frame flat">
+          <div class="lane" style="border: 0;">
+            <header>
+              <span class="nm">php-review</span>
+              <span class="pill run">běží</span>
+              <span class="sp"></span>
+              <span class="meta">0:48 · 0,31 $ · 6 kol</span>
+              <span class="tbtn" title="Zkopírovat claude --resume 8c1f…">⧉</span>
+              <span class="tbtn" title="Otevřít session v Terminálu">▶</span>
+            </header>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <code>▶</code> pustí týž příkaz v <code>Terminal.app</code>. Okno aplikace se nemění
+          a nic se z něj neodesílá — plnou moc má ta session v terminálu, ne tady.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">107</span>
+        <span class="body">
+          <b>Dvě tlačítka, ne přepínač</b>
+          <span>Kopírování a spuštění nejsou dvě podoby jedné akce: jedno dává text komukoli,
+          druhé otevře konkrétní aplikaci. Přepínač by znamenal, že si člověk musí vzpomenout,
+          co je zrovna nastavené.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">108</span>
+        <span class="body">
+          <b>Terminál zůstává venku</b>
+          <span>Vestavěný terminál by znamenal, že se z okna dá spustit <code>gh pr merge</code>
+          i <code>git push</code> — tedy že tvrdá podmínka č. 1 přestane platit a nepůjde ji
+          uhlídat testem, protože ta cesta nevede přes kód aplikace. Tohle je totéž bez té ceny.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#pr-nalezy"><span class="dir">← předchozí</span><span class="t">Nálezy</span></a>
+          <a class="next" href="#pr-zeptat-se"><span class="dir">další →</span><span class="t">Zeptat se</span></a>
+        </div>
+      </div>
+
+      <div class="doc-page" id="pr-zeptat-se" data-title="Zeptat se">
+        <div class="doc-head">
+          <div class="doc-where"><span>Pull request</span><b>Zeptat se</b></div>
+          <h2>Zeptat se</h2>
+          <p class="doc-lede">Rozhovor s Claudem nad tímhle pull requestem. Čte, neodesílá.</p>
+          <nav class="doc-tabs" aria-label="Záložky pull requestu">
+            <a class="doc-tab" href="#pr-prehled" data-page="pr-prehled">Přehled</a>
+            <a class="doc-tab" href="#pr-soubory" data-page="pr-soubory">Změněné soubory</a>
+            <a class="doc-tab" href="#pr-commity" data-page="pr-commity">Commity</a>
+            <a class="doc-tab" href="#pr-konverzace" data-page="pr-konverzace">Konverzace</a>
+            <a class="doc-tab" href="#pr-kontroly" data-page="pr-kontroly">Kontroly</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab" href="#pr-nalezy" data-page="pr-nalezy">Nálezy</a>
+            <a class="doc-tab" href="#pr-prubeh" data-page="pr-prubeh">Průběh</a>
+            <span class="doc-tsep"></span>
+            <a class="doc-tab on" href="#pr-zeptat-se" data-page="pr-zeptat-se">Zeptat se</a>
+          </nav>
+        </div>
+
+  <section class="section" id="s33">
+    <div class="section-head">
+      <div class="eyebrow">33 — Záložka s review · tab Zeptat se</div>
+      <h2>Otázka na kód, který mám před sebou</h2>
+      <p class="muted">
+        Reviewery odpovídají na to, na co byly puštěné. Při čtení diffu ale vzniká druhá otázka —
+        <em>proč tohle vůbec dělá</em>, <em>co z těch nálezů je doopravdy problém</em>,
+        <em>co se stane, když se to mergne</em> — a ta se dneska musí odnést do prohlížeče nebo
+        do terminálu. Tab <b>Zeptat se</b> je místo, kde se dá zeptat rovnou, nad kontextem toho
+        pull requestu: popis, diff, nálezy, konverzace, checky.
+      </p>
+      <p class="muted">
+        <b>Je to rozhovor, ne jednorázový dotaz.</b> Druhá otázka navazuje na první, protože je to
+        <b>jedna session na pull request</b> držená přes <code>--resume</code>. Bez toho by se každá
+        otázka ptala znovu na všechno a odpovědi by si protiřečily.
+      </p>
+      <p class="muted">
+        <b>Záložka, ne pravý panel.</b> Odpověď je próza s úryvky kódu; panel má 300 bodů a už drží
+        rozdělané review, labely a reviewery, takže by z něj třetí věc udělala skladiště. Cena je,
+        že při psaní otázky není vidět diff — a vyvažuje ji to, že odpověď smí odkázat na
+        <b>soubor a řádek</b>: klik skočí do <em>Změněných souborů</em> na to místo.
+      </p>
+      <p class="muted">
+        <b>Vpravo od druhého děliče, ne mezi reviewery.</b> Pruh záložek dělí, co je <em>na PR</em>,
+        od toho, <em>co s ním udělaly reviewery</em>. Rozhovor není ani jedno — je to třetí druh:
+        co s tím dělám <em>já teď</em>. Dostane proto vlastní oddíl na konci pruhu.
+      </p>
+      <p class="muted">
+        <b>Čte, neodesílá — a je to napsané v okně, ne jen v dokumentaci.</b> Session má
+        <b>užší</b> sadu nástrojů než reviewer: <code>Read</code>, <code>Grep</code>,
+        <code>Glob</code> a <code>Bash(git:*)</code>, se zákazem <code>Bash(gh:*)</code>
+        i <code>git push</code> — a <b>bez</b> <code>ReportFindings</code> (nemá co hlásit)
+        a <b>bez</b> <code>Skill</code>, protože skill načtený za běhu si umí říct o odeslání na
+        GitHub. Pracuje ve <b>vlastní kopii repa</b> v cache aplikace, tedy v tomtéž worktree,
+        jaký dostal reviewer; na uživatelovy klony nesahá. Kdo z odpovědi chce komentář na PR,
+        pošle ho <b>tou jednou cestou ven</b>, kterou má okno dneska: composerem v Konverzaci.
+      </p>
+    </div>
+
+    <div class="scroller">
+      <div class="win tall">
+        <div class="titlebar">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="tabstrip">
+            <div class="tab home"><span>⌂</span><span class="label">Přehled</span></div>
+            <div class="tab active">
+              <span class="dot" style="background: var(--crit);"></span>
+              <span class="label repo">vault#85</span>
+              <span class="x">×</span>
+            </div>
+            <div class="tab-add">+</div>
+          </div>
+          <div class="toolbtns">
+            <div class="tbtn key"><span>⌘K</span></div>
+            <div class="tbtn">✦</div>
+            <div class="tbtn">⟳</div>
+            <div class="tbtn">⚙</div>
+          </div>
+        </div>
+
+        <div class="pr-head">
+          <div class="pr-title">
+            <h4>chore: modernize dependencies (Symfony 8-ready, PHPUnit 11)</h4>
+            <span class="num">#85</span>
+          </div>
+          <div class="pr-meta">
+            <span class="state-chip">otevřený</span>
+            <span class="branch">odinuv:chore/deps</span>
+            <span>keboola/vault</span>
+          </div>
+        </div>
+
+        <!-- Osmá záložka je za **druhým** děličem: vlevo je PR, uprostřed to, co udělaly
+             reviewery, vpravo to, co s tím dělám já teď. -->
+        <div class="subtabs">
+          <div class="stab">Přehled</div>
+          <div class="stab">Změněné soubory <span class="cnt">8</span></div>
+          <div class="stab">Commity <span class="cnt">3</span></div>
+          <div class="stab">Konverzace <span class="cnt">12</span></div>
+          <div class="stab">Kontroly <span class="cnt">6</span></div>
+          <div class="tsep"></div>
+          <div class="stab">Nálezy <span class="cnt">3</span></div>
+          <div class="stab">Průběh</div>
+          <div class="tsep"></div>
+          <div class="stab on">Zeptat se</div>
+        </div>
+
+        <div class="convpane" style="min-height: 430px;">
+          <!-- Co o PR ví, se říká **nahoře a jednou** — jinak by se to muselo psát do každé
+               otázky. Je to výčet toho, co aplikace do promptu doopravdy dá. -->
+          <div class="convbar">
+            <span class="lbl">ví o tomhle PR:</span>
+            <span class="chips">
+              <span class="rchip"><span class="cnt">8</span> souborů diffu</span>
+              <span class="rchip"><span class="sw" style="background: var(--crit);"></span><span class="cnt">3</span> nálezy</span>
+              <span class="rchip"><span class="cnt">12</span> komentářů</span>
+              <span class="rchip"><span class="cnt">6</span> checků</span>
+            </span>
+            <span class="sp" style="flex: 1;"></span>
+            <span class="pill idle">čte · neodesílá</span>
+          </div>
+
+          <div class="ask-log">
+            <div class="ask-msg mine">
+              <div class="ask-bub">Proč se ten mutex bere kolem celého <code>fetch</code>, a ne jen kolem zápisu do cache?</div>
+              <div class="ask-meta">před 2 min</div>
+            </div>
+
+            <div class="ask-msg his">
+              <div class="ask-tool">
+                <span class="av sm">C</span>
+                <span>přečetl <b>SecretClient.php</b> · <b>CacheWarmer.php</b></span>
+              </div>
+              <div class="ask-bub">
+                <p>Protože <code>fetch</code> po minulé změně <b>sám plní cache</b>, ne jen čte —
+                zámek kolem zápisu by dvě souběžná volání pustil oběma do <code>client-&gt;fetch()</code>
+                a druhé by přepsalo čerstvější hodnotu.</p>
+                <p>Stojí to na <code>a1f77c2</code>, kde se ta cesta obrátila.
+                V tomhle PR je to <a class="fd-to" href="#s03">→ SecretClient.php:80</a>.</p>
+              </div>
+              <div class="ask-meta">12 s · 0,04 $</div>
+            </div>
+
+            <div class="ask-msg mine">
+              <div class="ask-bub">A ten nález od <b>php-review</b> o timeoutu — je to reálné, nebo šum?</div>
+              <div class="ask-meta">právě teď</div>
+            </div>
+
+            <!-- Že se zrovna odpovídá, nese **prstýnek na místě bubliny**, ne pruh nad plochou:
+                 odpověď přijde sem, tak ať je vidět, kde na ni čekat. -->
+            <div class="ask-msg his">
+              <div class="ask-tool">
+                <span class="av sm">C</span>
+                <span class="spin"></span>
+                <span>čte nálezy…</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="ta">Zeptej se na cokoli v tomhle PR…</div>
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <span class="muted" style="font-size: 11px;">
+                Čte kód ve své kopii repa. Odeslat na GitHub neumí.
+              </span>
+              <span class="sp" style="flex: 1;"></span>
+              <span class="kbd">⌘⏎</span>
+              <span class="send" style="padding: 7px 14px;">Zeptat se</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="statusbar">
+          <span class="sitem plain">Vše v pořádku</span>
+          <span class="sp"></span>
+          <span class="sitem">≥ 3,16 $</span>
+          <span class="sitem"><span class="d" style="background: var(--ok);"></span>Claude</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>První otevření</h3>
+    <p class="muted">
+      Prázdná plocha by u rozhovoru znamenala „a co se mám ptát“. Místo ní stojí <b>tři otázky
+      k odpíchnutí</b> — jsou to obyčejná tlačítka, která jen předvyplní pole, takže se dají
+      přepsat. Nejsou to schopnosti, je to nápověda, co tenhle tab umí.
+    </p>
+    <div class="pane new">
+      <div class="tag"><i></i>Tab bez jediné otázky</div>
+      <div class="frame flat">
+        <div class="convbar">
+          <span class="lbl">ví o tomhle PR:</span>
+          <span class="chips">
+            <span class="rchip"><span class="cnt">8</span> souborů diffu</span>
+            <span class="rchip"><span class="sw" style="background: var(--crit);"></span><span class="cnt">3</span> nálezy</span>
+            <span class="rchip"><span class="cnt">12</span> komentářů</span>
+          </span>
+          <span class="sp" style="flex: 1;"></span>
+          <span class="pill idle">čte · neodesílá</span>
+        </div>
+        <div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;">
+          <div class="muted" style="font-size: 12.5px;">Zatím ses na nic neptal. Třeba:</div>
+          <span class="ask-tip">Co v tomhle PR nejvíc riskuje?</span>
+          <span class="ask-tip">Který z těch tří nálezů je doopravdy problém?</span>
+          <span class="ask-tip">Co bych měl prověřit, než tohle schválím?</span>
+        </div>
+        <div class="composer">
+          <div class="ta">Zeptej se na cokoli v tomhle PR…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">101b</span>
+        <span class="body">
+          <b>Bubliny, ne karty pod sebou</b>
+          <span>Kdo mluví, se pozná <b>stranou a barvou</b>, ne hlavičkou se jménem u každé
+          zprávy — a bublina není přes celou šířku, protože právě to z rozhovoru dělá chat a ne
+          log. Karty (`.tl-card`) zůstávají tam, kam patří: v konverzaci na PR, která odpovídá
+          na „kdo co kdy řekl“. Že se zrovna odpovídá, nese prstýnek <b>na místě příští
+          bubliny</b>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">102</span>
+        <span class="body">
+          <b>Jedna session na pull request</b>
+          <span>Drží se přes <code>--resume</code>, takže druhá otázka navazuje na první. Rozhovor
+          se ukládá <b>k PR, ne k <code>headSha</code></b> — nálezy hlava zneplatní schválně
+          (nesmí platit pro kód, který už neexistuje), ale otázka „proč se ten mutex bere“ pushem
+          nezastará.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">103</span>
+        <span class="body">
+          <b>Sada nástrojů je užší než reviewerova</b>
+          <span>Tytéž konstanty minus <code>ReportFindings</code> a <code>Skill</code>. Je to
+          <b>třetí</b> vyjmenovaná session vedle revieweru a dotažení textu issue (#345) — a jako
+          u nich platí, že rozšířit ten výčet znamená rozšířit, co aplikace umí spustit bez
+          dohledu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">104</span>
+        <span class="body">
+          <b>Kontext je materiál, ne nástroj</b>
+          <span>Nálezy, konverzace a checky jdou do promptu jako text — session si je nedotahuje
+          sama, protože k tomu by potřebovala <code>gh</code>, a ten se nedá povolit jen na
+          čtení. Skládá se to týmž způsobem jako zadání pro agenta (#333).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">105</span>
+        <span class="body">
+          <b>Utrácí to, a je to vidět</b>
+          <span>U každé odpovědi stojí čas a cena, a částka se počítá do <em>Dneska stálo</em> na
+          dashboardu jako všechno ostatní. Strop se nedává — sazbu si člověk řídí tím, kolik se
+          ptá; skrytá útrata je horší než drahá.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">106</span>
+        <span class="body">
+          <b>Není to terminál</b>
+          <span>Surová session (sekce 20) o sobě říká totéž a platí to dál: čte se, nepíše se do
+          toho. Rozdíl je, že tady se <b>ptám</b> — a odpovídá session, která má vyjmenovaná
+          práva. Živý terminál je jiná věc a je v sekci 34.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+        <div class="doc-move">
+          <a class="prev" href="#pr-prubeh"><span class="dir">← předchozí</span><span class="t">Průběh</span></a>
           <a class="next" href="#moje-panel"><span class="dir">další →</span><span class="t">Panel u vlastního PR</span></a>
         </div>
       </div>
