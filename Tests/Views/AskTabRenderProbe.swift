@@ -16,7 +16,14 @@ import Testing
 /// `NSHostingView`, ne `ImageRenderer`: obsah je ve `ScrollView`u, který `ImageRenderer`
 /// nerasterizuje (poučení z #291 a #294).
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**, a proměnné se předávají **s prefixem `TEST_RUNNER_`** — jen ty `xcodebuild`
+/// do testovacího procesu pustí; bez něj se suita **tiše přeskočí** a nevyrenderuje se nic:
+///
+/// ```bash
+/// TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
+///     xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+///     -only-testing:PRismTests/AskTabRenderProbe
+/// ```
 @MainActor
 @Suite(
     "Sonda tabu Zeptat se (#452)",

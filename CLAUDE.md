@@ -141,8 +141,10 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   **Nemusíš vyhovět všem komentářům.** Copilot navrhuje i věci, které v tomhle repu nedávají
   smysl. Rozhoduješ ty — u nálezu, který neopravíš, ale musí být odpověď s důvodem. Když si
   radou nejsi jistý, ověř ji (spusť to, změř to); zamítnutí podložené měřením je lepší než
-  oprava naslepo. Když **nedoběhne vůbec** („Copilot encountered an error…“), je
-  nejpravděpodobnější příčinou velikost `CLAUDE.md` — viz *Údržba dokumentace* výš.
+  oprava naslepo. Když **nedoběhne vůbec** („Copilot encountered an error…“), jsou příčiny dvě
+  a poznají se podle toho, jestli job běžel: spadlý job = velikost `CLAUDE.md` (viz *Údržba
+  dokumentace* výš), **nespuštěný job = spotřebovaný request** (#452 — čtyři a půl hodiny ticha;
+  vyžádat znovu tehdy **nepomůže**, postup je v [`docs/github-cli.md`](docs/github-cli.md)).
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
