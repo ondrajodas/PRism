@@ -11437,6 +11437,239 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
 
   </section>
 
+
+  <section class="section" id="s36">
+    <div class="section-head">
+      <div class="eyebrow">36 — Vlastní PR · mergnout a srovnat větev</div>
+      <h2>Poslední dvě věci, kvůli kterým se chodí do prohlížeče</h2>
+      <p class="muted">
+        U vlastního PR umí okno od #392 přeštítkovat a vyžádat reviewera — to je půlka toho, jak si
+        člověk řídí svoji frontu. Druhá půlka zbyla v prohlížeči: <b>mergnout</b>, když je zeleno,
+        a <b>srovnat větev</b>, když mezitím ujel <code>main</code>. Obojí je práce s vlastním
+        pull requestem, ne s cizím, a obojí se dělá právě ve chvíli, kdy je člověk v tomhle okně.
+      </p>
+      <p class="muted">
+        <b>Tvrdá podmínka č. 1 se tím mění dvakrát, a pokaždé jinak.</b> Merge je <b>osmá metoda</b>
+        <code>ReviewPublishing</code> — přibývá do výčtu, který je schválně krátký a na jednom
+        místě, takže se dál dá přečíst, co všechno aplikace umí odeslat. Rebase je něco jiného:
+        je to <b>první zápis do remote</b> (<code>git push</code>) a k němu <b>první session, která
+        smí měnit soubory</b>. Ani jedno v tomhle repu dosud neexistovalo a v <code>CLAUDE.md</code>
+        se to musí přepsat i s tím, co za hranice zůstává.
+      </p>
+      <p class="muted">
+        <b>Jedině na vlastním PR — a u rebasu je to guard, ne pravidlo v hlavě.</b> Kdo smí být
+        cílem <code>--force-with-lease</code>, se posuzuje proti <b>datům pull requestu</b>
+        (autorem jsem já), ne proti jménu větve: větev se dá pojmenovat jakkoli a shoda jména by
+        byla kontrola, která vypadá jako kontrola. Na cizím PR se obě akce <b>nekreslí vůbec</b>,
+        ne zašedle — tak jako labely od #392.
+      </p>
+      <p class="muted">
+        <b>A holé <code>--force</code> se nepoužije nikdy.</b> <code>--force-with-lease</code> při
+        pohnutém remote <b>selže</b> místo aby přepsal cizí commit; to je celý rozdíl mezi
+        „přetlačím svoji větev“ a „přetlačím, co tam kdo mezitím dal“.
+      </p>
+    </div>
+
+    <h3>Panel: co se dá s vlastní větví udělat</h3>
+    <p class="muted">
+      Nová sekce <em>Větev</em> pod labely a reviewery. Nese <b>stav</b> (o kolik je za základem
+      a jestli jde mergnout) a k němu <b>obě akce</b> — mění se jen to, <b>která z nich je hlavní</b>:
+      když je zeleno, je hlavní <code>Mergnout…</code>, a když je větev pozadu nebo něco brání,
+      je hlavní <code>Srovnat s main</code>. Obě jsou tam schválně: srovnat větev dává smysl
+      i tehdy, když už mergnout jde, a schovávat akci podle stavu by znamenalo, že se tlačítko
+      pod rukou stěhuje. Zašedlé tlačítko s důvodem je tu naopak správně: je to stav, který se
+      mění, na rozdíl od cizího PR, kde se akce nekreslí vůbec.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Zeleno · dá se mergnout</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">odinuv:chore/deps → main</span><span class="ans done">srovnaná</span></div>
+              <div class="rv-row"><span class="who">3 commity · 6 checků</span><span class="ans done">zeleno</span></div>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <span class="mini pri">Mergnout…</span>
+              <span class="mini">Srovnat s main</span>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <code>Mergnout…</code> s třemi tečkami, protože otevírá potvrzení — merge je nevratný
+          a týká se <code>main</code>u, ne jen pull requestu.
+        </p>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Za základem · a proč to nejde</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">odinuv:chore/deps → main</span><span class="ans blocked">o 4 commity vzadu</span></div>
+              <div class="rv-row"><span class="who">1 check neprošel</span><span class="ans blocked">test-php 8.3</span></div>
+            </div>
+            <div class="warnbox" style="margin-top: 4px;">
+              <span class="i">▲</span>
+              <span>Mergnout nejde: <b>červený check</b> a větev je pozadu za <code>main</code>.</span>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <span class="mini" style="opacity: 0.45;">Mergnout…</span>
+              <span class="mini pri">Srovnat s main</span>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Důvod stojí <b>v panelu</b>, ne jen v nápovědě pod kurzorem — zašedlé tlačítko bez věty
+          je otázka, na kterou okno neodpoví (tatáž úvaha jako u vypnuté brány, #392).
+        </p>
+      </div>
+    </div>
+
+    <h3>Potvrzení mergu</h3>
+    <p class="muted">
+      Vypsané je <b>všechno, co se stane</b>, jako u odeslání review (#68): co se do čeho slévá,
+      kolik commitů, jakou metodou a s jakým titulkem. <b>Squash</b> je výchozí, protože tak se
+      v tomhle repu merguje a titulek PR je z něj commit message; kdo chce jinak, jde na GitHub.
+      <b>Výchozí akci to potvrzení nemá</b> — poslední klik před nevratnou věcí je klik (#68, #413).
+    </p>
+    <div class="pane new" style="max-width: 520px;">
+      <div class="tag"><i></i>Druhé kliknutí, na druhém tlačítku</div>
+      <div class="frame flat">
+        <div class="sheet-head">
+          <span class="t">Mergnout pull request?</span>
+          <span class="slug">keboola/vault #85</span>
+          <span class="sub">Tohle se nedá vzít zpět z aplikace.</span>
+        </div>
+        <div class="sheet-body">
+          <div class="pl-sec">
+            <span class="cap">Co se stane</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">větev</span><span class="ans">odinuv:chore/deps → main</span></div>
+              <div class="rv-row"><span class="who">metoda</span><span class="ans">squash</span></div>
+              <div class="rv-row"><span class="who">commitů</span><span class="ans">3 → 1</span></div>
+              <div class="rv-row"><span class="who">zpráva</span><span class="ans">chore: modernize dependencies…</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-foot">
+          <span class="mini">Zrušit</span>
+          <span class="sp"></span>
+          <span class="mini pri">Mergnout</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Když srovnání narazí na konflikt</h3>
+    <p class="muted">
+      Bez konfliktu je <em>Srovnat s main</em> nudné: rebase v kopii repa a
+      <code>--force-with-lease</code>. Zajímavý je ten druhý případ — a řeší ho <b>session
+      s <code>Write</code> a <code>Edit</code></b>, tedy první svého druhu v téhle aplikaci.
+      Drží ji tři věci, a všechny tři jsou vidět na obrazovce:
+    </p>
+    <p class="muted">
+      <b>Session nepíše ven.</b> Má <code>Write</code> a <code>Edit</code> <b>jen uvnitř svého
+      worktree</b> v cache, <code>gh</code> nemá a <code>git push</code> má dál v zákazu.
+      Přetlačuje <b>aplikace</b>, ne session — tím zůstává cesta ven v kódu, kde se dá zkontrolovat.
+    </p>
+    <p class="muted">
+      <b>Výsledek se ukazuje dřív, než se cokoli přetlačí.</b> Vidět je, které soubory kolidovaly,
+      co s nimi session udělala a diff toho, co z toho vzniklo. <b>Bez kliknutí se nepushuje nic</b>
+      — jinak by to byl agent, který mi beze slova přepíše větev.
+    </p>
+    <p class="muted">
+      <b>Co nerozřeší, nechá být.</b> Nedokončený rebase zůstane v kopii repa a nabídne se
+      <b>terminál</b> (sekce 35) — tam už mám plnou moc a kontext je připravený. Uhádaný výsledek
+      je horší než přiznané „na tohle nestačím“.
+    </p>
+    <div class="pane new">
+      <div class="tag"><i></i>Po doběhnutí session, před přetlačením</div>
+      <div class="frame flat">
+        <div class="sheet-head">
+          <span class="t">Srovnáno s <code>main</code> — 2 konflikty vyřešeny</span>
+          <span class="slug">odinuv:chore/deps · 4 commity přehrány</span>
+          <span class="sub">Do remote se zatím nesáhlo.</span>
+        </div>
+        <div class="sheet-body">
+          <div class="pl-sec">
+            <span class="cap">Co s tím session udělala</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="rv-av done">✓</span><span class="who">composer.lock</span><span class="ans done">vzala obojí</span></div>
+              <div class="rv-row"><span class="rv-av done">✓</span><span class="who">src/Vault/SecretClient.php</span><span class="ans done">ruční slití</span></div>
+              <div class="rv-row"><span class="rv-av wait">—</span><span class="who">tests/VaultTest.php</span><span class="ans">beze změny</span></div>
+            </div>
+          </div>
+          <div class="frame flat">
+            <table class="diff">
+              <tr class="hunk"><td colspan="3">src/Vault/SecretClient.php @@ -112,7 +112,7 @@</td></tr>
+              <tr class="del"><td class="ln">112</td><td class="sg">−</td><td class="code">        $timeout = <span class="st">30</span>;</td></tr>
+              <tr class="add"><td class="ln">112</td><td class="sg">+</td><td class="code">        $timeout = $<span class="vr">this</span>-&gt;<span class="fn">config</span>-&gt;<span class="fn">timeout</span>();</td></tr>
+            </table>
+          </div>
+          <div class="warnbox">
+            <span class="i">▲</span>
+            <span>Přetlačí se <b>tvoje</b> větev přes <code>--force-with-lease</code>. Když se
+            mezitím pohnul remote, push <b>selže</b> a nic se nepřepíše.</span>
+          </div>
+        </div>
+        <div class="sheet-foot">
+          <span class="mini">Zahodit rebase</span>
+          <span class="mini">Otevřít v terminálu</span>
+          <span class="sp"></span>
+          <span class="mini pri">Přetlačit větev</span>
+        </div>
+      </div>
+      <p style="font-size: 13.5px; color: var(--ink-2);">
+        <code>Zahodit rebase</code> vrátí kopii repa tam, kde byla (<code>git rebase --abort</code>)
+        — na remote se nesáhlo, takže není co vracet.
+      </p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">113</span>
+        <span class="body">
+          <b>Merge je osmá metoda, ne obejití výčtu</b>
+          <span>Přibývá do <code>ReviewPublishing</code> vedle sedmi dosavadních a
+          <code>SingleWayOutTests</code> se přepíšou <b>vědomě</b>. Co v zákazu zůstává: approve
+          mimo review, <b>zavření PR</b>, milník a <code>deleteLabel</code>. Roste-li ten výčet,
+          roste to, co aplikace umí odeslat — a to má být vidět na jednom místě.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">114</span>
+        <span class="body">
+          <b>Cílem force pushe je PR, ne jméno větve</b>
+          <span>Guard se ptá <b>dat pull requestu</b>, jestli jsem jeho autor — jméno větve se dá
+          nastavit na cokoli, takže shoda jména by byla kontrola, která vypadá jako kontrola.
+          A <code>--force-with-lease</code> místo <code>--force</code>: při pohnutém remote
+          <b>selže</b>. Tohle jsou dvě různé pojistky proti dvěma různým omylům a platí obě.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">115</span>
+        <span class="body">
+          <b>První session, která smí psát — a proto tři meze</b>
+          <span><code>Write</code> a <code>Edit</code> <b>jen ve svém worktree</b>, žádné
+          <code>gh</code>, <code>git push</code> dál zakázaný. Pushuje aplikace. A výsledek se
+          <b>ukazuje před</b> přetlačením, takže „výslovný pokyn člověka“ znamená totéž co
+          u odeslání review: klik na pojmenované tlačítko nad vypsaným obsahem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">116</span>
+        <span class="body">
+          <b>Nerozřešený konflikt se přiznává</b>
+          <span>Rebase zůstane rozdělaný v kopii repa a nabídne se terminál (sekce 35), kde už
+          mám plnou moc a kontext připravený. Uhádané slití, které projde testy a rozbije se
+          v provozu, je horší výsledek než věta „na tohle nestačím“.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#pr-prubeh"><span class="dir">← předchozí</span><span class="t">Průběh</span></a>
           <a class="next" href="#moje-prompt"><span class="dir">další →</span><span class="t">Prompt pro agenta</span></a>
