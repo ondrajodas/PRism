@@ -31,32 +31,10 @@ struct ReviewIntentStore: Sendable {
     @discardableResult
     func save(_ brief: String?, for pr: PRIdentifier, at headSha: String) throws -> URL? {
         guard let brief else { return nil }
-        let file = layout.intentFile(for: pr, at: headSha)
-        // Tatáž kontrola, jakou si dělá razítko použití repa — jedno místo, ne vlastní kopie
-        // (`CacheLayout.contains` rozbaluje symlinky v rodiči, protože zápis přes odkaz
-        // v cestě by psal mimo cache). „Pracuje výhradně ve své cache“ je tvrdá podmínka.
-        let checked = try CacheEviction.insideCache(file, of: layout)
-        // **A odkaz na samotném souboru se odmítne výslovně** — `contains` ho nezachytí, protože
-        // rozbaluje symlinky na obou stranách. Je to tatáž kontrola, jakou si u čtení dělají
-        // `ReviewStore` a `ReviewDraftStore` (#106).
-        //
-        // Změřeno, že na zápisu **dnes** nestojí nic: `write(to:options: .atomic)` odkaz
-        // **nahradí** souborem a cíl nechá být, kdežto tentýž zápis **bez** `.atomic` cíl
-        // přepíše. Bezpečnost tedy visela na jednom příznaku u zápisu, což je slabší záruka než
-        // vyjmenovaná kontrola — a u `existingFile` níž neplatilo ani to.
-        guard !layout.isSymbolicLink(checked) else {
-            throw CheckoutError.cacheUnavailable(
-                "Na cestě \(checked.path(percentEncoded: false)) leží symbolický odkaz."
-            )
-        }
-        try FileManager.default.createDirectory(
-            at: checked.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        // Atomicky, ze stejného důvodu jako u nálezů: půlka souboru se od celého nedá odlišit
-        // ničím jiným než tím, že v něm chybí sekce — a to by vypadalo jako nedotažené zadání.
-        try Data(brief.utf8).write(to: checked, options: .atomic)
-        return checked
+        // Kontroly hranice cache drží **jedno místo** (`CacheTextFile`, #452) — od #452 leží vedle
+        // pracovního stromu dva takové soubory (zadání a materiál pro rozhovor) a dvě kopie téhož
+        // ověření by se rozešly zrovna u toho, na čem stojí tvrdá podmínka č. 3.
+        return try CacheTextFile.write(brief, to: layout.intentFile(for: pr, at: headSha), in: layout)
     }
 
     /// Cesta k **uloženému** zadání, pokud na disku je. Nic nezakládá.
@@ -72,11 +50,6 @@ struct ReviewIntentStore: Sendable {
     /// symlinky na obou stranách a cíl pak vyjde rovný cíli — proto `isSymbolicLink`, tedy tatáž
     /// kontrola, kterou u čtení z cache mají `ReviewStore` i `ReviewDraftStore` (#106).
     func existingFile(for pr: PRIdentifier, at headSha: String) -> URL? {
-        let file = layout.intentFile(for: pr, at: headSha)
-        guard layout.contains(file),
-              !layout.isSymbolicLink(file),
-              FileManager.default.fileExists(atPath: file.path(percentEncoded: false))
-        else { return nil }
-        return file
+        CacheTextFile.existing(layout.intentFile(for: pr, at: headSha), in: layout)
     }
 }

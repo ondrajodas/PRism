@@ -4839,3 +4839,45 @@ odrážek** z původního souboru má v novém protějšek a všech **28 odkazů
 z `CLAUDE.md` zmizely, je v `docs/` nebo v README. Odkazy se ověřují skriptem, který spočítá
 GitHub kotvy z nadpisů — **65 relativních odkazů, nula rozbitých**. **Na obrazovce se nemění
 nic**, je to dokumentace.
+
+### #452 — tab `Zeptat se`: rozhovor s Claudem nad pull requestem
+
+Osmá záložka PR a **třetí vyjmenovaná session** vedle revieweera a dotažení textu issue (#345).
+Odpovídá na otázku, na kterou reviewer nebyl puštěný — *proč tohle vůbec dělá*, *co z těch nálezů
+je doopravdy problém* —, a ta se do #452 musela odnést do prohlížeče nebo do terminálu.
+
+**Sada nástrojů je užší než reviewerova**: `Read,Grep,Glob,Bash(git:*)`, tedy bez `ReportFindings`
+(nemá co hlásit) a bez `Skill` (skill načtený za běhu si umí říct o odeslání na GitHub);
+`--disallowedTools` je **tatáž konstanta** jako u revieweera a obě hodnoty tvrdí test **literálem**,
+jako u #345. **Tvrdá podmínka č. 1 se nehnula**: `grep ReviewPublishing App/` vrací týž seznam
+a `SingleWayOutTests` prošly beze změny.
+
+**Ukládá se k PR, ne k `headSha`**, a je to zapsaná výjimka z toho, jak se klíčuje všechno ostatní
+kolem review: podmínka č. 5 mluví o **nálezech**, tedy o tvrzení proti kódu, kdežto otázka „proč se
+ten mutex bere“ pushem nezastará. Rozhovor drží `--resume`, takže druhá otázka navazuje a materiál
+se skládá jen k té první; `session_id` se přepisuje po každé odpovědi, protože `claude --resume`
+vrací id **nové** session.
+
+**Kontext jde do promptu jako cesta k souboru** vedle pracovního stromu (precedens #120), ne jako
+nástroj — na dotažení nálezů, konverzace a checků by session potřebovala `gh`. Diff v souboru není:
+session si ho přečte `git diff base...HEAD`, tedy toutéž cestou jako reviewer.
+
+**Osmá záložka posunula dvě naměřená čísla v pruhu záložek.** Ve výchozím okně 1100 se od #452
+kreslí `labels`, tedy **bez `+X −Y`** (vrací se od ~1186 bodů) — je to ta výměna, kterou pořadí
+podob předepisuje. A **přibyla čtvrtá podoba** (`compact`, jen ikony bez popisku i u aktivní
+záložky): do #452 se na ni nedalo přijít, protože se `icons` i s trojmístnými odznaky vešly do okna
+689; s osmi záložkami chtějí 645–711 bodů proti 647, které v nejužším okně jsou, takže by se pruh
+v tom krajním stavu zalomil. `compact` se vejde s 598 body. Je to **změna měření, ne názoru**,
+a zůstalo u ní zapsané obojí.
+
+**Kolik jedna odpověď stojí, je změřené, ne odhadnuté**: první otázka nad tímhle PR (opus-5, diff
+~5 tisíc řádků) vyšla na **$1,56 a 125 s**, navazující jednovětá přes `--resume` na **$0,96 a
+6,8 s**. Cenu určuje **kontext, ne délka otázky**. Tentýž zkušební běh navíc **našel dvě věci
+v téhle implementaci** a obě se opravily ještě před PR: materiál se skládal jen k první otázce
+(pruh `ví o tomhle PR:` se přitom počítá živě, takže by nad navazující otázkou tvrdil víc, než
+data unesou) a mrtvé `session_id` se nezahazovalo, takže rozbité navázání by rozhovor položilo
+napořád.
+
+Testů **4139**, všechny zelené — nových je šest sad kolem rozhovoru (`AskCommandTests`,
+`AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`) a k tomu
+stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam (#361).

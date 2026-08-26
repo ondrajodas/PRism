@@ -18,7 +18,14 @@ enum MarkdownInlineText {
     ///
     /// - Parameter size: velikost prózy. Inline kód se od ní odvozuje, aby v drobnějším písmu
     ///   nevyskočil.
-    static func rendered(_ source: String, size: Double) -> AttributedString {
+    /// - Parameter codeBackground: podklad inline kódu. Výchozí `Palette.codeFill` je ten
+    ///   z návrhu; přebít se dá tam, kde se sází **na barevné ploše** (#452: moje bublina v tabu
+    ///   `Zeptat se` stojí na plném akcentu, takže by fialový podklad ležel na fialovém).
+    static func rendered(
+        _ source: String,
+        size: Double,
+        codeBackground: Color = Palette.codeFill
+    ) -> AttributedString {
         let text = MarkdownHTML.stripped(source).trimmingCharacters(in: .whitespacesAndNewlines)
         let options = AttributedString.MarkdownParsingOptions(
             allowsExtendedAttributes: false,
@@ -28,7 +35,7 @@ enum MarkdownInlineText {
         guard var attributed = try? AttributedString(markdown: text, options: options) else {
             return AttributedString(text)
         }
-        highlightCode(in: &attributed, size: size)
+        highlightCode(in: &attributed, size: size, background: codeBackground)
         return attributed
     }
 
@@ -41,7 +48,11 @@ enum MarkdownInlineText {
     ///
     /// Rozsahy se **posbírají dopředu** — mutace uprostřed procházení `runs` by kolekci pod rukama
     /// přerovnala.
-    private static func highlightCode(in attributed: inout AttributedString, size: Double) {
+    private static func highlightCode(
+        in attributed: inout AttributedString,
+        size: Double,
+        background: Color
+    ) {
         let ranges = attributed.runs.compactMap { run in
             run.inlinePresentationIntent?.contains(.code) == true ? run.range : nil
         }
@@ -49,7 +60,7 @@ enum MarkdownInlineText {
 
         for range in ranges {
             attributed[range].font = .system(size: MarkdownTypography.codeSize(base: size), design: .monospaced)
-            attributed[range].backgroundColor = Palette.codeFill
+            attributed[range].backgroundColor = background
         }
     }
 }

@@ -1168,6 +1168,41 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`ReviewStateFromRecordTests`, `VerdictSuggestionTests`, `QueueRowTests`, `ReviewerChipTests`,
   `FindingsEmptyReasonTests`, `AppStoreRecoveryTests` a obě nové), protože `makeStoredRun` osu
   ve výchozím stavu nemá — a přesně to je ta situace, ve které se okno nesmí rozkřičet.
+- **Rozhovor nad PR (#452)** — pět sad a v každé jedno tvrzení, které se rozbije potichu.
+  `AskCommandTests` tvrdí **obě konstanty sady literálem** (tvrdá podmínka č. 2) a k tomu, že je
+  **vlastní podmnožina** reviewerovy s rozdílem právě `ReportFindings` a `Skill`; porovnat povolení
+  proti `AskCommand.allowedTools` by neznamenalo nic, protože rozšířenou konstantu by test poslušně
+  přečetl. Dál že se `--resume` **posílá jen s neprázdným id** a že do dokladu „přečetl X“ jde jen
+  `Read`, který **prošel** — odmítnutý nic nepřečetl a řádek nad bublinou je doklad.
+  `AppStoreAskTests` hlídají tři věci, které mizí tiše: **druhá otázka navazuje** (`resuming` je id
+  z první odpovědi a materiál se do promptu nedává znovu), **odpověď bez textu dostane bublinu
+  s důvodem** (zaplacená session, o které se mlčí, vypadá jako by nebyla) a **rozhovor přežije
+  restart i nový commit** — to poslední je celý rozdíl proti nálezům (tvrdá podmínka č. 5), takže se
+  druhý store staví nad **jinou hlavou** PR. Vedle toho **tvrzení, že se něco NEstalo**: prázdná
+  otázka session nespustí a otevřený tab bez otázky na disk nic nenapíše. `AskStoreTests` jedou proti
+  skutečnému disku (cizí rozhovor v souboru, symlink, rozbitý JSON — všechno **vyhodí**, nevrátí
+  `nil`), `AskPromptTests` že **žádná sekce materiálu nezmizí mlčky** a `AskReferencesTests` že se
+  odkaz nevyrobí z URL (dvojtečka s číslem je v ní port).
+
+  Čekání na disk je tam, kde se z disku doopravdy čte: zápis si store rozjede vlastním taskem, o
+  kterém si nedrží handle (`persistAsk`, tentýž vzor jako u draftu), takže jediný jev, na který se
+  dá čekat, je **soubor**. Ten task navíc čte hodnotu **až v sobě** — se snímkem v parametru by
+  starší zápis mohl přebít novější a v souboru by po restartu chyběla odpověď.
+
+  **Vzhled má sondu, ne tvrzení** (`AskTabRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`
+  + `TEST_RUNNER_PRISM_RENDER_DIR`): tři stavy tabu ve dvou šířkách, aby se daly položit vedle
+  sekce 33 návrhu. Je to obrázková otázka — *sedí bublina na akcentu, je prstýnek na místě příští
+  bubliny* —, na kterou měření neodpoví. A **rozhodnutí „pevný stack, ne líný seznam“ má vlastní
+  měření** (`AskLogMeasurement`, ruční): první rozvržení stojí 24 ms u dvaceti bublin, 88 ms
+  u stovky a 260 ms u tří set — proti 410 ms, které #361 naměřilo u tří set uzlů osy. Bez čísla by
+  to bylo opsané z jedné nebo druhé strany; osa i diff mají každý jinou odpověď a rozhoduje strop.
+
+  **Jednu věc harness neověří: co ta session doopravdy stojí.** Změřilo se to spuštěním `claude`
+  s týmiž argumenty nad tímhle repem — první otázka **$1,56 / 125 s**, navazující přes `--resume`
+  **$0,96 / 6,8 s** (čísla a co z nich plyne jsou v [`docs/claude-cli.md`](claude-cli.md)). Ten běh
+  zároveň **našel dvě věci, které testy nechytaly**: materiál skládaný jen k první otázce (pruh
+  `ví o tomhle PR:` se počítá živě) a nezahozené mrtvé `session_id`. Obojí je dneska opravené a má
+  vlastní tvrzení.
 - **Dráhy v tabu `Průběh` (#242)** — osy se skládají `record(_:at:)`/`finish(_:at:)`, tedy tou
   cestou, kterou vznikají doopravdy. Pokrývá: doběhlá session má hotové fáze, kterými prošla;
   **doběhlá bez nahlášených nálezů nemá fázi hlášení za hotovou** (reviewer, který

@@ -3312,6 +3312,45 @@ ani `Stav proti milníkům`.
 Tatáž úvaha zamítla i **jeden release za celou dávku** — viz
 [`docs/paralelni-vyvoj.md`](../../paralelni-vyvoj.md), *5. Merge, release, restart*.
 
+### Záznam rozhodnutí — rozhovor nad PR jako osmá záložka (#452)
+
+Reviewery odpovídají na to, na co byly puštěné. Při čtení diffu ale vzniká druhá otázka — *proč
+tohle vůbec dělá*, *co z těch nálezů je doopravdy problém* — a ta se do #452 nesla do prohlížeče
+nebo do terminálu. Cílový stav je nakreslený v návrhu, sekce 33, takže brána na vzhled proběhla
+před založením issue.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Rozhovor se ukládá k PR, ne k `headSha`** | Klíčovat ho commitem jako nálezy (tvrdá podmínka č. 5) | Podmínka mluví o **nálezech**, tedy o tvrzení proti kódu, které po pushi neplatí. Rozhovor je otázka o **záměru** — „proč se ten mutex bere“ pushem nezastará. Klíčovat ho commitem by znamenalo, že zmizí zrovna ve chvíli, kdy se k němu člověk vrací, a příští otázka by zaplatila kontext znovu. Je to zapsaná výjimka, ne obejití: podmínka se nemění, jen se na tenhle typ dat nevztahuje |
+| **Sada nástrojů je vlastní a užší než reviewerova** | Pustit rozhovor přes `ReviewRunning` s reviewerovými povoleními | `ReportFindings` by byl druhý zápis do uložených nálezů (které jsou klíčované `headSha`) a `Skill` si umí říct o odeslání na GitHub — u revieweera je povolený proto, že na skillu celé review stojí, tady na něm nestojí nic. Zákazy zůstávají **toutéž konstantou**, protože druhá sada zákazů je druhé místo, kde se dá podmínka č. 2 porušit |
+| **Kontext jde do promptu jako cesta k souboru** | Nasypat nálezy, konverzaci a checky do promptu; nebo je session nechat dotáhnout samu | Dotáhnout by znamenalo `gh` v povoleních, a ten se nedá povolit jen na čtení. Obsah v promptu je precedens #120 obráceně: cizí text (popis PR, komentáře kolegů) má v promptu váhu instrukce, ve čteném souboru je to materiál k posouzení — a prompt by se s kilobajty cizího textu rozkolísal |
+| **Diff v tom souboru není** | Uložit do materiálu i celý diff | Session stojí v pracovním stromě a `Bash(git:*)` má, takže `git diff base...HEAD` je tatáž cesta, jakou jde reviewer. Diff v souboru by byly stovky kilobajtů zakládané při každé první otázce a **druhá pravda** o tom, co se v PR změnilo |
+| **Materiál se přepisuje před každou otázkou** | Dát ho jen do první otázky (první podoba #452) a spolehnout se, že ho `--resume` drží | Pruh `ví o tomhle PR:` se počítá **živě** z toho, co má okno teď, takže by nad navazující otázkou tvrdil `3 nálezy` o session, která o nich nikdy neslyšela — přesně *text v UI, který tvrdí víc, než data unesou*. Zápis do cache je zdarma a navazující prompt řekne, že je soubor čerstvý; stojí to nejvýš jeden `Read`. **Otočeno během #452**, našel to zkušební běh samotného tabu nad tímhle PR |
+| **Odpověď bez `session_id` zahodí navázání** | Nechat staré id a doufat, že příště projde | `claude --resume <mrtvé id>` selže **pokaždé stejně** — a v okně není nic, čím rozhovor začít znovu, takže by tab na tom PR zůstal rozbitý napořád. Zahozením se z příští otázky stane první; ztrácí se jen to, co stejně nefunguje. Našel to tentýž zkušební běh |
+| **Odkazy `→ file:line` stojí pod prózou, ne uvnitř věty** | Obarvit `path:line` inline, jak to kreslí návrh | Inline odkaz znamená sáhnout do `MarkdownInlineText`, a ten sází **i popis PR a cizí komentáře** — `file:80` by se stalo klikatelným všude v okně, včetně míst, kde to odkaz není. Kapsle pod odstavcem drží to, kvůli čemu odkaz v návrhu je (klik skočí do `Změněných souborů`), a nemění chování nikde jinde. Je to jediná vědomá odchylka od sekce 33 |
+| **`Zeptat se` nemá pravý panel** | Nechat panel jako v `Přehledu` a `Konverzaci` | Plocha tabu je próza s composerem. Panel by v jednom okně postavil druhé textové pole s vlastním odesílacím tlačítkem — přesně ta záměna, kvůli které composer komentáře (#216) nesedí v panelu, kde ho kreslí návrh |
+| **`⌘⏎` v tabu odesílá otázku a zkratka okna se zakáže** | Dát composeru jinou klávesu | `⌘⏎` je v composeru zavedená kombinace a v tomhle okně už je zabraná (#151, #441). Dvě tlačítka s toutéž kombinací znamenají, že vyhraje zaregistrované později (#184) — zakázané tlačítko klávesu nebere a propadne dál, tedy tentýž vzorec jako `⌘2` a `⎋` nad otevřenou paletou |
+| **Strop útraty se nedává** | Denní limit jako u automatu (`autoRunsPerDay`) | Limit u automatu je pojistka proti tomu, co se spustí **bez člověka**. Tady za každou otázkou někdo stojí a sazbu si řídí tím, kolik se ptá; cena je u každé odpovědi vidět a počítá se do `Dneska stálo`. Skrytá útrata je horší než drahá |
+| **Rozhovor se nedá z okna smazat** | Přidat `Zahodit rozhovor` | V mockupu to není a stav, který nikdo nečte, je mrtvá váha. Kdyby se ukázalo, že je to potřeba, je to změna vzhledu — tedy napřed mockup |
+
+### Záznam rozhodnutí — pruh záložek dostal čtvrtou podobu (#452)
+
+**Otočení rozhodnutí z #318**, a otočilo ho měření, ne názor. Tehdy se čtvrtá podoba (samotné ikony
+bez popisku i u aktivní záložky) zamítla s tím, že se na ni **nedá přijít**: se sedmi záložkami se
+`icons` vešly do tabu od 564 b (okno 617) a i s trojmístnými odznaky u všech od 636 b (okno 689),
+tedy pod podlahu okna 700.
+
+Osmá záložka to posunula. Naměřeno na `NSHostingView.fittingSize`: `icons` s trojmístnými odznaky
+chtějí **645 až 711 b** podle toho, která záložka je aktivní, a tab v nejužším okně má **647**.
+Šest z osmi podob se tedy nevejde a pruh by se v tom krajním stavu **zalomil** — přesně ta porucha,
+kterou #318 opravovalo. `compact` se vejde s **598 b**.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Přidala se čtvrtá podoba** | Nechat pruh zalomit se v krajním stavu; nebo srazit trojmístné odznaky na `99+` | Zalomený pruh ztrojnásobí výšku a odsune obsah, kvůli kterému je okno otevřené. `99+` je stejně široké jako `888`, takže by neušetřilo nic |
+| **`compact` se ukazuje jen s trojmístnými odznaky** | Ukázat ji v nejužším okně s běžnými daty | S běžnými odznaky se v nejužším okně pořád vejdou `icons` (573–639 b proti 647), takže `compact` je stav pro **krajní data**, ne pro úzké okno. Test to tvrdí právě takhle — kdyby se ukazovala jinak, přestala by hlídat, kdy doopravdy vzniká |
+| **Ve výchozím okně 1100 se smířilo se ztrátou `+X −Y`** | Zúžit záložky, aby se `full` do 1100 vešla | Pořadí podob říká, co ustupuje dřív, a `+X −Y` je první — mluví o rozsahu celého PR, tedy o otázce `Změněných souborů`. Je to tatáž výměna, jakou zaplatila sedmá záložka (#316), jen tentokrát ne zadarmo: vrací se od ~1186 bodů |
+
 ### Vlastní revize diffu je podmínka pushnutí, ne doporučení (#46)
 
 Není to úspora práce, je to úspora **času**: Copilot má latenci v minutách, takže každý nález,

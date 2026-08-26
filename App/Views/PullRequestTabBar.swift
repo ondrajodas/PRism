@@ -38,13 +38,13 @@ struct PullRequestTabBar: View {
     @State private var hovered: PullRequestTab?
 
     var body: some View {
-        // **Tři podoby, ne zúžení jednoho pruhu** (#316, třetí od #318). Co ustupuje a v jakém
-        // pořadí, je u `Layout`.
+        // **Čtyři podoby, ne zúžení jednoho pruhu** (#316, třetí od #318, čtvrtá od #452). Co
+        // ustupuje a v jakém pořadí, je u `Layout`.
         //
         // **`ViewThatFits` měří ideální šířku každé podoby**, a ta je u pruhu bez `lineLimit`u
         // šířka nezalomeného textu — přesně to, co potřebujeme vědět. **Že to tady doopravdy
         // platí, je změřené**, ne předpokládané (`TabStripWidthTests`): pruh v tabu 1347 b nakreslí
-        // `bar(.full)`, v 947 b `bar(.labels)` a v 647 b `bar(.icons)`, pixel po pixelu. To je ten
+        // `bar(.full)`, v 1097 b `bar(.labels)` a v 647 b `bar(.icons)`, pixel po pixelu. To je ten
         // rozdíl proti #284, kde `ViewThatFits` vybíral pořád nejširší variantu a rozhodovat musela
         // spočítaná šířka (`TextWidth`): tam byly popisky v řadě se `lineLimit`em, takže se
         // **zkracovaly** a ideální šířka o zúžení nic neřekla. Tady se pruh **zalomí**, a proto
@@ -57,6 +57,7 @@ struct PullRequestTabBar: View {
             bar(.full)
             bar(.labels)
             bar(.icons)
+            bar(.compact)
         }
     }
 
@@ -89,11 +90,16 @@ struct PullRequestTabBar: View {
     /// „kam se dá jít“, ale „kde jsem“. Podtržení to říká taky, jenže samo o sobě jen u jedné ze
     /// sedmi ikon — a to je zrovna ten údaj, kvůli kterému se do pruhu kouká nejčastěji.
     ///
-    /// **Čtvrtá podoba (samotné ikony, bez popisku i u aktivní) tu není schválně.** Změřeno
-    /// (`TabStripWidthTests`): `icons` se s nejdelším popiskem (`Změněné soubory`) vejde do tabu
-    /// od **564 b**, tedy do okna od 617 — a i s trojmístnými odznaky u všech záložek od 636 b,
-    /// tedy okna 689. Podlaha okna je 700, takže na čtvrtou podobu se **nedá přijít**; kód, který
-    /// nikdo nikdy neuvidí, je horší než měření, které to hlídá.
+    /// **Čtvrtá podoba přibyla u #452 — a je to změna měření, ne změna názoru.** Do té doby tady
+    /// stálo, že samotné ikony bez popisku i u aktivní záložky **nevzniknou**, protože se na ně
+    /// nedá přijít: se sedmi záložkami se `icons` vešly do tabu od 564 b (okno 617) a i
+    /// s trojmístnými odznaky u všech od 636 b (okno 689), tedy pod podlahu okna 700.
+    ///
+    /// Osmá záložka (`Zeptat se`, #452) to posunula: `icons` s trojmístnými odznaky chtějí podle
+    /// nového měření **645 až 711 b** podle toho, která záložka je aktivní — a tab v nejužším okně
+    /// má 647. Šest z osmi podob se tedy nevejde a pruh by se v tom krajním stavu **zalomil**, což
+    /// je přesně ta porucha, kterou #318 opravovalo. Kód, který nikdo neuvidí, je horší než měření;
+    /// tady ale to měření říká, že se na něj přijít **dá**.
     enum Layout: CaseIterable {
         /// Jak to má být: popisky u všech záložek a vpravo `+X −Y`.
         case full
@@ -101,6 +107,22 @@ struct PullRequestTabBar: View {
         case labels
         /// Ikony s odznaky; popisek jen u aktivní záložky.
         case icons
+        /// Jen ikony s odznaky — **ani u aktivní záložky popisek není**.
+        ///
+        /// Poslední záchrana pro krajní stav (trojmístné odznaky v nejužším okně). Ztrácí se v ní
+        /// jediná vypsaná odpověď na „kde jsem“, ale zbývá podtržení — a zalomený pruh je horší:
+        /// ztrojnásobí výšku a odsune obsah, kvůli kterému je okno otevřené.
+        case compact
+
+        /// Kreslí se v téhle podobě popisek? Vyčerpávající `switch`, ne `!= .icons`: pátá podoba
+        /// by jinak mlčky dostala popisky podle toho, kam ji někdo napsal.
+        func showsLabel(isActive: Bool) -> Bool {
+            switch self {
+            case .full, .labels: true
+            case .icons: isActive
+            case .compact: false
+            }
+        }
     }
 
     /// Jedna podoba pruhu. Záložky jsou ve všech tytéž — liší se **jen** tím, co se u nich
@@ -121,16 +143,20 @@ struct PullRequestTabBar: View {
     /// Rozhoduje **vlastnost tabu**, ne jeho index: `Kontroly` (#215) sedí nalevo doprostřed,
     /// takže zadrátovaná pozice by dělič posunula o jedno místo vedle. Od #306 je pruh konstantní,
     /// takže by se dala spočítat i z indexu — vlastnost přesto zůstává, protože o tom, kde dělič
-    /// patří, rozhoduje **čí výstup záložka ukazuje**, a to je odpověď, která přežije i sedmou
+    /// patří, rozhoduje **do které skupiny záložka patří**, a to je odpověď, která přežije i další
     /// záložku vloženou doprostřed.
+    ///
+    /// **Porovnává se skupina, ne příznak** (#452): od `Zeptat se` jsou skupiny tři, takže dělič
+    /// je všude, kde se skupina změní — a `Bool` z #242 by ten druhý předěl nedokázal popsat.
     private func needsSeparator(before index: Int) -> Bool {
         guard index > 0 else { return false }
         let tabs = PullRequestTab.allCases
-        return tabs[index].isReviewerOutput && !tabs[index - 1].isReviewerOutput
+        return tabs[index].group != tabs[index - 1].group
     }
 
-    /// Dělič v pruhu záložek: nalevo je to, co je na PR (a co má i GitHub), napravo to, co s ním
-    /// udělaly naše reviewery. Bez něj vypadá řada záložek jako jeden dlouhý seznam.
+    /// Dělič v pruhu záložek: nalevo je to, co je na PR (a co má i GitHub), uprostřed to, co s ním
+    /// udělaly naše reviewery, vpravo rozhovor (#452). Bez něj vypadá řada záložek jako jeden
+    /// dlouhý seznam.
     ///
     /// **Ne `Divider()`** — ten si orientaci bere z okolní osy, takže by ve vodorovném `HStack`u
     /// vyšel naležato; tady je potřeba svislá čárka. Tatáž past jako u linky pod záložkami.
@@ -193,7 +219,7 @@ struct PullRequestTabBar: View {
 
     private func item(_ tab: PullRequestTab, layout: Layout) -> some View {
         let isActive = selection == tab
-        let showsLabel = layout != .icons || isActive
+        let showsLabel = layout.showsLabel(isActive: isActive)
         return Button {
             withAnimation(.easeOut(duration: 0.18)) { selection = tab }
         } label: {
@@ -331,6 +357,10 @@ struct PullRequestTabBar: View {
         // v okně jednu ikonu, ne dvě.
         case .findings: "text.magnifyingglass"
         case .progress: "chart.bar.doc.horizontal"
+        // Bublina s otazníkem: je to **otázka**, ne diskuze — `bubble.left.and.bubble.right`
+        // patří `Konverzaci` a dvě bubliny v jednom pruhu by se pletly. Otazník uvnitř říká, že
+        // se tu ptám já, ne že si tu píšou kolegové.
+        case .ask: "questionmark.bubble"
         }
     }
 }

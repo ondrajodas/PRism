@@ -348,13 +348,24 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    a **jeden čtecí MCP nástroj**, jehož jméno je v konfiguraci (`issueTextTool`) —, tytéž
    zákazy z `ClaudeCommand.disallowedTools`, a v povoleních není `Write`, `Edit`, `Bash`,
    `ReportFindings` ani `Skill`. `ToolSearch` v ní být **musí**, bez něj se MCP nástroj nedá
-   zavolat ([rozbor](docs/architektura.md#text-issue-a-komentáře-pod-pr-345)).
+   zavolat ([rozbor](docs/architektura.md#text-issue-a-komentáře-pod-pr-345)). A **rozhovor nad PR**
+   (#452, tab `Zeptat se`) je **třetí vyjmenovaná session** se sadou **užší než reviewerova**:
+   `Read,Grep,Glob,Bash(git:*)`, tedy **bez `ReportFindings`** (nemá co hlásit) a **bez `Skill`**
+   (skill načtený za běhu si umí říct o odeslání na GitHub), se **stejnou** konstantou
+   `ClaudeCommand.disallowedTools`. Obě hodnoty tvrdí test **literálem**, jako u #345. Kontext
+   (nálezy, konverzace, checky) jde do promptu **cestou k souboru** vedle pracovního stromu, ne jako
+   nástroj — precedens #120; diff si session přečte `git diff <base>...HEAD`
+   ([rozbor](docs/architektura.md#rozhovor-nad-pr--tab-zeptat-se-452)).
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
 4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
+
+   **Rozhovor nad PR (#452) se tomuhle netýká, a je to zapsaná výjimka**: ukládá se **k PR, ne
+   k `headSha`**, protože rozhovor není nález — otázka „proč se ten mutex bere“ pushem nezastará.
+   Podmínka mluví o nálezech, tedy o tvrzení proti kódu.
 
    **Kontrola nálezů (#150) na tom stojí, ne obchází to**: nese `againstHeadSha` — hlavu, proti
    které běžela —, a jak se hlava posune, `Policy.recheck(of:head:)` odznaky nevydá. „Vyřešeno“
@@ -372,7 +383,7 @@ viz tvrdá podmínka č. 1.
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, login přihlášeného účtu (#330), labely s vyžádanými reviewery včetně týmů (#392) a od #420 **hlavy víc PR jedním dotazem**. **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326). Od #150 dvě podoby běhu — review a kontrola nálezů z minula. Vedle nich dvě krátké session, které o review nic nevědí: překlad nálezů a dotažení textu issue (#345). Od #327 umí transcript session i **přepsat k přečtení** | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326). Od #150 dvě podoby běhu — review a kontrola nálezů z minula. Vedle nich tři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345) a **rozhovor nad PR** (#452, vlastní užší sada nástrojů a `--resume`). Od #327 umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu i zadání pro agenta, obsah dashboardu a dění, geometrie, na kterou se ptá kresba, a **desítky dalších**. Úplný katalog s důvody je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej tam podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
@@ -601,7 +612,9 @@ grep -rln 'func updateNSView' App                           # výčet: rozhoduje
 grep -rnE '\.(green|red|yellow|orange)([^A-Za-z0-9_]|$)' App | grep -vE ':[0-9]+: *///?'
 ```
 
-- **Kombinace kláves se v `App/` píše jen v katalogu zkratek** (#441). Dvě tlačítka se stejnou
+- **Kombinace kláves se v `App/` píše jen v katalogu zkratek** (#441), a **zkratka okna se v tabu,
+  který si tutéž klávesu bere, zakáže** (#452: `⌘⏎` odesílá otázku v `Zeptat se`, rozhoduje
+  `Policy.claimsReturnShortcut`). Dvě tlačítka se stejnou
   kombinací nejsou chyba ani pád — vyhraje to zaregistrované později (#151, #184) a druhá
   zkratka „nefunguje“. Rozhoduje `Policy.windowShortcut(_:)` a překládá to jediné místo
   (`WindowShortcutButtons`, `View.windowShortcut(_:)`); popiska se **odvozuje**, nikdy neopisuje

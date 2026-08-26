@@ -14,16 +14,22 @@ import Testing
 ///
 /// Naměřeno tady, na `NSHostingView.fittingSize`, s odsazením pruhu (2 × 12 b) uvnitř čísla:
 ///
-/// | Podoba | Ideální šířka tabu | Okno (+ rail 53) |
-/// |---|---|---|
-/// | `full` — popisky a `+X −Y` | 996–998 b | 1049–1051 b |
-/// | `labels` — popisky, bez `+X −Y` | 886–888 b | 939–941 b |
-/// | `icons` — ikony, popisek u aktivní | 498–564 b | 551–617 b |
+/// | Podoba | Ideální šířka tabu | Okno (+ rail 53) | S odznaky `888` |
+/// |---|---|---|---|
+/// | `full` — popisky a `+X −Y` | 1131–1133 b | 1184–1186 b | 1216–1218 b |
+/// | `labels` — popisky, bez `+X −Y` | 1021–1023 b | 1074–1076 b | 1093–1095 b |
+/// | `icons` — ikony, popisek u aktivní | 573–639 b | 626–692 b | 645–711 b |
+/// | `compact` — jen ikony (#452) | 526 b | 579 b | 598 b |
 ///
 /// Pásma jsou tam proto, že šířka závisí na tom, **která záložka je aktivní**: aktivní popisek je
 /// polotučný a v `icons` je jediný, co se kreslí. Horní konec drží `Změněné soubory`, dolní
-/// `Nálezy`. S trojmístnými odznaky u všech záložek (`888`) vyjde `icons` na 636 b, tedy okno 689 —
-/// pořád pod podlahou okna (700), a proto nemá pruh čtvrtou podobu.
+/// `Nálezy`; `compact` pásmo nemá, protože v ní není žádný popisek.
+///
+/// **Čísla se u #452 posunula o osmou záložku** (`Zeptat se`) a s nimi jedno rozhodnutí: do té
+/// doby čtvrtá podoba **nebyla**, protože se na ni nedalo přijít (`icons` s odznaky `888` chtěly
+/// 636 b, tedy okno 689, pod podlahou 700). S osmi záložkami chtějí **645 až 711 b** a tab
+/// v nejužším okně má 647 — takže by se pruh v tom krajním stavu zalomil. `compact` je proto
+/// od #452 poslední kandidát a s 598 b se vejde i tam.
 ///
 /// Pro srovnání, co bylo naměřené u #316 (a co z toho pořád platí): 6 záložek se všemi odznaky
 /// a `+X −Y` potřebovalo tab 884 b / okno 937, sedmá záložka to posunula o dva body na 886 / 939
@@ -92,8 +98,9 @@ struct TabStripWidthTests {
     }
 
     /// A totéž s odznaky, které jsou širší, než jaké se v okně kdy objeví: **trojmístné u všech**
-    /// šesti počítaných záložek. Je to strop, ne běžný stav — a je to zároveň důvod, proč pruh
-    /// nepotřebuje čtvrtou podobu bez popisku i u aktivní záložky.
+    /// šesti počítaných záložek. Je to strop, ne běžný stav — a od #452 je to zároveň důvod, proč
+    /// pruh **čtvrtou podobu má**: s osmi záložkami se `icons` v tomhle stropu do nejužšího okna
+    /// nevejdou (645–711 b proti 647 b), kdežto `compact` ano (598 b).
     @Test("Nezalomí se ani s trojmístnými odznaky u všech záložek")
     func staysOnOneRowWithThreeDigitBadges() {
         let single = singleRowHeight()
@@ -129,16 +136,21 @@ struct TabStripWidthTests {
     /// proti té podobě vykreslené napřímo (`bar(_:)`), takže test nezávisí na tom, čím se podoby
     /// od sebe liší — jen na tom, že se vybrala ta správná.
     ///
-    /// Hranice jsou z naměřených ideálních šířek: `full` od tabu ~998, `labels` od ~888, pod tím
-    /// `icons`. Šířky v testu jsou uvnitř pásem, ne na hranách — hrana se hlídá měřením výšky výš.
+    /// Hranice jsou z naměřených ideálních šířek: `full` od tabu ~1131, `labels` od ~1021, pod tím
+    /// `icons` (a pod ním `compact`, na který se s běžnými odznaky nedá přijít — viz test níž).
+    /// Šířky v testu jsou uvnitř pásem, ne na hranách — hrana se hlídá měřením výšky výš.
+    ///
+    /// **Posunuly se u #452 o osmou záložku**: co bylo `full` v okně 1100, je dneska `labels`.
+    /// Ustupuje tedy `+X −Y`, přesně jak to pořadí podob předepisuje — je to tatáž výměna, jakou
+    /// zaplatila sedmá záložka u #316.
     @Test("V jaké šířce se kreslí která podoba")
     func picksTheStageThatFits() throws {
         let cases: [(window: CGFloat, layout: PullRequestTabBar.Layout)] = [
             (1400, .full),
-            (1100, .full),
-            (1000, .labels),
-            (960, .labels),
-            (900, .icons),
+            (1250, .full),
+            (1150, .labels),
+            (1080, .labels),
+            (1000, .icons),
             (narrowestWindow, .icons),
         ]
 
@@ -157,21 +169,33 @@ struct TabStripWidthTests {
     }
 
     /// **Na každou podobu se musí dát přijít.** Vyčerpávající výčet přes `Layout.allCases`, ne tři
-    /// vypsané případy: kdyby někdo přidal čtvrtou podobu, musí ukázat šířku, ve které se kreslí —
-    /// a to je zrovna to, co u #318 rozhodlo, že čtvrtá podoba (samotné ikony) **nevzniká**.
+    /// vypsané případy: kdo přidá další podobu, musí ukázat šířku a data, při kterých se kreslí —
+    /// a to je zrovna to, co u #318 rozhodlo, že čtvrtá podoba **nevzniká**, a u #452 (po přibytí
+    /// osmé záložky) obráceně, že vzniknout **musí**.
     ///
     /// Šířka se bere jako ideální šířka té podoby, ale nikdy užší než podlaha okna: pod ni se
     /// uživatel nedostane, takže „vejde se do 500 b“ ještě neznamená, že to někdo uvidí.
+    ///
+    /// **`compact` se nedá ukázat s běžnými odznaky** a je to samo tvrzení, ne obcházení testu:
+    /// s nimi se v nejužším okně vejdou `icons` (639 b proti 647 b), takže `compact` je stav pro
+    /// **krajní data**, ne pro úzké okno. Ukazuje se proto s trojmístnými odznaky u všech záložek,
+    /// tedy přesně tím stropem, kvůli kterému vznikla.
     @Test("Na každou podobu se dá přijít")
     func everyStageIsReachable() throws {
         for layout in PullRequestTabBar.Layout.allCases {
+            let wide = layout == .compact
+            let badge = wide ? Self.wideBadge(of:) : Self.badge(of:)
+            let counts = wide ? (additions: 2480, deletions: 960) : (additions: 248, deletions: 96)
             let width = max(idealWidth(of: layout, selection: .commits),
                             tabWidth(ofWindow: narrowestWindow))
-            let whole = try render(bar(selection: .commits, badges: true,
-                                       counts: (additions: 248, deletions: 96)), width: width)
+            let whole = try render(
+                PullRequestTabBar(selection: .constant(.commits), badge: badge)
+                    .diffCounts(counts),
+                width: width
+            )
             let expected = try render(
-                PullRequestTabBar(selection: .constant(.commits), badge: Self.badge(of:))
-                    .diffCounts((additions: 248, deletions: 96))
+                PullRequestTabBar(selection: .constant(.commits), badge: badge)
+                    .diffCounts(counts)
                     .bar(layout),
                 width: width
             )
@@ -183,11 +207,12 @@ struct TabStripWidthTests {
     /// žebříku výš — ten by prošel i tehdy, kdyby `full` přestala rozsah změny kreslit úplně,
     /// protože porovnává obě strany proti témuž kódu.
     ///
-    /// Šířka je z pásma, ve kterém se ta výměna doopravdy odehrává: okno 1000 je nad hranicí
-    /// popisků (941) a pod tím, co by pruh potřeboval i s pilulkou (~1051).
+    /// Šířka je z pásma, ve kterém se ta výměna doopravdy odehrává: okno 1100 je nad hranicí
+    /// popisků (1076) a pod tím, co by pruh potřeboval i s pilulkou (~1186). **Posunuto u #452**
+    /// z okna 1000, kde se od osmé záložky kreslí už `icons`.
     @Test("V úzkém pruhu se rozsah změny nekreslí")
     func dropsTheDiffstatWhenItDoesNotFit() throws {
-        let narrow = tabWidth(ofWindow: 1000)
+        let narrow = tabWidth(ofWindow: 1100)
 
         let withCounts = try render(bar(selection: .commits, badges: true,
                                         counts: (additions: 248, deletions: 96)), width: narrow)
@@ -216,6 +241,9 @@ struct TabStripWidthTests {
     /// takže na tuhle chybu měření výšky ani přesahu nestačí (poučení z #284). Hlídá se to
     /// porovnáním **ideální šířky vybrané podoby** s tím, kolik místa v tabu doopravdy je: když se
     /// podoba vejde celá, nemá se co smršťovat.
+    ///
+    /// **S běžnými odznaky se pořád vejdou `icons`** (573–639 b proti 647 b), takže se popisek
+    /// aktivní záložky v nejužším okně neztrácí — `compact` je až pro krajní data (viz výš).
     @Test("V nejužším okně se popisky neřežou, protože se tam nekreslí")
     func theNarrowStageFitsWithoutShrinking() {
         let available = tabWidth(ofWindow: narrowestWindow)
@@ -250,7 +278,20 @@ struct TabStripWidthTests {
         let labels = idealWidth(of: .labels, selection: .commits)
 
         #expect(icons < labels - 250,
-                "ikonový pruh chce \(icons) b proti \(labels) b s popisky — šest popisků nezmizelo")
+                "ikonový pruh chce \(icons) b proti \(labels) b s popisky — sedm popisků nezmizelo")
+    }
+
+    /// A `compact` shodí **i ten poslední** (#452) — jinak by to byla jen jinak pojmenovaná
+    /// `icons` a v krajním stavu by se pruh zalomil pořád.
+    ///
+    /// Tvrdí se to dvakrát: že je užší než `icons` u **nejdelšího** popisku, a že je **stejně
+    /// široká u každé aktivní záložky** — druhé samo o sobě znamená, že se žádný popisek nekreslí.
+    @Test("V nejužší podobě nemá popisek ani aktivní záložka")
+    func theCompactStageDropsEveryLabel() {
+        let compact = PullRequestTab.allCases.map { idealWidth(of: .compact, selection: $0) }
+
+        #expect(Set(compact).count == 1, "šířka `compact` se mění s aktivní záložkou: \(compact)")
+        #expect(compact[0] < idealWidth(of: .icons, selection: .filesChanged))
     }
 
     // MARK: - Měření
@@ -305,6 +346,7 @@ struct TabStripWidthTests {
         case .checks: .blocking(1)
         case .findings: .blocking(3)
         case .progress: .live
+        case .ask: .live
         }
     }
 
@@ -312,7 +354,7 @@ struct TabStripWidthTests {
     /// PR se stovkami souborů, commitů i komentářů zároveň je krajnost, a právě proto je to strop.
     private static func wideBadge(of tab: PullRequestTab) -> PullRequestTabBadge? {
         switch tab {
-        case .progress: .live
+        case .progress, .ask: .live
         case .checks, .findings: .blocking(888)
         case .overview, .filesChanged, .commits, .conversation: .count(888)
         }

@@ -65,6 +65,16 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// kterých se nedalo porovnat, kdo kde je — a u spadlé session se důvod ani konec logu
     /// neměly kam vejít.
     case progress
+    /// Rozhovor s Claudem nad tímhle PR (#452) — otázka, na kterou reviewer nebyl puštěný.
+    ///
+    /// **Záložka, ne pravý panel.** Odpověď je próza s úryvky kódu; panel má 300 bodů a už drží
+    /// rozdělané review, labely a reviewery, takže by z něj třetí věc udělala skladiště. Cena je,
+    /// že při psaní otázky není vidět diff — a vyvažuje ji to, že odpověď smí odkázat na soubor
+    /// a řádek, takže se do diffu dá skočit.
+    ///
+    /// **Vpravo za druhým děličem** (viz `group`): pruh dělí, co je *na PR*, od toho, *co s ním
+    /// udělaly reviewery. Rozhovor není ani jedno — je to třetí druh, *co s tím dělám já teď*.
+    case ask
 
     /// Se kterým tabem se PR otevírá.
     ///
@@ -88,25 +98,43 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
         case .checks: "Kontroly"
         case .findings: "Nálezy"
         case .progress: "Průběh"
+        case .ask: "Zeptat se"
+        }
+    }
+
+    /// Do které skupiny pruhu záložka patří — a tím i **kde se kreslí dělič** (#242, třetí
+    /// skupina od #452).
+    ///
+    /// Vlastnost tabu, ne pozice v poli: `Kontroly` (#215) sedí **nalevo** doprostřed, takže dělič
+    /// spočítaný z indexu by se tím tiše posunul na špatné místo. Vlastnost přežije i záložku
+    /// vloženou doprostřed, zadrátovaná pozice ne.
+    ///
+    /// **Do #452 to byl `Bool` (`isReviewerOutput`)** a dělič se kreslil tam, kde se překlopil.
+    /// Skupiny jsou ale tři, ne dvě — a `Bool` umí popsat jen jeden předěl, takže by osmá záložka
+    /// za druhým děličem musela tvrdit, že je *výstup reviewerů*. Výčet to říká rovnou a `switch`
+    /// nad ním je vyčerpávající, takže devátá záložka si vynutí rozhodnutí, kam patří.
+    enum Group: Int, Hashable, Sendable, CaseIterable {
+        /// Co je **na PR** — to, co má i GitHub.
+        case pullRequest
+        /// Co s ním udělaly **naše reviewery**.
+        case reviewerOutput
+        /// Co s tím dělám **já teď**.
+        case mine
+    }
+
+    var group: Group {
+        switch self {
+        case .overview, .filesChanged, .commits, .conversation, .checks: .pullRequest
+        case .findings, .progress: .reviewerOutput
+        case .ask: .mine
         }
     }
 
     /// Je to výstup **našich** reviewerů, ne něco, co je na PR?
     ///
-    /// Podle toho se v pruhu záložek kreslí dělič (#242): nalevo je to, co má i GitHub, napravo
-    /// to, co s PR udělaly reviewery. Bez něj by pět záložek vypadalo jako jeden dlouhý seznam.
-    ///
-    /// Je to vlastnost tabu, ne pozice v poli: `Kontroly` (#215) sedí **nalevo** doprostřed,
-    /// takže dělič spočítaný z indexu by se tím tiše posunul na špatné místo. Do #306 se navíc
-    /// index měnil podle dat, protože se `Kontroly` u PR bez CI nekreslily — to už neplatí, ale
-    /// první důvod stačí: vlastnost přežije i sedmou záložku vloženou doprostřed, zadrátovaná
-    /// pozice ne.
-    var isReviewerOutput: Bool {
-        switch self {
-        case .overview, .filesChanged, .commits, .conversation, .checks: false
-        case .findings, .progress: true
-        }
-    }
+    /// Odvozené ze `group`, ne druhý `switch`: dvě tvrzení o téže věci se rozejdou a chyba by
+    /// byla vidět jinde (v děliči), než by vznikla.
+    var isReviewerOutput: Bool { group == .reviewerOutput }
 
     /// Je v tomhle tabu vidět panel s nálezy a mým review (#294)?
     ///
@@ -147,10 +175,14 @@ enum PullRequestTab: Hashable, Sendable, CaseIterable {
     /// fakt o každém ze sedmi případů, tedy tentýž druh věci jako `czechLabel`
     /// a `isReviewerOutput`. `Policy` by na totéž potřebovala týž `switch` a druhé místo, kam se
     /// chodit podívat.
+    /// **`Zeptat se` panel nemá** (#452), a je to tentýž důvod jako u `Kontrol`: plocha tabu je
+    /// próza s úryvky kódu a composer pod ní, tedy obsah, který šířku potřebuje. Panel by k tomu
+    /// v jednom okně postavil druhé textové pole s vlastním odesílacím tlačítkem — a to je zrovna
+    /// ta záměna, kvůli které composer komentáře (#216) nesedí v panelu.
     var showsReviewPanel: Bool {
         switch self {
         case .overview, .filesChanged, .commits, .conversation: true
-        case .checks, .findings, .progress: false
+        case .checks, .findings, .progress, .ask: false
         }
     }
 }

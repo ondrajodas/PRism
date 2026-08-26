@@ -300,6 +300,11 @@ struct WindowShortcutsTests {
             // Paleta ⌘K je překryv, který existuje jen otevřený — a zkratky okna, které by se
             // s ní srazily, jsou nad ní zakázané (#184).
             "Views/CommandPaletteView.swift",
+            // Composer v tabu `Zeptat se` (#452): `⌘⏎` odesílá otázku a zkratka **okna** je nad
+            // tím tabem zakázaná (`Policy.claimsReturnShortcut`), takže se sem klávesa propadne.
+            // Je to tentýž vzorec jako u palety o řádek výš — jen se místo překryvu rozhoduje
+            // podle toho, který tab je na obrazovce.
+            "Views/AskView.swift",
         ]
 
         let found = Set(try sources().filter { $0.code.contains("keyboardShortcut(") }.map(\.path))
@@ -331,6 +336,11 @@ struct WindowShortcutsTests {
             "Views/CommandPaletteView.swift",
             // `⌥↵` u zakládání labelu (#413) sedí na **poli** v popoveru, ne na okně.
             "Views/LabelPickerView.swift",
+            // `⌘⏎` u composeru v tabu `Zeptat se` (#452) — kapsle vedle tlačítka, které tu
+            // klávesu doopravdy registruje o pár řádků výš v tomtéž souboru. Kreslí se literálem
+            // schválně: kombinace **není** v katalogu okna, protože ji tam registruje tab, ne
+            // okno; do katalogu patří jedině to, co se může srazit napříč obrazovkami.
+            "Views/AskView.swift",
         ]
 
         var found: Set<String> = []

@@ -2214,6 +2214,125 @@ stromu by odpovídala z hlavy. Řídí to `AppStore+Recheck`.
   Vlastní mapa (`recheckTasks`) je proto, že na `reviewTasks` visí chipy reviewerů, pruh průběhu
   i podmnožina k opakování (#149) — kontrola žádný skill nepouští.
 
+### Rozhovor nad PR — tab `Zeptat se` (#452)
+
+**Třetí vyjmenovaná session** vedle revieweera a dotažení textu issue. Odpovídá na otázku, na
+kterou reviewer nebyl puštěný — *proč tohle vůbec dělá*, *co z těch nálezů je doopravdy problém* —
+a dneska se odnáší do prohlížeče nebo do terminálu. Řídí to `AppStore+Ask`, session pouští
+`ClaudeAskSession` za protokolem `AskRunning`.
+
+- **Sada nástrojů je užší než reviewerova** (tvrdá podmínka č. 2): `Read,Grep,Glob,Bash(git:*)`,
+  bez `ReportFindings` (nemá co hlásit — nálezy sbírá reviewer a ukládají se klíčované `headSha`)
+  a bez `Skill` (skill načtený za běhu si umí říct o odeslání na GitHub). `--disallowedTools` je
+  **tatáž konstanta** `ClaudeCommand.disallowedTools`. Obě hodnoty tvrdí `AskCommandTests`
+  **literálem**, jako u #345, a k tomu, že sada je **vlastní podmnožina** reviewerovy s rozdílem
+  právě těch dvou položek.
+- **Jedna session na pull request, držená přes `--resume`.** Ověřeno spuštěním, že si session
+  předchozí odpověď pamatuje (viz [`docs/claude-cli.md`](claude-cli.md), *Rozhovor nad PR*).
+  `session_id` se **přepisuje po každé odpovědi** — vrácené id je někdy totéž a někdy nové (větev
+  z původní), takže držet to první by po druhé otázce navazovalo pořád na tutéž. A **když
+  nedorazí žádné, staré se zahodí**: rozhovor s mrtvým identifikátorem (session vypršela, cache se
+  uklidila) by jinak selhával **navždycky** a v okně není nic, čím ho začít znovu. Příští otázka se
+  tím stane první — založí novou session; zprávy zůstávají.
+- **Materiál se přepisuje před každou otázkou, ne jen před první**, a je to oprava první podoby
+  #452. Zápis do cache je zdarma, kdežto zastaralý snímek stál pravdivost pruhu `ví o tomhle PR:`:
+  ten se počítá **živě** z toho, co má okno teď, takže by nad navazující otázkou tvrdil `3 nálezy`
+  o session, která o nich nikdy neslyšela — tedy *text v UI, který tvrdí víc, než data unesou*.
+  Prompt navazující otázky proto říká, že je soubor **čerstvý**, a stojí to nejvýš jeden `Read`.
+- **Odpověď není levná, a je to změřené**: první otázka nad tímhle repem stála **$1,56 a 125 s**,
+  navazující jednovětá **$0,96 a 6,8 s**. Cenu určuje **kontext, ne délka otázky** — session s sebou
+  nese celý rozhovor včetně přečteného diffu, takže „krátká doplňující otázka je levná“ neplatí.
+- **Ukládá se k PR, ne k `headSha`** (`ask/<owner>/<repo>/<pr>.json`, `AskStore`) — vědomá výjimka
+  z toho, jak se klíčuje všechno ostatní kolem review. Tvrdá podmínka č. 5 mluví o **nálezech**:
+  ty nesmí platit pro kód, který už neexistuje. Otázka „proč se ten mutex bere“ ale pushem
+  nezastará; klíčovat ji commitem by znamenalo, že rozhovor zmizí zrovna ve chvíli, kdy se k němu
+  člověk vrací.
+- **Čte se až při otevření PR, ne při startu.** Na rozdíl od draftů, které se čtou celé při startu
+  kvůli indikátoru v seznamu: rozhovor v seznamu nic nemá, takže by se jinak při každém spuštění
+  dekódovalo všechno, co si kdo kdy vyzkoušel. Chybějící klíč v mapě znamená „ještě jsme se
+  nedívali“, prázdný rozhovor „na disku nic není“.
+- **Zápis čte hodnotu až v tasku** (`persistAsk`, tentýž vzor jako `persistDraft`). Otázka
+  a odpověď se zapisují každá zvlášť, takže dva tasky běží krátce po sobě a **pořadí jejich
+  doběhnutí není zaručené** — se snímkem v parametru by starší zápis přebil novější a v souboru by
+  po restartu chyběla odpověď, za kterou se zaplatilo.
+- **Kontext je materiál, ne nástroj.** Nálezy, konverzace a checky si session nedotahuje sama —
+  k tomu by potřebovala `gh`, a ten se nedá povolit jen na čtení. Skládá je `Policy.askBrief` do
+  souboru **vedle** pracovního stromu (`worktrees/<owner>/<repo>/<pr>-ask.md`, `AskContextStore`)
+  a do promptu jde **cesta**, ne obsah — tentýž precedens jako zadání pro reviewera (#120), i to
+  proč: cizí text v promptu má váhu instrukce, ve čteném souboru je to materiál k posouzení.
+  Soubor je **jeden na PR** (bez `headSha` v názvu), protože se přepisuje při každé otázce; verze
+  na commit by po deseti pushnutích nechala v cache deset kopií téhož.
+- **Diff v materiálu není.** Session stojí v pracovním stromě na hlavě PR a `Bash(git:*)` má, takže
+  si změny přečte `git diff <base>...HEAD` — toutéž cestou jako reviewer. Nasypat diff do souboru
+  by znamenalo stovky kilobajtů v souboru, který se zakládá při každé první otázce, a druhou pravdu
+  o tom, co se v PR změnilo.
+- **Žádná sekce materiálu nezmizí mlčky.** Prázdná sekce dostane větu (`nálezy nejsou`,
+  `konverzace se nenačetla`, `konverzace je zkrácená`) — chybějící sekce je mezera, kterou si model
+  doplní domněnkou, kdežto věta je informace. Je to tatáž úvaha jako u `ReviewIntentText`.
+- **Pracovní strom je ten, jaký dostal reviewer** (tvrdá podmínka č. 3) — `checkout.worktree(for:at:)`
+  na čerstvě dotažené hlavě. Hlava se bere **znovu**, ne z paměti: mezi nakreslením tlačítka
+  a kliknutím mohl přijít commit.
+- **Běžící odpověď je běh jako každý jiný**: chrání repo před eviction (`busyRepositories`), počítá
+  se do `runningReviews` (dialog při zavření aplikace) a zavírání ji zabíjí (#264). Vlastní mapa
+  (`askTasks`) je ze stejného důvodu jako u kontroly nálezů — na `reviewTasks` visí chipy
+  reviewerů a rozhovor žádný skill nepouští. A protože jede přes `SubprocessStreamer(sessions:
+  .shared)`, zabije osiřelou session i **další start** (#351).
+- **Útrata jde do `SpendLedger`u**, tedy do téhož `Dneska stálo` jako review. Zapisuje se **před**
+  kontrolou zrušení: session, která doběhla, peníze stála, ať se odpověď uloží, nebo ne. Strop se
+  nedává — sazbu si člověk řídí tím, kolik se ptá; skrytá útrata je horší než drahá.
+- **Odpověď, která nedoběhla, nezmizí.** `AskAnswer` nese text **i** důvod, ne jedno nebo druhé
+  (tatáž úvaha jako `IntentTextResult`): vytimeoutovaná session, která něco stihla říct, řekla něco
+  pravdivého. A odpověď **bez textu a bez důvodu** dostane vlastní větu — prázdná bublina by
+  vypadala jako chyba vykreslení.
+- **Odpověď smí odkázat na soubor a řádek.** Prompt si o tvar `path/to/file.swift:80` říká
+  a `Policy.askReferences` ho v textu hledá; klik jde **toutéž cestou jako skok z nálezu**
+  (`anchor(inFile:line:)` + `scroll(to:)`). Kapsle stojí **pod prózou, ne uvnitř věty**, a je to
+  vědomá odchylka od návrhu: inline odkaz by znamenal obarvit `path:line` v `AttributedString`u,
+  který skládá `MarkdownInlineText` — a ten sází i popis PR a cizí komentáře, takže by se `file:80`
+  stalo klikatelným všude v okně.
+
+Co je v okně a proč zrovna tak:
+
+- **Osmá záložka za druhým děličem.** Pruh dělí, co je *na PR*, od toho, *co s ním udělaly
+  reviewery*; rozhovor je třetí druh — *co s tím dělám já teď*. Rozhoduje o tom
+  `PullRequestTab.group`, který u #452 nahradil `Bool` (`isReviewerOutput`): ten umí popsat jediný
+  předěl, takže by osmá záložka za druhým děličem musela tvrdit, že je výstup reviewerů.
+  `isReviewerOutput` se od #452 **odvozuje** ze `group`, aby se ty dvě odpovědi nemohly rozejít.
+- **Záložka, ne pravý panel.** Odpověď je próza s úryvky kódu; panel má 300 bodů a už drží
+  rozdělané review, labely a reviewery. `showsReviewPanel` je proto u `Zeptat se` `false` — pod
+  sebou by jinak stála dvě textová pole s vlastním odesílacím tlačítkem, tedy ta záměna, kvůli které
+  composer komentáře (#216) nesedí v panelu.
+- **Bubliny, ne karty.** Kdo mluví, se pozná stranou a barvou (`AskBubbleView`), ne hlavičkou
+  u každé zprávy — a bublina není přes celou šířku (78 %). Karty zůstávají v konverzaci na PR, která
+  odpovídá na „kdo co kdy řekl“.
+- **Že se odpovídá, nese prstýnek na místě příští bubliny**, ne pruh nad plochou: odpověď přijde
+  sem. Řádek u něj říká, co session dělá (`Policy.askActivity` — sloveso podle nástroje, ne jeho
+  jméno), a než něco řekne, stojí tam `přemýšlí…`; prázdno v té několikasekundové mezeře vypadá jako
+  zaseknuté okno. Prstýnek je `SpinningRing`, tedy CoreAnimation (#350).
+- **Pevný `VStack`, ne líný seznam** (`AskLogEagerTests`). Rozhovor má strop o řád níž než osa
+  konverzace, která od #361 líný seznam nemá vůbec: osa jich má nejvýš čtyři stovky, kdežto tady je
+  každá zpráva **zaplacená session**.
+- **`ví o tomhle PR:` je výčet toho, co jde do promptu**, ne toho, co aplikace ví — chipy se skládají
+  z týchž hodnot jako materiál (`AppStore.askContextChips`). Nula chip nedostane: „0 checků“ je
+  pravdivé, ale v tom pruhu se čte jako selhání.
+- **`čte · neodesílá` a věta u composeru jsou v okně**, ne jen v dokumentaci. Práva, o kterých ví
+  jenom `CLAUDE.md`, uživateli neřeknou nic.
+- **Prázdný tab nabízí tři otázky k odpíchnutí.** Jsou to obyčejná tlačítka, která **jen předvyplní
+  pole** — nápověda, co tab umí, ne sada příkazů.
+- **Během odpovědi se z tlačítka stane `Zastavit`.** Jedna odpověď stojí kolem dolaru a běží minuty,
+  takže „rozmyslel jsem si to“ nesmí znamenat čekat na konec; zakázané `Zeptat se` vedle prstýnku je
+  navíc tlačítko, které v tu chvíli nedělá nic. Je to **tentýž prvek v jiném stavu**, ne druhé
+  tlačítko. Zkratku `⌘.` si to **nebere** — `WindowShortcut.cancelReview` má u sebe napsané, proč
+  jedna klávesa nesmí podle stavu zastavit jednou review a jindy něco jiného.
+- **`⌘⏎` v tomhle tabu odesílá otázku**, takže je zkratka **okna** (otevření potvrzení odeslání,
+  #151, #441) nad ním **zakázaná** — rozhoduje `Policy.claimsReturnShortcut`. Dvě tlačítka s toutéž
+  kombinací znamenají, že vyhraje zaregistrované později (#184); zakázané tlačítko klávesu nebere
+  a propadne dál. Je to tentýž vzorec jako u `⌘2` a `⎋` nad otevřenou paletou.
+
+**Co se tímhle nemění: tvrdá podmínka č. 1.** Session nic neodesílá, `grep ReviewPublishing App/`
+vrací týž seznam a `SingleWayOutTests` procházejí beze změny. Kdo z odpovědi chce komentář na PR,
+pošle ho composerem v `Konverzaci`.
+
 ## Překlad nálezů (`App/Review/`)
 
 Nálezy se do jazyka z nastavení překládají **až po doběhnutí review**, ne instrukcí
@@ -4202,17 +4321,18 @@ Dvě věci, které z toho platí dál:
   i po smazání `narrowingWidth(by: 26)`. Cena je jedna úroveň vyjednávání na tab, což proti
   ~5,5× na úroveň v zanořeném seznamu není nic — tady jde o jeden blok, ne o tisíc řádků.
 
-### Pruh záložek — tři podoby podle šířky (#316, #318)
+### Pruh záložek — čtyři podoby podle šířky (#316, #318, #452)
 
 `PullRequestTabBar` je jediné místo v okně, kde se o podobě rozhoduje **`ViewThatFits`em**, a ne
-spočítanou šířkou. Kandidáti jsou tři a jmenují se `Layout`; bere se **první, který se vejde**,
-takže pořadí je to, co říká, co ustupuje dřív:
+spočítanou šířkou. Kandidáti jsou čtyři a jmenují se `Layout`; bere se **první, který se vejde**,
+takže pořadí je to, co říká, co ustupuje dřív. Čísla jsou **po osmé záložce** (`Zeptat se`, #452):
 
-| Podoba | Co kreslí | Ideální šířka tabu | Okno (+ rail 53) |
-|---|---|---|---|
-| `full` | popisky u všech záložek a vpravo `+X −Y` | 996–998 b | 1049–1051 b |
-| `labels` | popisky, bez `+X −Y` (#316) | 886–888 b | 939–941 b |
-| `icons` | ikony s odznaky, popisek jen u aktivní (#318) | 498–564 b | 551–617 b |
+| Podoba | Co kreslí | Ideální šířka tabu | Okno (+ rail 53) | S odznaky `888` |
+|---|---|---|---|---|
+| `full` | popisky u všech záložek a vpravo `+X −Y` | 1131–1133 b | 1184–1186 b | 1216–1218 b |
+| `labels` | popisky, bez `+X −Y` (#316) | 1021–1023 b | 1074–1076 b | 1093–1095 b |
+| `icons` | ikony s odznaky, popisek jen u aktivní (#318) | 573–639 b | 626–692 b | 645–711 b |
+| `compact` | jen ikony s odznaky (#452) | 526 b | 579 b | 598 b |
 
 Pásma jsou tam proto, že šířka závisí na tom, **která záložka je aktivní** — její popisek je
 polotučný a v `icons` je jediný, co se kreslí. Horní konec drží `Změněné soubory`, dolní `Nálezy`.
@@ -4237,10 +4357,17 @@ Co se u toho nemá rozbít:
   a tlačítko dostane nápovědu (`help`) — obojí **jen tehdy, když se popisek nekreslí**, ať se jméno
   nečte a neukazuje dvakrát. Prázdný řetězec by nechal prázdný tooltip, takže je to `ViewModifier`
   s `if let`, ne `help("")`.
-- **Čtvrtá podoba (samotné ikony) tu není, a je to podložené měřením.** `icons` se s nejdelším
-  popiskem vejde do tabu od 564 b (okno 617), a i s trojmístnými odznaky u všech záložek od 636 b
-  (okno 689) — pod podlahu okna (700). Na čtvrtou podobu se tedy nedá přijít; kód, který nikdo
-  neuvidí, je horší než měření, které to hlídá (`TabStripWidthTests`).
+- **Čtvrtá podoba přibyla u #452, a je to změna měření, ne názoru.** Do té doby tady stálo, že
+  samotné ikony bez popisku i u aktivní záložky **nevzniknou**, protože se na ně nedá přijít: se
+  sedmi záložkami se `icons` vešly do tabu od 564 b (okno 617) a i s trojmístnými odznaky u všech
+  od 636 b (okno 689), tedy pod podlahu okna 700. Osmá záložka to posunula na **645 až 711 b**
+  (podle toho, která je aktivní) proti tabu 647 b v nejužším okně — šest z osmi podob se nevejde
+  a pruh by se v tom krajním stavu **zalomil**, tedy přesně ta porucha, kterou #318 opravovalo.
+  `compact` se s 598 b vejde. **Na běžná data se na ni nepřijde** (`icons` chtějí 573–639 b) a je
+  to samo tvrzení v `TabStripWidthTests`: `compact` se ukazuje jedině s trojmístnými odznaky.
+- **Osmá záložka posunula i to, co je vidět ve výchozím okně** (#452). Okno 1100 dávalo do té doby
+  `full`; dneska je to `labels`, takže ve výchozí šířce **není `+X −Y`** a vrací se od ~1184 bodů.
+  Je to ta výměna, kterou pořadí podob předepisuje, a tatáž, jakou zaplatila sedmá záložka (#316).
 - **Kandidáti se vypisují, nedělají se `ForEach`em.** `ViewThatFits` vybírá mezi **svými dětmi**
   a jedna `ForEach` je jedno dítě.
 - **`bar(_:)` je `internal` a nese i okraj a linku pod pruhem.** Okraj je šířka, která se taky musí

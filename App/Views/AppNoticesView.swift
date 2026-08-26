@@ -61,6 +61,13 @@ struct AppNoticesView: View {
                 if let failure = store.intentFailure {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
+                // Rozhovor nad PR (#452): otázka i odpověď jsou **zaplacená** práce, takže
+                // neuložený rozhovor, o kterém se mlčí, vypadá po restartu jako rozhovor, který
+                // nikdy nebyl — a příští otázka za něj zaplatí kontext znovu. Totéž u materiálu,
+                // který se nepodařilo uložit: odpověď bez něj vypadá v okně stejně jako s ním.
+                if let failure = store.askFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
                 // Neuložený vzhled okna (#278) taky ne: zápis selhal, takže se režim
                 // **nepřepnul** — a klik do railu, po kterém se nic nestane, vypadá jako rozbitá
                 // aplikace.
@@ -94,6 +101,7 @@ struct AppNoticesView: View {
             || store.dismissalFailure != nil
             || store.intentFailure != nil
             || store.appearanceFailure != nil
+            || store.askFailure != nil
             || store.notificationFailure != nil
     }
 
