@@ -128,7 +128,7 @@ struct AskTabRenderProbe {
         )
         window.contentView = hosting
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         hosting.layoutSubtreeIfNeeded()
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))

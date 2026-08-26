@@ -5037,7 +5037,7 @@ do té odmlky odeslal **starší** otázku a rozepsanou dostal zpátky. Text pro
 přepnutí tabu. Odeslání vrací `Bool`, takže se pole vyprázdní **jen když otázka doopravdy odešla** —
 neodeslaná v něm zůstane.
 
-Testů **4173**, všechny zelené — nových je sedm sad kolem rozhovoru (`AskCommandTests`,
+Testů **4196**, všechny zelené — nových je sedm sad kolem rozhovoru (`AskCommandTests`,
 `AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`,
 `AskComposerTests`) a k tomu stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam
 (#361). `AskComposerTests` jedou nad **skutečným oknem a skutečnou klávesou**
@@ -5068,11 +5068,15 @@ z opraveného měření vychází stejně; čísla v okně jsou 18 ms u dvaceti 
 u tří set, proti 413 ms, se kterými se pevný stack přijal u osy konverzace (#361). Měřidlo od té
 doby vypisuje **výšku obsahu a počet prvků**, protože zrovna tuhle chybu z časů poznat nejde.
 
-**Zeleno je z běhu po polovinách, a je u toho co zapsat.** Plný `xcodebuild test` se na tomhle
-stroji zasekne na **třech posledních suitách** (`AppStore — komentář pod PR`, `— odpovídání do
-vláken`, `— labely a reviewery`): v testovacím hostu se nasbírá **76 vláken v
-`-[NSAnimation _runBlocking]`** a dispatch pool narazí na soft limit 75, takže na zbytek už žádné
-vlákno nezbude (`sample` to hlásí větou *too many dispatch threads blocked in synchronous
-operations*). **Není to z #452** — změřeno se **zastashovanými** změnami, se stejným výsledkem na
-týchž třech suitách. Rozdělené na dvě poloviny (208 a 208 suit) doběhne obojí do 40 s a pokrytí je
-prokazatelně stejné: množina jmen suit z obou polovin je nadmnožinou té z plného běhu.
+**Zeleno bylo po většinu práce jen z běhu po polovinách**, protože plný `xcodebuild test` se na
+tomhle stroji zasekával na **třech posledních suitách** (`AppStore — komentář pod PR`,
+`— odpovídání do vláken`, `— labely a reviewery`): v testovacím hostu se nasbíralo **76 vláken
+v `-[NSAnimation _runBlocking]`** a dispatch pool narazil na soft limit 75. **Nebylo to z #452** —
+změřeno se **zastashovanými** změnami, se stejným výsledkem na týchž třech suitách. Zapsalo se to
+jako #462 a vyřešilo se to tam; od jeho mergnutí do `main` **doběhne plný běh normálně**
+(4 196 testů ve 412 suitách za 58 s), takže dělení na poloviny odpadlo.
+
+**Stráž z #462 si u toho vyžádala dvě úpravy v téhle větvi**: `AskTabRenderProbe`
+a `AskComposerTests` si okno ukazovaly `orderFront(nil)`, tedy s animací objevení, kterou #462
+zakázalo — od merge používají `orderFrontUnanimated()`. Je to přesně ta situace, kvůli které je
+ta stráž nad zdrojáky: obě sondy vznikly dřív, než pravidlo, a bez ní by se do `main` dostaly.
