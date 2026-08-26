@@ -11473,9 +11473,12 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
     <h3>Panel: co se dá s vlastní větví udělat</h3>
     <p class="muted">
       Nová sekce <em>Větev</em> pod labely a reviewery. Nese <b>stav</b> (o kolik je za základem
-      a jestli jde mergnout) a k němu tu jednu akci, která z toho stavu plyne — ne obě naráz.
-      Zašedlé tlačítko s důvodem je tu správně: je to stav, který se mění, na rozdíl od cizího PR,
-      kde se akce nekreslí vůbec.
+      a jestli jde mergnout) a k němu <b>obě akce</b> — mění se jen to, <b>která z nich je hlavní</b>:
+      když je zeleno, je hlavní <code>Mergnout…</code>, a když je větev pozadu nebo něco brání,
+      je hlavní <code>Srovnat s main</code>. Obě jsou tam schválně: srovnat větev dává smysl
+      i tehdy, když už mergnout jde, a schovávat akci podle stavu by znamenalo, že se tlačítko
+      pod rukou stěhuje. Zašedlé tlačítko s důvodem je tu naopak správně: je to stav, který se
+      mění, na rozdíl od cizího PR, kde se akce nekreslí vůbec.
     </p>
     <div class="duo">
       <div class="pane new">
