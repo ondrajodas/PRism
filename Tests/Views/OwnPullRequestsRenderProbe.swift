@@ -19,7 +19,14 @@ import Testing
 /// `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: v sekci je `List`, jehož obsah se
 /// offscreen nerasterizuje — tatáž cesta jako u tabů (#294) a `Kontrol` (#306).
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**, a proměnné se předávají **s prefixem `TEST_RUNNER_`** — jen ty `xcodebuild`
+/// do testovacího procesu pustí; bez něj se suita **tiše přeskočí** a nevyrenderuje se nic:
+///
+/// ```bash
+/// TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
+///     xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+///     -only-testing:PRismTests/OwnPullRequestsRenderProbe
+/// ```
 @MainActor
 @Suite(
     "Sonda sekce Moje PR (#331)",

@@ -18,8 +18,12 @@ import Testing
 /// Legacy scroller si vynucuje `DiffPairScrollView` sám, takže na náladě systémového nastavení
 /// posuvníků sonda nezávisí.
 ///
-/// ```
-/// PRISM_RENDER_DIR=/tmp/render xcodebuild … test -only-testing:PRismTests/DiffPairScrollerRenderProbe
+/// Proměnná se předává **s prefixem `TEST_RUNNER_`** — jen ten `xcodebuild` do testovacího procesu
+/// pustí; bez něj sonda **tiše nenakreslí nic**:
+///
+/// ```bash
+/// TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
+///     xcodebuild … test -only-testing:PRismTests/DiffPairScrollerRenderProbe
 /// ```
 @MainActor
 @Suite("Kresba pruhu v bloku dvojic")

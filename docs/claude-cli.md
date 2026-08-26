@@ -321,6 +321,34 @@ skončil v `permission_denials`.
 bootu (`--strict-mcp-config` jen pro Linear) se neměřilo, protože by to znamenalo šťourat do
 uloženého OAuth tokenu.
 
+## Rozhovor nad PR (#452)
+
+Třetí vyjmenovaná session. Sada je **užší než reviewerova** —
+`--allowedTools Read,Grep,Glob,Bash(git:*)`, tedy bez `ReportFindings` a bez `Skill` —, zákazy jsou
+**tatáž konstanta** `ClaudeCommand.disallowedTools` a rozhovor drží `--resume`.
+
+**`--resume` v print režimu funguje a session si pamatuje předchozí odpověď** — ověřeno spuštěním
+nad tímhle repem: druhá otázka („o kterém souboru jsi mluvil jako první?“) odpověděla konkrétním
+souborem z první odpovědi, aniž by ho měla v promptu. **Vrácené `session_id` bylo v tom běhu
+totéž**, ne nové; kód proto id po každé odpovědi **přepisuje** (nové by se jinak ztratilo)
+a když nedorazí žádné, **zahazuje** ho — mrtvý identifikátor by rozhovor rozbil napořád.
+
+**Kolik to stojí, změřeno na `ondrajodas/PRism#452` (opus-5, diff ~5 tisíc řádků):**
+
+| Otázka | Cena | Trvání | Kol |
+|---|---|---|---|
+| první — *Co v tomhle PR nejvíc riskuje?* | **$1,56** | **125 s** | 18 |
+| druhá přes `--resume` — jedna věta | **$0,96** | **6,8 s** | 1 |
+
+Dvě věci, které z toho plynou a nejsou zjevné:
+
+- **Cenu určuje kontext, ne délka otázky.** Druhá otázka byla jedna věta a jedno kolo, a stála
+  skoro dolar — session s sebou nese celý rozhovor včetně přečteného diffu. „Krátká doplňující
+  otázka je levná“ tedy neplatí.
+- **Je to řádově dráž než dotažení textu issue** ($0,18–0,31) a srovnatelné s celým review. Proto
+  je cena u **každé** odpovědi v okně vidět a počítá se do `Dneska stálo`; strop se nedává, protože
+  za každou otázkou stojí člověk.
+
 ## Fixtures
 
 | Soubor | Co dokazuje |

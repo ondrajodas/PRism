@@ -60,6 +60,10 @@ struct CacheLayout: Sendable, Equatable {
     /// a tady o to víc: je to ručně psaná práce, kterou by rozpočet na místo neměl smazat.
     var drafts: URL { root.appending(path: "drafts") }
 
+    /// Rozhovory z tabu `Zeptat se` (#452). **Mimo dosah eviction**, jako `reviews/` a `drafts/` —
+    /// jsou to kilobajty a je to ručně napsaná otázka i zaplacená odpověď, ne pracovní kopie.
+    var asks: URL { root.appending(path: "ask") }
+
     /// Konfigurace. Leží v kořeni cache, ne pod `reviews/` — edituje se ručně a má být
     /// vidět hned, jakmile člověk složku otevře.
     var configFile: URL { root.appending(path: "config.json") }
@@ -138,6 +142,20 @@ struct CacheLayout: Sendable, Equatable {
         drafts.appending(path: repo.owner).appending(path: repo.name)
     }
 
+    /// Rozhovor jednoho PR: `ask/<owner>/<repo>/<pr>.json` (#452).
+    ///
+    /// **Bez `headSha` v názvu**, jako draft a z podobného důvodu: nálezy nový commit zneplatní
+    /// schválně (tvrdá podmínka č. 5), ale otázka „proč se ten mutex bere“ pushem nezastará —
+    /// je to rozhovor o záměru, ne tvrzení o řádku. Klíčovat ho commitem by znamenalo, že rozhovor
+    /// zmizí právě ve chvíli, kdy se k němu člověk vrací.
+    func askFile(for pr: PRIdentifier) -> URL {
+        asks(of: pr.repo).appending(path: "\(pr.number).json")
+    }
+
+    func asks(of repo: RepoID) -> URL {
+        asks.appending(path: repo.owner).appending(path: repo.name)
+    }
+
     /// Leží cesta uvnitř kořene, i po rozbalení symlinků?
     ///
     /// Symlink v cestě umí mazání vyvést ven: `removeItem` přes odkaz v rodičovské
@@ -206,6 +224,21 @@ struct CacheLayout: Sendable, Equatable {
         // Přípona `.md` je zároveň to, co soubor odlišuje od pracovní kopie téhož PR — jméno
         // stromu je `<pr>-<sha>` bez ní, takže se nemají čím přebít.
         worktrees(of: pr.repo).appending(path: "\(pr.number)-\(headSha).md")
+    }
+
+    /// Materiál pro rozhovor: `worktrees/<owner>/<repo>/<pr>-ask.md` (#452).
+    ///
+    /// **Vedle stromu, ne v něm**, ze stejného důvodu jako zadání pro reviewera: soubor uvnitř
+    /// pracovní kopie by se objevil v `git status` i v `git diff`, takže by ho session viděla jako
+    /// součást změny, na kterou se ptáme.
+    ///
+    /// **Bez `headSha`, na rozdíl od zadání.** Rozhovor je jeden na PR a přepisuje se při každé
+    /// otázce — soubor na commit by po deseti pushnutích nechal v cache deset kopií téhož, ze
+    /// kterých je platná poslední. Úklid jde přesto tou cestou, která existuje:
+    /// `discardUnwantedWorktrees` čte číslo PR z prefixu jména (`42-ask.md` → 42), takže soubor
+    /// odejde s tím, jak PR vypadne ze sledovaného seznamu, a `evict` ho vezme s celou složkou.
+    func askContextFile(for pr: PRIdentifier) -> URL {
+        worktrees(of: pr.repo).appending(path: "\(pr.number)-ask.md")
     }
 
     /// Stromy jsou zanořené pod repo, ne slepené do jednoho jména.

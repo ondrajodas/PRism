@@ -1168,6 +1168,102 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (`ReviewStateFromRecordTests`, `VerdictSuggestionTests`, `QueueRowTests`, `ReviewerChipTests`,
   `FindingsEmptyReasonTests`, `AppStoreRecoveryTests` a obě nové), protože `makeStoredRun` osu
   ve výchozím stavu nemá — a přesně to je ta situace, ve které se okno nesmí rozkřičet.
+- **Rozhovor nad PR (#452)** — šest sad a v každé jedno tvrzení, které se rozbije potichu.
+  `AskCommandTests` tvrdí **obě konstanty sady literálem** (tvrdá podmínka č. 2) a k tomu, že je
+  **vlastní podmnožina** reviewerovy s rozdílem právě `ReportFindings` a `Skill`; porovnat povolení
+  proti `AskCommand.allowedTools` by neznamenalo nic, protože rozšířenou konstantu by test poslušně
+  přečetl. Dál že se `--resume` **posílá jen s neprázdným id** a že do dokladu „přečetl X“ jde jen
+  `Read`, který **prošel** — odmítnutý nic nepřečetl a řádek nad bublinou je doklad.
+  `AskStoreTests` mají od #458 vlastní suitu *Rozhovor mimo cache*, která tvrdí, že se něco
+  **NEstalo**: za odkazovanou rodičovskou složkou se cizí soubor **nepřečte, nepřepíše ani
+  nesmaže**. Odkaz je na **složce**, ne na souboru — to je ten případ, který `isSymbolicLink`
+  nezachytí a chytá ho jedině `contains`. **Ověřeno vloženou regresí**: bez té kontroly padnou
+  všechny tři a `save` cizí soubor doopravdy přepíše. Tatáž suita je u `ReviewDraftStore`, protože
+  je to store, ze kterého se opisovalo.
+  `AppStoreAskTests` hlídají tři věci, které mizí tiše: **druhá otázka navazuje** (`resuming` je id
+  z první odpovědi a materiál se do promptu nedává znovu), **odpověď bez textu dostane bublinu
+  s důvodem** (zaplacená session, o které se mlčí, vypadá jako by nebyla) a **rozhovor přežije
+  restart i nový commit** — to poslední je celý rozdíl proti nálezům (tvrdá podmínka č. 5), takže se
+  druhý store staví nad **jinou hlavou** PR. Vedle toho **tvrzení, že se něco NEstalo**: prázdná
+  otázka session nespustí a otevřený tab bez otázky na disk nic nenapíše. `AskStoreTests` jedou proti
+  skutečnému disku (cizí rozhovor v souboru, symlink, rozbitý JSON — všechno **vyhodí**, nevrátí
+  `nil`), `AskPromptTests` že **žádná sekce materiálu nezmizí mlčky** a `AskReferencesTests` že se
+  odkaz nevyrobí z URL (dvojtečka s číslem je v ní port).
+
+  Čekání na disk je tam, kde se z disku doopravdy čte: zápis si store rozjede vlastním taskem, o
+  kterém si nedrží handle (`persistAsk`, tentýž vzor jako u draftu), takže jediný jev, na který se
+  dá čekat, je **soubor**. Ten task navíc čte hodnotu **až v sobě** — se snímkem v parametru by
+  starší zápis mohl přebít novější a v souboru by po restartu chyběla odpověď.
+
+  **Zrušený běh se vyrábí chybou, ne `CancellationError`**, a bez toho se ta chyba nedá napsat:
+  `FakeAskRunner(failingOnCancellation:)` dělá to, co dělá skutečný zabitý podproces — `git` ani
+  `claude` o zrušení nevědí, takže vyhodí svou vlastní chybu a `CancellationError` se ven nedostane.
+  Tvrdí se z toho dvě věci, obě **že se něco NEstalo**: po `Zastavit` nesmí u zastavené otázky
+  přibýt bublina „Nepovedlo se…“, a po `Nový rozhovor` nesmí přibýt **ani v cache** — tam je to
+  horší, protože zápis té bubliny vrátí na disk soubor, který se před chvílí smazal. Ověřeno
+  vloženou regresí: bez `Task.isCancelled` padnou obě a `42.json` se v cache objeví znovu.
+
+  **Composer se testuje přes skutečné okno a skutečnou klávesu** (`AskComposerTests`), a je to
+  jediný způsob, jak se o té chybě dalo něco tvrdit: store obě poloviny výměny dělal správně od
+  začátku (`AppStoreAskTests` tvrdí, že otázka doletí do rozhovoru) a otázka **přesto** po odeslání
+  zůstala v poli. Rozbité to bylo **okružní cestou** — pole drželo text u sebe a dolů ho posílalo po
+  odmlce 400 ms, takže klik trefený do té mezery odeslal starší otázku a rozepsanou dostal zpátky.
+  Nad storem se to napsat nedá, protože store o tom poli nic neví.
+
+  Čtyři věci, na které se u toho narazilo a stojí za zapamatování:
+
+  - **`Button` je v tomhle okně kreslený SwiftUI**, takže v hostované hierarchii **žádný `NSButton`
+    není** (ověřeno výpisem stromu — jsou tam jen views textového pole) a `accessibilityChildren()`
+    vrací prázdno. `performClick` tedy nemá na čem. Zabírá
+    **`window.performKeyEquivalent(with:)`** se syntetickým `⌘⏎`, a to i **bez aktivace aplikace**,
+    kterou testovací host nedostane (#392) — jako vedlejší efekt to tvrdí i to, že si `⌘⏎` v tomhle
+    tabu doopravdy bere `Zeptat se`.
+  - **Do pole se píše přes `didChangeText()`**, ne přiřazením do `string`: binding se v SwiftUI plní
+    z delegáta, takže samotné přiřazení by se do view nikdy nedostalo a test by tvrdil, že se nic
+    neztratilo, i kdyby se ztrácelo všechno.
+  - **Textové pole se hledá pokaždé znovu.** Prázdný tab a tab s rozhovorem jsou dvě různé větve,
+    takže si SwiftUI umí composer přestavět — uložená reference pak ukazuje na `NSTextView`, který na
+    obrazovce dávno není, a test nad ním tvrdí „pole se nevyprázdnilo“, i když se vyprázdnilo. Stálo
+    to jedno kolo hledání chyby, která tam nebyla.
+  - **Čeká se na jev, ne na okamžik** (#269), a hned dvakrát: mezi zápisem do pole a překreslením
+    tlačítka je jeden průchod SwiftUI (mačká se proto z `waitUntil`, dokud si klávesu někdo
+    nevezme — zašedlé tlačítko nic neodešle, takže opakování nevadí) a vyprázdnění pole je zase
+    průchod po akci tlačítka.
+
+  **Ověřeno vloženou regresí, ne zeleným během.** Když `submit()` posílá zálohu ze storu místo toho,
+  co je v poli, padnou dvě sady (odeslaná otázka do rozhovoru vůbec nedoletí a v poli zůstane);
+  když pole vyprazdňuje **bezpodmínečně**, padne `Otázka, která neodešla, v poli zůstane`.
+
+  **Vzhled má sondu, ne tvrzení** (`AskTabRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`
+  + `TEST_RUNNER_PRISM_RENDER_DIR`): tři stavy tabu ve dvou šířkách, aby se daly položit vedle
+  sekce 33 návrhu. Je to obrázková otázka — *sedí bublina na akcentu, je prstýnek na místě příští
+  bubliny* —, na kterou měření neodpoví. A **rozhodnutí „pevný stack, ne líný seznam“ má vlastní
+  měření** (`AskLogMeasurement`, ruční, obě podoby A/B/A/B): první rozvržení stojí **18 ms
+  u dvaceti bublin, 87 ms u stovky a 242 ms u tří set**, proti plochým **4,6 ms** u líného seznamu
+  a proti **413 ms**, které #361 naměřilo u tří set uzlů osy — a **s těmi 413 ms se u osy pevný
+  stack přijal**. Bez čísla by to bylo opsané z jedné nebo druhé strany; osa i diff mají každý jinou
+  odpověď a rozhoduje strop.
+
+  **To měření jelo do #458 bez `NSWindow`u, a stojí za to vědět, jak to dopadlo.** Copilot na to
+  upozornil právem — `ScrollView` bez okna obsah **nerozvrhne** a tenhle repos to má popsané
+  u `AskTabRenderProbe` i `DetailTabRenderProbe`. Mechanismus se **potvrdil**: bez okna vyjde
+  `obsah 0 pt`, takže scroller o výšce dokumentu neví nic.
+
+  **Závěr „čísla jsou podhodnocená“ se ale nepotvrdil, a je to změřené, ne odhadnuté.** Bez okna
+  vyšel pevný stack **dražší** (300 bublin: 283 / 301 / 308 ms proti 242 / 238 / 257 ms v okně)
+  a **počet vyrobených prvků byl totožný** (907). Neúplné bylo tedy to, co scroller ví o svém
+  dokumentu, ne to, kolik práce si stack vyžádal — takže rozhodnutí zůstalo. Plyne z toho pravidlo,
+  ne jen oprava: **měřidlo vedle času vypisuje výšku obsahu a počet prvků** (jako
+  `ConversationAxisShapeProbe`), protože zrovna tuhle chybu nejde poznat z časů. A obráceně:
+  **„harness je nastavený špatně“ není totéž co „výsledek je špatně“** — obojí se musí změřit
+  zvlášť, jinak se kvůli správné námitce otočí správné rozhodnutí.
+
+  **Jednu věc harness neověří: co ta session doopravdy stojí.** Změřilo se to spuštěním `claude`
+  s týmiž argumenty nad tímhle repem — první otázka **$1,56 / 125 s**, navazující přes `--resume`
+  **$0,96 / 6,8 s** (čísla a co z nich plyne jsou v [`docs/claude-cli.md`](claude-cli.md)). Ten běh
+  zároveň **našel dvě věci, které testy nechytaly**: materiál skládaný jen k první otázce (pruh
+  `ví o tomhle PR:` se počítá živě) a nezahozené mrtvé `session_id`. Obojí je dneska opravené a má
+  vlastní tvrzení.
 - **Dráhy v tabu `Průběh` (#242)** — osy se skládají `record(_:at:)`/`finish(_:at:)`, tedy tou
   cestou, kterou vznikají doopravdy. Pokrývá: doběhlá session má hotové fáze, kterými prošla;
   **doběhlá bez nahlášených nálezů nemá fázi hlášení za hotovou** (reviewer, který

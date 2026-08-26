@@ -10,10 +10,12 @@ struct PullRequestTabTests {
     /// něco, co je na PR, ne výstup našich reviewerů. `Commity` (#316) přišly ještě dál doleva —
     /// vedle `Změněných souborů`, protože obojí odpovídá na „co se v kódu změnilo“, jen jednou
     /// naráz a jednou po krocích.
-    @Test("Pruh má sedm záložek v pořadí, ve kterém se čtou")
+    @Test("Pruh má osm záložek v pořadí, ve kterém se čtou")
     func order() {
-        #expect(PullRequestTab.allCases.map(\.czechLabel)
-            == ["Přehled", "Změněné soubory", "Commity", "Konverzace", "Kontroly", "Nálezy", "Průběh"])
+        #expect(PullRequestTab.allCases.map(\.czechLabel) == [
+            "Přehled", "Změněné soubory", "Commity", "Konverzace", "Kontroly",
+            "Nálezy", "Průběh", "Zeptat se",
+        ])
     }
 
     @Test("Otevírá se Přehledem")
@@ -24,13 +26,43 @@ struct PullRequestTabTests {
     /// Dělič odděluje to, co je na PR (a co má i GitHub), od toho, co s ním udělaly naše reviewery.
     /// `Kontroly` (#215) přišly doprostřed levé skupiny a `Commity` (#316) taky — a **ani jedno ho
     /// nesmí posunout**, protože se počítá z vlastnosti tabu, ne z indexu.
-    @Test("Výstup reviewerů je jedna souvislá skupina na konci")
+    @Test("Výstup reviewerů je jedna souvislá skupina uprostřed")
     func reviewerOutputIsOneGroup() {
         let flags = PullRequestTab.allCases.map(\.isReviewerOutput)
 
-        #expect(flags == [false, false, false, false, false, true, true])
-        // Jeden přechod, tedy jeden dělič — ne dva a ne žádný.
-        #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 1)
+        #expect(flags == [false, false, false, false, false, true, true, false])
+        // **Dva přechody, tedy dva děliče** (#452) — a `isReviewerOutput` sám o sobě ten druhý
+        // popsat neumí: `Zeptat se` má `false` jako `Přehled`, přesto před ním dělič je. Proto se
+        // od #452 dělič počítá ze `group`, ne z tohohle příznaku.
+        #expect(zip(flags, flags.dropFirst()).count { $0 != $1 } == 2)
+    }
+
+    /// **Skupiny jsou tři a dělič je mezi nimi** (#452). Do té doby to byl `Bool`, a ten umí
+    /// popsat jediný předěl — osmá záložka za druhým děličem by musela tvrdit, že je výstup
+    /// reviewerů.
+    @Test("Pruh se dělí na tři souvislé skupiny")
+    func groupsAreThreeAndContiguous() {
+        let groups = PullRequestTab.allCases.map(\.group)
+
+        #expect(groups == [
+            .pullRequest, .pullRequest, .pullRequest, .pullRequest, .pullRequest,
+            .reviewerOutput, .reviewerOutput,
+            .mine,
+        ])
+        // Dva přechody, tedy dva děliče. A **souvislost**: každá skupina je jeden úsek, takže se
+        // po vložení záložky doprostřed nemůže rozpadnout na dva děliče v jedné skupině.
+        #expect(zip(groups, groups.dropFirst()).count { $0 != $1 } == 2)
+        #expect(Set(groups).count == PullRequestTab.Group.allCases.count)
+    }
+
+    /// **Tvrdí, že se něco NEstalo**: `isReviewerOutput` se odvozuje ze `group`, takže se ty dvě
+    /// odpovědi nemají čím rozejít. Druhý `switch` by se rozešel potichu a chyba by byla vidět
+    /// v děliči, ne tam, kde vznikla.
+    @Test("Příznak výstupu reviewerů je odvozený ze skupiny")
+    func reviewerOutputComesFromTheGroup() {
+        for tab in PullRequestTab.allCases {
+            #expect(tab.isReviewerOutput == (tab.group == .reviewerOutput))
+        }
     }
 
     /// **Tvrdí, že se něco NEstalo** (#316): sedmá záložka vložená doprostřed dělič neposunula.
@@ -49,6 +81,15 @@ struct PullRequestTabTests {
         #expect(tabs[4] == .checks)
     }
 
+    /// Druhý dělič (#452) stojí před `Zeptat se` — a spočítá se **z téže vlastnosti** jako první.
+    @Test("Druhý dělič stojí před Zeptat se")
+    func secondSeparatorSitsBeforeTheAskTab() {
+        let tabs = PullRequestTab.allCases
+        let boundaries = tabs.indices.dropFirst().filter { tabs[$0].group != tabs[$0 - 1].group }
+
+        #expect(boundaries.map { tabs[$0] } == [.findings, .ask])
+    }
+
     /// **Počet záložek není funkcí dat** (#306, platí i pro #316). `PullRequestTabBar` kreslí
     /// `allCases` a nemá parametr, kterým by se dal pruh zúžit — do #306 ho měl a pruh se tím při
     /// **každém** otevření PR přeskládal z pěti záložek na šest. Test hlídá druhou polovinu toho
@@ -57,7 +98,7 @@ struct PullRequestTabTests {
     /// doprostřed.
     @Test("Kontroly i Commity jsou ve výčtu, ze kterého pruh kreslí, vždycky")
     func stripAlwaysHasTheDataDrivenTabs() {
-        #expect(PullRequestTab.allCases.count == 7)
+        #expect(PullRequestTab.allCases.count == 8)
         #expect(PullRequestTab.allCases.contains(.checks))
         #expect(PullRequestTab.allCases.contains(.commits))
     }
@@ -78,6 +119,9 @@ struct PullRequestTabTests {
         #expect(!PullRequestTab.checks.showsReviewPanel)
         #expect(!PullRequestTab.findings.showsReviewPanel)
         #expect(!PullRequestTab.progress.showsReviewPanel)
+        // `Zeptat se` (#452) panel nemá: plocha je próza s composerem, takže by pod sebou stála
+        // dvě textová pole s vlastním odesílacím tlačítkem.
+        #expect(!PullRequestTab.ask.showsReviewPanel)
     }
 
     /// **Tohle je ten test, který tvrdí, že se něco NEstalo**: že se `showsReviewPanel` neohnul na
@@ -104,7 +148,7 @@ struct PullRequestTabTests {
     /// Čtyři ze sedmi (do #392 tři): kdyby panel zmizel odevšad nebo zůstal všude, obojí by prošlo
     /// výčtem výš jen s jeho přepsáním — tohle je pojistka na to, že se výčet nepřepíše „aby test
     /// prošel“.
-    @Test("Panel je ve čtyřech tabech, ne ve všech a ne v žádném")
+    @Test("Panel je ve čtyřech tabech z osmi, ne ve všech a ne v žádném")
     func panelIsPartial() {
         let count = PullRequestTab.allCases.count(where: \.showsReviewPanel)
 
@@ -123,5 +167,7 @@ struct PullRequestTabTests {
         // Kontroly a Commity jsou fakt o PR, ne výstup reviewerů — proto nalevo od děliče.
         #expect(!PullRequestTab.checks.isReviewerOutput)
         #expect(!PullRequestTab.commits.isReviewerOutput)
+        // A `Zeptat se` (#452) taky ne — je to třetí skupina, ne výstup reviewerů.
+        #expect(!PullRequestTab.ask.isReviewerOutput)
     }
 }

@@ -70,7 +70,7 @@ actor ReviewStore {
         // nechceme, a zápis je atomický, takže se odkaz vzápětí nahradí naším souborem —
         // cíl zůstane netknutý. Nálezy se tím neztrácejí: záznam pro tenhle commit stejně
         // žádný náš neexistuje.
-        var record = (layout.isSymbolicLink(url) ? nil : try? read(at: url))
+        var record = (CacheFile.refusal(for: url, in: layout) == nil ? try? read(at: url) : nil)
             ?? ReviewRecord(pullRequest: pullRequest, headSha: run.key.headSha)
         // Osa se **nepřepisuje na nic**: překlad nálezů (#94) ukládá týž běh podruhé a osu
         // s sebou nenese, takže by ji jinak druhý zápis smazal.
@@ -95,7 +95,8 @@ actor ReviewStore {
     /// to někdo pamatuje — kontrola je jedno volání a je stejná jako u eviction.
     func delete(for pullRequest: PRIdentifier, at headSha: String) throws {
         let url = layout.reviewFile(for: pullRequest, at: headSha)
-        guard layout.contains(url), FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
+        guard CacheFile.isInsideCache(url, in: layout),
+              FileManager.default.fileExists(atPath: url.path(percentEncoded: false))
         else { return }
         try FileManager.default.removeItem(at: url)
     }
@@ -123,9 +124,9 @@ actor ReviewStore {
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
         }
-        // Odkaz je totéž co chybějící soubor: **náš** záznam tam není a přečíst cizí kvůli
-        // zápisu do něj je to poslední, co chceme (#106). Tatáž kontrola jako u odmítnutí.
-        guard !layout.isSymbolicLink(url) else {
+        // Odkaz **i cesta ven** jsou totéž co chybějící soubor: **náš** záznam tam není a přečíst
+        // cizí kvůli zápisu do něj je to poslední, co chceme (#106, hranice doplněna u #458).
+        guard CacheFile.refusal(for: url, in: layout) == nil else {
             throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
         }
 
@@ -181,9 +182,10 @@ actor ReviewStore {
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             throw ReviewStoreError.recordNotFound(pullRequest, headSha: finding.headSha)
         }
-        // Odkaz je totéž co chybějící soubor: **náš** záznam tam není a přečíst cizí kvůli
-        // tomu, abychom do něj zapsali odmítnutí, je to poslední, co chceme (#106).
-        guard !layout.isSymbolicLink(url) else {
+        // Odkaz **i cesta ven** jsou totéž co chybějící soubor: **náš** záznam tam není a přečíst
+        // cizí kvůli tomu, abychom do něj zapsali odmítnutí, je to poslední, co chceme (#106,
+        // hranice doplněna u #458).
+        guard CacheFile.refusal(for: url, in: layout) == nil else {
             throw ReviewStoreError.recordNotFound(pullRequest, headSha: finding.headSha)
         }
 
@@ -206,7 +208,7 @@ actor ReviewStore {
     /// v něm chybět nesmí jen proto, že přibylo později.
     func record(for pullRequest: PRIdentifier, at headSha: String) -> ReviewRecord? {
         let url = layout.reviewFile(for: pullRequest, at: headSha)
-        guard !layout.isSymbolicLink(url) else { return nil }
+        guard CacheFile.refusal(for: url, in: layout) == nil else { return nil }
         guard let record = try? read(at: url), record.pullRequest == pullRequest else { return nil }
         return record
     }
@@ -274,7 +276,7 @@ actor ReviewStore {
             // do odkazovaných složek nesestupuje —, ale tvrdá podmínka „nikdy nesahat na
             // uživatelovy soubory“ nemá viset na tomhle detailu `FileManageru`. Radši
             // nesmazat než smazat cizí.
-            if now.timeIntervalSince(closedAt) >= retention, layout.contains(url) {
+            if now.timeIntervalSince(closedAt) >= retention, CacheFile.isInsideCache(url, in: layout) {
                 try FileManager.default.removeItem(at: url)
             }
         }
@@ -302,7 +304,17 @@ actor ReviewStore {
 
     /// Zápis je atomický: půlka souboru je horší než žádný, protože se od celého nedá
     /// odlišit jinak než tím, že se nepodaří dekódovat.
+    ///
+    /// **Hranice cache se ověřuje i tady** (#458): do té doby ji měl v tomhle storu jen `delete`,
+    /// takže zápis by šel symlinkem v rodičovské složce ven. Odkaz na **samotném souboru** se
+    /// neodmítá schválně — `save` ho výš bere jako prázdné místo a atomický zápis ho nahradí naším
+    /// souborem, aniž by sáhl na cíl; to je zapsané rozhodnutí z #106, ne mezera.
     private func write(_ record: ReviewRecord, to url: URL) throws {
+        guard CacheFile.isInsideCache(url, in: layout) else {
+            throw CheckoutError.cacheUnavailable(
+                "Cesta \(url.path(percentEncoded: false)) vede mimo cache aplikace."
+            )
+        }
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true

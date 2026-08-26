@@ -363,6 +363,19 @@ final class AppStore {
     /// a nespouští tím `claude`.
     let intentText: (any IntentTextFetching)?
 
+    /// Rozhovor nad PR (#452). `nil` = **tab se neptá** a composer zůstane zakázaný s důvodem.
+    ///
+    /// Nepovinné ze stejného důvodu jako `translator`: testy, které o rozhovor nestojí, ho
+    /// nedostanou a nespouští tím `claude`.
+    let asker: (any AskRunning)?
+
+    /// Uložené rozhovory (#452). `nil` = neukládá se, tedy rozhovor zanikne se zavřením aplikace.
+    let asks: AskStore?
+
+    /// Materiál pro rozhovor vedle pracovního stromu (#452). `nil` = neukládá se a session
+    /// dostane prompt bez odkazu na soubor, tedy bez nálezů, konverzace a checků.
+    let askContexts: AskContextStore?
+
     private let configStore: ConfigStore?
 
     /// Doručování notifikací (#88). `nil` = odsud se neposílají (testy), takže se nic
@@ -441,6 +454,41 @@ final class AppStore {
     /// který nic nenašel — tedy jako „nálezy pořád platí“, což je zrovna to tvrzení, které se
     /// z ničeho vyrábět nesmí.
     var recheckFailures: [PRIdentifier: String] = [:]
+
+    /// Rozhovory z tabu `Zeptat se` (#452). Co v mapě není, se z disku ještě nenačetlo.
+    ///
+    /// **Načítá se až při otevření tabu**, ne při startu jako drafty — proč, je u `AskStore`.
+    /// Prázdný rozhovor v mapě proto znamená „na disku nic není“, ne „ještě jsme se nedívali“;
+    /// to druhé je chybějící klíč.
+    var askConversations: [PRIdentifier: AskConversation] = [:]
+
+    /// Rozepsaná otázka **per PR**. Co v mapě není, nikdo nerozepsal.
+    ///
+    /// Žije tady ze stejného důvodu jako rozepsaný komentář pod PR (#216): composer sedí pod
+    /// rozhovorem, který se překliknutím tabu odbourá, takže `@State` v něm by rozepsanou otázku
+    /// zahodil. Na disk se **neukládá** — je to otázka, kterou člověk zrovna formuluje, ne práce
+    /// v řádu odstavců.
+    var askDrafts: [PRIdentifier: String] = [:]
+
+    /// Běžící odpověď podle PR (#452). Co v mapě není, neběží.
+    ///
+    /// **Vlastní mapa, ne `reviewTasks`**, ze stejného důvodu jako u kontroly nálezů: na
+    /// `reviewTasks` visí chipy reviewerů, pruh průběhu i podmnožina k opakování, a rozhovor žádný
+    /// skill nepouští. Co si naopak vzít musí, je všechno, co platí pro **běžící session**:
+    /// ochrana repa před eviction, zabití při zavírání aplikace (#264) a počet běhů, na který se
+    /// ptá dialog při ukončení.
+    var askTasks: [PRIdentifier: Task<Void, Never>] = [:]
+
+    /// Co session zrovna dělá — řádek u prstýnku na místě příští bubliny (#452). Chybějící
+    /// záznam = zatím nic neřekla.
+    var askActivity: [PRIdentifier: String] = [:]
+
+    /// Proč se rozhovor nepodařilo přečíst nebo uložit (#452).
+    ///
+    /// Musí být vidět, a ze stejného důvodu jako u draftu: otázka i odpověď jsou zaplacená práce,
+    /// takže neuložený rozhovor, o kterém se mlčí, vypadá po restartu jako rozhovor, který nikdy
+    /// nebyl — a příští otázka za něj zaplatí kontext znovu.
+    var askFailure: String?
 
     /// Běžící kontrola nálezů (#150) — úloha a kdy začala.
     struct RunningRecheck {
@@ -618,6 +666,9 @@ final class AppStore {
         intents: ReviewIntentStore? = nil,
         translator: (any FindingTranslating)? = nil,
         intentText: (any IntentTextFetching)? = nil,
+        asker: (any AskRunning)? = nil,
+        asks: AskStore? = nil,
+        askContexts: AskContextStore? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
@@ -664,6 +715,9 @@ final class AppStore {
         self.intents = intents
         self.translator = translator
         self.intentText = intentText
+        self.asker = asker
+        self.asks = asks
+        self.askContexts = askContexts
         self.autoRuns = autoRuns
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
@@ -745,6 +799,17 @@ final class AppStore {
             intents: ReviewIntentStore(),
             translator: ClaudeFindingTranslator(claude: toolPaths.claude, runner: runner),
             intentText: ClaudeIntentTextFetcher(claude: toolPaths.claude, runner: runner),
+            // Rozhovor nad PR (#452). Streamem, ne bufferovaně — a přes tentýž registr běžících
+            // session (#351): `claude -p` běží minuty a jako sirotek po zabité aplikaci platí
+            // tokeny dál, takže ho musí umět zabít další start.
+            asker: ClaudeAskSession(
+                claude: toolPaths.claude,
+                gh: toolPaths.gh,
+                runner: SubprocessStreamer(sessions: .shared),
+                model: { box.value.global.model }
+            ),
+            asks: AskStore(),
+            askContexts: AskContextStore(),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
@@ -1515,6 +1580,9 @@ final class AppStore {
         Set(checkoutStates.filter { $0.value == .preparing }.keys)
             .union(reviewTasks.keys.map(\.repo))
             .union(recheckTasks.keys.map(\.repo))
+            // A od #452 i repa s běžící odpovědí v tabu `Zeptat se` — je to zase tatáž session
+            // nad tímtéž stromem.
+            .union(askTasks.keys.map(\.repo))
     }
 
     func checkoutState(for repo: RepoID) -> CheckoutState {
@@ -1585,7 +1653,10 @@ final class AppStore {
     /// **Počítá i kontroly nálezů** (#150): dialog se ptá kvůli tomu, že se zavřením zabije
     /// session, a kontrola je session jako každá jiná. Vynechat ji by znamenalo zavřít aplikaci
     /// bez zeptání nad běžícím `claude`.
-    var runningReviews: Int { reviewTasks.count + recheckTasks.count }
+    ///
+    /// **A od #452 i rozhovory**, ze stejného důvodu: odpověď v tabu `Zeptat se` je `claude -p`
+    /// session, která po zavření aplikace přežije na `launchd` (#264).
+    var runningReviews: Int { reviewTasks.count + recheckTasks.count + askTasks.count }
 
     /// Které reviewery běžící review pouští. Celá nastavená sada, když neběží nic — chipy pak
     /// ukazují to, co by se spustilo.
