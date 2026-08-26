@@ -2398,6 +2398,14 @@ Co je v okně a proč zrovna tak:
   - **Tab má vlastní identitu podle PR** (`.id(pullRequest.id)` na `AskView`). Detail se mezi pull
     requesty **znovupoužívá**, takže bez toho by si composer nechal rozepsanou otázku z předchozího
     PR a při zmizení ji uložil do jeho zálohy.
+- **Zrušení se nepozná jen podle `CancellationError`** (`AppStore+Ask.handle`), a je to **jedno
+  místo pro obě cesty** — `Zastavit` i `Nový rozhovor`. Zabíjený `git` ani `claude` o zrušení
+  nevědí, takže vyhodí **svou vlastní** chybu (`CheckoutError`, `GitHubError`) a `CancellationError`
+  se ven nedostane; bez `Task.isCancelled` by se to vypsalo do rozhovoru jako porucha. U `Zastavit`
+  by to bylo matoucí (tlačítko slibuje, že zůstane **otázka**, a nic víc), u `Nový rozhovor` **horší
+  než matoucí**: bublina by přistála do rozhovoru, který se právě vyprázdnil, a protože se každá
+  zpráva ukládá, **zapsala by zpátky na disk soubor, který se před chvílí smazal**. Ověřeno
+  vloženou regresí — bez `Task.isCancelled` padnou dvě sady a `42.json` se v cache objeví znovu.
 - **`Nový rozhovor` zahodí rozhovor i navázání** (`AppStore.resetAskConversation`) — a maže **i to,
   co není vidět**: soubor v cache a `sessionID`. Rozhovor, který zmizel z okna a zůstal na disku, se
   vrátí přepnutím tabu; ponechané `sessionID` by navázalo příští otázku na vlákno, se kterým člověk

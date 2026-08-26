@@ -346,6 +346,26 @@ struct AppStoreAskTests {
         #expect(messages(store).map(\.speaker) == [.mine])
     }
 
+    /// **Zabitá session spadne na svou vlastní chybu, ne na `CancellationError`** — `claude` ani
+    /// `git` o zrušení nevědí. Bublina „Nepovedlo se…“ z toho být nesmí: `Zastavit` slibuje, že
+    /// v rozhovoru zůstane **otázka**, a nic víc.
+    @Test("Zabitá odpověď nepřidá bublinu o selhání")
+    func killingTheAnswerAddsNoFailure() async {
+        let asker = FakeAskRunner(
+            holdsUntilRelease: true,
+            failingOnCancellation: GitHubError.commandFailed(exitCode: 143, message: "killed")
+        )
+        let store = store(asker: asker)
+
+        ask(store, "proč?")
+        await waitUntil("session naběhne") { !asker.requests.isEmpty }
+        store.cancelAsk(for: pr)
+        await waitUntilAnswered(store)
+
+        #expect(messages(store).map(\.speaker) == [.mine])
+        #expect(messages(store).allSatisfy { $0.failure == nil })
+    }
+
     // MARK: - Nový rozhovor (#452)
 
     /// `Nový rozhovor` musí zahodit **i to, co není vidět**: uložený soubor a `sessionID`, kterým
@@ -410,6 +430,31 @@ struct AppStoreAskTests {
         await settle()
 
         #expect(messages(store).isEmpty, "do zahozeného rozhovoru něco přibylo")
+    }
+
+    /// Tentýž závod na druhé cestě zrušení, a **je horší**: bublina by přistála do rozhovoru, který
+    /// se právě vyprázdnil — a protože se každá zpráva ukládá, **zapsala by zpátky na disk soubor,
+    /// který se před chvílí smazal**. Proto se tvrdí obojí: prázdno v okně i nepřítomnost souboru.
+    @Test("Nový rozhovor nedostane bublinu od zabité odpovědi")
+    func resettingSurvivesAKilledAnswer() async {
+        let asks = AskStore(layout: layout)
+        let asker = FakeAskRunner(
+            holdsUntilRelease: true,
+            failingOnCancellation: GitHubError.commandFailed(exitCode: 143, message: "killed")
+        )
+        let store = store(asker: asker, asks: asks)
+
+        ask(store, "proč?")
+        await waitUntil("session naběhne") { !asker.requests.isEmpty }
+        store.resetAskConversation(for: pr)
+        await waitUntilAnswered(store)
+        await settle()
+
+        #expect(messages(store).isEmpty, "do zahozeného rozhovoru přibyla bublina")
+        #expect(
+            !FileManager.default.fileExists(atPath: layout.askFile(for: pr).path()),
+            "zahozený rozhovor se zápisem té bubliny vrátil na disk"
+        )
     }
 
     /// **Rozepsané otázky se to netýká** — „načisto“ mluví o rozhovoru, ne o větě, kterou má

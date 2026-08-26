@@ -4943,12 +4943,18 @@ do té odmlky odeslal **starší** otázku a rozepsanou dostal zpátky. Text pro
 přepnutí tabu. Odeslání vrací `Bool`, takže se pole vyprázdní **jen když otázka doopravdy odešla** —
 neodeslaná v něm zůstane.
 
-Testů **4171**, všechny zelené — nových je sedm sad kolem rozhovoru (`AskCommandTests`,
+Testů **4173**, všechny zelené — nových je sedm sad kolem rozhovoru (`AskCommandTests`,
 `AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`,
 `AskComposerTests`) a k tomu stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam
 (#361). `AskComposerTests` jedou nad **skutečným oknem a skutečnou klávesou**
 (`window.performKeyEquivalent` s `⌘⏎`), protože `Button` je v tomhle okně kreslený SwiftUI a žádný
 `NSButton` v hierarchii není — a nad storem se o té chybě nedalo tvrdit nic.
+
+**Zabitá odpověď navíc nesmí nic dopsat.** Zrušení se nepozná jen podle `CancellationError` —
+zabíjený `git` ani `claude` o něm nevědí a vyhodí svou vlastní chybu —, takže by po `Zastavit`
+přibyla bublina „Nepovedlo se…“ a po `Nový rozhovor` by přistála do právě vyprázdněného rozhovoru
+a **zapsala ho zpátky na disk**. Rozhoduje o tom jedno místo pro obě cesty (`AppStore+Ask.handle`);
+ověřeno vloženou regresí.
 
 **Zeleno je z běhu po polovinách, a je u toho co zapsat.** Plný `xcodebuild test` se na tomhle
 stroji zasekne na **třech posledních suitách** (`AppStore — komentář pod PR`, `— odpovídání do

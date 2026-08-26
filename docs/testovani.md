@@ -1189,6 +1189,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   dá čekat, je **soubor**. Ten task navíc čte hodnotu **až v sobě** — se snímkem v parametru by
   starší zápis mohl přebít novější a v souboru by po restartu chyběla odpověď.
 
+  **Zrušený běh se vyrábí chybou, ne `CancellationError`**, a bez toho se ta chyba nedá napsat:
+  `FakeAskRunner(failingOnCancellation:)` dělá to, co dělá skutečný zabitý podproces — `git` ani
+  `claude` o zrušení nevědí, takže vyhodí svou vlastní chybu a `CancellationError` se ven nedostane.
+  Tvrdí se z toho dvě věci, obě **že se něco NEstalo**: po `Zastavit` nesmí u zastavené otázky
+  přibýt bublina „Nepovedlo se…“, a po `Nový rozhovor` nesmí přibýt **ani v cache** — tam je to
+  horší, protože zápis té bubliny vrátí na disk soubor, který se před chvílí smazal. Ověřeno
+  vloženou regresí: bez `Task.isCancelled` padnou obě a `42.json` se v cache objeví znovu.
+
   **Composer se testuje přes skutečné okno a skutečnou klávesu** (`AskComposerTests`), a je to
   jediný způsob, jak se o té chybě dalo něco tvrdit: store obě poloviny výměny dělal správně od
   začátku (`AppStoreAskTests` tvrdí, že otázka doletí do rozhovoru) a otázka **přesto** po odeslání

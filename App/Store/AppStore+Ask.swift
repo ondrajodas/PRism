@@ -182,15 +182,38 @@ extension AppStore {
             try Task.checkCancellation()
 
             record(answer, about: pr)
-        } catch is CancellationError {
+        } catch {
+            await handle(error, about: pr, using: checkout)
+        }
+    }
+
+    /// Co s chybou, na které odpověď skončila.
+    ///
+    /// **Zrušení se nepozná jen podle `CancellationError`, a to je celý smysl téhle metody.** Když
+    /// se běh zabíjí, `git` ani `claude` o zrušení nevědí — spadnou na svou vlastní chybu, takže
+    /// z `checkout.worktree` přiletí `CheckoutError` a ze session cokoli jiného. Bez `Task.isCancelled`
+    /// by se to vypsalo do rozhovoru jako porucha, ačkoli to bylo přání člověka:
+    ///
+    /// - po `Zastavit` by u zastavené otázky přibyla bublina „Nepovedlo se…“, ačkoli tlačítko
+    ///   slibuje, že v rozhovoru zůstane **otázka**, a nic víc;
+    /// - po `Nový rozhovor` by přistála do rozhovoru, který se právě vyprázdnil — a protože se každá
+    ///   zpráva ukládá, **zapsala by zpátky na disk soubor, který se před chvílí smazal**.
+    ///
+    /// Je to **jedno místo pro obě cesty zrušení** (`cancelAsk` i `resetAskConversation`) schválně:
+    /// dvě kopie téhle podmínky by se rozešly a druhá cesta by tu bublinu přidávala dál.
+    private func handle(_ error: any Error, about pr: PRIdentifier, using checkout: any RepoCheckout) async {
+        guard !(error is CancellationError), !Task.isCancelled else {
             // Zrušení není selhání a **neukládá se z něj nic** — kromě toho, co už v rozhovoru je.
             await syncCheckoutState(for: pr.repo, using: checkout)
-        } catch let error as CheckoutError {
+            return
+        }
+        switch error {
+        case let error as CheckoutError:
             checkoutStates[pr.repo] = .failed(error.userDescription)
             fail(about: pr, with: "Pracovní kopii se nepodařilo připravit, takže se nebylo kde ptát.")
-        } catch let error as GitHubError {
+        case let error as GitHubError:
             fail(about: pr, with: "Nepovedlo se. \(error.userDescription)")
-        } catch {
+        default:
             fail(about: pr, with: "Nepovedlo se. \(error.localizedDescription)")
         }
     }

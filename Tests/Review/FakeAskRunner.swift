@@ -11,6 +11,12 @@ final class FakeAskRunner: AskRunning, @unchecked Sendable {
     private let answers: [AskAnswer]
     private let failure: (any Error)?
     private let holds: Bool
+    /// Na co běh spadne, když ho někdo **zruší**.
+    ///
+    /// `nil` = poctivá `CancellationError`. Cokoli jiného vyrábí to, co dělá skutečný zabitý
+    /// podproces: `git` ani `claude` o zrušení nevědí, takže vyhodí **svou vlastní** chybu
+    /// a `CancellationError` se ven vůbec nedostane.
+    private let cancellationFailure: (any Error)?
     /// Co běh nahlásí jako průběh, než odpoví.
     private let reported: [AskProgress]
     private let lock = NSLock()
@@ -21,11 +27,13 @@ final class FakeAskRunner: AskRunning, @unchecked Sendable {
         answers: [AskAnswer] = [AskAnswer(text: "protože", sessionID: "s1")],
         failing failure: (any Error)? = nil,
         holdsUntilRelease: Bool = false,
+        failingOnCancellation cancellationFailure: (any Error)? = nil,
         progress reported: [AskProgress] = []
     ) {
         self.answers = answers
         self.failure = failure
         holds = holdsUntilRelease
+        self.cancellationFailure = cancellationFailure
         self.reported = reported
     }
 
@@ -44,12 +52,18 @@ final class FakeAskRunner: AskRunning, @unchecked Sendable {
         // Odmlkami, ne `Task.yield()` (#296): zrušený běh musí z čekání vypadnout sám, jinak by
         // test na zrušení visel místo aby spadl.
         while holds, !lock.withLock({ released }) {
-            try Task.checkCancellation()
+            try checkCancellation()
             try? await Task.sleep(for: .milliseconds(10))
         }
-        try Task.checkCancellation()
+        try checkCancellation()
 
         if let failure { throw failure }
         return answers.isEmpty ? AskAnswer() : answers[min(index, answers.count - 1)]
+    }
+
+    /// Zruší se to **chybou, kterou si test předepsal**, ne vždycky `CancellationError`.
+    private func checkCancellation() throws {
+        guard Task.isCancelled else { return }
+        throw cancellationFailure ?? CancellationError()
     }
 }
