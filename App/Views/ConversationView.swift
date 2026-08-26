@@ -141,7 +141,23 @@ struct ConversationView: View {
             empty
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                // **`VStack`, ne `LazyVStack` — a je to oprava #361, ne úspora** (patnácté kolo).
+                // Ve dvou `sample`ech ze **živého** záchvatu je celý kruh uvnitř SwiftUI:
+                // `LazySubviewPlacements.placeSubviews` (60 % vzorků hlavního vlákna) umístí
+                // položky, `LazyLayoutViewCache.updateItemPhases()` ten stav zapíše do grafu
+                // (`AG::Graph::value_set` → `propagate_dirty`) a graf si vyžádá další umístění.
+                // **Naše tělo v tom kole neběží ani jednou**, takže zlevňovat obsah kola (#375,
+                // #379, #393, #435, #438) ho nemá jak zastavit — a čtrnáct kol to potvrdilo.
+                // Pevný stack `LazySubview*` atributy do grafu nedostane vůbec, takže se ta vazba
+                // nemá kde utvořit (změřeno, `ConversationAxisShapeProbe`).
+                //
+                // **Zaplatí se to prvním rozvržením** — všechny uzly se vyrobí naráz: 44 uzlů
+                // 55 ms proti 5, 300 uzlů 413 ms proti 5, projíždění 0,86 s proti 0,31 s CPU
+                // (Debug). Únosné je to jedině proto, že **osa je shora omezená**:
+                // `ConversationQuery` bere `first: 100` z každého ze čtyř seznamů, takže víc než
+                // čtyři stovky uzlů odsud vyjít nemůžou. Diff takovou mez nemá a `LazyVStack`
+                // v něm proto zůstává.
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(rows, id: \.diagnosedID) { row in
                         if row.isFirstNew {
                             SinceMarker(at: lastVisit)
