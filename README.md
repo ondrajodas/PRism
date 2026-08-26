@@ -309,7 +309,7 @@ ne v hlavičce: je to stav prostředí, ne údaj o pull requestu. Selhaný check
 zůstává bannerem v hlavičce, protože se u něj musí vypsat celý výstup `gitu` a z něj se teprve
 pozná, co dělat dál.
 
-Detail PR má **sedm záložek** (#183, dvě přidal #242, jednu #215 a jednu #316): `Přehled` říká,
+Detail PR má **osm záložek** (#183, dvě přidal #242, jednu #215, jednu #316 a jednu #452): `Přehled` říká,
 jak to teď stojí (popis, fakta, co se změnilo od minule), `Změněné soubory` je diff, `Commity`
 je seznam commitů PR a diff toho, na který se klikne (popsané níž), a `Konverzace` je
 **časová osa toho, co se dělo** — s uzly,
@@ -318,28 +318,39 @@ filtrem `Vše / Komentáře / Vlákna / Události` a značkou `Nové od tvé pos
 je rovnou u události napsané, že tím zastaraly nálezy, a tlačítko pustit review znovu. Pátá je
 `Kontroly` — checky z GitHub Actions a detail toho, na který se klikne (popsaná níž).
 
-Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` (co dělaly) — a mezi
-`Kontrolami` a `Nálezy` je **dělič**: nalevo je to, co je na PR a co má i GitHub, napravo to, co
-s ním udělaly naše reviewery. Kreslí se z **vlastnosti záložky**, ne z její pozice — `Kontroly`
-i `Commity` sedí nalevo doprostřed, takže zadrátovaný index by ho posunul o jedno místo vedle.
-**Všech sedm záložek je v pruhu vždycky** (#306, #316), takže se jejich počet nemění podle dat.
+Za nimi stojí `Nálezy` (tabulka všeho, co reviewery nahlásily) a `Průběh` (co dělaly), a úplně
+vpravo `Zeptat se` (#452) — **rozhovor s Claudem nad tímhle PR**, popsaný níž. Mezi těmi třemi
+skupinami jsou **dva děliče**: vlevo je to, co je na PR a co má i GitHub, uprostřed to, co s ním
+udělaly naše reviewery, vpravo to, co s tím dělám já teď. Kreslí se ze **skupiny, do které záložka
+patří**, ne z její pozice — `Kontroly` i `Commity` sedí vlevo doprostřed, takže zadrátovaný index
+by dělič posunul o jedno místo vedle. **Všech osm záložek je v pruhu vždycky** (#306, #316), takže
+se jejich počet nemění podle dat.
 
-**Pruh se v užším okně zúží ve dvou stupních** (#316, #318). Popisky se nezkracují, jen zalamují,
-takže na šířce záleží — a pruh proto ustupuje po kusech, vždycky celý naráz:
+**Pruh se v užším okně zúží ve třech stupních** (#316, #318, #452). Popisky se nezkracují, jen
+zalamují, takže na šířce záleží — a pruh proto ustupuje po kusech, vždycky celý naráz. Čísla jsou
+**po osmé záložce**:
 
 | Okno | Co je v pruhu vidět |
 |---|---|
-| od **1051** | popisky u všech sedmi záložek a vpravo `+X −Y` |
-| **941–1050** | popisky, bez `+X −Y` (#316) |
-| do **940** | ikony s odznaky, popisek jen u aktivní záložky (#318) |
+| od **1186** | popisky u všech osmi záložek a vpravo `+X −Y` |
+| **1076–1185** | popisky, bez `+X −Y` (#316) |
+| do **1075** | ikony s odznaky, popisek jen u aktivní záložky (#318) |
+| krajní data | jen ikony s odznaky, popisek nikde (#452) |
 
 **První ustupuje `+X −Y`**, protože mluví o rozsahu celého PR, a to je odpověď na otázku
 `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem. Sedmá záložka se tím
-zaplatila skoro na nulu — pilulka stojí 110 bodů, záložka s odznakem 112. **Druhý stupeň jsou
-ikony** a spravuje něco jiného: do #318 se pruh pod 939 body **zalamoval** a v nejužším povoleném
-okně (700) byl vysoký 90 bodů místo 30 — se šesti záložkami 75, takže to nebyla cena sedmé
-záložky. S ikonami se nezalomí nikdy: vejdou se do okna od **617 bodů**, a i s trojmístnými odznaky
-u všech záložek od 689. Odznaky v nich zůstávají a jméno záložky říká nápověda pod kurzorem.
+zaplatila skoro na nulu (pilulka stojí 110 bodů, záložka s odznakem 112); **osmá už ne** —
+ve výchozím okně 1100 je od #452 vidět druhý stupeň, takže `+X −Y` se vrací až od ~1186 bodů.
+**Druhý stupeň jsou ikony** a spravuje něco jiného: do #318 se pruh pod 939 body **zalamoval**
+a v nejužším povoleném okně (700) byl vysoký 90 bodů místo 30 — se šesti záložkami 75, takže to
+nebyla cena sedmé záložky. Odznaky v ikonovém pruhu zůstávají a jméno záložky říká nápověda pod
+kurzorem.
+
+**Čtvrtý stupeň přibyl s osmou záložkou** (#452) a je to změna měření, ne názoru: do té doby se na
+něj nedalo přijít, protože se ikony vešly i s trojmístnými odznaky do okna 689. S osmi záložkami
+chtějí 645–711 bodů proti 647, které v nejužším okně jsou — takže by se pruh v tom krajním stavu
+(trojmístné počty u všech záložek naráz) zalomil. Poslední podoba shodí i popisek aktivní záložky
+a vejde se s 598 body; **na běžná data se na ni nepřijde**.
 
 V `Průběhu` má dráhu **každý reviewer z nastavené sady**, ne jen ten, který už na tomhle PR běžel:
 otázka je „kde je které z mých review“ a *ještě nezačalo* je taky odpověď. Tři různá „nic tu není“
@@ -353,8 +364,8 @@ jiného: `Přehled` novinky od poslední návštěvy, `Změněné soubory` poče
 je commitů (tiše — je to množství, ne upozornění), `Konverzace`
 kolik je toho k přečtení, `Kontroly` **kolik checků spadlo** (červeně; u běžícího puntík, nad
 zeleným CI nic — a dokud není seznam, taky nic: nula nad nenačtenými daty by tvrdila, že se
-spočítalo), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh`
-**puntík, ne počet** — „běží“ je stav, ne množství. Volba se pamatuje **u každého PR zvlášť**
+spočítalo), `Nálezy` kolik jich je (**červeně, když něco blokuje**) a `Průběh` i `Zeptat se`
+**puntík, ne počet** — „běží“ je stav, ne množství; počet otázek v rozhovoru by o tabu neřekl nic. Volba se pamatuje **u každého PR zvlášť**
 a otevírá se `Přehled` — popis a diskuze se čtou dřív než kód, kterého se týkají.
 
 Nad popisem PR jsou **dlaždice s fakty** (#198): kolik je commitů a kolik z nich přibylo od minule,
@@ -926,6 +937,66 @@ vědomé: ve 300 bodech se sloupce nemají kam vejít — kategorie, místo a sh
 a odmítnutí muselo skončit jako odznak u kategorie. Platí tam pořadí podle závažnosti, tedy to,
 v jakém se nálezy mají číst. **Tabulka se vrátila u #242, ale ve vlastní záložce** přes celou
 šířku, kde je sloupců dost, viz níž.
+
+### Záložka `Zeptat se` (#452)
+
+**Rozhovor s Claudem nad tímhle pull requestem.** Reviewery odpovídají na to, na co byly puštěné;
+při čtení diffu ale vzniká druhá otázka — *proč tohle vůbec dělá*, *co z těch nálezů je doopravdy
+problém*, *co se stane, když se to mergne* — a ta se do #452 musela odnést do prohlížeče nebo do
+terminálu.
+
+**Je to rozhovor, ne jednorázový dotaz.** Druhá otázka navazuje na první, protože je to **jedna
+session na pull request** držená přes `--resume`; bez toho by se každá otázka ptala znovu na
+všechno a odpovědi by si protiřečily. Rozhovor se ukládá **k PR, ne k `headSha`** — nálezy hlava
+zneplatní schválně, ale otázka „proč se ten mutex bere“ pushem nezastará —, takže přežije zavření
+záložky, nový commit i restart aplikace.
+
+**Čte, neodesílá — a je to napsané v okně, ne jen v dokumentaci.** Session má **užší** sadu
+nástrojů než reviewer: `Read`, `Grep`, `Glob` a `Bash(git:*)`, se zákazem `Bash(gh:*)` i `git push`
+a **bez** `ReportFindings` (nemá co hlásit) a **bez** `Skill` (skill načtený za běhu si umí říct
+o odeslání na GitHub). Pracuje ve **vlastní kopii repa** v cache aplikace, tedy v tomtéž worktree,
+jaký dostal reviewer; na uživatelovy klony nesahá. Kdo z odpovědi chce komentář na PR, pošle ho
+**tou jednou cestou ven**, kterou okno má: composerem v `Konverzaci`.
+
+**Kontext je materiál, ne nástroj.** Popis PR, nálezy, konverzace a checky si session nedotahuje
+sama — k tomu by potřebovala `gh`, a ten se nedá povolit jen na čtení. Aplikace je složí do souboru
+vedle pracovního stromu a do promptu jde **cesta k němu**, ne obsah (tentýž precedens jako zadání
+pro reviewera). Diff v tom souboru není: session si ho přečte `git diff base...HEAD`, tedy toutéž
+cestou jako reviewer. Co do promptu doopravdy jde, stojí **nahoře a jednou** — pruh `ví o tomhle
+PR:` s počty souborů diffu, nálezů, komentářů a checků.
+
+Nahoře vpravo je kapsle `čte · neodesílá`, dole composer s větou *Čte kód ve své kopii repa.
+Odeslat na GitHub neumí.* Odesílá se tlačítkem `Zeptat se` nebo **`⌘⏎`** — v tomhle tabu je proto
+zkratka okna na potvrzení odeslání review **zakázaná**, aby klávesa propadla composeru. Během
+odpovědi se z tlačítka stane **`Zastavit`**: jedna odpověď stojí kolem dolaru a běží minuty, takže
+„rozmyslel jsem si to“ nesmí znamenat čekat na konec.
+
+Bubliny, ne karty: moje otázky vpravo na akcentu, odpovědi vlevo na tichém podkladu, **co si
+přečetl** nad odpovědí a **čas a cena** drobně pod ní. Že se zrovna odpovídá, nese **prstýnek na
+místě příští bubliny** i s tím, co session právě dělá (`čte SecretClient.php`). Odpověď smí odkázat
+na **soubor a řádek** — pod prózou stojí kapsle `→ SecretClient.php:80` a klik skočí do `Změněných
+souborů` na to místo.
+
+**Prázdný tab nabízí otázky k odpíchnutí** jako přerušované kapsle a **klik je rovnou odešle** —
+jedno kliknutí je celý jejich smysl. Nejsou to schopnosti, je to nápověda, co tab umí; přepsat se
+dají tím, že se místo kliknutí napíše vlastní otázka do pole pod nimi. **Nabídka se řídí tím, co na
+PR doopravdy je**: když má pull request nálezy, je mezi otázkami ta, která je nechá prověřit, a se
+**stejným počtem**, jaký hlásí pruh `ví o tomhle PR:` o kus výš. Bez nálezů se nenabízí — ptala by
+se na nic.
+
+**Rozepsaná otázka přežije překliknutí tabu** i přepnutí na jiný PR: pole si ji drží samo a do
+paměti aplikace ji uloží, až když tab zmizí. Odeslaná otázka z pole **zmizí** (jinak by se dala
+odeslat a zaplatit podruhé), a když se neodešle, **zůstane** — přijít o napsanou otázku je horší
+než ji tam mít.
+
+**`Nový rozhovor`** vpravo nahoře zahodí rozhovor i navázanou session, takže příští otázka začíná
+načisto. Smaže i to, co není vidět — uložený rozhovor v cache a id session —, a proto **se ptá**:
+odpověď stála kolem dolaru a zpátky se nedá dostat ani zopakovat za stejné peníze. V prázdném tabu
+tlačítko není, protože nemá co zahodit; rozepsané otázky v poli se netýká.
+
+**Utrácí to, a je to vidět.** Cena každé odpovědi se počítá do `Dneska stálo` ve stavovém řádku
+jako všechno ostatní. **Strop se nedává** — sazbu si člověk řídí tím, kolik se ptá; skrytá útrata
+je horší než drahá.
 
 ### Záložka `Nálezy` (#242)
 
@@ -2070,15 +2141,18 @@ App/                      zdrojáky aplikace — target PRism
                           labely a vyžádání reviewera na vlastním PR (#392), založení nového labelu
                           v repozitáři (#413 — sedmá a jediná metoda, která píše mimo PR), brána z nastavení
   Review/                 spuštění session claude a překlad stream-json na nálezy;
-                          zadání PR pro reviewera vedle pracovního stromu (#120)
-                          a dotažení textu issue vlastní krátkou session (#345)
+                          zadání PR pro reviewera vedle pracovního stromu (#120),
+                          dotažení textu issue vlastní krátkou session (#345)
+                          a rozhovor nad PR (#452 — třetí vyjmenovaná session, užší sada
+                          nástrojů, --resume a materiál v souboru vedle stromu)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;
                           HandoffLedger — razítka předání zadání agentovi (#334);
                           ActivityNoticeLedger — o čem už se u vlastního PR hlásilo (#335);
                           ActivityLog a ActivityVisitLedger — záznam dění se stropem 200 položek
-                          a značka poslední návštěvy té sekce (#414)
+                          a značka poslední návštěvy té sekce (#414);
+                          AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Support/                sdílené drobnosti bez příslušnosti k modulu;
                           diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361) —

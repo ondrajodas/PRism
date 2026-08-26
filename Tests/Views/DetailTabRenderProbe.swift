@@ -229,6 +229,7 @@ struct DetailTabRenderProbe {
         case .checks: "kontroly"
         case .findings: "nalezy"
         case .progress: "prubeh"
+        case .ask: "zeptat-se"
         }
     }
 

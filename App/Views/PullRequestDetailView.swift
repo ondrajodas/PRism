@@ -149,6 +149,11 @@ struct PullRequestDetailView: View {
         // A detail taky — z něj je `headSha`, proti kterému se píše rozdělané review a proti
         // kterému se pozná, že zastaralo.
         .task(id: pullRequest) { await store.loadDetail(for: pullRequest) }
+        // Rozhovor (#452) se čte z disku **při otevření PR**, ne při startu aplikace: v seznamu
+        // nic nemá, takže by se jinak dekódovalo všechno, co si kdo kdy vyzkoušel, kvůli
+        // obrazovce, na kterou se ten den nemusí přijít podívat. Klíčem je identifikátor, ne
+        // celé shrnutí — nový commit rozhovor **nezneplatní** (ukládá se k PR, ne k `headSha`).
+        .task(id: pullRequest.id) { await store.loadAskConversation(for: pullRequest.id) }
         // Skok z palety (#184). Klíčem je **žádost i to, jak dopadl diff**: paleta umí skočit do
         // PR, jehož záložka se právě otevřela, takže diff v tu chvíli ještě není — a bez druhé
         // části klíče by se úloha po jeho dorazení už nespustila.
@@ -310,6 +315,10 @@ struct PullRequestDetailView: View {
         // Puntík, ne počet: „běží“ je stav, ne množství — u dvou reviewerů by dvojka o průběhu
         // neřekla nic.
         case .progress: store.isReviewing(pullRequest.id) ? .live : nil
+        // **Puntík, ne počet zpráv** (#452): číslo v rozhovoru je počet mých otázek, což o tabu
+        // neříká nic — a tichá kapsle „4“ vedle `Zeptat se` by vypadala jako čtyři nepřečtené
+        // věci. Odznak dostane jedině běžící odpověď, tedy tentýž stav jako u `Průběhu`.
+        case .ask: store.isAnswering(pullRequest.id) ? .live : nil
         }
     }
 
@@ -425,6 +434,7 @@ struct PullRequestDetailView: View {
                     case .checks: checks
                     case .findings: findings
                     case .progress: progress
+                    case .ask: ask
                     }
                 }
                 .availableWidth(proxy.size.width)
@@ -968,8 +978,14 @@ struct PullRequestDetailView: View {
 
     /// Dá se potvrzení vůbec otevřít? Rozhoduje `Policy`, ne tohle view — na totéž se ptá
     /// tlačítko v panelu.
+    ///
+    /// **V tabu `Zeptat se` je zakázané** (#452): composer tam odesílá otázku `⌘⏎` a dvě tlačítka
+    /// s toutéž kombinací v jednom okně znamenají, že vyhraje to zaregistrované později (#151,
+    /// #184). Zakázané tlačítko klávesu nebere, takže propadne composeru — tentýž vzorec jako
+    /// nad otevřenou paletou o řádek níž. Rozhoduje o tom `Policy`, ne `if` nad tabem tady.
     private var canOpenSubmission: Bool {
-        Policy.canOpenSubmission(
+        guard !Policy.claimsReturnShortcut(store.detailTab(for: pullRequest.id)) else { return false }
+        return Policy.canOpenSubmission(
             block: store.draftSendBlock(for: pullRequest.id),
             canTransfer: store.canTransferDraft(for: pullRequest.id)
         )
@@ -1383,6 +1399,50 @@ struct PullRequestDetailView: View {
             },
             slug: "\(pullRequest.repo)#\(pullRequest.number)"
         )
+    }
+
+    /// Tab `Zeptat se` (#452) — rozhovor nad tímhle PR.
+    ///
+    /// Skládá se tady, ne ve view: `Policy` rozhoduje výčtem, co je na obrazovce (prázdno s třemi
+    /// otázkami k odpíchnutí, nebo rozhovor s prstýnkem), a `AppStore` drží stav i cestu ven do
+    /// session. View z toho jen kreslí.
+    private var ask: some View {
+        // **Jedno pole chipů pro pruh i pro nabídku otázek** (#452): kdyby se počítalo dvakrát,
+        // mohl by pruh hlásit `3 nálezy` a otázka se ptát na jiné číslo — a přesně tahle třída
+        // chyby už jednou u tohohle tabu byla (materiál se skládal jinde než pruh).
+        let chips = store.askContextChips(for: pullRequest.id)
+        return AskView(
+            content: Policy.askTab(
+                conversation: store.askConversation(for: pullRequest.id),
+                isAnswering: store.isAnswering(pullRequest.id),
+                context: chips
+            ),
+            chips: chips,
+            activity: store.askActivityLine(for: pullRequest.id),
+            draft: store.askDraft(for: pullRequest.id),
+            block: store.askBlock(for: pullRequest.id),
+            persistDraft: { store.setAskDraft($0, for: pullRequest.id) },
+            send: { store.askQuestion($0, about: pullRequest.id) },
+            cancel: { store.cancelAsk(for: pullRequest.id) },
+            reset: { store.resetAskConversation(for: pullRequest.id) },
+            jump: { jumpToCode(file: $0.file, line: $0.line) }
+        )
+        // **Vlastní identita podle PR**, a je to podmínka správnosti: detail se mezi pull requesty
+        // **znovupoužívá** (proto ty `.task(id: pullRequest.id)` výš), takže bez tohohle by si
+        // composer nechal rozepsanou otázku z předchozího PR a při zmizení ji uložil do jeho
+        // zálohy. `onDisappear` starého `AskView` přitom doběhne s uzávěry starého PR, takže se
+        // rozepsaná otázka uloží tam, kam patří.
+        .id(pullRequest.id)
+    }
+
+    /// Skok z odpovědi na místo v kódu (#452).
+    ///
+    /// Jde **toutéž cestou jako skok z nálezu** (`anchor(inFile:line:)` + `scroll(to:)`), takže se
+    /// nemá čím rozejít v tom, co je „to místo“ — a když soubor v diffu není, **nestane se nic**:
+    /// skákat naslepo je horší než nehnout se. Rozbalit sbalený soubor umí ta kotva sama.
+    private func jumpToCode(file: String, line: Int) {
+        guard let anchor = anchor(inFile: file, line: line) else { return }
+        scroll(to: anchor)
     }
 
     /// Zkopíruje příkaz, jakým by se reviewer spustil teď — `Zkopírovat příkaz` u spadlé session

@@ -271,6 +271,38 @@ struct ReviewDraftStoreTests {
         await #expect(throws: ReviewDraftStoreError.self) { try await store().load(for: pr) }
     }
 
+    /// Odkaz na **rodičovské složce** je ten druhý případ, a `isSymbolicLink` ho nezachytí — ptá
+    /// se na samotný soubor. Chytá ho jedině `contains`, který rozbaluje rodiče, a ten měl do #458
+    /// v tomhle storu jen `delete`; **`save` tedy zapisoval mimo cache** (tatáž mezera, jakou
+    /// Copilot našel u `AskStore` — je to store, ze kterého se opisovalo).
+    ///
+    /// Tvrdí to, že se něco **NEstalo**: cizí soubor musí po všech třech operacích zůstat, jaký byl.
+    @Test("Draft za odkazovanou složkou se nepřečte, nepřepíše ani nesmaže")
+    func refusesADraftBehindASymlinkedDirectory() async throws {
+        let owner = layout.drafts(of: pr.repo).deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: owner.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: outsideCache.url.appending(path: pr.repo.name),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(at: owner, withDestinationURL: outsideCache.url)
+
+        let stranger = outsideCache.url.appending(path: "\(pr.repo.name)/\(pr.number).json")
+        let before = Data("cizi soubor, ne draft".utf8)
+        try before.write(to: stranger)
+
+        await #expect(throws: ReviewDraftStoreError.self) { try await store().load(for: pr) }
+        await #expect(throws: ReviewDraftStoreError.self) {
+            try await store().save(ReviewDraft(pullRequest: pr, headSha: "x", body: "ven"))
+        }
+        try await store().delete(for: pr)
+
+        #expect(try Data(contentsOf: stranger) == before, "sáhlo se mimo cache")
+    }
+
     // MARK: - Mazání
 
     @Test("Zahození draft smaže a jde zmáčknout dvakrát")

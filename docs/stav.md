@@ -4977,3 +4977,106 @@ kdyby to bylo potřeba, je bufferovat z `readabilityHandler`u jako `SubprocessSt
 Testů **4110**, z toho **2 nové** (`UnanimatedWindowTests`: stráž a pojistka, že doopravdy čte
 zdrojáky). Rozbor i obě tabulky měření jsou v [`testovani.md`](testovani.md), poznámka o poolu
 u podprocesů v [`architektura.md`](architektura.md).
+
+### #452 — tab `Zeptat se`: rozhovor s Claudem nad pull requestem
+
+Osmá záložka PR a **třetí vyjmenovaná session** vedle revieweera a dotažení textu issue (#345).
+Odpovídá na otázku, na kterou reviewer nebyl puštěný — *proč tohle vůbec dělá*, *co z těch nálezů
+je doopravdy problém* —, a ta se do #452 musela odnést do prohlížeče nebo do terminálu.
+
+**Sada nástrojů je užší než reviewerova**: `Read,Grep,Glob,Bash(git:*)`, tedy bez `ReportFindings`
+(nemá co hlásit) a bez `Skill` (skill načtený za běhu si umí říct o odeslání na GitHub);
+`--disallowedTools` je **tatáž konstanta** jako u revieweera a obě hodnoty tvrdí test **literálem**,
+jako u #345. **Tvrdá podmínka č. 1 se nehnula**: `grep ReviewPublishing App/` vrací týž seznam
+a `SingleWayOutTests` prošly beze změny.
+
+**Ukládá se k PR, ne k `headSha`**, a je to zapsaná výjimka z toho, jak se klíčuje všechno ostatní
+kolem review: podmínka č. 5 mluví o **nálezech**, tedy o tvrzení proti kódu, kdežto otázka „proč se
+ten mutex bere“ pushem nezastará. Rozhovor drží `--resume`, takže druhá otázka navazuje a materiál
+se **přepisuje před každou otázkou** (pruh `ví o tomhle PR:` se počítá živě, takže zastaralý snímek
+by nad navazující otázkou tvrdil víc, než data unesou). `session_id` se přepisuje po každé odpovědi,
+protože `claude --resume` id **může vrátit jiné** — a když nedorazí žádné, staré se zahodí, aby
+rozbité navázání rozhovor nepoložilo napořád.
+
+**Kontext jde do promptu jako cesta k souboru** vedle pracovního stromu (precedens #120), ne jako
+nástroj — na dotažení nálezů, konverzace a checků by session potřebovala `gh`. Diff v souboru není:
+session si ho přečte `git diff base...HEAD`, tedy toutéž cestou jako reviewer.
+
+**Osmá záložka posunula dvě naměřená čísla v pruhu záložek.** Ve výchozím okně 1100 se od #452
+kreslí `labels`, tedy **bez `+X −Y`** (vrací se od ~1186 bodů) — je to ta výměna, kterou pořadí
+podob předepisuje. A **přibyla čtvrtá podoba** (`compact`, jen ikony bez popisku i u aktivní
+záložky): do #452 se na ni nedalo přijít, protože se `icons` i s trojmístnými odznaky vešly do okna
+689; s osmi záložkami chtějí 645–711 bodů proti 647, které v nejužším okně jsou, takže by se pruh
+v tom krajním stavu zalomil. `compact` se vejde s 598 body. Je to **změna měření, ne názoru**,
+a zůstalo u ní zapsané obojí.
+
+**Kolik jedna odpověď stojí, je změřené, ne odhadnuté**: první otázka nad tímhle PR (opus-5, diff
+~5 tisíc řádků) vyšla na **$1,56 a 125 s**, navazující jednovětá přes `--resume` na **$0,96 a
+6,8 s**. Cenu určuje **kontext, ne délka otázky**. Tentýž zkušební běh navíc **našel dvě věci
+v téhle implementaci** a obě se opravily ještě před PR: materiál se skládal jen k první otázce
+(pruh `ví o tomhle PR:` se přitom počítá živě, takže by nad navazující otázkou tvrdil víc, než
+data unesou) a mrtvé `session_id` se nezahazovalo, takže rozbité navázání by rozhovor položilo
+napořád.
+
+**Proklikání otočilo tři zapsaná rozhodnutí a našlo jednu chybu.** Nabízené otázky do té doby jen
+předvyplnily pole — odešle je teď **jeden klik**, protože předvyplněná otázka chce druhý klik na
+tomtéž místě, kde měl stačit první. Nabídka je navíc **odvozená z pruhu `ví o tomhle PR:`**, takže
+se otázka na nálezy nad PR bez nálezů nenabízí (ptala by se na nic) a nese **týž počet**, jaký
+hlásí chip — jedno pole chipů jde do obojího, protože dvě čísla o jedné věci na jedné obrazovce
+jsou ta třída chyby, kterou u tohohle tabu jednou vyrobil materiál skládaný jinde než pruh. A
+přibyl **`Nový rozhovor`** (napřed dokreslený a odsouhlasený v sekci 33 návrhu): zahodí rozhovor,
+soubor v cache i `sessionID`, ptá se jednou větou, protože zpátky se to nedá koupit, a v prázdném
+tabu se nekreslí.
+
+Ta chyba byla, že **odeslaná otázka zůstala v poli** — a stálo to za rozbor: store obě poloviny
+výměny dělal správně, rozbité to bylo **okružní cestou**. Composer používal `DraftTextEditor`, který
+text posílá dolů po **odmlce 400 ms** (rozdělané review čtou bubliny v diffu, takže se každý úhoz
+zapisovat nedá), jenže tady je to, co se odesílá, **totéž pole**, do kterého se píše: klik trefený
+do té odmlky odeslal **starší** otázku a rozepsanou dostal zpátky. Text proto drží composer
+(`AskComposer`), store dostane otázku **až při odeslání** a `askDrafts` je od té doby jen záloha pro
+přepnutí tabu. Odeslání vrací `Bool`, takže se pole vyprázdní **jen když otázka doopravdy odešla** —
+neodeslaná v něm zůstane.
+
+Testů **4196**, všechny zelené — nových je sedm sad kolem rozhovoru (`AskCommandTests`,
+`AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`,
+`AskComposerTests`) a k tomu stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam
+(#361). `AskComposerTests` jedou nad **skutečným oknem a skutečnou klávesou**
+(`window.performKeyEquivalent` s `⌘⏎`), protože `Button` je v tomhle okně kreslený SwiftUI a žádný
+`NSButton` v hierarchii není — a nad storem se o té chybě nedalo tvrdit nic.
+
+**Zabitá odpověď navíc nesmí nic dopsat.** Zrušení se nepozná jen podle `CancellationError` —
+zabíjený `git` ani `claude` o něm nevědí a vyhodí svou vlastní chybu —, takže by po `Zastavit`
+přibyla bublina „Nepovedlo se…“ a po `Nový rozhovor` by přistála do právě vyprázdněného rozhovoru
+a **zapsala ho zpátky na disk**. Rozhoduje o tom jedno místo pro obě cesty (`AppStore+Ask.handle`);
+ověřeno vloženou regresí.
+
+**Poslední kolo Copilota našlo dvě věci a obě byly reálné.** První byla **chybějící hranice cache
+v `AskStore`** — `contains` měl jen `delete`, takže `load` četl a `save` zapisoval po cestě, kterou
+symlink v rodičovské složce vyvede ven (tvrdá podmínka č. 3). Opravilo se to **jako třída**:
+pravidlo se svedlo do nového `CacheFile` a použily ho i `ReviewDraftStore` a `ReviewStore`, které tu
+mezeru měly taky — je to store, ze kterého se opisovalo. Ledgery pod kořenem cache stráž vědomě
+nedostaly (jejich soubory jsou přímé děti kořene, takže mezi kořenem a souborem není složka, která
+by mohla být odkazem); zůstává u nich odkaz na **samotném souboru** jako zapsaná mezera. Ověřeno
+vloženou regresí: bez té kontroly `save` cizí soubor mimo cache doopravdy přepsal a `delete` ho
+smazal.
+
+Druhá byla, že **měření rozhovoru jelo bez `NSWindow`u**, a dopadla zajímavěji. Mechanismus se
+potvrdil (`ScrollView` bez okna obsah nerozvrhne — bez okna vyjde `obsah 0 pt`), ale **závěr ne**:
+bez okna byl pevný stack **dražší**, ne levnější (300 bublin 283–308 ms proti 238–257 ms v okně)
+a počet vyrobených prvků byl **totožný** (907). Rozhodnutí „pevný `VStack`, ne líný seznam“ tedy
+z opraveného měření vychází stejně; čísla v okně jsou 18 ms u dvaceti bublin, 87 u stovky a 242
+u tří set, proti 413 ms, se kterými se pevný stack přijal u osy konverzace (#361). Měřidlo od té
+doby vypisuje **výšku obsahu a počet prvků**, protože zrovna tuhle chybu z časů poznat nejde.
+
+**Zeleno bylo po většinu práce jen z běhu po polovinách**, protože plný `xcodebuild test` se na
+tomhle stroji zasekával na **třech posledních suitách** (`AppStore — komentář pod PR`,
+`— odpovídání do vláken`, `— labely a reviewery`): v testovacím hostu se nasbíralo **76 vláken
+v `-[NSAnimation _runBlocking]`** a dispatch pool narazil na soft limit 75. **Nebylo to z #452** —
+změřeno se **zastashovanými** změnami, se stejným výsledkem na týchž třech suitách. Zapsalo se to
+jako #462 a vyřešilo se to tam; od jeho mergnutí do `main` **doběhne plný běh normálně**
+(4 196 testů ve 412 suitách za 58 s), takže dělení na poloviny odpadlo.
+
+**Stráž z #462 si u toho vyžádala dvě úpravy v téhle větvi**: `AskTabRenderProbe`
+a `AskComposerTests` si okno ukazovaly `orderFront(nil)`, tedy s animací objevení, kterou #462
+zakázalo — od merge používají `orderFrontUnanimated()`. Je to přesně ta situace, kvůli které je
+ta stráž nad zdrojáky: obě sondy vznikly dřív, než pravidlo, a bez ní by se do `main` dostaly.

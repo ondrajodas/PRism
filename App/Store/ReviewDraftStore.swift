@@ -11,6 +11,8 @@ enum ReviewDraftStoreError: LocalizedError {
     case foreignDraft(expected: PRIdentifier, found: PRIdentifier)
     /// Na místě draftu je symbolický odkaz — čtení by šlo mimo cache.
     case symlinkedDraft(pullRequest: PRIdentifier)
+    /// Cesta k draftu vede po rozbalení symlinků **mimo cache aplikace**.
+    case draftOutsideCache(pullRequest: PRIdentifier)
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +20,8 @@ enum ReviewDraftStoreError: LocalizedError {
             "V souboru draftu pro \(expected) leží rozdělané review pro \(found)."
         case .symlinkedDraft(let pullRequest):
             "Na místě draftu pro \(pullRequest) je symbolický odkaz. Aplikace čte jen svoje soubory."
+        case .draftOutsideCache(let pullRequest):
+            "Cesta k draftu pro \(pullRequest) vede mimo cache aplikace. Aplikace sahá jen do ní."
         }
     }
 }
@@ -63,7 +67,7 @@ actor ReviewDraftStore {
             try delete(for: draft.pullRequest)
             return
         }
-        try write(draft, to: layout.draftFile(for: draft.pullRequest))
+        try write(draft, to: ownFile(for: draft.pullRequest))
     }
 
     /// Draft jednoho PR, nebo `nil`, když žádný není.
@@ -72,15 +76,11 @@ actor ReviewDraftStore {
     /// rozepsané review tváří jako neexistující — a člověk by ho psal znovu, aniž by věděl,
     /// že mu na disku leží rozbitý.
     func load(for pr: PRIdentifier) throws -> ReviewDraft? {
-        let url = layout.draftFile(for: pr)
+        // **Hranice cache napřed, existence až po ní.** Obráceně by se `fileExists` ptalo skrz
+        // odkaz v rodičovské složce, tedy na soubor mimo cache.
+        let url = try ownFile(for: pr)
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             return nil
-        }
-        // Symlink by přečetl soubor **mimo cache**. Aplikace si ho sama nevyrobí, ale
-        // „nikdy nesahat na uživatelovy soubory“ je tvrdá podmínka a nemá viset na tom, že
-        // si to někdo pamatuje. Stejná kontrola je ve výpisu.
-        guard !layout.isSymbolicLink(url) else {
-            throw ReviewDraftStoreError.symlinkedDraft(pullRequest: pr)
         }
         let draft = try read(at: url)
         // Jméno souboru není pravda — tou je `pullRequest` uvnitř. Rozchod by znamenal, že
@@ -116,16 +116,32 @@ actor ReviewDraftStore {
 
     /// Zahodí draft. Idempotentní — chybějící soubor není chyba, protože se na tlačítko dá
     /// zmáčknout dvakrát.
+    ///
+    /// **Odkaz na souboru se tady neodmítá**, na rozdíl od čtení a zápisu: `removeItem` smaže
+    /// odkaz, ne jeho cíl, takže je to jediná cesta, jak takovou anomálii z cache dostat pryč.
+    /// Důvod bydlí v `CacheFile`.
     func delete(for pr: PRIdentifier) throws {
         let url = layout.draftFile(for: pr)
-        // Kontrola je stejná jako u `ReviewStore` a `CacheEviction`: cesta se skládá
-        // z `CacheLayout` a ven vést nemůže, ale tvrdá podmínka „nikdy nesahat na uživatelovy
-        // soubory“ nemá viset na tom, že si to někdo pamatuje.
-        guard layout.contains(url) else { return }
+        guard CacheFile.isInsideCache(url, in: layout) else { return }
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
             return
         }
         try FileManager.default.removeItem(at: url)
+    }
+
+    /// Cesta k souboru draftu **ověřená na hranici cache** — jediné místo, odkud si ji čtení
+    /// a zápis berou.
+    ///
+    /// Do #458 tu kontrolu mělo jen mazání a odkaz se odmítal jen při čtení, takže `save` sahal na
+    /// cestu, kterou by symlink v rodičovské složce vyvedl ven. Pravidlo samo je v `CacheFile`;
+    /// tady se jen překládá na chybu, která umí říct, o **který draft** jde.
+    private func ownFile(for pr: PRIdentifier) throws -> URL {
+        let url = layout.draftFile(for: pr)
+        switch CacheFile.refusal(for: url, in: layout) {
+        case .outsideCache: throw ReviewDraftStoreError.draftOutsideCache(pullRequest: pr)
+        case .symbolicLink: throw ReviewDraftStoreError.symlinkedDraft(pullRequest: pr)
+        case nil: return url
+        }
     }
 
     /// Leží soubor tam, kam podle svého `pullRequest` patří?

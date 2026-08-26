@@ -127,6 +127,7 @@ struct TabStripRenderProbe {
         case .checks: "kontroly"
         case .findings: "nalezy"
         case .progress: "prubeh"
+        case .ask: "zeptat-se"
         }
     }
 
@@ -141,6 +142,9 @@ struct TabStripRenderProbe {
         case .checks: .blocking(1)
         case .findings: .blocking(3)
         case .progress: .live
+        // `Zeptat se` (#452) má odznak jedině při běžící odpovědi — a to je nejširší podoba,
+        // na které se pruh měří.
+        case .ask: .live
         }
     }
 

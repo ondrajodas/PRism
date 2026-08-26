@@ -5,6 +5,11 @@
 # deprecated Projects classic (`repository.pullRequest.projectCards`) a reviewer se
 # nepřidá. REST endpoint /requested_reviewers vrátí 200, ale bota tiše ignoruje.
 # Funguje jedině GraphQL mutace requestReviews s botIds.
+#
+# `union: true` je schválně: přidává do sady, takže nesundává reviewery, které už PR má.
+# Cena je, že na spotřebovaný request (job, který se zasekl a nikdy nezačal) tenhle skript
+# nemá účinek — vyžádat se to musí znovu až po vyprázdnění sady. Postup i měření jsou
+# v docs/github-cli.md, sekce „Když se request spotřebuje mrtvým jobem“.
 set -euo pipefail
 
 PR="${1:?použití: bin/copilot-review.sh <číslo PR>}"

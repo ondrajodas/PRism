@@ -79,9 +79,11 @@ extension AppStore {
         // Kontrola nálezů (#150) je tatáž `claude` session, takže se zavírá stejně — bez toho by
         // přežila aplikaci a běžela dál na `launchd`, což je celý ten problém z #264.
         for recheck in recheckTasks.values { recheck.task.cancel() }
+        // Rozhovor (#452) taky — je to `claude -p` jako každá jiná session tady.
+        for ask in askTasks.values { ask.cancel() }
 
         var remaining = Self.terminationChecks
-        while !reviewTasks.isEmpty || !recheckTasks.isEmpty, remaining > 0 {
+        while !reviewTasks.isEmpty || !recheckTasks.isEmpty || !askTasks.isEmpty, remaining > 0 {
             remaining -= 1
             // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake
             // hodiny čekání přeskočí, a test, který má tvrdit, že po zavření nic neběží, by

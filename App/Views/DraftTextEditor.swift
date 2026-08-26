@@ -9,17 +9,17 @@ import SwiftUI
 ///
 /// Odklad je stejná úvaha jako u okna nastavení (`SettingsModel`), jen bez `TimeSource`:
 /// tohle je view, a views se v tomhle repu neunit-testují.
+///
+/// **Pro composer, ze kterého se odesílá jedním klikem, se to nehodí** (#452) — mezi „co je
+/// vidět“ a „co store ví“ je celá ta odmlka, takže klik do ní trefený pošle starší text
+/// a rozepsaný vrátí zpátky do pole. Tab `Zeptat se` má proto vlastní `AskComposer`, který text
+/// drží u sebe a dolů ho posílá až při odeslání; podobu pole sdílejí přes `DraftTextField`.
 struct DraftTextEditor: View {
     /// Text, jak ho zná store.
     let text: String
     var placeholder = ""
     var minHeight: Double = 60
-    /// Strop výšky. `nil` = pole se roztáhne, kolik dostane.
-    ///
-    /// Potřebuje ho ten, kdo pole staví do **svislého rozvržení se zbývajícím místem** (#216):
-    /// `TextEditor` je svisle nenasytný, takže si o to zbylé místo řekne stejným dílem jako
-    /// osa konverzace vedle něj — a composer pak zabral půlku tabu. Uvnitř scrollu (bublina
-    /// vlákna, panel review) žádné zbylé místo není, proto tam strop netřeba.
+    /// Strop výšky. `nil` = pole se roztáhne, kolik dostane. Podrobnosti u `DraftTextField`.
     var maxHeight: Double?
     /// Má se prázdný text doručit i tehdy, když se **nezměnil**?
     ///
@@ -41,56 +41,28 @@ struct DraftTextEditor: View {
     private static let delay = Duration.milliseconds(400)
 
     var body: some View {
-        TextEditor(text: $value)
-            .font(.callout)
-            .scrollContentBackground(.hidden)
-            // `map` schválně: `Double?` se na `CGFloat?` implicitně nepřevede, i když
-            // `Double` na `CGFloat` ano.
-            .frame(minHeight: minHeight, maxHeight: maxHeight.map { CGFloat($0) })
-            // **Nápověda visí na editoru, ne na orámované ploše.** Kdyby se zavěsila až za
-            // `padding`, počítala by se od hrany rámečku, kdežto kurzor stojí na začátku
-            // textu — a mezi tím je právě to odsazení. Blikající kurzor mimo text z toho byl
-            // vidět na první pohled.
-            .overlay(alignment: .topLeading) { prompt }
-            .padding(6)
-            .background(.quinary, in: .rect(cornerRadius: 6))
-            .overlay {
-                RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 1)
-            }
-            .onAppear { adopt(text) }
-            .onChange(of: text) { _, new in
-                // Vlastní zápis, který se vrátil ze store, se přeskočí — jinak by přepsal to,
-                // co je zrovna rozepsané.
-                guard new != committed else { return }
-                // Cizí změna přišla dřív, než se rozepsané uložilo (typicky převzetí nálezu
-                // do těla během psaní). Rozepsané se doručí, ať se neztratí — cena je, že
-                // právě přidaná položka se tím přepíše, což je vidět a dá se kliknout znovu.
-                // Mířit to může jen na tentýž draft: identita tohohle view je svázaná s PR,
-                // takže při přepnutí se view **zahodí** (a flushne v `onDisappear`), ne
-                // překreslí.
-                flush()
-                adopt(new)
-            }
-            .onChange(of: value) { _, new in schedule(new) }
-            .onDisappear { flush() }
-    }
-
-    /// `TextEditor` nápovědu neumí, takže se kreslí přes něj — a musí začínat **na prvním
-    /// znaku**, ne na hraně pole.
-    ///
-    /// Svisle to znamená zavěsit ji na editor, ne na orámovanou plochu (viz `body`).
-    /// Vodorovně chybí ještě `lineFragmentPadding` textového pole, tedy 5 pt, kterými
-    /// `NSTextView` odsazuje glyfy od svého okraje — bez nich kurzor blikal přes první
-    /// písmeno nápovědy. Číslo je systémové, ne odhad: `NSTextContainer` ho má takhle
-    /// v defaultu.
-    @ViewBuilder private var prompt: some View {
-        if value.isEmpty && !placeholder.isEmpty {
-            Text(verbatim: placeholder)
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 5)
-                .allowsHitTesting(false)
+        DraftTextField(
+            text: $value,
+            placeholder: placeholder,
+            minHeight: minHeight,
+            maxHeight: maxHeight
+        )
+        .onAppear { adopt(text) }
+        .onChange(of: text) { _, new in
+            // Vlastní zápis, který se vrátil ze store, se přeskočí — jinak by přepsal to,
+            // co je zrovna rozepsané.
+            guard new != committed else { return }
+            // Cizí změna přišla dřív, než se rozepsané uložilo (typicky převzetí nálezu
+            // do těla během psaní). Rozepsané se doručí, ať se neztratí — cena je, že
+            // právě přidaná položka se tím přepíše, což je vidět a dá se kliknout znovu.
+            // Mířit to může jen na tentýž draft: identita tohohle view je svázaná s PR,
+            // takže při přepnutí se view **zahodí** (a flushne v `onDisappear`), ne
+            // překreslí.
+            flush()
+            adopt(new)
         }
+        .onChange(of: value) { _, new in schedule(new) }
+        .onDisappear { flush() }
     }
 
     private func adopt(_ new: String) {

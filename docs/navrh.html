@@ -10817,6 +10817,9 @@ Secret Client
             </span>
             <span class="sp" style="flex: 1;"></span>
             <span class="pill idle">čte · neodesílá</span>
+            <!-- `Nový rozhovor` je **jen tam, kde je co zahodit** — v prázdném tabu se nekreslí.
+                 Tiché tlačítko vedle kapsle, ne akcentované: je to úklid, ne hlavní akce. -->
+            <span class="mini">Nový rozhovor</span>
           </div>
 
           <div class="ask-log">
@@ -10880,9 +10883,18 @@ Secret Client
 
     <h3>První otevření</h3>
     <p class="muted">
-      Prázdná plocha by u rozhovoru znamenala „a co se mám ptát“. Místo ní stojí <b>tři otázky
-      k odpíchnutí</b> — jsou to obyčejná tlačítka, která jen předvyplní pole, takže se dají
-      přepsat. Nejsou to schopnosti, je to nápověda, co tenhle tab umí.
+      Prázdná plocha by u rozhovoru znamenala „a co se mám ptát“. Místo ní stojí <b>otázky
+      k odpíchnutí</b> a <b>klik je rovnou odešle</b> — jedno kliknutí je celý jejich smysl.
+      Původní zákres je jen předvyplňoval do pole; zahodilo se to při prvním proklikání, protože
+      předvyplněná otázka po člověku chce druhý klik na tomtéž místě, kde měl stačit první.
+      Nejsou to schopnosti, je to nápověda, co tenhle tab umí.
+    </p>
+    <p class="muted">
+      <b>Nabídka se řídí tím, co na PR doopravdy je.</b> Když má pull request nálezy, je mezi
+      otázkami ta, která je nechá <b>prověřit</b> — a s jejich <b>skutečným počtem</b>, tedy
+      s týmž číslem, jaké hlásí pruh <code>ví o tomhle PR:</code> o kus výš. Bez nálezů se
+      nenabízí, protože by se ptala na nic; dvě různá čísla na jedné obrazovce jsou horší než
+      jedna otázka míň.
     </p>
     <div class="pane new">
       <div class="tag"><i></i>Tab bez jediné otázky</div>
@@ -10948,6 +10960,17 @@ Secret Client
           <span>Nálezy, konverzace a checky jdou do promptu jako text — session si je nedotahuje
           sama, protože k tomu by potřebovala <code>gh</code>, a ten se nedá povolit jen na
           čtení. Skládá se to týmž způsobem jako zadání pro agenta (#333).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">104b</span>
+        <span class="body">
+          <b>Nový rozhovor se ptá, protože zpátky to nedostaneš</b>
+          <span>Tlačítko zahodí rozhovor i session a začne od nuly — a <b>zeptá se jednou větou</b>,
+          ačkoli se v tomhle okně skoro nic nepotvrzuje. Důvod je cena: odpověď stojí kolem dolaru
+          a omylem smazaný rozhovor se nedá vrátit ani zopakovat za stejné peníze. Je to tatáž
+          úvaha jako u zakládání labelu (#413) — potvrzuje se to, co je nevratné, ne to, co je
+          důležité. V prázdném tabu tlačítko <b>není</b>: nemá co zahodit.</span>
         </span>
       </div>
       <div class="note">
