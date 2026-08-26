@@ -4855,8 +4855,10 @@ a `SingleWayOutTests` prošly beze změny.
 **Ukládá se k PR, ne k `headSha`**, a je to zapsaná výjimka z toho, jak se klíčuje všechno ostatní
 kolem review: podmínka č. 5 mluví o **nálezech**, tedy o tvrzení proti kódu, kdežto otázka „proč se
 ten mutex bere“ pushem nezastará. Rozhovor drží `--resume`, takže druhá otázka navazuje a materiál
-se skládá jen k té první; `session_id` se přepisuje po každé odpovědi, protože `claude --resume`
-vrací id **nové** session.
+se **přepisuje před každou otázkou** (pruh `ví o tomhle PR:` se počítá živě, takže zastaralý snímek
+by nad navazující otázkou tvrdil víc, než data unesou). `session_id` se přepisuje po každé odpovědi,
+protože `claude --resume` id **může vrátit jiné** — a když nedorazí žádné, staré se zahodí, aby
+rozbité navázání rozhovor nepoložilo napořád.
 
 **Kontext jde do promptu jako cesta k souboru** vedle pracovního stromu (precedens #120), ne jako
 nástroj — na dotažení nálezů, konverzace a checků by session potřebovala `gh`. Diff v souboru není:

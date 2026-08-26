@@ -173,8 +173,8 @@ struct AppStoreAskTests {
         #expect(asker.requests[1].prompt.contains("42-ask.md"))
         #expect(asker.requests[1].prompt.contains("have been refreshed"))
         #expect(!asker.requests[0].prompt.contains("have been refreshed"))
-        // A id se posouvá: `claude --resume` vrací id **nové** session, takže třetí otázka musí
-        // navázat na tu druhou, ne pořád na první.
+        // A id se posouvá: `claude --resume` id **může vrátit jiné** (v naměřeném běhu zůstalo
+        // totéž), takže se bere to poslední — třetí otázka musí navázat na druhou, ne na první.
         #expect(store.askConversation(for: pr)?.sessionID == "s2")
     }
 

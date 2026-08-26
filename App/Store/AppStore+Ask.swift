@@ -225,8 +225,9 @@ extension AppStore {
     /// stihla říct. Zahodit text kvůli tomu, že u něj stojí hláška, by znamenalo zaplatit odpověď
     /// a nezobrazit ji.
     ///
-    /// `sessionID` se přepisuje **vždycky, když dorazilo**: `claude --resume` vrací id **nové**
-    /// session, takže držet to první by po druhé otázce navazovalo pořád na tutéž.
+    /// `sessionID` se přepisuje **vždycky, když dorazilo**: `claude --resume` id **může vrátit
+    /// jiné**. V naměřeném běhu zůstalo totéž (`docs/claude-cli.md`), ale držet to první by
+    /// znamenalo, že se změněné id ztratí a třetí otázka naváže na tu první.
     ///
     /// **A když nedorazilo, staré se zahodí.** Bez toho by rozhovor s nefunkčním navázáním
     /// (session vypršela, cache se uklidila, `claude` ji nezná) zůstal rozbitý **navždycky**:

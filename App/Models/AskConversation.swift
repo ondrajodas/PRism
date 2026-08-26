@@ -67,8 +67,9 @@ struct AskConversation: Codable, Equatable, Sendable {
     let pullRequest: PRIdentifier
     var messages: [AskMessage] = []
     /// `session_id` poslední odpovědi. **Bere se z každé doběhlé session znovu**, protože
-    /// `claude --resume` vrací id **nové** session (větev z té původní) — držet to první by po
-    /// druhé otázce navazovalo pořád na tutéž a třetí by o druhé nevěděla.
+    /// `claude --resume` id **může vrátit jiné** — v naměřeném běhu (viz `docs/claude-cli.md`)
+    /// zůstalo totéž, ale spoléhat se na to znamená, že by se změněné id ztratilo a třetí otázka
+    /// by navazovala na tu první.
     var sessionID: String?
 
     init(pullRequest: PRIdentifier, messages: [AskMessage] = [], sessionID: String? = nil) {

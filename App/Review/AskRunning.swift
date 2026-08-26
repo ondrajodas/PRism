@@ -37,8 +37,8 @@ struct AskRequest: Sendable, Equatable {
 struct AskAnswer: Sendable, Equatable {
     /// Text odpovědi z posledního sdělení session. `nil` = žádné nedorazilo.
     var text: String?
-    /// `session_id` **téhle** session — tím se navazuje příště. `claude --resume` vrací id nové
-    /// session (větev z původní), takže se přepisuje po každé odpovědi.
+    /// `session_id` **téhle** session — tím se navazuje příště. `claude --resume` id **může
+    /// vrátit jiné** (v naměřeném běhu zůstalo totéž), takže se přepisuje po každé odpovědi.
     var sessionID: String?
     /// Soubory, které si session otevřela.
     var readFiles: [String] = []

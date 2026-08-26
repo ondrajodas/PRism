@@ -2229,8 +2229,10 @@ a dneska se odnáší do prohlížeče nebo do terminálu. Řídí to `AppStore+
   právě těch dvou položek.
 - **Jedna session na pull request, držená přes `--resume`.** Ověřeno spuštěním, že si session
   předchozí odpověď pamatuje (viz [`docs/claude-cli.md`](claude-cli.md), *Rozhovor nad PR*).
-  `session_id` se **přepisuje po každé odpovědi** — vrácené id je někdy totéž a někdy nové (větev
-  z původní), takže držet to první by po druhé otázce navazovalo pořád na tutéž. A **když
+  `session_id` se **přepisuje po každé odpovědi**. V tom naměřeném běhu vrátilo `--resume`
+  **totéž** id, ale že jiné být nemůže, změřené **není** — a kdyby přišlo jiné, držení toho prvního
+  by znamenalo, že se ztratí a třetí otázka naváže na první. Přepsat to, co dorazilo, je levnější
+  než na to spoléhat. A **když
   nedorazí žádné, staré se zahodí**: rozhovor s mrtvým identifikátorem (session vypršela, cache se
   uklidila) by jinak selhával **navždycky** a v okně není nic, čím ho začít znovu. Příští otázka se
   tím stane první — založí novou session; zprávy zůstávají.
