@@ -4804,3 +4804,38 @@ Testů **4077**, všechny zelené: tři nová tvrzení v `ConversationAxisEagerT
 měření `ConversationAxisShapeProbe` (ta se v běžném běhu přeskočí); zbytek přidal mezitím mergnutý
 `main`. **Na obrazovce se nemění nic** — osa vypadá stejně (ověřeno rendrem `DetailTabRenderProbe`
 v obou šířkách), mění se jen to, kdy se uzly vyrábějí.
+
+### #447 — `CLAUDE.md` podruhé přerostl hranici, u které si sám říká „čas rozdělovat“
+
+`wc -c < CLAUDE.md` vrátil **104 597 B**. Soubor si tu hranici stanovil sám („nad ~100 kB je čas
+rozdělovat znovu“) a není to estetika: Copilot si ho bere jako custom instructions se stropem
+110 tisíc tokenů, a když ho přeroste, review na PR **vůbec nedoběhne** (stalo se to při 315 kB,
+#162; první rozdělení do `docs/` bylo 873bc29 a nechalo 37 kB).
+
+**Po rozdělení 66 576 B**, tedy o **36 % míň** a 839 řádků místo 1308. Zůstalo tady to, co je
+potřeba znát **dřív, než se něco napíše**: věty pravidel, výčty tvrdých podmínek (sedm metod
+`ReviewPublishing`, pět zakázaných akcí, sada nástrojů revieweera) a **dvacet grepů**, které se
+pouštějí před pushem — ty by v `docs/` nikdo nespustil. Odstěhovala se **vysvětlení, naměřená
+čísla a historie změn pravidel**, a ke každému zůstal odkaz.
+
+Kam se co přestěhovalo: rozbory tvrdé podmínky č. 1 a č. 2, výkonové poučky (#220, #236, #252,
+#275, #325, #327, #350, #358, #361, #393, #422, #428, #432, #441) a obří buňka `Policy` z tabulky
+modulů do [`docs/architektura.md`](architektura.md); postupy měření (#269, #274, #391) do
+[`docs/testovani.md`](testovani.md); historie změn samotných pravidel (#46, #125, #162, a proč se
+merge a zavření issue od 2026-08-01 neptají) do **nové sekce specifikace** *Záznam rozhodnutí —
+pravidla repa a pracovní postup*; a operační znalost o `gh` (co na tomhle repu padá, čím to
+nahradit, jak číst výsledek Copilota) do **nového** [`docs/github-cli.md`](github-cli.md).
+
+**Skončilo to na 66 kB, ne na orientačních 40, a je to rozhodnutí.** Poprvé se stěhovala
+dokumentace, teď zbyla po odstěhování všech vysvětlení jen tři nestlačitelná pásma — výčty
+tvrdých podmínek (9,7 kB), grepy před pushem a věty pravidel, kterých má repo proti stavu po
+873bc29 skoro dvojnásobek. Cesta k 40 kB proto vedla jedině přes **mazání pravidel**, ne přes
+stěhování vysvětlení; zdůvodnění je v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447).
+Kontrolní číslo v `CLAUDE.md` zůstává **hranice 100 kB**, ne cíl 40.
+
+**Že se nic neztratilo, je doložené dvěma průchody, ne dojmem**: všech **173 tučných začátků
+odrážek** z původního souboru má v novém protějšek a všech **28 odkazů na issue**, které
+z `CLAUDE.md` zmizely, je v `docs/` nebo v README. Odkazy se ověřují skriptem, který spočítá
+GitHub kotvy z nadpisů — **65 relativních odkazů, nula rozbitých**. **Na obrazovce se nemění
+nic**, je to dokumentace.
