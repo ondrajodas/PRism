@@ -216,10 +216,13 @@ struct DiffRenderedRowsTests {
     func theSourcesAreActuallyRead() throws {
         #expect(try Self.source(of: "DiffView").count > 500)
         #expect(try Self.source(of: "DiffRowView").count > 500)
-        // A že se prochází celé `App/`, ne jen `App/Views` — jinak by prázdný nález výš mohl
-        // znamenat i „druhá cesta leží ve složce, kam se stráž nedívá“.
-        #expect(try Self.sources(matching: "DiffRow.blockedPairs(") == ["DiffView.swift"])
+        // Že se prochází **celé `App/`**, ne jen `App/Views`: `DiffRow.swift` leží v `App/Diff/`,
+        // takže bez rekurze by v seznamu nebyl — a prázdný nález výš by mohl znamenat i „druhá
+        // cesta leží ve složce, kam se stráž nedívá“.
         #expect(try Self.swiftFiles().contains { $0.lastPathComponent == "DiffRow.swift" })
+        // A že slévání do bloků volá taky jen `DiffView` — druhý skladatel seznamu ke kreslení by
+        // znamenal druhou cestu, i kdyby `DiffRowView` plnil pořád jeden.
+        #expect(try Self.sources(matching: "DiffRow.blockedPairs(") == ["DiffView.swift"])
     }
 
     private static let app = URL(filePath: #filePath)
