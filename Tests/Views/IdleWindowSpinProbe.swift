@@ -18,8 +18,8 @@ import Testing
 ///
 /// **Okno musí být na obrazovce.** Okno mimo obrazovku nedostává takt překreslování, takže
 /// v něm smyčka nenastane ani tehdy, když v aplikaci je — a sonda by tvrdila, že je čisto.
-/// Proto `orderFrontRegardless()` (bez aktivace, ať sonda nikomu neukradne klávesnici) a rovnou
-/// zpátky `orderOut`.
+/// Proto `orderFrontRegardlessUnanimated()` (bez aktivace, ať sonda nikomu neukradne klávesnici,
+/// a bez animace objevení, viz `UnanimatedWindow`) a rovnou zpátky `orderOut`.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`.
 @MainActor
@@ -84,7 +84,7 @@ struct IdleWindowSpinProbe {
         window.contentViewController = controller
         window.setFrameOrigin(NSPoint(x: 60, y: 60))
         window.level = .floating
-        window.orderFrontRegardless()
+        window.orderFrontRegardlessUnanimated()
         defer { window.orderOut(nil) }
         _ = spinMainRunLoop(seconds: 1.0)
 
@@ -157,7 +157,7 @@ struct IdleWindowSpinProbe {
         // je čisto. Fokus si přitom nebere: sonda nemá terminálu ani cizímu PRismu sebrat
         // klávesnici.
         window.level = .floating
-        window.orderFrontRegardless()
+        window.orderFrontRegardlessUnanimated()
         return window
     }
 

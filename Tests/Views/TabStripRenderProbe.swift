@@ -109,7 +109,7 @@ struct TabStripRenderProbe {
         // Mimo obrazovku, ať sonda nikomu neskočí před oči — v paralelním běhu stojí vedle sebe víc
         // instancí a cizí okno je poslední, co má sonda rušit.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)

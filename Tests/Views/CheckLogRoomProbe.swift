@@ -161,7 +161,7 @@ struct CheckLogRoomProbe {
         // Mimo obrazovku, ať sonda nikomu neskočí před oči — v paralelním vývoji stojí vedle sebe
         // víc instancí a cizí okno je poslední, co má sonda rušit.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         // Hierarchie se doskládá až po kole smyčky; `.task` v detailu si k tomu dotahuje diff
         // a konverzaci z fake gatewaye.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))

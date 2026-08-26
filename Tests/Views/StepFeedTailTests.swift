@@ -74,7 +74,7 @@ struct StepFeedTailTests {
             window.contentView = hosting
             // Mimo obrazovku, ať sonda nikomu neskočí před oči.
             window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-            window.orderFront(nil)
+            window.orderFrontUnanimated()
         }
 
         deinit { window.orderOut(nil) }

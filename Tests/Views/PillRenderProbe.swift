@@ -387,7 +387,7 @@ struct PillRenderProbe {
         window.contentView = hosting
         // Mimo obrazovku, ať sonda nikomu neskočí před oči — vedle sebe běží víc slotů.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 

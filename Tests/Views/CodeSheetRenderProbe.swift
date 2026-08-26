@@ -68,7 +68,7 @@ struct CodeSheetRenderProbe {
         )
         window.contentView = hosting
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         // Hierarchie se doskládá až po kole smyčky; `NSTextView` uvnitř navíc dostane text
         // v `updateNSView`, tedy až po prvním rozvržení.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))

@@ -310,7 +310,7 @@ struct PanelMetadataRenderProbe {
         )
         window.contentView = hosting
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)

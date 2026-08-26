@@ -892,7 +892,7 @@ struct IdleDiffSpinProbe {
         window.setFrameOrigin(NSPoint(x: 0, y: 20))
         // Nad ostatními okny, ale bez aktivace — fokus si sonda brát nesmí (#350).
         window.level = .floating
-        window.orderFrontRegardless()
+        window.orderFrontRegardlessUnanimated()
         return window
     }
 
@@ -974,7 +974,7 @@ struct IdleDiffSpinProbe {
         window.setFrameOrigin(NSPoint(x: 0, y: 20))
         // Nad ostatními okny, ale bez aktivace — fokus si sonda brát nesmí (#350).
         window.level = .floating
-        window.orderFrontRegardless()
+        window.orderFrontRegardlessUnanimated()
         return window
     }
 

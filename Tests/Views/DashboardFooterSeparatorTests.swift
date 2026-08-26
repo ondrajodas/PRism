@@ -104,7 +104,7 @@ struct DashboardFooterSeparatorTests {
         window.contentView = hosting
         // Mimo obrazovku, ať test nikomu neskočí před oči — vedle sebe běží víc instancí aplikace.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
 
         let limit = ContinuousClock.now.advanced(by: TestWait.deadline)

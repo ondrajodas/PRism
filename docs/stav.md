@@ -4926,3 +4926,54 @@ Testů **4108**, všechny zelené — z toho **10 nových**: `DiffRenderedRowsTe
 zdrojáky, s kontrolou měřidla z obou stran) a jeden případ v `DiffJumpTargetTests` na soubor, ve
 kterém poznámka `git`u bloky rozděluje. **Ověřeno vloženou regresí** v obou směrech: `EmptyView()`
 ve větvi `.pair` stráž shodí a před smazáním `DiffPairView` shodila tvrzení o jediném view.
+
+### #462 — plný běh testů se zasekával na animaci objevení okna
+
+**Na tomhle není co vidět** — je to celé v `Tests/` a v dokumentaci; `App/` se nemění ani o řádek.
+
+Plný `xcodebuild test` se zasekával na **třech posledních suitách** (`komentář pod PR`, `odpovídání
+do vláken`, `labely a reviewery`), tedy přesně na těch, které spouštějí podstrčený `gh` jako
+podproces, a v hostu se u toho nasbíralo **76 vláken v `-[NSAnimation _runBlocking]`**. Obcházelo se
+to během po polovinách. Vypadalo to jako rozbité testy a je to ten druh chyby, kvůli kterému v repu
+stojí pravidlo psát výstup do souboru — jednou už kvůli tomu padlo přes půl hodiny na hledání
+neexistující chyby.
+
+**Příčinou je ukázání okna, ne SwiftUI a ne obsah.** `orderFront` na okně s výchozí
+`animationBehavior` spustí animaci objevení, a ta na macOS běží jako `NSAnimation` v **threaded**
+režimu — tedy `dispatch_async` na globální root frontu, ze které si na celou dobu animace drží
+vlákno a odpovídá z něj display linku. Změřeno samostatnou sondou: 12 oken ukázaných naráz dá **25
+vláken procesu, z toho 14 v `_runBlocking`**; totéž s `animationBehavior = .none` dá **5 a 0**;
+tatáž dvojice vyjde i na `borderless` okně **bez jediného view**, a naopak 12 `NSHostingView`ů
+v neukázaných oknech nestojí nic. `Tests/Views/` přitom ukazovalo okno na **48 místech** a Swift
+Testing pouští suity paralelně.
+
+**A že to zaplatí `gh`, je taky změřené.** Pool má na tomhle stroji strop **75** pracovních vláken
+a `SubprocessRunner` z něj bere vlákna na blokující čtení pip. Při 80 obsazených vláknech (pool se
+zastaví na 76 — přesně to číslo z hlášení) se práce na téže privátní souběžné frontě dostane na
+procesor až za **28,0 s** místo **0,0001 s**, což je nad třicetisekundovým timeoutem `gh`. Odtud
+`PublishError.timedOut` u těch tří suit pod zátěží: **jedna příčina, dva projevy**, ne dvě různé
+věci.
+
+**Opravou je jeden helper a stráž nad zdrojáky.** Okno se v testech ukazuje jedině přes
+`orderFrontUnanimated()` (`Tests/Support/UnanimatedWindow.swift`), který napřed nastaví
+`animationBehavior = .none`; hlídá to `UnanimatedWindowTests` — nad **zdrojáky**, ne nad během, ze
+stejného důvodu jako u #367 (počet vláken procesu je vlastnost celého paralelního běhu, takže by
+tvrzení o něm padalo podle toho, kdo běžel vedle). `App/` se nemění schválně: animace objevení okna
+je v aplikaci v pořádku, otevírá se jich pár, ne padesát.
+
+**Co se nepovedlo prokázat, a je to zapsané:** samotné zaseknutí se nereprodukovalo — všech šest
+plných běhů (A/B/A/B/A/B) doběhlo, i ty bez opravy. Závěr proto stojí na mechanismu a na číslech,
+ne na pozorovaném rozdílu mezi zaseknutým a nezaseknutým během. Změřená je špička vláken hostitele
+(bez opravy 88 / 71 / 76, s opravou 42 / 57 / 54) a `_runBlocking` v opakovaných vzorcích — na
+poslední dvojici, kde oba měřiče běžely celou dobu, **8 bez opravy a 2 s opravou**. Ty dvě jsou
+okno **samotného hostitele** při startu, ne test: `-only-testing` na suitu bez jediného okna dá
+`_runBlocking = 1`.
+
+**Slabinou zůstává `SubprocessRunner`**: dokud čte `readToEnd()`, drží každé volání dvě vlákna
+sdíleného poolu, takže ho umí zdržet kdokoli, kdo pool obsadí. V aplikaci to nehrozí (oken je pár,
+paralelismus review drží `WorkCoordinator`), takže se produkční cesta nepřepisovala; cesta ven,
+kdyby to bylo potřeba, je bufferovat z `readabilityHandler`u jako `SubprocessStreamer`.
+
+Testů **4110**, z toho **2 nové** (`UnanimatedWindowTests`: stráž a pojistka, že doopravdy čte
+zdrojáky). Rozbor i obě tabulky měření jsou v [`testovani.md`](testovani.md), poznámka o poolu
+u podprocesů v [`architektura.md`](architektura.md).

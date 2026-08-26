@@ -8675,7 +8675,7 @@ nad stavem prostředí ve view, patří to do reportu.
 nezavolají, by musely dopsat všechny. `workingDirectory` je jen v `ProcessStreaming` —
 `claude` pracovní složku flagem předat neumí, kdežto `git` si vystačí s `-C`.
 
-Sedm věcí o podprocesech, na které se naráží znovu:
+Osm věcí o podprocesech, na které se naráží znovu:
 
 - **Blokující I/O nesmí na kooperativní pool.** `readToEnd()` neumí čekat kooperativně
   a pool má jen tolik vláken, kolik je jader — několik paralelních review by si je
@@ -8688,6 +8688,18 @@ Sedm věcí o podprocesech, na které se naráží znovu:
   — projeví se to jako **náhodně visící běh testů**, ve kterém všechny testy prošly.
   Stálo to půl dne hledání; s `terminationHandler`em jde sada pětkrát za sebou zeleně,
   před tím padal každý druhý až třetí běh.
+- **A vyhladovět ten pool umí i někdo cizí** (#462). Bod výš popisuje případ, kdy si vlákna bere
+  `ioQueue` sama; u #462 je vzala **AppKitová animace objevení okna** — `NSAnimation` v threaded
+  režimu je `dispatch_async` na globální root frontu, ze které si vlákno drží po celou dobu animace,
+  a `Tests/Views/` ukazovalo okno na 48 místech naráz. Projev je **tentýž**: náhodně visící běh
+  testů, ve kterém všechny testy prošly, plus `PublishError.timedOut` u suit, které spouštějí `gh`.
+  Změřeno: při 80 obsazených vláknech (pool se zastaví na **76**) se práce na privátní souběžné
+  frontě dostane na procesor za **28 s** místo 0,0001 s, tedy nad timeoutem `gh`. Opraveno v testech
+  (`orderFrontUnanimated`, viz
+  [`testovani.md`](testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)), ne tady —
+  aplikace oken tolik neotevírá a paralelismus review drží `WorkCoordinator`. **Zůstává to ale
+  slabina**: dokud se výstup čte `readToEnd()`, drží každé volání dvě vlákna sdíleného poolu. Cesta
+  ven, kdyby to bylo potřeba, je bufferovat z `readabilityHandler`u jako `SubprocessStreamer`.
 - **Oba pipy se musí číst souběžně.** Sériově: než dojde EOF na prvním, druhý naplní buffer
   jádra a proces se zasekne na zápisu.
 - **Zrušení musí proces zabít.** Bez toho čekání na EOF drží volání, dokud proces nedoběhne
