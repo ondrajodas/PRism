@@ -81,6 +81,14 @@ struct AppNoticesView: View {
                 if let failure = store.notificationFailure {
                     notice(failure, icon: "bell.slash")
                 }
+                // Neotevřený Terminál (#453) je tentýž případ jako notifikace: výsledek téhle
+                // akce je vidět **mimo aplikaci**, takže neúspěch vypadá k nerozeznání od toho,
+                // že se nekliklo. A stejně jako u notifikací se spravuje v Nastavení systému
+                // (Soukromí → Automatizace), kam aplikace nedosáhne — proto vlastní ikona, ne
+                // vykřičník: nejčastější příčina není rozbitá aplikace, ale nepovolený přístup.
+                if let failure = store.terminalFailure {
+                    notice(failure, icon: "terminal")
+                }
             }
         }
     }
@@ -103,6 +111,7 @@ struct AppNoticesView: View {
             || store.appearanceFailure != nil
             || store.askFailure != nil
             || store.notificationFailure != nil
+            || store.terminalFailure != nil
     }
 
     private func notice(_ text: String, icon: String) -> some View {

@@ -306,6 +306,14 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       zadrátovaný seznam s jediným sandboxem; proč se to změnilo, je v [záznamu
       rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí-1).
 
+   **Otevřít session v uživatelově terminálu (#453) osmou cestou ven není**, a je to hranice, ne
+   výjimka: terminál je **mimo aplikaci** — totéž, jako když si člověk `claude --resume` vlepí
+   sám. Uvnitř okna žádný terminál nevzniká, `TerminalOpening` nemá čím na GitHub sáhnout
+   a `grep ReviewPublishing App/` vypisuje týž seznam. **Vestavěný terminál je zamítnutý**:
+   znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, a **nešel by uhlídat testem**,
+   protože ta cesta nevede přes kód aplikace
+   ([rozbor](docs/architektura.md#živá-session-v-terminálu-453)).
+
    Co se **nezměnilo**: `ReviewVerdict` je pořád jen návrh a sám nic neodesílá (od #114 se jím
    **předvyplňuje** verdikt v panelu, ale odejít umí jedině touž cestou). „Výslovný pokyn
    člověka“ vypadá takhle: **potvrzovací sheet jen u review** (dvě kliknutí, celý payload

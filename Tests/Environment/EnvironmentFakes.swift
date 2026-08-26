@@ -124,6 +124,37 @@ final class ScriptedProcessRunner: ProcessRunning, @unchecked Sendable {
     }
 }
 
+/// Terminál, který nic neotevírá — zapamatuje si řádku a odpoví, jak si test řekl (#453).
+///
+/// Skutečné okno by se v testu nedalo ani vyrobit, ani vzít zpátky, a `osascript` by si vyžádal
+/// povolení automatizace pro testovacího hostitele.
+final class FakeTerminal: TerminalOpening, @unchecked Sendable {
+    private let lock = NSLock()
+    private var failure: TerminalError?
+    private var opened: [String] = []
+
+    init(failing failure: TerminalError? = nil) {
+        self.failure = failure
+    }
+
+    /// Co se doopravdy poslalo do terminálu.
+    var openedLines: [String] { lock.withLock { opened } }
+
+    /// Co odpoví **příště**. Test „hláška po nepovedeném pokusu zmizí, až se to povede“ potřebuje
+    /// jednu instanci se dvěma odpověďmi — dvě instance by o zahození hlášky netvrdily nic.
+    func willSucceed() {
+        lock.withLock { failure = nil }
+    }
+
+    func open(_ commandLine: String) async throws {
+        let outcome: TerminalError? = lock.withLock {
+            opened.append(commandLine)
+            return failure
+        }
+        if let outcome { throw outcome }
+    }
+}
+
 /// Čas, který se nikam neposouvá sám.
 ///
 /// Místo čekání si jen zapíše, jak dlouho se mělo čekat — na tom se testuje backoff — a

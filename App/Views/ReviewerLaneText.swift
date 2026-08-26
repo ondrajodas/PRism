@@ -88,6 +88,22 @@ enum ReviewerLaneText {
         return "Doběhlo · \(Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů"))."
     }
 
+    /// Popisky obou cest do terminálu (#453).
+    ///
+    /// **Obě nesou konkrétní příkaz**, a to je podmínka, ne pohodlí: v hlavičce stojí dvě ikony
+    /// vedle sebe a nápověda je jediné, čím se od sebe liší. Skládá je `Policy.resumeCommand`,
+    /// takže se text v nápovědě nemá čím rozejít s tím, co se zkopíruje nebo pustí.
+    static func copyResume(sessionID: String) -> String {
+        "Zkopírovat \(Policy.resumeCommand(sessionID: sessionID))"
+    }
+
+    static let openInTerminal = "Otevřít session v Terminálu"
+
+    static func openInTerminalHelp(sessionID: String) -> String {
+        "Otevře nové okno Terminálu v pracovním stromu té session a pustí v něm "
+            + "\(Policy.resumeCommand(sessionID: sessionID))."
+    }
+
     /// Odznak v hlavičce dráhy, když zadání pro reviewera nebylo celé (#345).
     ///
     /// **Netvrdí, co v zadání chybělo** — na to je místo v nápovědě a v souboru se zadáním. Krátký

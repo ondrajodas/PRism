@@ -1095,7 +1095,8 @@ a `spadlo` se slít nesmí.
 Podrobný výpis toho, co reviewer spouštěl — který soubor čte, co hledá, jaký příkaz spustil —
 je pod rozbalením každé dráhy. Skládá se nativně z eventů, ne přeposíláním textu, takže
 aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
-se `claude --resume <id>` jedním tlačítkem. Osa zůstane i po doběhnutí běhu — a od #203
+se `claude --resume <id>` jedním tlačítkem — nebo se od #453 rovnou **otevře v Terminálu**,
+viz níž. Osa zůstane i po doběhnutí běhu — a od #203
 **přežije i restart aplikace**: ukládá se k běhu, takže se k ní dá vrátit druhý den i s tím
 `sessionID`. Delší běh nadělá stovky událostí, proto se drží posledních 300 a kolik se jich
 nevešlo, je u rozbalení vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
@@ -1142,6 +1143,25 @@ nezaložila) se **netvrdí** — z chybějícího souboru se to nepozná. *Nedá
 tam pořád leží. *Prázdný* nabídne opakování, protože u běžící session je to dočasný stav — prázdný
 sheet by vypadal jako „session nic nedělala“. Do sheetu se **nepíše**: čte se, vybírá a kopíruje,
 a cesta zpátky do session zůstává `Zkopírovat resume`.
+
+**Do běžící session se dá vstoupit, jen ne uvnitř okna** (#453, návrh sekce 34). Vedle `⧉`
+(zkopíruje `claude --resume <id>`) je `▶` — **`Otevřít session v Terminálu`**, které tentýž
+příkaz rovnou pustí v `Terminal.app`, a to **v pracovním stromu té session**, aby `--resume`
+navázal tam, kde běžel. Kopírování **zůstává**: kdo si session pouští jinde (iTerm, tmux, jiný
+stroj), potřebuje text, ne cizí okno — jsou to dvě akce, ne dvě podoby jedné.
+
+**Tvrdé podmínky se tím nemění, a to je jádro té změny.** Terminál je **mimo aplikaci**: je to
+totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný terminál
+nevzniká, `ReviewPublishing` zůstává jedinou cestou ven a plnou moc má ta session tam, kde ji
+člověk čeká — ve svém terminálu, pod svým jménem a se svým `gh`. **Vestavěný terminál je
+zamítnutý**: znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, a nešel by uhlídat
+testem, protože ta cesta nevede přes kód aplikace.
+
+Nabízí se to **jen tam, kde je co obnovit**: bez `session_id` **a bez pracovního stromu** se
+tlačítko nekreslí (ne zašedle — u dráhy, která teprve čeká na slot, by zašedlé slibovalo něco,
+co přijde samo). Když se okno neotevře — typicky proto, že se PRismu nepovolilo ovládat Terminal
+(Nastavení systému → Soukromí a zabezpečení → Automatizace) —, **řekne se to ve stavovém řádku**
+i s tím, čím to systém vysvětlil. Neotevřené okno se totiž z aplikace nedá poznat jinak.
 
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
 Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že

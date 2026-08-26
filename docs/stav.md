@@ -4840,6 +4840,50 @@ z `CLAUDE.md` zmizely, je v `docs/` nebo v README. Odkazy se ověřují skriptem
 GitHub kotvy z nadpisů — **65 relativních odkazů, nula rozbitých**. **Na obrazovce se nemění
 nic**, je to dokumentace.
 
+### #453 — do běžící session se dá vstoupit, jen ne uvnitř okna
+
+V hlavičce dráhy v tabu `Průběh` bylo `⧉`, které **zkopíruje** `claude --resume <id>`. Je to cesta
+ven do terminálu a byla úmyslně nejmenší možná — jenže na jejím konci pořád zbývalo přepnout se do
+Terminálu, vlepit a odentrovat. Vedle něj je od #453 **`▶`** (`Otevřít session v Terminálu`, návrh
+sekce 34), které tentýž příkaz rovnou pustí v `Terminal.app`, a to **v pracovním stromu** té
+session. Kopírování **zůstalo**: kdo si session pouští jinde (iTerm, tmux, jiný stroj), potřebuje
+text, ne cizí okno — jsou to dvě akce, ne dvě podoby jedné.
+
+**Tvrdá podmínka č. 1 se tím nemění, a to bylo jádro celého issue.** Terminál je **mimo aplikaci**
+— je to totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný
+terminál nevzniká: `grep ReviewPublishing App/` vypisuje **týž seznam šesti souborů** jako `main`
+a `SingleWayOutTests` prošly beze změny. **Vestavěný terminál je zamítnutý a zapsané je proč**:
+znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, tedy že podmínka přestane platit
+— a nepůjde ji uhlídat testem, protože ta cesta nevede přes kód aplikace.
+
+**Pracovní strom je podmínka stejně jako `session_id`, a je to odchylka od zadání** (to mluvilo jen
+o `id`). `claude --resume` hledá vlákno podle adresáře, ve kterém se spustí, takže tentýž příkaz
+jinde session **nenajde** — otevřelo by se okno, ve kterém `claude` řekne, že takové vlákno nezná.
+„Nabízí se to jen tam, kde je co obnovit“ tedy platí doslova, a je to tatáž dvojice podmínek jako
+u `Ukázat session` (#327). Rozdíl není teoretický: dráha z uloženého běhu bez osy zná `session_id`
+a strom ne (soubory z doby před #203). Rozhoduje `Policy.terminalSession(of:)`, ne `if` ve view.
+
+**Ověřeno spuštěním, ne přečtením** — u téhle cesty se chyba projeví tím, že se okno neotevře
+a nikdo se nic nedozví. Změřilo se ručně, mimo aplikaci (postup je v
+[`testovani.md`](testovani.md)), a vyšly z toho dvě věci, které by se neodhadly: `osascript`
+argument doopravdy předá do `on run argv` (takže se příkaz nemusí vlepovat do zdrojáku skriptu —
+uvozovka v cestě by ho rozbila) a **z výstupu se úspěch nepozná**, protože `activate` na konci
+nevrací nic; rozhoduje návratový kód, a přesně na něm to aplikace staví. Uzávorkování cesty sedí
+i na apostrof (`cd '/tmp/it'\''s here'` vypsalo
+`/tmp/it's here`); od #453 ho skládá **jedno místo** (`ShellQuoting`), sdílené se `Zkopírovat
+příkaz`.
+
+**Selhání se hlásí ve stavovém řádku** (`AppStore.terminalFailure`), doslova tím, čím ho vysvětlil
+systém. Je to tentýž případ jako notifikace (#88): výsledek je vidět mimo aplikaci, takže `try?`
+by z tlačítka udělal něco, co občas nedělá nic. Aplikace k tomu dostala
+`NSAppleEventsUsageDescription` v `Info.plist` — bez něj macOS Apple event odmítne kódem `-1743`
+a **ani se nezeptá**, protože ho přisuzuje odpovědnému procesu (aplikaci), ne tomu `osascript`u.
+
+Testů **4098**, všechny zelené — z toho **21 nových**: `Policy` výčtem (kdy se tlačítko nekreslí,
+že `▶` pouští týž příkaz, jaký kopíruje `⧉`, a že `cd` je s `&&`), tvar volání `osascript`u
+(příkaz jde jako argument, ne do skriptu) a to hlavní ze storu — **neotevřené okno skončí hláškou,
+ne tichem**.
+
 ### #452 — tab `Zeptat se`: rozhovor s Claudem nad pull requestem
 
 Osmá záložka PR a **třetí vyjmenovaná session** vedle revieweera a dotažení textu issue (#345).
@@ -4880,6 +4924,6 @@ v téhle implementaci** a obě se opravily ještě před PR: materiál se sklád
 data unesou) a mrtvé `session_id` se nezahazovalo, takže rozbité navázání by rozhovor položilo
 napořád.
 
-Testů **4139**, všechny zelené — nových je šest sad kolem rozhovoru (`AskCommandTests`,
+Testů **4160**, všechny zelené — nových je šest sad kolem rozhovoru (`AskCommandTests`,
 `AskTabTests`, `AskPromptTests`, `AskReferencesTests`, `AskStoreTests`, `AppStoreAskTests`) a k tomu
 stráž `AskLogEagerTests`, že se do rozhovoru nevrátí líný seznam (#361).

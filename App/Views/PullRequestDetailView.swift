@@ -1392,6 +1392,11 @@ struct PullRequestDetailView: View {
                 rawSession = target
                 Task { await store.openRawSession(target) }
             },
+            // Terminál (#453). Nic se v okně nemění — okno se otevře **mimo aplikaci** —, takže
+            // sem nepatří ani sheet, ani stav ve view: co se nepovede, ohlásí stavový řádek.
+            openInTerminal: { session in
+                Task { await store.openInTerminal(session) }
+            },
             slug: "\(pullRequest.repo)#\(pullRequest.number)"
         )
     }
