@@ -3237,6 +3237,39 @@ tehdy chybělo: čtyři kapsle na systémové zelené a červené měly ve svět
 geometrie — mění se jedině hodnota barvy. `Palette.mint` a `Palette.stale` zůstávají tam, kam je
 daly #309 a #383; tohle je zbytek téhož výčtu, ne jeho revize.
 
+### Záznam rozhodnutí — diff kreslí kód jen bloky (#446)
+
+**Vyklizení té cesty, kterou #438 vědomě odložilo** (poslední řádek jeho tabulky: „vyklizení téhle
+cesty je vlastní zadání, ne přílepek k výkonové opravě“). Zadání znělo, že do `DiffRowView` nedojde
+z diffu ani `.line`, ani `.pair`, takže jsou obě větve i celý `DiffPairView` kulisa.
+
+**Měření dalo půl odpovědi jinak, než zadání předpokládalo.** `DiffRenderedRowsTests` projedou
+`DiffRow.rows(of:layout:)` + `blocked(_:)`/`blockedPairs(_:)` — tedy **týž výraz, jakým se plní
+`ForEach`** — nad pěti skutečnými diffy z fixtures v obou pohledech:
+
+| Případ | Dojde ke kreslení? |
+|---|---|
+| `.pair` | **Ne, nikdy** — v žádném pohledu, u žádného souboru, ani mezi bublinami, které blok rozetnou |
+| `.line` | **Ano, v jednom případě**: poznámka `git`u (`\ No newline at end of file`) ve **split** pohledu |
+
+Ta výjimka plyne ze dvou rozhodnutí, která spolu nesouvisejí: `DiffRow.paired(_:)` `meta` řádek
+**nepáruje** (není to obsah souboru, takže nemá stranu — pravidlo z #98) a `blockedPairs(_:)` slévá
+**jen dvojice**. V pohledu pod sebou výjimka není, tam ji `blocked(_:)` sebere do bloku.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **`DiffPairView` se smazal celý** | Nechat ho „kvůli konstantám a jako popis toho, jak dvojice vypadá bez bloku“, jak to do #446 stálo v `architektura.md` | Konstanty jsou v `DiffLineView`, ne v něm, takže ten důvod neplatil ani v době, kdy se zapisoval. A „popis“, který se nespustí, je přesně ta věc, kvůli které #438 hledalo výkonový problém na špatném místě — sto řádků, o kterých čtenář nemá jak poznat, že jsou kulisa |
+| **Větev `.line` zůstává** | Smazat obě, jak zadání navrhovalo jako první variantu | Je **živá**. Smazat ji znamená, že se v split pohledu buď přestane kreslit `\ No newline at end of file`, nebo se meta řádek začne slévat do bloku — a obojí je změna na obrazovce, kterou tohle issue výslovně nemá dělat |
+| **`.pair` kreslí týž blok, ne `EmptyView`** | (a) `EmptyView()` s komentářem „sem se to nedostane“; (b) zúžit typ, který `DiffRowView` bere, aby `.pair` nebyla reprezentovatelná | (a) je **tichá díra v diffu**: kdyby se tam dvojice někdy dostala (třeba záměnou `blocked(_:)` za `blockedPairs(_:)`), zmizel by kus kódu a nic by to neřeklo — tatáž třída jako `try?` z tabulky v `CLAUDE.md`. (b) je vlastní refaktor `DiffRow`, ne úklid; enum sdílí kotvy, bubliny i identitu. Delegace je jeden řádek a **ověřená renderem**: obě větve daly bajt po bajtu tentýž PNG |
+| **Spadlo s tím i `DiffLineView.side` a `DiffMissingHatch: Shape`** | Nechat je — v zadání nejsou | Obojí ztratilo s `DiffPairView` **jediného volajícího**, takže by po úklidu mrtvé cesty zbyla mrtvá cesta o patro níž: `side` je volba „jsem buňka dvojice“ (tři větve, které nikdo nevyplní) a `path(in:)` je kreslení šrafy pro SwiftUI, které nikdo nekreslí. Je to „oprav třídu, ne výskyt“ — a obojí je **provably beze změny kresby**, protože živí volající už dřív předávali `side: nil` |
+| **Tvrdí se to nad daty i nad zdrojáky** | Jen jedno z toho | Nad daty (pět fixtures × dva pohledy) se dokazuje, že `.pair` nepřežije slití; nad zdrojáky, že do `DiffRowView` **nevede druhá cesta**, která by to slití obešla — bez toho by tvrzení platilo o funkci, kterou si testy zavolaly samy. K tomu **kontrola měřidla**: v mezikroku dvojice být **musí**, jinak by nula neznamenala nic. Tatáž konstrukce jako `SingleWayOutTests` |
+| **Pauza na proklikání se nekonala, doložilo se to renderem** | Ukázat aplikaci | Tvrzení je „na obrazovce se nemění nic“, a to se ukázáním nedokazuje. Doloženo **12 PNG před a po** (tři soubory × dva pohledy × dva režimy, plus úryvek u vlákna): všech 14 hashů **bajt po bajtu shodných**, a render sám ověřen jako deterministický třemi běhy před změnou |
+
+**Co se nezměnilo:** kotvy a skok na nález (`DiffRow.blockIDs(in:)` se nedotklo nic — a je na to
+nový případ v `DiffJumpTargetTests`, právě se souborem, ve kterém poznámka `git`u bloky rozděluje),
+`DiffLineView` jako takový (`ThreadSnippetView` ho kreslí dál), barvy, konstanty ani `segments(in:)`
+u šrafy.
+
 ## Záznam rozhodnutí — pravidla repa a pracovní postup (#447)
 
 Sem se u #447 přestěhovalo **zdůvodnění** pravidel, která platí v `CLAUDE.md`. Samotná pravidla

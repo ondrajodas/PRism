@@ -74,6 +74,39 @@ struct DiffJumpTargetTests {
         }
     }
 
+    /// Kotva se počítá nad **slitými** řádky, takže se u #446 musela ověřit i tam, kde slití
+    /// není úplné: poznámka `git`u zůstane ve split pohledu samostatným `.line` (viz
+    /// `DiffRenderedRowsTests`) a **rozděluje** kolem sebe bloky. Kdyby ji překlad nepokrýval,
+    /// skok na řádek za ní by mířil na id, které v seznamu není.
+    @Test("Kotva se trefí i v souboru s poznámkou gitu", arguments: [DiffLayout.unified, .split])
+    func anAnchorSurvivesAGitNote(layout: DiffLayout) throws {
+        let text = [
+            "diff --git a/Cart.php b/Cart.php",
+            "--- a/Cart.php",
+            "+++ b/Cart.php",
+            "@@ -25,4 +25,4 @@",
+            " kontext",
+            "-staré",
+            "\\ No newline at end of file",
+            "+nové",
+            " další",
+        ].joined(separator: "\n")
+        let diff = DiffParser.parse(text)
+        let file = try #require(diff.files.first)
+        let visible = visibleIDs(file, layout: layout)
+        let rows = DiffRow.rows(of: file, layout: layout)
+        let index = DiffRow.blockIDs(in: layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows))
+
+        for line in 25...27 {
+            let anchor = try #require(DiffRow.anchor(in: diff, file: "Cart.php", line: line))
+            #expect(anchor != file.id, "řádek \(line) má být v diffu, ne u hlavičky souboru")
+            #expect(
+                visible.contains(index[anchor] ?? anchor),
+                "řádek \(line) v pohledu \(layout) míří mimo seznam"
+            )
+        }
+    }
+
     @Test("Bez překladu se kotva do seznamu netrefí")
     func withoutTheTranslationTheAnchorMisses() throws {
         // Tohle je ta chyba sama: kdyby se překlad zase ztratil, tenhle test zůstane zelený

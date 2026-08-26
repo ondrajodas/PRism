@@ -1416,6 +1416,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   pohledech; druhý test naopak tvrdí, že **bez** překladu se netrefí. Z té dvojice je pak poznat,
   jestli spadlo zadání, nebo kód. Plus že se řádek mimo blok mapuje sám na sebe (jinak by přestal
   fungovat skok na soubor) a že blok nezapomene ani jeden řádek, který spolkl.
+
+  **Od #446 k tomu patří soubor s poznámkou `git`u.** Ta ve split pohledu zůstane samostatným
+  `.line` a **rozděluje** kolem sebe bloky, takže je to jediné místo v diffu, kde slití není úplné
+  — a kdyby ho překlad nepokrýval, skok na řádek za ní by mířil na id, které v seznamu není.
+- **Co z diffu doopravdy dojde ke kreslení (#446)** — `DiffRenderedRowsTests`. Tvrdí se to
+  **nad daty i nad zdrojáky**, protože každá polovina sama o sobě jde obejít.
+
+  Nad daty: seznam se skládá **týmž výrazem, jakým se plní `ForEach`**
+  (`rows(of:layout:)` + `blocked(_:)`/`blockedPairs(_:)`) nad **pěti skutečnými diffy** z fixtures
+  v obou pohledech. `.pair` se ke kreslení nedostane **nikdy** — ani mezi bublinami, které blok
+  rozetnou, tedy zrovna tam, kde by osamocená dvojice mohla zbýt. `.line` **jednou**: poznámka
+  `git`u (`\ No newline at end of file`) ve split pohledu, protože ji `paired(_:)` nepáruje
+  a `blockedPairs(_:)` slévá jen dvojice. Ve stažených diffech poznámka není, takže je na ni
+  vlastní soubor **a vlastní test o tom, že ta nula výš je vlastnost fixtures, ne kódu**.
+
+  **Kontrola měřidla** je tam dvakrát: v mezikroku (`rows(of:layout: .split)`) dvojice **být
+  musí**, jinak by nula neznamenala nic, a test s bublinou tvrdí, že se blok doopravdy rozťal.
+
+  Nad zdrojáky (tatáž konstrukce jako `SingleWayOutTests`): že `DiffRowView` plní **jediný
+  volající jediným výrazem** — bez toho by tvrzení nad daty platila o funkci, kterou si testy
+  zavolaly samy —, že `DiffPairView` v aplikaci **není** a že nedosažitelná větev `.pair` kreslí
+  **týž blok**, ne prázdno. **Ověřeno vloženou regresí** (`EmptyView()` do té větve spadne)
+  a renderem: obě větve daly bajt po bajtu tentýž PNG.
 - **`Policy` — procházení nálezů (#187)** — vyčerpávajícím výčtem: bez kurzoru se jde jen
   dopředu, šipky drží pořadí diffu, na kraji není kam, odmítnutý nález se přeskočí a skupina
   bez platného nálezu vypadne celá. Tři případy, kvůli kterým to celé vzniklo: **nález bez místa

@@ -1,4 +1,4 @@
-import SwiftUI
+import CoreGraphics
 
 /// Šrafa prázdného protějšku v pohledu vedle sebe (#277) — tam, kde na téhle straně dvojice
 /// řádek **není**.
@@ -15,14 +15,15 @@ import SwiftUI
 /// **Plocha díry se nekreslí**, jen šrafa. V návrhu je pod gradientem `transparent`, takže tam, kde
 /// řádek není, prosvítá plocha obsahu — a je to tak správně: díra je prázdné místo, ne stav.
 ///
-/// **Geometrie je na jednom místě pro obě cesty kreslení**: blok kódu si šrafu kreslí sám
-/// v AppKitu (`DiffTextView.drawRows`), samostatná dvojice ji dostane jako SwiftUI `Shape`
-/// (`DiffPairView`). Dvě kopie rozestupů by znamenaly dvě různé šrafy v jednom okně.
+/// **Kreslí ji blok kódu v AppKitu** (`DiffTextView.drawRows`), a je to od #446 jediná cesta.
+/// Do té doby byla druhá — samostatná dvojice (`DiffPairView`) ji brala jako SwiftUI `Shape` —,
+/// jenže do split pohledu se od #157 dostane jedině blok, takže se ta cesta nekreslila. Proto tady
+/// zbyla **jen geometrie** (`segments(in:)`) a ne `Shape`: úsečky jsou to, co se sdílet mělo, aby
+/// dvě kopie rozestupů nedělaly dvě různé šrafy v jednom okně.
 ///
-/// Sdílet se to dá bez přepočtu, protože **obě plochy mají `y` dolů**: `NSTextView` je flipped
-/// (kvůli tomu se v `DiffTextView` kreslí `draw(in:)` a ne `draw(at:)`) a SwiftUI taky. Pruhy tedy
-/// v obou cestách padají stejným směrem.
-struct DiffMissingHatch: Shape {
+/// `y` je v obou plochách **dolů**, takže se úsečky daly sdílet bez přepočtu: `NSTextView` je
+/// flipped (kvůli tomu se v `DiffTextView` kreslí `draw(in:)` a ne `draw(at:)`) a SwiftUI taky.
+struct DiffMissingHatch {
     /// Šířka pruhu — `5px` z návrhu. Kreslí se tahem, takže je to přímo šířka tahu: ta se měří
     /// **napříč** úsečkou, tedy tak, jak ji měří i CSS gradient.
     static let lineWidth = 5.0
@@ -52,14 +53,5 @@ struct DiffMissingHatch: Shape {
             x += step
         }
         return result
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        for segment in Self.segments(in: rect) {
-            path.move(to: segment.from)
-            path.addLine(to: segment.to)
-        }
-        return path
     }
 }

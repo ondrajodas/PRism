@@ -65,19 +65,14 @@ struct DiffRowView: View {
                 copy: copy
             )
         case .pairBlock(let id, let pair):
-            DiffPairBlockRowView(
-                block: pair,
-                language: language,
-                draft: draft,
-                performDraftAction: perform,
-                commentRangeCells: commentRangeCells,
-                draggedCells: draggedCells,
-                dragEnd: dragEnd,
-                rangeDrag: rangeDrag,
-                blockID: id,
-                copy: copy
-            )
+            pairBlock(id, pair)
         case .line(let id, let line):
+            // **Z diffu sem dojde jedině poznámka `git`u ve split pohledu** (#446), tedy
+            // `\ No newline at end of file`. `DiffRow.paired(_:)` ji nechává celou (není to obsah
+            // souboru, takže nemá stranu, viz `DiffPairing`) a `blockedPairs(_:)` slévá jen
+            // dvojice; v pohledu pod sebou ji `blocked(_:)` naopak sebere do bloku jako každý
+            // jiný řádek. Živá tahle větev tedy je — na rozdíl od té pod ní —, ale jen na tomhle
+            // jednom případu; obojí tvrdí `DiffRenderedRowsTests`.
             DiffLineView(
                 line: line,
                 language: language,
@@ -91,21 +86,16 @@ struct DiffRowView: View {
             )
             .copyMenu(copy.targets(line), selectText: selectText(of: line))
         case .pair(let id, let left, let right):
-            DiffPairView(
-                left: left,
-                right: right,
-                language: language,
-                draft: draft,
-                performDraftAction: perform,
-                leftInRange: left.map { covers(commentRangeCells, $0, on: .left) } ?? false,
-                rightInRange: right.map { covers(commentRangeCells, $0, on: .right) } ?? false,
-                leftInDrag: left.map { covers(draggedCells, $0, on: .left) } ?? false,
-                rightInDrag: right.map { covers(draggedCells, $0, on: .right) } ?? false,
-                dragEnd: dragEnd,
-                rangeDrag: rangeDrag,
-                dragID: id,
-                copy: copy
-            )
+            // **Sem se dvojice z diffu nedostane** (#446): `DiffView` sype do seznamu vždycky
+            // výsledek `blockedPairs(_:)`, a ta slije i dvojici osamocenou mezi bublinami.
+            // Do #446 tu viselo vlastní `DiffPairView` — sto řádků paralelního kreslení, které se
+            // od #157 nespustilo ani jednou. Zbylo po něm hlavně to, že se `DiffRowView` četl jako
+            // čtyři větve pro obsah souboru, ze kterých byla jedna kulisa.
+            //
+            // Prázdno tu ale být nesmí — tichá díra v diffu je horší než řádek navíc —, takže se
+            // dvojice nakreslí **týmž blokem** jako každá jiná. Jedna cesta ke kreslení dvojice,
+            // ne druhá vedle ní.
+            pairBlock(id, DiffPairBlock(left: [left], right: [right], ids: [id]))
         case .expander(_, let expander):
             DiffExpanderView(
                 expander: expander,
@@ -142,20 +132,40 @@ struct DiffRowView: View {
         }
     }
 
+    /// Blok dvou sloupců i s tím, co na řádcích visí. **Jediné místo, kde se v tomhle view kreslí
+    /// dvojice** — hotový `.pairBlock` i osamocená `.pair`, která se sem nemá jak dostat (#446).
+    private func pairBlock(_ id: String, _ block: DiffPairBlock) -> some View {
+        DiffPairBlockRowView(
+            block: block,
+            language: language,
+            draft: draft,
+            performDraftAction: perform,
+            commentRangeCells: commentRangeCells,
+            draggedCells: draggedCells,
+            dragEnd: dragEnd,
+            rangeDrag: rangeDrag,
+            blockID: id,
+            copy: copy
+        )
+    }
+
     /// Akce, která otevře hunk řádku jako text k vybírání (#157). `nil` = není z čeho ho složit,
     /// položka se v menu nekreslí.
     private func selectText(of line: DiffLine) -> (() -> Void)? {
         copy.selectableText(line).map { text in { copy.showText(text) } }
     }
 
-    /// Leží buňka (řádek na dané straně) uvnitř rozsahu? V pohledu pod sebou je sloupec jediný,
-    /// takže stačí, když řádek padne do rozsahu na **kterékoli** straně.
-    private func covers(_ cells: Set<DraftAnchor.Endpoint>, _ line: DiffLine, on side: DiffSide? = nil) -> Bool {
+    /// Leží řádek přes celou šířku uvnitř rozsahu? Stačí, když padne do rozsahu na **kterékoli**
+    /// straně — sloupec je jediný, takže se rozsah nemá o co dělit.
+    ///
+    /// **Strana se sem od #446 nepředává**: jedinou stranu měly buňky dvojice, a ty odsud kreslí
+    /// blok (`DiffPairBlockRowView`), který si rozsahy vybírá sám. Volitelný parametr, který
+    /// nikdo nevyplní, je kulisa téhož druhu jako `DiffPairView` sám.
+    private func covers(_ cells: Set<DraftAnchor.Endpoint>, _ line: DiffLine) -> Bool {
         guard !cells.isEmpty else { return false }
-        let sides: [DiffSide] = side.map { [$0] } ?? [.right, .left]
-        return sides.contains { candidate in
-            guard let number = Policy.number(of: line, on: candidate) else { return false }
-            return cells.contains(DraftAnchor.Endpoint(line: number, side: candidate))
+        return [DiffSide.right, .left].contains { side in
+            guard let number = Policy.number(of: line, on: side) else { return false }
+            return cells.contains(DraftAnchor.Endpoint(line: number, side: side))
         }
     }
 
@@ -163,8 +173,9 @@ struct DiffRowView: View {
     ///
     /// Ve split pohledu **vedle sebe ve svých polovinách**: komentář je vázaný na stranu, takže
     /// pruh přes oba sloupce by tvrdil, že patří k obojímu — a u komentáře k odebranému řádku
-    /// je to matoucí nejvíc. Rozdělení šířky je **stejné jako v `DiffPairView`** (dvě poloviny
-    /// a mezi nimi 1 pt na dělicí čáru), takže komentář končí tam, kde končí buňka jeho řádku.
+    /// je to matoucí nejvíc. Rozdělení šířky je **stejné jako v bloku dvojic**
+    /// (`DiffGutterGeometry.rightColumnX(inBlockOfWidth:)` — dvě poloviny a mezi nimi 1 pt na
+    /// dělicí čáru), takže komentář končí tam, kde končí buňka jeho řádku.
     ///
     /// V pohledu pod sebou pod sebou přes celou šířku, jako dosud. Nález ani cizí vlákno se na
     /// stranu nevážou (nález stranu nemá vůbec) a nesou delší text, takže zůstávají přes celou

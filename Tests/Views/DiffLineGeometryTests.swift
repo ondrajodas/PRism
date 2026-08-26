@@ -13,7 +13,9 @@ import Testing
 /// **Zadání #438 vinilo diff pod jiným tabem; měření to vyvrátilo** (`IdleDiffSpinProbe`
 /// `lineGeometryOrigin`, čísla v `docs/testovani.md`). S diffem vepředu se `DiffLine.geometry`
 /// neozve **ani jednou** — `DiffView` slévá řádky do bloků (`DiffRow.blocked(_:)`), takže tam
-/// `DiffLineView` nekreslí ani jeden řádek. Zásahy jsou z **osy konverzace**, která je vepředu:
+/// `DiffLineView` nekreslí ani jeden řádek. (**Přesněji od #446**: jeden případ zbývá — poznámka
+/// `git`u ve split pohledu —, ale v měřeném souboru není a víc než jedna na hunk jich nebývá.)
+/// Zásahy jsou z **osy konverzace**, která je vepředu:
 /// úryvek u vlákna (`ThreadSnippetView`) kreslí `DiffLineView` řádek po řádku a rámeček z něj
 /// nemá kdo převzít.
 ///
@@ -70,21 +72,24 @@ struct DiffLineGeometryTests {
 
     /// **Kontrola měřidla**: bez tohohle by nula výš mohla znamenat i „rámeček nehlásí nikdo
     /// a tažení rozsahu je rozbité“. V diffu se předává obojí, takže se tam ta větev bere.
+    ///
+    /// Od #446 je to **jedno místo, ne dvě**: `DiffPairView` byl smazaný jako mrtvá cesta, takže
+    /// tuhle podmínku vyplňuje jedině větev `.line` v `DiffRowView` — a ta se v diffu kreslí jen
+    /// u poznámky `git`u ve split pohledu (viz `DiffRenderedRowsTests`). Nula výš tím **neslábne**:
+    /// pořád existuje volající, který obojí předá, takže se pozná rozdíl mezi „nehlásí se, protože
+    /// je to za podmínkou“ a „nehlásí se, protože podmínku nikdo nevyplní“.
     @Test("V diffu se předává identita i krabice")
     func theDiffPassesBoth() throws {
         let row = try source(of: "DiffRowView")
         #expect(row.contains("dragID: id"))
         #expect(row.contains("rangeDrag: rangeDrag"))
-        let pair = try source(of: "DiffPairView")
-        #expect(pair.contains("dragID: dragID.map"))
-        #expect(pair.contains("rangeDrag: rangeDrag"))
     }
 
     /// Kontrola, že se zdrojáky doopravdy čtou — jinak by prázdný nález prošel jako splněné
     /// tvrzení.
     @Test("Zdrojáky se doopravdy čtou")
     func theSourcesAreActuallyRead() throws {
-        for view in ["DiffLineView", "ThreadSnippetView", "DiffRowView", "DiffPairView"] {
+        for view in ["DiffLineView", "ThreadSnippetView", "DiffRowView"] {
             #expect(try source(of: view).count > 500, "\(view) vyšel prázdný, test netvrdí nic")
         }
     }
