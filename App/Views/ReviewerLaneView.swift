@@ -28,6 +28,9 @@ struct ReviewerLaneView: View {
     /// Otevře přepis celého transcriptu (#327). `nil` = dráha nemá `session_id` nebo pracovní strom,
     /// takže se tlačítko nekreslí — viz `StepFeedView.showRawSession`.
     var showRawSession: (() -> Void)?
+    /// Pustí `claude --resume …` v Terminálu (#453). `nil` = není co obnovit, takže se tlačítko
+    /// **nekreslí** — rozhoduje o tom `Policy.terminalSession(of:)`, ne `if` tady.
+    var openInTerminal: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -105,7 +108,12 @@ struct ReviewerLaneView: View {
                     .monospacedDigit()
                     .help("Cena, trvání a počet kol modelu, jak je nahlásila session (`result` event).")
             }
-            if let sessionID = lane.sessionID { resume(sessionID) }
+            if let sessionID = lane.sessionID {
+                resume(sessionID)
+                // `▶` vedle `⧉`, ne místo něj (#453): kdo si session pouští jinde (iTerm, tmux,
+                // jiný stroj), potřebuje text, ne cizí okno. Jsou to dvě akce, ne dvě podoby jedné.
+                if let openInTerminal { terminal(sessionID, action: openInTerminal) }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -134,14 +142,31 @@ struct ReviewerLaneView: View {
     }
 
     /// Levná náhrada vestavěného terminálu: session se dá otevřít v tom svém.
+    ///
+    /// **Zůstává i vedle `▶`** (#453) a nejsou to dvě podoby jedné akce: kdo si session pouští
+    /// jinde — v iTermu, v tmuxu, na jiném stroji —, potřebuje text, ne cizí okno.
     private func resume(_ sessionID: String) -> some View {
         Button("Zkopírovat resume", systemImage: "doc.on.doc") {
-            Clipboard.copy("claude --resume \(sessionID)")
+            Clipboard.copy(Policy.resumeCommand(sessionID: sessionID))
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
         .font(.caption)
-        .help("claude --resume \(sessionID)")
+        .help(ReviewerLaneText.copyResume(sessionID: sessionID))
+    }
+
+    /// Tentýž příkaz, jen rovnou puštěný — `▶` z návrhu, sekce 34 (#453).
+    ///
+    /// **Vestavěný terminál to není a nebude**: ten by znamenal, že se z okna dá spustit
+    /// `gh pr merge` i `git push`, tedy že tvrdá podmínka č. 1 přestane platit — a nepůjde ji
+    /// uhlídat testem, protože ta cesta nevede přes kód aplikace. Tohle je totéž bez té ceny:
+    /// session dostane plnou moc tam, kde ji člověk čeká, ve svém terminálu a pod svým jménem.
+    private func terminal(_ sessionID: String, action: @escaping () -> Void) -> some View {
+        Button(ReviewerLaneText.openInTerminal, systemImage: "play.fill", action: action)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .help(ReviewerLaneText.openInTerminalHelp(sessionID: sessionID))
     }
 
     // MARK: - Fáze

@@ -1890,6 +1890,47 @@ Co se **nepodařilo zlevnit**, ať to příště nikdo nezkouší znovu: dělen�
 druhou cestou dělení textu — a jedno místo, kde se rozhoduje, co je řádek, je pravidlo, které stojí
 za víc než dvě desetiny sekundy v Debug buildu.
 
+### Živá session v Terminálu (#453)
+
+Vedle `⧉` (`Zkopírovat resume`) stojí v hlavičce dráhy `▶` — **`Otevřít session v Terminálu`**,
+které tentýž příkaz rovnou pustí v `Terminal.app`, v **pracovním stromu** té session. Návrh je
+sekce 34; kopírování zůstává, protože kdo si session pouští jinde (iTerm, tmux, jiný stroj),
+potřebuje text, ne cizí okno.
+
+**Tvrdá podmínka č. 1 se tím nemění, a je to jádro celé změny.** Terminál je **mimo aplikaci** —
+je to totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný
+terminál nevzniká, `grep ReviewPublishing App/` vypisuje **týž seznam** a `SingleWayOutTests`
+procházejí beze změny. **Vestavěný terminál je zamítnutý a zapsané je proč**: znamenal by, že se
+z okna dá spustit `gh pr merge` i `git push`, tedy že podmínka přestane platit — a nepůjde ji
+uhlídat testem, protože ta cesta nevede přes kód aplikace. Tohle je totéž bez té ceny.
+
+Čtyři věci, které na tom nejsou zjevné:
+
+- **Pracovní strom je podmínka stejně jako `session_id`**, i když zadání mluví jen o `id`.
+  `claude --resume` hledá vlákno podle adresáře, ve kterém se spustí
+  (`~/.claude/projects/<zakódovaná cesta>/`), takže **tentýž příkaz jinde session nenajde** —
+  otevřelo by se okno, ve kterém `claude` řekne, že takové vlákno nezná. „Nabízí se to jen tam,
+  kde je co obnovit“ tedy platí doslova, a je to tatáž dvojice podmínek jako u `Ukázat session`
+  (`Policy.rawSessionTarget`). Rozdíl není teoretický: dráha z uloženého běhu **bez osy** zná
+  `session_id` a strom ne (soubory z doby před #203). Rozhoduje `Policy.terminalSession(of:)`,
+  ne `if` ve view, a **zašedlé tlačítko to není** — u dráhy, která teprve čeká na slot, by
+  slibovalo něco, co přijde samo.
+- **Příkaz skládá jedno místo** (`Policy.resumeCommand(sessionID:)`) — kopíruje ho `⧉` a pouští
+  `▶`. Dvě kopie by se rozešly první úpravou a rozdíl mezi „co mám ve schránce“ a „co se mi
+  otevřelo“ se nedá poznat jinak než tím, že jedno z toho nefunguje.
+- **`&&`, ne `;`** (`TerminalSession.shellLine`): pracovní strom umí zmizet (úklid cache,
+  eviction), a `claude --resume` spuštěný místo něj v domovském adresáři by odpověděl větou
+  **o session**, ne o adresáři. S `&&` zůstane v okně `cd: no such file or directory`, což je
+  pravda a dá se podle ní jednat. Uzávorkování cesty dělá `ShellQuoting` — od #453 **jedno
+  místo**, protože totéž potřebuje `ClaudeCommand.shellCommand` pro `Zkopírovat příkaz`.
+- **Selhání se hlásí ve stavovém řádku** (`AppStore.terminalFailure` → `AppNoticesView`).
+  Je to tentýž případ jako notifikace (#88): výsledek téhle akce je vidět **mimo aplikaci**,
+  takže neúspěch vypadá k nerozeznání od toho, že se nekliklo — `try?` nad tou cestou by
+  z tlačítka udělal něco, co občas nedělá nic. Důvod se **opisuje doslova** z toho, co řekl
+  systém (`Not authorized to send Apple events to Terminal.`), protože je to jediné, podle čeho
+  se dá jednat, a spravuje se to v Nastavení systému, kam aplikace nedosáhne. Hláška se zahodí
+  teprve tehdy, když se okno **doopravdy** otevře, ne při dalším kliknutí.
+
 ## `ReviewRunner` (`App/Review/`)
 
 Jeden běh = jedna headless session `claude` na jeden skill v jednom pracovním stromě.
@@ -6547,6 +6588,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.dashboardBlock(_:of:)`, `Policy.destination(of:)`, `Policy.dashboardRowLimit` | Strop **pěti řádků** na blok dashboardu i text patky (`DashboardBlock`, #371) a kam vede která karta (`DashboardCard` → `DashboardDestination`). Strop je **řez, ne řazení** a **o kresbě, ne o množině** — karta nad blokem dál počítá celou frontu. Rozřazení bloku dělá `PullRequestOwnership`, tedy tentýž typ jako obě fronty; `destination(of: .spend)` je **`nil`**, protože útrata není seznam, na který by se dalo přepnout |
 | `Policy.dashboardActivity(_:since:empty:)` | Blok `Dění` na dashboardu (#443, `DashboardActivity`): nadpis s počtem **nepřečtených z celého záznamu**, pět nejnovějších řádků, patka `Zobrazit celé dění +37 →` a jedna věta místo řádků, když je prázdno. Strop je tentýž `dashboardRowLimit` jako u front a patku nese **týž `DashboardBlock.Footer`** — druhá kresba patky by se s tou první rozešla. Značka poslední návštěvy jde dovnitř jako **vstup**, blok ji nikdy neposouvá |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
+| `Policy.resumeCommand(sessionID:)`, `Policy.terminalSession(of:)` | Čím se session obnoví a jestli ji dráha umí pustit v Terminálu (#453) → `TerminalSession`. **Jeden příkaz pro obojí** — `⧉` ho kopíruje, `▶` pouští. `nil` = tlačítko se **nekreslí**, a podmínkou je `session_id` **i pracovní strom**: `claude --resume` hledá vlákno podle adresáře, takže bez něj by okno jen oznámilo, že takové vlákno nezná |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
@@ -8526,6 +8568,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
 | `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
 | `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
+| `TerminalOpening` | Protokol: pusť řádku v novém okně terminálu (#453). `AppleScriptTerminal` nad `/usr/bin/osascript` — **není to druhá cesta ven**, terminál je mimo aplikaci. Příkaz jde do skriptu jako `argv`, ne vlepený do jeho zdrojáku, a selhání se **vrací jako chyba** (`TerminalError`), ne mlčí |
 
 Nad notifikacemi (#88) platí:
 

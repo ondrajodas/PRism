@@ -5080,6 +5080,49 @@ významu, ale v diffu PR je to sto řádků šumu. Smazáním souboru se to nevr
 řekneš, že je hotovo.** Vrácený zdroják na běžící aplikaci nic nezmění a pak se ukazuje
 falešná obrazovka.
 
+### Jak ověřit otevření Terminálu (#453)
+
+**Spuštěním, ne přečtením.** Chyba se u téhle cesty projeví tím, že se **okno neotevře a nikdo
+se nic nedozví** — v harnessu se přitom ověřit nedá: `osascript` by si vyžádal povolení
+automatizace pro testovacího hostitele a otevřená okna by po sobě nechal běh testů. Testuje se
+proto **tvar volání** (`TerminalLauncherTests`) a Apple event se zkusí ručně, mimo aplikaci:
+
+```bash
+/usr/bin/osascript -e 'on run argv
+    tell application "Terminal"
+        do script (item 1 of argv)
+        activate
+    end tell
+end run' "cd '/tmp' && echo prism-marker"
+```
+
+**Že se okno doopravdy otevřelo, se z výstupu nepozná** (rozhoduje návratový kód, a ten je nula):
+`activate` je poslední příkaz skriptu a nevrací nic, takže `osascript` při úspěchu **mlčí**. Bez
+`activate` na konci vypíše `tab 1 of window id 202861`. Zpátky se proto čte z okna, a stejnou
+cestou se po sobě uklidí:
+
+```bash
+/usr/bin/osascript -e 'tell application "Terminal" to get contents of selected tab of front window'
+/usr/bin/osascript -e 'tell application "Terminal" to close (every window whose id is 202861)'
+```
+
+Co z toho u #453 vyšlo a bez měření by se neodhadlo:
+
+- **`osascript -e <skript> <argument>` argument doopravdy předá** do `on run argv`, takže se
+  příkaz nemusí vlepovat do zdrojáku skriptu. Ověřeno i s **apostrofem v cestě**
+  (`cd '/tmp/it'\''s here' && pwd` vypsalo `/tmp/it's here`), tedy že uzávorkování ze
+  `ShellQuoting` sedí na to, co shell v Terminálu doopravdy dostane.
+- **Zavření okna patří k úklidu.** Zkušební okna po sobě nechává i neúspěšný pokus, a v cizím
+  Terminálu se pak nedá vybrat, které je čí — `id` vrátí `do script` bez `activate` (viz výš)
+  nebo dohledání podle obsahu (`contents of selected tab of w contains "prism-marker"`).
+
+**Co v harnessu ani odsud ověřit nejde, a proto to zkouší člověk**: že Apple event projde
+**z aplikace**. TCC ho přisuzuje **odpovědnému procesu**, tedy PRismu, ne tomu `osascript`u —
+takže povolení, které má shell, o aplikaci nevypovídá nic. Aplikace k tomu potřebuje
+`NSAppleEventsUsageDescription` v `Info.plist` (bez něj macOS event odmítne kódem `-1743`
+a **ani se nezeptá**) a napoprvé systémový dotaz, který se musí odkliknout. **Každý slot je pro
+macOS jiná aplikace**, takže se ptá zvlášť — stejně jako u notifikací.
+
 ## Jak změřit, že okno netuhne (#220)
 
 Měřicí harness je `Tests/Diff/DiffPerformanceMeasurement.swift` a **v běžném běhu se nepouští** —

@@ -405,6 +405,20 @@ final class AppStore {
     /// to **jeden** snímek, ne slovník — viz `RawSessionSnapshot`.
     var rawSession: RawSessionSnapshot?
 
+    /// Otevření session v uživatelově terminálu (#453). `nil` = odsud se neotevírá (testy).
+    ///
+    /// Nepovinné ze stejného důvodu jako `notifications`: živá implementace posílá Apple event do
+    /// `Terminal.app`, takže by z každého testu, který si složí store, byl test otevírající okna.
+    let terminal: (any TerminalOpening)?
+
+    /// Proč se poslední pokus otevřít session v Terminálu nepovedl. `nil` = nic se nepokazilo.
+    ///
+    /// **Musí být vidět, a je to celý důvod, proč ten stav existuje**: okno se otevírá **mimo
+    /// aplikaci**, takže neúspěch vypadá úplně stejně jako by se nekliklo — nic se nestane a nic
+    /// se neřekne. `try?` nad tou cestou je přesně ten vzor, který `CLAUDE.md` vypisuje jako
+    /// opakovaný nález. Kreslí to `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“.
+    var terminalFailure: String?
+
     /// Počitadlo načtení přepisu. Viz `RawSessionSnapshot.generation` — bez něj by dvě čtení téhož
     /// cíle nešlo od sebe poznat.
     var rawSessionGeneration = 0
@@ -612,6 +626,7 @@ final class AppStore {
         announced: AnnouncedPullRequests? = nil,
         interrupted: InterruptedRuns? = nil,
         transcripts: (any TranscriptReading)? = nil,
+        terminal: (any TerminalOpening)? = nil,
         appearance: (any AppearanceApplying)? = nil,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
@@ -632,6 +647,7 @@ final class AppStore {
         self.announced = announced
         self.interrupted = interrupted
         self.transcripts = transcripts
+        self.terminal = terminal
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -737,6 +753,9 @@ final class AppStore {
             announced: AnnouncedPullRequests(),
             interrupted: InterruptedRuns(),
             transcripts: TranscriptStore(),
+            // Terminál (#453) — bufferovaný runner stačí: `osascript` doběhne, jakmile Terminal
+            // okno založí, a to okno pak žije mimo aplikaci.
+            terminal: AppleScriptTerminal(runner: runner),
             appearance: AppAppearance.application,
             handoffs: HandoffLedger(),
             // Záznam dění (#414). Živý jedině tady — testy ho nedostanou, takže nesahají do cache.
