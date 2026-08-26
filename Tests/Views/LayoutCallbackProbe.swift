@@ -121,7 +121,7 @@ struct LayoutCallbackProbe {
         window.setContentSize(NSSize(width: side, height: side))
         window.setFrameOrigin(origin)
         window.level = .floating
-        window.orderFrontRegardless()
+        window.orderFrontRegardlessUnanimated()
         return window
     }
 }

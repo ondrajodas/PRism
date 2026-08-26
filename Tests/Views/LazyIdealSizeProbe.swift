@@ -83,7 +83,7 @@ struct LazyIdealSizeProbe {
         window.setContentSize(NSSize(width: width, height: height))
         window.setFrameOrigin(NSPoint(x: 40, y: 40))
         window.level = .floating
-        window.orderFrontRegardless()
+        window.orderFrontRegardlessUnanimated()
         return window
     }
 }

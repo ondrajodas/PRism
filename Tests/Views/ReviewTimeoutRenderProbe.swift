@@ -112,7 +112,7 @@ struct ReviewTimeoutRenderProbe {
                 // Mimo obrazovku, ať sonda nikomu neskočí před oči — v paralelním běhu stojí
                 // vedle sebe víc instancí a cizí okno je poslední, co má sonda rušit.
                 window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-                window.orderFront(nil)
+                window.orderFrontUnanimated()
                 defer { window.orderOut(nil) }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.4))
                 let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))

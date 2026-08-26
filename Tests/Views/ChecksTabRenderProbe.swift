@@ -132,7 +132,7 @@ struct ChecksTabRenderProbe {
         // Mimo obrazovku, ať sonda nikomu neskočí před oči — v paralelním běhu stojí vedle sebe víc
         // instancí a cizí okno je poslední, co má sonda rušit.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         // Hierarchie se doskládá až po jednom kole smyčky; `.task` v detailu si navíc dotahuje diff
         // a konverzaci z fake gatewaye, takže se na to musí nechat čas.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))

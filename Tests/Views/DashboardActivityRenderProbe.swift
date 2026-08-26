@@ -86,7 +86,7 @@ struct DashboardActivityRenderProbe {
         window.contentView = hosting
         // Mimo obrazovku, ať sonda nikomu neskočí před oči — vedle sebe běží víc instancí aplikace.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
         // Hierarchie se doskládá až za pár koly smyčky; sonda nic netvrdí, takže stačí odmlka.
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))

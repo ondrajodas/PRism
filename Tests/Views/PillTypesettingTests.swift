@@ -294,7 +294,7 @@ struct PillTypesettingTests {
         )
         window.contentView = hosting
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
         hosting.layoutSubtreeIfNeeded()
 
@@ -544,7 +544,7 @@ struct PillTypesettingTests {
         // Mimo obrazovku, ať měření nikomu neskočí před oči — v paralelním běhu stojí vedle sebe
         // víc instancí.
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
 
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))

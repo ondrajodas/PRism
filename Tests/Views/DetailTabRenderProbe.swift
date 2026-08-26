@@ -148,7 +148,7 @@ struct DetailTabRenderProbe {
         let appearance = try name.map { try #require(NSAppearance(named: $0)) }
         window.appearance = appearance
         hosting.appearance = appearance
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         // Hierarchie se doskládá až po jednom kole smyčky; `.task` v detailu si navíc dotahuje diff
         // a konverzaci z fake gatewaye, takže se na to musí nechat čas.
         RunLoop.current.run(until: Date().addingTimeInterval(0.6))

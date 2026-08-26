@@ -182,7 +182,7 @@ struct LogTailScrollerReserveTests {
         )
         window.contentView = scroll
         window.setFrameOrigin(NSPoint(x: -10_000, y: -10_000))
-        window.orderFront(nil)
+        window.orderFrontUnanimated()
         defer { window.orderOut(nil) }
 
         // Skok na konec jako v aplikaci — kvůli němu se pozná, že necelý řádek zůstane u **horní**
