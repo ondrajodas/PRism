@@ -75,7 +75,7 @@ struct TerminalLauncherTests {
     func aSilentFailureStillSaysSomething() async throws {
         let runner = FakeProcessRunner(exitCode: 2)
 
-        let error = await captured(runner)
+        let error = try await captured(runner)
 
         #expect(error == .failed("`osascript` skončil kódem 2."))
     }
@@ -86,7 +86,7 @@ struct TerminalLauncherTests {
     func aTimeoutNamesTheLikelyCause() async throws {
         let runner = FakeProcessRunner(failing: .timedOut)
 
-        let error = await captured(runner)
+        let error = try await captured(runner)
 
         #expect(error == .failed(
             "Terminal se v limitu neozval — zůstal nejspíš otevřený dotaz na povolení automatizace."
@@ -97,7 +97,7 @@ struct TerminalLauncherTests {
     func aFailedLaunchIsAnErrorToo() async throws {
         let runner = FakeProcessRunner(failing: .launchFailed("nejde"))
 
-        let error = await captured(runner)
+        let error = try await captured(runner)
 
         guard case .failed(let text) = try #require(error) else { return }
         #expect(text.contains("osascript"))
@@ -112,14 +112,16 @@ struct TerminalLauncherTests {
         try await AppleScriptTerminal(runner: runner).open(line)
     }
 
-    private func captured(_ runner: FakeProcessRunner) async -> TerminalError? {
+    /// Chybu jiného typu **nechytá schválně** (nález Copilota na #457): propadne ven a test spadne
+    /// na ní, tedy s tím, co se doopravdy vyhodilo. `catch { return nil }` by z ní udělal `nil`
+    /// a test by se rozbil až o porovnání — hláška by mluvila o `nil` místo o té chybě. Je to
+    /// tentýž vzor, který se v `App/` zakazuje, jen v testu.
+    private func captured(_ runner: FakeProcessRunner) async throws -> TerminalError? {
         do {
             try await AppleScriptTerminal(runner: runner).open(line)
             return nil
         } catch let error as TerminalError {
             return error
-        } catch {
-            return nil
         }
     }
 }
