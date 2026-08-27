@@ -20,8 +20,10 @@ struct TerminalShellCommand: Equatable, Sendable {
 /// Jak si stojí shell v zásuvce (#459).
 ///
 /// **`exited` nese kód**, ne jen příznak: `zsh` po `exit 1` je něco jiného než `zsh`, který spadl —
-/// a v hlavičce zásuvky je to jediné, podle čeho se pozná, že se něco nepovedlo. `nil` je běh,
-/// který skončil, aniž by kód dorazil (čtení pty selhalo dřív); je to odpověď, ne slabší „skončil“.
+/// a v hlavičce zásuvky je to jediné, podle čeho se pozná, že se něco nepovedlo. `nil` je běh, ze
+/// kterého kód nedorazil: čtení pty selhalo dřív, nebo se shell **vůbec nespustil** (`SHELL` míří
+/// na binárku, která neexistuje). Je to odpověď, ne slabší „skončil“ — a hlavně se ani jeden
+/// z těch stavů nesmí kreslit jako `běží`.
 enum TerminalRunState: Equatable, Sendable {
     case running
     case exited(code: Int32?)
@@ -177,14 +179,24 @@ extension Policy {
 
     // MARK: - Co se spustí a s čím
 
-    /// Shell z prostředí, jinak `/bin/zsh` — tatáž volba jako v `LoginShellPathReader`.
+    /// Shell, který se pustí, když z `SHELL` nic použitelného nekouká — `/bin/zsh` je výchozí
+    /// macOS od Cataliny a je to tatáž volba jako v `LoginShellPathReader`.
+    ///
+    /// Konstanta, ne literál na dvou místech: bere si ji i volající, který zjistí, že binárka
+    /// ze `SHELL` na disku není (viz `EmbeddedTerminalView.start(in:)`).
+    static let fallbackShell = TerminalShellCommand(
+        executable: URL(filePath: "/bin/zsh"),
+        argv0: "-zsh"
+    )
+
+    /// Shell z prostředí, jinak `fallbackShell`.
     static func terminalShell(_ environment: [String: String]) -> TerminalShellCommand {
-        let configured = environment["SHELL"] ?? ""
         // Relativní cesta se zahazuje: `SHELL` se dá nastavit na cokoli, a spustit `zsh` nalezené
         // podle `PATH` aplikace by znamenalo spustit něco jiného, než co si člověk nastavil.
-        let executable = configured.hasPrefix("/")
-            ? URL(filePath: configured)
-            : URL(filePath: "/bin/zsh")
+        guard let configured = environment["SHELL"], configured.hasPrefix("/") else {
+            return fallbackShell
+        }
+        let executable = URL(filePath: configured)
         return TerminalShellCommand(executable: executable, argv0: "-" + executable.lastPathComponent)
     }
 

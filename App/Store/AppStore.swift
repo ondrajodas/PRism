@@ -669,7 +669,9 @@ final class AppStore {
     ///
     /// Na tomhle jediném příznaku stojí to, že se okenní zkratky bez `⌘` neuplatní
     /// (`Policy.shortcutYieldsToTerminal`) — jinak by `⌃W` uprostřed psaní zavřelo záložku.
-    /// Hlásí ho `TerminalHost` z `becomeFirstResponder`/`resignFirstResponder`.
+    /// Hlásí ho `TerminalHost` ze setteru `hasFocus` na ploše emulátoru — `becomeFirstResponder`
+    /// a `resignFirstResponder` má knihovna `public`, ne `open`, takže se z jiného modulu přepsat
+    /// nedají (zdůvodnění je u `EmbeddedTerminalView.hasFocus`).
     var isTerminalFocused = false
 
     /// Jak si stojí shell toho PR. Co v mapě není, nikdy neběželo.

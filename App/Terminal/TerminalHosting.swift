@@ -41,10 +41,12 @@ protocol TerminalHosting: AnyObject {
     /// takže nová plocha při každém překreslení by znamenala nový shell při každém překreslení.
     func terminal(for pr: PRIdentifier, in directory: URL) -> NSView
 
-    /// Zabije shell toho pull requestu; `true`, když nějaký byl.
+    /// Zabije shell toho pull requestu; `true`, když nějaký běžel.
     ///
-    /// Volá se ze zavření záložky a ze zavření zásuvky, takže musí být bezpečné zavolat to nad
-    /// pull requestem, který terminál nikdy neměl.
+    /// **Volá se ze zavření záložky, ne ze schování zásuvky.** Zásuvka je pohled — `` ⌃` `` shell
+    /// nechává běžet, protože uprostřed `claude --resume` by to byl nevratný omyl; zavřená záložka
+    /// je naproti tomu konec kontextu. Musí být bezpečné zavolat to nad pull requestem, který
+    /// terminál nikdy neměl.
     @discardableResult func stopTerminal(for pr: PRIdentifier) -> Bool
 
     /// Zabije všechny — ukončení aplikace (#264, #351).

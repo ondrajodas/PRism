@@ -43,9 +43,19 @@ final class EmbeddedTerminalView: LocalProcessTerminalView {
     /// **Značka do `sessions.json` (#351) je součást startu, ne kosmetika**: zabitá aplikace nemá
     /// kde spustit úklid, takže osiřelý shell — a v něm `claude`, který platí tokeny — by běžel dál
     /// pod `launchd`. Zapisuje se identita `(pid, startedAt)`, kterou si registr přečte z jádra sám.
+    /// **Binárka se před spuštěním ověří, a není to opatrnost.** `SwiftTerm` staví na `forkpty`
+    /// a v potomkovi po neúspěšném `execve` **nedělá nic** — `Pty.fork(andExec:)` se z něj vrátí
+    /// stejně jako v rodiči, takže by dál běžela **kopie naší aplikace** jako podproces sebe sama.
+    /// `SHELL` je přitom uživatelská proměnná a binárka z ní umí zmizet (odinstalovaný `fish`).
+    /// Když neexistuje, bere se `/bin/zsh` — přijít o svůj shell je pořád lepší než přijít
+    /// o zásuvku a mít v tabulce procesů dvojníka.
     func start(in directory: URL) {
         guard !process.running else { return }
-        let command = Policy.terminalShell(ProcessInfo.processInfo.environment)
+        let configured = Policy.terminalShell(ProcessInfo.processInfo.environment)
+        let isExecutable = FileManager.default.isExecutableFile(
+            atPath: configured.executable.path(percentEncoded: false)
+        )
+        let command = isExecutable ? configured : Policy.fallbackShell
         startProcess(
             executable: command.executable.path(percentEncoded: false),
             args: [],
@@ -53,7 +63,16 @@ final class EmbeddedTerminalView: LocalProcessTerminalView {
             execName: command.argv0,
             currentDirectory: directory.path(percentEncoded: false)
         )
-        if let shellPid { RunningSessions.shared.remember(pid: shellPid) }
+        // **Stav se hlásí podle toho, co se doopravdy stalo, ne podle toho, že se o to někdo
+        // pokusil** (nález Copilota). `SHELL` je uživatelská proměnná, takže může ukazovat na
+        // binárku, která neexistuje — `fork`/`exec` pak selže a `running` zůstane `false`.
+        // Bezpodmínečné `.running` by v hlavičce zásuvky svítilo „běží“ nad prázdnou plochou,
+        // ve které nic není a nikdy nebude.
+        guard let shellPid else {
+            stateChanged?(.exited(code: nil))
+            return
+        }
+        RunningSessions.shared.remember(pid: shellPid)
         stateChanged?(.running)
     }
 

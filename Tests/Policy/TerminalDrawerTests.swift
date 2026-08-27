@@ -183,10 +183,10 @@ struct TerminalDrawerTests {
     @Test("Bez použitelného SHELL se bere /bin/zsh")
     func aMissingShellFallsBackToZsh() {
         for environment in [[:], ["SHELL": ""], ["SHELL": "zsh"]] as [[String: String]] {
-            let shell = Policy.terminalShell(environment)
-            #expect(shell.executable == URL(filePath: "/bin/zsh"))
-            #expect(shell.argv0 == "-zsh")
+            #expect(Policy.terminalShell(environment) == Policy.fallbackShell)
         }
+        #expect(Policy.fallbackShell.executable == URL(filePath: "/bin/zsh"))
+        #expect(Policy.fallbackShell.argv0 == "-zsh")
     }
 
     /// **Tvrzení o tom, co se nestane**: `PATH` aplikace se do shellu nedostane. GUI aplikace ho má

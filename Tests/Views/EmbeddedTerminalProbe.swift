@@ -8,8 +8,9 @@ import Testing
 /// Sonda, ne test (#459): **spustí skutečný login shell** v pty a zase ho zabije.
 ///
 /// Existuje proto, že tři nejrizikovější věci na celém #459 se přečtením kódu ověřit nedají:
-/// jestli se shell vůbec spustí, jestli stojí **v tom adresáři, který dostal**, a jestli po
-/// `kill()` **doopravdy** neběží. Ta poslední je celý závazek z #264 a #351.
+/// jestli se shell vůbec spustí **s řídicím terminálem** (bez něj by `⌃C` uvnitř nepřerušilo nic),
+/// jestli stojí **v tom adresáři, který dostal**, a jestli po `kill()` **doopravdy** neběží.
+/// Ta poslední je celý závazek z #264 a #351.
 ///
 /// **V běžném běhu se nepouští** (`PRISM_MEASURE`), a je to podmínka, ne opatrnost: spuštěný shell
 /// je proces, který umí běh testů přežít — a `xcodebuild test` běží i souběžně ve třech slotech.
@@ -27,17 +28,18 @@ import Testing
 /// nenastane; v hostu z toho plyne, že buffer emulátoru zůstane prázdný, ať shell vypíše cokoli.
 ///
 /// Sonda proto **nic nečte z emulátoru** a všechno si zjišťuje z jádra: adresář přes `lsof`, běh
-/// a zánik přes `ps`. Že se do pty dá **psát**, se pozná tím, že shell po `exit` skončí — což je
-/// pozorovatelné taky bez hlavní fronty. Jak plocha doopravdy vypadá, ověřuje člověk na běžící
-/// aplikaci (postup je v `docs/testovani.md`).
+/// a zánik přes `ps`. **Ani psaní do pty se odsud neověřuje** — pokus o to (poslat `exit` a čekat
+/// na konec) vycházel náhodně, protože `send` jde přes druhý `DispatchIO` kanál nad deskriptorem,
+/// jehož první kanál visí na téže hladové frontě. Jak plocha vypadá a jestli se do ní dá psát,
+/// ověřuje člověk na běžící aplikaci (postup je v `docs/testovani.md`).
 @MainActor
 @Suite(
     "Sonda vestavěného terminálu (#459)",
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
 )
 struct EmbeddedTerminalProbe {
-    @Test("Shell stojí v tom adresáři, který dostal, a čte, co mu píšeme")
-    func startsWhereItWasToldAndReadsInput() throws {
+    @Test("Shell stojí v tom adresáři, který dostal, a má řídicí terminál")
+    func startsWhereItWasTold() throws {
         let directory = try Self.scratch()
         defer { try? FileManager.default.removeItem(at: directory) }
 
@@ -51,9 +53,15 @@ struct EmbeddedTerminalProbe {
             Issue.record("shell se nespustil")
             return
         }
-        print("SONDA shell pid=\(pid), stav \(Self.state(of: pid) ?? "—")")
+        let state = Self.state(of: pid)
+        print("SONDA shell pid=\(pid), stav \(state ?? "—")")
         #expect(states == [.running])
         #expect(Self.isAlive(pid), "shell neběží hned po startu")
+        // **`s` znamená session leader a `+` popředí řídicího terminálu** — tedy že `login_tty`
+        // proběhlo a job control uvnitř funguje. Bez toho by `⌃C` v zásuvce nepřerušilo nic
+        // a přišlo by se na to až rukama.
+        #expect(state?.contains("s") == true, "shell není session leader: \(state ?? "—")")
+        #expect(state?.hasSuffix("+") == true, "shell nemá řídicí terminál: \(state ?? "—")")
 
         // **Adresář z jádra, ne z výpisu**: `pwd` v terminálu by se muselo přečíst z bufferu,
         // a ten v hostu zůstává prázdný (viz hlavička).
@@ -65,14 +73,11 @@ struct EmbeddedTerminalProbe {
         print("SONDA cwd=\(cwd ?? "—")")
         #expect(cwd == wanted)
 
-        // Psaní do pty **tou cestou, kterou jde vstup v aplikaci**. Že bajty dorazily, se pozná
-        // tím, že shell skončí — na to hlavní fronta potřeba není.
-        view.send(source: view, data: ArraySlice("exit\n".utf8))
-        #expect(
-            Self.wait(until: { !Self.isAlive(pid) }, limit: 15),
-            "shell nereagoval na `exit` — do pty se nezapisuje"
-        )
-        // Sirotek by tu neměl co dělat ani po řádném ukončení.
+        // **Psaní do pty se odsud neověřuje, a je to změřené.** Pokus o to tady byl: poslat `exit`
+        // a čekat, až shell skončí. Vycházel **náhodně** (z pěti běhů dva zeleně) a opakované
+        // posílání to nespravilo — `LocalProcess.send` jde přes druhý `DispatchIO` kanál nad týmž
+        // deskriptorem, jehož první kanál visí na hladové hlavní frontě (viz hlavička). Sonda,
+        // která by na tom stála, je falešně červený `main`; napsat do terminálu zkouší člověk.
         view.kill()
     }
 

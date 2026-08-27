@@ -6646,12 +6646,17 @@ Co změřila a co by se bez ní neodhadlo:
 - **Pracovní adresář sedí** — čte se z jádra (`lsof -d cwd`), ne z výpisu v terminálu. Obě cesty se
   musí prohnat `resolvingSymlinksInPath`: `TMPDIR` je na macOS symlink, takže jádro hlásí
   `/private/var/folders/…` a `FileManager` `/var/folders/…`.
-- **Do pty se dá psát**, a pozná se to bez čtení výstupu: po `exit\n` shell skončí.
 - **`kill()` zabíjí doopravdy** — po něm je stav `Z`. **Zombie se počítá jako mrtvý**: nesklizený
   potomek zabírá řádek v tabulce procesů, ale neběží, a `kill(pid, 0)` na něm pořád vrací nulu —
   takže tvrzení postavené na návratovém kódu by hlásilo, že shell přežil.
 
-**Co sonda ověřit nemůže, a je to změřené, ne odhad: obsah emulátoru.** `LocalProcess` doručuje
+**Psaní do pty se odsud neověřuje, a je to změřené.** Pokus tam byl: poslat `exit` a čekat, až
+shell skončí. Vycházel **náhodně** (z pěti běhů dva zeleně) a opakované posílání to nespravilo —
+`LocalProcess.send` jde přes **druhý** `DispatchIO` kanál nad týmž deskriptorem, jehož první kanál
+visí na hladové hlavní frontě (viz níž). Sonda postavená na tom je falešně červený `main`; napsat
+do terminálu zkouší člověk.
+
+**A co sonda ověřit nemůže vůbec, taky změřeně: obsah emulátoru.** `LocalProcess` doručuje
 přečtené bajty přes `DispatchQueue.main`, a **hlavní dispatch fronta se v testovacím hostu nedrání
 vůbec**. Naměřeno tak, že se z pozadí zavolalo `DispatchQueue.main.async` i `.sync` a za pět sekund
 neproběhlo **ani jedno** (`hits == 0`) — přestože sonda běží na hlavním vlákně

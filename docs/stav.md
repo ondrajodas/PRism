@@ -5204,7 +5204,9 @@ takže `login_tty` proběhlo a job control uvnitř funguje; kdyby ne, `⌃C` v z
 Zadruhé: po `kill()` je stav `Z`, a **zombie se počítá jako mrtvý** — `kill(pid, 0)` na nesklizeném
 potomkovi pořád vrací nulu, takže první podoba tvrzení hlásila, že shell přežil, i když neběžel.
 
-**A jedna věc se ověřit nedá, změřeně:** obsah emulátoru. `LocalProcess` doručuje bajty přes
+**A dvě věci se ověřit nedají, změřeně.** Psaní do pty: `exit` poslané do shellu vycházelo náhodně
+(z pěti běhů dva) a opakování to nespravilo, protože `send` jde přes druhý `DispatchIO` kanál nad
+deskriptorem, jehož první kanál visí na hladové hlavní frontě. A obsah emulátoru vůbec. `LocalProcess` doručuje bajty přes
 `DispatchQueue.main` a **hlavní dispatch fronta se v testovacím hostu nedrání vůbec** — z pozadí
 zavolané `DispatchQueue.main.async` i `.sync` za pět sekund neproběhly ani jednou, přestože sonda
 běží na hlavním vlákně a točí `RunLoop.main.run(until:)`. Sonda proto **nic z emulátoru nečte**

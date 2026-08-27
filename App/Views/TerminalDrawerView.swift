@@ -64,12 +64,12 @@ struct TerminalDrawerView: View {
         Color.clear
             .frame(height: 4)
             .contentShape(.rect)
-            .onHover { inside in
-                // `NSCursor` přímo: SwiftUI `pointerStyle` umí `.frameResize` až od macOS 15
-                // a `resizeUpDown` je přesně ten kurzor, který AppKit používá u vodorovného
-                // děliče v `NSSplitView`.
-                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-            }
+            // **`pointerStyle`, ne `NSCursor.push()`/`pop()`.** Ta dvojice se rozváže, jakmile view
+            // zmizí, zatímco je myš nad ním — a zásuvka se schovává klávesou, takže se to stane při
+            // `` ⌃` `` s kurzorem na proužku. Zbyl by na obrazovce šipkový kurzor pro roztahování
+            // nad něčím, co roztáhnout nejde. Cíl je macOS 26, takže tenhle modifikátor je
+            // k dispozici a stav si řídí SwiftUI.
+            .pointerStyle(.frameResize(position: .top))
             .gesture(
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
@@ -120,9 +120,15 @@ struct TerminalDrawerView: View {
             // všechno, co jde z terminálu — `git push` i `gh pr merge`. Je to protějšek
             // `čte · neodesílá` v tabu `Zeptat se` a jediné místo, kde je změna tvrdé podmínky č. 1
             // vidět na obrazovce, ne jen v dokumentaci.
-            Text(verbatim: "plná práva")
-                .designPill(tint: Palette.crit, background: Palette.crit.opacity(0.15))
-                .help("Co se pustí odsud, běží pod tvým účtem a s tvým `gh` — aplikace to nijak neomezuje.")
+            //
+            // **Bez adresáře se nekreslí**: bez pracovní kopie žádný shell není, takže by kapsle
+            // mluvila o právech plochy, která tam není — a text, který tvrdí víc, než co data
+            // unesou, je v tomhle okně chyba, ne ozdoba.
+            if directory != nil {
+                Text(verbatim: "plná práva")
+                    .designPill(tint: Palette.crit, background: Palette.crit.opacity(0.15))
+                    .help("Co se pustí odsud, běží pod tvým účtem a s tvým `gh` — aplikace to nijak neomezuje.")
+            }
             Spacer(minLength: 8)
             // **Vpravo, jako v návrhu** — vlevo stojí to, co se nemění (jméno, cesta, práva),
             // vpravo to, co se mění během běhu. Kdyby stav sedl doleva, posouval by kapsli
