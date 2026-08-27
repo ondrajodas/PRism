@@ -273,9 +273,11 @@ struct MergePublishingTests {
         #expect(!error.userDescription.contains("Zkus"))
     }
 
-    /// **Timeout je jediný stav, po kterém se nesmí nabídnout druhý pokus.** `PUT` mohl doběhnout,
-    /// takže druhé kliknutí by mergovalo něco, co už je mergnuté.
-    @Test("Po timeoutu se merge nenabízí znovu")
+    /// **Druhý pokus se nesmí nabídnout tam, kde se nedá tvrdit, že se nic nestalo** — a takové
+    /// stavy jsou dva, ne jeden: `timedOut` a `malformedResponse`. U obou mohl `PUT` doběhnout,
+    /// takže druhé kliknutí by mergovalo něco, co už je mergnuté. Odmítnutí od GitHubu (`405`,
+    /// `409`) i neodeslaný pokus (`mergeWithoutHead`) jsou naopak jistota, že se nesáhlo na nic.
+    @Test("Po nejasném konci se merge nenabízí znovu")
     func doesNotOfferARetryAfterATimeout() {
         #expect(PublishError.timedOut.mightHaveReachedGitHub)
         #expect(PublishError.malformedResponse("").mightHaveReachedGitHub)
