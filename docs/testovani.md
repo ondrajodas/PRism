@@ -5963,7 +5963,61 @@ nehořelo“ tady nikde nestojí a stát nesmí. Ověřitelné je jen to struktu
 `graphUnderTheAxis`) a **provozní**: používat aplikaci s `./bin/run.sh --diagnose` a koukat na řádek
 `HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE SLOVU` v `<cache>/diagnostics.log`. Kdyby přišel další záchvat
 nad **Konverzací**, je to doklad, že se ta úvaha mýlila; nad **Soubory** ne — tam líný seznam
-zůstává (řádků jsou tisíce) a tatáž třída kola se tam vrátit může.
+tehdy zůstal (řádků jsou tisíce) a tatáž třída kola se tam vrátit může.
+
+**A vrátila se — přesně tam** (#469, záchvat 27. 8.). Věta o odstavec výš byla napsaná jako
+výhrada a stala se z ní předpověď: dva `sample`y z hořící instance měly `LazySubviewPlacements`
+na 25 % vzorků hlavního vlákna, `FileDiff.diagnosedID` i `DiffRow.diagnosedID` v zásobníku
+a **nula** `ConversationRow`. Jak se to změřilo a co z toho vyšlo, je v sekci níž.
+
+### Diff bez líného seznamu (#469)
+
+Sonda je `Tests/Views/DiffShapeProbe.swift` (ručně, `TEST_RUNNER_PRISM_MEASURE=1`), sestra
+`ConversationAxisShapeProbe` — a stejně jako ona kreslí **skutečné `DiffRowView`** nad
+rozparsovaným diffem, tedy včetně `NSTextView` v každém bloku. Materiál je skutečná fixture
+(`gh/pr-diff-ordinary.diff`) doplněná syntetickými soubory na požadovaný počet řádků
+(`DiffMaterial`, sdílené s `DiffWindowRenderProbe`).
+
+Poměřuje **pět podob**, a tři z nich jsou **ablace**, ne varianty k nasazení — bez nich by z čísel
+nebylo poznat, za co se platí:
+
+| Podoba | Co to je |
+|---|---|
+| `LazyVStack` | podoba do #469 (sekce a `pinnedViews`) |
+| `VStack` s oknem | podoba od #469 — pás kolem výřezu se zapíná **jediným modifikátorem** (výřez v prostředí), takže se ablace liší od aplikace právě tím jedním rozhodnutím |
+| `VStack` se všemi bloky | ablace: co by pevný stack stál bez okna |
+| `VStack` bez bloků | ablace: co stojí sám seznam, když v něm nevisí `NSTextView` |
+| `VStack` bez bloků a bez ukotvení | ablace: co z toho patří ukotvené hlavičce |
+
+Čísla a to, co z nich plyne, jsou v [`docs/architektura.md`](architektura.md#pevný-seznam-a-nasazování-bloků-469).
+Tady zůstává **to, na co se u toho měření naráží**:
+
+- **Nejdřív se měřila cena, kterou v aplikaci nikdo neplatí** (#275 doslova). První podoba sondy
+  neměla pojmenovaný souřadnicový prostor obsahu, takže `onGeometryChange` v blocích četlo rámečky
+  v prostoru, který se scrollováním hýbe. Vyšlo z toho 6,4 s CPU u pevného stacku — a po doplnění
+  prostoru **6,3 s**, takže to tentokrát nebyla ta příčina. Zůstává z toho pravidlo, ne nález:
+  **sonda musí mít tvar aplikace, i když se to zrovna neprojeví**.
+- **Hák sondy patří na řádek, ne na soubor.** `GraphStackCollector` bere vzorek každého dvoustého
+  dotazu na identitu; souborů je pár desítek, takže s hákem na `FileDiff` vyšlo **0 vzorků** a sonda
+  tvrdila „bez `LazySubview*`“ i o líném seznamu. S hákem na `DiffRow` je to 478 dotazů a 2 vzorky,
+  **oba** s `LazySubviewPlacements`.
+- **Zamčená obrazovka měření zabije, a pozná se to na jednom čísle.** Okno mimo obrazovku (a stejně
+  tak okno pod zamčenou obrazovkou) nedostane takt překreslování, takže gesto kolečkem **nikam
+  neposune**: ve výpisu je `dojelo na -32` místo `dojelo na 5968` a všechny podoby vyjdou shodně na
+  0,03 s CPU. To číslo je v sondě právě proto — bez něj by z toho byla tabulka, ve které se všechno
+  vyrovnalo. `caffeinate -u` obrazovku **probudí jen někdy** a `caffeinate -d` už uspanou
+  neprobudí; spolehlivé je zkontrolovat `dojelo na …` a měření zahodit, když je záporné.
+- **Sériím se pořád střídá A/B/A/B** (#274). Drift sezení je i tady větší než hledaný rozdíl:
+  tatáž podoba vyšla v jednom sezení 3,08 s a v jiném 4,47 s.
+
+**Jak diff vypadá**, se ověřuje `DiffWindowRenderProbe` (ručně, `TEST_RUNNER_PRISM_MEASURE=1`
+a `TEST_RUNNER_PRISM_RENDER_DIR`): renderuje **skutečný `DiffView`** v obou pohledech na třech
+polohách výřezu (vršek, prostředek, konec) do PNG — z okna mimo obrazovku přes `cacheDisplay`,
+protože blok kódu je AppKitové view a `ImageRenderer` na něj nedosáhne. Odpovídá na čtyři otázky,
+které se rozbijí potichu: zůstal diff **celý** (rezervovaná výška se nesmí lišit od skutečné),
+drží se **hlavička souboru** nahoře, **vysune se** na konci svého souboru a platí obojí i v pohledu
+**vedle sebe**. Vedle obrázků vypisuje výšku obsahu a **počet bloků kódu v okně** — bez toho čísla
+by render nad prázdným oknem vypadal stejně jako render nad rozbitým.
 
 ### Projíždění kolečkem, a co z něj u #361 vyšlo (#361)
 

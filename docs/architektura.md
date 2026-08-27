@@ -716,6 +716,131 @@ hodnoty, které si berou bloky, a je to **jediné místo, kde jsou**. Vyčlenit 
 Hlídá to `DiffRenderedRowsTests` — nad **skutečnými** diffy z fixtures v obou pohledech, plus
 stráž nad zdrojáky, že `DiffRowView` plní jediné místo jediným výrazem.
 
+### Pevný seznam a nasazování bloků (#469)
+
+Diff od #469 **nekreslí `LazyVStack`**. Je to změna proti rozhodnutí z #361, které tehdy znělo
+„líný seznam patří tam, kde je seznam neomezený“ — a důvodem je, že se kolo z #361 po opravě osy
+konverzace **přestěhovalo do diffu**, ne že by zmizelo.
+
+#### Co se změřilo, než se to rozhodlo
+
+Sonda `DiffShapeProbe` (Debug, okno 1200×800, gesto kolečkem 150 × 40 pt, série se střídají
+A/B/A/B podle #274) poměřuje **pět podob téhož místa**: `LazyVStack` se sekcemi (podoba do #469),
+pevný `VStack` **s oknem** (podoba od #469), pevný `VStack` **se všemi bloky** (ablace), pevný
+`VStack` **bez bloků** (druhá ablace) a totéž **bez ukotvených hlaviček** (třetí).
+
+| řádků | `LazyVStack` | `VStack` **s oknem** | `VStack` se všemi bloky | `VStack` bez bloků | bez bloků a bez ukotvení |
+|---|---|---|---|---|---|
+| 500 | 0,58 s | **0,73** | 2,96 | 0,17 | 0,20 / 0,21 |
+| 6000 | 0,57 / 0,51 | **0,86 / 0,85** | 21,19 / 20,25 | 0,19 | 0,19 |
+
+Čtou se z toho tři věci a všechny tři jsou pro to rozhodnutí podstatné:
+
+1. **Pevný stack sám o sobě je levný a v počtu řádků plochý** — `VStack` bez bloků stojí 0,17 až
+   0,20 s bez ohledu na to, jestli je v něm 500 nebo 6000 řádků, tedy **třikrát míň než líný
+   seznam**. Prvky v něm nejsou zadarmo, ale nejsou tím, co projíždění stojí.
+2. **Cena projíždění roste s počtem nasazených `NSTextView`, ne s délkou seznamu.** Pevný stack se
+   všemi bloky vyšel 2,96 s na 20 blocích a 21 s na 108 — a `updateNSView` se při tom gestu
+   nevolalo ani jednou (počitadla z #393 zůstala na 20 a 108), takže ta cena **není v našem kódu**.
+   Je v tom, že v dokumentu scroll view visí stovka textových views.
+3. **Z 1 a 2 plyne řešení**: pevný stack **plus vlastní okno**. `Policy.mountBand(visible:)` řekne,
+   ve kterém pásu obsahu má blok živý `NSTextView`; mimo pás zbyde `Color.clear` s naposledy
+   změřenou výškou (`DiffBlockSlot`). Nasazených bloků je pak **6 bez ohledu na velikost diffu**
+   (změřeno u 500, 6 000, 20 000 i 50 000 řádků), kdežto bez okna jich je 20 / 108 / 340 / 840.
+
+#### Strukturální doklad, ne „po opravě to nehořelo“
+
+Kolo se za čtrnáct kol #361 nepodařilo vyrobit na povel, takže „nehoří“ nedokazuje nic. Doloženo
+je proto totéž, čím to doložilo #361 u osy: **co je v evaluačním zásobníku AttributeGraphu, když se
+`ForEach` ptá na identitu řádku** (`DiffShapeProbe.graphUnderTheRow`, vzorky přes `GraphProbe`):
+
+| podoba | dotazů na identitu | vzorků | z toho s `LazySubview*` | kořen | vrchol |
+|---|---|---|---|---|---|
+| `LazyVStack` | 478 | 2 | **2** | `LazySubviewPrefetcher<LazyVStackLayout>` | `LazySubviewPlacements<LazyVStackLayout>` |
+| `VStack` s oknem | 371 | 1 | **0** | `ScrollGeometryProvider` | `DynamicContainerInfo<DynamicLayoutViewAdaptor>` |
+
+`LazySubviewPlacements` je **jmenovitě ten atribut**, jehož `placeSubviews` drželo 25 % vzorků
+hlavního vlákna v obou `sample`ech z hořícího okna 27. 8. Pod pevným stackem nemá jak vzniknout,
+takže se ta vazba nemá kde utvořit. **Netvrdí to, že záchvat nepřijde** — tvrdí to, že tuhle jednu
+cestu k němu už nikdo neujde.
+
+#### Co to stojí: první rozvržení
+
+| řádků | `LazyVStack` | `VStack` s oknem | `VStack` se všemi bloky |
+|---|---|---|---|
+| 500 | 3–5 ms | **10 ms** | 20 ms |
+| 6000 | 3–4 | **50–59** | 144–160 |
+| 20 000 | 6–10 | **206–304** | 623–933 |
+| 50 000 | 16–28 | **983–1534** | 3098–5338 |
+
+Je to **vědomá cena a je vidět**: u dvacetitisícového diffu čtvrt sekundy, u padesátitisícového
+sekunda a půl (Debug). Platí se za to, že blok, který se ještě nikdy nekreslil, se **nasadí** —
+`Policy.isBlockMounted(nil, band:)` je `true`, protože o jeho výšce se nedá nic tvrdit, a prázdné
+místo je horší odpověď než blok navíc.
+
+**Odhad výšky je zamítnutá varianta.** Vypadá lákavě (řádky × výška řádku), ale platil by se tím,
+že by obsah pod prstem měnil výšku pokaždé, když se blok poprvé nasadí — a skok na nález by mířil
+vedle. Přesná výška od začátku je to, co drží `⌥↓` i kotvy z `DiffRow.blockIDs`.
+
+**Zbytek chyby je změřený a je malý**: výška obsahu u 2000řádkového diffu vyšla 46 065 pt na vršku
+a 46 241 pt po projetí, tedy **0,4 % korekce**, která konverguje (blok změřený na provizorní šířce
+se při dalším nasazení dorovná). Pro srovnání, `LazyVStack` u 6000řádkového diffu hlásil 99 687,
+resp. 101 736 pt tam, kde pevný stack **změří** 112 507 — tedy **12 % vedle**, a to se nedorovná
+nikdy, protože je to odhad ze své podstaty. Posuvník tedy od #469 nelže víc, ale míň.
+
+Skok na nález má kvůli té zbývající korekci **druhý `scrollTo` o průchod později** (`DiffView`,
+`task(id: scrollTarget)`): cíl mohl být do té chvíle jen rezervovanou výškou, a jak se nasadí,
+posune se to pod ním. Je to **zmírnění, ne záruka** — kolik průchodů to sedne, se řídit nedá
+a čekat časovačem je zakázaná třída (#350).
+
+#### Kdo čte co: `DiffViewport`
+
+Dvě vlastnosti, a je to **výkonové rozhodnutí**, ne členění pro pořádek. `@Observable` sleduje po
+vlastnostech:
+
+- **`band`** se mění **jednou za projetý výřez** (je kvantovaný) a čtou ho **všechny** sloty bloků.
+  Kdyby se počítal z okamžité polohy, překládalo by se při každém snímku tělo každého bloku.
+- **`top`** se mění při **každém** otočení kolečka a čte ho **jediné view** — `DiffPinnedHeader`.
+  Cena je tím ohraničená na jednu malou hlavičku; kdyby to čtení bylo v těle `DiffView`, skládaly
+  by se při každém snímku řádky všech souborů (`DiffRow.rows(of:)`).
+
+**Rámečky bloků se čtou v souřadnicích obsahu, ne výřezu**, a je to tatáž úvaha: hodnota
+v souřadnicích obsahu se scrollováním **nemění**, takže se za to čtení neplatí. První podoba se
+ptala každého bloku a každé hlavičky na rámeček ve **výřezu** — tedy na hodnotu, která se mění — a
+stálo to 3,5 s CPU na 6000 řádcích proti 0,19 s u seznamu bez těch dotazů. To je ta zamítnutá
+varianta a je zamítnutá měřením.
+
+#### Ukotvená hlavička souboru
+
+`LazyVStack(pinnedViews: [.sectionHeaders])` byl jediný, kdo v SwiftUI ukotvené hlavičky umí.
+**Zahodit je nešlo** — v návrhu je `.fhead { position: sticky; top: 0 }`, takže je to vzhled, ne
+detail implementace. Kreslí se proto **jedna hlavička přes výřez** (`DiffPinnedHeader` v overlay nad
+scroll view), o které rozhoduje `Policy.pinnedFileHeader(files:top:headerHeight:)`: který soubor
+právě protíná horní hranu a o kolik se má hlavička vysunout, aby ji hlavička dalšího souboru
+**vytlačila** místo aby ji překryla.
+
+**Posouvat každou hlavičku podle jejího vlastního rámečku ve výřezu je zamítnutá varianta**, taky
+měřením: stálo to 0,83 s CPU na 24 souborech (ablace `VStack bez bloků` se ukotvením a bez něj —
+0,99 s proti 0,19 s), protože se při každém snímku počítal rámeček **každého** souboru.
+`visualEffect` by ten posun udělal zadarmo, ale hit testing ho nesleduje, takže by se na ukotvenou
+hlavičku nedalo kliknout — a ona je celá tlačítko (sbalení souboru).
+
+Rozsahy souborů plní `DiffFileSection` do krabice **mimo observable stav** (`DiffFileExtents`,
+tatáž konstrukce jako `DiffRowFrames`), v souřadnicích obsahu, takže se scrollováním nemění.
+Krabice se **klíčuje `subject`em**: `@State` detailu přetéká mezi pull requesty, takže bez toho by
+se v ní vrstvily rozsahy každého prohlédnutého PR. A `ordered(of:)` vydá rozsahy **jedině tehdy,
+když jsou změřené všechny** — díra uprostřed by znamenala, že se u horní hrany drží hlavička
+souboru, který je někde jinde.
+
+#### Co zůstalo v aplikaci líné
+
+`grep -rn 'LazyVStack\|LazyVGrid' App` vypíše po #469 osm míst: strom souborů, tabulka nálezů, fakta
+o PR, průběh review, dění, seznam commitů, panel a živý výpis kroků. **Všechna mají strop** (dění
+200 položek, výpis kroků taky, commity a soubory jsou z jednoho PR, nálezy z jednoho běhu), takže
+u nich platí pravidlo z #361 nezměněné. Že by se kolo utvořilo tam, **vyloučené není** — je to
+vlastnost vzoru, ne délky seznamu —, ale ani jednou se to nestalo a cena pevného stacku by tam byla
+zbytečná.
+
 ### Trvalý vodorovný pruh ve split pohledu (#422)
 
 Ve splitu se nezalamuje, takže dlouhý řádek odjede za okraj sloupce — a do #422 se to z okna
@@ -6820,6 +6945,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.disclosure(of:categories:toggled:)`, `Policy.disclosureKey(of:)` | Jak je nález u kódu rozbalený (#185): blokující rozbalený, ostatní značka, odmítnutý nikdy — a čím se místo klíčuje |
 | `Policy.chips(for:skills:running:)` | Stav reviewerů pro horní lištu — `ReviewerChip` i s **cenou** z uloženého běhu |
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
+| `Policy.mountBand(visible:)`, `Policy.isBlockMounted(_:band:)` | Ve kterém pásu obsahu má blok kódu živý `NSTextView` (#469) — laznost diffu, kterou do #469 dělal `LazyVStack`. Pás je **kvantovaný na násobky výřezu**, protože ho čte každý blok v seznamu, a je **nejmíň o výřez širší** na každou stranu. `nil` (blok se nikdy nekreslil) znamená **nasadit** |
+| `Policy.pinnedFileHeader(files:top:headerHeight:)` | Která hlavička souboru se drží u horní hrany výřezu a o kolik je vysunutá (#469) — náhrada za `LazyVStack(pinnedViews:)`. **Jedna hlavička přes výřez**, ne posun u každé; na konci souboru se vysune, aby ji hlavička dalšího vytlačila |
 | `Policy.hoverChange(from:to:)` | Jestli se hover má zapsat do `@State`, nebo se stav **nechá být** (#358). Generické nad `Equatable`, takže platí pro `HoveredCell?` (split) i `Int?` (pod sebou) — jedna podmínka, ne dvě kopie. Vrací hodnotu, **ne `inout`**: `@State` je počítaná vlastnost, takže `&hovered` by prošlo setterem i beze změny, a špiní právě setter |
 | `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPromptCore(intentPath:)`, `.reviewPrompt(template:skillID:baseSha:intent:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro** — od #120 i s větou o souboru se zadáním. Skládá to **jedno místo**, protože týž text potřebuje běh, `Zkopírovat příkaz` i náhled v nastavení |
 | `Policy.intentLinks(in:)`, `.intentBrief(of:description:links:)` | Zadání pro reviewera (#120, `ReviewIntent`): odkazy na Linear issue z cizího textu (dedup podle identifikátoru, pořadí prvního výskytu) a soubor v Markdownu, který se z nich složí. `nil` = nebylo co uložit |

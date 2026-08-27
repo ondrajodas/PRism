@@ -2,8 +2,11 @@ import SwiftUI
 
 /// Diff v plné šířce: soubory pod sebou, hlavička souboru se při scrollu drží nahoře.
 ///
-/// Skládá se líně (`LazyVStack`) — diff o tisících řádků je běžný a vykreslit ho celý
-/// naráz by okno na chvíli položilo.
+/// **Seznam je pevný (`VStack`), laznost je v nasazování bloků** (#469). Líný seznam by diff
+/// skládal po kusech sám, jenže si při umisťování položek zapisuje do grafu, ze kterého čte,
+/// a to kolo se nemá kde zastavit (#361, tam u osy konverzace). Od #469 tedy o tom, jestli má blok
+/// kódu živý `NSTextView`, rozhoduje `Policy.mountBand(visible:)` a `DiffBlockSlot`; ukotvenou
+/// hlavičku, kterou uměl `LazyVStack(pinnedViews:)`, kreslí `DiffPinnedHeader` přes výřez.
 struct DiffView: View {
     let diff: Diff
     /// Co se kreslí — pull request (`owner/repo#číslo`), nebo commit v tabu `Commity`.
@@ -83,6 +86,13 @@ struct DiffView: View {
     /// Hunk otevřený jako text k vybírání (#157). Sheet drží diff, protože je nad celým seznamem
     /// řádků — a `nil` znamená, že žádný otevřený není.
     @State private var codeText: CodeText?
+    /// Kde je výřez v obsahu (#469). Z něj si bloky berou pás, ve kterém se nasazují, a ukotvená
+    /// hlavička polohu. Viz `DiffViewport` — dvě vlastnosti, protože každou čte někdo jiný a jinak
+    /// často.
+    @State private var viewport = DiffViewport()
+    /// Kde v obsahu leží který soubor (#469). Krabice mimo observable stav; plní ji sekce, čte ji
+    /// ukotvená hlavička.
+    @State private var fileExtents = DiffFileExtents()
 
     /// Souřadnicový prostor **obsahu** diffu. Rámečky řádků i poloha myši při tažení se čtou
     /// v něm, takže scrollování s nimi nehýbe.
@@ -136,7 +146,15 @@ struct DiffView: View {
                 guard let target = scrollTarget else { return }
                 // Cíl je **řádek**, ale v seznamu je od #157 blok, který nese `id` jen toho
                 // prvního — bez překladu `scrollTo` tiše nic neudělá.
-                withAnimation { proxy.scrollTo(blockID(covering: target), anchor: jumpAnchor) }
+                let id = blockID(covering: target)
+                withAnimation { proxy.scrollTo(id, anchor: jumpAnchor) }
+                // **Podruhé o průchod později** (#469). Cíl mohl být do téhle chvíle jen
+                // rezervovanou výškou (`DiffBlockSlot`); jak se po skoku dostane do pásu, nasadí
+                // se a jeho výška se dorovná na skutečnou — a s ní se posune i to, co je pod ním.
+                // Druhý skok to srovná. Je to **zmírnění, ne záruka**: kolik průchodů to sedne,
+                // se řídit nedá, a čekat časovačem je zakázaná třída (#350).
+                await Task.yield()
+                proxy.scrollTo(id, anchor: jumpAnchor)
                 scrollTarget = nil
             }
         }
@@ -188,26 +206,51 @@ struct DiffView: View {
     /// běžící aplikaci: se pěti řádky (140 pt) odskok působil zbytečně velký.
     private static let contextAbove = 90.0
 
-    /// Každý **řádek** je vlastní buňka líného seznamu, ne každý hunk. Hunk jako celek
-    /// se po změně šířky okna překresloval jen zčásti a v diffu zůstávala prázdná místa.
+    /// Každý **řádek** je vlastní buňka seznamu, ne každý hunk. Hunk jako celek se po změně šířky
+    /// okna překresloval jen zčásti a v diffu zůstávala prázdná místa.
+    ///
+    /// **Pevný `VStack`, ne `LazyVStack` — a je to oprava #469, ne úspora.** Líný seznam zapisuje
+    /// při umisťování položek do grafu, ze kterého sám čte, a to kolo se nemá kde zastavit; u osy
+    /// konverzace to vyřešilo #361 týmž způsobem a kolo se přestěhovalo sem. Laznost tím ale
+    /// nezmizela, jen se přestěhovala z rozvržení do jednoho rozhodnutí: blok kódu se nasazuje jen
+    /// v pásu kolem výřezu (`DiffBlockSlot`, `Policy.mountBand(visible:)`). Bez toho by pevný
+    /// stack diff položil — čísla jsou u té funkce.
     private var files: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(diff.files, id: \.diagnosedID) { file in
-                    Section {
+                    DiffFileSection(extents: fileExtents, fileID: file.id) {
+                        fileHeader(file)
+                    } content: {
                         // Sbalený soubor se nevykresluje vůbec — u padesátisouborového PR
                         // je to hlavní důvod, proč se sbaluje. Hlavička zůstává, takže
                         // sekce nezmizí a skok na soubor pořád funguje.
                         if !folding.isFolded(file) {
                             rows(of: file)
                         }
-                    } header: {
-                        fileHeader(file)
                     }
                     .id(file.id)
                 }
             }
             .coordinateSpace(.named(Self.contentSpace))
+        }
+        // **Jediné místo, kam se scrollování zapisuje** (#469). Pás se mění jednou za výřez a čtou
+        // ho všechny bloky; `top` se mění při každém snímku a čte ho jenom ukotvená hlavička.
+        .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, visible in
+            let band = Policy.mountBand(visible: visible)
+            if viewport.band != band { viewport.band = band }
+            if viewport.top != visible.minY { viewport.top = visible.minY }
+        }
+        // Výřez do prostředí, ne parametrem: prochází přes `DiffRowView` až do slotu bloku
+        // a cesta k němu je dlouhá. Identita objektu se nemění, takže tělo diffu se tím
+        // nepřekresluje — sledují se jeho **vlastnosti**, každou čte někdo jiný (viz `DiffViewport`).
+        .environment(viewport)
+        // Ukotvená hlavička souboru — jedna, přes výřez. Do #469 to dělal
+        // `LazyVStack(pinnedViews:)`; proč se to kreslí takhle, je u `Policy.pinnedFileHeader`.
+        .overlay(alignment: .topLeading) {
+            DiffPinnedHeader(files: diff.files, extents: fileExtents, viewport: viewport) {
+                fileHeader($0)
+            }
         }
         // Jen měření, žádný vliv na rozvržení — proto `onGeometryChange` a ne `GeometryReader`.
         .onGeometryChange(for: CGSize.self) {
@@ -218,6 +261,13 @@ struct DiffView: View {
             contentWidth = $0.width
         }
         .sheet(item: $codeText) { CodeTextSheet(content: $0) }
+        // Rozsahy i změřené výšky bloků patří **tomuhle** diffu: `@State` detailu přetéká mezi
+        // pull requesty, takže by se jinak držely hodnoty z PR, který v okně dávno není — a řádek
+        // se stejnou identitou (`CLAUDE.md|174` má každý druhý PR) by dostal cizí výšku.
+        .onChange(of: subject, initial: true) {
+            fileExtents.reset(for: subject)
+            viewport.generation += 1
+        }
     }
 
     /// Hunk jako text k vybírání. Kód se skládá **stejnou funkcí jako pro schránku**

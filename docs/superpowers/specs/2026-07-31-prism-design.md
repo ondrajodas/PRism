@@ -3405,3 +3405,32 @@ Do té doby to byly věci, na které se ptal. Nepatří mezi tvrdé podmínky: z
 nálezy a hotové zadání issue jsou zjistitelný stav, kdežto dotaz na ně je kolo navíc u něčeho,
 co se dá ověřit. Co se **nezměnilo**: tvrdé podmínky se pořád mají ptát, a „když si nejsi jistý,
 jestli je hotovo, tak hotovo není“.
+
+### Záznam rozhodnutí — diff kreslí pevný stack a laznost si řídí sám (#469)
+
+**Co se změnilo.** Do #469 platilo pravidlo z #361: *líný seznam patří tam, kde je seznam neomezený
+(diff — tisíce řádků), ne tam, kde má strop*. Od #469 neplatí — diff kreslí **pevný `VStack`**
+a o tom, jestli má blok kódu živý `NSTextView`, rozhoduje `Policy.mountBand(visible:)`.
+
+**Proč se to změnilo.** #361 udělalo osu konverzace nelínou a kolo se **přestěhovalo do diffu** (dva
+`sample`y ze živého záchvatu 27. 8.). Z toho plyne, že „neomezený seznam“ není důvod ten vzor snést:
+zápis `LazyLayoutViewCache.updateItemPhases` do grafu, ze kterého si lazy layout sám čte, je
+vlastnost **lazy layoutu**, ne délky seznamu. Argument z #361 tedy nebyl špatný, byl jen o něčem
+jiném — mluvil o **ceně prvního rozvržení**, kterou u diffu opravdu nešlo zaplatit celou.
+
+**Zamítnuté varianty a proč** (všechny změřené, `DiffShapeProbe`):
+
+| Varianta | Proč ne |
+|---|---|
+| Nechat `LazyVStack` a dál zlevňovat obsah kola | Čtrnáct kol #361 ukázalo, že se tím kolo nezastaví: naše tělo v něm neběží ani jednou |
+| Pevný `VStack` **bez okna** | 21 s CPU na projetí 6000řádkového diffu proti 0,57 s u líného seznamu. Cena roste s počtem nasazených `NSTextView` |
+| Odhad výšky místo nasazení nezměřeného bloku | Ušetřil by první rozvržení (1,5 s u 50 000 řádků), ale obsah by pod prstem měnil výšku pokaždé, když se blok poprvé nasadí — a skok na nález by mířil vedle |
+| Posouvat **každou** hlavičku podle jejího rámečku ve výřezu | 0,83 s CPU navíc na 24 souborech: při každém snímku se počítá rámeček každého souboru |
+| `visualEffect` na ten posun | Zadarmo, ale **hit testing ho nesleduje** — a hlavička je celá tlačítko (sbalení souboru) |
+| Číst rámečky bloků v souřadnicích **výřezu** | 3,5 s CPU proti 0,19 s: je to hodnota, která se scrollováním mění, takže se přepočítává u každého bloku při každém snímku |
+| `List` (laznost v AppKitu) | Zamítnuto už u #361 a nic se na tom nezměnilo: výška obsahu je odhad, takže posuvník lže, a syntetickým gestem se nedá změřit |
+
+**Co se tím nezměnilo.** Pravidlo z #361 o **ostatních** seznamech platí dál: líný seznam se posuzuje
+podle toho, jestli má strop, a osm zbylých míst v aplikaci ho má. A doklad se pořád nedělá tím, že po
+opravě nehořelo — dělá se strukturálně (`LazySubview*` v evaluačním zásobníku: 2 ze 2 před, 0 po)
+a měřením obou konců.

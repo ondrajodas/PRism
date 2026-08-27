@@ -155,8 +155,13 @@ struct ConversationView: View {
                 // 55 ms proti 5, 300 uzlů 413 ms proti 5, projíždění 0,86 s proti 0,31 s CPU
                 // (Debug). Únosné je to jedině proto, že **osa je shora omezená**:
                 // `ConversationQuery` bere `first: 100` z každého ze čtyř seznamů, takže víc než
-                // čtyři stovky uzlů odsud vyjít nemůžou. Diff takovou mez nemá a `LazyVStack`
-                // v něm proto zůstává.
+                // čtyři stovky uzlů odsud vyjít nemůžou.
+                //
+                // **Diff takovou mez nemá, a přesto líný seznam od #469 nemá taky** — kolo se do
+                // něj po téhle opravě přestěhovalo. Neplatí se to prvním rozvržením celého diffu,
+                // ale vlastním oknem: blok kódu se nasazuje jen v pásu kolem výřezu
+                // (`Policy.mountBand(visible:)`). Na ose by to bylo zbytečné — uzel není
+                // `NSTextView` a čtyři stovky se rozvrhnou i naráz.
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(rows, id: \.diagnosedID) { row in
                         if row.isFirstNew {

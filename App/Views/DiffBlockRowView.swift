@@ -30,7 +30,13 @@ struct DiffBlockRowView: View {
     /// Poloha bloku v prostoru obsahu, **mimo observable stav** — viz `DiffBlockPlacement` (#252).
     @State private var placement = DiffBlockPlacement()
 
+    /// **Blok se nasazuje jen v pásu kolem výřezu** (#469) — viz `DiffBlockSlot`. Obaluje se celé
+    /// tělo, ne jen text: plocha na tažení, pilulka i hlášení rámečků stojí tolik co on.
     var body: some View {
+        DiffBlockSlot { mounted }
+    }
+
+    private var mounted: some View {
         DiffCodeBlockView(
             block: block,
             language: language,
