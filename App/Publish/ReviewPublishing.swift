@@ -5,16 +5,17 @@ import Foundation
 /// Do #67 to vynucoval typ: `GitHubGateway` schválně neměl metodu, kterou by šlo něco
 /// odeslat. Ta vlastnost **zůstává** — zápis dostal vlastní modul, takže polling, diff,
 /// checkout ani reviewer nemají čím něco poslat. `grep ReviewPublishing App/` vyjmenuje všechna
-/// místa, odkud to jde: **šest souborů a čtyři volající** — protokol, `GhReviewPublisher`,
-/// `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission` a `MetadataSubmission`. Roste-li
+/// místa, odkud to jde: **sedm souborů a pět volajících** — protokol, `GhReviewPublisher`,
+/// `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission`, `MetadataSubmission`
+/// a `MergeSubmission`. Roste-li
 /// ten výčet, roste to, co aplikace umí odeslat, a to musí být vidět z jednoho grepu.
 ///
-/// Metody jsou **vyjmenované a je jich sedm** (do #73 jedna, do #216 tři, do #392 čtyři, do #413
-/// šest). Každá
+/// Metody jsou **vyjmenované a je jich osm** (do #73 jedna, do #216 tři, do #392 čtyři, do #413
+/// šest, do #465 sedm). Každá
 /// odpovídá jedné věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna,
 /// přepnout jeho vyřešení, napsat komentář pod PR, přeštítkovat svůj PR, vyžádat na něm review,
-/// založit label, který repozitář ještě nezná.
-/// Co tady být **nesmí**: approve mimo review, **merge**, **zavření PR**, **milník** a **smazání
+/// založit label, který repozitář ještě nezná, mergnout vlastní PR.
+/// Co tady být **nesmí**: approve mimo review, **zavření PR**, **milník** a **smazání
 /// labelu**. Roste-li
 /// tenhle výčet, roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru.
 ///
@@ -40,6 +41,19 @@ import Foundation
 /// v repozitáři ještě není, se jinak musí založit v prohlížeči — tedy tím odskokem, kvůli kterému
 /// #392 vzniklo. Co se **nezměnilo**: brána je tatáž, výčet je krátký a na jednom místě,
 /// `GitHubGateway` zápis dál nemá.
+///
+/// **Merge přibyl u #465** — osmá metoda, a je to **vědomá změna zákazu**: do té doby stálo v tomhle
+/// souboru i v `CLAUDE.md`, že merge sem nepatří, a `SingleWayOutTests` ho hlídaly jmenovitě.
+/// Změnilo se to z téhož důvodu jako #73, #216, #392 a #413: mergnout vlastní PR, když je zeleno,
+/// je poslední věc, kvůli které se od hotového review odskakuje do prohlížeče — a je to práce
+/// s **vlastní** frontou, tedy tatáž třída jako labely a reviewery. Co se **nezměnilo**: brána je
+/// tatáž (`PublishScope`), výčet je krátký a na jednom místě, `GitHubGateway` zápis dál nemá a v
+/// zákazu zůstává approve mimo review, **zavření PR**, **milník** a **smazání labelu**.
+///
+/// Merge je přitom **nevratnější než všech sedm předchozích** — týká se `main`u, ne jen pull
+/// requestu —, a platí se to dvěma věcmi navíc, které ostatní metody nemají: **potvrzením s úplným
+/// výpisem** toho, co se stane (jako u review, #68), a **hlavou v payloadu** (`sha`), na kterou
+/// GitHub odpoví `409`, když se větev mezitím pohnula.
 ///
 /// **`deleteLabel` se nepřidá.** Není to opomenutí, je to hranice. Smazání labelu je jediná akce
 /// v tomhle okně, po které nezůstane co opravit: label zmizí ze **všech** issues a PR, na kterých
@@ -136,4 +150,22 @@ protocol ReviewPublishing: Sendable {
         _ label: PullRequestLabel,
         for pullRequest: PRIdentifier
     ) async throws -> PullRequestLabel
+
+    /// Mergne pull request (#465). Vrací commit, který tím vznikl — tak, jak ho potvrdil GitHub.
+    ///
+    /// **Osmá metoda a ta nejnevratnější**: šest z předchozích sedmi sahalo na pull request nebo
+    /// na diskuzi, sedmá na labely repozitáře — tohle mění `main`. Vyvažuje se to na dvou místech
+    /// a obě jsou vidět: **potvrzení s úplným výpisem** toho, co se stane (`MergeSheet`, tatáž
+    /// úvaha jako #68), a **hlava v payloadu**.
+    ///
+    /// Pre-flight je **širší než u labelů a užší než u review**. Ověřuje se scope, stav PR
+    /// **a hlava** — hlava proto, že merge se na commit váže; mergnout kód, který jsi neviděl, je
+    /// tatáž záměna jako approve na kód, který jsi neviděl. Na rozdíl od review je tady navíc
+    /// **druhá pojistka v samotném volání**: `sha` v payloadu je pro GitHub podmínka, takže na
+    /// commit pushnutý mezi pre-flightem a voláním odpoví `409` a nemergne nic. U review taková
+    /// možnost není (změřeno u #62, že review se zastaralým `commit_id` projde).
+    ///
+    /// **Metodu si volající nevybírá.** Squash je jediná, kterou aplikace posílá, a je v jedné
+    /// konstantě (`MergeRequest.method`) — proto ji plán nenese jako pole.
+    func merge(_ plan: MergePlan) async throws -> MergedPullRequest
 }

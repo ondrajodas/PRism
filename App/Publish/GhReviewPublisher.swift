@@ -192,6 +192,45 @@ struct GhReviewPublisher: ReviewPublishing {
         return try decoded(GhLabel.self, from: output).label
     }
 
+    // MARK: - Merge (#465)
+
+    /// Mergne pull request. **Osmá a nejnevratnější cesta ven** — zdůvodnění je u `ReviewPublishing`.
+    ///
+    /// Pre-flight ověřuje **i hlavu**, na rozdíl od labelů a komentářů: merge se váže na commit,
+    /// takže mergnout kód, který jsi neviděl, je tatáž záměna jako approve na kód, který jsi
+    /// neviděl. `sha` v payloadu je k tomu **druhá pojistka**, kterou review mít nemůže: GitHub ji
+    /// bere jako podmínku a na commit pushnutý mezi pre-flightem a voláním odpoví `409`.
+    ///
+    /// Jedno volání, takže tvrdá podmínka č. 5 (atomicky, nebo vůbec) je splněná triviálně: merge
+    /// buď proběhne celý, nebo se nestane nic.
+    func merge(_ plan: MergePlan) async throws -> MergedPullRequest {
+        guard scope.allows(plan.pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(plan.pullRequest.repo)
+        }
+        // Prázdná hlava se **nevolá**: bez `sha` by GitHub mergnul, co je zrovna nahoře — tedy
+        // přesně to, čemu ta podmínka brání. Do plánu se prázdná dostat nemá (`Policy.mergePlan`
+        // ho skládá z načteného detailu), a právě proto je kontrola tady.
+        guard PublishRequest.isSendable(plan.headSha) else { throw PublishError.mergeWithoutHead }
+
+        try await preflight(plan.pullRequest, expecting: plan.headSha)
+
+        let file = try writePayload(
+            try MergeRequest.encoded(MergeRequest.Payload(plan)),
+            prefix: "prism-merge"
+        )
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let output = try await call(MergeRequest.arguments(for: plan.pullRequest, payload: file))
+        let decoded = try decoded(GhMergeResponse.self, from: output)
+        guard let merged = decoded.merge() else {
+            // Návratový kód byl **nula**, takže volání prošlo — a přesto z odpovědi neplyne, že se
+            // mergovalo. Vlastní hláška by tady tvrdila víc, než co víme; `malformedResponse` je
+            // ta jediná pravdivá a posílá člověka na GitHub, což je jediný další krok.
+            throw PublishError.malformedResponse(decoded.message ?? "V odpovědi chybí commit merge.")
+        }
+        return merged
+    }
+
     // MARK: - Pre-flight
 
     /// Ověří, že se posílá na to, co jsme viděli. **Při neshodě se nevolá zápis.**

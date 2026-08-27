@@ -115,6 +115,10 @@ extension AppStore {
             // snímek, ani porucha**; obojí je hotová odpověď a přepisovat ji při každém příchodu na
             // PR by z labelů udělalo polling.
             if metadataStates[id] == nil { await loadMetadata(for: pullRequest) }
+            // Slévatelnost větve (#465) má tentýž problém i tutéž odpověď, jen se ptá **jen na
+            // vlastním PR** — na cizím se sekce `Větev` nekreslí, takže by to bylo volání za nic.
+            // Rozhodnout o tom umí `loadBranchStatus` sám, tady se jen ptáme, jestli už odpověď je.
+            if branchStatuses[id] == nil { await loadBranchStatus(for: pullRequest) }
             return
         }
         detailStates[id] = .loading
@@ -164,6 +168,13 @@ extension AppStore {
         // **Za commity, ne souběžně** — týž důvod jako u nich: obojí je `gh` podproces a paralelní
         // spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících.
         await loadMetadata(for: pullRequest)
+
+        // Slévatelnost větve (#465) **jako poslední, a jen na vlastním PR**. Jako poslední proto,
+        // že je to jediné z těchhle volání, které si na straně GitHubu vyžádá **výpočet** (líné
+        // pole `mergeable`) a umí se kvůli němu zeptat víckrát; a jen na vlastním proto, že na
+        // cizím se sekce `Větev` nekreslí. Rozhoduje o tom `loadBranchStatus` sám — jedna odpověď
+        // na „čí to je“, ne dvě.
+        await loadBranchStatus(for: pullRequest)
     }
 
     /// Dotáhne checky k PR. **Selhání se neschovává do prázdna** (#215).

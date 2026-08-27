@@ -9,6 +9,20 @@ struct GhGateway: GitHubGateway {
     private let runner: ProcessRunning
     private let timeout: Duration
     private let searchLimit: Int
+    /// Jak dlouho se čeká, než se GitHubu položí druhý dotaz na líné pole `mergeable` (#465).
+    ///
+    /// **Parametr, ne konstanta**, aby se opakovaný dotaz dal otestovat bez čekání ve zkoušce —
+    /// je to totéž, co dělá `timeout` o řádek výš.
+    private let branchStatusDelay: Duration
+
+    /// Kolikrát se aplikace zeptá na slévatelnost, než to vzdá (#465).
+    ///
+    /// Tři, a je to volba, ne měření: kolik dotazů GitHub potřebuje, se z venku zjistit nedá
+    /// (v měření odpovídal usazeně hned — viz `fetchBranchStatus`). Tři znamenají dvě vteřiny
+    /// čekání v tom nejhorším případě, což je pod hranicí, kdy by si člověk stihl všimnout, že
+    /// panel na něco čeká. Víc by ho v „zjišťuju“ drželo dýl, než kolik stojí odpověď, kterou si
+    /// umí vyžádat sám obnovením okna.
+    private static let branchStatusAttempts = 3
 
     /// `searchLimit` je jedna stránka `gh search prs`. Sto review requestů naráz je řádově
     /// víc, než kolik jich reálně vzniká, takže stránkování by byl kód navíc bez užitku.
@@ -16,12 +30,14 @@ struct GhGateway: GitHubGateway {
         gh: URL,
         runner: ProcessRunning,
         timeout: Duration = .seconds(30),
-        searchLimit: Int = 100
+        searchLimit: Int = 100,
+        branchStatusDelay: Duration = .seconds(1)
     ) {
         self.gh = gh
         self.runner = runner
         self.timeout = timeout
         self.searchLimit = searchLimit
+        self.branchStatusDelay = branchStatusDelay
     }
 
     func checkAuth() async -> GhAuthState {
@@ -347,6 +363,46 @@ struct GhGateway: GitHubGateway {
         // topologické pořadí se tím zachová, jen se čte z druhé strany. Zahazují se jen položky
         // bez sha, ze kterých se řádek udělat nedá.
         return items.compactMap(\.pullRequestCommit)
+    }
+
+    // MARK: - Slévatelnost větve (#465)
+
+    /// Jestli se dá větev mergnout. **Ptá se opakovaně, dokud GitHub neodpoví jinak než `UNKNOWN`.**
+    ///
+    /// `mergeable` je u GitHubu **líné pole**: odpověď se počítá až na vyžádání a dotaz, který ji
+    /// nezastihne hotovou, dostane `UNKNOWN` (v RESTu `null`). Bez druhého dotazu by tedy bylo
+    /// tlačítko `Mergnout…` u čerstvého PR zašedlé podle náhody.
+    ///
+    /// **Co je z toho změřené a co ne** — patří sem obojí, aby se to příště nemuselo měřit znovu.
+    /// Změřené je, že `UNKNOWN` je **trvalý stav mergnutého PR** (`PRism#470`, obě pole). Změřené
+    /// je i to, že se `UNKNOWN` na malém repu **nepodařilo zastihnout**: na `prism-review-sandbox#8`
+    /// vyšlo `MERGEABLE`/`CLEAN` hned po založení PR i hned po každém ze tří pushů, přes GraphQL
+    /// (`gh pr view`) i přes REST. Opakovaný dotaz je proto pojistka proti **doloženému chování
+    /// API**, ne proti stavu, který se tady povedlo vyrobit — a stojí nula, dokud odpověď chodí
+    /// usazená.
+    ///
+    /// **Strop je `attempts`, ne čas**: dotaz sám má svůj `timeout`, takže omezovat celé kolo
+    /// hodinami by znamenalo dvě meze na jednu věc. Když se to nestihne, vrátí se `UNKNOWN` —
+    /// je to pořád odpověď a panel z ní udělá větu, ne prázdno.
+    ///
+    /// **Mergnutý a zavřený PR vrací `UNKNOWN` navždycky** (změřeno na `PRism#470`), takže se
+    /// na něm vyčerpají všechny pokusy. Nevadí to: sekce `Větev` se kreslí na otevřeném PR
+    /// a `Policy.mergeOffer` má stav PR mezi překážkami dřív, než se na tohle pole ptá.
+    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus {
+        var status = try await branchStatus(id: id)
+        for _ in 1..<Self.branchStatusAttempts where !status.isSettled {
+            try await Task.sleep(for: branchStatusDelay)
+            status = try await branchStatus(id: id)
+        }
+        return status
+    }
+
+    private func branchStatus(id: PRIdentifier) async throws -> BranchStatus {
+        try await run([
+            "pr", "view", String(id.number),
+            "--repo", id.repo.description,
+            "--json", GhBranchStatus.jsonFields,
+        ], phase: "Slévatelnost větve", decodedAs: GhBranchStatus.self).status
     }
 
     /// `phase` **není dekorace**: `Výstupu gh nerozumím. keyNotFound…` neříká, co se zkoušelo,

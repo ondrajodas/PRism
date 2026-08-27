@@ -5,21 +5,32 @@ import Testing
 
 /// Jediná cesta ven (tvrdá podmínka č. 1) jako **test, ne grep v hlavě** (#333).
 ///
-/// `CLAUDE.md` říká, že `grep ReviewPublishing App/` má vypsat šest souborů a čtyři volající. Dokud
+/// `CLAUDE.md` říká, že `grep ReviewPublishing App/` má vypsat sedm souborů a pět volajících. Dokud
 /// to byl jen grep, platilo to jen tehdy, když si na něj někdo vzpomněl — a zrovna u téhle
 /// podmínky se porušení nepozná jinak než tím, že něco odešlo. Nejcennější test je ten, který
 /// tvrdí, že se něco **nestalo**.
 ///
-/// **Čísla v tvrzeních se u #392 a #413 zvedla, tvrzení samotná ne** (u #392 z pěti souborů
-/// a čtyř metod, u #413 ze šesti metod na sedm). Pravidlo se rozšířilo vědomě — labely a vyžádání
-/// reviewera na **vlastním** PR, pak založení labelu; důvody jsou u `ReviewPublishing` —, takže se
-/// přepsal ten výčet, ne jeho podoba: pořád je to **jmenovitý**
+/// **Čísla v tvrzeních se u #392, #413 a #465 zvedla, tvrzení samotná ne** (u #392 z pěti souborů
+/// a čtyř metod, u #413 ze šesti metod na sedm, u #465 ze šesti souborů na sedm a ze sedmi metod
+/// na osm). Pravidlo se rozšířilo vědomě — labely a vyžádání
+/// reviewera na **vlastním** PR, pak založení labelu, pak merge; důvody jsou u `ReviewPublishing` —,
+/// takže se přepsal ten výčet, ne jeho podoba: pořád je to **jmenovitý**
 /// seznam souborů a **jmenovitý** seznam metod, ne rozsah ani „aspoň tolik“. Rozvolnit tvrzení na
-/// nerovnost by z testu udělalo dekoraci: přibyla by osmá cesta ven a nikdo by se o ní nedozvěděl.
+/// nerovnost by z testu udělalo dekoraci: přibyla by devátá cesta ven a nikdo by se o ní nedozvěděl.
 ///
-/// **Počet souborů se u #413 nezvedl, a je to samo tvrzení**: založení labelu je sedmá **metoda**,
-/// ne pátý volající — přibylo do `MetadataSubmission`, protože je to tatáž věc z pohledu podmínky
-/// (metadata vlastního PR, tatáž brána, tytéž dvě sekce panelu).
+/// **Počet souborů se u #413 nezvedl, u #465 ano, a v obou případech je to samo tvrzení.** Založení
+/// labelu je sedmá **metoda**, ne pátý volající — přibylo do `MetadataSubmission`, protože je to
+/// tatáž věc z pohledu podmínky (metadata vlastního PR, tatáž brána, tytéž dvě sekce panelu).
+/// Merge je proti tomu **pátý volající** (`MergeSubmission`), a je to jediné místo, kde se od
+/// #392 liší: má **potvrzovací obrazovku a životnost** — objekt vzniká kliknutím, drží snímek toho,
+/// co se potvrzuje, a zaniká zavřením sheetu. Je to tvarem `ReviewSubmission`, ne
+/// `MetadataSubmission`.
+///
+/// **A `merge` z výčtu zakázaných zmizel, což je ta nejpodstatnější změna v tomhle souboru.** Do
+/// #465 tady stálo jmenovitě, že merge je porušení podmínky. Změnilo se to vědomě, ne obejitím:
+/// mergnout vlastní PR, když je zeleno, je poslední věc, kvůli které se od hotového review
+/// odskakuje do prohlížeče. **V zákazu zůstává** approve mimo review, zavření PR, milník
+/// a `deleteLabel` — a je jmenovitě vypsaný níž, aby se z testu dalo přečíst, co se smí a co ne.
 ///
 /// Čte se **zdroják, ne chování**: „odkud se dá odeslat“ je vlastnost struktury kódu, na kterou se
 /// za běhu zeptat nedá. Cesta ke zdrojákům se odvozuje z `#filePath`, jako u `Fixture`.
@@ -72,12 +83,12 @@ struct SingleWayOutTests {
         case unreadable(String)
     }
 
-    /// **Šest souborů, ani o jeden víc.** Protokol, jeho implementace a čtyři volající — víc míst
+    /// **Sedm souborů, ani o jeden víc.** Protokol, jeho implementace a pět volajících — víc míst
     /// znamená víc toho, co aplikace umí odeslat, a to má být vidět na jednom místě.
     ///
     /// Všechny leží v `Publish/`, a to je druhá polovina tvrzení: nový volající **mimo** tuhle
     /// složku by znamenal, že cesta ven vede odjinud než z jednoho místa.
-    @Test("ReviewPublishing zná šest souborů")
+    @Test("ReviewPublishing zná sedm souborů")
     func namesEveryWayOut() throws {
         let using = try swiftFiles()
             .filter { $0.code.contains("ReviewPublishing") }
@@ -87,6 +98,7 @@ struct SingleWayOutTests {
         #expect(using == [
             "Publish/CommentSubmission.swift",
             "Publish/GhReviewPublisher.swift",
+            "Publish/MergeSubmission.swift",
             "Publish/MetadataSubmission.swift",
             "Publish/ReviewPublishing.swift",
             "Publish/ReviewSubmission.swift",
@@ -95,11 +107,11 @@ struct SingleWayOutTests {
         #expect(using.allSatisfy { $0.hasPrefix("Publish/") })
     }
 
-    /// Protokol má **sedm vyjmenovaných metod** (do #392 čtyři, do #413 šest). Approve mimo review,
-    /// **merge**, **zavření PR**, **milník** ani **smazání labelu** mezi ně nepatří — a kdyby přibyla
-    /// osmá, má o tom být řeč v review, ne až na GitHubu.
-    @Test("Protokol má sedm metod")
-    func hasSevenMethods() throws {
+    /// Protokol má **osm vyjmenovaných metod** (do #392 čtyři, do #413 šest, do #465 sedm). Approve
+    /// mimo review, **zavření PR**, **milník** ani **smazání labelu** mezi ně nepatří — a kdyby
+    /// přibyla devátá, má o tom být řeč v review, ne až na GitHubu.
+    @Test("Protokol má osm metod")
+    func hasEightMethods() throws {
         guard let file = try swiftFiles().first(where: { $0.path == "Publish/ReviewPublishing.swift" }) else {
             Issue.record("soubor s protokolem se nenašel")
             return
@@ -108,22 +120,27 @@ struct SingleWayOutTests {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.hasPrefix("func ") }
 
-        #expect(methods.count == 7)
+        #expect(methods.count == 8)
         for name in [
             "func submit", "func reply", "func setResolved", "func comment",
-            "func setLabels", "func requestReviewers", "func createLabel",
+            "func setLabels", "func requestReviewers", "func createLabel", "func merge",
         ] {
             #expect(methods.contains { $0.hasPrefix(name) })
         }
-        // **Co v zákazu zůstalo.** Vyjmenované jmenovitě, ne jen počtem: osmá metoda by počet
-        // shodila, ale přejmenovaná pátá ne — a `merge` nebo `close` v tomhle protokolu je
+        // **Co v zákazu zůstalo.** Vyjmenované jmenovitě, ne jen počtem: devátá metoda by počet
+        // shodila, ale přejmenovaná pátá ne — a `close` nebo `approve` v tomhle protokolu je
         // porušení podmínky, ne rozšíření.
+        //
+        // **`merge` z tohohle výčtu u #465 zmizel** a je to vědomá změna pravidla, ne díra: přibyl
+        // jako osmá **metoda** výš, se svým potvrzením a s hlavou v payloadu. Že tady zůstává
+        // `close`, není nedodělek — zavřít cizí ani vlastní PR odsud nejde a nepůjde, protože to
+        // není práce, která se dělá **při review**.
         //
         // **`deleteLabel` je v tom výčtu od #413**, a je to ta jediná věc, kterou nová metoda
         // nesmí přitáhnout: založený label se dá **přidat i odebrat z PR**, ale smazat ho
         // z repozitáře se odsud nebude dát nikdy — zmizel by ze všech issues, na kterých leží.
         for forbidden in [
-            "func merge", "func close", "func approve", "func setMilestone", "func deleteLabel",
+            "func close", "func approve", "func setMilestone", "func deleteLabel",
         ] {
             #expect(!methods.contains { $0.hasPrefix(forbidden) }, "\(forbidden) je cesta ven, kterou podmínka nepřipouští")
         }

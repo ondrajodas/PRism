@@ -59,6 +59,12 @@ struct PullRequestDetailView: View {
     /// se to na příštím tiku stane. Sheet by tím zmizel i s hláškou, kvůli které je otevřený.
     @Binding var submission: ReviewSubmission?
 
+    /// Rozdělaný merge (#465). Zakládá se tady, ale **drží ho `ContentView`** — a je to tatáž
+    /// past jako u odeslání review, jen o stupeň horší: mergnutý PR ze zdroje `author:@me`
+    /// na příštím tiku **vypadne**, takže by sheet zavěšený na detailu zmizel zrovna s tou
+    /// hláškou, kvůli které je otevřený.
+    @Binding var merge: MergeSubmission?
+
     /// Výška celého detailu — z ní je strop zásuvky s terminálem (#459).
     ///
     /// Měří se `onGeometryChange`, protože **akce se při nezměněné hodnotě nespustí** (změřeno
@@ -524,6 +530,10 @@ struct PullRequestDetailView: View {
             hasLoadedCandidates: store.hasLoadedAssignableUsers(in: pullRequest.repo),
             metadataActionState: store.metadataActionState(for: pullRequest.id),
             metadataActions: metadataActions,
+            // Sekce `Větev` (#465) — skládá ji `Policy`, panel z ní jen sází. Na cizím PR vyjde
+            // `nil` a nekreslí se ani nadpis.
+            branch: store.branchSection(for: pullRequest.id),
+            branchActions: branchActions,
             // Proti kterému kódu nálezy platí (#392). Rozhoduje `Policy` — panel z toho jen sází
             // větu, takže se okno neptá dvakrát jinak.
             headNotice: headNotice,
@@ -550,6 +560,17 @@ struct PullRequestDetailView: View {
             loadCandidates: { await store.loadAssignableUsers(for: id.repo) },
             clearFailure: { store.clearMetadataFailure(for: id) }
         )
+    }
+
+    /// Akce sekce `Větev` (#465). Skládá se tady, jako `metadataActions` — panel dostane hodnotu
+    /// a `AppStore` nezná.
+    ///
+    /// `Mergnout…` **jen otevře potvrzení**: `mergeSubmission(for:)` vrátí `nil`, když mergnout
+    /// nejde, takže se sheet nad neproveditelným mergem neotevře ani tehdy, kdyby se na zakázané
+    /// tlačítko nějak kliknout dalo.
+    private var branchActions: BranchActions {
+        let summary = pullRequest
+        return BranchActions(merge: { merge = store.mergeSubmission(for: summary) })
     }
 
     /// Věta o tom, proti které hlavě nálezy platí (#392).
