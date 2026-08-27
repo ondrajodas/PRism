@@ -3566,3 +3566,110 @@ v hierarchii vůbec**: plocha nulové výšky by běžícímu TUI ohlásila `0×
 #### Co #459 vědomě nechává na jindy
 
 `▶` v tabu `Průběh` pořád otevírá `Terminal.app` (#453) — přepojení na zásuvku je **#460**.
+**Dotaženo u #460**, viz záznam rozhodnutí níž.
+
+### Záznam rozhodnutí — `▶` pouští session v zásuvce (#460)
+
+Nakresleno v návrhu, sekce 35, poznámka 112; sekce 34 zůstává **záznamem toho, co bylo dřív**,
+a nepřekresluje se. Brána na vzhled tedy proběhla dřív, než issue vzniklo.
+
+`▶` v hlavičce dráhy přestává otevírat `Terminal.app` a **vytáhne zásuvku**, ve které pustí
+`claude --resume <id>` v pracovním stromě té session. Důvod je jednou větou: od #459 je terminál
+v okně, takže odcházet do cizí aplikace kvůli session, která se dá pustit o kus níž, nemá co
+získat. `⧉` (`Zkopírovat resume`) **zůstává** — kdo si session pouští v iTermu, tmuxu nebo na jiném
+stroji, potřebuje text; jsou to dvě akce, ne dvě podoby jedné.
+
+`Policy.resumeCommand(sessionID:)` a `ShellQuoting` se použily **beze změny** a je to podmínka:
+`⧉` ten text kopíruje a `▶` ho pouští, takže dvě kopie by se rozešly první úpravou.
+
+#### Posílá se celá `shellLine`, ne jen příkaz
+
+Do zásuvky jde `cd '<strom>' && claude --resume <id>`, tedy **tatáž řádka, jakou od #453 dostával
+`Terminal.app`**. `cd` není nadbytečné jen proto, že store shell startuje ve stromu té session:
+zásuvka smí mít shell puštěný odjinud (`` ⌃` `` nad bare klonem, protože review ještě neběželo)
+a `claude --resume` hledá vlákno **podle adresáře**, ve kterém se spustí. Zamítnuté bylo posílat
+jen `command` a spoléhat na startovní adresář: fungovalo by to právě do prvního `` ⌃` `` před
+review a selhalo by **větou o session**, ne o adresáři — tedy nejhůř čitelným způsobem.
+
+#### Když v zásuvce něco běží, nepíše se tam
+
+Řádka poslaná do shellu je pro program, který v něm běží, **vstup**: v rozdělaném `claude` by
+z `claude --resume …` byla odeslaná zpráva, ve `vi` posbírané příkazy. `▶` se proto **jedním**
+voláním zeptá jádra na popředí pty (`tcgetpgrp`, tedy totéž, co dělá `kill()` z #459), a když tam
+někdo je, vrátí `busy` a **nepošle nic**. Není to ten pravidelný takt, kvůli kterému kapsle
+v hlavičce zásuvky neukazuje běžící příkaz — ptá se to ve chvíli kliknutí, ne v časovači.
+
+Zvažovaly se tři jiné odpovědi a všechny jsou zamítnuté:
+
+| Zamítnuto | Proč |
+|---|---|
+| Poslat to tam stejně | Tichá ztráta i tichá škoda naráz: v běžícím `claude` by to byla **odeslaná zpráva**, kterou nikdo nechtěl, a nedalo by se to vzít zpět |
+| Přerušit, co běží (`⌃C`), a pak poslat | Aplikace by rozhodovala za člověka o tom, co je jeho práce. `⌃C` do rozdělaného rebase nebo do běžícího testu je přesně ta věc, kterou musí odmáčknout on |
+| Pustit druhý shell vedle | Zásuvka je **jedna plocha na pull request** (#459), takže druhý shell znamená druhou plochu a přepínač mezi nimi — nové UI kvůli okrajovému stavu, a k tomu mimo mockup |
+
+Zbývá to **říct**: zásuvka se vytáhne (běžící příkaz je zrovna to, na co se má člověk podívat)
+a ve stavovém řádku stojí, že se nic neposlalo a jaké jsou dvě cesty dál — ukončit, co běží, nebo
+si příkaz vzít přes `⧉`. Hlásí to `AppStore.terminalFailure`, tedy **totéž pole**, kterým se od
+#453 hlásí neotevřený `Terminal.app`: z `▶` vede pokaždé právě jedna cesta, takže dvě pole by
+znamenala dvě místa, která se musí nezávisle zahazovat.
+
+**Skončený shell se pustí znovu.** `▶` je žádost o běžící session, takže tlačítko, které po jednom
+`exit` přestane fungovat, by nechalo jako jedinou cestu zpátky zavření celé záložky. Startuje se na
+**téže ploše**, takže starý výpis v ní zůstane — pro čtení předchozí session je to spíš dobře.
+Že se to povedlo, se u toho **čte** (`isRunning`), ne předpokládá: `fork`/`exec` umí selhat a
+`started` nad neběžícím shellem by tvrdilo, že se něco pustilo.
+
+#### Píše se `CR` a posílá se rovnou — obojí změřeno pty sondou
+
+`↵` posílá přes terminál `CR`; v kanonickém režimu ho `ICRNL` převede na `NL`, v `ZLE` je navázaný
+na `accept-line`. Změřeno, že **obojí projde stejně** (`CR` i `LF`, 4 běhy ze 4 v obou fázích),
+takže se vybíralo podle pravidla, ne podle rozdílu.
+
+**Nečeká se na prompt.** Bajty zapsané do pty dřív, než `ZLE` naběhne, počká linková disciplína ve
+vstupním bufferu a shell je zpracuje na prvním promptu — změřeno 5 běhů z 5, i s `.zshrc`, který
+před promptem sekundu spí; příkaz proběhne **právě jednou**. Cena je jedna **ozvěna řádky navíc
+nad promptem**: linková disciplína ji echuje dřív, než si `ZLE` řádek překreslí (3 výskyty v pty
+výpisu proti 2 u odloženého zápisu). Zamítnuté bylo počkat na první výstup shellu
+(`dataReceived(slice:)` je `open`, takže by to šlo): ušetřilo by to tu jednu ozvěnu, ale přidalo
+by stav navíc a **nové selhání** pro shell, který sám od sebe nic nevypíše — tedy „příkaz se
+nikdy nepustí“ místo jednoho řádku ozvěny. Ověřit to navíc nejde v harnessu (#459 změřilo, že
+hlavní dispatch fronta testovacího hostu se nedrání), takže by to byl mechanismus, který se
+neotestuje ani vloženou regresí.
+
+#### `▶` si nebere fokus
+
+Sebrat ho znamená sáhnout na první responder v tomtéž průchodu, ve kterém se plocha teprve staví —
+past z #184, kterou jde ověřit **jedině na běžící aplikaci**. Kliknout do zásuvky je proti tomu
+jeden klik, a fokus sebraný pod rukama je horší než klik navíc. Kdyby se to při používání ukázalo
+jako otrava, je to samostatná změna s vlastním měřením.
+
+#### Bez zásuvky se tlačítko nekreslí
+
+`AppStore.hasTerminalDrawer` je `false` tam, kde v okně žádný hostitel není. `▶` se pak **nekreslí**
+— ne zašedle a hlavně ne s tichým pádem zpátky do `Terminal.app`: dvě různá chování pod jednou
+ikonou znamenají, že se nedá spolehnout ani na jedno. Je to tatáž úvaha jako u
+`Policy.terminalSession(of:)`, jen o druhou podmínku dál.
+
+#### Osud `AppleScriptTerminal` (#460)
+
+**Zůstává, bez volajícího, i s `NSAppleEventsUsageDescription` v `Info.plist`** — a je to
+rozhodnutí na jedno vydání, ne trvalý stav. Zapsané je proto, že „stav, který se drží, ale nikdo
+ho nečte“ je v tomhle repu vyjmenovaný jako opakovaný nález, takže dormantní cesta musí mít důvod
+i podmínku zániku.
+
+Důvod: **shell v zásuvce se zabije se zavřením aplikace** (#264, #459, poznámka 111 z návrhu),
+kdežto okno `Terminal.app` session přežije — a PRism se restartuje po každém mergi. Jestli to
+v praxi chybí, se pozná jedině používáním, ne čtením kódu; a než to bude jasné, je levnější mít
+tu cestu v repu než ji vracet i s TCC dialogem na automatizaci.
+
+Podmínka zániku: **až bude z používání jasné, že zásuvka pokrývá i tohle**, jde ven celá naráz —
+`TerminalOpening`, `AppleScriptTerminal`, `TerminalError`, `AppStore.terminal`,
+`AppStore.openInTerminal(_:)`, `FakeTerminal`, `AppStoreTerminalTests`
+a `NSAppleEventsUsageDescription`. Pole `AppStore.terminalFailure` **zůstává i pak**: od #460 do něj
+píše `▶` sám (`busy`, `noShell`), takže mrtvé nezůstane.
+
+Zamítnuté bylo držet tu cestu **dosažitelnou** — `⌥`-klikem na `▶` nebo položkou v kontextovém
+menu. Obojí je nová věc na obrazovce, tedy mockup a schvalovací brána; a `⌥`-klik je navíc přesně
+to „dvě chování pod jednou ikonou“, které issue u tichého fallbacku zakazuje. Dokud tedy o osudu
+nerozhodne používání, je poctivější mít tu cestu **viditelně dormantní a s napsanou podmínkou**
+než ji schovávat pod modifikátor.

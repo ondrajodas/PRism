@@ -2047,24 +2047,22 @@ Co se **nepodařilo zlevnit**, ať to příště nikdo nezkouší znovu: dělen�
 druhou cestou dělení textu — a jedno místo, kde se rozhoduje, co je řádek, je pravidlo, které stojí
 za víc než dvě desetiny sekundy v Debug buildu.
 
-### Živá session v Terminálu (#453)
+### Živá session v terminálu (#453, přepojeno na zásuvku #460)
 
-Vedle `⧉` (`Zkopírovat resume`) stojí v hlavičce dráhy `▶` — **`Otevřít session v Terminálu`**,
-které tentýž příkaz rovnou pustí v `Terminal.app`, v **pracovním stromu** té session. Návrh je
-sekce 34; kopírování zůstává, protože kdo si session pouští jinde (iTerm, tmux, jiný stroj),
-potřebuje text, ne cizí okno.
+Vedle `⧉` (`Zkopírovat resume`) stojí v hlavičce dráhy `▶` — **`Pustit session v terminálu`**,
+které vytáhne **zásuvku** (#459), přejde v ní do **pracovního stromu** té session
+a pustí tam tentýž příkaz. Návrh je sekce 35, poznámka 112; sekce 34 zůstává záznamem toho, co
+bylo dřív. Kopírování zůstává, protože kdo si session pouští jinde (iTerm, tmux, jiný stroj),
+potřebuje text, ne cizí plochu.
 
-**Tvrdá podmínka č. 1 se tím nemění, a je to jádro celé změny.** Terminál je **mimo aplikaci** —
-je to totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný
-terminál nevzniká, `grep ReviewPublishing App/` vypisuje **týž seznam** a `SingleWayOutTests`
-procházejí beze změny.
+**Do #460 se tím otevíralo okno `Terminal.app`** a tvrdá podmínka č. 1 se u toho nehnula, protože
+terminál byl mimo aplikaci. Od #459 je terminál **v okně** a ta záruka je vyměněná za funkci
+(viz *Vestavěný terminál (#459)* níž), takže odcházet do cizí aplikace kvůli session, která se dá
+pustit o kus níž, přestalo mít důvod. `grep ReviewPublishing App/` vypisuje pořád **týž seznam**
+a `SingleWayOutTests` procházejí beze změny — cesta ven ze shellu nevede přes kód aplikace, což
+říká kapsle `plná práva` v hlavičce zásuvky.
 
-**Zamítnutí vestavěného terminálu padlo u #459** — do té doby tady stálo, že by znamenal, že se
-z okna dá spustit `gh pr merge` i `git push`, a že to nepůjde uhlídat testem. Obojí je pořád pravda;
-uživatel rozhodl, že se ta záruka za tu funkci vymění (viz *Vestavěný terminál (#459)* níž). `▶`
-v hlavičce dráhy zůstává na `Terminal.app` — přepojení na zásuvku je #460.
-
-Čtyři věci, které na tom nejsou zjevné:
+Sedm věcí, které na tom nejsou zjevné:
 
 - **Pracovní strom je podmínka stejně jako `session_id`**, i když zadání mluví jen o `id`.
   `claude --resume` hledá vlákno podle adresáře, ve kterém se spustí
@@ -2084,12 +2082,28 @@ v hlavičce dráhy zůstává na `Terminal.app` — přepojení na zásuvku je #
   pravda a dá se podle ní jednat. Uzávorkování cesty dělá `ShellQuoting` — od #453 **jedno
   místo**, protože totéž potřebuje `ClaudeCommand.shellCommand` pro `Zkopírovat příkaz`.
 - **Selhání se hlásí ve stavovém řádku** (`AppStore.terminalFailure` → `AppNoticesView`).
-  Je to tentýž případ jako notifikace (#88): výsledek téhle akce je vidět **mimo aplikaci**,
-  takže neúspěch vypadá k nerozeznání od toho, že se nekliklo — `try?` nad tou cestou by
-  z tlačítka udělal něco, co občas nedělá nic. Důvod se **opisuje doslova** z toho, co řekl
-  systém (`Not authorized to send Apple events to Terminal.`), protože je to jediné, podle čeho
-  se dá jednat, a spravuje se to v Nastavení systému, kam aplikace nedosáhne. Hláška se zahodí
-  teprve tehdy, když se okno **doopravdy** otevře, ne při dalším kliknutí.
+  Je to tentýž případ jako notifikace (#88): výsledek téhle akce v okně **není vidět** — do #460
+  proto, že se okno otevíralo mimo aplikaci, od #460 proto, že v zásuvce zůstalo všechno tak, jak
+  bylo —, takže neúspěch vypadá k nerozeznání od toho, že se nekliklo; `try?` nad tou cestou by
+  z tlačítka udělal něco, co občas nedělá nic. U `Terminal.app` se důvod **opisoval doslova** z toho,
+  co řekl systém (`Not authorized to send Apple events to Terminal.`), protože se to spravuje
+  v Nastavení systému, kam aplikace nedosáhne. Hláška se zahodí teprve tehdy, když se to
+  **doopravdy** povede, ne při dalším kliknutí.
+- **Do běžícího jobu se nepíše** (#460). Řádka poslaná do shellu je pro program, který v něm běží,
+  **vstup** — v rozdělaném `claude` by z `claude --resume …` byla odeslaná zpráva a ve `vi`
+  posbírané příkazy. `EmbeddedTerminalView.hasForegroundJob` se proto **jedním** voláním zeptá
+  jádra na popředí pty (`tcgetpgrp`, tedy totéž, co dělá `kill()`), a když tam někdo je, `▶` vrátí
+  `busy` a **nepošle nic**. Není to ten pravidelný takt, kvůli kterému kapsle v hlavičce neukazuje
+  běžící příkaz: ptá se to ve chvíli kliknutí, ne v časovači. Zásuvka se přesto **vytáhne** — běžící
+  příkaz je zrovna to, na co se má člověk podívat, než se rozhodne.
+- **Posílá se celá `shellLine`, i do zásuvky** (#460), tedy `cd '<strom>' && claude --resume <id>`.
+  `cd` není nadbytečné jen proto, že store shell startuje ve stromu té session: zásuvka smí mít
+  shell puštěný odjinud (`` ⌃` `` nad klonem, protože review ještě neběželo), a `claude --resume`
+  hledá vlákno **podle adresáře**. Cesta v hlavičce zásuvky se proto po `▶` přepisuje na strom té
+  session — ale **jen když řádka odešla**; po `busy` shell dál stojí tam, kde stál.
+- **`▶` si nebere fokus** (#460). Sebrat ho znamená sáhnout na první responder v tomtéž průchodu,
+  ve kterém se plocha teprve staví — past z #184, kterou jde ověřit jedině na běžící aplikaci.
+  Kliknout do zásuvky je proti tomu jeden klik.
 
 ## `ReviewRunner` (`App/Review/`)
 
@@ -3335,7 +3349,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
-| `AppStore+Terminal.swift` | Terminál — otevření session v `Terminal.app` (#453) a od #459 **zásuvka**: `toggleTerminal()`, `resolveTerminalDirectory(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `stopTerminal(for:)` ze zavření záložky a `stopTerminalsBeforeTermination()`. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 105 |
+| `AppStore+Terminal.swift` | Terminál — **zásuvka** (#459) a od #460 i `▶` do ní (`resumeInDrawer(_:for:)`, `hasTerminalDrawer`): `toggleTerminal()`, `resolveTerminalDirectory(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `stopTerminal(for:)` ze zavření záložky a `stopTerminalsBeforeTermination()`. `openInTerminal(_:)` do `Terminal.app` (#453) tu zůstává **bez volajícího**, jako záloha — viz specifikace. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 140 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -6978,6 +6992,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.terminalDrawerHeight(stored:available:)`, `terminalDrawerResize(from:by:available:)`, `terminalDrawerStoredHeight(stored:measured:)` | Výška zásuvky (#459): otevření z uložené hodnoty s ořezem **při použití**, tažení počítané **z výšky na začátku tahu** (jinak se přetažení za strop nasčítá a zásuvka se přestane vracet) a rozhodnutí, jestli zapsat. Nad zásuvkou vždycky zůstane `terminalDrawerContentFloor` — jinak by z ní byla ta devátá záložka |
 | `Policy.terminalWorkingDirectory(worktree:clone:)`, `terminalDirectoryLabel(_:home:)` | Kde shell startuje (#459) — **pracovní strom review** má přednost, protože `claude --resume` session najde jedině v adresáři, ve kterém běžela; jinak bare klon. Existenci na disku ověřuje volající (`Policy` nesahá na I/O). Zkrácení na `~` bere domov **argumentem**, ne z prostředí, a zkracuje jen celý prefix po hranici složky (`/Users/ondrej` se nesmí zkrátit kvůli domovu `/Users/ondra`) |
 | `Policy.terminalShell(_:)`, `terminalEnvironment(_:)` | Co se v zásuvce spustí (#459): shell ze `SHELL` (relativní se zahazuje) s `argv[0]` **s pomlčkou**, tedy login shell — bez toho by v zásuvce nebylo nic mimo `/usr/bin`, protože **`PATH` se schválně nepředává**. K tomu `TERM=xterm-256color`, `COLORTERM=truecolor` a UTF-8 locale |
+| `Policy.resumeNotice(_:)` | Co se řekne po `▶` (#460) → `TerminalCommandOutcome`. `nil` = **mlčet**: co se povedlo, je vidět v zásuvce, která se zrovna otevřela. Zbylé dva konce vidět nejsou — `busy` je zásuvka, ve které se nic nezměnilo, a `noShell` prázdná plocha —, takže by `▶` bez věty vypadalo jako tlačítko, které nic nedělá. U `busy` je ve větě i **druhá cesta** (`Zkopírovat resume`): přerušit běžící příkaz je rozhodnutí člověka |
 | `Policy.quitPrompt(reviews:terminals:)` | Na co se aplikace zeptá při ukončení (#94, #264, #459) → `QuitPrompt`. `nil` = **neptat se**. Věty se liší podle toho, co běží: „Běží 2 věci“ nedává důvod kliknout na Zpět. A **neslibují víc, než co data unesou** — z review se dá dotáhnout, co reviewer nahlásil, kdežto výpis shellu se nikam neukládá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
@@ -8938,9 +8953,9 @@ něco jiného:
 
 | Typ | Co drží |
 |---|---|
-| `TerminalHosting` | Protokol: kolik shellů běží, plocha pro pull request, zabít jeden, zabít všechny, a dva uzávěry (stav shellu, fokus). **Bez zápisové metody a bez `gh`** |
-| `TerminalHost` | Živá implementace — **jeden `EmbeddedTerminalView` na pull request**, řez a barvy z palety |
-| `EmbeddedTerminalView` | `SwiftTerm.LocalProcessTerminalView` s třemi věcmi navíc: start login shellu v daném adresáři, hlášení fokusu a `kill()`, který zabije **popředí pty**, ne jen shell |
+| `TerminalHosting` | Protokol: kolik shellů běží, plocha pro pull request, **napsat do ní řádku** (#460), zabít jeden, zabít všechny, a dva uzávěry (stav shellu, fokus). **Bez zápisové metody a bez `gh`** |
+| `TerminalHost` | Živá implementace — **jeden `EmbeddedTerminalView` na pull request**, řez a barvy z palety; plochu vyrábí jedno místo (`surface(for:in:)`), aby `` ⌃` `` a `▶` nedaly dva různé shelly |
+| `EmbeddedTerminalView` | `SwiftTerm.LocalProcessTerminalView` s pěti věcmi navíc: start login shellu v daném adresáři, hlášení fokusu, `kill()`, který zabije **popředí pty**, ne jen shell, a od #460 `hasForegroundJob` (běží tam něco?) se `send(line:)` |
 
 Rozhodnutí, která k tomu patří, jsou v `Policy` (`App/Policy/TerminalDrawer.swift`): výška zásuvky
 a její ořez, jestli zkratka ustupuje terminálu, kde shell startuje, jak se cesta zkrátí na `~`, co
@@ -8993,6 +9008,28 @@ a to jde napsat jedině proti fake implementaci.
   Zjistit příkaz znamená ptát se jádra na popředí pty v pravidelném taktu, tedy zavést v okně další
   časovač kvůli popisce. Je to méně, než slibuje mockup, ale nic z toho není nepravda — a `exit 1`
   se od `exit 0` odliší, což je to, kvůli čemu se na kapsli člověk podívá.
+- **Do zásuvky se píše `CR`, ne `LF`, a posílá se rovnou** (#460, `send(line:)`). `↵` posílá přes
+  terminál `CR`; v kanonickém režimu ho `ICRNL` převede na `NL`, v `ZLE` je navázaný na
+  `accept-line`. Změřeno pty sondou, že obojí projde stejně (4 ze 4 u obou), takže se vybíralo
+  podle pravidla, ne podle rozdílu. **Čeká se s tím na nic**: bajty zapsané dřív, než `ZLE`
+  naběhne, počká linková disciplína ve vstupním bufferu a shell je zpracuje na prvním promptu
+  (změřeno 5 z 5, i s `.zshrc`, který před promptem sekundu spí). Cena je jedna **ozvěna řádky
+  navíc nad promptem** — echuje ji linková disciplína dřív, než si `ZLE` řádek překreslí; zamítnuté
+  bylo počkat na první výstup shellu, protože by z toho byl stav navíc a nové selhání pro shell,
+  který sám od sebe nic nevypíše.
+
+  Dvě věci u toho **nejsou volitelné**. Píše se přes **`send(txt:)` knihovny, ne přímo do
+  `process`**: ta cesta navíc srovná výřez na kurzor (`ensureCaretIsVisible`) a ohlásí terminálu
+  vstup — bez toho by řádka odešla, ale zásuvka odrolovaná nahoru by zůstala stát a vypadalo by to,
+  že se nic nestalo. A **deskriptor se kontroluje zvlášť od `running`**: `LocalProcess` na `EOF`
+  z pty nastaví `childfd = -1` a `running` nechá na `true`, dokud nedorazí událost o konci procesu,
+  takže zápis by tiše propadl a `run` by hlásil `sent`. Proto `send(line:)` vrací **`Bool`** a `run`
+  z něj skládá odpověď, místo aby ji předpokládal.
+- **`run(_:for:in:)` po skončeném shellu pustí nový** (#460), na téže ploše. `▶` je žádost o běžící
+  session, takže tlačítko, které po jednom `exit` přestane fungovat, by nechalo jako jedinou cestu
+  zpátky zavření záložky. Starý výpis v ploše přitom zůstane, což je pro čtení předchozí session
+  spíš dobře. Výsledek se u toho **čte, ne předpokládá** (`isRunning`): `fork`/`exec` umí selhat,
+  a `started` nad neběžícím shellem by tvrdilo, že se něco pustilo.
 
 ## Vrstva `Environment` (`App/Environment/`)
 
@@ -9020,7 +9057,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
 | `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
 | `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
-| `TerminalOpening` | Protokol: pusť řádku v novém okně terminálu (#453). `AppleScriptTerminal` nad `/usr/bin/osascript` — **není to druhá cesta ven**, terminál je mimo aplikaci. Příkaz jde do skriptu jako `argv`, ne vlepený do jeho zdrojáku, a selhání se **vrací jako chyba** (`TerminalError`), ne mlčí |
+| `TerminalOpening` | Protokol: pusť řádku v novém okně terminálu (#453). `AppleScriptTerminal` nad `/usr/bin/osascript` — **není to druhá cesta ven**, terminál je mimo aplikaci. Příkaz jde do skriptu jako `argv`, ne vlepený do jeho zdrojáku, a selhání se **vrací jako chyba** (`TerminalError`), ne mlčí. **Od #460 to nikdo nevolá** — drží se jako záloha i s `NSAppleEventsUsageDescription`, viz specifikace |
 
 Nad notifikacemi (#88) platí:
 

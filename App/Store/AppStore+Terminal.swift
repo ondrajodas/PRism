@@ -1,7 +1,16 @@
 import Foundation
 
 extension AppStore {
-    /// `Otevřít session v Terminálu` (#453) — `▶` v hlavičce dráhy v tabu `Průběh`.
+    /// Otevření session v `Terminal.app` (#453). **Od #460 to v aplikaci nikdo nevolá.**
+    ///
+    /// Drží se jako **záloha, ne jako mrtvý kód**, a je to zapsané rozhodnutí (viz specifikace,
+    /// *Osud `AppleScriptTerminal`*): `▶` odteď míří do zásuvky (`resumeInDrawer(_:for:)`), jenže
+    /// shell v zásuvce se **zavřením aplikace zabije** (#264, #459) a PRism se restartuje po
+    /// každém mergi — kdežto okno `Terminal.app` session přežije. Jestli to v praxi chybí, se
+    /// pozná jedině používáním, takže se ta cesta smaže teprve tehdy, až bude jasné, že ne.
+    /// Až ten čas přijde, jde ven celá naráz: `TerminalOpening`, `AppleScriptTerminal`,
+    /// `AppStore.terminal`, tahle metoda, `FakeTerminal`, `AppStoreTerminalTests`
+    /// a `NSAppleEventsUsageDescription` z `Info.plist`.
     ///
     /// **Uvnitř aplikace tím nic nevzniká** a tvrdá podmínka č. 1 se nemění: složí se řádka pro
     /// shell a předá se `Terminal.app`. Co se v tom okně bude dít dál, aplikace neví a neřídí —
@@ -59,6 +68,40 @@ extension AppStore {
         }
         guard let pr = activeTab.pullRequest else { return }
         await resolveTerminalDirectory(for: pr)
+    }
+
+    /// Je v tomhle okně zásuvka? `false` = **`▶` se nekreslí** (testovací store bez hostitele).
+    ///
+    /// Nekreslí se schválně, místo aby tiše spadlo zpátky na `Terminal.app` (#460): dvě různá
+    /// chování pod jednou ikonou znamenají, že se nedá spolehnout ani na jedno. Je to tatáž úvaha
+    /// jako u `Policy.terminalSession(of:)`, jen o druhou podmínku dál.
+    var hasTerminalDrawer: Bool { terminals != nil }
+
+    /// `▶` v hlavičce dráhy (#460) — pusť `claude --resume …` v **zásuvce**, ne v `Terminal.app`.
+    ///
+    /// Posílá se **celá `shellLine`**, tedy `cd '<strom>' && claude --resume <id>`, a je to tatáž
+    /// řádka, jakou dostával `Terminal.app` od #453. Není to opatrnost navíc: zásuvka smí mít
+    /// shell odjinud (otevřený `` ⌃` `` nad klonem, protože review ještě neběželo), a `claude
+    /// --resume` hledá vlákno **podle adresáře**. `cd` v řádce je tedy jediné, co zaručí, že se
+    /// session naváže i v shellu, který startoval jinde — a s `&&` zůstane po zmizelém stromu
+    /// v zásuvce `cd: no such file or directory`, což je pravda, podle které se dá jednat.
+    ///
+    /// **Zásuvka se otevře vždycky, i když se nic neposlalo**: `busy` znamená, že v ní něco běží,
+    /// a to je přesně ta věc, na kterou se má člověk podívat, než se rozhodne, co s tím.
+    ///
+    /// **Fokus si sama nebere.** Sebrat ho znamená sáhnout na první responder v tomtéž průchodu,
+    /// ve kterém se plocha teprve staví (past z #184), a ověřit se to dá jedině na běžící
+    /// aplikaci. Kliknout do zásuvky je proti tomu jeden klik.
+    func resumeInDrawer(_ session: TerminalSession, for pr: PRIdentifier) {
+        // Bez hostitele se `▶` nekreslí, takže sem se nedojde — a kdyby přece, nesmí se vymyslet
+        // hláška o něčem, o co se nikdo nepokusil.
+        guard let terminals else { return }
+        let outcome = terminals.run(session.shellLine, for: pr, in: session.directory)
+        // Cesta v hlavičce zásuvky se přepisuje **jen když řádka odešla**: po `busy` shell dál
+        // stojí tam, kde stál, a popiska, která by tvrdila jinak, je horší než stará pravda.
+        if outcome != .busy { terminalDirectories[pr] = session.directory }
+        isTerminalOpen = true
+        terminalFailure = Policy.resumeNotice(outcome)
     }
 
     /// Kde stojí shell toho PR. `nil` = v cache pro něj **není adresář**, a zásuvka to řekne.

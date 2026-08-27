@@ -1427,11 +1427,13 @@ struct PullRequestDetailView: View {
                 rawSession = target
                 Task { await store.openRawSession(target) }
             },
-            // Terminál (#453). Nic se v okně nemění — okno se otevře **mimo aplikaci** —, takže
-            // sem nepatří ani sheet, ani stav ve view: co se nepovede, ohlásí stavový řádek.
-            openInTerminal: { session in
-                Task { await store.openInTerminal(session) }
-            },
+            // Terminál (#453, od #460 **zásuvka místo `Terminal.app`**). Stav ani sheet sem
+            // nepatří: co se povede, je vidět v zásuvce, která se otevřela, a co ne, ohlásí
+            // stavový řádek. `nil` = v tomhle okně zásuvka není, takže se `▶` **nekreslí** —
+            // tichý pád zpátky do `Terminal.app` by byla dvě chování pod jednou ikonou.
+            openInTerminal: store.hasTerminalDrawer
+                ? { session in store.resumeInDrawer(session, for: pullRequest.id) }
+                : nil,
             slug: "\(pullRequest.repo)#\(pullRequest.number)"
         )
     }

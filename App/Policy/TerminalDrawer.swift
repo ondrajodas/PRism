@@ -29,6 +29,23 @@ enum TerminalRunState: Equatable, Sendable {
     case exited(code: Int32?)
 }
 
+/// Jak dopadl pokus poslat řádku do zásuvky (#460).
+///
+/// **Čtyři stavy, ne `Bool`**, a je to tatáž úvaha jako u `TerminalRunState`: „neposlalo se“ má
+/// dva úplně různé důvody — v zásuvce něco běží, nebo se v ní nepodařilo spustit shell —, a člověk
+/// s každým z nich naloží jinak. `started` se od `sent` liší jen tím, co se stalo navíc; oba
+/// znamenají, že řádka odešla.
+enum TerminalCommandOutcome: Equatable, Sendable {
+    /// Shell v zásuvce nebyl (nebo skončil), pustil se nový a řádka do něj odešla.
+    case started
+    /// Řádka odešla do shellu, který čekal na prompt.
+    case sent
+    /// V zásuvce běží cizí job v popředí — **nic se neposlalo**.
+    case busy
+    /// Shell se nepodařilo spustit, takže řádku nemá kdo přečíst.
+    case noShell
+}
+
 /// Dotaz na ukončení aplikace (#459) — věta v `NSAlert`u.
 ///
 /// Vlastní typ, protože se ptá **na dvě různé věci naráz**: běžící review (#94) a shelly
@@ -224,6 +241,35 @@ extension Policy {
         }
         variables.append("LANG=" + (environment["LANG"] ?? "en_US.UTF-8"))
         return variables
+    }
+
+    // MARK: - Co se řekne po `▶`
+
+    /// Věta do stavového řádku po kliknutí na `▶` (#460). `nil` = **mlčet**, řádka odešla.
+    ///
+    /// Mlčí se schválně u obou úspěšných konců: co se povedlo, je vidět v zásuvce, která se
+    /// zrovna otevřela — hláška o tom by byla text navíc nad tím, co má člověk před očima.
+    /// Zbylé dva konce vidět **nejsou**: `busy` znamená zásuvku, ve které se nic nezměnilo, a
+    /// `noShell` prázdnou plochu. Bez věty by obojí vypadalo jako tlačítko, které nic nedělá —
+    /// tedy přesně to, co u `Terminal.app` hlídal `AppStore.terminalFailure` od #453.
+    static func resumeNotice(_ outcome: TerminalCommandOutcome) -> String? {
+        switch outcome {
+        case .started, .sent: nil
+        // **Bez zpětných apostrofů kolem příkazu.** Věty ze stavu jdou do `Text` jako proměnná,
+        // ne jako literál, takže z nich SwiftUI markdown nedělá — apostrofy by se nakreslily.
+        case .busy:
+            // **Neříká „ukonči to“ jako jedinou cestu**: přerušit běžící příkaz kvůli tomu, že se
+            // někam neposlal jiný, je rozhodnutí člověka. Druhá cesta je proto vyjmenovaná a je
+            // to ta, kterou #453 nechalo v hlavičce dráhy schválně.
+            "V zásuvce toho pull requestu něco běží, takže se claude --resume neposlal. "
+                + "Ukonči, co běží, a klikni znovu — nebo si příkaz vezmi tlačítkem "
+                + "Zkopírovat resume."
+        case .noShell:
+            // Důvod se **nehádá**: `EmbeddedTerminalView.start` už na chybějící `SHELL` sáhne po
+            // `/bin/zsh`, takže sem se dojde jedině tehdy, když selhalo i to — a vymyšlená
+            // příčina by byla horší než žádná.
+            "Shell se v zásuvce nepodařilo spustit, takže se claude --resume nepustil."
+        }
     }
 
     // MARK: - Ukončení aplikace

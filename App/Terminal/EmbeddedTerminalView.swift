@@ -31,6 +31,57 @@ final class EmbeddedTerminalView: LocalProcessTerminalView {
     /// PID shellu, dokud běží. `nil` je „nemáme co zabíjet ani co zapisovat do `sessions.json`“.
     var shellPid: pid_t? { process.running && process.shellPid > 0 ? process.shellPid : nil }
 
+    /// Drží zrovna terminál nějaký **cizí job v popředí**? (#460)
+    ///
+    /// Ptá se jádra na popředí pty (`tcgetpgrp`) — tedy přesně to, co dělá `kill()`, aby vědělo,
+    /// koho zabít. **Není to ten pravidelný takt, kvůli kterému kapsle v hlavičce neukazuje běžící
+    /// příkaz** (#459): ptá se to jedním voláním ve chvíli kliknutí na `▶`, ne v časovači, a
+    /// odpovídá na tvrdou otázku „smí se sem poslat řádka?“, ne na popisku.
+    ///
+    /// Odpověď je podmínkou toho, aby `▶` nebylo nebezpečné: řádka poslaná do shellu je pro
+    /// běžící program **vstup**, takže v běžícím `claude` by z `claude --resume …` byla odeslaná
+    /// zpráva a ve `vi` posbírané příkazy. `false` u shellu, který neběží — tam není co přerušit.
+    var hasForegroundJob: Bool {
+        guard process.running else { return false }
+        let descriptor = process.childfd
+        guard descriptor >= 0 else { return false }
+        let foreground = tcgetpgrp(descriptor)
+        // `> 0` schválně, ze stejného důvodu jako v `kill()`: `tcgetpgrp` vrací `-1` u deskriptoru,
+        // který není řídicí terminál, a `0` není platná skupina. Ani jedno není běžící job.
+        return foreground > 0 && foreground != process.shellPid
+    }
+
+    // MARK: - Vstup
+
+    /// Napíše řádku do shellu, jako by ji člověk napsal a odeslal `↵` (#460). `false` = neodešla.
+    ///
+    /// **`\r`, ne `\n`**: `↵` posílá přes terminál `CR` a ten musí umět zpracovat každý shell —
+    /// v kanonickém režimu ho `ICRNL` převede na `NL`, v `ZLE` je navázaný na `accept-line`.
+    /// Změřeno pty sondou, že obojí projde stejně (4 běhy z 4 u obou), takže se vybíralo podle
+    /// pravidla, ne podle rozdílu.
+    ///
+    /// **Posílá se rovnou, i do shellu, který se právě spustil.** Změřeno (5 běhů z 5): bajty
+    /// zapsané dřív, než `ZLE` naběhne, počká linková disciplína ve vstupním bufferu a shell je
+    /// zpracuje na prvním promptu — příkaz tedy proběhne právě jednou. Cenou je, že se řádka
+    /// jednou navíc odechuje **nad** promptem (linková disciplína ji echuje před tím, než si `ZLE`
+    /// řádek překreslí). Čekat místo toho na první výstup shellu by tu ozvěnu ušetřilo, jenže by
+    /// z toho byl stav navíc a nové selhání pro shell, který sám od sebe nic nevypíše — a to je
+    /// horší než jeden řádek ozvěny.
+    ///
+    /// **Přes `send(txt:)` knihovny, ne přímo do `process`.** Ta cesta navíc srovná výřez na kurzor
+    /// (`ensureCaretIsVisible`) a ohlásí terminálu vstup — bez toho by řádka odešla do shellu, ale
+    /// zásuvka odrolovaná nahoru by zůstala stát a vypadalo by to, že se nic nestalo.
+    ///
+    /// **Deskriptor se kontroluje zvlášť od `running`**, a není to opatrnost: `LocalProcess` na
+    /// `EOF` z pty nastaví `childfd = -1` a `running` nechá na `true`, dokud nedorazí událost
+    /// o konci procesu. Zápis do `-1` by tiše selhal a volající by si myslel, že řádka odešla.
+    @discardableResult
+    func send(line: String) -> Bool {
+        guard process.running, process.childfd >= 0 else { return false }
+        send(txt: line + "\r")
+        return true
+    }
+
     // MARK: - Start
 
     /// Pustí login shell v tom adresáři.

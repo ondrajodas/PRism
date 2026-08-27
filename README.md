@@ -1003,7 +1003,8 @@ je horší než drahá.
 **`` ⌃` `` vytáhne přes spodek záložky shell**, který stojí v **kopii repa toho pull requestu**
 v cache aplikace. Do #459 se dal terminál otevřít jedním tlačítkem v tabu `Průběh` (#453), jenže
 to pořád znamená **odejít z okna**: kdo se během review potřebuje podívat na `git log`, pustit test
-nebo dopsat otázku do běžící session, odejde a vrátí se za deset minut.
+nebo dopsat otázku do běžící session, odejde a vrátí se za deset minut. Od #460 do zásuvky míří
+i to tlačítko: `▶` v tabu `Průběh` v ní rovnou pustí `claude --resume` (viz níž).
 
 **Zásuvka, ne devátá záložka**, a je to celý smysl: půlka užitku je, že je vidět diff a **pod ním**
 výstup příkazu. Roztahuje se **tažením za horní hranu** a výška si pamatuje mezi spuštěními; nad
@@ -1148,10 +1149,10 @@ od proběhlé jen barvou odznaku, protože na důvod ani na konec logu nebylo m�
 a `spadlo` se slít nesmí.
 
 Podrobný výpis toho, co reviewer spouštěl — který soubor čte, co hledá, jaký příkaz spustil —
-je pod rozbalením každé dráhy. Skládá se nativně z eventů, ne přeposíláním textu, takže
-aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
-se `claude --resume <id>` jedním tlačítkem — nebo se od #453 rovnou **otevře v Terminálu**,
-viz níž. Osa zůstane i po doběhnutí běhu — a od #203
+je pod rozbalením každé dráhy. Skládá se nativně z eventů, ne přeposíláním textu, takže se dá
+číst i bez terminálu; když je potřeba se do session vrátit, zkopíruje se `claude --resume <id>`
+jedním tlačítkem — nebo se od #453 rovnou **pustí** (do #460 v `Terminal.app`, od #460
+v zásuvce), viz níž. Osa zůstane i po doběhnutí běhu — a od #203
 **přežije i restart aplikace**: ukládá se k běhu, takže se k ní dá vrátit druhý den i s tím
 `sessionID`. Delší běh nadělá stovky událostí, proto se drží posledních 300 a kolik se jich
 nevešlo, je u rozbalení vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
@@ -1199,24 +1200,29 @@ tam pořád leží. *Prázdný* nabídne opakování, protože u běžící sess
 sheet by vypadal jako „session nic nedělala“. Do sheetu se **nepíše**: čte se, vybírá a kopíruje,
 a cesta zpátky do session zůstává `Zkopírovat resume`.
 
-**Do běžící session se dá vstoupit, jen ne uvnitř okna** (#453, návrh sekce 34). Vedle `⧉`
-(zkopíruje `claude --resume <id>`) je `▶` — **`Otevřít session v Terminálu`**, které tentýž
-příkaz rovnou pustí v `Terminal.app`, a to **v pracovním stromu té session**, aby `--resume`
-navázal tam, kde běžel. Kopírování **zůstává**: kdo si session pouští jinde (iTerm, tmux, jiný
-stroj), potřebuje text, ne cizí okno — jsou to dvě akce, ne dvě podoby jedné.
+**Do běžící session se dá vstoupit rovnou v okně** (#453, od #460 návrh sekce 35, poznámka 112).
+Vedle `⧉` (zkopíruje `claude --resume <id>`) je `▶` — **`Pustit session v terminálu`**,
+které vytáhne **zásuvku** (viz *Terminál v zásuvce* výš), přejde v ní **do pracovního stromu té
+session** a pustí tam tentýž příkaz. Strom je podmínka, ne kosmetika: `claude --resume` hledá
+vlákno podle adresáře, ve kterém se spustí. Kopírování **zůstává**: kdo si session pouští jinde
+(iTerm, tmux, jiný stroj), potřebuje text — jsou to dvě akce, ne dvě podoby jedné.
 
-**Tvrdé podmínky se tím nemění, a to je jádro té změny.** Terminál je **mimo aplikaci**: je to
-totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný terminál
-nevzniká, `ReviewPublishing` zůstává jedinou cestou ven a plnou moc má ta session tam, kde ji
-člověk čeká — ve svém terminálu, pod svým jménem a se svým `gh`. **Vestavěný terminál je
-zamítnutý**: znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, a nešel by uhlídat
-testem, protože ta cesta nevede přes kód aplikace.
+**Do #460 se tím otevíralo okno `Terminal.app`.** Změnilo se to proto, že od #459 je terminál
+v okně, takže odcházet do cizí aplikace kvůli session, která se dá pustit o kus níž, nemá důvod.
+Co odchodu do `Terminal.app` zůstalo: session tam **přežije zavření PRismu**, kdežto shell
+v zásuvce se s ním zabije. Cesta ven do `Terminal.app` je proto v kódu ještě chvíli **jako
+záloha**; z okna se dnes nepoužije.
+
+**Když v zásuvce zrovna něco běží, `▶` do toho nepíše.** Řádka poslaná do běžícího programu je
+pro něj vstup, takže by z `claude --resume …` byla zpráva odeslaná do rozdělaného `claude`.
+Zásuvka se v tom případě jen vytáhne (běžící příkaz je zrovna to, na co je potřeba se podívat)
+a ve stavovém řádku stojí, že se nic neposlalo a co s tím. Když v zásuvce shell skončil, `▶` ho
+pustí znovu — starý výpis v ní přitom zůstane.
 
 Nabízí se to **jen tam, kde je co obnovit**: bez `session_id` **a bez pracovního stromu** se
 tlačítko nekreslí (ne zašedle — u dráhy, která teprve čeká na slot, by zašedlé slibovalo něco,
-co přijde samo). Když se okno neotevře — typicky proto, že se PRismu nepovolilo ovládat Terminal
-(Nastavení systému → Soukromí a zabezpečení → Automatizace) —, **řekne se to ve stavovém řádku**
-i s tím, čím to systém vysvětlil. Neotevřené okno se totiž z aplikace nedá poznat jinak.
+co přijde samo). **Nekreslí se ani tam, kde zásuvka není** — tichý pád zpátky do `Terminal.app`
+by znamenal dvě různá chování pod jednou ikonou, tedy že se nedá spolehnout ani na jedno.
 
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
 Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že
@@ -2206,6 +2212,7 @@ App/                      zdrojáky aplikace — target PRism
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Terminal/               vestavěný terminál (#459): plocha SwiftTermu obarvená paletou, hlášení fokusu
                           a zabití popředí pty; hostitel drží jeden shell na pull request
+                          a od #460 do něj umí napsat řádku (▶ v tabu Průběh)
   Support/                sdílené drobnosti bez příslušnosti k modulu;
                           diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361) —
                           včetně rotace jejího záznamu při startu sezení (#412)

@@ -311,7 +311,9 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    **Otevřít session v uživatelově terminálu (#453) osmou cestou ven není**, a je to hranice, ne
    výjimka: terminál je **mimo aplikaci** — totéž, jako když si člověk `claude --resume` vlepí
    sám. Uvnitř okna žádný terminál nevzniká, `TerminalOpening` nemá čím na GitHub sáhnout
-   a `grep ReviewPublishing App/` vypisuje týž seznam.
+   a `grep ReviewPublishing App/` vypisuje týž seznam. **Od #460 to `▶` nepoužívá** (míří do
+   zásuvky) a ta cesta se drží **bez volajícího, jako záloha**; kdy a s čím jde ven, je
+   v [záznamu rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#osud-applescriptterminal-460).
 
    **Od #459 je terminál i uvnitř okna, a je to vědomá změna téhle podmínky** — ne její obejití.
    Do #459 tu stálo, že vestavěný terminál je **zamítnutý**, protože by nešel uhlídat testem.
@@ -329,6 +331,12 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      `plná práva`, protějšek `čte · neodesílá` z tabu `Zeptat se`.
    - **Tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache aplikace (pracovní strom
      review, nebo bare klon), nikdy v uživatelově klonu.
+   - **Od #460 do toho shellu píše i aplikace, a je to jedna řádka** (`TerminalHosting.run`,
+     `▶` v tabu `Průběh`): `cd '<strom>' && claude --resume <id>`, skládaná
+     `Policy.resumeCommand(sessionID:)` a `ShellQuoting` — **tedy tentýž text, jaký kopíruje
+     `⧉`**, a jinou aplikace poslat neumí. Do běžícího jobu se přitom **nepíše vůbec**
+     (`hasForegroundJob`), protože řádka je pro něj vstup. Plnou moc má dál **člověk**: cokoli
+     jiného než tuhle jednu řádku napíše jedině on.
 
    Podrobnosti — proč zásuvka a ne záložka, proč `SwiftTerm` a proč zrovna verze 1.11.2, jak se
    ten proces zabíjí a co je proti návrhu jinak — jsou
@@ -419,7 +427,7 @@ viz tvrdá podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kter�
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR a od #413 **založit label v repozitáři** | `gh` CLI |
-| `TerminalHost` | Vestavěný terminál (#459) — **jeden shell na pull request** v checkoutu toho PR, pty a VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty. Zápisovou metodu nemá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
+| `TerminalHost` | Vestavěný terminál (#459) — **jeden shell na pull request** v checkoutu toho PR, pty a VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty. Od #460 do něj umí napsat **jednu řádku** (`▶`), a jen tehdy, když v něm nic neběží. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá

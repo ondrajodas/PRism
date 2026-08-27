@@ -18,7 +18,8 @@ struct ReviewProgressView: View {
     /// Cíl skládá **`Policy`, ne view** (`Policy.rawSessionTarget(of:slug:)`): rozhodnutí „bez
     /// `session_id` a bez pracovního stromu tlačítko není“ je pravidlo, ne `if` v kresbě.
     var showRawSession: ((RawSessionTarget) -> Void)?
-    /// Otevře session té dráhy v Terminálu (#453). `nil` = odsud se to neotevírá.
+    /// Pustí session té dráhy v zásuvce s terminálem (#453, #460). `nil` = odsud se to nepouští —
+    /// ať už proto, že to volající neumí, nebo že v okně žádná zásuvka není.
     ///
     /// Cíl skládá **`Policy`, ne view** (`Policy.terminalSession(of:)`), ze stejného důvodu jako
     /// u `showRawSession`: „bez `session_id` a bez pracovního stromu tlačítko není“ je pravidlo.
@@ -98,7 +99,7 @@ struct ReviewProgressView: View {
         return { showRawSession(target) }
     }
 
-    /// Akce, která dráze otevře session v Terminálu (#453). `nil` = není co obnovit.
+    /// Akce, která dráze pustí session v zásuvce (#453, #460). `nil` = není co obnovit.
     private func terminal(of lane: ReviewerLane) -> (() -> Void)? {
         guard let openInTerminal, let session = Policy.terminalSession(of: lane) else { return nil }
         return { openInTerminal(session) }

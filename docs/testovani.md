@@ -6611,12 +6611,13 @@ TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/prism xcodebuild \
 se **přeskočí** — `xcodebuild` skončí `TEST SUCCEEDED` a v cílové složce nic není, což vypadá jako
 rozbitá sonda.
 
-### Zásuvka s terminálem (#459)
+### Zásuvka s terminálem (#459, `▶` do ní #460)
 
 Testuje se **rozhodnutí a stav, ne emulátor**: `TerminalDrawerTests` (čisté funkce),
 `AppStoreTerminalTests` (co store udělá s otevřením, zavřením záložky a ukončením — proti
-`FakeTerminalHost`, který žádný shell nespouští) a `AppDelegateTerminationTests` (dotaz při
-zavírání). Co se **v harnessu ověřit nedá a proto to zkouší člověk**, je vypsané níž.
+`FakeTerminalHost`, který žádný shell nespouští), `AppStoreResumeInDrawerTests` (`▶`, #460)
+a `AppDelegateTerminationTests` (dotaz při zavírání). Co se **v harnessu ověřit nedá a proto to
+zkouší člověk**, je vypsané níž.
 
 Co z toho stojí za zapamatování:
 
@@ -6632,6 +6633,15 @@ Co z toho stojí za zapamatování:
   ve smazané složce není teoretický stav; test to zkouší nad cestou, která nikdy neexistovala.
 - **Emulátor se netestuje** a je to vědomé: `SwiftTerm` má vlastní sadu testů. Rozhraní mezi ním
   a naším kódem je úzké — start, kill, fokus, barvy —, a to podstatné z něj měří sonda níž.
+- **U `▶` (#460) se tvrdí, co se do zásuvky poslalo, ne co se v ní stalo.** Rozhodnutí „běží tam
+  něco?“ dělá živý hostitel z jádra (`tcgetpgrp`), takže fake dostane výsledek podstrčený
+  (`FakeTerminalHost.outcome`) a testuje se, co s ním store udělá. Nejcennější jsou dvě tvrzení
+  o tom, co se **ne**stane: po `busy` se **nepřepíše cesta v hlavičce** zásuvky (shell se nikam
+  nepřesunul, takže by nová popiska lhala) a store **bez** hostitele si nevymyslí hlášku o něčem,
+  o co se nikdo nepokusil.
+- **Že do zásuvky jde `session.shellLine`, se tvrdí i literálem.** Text se porovnává s celou
+  řádkou `cd '…' && claude --resume …` **a** s `session.shellLine`: první podoba chytí změnu
+  uzávorkování, druhá to, že se `⧉` a `▶` rozešly.
 
 #### Sonda `EmbeddedTerminalProbe` — skutečný shell, ale bez emulátoru
 
@@ -6679,6 +6689,12 @@ aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
 5. Zavření okna s běžícím procesem se **zeptá**, a po `Ukončit` po sobě nic nenechá:
    `ps -o pid,ppid,command -p <pid shellu>` a `pgrep -f claude` nemají co vrátit.
 6. Na české klávesnici funguje `⌃;`.
+7. **`▶` v hlavičce dráhy v tabu `Průběh`** (#460): vytáhne zásuvku a session v ní **naváže** —
+   `claude` se rozjede a nabídne pokračování toho vlákna, ne nové. Do zásuvky, ve které něco běží,
+   se **nesmí nic napsat**: pusť v ní `sleep 30`, klikni na `▶` a v terminálu nesmí přibýt ani
+   znak; místo toho je věta ve stavovém řádku dole. Po `exit` v zásuvce `▶` shell **pustí znovu**
+   a starý výpis nad ním zůstane. Tohle jsou ty tři věci, které se v harnessu ověřit nedají,
+   protože se do pty odsud psát nedá (viz sonda výš).
 
 ### `⌃Tab` a shift, který mění klávesu (#245)
 

@@ -81,11 +81,12 @@ struct AppNoticesView: View {
                 if let failure = store.notificationFailure {
                     notice(failure, icon: "bell.slash")
                 }
-                // Neotevřený Terminál (#453) je tentýž případ jako notifikace: výsledek téhle
-                // akce je vidět **mimo aplikaci**, takže neúspěch vypadá k nerozeznání od toho,
-                // že se nekliklo. A stejně jako u notifikací se spravuje v Nastavení systému
-                // (Soukromí → Automatizace), kam aplikace nedosáhne — proto vlastní ikona, ne
-                // vykřičník: nejčastější příčina není rozbitá aplikace, ale nepovolený přístup.
+                // Co se nepodařilo s terminálem. Je to tentýž případ jako notifikace: výsledek
+                // téhle akce **není v okně vidět**, takže neúspěch vypadá k nerozeznání od toho,
+                // že se nekliklo — u #453 proto, že se okno otevírá mimo aplikaci, a od #460
+                // proto, že v zásuvce zůstalo všechno tak, jak bylo. Vlastní ikona, ne vykřičník:
+                // není to rozbitá aplikace, je to terminál, který někdo musí uklidit (běžící
+                // příkaz), nebo přístup, který se povoluje v Nastavení systému.
                 if let failure = store.terminalFailure {
                     notice(failure, icon: "terminal")
                 }

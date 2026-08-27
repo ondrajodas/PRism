@@ -426,14 +426,20 @@ final class AppStore {
     ///
     /// Nepovinné ze stejného důvodu jako `notifications`: živá implementace posílá Apple event do
     /// `Terminal.app`, takže by z každého testu, který si složí store, byl test otevírající okna.
+    ///
+    /// **Od #460 to `▶` nepoužívá** — drží se jako záloha, viz `openInTerminal(_:)`.
     let terminal: (any TerminalOpening)?
 
-    /// Proč se poslední pokus otevřít session v Terminálu nepovedl. `nil` = nic se nepokazilo.
+    /// Co má terminál za novinu. `nil` = nic se nepokazilo.
     ///
-    /// **Musí být vidět, a je to celý důvod, proč ten stav existuje**: okno se otevírá **mimo
-    /// aplikaci**, takže neúspěch vypadá úplně stejně jako by se nekliklo — nic se nestane a nic
-    /// se neřekne. `try?` nad tou cestou je přesně ten vzor, který `CLAUDE.md` vypisuje jako
-    /// opakovaný nález. Kreslí to `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“.
+    /// **Musí být vidět, a je to celý důvod, proč ten stav existuje**: výsledek téhle akce je
+    /// buď mimo aplikaci (#453, okno `Terminal.app`), nebo v zásuvce, ve které se **nic
+    /// nezměnilo** (#460, `busy` a `noShell`) — a obojí vypadá úplně stejně jako by se nekliklo.
+    /// `try?` nad tou cestou je přesně ten vzor, který `CLAUDE.md` vypisuje jako opakovaný nález.
+    /// Kreslí to `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“.
+    ///
+    /// Jedno pole na obojí schválně: je to jedna věta o jedné akci a dvě pole by znamenala dvě
+    /// místa, která se musí nezávisle zahazovat — z `▶` přitom vede pokaždé právě jedna cesta.
     var terminalFailure: String?
 
     /// Počitadlo načtení přepisu. Viz `RawSessionSnapshot.generation` — bez něj by dvě čtení téhož

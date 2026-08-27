@@ -97,10 +97,12 @@ enum ReviewerLaneText {
         "Zkopírovat \(Policy.resumeCommand(sessionID: sessionID))"
     }
 
-    static let openInTerminal = "Otevřít session v Terminálu"
+    /// **Od #460 je cíl zásuvka, ne `Terminal.app`** — a popisek to musí říct, protože je to
+    /// jediné, čím se `▶` představuje dřív, než se na něj klikne.
+    static let openInTerminal = "Pustit session v terminálu"
 
     static func openInTerminalHelp(sessionID: String) -> String {
-        "Otevře nové okno Terminálu v pracovním stromu té session a pustí v něm "
+        "Vytáhne zásuvku s terminálem, přejde v ní do pracovního stromu té session a pustí "
             + "\(Policy.resumeCommand(sessionID: sessionID))."
     }
 

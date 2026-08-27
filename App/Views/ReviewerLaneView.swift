@@ -28,8 +28,9 @@ struct ReviewerLaneView: View {
     /// Otevře přepis celého transcriptu (#327). `nil` = dráha nemá `session_id` nebo pracovní strom,
     /// takže se tlačítko nekreslí — viz `StepFeedView.showRawSession`.
     var showRawSession: (() -> Void)?
-    /// Pustí `claude --resume …` v Terminálu (#453). `nil` = není co obnovit, takže se tlačítko
-    /// **nekreslí** — rozhoduje o tom `Policy.terminalSession(of:)`, ne `if` tady.
+    /// Pustí `claude --resume …` v zásuvce s terminálem (#453, #460). `nil` = **není co obnovit,
+    /// nebo v okně není zásuvka** — v obou případech se tlačítko nekreslí a rozhoduje o tom
+    /// `Policy.terminalSession(of:)` se `AppStore.hasTerminalDrawer`, ne `if` tady.
     var openInTerminal: (() -> Void)?
 
     var body: some View {
@@ -110,8 +111,9 @@ struct ReviewerLaneView: View {
             }
             if let sessionID = lane.sessionID {
                 resume(sessionID)
-                // `▶` vedle `⧉`, ne místo něj (#453): kdo si session pouští jinde (iTerm, tmux,
-                // jiný stroj), potřebuje text, ne cizí okno. Jsou to dvě akce, ne dvě podoby jedné.
+                // `▶` vedle `⧉`, ne místo něj (#453, potvrzeno #460): kdo si session pouští jinde
+                // (iTerm, tmux, jiný stroj), potřebuje text, ne cizí plochu. Jsou to dvě akce, ne
+                // dvě podoby jedné.
                 if let openInTerminal { terminal(sessionID, action: openInTerminal) }
             }
         }
@@ -155,12 +157,12 @@ struct ReviewerLaneView: View {
         .help(ReviewerLaneText.copyResume(sessionID: sessionID))
     }
 
-    /// Tentýž příkaz, jen rovnou puštěný — `▶` z návrhu, sekce 34 (#453).
+    /// Tentýž příkaz, jen rovnou puštěný — `▶` z návrhu, sekce 34 a poznámka 112 (#453, #460).
     ///
-    /// **Vestavěný terminál to není a nebude**: ten by znamenal, že se z okna dá spustit
-    /// `gh pr merge` i `git push`, tedy že tvrdá podmínka č. 1 přestane platit — a nepůjde ji
-    /// uhlídat testem, protože ta cesta nevede přes kód aplikace. Tohle je totéž bez té ceny:
-    /// session dostane plnou moc tam, kde ji člověk čeká, ve svém terminálu a pod svým jménem.
+    /// **Od #460 míří do zásuvky, ne do `Terminal.app`**: session je odteď v okně, tak není důvod
+    /// odcházet. Do #459 tady stálo, že vestavěný terminál to nebude, protože by se z okna dal
+    /// spustit `gh pr merge` i `git push`; obojí je pořád pravda a rozhodnutí vyměnit tu záruku
+    /// za funkci padlo u #459 — kapsle `plná práva` v hlavičce zásuvky to říká na obrazovce.
     private func terminal(_ sessionID: String, action: @escaping () -> Void) -> some View {
         Button(ReviewerLaneText.openInTerminal, systemImage: "play.fill", action: action)
             .labelStyle(.iconOnly)

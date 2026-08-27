@@ -157,6 +157,13 @@ final class FakeTerminalHost: TerminalHosting {
     private(set) var stoppedAll = 0
     private(set) var handed: [PRIdentifier: URL] = [:]
 
+    /// Jak dopadne příští `run(_:for:in:)` (#460). Rozhodnutí, jestli je zásuvka zaneprázdněná,
+    /// dělá živý hostitel z jádra (`tcgetpgrp`), takže se sem v testu podstrčí hotový výsledek.
+    var outcome: TerminalCommandOutcome = .started
+
+    /// Co po sobě `▶` nechalo: řádka, pull request a adresář.
+    private(set) var ran: [(line: String, pr: PRIdentifier, directory: URL)] = []
+
     var report: (@MainActor (PRIdentifier, TerminalRunState) -> Void)?
     var focusChanged: (@MainActor (Bool) -> Void)?
 
@@ -165,6 +172,16 @@ final class FakeTerminalHost: TerminalHosting {
     func terminal(for pr: PRIdentifier, in directory: URL) -> NSView {
         handed[pr] = directory
         return NSView()
+    }
+
+    @discardableResult
+    func run(
+        _ commandLine: String,
+        for pr: PRIdentifier,
+        in directory: URL
+    ) -> TerminalCommandOutcome {
+        ran.append((commandLine, pr, directory))
+        return outcome
     }
 
     @discardableResult

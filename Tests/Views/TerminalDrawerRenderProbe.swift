@@ -158,6 +158,16 @@ private final class ProbeTerminalHost: TerminalHosting {
         return view
     }
 
+    /// Sonda kreslí, nespouští — a bez shellu není kam psát (#460).
+    @discardableResult
+    func run(
+        _ commandLine: String,
+        for pr: PRIdentifier,
+        in directory: URL
+    ) -> TerminalCommandOutcome {
+        .noShell
+    }
+
     @discardableResult
     func stopTerminal(for pr: PRIdentifier) -> Bool { views.removeValue(forKey: pr) != nil }
 

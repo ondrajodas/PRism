@@ -5220,3 +5220,50 @@ kam sednout, #392, #434): že se zkratky s fokusem v terminálu doopravdy neupla
 aplikace nezbyde běžící proces. Seznam kroků je v [`testovani.md`](testovani.md).
 
 **`▶` v tabu `Průběh` zůstává na `Terminal.app`** — přepojení na zásuvku je **#460**.
+
+## #460 — `▶` v `Průběhu` pouští session v zásuvce, ne v `Terminal.app`
+
+Tlačítko `▶` v hlavičce dráhy přestalo otevírat cizí okno a **vytáhne zásuvku** (#459), ve které
+pustí `claude --resume <id>` v pracovním stromě té session. Návrh to má zakreslený od #459 — sekce
+35, poznámka 112 —, takže brána na vzhled proběhla dřív, než issue vzniklo; sekce 34 zůstává
+záznamem toho, co bylo dřív. `⧉` (`Zkopírovat resume`) **zůstává**: kdo si session pouští v iTermu,
+tmuxu nebo na jiném stroji, potřebuje text. `Policy.resumeCommand(sessionID:)` a `ShellQuoting` se
+použily **beze změny**, takže to, co se kopíruje, a to, co se pouští, se nemá čím rozejít.
+
+**Posílá se celá `shellLine`** — `cd '<strom>' && claude --resume <id>`, tedy tatáž řádka, jakou od
+#453 dostával `Terminal.app`. `cd` v ní není nadbytečné: zásuvka smí mít shell puštěný odjinud
+(`` ⌃` `` nad bare klonem, protože review ještě neběželo) a `claude --resume` hledá vlákno **podle
+adresáře**. Bez něj by to selhalo právě v tom případě a **větou o session**, ne o adresáři.
+
+**Když v zásuvce něco běží, nepíše se tam.** Řádka poslaná do shellu je pro běžící program **vstup**
+— v rozdělaném `claude` by z toho byla odeslaná zpráva —, takže se `▶` jedním voláním zeptá jádra na
+popředí pty (`tcgetpgrp`, totéž, co dělá `kill()`) a při obsazeném popředí **nepošle nic**. Zásuvka
+se přesto vytáhne (běžící příkaz je zrovna to, na co je potřeba se podívat) a ve stavovém řádku
+stojí, co se stalo a jaké jsou dvě cesty dál. Zamítnuté bylo poslat to tam stejně, přerušit běžící
+příkaz za člověka a pustit druhý shell vedle. **Skončený shell `▶` pustí znovu** na téže ploše, aby
+tlačítko nepřestalo fungovat po jednom `exit`; starý výpis v ní zůstane.
+
+**Dvě věci jsou změřené pty sondou, ne odhadnuté.** Píše se `CR` (to, co posílá `↵`) a měřením
+vyšlo, že `CR` i `LF` projdou stejně — 4 běhy ze 4 v obou fázích —, takže rozhodlo pravidlo, ne
+rozdíl. A **nečeká se na prompt**: bajty zapsané dřív, než `ZLE` naběhne, počká linková disciplína
+ve vstupním bufferu a shell je zpracuje na prvním promptu (5 z 5, i s `.zshrc`, který před promptem
+sekundu spí). Cena je jedna **ozvěna řádky navíc nad promptem**; zamítnuté bylo počkat na první
+výstup shellu, protože by to přidalo stav a **nové selhání** pro shell, který sám od sebe nic
+nevypíše — a v harnessu se to nedá ověřit vůbec (#459 změřilo, že hlavní dispatch fronta
+testovacího hostu se nedrání).
+
+**`AppleScriptTerminal` se nemaže** — zůstává bez volajícího i s `NSAppleEventsUsageDescription`,
+a je to rozhodnutí na jedno vydání s napsanou podmínkou zániku (specifikace, *Osud
+`AppleScriptTerminal`*): shell v zásuvce se zabije se zavřením aplikace, kdežto okno `Terminal.app`
+session přežije, a PRism se restartuje po každém mergi. Jestli to v praxi chybí, se pozná jedině
+používáním. Mrtvé pole z toho nezůstane: do `AppStore.terminalFailure` od #460 píše `▶` sám.
+
+Testů **4260**, všechny zelené — z toho **9 nových**: `Policy` výčtem (mlčí se nad povedeným koncem,
+u `busy` je ve větě i druhá cesta, u `noShell` se důvod nehádá) a to podstatné ze storu —
+**zásuvka se vytáhne**, jde do ní `session.shellLine`, po `busy` se **nepřepíše cesta v hlavičce**
+a store bez hostitele **nenabízí `▶` a nevymýšlí si hlášku**.
+
+**Co ověřuje jedině člověk**: že se session v zásuvce doopravdy naváže a že `claude` v ní vypadá
+jako v Terminálu. Do pty se v harnessu psát nedá (změřeno u #459: `send` jde přes druhý `DispatchIO`
+kanál nad deskriptorem, jehož první kanál visí na hladové hlavní frontě, takže `exit` vycházel
+2 z 5) a obsah emulátoru se odtud nepřečte vůbec.

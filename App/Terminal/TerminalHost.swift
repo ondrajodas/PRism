@@ -28,6 +28,45 @@ final class TerminalHost: TerminalHosting {
     var runningTerminals: Int { views.values.count { $0.isRunning } }
 
     func terminal(for pr: PRIdentifier, in directory: URL) -> NSView {
+        surface(for: pr, in: directory)
+    }
+
+    /// `▶` v hlavičce dráhy (#460) — napiš do zásuvky řádku, jako by ji člověk odeslal.
+    ///
+    /// **Plocha se vyrábí toutéž cestou jako pro `` ⌃` ``** (`surface(for:in:)`), takže zásuvka,
+    /// která se pak otevře, ukáže tenhle shell a ne druhý — idempotence z `terminal(for:in:)` je
+    /// podmínka i tady.
+    @discardableResult
+    func run(
+        _ commandLine: String,
+        for pr: PRIdentifier,
+        in directory: URL
+    ) -> TerminalCommandOutcome {
+        let view = surface(for: pr, in: directory)
+        if view.isRunning {
+            // Pořadí schválně: **napřed se ptáme, jestli je kam psát**. Opačně by se řádka poslala
+            // a teprve pak by se zjistilo komu.
+            guard !view.hasForegroundJob else { return .busy }
+            // Že řádka odešla, se **čte z výsledku**: shell umí hlásit `running` i po zavření pty
+            // (viz `send(line:)`), a `start(in:)` by nad ním neudělal nic — takže tam už není co
+            // zkoušet a jediná pravdivá odpověď je „shell nemá kdo přečíst“.
+            return view.send(line: commandLine) ? .sent : .noShell
+        }
+        // Shell po `exit` nebo po pádu. `start(in:)` si běžící proces hlídá sám, takže tady
+        // znamená „pusť ho znovu“ — starý výpis přitom v ploše zůstane, což je pro čtení
+        // předchozí session spíš dobře.
+        view.start(in: directory)
+        // **Stav se čte, ne předpokládá** (tatáž úvaha jako u `start(in:)`): `SHELL` umí mířit na
+        // binárku, která neexistuje, a `fork`/`exec` umí selhat. `started` nad neběžícím shellem
+        // by tvrdilo, že se něco pustilo, a řádka by se přitom neměla kde přečíst.
+        return view.send(line: commandLine) ? .started : .noShell
+    }
+
+    /// Plocha toho pull requestu — **vyrobí ji, když ještě není, jinak vrátí tutéž**.
+    ///
+    /// Vrací `EmbeddedTerminalView`, ne `NSView`: `run(_:for:in:)` se jí potřebuje ptát na stav
+    /// shellu, a přetypovávat zpátky to, co jsme právě vyrobili, je jen zdroj druhé pravdy.
+    private func surface(for pr: PRIdentifier, in directory: URL) -> EmbeddedTerminalView {
         if let existing = views[pr] { return existing }
         // Nenulový rámec schválně: `SwiftTerm` si z něj počítá sloupce a řádky, a na nulové ploše
         // by z toho vyšlo `0×0`. Skutečnou velikost dostane hned prvním rozvržením, které pošle

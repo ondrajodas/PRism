@@ -255,4 +255,31 @@ struct TerminalDrawerTests {
         #expect(both.contains("reviewer nahlásil"))
         #expect(both.contains("nikam neukládá"))
     }
+
+    // MARK: - Co se řekne po `▶` (#460)
+
+    /// **Nejcennější tvrzení téhle části**: nad povedeným koncem se mlčí. Hláška „session se
+    /// pustila“ nad zásuvkou, ve které je ta session vidět, je text navíc nad tím, co má člověk
+    /// před očima — a stavový řádek se tím naučí ignorovat.
+    @Test("Povedený konec nic nehlásí")
+    func aSuccessSaysNothing() {
+        #expect(Policy.resumeNotice(.started) == nil)
+        #expect(Policy.resumeNotice(.sent) == nil)
+    }
+
+    /// Obojí je stav, ve kterém se **v zásuvce nic nezměnilo** — bez věty by `▶` vypadalo jako
+    /// tlačítko, které nic nedělá. Vyjmenované zvlášť, protože se s každým naloží jinak.
+    @Test("Neposlaná řádka se řekne, a s důvodem")
+    func aRefusalIsSpelledOut() throws {
+        let busy = try #require(Policy.resumeNotice(.busy))
+        #expect(busy.contains("něco běží"))
+        // **Druhá cesta patří do věty**: přerušit běžící příkaz kvůli tomu, že se někam neposlal
+        // jiný, je rozhodnutí člověka, ne jediná nabídnutá možnost.
+        #expect(busy.contains("Zkopírovat resume"))
+
+        let noShell = try #require(Policy.resumeNotice(.noShell))
+        #expect(noShell.contains("nepodařilo spustit"))
+        // Důvod se **nehádá** — sem se dojde, až když selhal i `/bin/zsh`.
+        #expect(!noShell.contains("SHELL"))
+    }
 }

@@ -41,6 +41,22 @@ protocol TerminalHosting: AnyObject {
     /// takže nová plocha při každém překreslení by znamenala nový shell při každém překreslení.
     func terminal(for pr: PRIdentifier, in directory: URL) -> NSView
 
+    /// Napíše řádku do zásuvky toho pull requestu — `▶` v hlavičce dráhy (#460).
+    ///
+    /// Plochu **vyrobí, když ještě není**, a shell v ní **pustí znovu, když skončil**: `▶` je
+    /// žádost o běžící session, takže tlačítko, které po jednom `exit` přestane fungovat, by
+    /// nechalo jako jedinou cestu zpátky zavření záložky.
+    ///
+    /// **Do běžícího jobu se nepíše** (`busy`) — řádka je pro něj vstup, ne příkaz, takže by
+    /// v běžícím `claude` z `claude --resume …` byla odeslaná zpráva. Co se stalo, se proto vrací
+    /// volajícímu a ten to řekne; hostitel sám nic nekreslí.
+    @discardableResult
+    func run(
+        _ commandLine: String,
+        for pr: PRIdentifier,
+        in directory: URL
+    ) -> TerminalCommandOutcome
+
     /// Zabije shell toho pull requestu; `true`, když nějaký běžel.
     ///
     /// **Volá se ze zavření záložky, ne ze schování zásuvky.** Zásuvka je pohled — `` ⌃` `` shell
