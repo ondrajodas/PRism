@@ -30,7 +30,13 @@ struct DiffPairBlockRowView: View {
     /// znamenalo platit celý jeho layout při každém posunu.
     @State private var placement = DiffBlockPlacement()
 
+    /// **Blok se nasazuje jen v pásu kolem výřezu** (#469) — viz `DiffBlockSlot`. Ve split pohledu
+    /// o to víc: jedna dvojice jsou **dva** `NSTextView`.
     var body: some View {
+        DiffBlockSlot { mounted }
+    }
+
+    private var mounted: some View {
         DiffPairBlockView(
             block: block,
             language: language,

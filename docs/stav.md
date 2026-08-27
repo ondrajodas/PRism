@@ -5080,3 +5080,61 @@ jako #462 a vyřešilo se to tam; od jeho mergnutí do `main` **doběhne plný b
 a `AskComposerTests` si okno ukazovaly `orderFront(nil)`, tedy s animací objevení, kterou #462
 zakázalo — od merge používají `orderFrontUnanimated()`. Je to přesně ta situace, kvůli které je
 ta stráž nad zdrojáky: obě sondy vznikly dřív, než pravidlo, a bez ní by se do `main` dostaly.
+
+## #469 — okno tuhne nad diffem: kolo z #361 se nepřestěhovalo znovu, ale zaniklo
+
+**Zadání znělo „udělej cokoliv, aby se to nesekalo“**, ne „vysvětli to“. Patnáct kol #361 udělalo
+kolo levnější a odebralo mu jedno místo — osu konverzace —, jenže se tím **přestěhovalo do diffu**:
+dva `sample`y z hořící instance 27. 8. měly `LazySubviewPlacements.placeSubviews` na 25 % vzorků
+hlavního vlákna, `FileDiff.diagnosedID` i `DiffRow.diagnosedID` v zásobníku a nula `ConversationRow`.
+Věta „nad **Soubory** se tatáž třída kola vrátit může“, kterou #361 nechalo v `docs/testovani.md`
+jako výhradu, se tím stala předpovědí.
+
+**Diff proto od #469 nekreslí `LazyVStack`.** Je to vědomá změna pravidla z #361 („líný seznam patří
+tam, kde je seznam neomezený“): neomezenost není důvod ten vzor snést, protože kolo je vlastnost
+lazy layoutu, ne délky seznamu.
+
+**Samotný pevný stack by ale diff položil, a to se změřilo dřív, než se cokoli rozhodlo.** Nová
+sonda `DiffShapeProbe` poměřila pět podob téhož místa a rozhodly dvě věci: pevný stack **bez
+nasazených bloků** je v počtu řádků **plochý** (0,17–0,20 s CPU na 150 × 40 pt, ať je řádků 500 nebo
+6000) a **třikrát levnější než líný seznam**, kdežto pevný stack **se všemi bloky** stojí 2,96 s na
+20 blocích a **21 s** na 108. Cena projíždění tedy roste s počtem nasazených `NSTextView`, ne
+s délkou seznamu — a `updateNSView` se při tom gestu nevolá ani jednou, takže to není naše práce.
+
+**Laznost se proto nezahodila, jen přestěhovala z rozvržení do jednoho rozhodnutí.**
+`Policy.mountBand(visible:)` řekne, ve kterém pásu obsahu má blok živý `NSTextView`; mimo pás zbyde
+`Color.clear` s naposledy změřenou výškou. Nasazených bloků je **šest bez ohledu na velikost diffu**
+(změřeno u 500, 6 000, 20 000 i 50 000 řádků; bez okna 20 / 108 / 340 / 840) a projíždění vyšlo
+0,73 s u 500 řádků a 0,86 / 0,85 s u 6000, tedy proti líným 0,58 a 0,57 / 0,51 s **flat a ve stejném
+řádu**.
+
+**Doloženo je to strukturálně, ne tím, že po opravě nehořelo.** Kolo se za čtrnáct kol #361 nedalo
+vyrobit na povel, takže „nehoří“ nedokazuje nic a v téhle větvi to nikde nestojí. Doklad je tentýž,
+jakým to #361 doložilo u osy: v evaluačním zásobníku pod řádkem diffu je u `LazyVStack`u
+`LazySubviewPlacements` ve **2 vzorcích ze 2**, u pevného stacku v **nule** — a `LazySubviewPlacements`
+je jmenovitě ten atribut z hořícího `sample`u.
+
+**Zaplatilo se to prvním rozvržením a je to napsané i tam, kde je to vysoké**: 50 ms u 6000 řádků,
+206–304 ms u 20 000 a 983–1534 ms u 50 000 (Debug). Odhad výšky by tu cenu ušetřil a **je zamítnutý**:
+obsah pod prstem by měnil výšku pokaždé, když se blok poprvé nasadí, a skok na nález by mířil vedle.
+Zbylá odchylka je **0,4 %** a konverguje (46 065 → 46 241 pt u 2000řádkového diffu), kdežto
+`LazyVStack` u 6000řádkového diffu odhadoval 99 687 pt tam, kde pevný stack **změří** 112 507 —
+**12 % vedle**, a nedorovnal to nikdy; posuvník tedy od #469 lže míň, ne víc.
+
+**Ukotvenou hlavičku souboru uměl jedině `LazyVStack(pinnedViews:)`, a zahodit ji nešlo** — v návrhu
+je `.fhead { position: sticky; top: 0 }`, takže je to vzhled. Kreslí se proto jedna přes výřez
+(`DiffPinnedHeader`, rozhoduje `Policy.pinnedFileHeader`). **Posouvat každou hlavičku zvlášť je
+zamítnuté měřením** (0,83 s CPU navíc na 24 souborech) a `visualEffect`, který by ten posun udělal
+zadarmo, **nesleduje hit testing** — a hlavička je celá tlačítko.
+
+**Dvě věci na tom nejsou zjevné a stály kolo měření.** První: rámečky se musí číst v souřadnicích
+**obsahu**, ne výřezu — první podoba se ptala každého bloku a každé hlavičky na rámeček ve výřezu,
+tedy na hodnotu, která se scrollováním mění, a stálo to 3,5 s CPU proti 0,19 s. Druhá: `DiffViewport`
+má **dvě** vlastnosti schválně, protože `@Observable` sleduje po vlastnostech — `band` čtou všechny
+bloky a mění se jednou za výřez, `top` se mění při každém snímku a čte ho **jediné** view.
+
+**Co zůstalo nedokázané**, a je to zapsané: že záchvat nepřijde, se tvrdit nedá; osm dalších
+`LazyVStack`ů v aplikaci (strom souborů, tabulka nálezů, dění, commity, panel, výpis kroků, fakta,
+průběh) **mají strop**, takže u nich platí pravidlo z #361 nezměněné, ale vyloučené to není. A cena
+projíždění se u velkých diffů měří **jen na odemčené obrazovce** — pod zamčenou gesto nikam
+neposune a všechny podoby vyjdou shodně, což se pozná podle záporného `dojelo na …` ve výpisu sondy.

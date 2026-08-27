@@ -547,8 +547,18 @@ než pravidlo obejdeš**, protože většina z nich se v harnessu neprojeví.
   téže krabice, ze které kreslí `placeSubviews`; hlídá to `LazyIdealSizeTests`
   ([rozbor](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361)). Je to
   ale [zlevnění, ne oprava](docs/architektura.md#nezastavilo-to-nic-a-je-to-změřené-361-třinácté-kolo).
-- **Líný seznam patří tam, kde je seznam neomezený** (diff — tisíce řádků), ne tam, kde má strop
-  (osa konverzace má nejvýš čtyři stovky uzlů a od #361 líný seznam nemá vůbec). `List` je
+- **`LazyVStack` v diffu ani na ose konverzace nepatří, a je to změna proti #361** (#469). Do #469
+  tu stálo, že líný seznam patří tam, kde je seznam neomezený — tedy do diffu. Kolo z #361 se ale
+  po opravě osy **přestěhovalo právě tam** (dva `sample`y ze živého záchvatu, `LazySubviewPlacements`
+  25 %, `FileDiff.diagnosedID` i `DiffRow.diagnosedID` v zásobníku), takže neomezenost není důvod
+  ten vzor snést: je to vlastnost lazy layoutu, ne délky seznamu. Diff proto kreslí **pevný
+  `VStack`** a laznost se přestěhovala z rozvržení do jednoho rozhodnutí — blok kódu má živý
+  `NSTextView` jen v pásu kolem výřezu (`Policy.mountBand(visible:)`, `DiffBlockSlot`), ukotvenou
+  hlavičku kreslí `DiffPinnedHeader` přes výřez a jediné místo, kam se scrollování zapisuje, je
+  `DiffViewport`. **Bez toho okna by pevný stack diff položil** (6000 řádků: 21 s CPU proti 0,86 s
+  s oknem), a **cena projíždění roste s počtem nasazených `NSTextView`, ne s délkou seznamu** —
+  hlídá to `DiffMountingTests`, čísla i ablace jsou
+  v [`docs/architektura.md`](docs/architektura.md#pevný-seznam-a-nasazování-bloků-469). `List` je
   změřený a zamítnutý — výška obsahu je u něj odhad, takže posuvník lže; hlídá to
   `ConversationAxisEagerTests` ([cena](docs/architektura.md#patnácté-kolo-osa-líný-seznam-nemá-361)).
 - **Nevyjednává se ani počet prvků** (#252): overlay nad blokem kódu měl plochu, gesto a čtení
@@ -567,7 +577,9 @@ než pravidlo obejdeš**, protože většina z nich se v harnessu neprojeví.
 grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'    # výčet k posouzení, ne prázdný
 grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'       # šest míst + modifikátor sám
-grep -n 'LazyVStack' App/Views/ConversationView.swift            # musí vyjít prázdný
+# Prázdný (#361, #469) — filtr zahazuje komentáře, ve kterých se to rozhodnutí vysvětluje.
+grep -n 'LazyVStack' App/Views/ConversationView.swift App/Views/DiffView.swift |
+    grep -vE ':[0-9]+: *//|:[0-9]+: *///'
 grep -rn 'LazyVStack\|LazyVGrid' App | grep -vE ':[0-9]+: *//'   # výčet: má ten seznam strop?
 grep -n 'ForEach(Array(' App/Views/ConversationView.swift App/Views/ThreadBubbleView.swift
 grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k posouzení, ne prázdný
