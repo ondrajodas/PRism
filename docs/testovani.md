@@ -751,6 +751,60 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   u šipek z #392, ale klávesa v harnessu nemá kam přijít — testovací host **nedostane aktivaci**
   (změřeno u #392), takže pole nemá key okno. Ověří to člověk v pauze; totéž platí o `POST /labels`
   proti živému API, protože brána je ve slotové konfiguraci vypnutá schválně.
+- **Merge vlastního PR z panelu (#465)** — **osmá cesta ven a první, která mění `main`**, takže se
+  u ní hlídá totéž co u těch sedmi a k tomu dvě věci, které jinde neexistují: **výčet důvodů, proč
+  se akce nenabídne**, a **hlava jako podmínka volání**.
+  - **`BranchMergeTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve kterých
+    se merge **nenabídne**: cizí PR (tam se nekreslí ani nadpis sekce), vypnutá brána, **nenačtený
+    stav větve** (`nil` i `.loading` i `.failed` — u nevratné akce je „nevím“ vlastní odpověď, ne
+    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev,
+    **červený check** a **vlastní blokující nález**. K tomu dvě rozhodnutí, která se dají potichu
+    obrátit: **běžící a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem**
+    (nad větou „je konflikt“ by věta „nevím“ nedávala smysl).
+
+    Řádky stavu se tvrdí **textem, ne strukturou**: `3 commity · 2 checky` / `zeleno` proti
+    `1 commit · 2 checky` / `1 neprošel` — skloňování je v nich to, co se rozbije nejtišeji. A
+    **„bez checků“ a „checky se načítají“ jsou dvě různé odpovědi**: PR bez CI je běžný stav, kdežto
+    nenačtené checky o PR netvrdí nic.
+  - **`MergePublishingTests`** — bez povolení, na zavřeném a mergnutém PR, na **posunuté hlavě**
+    a s prázdnou hlavou je **`runner.invocations.isEmpty`**. Tři tvrzení jsou zvlášť pro tuhle metodu:
+    **payload nese přesně tři pole** (`commit_title`, `merge_method`, `sha`) na hotových bajtech —
+    `commit_message` v něm schválně **není**, protože tělo squash commitu skládá GitHub ze zpráv
+    slévaných commitů; **metoda se čte z konstanty**, kterou používá i potvrzení; a **`merged: false`
+    se nebere jako úspěch**, i když návratový kód byl nula.
+
+    Fixtures jsou **skutečné odpovědi**, změřené na `ondrajodas/prism-review-sandbox#8` — sonda tam
+    byla pro tenhle účel založená, třikrát pushnutá a nakonec mergnutá. `409` (`Head branch was
+    modified…`) je skutečné tělo z pokusu s cizí `sha`, `pr-merged.json` skutečná odpověď mergu. Text
+    `405` (`Pull Request is not mergeable`) je proti tomu **z dokumentace, ne změřený**, a je u něj
+    napsáno proč: vyrobit ho by chtělo PR v konfliktu nebo draft, a převedení sondy na draft zakázala
+    permission brána. Je proto inline JSONem, aby se nepletl se skutečnými fixtures.
+  - **`AppStoreMergeTests`** — tady se hlídá, **kdy se aplikace vůbec ptá**: na cizí PR a na mergnutý
+    se na slévatelnost **neptá vůbec** (`branchStatusRequests.isEmpty`), druhý příchod na PR se neptá
+    znovu a selhání se nezahodí do prázdna. K tomu nula spuštění `gh` bez brány, na cizím PR a nad
+    červeným checkem — `mergeSubmission(for:)` vrátí `nil`, takže se sheet nad neproveditelným mergem
+    neotevře ani tehdy, kdyby se na zakázané tlačítko nějak kliknout dalo. A po úspěchu **jedno**
+    volání `gh` a **dvě čtení detailu navíc** (pre-flight a načtení stavu po mergi) — to druhé je to,
+    na čem stojí, že panel merge nenabídne podruhé.
+
+    Podstrčit mergnutý detail **dopředu** tady nejde: pre-flight publisheru se ptá tou samou gateway,
+    takže by merge odmítl ještě před voláním. Že se z mergnutého stavu stane `notOpen(.merged)`, proto
+    tvrdí `BranchMergeTests` nad čistou funkcí a store se ptá jen na to, že se pro ten stav došlo.
+  - **`GhGatewayTests`** (rozšířené) — **líné pole**. Usazená odpověď se ptá **jednou**, `UNKNOWN`
+    se doptá, po **třech** pokusech se vrátí `UNKNOWN` jako **odpověď, ne chyba** (z chyby by panel
+    napsal „nepodařilo se zjistit“, což je něco jiného), neznámý stav se **nepřekládá na čistý**
+    a chybějící `mergeStateStatus` odpověď **nepoloží** — GitHub ho vydá jen tomu, kdo má na
+    repozitář zápis. Čeká se v testu **nula sekund** (`branchStatusDelay: .zero`), protože se měří
+    počet dotazů, ne trpělivost.
+  - **`SingleWayOutTests`** — **sedm souborů, pět volajících, osm metod** jmenovitě, a `merge` z
+    výčtu zakázaných **zmizel**; zůstává approve mimo review, `close`, milník a `deleteLabel`.
+    Je to jediné místo v repu, kde se ta změna pravidla dá přečíst jako změna, ne jako díra.
+  - **`WindowShortcutsTests`** — `Views/MergeSheet.swift` přibyl do jmenovitého výčtu souborů, které
+    si klávesu berou samy (`⎋` na `Zrušit`). Tlačítko, které merguje, zkratku **nemá**.
+
+  **Co testy neověří:** že `PUT /pulls/{n}/merge` projde z běžící aplikace — brána je ve slotové
+  konfiguraci vypnutá schválně, takže se akce v proklikávané instanci nenabídne, dokud si ji člověk
+  nezapne. Ověřené je to **mimo aplikaci**, tímtéž voláním na sondě.
 - **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
   test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
   rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají

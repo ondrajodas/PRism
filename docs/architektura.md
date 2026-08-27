@@ -8305,6 +8305,41 @@ Nad odesílatelností draftu (#68) platí:
   hlava z detailu by mluvila o commitu, se kterým ty nálezy nemají nic společného. Text věty patří
   k tomu výčtu (`czechSentence`), aby se testoval tam, kde se rozhoduje, a ne odečítáním pixelů.
 
+### Sekce `Větev` v panelu (#465)
+
+Třetí sekce nad segmenty, pod labely a reviewery (návrh, sekce 36). Nese **stav** (kam se to slévá,
+jestli je větev srovnaná, jak dopadly checky) a **akci, která z toho stavu plyne**; je to zároveň
+základ pro `Srovnat s main` (#466), proto je to `stav + nabídka`, ne jedno tlačítko.
+
+**Rozhoduje `Policy.branchSection`, ne view.** Řádek „srovnaná / za základem“ a zašednutí tlačítka
+odpovídají na tutéž otázku, takže dvě skládání by uměla říct každé něco jiného — a u nevratné akce
+je to ten nejdražší druh rozejití.
+
+**Tři stavy nabídky, ne boolean** (`Policy.MergeOffer`), tatáž úvaha jako u `MetadataEditing`:
+
+- **`absent` na cizím PR** — akce se nekreslí **vůbec**, ani nadpis sekce. Mergnout frontu někoho
+  jiného se odsud nedělá nikdy, takže zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“.
+- **`blocked([důvody])`** tam, kde se stav **mění**: vypnutá brána, červený check, větev pozadu,
+  konflikt, chráněná větev, vlastní blokující nález, nenačtený stav. Důvody jsou **vyjmenované, ne
+  jedna věta**, protože každý vede jinam — a jsou **v panelu**, ne jen v nápovědě pod kurzorem
+  (zašedlé tlačítko bez věty je otázka, na kterou okno neodpoví; tatáž úvaha jako u #392).
+- **`allowed`** jedině tehdy, když nesvítí žádný z nich.
+
+Dvě rozhodnutí, která nejsou zjevná:
+
+- **Spadlý check merge blokuje, i když by ho GitHub pustil.** `UNSTABLE` znamená „nepovinný check
+  spadl“ a GitHub merge dovolí; aplikace je tady schválně **striktnější** — tatáž úvaha jako
+  u odpovědi na zavřeném PR (#73). Zeleno je jediný stav, ve kterém se dá mergnout bez čtení.
+  **Běžící check naopak nebrání**: mergnout rozběhnutou CI je legitimní rozhodnutí a povinný check
+  zavře GitHub sám (`BLOCKED`).
+- **`BLOCKED` se nepřekládá na „červený check“.** GitHub ho vrací i tehdy, když chybí schválení,
+  a hlavně **i tomu, kdo do repozitáře nemá zápis** — změřeno na `cli/cli#14278`, kde vyšel
+  u `MERGEABLE`. Věta proto jmenuje **všechny tři** možnosti; vybrat jednu by byla určitá nepravda.
+
+**Počet commitů „o kolik je větev vzadu“ v #465 není**, ačkoli ho návrh kreslí. `mergeStateStatus`
+ho nedává a `compare` API by za jedno číslo stáhlo celý seznam souborů. Přijde s #466, kde bude po
+ruce klon v cache a spočítá se lokálně; do té doby stojí v řádku `za základem` bez čísla.
+
 ## `GitHubGateway` (`App/GitHub/`)
 
 Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvacet jedna** metod
@@ -8652,6 +8687,31 @@ Co k nabídce labelů přidalo **zakládání nového** (#413):
   jen pro sondy.** Není to binding — sonda nemá klávesnici, takže druhou obrazovku jinak nevyfotí;
   v aplikaci se ani jedno nepředává.
 
+### Slévatelnost větve je **líné pole** (#465)
+
+`mergeable` i `mergeStateStatus` se u GitHubu počítají **až na vyžádání**: dotaz, který je nezastihne
+hotové, dostane `UNKNOWN` (v RESTu `null`) a **sám ten výpočet spustí**. Kdo se zeptá jednou, dostane
+zašedlé `Mergnout…` podle náhody, proto se `GhGateway.fetchBranchStatus` ptá opakovaně (tři pokusy,
+vteřina mezi nimi).
+
+**Co je z toho změřené a co ne**, aby se to příště nemuselo měřit znovu:
+
+- Změřené: `UNKNOWN` je **trvalý stav mergnutého PR** (`PRism#470`, obě pole). Proto se
+  `loadBranchStatus` na zavřeném a mergnutém PR neptá vůbec — vyčerpal by všechny pokusy včetně
+  čekání mezi nimi, a `Policy.mergeOffer` tu odpověď stejně přebije stavem PR.
+- Změřené: `UNKNOWN` se na malém repu **nepodařilo zastihnout**. Na `prism-review-sandbox#8` vyšlo
+  `MERGEABLE`/`CLEAN` hned po založení PR i hned po každém ze tří pushů, přes GraphQL (`gh pr view`)
+  i přes REST. Opakovaný dotaz je tedy pojistka proti **doloženému chování API**, ne proti stavu,
+  který se povedlo vyrobit — a stojí nula, dokud odpověď chodí usazená.
+- **Tři pokusy jsou volba, ne měření**: kolik jich GitHub potřebuje, se zvenku zjistit nedá. Dvě
+  vteřiny čekání v nejhorším případě jsou pod hranicí, kdy by si člověk stihl všimnout, že panel na
+  něco čeká.
+
+**Ptá se jen na vlastním PR**, na rozdíl od labelů: na cizím se sekce nekreslí, takže by to bylo
+volání za nic — a je to zrovna to volání, které si na straně GitHubu vyžádá výpočet. Čte se **jako
+poslední** v řadě za detailem, checky, commity a labely, ze stejného důvodu jako ostatní: každé je
+`gh` podproces a paralelní spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících.
+
 ## `ReviewPublisher` (`App/Publish/`)
 
 **Jediná cesta, kterou z aplikace něco odejde na GitHub.** Vznikl v #67 a nahradil tvrdou
@@ -8921,6 +8981,65 @@ dokumentace. Výjimka se proto platí **viditelností** (`AppStore.createLabel(_
   sadu, kterou první polovina ještě nedokončila.
 - **Když spadne první volání, mezistav nevzniká**: je to obyčejné `failed` a v nabídce po tom
   nezůstane řádek, který neexistuje.
+
+### Merge vlastního PR (#465) — osmá metoda, a první, která mění `main`
+
+Vědomá změna tvrdé podmínky č. 1, a **největší, jaká v ní zatím byla**: do #465 stálo v `CLAUDE.md`
+i v `SingleWayOutTests` jmenovitě, že `merge` sem nepatří. **Proč se to změnilo**: mergnout vlastní
+PR, když je zeleno, je poslední věc, kvůli které se od hotového review odskakuje do prohlížeče — a je
+to práce s **vlastní** frontou, tedy tatáž třída jako labely a reviewery z #392. Precedens i úvaha
+jsou tytéž jako u #73, #216, #392 a #413: výčet se rozšířil, protože se ta věc dělá při review,
+a zapsal se důvod.
+
+Co je na téhle metodě jiné než na sedmi před ní:
+
+- **Mění `main`, ne pull request.** Šest z předchozích sedmi sahalo na PR nebo na diskuzi, sedmá na
+  labely repozitáře; tohle je jediná akce v okně, po které se změní cílová větev. Nevratnost se
+  vyvažuje **dvěma** věcmi, ne jednou: potvrzením s úplným výpisem (jako u review, #68) **a hlavou
+  v payloadu**.
+- **Hlava je v payloadu jako podmínka, ne jako údaj.** `sha` v `PUT /pulls/{n}/merge` je pro GitHub
+  pojistka: když se větev mezitím pohnula, odpoví `409` a **nemergne nic**. Změřeno na
+  `ondrajodas/prism-review-sandbox#8` — pokus s cizí `sha` vrátil
+  `{"message":"Head branch was modified. Review and try the merge again.","status":"409"}`. Je to
+  ochrana, kterou review mít **nemůže**: `commit_id` u review je údaj a zastaralé review projde
+  (změřeno u #62). Pre-flight se u merge dělá **navíc**, aby se z neshody dala napsat věta o starém
+  a novém commitu, místo aby se člověk dozvěděl `409`.
+- **Metoda není volba, ale konstanta.** `MergeRequest.method` je `squash` a čte ji payload
+  **i potvrzení** — jedno místo, takže se kresba a to, co odejde, nemůžou rozejít. Plán proto pole
+  `method` nemá vůbec: bylo by to pole s jedinou dosažitelnou hodnotou, tedy mrtvá váha a druhé
+  místo k rozejití. Kdo chce jinou metodu, jde na GitHub.
+- **`commit_title` se posílá, `commit_message` ne.** Bez `commit_title` si titulek skládá GitHub podle
+  nastavení repozitáře (`Default to pull request title for squash merges`), do kterého aplikace
+  nevidí — potvrzení by tedy ukazovalo titulek, který nemusí vzniknout. Skládá ho
+  `Policy.squashTitle(of:number:)` jako `titulek PR (#číslo)`. Tělo se naopak **neposílá schválně**:
+  bez něj složí GitHub tělo squash commitu ze zpráv slévaných commitů, a přesně tak vypadá celá
+  historie `main`u v tomhle repu. Ověřeno mergem sondy — titulek byl přesně poslaný `commit_title`
+  a pod ním odrážky se třemi zprávami z větve. Že to tak bude, **je napsané v potvrzení**, protože
+  jinak by věta „vypsané je všechno, co se stane“ slibovala víc, než co je vidět.
+- **Vlastní volající, ne metoda v `MetadataSubmission`.** Je to jediné místo, kde se #465 od #392
+  liší: labely a reviewery jsou akce z panelu, které se dějí a mizí, kdežto merge má **potvrzovací
+  obrazovku a životnost** — `MergeSubmission` vzniká kliknutím na `Mergnout…`, drží snímek toho, co
+  se potvrzuje, a zaniká zavřením sheetu. Tvarem je to `ReviewSubmission`, ne `MetadataSubmission`.
+- **`AppStore` o mergi nedrží žádný stav.** Sheet ho drží celý (`@State` v `ContentView`), takže po
+  něm ve store nezůstane ani chyba k úklidu — na rozdíl od `MetadataActionState`, který existuje
+  proto, že akce v panelu musí přežít překliknutí tabu.
+- **Sheet nebydlí v detailu PR.** Je to tatáž past jako u `ReviewSubmission` a o stupeň horší:
+  mergnutý PR ze zdroje `author:@me` na příštím tiku **vypadne**, takže by sheet zavěšený na detailu
+  zmizel zrovna s hláškou, kvůli které je otevřený.
+- **Sheet se po úspěchu nezavírá sám**, na rozdíl od odeslaného review. Tam je za sheetem vidět, že
+  review odešlo (draft zmizel z panelu i z řádku); tady PR teprve vypadne ze seznamu, takže by
+  zavřený sheet nechal člověka koukat na tab, který se přestal kreslit.
+- **Po úspěchu se stav PR načte znovu** (`AppStore.pullRequestWasMerged`), aby panel nenabízel
+  `Mergnout…` u něčeho, co je mergnuté, a nečekalo se na tik pollingu. Že s detailem přijdou i checky
+  a commity, je **cena za jednu cestu**: `loadDetail` je jediné místo, které umí detail načíst
+  správně (razítko hlavy, zápis do dění), a duplikovat ho kvůli dvěma voláním navíc by znamenalo dvě
+  skládání téhož. Merge je akce jednou za čas, ne tik pollingu.
+- **Dvě nové chyby, obě s dalším krokem.** `branchMoved` (409) říká, že se **nic nestalo**
+  a pojistka zabrala; `notMergeable` (405) říká, že se stav mezi načtením panelu a kliknutím změnil,
+  a **neradí zkoušet znovu** — dokud se stav nezmění, dopadne druhý pokus stejně. `branchMoved`
+  pokrývá i `Base branch was modified`, protože další krok je u obou tentýž.
+- **Co v zákazu zůstává**: approve mimo review, **zavření PR**, **milník** a `deleteLabel`.
+  `SingleWayOutTests` je hlídají jmenovitě dál — jen bez `merge`.
 
 ## Vrstva `Environment` (`App/Environment/`)
 

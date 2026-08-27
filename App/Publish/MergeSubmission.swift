@@ -1,0 +1,113 @@
+import Foundation
+import Observation
+
+/// Jeden merge — od otevření potvrzení po odpověď GitHubu. **Pátý z pěti volajících
+/// `ReviewPublishing`** (#465).
+///
+/// **Vlastní typ, ne metoda v `MetadataSubmission`**, a je to jediné místo, kde se tenhle milník
+/// od #392 liší: labely a reviewery jsou akce **z panelu**, které se dějí a mizí, kdežto merge má
+/// **potvrzovací obrazovku a životnost** — objekt vzniká kliknutím na `Mergnout…`, drží snímek
+/// toho, co se potvrzuje, a zaniká zavřením sheetu. Je to tvarem `ReviewSubmission`, ne
+/// `MetadataSubmission`, protože je to tatáž věc: poslední brána před tím, než něco opustí stroj.
+///
+/// **Tady vzniká publisher a tady zaniká** (tvrdá podmínka č. 1). `AppStore` ho nemá kde uložit —
+/// drží jen cestu ke `gh`.
+@MainActor
+@Observable
+final class MergeSubmission: Identifiable {
+    /// Kvůli `.sheet(item:)`. Identita je „tenhle jeden merge“, ne PR — druhé kliknutí po zavření
+    /// sheetu je nový merge s novým snímkem.
+    let id = UUID()
+
+    let pullRequest: PullRequestSummary
+    /// Co se stane. **Snímek pořízený při otevření sheetu**, ne odkaz do storu: co je v potvrzení
+    /// vidět, to odejde, i kdyby mezitím dorazil polling s jiným počtem commitů.
+    let plan: MergePlan
+
+    private(set) var state: State
+
+    enum State: Equatable {
+        case ready
+        case merging
+        /// Nepovedlo se. **Na PR se nesáhlo** u všeho kromě `timedOut` a `malformedResponse` —
+        /// rozhoduje o tom `PublishError.mightHaveReachedGitHub`, jako u review.
+        case failed(PublishError)
+        /// GitHub merge potvrdil; tohle je commit, který vznikl.
+        case merged(MergedPullRequest)
+    }
+
+    /// Jak vyrobit **jedinou cestu ven**. Volá se až v `merge()`.
+    private let publisher: @MainActor () -> any ReviewPublishing
+    /// Co udělat po úspěchu — načíst stav PR znovu, aby okno nenabízelo merge podruhé. Skládá to
+    /// `AppStore`, protože je to jeho stav; tenhle objekt o něm nic neví.
+    private let afterSuccess: @MainActor () async -> Void
+
+    init(
+        pullRequest: PullRequestSummary,
+        plan: MergePlan,
+        publisher: @escaping @MainActor () -> any ReviewPublishing,
+        afterSuccess: @escaping @MainActor () async -> Void
+    ) {
+        self.pullRequest = pullRequest
+        self.plan = plan
+        self.publisher = publisher
+        self.afterSuccess = afterSuccess
+        state = .ready
+    }
+
+    /// Ostrá cesta: publisher se skládá z `gh` a read-only gateway (kvůli pre-flightu) — a skládá
+    /// se **až** ve chvíli odesílání.
+    convenience init(
+        pullRequest: PullRequestSummary,
+        plan: MergePlan,
+        gh: URL,
+        gateway: any GitHubGateway,
+        scope: PublishScope,
+        afterSuccess: @escaping @MainActor () async -> Void
+    ) {
+        self.init(
+            pullRequest: pullRequest,
+            plan: plan,
+            // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako plán.
+            publisher: {
+                GhReviewPublisher(gh: gh, runner: SubprocessRunner(), gateway: gateway, scope: scope)
+            },
+            afterSuccess: afterSuccess
+        )
+    }
+
+    /// Dá se (znovu) mergnout?
+    ///
+    /// **Po selhání jen tehdy, když je jisté, že se nic nestalo.** `timedOut` a `malformedResponse`
+    /// znamenají, že merge **mohl** proběhnout — a tlačítko `Mergnout` nad mergnutým PR je
+    /// pozvánka ke druhému pokusu, ze kterého v lepším případě vyleze chyba a v horším zmatek.
+    /// Tatáž úvaha jako u review, jen o stupeň dražší.
+    var canMerge: Bool {
+        switch state {
+        case .ready: true
+        case .failed(let error): !error.mightHaveReachedGitHub
+        case .merging, .merged: false
+        }
+    }
+
+    /// Mergne. **Jediné místo v aplikaci, které volá `ReviewPublishing.merge`.**
+    func merge() async {
+        guard canMerge else { return }
+        state = .merging
+        do {
+            let merged = try await publisher().merge(plan)
+            // Stav se přepíná **před** úklidem, jako u review: načíst PR znovu je práce po síti
+            // a potvrzení, že merge prošel, na ni nemá čekat.
+            state = .merged(merged)
+            await afterSuccess()
+        } catch let error as PublishError {
+            state = .failed(error)
+        } catch is CancellationError {
+            // **Ne `.ready`.** Zrušit jde jedině *během* volání, takže se nedá tvrdit, že se nic
+            // nestalo — `PUT` mohl doběhnout. Tatáž úvaha jako u review.
+            state = .failed(.interrupted)
+        } catch {
+            state = .failed(.unknown(error.localizedDescription))
+        }
+    }
+}

@@ -141,3 +141,46 @@ smaže přes REST:
 gh api repos/{owner}/{repo}/pulls/<n> --jq '.merged'
 gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<větev>
 ```
+
+## Merge přes API — co je změřené (#465)
+
+Aplikace merguje `PUT /repos/{repo}/pulls/{n}/merge` (osmá metoda `ReviewPublishing`). Změřeno na
+sondě `ondrajodas/prism-review-sandbox#8`, která tam byla pro tenhle účel založená, třikrát
+pushnutá a nakonec mergnutá:
+
+- **Úspěšná odpověď** je krátká a nese commit, který vznikl:
+
+  ```json
+  {"sha":"d5e454dd…","merged":true,"message":"Pull Request successfully merged"}
+  ```
+
+- **`sha` v payloadu je podmínka, ne údaj.** S cizí hodnotou vrátí GitHub `409`:
+
+  ```json
+  {"message":"Head branch was modified. Review and try the merge again.","status":"409"}
+  ```
+
+  `gh` to na stderr vypíše jako `gh: Head branch was modified. Review and try the merge again.
+  (HTTP 409)`. Je to jediná ochrana, která zabere i na commit pushnutý **mezi** pre-flightem
+  a voláním — u review taková možnost není, `commit_id` je tam údaj a zastaralé review projde
+  (změřeno u #62).
+
+- **`commit_title` se posílá, `commit_message` ne.** Výsledný squash commit měl titulek přesně
+  ten, který šel v `commit_title`, a pod ním odrážky se **zprávami slévaných commitů** — tedy
+  tělo, které GitHub složil sám. Tak vypadá celá historie `main`u v tomhle repu, takže se
+  neposílá; kdo by ho poslal prázdné, tu prózu mergem zahodí.
+
+- **`mergeable` a `mergeStateStatus` jsou líná pole.** Odpověď se počítá až na vyžádání a dotaz,
+  který ji nezastihne hotovou, dostane `UNKNOWN` (v RESTu `null`) — a **sám ten výpočet spustí**.
+  Co se povedlo změřit: mergnutý PR vrací `UNKNOWN` **navždycky** (`PRism#470`, obě pole). Co se
+  změřit **nepovedlo**: zastihnout `UNKNOWN` na živém PR. Na sondě vyšlo `MERGEABLE`/`CLEAN` hned
+  po založení PR i hned po každém ze tří pushů, přes `gh pr view` i přes REST.
+
+- **`mergeStateStatus` vydá GitHub jen tomu, kdo má na repozitář zápis** — jinak vrací `BLOCKED`.
+  Změřeno na `cli/cli#14278`, kde vyšlo `{"mergeStateStatus":"BLOCKED","mergeable":"MERGEABLE"}`.
+  Věta v aplikaci proto nesmí `BLOCKED` překládat na „červený check“: znamená kterýkoli
+  z „chybí schválení / běží povinný check / nemáš zápis“ a GitHub nedává, který.
+
+- **Co změřené není:** `405 Pull Request is not mergeable`. Vyrobit ho by chtělo PR v konfliktu
+  nebo draft, a převedení sondy na draft zakázala permission brána; text v aplikaci je proto
+  z dokumentace GitHubu.

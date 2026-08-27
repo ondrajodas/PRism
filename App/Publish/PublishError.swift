@@ -50,6 +50,25 @@ enum PublishError: Error, Equatable {
     /// label existuje, takže se stačí podívat do nabídky. `Policy.newLabelOffer` na to nedosáhne,
     /// protože nabídka je snímek z chvíle otevření; mezitím ho může založit někdo jiný.
     case labelExists(String)
+    /// Merge bez hlavy, na kterou se má mergovat. Nic se nevolalo (#465).
+    ///
+    /// Vlastní případ, ne `nothingToSend`: ta věta radí vybrat verdikt, což u merge nedává smysl.
+    /// A není to opatrnost — `sha` je v payloadu **podmínka**, takže bez ní by GitHub mergnul, co
+    /// je zrovna nahoře; tedy přesně to, čemu ta podmínka brání.
+    case mergeWithoutHead
+    /// GitHub odmítl merge jako neproveditelný — `405` (#465).
+    ///
+    /// Vlastní případ, ne `unknown`: vede jinam než cokoli ostatního. Znamená, že se stav větve
+    /// mezi načtením panelu a kliknutím změnil (konflikt, spadlý povinný check), takže dalším
+    /// krokem je podívat se na aktuální stav, ne zkoušet znovu.
+    case notMergeable(String)
+    /// Větev se pohnula mezi potvrzením a voláním — `409` (#465).
+    ///
+    /// Vlastní případ, a je to ten nejcennější v celém tomhle výčtu: znamená, že **hlava
+    /// v payloadu zabrala** a GitHub nemergnul commit, který nikdo neviděl. Pokrývá obě strany
+    /// (`Head branch was modified` i `Base branch was modified`), protože další krok je u obou
+    /// tentýž — načíst PR znovu a podívat se, co přibylo.
+    case branchMoved(String)
     /// Vlákno, do kterého se odpovídá, na GitHubu není.
     ///
     /// Vlastní případ, ne `network`: hláška `Could not resolve to a node with the global id`
@@ -103,15 +122,20 @@ extension PublishError {
         switch self {
         // Nic se nevolalo (brány a pre-flight), nebo `gh` vůbec nenaběhl.
         case .publishingNotAllowed, .staleDraft, .nothingToSend, .blankReply, .blankComment,
-             .noReviewer, .blankLabelName, .pullRequestNotOpen, .toolUnavailable:
+             .noReviewer, .blankLabelName, .mergeWithoutHead, .pullRequestNotOpen, .toolUnavailable:
             false
         // GitHub požadavek **odmítl** — 422 u rozřazení komentářů, 401 u přihlášení, 403 u
         // limitu, spadlé spojení u sítě. Ve všech případech review nevzniklo.
         //
         // `labelExists` je taky odmítnutí (422 `already_exists`), a navíc jediné, u kterého
         // „možná to prošlo“ nic neznamená: label toho jména v repu **je**, ať ho tam dal kdokoli.
+        //
+        // `notMergeable` (405) a `branchMoved` (409) jsou odmítnutí taky — a u merge je to ta
+        // podstatná vlastnost: GitHub neudělal nic, takže se panel smí zeptat na stav znovu
+        // a nabídnout to podruhé.
         case .lineOutsideDiff, .pathOutsideDiff, .pendingReviewExists, .ownPullRequest,
-             .notAuthenticated, .rateLimited, .network, .threadNotFound, .labelExists:
+             .notAuthenticated, .rateLimited, .network, .threadNotFound, .labelExists,
+             .notMergeable, .branchMoved:
             false
         // `timedOut`: `gh` jsme po třiceti vteřinách zabili sami, POST mohl doběhnout.
         // `malformedResponse`: exit kód byl **nula**, takže POST prošel a jen odpovědi
@@ -161,6 +185,15 @@ extension PublishError {
         // omylu: neurčitá pravda je lepší než určitá nepravda.
         case text.contains("already_exists") && text.contains("Label"):
             self = .labelExists(text)
+        // 409 u merge: `Head branch was modified. Review and try the merge again.` — tedy že
+        // **zabrala hlava v payloadu**. `Base branch was modified` je totéž z druhé strany a vede
+        // ke stejnému kroku, takže se poznává společný kus věty.
+        case text.contains("branch was modified"):
+            self = .branchMoved(text)
+        // 405 u merge: `Pull Request is not mergeable`. **Před** obecným 403/422 níž není potřeba
+        // nic řadit — je to jediná hláška, která tenhle text nese.
+        case text.contains("not mergeable"):
+            self = .notMergeable(text)
         case text.contains("Can not approve your own"),
              text.contains("Can not request changes on your own"):
             self = .ownPullRequest(text)
@@ -209,6 +242,15 @@ extension PublishError {
             // **Ne „zkus to znovu“**: label existuje, takže druhý pokus dopadne stejně. Jediný
             // další krok je otevřít nabídku znovu — v ní už ten řádek bude.
             "Label toho jména už v repozitáři je. Zavři nabídku a otevři ji znovu, bude v seznamu."
+        case .mergeWithoutHead:
+            "Nevím, na který commit mergovat. Načti pull request znovu."
+        case .notMergeable:
+            // **Ne „zkus to znovu“**: dokud se stav nezmění, dopadne druhý pokus stejně.
+            "GitHub merge odmítl — pull request se v tuhle chvíli mergnout nedá. Zkontroluj stav větve a checků."
+        case .branchMoved:
+            // Nejde o poruchu, ale o to, že ochrana zabrala — a proto se to říká jako fakt, ne
+            // jako chyba: mergnout se nemá to, co člověk neviděl.
+            "Větev se mezitím pohnula, takže se nic nemergovalo. Načti pull request znovu a podívej se, co přibylo."
         case .threadNotFound:
             "Vlákno na GitHubu není — někdo ho mezitím smazal, nebo je konverzace v okně stará. Načti ji znovu."
         case .lineOutsideDiff:

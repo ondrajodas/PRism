@@ -209,7 +209,8 @@ struct DetailProgressMeasurement {
         let scene = PullRequestDetailView(
             store: store,
             pullRequest: Self.summary,
-            submission: .constant(nil)
+            submission: .constant(nil),
+                merge: .constant(nil)
         )
         .frame(width: Self.width, height: height)
         .background(Palette.background)

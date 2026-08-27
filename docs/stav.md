@@ -5138,3 +5138,61 @@ bloky a mění se jednou za výřez, `top` se mění při každém snímku a čt
 průběh) **mají strop**, takže u nich platí pravidlo z #361 nezměněné, ale vyloučené to není. A cena
 projíždění se u velkých diffů měří **jen na odemčené obrazovce** — pod zamčenou gesto nikam
 neposune a všechny podoby vyjdou shodně, což se pozná podle záporného `dojelo na …` ve výpisu sondy.
+
+### M13 — Vlastní PR do konce (milník #15)
+
+Tři issues, které se **musí za sebou**, a proto je rozvrh polovina zadání: **#465** (mergnout
+z panelu), **#466** (srovnat s `main` bez konfliktu) a **#467** (řešení konfliktů session).
+Všechny sahají do téže nové sekce panelu (`Větev`) a druhá se třetí navíc sdílejí cestu zápisu do
+remote, takže souběžně to nejde. Nakreslené je to v **sekci 36** návrhu.
+
+Tvrdé podmínky se v tomhle milníku mění **dvakrát a pokaždé jinak**: merge je osmá metoda výčtu
+(rozšíření), kdežto force push a session s `Write`/`Edit` jsou **nové třídy**, které v repu dosud
+neexistovaly. Obojí se přepisuje v `CLAUDE.md` včetně toho, co za hranicí zůstává.
+
+### #465 — mergnout vlastní PR z panelu
+
+Do #465 se od hotového review odskakovalo do prohlížeče kvůli jediné věci: zeleno, nezbývá nic
+jiného, a mergnout se dá jen tam. Panel dostal sekci **`Větev`** — dva řádky stavu (kam se to
+slévá a jestli je větev srovnaná; kolik commitů a jak dopadly checky) a k nim `Mergnout…`
+s potvrzením.
+
+**Tvrdá podmínka č. 1 se tím mění vědomě, a je to největší změna, jakou v ní zatím byla.** Do #465
+stálo v `CLAUDE.md` i v `SingleWayOutTests` jmenovitě, že `merge` sem nepatří; teď je to **osmá
+metoda** `ReviewPublishing`, s pátým volajícím (`MergeSubmission`) a sedmým souborem ve výčtu.
+Přepsal se výčet, ne jeho podoba — pořád je to jmenovitý seznam souborů i metod, ne rozsah.
+V zákazu zůstává approve mimo review, zavření PR, milník a `deleteLabel`.
+
+Nevratnost se platí **dvěma věcmi navíc**, které ostatní metody nemají: potvrzením s úplným
+výpisem (jako #68) a **hlavou v payloadu**. `sha` je pro GitHub podmínka, takže na commit pushnutý
+mezi pre-flightem a voláním odpoví `409` a nemergne nic — změřeno na sondě
+`prism-review-sandbox#8`, která tam byla pro tenhle účel založená a nakonec mergnutá. Odtud jsou
+i fixtures: skutečná odpověď mergu a skutečné tělo `409`.
+
+**Metoda je jedna (`squash`) a je konstantou**, kterou čte payload i potvrzení. `commit_title` se
+posílá doslova — bez něj si ho GitHub skládá podle nastavení repozitáře, do kterého aplikace
+nevidí —, kdežto `commit_message` **ne**: tělo squash commitu složí GitHub ze zpráv slévaných
+commitů, a přesně tak vypadá celá historie `main`u v tomhle repu. Že to tak bude, je **napsané
+v potvrzení**, jinak by věta „vypsané je všechno, co se stane“ slibovala víc, než co je vidět.
+
+**O tom, jestli se akce nabídne, rozhoduje `Policy` výčtem.** Na cizím PR se sekce nekreslí vůbec;
+na vlastním je tlačítko zašedlé s **vypsanými** důvody (každý vede jinam) — vypnutá brána,
+nenačtený stav, konflikt, větev pozadu, chráněná větev, červený check a **vlastní blokující nález**.
+Červený check merge zakazuje, i když by ho GitHub u nepovinných pustil: zeleno je jediný stav, ve
+kterém se dá mergnout bez čtení. Běžící check naopak nebrání.
+
+**Past, kterou issue jmenovalo, se ošetřila a zároveň se nepodařilo vyrobit.** `mergeable`
+i `mergeStateStatus` jsou u GitHubu líná pole — dotaz, který je nezastihne hotové, dostane
+`UNKNOWN` a sám ten výpočet spustí. Gateway se proto ptá až třikrát. Změřené je, že `UNKNOWN` je
+**trvalý stav mergnutého PR** (`PRism#470`), a taky to, že se `UNKNOWN` na živém PR **zastihnout
+nepodařilo**: na sondě vyšlo `MERGEABLE`/`CLEAN` hned po založení i po každém ze tří pushů, přes
+GraphQL i REST. Opakovaný dotaz je tedy pojistka proti doloženému chování API, ne proti stavu,
+který se povedlo vyrobit.
+
+**Počet „o kolik je větev vzadu“ v #465 není**, ačkoli ho návrh kreslí: `mergeStateStatus` ho
+nedává a `compare` API by za to číslo stáhlo celý seznam souborů. Přijde s #466, kde bude po ruce
+klon v cache a spočítá se lokálně.
+
+Sekce je postavená tak, aby do ní šla přidat **druhá akce** (`Srovnat s main`, #466): je to
+`stav + nabídka`, ne jedno tlačítko, a akce se kreslí řadou i s jedním prvkem.
+

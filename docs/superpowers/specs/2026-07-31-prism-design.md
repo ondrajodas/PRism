@@ -3434,3 +3434,50 @@ jiném — mluvil o **ceně prvního rozvržení**, kterou u diffu opravdu nešl
 podle toho, jestli má strop, a osm zbylých míst v aplikaci ho má. A doklad se pořád nedělá tím, že po
 opravě nehořelo — dělá se strukturálně (`LazySubview*` v evaluačním zásobníku: 2 ze 2 před, 0 po)
 a měřením obou konců.
+
+### Záznam rozhodnutí — merge jako osmá cesta ven (#465)
+
+**Změna pravidla, ne výjimka z něj.** Do #465 stálo v `CLAUDE.md`, v `ReviewPublishing`
+i v `SingleWayOutTests` jmenovitě, že `merge` je cesta ven, kterou tvrdá podmínka č. 1 nepřipouští.
+Od #465 je to osmá metoda protokolu. Precedens je tentýž jako u #73 (odpověď do vlákna), #216
+(komentář pod PR), #392 (labely a reviewery) a #413 (nový label): **výčet se rozšířil, protože se
+ta věc dělá při review, a zapsal se důvod**.
+
+**Proč zrovna merge.** Je to poslední věc, kvůli které se od hotového review odskakuje do
+prohlížeče — a je to práce s **vlastní** frontou, tedy tatáž třída jako labely. Co se nezměnilo:
+brána (`PublishScope`) je tatáž, výčet je krátký a na jednom místě, `GitHubGateway` zápis dál nemá,
+a v zákazu zůstává approve mimo review, zavření PR, milník a `deleteLabel`.
+
+**Čím se ta nevratnost platí.** Merge mění `main`, ne pull request, takže dostal **dvě** pojistky
+místo jedné:
+
+1. **Potvrzení s úplným výpisem** (tatáž konstrukce jako #68) — a v něm i to, co ve výpisu **není**.
+2. **Hlava v payloadu** (`sha`). Pro GitHub je to podmínka: na commit pushnutý mezi pre-flightem
+   a voláním odpoví `409` a nemergne nic. Je to ochrana, kterou review mít nemůže — `commit_id`
+   u review je údaj a zastaralé review projde (změřeno u #62).
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| `merge` jako metoda `MetadataSubmission` | Labely jsou akce z panelu, které se dějí a mizí; merge má potvrzovací obrazovku a životnost. Tvarem je to `ReviewSubmission`, ne `MetadataSubmission` — a pátý volající je poctivější než metoda, která se chová jinak než zbytek typu |
+| Volba metody (`squash` / `merge` / `rebase`) v potvrzení | Třetí prvek na obrazovce kvůli hodnotě, kterou člověk změní jednou za rok. `squash` je konstanta na jednom místě, kterou čte payload i potvrzení; kdo chce jinou, jde na GitHub |
+| Pole `method` v `MergePlan` | Pole s jedinou dosažitelnou hodnotou je mrtvá váha a **druhé místo, kde se dá kresba rozejít s payloadem** |
+| Poslat `commit_message: ""` | Tělo squash commitu by bylo prázdné a próza ze zpráv commitů — tedy zdůvodnění změny, kterým je v tomhle repu plný `main` — by se mergem zahodila |
+| Skládat `commit_message` v aplikaci | Druhé skládání téhož, co GitHub umí sám; a v potvrzení by ho stejně nešlo ukázat celé |
+| Vynechat `commit_title` a nechat titulek na GitHubu | Skládá si ho podle nastavení repozitáře, do kterého aplikace nevidí — potvrzení by ukazovalo titulek, který nemusí vzniknout |
+| Nepouštět merge, dokud je `mergeable` `UNKNOWN`, a neptat se znovu | Tlačítko zašedlé podle náhody: `mergeable` je líné pole a **první dotaz ten výpočet teprve spouští** |
+| Ptát se na slévatelnost u každého PR | Volání navíc při každém výběru řádku, a zrovna to volání, které si na straně GitHubu vyžádá výpočet. Sekce se na cizím PR nekreslí, takže by to bylo za nic |
+| Dotáhnout počet „o kolik je větev vzadu“ z `compare` API | Za jedno číslo celý seznam souborů. #466 ho spočítá lokálně v klonu, který v cache stejně bude |
+| Nechat merge nabídnutý nad červeným checkem (GitHub `UNSTABLE` pustí) | Zeleno je jediný stav, ve kterém se dá mergnout bez čtení. Aplikace je tady schválně striktnější — tatáž úvaha jako u odpovědi na zavřeném PR (#73) |
+| Zakázat merge i nad **běžícím** checkem | Mergnout rozběhnutou CI je legitimní rozhodnutí a povinný check zavře GitHub sám (`BLOCKED`) |
+| Přeložit `BLOCKED` na „červený check“ | Znamená kterýkoli z „chybí schválení / běží povinný check / **nemáš na repo zápis**“ a GitHub nedává který — změřeno na `cli/cli#14278`. Určitá nepravda je horší než neurčitá pravda |
+| Zavírat sheet po úspěchu, jako u review | U review je za sheetem vidět, že odešlo; tady PR ze seznamu **vypadne**, takže by zmizela jediná zpráva o výsledku |
+| Nechat sheet v detailu PR | Detail se přestane kreslit, jakmile PR vypadne z výsledků hledání — a mergnutý vypadne hned na příštím tiku |
+| Po mergi nic nenačítat | Panel by nabízel `Mergnout…` u něčeho, co je mergnuté, až do dalšího tiku |
+| `deleteLabel`, `close`, `setMilestone` „když už se výčet otevřel“ | Nic z toho se nedělá **při review**, a právě to je hranice, podle které se výčet od #73 rozšiřuje |
+
+**Co zůstalo neověřené a je to zapsané:** `405 Pull Request is not mergeable`. Vyrobit ho by chtělo
+PR v konfliktu nebo draft; převedení sondy na draft zakázala permission brána, takže je ten text
+z dokumentace GitHubu, ne změřený. A `UNKNOWN` u `mergeable` se na živém PR **zastihnout
+nepodařilo** — sonda odpovídala usazeně hned po založení i po každém pushi.

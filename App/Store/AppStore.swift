@@ -1195,6 +1195,14 @@ final class AppStore {
     /// Co se právě děje s labely nebo reviewery (#392). Chybějící klíč = nic.
     var metadataActionStates: [PRIdentifier: MetadataActionState] = [:]
 
+    /// Jestli se dá větev mergnout (#465), klíčované PR. Chybějící klíč = ještě se neptalo.
+    ///
+    /// **Stav, ne hodnota**, a u nevratné akce je to podstatnější než kdekoli jinde: „nedá se
+    /// mergnout“ a „nezjistil jsem, jestli to jde“ musí vést k jiné větě v panelu. Plní se **jen
+    /// u vlastních otevřených PR** — jinde by se sekce `Větev` nekreslila a odpověď GitHubu by
+    /// stejně byla `UNKNOWN`.
+    var branchStatuses: [PRIdentifier: BranchStatusState] = [:]
+
     /// Který commit je v tabu `Commity` rozkliknutý (#317). Chybějící klíč = v tabu je seznam.
     ///
     /// **Jen žádost okna**, ne tvrzení o PR: že ten commit na PR pořád je, rozhoduje
@@ -1833,6 +1841,12 @@ final class AppStore {
             wantedPullRequests.contains($0.key) || $0.value == .loading
         }
         metadataActionStates = metadataActionStates.filter { wantedPullRequests.contains($0.key) }
+        // Slévatelnost větve (#465) — tatáž hranice i tentýž důvod jako u labelů: mapa drží celý
+        // identifikátor PR, takže by bez úklidu rostla donekonečna, a rozdělané načtení přežije,
+        // protože doběhlé volání by si ho zapsalo zpátky.
+        branchStatuses = branchStatuses.filter {
+            wantedPullRequests.contains($0.key) || $0.value == .loading
+        }
         // Nabídky se klíčují **repem**, takže se uklízejí podle rep v seznamu — tatáž hranice jako
         // u `checkoutStates`.
         // Nabídky a jejich poruchy se uklízejí **spolu**: kdyby zůstal jen důvod, hlásila by

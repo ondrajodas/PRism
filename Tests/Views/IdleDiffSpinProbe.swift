@@ -948,7 +948,8 @@ struct IdleDiffSpinProbe {
         let detail = PullRequestDetailView(
             store: store,
             pullRequest: Self.summary,
-            submission: .constant(nil)
+            submission: .constant(nil),
+                merge: .constant(nil)
         )
         let controller = NSHostingController(
             rootView: Group {
