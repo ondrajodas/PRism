@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 
 @testable import PRism
@@ -12,8 +13,10 @@ import Testing
 /// `ownership(of:)` — tedy i celý detail PR, jehož jedno přerovnání stojí **33–43 ms** rozvržení
 /// okna (`DetailRelayoutMeasurement`).
 ///
-/// Druhá polovina je, že `@Observable` hlásí **zápis, ne změnu**: tik, po kterém je fronta stejná
-/// jako před minutou (tedy skoro každý), zapisoval tentýž seznam a okno se překreslilo celé.
+/// **Co za tím nestojí:** že by se hlásil každý zápis. Tak to vypadalo, než se to změřilo — zápis
+/// **téže hodnoty** `@Observable` na tomhle toolchainu nehlásí (tvrdí to
+/// `writingTheSameValueDoesNotWake` níž, a stojí na tom, že `refresh()` píše seznam bez `if`u na
+/// rovnost). Vada byla jenom v hrubosti té vlastnosti, ne v počtu zápisů.
 @MainActor
 @Suite("Co tik pollingu nezneplatní (#472)")
 struct PollObservationTests {

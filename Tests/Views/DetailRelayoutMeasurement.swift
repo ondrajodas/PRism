@@ -81,8 +81,8 @@ struct DetailRelayoutMeasurement {
     ///
     /// - `hostitel` je průchod tělem nad scénou. Detail se poskládá znovu — a když se `store`,
     ///   shrnutí ani binding nezměnily, SwiftUI ho prohlásí za nezměněný a **tělo nepřeloží**.
-    /// - `store` je zápis do sledované vlastnosti, kterou tělo detailu čte. Ten tělo přeloží
-    ///   **vždycky**, i když je zapsaná hodnota tatáž — `@Observable` sleduje zápis, ne změnu.
+    /// - `store` je zápis **jiné** hodnoty do sledované vlastnosti, kterou tělo detailu čte. Ten
+    ///   tělo přeloží; zápis téže hodnoty naopak ne (viz `PollObservationTests`).
     enum Driver: String {
         case host = "hostitel"
         case store = "zápis do store"
