@@ -341,6 +341,10 @@ final class AppStore {
 
     let checkout: (any RepoCheckout)?
 
+    /// Vestavěné terminály (#459). `nil` = **zásuvka se nekreslí** — tak jsou na tom testy, které
+    /// o terminál nestojí, a je to tentýž vzorec jako u `checkout` nebo `reviewer`.
+    let terminals: (any TerminalHosting)?
+
     let reviewer: (any ReviewRunning)?
 
     let reviews: ReviewStore?
@@ -653,6 +657,32 @@ final class AppStore {
     /// neukazuje. Uvnitř jednoho PR se tím nemění nic, takže odskok mezi taby o něj nepřipraví.
     var openedPullRequest: PRIdentifier?
 
+    /// Je zásuvka s terminálem vytažená? (#459)
+    ///
+    /// **Jeden příznak na okno, ne na pull request.** `⌃\`` je hmat, kterým se terminál schová
+    /// a vytáhne, a kdyby si ho každá záložka pamatovala zvlášť, znamenal by při přepnutí pokaždé
+    /// něco jiného. Shell samotný je naproti tomu **per PR** (drží ho `TerminalHost`), takže
+    /// schování zásuvky nic nezabíjí — přesně jako sbalení panelu nálezů.
+    var isTerminalOpen = false
+
+    /// Má zásuvka fokus?
+    ///
+    /// Na tomhle jediném příznaku stojí to, že se okenní zkratky bez `⌘` neuplatní
+    /// (`Policy.shortcutYieldsToTerminal`) — jinak by `⌃W` uprostřed psaní zavřelo záložku.
+    /// Hlásí ho `TerminalHost` ze setteru `hasFocus` na ploše emulátoru — `becomeFirstResponder`
+    /// a `resignFirstResponder` má knihovna `public`, ne `open`, takže se z jiného modulu přepsat
+    /// nedají (zdůvodnění je u `EmbeddedTerminalView.hasFocus`).
+    var isTerminalFocused = false
+
+    /// Jak si stojí shell toho PR. Co v mapě není, nikdy neběželo.
+    var terminalStates: [PRIdentifier: TerminalRunState] = [:]
+
+    /// Ve kterém adresáři shell toho PR stojí — **zjištěné jednou, při otevření zásuvky**.
+    ///
+    /// Drží se proto, že rozhodnutí („strom review, nebo klon?“) potřebuje sáhnout na disk, a to se
+    /// v `body` dělat nesmí (#224). Klíč je PR, ne repo: pracovní strom je per PR i per commit.
+    var terminalDirectories: [PRIdentifier: URL] = [:]
+
     init(
         gateway: any GitHubGateway,
         configuration: Configuration = .standard,
@@ -660,6 +690,7 @@ final class AppStore {
         time: any TimeSource = SystemTimeSource(),
         eviction: CacheEviction? = nil,
         checkout: (any RepoCheckout)? = nil,
+        terminals: (any TerminalHosting)? = nil,
         reviewer: (any ReviewRunning)? = nil,
         reviews: ReviewStore? = nil,
         drafts: ReviewDraftStore? = nil,
@@ -709,6 +740,7 @@ final class AppStore {
         )
         self.gateway = gateway
         self.checkout = checkout
+        self.terminals = terminals
         self.reviewer = reviewer
         self.reviews = reviews
         draftStore = drafts
@@ -765,6 +797,12 @@ final class AppStore {
             case .claude: self?.lastReviewCall
             }
         }
+        // Terminál si stav nedrží sám (#459) — hlásí ho sem, protože okno kreslí stav ze store
+        // a druhé místo se stavem by se s tímhle rozešlo. Je to tentýž tvar jako `lastCall` výš.
+        self.terminals?.report = { [weak self] pr, state in self?.terminalStates[pr] = state }
+        self.terminals?.focusChanged = { [weak self] hasFocus in
+            self?.isTerminalFocused = hasFocus
+        }
     }
 
     /// Sestavení z toho, co našel preflight. Absolutní cesta k `gh` je jediné, co gateway
@@ -785,6 +823,8 @@ final class AppStore {
                 checkout: checkout
             ),
             checkout: checkout,
+            // Zásuvka s terminálem (#459). Živá jedině tady — testy shell nespouštějí.
+            terminals: TerminalHost(),
             reviewer: ClaudeReviewRunner(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,
@@ -1027,12 +1067,18 @@ final class AppStore {
     /// Zavře záložku. **Nic se tím nezahazuje** — draft, nálezy i běžící review zůstávají, protože
     /// nic z toho na záložce nevisí.
     ///
+    /// **Jedinou výjimkou je shell v zásuvce** (#459), a je to vědomý rozdíl: všechno ostatní se
+    /// dá otevřít znovu z disku, kdežto shell je proces, který by po zavřené záložce běžel dál bez
+    /// okna, ve kterém by šel vidět — tedy přesně ten sirotek, kvůli kterému vzniklo #264 a #351.
+    /// Zásuvka se schová **bez** zabíjení; zavřená záložka je jiná věc než schovaná zásuvka.
+    ///
     /// Po zavření se jde na **sousední** záložku, ne domů: zavírá se typicky doprojité review
     /// a další v řadě je to, co člověk chce vidět. Domů se propadne, až když nezbyde žádná.
     func closeTab(_ pullRequest: PRIdentifier) {
         guard let index = openTabs.firstIndex(of: pullRequest) else { return }
         openTabs.remove(at: index)
         openTabSnapshots[pullRequest] = nil
+        stopTerminal(for: pullRequest)
 
         guard activeTab == .pullRequest(pullRequest) else { return }
         let neighbour = openTabs.indices.contains(index) ? openTabs[index] : openTabs.last
@@ -1194,6 +1240,14 @@ final class AppStore {
 
     /// Co se právě děje s labely nebo reviewery (#392). Chybějící klíč = nic.
     var metadataActionStates: [PRIdentifier: MetadataActionState] = [:]
+
+    /// Jestli se dá větev mergnout (#465), klíčované PR. Chybějící klíč = ještě se neptalo.
+    ///
+    /// **Stav, ne hodnota**, a u nevratné akce je to podstatnější než kdekoli jinde: „nedá se
+    /// mergnout“ a „nezjistil jsem, jestli to jde“ musí vést k jiné větě v panelu. Plní se **jen
+    /// u vlastních otevřených PR** — jinde by se sekce `Větev` nekreslila a odpověď GitHubu by
+    /// stejně byla `UNKNOWN`.
+    var branchStatuses: [PRIdentifier: BranchStatusState] = [:]
 
     /// Který commit je v tabu `Commity` rozkliknutý (#317). Chybějící klíč = v tabu je seznam.
     ///
@@ -1833,6 +1887,12 @@ final class AppStore {
             wantedPullRequests.contains($0.key) || $0.value == .loading
         }
         metadataActionStates = metadataActionStates.filter { wantedPullRequests.contains($0.key) }
+        // Slévatelnost větve (#465) — tatáž hranice i tentýž důvod jako u labelů: mapa drží celý
+        // identifikátor PR, takže by bez úklidu rostla donekonečna, a rozdělané načtení přežije,
+        // protože doběhlé volání by si ho zapsalo zpátky.
+        branchStatuses = branchStatuses.filter {
+            wantedPullRequests.contains($0.key) || $0.value == .loading
+        }
         // Nabídky se klíčují **repem**, takže se uklízejí podle rep v seznamu — tatáž hranice jako
         // u `checkoutStates`.
         // Nabídky a jejich poruchy se uklízejí **spolu**: kdyby zůstal jen důvod, hlásila by

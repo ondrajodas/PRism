@@ -19,6 +19,7 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     private var labelsOutcome: Result<[PullRequestLabel], any Error>?
     private var reviewersOutcome: Result<RequestedReview, any Error>?
     private var newLabelOutcome: Result<PullRequestLabel, any Error>?
+    private var mergeOutcome: Result<MergedPullRequest, any Error>?
     /// Drží odeslání „rozběhnuté“, dokud se nepustí. Bez toho se nedá otestovat, co se stane
     /// **během** odesílání — a právě tam bydlí zákaz druhého odeslání. Stejný důvod, kvůli
     /// kterému `FakeReviewRunner` umí pozdržet běh.
@@ -46,6 +47,10 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         /// `labels`: zakládání jsou dvě volání za sebou, takže na jejich **pořadí** v tomhle seznamu
         /// stojí tvrzení o mezistavu.
         case newLabel(PRIdentifier, label: PullRequestLabel)
+        /// Merge (#465). Ve stejném výčtu jako ostatní, a je to u něj to nejcennější: testy nad
+        /// mergem tvrdí hlavně to, že se **nemergovalo** — a to se pozná jedině z jednoho seznamu
+        /// všeho, co publisher dostal.
+        case merge(MergePlan)
     }
 
     convenience init(reply outcome: Result<ThreadComment, any Error>) {
@@ -76,6 +81,11 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     convenience init(newLabel outcome: Result<PullRequestLabel, any Error>) {
         self.init([])
         lock.withLock { newLabelOutcome = outcome }
+    }
+
+    convenience init(merge outcome: Result<MergedPullRequest, any Error>) {
+        self.init([])
+        lock.withLock { mergeOutcome = outcome }
     }
 
     var threadActions: [ThreadCall] { lock.withLock { threadCalls } }
@@ -170,6 +180,17 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         if let gate = lock.withLock({ gate }) { await gate() }
         guard let outcome = lock.withLock({ newLabelOutcome }) else {
             throw PublishError.unknown("Fake publisher nemá co vrátit na nový label.")
+        }
+        return try outcome.get()
+    }
+
+    // MARK: - Merge (#465)
+
+    func merge(_ plan: MergePlan) async throws -> MergedPullRequest {
+        lock.withLock { threadCalls.append(.merge(plan)) }
+        if let gate = lock.withLock({ gate }) { await gate() }
+        guard let outcome = lock.withLock({ mergeOutcome }) else {
+            throw PublishError.unknown("Fake publisher nemá co vrátit na merge.")
         }
         return try outcome.get()
     }

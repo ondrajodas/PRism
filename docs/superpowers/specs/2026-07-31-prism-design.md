@@ -3434,6 +3434,217 @@ jiném — mluvil o **ceně prvního rozvržení**, kterou u diffu opravdu nešl
 podle toho, jestli má strop, a osm zbylých míst v aplikaci ho má. A doklad se pořád nedělá tím, že po
 opravě nehořelo — dělá se strukturálně (`LazySubview*` v evaluačním zásobníku: 2 ze 2 před, 0 po)
 a měřením obou konců.
+### Záznam rozhodnutí — vestavěný terminál jako zásuvka (#459)
+
+**Co vzniklo.** Zásuvka přes spodek záložky pull requestu, přepínaná `` ⌃` ``, ve které běží
+**skutečný shell** v checkoutu toho PR — pty plus VT/xterm emulace, ne zjednodušený výpis.
+
+**Proč zásuvka, ne devátá záložka.** Půlka užitku je vidět diff a **pod ním** výstup příkazu.
+Záložka by diff schovala, a tím by z terminálu udělala druhé okno, do kterého se stejně přepíná —
+tedy přesně ten odskok, kvůli kterému #459 vzniklo. Sekce 34 (#453) na to odpověděla otevřením
+`Terminal.app`; je to levné a tvrdé podmínky se u toho nehnuly, ale pořád to znamená **odejít
+z okna**.
+
+**Proč skutečný emulátor.** `claude` je celoobrazovkové TUI: kurzor, barvy, alternativní buffer,
+překreslování při změně velikosti. Zjednodušený renderer by vypadal rozbitě a ta chyba by se nedala
+popsat jinak než „vypadá to divně“. Napsat vlastní VT je přitom řádově víc práce než celý zbytek
+tohohle issue.
+
+#### Tvrdá podmínka č. 1 se tím mění, a je to vědomé
+
+**Zůstává pravda**, že aplikace **sama** nic neodesílá a `ReviewPublishing` je jediná cesta ven
+**v jejím kódu**: `grep ReviewPublishing App/` vypisuje týž seznam jako předtím a `SingleWayOutTests`
+prochází beze změny — na ně se nesahalo. Terminál nemá zápisovou metodu, nezná `gh` a nic jejím
+jménem neposílá.
+
+**Přestává platit**, že se ta záruka dá **dokázat testem**. Ze shellu jde `gh pr merge` i
+`git push`, a na to žádná stráž v kódu nedosáhne, protože ta cesta nevede přes kód aplikace. Plnou
+moc má odsud **člověk**, ne aplikace.
+
+**Musí to být vidět na obrazovce, ne jen v dokumentaci** — v hlavičce zásuvky stojí kapsle
+`plná práva`, protějšek `čte · neodesílá` z tabu `Zeptat se`. Je to jediné místo, kde je ta změna
+poznat dřív, než se do zásuvky něco napíše.
+
+**Co se nezměnilo:** tvrdá podmínka č. 3. Shell startuje v cache aplikace (pracovní strom review,
+nebo bare klon repa), nikdy v uživatelově klonu.
+
+#### `SwiftTerm` — první závislost třetí strany v tomhle repu
+
+Přesně proto to má vlastní odstavec: do #459 se do `project.pbxproj` nesahalo (kromě
+`Signing.xcconfig` a `ASSETCATALOG_COMPILER_APPICON_NAME`), a balíček se jinak než přes něj
+nepřipojí. Je to tedy **třetí vědomá výjimka z toho pravidla**, ne jeho zrušení: `App/` a `Tests/`
+zůstávají buildable folders a nový zdroják se pořád jen vytvoří.
+
+**Verze je připnutá na 1.11.2 a je to měřené rozhodnutí, ne opatrnost.** Vyzkoušené shora dolů:
+
+| Verze | Co se stalo |
+|---|---|
+| 1.20.0 (nejnovější) | `Validate plug-in "SwiftTermBuildInfoPlugin"` — build spadne. `xcodebuild` build tool plugin z balíčku bez `-skipPackagePluginValidation` neschválí |
+| 1.16.0 | Plugin pryč, ale `CompileMetalFile Shaders.metal` → `cannot execute tool 'metal' due to missing Metal Toolchain` |
+| **1.11.2** | **Buildí se** — poslední verze bez build tool pluginu i bez metalového shaderu v resources |
+
+**Zamítnuté cesty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| 1.20.0 + `-skipPackagePluginValidation` | Přepsalo by to **tři** dokumentované příkazy (build, test, `bin/run.sh`) a od té chvíle by se **mlčky spouštěl každý** plugin každého budoucího balíčku. Cena za novější verzi knihovny, kterou tady nikdo nepotřebuje |
+| 1.16.0 + `xcodebuild -downloadComponent MetalToolchain` | Několikagigabajtová komponenta Xcode a nový požadavek na stroj — kvůli shaderu renderer, který se v zásuvce nepoužije |
+| Vendorovat zdrojáky do repa | Ztratí se pin i cesta k aktualizaci a `App/` přestane být jen náš kód |
+| Napsat vlastní VT emulaci | Řádově víc práce než celý zbytek issue, a chyba v ní se projeví jako „vypadá to rozbitě“ |
+
+**Cena připnutí je zapsaná**: jsme na verzi z února 2026, ne na nejnovější. Až bude důvod jít
+nahoru, je to rozhodnutí o těch třech příkazech a o té komponentě, ne o čísle v `pbxproj` —
+a `Package.resolved` je v repu, takže se pin nikam neztratí.
+
+#### Klávesy patří terminálu — a hranice je `⌘`, ne `Control`
+
+Návrh (poznámka 110) mluví o `Control`u: `⌃W` maže slovo, `⌃C` přerušuje běh, `⌃1`–`⌃5` a `⌃⇥`
+patří tomu, co uvnitř běží. Implementované pravidlo je ale **širší**: *co nemá `⌘`, patří
+terminálu* (`Policy.shortcutYieldsToTerminal`).
+
+Hranice kolem jednoho modifikátoru by totiž nechala venku `⎋` (vim, `claude`) a `⌥↑`/`⌥↓`, kde je
+`Option` v terminálu meta. `⌘` naopak terminál nikdy nedostane — je to modifikátor menu, ne klávesa,
+která by dojela do pty. Pravidlo je tím pádem jedna věta a jde ho projít **vyčerpávajícím výčtem nad
+celým katalogem** (#441), takže si nová zkratka na `Control`u vynutí rozhodnutí sama.
+
+**Jedinou výjimkou je `` ⌃` `` sama**, a rozhoduje o ní **akce, ne kombinace**: kdyby se zítra
+zásuvka přepínala jinou klávesou, výjimka jde s ní. Bez té výjimky by se zásuvka s fokusem uvnitř
+nedala zavřít klávesnicí vůbec.
+
+**Alternativa `⌃;` je pro českou klávesnici**, ze stejného důvodu jako `⌃+ěščř` u sekcí railu:
+`keyboardShortcut` páruje na **znak**, a klávesa vlevo od `1` má v české mapě `;`, ne `` ` ``.
+
+**Vypíná se `keyboardShortcut(nil)`, ne `disabled`.** Obojí propadne dál, takže se to chová stejně;
+rozdíl je v tvrzení — zakázané tlačítko říká „akce teď není k dispozici“, kdežto tady ta akce
+k dispozici je a jen tu klávesu okno nemá brát.
+
+#### Zavření okna ten proces zabije — a ne jenom shell
+
+Tentýž závazek jako u revieweera (#264): co aplikace spustí, to i ukončí. Dvě věci na tom nejsou
+zjevné:
+
+1. **`SIGKILL`, a napřed popředí pty.** Knihovní `terminate()` posílá `SIGTERM` **shellu**, a to
+   nestačí: `claude` spuštěný v interaktivním shellu dostane vlastní process group (job control),
+   takže by ho signál poslaný shellu minul a osiřel by na `launchd` úplně stejně, jako to popisuje
+   #351. Zabíjí se proto `tcgetpgrp(childfd)` a **až pak** shell — po smrti shellu se pty zavírá
+   a `tcgetpgrp` nemá koho vrátit.
+2. **Značka v `sessions.json`** (#351), toutéž cestou jako u běžících review. Aplikaci zabitou
+   zvenčí nemá kde uklidit nikdo, takže osiřelý shell zabije **další start**.
+
+**Zavření záložky shell zabije, schování zásuvky ne.** Je to vědomý rozdíl: zásuvka je pohled
+(jako sbalený panel nálezů), kdežto zavřená záložka je konec kontextu — a shell po ní by běžel dál
+bez okna, ve kterém by šel vidět.
+
+**Shell je jeden na pull request**, ne jeden na okno. Jediný shell by se při přepnutí záložky musel
+buď restartovat (a zabít rozdělaný `claude --resume`), nebo lhát o tom, kde stojí.
+
+#### Kde shell startuje
+
+Pracovní strom posledního review, když existuje; jinak bare klon repa; jinak se zásuvka otevře
+s větou, že v cache není pracovní kopie. Pořadí je podstatné: **`claude --resume` session najde
+jedině v tom adresáři, ve kterém běžela** (vlákna se klíčují cestou), takže klon by tentýž příkaz
+odpověděl, že takové vlákno nezná. Existence se ověřuje na disku a **mimo hlavní vlákno**, protože
+eviction klony maže — shell spuštěný ve smazané složce je horší než zásuvka, která řekne proč.
+
+#### Co je proti návrhu jinak
+
+**Kapsle s běžícím příkazem** (`claude --resume 8c1f…`) se nekreslí; místo ní je `běží` / `skončil
+(kód)`. Zjistit běžící příkaz znamená ptát se jádra na popředí pty v pravidelném taktu, tedy zavést
+v okně další časovač kvůli popisce. Zásuvka říká to, co ví bez ptaní — a odlišit `exit 1` od `exit 0`
+je zrovna to, kvůli čemu se na kapsli člověk podívá. Je to **méně**, než slibuje návrh, ale nic
+z toho není nepravda; mockup se kvůli tomu nepřekresluje (schvaluje ho uživatel, #286).
+
+**Výška se pamatuje tažením za horní hranu**, ne měřením rozvržení. Vzor `Policy.rawSessionSheetSize`
+(#327) se převzal na **ořez** (uložená hodnota se clampuje při použití, ne při zápisu), ale past
+s prvním průchodem rozvržení tady **není**: výšku nikdo nenavrhuje, mění ji jedině tažení, takže se
+zapisuje na konci tahu a odmlka (`RawSessionSheet.resizeSettle`) potřeba není.
+
+**Změna velikosti přeposílá `TIOCSWINSZ`** — dělá to `SwiftTerm` sám v `setFrameSize` →
+`processSizeChange` → `sizeChanged`, takže se to nikde neopisuje. Proto taky **zavřená zásuvka není
+v hierarchii vůbec**: plocha nulové výšky by běžícímu TUI ohlásila `0×0`.
+
+#### Co #459 vědomě nechává na jindy
+
+`▶` v tabu `Průběh` pořád otevírá `Terminal.app` (#453) — přepojení na zásuvku je **#460**.
+
+### Záznam rozhodnutí — merge jako osmá cesta ven (#465)
+
+**Změna pravidla, ne výjimka z něj.** Do #465 stálo v `CLAUDE.md`, v `ReviewPublishing`
+i v `SingleWayOutTests` jmenovitě, že `merge` je cesta ven, kterou tvrdá podmínka č. 1 nepřipouští.
+Od #465 je to osmá metoda protokolu. Precedens je tentýž jako u #73 (odpověď do vlákna), #216
+(komentář pod PR), #392 (labely a reviewery) a #413 (nový label): **výčet se rozšířil, protože se
+ta věc dělá při review, a zapsal se důvod**.
+
+**Proč zrovna merge.** Je to poslední věc, kvůli které se od hotového review odskakuje do
+prohlížeče — a je to práce s **vlastní** frontou, tedy tatáž třída jako labely. Co se nezměnilo:
+brána (`PublishScope`) je tatáž, výčet je krátký a na jednom místě, `GitHubGateway` zápis dál nemá,
+a v zákazu zůstává approve mimo review, zavření PR, milník a `deleteLabel`.
+
+**Čím se ta nevratnost platí.** Merge mění `main`, ne pull request, takže dostal **dvě** pojistky
+místo jedné:
+
+1. **Potvrzení s úplným výpisem** (tatáž konstrukce jako #68) — a v něm i to, co ve výpisu **není**.
+2. **Hlava v payloadu** (`sha`). Pro GitHub je to podmínka: na commit pushnutý mezi pre-flightem
+   a voláním odpoví `409` a nemergne nic. Je to ochrana, kterou review mít nemůže — `commit_id`
+   u review je údaj a zastaralé review projde (změřeno u #62).
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| `merge` jako metoda `MetadataSubmission` | Labely jsou akce z panelu, které se dějí a mizí; merge má potvrzovací obrazovku a životnost. Tvarem je to `ReviewSubmission`, ne `MetadataSubmission` — a pátý volající je poctivější než metoda, která se chová jinak než zbytek typu |
+| Volba metody (`squash` / `merge` / `rebase`) v potvrzení | Třetí prvek na obrazovce kvůli hodnotě, kterou člověk změní jednou za rok. `squash` je konstanta na jednom místě, kterou čte payload i potvrzení; kdo chce jinou, jde na GitHub |
+| Pole `method` v `MergePlan` | Pole s jedinou dosažitelnou hodnotou je mrtvá váha a **druhé místo, kde se dá kresba rozejít s payloadem** |
+| Poslat `commit_message: ""` | Tělo squash commitu by bylo prázdné a próza ze zpráv commitů — tedy zdůvodnění změny, kterým je v tomhle repu plný `main` — by se mergem zahodila |
+| Skládat `commit_message` v aplikaci | Druhé skládání téhož, co GitHub umí sám; a v potvrzení by ho stejně nešlo ukázat celé |
+| Vynechat `commit_title` a nechat titulek na GitHubu | Skládá si ho podle nastavení repozitáře, do kterého aplikace nevidí — potvrzení by ukazovalo titulek, který nemusí vzniknout |
+| Nepouštět merge, dokud je `mergeable` `UNKNOWN`, a neptat se znovu | Tlačítko zašedlé podle náhody: `mergeable` je líné pole a **první dotaz ten výpočet teprve spouští** |
+| Ptát se na slévatelnost u každého PR | Volání navíc při každém výběru řádku, a zrovna to volání, které si na straně GitHubu vyžádá výpočet. Sekce se na cizím PR nekreslí, takže by to bylo za nic |
+| Dotáhnout počet „o kolik je větev vzadu“ z `compare` API | Za jedno číslo celý seznam souborů. #466 ho spočítá lokálně v klonu, který v cache stejně bude |
+| Nechat merge nabídnutý nad červeným checkem (GitHub `UNSTABLE` pustí) | Zeleno je jediný stav, ve kterém se dá mergnout bez čtení. Aplikace je tady schválně striktnější — tatáž úvaha jako u odpovědi na zavřeném PR (#73) |
+| Zakázat merge i nad **běžícím** checkem | Mergnout rozběhnutou CI je legitimní rozhodnutí a povinný check zavře GitHub sám (`BLOCKED`) |
+| Přeložit `BLOCKED` na „červený check“ | Znamená kterýkoli z „chybí schválení / běží povinný check / **nemáš na repo zápis**“ a GitHub nedává který — změřeno na `cli/cli#14278`. Určitá nepravda je horší než neurčitá pravda |
+| Nechat sheet v detailu PR | Detail se přestane kreslit, jakmile PR vypadne z výsledků hledání — a mergnutý vypadne hned na příštím tiku |
+| Po mergi nic nenačítat | Panel by nabízel `Mergnout…` u něčeho, co je mergnuté, až do dalšího tiku |
+| `deleteLabel`, `close`, `setMilestone` „když už se výčet otevřel“ | Nic z toho se nedělá **při review**, a právě to je hranice, podle které se výčet od #73 rozšiřuje |
+
+**Co zůstalo neověřené a je to zapsané:** `405 Pull Request is not mergeable`. Vyrobit ho by chtělo
+PR v konfliktu nebo draft; převedení sondy na draft zakázala permission brána, takže je ten text
+z dokumentace GitHubu, ne změřený. A `UNKNOWN` u `mergeable` se na živém PR **zastihnout
+nepodařilo** — sonda odpovídala usazeně hned po založení i po každém pushi.
+
+### Záznam rozhodnutí — po mergi se zavírá záložka (#465)
+
+**Změna rozhodnutí z téhož issue, ještě před jeho mergem.** V tabulce výš stálo mezi zamítnutými
+„zavírat sheet po úspěchu, jako u review“ s odůvodněním, že mergnutý PR ze seznamu vypadne a se
+zavřeným sheetem by zmizela jediná zpráva o výsledku. Odůvodnění padlo v okamžiku, kdy se rozhodlo
+zavírat **i záložku**: za sheetem pak není tab, který se přestal kreslit, ale okno přepnuté na
+sousední záložku nebo domů. Zavírá se tedy obojí.
+
+**Proč se to vůbec zavírá.** Mergnutý pull request je dočtený — je to poslední úkon, který na něm
+v tomhle okně jde udělat, a nechat po něm otevřenou záložku znamená jedno kliknutí navíc za
+informaci, kterou má člověk před sebou. Je to tatáž úvaha, jakou má `ReviewSubmission.closesItself`
+u odeslaného review.
+
+**Pravidlo o zavírání záložek se tím neruší, jen se čte doslova.** V `ContentView` platí, že
+mergnutý PR jde ještě dočíst a zavřít ho má **člověk, ne tik pollingu**. To pravidlo je o pollingu:
+PR, který ze seznamu vypadl, aniž bych s tím cokoli udělal (mergnul ho někdo jiný, odebrali mě
+z reviewerů), si záložku drží a zavírá se z prázdného stavu *Pull request zmizel ze seznamu*. Merge
+z panelu je **druhá strana téhož pravidla**: zavírá ho taky člověk, jen tím klikem, kterým ten PR
+dokončil. Za měsíc se to nesmí přečíst obráceně, proto to stojí i v `ContentView`
+a v `AppStore.pullRequestWasMerged`.
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| Zavřít záložku hned po kliknutí na `Mergnout` | Selhání (`409`, `405`, spadlá síť) by nemělo kde ukázat hlášku — a je to zrovna ta situace, ve které člověk potřebuje vědět, co se stalo a jestli se dá zkusit znovu |
+| Zavřít sheet dřív než záložku | Na okamžik by se odhalil detail PR, který se za chvíli přestane kreslit. Pořadí proto drží `merge()`: `closeTab` je první řádek úklidu a běží ještě v tom průchodu, ve kterém se přepnul stav |
+| Zeptat se, když na PR leží rozdělané review | `closeTab` nic nezahazuje a draft leží na disku, takže je s otevřenou záložkou zpátky — dialog by byl otázka na nic. Na vlastním PR se navíc draft ani nedá založit (#333) |
+| Draft po mergi smazat | Bylo by to **jediné nevratné** na jinak vratném zavření, a tiše zmizelá próza je horší než draft, který nemá kam odejít |
+| Zrušit prázdný stav *Pull request zmizel ze seznamu* | Platí dál pro všechno, co PR ze seznamu vyřadí jinak než mým mergem |
+| Totéž po **odeslání review** | Jiná situace: PR nezmizí proto, že bych ho dokončil, ale proto, že mě někdo odebral z reviewerů — a to se může stát i omylem. Rozsah #465 se kvůli tomu nerozšiřuje; když se to bude chtít, je to vlastní issue |
+| Zapsat merge do **dění** (#414), ať sha přežije zavřený sheet | Nový druh položky znamená glyf, barvu, cíl kliknutí a rozhodnutí o chipu `bez banneru` ve čtyřech vyčerpávajících `switch`ích — velká změna kvůli údaji, se kterým se v aplikaci stejně nedá nic dělat. Sha mergnutého commitu je věc pro GitHub |
 
 ### Záznam rozhodnutí — sledovaná vlastnost se dělí podle toho, kdo ji čte (#472)
 
@@ -3462,4 +3673,3 @@ tím na pravidlo: co se mění jinak často a čte jinde, patří do vlastní vl
 **Co zůstalo nedokázané.** Průchodů tělem ubylo šedesátkrát, ale cena tichého tiku spadla jen
 o třetinu (u 500řádkového diffu z 451 na 427 ms, tedy skoro vůbec). Zbytek leží v rozvržení okna,
 ne v tělech — a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
-

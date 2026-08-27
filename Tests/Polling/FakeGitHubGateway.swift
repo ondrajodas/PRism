@@ -297,6 +297,28 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return metadata
     }
 
+    /// Co vrátí `fetchBranchStatus` (#465). Výchozí je **usazené `MERGEABLE`/`CLEAN`**, protože
+    /// v drtivé většině testů jde o něco jiného a `UNKNOWN` by tam potichu zakázalo merge.
+    var branchStatus = BranchStatus(mergeability: .mergeable, mergeState: .clean)
+
+    /// Čím `fetchBranchStatus` spadne. `nil` = vrátí `branchStatus`.
+    ///
+    /// Vlastní přepínač, ne `Result`, ze stejného důvodu jako u labelů: „nedá se mergnout“
+    /// a „nezjistil jsem to“ se u nevratné akce nesmí slít.
+    var branchStatusFailure: (any Error)?
+
+    /// Na co se kdo ptal, v pořadí. Na počtu stojí testy, které tvrdí, že se **na cizí PR
+    /// neptáme vůbec**.
+    var branchStatusRequests: [PRIdentifier] { lock.withLock { branchStatusAsked } }
+
+    private var branchStatusAsked: [PRIdentifier] = []
+
+    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus {
+        lock.withLock { branchStatusAsked.append(id) }
+        if let branchStatusFailure { throw branchStatusFailure }
+        return branchStatus
+    }
+
     /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
     /// vyrobit label.
     var repositoryLabels: [PullRequestLabel] = []

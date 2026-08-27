@@ -75,7 +75,7 @@ struct PanelMetadataView: View {
     // MARK: - Sekce
 
     private var labels: some View {
-        section("Labely") {
+        PanelSection(caption: "Labely") {
             VStack(alignment: .leading, spacing: LabelChipStyle.spacing) {
                 // Řádky jsou z `Policy`, ne z pružného rozvržení: dvouřádkový strop a `+N` se
                 // z „nech to zalomit“ vyjádřit nedají.
@@ -91,7 +91,7 @@ struct PanelMetadataView: View {
     }
 
     private var reviewers: some View {
-        section("Reviewery") {
+        PanelSection(caption: "Reviewery") {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(metadata.reviewers, id: \.login) { reviewer in
                     reviewerRow(reviewer)
@@ -235,17 +235,6 @@ struct PanelMetadataView: View {
             // klik neudělal nic — a tlačítko, po kterém se nic nestane, je horší než zakázané.
             AddChipLabel(title: Self.addLabelTitle, isEnabled: false)
                 .help(editing.reason ?? (hasSnapshot ? "" : "Labely se ještě načítají."))
-        }
-    }
-
-    private func section(_ caption: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: caption)
-                .font(.system(size: 10, design: .monospaced))
-                .tracking(1)
-                .textCase(.uppercase)
-                .foregroundStyle(Palette.ink3)
-            content()
         }
     }
 

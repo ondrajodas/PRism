@@ -235,4 +235,18 @@ protocol GitHubGateway: Sendable {
     /// **Dvanáctá** čtecí metoda (jedenáctá, než se vedle přidal `fetchDiff(repo:from:to:)` z #284);
     /// tvrdá podmínka č. 1 platí dál — gateway pořád nemá nic, čím by šlo něco odeslat.
     func fetchCommits(id: PRIdentifier) async throws -> [PullRequestCommit]
+
+    /// Jestli se dá větev mergnout a co tomu podle pravidel repozitáře brání (#465) — sekce
+    /// `Větev` v panelu.
+    ///
+    /// **Ptá se opakovaně, a je to celý smysl téhle metody.** `mergeable` i `mergeStateStatus`
+    /// jsou u GitHubu **líná pole**: první dotaz po pushi (a po založení PR) vrátí `UNKNOWN`
+    /// a teprve tím dotazem se výpočet spustí. Kdo se zeptá jednou, dostane odpověď „nevím“
+    /// podle náhody — a z ní zašedlé tlačítko `Mergnout…` u PR, který je zeleny. Kolik pokusů
+    /// a jak dlouho čekat, drží implementace; volající dostane **usazenou** odpověď, nebo
+    /// `UNKNOWN` po vyčerpání pokusů, což je pořád odpověď.
+    ///
+    /// **Dvaadvacátá metoda protokolu**; čtení je čtení a tvrdá podmínka č. 1 platí dál —
+    /// mergnout umí jedině `ReviewPublishing`.
+    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus
 }

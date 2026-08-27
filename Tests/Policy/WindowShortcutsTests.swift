@@ -37,10 +37,10 @@ struct WindowShortcutsTests {
     /// Počet je **vyjmenovaný, ne „aspoň tolik“** — stejně jako u `SingleWayOutTests`. Nová zkratka
     /// v okně je rozhodnutí, ne přírůstek: má projít úvahou, jestli se s něčím nesrazí a jestli se
     /// nakreslí tam, kde se na ni přijde.
-    @Test("Katalog má právě dvacet akcí")
-    func catalogHasExactlyTwentyActions() {
-        #expect(Policy.windowShortcutActions.count == 20)
-        #expect(Policy.windowShortcuts.count == 20)
+    @Test("Katalog má právě jednadvacet akcí")
+    func catalogHasExactlyTwentyOneActions() {
+        #expect(Policy.windowShortcutActions.count == 21)
+        #expect(Policy.windowShortcuts.count == 21)
     }
 
     /// Kombinace, které patří systému nebo scéně nastavení, si okno **nesmí vzít**. `⌘W` je zrovna
@@ -195,6 +195,7 @@ struct WindowShortcutsTests {
             (.openSubmission, "⌘⏎"),
             (.agentPrompt, "⌘⇧P"),
             (.cancelReview, "⌘."),
+            (.toggleTerminal, "⌃`"),
             (.fileTree, "⌘1"),
             (.runAllReviews, "⌘⇧R"),
             (.openDraft, "⌘⇧D"),
@@ -294,6 +295,9 @@ struct WindowShortcutsTests {
             "Views/AgentPromptSheet.swift",
             "Views/CodeTextSheet.swift",
             "Views/ReviewSubmissionSheet.swift",
+            // Potvrzení merge (#465): `⎋` na `Zrušit`, jako u potvrzení review. Tlačítko, které
+            // merguje, zkratku **nemá** — poslední klik před nevratnou věcí je klik.
+            "Views/MergeSheet.swift",
             "Views/Settings/SettingsView.swift",
             "Views/Settings/SettingsScene.swift",
             "Views/ReleaseNotes/ReleaseNotesScene.swift",

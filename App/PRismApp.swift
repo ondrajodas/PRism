@@ -27,11 +27,15 @@ struct PRismApp: App {
                 // v okamžiku zavírání, ne v okamžiku, kdy se okno objevilo.
                 .onAppear {
                     delegate.runningReviews = { preflight.store?.runningReviews ?? 0 }
+                    // Shelly v zásuvce (#459) — tentýž závazek jako u review: co aplikace
+                    // spustila, to i ukončí.
+                    delegate.runningTerminals = { preflight.store?.runningTerminals ?? 0 }
                     // Bez tohohle přežije `claude` aplikaci a běží dál pod `launchd` (#264).
                     delegate.stopReviews = {
                         guard let store = preflight.store else { return }
                         await store.stopReviewsBeforeTermination()
                     }
+                    delegate.stopTerminals = { preflight.store?.stopTerminalsBeforeTermination() }
                 }
         }
         // Systémová titulková lišta se schovává (#180): hlavičku si kreslí `ContentView` sám,

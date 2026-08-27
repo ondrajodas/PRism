@@ -250,49 +250,65 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
    Aplikace **umí** odeslat review, od #73 se **ozvat do vlákna**, od #216 **napsat komentář
-   pod PR**, od #392 **přeštítkovat svůj PR a vyžádat na něm review** a od #413 **založit
-   label, který repozitář ještě nezná** — ale jedině přes `ReviewPublishing`, jedině na
-   výslovný pokyn člověka a jedině tam, kde se to **v nastavení povolilo**. Pravidlo se
-   skládá z šesti věcí a každá z nich je kontrolovatelná:
+   pod PR**, od #392 **přeštítkovat svůj PR a vyžádat na něm review**, od #413 **založit
+   label, který repozitář ještě nezná** a od #465 **mergnout vlastní PR** — ale jedině přes
+   `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam, kde se to **v nastavení
+   povolilo**. Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
    2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají to být
-      **šest souborů a čtyři volající**: protokol, `GhReviewPublisher` (implementace),
+      **sedm souborů a pět volajících**: protokol, `GhReviewPublisher` (implementace),
       `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna),
-      `CommentSubmission` (komentář pod PR) a `MetadataSubmission` (labely a vyžádání
-      reviewera). Všechny leží v `App/Publish/` — volající **mimo** tu složku by znamenal,
-      že cesta ven vede odjinud než z jednoho místa.
+      `CommentSubmission` (komentář pod PR), `MetadataSubmission` (labely a vyžádání
+      reviewera) a `MergeSubmission` (merge). Všechny leží v `App/Publish/` — volající
+      **mimo** tu složku by znamenal, že cesta ven vede odjinud než z jednoho místa.
 
-      Protokol má **sedm vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
-      `setLabels`, `requestReviewers`, `createLabel`. Do #73 měl jednu a stálo tu, že cokoli
-      dalšího by byla druhá cesta ven; do #216 tři, do #392 čtyři, do #413 šest. Výčet je
-      krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří bránu z bodu 6** —
-      proto všechny berou adresu, ze které se pozná repo.
+      Protokol má **osm vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
+      `setLabels`, `requestReviewers`, `createLabel`, `merge`. Do #73 měl jednu a stálo tu, že
+      cokoli dalšího by byla druhá cesta ven; do #216 tři, do #392 čtyři, do #413 šest, do
+      #465 sedm. Výčet je krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří
+      bránu z bodu 6** — proto všechny berou adresu, ze které se pozná repo.
 
-      **Zakázané zůstává**: approve mimo review, **`merge`**, **zavření PR**, **milník**
+      **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**
       a **`deleteLabel`** — smazaný label zmizí ze **všech** issues a PR, na kterých leží,
       a aplikace tu ztrátu neumí ani ukázat; mazat i přebarvovat se chodí na GitHub.
-      **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests` — šest souborů, sedm
-      metod, jmenovitě i těch pět zakázaných, a že soubory zadání pro agenta nezná publisher,
+      **`merge` z toho zákazu u #465 vypadl** a je to vědomá změna pravidla, ne díra: mergnout
+      vlastní PR, když je zeleno, je poslední věc, kvůli které se od hotového review odskakuje
+      do prohlížeče, a je to tatáž třída jako labely — práce s **vlastní** frontou. Platí se za
+      to dvěma věcmi navíc, které ostatní metody nemají: **potvrzením s úplným výpisem** (jako
+      u review, #68) a **hlavou v payloadu** (`sha`), na kterou GitHub odpoví `409`, když se
+      větev mezitím pohnula.
+      **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests` — sedm souborů, osm
+      metod, jmenovitě i ty čtyři zakázané, a že soubory zadání pro agenta nezná publisher,
       payload, API ani podproces). **Měnit se smí jedině na vlastním PR**
-      (`Policy.metadataEditing`); na cizím se akce **nekreslí vůbec**, ne zašedle — zašedlá
-      s důvodem **napsaným v panelu** patří jedině tam, kde je vypnutá brána. Proč se ten výčet
+      (`Policy.metadataEditing`, u merge `Policy.mergeOffer`); na cizím se akce **nekreslí
+      vůbec**, ne zašedle — zašedlá
+      s důvodem **napsaným v panelu** patří jedině tam, kde se stav **mění** (vypnutá brána,
+      červený check, větev pozadu). Proč se ten výčet
       rozšiřoval, je v [`docs/architektura.md`](docs/architektura.md#reviewpublisher-apppublish)
       — [#392](docs/architektura.md#labely-a-vyžádání-reviewera-392--pátá-a-šestá-metoda),
-      [#413](docs/architektura.md#založení-labelu-413--sedmá-metoda-a-první-která-píše-do-repozitáře).
+      [#413](docs/architektura.md#založení-labelu-413--sedmá-metoda-a-první-která-píše-do-repozitáře),
+      [#465](docs/architektura.md#merge-vlastního-pr-465--osmá-metoda-a-první-která-mění-main).
    3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká
-      s ní — drží ho `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission`
-      a `MetadataSubmission`. `AppStore` si kvůli odesílání drží **jen cestu ke `gh`**, ne
-      publisher ani továrnu na něj (proto ho ten grep nevypíše); u vláken, komentářů a labelů
-      drží **stav** (`ThreadActionState`, `CommentActionState`, `MetadataActionState`), ne
-      cestu ven.
+      s ní — drží ho `ReviewSubmission`, `ThreadSubmission`, `CommentSubmission`,
+      `MetadataSubmission` a `MergeSubmission`. `AppStore` si kvůli odesílání drží **jen cestu
+      ke `gh`**, ne publisher ani továrnu na něj (proto ho ten grep nevypíše); u vláken,
+      komentářů a labelů drží **stav** (`ThreadActionState`, `CommentActionState`,
+      `MetadataActionState`), ne cestu ven. **Merge stav ve store nemá vůbec**: sheet ho drží
+      celý (`MergeSubmission` v `@State` okna, jako u review), protože je to jedno potvrzení,
+      které vzniká kliknutím a zaniká zavřením.
    4. **Odeslání review si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád
       hlava PR — approve na kód, který jsi neviděl, tak nejde poslat ani závodem s pushnutým
       commitem (GitHub proti tomu **nechrání**, změřeno u #62). **U odpovědi do vlákna,
       u komentáře pod PR a u labelů s reviewery se `headSha` neověřuje** (#73, #216, #392),
       protože se to všechno váže na PR nebo na diskuzi, ne na commit; ověřuje se **stav PR**,
       a to i **striktněji než GitHub** (změřeno u #73, že odpověď na zavřeném PR projde).
+      **U merge se hlava ověřuje, a dvakrát** (#465): v pre-flightu jako u review, a k tomu se
+      posílá **v payloadu** (`sha`) — pro GitHub je to podmínka, takže na commit pushnutý mezi
+      pre-flightem a voláním odpoví `409` a nemergne nic (změřeno na
+      `prism-review-sandbox#8`). Je to jediná cesta ven, která má proti závodu dvě pojistky,
+      a je to schválně: merge se týká `main`u, ne jen pull requestu.
    5. **Jedno atomické volání.** Buď odejde všechno, nebo nic (změřeno u #62). U vláken
       a komentářů triviálně; **u labelů to drží tvar payloadu** (#392) — `PUT
       /issues/{n}/labels` sadu **nahrazuje**, takže se posílá celá a jedním voláním a skládá ji
@@ -308,18 +324,44 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
       zadrátovaný seznam s jediným sandboxem; proč se to změnilo, je v [záznamu
       rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí-1).
 
-   **Otevřít session v uživatelově terminálu (#453) osmou cestou ven není**, a je to hranice, ne
+   **Otevřít session v uživatelově terminálu (#453) devátou cestou ven není**, a je to hranice, ne
    výjimka: terminál je **mimo aplikaci** — totéž, jako když si člověk `claude --resume` vlepí
    sám. Uvnitř okna žádný terminál nevzniká, `TerminalOpening` nemá čím na GitHub sáhnout
-   a `grep ReviewPublishing App/` vypisuje týž seznam. **Vestavěný terminál je zamítnutý**:
-   znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, a **nešel by uhlídat testem**,
-   protože ta cesta nevede přes kód aplikace
-   ([rozbor](docs/architektura.md#živá-session-v-terminálu-453)).
+   a `grep ReviewPublishing App/` vypisuje týž seznam.
+
+   **Od #459 je terminál i uvnitř okna, a je to vědomá změna téhle podmínky** — ne její obejití.
+   Do #459 tu stálo, že vestavěný terminál je **zamítnutý**, protože by nešel uhlídat testem.
+   Uživatel si ho vyžádal jmenovitě a rozhodl, že se ta záruka vymění za to, že se od review
+   nemusí odcházet z okna. Co z podmínky **zůstává** a co z ní **padá**, je potřeba číst spolu:
+
+   - **Zůstává**, že aplikace **sama** nic neodesílá a `ReviewPublishing` je jediná cesta ven
+     **v jejím kódu**. `grep ReviewPublishing App/` vypisuje **týž seznam** (od #465 sedm souborů
+     a pět volajících) a `SingleWayOutTests` prochází **beze změny** — na ně se nesahalo.
+     `TerminalHosting` nemá zápisovou metodu a nezná `gh`.
+   - **Padá**, že se ta záruka dá **dokázat testem**. Ze shellu jde `gh pr merge` i `git push`
+     a žádná stráž na to nedosáhne, protože ta cesta nevede přes kód aplikace. Plnou moc má odsud
+     **člověk**, ne aplikace.
+   - **Musí to být vidět na obrazovce, ne jen tady**: v hlavičce zásuvky stojí kapsle
+     `plná práva`, protějšek `čte · neodesílá` z tabu `Zeptat se`.
+   - **Tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache aplikace (pracovní strom
+     review, nebo bare klon), nikdy v uživatelově klonu.
+
+   Podrobnosti — proč zásuvka a ne záložka, proč `SwiftTerm` a proč zrovna verze 1.11.2, jak se
+   ten proces zabíjí a co je proti návrhu jinak — jsou
+   v [`docs/architektura.md`](docs/architektura.md#vestavěný-terminál-459)
+   a v [záznamu rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--vestavěný-terminál-jako-zásuvka-459).
+
+   **Merge z panelu (#465) je proti tomu ta druhá, hlídaná strana**: jde přes protokol, přes bránu
+   a s potvrzením, takže se o něm dá tvrdit test. Že aplikace umí mergnout, přitom **není argument
+   pro to, aby uměla spustit `git push` sama** — to je #466 a řeší se vlastní cestou s guardem;
+   a že to jde ze zásuvky, je moc **člověka**, ne aplikace.
 
    Co se **nezměnilo**: `ReviewVerdict` je pořád jen návrh a sám nic neodesílá (od #114 se jím
    **předvyplňuje** verdikt v panelu, ale odejít umí jedině touž cestou). „Výslovný pokyn
-   člověka“ vypadá takhle: **potvrzovací sheet jen u review** (dvě kliknutí, celý payload
-   vidět, #68); **odpověď do vlákna, komentář pod PR ani label se nepotvrzují** (#73, #216,
+   člověka“ vypadá takhle: **potvrzovací sheet u review a u merge** (dvě kliknutí, celý payload
+   vidět — #68, #465; u merge je v něm navíc napsané, co v tom výpisu **není**, protože tělo
+   squash commitu skládá GitHub ze slévaných commitů); **odpověď do vlákna, komentář pod PR ani
+   label se nepotvrzují** (#73, #216,
    #392 — jedno pojmenované tlačítko); **u vyžádání reviewera je potvrzení v nadpisu nabídky**
    (`Vyžádat review od`), protože request se odebráním nedá vzít zpět; **založení labelu
    potvrzení má** (#413) na **druhé obrazovce téhož popoveru, ne v sheetu**, a **bez výchozí
@@ -328,6 +370,12 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    a **přebarvit ani smazat label odsud nejde**. A composer komentáře **nesmí splynout s tabem
    `Moje review`**. Proč zrovna takhle, je
    v [`docs/architektura.md`](docs/architektura.md#labely-a-reviewery-v-panelu-392).
+   **U merge tlačítko výchozí akci nemá** (ani `Enter`), **metoda je jedna** (`squash`, z jedné
+   konstanty, kterou čte payload i potvrzení) a **po úspěchu se zavře sheet i záložka toho PR**
+   — jedině po úspěchu: po `409`, `405` nebo spadlé síti zůstává obojí i s hláškou, jinak by ji
+   nebylo kde ukázat. Pravidlo, že **mergnutý PR jde ještě dočíst a zavřít ho má člověk, ne tik
+   pollingu**, se tím **neruší** — mluví o pollingu, kdežto tady záložku zavírá klik na
+   `Mergnout`.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
@@ -385,22 +433,24 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 ## Architektura
 
-Osm modulů. Čtyři, které sahají do vnějšího světa, jsou za protokolem, aby byly v testech
+Devět modulů. Pět, které sahají do vnějšího světa, je za protokolem, aby byly v testech
 nahraditelné fake implementací. Osmý (`ReviewPublisher`, #67) je jediný, který **zapisuje** —
-viz tvrdá podmínka č. 1.
+viz tvrdá podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kterém **plnou moc má
+člověk**, ne aplikace — tamtéž.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, login přihlášeného účtu (#330), labely s vyžádanými reviewery včetně týmů (#392) a od #420 **hlavy víc PR jedním dotazem**. **Pořád bez zápisu** | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, login přihlášeného účtu (#330), labely s vyžádanými reviewery včetně týmů (#392), od #420 **hlavy víc PR jedním dotazem** a od #465 **slévatelnost větve** (líné pole, ptá se opakovaně). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326). Od #150 dvě podoby běhu — review a kontrola nálezů z minula. Vedle nich tři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345) a **rozhovor nad PR** (#452, vlastní užší sada nástrojů a `--resume`). Od #327 umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu i zadání pro agenta, obsah dashboardu a dění, geometrie, na kterou se ptá kresba, a **desítky dalších**. Úplný katalog s důvody je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej tam podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
-| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR a od #413 **založit label v repozitáři** | `gh` CLI |
+| `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři** a od #465 **mergnout vlastní PR** | `gh` CLI |
+| `TerminalHost` | Vestavěný terminál (#459) — **jeden shell na pull request** v checkoutu toho PR, pty a VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty. Zápisovou metodu nemá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
-Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle sedmičku stojí
+Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
 diff jinou roli než být vidět. Totéž platí o `App/Health/` (#31).
 
@@ -446,10 +496,11 @@ podrobnosti. Zvlášť stojí za přečtení, než sáhneš na:
 - **Do `project.pbxproj` nesahej.** `App/` a `Tests/` jsou buildable folders
   (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
   z filesystému, nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při změně
-  targetů nebo build settings. Dvě výjimky: `Signing.xcconfig` (xcconfig se dá napojit jen
-  odkazem přes `baseConfigurationReference`) a `ASSETCATALOG_COMPILER_APPICON_NAME` (#83 —
-  build setting, leží na **app targetu**, ne na projektu); `App/Assets.xcassets` se v pbxproj
-  **nevyjmenovává**. A **dva zdrojáky se stejným jménem build položí** (#184), i když leží
+  targetů nebo build settings. **Tři výjimky**: `Signing.xcconfig` (xcconfig se dá napojit jen
+  odkazem přes `baseConfigurationReference`), `ASSETCATALOG_COMPILER_APPICON_NAME` (#83 —
+  build setting, leží na **app targetu**, ne na projektu) a od #459 **`SwiftTerm`** (balíček se
+  jinak než přes `packageReferences` nepřipojí; `Package.resolved` je v repu, aby pin nikam
+  neutekl); `App/Assets.xcassets` se v pbxproj **nevyjmenovává**. A **dva zdrojáky se stejným jménem build položí** (#184), i když leží
   v různých podsložkách — jméno souboru je v jednom targetu klíč (`Multiple commands produce …
   <Jméno>.stringsdata`), takže se pojmenovávají **jednoznačně napříč celým `App/`** (a `Tests/`).
 - **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
@@ -861,6 +912,13 @@ Pusť ho znovu, viz tatáž sekce.
 - macOS 26, Xcode 26, Swift 6.3
 - Vyžaduje na stroji `gh` (přihlášený), `claude` a `git`
 - **App Sandbox vypnutý** — aplikace spouští podprocesy a zapisuje do vlastní cache
+- **Jedna závislost třetí strany: `SwiftTerm`, připnutý na `1.11.2`** (#459). Verze je vybraná
+  měřením, ne opatrností: od `1.17` má balíček build tool plugin, který `xcodebuild` bez
+  `-skipPackagePluginValidation` odmítne, a od `1.12` metalový shader v resources, na který je
+  potřeba Metal Toolchain (na tomhle stroji není). **Připnutí drží všechny příkazy v repu beze
+  změny** — kdo půjde nahoru, mění tři z nich a instaluje komponentu Xcode; zdůvodnění je
+  v [záznamu rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#swiftterm--první-závislost-třetí-strany-v-tomhle-repu).
+  Rozpouští se při prvním buildu, takže je **potřeba síť** — `Package.resolved` je v repu
 - **Podpis je stálý, ne ad-hoc** (#61). `Signing.xcconfig` drží ad-hoc default a přes
   `#include?` si tahá gitignorovaný `Signing.local.xcconfig` s jménem certifikátu, který
   vyrobí `bin/setup-signing.sh`. Ad-hoc podpis nemá stálou identitu, takže po každém buildu

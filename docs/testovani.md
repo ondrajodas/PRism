@@ -751,6 +751,60 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   u šipek z #392, ale klávesa v harnessu nemá kam přijít — testovací host **nedostane aktivaci**
   (změřeno u #392), takže pole nemá key okno. Ověří to člověk v pauze; totéž platí o `POST /labels`
   proti živému API, protože brána je ve slotové konfiguraci vypnutá schválně.
+- **Merge vlastního PR z panelu (#465)** — **osmá cesta ven a první, která mění `main`**, takže se
+  u ní hlídá totéž co u těch sedmi a k tomu dvě věci, které jinde neexistují: **výčet důvodů, proč
+  se akce nenabídne**, a **hlava jako podmínka volání**.
+  - **`BranchMergeTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve kterých
+    se merge **nenabídne**: cizí PR (tam se nekreslí ani nadpis sekce), vypnutá brána, **nenačtený
+    stav větve** (`nil` i `.loading` i `.failed` — u nevratné akce je „nevím“ vlastní odpověď, ne
+    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev,
+    **červený check** a **vlastní blokující nález**. K tomu dvě rozhodnutí, která se dají potichu
+    obrátit: **běžící a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem**
+    (nad větou „je konflikt“ by věta „nevím“ nedávala smysl).
+
+    Řádky stavu se tvrdí **textem, ne strukturou**: `3 commity · 2 checky` / `zeleno` proti
+    `1 commit · 2 checky` / `1 neprošel` — skloňování je v nich to, co se rozbije nejtišeji. A
+    **„bez checků“ a „checky se načítají“ jsou dvě různé odpovědi**: PR bez CI je běžný stav, kdežto
+    nenačtené checky o PR netvrdí nic.
+  - **`MergePublishingTests`** — bez povolení, na zavřeném a mergnutém PR, na **posunuté hlavě**
+    a s prázdnou hlavou je **`runner.invocations.isEmpty`**. Tři tvrzení jsou zvlášť pro tuhle metodu:
+    **payload nese přesně tři pole** (`commit_title`, `merge_method`, `sha`) na hotových bajtech —
+    `commit_message` v něm schválně **není**, protože tělo squash commitu skládá GitHub ze zpráv
+    slévaných commitů; **metoda se čte z konstanty**, kterou používá i potvrzení; a **`merged: false`
+    se nebere jako úspěch**, i když návratový kód byl nula.
+
+    Fixtures jsou **skutečné odpovědi**, změřené na `ondrajodas/prism-review-sandbox#8` — sonda tam
+    byla pro tenhle účel založená, třikrát pushnutá a nakonec mergnutá. `409` (`Head branch was
+    modified…`) je skutečné tělo z pokusu s cizí `sha`, `pr-merged.json` skutečná odpověď mergu. Text
+    `405` (`Pull Request is not mergeable`) je proti tomu **z dokumentace, ne změřený**, a je u něj
+    napsáno proč: vyrobit ho by chtělo PR v konfliktu nebo draft, a převedení sondy na draft zakázala
+    permission brána. Je proto inline JSONem, aby se nepletl se skutečnými fixtures.
+  - **`AppStoreMergeTests`** — tady se hlídá, **kdy se aplikace vůbec ptá**: na cizí PR a na mergnutý
+    se na slévatelnost **neptá vůbec** (`branchStatusRequests.isEmpty`), druhý příchod na PR se neptá
+    znovu a selhání se nezahodí do prázdna. K tomu nula spuštění `gh` bez brány, na cizím PR a nad
+    červeným checkem — `mergeSubmission(for:)` vrátí `nil`, takže se sheet nad neproveditelným mergem
+    neotevře ani tehdy, kdyby se na zakázané tlačítko nějak kliknout dalo. A po úspěchu **jedno**
+    volání `gh` a **dvě čtení detailu navíc** (pre-flight a načtení stavu po mergi) — to druhé je to,
+    na čem stojí, že panel merge nenabídne podruhé.
+
+    Podstrčit mergnutý detail **dopředu** tady nejde: pre-flight publisheru se ptá tou samou gateway,
+    takže by merge odmítl ještě před voláním. Že se z mergnutého stavu stane `notOpen(.merged)`, proto
+    tvrdí `BranchMergeTests` nad čistou funkcí a store se ptá jen na to, že se pro ten stav došlo.
+  - **`GhGatewayTests`** (rozšířené) — **líné pole**. Usazená odpověď se ptá **jednou**, `UNKNOWN`
+    se doptá, po **třech** pokusech se vrátí `UNKNOWN` jako **odpověď, ne chyba** (z chyby by panel
+    napsal „nepodařilo se zjistit“, což je něco jiného), neznámý stav se **nepřekládá na čistý**
+    a chybějící `mergeStateStatus` odpověď **nepoloží** — GitHub ho vydá jen tomu, kdo má na
+    repozitář zápis. Čeká se v testu **nula sekund** (`branchStatusDelay: .zero`), protože se měří
+    počet dotazů, ne trpělivost.
+  - **`SingleWayOutTests`** — **sedm souborů, pět volajících, osm metod** jmenovitě, a `merge` z
+    výčtu zakázaných **zmizel**; zůstává approve mimo review, `close`, milník a `deleteLabel`.
+    Je to jediné místo v repu, kde se ta změna pravidla dá přečíst jako změna, ne jako díra.
+  - **`WindowShortcutsTests`** — `Views/MergeSheet.swift` přibyl do jmenovitého výčtu souborů, které
+    si klávesu berou samy (`⎋` na `Zrušit`). Tlačítko, které merguje, zkratku **nemá**.
+
+  **Co testy neověří:** že `PUT /pulls/{n}/merge` projde z běžící aplikace — brána je ve slotové
+  konfiguraci vypnutá schválně, takže se akce v proklikávané instanci nenabídne, dokud si ji člověk
+  nezapne. Ověřené je to **mimo aplikaci**, tímtéž voláním na sondě.
 - **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
   test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
   rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají
@@ -6640,8 +6694,8 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (dvacet), ne „aspoň tolik“ — tatáž konstrukce jako u
-  `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
+- **Počet akcí je vyjmenovaný** (od #459 jednadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+  u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
   a paletě, které si klávesu berou samy. Komentáře se zahazují stejně jako v grepech z `CLAUDE.md`.
@@ -6688,6 +6742,75 @@ TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/prism xcodebuild \
 **Prefix `TEST_RUNNER_` je povinný**: bez něj se proměnná do testovacího hosta nedostane a sonda
 se **přeskočí** — `xcodebuild` skončí `TEST SUCCEEDED` a v cílové složce nic není, což vypadá jako
 rozbitá sonda.
+
+### Zásuvka s terminálem (#459)
+
+Testuje se **rozhodnutí a stav, ne emulátor**: `TerminalDrawerTests` (čisté funkce),
+`AppStoreTerminalTests` (co store udělá s otevřením, zavřením záložky a ukončením — proti
+`FakeTerminalHost`, který žádný shell nespouští) a `AppDelegateTerminationTests` (dotaz při
+zavírání). Co se **v harnessu ověřit nedá a proto to zkouší člověk**, je vypsané níž.
+
+Co z toho stojí za zapamatování:
+
+- **Nejcennější jsou tři tvrzení o tom, co se nestane**: schování zásuvky shell **nezabije**
+  (jinak by `` ⌃` `` uprostřed běžícího `claude --resume` byl nevratný omyl), zavření záložky ho
+  **zabije** (jinak sirotek z #264 a #351) a `PATH` aplikace se do shellu **nepředá** (jinak
+  zásuvka bez Homebrew).
+- **Ustupování zkratek se tvrdí výčtem nad celým katalogem**, ne nad jednou vybranou kombinací —
+  a přes **všechny** kombinace, protože `⌃1` má na české mapě alternativu `⌃+`, která by se
+  uplatnila stejně. Výjimka `` ⌃` `` je v tom tvrzení **vypsaná**, takže druhá výjimka spadne
+  v testu, ne až v okně.
+- **Adresář, který na disku není, se nesmí nabídnout.** Eviction klony maže, takže shell spuštěný
+  ve smazané složce není teoretický stav; test to zkouší nad cestou, která nikdy neexistovala.
+- **Emulátor se netestuje** a je to vědomé: `SwiftTerm` má vlastní sadu testů. Rozhraní mezi ním
+  a naším kódem je úzké — start, kill, fokus, barvy —, a to podstatné z něj měří sonda níž.
+
+#### Sonda `EmbeddedTerminalProbe` — skutečný shell, ale bez emulátoru
+
+`TEST_RUNNER_PRISM_MEASURE=1` a `-only-testing:PRismTests/EmbeddedTerminalProbe`; **v běžném běhu
+se nepouští**, protože spuštěný shell je proces, který umí běh testů přežít.
+
+Co změřila a co by se bez ní neodhadlo:
+
+- **Login shell se spustí a má řídicí terminál.** `ps -o state=` vrací `Ss+`, tedy *session leader
+  v popředí* — takže `login_tty` proběhlo a job control uvnitř funguje. Kdyby chybělo, `⌃C`
+  v zásuvce by nepřerušilo nic.
+- **Pracovní adresář sedí** — čte se z jádra (`lsof -d cwd`), ne z výpisu v terminálu. Obě cesty se
+  musí prohnat `resolvingSymlinksInPath`: `TMPDIR` je na macOS symlink, takže jádro hlásí
+  `/private/var/folders/…` a `FileManager` `/var/folders/…`.
+- **`kill()` zabíjí doopravdy** — po něm je stav `Z`. **Zombie se počítá jako mrtvý**: nesklizený
+  potomek zabírá řádek v tabulce procesů, ale neběží, a `kill(pid, 0)` na něm pořád vrací nulu —
+  takže tvrzení postavené na návratovém kódu by hlásilo, že shell přežil.
+
+**Psaní do pty se odsud neověřuje, a je to změřené.** Pokus tam byl: poslat `exit` a čekat, až
+shell skončí. Vycházel **náhodně** (z pěti běhů dva zeleně) a opakované posílání to nespravilo —
+`LocalProcess.send` jde přes **druhý** `DispatchIO` kanál nad týmž deskriptorem, jehož první kanál
+visí na hladové hlavní frontě (viz níž). Sonda postavená na tom je falešně červený `main`; napsat
+do terminálu zkouší člověk.
+
+**A co sonda ověřit nemůže vůbec, taky změřeně: obsah emulátoru.** `LocalProcess` doručuje
+přečtené bajty přes `DispatchQueue.main`, a **hlavní dispatch fronta se v testovacím hostu nedrání
+vůbec**. Naměřeno tak, že se z pozadí zavolalo `DispatchQueue.main.async` i `.sync` a za pět sekund
+neproběhlo **ani jedno** (`hits == 0`) — přestože sonda běží na hlavním vlákně
+(`Thread.isMainThread == true`) a točí `RunLoop.main.run(until:)`. Buffer emulátoru proto zůstane
+prázdný, ať shell vypíše cokoli; první podoba sondy na tom stála a měřila vlastní zaseknutí.
+
+Plyne z toho pravidlo širší než #459: **co v aplikaci chodí přes `DispatchQueue.main`, se v hostu
+pozorovat nedá.** Kde to jde, hledá se jiný pozorovatelný konec (tady jádro); kde ne, ověřuje se to
+rukama.
+
+**Co ověří jedině člověk na běžící aplikaci** (v harnessu ne, protože testovací host nedostane
+aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
+
+1. `` ⌃` `` zásuvku vytáhne a schová; na domácí záložce se nestane nic.
+2. V zásuvce běží login shell v checkoutu toho PR (`pwd`), s uživatelovým `PATH` (`which claude`).
+3. `claude --resume <id>` v ní vypadá jako v Terminálu — kurzor, barvy, překreslení při **změně
+   velikosti okna** i při tažení za horní hranu zásuvky (`TIOCSWINSZ`).
+4. `⌃W` a `⌃C` uvnitř terminálu **nesáhnou na záložky** — `⌃W` maže slovo, `⌃C` přeruší běh.
+   Tohle je ten test, kvůli kterému #459 mohlo dopadnout špatně.
+5. Zavření okna s běžícím procesem se **zeptá**, a po `Ukončit` po sobě nic nenechá:
+   `ps -o pid,ppid,command -p <pid shellu>` a `pgrep -f claude` nemají co vrátit.
+6. Na české klávesnici funguje `⌃;`.
 
 ### `⌃Tab` a shift, který mění klávesu (#245)
 

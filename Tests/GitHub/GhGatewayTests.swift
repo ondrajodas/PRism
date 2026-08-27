@@ -519,4 +519,95 @@ struct GhGatewayTests {
             try await gateway(runner).fetchViewer()
         }
     }
+
+    // MARK: - Slévatelnost větve (#465)
+
+    /// Gateway s **nulovým čekáním** mezi pokusy: v testu se měří počet dotazů, ne trpělivost.
+    private func promptGateway(_ runner: ProcessRunning) -> GhGateway {
+        GhGateway(gh: gh, runner: runner, branchStatusDelay: .zero)
+    }
+
+    private func branchStatus(
+        _ mergeable: String,
+        _ state: String
+    ) -> Result<ProcessResult, ProcessError> {
+        .success(
+            ProcessResult(
+                exitCode: 0,
+                standardOutput: #"{"mergeable":"\#(mergeable)","mergeStateStatus":"\#(state)"}"#,
+                standardError: ""
+            )
+        )
+    }
+
+    /// **Usazená odpověď se ptá jednou.** Opakovaný dotaz je pojistka proti línému poli, ne
+    /// pravidlo — a kdyby se ptal vždycky třikrát, platil by za něj každý výběr řádku.
+    @Test("Usazená slévatelnost se ptá jednou")
+    func asksOnceWhenGitHubKnows() async throws {
+        let runner = ScriptedProcessRunner([branchStatus("MERGEABLE", "CLEAN")])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+
+        #expect(status == BranchStatus(mergeability: .mergeable, mergeState: .clean))
+        #expect(runner.invocations.count == 1)
+        #expect(runner.commands.first?.prefix(2) == ["pr", "view"])
+        #expect(runner.commands.first?.contains("mergeable,mergeStateStatus") == true)
+    }
+
+    /// **`UNKNOWN` znamená zeptat se znovu.** Bez toho by bylo tlačítko `Mergnout…` u čerstvého PR
+    /// zašedlé podle náhody — `mergeable` se u GitHubu počítá až na vyžádání.
+    @Test("Nespočítaná slévatelnost se doptá")
+    func asksAgainWhenGitHubDoesNotKnowYet() async throws {
+        let runner = ScriptedProcessRunner([
+            branchStatus("UNKNOWN", "UNKNOWN"),
+            branchStatus("MERGEABLE", "BLOCKED"),
+        ])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+
+        #expect(status == BranchStatus(mergeability: .mergeable, mergeState: .blocked))
+        #expect(runner.invocations.count == 2)
+    }
+
+    /// **Strop je tři pokusy a `UNKNOWN` po nich je odpověď**, ne chyba: panel z ní udělá větu
+    /// „GitHub ještě nespočítal…“, kdežto z chyby by udělal „nepodařilo se zjistit“ — a to je
+    /// něco jiného.
+    @Test("Po třech pokusech se vrátí UNKNOWN, ne chyba")
+    func givesUpAfterThreeAttempts() async throws {
+        let runner = ScriptedProcessRunner([branchStatus("UNKNOWN", "UNKNOWN")])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+
+        #expect(status == BranchStatus(mergeability: .unknown, mergeState: .unknown))
+        #expect(runner.invocations.count == 3)
+    }
+
+    /// Neznámá hodnota se **nehádá**: nové jméno stavu z GitHubu je `unknown`, ne „nejspíš čisto“.
+    @Test("Neznámý stav se nepřekládá na čistý")
+    func doesNotGuessAnUnknownState() async throws {
+        let runner = ScriptedProcessRunner([branchStatus("MERGEABLE", "SOMETHING_NEW")])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+
+        #expect(status.mergeState == .unknown)
+    }
+
+    /// Chybějící `mergeStateStatus` je **běžný stav** (GitHub ho vydá jen tomu, kdo má na
+    /// repozitář zápis), takže nesmí položit celou odpověď.
+    @Test("Chybějící mergeStateStatus odpověď nepoloží")
+    func survivesAMissingMergeState() async throws {
+        let runner = ScriptedProcessRunner([
+            .success(
+                ProcessResult(
+                    exitCode: 0,
+                    standardOutput: #"{"mergeable":"MERGEABLE"}"#,
+                    standardError: ""
+                )
+            ),
+        ])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+
+        #expect(status == BranchStatus(mergeability: .mergeable, mergeState: .unknown))
+    }
 }
