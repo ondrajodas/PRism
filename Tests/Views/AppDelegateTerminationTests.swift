@@ -97,6 +97,65 @@ struct AppDelegateTerminationTests {
         #expect(allowed.count == 1)
     }
 
+    /// Shell v zásuvce (#459) je tentýž závazek jako běžící review: co aplikace spustila, to i
+    /// ukončí. Bez dotazu by se dal `claude --resume` v terminálu zabít omylem jedním `⌘Q`.
+    @Test("Na běžící shell v zásuvce se aplikace zeptá")
+    func aRunningShellIsAlsoWorthAsking() {
+        let asked = Recorder()
+        let killed = Recorder()
+        let delegate = AppDelegate()
+        delegate.runningReviews = { 0 }
+        delegate.runningTerminals = { 1 }
+        delegate.confirmQuit = { _ in
+            asked.record()
+            return true
+        }
+        delegate.stopTerminals = { killed.record() }
+        delegate.allowTermination = {}
+
+        // Nic se neodkládá: signál shellu odchází přímo z téhle cesty, takže není na co čekat.
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(asked.count == 1)
+        #expect(killed.count == 1)
+    }
+
+    /// **Tvrzení o tom, co se nestane**: kdo se zavření rozmyslel, nesmí přijít o rozdělaný shell.
+    @Test("Zpět v dialogu shell nezabije")
+    func goingBackKeepsTheShellAlive() {
+        let killed = Recorder()
+        let delegate = AppDelegate()
+        delegate.runningReviews = { 0 }
+        delegate.runningTerminals = { 1 }
+        delegate.confirmQuit = { _ in false }
+        delegate.stopTerminals = { killed.record() }
+        delegate.allowTermination = {}
+
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateCancel)
+        #expect(killed.count == 0)
+    }
+
+    /// Když běží obojí, zabijí se shelly hned a na review se počká — jsou to dvě různé cesty,
+    /// protože shell se zabíjí signálem odsud, kdežto review přes zrušení tasku (#264).
+    @Test("Když běží review i shell, zabije se obojí")
+    func bothKindsOfWorkAreStopped() async {
+        let killed = Recorder()
+        let stopped = Recorder()
+        let allowed = Recorder()
+        let delegate = AppDelegate()
+        delegate.runningReviews = { 1 }
+        delegate.runningTerminals = { 2 }
+        delegate.confirmQuit = { _ in true }
+        delegate.stopTerminals = { killed.record() }
+        delegate.stopReviews = { stopped.record() }
+        delegate.allowTermination = { allowed.record() }
+
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateLater)
+        #expect(killed.count == 1)
+
+        await waitUntil("systém dostane odpověď") { allowed.count > 0 }
+        #expect(stopped.count == 1)
+    }
+
     @Test("Odpověď systému dorazí i tehdy, když zabíjení nikdo nedoplnil")
     func terminationIsAlwaysAllowedInTheEnd() async {
         // Ze zaseknuté nebo nezapojené cesty nesmí vzniknout aplikace, která se nedá zavřít.

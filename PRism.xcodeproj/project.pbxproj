@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A100000000000000000000F3 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000F2 /* SwiftTerm */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		A100000000000000000000A6 /* PRism.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PRism.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100000000000000000000A7 /* PRismTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PRismTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -22,6 +26,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A100000000000000000000F3 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +79,7 @@
 			);
 			name = "PRism";
 			packageProductDependencies = (
+				A100000000000000000000F2 /* SwiftTerm */,
 			);
 			productName = "PRism";
 			productReference = A100000000000000000000A6 /* PRism.app */;
@@ -130,6 +136,9 @@
 			);
 			mainGroup = A100000000000000000000A2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A100000000000000000000F1 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A100000000000000000000A3 /* Products */;
 			projectDirPath = "";
@@ -430,6 +439,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A100000000000000000000F1 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = exactVersion;
+				version = 1.11.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A100000000000000000000F2 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A100000000000000000000F1 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A100000000000000000000A1 /* Project object */;
 }
