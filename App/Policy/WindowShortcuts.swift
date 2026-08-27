@@ -59,6 +59,8 @@ struct WindowShortcut: Equatable, Sendable {
         case openSubmission
         case agentPrompt
         case cancelReview
+        /// Zásuvka s terminálem (#459) — **jediná zkratka, která terminálu neustupuje.**
+        case toggleTerminal
         // Obsah detailu a domácí záložky.
         case fileTree
         case runAllReviews
@@ -224,6 +226,20 @@ extension Policy {
                 title: "Zastavit běžící review",
                 primary: .init(key: .character("."), modifiers: .command)
             )
+        // `` ⌃` `` je zkratka terminálu na macOS napříč aplikacemi (VS Code, Xcode, JetBrains) —
+        // a hlavně **jediná okenní zkratka, která platí i s fokusem v zásuvce** (#459). Kdyby byla
+        // na `⌘`, srazila by se s tím, co `⌘` v okně dělá; kdyby byla na `Control`u a nebyla
+        // výjimkou, nešla by zásuvka zavřít klávesnicí vůbec.
+        //
+        // **Alternativa `⌃;` je pro českou klávesnici**, ze stejného důvodu jako `⌃+ěščř` u sekcí
+        // railu: `keyboardShortcut` páruje na **znak**, a klávesa vlevo od `1` má v české mapě
+        // `;`, ne `` ` ``. Bez ní by se zásuvka na české mapě nedala otevřít.
+        case .toggleTerminal:
+            return WindowShortcut(
+                title: "Terminál",
+                primary: .init(key: .character("`"), modifiers: .control),
+                alternates: [.init(key: .character(";"), modifiers: .control)]
+            )
         case .fileTree:
             return WindowShortcut(
                 title: "Strom souborů",
@@ -268,7 +284,7 @@ extension Policy {
         + RailSection.allCases.map(WindowShortcut.Action.openSection)
         + [
             .nextFinding, .previousFinding, .reviewPanel, .backFromCommit,
-            .openSubmission, .agentPrompt, .cancelReview,
+            .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
             .fileTree, .runAllReviews, .openDraft,
         ]
 

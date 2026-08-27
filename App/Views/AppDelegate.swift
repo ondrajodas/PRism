@@ -22,13 +22,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kolik review právě běží. Doplní `PRismApp`, jakmile má store; do té doby nic neběží.
     @MainActor var runningReviews: () -> Int = { 0 }
 
+    /// Kolik shellů běží v zásuvce s terminálem (#459). Taky uzávěr a taky z `PRismApp`.
+    ///
+    /// **Vlastní počet, ne přičtený k review**: dialog o nich mluví každý jinak, protože se s nimi
+    /// ztrácí něco jiného — z review se dá dotáhnout, co reviewer nahlásil, kdežto výpis shellu se
+    /// nikam neukládá. Skládá to `Policy.quitPrompt`.
+    @MainActor var runningTerminals: () -> Int = { 0 }
+
     /// Zabije běžící review a vrátí se, teprve když po nich nic nezůstalo (#264). Doplní
     /// `PRismApp` ze stejného důvodu jako `runningReviews`.
     @MainActor var stopReviews: @MainActor () async -> Void = {}
 
+    /// Zabije shelly v zásuvce (#459). **Synchronně**, na rozdíl od review: signál odchází přímo
+    /// z téhle cesty, takže není na co čekat.
+    @MainActor var stopTerminals: @MainActor () -> Void = {}
+
     /// Jak se zeptat. Vlastnost, ne jen metoda, kvůli testům: `NSAlert.runModal()` v nich čeká
     /// na kliknutí, které nikdo neudělá.
-    @MainActor var confirmQuit: @MainActor (Int) -> Bool = { AppDelegate.ask(about: $0) }
+    @MainActor var confirmQuit: @MainActor (QuitPrompt) -> Bool = { AppDelegate.ask(about: $0) }
 
     /// Odpověď systému, že se aplikace smí zavřít. Taky vlastnost, a taky kvůli testům:
     /// `reply(toApplicationShouldTerminate:)` mimo odložené ukončení by hosta testů ukončil
@@ -73,9 +84,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // dvakrát — `reply(toApplicationShouldTerminate:)` je na jedno odložené ukončení.
             guard !isStoppingReviews else { return .terminateLater }
 
-            let running = runningReviews()
-            guard running > 0 else { return .terminateNow }
-            guard confirmQuit(running) else { return .terminateCancel }
+            // Co běží a jak se na to zeptat, rozhoduje `Policy.quitPrompt` — `nil` znamená, že
+            // neběží nic. Zabíjení shellů se nedá odložit za `terminateNow`, takže se dělá tady:
+            // po `.terminateNow` už žádné další kolo runloopu nepřijde a shell by osiřel.
+            guard let prompt = Policy.quitPrompt(
+                reviews: runningReviews(),
+                terminals: runningTerminals()
+            ) else {
+                return .terminateNow
+            }
+            guard confirmQuit(prompt) else { return .terminateCancel }
+            stopTerminals()
+            guard runningReviews() > 0 else { return .terminateNow }
             isStoppingReviews = true
 
             // **Odloží se jen zabíjení, ne dotaz.** Dotaz musí padnout synchronně, jinak by se
@@ -94,19 +114,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `NSAlert` a `runModal()` schválně, ne SwiftUI: dotaz musí padnout **synchronně**, jinak
     /// se aplikace ukončí, než se kdokoli zeptá.
-    @MainActor private static func ask(about running: Int) -> Bool {
+    ///
+    /// **Text se tady neskládá** (#459) — je z `Policy.quitPrompt`. Věty se totiž liší podle toho,
+    /// co běží, a čtyři větve `if`ů ve view vrstvě jsou přesně to, co patří do `Policy`, kde se
+    /// dají projít výčtem.
+    @MainActor private static func ask(about prompt: QuitPrompt) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = running == 1
-            ? "Běží review. Ukončit teď?"
-            : "Běží \(running) review. Ukončit teď?"
-        // Text říká, co se stane, ne jen že se něco děje. „Běží review“ samo o sobě nedává
-        // důvod kliknout na Zpět. **Neslibuje ale ani víc, než co data unesou:** dotáhne se to,
-        // co reviewer do zabití nahlásil, a jen z běhu, který stihl ohlásit svoje id session.
-        alert.informativeText = """
-        Běžící session se ukončením zabijí. Co doběhlo, zůstane uložené; z nedoběhlého se po \
-        dalším spuštění dotáhne, co reviewer nahlásil do té chvíle.
-        """
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.detail
         alert.addButton(withTitle: "Ukončit")
         alert.addButton(withTitle: "Zpět")
         // Zpět jako výchozí: ztracený nález je dražší než jedno kliknutí navíc.

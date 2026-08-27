@@ -5138,3 +5138,85 @@ bloky a mění se jednou za výřez, `top` se mění při každém snímku a čt
 průběh) **mají strop**, takže u nich platí pravidlo z #361 nezměněné, ale vyloučené to není. A cena
 projíždění se u velkých diffů měří **jen na odemčené obrazovce** — pod zamčenou gesto nikam
 neposune a všechny podoby vyjdou shodně, což se pozná podle záporného `dojelo na …` ve výpisu sondy.
+## #459 — terminál je uvnitř okna, a tvrdá podmínka č. 1 se tím vědomě změnila
+
+`` ⌃` `` vytáhne přes spodek záložky PR **zásuvku se skutečným shellem**, který stojí v kopii repa
+toho pull requestu v cache aplikace. Návrh je sekce 35. Do #459 se dal terminál otevřít jedním
+tlačítkem v tabu `Průběh` (#453) — je to levné a podmínky se u toho nehnuly, ale pořád to znamená
+**odejít z okna** a vrátit se za deset minut.
+
+**Zásuvka, ne devátá záložka**, a je to celý smysl: půlka užitku je vidět diff a **pod ním** výstup
+příkazu. Roztahuje se tažením za horní hranu, výška si pamatuje mezi spuštěními a nad zásuvkou
+vždycky kus obsahu zůstane — jinak by z ní ta záložka byla.
+
+**Tvrdá podmínka č. 1 se změnila a je to přepsané, ne obejité.** Do #459 v `CLAUDE.md`
+i v `architektura.md` stálo, že vestavěný terminál je **zamítnutý**, protože nepůjde uhlídat
+testem. Obojí je pořád pravda; uživatel si tu funkci vyžádal jmenovitě a rozhodl, že se za ni ta
+záruka vymění. Čte se to jako dvojice: **zůstává**, že aplikace **sama** nic neodesílá a
+`ReviewPublishing` je jediná cesta ven **v jejím kódu** — `grep ReviewPublishing App/` vypisuje
+**týž seznam** a `SingleWayOutTests` prošly **beze změny**, protože se na ně nesahalo; **padá**, že
+se to dá **dokázat testem**, protože ze shellu jde `gh pr merge` i `git push` a ta cesta nevede přes
+kód aplikace. Plnou moc má odsud **člověk**, ne aplikace — a **je to napsané na obrazovce**, ne jen
+v dokumentaci: v hlavičce zásuvky stojí kapsle `plná práva`, protějšek `čte · neodesílá` z tabu
+`Zeptat se`. **Tvrdá podmínka č. 3 platí beze změny.**
+
+**`SwiftTerm` je první závislost třetí strany v tomhle repu** a **třetí vědomá výjimka** z pravidla
+„do `project.pbxproj` nesahej“ (po `Signing.xcconfig` a `ASSETCATALOG_COMPILER_APPICON_NAME`).
+Verze `1.11.2` je vybraná **měřením, ne opatrností**: `1.20.0` shodí build na
+`Validate plug-in "SwiftTermBuildInfoPlugin"` (build tool plugin `xcodebuild` bez
+`-skipPackagePluginValidation` neschválí) a `1.16.0` na `cannot execute tool 'metal' due to missing
+Metal Toolchain`. Zamítnuté cesty jsou zapsané i s cenou: flag by přepsal **tři** dokumentované
+příkazy a od té chvíle by se mlčky spouštěl **každý** plugin každého budoucího balíčku;
+`-downloadComponent MetalToolchain` je několikagigabajtová komponenta Xcode kvůli rendereru, který
+se v zásuvce nepoužije. **Připnutí drží všechny příkazy v repu beze změny**, `Package.resolved` je
+v repu a cena — jsme na verzi z února 2026 — je napsaná.
+
+**Klávesy patří terminálu, a hranice je `⌘`, ne `Control`.** Návrh mluví o `Control`u, jenže hranice
+kolem jednoho modifikátoru by nechala venku `⎋` (vim, `claude`) a `⌥↑`/`⌥↓`, kde je `Option`
+v terminálu meta. Pravidlo je proto jedna věta — *co nemá `⌘`, patří terminálu*
+(`Policy.shortcutYieldsToTerminal`) — a jde ho projít **vyčerpávajícím výčtem nad celým katalogem**
+(#441), takže si nová zkratka na `Control`u vynutí rozhodnutí sama. Jedinou výjimkou je `` ⌃` ``,
+a rozhoduje o ní **akce, ne kombinace**. Na české mapě funguje i `⌃;`, ze stejného důvodu jako
+`⌃+ěščř` u sekcí railu.
+
+**Zabíjí se popředí pty, ne jen shell, a stálo to úvahu navíc.** Knihovní `terminate()` posílá
+`SIGTERM` shellu — a to na závazek z #264 nestačí: `claude` spuštěný v interaktivním shellu dostane
+vlastní process group (job control), takže by ho signál poslaný shellu **minul** a osiřel by na
+`launchd` úplně stejně jako v #351. Zabíjí se proto `tcgetpgrp(childfd)` a **až pak** shell.
+K tomu značka v `sessions.json` toutéž cestou jako u review, aby osiřelý shell zabil **další start**
+po zabité aplikaci. **Zavření záložky shell zabije, schování zásuvky ne** — `` ⌃` `` je pohled, ne
+konec práce.
+
+**Proti návrhu je jedna věc jinak a je zapsaná**: kapsle v hlavičce ukazuje `běží` / `skončil (kód)`,
+ne příkaz, který zrovna běží. Zjistit ho znamená ptát se jádra na popředí pty v pravidelném taktu,
+tedy zavést v okně další časovač kvůli popisce. Je to méně, než slibuje mockup, ale nic z toho není
+nepravda — a `exit 1` se od `exit 0` odliší, což je to, kvůli čemu se na kapsli člověk podívá.
+Mockup se kvůli tomu **nepřekresluje** (schvaluje ho uživatel, #286).
+
+Testů **4250**, všechny zelené — z toho **33 nových**: `Policy` výčtem (výška a její ořez, tažení,
+kde shell startuje, co se spustí a s čím, dotaz při ukončení) a to podstatné ze storu a z delegáta —
+**schování zásuvky shell nezabije**, **zavření záložky ano**, **`Zpět` v dialogu nezabije nic**
+a **`PATH` aplikace se do shellu nepředá**.
+
+**Nad tím je sonda se skutečným shellem** (`EmbeddedTerminalProbe`, mimo běžný běh) a našla dvě věci,
+které by se z kódu nepoznaly. Zaprvé: shell startuje jako `Ss+`, tedy **session leader v popředí** —
+takže `login_tty` proběhlo a job control uvnitř funguje; kdyby ne, `⌃C` v zásuvce by nepřerušilo nic.
+Zadruhé: po `kill()` je stav `Z`, a **zombie se počítá jako mrtvý** — `kill(pid, 0)` na nesklizeném
+potomkovi pořád vrací nulu, takže první podoba tvrzení hlásila, že shell přežil, i když neběžel.
+
+**A dvě věci se ověřit nedají, změřeně.** Psaní do pty: `exit` poslané do shellu vycházelo náhodně
+(z pěti běhů dva) a opakování to nespravilo, protože `send` jde přes druhý `DispatchIO` kanál nad
+deskriptorem, jehož první kanál visí na hladové hlavní frontě. A obsah emulátoru vůbec. `LocalProcess` doručuje bajty přes
+`DispatchQueue.main` a **hlavní dispatch fronta se v testovacím hostu nedrání vůbec** — z pozadí
+zavolané `DispatchQueue.main.async` i `.sync` za pět sekund neproběhly ani jednou, přestože sonda
+běží na hlavním vlákně a točí `RunLoop.main.run(until:)`. Sonda proto **nic z emulátoru nečte**
+a všechno si zjišťuje z jádra (`lsof` na adresář, `ps` na stav, `exit` jako důkaz, že se do pty píše).
+Je z toho pravidlo širší než #459 a je zapsané v [`testovani.md`](testovani.md): **co v aplikaci chodí
+přes `DispatchQueue.main`, se v hostu pozorovat nedá.**
+
+**Co ověřuje jedině člověk** (testovací host nedostane aktivaci, takže nemá key okno a stisk nemá
+kam sednout, #392, #434): že se zkratky s fokusem v terminálu doopravdy neuplatní, že `claude
+--resume` vypadá jako v Terminálu, že změna velikosti okna přeposílá `TIOCSWINSZ` a že po zavření
+aplikace nezbyde běžící proces. Seznam kroků je v [`testovani.md`](testovani.md).
+
+**`▶` v tabu `Průběh` zůstává na `Terminal.app`** — přepojení na zásuvku je **#460**.

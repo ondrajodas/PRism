@@ -311,10 +311,29 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    **Otevřít session v uživatelově terminálu (#453) osmou cestou ven není**, a je to hranice, ne
    výjimka: terminál je **mimo aplikaci** — totéž, jako když si člověk `claude --resume` vlepí
    sám. Uvnitř okna žádný terminál nevzniká, `TerminalOpening` nemá čím na GitHub sáhnout
-   a `grep ReviewPublishing App/` vypisuje týž seznam. **Vestavěný terminál je zamítnutý**:
-   znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, a **nešel by uhlídat testem**,
-   protože ta cesta nevede přes kód aplikace
-   ([rozbor](docs/architektura.md#živá-session-v-terminálu-453)).
+   a `grep ReviewPublishing App/` vypisuje týž seznam.
+
+   **Od #459 je terminál i uvnitř okna, a je to vědomá změna téhle podmínky** — ne její obejití.
+   Do #459 tu stálo, že vestavěný terminál je **zamítnutý**, protože by nešel uhlídat testem.
+   Uživatel si ho vyžádal jmenovitě a rozhodl, že se ta záruka vymění za to, že se od review
+   nemusí odcházet z okna. Co z podmínky **zůstává** a co z ní **padá**, je potřeba číst spolu:
+
+   - **Zůstává**, že aplikace **sama** nic neodesílá a `ReviewPublishing` je jediná cesta ven
+     **v jejím kódu**. `grep ReviewPublishing App/` vypisuje **týž seznam** (šest souborů, čtyři
+     volající) a `SingleWayOutTests` prochází **beze změny** — na ně se nesahalo. `TerminalHosting`
+     nemá zápisovou metodu a nezná `gh`.
+   - **Padá**, že se ta záruka dá **dokázat testem**. Ze shellu jde `gh pr merge` i `git push`
+     a žádná stráž na to nedosáhne, protože ta cesta nevede přes kód aplikace. Plnou moc má odsud
+     **člověk**, ne aplikace.
+   - **Musí to být vidět na obrazovce, ne jen tady**: v hlavičce zásuvky stojí kapsle
+     `plná práva`, protějšek `čte · neodesílá` z tabu `Zeptat se`.
+   - **Tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache aplikace (pracovní strom
+     review, nebo bare klon), nikdy v uživatelově klonu.
+
+   Podrobnosti — proč zásuvka a ne záložka, proč `SwiftTerm` a proč zrovna verze 1.11.2, jak se
+   ten proces zabíjí a co je proti návrhu jinak — jsou
+   v [`docs/architektura.md`](docs/architektura.md#vestavěný-terminál-459)
+   a v [záznamu rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--vestavěný-terminál-jako-zásuvka-459).
 
    Co se **nezměnilo**: `ReviewVerdict` je pořád jen návrh a sám nic neodesílá (od #114 se jím
    **předvyplňuje** verdikt v panelu, ale odejít umí jedině touž cestou). „Výslovný pokyn
@@ -385,9 +404,10 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
 ## Architektura
 
-Osm modulů. Čtyři, které sahají do vnějšího světa, jsou za protokolem, aby byly v testech
+Devět modulů. Pět, které sahají do vnějšího světa, je za protokolem, aby byly v testech
 nahraditelné fake implementací. Osmý (`ReviewPublisher`, #67) je jediný, který **zapisuje** —
-viz tvrdá podmínka č. 1.
+viz tvrdá podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kterém **plnou moc má
+člověk**, ne aplikace — tamtéž.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
@@ -399,8 +419,9 @@ viz tvrdá podmínka č. 1.
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR a od #413 **založit label v repozitáři** | `gh` CLI |
+| `TerminalHost` | Vestavěný terminál (#459) — **jeden shell na pull request** v checkoutu toho PR, pty a VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty. Zápisovou metodu nemá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
-Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle sedmičku stojí
+Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
 diff jinou roli než být vidět. Totéž platí o `App/Health/` (#31).
 
@@ -446,10 +467,11 @@ podrobnosti. Zvlášť stojí za přečtení, než sáhneš na:
 - **Do `project.pbxproj` nesahej.** `App/` a `Tests/` jsou buildable folders
   (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
   z filesystému, nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při změně
-  targetů nebo build settings. Dvě výjimky: `Signing.xcconfig` (xcconfig se dá napojit jen
-  odkazem přes `baseConfigurationReference`) a `ASSETCATALOG_COMPILER_APPICON_NAME` (#83 —
-  build setting, leží na **app targetu**, ne na projektu); `App/Assets.xcassets` se v pbxproj
-  **nevyjmenovává**. A **dva zdrojáky se stejným jménem build položí** (#184), i když leží
+  targetů nebo build settings. **Tři výjimky**: `Signing.xcconfig` (xcconfig se dá napojit jen
+  odkazem přes `baseConfigurationReference`), `ASSETCATALOG_COMPILER_APPICON_NAME` (#83 —
+  build setting, leží na **app targetu**, ne na projektu) a od #459 **`SwiftTerm`** (balíček se
+  jinak než přes `packageReferences` nepřipojí; `Package.resolved` je v repu, aby pin nikam
+  neutekl); `App/Assets.xcassets` se v pbxproj **nevyjmenovává**. A **dva zdrojáky se stejným jménem build položí** (#184), i když leží
   v různých podsložkách — jméno souboru je v jednom targetu klíč (`Multiple commands produce …
   <Jméno>.stringsdata`), takže se pojmenovávají **jednoznačně napříč celým `App/`** (a `Tests/`).
 - **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
@@ -851,6 +873,13 @@ Pusť ho znovu, viz tatáž sekce.
 - macOS 26, Xcode 26, Swift 6.3
 - Vyžaduje na stroji `gh` (přihlášený), `claude` a `git`
 - **App Sandbox vypnutý** — aplikace spouští podprocesy a zapisuje do vlastní cache
+- **Jedna závislost třetí strany: `SwiftTerm`, připnutý na `1.11.2`** (#459). Verze je vybraná
+  měřením, ne opatrností: od `1.17` má balíček build tool plugin, který `xcodebuild` bez
+  `-skipPackagePluginValidation` odmítne, a od `1.12` metalový shader v resources, na který je
+  potřeba Metal Toolchain (na tomhle stroji není). **Připnutí drží všechny příkazy v repu beze
+  změny** — kdo půjde nahoru, mění tři z nich a instaluje komponentu Xcode; zdůvodnění je
+  v [záznamu rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#swiftterm--první-závislost-třetí-strany-v-tomhle-repu).
+  Rozpouští se při prvním buildu, takže je **potřeba síť** — `Package.resolved` je v repu
 - **Podpis je stálý, ne ad-hoc** (#61). `Signing.xcconfig` drží ad-hoc default a přes
   `#include?` si tahá gitignorovaný `Signing.local.xcconfig` s jménem certifikátu, který
   vyrobí `bin/setup-signing.sh`. Ad-hoc podpis nemá stálou identitu, takže po každém buildu
