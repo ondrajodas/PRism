@@ -126,7 +126,6 @@ struct ProbeDiff: View {
     @State private var target: String?
     @State private var expansions: [String: FileExpansion] = [:]
     @State private var folded: Set<String> = []
-    @State private var chosenLayout: DiffLayout = .unified
 
     var body: some View {
         DiffView(
@@ -146,9 +145,12 @@ struct ProbeDiff: View {
                 foldAll: { folded = Set($0.map(\.id)) },
                 unfoldAll: { folded = [] }
             ),
-            layout: $chosenLayout
+            // **Konstantní binding, ne `@State` přepnutý v `task`u** (nález Copilota na #470):
+            // s odloženým přepnutím se první snímek nakreslí vždycky `.unified` a teprve pak se
+            // překlopí, takže by render závisel na tom, jestli se to stihne. Sonda na pohled
+            // nesahá, takže konstanta je přesná.
+            layout: .constant(layout)
         )
         .background(Palette.background)
-        .task { chosenLayout = layout }
     }
 }
