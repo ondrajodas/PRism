@@ -90,6 +90,17 @@ final class MergeSubmission: Identifiable {
         }
     }
 
+    /// Mergnulo se a **není k tomu co dodat** — sheet se pak zavírá sám, stejně jako u odeslaného
+    /// review (`ReviewSubmission.closesItself`).
+    ///
+    /// **Bez podmínky, na rozdíl od review.** Tam je to nepravda u odpovědi, jejímuž stavu
+    /// nerozumíme, protože ta se jinde v okně nedozví; u merge taková odpověď neexistuje —
+    /// `GhMergeResponse.merge()` z ní udělá `malformedResponse`, tedy selhání. A selhání sheet
+    /// nechává otevřený schválně: je to jediné místo, kde je vidět, co GitHub odmítl.
+    var closesItself: Bool {
+        if case .merged = state { true } else { false }
+    }
+
     /// Mergne. **Jediné místo v aplikaci, které volá `ReviewPublishing.merge`.**
     func merge() async {
         guard canMerge else { return }
@@ -99,6 +110,9 @@ final class MergeSubmission: Identifiable {
             // Stav se přepíná **před** úklidem, jako u review: načíst PR znovu je práce po síti
             // a potvrzení, že merge prošel, na ni nemá čekat.
             state = .merged(merged)
+            // Úklid **zavírá i záložku toho PR** (#465) a je to první, co udělá — ještě než se
+            // `merge()` vrátí volajícímu, který teprve podle `closesItself` zavírá sheet. Pořadí
+            // tedy drží tenhle řádek, ne view: sheet se nemá jak zavřít dřív než záložka pod ním.
             await afterSuccess()
         } catch let error as PublishError {
             state = .failed(error)

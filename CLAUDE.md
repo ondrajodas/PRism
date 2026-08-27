@@ -352,9 +352,11 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    `Moje review`**. Proč zrovna takhle, je
    v [`docs/architektura.md`](docs/architektura.md#labely-a-reviewery-v-panelu-392).
    **U merge tlačítko výchozí akci nemá** (ani `Enter`), **metoda je jedna** (`squash`, z jedné
-   konstanty, kterou čte payload i potvrzení) a **sheet se po úspěchu nezavírá sám** — na
-   rozdíl od review, protože mergnutý PR ze seznamu vypadne a s ním by zmizela jediná zpráva
-   o tom, jak to dopadlo.
+   konstanty, kterou čte payload i potvrzení) a **po úspěchu se zavře sheet i záložka toho PR**
+   — jedině po úspěchu: po `409`, `405` nebo spadlé síti zůstává obojí i s hláškou, jinak by ji
+   nebylo kde ukázat. Pravidlo, že **mergnutý PR jde ještě dočíst a zavřít ho má člověk, ne tik
+   pollingu**, se tím **neruší** — mluví o pollingu, kdežto tady záložku zavírá klik na
+   `Mergnout`.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si

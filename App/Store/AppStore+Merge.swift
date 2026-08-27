@@ -107,10 +107,28 @@ extension AppStore {
         )
     }
 
-    /// Úklid po mergi: **stav PR se načte znovu**.
+    /// Úklid po mergi: **zavře se záložka toho PR a jeho stav se načte znovu**.
     ///
-    /// Mergnutý PR ze seznamu vypadne, ale až na dalším tiku pollingu — a do té doby by panel
-    /// nabízel `Mergnout…` u něčeho, co je mergnuté. Načtením se z něj stane zašedlé tlačítko
+    /// **Záložku zavírá člověk, ne polling** (#465), a v tom rozdílu je celé zdůvodnění. Pravidlo
+    /// z `ContentView` — mergnutý PR jde ještě dočíst a zavřít ho má člověk, ne tik — se tím
+    /// **neruší**: mluví o pollingu, tedy o PR, který ze seznamu vypadl, aniž bych s tím cokoli
+    /// udělal (mergnul ho někdo jiný, odebrali mě z reviewerů). Ten si záložku drží dál a zavírá
+    /// se z prázdného stavu *Pull request zmizel ze seznamu*. Tady je to opačná situace: záložku
+    /// zavírá **klik na `Mergnout`**, tedy tentýž člověk tímtéž gestem, kterým ten PR dokončil.
+    ///
+    /// **Až po úspěchu.** Sem se po selhání nedojde vůbec — `MergeSubmission` volá úklid jedině
+    /// nad `.merged` —, takže po `409`, `405` i po spadlé síti zůstává záložka i sheet s hláškou.
+    /// Bez toho by se ta hláška neměla kde ukázat.
+    ///
+    /// **Bez ptaní, i kdyby na PR leželo rozdělané review.** `closeTab` nic nezahazuje: draft
+    /// zůstává v `ReviewDraftStore` na disku a s otevřenou záložkou je zpátky, takže by dialog
+    /// jen stál v cestě. Na vlastním PR se navíc draft ani nedá založit (#333), takže je to případ,
+    /// který skoro nenastane — a mazat ho tady by bylo to jediné nevratné na jinak vratném
+    /// zavření.
+    ///
+    /// **Stav PR se přesto načítá znovu.** Zavřená záložka není konec: PR zůstává v seznamu až do
+    /// dalšího tiku, takže se dá otevřít znovu — a se zapamatovaným detailem by v panelu zase
+    /// svítilo `Mergnout…` u něčeho, co je mergnuté. Načtením se z něj stane zašedlé tlačítko
     /// s větou „pull request není otevřený — je mergnutý“, tedy odpověď, kterou okno umí dát samo
     /// a hned.
     ///
@@ -125,6 +143,9 @@ extension AppStore {
     /// ho tady kvůli dvěma voláním navíc by znamenalo dvě skládání téhož. Merge je akce jednou za
     /// čas, ne tik pollingu.
     func pullRequestWasMerged(_ pullRequest: PullRequestSummary) async {
+        // **Jako první, a synchronně**: běží to ještě v tom průchodu, ve kterém se přepnul stav
+        // odeslání, takže sheet nemá jak zavřít dřív než záložka pod ním.
+        closeTab(pullRequest.id)
         detailStates[pullRequest.id] = nil
         await loadDetail(for: pullRequest)
     }

@@ -14,6 +14,8 @@ import SwiftUI
 /// **Nebydlí v detailu PR, ale v `ContentView`** — tatáž past jako u `ReviewSubmission` a o stupeň
 /// horší: mergnutý PR ze zdroje `author:@me` na příštím tiku **vypadne**, takže by se sheet
 /// zavěšený na detailu ztratil zrovna nad hláškou, ze které se člověk dozví, jak to dopadlo.
+/// Od chvíle, kdy se po úspěšném mergi zavírá i **záložka** (#465), by ho to zabilo ještě dřív —
+/// hned v tom průchodu, ve kterém merge doběhl.
 struct MergeSheet: View {
     let submission: MergeSubmission
     let close: () -> Void
@@ -179,15 +181,29 @@ struct MergeSheet: View {
     /// Tlačítko je pojmenované **akcí** a **není výchozí**: `.keyboardShortcut` na něm schválně
     /// žádný není, takže `Enter` nic nemergne. `.borderedProminent` je vzhled, ne klávesa.
     ///
-    /// **Sheet se po úspěchu nezavírá sám**, na rozdíl od odeslaného review. Tam je za sheetem
-    /// vidět, že review odešlo (draft zmizel z panelu i z řádku); tady PR ze seznamu teprve
-    /// **vypadne**, takže by zavřený sheet nechal člověka koukat na tab, který se přestal kreslit,
-    /// a jediná zpráva o výsledku by zmizela s ním.
+    /// **Po úspěchu se sheet zavírá sám**, jako u odeslaného review — a spolu s ním i **záložka
+    /// toho PR** (`AppStore.pullRequestWasMerged`, #465).
+    ///
+    /// Do #465 tady stálo, že se nezavírá: mergnutý PR ze seznamu vypadne, takže by zavřený sheet
+    /// nechal člověka koukat na tab, který se přestal kreslit. **Tím, že se zavírá i ta záložka,
+    /// ten důvod padl** — za sheetem není mrtvý tab, ale okno přepnuté na sousední záložku nebo
+    /// domů.
+    ///
+    /// **Pořadí drží `merge()`, ne tohle view**: úklid (a v něm zavření záložky) běží uvnitř něj,
+    /// takže se sheet nemá jak zavřít dřív než záložka pod ním. Úklid u toho **čeká na síť**, takže
+    /// mezi přepnutím stavu a zavřením je průchod, ve kterém patička kreslí zelené
+    /// `Mergnuto jako …` — potvrzení bez umělé pauzy, tatáž konstrukce jako u review.
     private var mergeButton: some View {
         // Popisek se skládá **do `String`u**, ne interpolací v literálu: literál by šel do
         // `LocalizedStringKey` a identifikátor PR by se v něm prohnal formátováním.
         Button(mergeLabel) {
-            Task { await submission.merge() }
+            Task {
+                await submission.merge()
+                // **Až po úspěchu, ne po kliknutí.** Po `409`, `405` i po spadlé síti zůstává
+                // sheet otevřený: je to jediné místo, kde je vidět, co GitHub odmítl a jestli se
+                // dá zkusit znovu.
+                if submission.closesItself { close() }
+            }
         }
         .buttonStyle(.borderedProminent)
         .disabled(!submission.canMerge)

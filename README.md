@@ -870,8 +870,16 @@ ne jen pull requestu.
 jiná se odsud neposílá — kdo chce jinou, jde na GitHub), kolik commitů se slévá do jednoho, jaký
 bude titulek a proti které hlavě se merguje. **A hlavně píše i to, co v tom výpisu není**: tělo
 squash commitu skládá GitHub ze zpráv slévaných commitů, takže se neslibuje, že je v okně vidět
-celé. Tlačítko **není výchozí** — Enterem se nic nemergne — a **sheet se po úspěchu nezavírá sám**:
-mergnutý PR ze seznamu vypadne, takže by s ním zmizela jediná zpráva o tom, jak to dopadlo.
+celé. Tlačítko **není výchozí** — Enterem se nic nemergne.
+
+**Po úspěšném mergi se zavře potvrzení i záložka toho pull requestu.** Mergnutý PR je dočtený, tak
+se nemusí zavírat ručně; okno přeskočí na sousední záložku, a když žádná nezbyla, domů. Zavírá se
+**jen po úspěchu** — když GitHub merge odmítne (`409` po pushnutém commitu, `405`, spadlá síť),
+zůstane otevřené obojí i s hláškou, proč to nešlo, a dá se zkusit znovu. Pravidlo, že záložku
+mergnutého PR zavírá **člověk a ne polling**, tím platí dál: tady ji zavírá tentýž klik, kterým se
+mergovalo. Prázdný stav *Pull request zmizel ze seznamu* se `Zavřít záložku` zůstává pro to, co se
+stalo jinde — cizí merge, odebraný request na review. **Rozdělané review se zavřením neztratí**,
+draft leží na disku a s otevřenou záložkou je zpátky.
 
 **Hlava PR jde v payloadu jako podmínka, ne jako údaj.** Když se větev mezi otevřením potvrzení
 a kliknutím pohne, GitHub odpoví `409` a **nemergne nic** — v okně je pak věta, že se nic nestalo

@@ -3472,7 +3472,6 @@ místo jedné:
 | Nechat merge nabídnutý nad červeným checkem (GitHub `UNSTABLE` pustí) | Zeleno je jediný stav, ve kterém se dá mergnout bez čtení. Aplikace je tady schválně striktnější — tatáž úvaha jako u odpovědi na zavřeném PR (#73) |
 | Zakázat merge i nad **běžícím** checkem | Mergnout rozběhnutou CI je legitimní rozhodnutí a povinný check zavře GitHub sám (`BLOCKED`) |
 | Přeložit `BLOCKED` na „červený check“ | Znamená kterýkoli z „chybí schválení / běží povinný check / **nemáš na repo zápis**“ a GitHub nedává který — změřeno na `cli/cli#14278`. Určitá nepravda je horší než neurčitá pravda |
-| Zavírat sheet po úspěchu, jako u review | U review je za sheetem vidět, že odešlo; tady PR ze seznamu **vypadne**, takže by zmizela jediná zpráva o výsledku |
 | Nechat sheet v detailu PR | Detail se přestane kreslit, jakmile PR vypadne z výsledků hledání — a mergnutý vypadne hned na příštím tiku |
 | Po mergi nic nenačítat | Panel by nabízel `Mergnout…` u něčeho, co je mergnuté, až do dalšího tiku |
 | `deleteLabel`, `close`, `setMilestone` „když už se výčet otevřel“ | Nic z toho se nedělá **při review**, a právě to je hranice, podle které se výčet od #73 rozšiřuje |
@@ -3481,3 +3480,36 @@ místo jedné:
 PR v konfliktu nebo draft; převedení sondy na draft zakázala permission brána, takže je ten text
 z dokumentace GitHubu, ne změřený. A `UNKNOWN` u `mergeable` se na živém PR **zastihnout
 nepodařilo** — sonda odpovídala usazeně hned po založení i po každém pushi.
+
+### Záznam rozhodnutí — po mergi se zavírá záložka (#465)
+
+**Změna rozhodnutí z téhož issue, ještě před jeho mergem.** V tabulce výš stálo mezi zamítnutými
+„zavírat sheet po úspěchu, jako u review“ s odůvodněním, že mergnutý PR ze seznamu vypadne a se
+zavřeným sheetem by zmizela jediná zpráva o výsledku. Odůvodnění padlo v okamžiku, kdy se rozhodlo
+zavírat **i záložku**: za sheetem pak není tab, který se přestal kreslit, ale okno přepnuté na
+sousední záložku nebo domů. Zavírá se tedy obojí.
+
+**Proč se to vůbec zavírá.** Mergnutý pull request je dočtený — je to poslední úkon, který na něm
+v tomhle okně jde udělat, a nechat po něm otevřenou záložku znamená jedno kliknutí navíc za
+informaci, kterou má člověk před sebou. Je to tatáž úvaha, jakou má `ReviewSubmission.closesItself`
+u odeslaného review.
+
+**Pravidlo o zavírání záložek se tím neruší, jen se čte doslova.** V `ContentView` platí, že
+mergnutý PR jde ještě dočíst a zavřít ho má **člověk, ne tik pollingu**. To pravidlo je o pollingu:
+PR, který ze seznamu vypadl, aniž bych s tím cokoli udělal (mergnul ho někdo jiný, odebrali mě
+z reviewerů), si záložku drží a zavírá se z prázdného stavu *Pull request zmizel ze seznamu*. Merge
+z panelu je **druhá strana téhož pravidla**: zavírá ho taky člověk, jen tím klikem, kterým ten PR
+dokončil. Za měsíc se to nesmí přečíst obráceně, proto to stojí i v `ContentView`
+a v `AppStore.pullRequestWasMerged`.
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| Zavřít záložku hned po kliknutí na `Mergnout` | Selhání (`409`, `405`, spadlá síť) by nemělo kde ukázat hlášku — a je to zrovna ta situace, ve které člověk potřebuje vědět, co se stalo a jestli se dá zkusit znovu |
+| Zavřít sheet dřív než záložku | Na okamžik by se odhalil detail PR, který se za chvíli přestane kreslit. Pořadí proto drží `merge()`: `closeTab` je první řádek úklidu a běží ještě v tom průchodu, ve kterém se přepnul stav |
+| Zeptat se, když na PR leží rozdělané review | `closeTab` nic nezahazuje a draft leží na disku, takže je s otevřenou záložkou zpátky — dialog by byl otázka na nic. Na vlastním PR se navíc draft ani nedá založit (#333) |
+| Draft po mergi smazat | Bylo by to **jediné nevratné** na jinak vratném zavření, a tiše zmizelá próza je horší než draft, který nemá kam odejít |
+| Zrušit prázdný stav *Pull request zmizel ze seznamu* | Platí dál pro všechno, co PR ze seznamu vyřadí jinak než mým mergem |
+| Totéž po **odeslání review** | Jiná situace: PR nezmizí proto, že bych ho dokončil, ale proto, že mě někdo odebral z reviewerů — a to se může stát i omylem. Rozsah #465 se kvůli tomu nerozšiřuje; když se to bude chtít, je to vlastní issue |
+| Zapsat merge do **dění** (#414), ať sha přežije zavřený sheet | Nový druh položky znamená glyf, barvu, cíl kliknutí a rozhodnutí o chipu `bez banneru` ve čtyřech vyčerpávajících `switch`ích — velká změna kvůli údaji, se kterým se v aplikaci stejně nedá nic dělat. Sha mergnutého commitu je věc pro GitHub |

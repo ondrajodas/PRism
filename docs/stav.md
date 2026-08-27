@@ -5196,3 +5196,13 @@ klon v cache a spočítá se lokálně.
 Sekce je postavená tak, aby do ní šla přidat **druhá akce** (`Srovnat s main`, #466): je to
 `stav + nabídka`, ne jedno tlačítko, a akce se kreslí řadou i s jedním prvkem.
 
+**Po úspěšném mergi se zavírá potvrzení i záložka toho PR** — přidáno do #465 ještě před mergem,
+takže se v záznamu rozhodnutí mění jeden zamítnutý řádek na rozhodnutí. Původně se sheet nezavíral
+s tím, že mergnutý PR ze seznamu vypadne a zmizela by jediná zpráva o výsledku; s tím, že odchází
+i záložka, ten důvod padl — za sheetem není mrtvý tab, ale okno přepnuté jinam. **Jen po úspěchu**:
+po `409`, `405` i po spadlé síti zůstává obojí i s hláškou, jinak by ji nebylo kde ukázat, a je na
+to test z obou stran (obě regrese ověřené vložením). Pravidlo, že mergnutý PR jde ještě dočíst
+a zavřít ho má člověk, ne tik pollingu, se tím **neruší**: mluví o pollingu, kdežto tady záložku
+zavírá klik na `Mergnout`. Rozdělané review se zavřením neztrácí — draft leží na disku, takže se
+nezavírá s ptaním, ani se nemaže.
+

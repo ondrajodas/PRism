@@ -76,6 +76,14 @@ struct AppStoreMergeTests {
     {"sha":"d5e454dd4838a98ce88339531517411941233813","merged":true,"message":"Pull Request successfully merged"}
     """
 
+    /// Odmítnutí merge se zastaralou hlavou, **zkrácené na to, co store zajímá**. Plná změřená
+    /// odpověď leží ve fixture `gh/merge-error-head-modified.json` a rozbor nad ní dělají
+    /// `MergePublishingTests`; tady se testuje store, ne dekódování. Sdílené, protože o téže
+    /// odpovědi tvrdí něco dva testy a rozejít se ta dvě tvrzení nesmí.
+    private let refusalOutput = """
+    {"message":"Head branch was modified. Review and try the merge again.","status":"409"}
+    """
+
     private func fakeGh(_ output: String, exitCode: Int32 = 0) throws -> URL {
         let script = directory.url.appending(path: "gh-\(UUID().uuidString).sh")
         let redirect = exitCode == 0 ? "" : ">&2"
@@ -126,6 +134,9 @@ struct AppStoreMergeTests {
             gh: gh
         )
         await store.loadDetail(for: summary())
+        // Merge se spouští z panelu, tedy nad **otevřenou záložkou** — a od #465 je zavření té
+        // záložky součástí úklidu po mergi, takže scéna bez ní by o tom nemohla tvrdit nic.
+        store.openTab(pr)
         return (store, gateway)
     }
 
@@ -259,10 +270,7 @@ struct AppStoreMergeTests {
     /// jednom sheetu, který ji vyvolal.
     @Test("Po odmítnutém mergi zůstává nabídka i stav")
     func keepsTheOfferAfterARefusedMerge() async throws {
-        let refusal = """
-        {"message":"Head branch was modified. Review and try the merge again.","status":"409"}
-        """
-        let (store, _) = await prepared(gh: try fakeGh(refusal, exitCode: 1))
+        let (store, _) = await prepared(gh: try fakeGh(refusalOutput, exitCode: 1))
         let submission = try #require(store.mergeSubmission(for: summary()))
 
         await submission.merge()
@@ -277,5 +285,59 @@ struct AppStoreMergeTests {
         }
         #expect(submission.canMerge, "GitHub odmítl, takže se dá zkusit znovu")
         #expect(store.branchSection(for: pr)?.merge.isAllowed == true)
+    }
+
+    // MARK: - Záložka (#465)
+
+    /// **Po úspěšném mergi se záložka zavře.** Zavírá ji klik na `Mergnout`, tedy člověk — pravidlo
+    /// „mergnutý PR jde ještě dočíst a zavřít ho má člověk, ne tik pollingu“ se tím neruší, mluví
+    /// o pollingu.
+    ///
+    /// Tvrdí se u toho i `closesItself`, protože sheet a záložka mají odejít **spolu**: sheet nad
+    /// zavřenou záložkou by visel nad oknem, které o tom PR nic nekreslí.
+    @Test("Po mergi se záložka zavře")
+    func closesTheTabAfterMerging() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(mergedOutput))
+        let submission = try #require(store.mergeSubmission(for: summary()))
+        #expect(store.openTabs == [pr])
+
+        await submission.merge()
+
+        #expect(store.openTabs.isEmpty)
+        #expect(store.activeTab == .home, "poslední záložka propadá domů")
+        #expect(submission.closesItself, "sheet odchází se záložkou, ne zvlášť")
+    }
+
+    /// **A po selhání zůstane** — tohle je ta polovina, která se rozbije potichu: se zavřenou
+    /// záložkou i sheetem by chybová hláška neměla kde být a `409` by vypadal jako úspěch.
+    @Test("Po odmítnutém mergi záložka zůstane")
+    func keepsTheTabAfterARefusedMerge() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(refusalOutput, exitCode: 1))
+        let submission = try #require(store.mergeSubmission(for: summary()))
+
+        await submission.merge()
+
+        #expect(store.openTabs == [pr])
+        #expect(store.activeTab == .pullRequest(pr))
+        #expect(!submission.closesItself, "sheet zůstává otevřený i s hláškou")
+    }
+
+    /// **Zavřením záložky se nic nezahazuje.** Draft leží na disku, takže se zavírá bez ptaní —
+    /// a kdyby ho merge smazal, bylo by to to jediné nevratné na jinak vratném zavření.
+    ///
+    /// Draft se sem **podstrkuje přímo**, na rozdíl od zbytku téhle sady: na vlastním PR se nedá
+    /// založit žádnou cestou v aplikaci (#333), takže scéna, ve které leží, vzniká jedině takhle.
+    /// Je to případ z minula (draft z doby, kdy PR nebyl můj) — a právě proto se nesmí ztratit
+    /// potichu.
+    @Test("Merge draft na PR nemaže")
+    func keepsTheDraftAfterMerging() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(mergedOutput))
+        store.drafts[pr] = ReviewDraft(pullRequest: pr, headSha: "aaaa1111", body: "rozepsáno")
+        let submission = try #require(store.mergeSubmission(for: summary()))
+
+        await submission.merge()
+
+        #expect(store.hasDraft(pr))
+        #expect(store.draft(for: pr)?.body == "rozepsáno")
     }
 }

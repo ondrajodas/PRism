@@ -270,6 +270,11 @@ struct ContentView: View {
     /// PR, který mezitím ze seznamu vypadl, si záložku **drží** — mergnutý pull request jde
     /// ještě dočíst a zavřít ho má člověk, ne tik pollingu. Když se o něm ale nedá zjistit ani
     /// titulek, řekne se to místo prázdné plochy.
+    ///
+    /// **Merge z panelu je druhá strana téhož pravidla, ne výjimka z něj** (#465): tam záložku
+    /// zavírá taky člověk, jen tím klikem, kterým PR dokončil. Sem se proto po vlastním mergi
+    /// nedojde — tenhle stav zůstává pro to, co se stalo jinde: cizí merge, odebraný request na
+    /// review, zavřený PR.
     @ViewBuilder private var content: some View {
         switch store.activeTab {
         case .home:
@@ -289,7 +294,8 @@ struct ContentView: View {
             } else {
                 EmptyStateView(
                     // Čekání, ne porucha: nic se nerozbilo, PR jen vypadl z výsledků hledání
-                    // (typicky po odeslaném review).
+                    // (typicky po odeslaném review). Po **vlastním** mergi se sem nedojde —
+                    // tam se záložka zavře sama (#465).
                     nature: .waiting,
                     symbol: "questionmark.folder",
                     title: "Pull request zmizel ze seznamu",

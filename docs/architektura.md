@@ -7687,7 +7687,9 @@ Nad nálezy platí navíc:
     je to, co člověk chce vidět. Domů se propadne, až když nezbyde žádná.
   - **PR, který vypadl ze seznamu, si záložku drží.** Mergnutý pull request jde ještě dočíst
     a zavřít ho má člověk, ne tik pollingu. Když o něm nevíme ani titulek, řekne se to místo
-    prázdné plochy.
+    prázdné plochy. **Merge z panelu (#465) je druhá strana téhož pravidla, ne výjimka z něj**:
+    záložku tam zavírá taky člověk, jen tím klikem, kterým PR dokončil — takže se po vlastním
+    mergi do toho prázdného stavu vůbec nedojde.
   - **Sheet odeslání zůstává na `ContentView`.** Detail zmizí, jakmile PR vypadne ze seznamu,
     a odeslané review `review-requested` ruší — sheet zavěšený na detailu by zmizel uprostřed
     odesílání.
@@ -9026,14 +9028,35 @@ Co je na téhle metodě jiné než na sedmi před ní:
 - **Sheet nebydlí v detailu PR.** Je to tatáž past jako u `ReviewSubmission` a o stupeň horší:
   mergnutý PR ze zdroje `author:@me` na příštím tiku **vypadne**, takže by sheet zavěšený na detailu
   zmizel zrovna s hláškou, kvůli které je otevřený.
-- **Sheet se po úspěchu nezavírá sám**, na rozdíl od odeslaného review. Tam je za sheetem vidět, že
-  review odešlo (draft zmizel z panelu i z řádku); tady PR teprve vypadne ze seznamu, takže by
-  zavřený sheet nechal člověka koukat na tab, který se přestal kreslit.
-- **Po úspěchu se stav PR načte znovu** (`AppStore.pullRequestWasMerged`), aby panel nenabízel
-  `Mergnout…` u něčeho, co je mergnuté, a nečekalo se na tik pollingu. Že s detailem přijdou i checky
-  a commity, je **cena za jednu cestu**: `loadDetail` je jediné místo, které umí detail načíst
-  správně (razítko hlavy, zápis do dění), a duplikovat ho kvůli dvěma voláním navíc by znamenalo dvě
-  skládání téhož. Merge je akce jednou za čas, ne tik pollingu.
+- **Po úspěchu se zavírá sheet i záložka toho PR** (`AppStore.pullRequestWasMerged`). Do #465 tu
+  stálo, že se sheet nezavírá — s odůvodněním, že mergnutý PR ze seznamu vypadne, takže by zavřený
+  sheet nechal člověka koukat na tab, který se přestal kreslit. **Tím, že odchází i ta záložka, ten
+  důvod padl**: za sheetem není mrtvý tab, ale okno přepnuté na sousední záložku nebo domů.
+
+  Čtyři věci, které to drží pohromadě:
+
+  - **Zavírá se až po úspěchu, ne po kliknutí.** Po `409`, `405` i po spadlé síti zůstává záložka
+    i sheet — je to jediné místo, kde je vidět, co GitHub odmítl a jestli se dá zkusit znovu. Sem
+    se po selhání ani nedojde: `MergeSubmission` volá úklid jedině nad `.merged`.
+  - **Pořadí drží `merge()`, ne view.** `closeTab` je první řádek úklidu a běží ještě v tom
+    průchodu, ve kterém se přepnul stav; sheet zavírá až volající podle `closesItself`, tedy po
+    návratu z `merge()`. Opačné pořadí by na okamžik odhalilo detail PR, který se za chvíli
+    přestane kreslit.
+  - **Pravidlo o zavírání záložek se tím neruší.** „Mergnutý PR jde ještě dočíst a zavřít ho má
+    člověk, ne tik pollingu“ mluví o **pollingu** — o PR, který ze seznamu vypadl, aniž bych s tím
+    cokoli udělal. Tady záložku zavírá klik na `Mergnout`, tedy tentýž člověk tímtéž gestem,
+    kterým ten PR dokončil. Prázdný stav *Pull request zmizel ze seznamu* zůstává pro to, co se
+    stalo jinde: cizí merge, odebraný request na review.
+  - **Bez ptaní, i kdyby na PR leželo rozdělané review.** `closeTab` nic nezahazuje (má na to
+    vlastní test už od #180) a draft leží v `ReviewDraftStore` na disku, takže je s otevřenou
+    záložkou zpátky. Na vlastním PR se navíc draft ani nedá založit (#333). Dialog by tedy byl
+    otázka na nic — a smazat draft by bylo to jediné nevratné na jinak vratném zavření.
+- **Stav PR se přesto načte znovu.** Zavřená záložka není konec: PR zůstává v seznamu až do dalšího
+  tiku, takže se dá otevřít znovu — a se zapamatovaným detailem by v panelu zase svítilo
+  `Mergnout…` u něčeho, co je mergnuté. Že s detailem přijdou i checky a commity, je **cena za
+  jednu cestu**: `loadDetail` je jediné místo, které umí detail načíst správně (razítko hlavy,
+  zápis do dění), a duplikovat ho kvůli dvěma voláním navíc by znamenalo dvě skládání téhož. Merge
+  je akce jednou za čas, ne tik pollingu.
 - **Dvě nové chyby, obě s dalším krokem.** `branchMoved` (409) říká, že se **nic nestalo**
   a pojistka zabrala; `notMergeable` (405) říká, že se stav mezi načtením panelu a kliknutím změnil,
   a **neradí zkoušet znovu** — dokud se stav nezmění, dopadne druhý pokus stejně. `branchMoved`
