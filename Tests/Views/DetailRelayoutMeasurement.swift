@@ -303,12 +303,22 @@ struct WindowRelayoutHost: View {
     let clock: RelayoutClock
 
     @State private var submission: ReviewSubmission?
+    /// Rozdělaný merge (#465) — v aplikaci ho drží `ContentView` ze stejného důvodu jako
+    /// `submission`, takže ho i sonda musí držet stejně: binding z `@State` má stálou identitu
+    /// úložiště, a na tom stojí, že se detail poznává jako nezměněný.
+    @State private var merge: MergeSubmission?
 
     var body: some View {
         let _ = clock.tick
         switch scene {
         case .window: ContentView(store: store)
-        case .detail: PullRequestDetailView(store: store, pullRequest: summary, submission: $submission)
+        case .detail:
+            PullRequestDetailView(
+                store: store,
+                pullRequest: summary,
+                submission: $submission,
+                merge: $merge
+            )
         }
     }
 }
