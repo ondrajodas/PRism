@@ -5325,7 +5325,7 @@ a je to rozhodnutí na jedno vydání s napsanou podmínkou zániku (specifikace
 session přežije, a PRism se restartuje po každém mergi. Jestli to v praxi chybí, se pozná jedině
 používáním. Mrtvé pole z toho nezůstane: do `AppStore.terminalFailure` od #460 píše `▶` sám.
 
-Testů **4260**, všechny zelené — z toho **9 nových**: `Policy` výčtem (mlčí se nad povedeným koncem,
+Testů **4319**, všechny zelené — z toho **9 nových**: `Policy` výčtem (mlčí se nad povedeným koncem,
 u `busy` je ve větě i druhá cesta, u `noShell` se důvod nehádá) a to podstatné ze storu —
 **zásuvka se vytáhne**, jde do ní `session.shellLine`, po `busy` se **nepřepíše cesta v hlavičce**
 a store bez hostitele **nenabízí `▶` a nevymýšlí si hlášku**.
