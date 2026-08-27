@@ -50,7 +50,7 @@ struct PollingServiceTests {
         await service.refresh()
 
         #expect(gateway.queries == sources.map(\.query))
-        #expect(service.state.pullRequests.map(\.id.description) == ["cli/go-gh#2", "cli/cli#1"])
+        #expect(service.pullRequests.map(\.id.description) == ["cli/go-gh#2", "cli/cli#1"])
     }
 
     @Test("Po úspěchu je stav aktuální a nese čas")
@@ -60,9 +60,9 @@ struct PollingServiceTests {
 
         await service.refresh()
 
-        #expect(service.state.status == .upToDate)
-        #expect(service.state.lastSuccess == time.now)
-        #expect(service.state.isStale == false)
+        #expect(service.status == .upToDate)
+        #expect(service.lastSuccess == time.now)
+        #expect(service.isStale == false)
     }
 
     @Test("Bez zdrojů je seznam prázdný, ne rozbitý")
@@ -73,8 +73,8 @@ struct PollingServiceTests {
         await service.refresh()
 
         #expect(gateway.searchCount == 0)
-        #expect(service.state.pullRequests.isEmpty)
-        #expect(service.state.status == .upToDate)
+        #expect(service.pullRequests.isEmpty)
+        #expect(service.status == .upToDate)
     }
 
     @Test("Smyčka pollí v zadaném intervalu")
@@ -98,7 +98,7 @@ struct PollingServiceTests {
         let service = service(gateway: FakeGitHubGateway(always: .success([])), time: time)
         await service.run()
 
-        #expect(service.state.nextPoll == started.addingTimeInterval(interval.seconds))
+        #expect(service.nextPoll == started.addingTimeInterval(interval.seconds))
     }
 
     /// Před prvním usnutím se nemá co ukázat — a nula ani „za chvíli“ by o příštím tiku tvrdily
@@ -109,7 +109,7 @@ struct PollingServiceTests {
 
         await service.refresh()
 
-        #expect(service.state.nextPoll == nil)
+        #expect(service.nextPoll == nil)
     }
 
     // MARK: - Probíhající dotaz
@@ -122,13 +122,13 @@ struct PollingServiceTests {
         let probe = FlagProbe()
         let service = service(gateway: FakeGitHubGateway(always: .success([])), time: FakeTimeSource())
         service.afterSuccessfulTick = { [weak service] _ in
-            await MainActor.run { probe.duringTick = service?.state.isRefreshing }
+            await MainActor.run { probe.duringTick = service?.isRefreshing }
         }
 
         await service.refresh()
 
         #expect(probe.duringTick == true)
-        #expect(service.state.isRefreshing == false)
+        #expect(service.isRefreshing == false)
     }
 
     /// **Zaseknutý příznak je to horší selhání**: dashboard by pak psal „ptám se…“ navždycky
@@ -141,14 +141,14 @@ struct PollingServiceTests {
             time: FakeTimeSource()
         )
         await failing.refresh()
-        #expect(failing.state.isRefreshing == false)
+        #expect(failing.isRefreshing == false)
 
         let cancelled = service(
             gateway: FakeGitHubGateway(always: .failure(CancellationError())),
             time: FakeTimeSource()
         )
         await cancelled.refresh()
-        #expect(cancelled.state.isRefreshing == false)
+        #expect(cancelled.isRefreshing == false)
     }
 
     /// Mezi dvěma tiky se aplikace neptá, takže se dashboard vrátí k odpočtu.
@@ -159,7 +159,7 @@ struct PollingServiceTests {
 
         await service.run()
 
-        #expect(service.state.isRefreshing == false)
+        #expect(service.isRefreshing == false)
     }
 
     // MARK: - Výpadek sítě
@@ -176,8 +176,8 @@ struct PollingServiceTests {
         let service = service(gateway: gateway, time: time)
         await service.run()
 
-        #expect(service.state.pullRequests.map(\.id.description) == ["cli/cli#1"])
-        #expect(service.state.isStale)
+        #expect(service.pullRequests.map(\.id.description) == ["cli/cli#1"])
+        #expect(service.isStale)
     }
 
     @Test("Neaktuální stav řekne, odkdy se to nedaří a proč")
@@ -188,8 +188,8 @@ struct PollingServiceTests {
 
         await service.refresh()
 
-        #expect(service.state.status == .failing(since: time.now, reason: failure))
-        #expect(service.state.lastSuccess == nil)
+        #expect(service.status == .failing(since: time.now, reason: failure))
+        #expect(service.lastSuccess == nil)
     }
 
     @Test("Opakované selhání nepřepíše čas, odkdy se to nedaří")
@@ -202,7 +202,7 @@ struct PollingServiceTests {
         await service.run()
 
         // Kdyby se `since` přepisovalo, ukazovalo by se pořád „neaktuální od teď“.
-        #expect(service.state.status == .failing(since: started, reason: failure))
+        #expect(service.status == .failing(since: started, reason: failure))
     }
 
     @Test("Po zotavení je stav zase aktuální")
@@ -218,9 +218,9 @@ struct PollingServiceTests {
         let service = service(gateway: gateway, time: time)
         await service.run()
 
-        #expect(service.state.status == .upToDate)
-        #expect(service.state.pullRequests.map(\.id.description) == ["cli/cli#1"])
-        #expect(service.state.isStale == false)
+        #expect(service.status == .upToDate)
+        #expect(service.pullRequests.map(\.id.description) == ["cli/cli#1"])
+        #expect(service.isStale == false)
     }
 
     @Test("Síťová chyba nespouští backoff")
@@ -249,7 +249,7 @@ struct PollingServiceTests {
         let service = service(gateway: gateway, time: time)
         await service.run()
 
-        #expect(service.state.pullRequests.map(\.id.description) == ["cli/cli#2", "cli/cli#1"])
+        #expect(service.pullRequests.map(\.id.description) == ["cli/cli#2", "cli/cli#1"])
     }
 
     // MARK: - Rate limit
@@ -263,7 +263,7 @@ struct PollingServiceTests {
 
         await service.refresh()
 
-        #expect(service.state.status == .rateLimited(since: hit, retryAt: hit.addingTimeInterval(120)))
+        #expect(service.status == .rateLimited(since: hit, retryAt: hit.addingTimeInterval(120)))
     }
 
     @Test("Opakovaný rate limit čeká pokaždé déle")
@@ -287,7 +287,7 @@ struct PollingServiceTests {
         let service = service(gateway: FakeGitHubGateway(always: .failure(limited)), time: time)
         await service.run()
 
-        #expect(service.state.nextPoll == hit.addingTimeInterval(120))
+        #expect(service.nextPoll == hit.addingTimeInterval(120))
     }
 
     @Test("Backoff má strop, aby se polling neuspal na hodiny")
@@ -336,7 +336,7 @@ struct PollingServiceTests {
 
         await service.refresh()
 
-        #expect(service.state.status == .notStarted)
+        #expect(service.status == .notStarted)
     }
 }
 

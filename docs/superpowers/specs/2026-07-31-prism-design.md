@@ -3434,3 +3434,32 @@ jiném — mluvil o **ceně prvního rozvržení**, kterou u diffu opravdu nešl
 podle toho, jestli má strop, a osm zbylých míst v aplikaci ho má. A doklad se pořád nedělá tím, že po
 opravě nehořelo — dělá se strukturálně (`LazySubview*` v evaluačním zásobníku: 2 ze 2 před, 0 po)
 a měřením obou konců.
+
+### Záznam rozhodnutí — sledovaná vlastnost se dělí podle toho, kdo ji čte (#472)
+
+**Co se změnilo.** `PollingService` držel do #472 **jednu** sledovanou vlastnost — `var state =
+PollState()` se všemi pěti hodnotami uvnitř. Od #472 drží pět vlastností zvlášť a `PollState`
+zůstal jako **hodnota**, ze které se počítají odvozené odpovědi (`isStale`, `emptyReason`).
+
+**Proč.** `@Observable` sleduje **po vlastnostech**, takže jedna hrubá vlastnost znamená, že se za
+všech pět hodnot hlásí táž změna. `isRefreshing = true` na začátku tiku tím probudilo i každého,
+kdo četl **jen seznam PR** — a ten čte `AppStore.author(of:)` → `ownership(of:)`, tedy to, čím
+detail PR pozná, čí PR kreslí. Tichý tik proto překresloval celé okno včetně diffu: **62 průchodů
+tělem `PullRequestDetailView` na dvacet tiků, po rozdělení 1** (`DetailRelayoutMeasurement`).
+
+Je to **stejné rozhodnutí jako u `DiffViewport` (#469)**, jen o dvě vrstvy jinde, a zobecňuje se
+tím na pravidlo: co se mění jinak často a čte jinde, patří do vlastní vlastnosti.
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| Psát jen změnu (`if pullRequests != merged { … }`) | **Změřeno, že to nic nedělá**: zápis téže hodnoty `@Observable` na tomhle toolchainu nehlásí (ověřeno vloženou regresí z obou stran). Byl by to `if`, který nic nemění — a takový kód se v tomhle repu nedrží. Pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`, takže se to pozná, kdyby se chování změnilo |
+| Stráž na `forget(whatIsNotIn:)` (přes třicet map, přepisovaných po každém tiku výsledkem `filter`u) | Tentýž důvod: se stráží i bez ní vychází tvrzení o nezneplatnění stejně. Bylo to napsané a **zase zahozené**, aby diff nebyl o třicet míst větší za nic |
+| Vrátit #469 (líný diff) | Hypotéza z hlavičky #472. **Změřeno, že cenu nedělá**: jedno zneplatnění detailu stojí 33–43 ms **bez ohledu na délku diffu** (500 proti 2000 řádkům: 38 proti 43 ms) i na tabu (`Přehled` bez dlouhého seznamu je nejdražší), a `DiffView.body` se u toho vůbec nepřeloží |
+| Zlevnit `updateWindowContentSizeExtremaIfNecessary` (`.windowResizability(.contentMinSize)`) | Je to 15–50 % rozvržení podle fáze, takže je to reálná nitka — ale `.contentMinSize` je tam kvůli tomu, že s `.automatic` **nešlo okno zmenšit na výšku**, a ověřit tu změnu jde jedině rukou na běžícím okně. Zapsáno jako nedodělané, ne zamítnuté |
+
+**Co zůstalo nedokázané.** Průchodů tělem ubylo šedesátkrát, ale cena tichého tiku spadla jen
+o třetinu (u 500řádkového diffu z 451 na 427 ms, tedy skoro vůbec). Zbytek leží v rozvržení okna,
+ne v tělech — a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+

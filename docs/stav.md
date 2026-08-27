@@ -5138,3 +5138,41 @@ bloky a mění se jednou za výřez, `top` se mění při každém snímku a čt
 průběh) **mají strop**, takže u nich platí pravidlo z #361 nezměněné, ale vyloučené to není. A cena
 projíždění se u velkých diffů měří **jen na odemčené obrazovce** — pod zamčenou gesto nikam
 neposune a všechny podoby vyjdou shodně, což se pozná podle záporného `dojelo na …` ve výpisu sondy.
+
+### #472 — okno reagovalo pozdě, a nebylo to eager diffem
+
+Ráno po #469 přestalo okno **tuhnout**, ale začalo **reagovat pozdě**: v klidu 0,43 s CPU za minutu,
+při práci ale 0,5–0,9 s CPU **na každou sekundu**, a to skoro minutu v kuse. Hypotéza v zadání zněla,
+že to násobí pevný diff z #469 — tedy že se vyměnilo zaseknuté okno za pomalé.
+
+**Neplatí, a je to změřené.** `DetailRelayoutMeasurement` staví skutečný `ContentView` nad skutečným
+`AppStore` a míchá čtyři osy (scéna, pohon, tab, náplň store). Jedno zneplatnění detailu stojí
+**33–43 ms** a **nezávisí ani na délce diffu** (500 proti 2000 řádkům: 38 proti 43 ms), **ani na
+tabu** — `Přehled`, kde žádný dlouhý seznam není, vyšel dokonce nejdráž. `DiffView.body` se u toho
+**vůbec nepřeloží**. Cenu tedy nedělá eager diff; #469 zůstává, jak bylo.
+
+**Co ji dělá, je hrubost sledované vlastnosti.** `PollingService` držel všech pět hodnot v jednom
+`PollState`u, a `@Observable` sleduje po vlastnostech — takže `isRefreshing = true` na začátku tiku
+probudilo i každého, kdo četl jen seznam PR. Ten čte `AppStore.author(of:)` → `ownership(of:)`, tedy
+to, čím detail pozná, čí PR kreslí. **Tichý tik proto překresloval celé okno včetně diffu.** Po
+rozdělení na pět vlastností (tatáž úvaha jako u `DiffViewport` v #469):
+
+| Tichý tik, 2000řádkový diff | do #472 | od #472 |
+|---|---|---|
+| průchody tělem `PullRequestDetailView` (20 tiků) | 62 | **1** |
+| průchody tělem `DiffView` | 69 | **7** |
+| průchody tělem `DiffRowView` | 10 143 | **1 029** |
+| CPU na tik | 551 ms | **343 ms** |
+
+**Zamítnuto měřením: psát „jen změnu“.** `if pullRequests != merged { … }` vypadá jako druhá polovina
+opravy a není — zápis téže hodnoty `@Observable` na tomhle toolchainu **nehlásí** (ověřeno vloženou
+regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ze stejného důvodu se
+nesahalo na `forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u.
+
+**Co zůstalo nedokázané**, a je to zapsané: průchodů tělem ubylo šedesátkrát, ale cena tiku spadla
+jen o třetinu (u malého diffu skoro vůbec) — zbytek leží v **rozvržení okna**, ne v tělech. Ve
+`sample`u z toho drží `NSHostingView.layout()` → `render` hlavní podíl a
+`updateWindowContentSizeExtremaIfNecessary` je z toho 15–50 % podle fáze; je to druhá aktualizace
+grafu, kterou si vynucuje `.windowResizability(.contentMinSize)`. Zlevnit ji se u #472 **nezkoušelo**.
+A sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+

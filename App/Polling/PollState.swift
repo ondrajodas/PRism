@@ -1,26 +1,24 @@
 import Foundation
 
-/// Co polling ví — seznam PR a jak si stojí jeho čerstvost.
+/// Odvozené otázky nad tím, co polling ví — proč je seznam prázdný a je zastaralý.
+///
+/// **Není to úložiště, je to hodnota** (#472). Do #472 tenhle typ držel `PollingService` jako
+/// jedinou vlastnost `state`, a to znamenalo, že `@Observable` hlásil **jednu** změnu za všech
+/// pět polí naráz: zápis `isRefreshing = true` na začátku tiku zneplatnil i každého, kdo četl
+/// jen seznam PR — tedy `AppStore.author(of:)`, na kterém visí `ownership`, a s ním celý detail
+/// PR. Naměřeno, že jedno takové zneplatnění stojí **33–43 ms** rozvržení okna
+/// (`DetailRelayoutMeasurement`), a tik jich vyrábí několik.
+///
+/// Je to tatáž úvaha jako u `DiffViewport` (#469): `@Observable` sleduje **po vlastnostech**,
+/// takže co se mění jinak často a čte jinde, patří do vlastní vlastnosti. `PollingService` proto
+/// od #472 drží pět vlastností zvlášť a tenhle typ si skládá jen tam, kde se odpověď opravdu
+/// počítá ze všech tří vstupů.
 struct PollState: Sendable, Equatable {
     var pullRequests: [PullRequestSummary] = []
     var status: PollStatus = .notStarted
     /// Kdy naposledy dotaz prošel. `nil` znamená „ještě nikdy“ — seznam pak není starý,
     /// jen prázdný, a to je pro uživatele něco jiného.
     var lastSuccess: Date?
-    /// Kdy se smyčka zeptá znovu (#181). `nil`, dokud poprvé neusne.
-    ///
-    /// Ukládá to **smyčka**, ne odhad ve view: interval se dá změnit v nastavení a při rate
-    /// limitu ho přebíjí backoff, takže `lastSuccess + interval` by po prvním odmítnutí lhalo.
-    /// Ruční obnovení tuhle hodnotu **neposouvá** — tik mimo pořadí smyčku nepřeplánuje.
-    var nextPoll: Date?
-    /// Ptáme se právě teď? (#237)
-    ///
-    /// Drží to **odpočet na dashboardu**: `nextPoll` zůstává v minulosti po celou dobu dotazu
-    /// (zapisuje ho smyčka až po `refresh()`), takže by odpočet došel na nulu a šel dál —
-    /// a samotné srovnání s hodinami to nezachrání, protože odpočet tiká **bez přepočtu view**.
-    /// Změna tohohle příznaku je naopak observovatelná, takže okno na ni sáhne ve chvíli, kdy
-    /// se to stane, a napíše, co se děje, místo čísla, které už neplatí.
-    var isRefreshing = false
 
     /// Ukazujeme data, o kterých víme, že už nemusí platit?
     var isStale: Bool { lastSuccess != nil && status != .upToDate }

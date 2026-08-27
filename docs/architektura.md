@@ -6784,8 +6784,42 @@ Věci, které se u toho nemají rozbít:
 ## `PollingService` (`App/Polling/`)
 
 Drží seznam PR aktuální: v intervalu (default 60 s) se zeptá všech zdrojů, sloučí je přes
-`PullRequestList` a publikuje `PollState`. `@MainActor` a `@Observable` — jeho stav je to,
+`PullRequestList` a publikuje výsledek. `@MainActor` a `@Observable` — jeho stav je to,
 co kreslí okno; síťová práce stejně probíhá v podprocesech `gh`.
+
+### Pět vlastností, ne jeden `PollState` (#472)
+
+Do #472 držel `PollingService` **jednu** sledovanou vlastnost — `var state = PollState()` se všemi
+pěti hodnotami uvnitř. `@Observable` sleduje **po vlastnostech**, takže to znamenalo, že se za
+každou z těch pěti hodnot hlásí táž změna: `isRefreshing = true` na začátku tiku probudilo
+i každého, kdo četl **jen seznam PR**.
+
+A ten čte `AppStore.author(of:)` → `ownership(of:)`, tedy to, čím detail PR pozná, čí PR kreslí.
+Tichý tik — takový, po kterém je fronta stejná jako před minutou, tedy skoro každý — proto
+překresloval **celé okno včetně diffu**. Naměřeno (`DetailRelayoutMeasurement`, okno 1512×874 nad
+vlastním PR s dvaceti čtyřmi nálezy, dvacet tichých tiků):
+
+| | průchody tělem `PullRequestDetailView` | `DiffView` | `DiffRowView` | CPU na tik |
+|---|---|---|---|---|
+| do #472 (2000 řádků diffu) | **62** | 69 | 10 143 | 551 ms |
+| od #472 | **1** | 7 | 1 029 | 343 ms |
+
+Je to tatáž úvaha jako u `DiffViewport` (#469) a tentýž závěr: **co se mění jinak často a čte
+jinde, patří do vlastní vlastnosti.** `PollState` zůstal jako **hodnota**, ze které se počítají
+odvozené odpovědi (`isStale`, `emptyReason`) — ty na seznamu, stavu i razítku závisejí doopravdy,
+takže se skládá jen z nich a `isRefreshing` ani `nextPoll` do něj nepatří.
+
+**Zamítnutá varianta: psát jen změnu** (`if pullRequests != merged { … }`). Vypadá to jako druhá
+polovina opravy a **není** — `@Observable` na tomhle toolchainu zápis téže hodnoty **nehlásí**
+(změřeno vloženou regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ten
+`if` by tedy byl porovnání navíc, které nic nemění. Z téhož důvodu se nesahalo ani na
+`forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u: se stráží
+i bez ní vychází tvrzení o nezneplatnění stejně.
+
+**Co tím opravené není**: sedm průchodů tělem `DiffView` a tisíc řádků diffu za dvacet tichých
+tiků zbývá, a nevysvětlené je i to, proč cena tiku spadla jen o třetinu, když průchodů tělem ubylo
+šedesátkrát. Zbytek leží v rozvržení okna, ne v tělech — viz *Kolik stojí přerovnání okna* v
+[`docs/testovani.md`](testovani.md).
 
 `run()` je smyčka (obnovit → počkat → opakovat), `refresh()` jeden cyklus. Tlačítko
 „obnovit teď“ volá `refresh()` — ruční obnovení není nic jiného než tik mimo pořadí.
@@ -6814,7 +6848,7 @@ smyčku nepřeplánuje, takže dokud poprvé neusne, je `nil`.
 
 **Po dobu dotazu je `nextPoll` v minulosti** — zapisuje se až za `refresh()`. Od #237 je v tom
 koutě odpočet (`za 43s znovu`), takže to přestala být kosmetika: odpočet by došel na nulu a šel
-dál. Drží to `PollState.isRefreshing`, které `refresh()` zvedne na začátku a v `defer` zase
+dál. Drží to `PollingService.isRefreshing`, které `refresh()` zvedne na začátku a v `defer` zase
 spustí. **Proč příznak, a ne srovnání s hodinami**: odpočet ve view tiká *bez přepočtu těla*
 (`DashboardCountdown` a jeho `TimelineView`), takže `now` v těle platí jen k poslednímu přepočtu —
 po probuzení stroje by to byl uplynulý termín, do #260 odpočítávaný nahoru a od #260 zamrzlý na

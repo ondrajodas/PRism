@@ -901,7 +901,7 @@ final class AppStore {
     /// a konverzace, smazalo cache a zrušilo běžící review**; a na rozřazení podle autora by to
     /// samé udělalo přihlášení jiným účtem, jen navíc potichu. Rozdíl mezi tímhle getterem
     /// a `visiblePullRequests` je jediné, co dělí filtr od mazání cache — a je na to test.
-    var pullRequests: [PullRequestSummary] { polling.state.pullRequests }
+    var pullRequests: [PullRequestSummary] { polling.pullRequests }
 
     /// Seznam **po filtru** (#117), ještě bez rozřazení podle autora. Čtou ho ty dva zúžené
     /// gettery (`visibleQueuePullRequests`, `visibleOwnPullRequests`), detail vybraného řádku
@@ -1246,11 +1246,11 @@ final class AppStore {
     var checkTasks: [CheckKey: Task<Void, Never>] = [:]
 
     /// Kdy se polling zeptá znovu. `nil`, dokud smyčka poprvé neusne.
-    var nextPoll: Date? { polling.state.nextPoll }
+    var nextPoll: Date? { polling.nextPoll }
 
     /// Ptá se polling právě teď? Čte to odpočet v hlavičce dashboardu (#237) — po dobu dotazu
     /// je `nextPoll` v minulosti, takže se místo něj píše, co se děje.
-    var isRefreshing: Bool { polling.state.isRefreshing }
+    var isRefreshing: Bool { polling.isRefreshing }
 
     /// Útrata po dnech pro graf. Prázdné, dokud se nenačte — sedm nul by vypadalo jako týden
     /// bez práce, ne jako chybějící data.
@@ -1267,13 +1267,13 @@ final class AppStore {
         pullRequests.filter { hasDraft($0.id) }
     }
 
-    var status: PollStatus { polling.state.status }
+    var status: PollStatus { polling.status }
 
-    var lastSuccess: Date? { polling.state.lastSuccess }
+    var lastSuccess: Date? { polling.lastSuccess }
 
-    var isStale: Bool { polling.state.isStale }
+    var isStale: Bool { polling.isStale }
 
-    var emptyReason: PollEmptyReason? { polling.state.emptyReason }
+    var emptyReason: PollEmptyReason? { polling.emptyReason }
 
     /// Proč je **fronta** prázdná — včetně toho, že ji schoval filtr (#117).
     ///
@@ -1315,11 +1315,11 @@ final class AppStore {
     /// (detail, diff, konverzace) sem schválně nepřitékají: běží nepravidelně a jejich
     /// `notFound` není o dostupnosti, nýbrž o tom, že na PR nevidíme.
     private var gitHubCall: ServiceCall? {
-        switch polling.state.status {
+        switch polling.status {
         case .notStarted:
             nil
         case .upToDate:
-            polling.state.lastSuccess.map { ServiceCall(since: $0) }
+            polling.lastSuccess.map { ServiceCall(since: $0) }
         case .failing(let since, let reason):
             ServiceCall(since: since, failure: reason.userDescription)
         case .rateLimited(let since, let retryAt):
@@ -1631,7 +1631,7 @@ final class AppStore {
     /// „kolik toho na mě čeká“; vlastní PR je druhá fronta a mluví o ní rail a dashboard. Kdyby se
     /// počítala obojí, byla by v jedné větě dvě různá tvrzení o jednom čísle.
     var queueSummary: QueueSummary? {
-        guard polling.state.lastSuccess != nil else { return nil }
+        guard polling.lastSuccess != nil else { return nil }
         let summary = Policy.summary(
             of: queuePullRequests,
             records: reviewRecords,

@@ -585,6 +585,16 @@ grep -n 'ForEach(Array(' App/Views/ConversationView.swift App/Views/ThreadBubble
 grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k posouzení, ne prázdný
 ```
 
+- **`@Observable` sleduje po vlastnostech, takže hrubá vlastnost je výkonová vada** (#469, znovu
+  #472). Co se mění jinak často a čte jinde, patří do **vlastní** vlastnosti: `PollingService`
+  držel do #472 všech pět hodnot v jednom `PollState`u, takže `isRefreshing = true` na začátku
+  tiku probudilo i čtenáře seznamu PR — a ten čte `AppStore.author(of:)`, na kterém visí
+  `ownership` a s ním celý detail. Tichý tik tím překresloval celé okno: **62 průchodů tělem
+  `PullRequestDetailView` za dvacet tiků, po rozdělení 1**. Naopak **psát „jen změnu“ nemá smysl**
+  — zápis téže hodnoty toolchain nehlásí (změřeno, pinuje to `PollObservationTests`), takže
+  `if x != new { x = new }` je porovnání navíc, které nic nemění.
+  Čísla i zamítnuté varianty jsou
+  v [`docs/architektura.md`](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
 - **Animace, která nikdy nedoběhne, nesmí být ve SwiftUI** (#350): `repeatForever` si vyžádá
   průchod při **každém obtažení obrazovky** a ten rozvrhne celé okno — nečinné okno stálo kvůli
   jedenáctibodovému prstýnku **99 % CPU** hlavního vlákna. Nekonečné otáčení patří na `CALayer`
