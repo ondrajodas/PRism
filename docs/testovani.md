@@ -6616,8 +6616,8 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (dvacet), ne „aspoň tolik“ — tatáž konstrukce jako u
-  `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
+- **Počet akcí je vyjmenovaný** (od #459 jednadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+  u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
   a paletě, které si klávesu berou samy. Komentáře se zahazují stejně jako v grepech z `CLAUDE.md`.
@@ -6664,6 +6664,75 @@ TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/prism xcodebuild \
 **Prefix `TEST_RUNNER_` je povinný**: bez něj se proměnná do testovacího hosta nedostane a sonda
 se **přeskočí** — `xcodebuild` skončí `TEST SUCCEEDED` a v cílové složce nic není, což vypadá jako
 rozbitá sonda.
+
+### Zásuvka s terminálem (#459)
+
+Testuje se **rozhodnutí a stav, ne emulátor**: `TerminalDrawerTests` (čisté funkce),
+`AppStoreTerminalTests` (co store udělá s otevřením, zavřením záložky a ukončením — proti
+`FakeTerminalHost`, který žádný shell nespouští) a `AppDelegateTerminationTests` (dotaz při
+zavírání). Co se **v harnessu ověřit nedá a proto to zkouší člověk**, je vypsané níž.
+
+Co z toho stojí za zapamatování:
+
+- **Nejcennější jsou tři tvrzení o tom, co se nestane**: schování zásuvky shell **nezabije**
+  (jinak by `` ⌃` `` uprostřed běžícího `claude --resume` byl nevratný omyl), zavření záložky ho
+  **zabije** (jinak sirotek z #264 a #351) a `PATH` aplikace se do shellu **nepředá** (jinak
+  zásuvka bez Homebrew).
+- **Ustupování zkratek se tvrdí výčtem nad celým katalogem**, ne nad jednou vybranou kombinací —
+  a přes **všechny** kombinace, protože `⌃1` má na české mapě alternativu `⌃+`, která by se
+  uplatnila stejně. Výjimka `` ⌃` `` je v tom tvrzení **vypsaná**, takže druhá výjimka spadne
+  v testu, ne až v okně.
+- **Adresář, který na disku není, se nesmí nabídnout.** Eviction klony maže, takže shell spuštěný
+  ve smazané složce není teoretický stav; test to zkouší nad cestou, která nikdy neexistovala.
+- **Emulátor se netestuje** a je to vědomé: `SwiftTerm` má vlastní sadu testů. Rozhraní mezi ním
+  a naším kódem je úzké — start, kill, fokus, barvy —, a to podstatné z něj měří sonda níž.
+
+#### Sonda `EmbeddedTerminalProbe` — skutečný shell, ale bez emulátoru
+
+`TEST_RUNNER_PRISM_MEASURE=1` a `-only-testing:PRismTests/EmbeddedTerminalProbe`; **v běžném běhu
+se nepouští**, protože spuštěný shell je proces, který umí běh testů přežít.
+
+Co změřila a co by se bez ní neodhadlo:
+
+- **Login shell se spustí a má řídicí terminál.** `ps -o state=` vrací `Ss+`, tedy *session leader
+  v popředí* — takže `login_tty` proběhlo a job control uvnitř funguje. Kdyby chybělo, `⌃C`
+  v zásuvce by nepřerušilo nic.
+- **Pracovní adresář sedí** — čte se z jádra (`lsof -d cwd`), ne z výpisu v terminálu. Obě cesty se
+  musí prohnat `resolvingSymlinksInPath`: `TMPDIR` je na macOS symlink, takže jádro hlásí
+  `/private/var/folders/…` a `FileManager` `/var/folders/…`.
+- **`kill()` zabíjí doopravdy** — po něm je stav `Z`. **Zombie se počítá jako mrtvý**: nesklizený
+  potomek zabírá řádek v tabulce procesů, ale neběží, a `kill(pid, 0)` na něm pořád vrací nulu —
+  takže tvrzení postavené na návratovém kódu by hlásilo, že shell přežil.
+
+**Psaní do pty se odsud neověřuje, a je to změřené.** Pokus tam byl: poslat `exit` a čekat, až
+shell skončí. Vycházel **náhodně** (z pěti běhů dva zeleně) a opakované posílání to nespravilo —
+`LocalProcess.send` jde přes **druhý** `DispatchIO` kanál nad týmž deskriptorem, jehož první kanál
+visí na hladové hlavní frontě (viz níž). Sonda postavená na tom je falešně červený `main`; napsat
+do terminálu zkouší člověk.
+
+**A co sonda ověřit nemůže vůbec, taky změřeně: obsah emulátoru.** `LocalProcess` doručuje
+přečtené bajty přes `DispatchQueue.main`, a **hlavní dispatch fronta se v testovacím hostu nedrání
+vůbec**. Naměřeno tak, že se z pozadí zavolalo `DispatchQueue.main.async` i `.sync` a za pět sekund
+neproběhlo **ani jedno** (`hits == 0`) — přestože sonda běží na hlavním vlákně
+(`Thread.isMainThread == true`) a točí `RunLoop.main.run(until:)`. Buffer emulátoru proto zůstane
+prázdný, ať shell vypíše cokoli; první podoba sondy na tom stála a měřila vlastní zaseknutí.
+
+Plyne z toho pravidlo širší než #459: **co v aplikaci chodí přes `DispatchQueue.main`, se v hostu
+pozorovat nedá.** Kde to jde, hledá se jiný pozorovatelný konec (tady jádro); kde ne, ověřuje se to
+rukama.
+
+**Co ověří jedině člověk na běžící aplikaci** (v harnessu ne, protože testovací host nedostane
+aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
+
+1. `` ⌃` `` zásuvku vytáhne a schová; na domácí záložce se nestane nic.
+2. V zásuvce běží login shell v checkoutu toho PR (`pwd`), s uživatelovým `PATH` (`which claude`).
+3. `claude --resume <id>` v ní vypadá jako v Terminálu — kurzor, barvy, překreslení při **změně
+   velikosti okna** i při tažení za horní hranu zásuvky (`TIOCSWINSZ`).
+4. `⌃W` a `⌃C` uvnitř terminálu **nesáhnou na záložky** — `⌃W` maže slovo, `⌃C` přeruší běh.
+   Tohle je ten test, kvůli kterému #459 mohlo dopadnout špatně.
+5. Zavření okna s běžícím procesem se **zeptá**, a po `Ukončit` po sobě nic nenechá:
+   `ps -o pid,ppid,command -p <pid shellu>` a `pgrep -f claude` nemají co vrátit.
+6. Na české klávesnici funguje `⌃;`.
 
 ### `⌃Tab` a shift, který mění klávesu (#245)
 

@@ -73,6 +73,10 @@ struct ContentView: View {
         // fialová nezadrátovává.
         .background(Palette.background)
         .tint(Palette.accent)
+        // Dokud píše člověk do zásuvky, patří klávesy bez `⌘` terminálu (#459). Nasazuje se
+        // **jednou, na kořen okna** — zkratky se registrují na čtyřech místech a předávat příznak
+        // argumentem by znamenalo na jedno z nich zapomenout.
+        .environment(\.terminalFocused, store.isTerminalFocused)
         .fullSizeContentWindow()
         // Potvrzení odeslání. `item:`, ne `isPresented:`: sheet nemá co ukazovat bez snímku
         // draftu, takže `nil` je zavřený stav i zdroj dat naráz.
@@ -142,6 +146,20 @@ struct ContentView: View {
         // vynutí `Policy.windowShortcut`, kde je nad `RailSection` vyčerpávající `switch`.
         ForEach(RailSection.allCases) { section in
             WindowShortcutButtons(action: .openSection(section)) { store.show(section) }
+        }
+        // `` ⌃` `` — zásuvka s terminálem (#459). Bydlí tady jako ostatní zkratky okna, ale platí
+        // **jen v záložce PR**: terminál bez repozitáře je obyčejný shell, ten má člověk vedle.
+        // Na domácí záložce se proto nesmí stát nic — zakázané tlačítko klávesu nebere a propadne
+        // dál, tentýž vzorec jako u `⌃W`.
+        //
+        // **Neustupuje terminálu**, na rozdíl od všeho ostatního na `Control`u: je to jediná
+        // klávesa, kterou se zásuvka schová, takže by se s vypnutými zkratkami nedala zavřít jinak
+        // než myší. Rozhoduje o tom `Policy.shortcutYieldsToTerminal`, ne `if` tady.
+        WindowShortcutButtons(
+            action: .toggleTerminal,
+            isEnabled: store.activeTab.pullRequest != nil
+        ) {
+            Task { await store.toggleTerminal() }
         }
     }
 

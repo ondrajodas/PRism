@@ -65,6 +65,13 @@ struct PullRequestDetailView: View {
     /// hláškou, kvůli které je otevřený.
     @Binding var merge: MergeSubmission?
 
+    /// Výška celého detailu — z ní je strop zásuvky s terminálem (#459).
+    ///
+    /// Měří se `onGeometryChange`, protože **akce se při nezměněné hodnotě nespustí** (změřeno
+    /// u #361), takže to není bezpodmínečný zápis z každého snímku, kterému se vyhýbá #358.
+    /// Nula znamená „ještě se neměřilo“ a zásuvka se pak otevře na ideál, ne na podlahu.
+    @State private var detailHeight: CGFloat = 0
+
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
         VStack(alignment: .leading, spacing: 0) {
@@ -81,8 +88,10 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.surface)
             content
+            terminalDrawer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { detailHeight = $0 }
         // Celý log jobu (#214) — tentýž sheet, jakým se kopíruje hunk z diffu (#157): jeden
         // read-only `NSTextView`, tedy přesně na tohle.
         .sheet(item: $logSheet) { CodeTextSheet(content: $0) }
@@ -146,6 +155,13 @@ struct PullRequestDetailView: View {
         // Zadání patří k jednomu PR (#333) a je k rozkopírování, takže při přepnutí **nesmí**
         // přetéct: zkopírovat prompt psaný o jiném PR se nedá vzít zpátky.
         .task(id: pullRequest.id) { promptSheet = nil }
+        // Adresář zásuvky (#459) se hledá i při přepnutí PR s vytaženou zásuvkou — jinak by nad
+        // novým pull requestem zůstala cesta do checkoutu toho předchozího. Shell, který už běží,
+        // to nepřestěhuje: ten si drží ten svůj adresář, ve kterém startoval.
+        .task(id: pullRequest.id) {
+            guard store.isTerminalOpen else { return }
+            await store.resolveTerminalDirectory(for: pullRequest.id)
+        }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
         .task(id: pullRequest) { await store.loadDiff(for: pullRequest) }
@@ -449,6 +465,25 @@ struct PullRequestDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Palette.surface)
             if tab.showsReviewPanel { panel }
+        }
+    }
+
+    /// Zásuvka s terminálem (#459) — **jen v záložce pull requestu**, protože jinde není checkout,
+    /// ve kterém by měl shell startovat.
+    ///
+    /// Zavřená se do hierarchie **vůbec nedostane**, a to je podmínka, ne úspora: plocha emulátoru
+    /// si při rozvržení počítá řádky a sloupce a posílá je do pty jako `TIOCSWINSZ`, takže schovaná
+    /// zásuvka nulové výšky by běžícímu TUI ohlásila `0×0`.
+    @ViewBuilder private var terminalDrawer: some View {
+        if store.isTerminalOpen {
+            TerminalDrawerView(
+                pullRequest: pullRequest.id,
+                directory: store.terminalDirectory(for: pullRequest.id),
+                state: store.terminalStates[pullRequest.id],
+                host: store.terminals,
+                available: detailHeight,
+                close: { Task { await store.toggleTerminal() } }
+            )
         }
     }
 

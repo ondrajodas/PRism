@@ -2057,9 +2057,12 @@ potřebuje text, ne cizí okno.
 **Tvrdá podmínka č. 1 se tím nemění, a je to jádro celé změny.** Terminál je **mimo aplikaci** —
 je to totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný
 terminál nevzniká, `grep ReviewPublishing App/` vypisuje **týž seznam** a `SingleWayOutTests`
-procházejí beze změny. **Vestavěný terminál je zamítnutý a zapsané je proč**: znamenal by, že se
-z okna dá spustit `gh pr merge` i `git push`, tedy že podmínka přestane platit — a nepůjde ji
-uhlídat testem, protože ta cesta nevede přes kód aplikace. Tohle je totéž bez té ceny.
+procházejí beze změny.
+
+**Zamítnutí vestavěného terminálu padlo u #459** — do té doby tady stálo, že by znamenal, že se
+z okna dá spustit `gh pr merge` i `git push`, a že to nepůjde uhlídat testem. Obojí je pořád pravda;
+uživatel rozhodl, že se ta záruka za tu funkci vymění (viz *Vestavěný terminál (#459)* níž). `▶`
+v hlavičce dráhy zůstává na `Terminal.app` — přepojení na zásuvku je #460.
 
 Čtyři věci, které na tom nejsou zjevné:
 
@@ -3332,6 +3335,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
+| `AppStore+Terminal.swift` | Terminál — otevření session v `Terminal.app` (#453) a od #459 **zásuvka**: `toggleTerminal()`, `resolveTerminalDirectory(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `stopTerminal(for:)` ze zavření záložky a `stopTerminalsBeforeTermination()`. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 105 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -6970,6 +6974,11 @@ Věci, které se u toho nemají rozbít:
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.resumeCommand(sessionID:)`, `Policy.terminalSession(of:)` | Čím se session obnoví a jestli ji dráha umí pustit v Terminálu (#453) → `TerminalSession`. **Jeden příkaz pro obojí** — `⧉` ho kopíruje, `▶` pouští. `nil` = tlačítko se **nekreslí**, a podmínkou je `session_id` **i pracovní strom**: `claude --resume` hledá vlákno podle adresáře, takže bez něj by okno jen oznámilo, že takové vlákno nezná |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
+| `Policy.shortcutYieldsToTerminal(_:_:)` | Ustupuje zkratka okna terminálu v zásuvce (#459)? Pravidlo je jedno: **co nemá `⌘`, patří terminálu** — širší než poznámka 110 z návrhu, která mluví o `Control`u, protože hranice kolem jednoho modifikátoru by nechala venku `⎋` a `⌥↑`/`⌥↓`. Jedinou výjimkou je `` ⌃` `` sama a rozhoduje o ní **akce, ne kombinace** |
+| `Policy.terminalDrawerHeight(stored:available:)`, `terminalDrawerResize(from:by:available:)`, `terminalDrawerStoredHeight(stored:measured:)` | Výška zásuvky (#459): otevření z uložené hodnoty s ořezem **při použití**, tažení počítané **z výšky na začátku tahu** (jinak se přetažení za strop nasčítá a zásuvka se přestane vracet) a rozhodnutí, jestli zapsat. Nad zásuvkou vždycky zůstane `terminalDrawerContentFloor` — jinak by z ní byla ta devátá záložka |
+| `Policy.terminalWorkingDirectory(worktree:clone:)`, `terminalDirectoryLabel(_:home:)` | Kde shell startuje (#459) — **pracovní strom review** má přednost, protože `claude --resume` session najde jedině v adresáři, ve kterém běžela; jinak bare klon. Existenci na disku ověřuje volající (`Policy` nesahá na I/O). Zkrácení na `~` bere domov **argumentem**, ne z prostředí, a zkracuje jen celý prefix po hranici složky (`/Users/ondrej` se nesmí zkrátit kvůli domovu `/Users/ondra`) |
+| `Policy.terminalShell(_:)`, `terminalEnvironment(_:)` | Co se v zásuvce spustí (#459): shell ze `SHELL` (relativní se zahazuje) s `argv[0]` **s pomlčkou**, tedy login shell — bez toho by v zásuvce nebylo nic mimo `/usr/bin`, protože **`PATH` se schválně nepředává**. K tomu `TERM=xterm-256color`, `COLORTERM=truecolor` a UTF-8 locale |
+| `Policy.quitPrompt(reviews:terminals:)` | Na co se aplikace zeptá při ukončení (#94, #264, #459) → `QuitPrompt`. `nil` = **neptat se**. Věty se liší podle toho, co běží: „Běží 2 věci“ nedává důvod kliknout na Zpět. A **neslibují víc, než co data unesou** — z review se dá dotáhnout, co reviewer nahlásil, kdežto výpis shellu se nikam neukládá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
 | `Policy.checksBadge(of:)` | Odznak u záložky `Kontroly` (#215) — spadlé červeně s počtem, běžící puntíkem, zelené a přeskočené bez odznaku. Bere **stav tabu**, ne `ChecksSummary` (#306): jeden `guard` na začátku drží prázdnou kapsli i nulu mimo pruh nad nenačteným, prázdným i spadlým stavem |
@@ -9063,6 +9072,69 @@ Co je na téhle metodě jiné než na sedmi před ní:
   pokrývá i `Base branch was modified`, protože další krok je u obou tentýž.
 - **Co v zákazu zůstává**: approve mimo review, **zavření PR**, **milník** a `deleteLabel`.
   `SingleWayOutTests` je hlídají jmenovitě dál — jen bez `merge`.
+
+## Vestavěný terminál (#459)
+
+`App/Terminal/` — shell v zásuvce pod diffem, návrh sekce 35. Jsou to tři soubory a každý drží
+něco jiného:
+
+| Typ | Co drží |
+|---|---|
+| `TerminalHosting` | Protokol: kolik shellů běží, plocha pro pull request, zabít jeden, zabít všechny, a dva uzávěry (stav shellu, fokus). **Bez zápisové metody a bez `gh`** |
+| `TerminalHost` | Živá implementace — **jeden `EmbeddedTerminalView` na pull request**, řez a barvy z palety |
+| `EmbeddedTerminalView` | `SwiftTerm.LocalProcessTerminalView` s třemi věcmi navíc: start login shellu v daném adresáři, hlášení fokusu a `kill()`, který zabije **popředí pty**, ne jen shell |
+
+Rozhodnutí, která k tomu patří, jsou v `Policy` (`App/Policy/TerminalDrawer.swift`): výška zásuvky
+a její ořez, jestli zkratka ustupuje terminálu, kde shell startuje, jak se cesta zkrátí na `~`, co
+se spustí a s jakým prostředím, a na co se aplikace zeptá při ukončení.
+
+**Proč je to devátý modul, a ne jen view.** Shell je cizí proces — tedy vnější svět jako `gh`,
+`git` a `claude` —, takže patří za protokol se stejným zdůvodněním: nejcennější tvrzení kolem něj
+je „něco se **ne**stalo“ (zavření záložky shell zabilo, ukončení aplikace po sobě nic nenechalo),
+a to jde napsat jedině proti fake implementaci.
+
+### Co na tom není zjevné
+
+- **`SIGKILL` na popředí pty, ne `terminate()`.** Knihovní `terminate()` posílá `SIGTERM`
+  **shellu**, a to na závazek z #264 nestačí: `claude` spuštěný v interaktivním shellu dostane
+  vlastní process group (job control), takže by ho signál poslaný shellu **minul** a osiřel by na
+  `launchd` úplně stejně jako v #351. Zabíjí se proto `tcgetpgrp(childfd)` a **až pak** shell —
+  v tomhle pořadí, protože po smrti shellu se pty zavírá a `tcgetpgrp` nemá koho vrátit.
+  `terminate()` se volá i tak: je to jediná cesta, jak knihovna zavře `DispatchIO` a deskriptor.
+  `killpg` se u toho volá jen na `> 0` — `tcgetpgrp` vrací `-1` u deskriptoru, který není řídicí
+  terminál, a `killpg(0, …)` by znamenalo **naši vlastní** skupinu, tedy zabít aplikaci.
+- **Značka v `sessions.json`** (#351) toutéž cestou jako u review: zapisuje se po startu, maže se
+  v `kill()` **i** v `processTerminated` (shell umí skončit sám přes `exit`). V `kill()` schválně
+  hned, ne až v callbacku — při ukončení aplikace už žádné další kolo runloopu nemusí přijít.
+- **Fokus se hlásí přes `hasFocus`, ne přes `becomeFirstResponder`.** Ty dvě metody má knihovna
+  `public`, ne `open`, takže je z jiného modulu přepsat **nejde** (ověřeno překladačem);
+  `hasFocus` je `open` a knihovna ho z obou nastavuje, takže je to tentýž okamžik. Hlásí se
+  **jen změna** — setter chodí i tam, kde se hodnota nemění, a bezpodmínečný zápis do stavu okna
+  je zrovna ta třída, kterou popisuje #358.
+- **Barvy se musí dát nasadit znovu.** `SwiftTerm` si dynamickou `NSColor` převede na svoje hodnoty
+  **ve chvíli přiřazení**, takže o pozdějším přepnutí režimu neví — a aplikace ho umí vynutit
+  v railu (#278). Přenastavuje se proto z `viewDidChangeEffectiveAppearance`, a vyhodnocuje se
+  uvnitř `performAsCurrentDrawingAppearance`: mimo kreslení není `NSAppearance.current` nutně
+  vzhled tohohle view.
+- **`TIOCSWINSZ` se nikde neopisuje** — dělá to `SwiftTerm` v `setFrameSize` → `processSizeChange`
+  → `sizeChanged`. Proto ale **zavřená zásuvka nesmí zůstat v hierarchii**: plocha nulové výšky by
+  běžícímu TUI ohlásila `0×0` a TUI by se překreslilo do nesmyslu.
+- **`PATH` se do shellu nepředává** (`Policy.terminalEnvironment`). GUI aplikace ho má osekaný na
+  systémové složky — právě proto v repu existuje `BinaryLocator` —, takže předat ho dál znamená
+  zásuvku bez Homebrew. Login shell si ho složí sám (`argv[0]` s pomlčkou → `/etc/zprofile`
+  a `path_helper`, pak `.zprofile` uživatele). Je to tatáž volba, jakou dělá `Terminal.app`.
+- **Plochu vlastní hostitel, ne SwiftUI.** `makeNSView` se volá při každém složení stromu, takže
+  plocha vlastněná representable by znamenala **nový shell po každém zavření a otevření zásuvky**.
+  `updateNSView` je prázdný schválně: nic v té ploše nejde ze SwiftUI stavu, takže by tam byl zápis,
+  který se při každém přepočtu geometrie zopakuje pro nic (#393).
+- **Výška se ukládá na konci tažení**, ne z měření rozvržení. Vzor `Policy.rawSessionSheetSize`
+  (#327) se převzal na **ořez** (uložená hodnota se clampuje při použití, protože v `UserDefaults`
+  může být cokoli), ale past s prvním průchodem rozvržení tady **není** — výšku nikdo nenavrhuje,
+  mění ji jedině tažení. Odmlka jako `RawSessionSheet.resizeSettle` proto potřeba není.
+- **Kapsle v hlavičce ukazuje `běží` / `skončil (kód)`, ne běžící příkaz**, jak ho kreslí návrh.
+  Zjistit příkaz znamená ptát se jádra na popředí pty v pravidelném taktu, tedy zavést v okně další
+  časovač kvůli popisce. Je to méně, než slibuje mockup, ale nic z toho není nepravda — a `exit 1`
+  se od `exit 0` odliší, což je to, kvůli čemu se na kapsli člověk podívá.
 
 ## Vrstva `Environment` (`App/Environment/`)
 

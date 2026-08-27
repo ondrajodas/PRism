@@ -1038,6 +1038,47 @@ tlačítko není, protože nemá co zahodit; rozepsané otázky v poli se netýk
 jako všechno ostatní. **Strop se nedává** — sazbu si člověk řídí tím, kolik se ptá; skrytá útrata
 je horší než drahá.
 
+### Terminál v zásuvce (#459)
+
+**`` ⌃` `` vytáhne přes spodek záložky shell**, který stojí v **kopii repa toho pull requestu**
+v cache aplikace. Do #459 se dal terminál otevřít jedním tlačítkem v tabu `Průběh` (#453), jenže
+to pořád znamená **odejít z okna**: kdo se během review potřebuje podívat na `git log`, pustit test
+nebo dopsat otázku do běžící session, odejde a vrátí se za deset minut.
+
+**Zásuvka, ne devátá záložka**, a je to celý smysl: půlka užitku je, že je vidět diff a **pod ním**
+výstup příkazu. Roztahuje se **tažením za horní hranu** a výška si pamatuje mezi spuštěními; nad
+zásuvkou vždycky kus obsahu zůstane, jinak by se z ní stala ta záložka.
+
+**Je to skutečný emulátor** — pty a VT/xterm, ne zjednodušený výpis: `claude --resume` v ní vypadá
+jako v Terminálu, včetně kurzoru, barev a překreslení při změně velikosti okna. Stojí za tím
+[`SwiftTerm`](https://github.com/migueldeicaza/SwiftTerm), jediná závislost třetí strany v tomhle
+repu.
+
+**Tady končí „aplikace nemá čím odeslat“, a je to napsané na obrazovce.** V hlavičce zásuvky stojí
+kapsle **`plná práva`** — protějšek `čte · neodesílá` z tabu `Zeptat se`. Aplikace **sama** dál nic
+neodesílá a odesílat umí jedině tou jednou cestou (`ReviewPublishing`), jenže ze shellu jde
+`gh pr merge` i `git push` a to už neuhlídá žádný test: plnou moc má v zásuvce **člověk**.
+
+**Klávesy patří terminálu.** Dokud má zásuvka fokus, okenní zkratky **bez `⌘`** se neuplatní —
+`⌃W` v terminálu maže slovo, `⌃C` přerušuje běh, `⌃1`–`⌃5` a `⌃⇥` patří tomu, co uvnitř běží, `⎋`
+vyskakuje z vimu. Jediná zkratka, která platí dál, je `` ⌃` `` sama; jinak by se zásuvka nedala
+zavřít klávesnicí. Na české klávesnici funguje i **`⌃;`** — je to táž klávesa vlevo od `1`.
+
+**Co aplikace spustila, to i ukončí.** Zavření okna se na běžící shell **zeptá** a po odpovědi ho
+zabije — a ne jenom shell: zabíjí se **popředí pty**, takže odejde i `claude`, který v něm běží
+(job control mu dává vlastní process group, kterou by signál shellu minul). Zabitá aplikace na to
+nemá kde dojít, takže se běžící shell zapisuje do `sessions.json` a osiřelý zabije **další start**,
+stejně jako u review (#351). **Zavření záložky** shell zabije taky; **schování zásuvky ne** —
+`` ⌃` `` je pohled, ne konec práce.
+
+**Shell je jeden na pull request**, protože pracovní adresář je checkout **toho** PR. Když v cache
+žádná kopie repa není, zásuvka to místo prázdné plochy řekne — terminál bez repozitáře je obyčejný
+shell a ten má člověk vedle.
+
+**Známé omezení proti návrhu:** kapsle v hlavičce ukazuje `běží` / `skončil (kód)`, ne příkaz,
+který zrovna běží. Zjistit ho znamená ptát se jádra na popředí pty v pravidelném taktu — tedy další
+časovač v okně kvůli popisce.
+
 ### Záložka `Nálezy` (#242)
 
 **Přes celou šířku se nález nasází jako tabulka**, což ve 300 bodech nešlo: na jeden řádek se vejde
@@ -1460,6 +1501,7 @@ zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, kt
 | `⌘⏎` nebo `⌃⏎` | otevřít **potvrzení** odeslání review |
 | `⌘⇧P` | sestavit zadání pro agenta |
 | `⌘.` | zastavit běžící review na PR v okně |
+| `` ⌃` `` | zásuvka s terminálem (na české mapě i `⌃;`) |
 | `⎋` | zpět na seznam commitů |
 | `⌘⇧R` / `⌘⇧D` | z dashboardu: pustit review na vše, co neběželo / dopsat rozdělané |
 | `⌘,` | nastavení |
@@ -1478,8 +1520,13 @@ později, a pozná se to jedině tím, že jedna ze zkratek „nefunguje“ (#15
 zakázaná; `⌃⏎` se s ní nepotká. V samotném potvrzovacím sheetu zkratka na odeslání **není a nebude**.
 
 **Zakázaná zkratka klávesu nebere a propadne dál** — `⌃W` na domácí záložce, `⌘R` po dobu dotazu,
-`⌘.` nad PR, na kterém nic neběží, `⌘2` v tabech bez panelu. Zkratka, po které se nic nestane, je
-totiž k nerozeznání od rozbité aplikace.
+`⌘.` nad PR, na kterém nic neběží, `⌘2` v tabech bez panelu, `` ⌃` `` mimo záložku PR. Zkratka, po
+které se nic nestane, je totiž k nerozeznání od rozbité aplikace.
+
+**S fokusem v terminálu (#459) se zkratky bez `⌘` neuplatní vůbec.** `⌃W` uvnitř maže slovo, `⌃C`
+přerušuje běh, `⎋` vyskakuje z vimu — a zkratka, která uprostřed psaní zavře záložku, je horší než
+žádný terminál. Hranice je `⌘`, ne `Control`, protože jinak by venku zůstalo `⎋` a `⌥↑`/`⌥↓`;
+`⌘` naopak terminál nikdy nedostane. Jedinou výjimkou je `` ⌃` `` sama.
 
 Dvě věci na tom řídí systém, ne aplikace: **`⌃1`–`⌃5` může sebrat Mission Control** (`Přepnout na
 plochu N`), a pak se k oknu událost nedostane vůbec — buď se ta systémová zkratka vypne, nebo se
@@ -1858,6 +1905,9 @@ jinak by po startu vypadala jako nová celá historie.
 - [`gh`](https://cli.github.com) — přihlášený (`gh auth login`)
 - `claude` — Claude Code CLI
 - `git`
+- Při **prvním buildu síť** — rozpouští se jediná závislost třetí strany,
+  [`SwiftTerm`](https://github.com/migueldeicaza/SwiftTerm) (#459), připnutý na `1.11.2`.
+  `Package.resolved` je v repu, takže se verze nikam neposune sama.
 
 Kromě těch tří binárek chodí aplikace na síť **jedinou vlastní cestou** (`HTTPGetting`) a jsou na
 ní dvě věci: stav komponent ze status pages GitHubu a Claude pro stavový řádek, a **avatary**
@@ -2194,6 +2244,8 @@ App/                      zdrojáky aplikace — target PRism
                           a značka poslední návštěvy té sekce (#414);
                           AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
+  Terminal/               vestavěný terminál (#459): plocha SwiftTermu obarvená paletou, hlášení fokusu
+                          a zabití popředí pty; hostitel drží jeden shell na pull request
   Support/                sdílené drobnosti bez příslušnosti k modulu;
                           diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361) —
                           včetně rotace jejího záznamu při startu sezení (#412)
