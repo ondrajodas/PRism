@@ -172,7 +172,8 @@ struct CommitsTabRenderProbe {
         let scene = PullRequestDetailView(
             store: store,
             pullRequest: Self.summary,
-            submission: .constant(nil)
+            submission: .constant(nil),
+            merge: .constant(nil)
         )
         .frame(width: width, height: Self.height)
         .background(Palette.background)

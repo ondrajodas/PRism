@@ -138,7 +138,8 @@ struct IdleWindowSpinProbe {
                     PullRequestDetailView(
                         store: store,
                         pullRequest: Self.summary,
-                        submission: .constant(nil)
+                        submission: .constant(nil),
+                        merge: .constant(nil)
                     )
                 }
             }

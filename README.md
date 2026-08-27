@@ -860,6 +860,46 @@ stane a komu; u týmu je v něm slovo `týmu`, protože upozornění odejde vše
 odesílání vypnuté, jsou akce zakázané a **důvod je napsaný pod sekcemi**, ne jen v tooltipu. Odesílá se to **tou samou jedinou cestou ven** a **tou samou branou** jako review
 a komentáře; s vypnutým odesíláním jsou akce zakázané s důvodem, což je jiný stav než cizí PR.
 
+**Pod nimi je od #465 sekce `Větev`** — stav vlastní větve a to, co se s ní dá udělat. Dva řádky
+říkají, **kam se to slévá** (`issue-465-… → main`, a jestli je větev srovnaná, za základem, nebo
+v konfliktu) a **co je na tom hotové** (`3 commity · 6 checků` / `zeleno`). Pod nimi je
+`Mergnout…` — se třemi tečkami, protože otevírá potvrzení; merge je nevratný a týká se `main`u,
+ne jen pull requestu.
+
+**Potvrzení vypisuje, co se stane**, jako u odeslání review: větev → base, metoda (`squash`,
+jiná se odsud neposílá — kdo chce jinou, jde na GitHub), kolik commitů se slévá do jednoho, jaký
+bude titulek a proti které hlavě se merguje. **A hlavně píše i to, co v tom výpisu není**: tělo
+squash commitu skládá GitHub ze zpráv slévaných commitů, takže se neslibuje, že je v okně vidět
+celé. Tlačítko **není výchozí** — Enterem se nic nemergne.
+
+**Po úspěšném mergi se zavře potvrzení i záložka toho pull requestu.** Mergnutý PR je dočtený, tak
+se nemusí zavírat ručně; okno přeskočí na sousední záložku, a když žádná nezbyla, domů. Zavírá se
+**jen po úspěchu** — když GitHub merge odmítne (`409` po pushnutém commitu, `405`, spadlá síť),
+zůstane otevřené obojí i s hláškou, proč to nešlo, a dá se zkusit znovu. Pravidlo, že záložku
+mergnutého PR zavírá **člověk a ne polling**, tím platí dál: tady ji zavírá tentýž klik, kterým se
+mergovalo. Prázdný stav *Pull request zmizel ze seznamu* se `Zavřít záložku` zůstává pro to, co se
+stalo jinde — cizí merge, odebraný request na review. **Rozdělané review se zavřením neztratí**,
+draft leží na disku a s otevřenou záložkou je zpátky.
+
+**Hlava PR jde v payloadu jako podmínka, ne jako údaj.** Když se větev mezi otevřením potvrzení
+a kliknutím pohne, GitHub odpoví `409` a **nemergne nic** — v okně je pak věta, že se nic nestalo
+a co přibylo. Je to jediná akce v aplikaci se dvěma pojistkami proti závodu (pre-flight a `sha`
+v payloadu), a je to schválně: mergnout kód, který jsi neviděl, je tatáž záměna jako approve na
+kód, který jsi neviděl.
+
+**Kdy se `Mergnout…` nenabídne, a proč to okno řekne.** Na cizím PR se sekce **nekreslí vůbec** —
+mergnout cizí frontu se odsud nedělá nikdy. Na vlastním je tlačítko zašedlé, když se stav teprve
+zjišťuje, když je odesílání vypnuté, když je větev pozadu nebo v konfliktu, když merge nepouštějí
+pravidla repozitáře, když **neprošel check** — a když **můj vlastní reviewer hlásí blokující
+nález**. Důvod stojí **v panelu**, ne jen v nápovědě pod kurzorem, a je jich vypsaných tolik,
+kolik jich platí: každý vede jinam. Červený check merge zakazuje, i když by ho GitHub pustil
+(u nepovinných checků dovolí) — zeleno je jediný stav, ve kterém se dá mergnout bez čtení. Běžící
+check naopak nebrání.
+
+**Slévatelnost se u GitHubu počítá až na vyžádání**, takže se na ni aplikace ptá opakovaně (tři
+pokusy) — bez toho by tlačítko u čerstvého PR svítilo zašedle podle náhody. A ptá se **jen na
+vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „nevím“ navždycky.
+
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
 nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu
 naopak zůstávají — tab `Nálezy` je druhý pohled na tu samou věc, ne přesun.
@@ -1857,7 +1897,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Prompt review** | Psaná **šablona** se zástupnými texty a **jádro**, které se připojí vždycky. Dělí se to proto, že věta o `ReportFindings` není styl, ale kontrakt: bez ní reviewer nálezy napíše textem a rozbitý sběr vypadá jako čisté review. Výchozí šablona je doslova ten text, co byl v kódu, prázdná znamená „ber výchozí“ a chybějící zástupný text je chyba u pole — neplatná šablona se neuloží a review se s ní nespustí. Globálně, ne per repo: prompt je „jak vypadá review u mě“, ne vlastnost repozitáře. |
 | **Časový limit běhu** | V nastavení, globálně i per repo, s rozsahem 5–60 minut a **bez volby „bez limitu“**: timeout je jediná pojistka proti session, která se zacyklí, kdežto denní strop a limit souběhu omezují jen počet běhů. Horní mez je vazba na účet (strop krát denní limit je nejhorší den), dolní proti tomu, aby limit dělal `timedOut` z review, které fungovalo. Putuje s požadavkem, takže rozjetý běh doběhne s tím svým; ke staršímu výsledku se číslo nepíše, protože uložený běh limit nenese. Sdílí ho kontrola nálezů — tatáž session, tentýž strom, tytéž peníze. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
-| **Odesílání na GitHub** | Platí pro review, odpovědi do vláken i komentáře pod PR. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl. |
+| **Odesílání na GitHub** | Platí pro review, odpovědi do vláken, komentáře pod PR, labely s reviewery a od #465 i **merge vlastního PR**. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl — u merge navíc **hlava v payloadu**, na kterou GitHub odpoví `409` a nemergne nic. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
 | **Vzhled okna** | Tmavý, světlý, nebo podle systému — ovládá se **z levé lišty**, kde ho má návrh, a rozhoduje o tom jediný řádek (`NSApp.appearance`), ne větvení podle režimu. Barvy zůstávají v paletě, kde jednu hodnotu vybírá dynamická systémová barva podle vzhledu, ve kterém se zrovna kreslí; přepínač proto volí režim, ne paletu, a platí naráz pro všechna okna. Uplatňuje se na tom jednom místě, kterým konfigurace vchází do běžící aplikace — ve view by se minul okna, které zrovna není otevřené. |

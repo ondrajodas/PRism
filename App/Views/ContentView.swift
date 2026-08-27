@@ -24,6 +24,16 @@ struct ContentView: View {
     /// vzniká jediná cesta ven (tvrdá podmínka č. 1).
     @State private var submission: ReviewSubmission?
 
+    /// Rozdělaný merge (#465). `nil` = potvrzovací sheet je zavřený.
+    ///
+    /// Bydlí **tady, ne v detailu PR**, ze stejného důvodu jako odeslání review — a o stupeň
+    /// naléhavěji: mergnutý PR ze zdroje `author:@me` z výsledků hledání **vypadne**, takže by
+    /// sheet zavěšený na detailu zmizel právě v okamžiku, kdy má co říct.
+    ///
+    /// Ve store to naopak být nesmí: objekt má zaniknout se zavřením sheetu, protože v něm vzniká
+    /// jediná cesta ven (tvrdá podmínka č. 1).
+    @State private var merge: MergeSubmission?
+
     var body: some View {
         // Průchod tělem se počítá, jen když je zapnutá diagnostika (#361) — jinak je to načtení
         // jednoho statického `Optional`u. Viz `RenderDiagnostics`.
@@ -72,6 +82,11 @@ struct ContentView: View {
         // draftu, takže `nil` je zavřený stav i zdroj dat naráz.
         .sheet(item: $submission) { submission in
             ReviewSubmissionSheet(submission: submission) { self.submission = nil }
+        }
+        // Potvrzení merge (#465). `item:` ze stejného důvodu jako u review: bez snímku plánu nemá
+        // sheet co ukazovat, takže `nil` je zavřený stav i zdroj dat naráz.
+        .sheet(item: $merge) { merge in
+            MergeSheet(submission: merge) { self.merge = nil }
         }
         .hiddenShortcuts { shortcuts }
         // Paleta je **překryv okna, ne sheet**: sheet si bere šířku okna a přijíždí shora jako
@@ -273,6 +288,11 @@ struct ContentView: View {
     /// PR, který mezitím ze seznamu vypadl, si záložku **drží** — mergnutý pull request jde
     /// ještě dočíst a zavřít ho má člověk, ne tik pollingu. Když se o něm ale nedá zjistit ani
     /// titulek, řekne se to místo prázdné plochy.
+    ///
+    /// **Merge z panelu je druhá strana téhož pravidla, ne výjimka z něj** (#465): tam záložku
+    /// zavírá taky člověk, jen tím klikem, kterým PR dokončil. Sem se proto po vlastním mergi
+    /// nedojde — tenhle stav zůstává pro to, co se stalo jinde: cizí merge, odebraný request na
+    /// review, zavřený PR.
     @ViewBuilder private var content: some View {
         switch store.activeTab {
         case .home:
@@ -283,11 +303,17 @@ struct ContentView: View {
             HomeView(store: store, openSettings: { openSettings() })
         case .pullRequest(let id):
             if let summary = store.summary(for: id) {
-                PullRequestDetailView(store: store, pullRequest: summary, submission: $submission)
+                PullRequestDetailView(
+                    store: store,
+                    pullRequest: summary,
+                    submission: $submission,
+                    merge: $merge
+                )
             } else {
                 EmptyStateView(
                     // Čekání, ne porucha: nic se nerozbilo, PR jen vypadl z výsledků hledání
-                    // (typicky po odeslaném review).
+                    // (typicky po odeslaném review). Po **vlastním** mergi se sem nedojde —
+                    // tam se záložka zavře sama (#465).
                     nature: .waiting,
                     symbol: "questionmark.folder",
                     title: "Pull request zmizel ze seznamu",

@@ -79,6 +79,10 @@ struct ReviewPanel: View {
     var hasLoadedCandidates = false
     var metadataActionState: MetadataActionState?
     var metadataActions = MetadataActions()
+    /// Sekce `Větev` (#465) — stav větve a to, co se s ní dá udělat. `nil` na cizím PR, kde se
+    /// nekreslí vůbec; rozhoduje o tom `Policy.branchSection`, ne panel.
+    var branch: Policy.BranchSection?
+    var branchActions = BranchActions()
     /// Proti kterému kódu nálezy platí (#392). Kreslí se **jen v tabu `Commity`** — rozhoduje
     /// `Policy.findingsHeadNotice`, ne panel.
     var headNotice: Policy.FindingsHeadNotice = .none
@@ -149,6 +153,15 @@ struct ReviewPanel: View {
                         actionState: metadataActionState,
                         actions: metadataActions
                     )
+                    // **Pod labely a reviewery** (#465), jak to kreslí návrh: je to třetí věc,
+                    // která platí pro celý pull request, ne pro vybraný segment.
+                    if let branch {
+                        PanelBranchView(
+                            section: branch,
+                            contentWidth: metadataContentWidth,
+                            actions: branchActions
+                        )
+                    }
                     segments
                     content
                 }
