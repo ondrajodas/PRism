@@ -139,7 +139,7 @@ struct IdleWindowSpinProbe {
                         store: store,
                         pullRequest: Self.summary,
                         submission: .constant(nil),
-                merge: .constant(nil)
+                        merge: .constant(nil)
                     )
                 }
             }

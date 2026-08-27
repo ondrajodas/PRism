@@ -87,8 +87,12 @@ struct PanelBranchView: View {
     /// brány, #392). Sazba je `.warnbox` z návrhu, tedy tatáž jako u věty o zastaralých nálezech.
     private var warning: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // **Ikona je jen vizuální**, takže se z accessibility stromu schová: bez toho ji čtečka
+            // přečte jako jméno symbolu (`exclamationmark.triangle`) před větou, která to samé
+            // říká slovy. Nález Copilota na #465.
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Palette.stale)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 // Důvodů může být víc a **každý vede jinam**, takže se nesčítají do jedné věty:
                 // „červený check“ se opraví pushem, „větev je pozadu“ srovnáním, vypnutá brána
