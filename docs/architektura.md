@@ -2100,7 +2100,11 @@ Sedm věcí, které na tom nejsou zjevné:
   `cd` není nadbytečné jen proto, že store shell startuje ve stromu té session: zásuvka smí mít
   shell puštěný odjinud (`` ⌃` `` nad klonem, protože review ještě neběželo), a `claude --resume`
   hledá vlákno **podle adresáře**. Cesta v hlavičce zásuvky se proto po `▶` přepisuje na strom té
-  session — ale **jen když řádka odešla**; po `busy` shell dál stojí tam, kde stál.
+  session — a to **i po `noShell`**, i když řádka neodešla: bez cesty kreslí zásuvka větu
+  *Tenhle pull request nemá v cache pracovní kopii*, a ta by po nepovedeném startu **lhala**
+  (strom na disku je, nepovedl se shell). S cestou je v hlavičce pravda o tom, odkud se startovalo,
+  a kapsle řekne `skončil` — tentýž stav, jaký v zásuvce zbyde po `exit`. Po `busy` se naopak
+  **nepřepisuje**: tam se plocha nestavěla a shell dál stojí tam, kde stál.
 - **`▶` si nebere fokus** (#460). Sebrat ho znamená sáhnout na první responder v tomtéž průchodu,
   ve kterém se plocha teprve staví — past z #184, kterou jde ověřit jedině na běžící aplikaci.
   Kliknout do zásuvky je proti tomu jeden klik.

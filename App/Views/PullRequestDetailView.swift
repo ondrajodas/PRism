@@ -1452,7 +1452,7 @@ struct PullRequestDetailView: View {
             // nepatří: co se povede, je vidět v zásuvce, která se otevřela, a co ne, ohlásí
             // stavový řádek. `nil` = v tomhle okně zásuvka není, takže se `▶` **nekreslí** —
             // tichý pád zpátky do `Terminal.app` by byla dvě chování pod jednou ikonou.
-            openInTerminal: store.hasTerminalDrawer
+            resumeInDrawer: store.hasTerminalDrawer
                 ? { session in store.resumeInDrawer(session, for: pullRequest.id) }
                 : nil,
             slug: "\(pullRequest.repo)#\(pullRequest.number)"

@@ -97,8 +97,15 @@ extension AppStore {
         // hláška o něčem, o co se nikdo nepokusil.
         guard let terminals else { return }
         let outcome = terminals.run(session.shellLine, for: pr, in: session.directory)
-        // Cesta v hlavičce zásuvky se přepisuje **jen když řádka odešla**: po `busy` shell dál
-        // stojí tam, kde stál, a popiska, která by tvrdila jinak, je horší než stará pravda.
+        // Cesta v hlavičce zásuvky se přepisuje **všude, kde se plocha postavila v tomhle stromu**
+        // — tedy i po `noShell`. Vypadá to jako nedůslednost (řádka přece neodešla), ale je to
+        // naopak: bez cesty kreslí zásuvka větu „Tenhle pull request nemá v cache pracovní kopii“,
+        // a ta by po nepovedeném startu **lhala** — strom je na disku, nepovedl se shell. S cestou
+        // je v hlavičce pravda (odkud se startovalo) a kapsle stavu řekne `skončil`, což je přesně
+        // to, co se stalo; je to tentýž stav, jaký v zásuvce zbyde po `exit` (#459).
+        //
+        // Po `busy` se naopak **nepřepisuje**: tam se plocha nestavěla a shell dál stojí tam, kde
+        // stál, takže nová popiska by tvrdila něco, co není.
         if outcome != .busy { terminalDirectories[pr] = session.directory }
         isTerminalOpen = true
         terminalFailure = Policy.resumeNotice(outcome)

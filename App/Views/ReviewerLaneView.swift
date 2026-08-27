@@ -31,7 +31,7 @@ struct ReviewerLaneView: View {
     /// Pustí `claude --resume …` v zásuvce s terminálem (#453, #460). `nil` = **není co obnovit,
     /// nebo v okně není zásuvka** — v obou případech se tlačítko nekreslí a rozhoduje o tom
     /// `Policy.terminalSession(of:)` se `AppStore.hasTerminalDrawer`, ne `if` tady.
-    var openInTerminal: (() -> Void)?
+    var resumeInDrawer: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -114,7 +114,7 @@ struct ReviewerLaneView: View {
                 // `▶` vedle `⧉`, ne místo něj (#453, potvrzeno #460): kdo si session pouští jinde
                 // (iTerm, tmux, jiný stroj), potřebuje text, ne cizí plochu. Jsou to dvě akce, ne
                 // dvě podoby jedné.
-                if let openInTerminal { terminal(sessionID, action: openInTerminal) }
+                if let resumeInDrawer { drawer(sessionID, action: resumeInDrawer) }
             }
         }
         .padding(.horizontal, 12)
@@ -163,12 +163,12 @@ struct ReviewerLaneView: View {
     /// odcházet. Do #459 tady stálo, že vestavěný terminál to nebude, protože by se z okna dal
     /// spustit `gh pr merge` i `git push`; obojí je pořád pravda a rozhodnutí vyměnit tu záruku
     /// za funkci padlo u #459 — kapsle `plná práva` v hlavičce zásuvky to říká na obrazovce.
-    private func terminal(_ sessionID: String, action: @escaping () -> Void) -> some View {
-        Button(ReviewerLaneText.openInTerminal, systemImage: "play.fill", action: action)
+    private func drawer(_ sessionID: String, action: @escaping () -> Void) -> some View {
+        Button(ReviewerLaneText.resumeInDrawer, systemImage: "play.fill", action: action)
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
             .font(.caption)
-            .help(ReviewerLaneText.openInTerminalHelp(sessionID: sessionID))
+            .help(ReviewerLaneText.resumeInDrawerHelp(sessionID: sessionID))
     }
 
     // MARK: - Fáze

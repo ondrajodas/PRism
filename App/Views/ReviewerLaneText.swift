@@ -99,9 +99,9 @@ enum ReviewerLaneText {
 
     /// **Od #460 je cíl zásuvka, ne `Terminal.app`** — a popisek to musí říct, protože je to
     /// jediné, čím se `▶` představuje dřív, než se na něj klikne.
-    static let openInTerminal = "Pustit session v terminálu"
+    static let resumeInDrawer = "Pustit session v terminálu"
 
-    static func openInTerminalHelp(sessionID: String) -> String {
+    static func resumeInDrawerHelp(sessionID: String) -> String {
         "Vytáhne zásuvku s terminálem, přejde v ní do pracovního stromu té session a pustí "
             + "\(Policy.resumeCommand(sessionID: sessionID))."
     }

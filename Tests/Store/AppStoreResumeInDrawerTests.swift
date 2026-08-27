@@ -98,7 +98,12 @@ struct AppStoreResumeInDrawerTests {
     }
 
     /// Prázdná plocha bez věty vypadá k nerozeznání od toho, že se nekliklo.
-    @Test("Nespuštěný shell se řekne")
+    ///
+    /// **Cesta se u toho přesto zapíše**, a je to rozhodnutí, ne nedůslednost (nález Copilota):
+    /// bez ní kreslí zásuvka větu „Tenhle pull request nemá v cache pracovní kopii“, a ta by
+    /// lhala — strom na disku je, nepovedl se shell. S cestou je v hlavičce pravda o tom, odkud
+    /// se startovalo, a kapsle stavu řekne `skončil`.
+    @Test("Nespuštěný shell se řekne, ale cesta v hlavičce zůstane pravdivá")
     func aShellThatNeverStartedIsReported() throws {
         let host = FakeTerminalHost()
         host.outcome = .noShell
@@ -108,6 +113,7 @@ struct AppStoreResumeInDrawerTests {
 
         let failure = try #require(store.terminalFailure)
         #expect(failure.contains("nepodařilo spustit"))
+        #expect(store.terminalDirectory(for: pullRequest) == worktree)
     }
 
     /// Hláška zmizí teprve tehdy, když se to **doopravdy povede**. Jedna instance se dvěma
