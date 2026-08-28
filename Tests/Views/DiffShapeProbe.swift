@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 
@@ -23,6 +24,11 @@ import Testing
 ///    v evaluačním zásobníku pod řádkem diffu. U pevného stacku musí být nula.
 /// 4. `burnAfterScrolling` — hoří diff po gestu? **Nedokazuje to nic** (kolo se v harnessu za
 ///    čtrnáct kol #361 vyrobit nepodařilo), je to kontrola, že se pevný stack nechová hůř.
+/// 5. `relayoutCost` (#472) — co stojí **přerovnání shora**, tedy to, co #469 neměřilo:
+///    tělo detailu se překládá při každém průchodu tělem `ContentView`, ne jen při scrollování.
+///
+/// Kvůli té páté jde každá scéna přes `DiffRelayoutHost` (jeden `View` navíc, který drží generaci),
+/// takže se čísla z #469 mohou o kousek lišit — poměry mezi podobami tím zůstávají.
 ///
 /// Řádky jsou **skutečné `DiffRowView`** nad skutečnými `DiffRow` z rozparsovaného diffu —
 /// tedy včetně `NSTextView` v každém bloku. Bez nich by cena pevného stacku vyšla řádově nižší,
@@ -107,6 +113,65 @@ struct DiffShapeProbe {
             }
         }
     }
+
+    /// Co stojí **přerovnání shora** (#472), tedy průchod tělem `PullRequestDetailView`.
+    ///
+    /// Je to druhá polovina rozhodnutí z #469 a ta, kterou #469 neměřilo: diff se nepřerovnává jen
+    /// scrollováním. Když se jeho tělo přeloží, poskládají se v líném seznamu jen viditelné řádky,
+    /// v pevném **všechny**.
+    ///
+    /// **Co tělo detailu překládá, měří `DetailRelayoutMeasurement`** — a vyšlo z toho, že to
+    /// **není** průchod tělem `ContentView` (ten detail nechá být, protože se nezměnil), ale
+    /// **zápis do sledované vlastnosti**, kterou detail čte. Tahle sonda proto neměří scénář
+    /// z aplikace, ale **tvar seznamu**: co stojí přerovnání shora, ať ho vyvolá cokoli.
+    ///
+    /// Měří se **cena přerovnání, ne příprava** (#274): okno se nechá usadit a teprve pak se
+    /// generace bumpne dvacetkrát s kolem runloopu po každém bumpnutí.
+    @Test("Kolik stojí přerovnání shora nad diffem")
+    func relayoutCost() throws {
+        for lines in Self.scrollingSizes {
+            var costs: [DiffListShape: [Double]] = [:]
+            // Série se střídají A/B/A/B — drift sezení je větší než hledaný rozdíl (#274).
+            for _ in 0..<2 {
+                for shape in DiffListShape.allCases {
+                    let rows = Self.material(lines: lines)
+                    let clock = RelayoutClock()
+                    let window = show(rows: rows, shape: shape, clock: clock)
+                    defer { window.orderOut(nil) }
+                    _ = spinMainRunLoop(seconds: 2)
+                    let root = try #require(window.contentView)
+                    let before = Self.blockWork(in: root)
+                    let started = mainThreadCPUSeconds()
+                    for _ in 0..<Self.relayouts {
+                        clock.tick += 1
+                        _ = spinMainRunLoop(seconds: 0.016)
+                    }
+                    let cost = mainThreadCPUSeconds() - started
+                    costs[shape, default: []].append(cost)
+                    print(String(
+                        format: "MĚŘENÍ přerovnání %d řádků, %@: %.2f s CPU za %d přerovnání"
+                            + " (%.0f ms na jedno) — před %@, po %@",
+                        lines,
+                        shape.rawValue,
+                        cost,
+                        Self.relayouts,
+                        cost / Double(Self.relayouts) * 1000,
+                        before.description,
+                        Self.blockWork(in: root).description
+                    ))
+                }
+            }
+            for shape in DiffListShape.allCases {
+                let values = costs[shape] ?? []
+                print("MĚŘENÍ přerovnání \(lines) řádků, \(shape.rawValue): "
+                    + values.map { String(format: "%.2f", $0) }.joined(separator: " / ") + " s CPU")
+            }
+        }
+    }
+
+    /// Kolikrát se v sérii přerovnává. Dvacet, protože jedno přerovnání je v aplikaci pod
+    /// rozlišením `ps` a série musí trvat déle než kolo runloopu.
+    private static let relayouts = 20
 
     /// Kolik práce ve viditelných blocích proběhlo — tatáž konstrukce jako v `IdleDiffSpinProbe`.
     private static func blockWork(in view: NSView) -> BlockWork {
@@ -252,9 +317,14 @@ struct DiffShapeProbe {
         }
     }
 
-    private func show(rows: [SampledDiffFile], shape: DiffListShape) -> NSWindow {
+    private func show(
+        rows: [SampledDiffFile],
+        shape: DiffListShape,
+        clock: RelayoutClock? = nil
+    ) -> NSWindow {
         let host = NSHostingView(
-            rootView: ShapedDiffList(files: rows, shape: shape).background(Palette.background)
+            rootView: DiffRelayoutHost(files: rows, shape: shape, clock: clock)
+                .background(Palette.background)
         )
         host.sizingOptions = [.minSize]
         let window = NSWindow(
@@ -289,6 +359,26 @@ struct DiffShapeProbe {
             if height > (best?.documentView?.frame.height ?? 0) { best = found }
         }
         return best
+    }
+}
+
+/// Kolikáté přerovnání shora (#472) — pohon sondy `relayoutCost`.
+///
+/// Musí to být **objekt v prostředí sondy**, ne `@State` uvnitř scény: sonda bumpuje generaci
+/// zvenčí a chce, aby se z toho stal průchod tělem hostitele — tedy tatáž cesta, jakou v aplikaci
+/// jde tik pollingu (`ContentView` → `PullRequestDetailView` → `DiffView`).
+@MainActor @Observable final class RelayoutClock {
+    var tick = 0
+}
+
+/// Hostitel seznamu — model `PullRequestDetailView`: jeho tělo se překládá a skládá seznam znovu.
+struct DiffRelayoutHost: View {
+    let files: [SampledDiffFile]
+    let shape: DiffListShape
+    var clock: RelayoutClock?
+
+    var body: some View {
+        ShapedDiffList(files: files, shape: shape, generation: clock?.tick ?? 0)
     }
 }
 
@@ -346,11 +436,18 @@ struct SampledDiffRow: Identifiable {
 struct ShapedDiffList: View {
     let files: [SampledDiffFile]
     let shape: DiffListShape
+    /// Kolikáté přerovnání shora (#472). Mění se **jen hodnotou**, obsah seznamu zůstává týž —
+    /// je to model toho, co v aplikaci dělá průchod tělem `PullRequestDetailView`: `DiffView`
+    /// se poskládá znovu s jinými uzávěry, takže se jeho tělo přeloží, i když se diff nezměnil.
+    var generation = 0
 
     @State private var viewport = DiffViewport()
     @State private var extents = DiffFileExtents()
 
     var body: some View {
+        // Čtení generace je to, čím se tělo při přerovnání přeloží — bez něj by SwiftUI seznam
+        // se stejnými daty prohlásil za nezměněný a sonda by měřila nulu u obou podob.
+        let _ = generation
         HStack(spacing: 0) {
             GeometryReader { proxy in
                 list

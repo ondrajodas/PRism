@@ -3647,6 +3647,75 @@ a v `AppStore.pullRequestWasMerged`.
 | Totéž po **odeslání review** | Jiná situace: PR nezmizí proto, že bych ho dokončil, ale proto, že mě někdo odebral z reviewerů — a to se může stát i omylem. Rozsah #465 se kvůli tomu nerozšiřuje; když se to bude chtít, je to vlastní issue |
 | Zapsat merge do **dění** (#414), ať sha přežije zavřený sheet | Nový druh položky znamená glyf, barvu, cíl kliknutí a rozhodnutí o chipu `bez banneru` ve čtyřech vyčerpávajících `switch`ích — velká změna kvůli údaji, se kterým se v aplikaci stejně nedá nic dělat. Sha mergnutého commitu je věc pro GitHub |
 
+### Záznam rozhodnutí — sledovaná vlastnost se dělí podle toho, kdo ji čte (#472)
+
+**Co se změnilo.** `PollingService` držel do #472 **jednu** sledovanou vlastnost — `var state =
+PollState()` se všemi pěti hodnotami uvnitř. Od #472 drží pět vlastností zvlášť a `PollState`
+zůstal jako **hodnota**, ze které se počítají odvozené odpovědi (`isStale`, `emptyReason`).
+
+**Proč.** `@Observable` sleduje **po vlastnostech**, takže jedna hrubá vlastnost znamená, že se za
+všech pět hodnot hlásí táž změna. `isRefreshing = true` na začátku tiku tím probudilo i každého,
+kdo četl **jen seznam PR** — a ten čte `AppStore.author(of:)` → `ownership(of:)`, tedy to, čím
+detail PR pozná, čí PR kreslí. Tichý tik proto překresloval celé okno včetně diffu: **62 průchodů
+tělem `PullRequestDetailView` na dvacet tiků, po rozdělení 1** (`DetailRelayoutMeasurement`).
+
+Je to **stejné rozhodnutí jako u `DiffViewport` (#469)**, jen o dvě vrstvy jinde, a zobecňuje se
+tím na pravidlo: co se mění jinak často a čte jinde, patří do vlastní vlastnosti.
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| Psát jen změnu (`if pullRequests != merged { … }`) | **Změřeno, že to nic nedělá**: zápis téže hodnoty `@Observable` na tomhle toolchainu nehlásí (ověřeno vloženou regresí z obou stran). Byl by to `if`, který nic nemění — a takový kód se v tomhle repu nedrží. Pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`, takže se to pozná, kdyby se chování změnilo |
+| Stráž na `forget(whatIsNotIn:)` (přes třicet map, přepisovaných po každém tiku výsledkem `filter`u) | Tentýž důvod: se stráží i bez ní vychází tvrzení o nezneplatnění stejně. Bylo to napsané a **zase zahozené**, aby diff nebyl o třicet míst větší za nic |
+| Vrátit #469 (líný diff) | Hypotéza z hlavičky #472. **Změřeno, že cenu nedělá**: jedno zneplatnění detailu stojí 95–116 ms **bez ohledu na délku diffu** (500 proti 2000 řádkům: 99 proti 105 ms) i na tabu (`Přehled` bez dlouhého seznamu je nejdražší), a `DiffView.body` se u toho vůbec nepřeloží |
+| Zlevnit `updateWindowContentSizeExtremaIfNecessary` (`.windowResizability(.contentMinSize)`) | Je to 15–50 % rozvržení podle fáze, takže je to reálná nitka — ale `.contentMinSize` je tam kvůli tomu, že s `.automatic` **nešlo okno zmenšit na výšku**, a ověřit tu změnu jde jedině rukou na běžícím okně. Zapsáno jako nedodělané, ne zamítnuté |
+
+**Co zůstalo nedokázané.** Průchodů tělem ubylo šedesátkrát, ale cena tichého tiku spadla jen
+o třetinu (u 500řádkového diffu z 451 na 427 ms, tedy skoro vůbec). Zbytek leží v rozvržení okna,
+ne v tělech — a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+
+### Záznam rozhodnutí — co u #472 nešlo zlevnit, a proč se to zkusilo
+
+Po nasazení opravy pollingu uživatel hlásil, že problém trvá: „ten přechod je takový škubaný
+a přechází to prostě pomalu… chvíli to čeká a pak se to začne škubaně přepínat.“ Hledalo se dál
+a **tři kandidáti padli měřením**. Zapsané jsou proto, že všichni tři vypadají rozumně a bez
+tohohle záznamu je někdo zkusí znovu.
+
+| Kandidát | Proč se zkusil | Že mechanicky funguje | Proč padl |
+|---|---|---|---|
+| `Layout` v kořeni okna, který odpoví na dotaz o **minimum** konstantou | `updateWindowContentSizeExtremaIfNecessary` drží ve `sample`u 15–50 % rozvržení; minimum je přitom konstanta (700×400) | `WindowMinimumProbe`: sestup se zastaví, pod kořenem zbyde **jedna** nabídka místo dvou | **94 ms proti 98 ms.** Cena té druhé aktualizace grafu není v sestupu stromem, ale v samotném kole aktualizace |
+| **Zapamatované výšky bloků** přes přepnutí tabu | přepnutí nasazuje **všechny** bloky (50 z 50) místo pásu (5), protože změřená výška zaniká s podstromem | počitadlo: **5 778 použití z 6 924 dotazů** | **422/576 ms proti 428/602 ms.** Mount `NSTextView` není to, co přepnutí stojí |
+| Uzávěry tažení a kopírování **jednou za soubor** místo za řádek | 8 uzávěrů × 294 řádků = 2 352 alokací na jedno přepnutí tabu | — | Uvnitř rozptylu. **Zůstalo** jako kratší kód, ne jako zlevnění — a je to tak napsané i v komentáři |
+
+**Co z toho plyne a je to ten skutečný nález:** ve `sample`u je vlastní práce aplikace **~1,5 %**
+hlavního vlákna. Cenu drží **rozvržení pevného seznamu z #469**, a to se nedá obejít ničím, co
+stojí vedle něj. Přepnutí tabu je přitom **jiný a dražší scénář** než přerovnání (407–682 ms proti
+95–116 ms) a jako jediné **roste s velikostí diffu**: obsah tabu se zahodí a platí se **první**
+rozvržení.
+
+**A ten redesign se pak na pokyn uživatele zkusil — jako čtvrtý, se stejným výsledkem.** Řádky se
+seskupily po šestnácti (`Policy.diffChunks`), úsek mimo pás se nahradil jedním prázdným místem
+známé výšky, paměť výšek žila v `@State` detailu (aby přežila přepnutí tabu) a skok na nález si
+svůj úsek vynucoval, aby kotva v hierarchii byla. **Mechanicky to fungovalo**: průchodů tělem
+`DiffRowView` na jedno přepnutí ubylo **z 294 na 147**. **Cena se nehnula** — 389/638 ms proti
+407/602 ms.
+
+**Půlka dětí ve stacku zmizela a nezměnilo to nic.** To je zároveň ten nejsilnější doklad
+z celého #472: **cena není v počtu řádků**, takže ani dotažení té druhé půlky by nepomohlo.
+Zahozeno, aby v repu nezůstal složitý a rizikový mechanismus, který se nedá obhájit číslem.
+
+**Kde ta cena je, ukázala ablace, která měla přijít dřív**: přepnutí mezi dvěma taby **bez diffu**
+(`Přehled` ↔ `Kontroly`) stojí **309 ms** proti 410 ms s diffem. **Tři čtvrtiny přepnutí tedy
+s diffem nemají co dělat** — je to přestavba **detailu samotného**: hlavička, pruh záložek, panel
+a `.task` kaskáda se přepnutím zahodí a staví znovu (`PullRequestDetailView=2` a `MarkdownText=1`
+na přepnutí i tam, kde žádný seznam není). Kdo na tom bude pracovat dál, má začít **tam**.
+
+**Poučení pro příště, a je obecné:** u téhle třídy se **napřed měří, která část scénáře je drahá**,
+a teprve pak se optimalizuje. Čtyři pokusy zlevnily věci, které dohromady dělaly čtvrtinu problému.
+
+**Vrátit `LazyVStack` zamítnuto beze změny** (#469): zaseknuté okno je horší vada než pomalé.
+
 ### Záznam rozhodnutí — `▶` pouští session v zásuvce (#460)
 
 Nakresleno v návrhu, sekce 35, poznámka 112; sekce 34 zůstává **záznamem toho, co bylo dřív**,
