@@ -5287,3 +5287,96 @@ to test z obou stran (obě regrese ověřené vložením). Pravidlo, že mergnut
 a zavřít ho má člověk, ne tik pollingu, se tím **neruší**: mluví o pollingu, kdežto tady záložku
 zavírá klik na `Mergnout`. Rozdělané review se zavřením neztrácí — draft leží na disku, takže se
 nezavírá s ptaním, ani se nemaže.
+
+### #472 — okno reagovalo pozdě, a nebylo to eager diffem
+
+Ráno po #469 přestalo okno **tuhnout**, ale začalo **reagovat pozdě**: v klidu 0,43 s CPU za minutu,
+při práci ale 0,5–0,9 s CPU **na každou sekundu**, a to skoro minutu v kuse. Hypotéza v zadání zněla,
+že to násobí pevný diff z #469 — tedy že se vyměnilo zaseknuté okno za pomalé.
+
+**Neplatí, a je to změřené.** `DetailRelayoutMeasurement` staví skutečný `ContentView` nad skutečným
+`AppStore` a míchá čtyři osy (scéna, pohon, tab, náplň store). Jedno zneplatnění detailu stojí
+**95–116 ms** a **nezávisí ani na délce diffu** (500 proti 2000 řádkům: 99 proti 105 ms), **ani na
+tabu** — `Přehled`, kde žádný dlouhý seznam není, vyšel dokonce nejdráž. `DiffView.body` se u toho
+**vůbec nepřeloží**. Cenu tedy nedělá eager diff; #469 zůstává, jak bylo.
+
+**Ta čísla jsou z opravené sondy a je to poučení samo o sobě**: první podoba předepisovala rozměr
+**obsahu**, a tím zmrazila dotaz na minimum okna (`.windowResizability(.contentMinSize)`) — vyšlo
+z ní 33–43 ms, tedy třikrát míň, a **neměřila, co dělá aplikace**. Rozměr proto předepisuje okno.
+
+**Co ji dělá, je hrubost sledované vlastnosti.** `PollingService` držel všech pět hodnot v jednom
+`PollState`u, a `@Observable` sleduje po vlastnostech — takže `isRefreshing = true` na začátku tiku
+probudilo i každého, kdo četl jen seznam PR. Ten čte `AppStore.author(of:)` → `ownership(of:)`, tedy
+to, čím detail pozná, čí PR kreslí. **Tichý tik proto překresloval celé okno včetně diffu.** Po
+rozdělení na pět vlastností (tatáž úvaha jako u `DiffViewport` v #469):
+
+| Tichý tik, 2000řádkový diff | do #472 | od #472 |
+|---|---|---|
+| průchody tělem `PullRequestDetailView` (20 tiků) | 62 | **1** |
+| průchody tělem `DiffView` | 69 | **7** |
+| průchody tělem `DiffRowView` | 10 143 | **1 029** |
+| CPU na tik | 551 ms | **343 ms** |
+
+**Zamítnuto měřením: psát „jen změnu“.** `if pullRequests != merged { … }` vypadá jako druhá polovina
+opravy a není — zápis téže hodnoty `@Observable` na tomhle toolchainu **nehlásí** (ověřeno vloženou
+regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ze stejného důvodu se
+nesahalo na `forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u.
+
+**Průchodů tělem ubylo šedesátkrát, ale cena tiku spadla jen o třetinu** — a zbytek se hledal dál,
+protože uživatel po nasazení hlásil, že „ten přechod je takový škubaný a přechází to prostě pomalu“.
+
+**Ten zbytek je rozvržení, a nedá se obejít vedle něj.** Ve `sample`u té fáze je vlastní práce
+aplikace **~1,5 %** hlavního vlákna (`AppStore` 21, `Policy` 15, `PullRequestDetailView` 36 vzorků
+ze 14 726); zbytek je `GraphHost.flushTransactions`, `NSHostingView.layout` a
+`LayoutEngineBox.sizeThatFits`. **Zkusila se tři zlevnění, všechna mechanicky fungují a žádné
+cenu nezměnilo** — zkratka na dotaz o minimum okna (94 proti 98 ms), zapamatované výšky bloků přes
+přepnutí tabu (5 778 použití z 6 924 dotazů, 422/576 proti 428/602 ms) a skládání uzávěrů jednou za
+soubor místo za řádek (8 místo 2 352 alokací, uvnitř rozptylu). Z posledního zbyl **kratší kód**,
+ostatní dvě se zahodily; čísla i ověření, že fungují, jsou v [`docs/testovani.md`](testovani.md).
+
+**Co se u toho ale změřilo a je to nejlepší popis té bolesti, jaký zatím existuje:** přepnutí tabu
+je **jiný a dražší scénář** než přerovnání — 407–682 ms proti 95–116 ms, a na rozdíl od přerovnání
+**roste s velikostí diffu**. Obsah tabu se přepnutím zahodí a staví znovu, takže se platí **první
+rozvržení** pevného seznamu z #469: 294 průchodů tělem `DiffRowView` a nasazení **všech** bloků
+(50 z 50 proti pěti v ustáleném stavu).
+
+**Ten redesign se pak zkusil — a je to čtvrtý zamítnutý kandidát.** Řádky se seskupily po
+šestnácti a úsek mimo pás se nahradil jedním prázdným místem známé výšky (paměť výšek v `@State`
+detailu, aby přežila přepnutí tabu; skok na nález si svůj úsek vynucuje, aby kotva v hierarchii
+byla). **Mechanicky to fungovalo** — průchodů tělem `DiffRowView` na jedno přepnutí ubylo
+**z 294 na 147** —, a **cena se nehnula**: 389/638 ms proti 407/602 ms. Půlka dětí ve stacku
+zmizela a nezměnilo to nic, což je zároveň ten nejsilnější doklad, že **cena není v počtu řádků**.
+Zahozeno.
+
+**A pak se ta cena našla.** Ablace *slepá kostra* (rail, hlavička a stavový řádek nahrazené
+obarvenými obdélníky, takže se měří **tvar**, ne sousedé) ukázala, že **obsah okna byl pružné dítě
+`HStack`u**: stack mu při každém rozvržení posílá průzkumné nabídky na pružnost a pružný rámec je
+**předá dolů celým detailem** — panelem, pruhem záložek i obsahem tabu. Je to tatáž třída jako #220
+a #361, jen o patro výš.
+
+Oprava je jeden modifikátor (`content.fillingSlot(alignment: .topLeading)` v `ContentView`) a na
+realistických datech (konverzace 200 uzlů, 48 nálezů, 12 checků, 24 commitů) vyšla:
+
+| Scénář (skutečné okno) | před | po |
+|---|---|---|
+| tichý tik pollingu | 512 ms | **20 ms** |
+| přerovnání (zápis do store) | 104 ms | **10 ms** |
+| přepnutí tabu bez diffu | 318 ms | **62 ms** |
+| přepnutí tabu s diffem, 500 řádků | 410 ms | **243 ms** |
+| přepnutí tabu s diffem, 2000 řádků | 638 ms | **466 ms** |
+
+**Sousedé ani obsah v tom nebyli**: skutečný rail, hlavička a stavový řádek stojí proti slepým
+obdélníkům **7 ms**, a táž kostra vyšla 81 ms s plným storem proti 70 ms s prázdným — obsah tedy
+dělá **14 %**. Zbylých 86 % byla struktura — a **zpětně to vysvětluje všechny čtyři zamítnuté pokusy**:
+zlevňovaly věci **uvnitř** detailu, kdežto platilo se za to, kolikrát se do detailu vůbec sestoupí.
+
+**Zbývá pojmenovaná mezera**: přepnutí tabu **s diffem** stojí pořád 243 ms u 500řádkového a 466 ms
+u 2000řádkového diffu, tedy o 180–400 ms víc než přepnutí bez něj. Roste to s velikostí diffu
+a první rozvržení pevného seznamu z #469 je nejpravděpodobnější příčina; zkusit se to dá tím, že
+se `fillingSlot()` dostane i **dovnitř** tabu, mezi obsah a jeho části.
+
+**Původní ablace ukázala, kde ta cena doopravdy je**: přepnutí mezi dvěma taby **bez diffu**
+(`Přehled` ↔ `Kontroly`) stojí **309 ms** proti 410 ms s diffem. **Tři čtvrtiny přepnutí tedy
+s diffem nemají co dělat** — je to přestavba detailu samotného (hlavička, pruh záložek, panel,
+`.task` kaskáda), která se přepnutím zahodí a staví znovu. Kdo na tom bude pracovat dál, má začít
+tam, ne v diffu; a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.

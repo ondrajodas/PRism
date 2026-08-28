@@ -593,11 +593,17 @@ než pravidlo obejdeš**, protože většina z nich se v harnessu neprojeví.
   při pohybu myši. Cena se proto **neodhaduje z tabulky pro šířku**. Zakázaná je **v řádku**, ne
   plošně — ohraničené formy jsou
   [vyjmenované](docs/architektura.md#šířka-v-okně-appviewsavailablewidthswift).
-- **Líný seznam ve `ScrollView`u rozměr nevyjednává vůbec** (#361) — dostane ho změřený
-  (`fillingSlot()`), protože na každý dotaz pružného rámce odpovídá `LazyVStack` **zápisem** do
-  téže krabice, ze které kreslí `placeSubviews`; hlídá to `LazyIdealSizeTests`
-  ([rozbor](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361)). Je to
-  ale [zlevnění, ne oprava](docs/architektura.md#nezastavilo-to-nic-a-je-to-změřené-361-třinácté-kolo).
+- **Rozměr nevyjednává líný seznam** (#361) **ani obsah okna** (#472) — oba ho dostanou změřený
+  (`fillingSlot()`). U líného seznamu proto, že na každý dotaz pružného rámce odpovídá `LazyVStack`
+  **zápisem** do téže krabice, ze které kreslí `placeSubviews` (hlídá to `LazyIdealSizeTests`;
+  [rozbor](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361)), a je to
+  tam [zlevnění, ne oprava](docs/architektura.md#nezastavilo-to-nic-a-je-to-změřené-361-třinácté-kolo).
+  U obsahu okna proto, že pružné dítě `HStack`u dostane průzkumné nabídky na pružnost a rámec je
+  **předá dolů celým detailem**: naměřeno **89 → 8 ms** na průchod tělem detailu a **282 → 56 ms**
+  na přepnutí tabu
+  ([rozbor](docs/architektura.md#obsah-okna-dostane-změřenou-štěrbinu-472)). **Sousedé ani obsah
+  v tom nejsou** — skutečný rail, hlavička a stavový řádek stojí proti slepým obdélníkům 7 ms
+  a plný store proti prázdnému 14 %.
 - **`LazyVStack` v diffu ani na ose konverzace nepatří, a je to změna proti #361** (#469). Do #469
   tu stálo, že líný seznam patří tam, kde je seznam neomezený — tedy do diffu. Kolo z #361 se ale
   po opravě osy **přestěhovalo právě tam** (dva `sample`y ze živého záchvatu, `LazySubviewPlacements`
@@ -627,7 +633,7 @@ než pravidlo obejdeš**, protože většina z nich se v harnessu neprojeví.
 ```bash
 grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'    # výčet k posouzení, ne prázdný
-grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'       # šest míst + modifikátor sám
+grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'       # osm míst + modifikátor sám
 # Prázdný (#361, #469) — filtr zahazuje komentáře, ve kterých se to rozhodnutí vysvětluje.
 grep -n 'LazyVStack' App/Views/ConversationView.swift App/Views/DiffView.swift |
     grep -vE ':[0-9]+: *//|:[0-9]+: *///'
@@ -636,6 +642,25 @@ grep -n 'ForEach(Array(' App/Views/ConversationView.swift App/Views/ThreadBubble
 grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k posouzení, ne prázdný
 ```
 
+- **`@Observable` sleduje po vlastnostech, takže hrubá vlastnost je výkonová vada** (#469, znovu
+  #472). Co se mění jinak často a čte jinde, patří do **vlastní** vlastnosti: `PollingService`
+  držel do #472 všech pět hodnot v jednom `PollState`u, takže `isRefreshing = true` na začátku
+  tiku probudilo i čtenáře seznamu PR — a ten čte `AppStore.author(of:)`, na kterém visí
+  `ownership` a s ním celý detail. Tichý tik tím překresloval celé okno: **62 průchodů tělem
+  `PullRequestDetailView` za dvacet tiků, po rozdělení 1**. Naopak **psát „jen změnu“ nemá smysl**
+  — zápis téže hodnoty toolchain nehlásí (změřeno, pinuje to `PollObservationTests`), takže
+  `if x != new { x = new }` je porovnání navíc, které nic nemění.
+  Čísla i zamítnuté varianty jsou
+  v [`docs/architektura.md`](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
+- **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — ve `sample`u je vlastní práce
+  aplikace **~1,5 %** hlavního vlákna. Než začneš zlevňovat vedle rozvržení, přečti si
+  [*Tři zlevnění, která se změřila a zahodila*](docs/testovani.md#tři-zlevnění-která-se-změřila-a-zahodila):
+  zkratka na dotaz o minimum okna, zapamatované výšky bloků i skládání uzávěrů po souborech
+  **mechanicky fungují a na ceně nezměnily nic** — včetně redesignu na úseky řádků, po kterém
+  ubyla **půlka** dětí ve stacku a cena se nehnula. **Napřed změř, která část scénáře je drahá:**
+  přepnutí tabu je jiný a dražší scénář než přerovnání (407–682 ms proti 95–116 ms), ale **tři
+  čtvrtiny z něj s diffem nesouvisí** — je to přestavba detailu (309 ms i mezi dvěma taby, ve
+  kterých žádný seznam není).
 - **Animace, která nikdy nedoběhne, nesmí být ve SwiftUI** (#350): `repeatForever` si vyžádá
   průchod při **každém obtažení obrazovky** a ten rozvrhne celé okno — nečinné okno stálo kvůli
   jedenáctibodovému prstýnku **99 % CPU** hlavního vlákna. Nekonečné otáčení patří na `CALayer`

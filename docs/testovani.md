@@ -6064,6 +6064,13 @@ Tady zůstává **to, na co se u toho měření naráží**:
 - **Sériím se pořád střídá A/B/A/B** (#274). Drift sezení je i tady větší než hledaný rozdíl:
   tatáž podoba vyšla v jednom sezení 3,08 s a v jiném 4,47 s.
 
+Od #472 má sonda **pátou otázku** — `relayoutCost`, tedy co stojí **přerovnání shora**: tělo detailu
+se překládá při každém průchodu tělem `ContentView`, ne jen při scrollování, a #469 to neměřilo.
+Vyšlo, že pevný stack je i tady dražší, ale **málo**: 6000 řádků, 3 ms na přerovnání u líného
+seznamu proti **9 ms** u pevného s oknem (500 řádků: 4 proti 4). Kvůli té páté otázce jde každá
+scéna přes `DiffRelayoutHost`, tedy o jeden `View` víc — čísla z #469 se tím mohou o kousek posunout,
+poměry mezi podobami ne.
+
 **Jak diff vypadá**, se ověřuje `DiffWindowRenderProbe` (ručně, `TEST_RUNNER_PRISM_MEASURE=1`
 a `TEST_RUNNER_PRISM_RENDER_DIR`): renderuje **skutečný `DiffView`** v obou pohledech na třech
 polohách výřezu (vršek, prostředek, konec) do PNG — z okna mimo obrazovku přes `cacheDisplay`,
@@ -6539,6 +6546,180 @@ bez ohledu na `.shift`**, takže dvě tlačítka lišící se jen jím jsou jedn
 směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` procházet nálezy a `⌥⇧↓` skákalo po
 tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
 zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
+
+### Kolik stojí přerovnání okna (#472)
+
+Dvě sondy, obě ruční (`TEST_RUNNER_PRISM_MEASURE=1`), a **je podstatné, že jsou dvě**: měří dvě
+různé věci a odpověď na #472 je v jejich rozdílu.
+
+| Sonda | Co měří | Co z ní vyšlo |
+|---|---|---|
+| `DiffShapeProbe.relayoutCost` | **tvar seznamu** — přerovnání shora nad předpočítanými řádky, líný proti pevnému. Neměří scénář z aplikace, měří tvar | pevný stack je dražší **3×**, ale absolutně málo (6000 řádků: **3 ms** proti **9 ms** na přerovnání) |
+| `DetailRelayoutMeasurement.relayoutCost` | **cesta, kterou kód doopravdy jde** (#275) — skutečný `ContentView` nad skutečným `AppStore` | jedno zneplatnění detailu stojí **95–116 ms** a **nezávisí ani na délce diffu, ani na tabu** |
+
+#### Čtyři osy, protože bez ablace se to neodliší
+
+`DetailRelayoutMeasurement` míchá **scénu** (celé okno / samotný detail), **pohon** (průchod tělem
+hostitele / zápis do sledované vlastnosti / tichý tik pollingu), **tab** (`Soubory` s pevným
+diffem, `Přehled` bez dlouhého seznamu, `Kontroly` navíc bez panelu vpravo) a **náplň store**
+(prázdný / vlastní PR s nálezy a draftem). Čísla z jednoho sezení (okno 1512×874, Debug):
+
+Čísla jsou z **opravené** podoby sondy (rozměr předepisuje okno, ne obsah — viz odstavec pod
+tabulkou); starší běhy vycházely třikrát nižší a **neměřily to, co dělá aplikace**:
+
+| Případ | ms na přerovnání |
+|---|---|
+| okno, `Soubory`, **hostitel** (tělo `ContentView`) | **4–6**, a **nula průchodů tělem** |
+| okno, `Soubory`, zápis do store | **94–116** |
+| okno, `Přehled`, zápis do store | **114–117** |
+| okno, `Kontroly` (bez panelu), zápis do store | **90–102** |
+| jen detail, `Soubory`, zápis do store | **22–27** |
+| jen detail, `Soubory`, prázdný store | 7–9 |
+
+Čtyři věci z toho plynou a všechny jsou pro #472 rozhodující:
+
+1. **Průchod tělem `ContentView` detail nezneplatní.** `PullRequestDetailView` se poskládá znovu,
+   ale SwiftUI ho prohlásí za nezměněný a tělo nepřeloží — v snímku počitadel není **žádné tělo**.
+   Co detail překresluje, je tedy **zápis do sledované vlastnosti**, ne přestavba shora.
+2. **Délka diffu na ceně nic nemění** (500 proti 2000 řádkům: 38 proti 43 ms) a `DiffView.body` se
+   při přerovnání detailu **vůbec nepřeloží**. Hypotéza z hlavičky #472 — že cenu násobí eager diff
+   z #469 — tím padla; `Přehled`, kde žádný dlouhý seznam není, je dokonce ten nejdražší tab.
+3. **Panel vpravo je z toho ~15 ms** (rozdíl `Přehled` proti `Kontrolám`), takže ani on to není.
+4. **Tři čtvrtiny ceny jsou mimo detail** (~100 ms v okně proti ~10 ms nad samotným detailem)
+   a jsou v **rozvržení**, ne v tělech. Ve `sample`u z toho běhu drží `NSHostingView.layout()` →
+   `render` hlavní podíl a **`updateWindowContentSizeExtremaIfNecessary` je z toho 15–50 %** podle
+   fáze — druhá aktualizace grafu, kterou si vynucuje `.windowResizability(.contentMinSize)`
+   (tentýž jev jako u #350). **Zlevnit ji se zkusilo a nešlo to**, viz *Tři zlevnění* níž.
+
+**Pozor na to, čím se okno v sondě hostuje.** Předepsaný `frame(width:height:)` na scéně dotaz na
+minimum **zmrazí** (odpoví konstantou dřív, než se zanoří), takže se s ním celá tahle mašinerie
+neměří — a čísla vyjdou **třikrát nižší** (33–43 ms proti 95–116 ms). Rozměr proto předepisuje
+**okno**, ne obsah, a hostující vrstva dostane `sizingOptions = [.minSize]`; tatáž konstrukce
+i tentýž důvod jako v `IdleDiffSpinProbe.show(scene:minSizeFromContent:)`.
+
+#### Přepnutí tabu je jiný scénář než přerovnání, a je to ten dražší
+
+Uživatel popsal #472 jako „chvíli to čeká a pak se to začne škubaně přepínat“ — a to **není**
+přerovnání, je to **první rozvržení**: obsah tabu se přepnutím zahodí a postaví znovu. Pohon
+`přepnutí tabu tam a zpět` (`Přehled` ↔ `Soubory`) to měří:
+
+| Diff | přerovnání (zápis do store) | **přepnutí tabu** | tichý tik |
+|---|---|---|---|
+| 500 řádků | 99–107 ms | **407–428 ms** | 496–556 ms |
+| 2000 řádků | 95–116 ms | **576–682 ms** | 512–591 ms |
+
+Na jedno přepnutí se přeloží **294 těl `DiffRowView`** (2000řádkový diff) a **nasadí se všechny
+bloky** — `bloků 50, nasazení 50` proti `bloků 5` v ustáleném stavu, protože změřená výška bloku
+zaniká s podstromem. **Roste to s velikostí diffu**, na rozdíl od přerovnání.
+
+#### Ablace „slepá kostra“ — jak se pozná, jestli cenu dělá obsah, nebo tvar
+
+Tohle je **postup, ne jednorázové měření**, a je to ten, kterým se #472 nakonec vyřešilo. Otázka
+zní: **stojí to, co je uvnitř, nebo to, kam je to zasazené?** Bez ní se optimalizuje uvnitř
+podstromu, který je levný — a přesně to se u #472 stalo čtyřikrát po sobě.
+
+Dělá se to tak, že se měřený view nechá **beze změny** a vymění se jeho **sousedé** za obarvené
+obdélníky téže velikosti (`Color.gray.frame(height:)`, `frame(width:)`). Vzniknou tři scény, které
+se od sebe liší jedním krokem:
+
+| Scéna | Co je v ní | Na co odpovídá |
+|---|---|---|
+| `jen detail` | měřený view sám v okně | co stojí on |
+| `detail ve slepé kostře` | tentýž view v **kostře** z aplikace, sousedé slepí | co stojí **zasazení** |
+| `okno` | skutečný `ContentView` | co stojí **sousedé** (rozdíl proti kostře) |
+
+Čísla z #472 (realistická data — konverzace 200 uzlů, 48 nálezů, 12 checků, 24 commitů):
+
+| Scéna | průchod tělem detailu | přepnutí tabu (bez diffu) |
+|---|---|---|
+| jen detail | 18 ms | 88 ms |
+| slepá kostra, **pružný rámec** | **81–89 ms** | **282–295 ms** |
+| slepá kostra, pružný rámec, **prázdný store** | 70 ms | — |
+| slepá kostra, **měřená štěrbina** | **7–8 ms** | **56 ms** |
+| skutečné okno (po opravě) | 10–11 ms | 62 ms |
+
+Čte se z toho, že **sousedé stáli 7 ms** a **zasazení 71 ms** — tedy že cenu dělal tvar, ne obsah.
+Čtvrtá scéna (`slepá kostra, měřená štěrbina`) je pak ta samá kostra s opravou, takže se rozdíl dá
+přečíst na jednom řádku a **nezávisí na tom, co je zrovna v aplikaci**.
+
+Tři věci, bez kterých z toho nic není:
+
+- **Slepí sousedé musí mít rozměry z aplikace.** Rail 56, hlavička 92, stavový řádek 28 bodů —
+  jinak se měří jiný tvar.
+- **Data musí být realistická, i když se měří tvar** — a porovnat se musí **uvnitř jednoho běhu**
+  (drift sezení je větší než hledaný rozdíl, #274). Táž kostra vyšla **81 ms s plným storem
+  a 70 ms s prázdným**, tedy obsah dělá **14 %**. Malý rozdíl je tady **výsledek**, ne důvod
+  fixture nedoplnit: bez něj by se nedalo tvrdit, že cenu nedělá obsah.
+- **Rozměr předepisuje okno, ne scéna.** `frame(width:height:)` na obsahu zmrazí dotaz na minimum
+  a čísla vyjdou třikrát nižší — viz odstavec o hostování výš.
+
+#### Tři čtvrtiny přepnutí nemá s diffem co dělat
+
+Pohon `přepnutí tabu bez diffu` (`Přehled` ↔ `Kontroly`, tedy dva taby, ve kterých žádný dlouhý
+seznam není) je ablace k tomu výš — a odpovídá na otázku, kterou se čtyři pokusy o zlevnění diffu
+marně snažily obejít:
+
+| Přepnutí | 500 řádků |
+|---|---|
+| `Přehled` ↔ `Soubory` | **410 ms** |
+| `Přehled` ↔ `Kontroly` (bez diffu) | **309 ms** |
+
+**Diff je z toho ~100 ms, zbytek je přestavba detailu samotného** — hlavička, pruh záložek, panel
+a `.task` kaskáda, které se přepnutím zahodí a staví znovu (`PullRequestDetailView=2`
+a `MarkdownText=1` na přepnutí i v tabu bez diffu). U 2000řádkového diffu je diffová část větší
+(~230 ms z 638), ale ta fixní zůstává.
+
+#### Čtyři zlevnění, která se změřila a zahodila
+
+Všechna tři **mechanicky fungují** a **na ceně nezměnila nic**. Jsou tady proto, aby je nikdo
+nezkoušel podruhé:
+
+| Co se zkusilo | Že to funguje, je ověřeno | Co to udělalo s cenou |
+|---|---|---|
+| `Layout` v kořeni okna, který na dotaz na **minimum** (`0×0`) odpoví konstantou místo zanoření — cílem bylo `updateWindowContentSizeExtremaIfNecessary`, které ve `sample`u drží 15–50 % rozvržení | `WindowMinimumProbe`: pod kořenem zbyla **jedna** nabídka místo dvou | 94 ms proti **98 ms** — cena té druhé aktualizace grafu **není v tom sestupu** |
+| **Zapamatované výšky bloků**, které přežijí přepnutí tabu (aby se nemusely nasazovat všechny) | počitadlo v cache: **5 778 použití z 6 924 dotazů** | 422 / 576 ms proti **428 / 602 ms** — mount `NSTextView` není to, co přepnutí stojí |
+| Skládat uzávěry tažení a kopírování **jednou za soubor** místo za řádek (8 místo 2 352 alokací) | — | 407 / 682 ms proti **428 / 602 ms**, tedy uvnitř rozptylu; **zůstalo jako kratší kód**, ne jako zlevnění |
+| **Úseky řádků** (#472, redesign): řádky po šestnácti, úsek mimo pás nahrazený jedním prázdným místem známé výšky — aby měl pevný stack desítky dětí místo tisíců | průchodů tělem `DiffRowView` na jedno přepnutí **294 → 147**, tedy polovina pryč | 389 / 638 ms proti **407 / 602 ms**. **Půlka dětí zmizela a cena se nehnula** — což je zároveň ten nejsilnější doklad, že cena není v počtu řádků |
+
+**Co z toho plyne:** cenu **nedrží počet řádků** — půlka jich zmizela a nezměnilo to nic —
+a u přepnutí tabu jsou **tři čtvrtiny ceny mimo diff**. Zbývalo rozvržení detailu a okna jako
+celku, a **tam ta cena taky byla**: obsah okna byl pružné dítě `HStack`u, takže mu stack posílal
+průzkumné nabídky na pružnost a rámec je předával dolů celým detailem. Našla to ablace *slepá
+kostra* výš; oprava je `fillingSlot()` na obsahu v `ContentView`. **Všechny čtyři zamítnuté pokusy
+tím dávají smysl zpětně** — zlevňovaly věci **uvnitř** detailu, kdežto platilo se za to, kolikrát
+se do detailu vůbec sestoupí. Ve `sample`u té fáze je naše vlastní práce **~1,5 %** hlavního vlákna (`AppStore` 21,
+`Policy` 15, `PullRequestDetailView` 36 vzorků ze 14 726); zbytek je `GraphHost.flushTransactions`
+(1 947), `NSHostingView.layout` (1 630) a `LayoutEngineBox.sizeThatFits` (1 222).
+
+#### Pohon „tichý tik pollingu“ je ten, kvůli kterému #472 vzniklo
+
+`await store.refresh()` nad fake gatewayí, která vrací pořád tentýž seznam — tedy přesně to, co
+v záznamu diagnostiky z 27. 8. stálo 1,0–1,5 s CPU každou minutu. Před/po opravou (#472, tatáž
+sezení, série A/B/A/B):
+
+| Diff | | průchody tělem `PullRequestDetailView` | `DiffView` | `DiffRowView` | CPU na tik |
+|---|---|---|---|---|---|
+| 500 řádků | do #472 | 62 | 68 | 4 352 | 451 ms |
+| | od #472 | **1** | **7** | **448** | 427 ms |
+| 2000 řádků | do #472 | 62 | 69 | 10 143 | 551 ms |
+| | od #472 | **1** | **7** | **1 029** | 343 ms |
+
+**Průchodů tělem ubylo šedesátkrát, ceny jen o třetinu** (a u malého diffu skoro vůbec) — a to je
+poctivý závěr, ne měření navíc: zbytek tiku není v tělech. Kde je, je bod 4 výš.
+
+#### Na co se u téhle sondy naráží
+
+- **Odložené okno drží svůj strom a ten dál poslouchá store.** První podoba sondy měřila v jedné
+  scéně a okna jen odkládala — do dalšího měření se pak počítaly průchody tělem předchozích scén
+  (0,57 → 2,26 s u téhož případu a osminásobný počet průchodů). Řeší to **vlastní store na každou
+  sérii**; rozebrat okno zevnitř `defer`u nejde (`contentView = nil` a `close()` uprostřed měření
+  položily testovacího hosta `SIGSEGV`em).
+- **Seznam PR se musí naplnit** (`await store.refresh()` v přípravě), jinak `ContentView` na
+  `store.summary(for:)` nesáhne a místo detailu nakreslí prázdný stav — naměřeno **0,00 s CPU
+  a nula průchodů tělem**, tedy měření nad oknem, ve kterém PR není.
+- **Rozměr se předepisuje scéně**, ne oknu (past ze `IdleDiffSpinProbe.show(store:full:)`).
+- **`FakeTimeSource` nespí**, takže `ContentView` se svým `.task { keepFresh() }` roztočí polling
+  naplno; sonda ho zastaví `stopAfter: 1`.
 
 ### Kolik stojí otevřená záložka (#274)
 

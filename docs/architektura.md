@@ -6788,8 +6788,77 @@ Věci, které se u toho nemají rozbít:
 ## `PollingService` (`App/Polling/`)
 
 Drží seznam PR aktuální: v intervalu (default 60 s) se zeptá všech zdrojů, sloučí je přes
-`PullRequestList` a publikuje `PollState`. `@MainActor` a `@Observable` — jeho stav je to,
+`PullRequestList` a publikuje výsledek. `@MainActor` a `@Observable` — jeho stav je to,
 co kreslí okno; síťová práce stejně probíhá v podprocesech `gh`.
+
+### Obsah okna dostane změřenou štěrbinu (#472)
+
+`ContentView` staví `VStack { hlavička; HStack { rail; obsah }; stavový řádek }` — a `obsah`
+(detail PR, nebo dashboard) byl do #472 **pružné dítě**. Stack se pružného dítěte při každém
+rozvržení ptá průzkumnými nabídkami na pružnost (`nil×nil`, `0×0`, `0×∞`, `∞×0`, `∞×∞`, …) a pružný
+rámec je **předá dolů** — celým detailem, panelem, pruhem záložek i obsahem tabu. Je to tatáž třída
+jako #220 a #361, jen o patro výš: neplatí se za seznam, ale za to, že detail vůbec visí ve stacku.
+
+**Změřeno ablací „slepá kostra“** (`DetailRelayoutMeasurement`): rail, hlavička i stavový řádek
+nahrazené obarvenými obdélníky, takže se měří **tvar**, ne sousedé. Data jsou realistická —
+konverzace o 200 uzlech, 48 nálezů, 12 checků, 24 commitů, rozdělané review, vlastní PR.
+
+| Scéna | průchod tělem detailu | přepnutí tabu (bez diffu) |
+|---|---|---|
+| slepá kostra, **pružný rámec** (stav do #472) | **81–89 ms** | **282–295 ms** |
+| slepá kostra, **měřená štěrbina** | **7–8 ms** | **56 ms** |
+| jen detail, bez kostry | 18 ms | 88 ms |
+| skutečné okno **po opravě** | **10–11 ms** | **62 ms** |
+
+Tři věci, které z toho plynou:
+
+1. **Sousedé nejsou vinni.** Skutečný rail, hlavička a stavový řádek stojí proti slepým obdélníkům
+   **7 ms** — cenu dělalo vyjednávání, ne jejich obsah.
+2. **Nedělá ji ani obsah detailu.** Táž kostra vyšla **81 ms s plným storem a 70 ms s prázdným**
+   (jeden běh, aby to nebylo srovnání napříč sezeními) — obsah tedy dělá **14 %** a zbylých 86 %
+   struktura.
+3. **Je to nejlevnější varianta ze všech tří** — 8 ms je míň než detail bez kostry (18 ms), protože
+   se dotazy zastaví u `GeometryReader`u i směrem k hostující vrstvě.
+
+Opravou je `fillingSlot()` na `obsah` v `ContentView` — týž modifikátor a týž důvod jako u líných
+seznamů v #361, jen nad celým tabem. **Zpětně to vysvětluje, proč čtyři dřívější pokusy o zlevnění
+nezměnily nic**: zkratka na minimum okna, výšky bloků, uzávěry po souborech i úseky řádků zlevňovaly
+věci **uvnitř** detailu, kdežto cena byla v tom, kolikrát se do detailu vůbec sestoupí.
+
+### Pět vlastností, ne jeden `PollState` (#472)
+
+Do #472 držel `PollingService` **jednu** sledovanou vlastnost — `var state = PollState()` se všemi
+pěti hodnotami uvnitř. `@Observable` sleduje **po vlastnostech**, takže to znamenalo, že se za
+každou z těch pěti hodnot hlásí táž změna: `isRefreshing = true` na začátku tiku probudilo
+i každého, kdo četl **jen seznam PR**.
+
+A ten čte `AppStore.author(of:)` → `ownership(of:)`, tedy to, čím detail PR pozná, čí PR kreslí.
+Tichý tik — takový, po kterém je fronta stejná jako před minutou, tedy skoro každý — proto
+překresloval **celé okno včetně diffu**. Naměřeno (`DetailRelayoutMeasurement`, okno 1512×874 nad
+vlastním PR s dvaceti čtyřmi nálezy, dvacet tichých tiků):
+
+| | průchody tělem `PullRequestDetailView` | `DiffView` | `DiffRowView` | CPU na tik |
+|---|---|---|---|---|
+| do #472 (2000 řádků diffu) | **62** | 69 | 10 143 | 551 ms |
+| od #472 | **1** | 7 | 1 029 | 343 ms |
+
+Je to tatáž úvaha jako u `DiffViewport` (#469) a tentýž závěr: **co se mění jinak často a čte
+jinde, patří do vlastní vlastnosti.** `PollState` zůstal jako **hodnota**, ze které se počítají
+odvozené odpovědi (`isStale`, `emptyReason`) — ty na seznamu, stavu i razítku závisejí doopravdy,
+takže se skládá jen z nich a `isRefreshing` ani `nextPoll` do něj nepatří.
+
+**Zamítnutá varianta: psát jen změnu** (`if pullRequests != merged { … }`). Vypadá to jako druhá
+polovina opravy a **není** — `@Observable` na tomhle toolchainu zápis téže hodnoty **nehlásí**
+(změřeno vloženou regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ten
+`if` by tedy byl porovnání navíc, které nic nemění. Z téhož důvodu se nesahalo ani na
+`forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u: se stráží
+i bez ní vychází tvrzení o nezneplatnění stejně.
+
+**Co tím opravené není**: sedm průchodů tělem `DiffView` a tisíc řádků diffu za dvacet tichých
+tiků zbývá, a cena tiku spadla jen o třetinu, přestože průchodů tělem ubylo šedesátkrát. Zbytek
+leží v **rozvržení okna**, ne v tělech — vlastní práce aplikace je ve `sample`u té fáze **~1,5 %**
+hlavního vlákna a **tři zlevnění vedle rozvržení se změřila a zahodila**; viz *Kolik stojí
+přerovnání okna* v [`docs/testovani.md`](testovani.md#kolik-stojí-přerovnání-okna-472).
 
 `run()` je smyčka (obnovit → počkat → opakovat), `refresh()` jeden cyklus. Tlačítko
 „obnovit teď“ volá `refresh()` — ruční obnovení není nic jiného než tik mimo pořadí.
@@ -6818,7 +6887,7 @@ smyčku nepřeplánuje, takže dokud poprvé neusne, je `nil`.
 
 **Po dobu dotazu je `nextPoll` v minulosti** — zapisuje se až za `refresh()`. Od #237 je v tom
 koutě odpočet (`za 43s znovu`), takže to přestala být kosmetika: odpočet by došel na nulu a šel
-dál. Drží to `PollState.isRefreshing`, které `refresh()` zvedne na začátku a v `defer` zase
+dál. Drží to `PollingService.isRefreshing`, které `refresh()` zvedne na začátku a v `defer` zase
 spustí. **Proč příznak, a ne srovnání s hodinami**: odpočet ve view tiká *bez přepočtu těla*
 (`DashboardCountdown` a jeho `TimelineView`), takže `now` v těle platí jen k poslednímu přepočtu —
 po probuzení stroje by to byl uplynulý termín, do #260 odpočítávaný nahoru a od #260 zamrzlý na
