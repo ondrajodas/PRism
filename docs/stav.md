@@ -5318,9 +5318,26 @@ opravy a není — zápis téže hodnoty `@Observable` na tomhle toolchainu **ne
 regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ze stejného důvodu se
 nesahalo na `forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u.
 
-**Co zůstalo nedokázané**, a je to zapsané: průchodů tělem ubylo šedesátkrát, ale cena tiku spadla
-jen o třetinu (u malého diffu skoro vůbec) — zbytek leží v **rozvržení okna**, ne v tělech. Ve
-`sample`u z toho drží `NSHostingView.layout()` → `render` hlavní podíl a
-`updateWindowContentSizeExtremaIfNecessary` je z toho 15–50 % podle fáze; je to druhá aktualizace
-grafu, kterou si vynucuje `.windowResizability(.contentMinSize)`. Zlevnit ji se u #472 **nezkoušelo**.
+**Průchodů tělem ubylo šedesátkrát, ale cena tiku spadla jen o třetinu** — a zbytek se hledal dál,
+protože uživatel po nasazení hlásil, že „ten přechod je takový škubaný a přechází to prostě pomalu“.
+
+**Ten zbytek je rozvržení, a nedá se obejít vedle něj.** Ve `sample`u té fáze je vlastní práce
+aplikace **~1,5 %** hlavního vlákna (`AppStore` 21, `Policy` 15, `PullRequestDetailView` 36 vzorků
+ze 14 726); zbytek je `GraphHost.flushTransactions`, `NSHostingView.layout` a
+`LayoutEngineBox.sizeThatFits`. **Zkusila se tři zlevnění, všechna mechanicky fungují a žádné
+cenu nezměnilo** — zkratka na dotaz o minimum okna (94 proti 98 ms), zapamatované výšky bloků přes
+přepnutí tabu (5 778 použití z 6 924 dotazů, 422/576 proti 428/602 ms) a skládání uzávěrů jednou za
+soubor místo za řádek (8 místo 2 352 alokací, uvnitř rozptylu). Z posledního zbyl **kratší kód**,
+ostatní dvě se zahodily; čísla i ověření, že fungují, jsou v [`docs/testovani.md`](testovani.md).
+
+**Co se u toho ale změřilo a je to nejlepší popis té bolesti, jaký zatím existuje:** přepnutí tabu
+je **jiný a dražší scénář** než přerovnání — 407–682 ms proti 95–116 ms, a na rozdíl od přerovnání
+**roste s velikostí diffu**. Obsah tabu se přepnutím zahodí a staví znovu, takže se platí **první
+rozvržení** pevného seznamu z #469: 294 průchodů tělem `DiffRowView` a nasazení **všech** bloků
+(50 z 50 proti pěti v ustáleném stavu).
+
+**Zbývá tedy jedna cesta a je to redesign, ne úprava**: seřadit řádky do úseků a ty mimo výřez
+nahradit jedním prázdným místem známé výšky, aby pevný stack měl řádově **desítky** dětí místo
+tisíců. Laznost by zůstala mimo rozvržení (žádný `LazyVStack`, tedy ani kolo z #361), ale sahá to
+na kotvy skoku na nález, na split pohled i na pruh z #422 — proto se to do #472 nevešlo.
 A sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.

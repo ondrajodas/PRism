@@ -646,6 +646,12 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   `if x != new { x = new }` je porovnání navíc, které nic nemění.
   Čísla i zamítnuté varianty jsou
   v [`docs/architektura.md`](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
+- **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — ve `sample`u je vlastní práce
+  aplikace **~1,5 %** hlavního vlákna. Než začneš zlevňovat vedle rozvržení, přečti si
+  [*Tři zlevnění, která se změřila a zahodila*](docs/testovani.md#tři-zlevnění-která-se-změřila-a-zahodila):
+  zkratka na dotaz o minimum okna, zapamatované výšky bloků i skládání uzávěrů po souborech
+  **mechanicky fungují a na ceně nezměnily nic**. A **přepnutí tabu je jiný scénář než
+  přerovnání** — je dražší (407–682 ms proti 95–116 ms) a jako jediné roste s velikostí diffu.
 - **Animace, která nikdy nedoběhne, nesmí být ve SwiftUI** (#350): `repeatForever` si vyžádá
   průchod při **každém obtažení obrazovky** a ten rozvrhne celé okno — nečinné okno stálo kvůli
   jedenáctibodovému prstýnku **99 % CPU** hlavního vlákna. Nekonečné otáčení patří na `CALayer`

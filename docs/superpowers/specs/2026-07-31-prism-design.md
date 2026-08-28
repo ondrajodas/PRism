@@ -3673,3 +3673,29 @@ tím na pravidlo: co se mění jinak často a čte jinde, patří do vlastní vl
 **Co zůstalo nedokázané.** Průchodů tělem ubylo šedesátkrát, ale cena tichého tiku spadla jen
 o třetinu (u 500řádkového diffu z 451 na 427 ms, tedy skoro vůbec). Zbytek leží v rozvržení okna,
 ne v tělech — a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+
+### Záznam rozhodnutí — co u #472 nešlo zlevnit, a proč se to zkusilo
+
+Po nasazení opravy pollingu uživatel hlásil, že problém trvá: „ten přechod je takový škubaný
+a přechází to prostě pomalu… chvíli to čeká a pak se to začne škubaně přepínat.“ Hledalo se dál
+a **tři kandidáti padli měřením**. Zapsané jsou proto, že všichni tři vypadají rozumně a bez
+tohohle záznamu je někdo zkusí znovu.
+
+| Kandidát | Proč se zkusil | Že mechanicky funguje | Proč padl |
+|---|---|---|---|
+| `Layout` v kořeni okna, který odpoví na dotaz o **minimum** konstantou | `updateWindowContentSizeExtremaIfNecessary` drží ve `sample`u 15–50 % rozvržení; minimum je přitom konstanta (700×400) | `WindowMinimumProbe`: sestup se zastaví, pod kořenem zbyde **jedna** nabídka místo dvou | **94 ms proti 98 ms.** Cena té druhé aktualizace grafu není v sestupu stromem, ale v samotném kole aktualizace |
+| **Zapamatované výšky bloků** přes přepnutí tabu | přepnutí nasazuje **všechny** bloky (50 z 50) místo pásu (5), protože změřená výška zaniká s podstromem | počitadlo: **5 778 použití z 6 924 dotazů** | **422/576 ms proti 428/602 ms.** Mount `NSTextView` není to, co přepnutí stojí |
+| Uzávěry tažení a kopírování **jednou za soubor** místo za řádek | 8 uzávěrů × 294 řádků = 2 352 alokací na jedno přepnutí tabu | — | Uvnitř rozptylu. **Zůstalo** jako kratší kód, ne jako zlevnění — a je to tak napsané i v komentáři |
+
+**Co z toho plyne a je to ten skutečný nález:** ve `sample`u je vlastní práce aplikace **~1,5 %**
+hlavního vlákna. Cenu drží **rozvržení pevného seznamu z #469**, a to se nedá obejít ničím, co
+stojí vedle něj. Přepnutí tabu je přitom **jiný a dražší scénář** než přerovnání (407–682 ms proti
+95–116 ms) a jako jediné **roste s velikostí diffu**: obsah tabu se zahodí a platí se **první**
+rozvržení.
+
+**Zbývající cesta je redesign, ne úprava.** Seřadit řádky do úseků a ty mimo výřez nahradit jedním
+prázdným místem známé výšky, aby pevný stack měl desítky dětí místo tisíců — laznost by zůstala
+mimo rozvržení, takže by kolo z #361 nemělo kde vzniknout. Sahá to ale na kotvy skoku na nález, na
+split pohled i na trvalý pruh z #422, takže to je vlastní issue s vlastní pauzou, ne dodatek
+k #472. **Vrátit `LazyVStack` zamítnuto beze změny** (#469): zaseknuté okno je horší vada než pomalé.
+

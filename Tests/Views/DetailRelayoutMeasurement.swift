@@ -71,6 +71,7 @@ struct DetailRelayoutMeasurement {
 
     /// Co se hostuje. **Celé okno je ta poctivá krajnost**: v aplikaci se s detailem překresluje
     /// i rail, pruh záložek a stavový řádek, a samotný detail by z ceny vynechal právě je.
+    ///
     enum Scene: String {
         case window = "okno"
         case detail = "jen detail"
@@ -90,6 +91,11 @@ struct DetailRelayoutMeasurement {
         /// seznam. Je to ten scénář ze záznamu diagnostiky, kvůli kterému #472 vzniklo: okno,
         /// ve kterém se nic nezměnilo, spálilo za tik 1,0–1,5 s CPU.
         case poll = "tichý tik pollingu"
+        /// **Přepnutí tabu tam a zpět** — `Přehled` ↔ `Soubory`. To je ta půlka #472, kterou
+        /// uživatel popsal jako „chvíli to čeká a pak se to začne škubaně přepínat“: obsah tabu
+        /// se přepnutím **zahodí a postaví znovu**, takže se platí **první rozvržení**, ne
+        /// přerovnání. A první rozvržení je u pevného diffu (#469) vědomě drahé.
+        case tab = "přepnutí tabu tam a zpět"
     }
 
     /// Co v store leží. **Ablace**: prázdný store je harness, plný je to, nad čím okno v provozu
@@ -117,34 +123,36 @@ struct DetailRelayoutMeasurement {
     /// (`PullRequestTab.showsReviewPanel`) — bez těch dvou by z čísel nebylo poznat, kolik z ceny
     /// patří seznamu a kolik panelu.
     private static let cases: [Case] = [
-        Case(scene: .window, tab: .filesChanged, driver: .poll),
-        Case(scene: .window, tab: .filesChanged, driver: .host),
+        Case(scene: .window, tab: .filesChanged, driver: .tab),
         Case(scene: .window, tab: .filesChanged, driver: .store),
-        Case(scene: .window, tab: .overview, driver: .store),
-        Case(scene: .window, tab: .checks, driver: .store),
-        Case(scene: .detail, tab: .filesChanged, driver: .store),
-        Case(scene: .detail, tab: .filesChanged, driver: .store, payload: .bare),
+        Case(scene: .window, tab: .filesChanged, driver: .poll),
     ]
 
     /// Jedna série: okno se nechá usadit (**příprava se neměří**, #274) a teprve pak se dvacetkrát
     /// přerovná.
     private func measure(store: AppStore, scenario: Case) async throws -> (Double, String) {
         let clock = RelayoutClock()
-        // Rozměr je z té instance, na které se #472 hlásí (1512×874), a **předepisuje se scéně** —
-        // jinak okno spadne na ideální výšku obsahu a v diffu nezbyde ani jeden blok (past ze
-        // `IdleDiffSpinProbe.show(store:full:)`).
-        let controller = NSHostingController(
+        // **Okno se staví jako `WindowGroup`, ne přes předepsaný `frame` na obsahu** — a je to
+        // podmínka toho, aby ablace na zkratku minima vůbec něco měřila. `frame(width:height:)`
+        // na scéně dotaz na minimum **zmrazí** (odpoví konstantou dřív, než se zanoří), takže by
+        // obě podoby vyšly stejně; rozměr proto předepisuje okno. Tatáž konstrukce i tentýž důvod
+        // jako v `IdleDiffSpinProbe.show(scene:minSizeFromContent:)`.
+        let host = NSHostingView(
             rootView: WindowRelayoutHost(store: store, summary: Self.summary, scene: scenario.scene, clock: clock)
-                .frame(width: 1512, height: 874)
                 .background(Palette.background)
         )
+        // **Bez tohohle se `.contentMinSize` nemodeluje** a ablace by měřila dvakrát totéž:
+        // druhé rozvržení okna si vynucuje právě dotaz na minimum, a ten hostující vrstva pošle
+        // jedině s tímhle příznakem (změřeno `WindowMinimumProbe`).
+        host.sizingOptions = [.minSize]
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1512, height: 874),
-            styleMask: [.titled, .resizable],
+            styleMask: [.titled, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.contentViewController = controller
+        window.contentView = host
+        window.setContentSize(NSSize(width: 1512, height: 874))
         window.setFrameOrigin(NSPoint(x: 40, y: 40))
         // Zakryté okno nedostane takt překreslování, takže by se měřilo prázdno; fokus si sonda
         // nebere — tatáž konstrukce jako v `IdleDiffSpinProbe`.
@@ -176,15 +184,34 @@ struct DetailRelayoutMeasurement {
             // Tatáž hodnota, jaká tam je: měří se **přerovnání**, ne přepnutí tabu.
             case .store: store.setDetailTab(tab, for: pr)
             case .poll: await store.refresh()
+            case .tab:
+                // Tam a zpět, ať se měří obojí a scéna skončí tam, kde začala.
+                store.setDetailTab(.overview, for: pr)
+                _ = spinMainRunLoop(seconds: 0.016)
+                store.setDetailTab(.filesChanged, for: pr)
             }
             _ = spinMainRunLoop(seconds: 0.016)
         }
         let cost = mainThreadCPUSeconds() - started
+        let mounted = window.contentView.map { Self.mounts(in: $0) } ?? (blocks: 0, mounts: 0)
         let snapshot = diagnostics.snapshot()
             .sorted { $0.value > $1.value }
             .map { "\($0.key)=\($0.value)" }
             .joined(separator: " ")
-        return (cost, snapshot.isEmpty ? "žádná těla" : snapshot)
+        let bodies = snapshot.isEmpty ? "žádná těla" : snapshot
+        return (cost, "\(bodies), bloků \(mounted.blocks), nasazení \(mounted.mounts)")
+    }
+
+    /// Kolik bloků kódu v okně visí a kolikrát se **nasadily**. Bez toho čísla by se nedalo
+    /// poznat, jestli se za přepnutí tabu platí znovunasazením všech `NSTextView`, nebo něčím
+    /// jiným — a přesně to je otázka #469 proti #472.
+    private static func mounts(in view: NSView) -> (blocks: Int, mounts: Int) {
+        if let container = view as? DiffPairBlockContainer { return (1, container.mounts) }
+        if let text = view as? DiffTextView { return (1, text.mounts) }
+        return view.subviews.reduce((blocks: 0, mounts: 0)) { total, child in
+            let found = mounts(in: child)
+            return (total.blocks + found.blocks, total.mounts + found.mounts)
+        }
     }
 
     /// Počitadla průchodů tělem. Zapisují do složky, která se hned zahodí — sondu zajímá
@@ -311,7 +338,8 @@ struct WindowRelayoutHost: View {
     var body: some View {
         let _ = clock.tick
         switch scene {
-        case .window: ContentView(store: store)
+        // Kořen okna má tvar z `RootView`, včetně jeho podlahy — na ní stojí dotaz na minimum.
+        case .window: ContentView(store: store).frame(minWidth: 700, minHeight: 400)
         case .detail:
             PullRequestDetailView(
                 store: store,

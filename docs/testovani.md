@@ -6555,7 +6555,7 @@ různé věci a odpověď na #472 je v jejich rozdílu.
 | Sonda | Co měří | Co z ní vyšlo |
 |---|---|---|
 | `DiffShapeProbe.relayoutCost` | **tvar seznamu** — přerovnání shora nad předpočítanými řádky, líný proti pevnému | pevný stack je dražší **3×**, ale absolutně málo (6000 řádků: **3 ms** proti **9 ms** na přerovnání) |
-| `DetailRelayoutMeasurement.relayoutCost` | **cesta, kterou kód doopravdy jde** (#275) — skutečný `ContentView` nad skutečným `AppStore` | jedno zneplatnění detailu stojí **33–43 ms** a **nezávisí ani na délce diffu, ani na tabu** |
+| `DetailRelayoutMeasurement.relayoutCost` | **cesta, kterou kód doopravdy jde** (#275) — skutečný `ContentView` nad skutečným `AppStore` | jedno zneplatnění detailu stojí **95–116 ms** a **nezávisí ani na délce diffu, ani na tabu** |
 
 #### Čtyři osy, protože bez ablace se to neodliší
 
@@ -6582,11 +6582,48 @@ diffem, `Přehled` bez dlouhého seznamu, `Kontroly` navíc bez panelu vpravo) a
    při přerovnání detailu **vůbec nepřeloží**. Hypotéza z hlavičky #472 — že cenu násobí eager diff
    z #469 — tím padla; `Přehled`, kde žádný dlouhý seznam není, je dokonce ten nejdražší tab.
 3. **Panel vpravo je z toho ~5 ms** (rozdíl `Přehled` proti `Kontrolám`), takže ani on to není.
-4. **Tři čtvrtiny ceny jsou mimo detail** (40 ms v okně proti 10 ms nad samotným detailem) a jsou
-   v **rozvržení**, ne v tělech. Ve `sample`u z toho běhu drží `NSHostingView.layout()` → `render`
-   hlavní podíl a **`updateWindowContentSizeExtremaIfNecessary` je z toho 15–50 %** podle fáze —
-   to je ta druhá aktualizace grafu, kterou si vynucuje `.windowResizability(.contentMinSize)`
-   (tentýž jev jako u #350). **Zlevnit ji se u #472 nezkoušelo**, je to zapsaná nitka.
+4. **Tři čtvrtiny ceny jsou mimo detail** (~100 ms v okně proti ~10 ms nad samotným detailem)
+   a jsou v **rozvržení**, ne v tělech. Ve `sample`u z toho běhu drží `NSHostingView.layout()` →
+   `render` hlavní podíl a **`updateWindowContentSizeExtremaIfNecessary` je z toho 15–50 %** podle
+   fáze — druhá aktualizace grafu, kterou si vynucuje `.windowResizability(.contentMinSize)`
+   (tentýž jev jako u #350). **Zlevnit ji se zkusilo a nešlo to**, viz *Tři zlevnění* níž.
+
+**Pozor na to, čím se okno v sondě hostuje.** Předepsaný `frame(width:height:)` na scéně dotaz na
+minimum **zmrazí** (odpoví konstantou dřív, než se zanoří), takže se s ním celá tahle mašinerie
+neměří — a čísla vyjdou **třikrát nižší** (33–43 ms proti 95–116 ms). Rozměr proto předepisuje
+**okno**, ne obsah, a hostující vrstva dostane `sizingOptions = [.minSize]`; tatáž konstrukce
+i tentýž důvod jako v `IdleDiffSpinProbe.show(scene:minSizeFromContent:)`.
+
+#### Přepnutí tabu je jiný scénář než přerovnání, a je to ten dražší
+
+Uživatel popsal #472 jako „chvíli to čeká a pak se to začne škubaně přepínat“ — a to **není**
+přerovnání, je to **první rozvržení**: obsah tabu se přepnutím zahodí a postaví znovu. Pohon
+`přepnutí tabu tam a zpět` (`Přehled` ↔ `Soubory`) to měří:
+
+| Diff | přerovnání (zápis do store) | **přepnutí tabu** | tichý tik |
+|---|---|---|---|
+| 500 řádků | 99–107 ms | **407–428 ms** | 496–556 ms |
+| 2000 řádků | 95–116 ms | **576–682 ms** | 512–591 ms |
+
+Na jedno přepnutí se přeloží **294 těl `DiffRowView`** (2000řádkový diff) a **nasadí se všechny
+bloky** — `bloků 50, nasazení 50` proti `bloků 5` v ustáleném stavu, protože změřená výška bloku
+zaniká s podstromem. **Roste to s velikostí diffu**, na rozdíl od přerovnání.
+
+#### Tři zlevnění, která se změřila a zahodila
+
+Všechna tři **mechanicky fungují** a **na ceně nezměnila nic**. Jsou tady proto, aby je nikdo
+nezkoušel podruhé:
+
+| Co se zkusilo | Že to funguje, je ověřeno | Co to udělalo s cenou |
+|---|---|---|
+| `Layout` v kořeni okna, který na dotaz na **minimum** (`0×0`) odpoví konstantou místo zanoření — cílem bylo `updateWindowContentSizeExtremaIfNecessary`, které ve `sample`u drží 15–50 % rozvržení | `WindowMinimumProbe`: pod kořenem zbyla **jedna** nabídka místo dvou | 94 ms proti **98 ms** — cena té druhé aktualizace grafu **není v tom sestupu** |
+| **Zapamatované výšky bloků**, které přežijí přepnutí tabu (aby se nemusely nasazovat všechny) | počitadlo v cache: **5 778 použití z 6 924 dotazů** | 422 / 576 ms proti **428 / 602 ms** — mount `NSTextView` není to, co přepnutí stojí |
+| Skládat uzávěry tažení a kopírování **jednou za soubor** místo za řádek (8 místo 2 352 alokací) | — | 407 / 682 ms proti **428 / 602 ms**, tedy uvnitř rozptylu; **zůstalo jako kratší kód**, ne jako zlevnění |
+
+**Co z toho plyne:** cenu drží **rozvržení pevného seznamu**, ne nic z toho, co jde obejít vedle
+něj. Ve `sample`u té fáze je naše vlastní práce **~1,5 %** hlavního vlákna (`AppStore` 21,
+`Policy` 15, `PullRequestDetailView` 36 vzorků ze 14 726); zbytek je `GraphHost.flushTransactions`
+(1 947), `NSHostingView.layout` (1 630) a `LayoutEngineBox.sizeThatFits` (1 222).
 
 #### Pohon „tichý tik pollingu“ je ten, kvůli kterému #472 vzniklo
 

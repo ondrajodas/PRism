@@ -319,6 +319,36 @@ struct DiffView: View {
         // a jen na jeho konci je vidět tlačítko, aby šlo s myší.
         let dragged = draft.draggedRange.flatMap { $0.path == file.displayPath ? $0.anchor : nil }
         let draggedCells = dragged.map { Policy.rangeCells(of: $0, in: file) } ?? []
+        // **Tažení a kopírování se skládají jednou za soubor, ne za řádek** — tentýž důvod jako
+        // u kotev a rozsahů nad tímhle řádkem: ani jeden z těch osmi uzávěrů na řádku nezávisí,
+        // všechny berou soubor a to, co dostanou parametrem. Při přepnutí tabu se přitom všechny
+        // řádky skládají znovu (294 průchodů tělem `DiffRowView` u 2000řádkového diffu), takže
+        // je to 8 uzávěrů na soubor místo 2 352.
+        //
+        // **Na ceně to ale změřit nešlo** (#472): přepnutí tabu vyšlo 407 / 682 ms proti
+        // 428 / 602 ms před úpravou, tedy uvnitř rozptylu — cenu drží rozvržení, ne skládání
+        // řádků. Zůstává to proto jako **kratší kód**, ne jako zlevnění.
+        let rangeDrag = RangeDragActions(
+            box: .init(frames: rowFrames, subject: subject),
+            move: { draft.dragRange(file.displayPath, $0, $1) },
+            end: draft.endRangeDrag
+        )
+        // Kopírování (#157) se skládá **až při otevření menu**: text rozsahu se hledá přes
+        // všechny hunky, takže při vykreslení každého řádku by to byla práce navíc u operace,
+        // kterou nikdo nevyvolal. Rozsahy se berou z **mých rozdělaných** komentářů — tažení už
+        // je vybírá a zvýrazňuje, jen se s nimi dosud dala udělat jediná věc.
+        let copy = DiffCopyActions(
+            targets: { Policy.copyTargets(for: $0, in: file, comments: comments) },
+            hunkTargets: { hunk in
+                [DiffCopyTarget(id: "hunk", title: "Kopírovat hunk", text: Policy.code(of: hunk))]
+            },
+            selectableText: { line in
+                Policy.hunk(containing: line, in: file).map { codeText(of: $0, in: file) }
+            },
+            selectableHunkText: { codeText(of: $0, in: file) },
+            showText: { codeText = $0 }
+        )
+        let reveal: (ClosedRange<Int>) -> Void = { expansion.reveal(file, $0) }
         return ForEach(
             layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows),
             id: \.diagnosedID
@@ -329,7 +359,7 @@ struct DiffView: View {
                 layout: layout,
                 isLoadingContent: state.isLoading,
                 contentFailure: state.failure,
-                reveal: { expansion.reveal(file, $0) },
+                reveal: reveal,
                 highlighted: highlighted,
                 blockingCategories: blockingCategories,
                 findingActions: findingActions,
@@ -340,27 +370,8 @@ struct DiffView: View {
                 commentRangeCells: rangeCells,
                 draggedCells: draggedCells,
                 dragEnd: dragged?.end,
-                rangeDrag: RangeDragActions(
-                    box: .init(frames: rowFrames, subject: subject),
-                    move: { draft.dragRange(file.displayPath, $0, $1) },
-                    end: draft.endRangeDrag
-                ),
-                // Kopírování (#157) se skládá **až při otevření menu**: text rozsahu se hledá přes
-                // všechny hunky, takže při vykreslení každého řádku by to byla práce navíc u
-                // operace, kterou nikdo nevyvolal. Rozsahy se berou z **mých rozdělaných**
-                // komentářů — tažení už je vybírá a zvýrazňuje, jen se s nimi dosud dala udělat
-                // jediná věc.
-                copy: DiffCopyActions(
-                    targets: { Policy.copyTargets(for: $0, in: file, comments: comments) },
-                    hunkTargets: { hunk in
-                        [DiffCopyTarget(id: "hunk", title: "Kopírovat hunk", text: Policy.code(of: hunk))]
-                    },
-                    selectableText: { line in
-                        Policy.hunk(containing: line, in: file).map { codeText(of: $0, in: file) }
-                    },
-                    selectableHunkText: { codeText(of: $0, in: file) },
-                    showText: { codeText = $0 }
-                )
+                rangeDrag: rangeDrag,
+                copy: copy
             )
         }
     }
