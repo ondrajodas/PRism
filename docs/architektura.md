@@ -2050,8 +2050,8 @@ za víc než dvě desetiny sekundy v Debug buildu.
 ### Živá session v terminálu (#453, přepojeno na zásuvku #460)
 
 Vedle `⧉` (`Zkopírovat resume`) stojí v hlavičce dráhy `▶` — **`Pustit session v terminálu`**,
-které vytáhne **zásuvku** (#459), přejde v ní do **pracovního stromu** té session
-a pustí tam tentýž příkaz. Návrh je sekce 35, poznámka 112; sekce 34 zůstává záznamem toho, co
+které vytáhne **zásuvku** (#459), **přepne na relaci té dráhy**, přejde v ní do **pracovního
+stromu** té session a pustí tam tentýž příkaz. Návrh je sekce 35, poznámka 112; sekce 34 zůstává záznamem toho, co
 bylo dřív. Kopírování zůstává, protože kdo si session pouští jinde (iTerm, tmux, jiný stroj),
 potřebuje text, ne cizí plochu.
 
@@ -2094,12 +2094,11 @@ Sedm věcí, které na tom nejsou zjevné:
   posbírané příkazy. `EmbeddedTerminalView.hasForegroundJob` se proto **jedním** voláním zeptá
   jádra na popředí pty (`tcgetpgrp`, tedy totéž, co dělá `kill()`), a když tam někdo je, `▶` vrátí
   `busy` a **nepošle nic**. Není to ten pravidelný takt, kvůli kterému kapsle v hlavičce neukazuje
-  běžící příkaz: ptá se to ve chvíli kliknutí, ne v časovači. Zásuvka se přesto **vytáhne** — běžící
-  příkaz je zrovna to, na co se má člověk podívat, než se rozhodne.
+  běžící příkaz: ptá se to ve chvíli kliknutí, ne v časovači. **Slepá ulička z toho ale není**:
+  zásuvka se na tu relaci **přepne**, takže je vidět, co v ní běží.
 - **Posílá se celá `shellLine`, i do zásuvky** (#460), tedy `cd '<strom>' && claude --resume <id>`.
-  `cd` není nadbytečné jen proto, že store shell startuje ve stromu té session: zásuvka smí mít
-  shell puštěný odjinud (`` ⌃` `` nad klonem, protože review ještě neběželo), a `claude --resume`
-  hledá vlákno **podle adresáře**. Cesta v hlavičce zásuvky se proto po `▶` přepisuje na strom té
+  `cd` není nadbytečné ani u vlastní relace: `▶` umí přijít i na relaci, která už existuje a stojí
+  jinde (starší strom téže dráhy), a `claude --resume` hledá vlákno **podle adresáře**. Cesta v hlavičce zásuvky se proto po `▶` přepisuje na strom té
   session — a to **i po `noShell`**, i když řádka neodešla: bez cesty kreslí zásuvka větu
   *Tenhle pull request nemá v cache pracovní kopii*, a ta by po nepovedeném startu **lhala**
   (strom na disku je, nepovedl se shell). S cestou je v hlavičce pravda o tom, odkud se startovalo,
@@ -3353,7 +3352,8 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
-| `AppStore+Terminal.swift` | Terminál — **zásuvka** (#459) a od #460 i `▶` do ní (`resumeInDrawer(_:for:)`, `hasTerminalDrawer`): `toggleTerminal()`, `resolveTerminalDirectory(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `stopTerminal(for:)` ze zavření záložky a `stopTerminalsBeforeTermination()`. `openInTerminal(_:)` do `Terminal.app` (#453) tu zůstává **bez volajícího**, jako záloha — viz specifikace. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 140 |
+| `AppStore+Terminal.swift` | `openInTerminal(_:)` do `Terminal.app` (#453) — od #460 **bez volajícího**, drží se jako záloha (viz specifikace) | 47 |
+| `AppStore+TerminalDrawer.swift` | Zásuvka (#459) a **relace v ní** (#460): `toggleTerminal()`, `prepareTerminalDrawer(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `resumeInDrawer(_:for:)` za `▶`, `selectTerminalSlot(_:)`, `terminalRows(for:)` a úklid — `stopTerminal(for:)` maže **celý seznam relací** toho PR, `stopTerminalsBeforeTermination()` všechny. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 222 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -6996,7 +6996,9 @@ Věci, které se u toho nemají rozbít:
 | `Policy.terminalDrawerHeight(stored:available:)`, `terminalDrawerResize(from:by:available:)`, `terminalDrawerStoredHeight(stored:measured:)` | Výška zásuvky (#459): otevření z uložené hodnoty s ořezem **při použití**, tažení počítané **z výšky na začátku tahu** (jinak se přetažení za strop nasčítá a zásuvka se přestane vracet) a rozhodnutí, jestli zapsat. Nad zásuvkou vždycky zůstane `terminalDrawerContentFloor` — jinak by z ní byla ta devátá záložka |
 | `Policy.terminalWorkingDirectory(worktree:clone:)`, `terminalDirectoryLabel(_:home:)` | Kde shell startuje (#459) — **pracovní strom review** má přednost, protože `claude --resume` session najde jedině v adresáři, ve kterém běžela; jinak bare klon. Existenci na disku ověřuje volající (`Policy` nesahá na I/O). Zkrácení na `~` bere domov **argumentem**, ne z prostředí, a zkracuje jen celý prefix po hranici složky (`/Users/ondrej` se nesmí zkrátit kvůli domovu `/Users/ondra`) |
 | `Policy.terminalShell(_:)`, `terminalEnvironment(_:)` | Co se v zásuvce spustí (#459): shell ze `SHELL` (relativní se zahazuje) s `argv[0]` **s pomlčkou**, tedy login shell — bez toho by v zásuvce nebylo nic mimo `/usr/bin`, protože **`PATH` se schválně nepředává**. K tomu `TERM=xterm-256color`, `COLORTERM=truecolor` a UTF-8 locale |
-| `Policy.resumeNotice(_:)` | Co se řekne po `▶` (#460) → `TerminalCommandOutcome`. `nil` = **mlčet**: co se povedlo, je vidět v zásuvce, která se zrovna otevřela. Zbylé dva konce vidět nejsou — `busy` je zásuvka, ve které se nic nezměnilo, a `noShell` prázdná plocha —, takže by `▶` bez věty vypadalo jako tlačítko, které nic nedělá. U `busy` je ve větě i **druhá cesta** (`Zkopírovat resume`): přerušit běžící příkaz je rozhodnutí člověka |
+| `Policy.resumeNotice(_:in:)`, `slotsFullNotice(_:)` | Co se řekne po `▶` (#460) → `TerminalCommandOutcome`. `nil` = **mlčet**: co se povedlo, je vidět v zásuvce, která se zrovna otevřela. Zbylé konce vidět nejsou — `busy` je relace, ve které se nic nezměnilo, `noShell` prázdná plocha a plný strop **nevzniklá záložka** —, takže by `▶` bez věty vypadalo jako tlačítko, které nic nedělá. Věta **jmenuje relaci**, protože jich zásuvka drží víc |
+| `Policy.terminalSlotAdmission(of:in:states:limit:)`, `terminalSlots(_:adding:evicting:)`, `terminalSlotAfterRemoval(of:from:)` | Kdo smí do zásuvky (#460) a co kvůli němu odejde. **Vytlačuje se jedině neběžící relace, a vždycky nejstarší**; když všechny běží, nová **nevznikne**. Pořadí je pořadí vzniku — přepínač se nemá přeskládat pod rukama |
+| `Policy.terminalSlotTitle(_:)`, `terminalSlotMark(_:)`, `terminalSlotHelp(_:state:)`, `terminalSlotRows(_:active:states:)` | Co je na záložce přepínače vidět (#460) → `TerminalSlotRow`. Jméno dráhy, ne `session_id`; puntík má **tři** stavy, i když návrh kreslí dva, a **návratový kód žije v nápovědě** — do puntíku se nevejde a tři kódy do hlavičky taky ne |
 | `Policy.quitPrompt(reviews:terminals:)` | Na co se aplikace zeptá při ukončení (#94, #264, #459) → `QuitPrompt`. `nil` = **neptat se**. Věty se liší podle toho, co běží: „Běží 2 věci“ nedává důvod kliknout na Zpět. A **neslibují víc, než co data unesou** — z review se dá dotáhnout, co reviewer nahlásil, kdežto výpis shellu se nikam neukládá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
@@ -9099,13 +9101,87 @@ něco jiného:
 
 | Typ | Co drží |
 |---|---|
-| `TerminalHosting` | Protokol: kolik shellů běží, plocha pro pull request, **napsat do ní řádku** (#460), zabít jeden, zabít všechny, a dva uzávěry (stav shellu, fokus). **Bez zápisové metody a bez `gh`** |
-| `TerminalHost` | Živá implementace — **jeden `EmbeddedTerminalView` na pull request**, řez a barvy z palety; plochu vyrábí jedno místo (`surface(for:in:)`), aby `` ⌃` `` a `▶` nedaly dva různé shelly |
+| `TerminalSlot` | **Jedna relace = jedno pty** (#460): `(pull request, role)`, kde role je holý `shell` nebo `session(skill)`. Klíčem je dvojice, ne jen skill — pracovní adresář je adresář *toho* PR |
+| `TerminalHosting` | Protokol: kolik shellů běží, plocha pro **relaci**, **napsat do ní řádku** (#460), zabít jednu relaci, zabít **všechny relace jednoho PR**, zabít všechno, a dva uzávěry (stav, fokus). **Bez zápisové metody a bez `gh`** |
+| `TerminalHost` | Živá implementace — **jeden `EmbeddedTerminalView` na relaci**, řez a barvy z palety; plochu vyrábí jedno místo (`surface(for:in:)`), aby `` ⌃` `` a `▶` nedaly dva různé shelly |
 | `EmbeddedTerminalView` | `SwiftTerm.LocalProcessTerminalView` s pěti věcmi navíc: start login shellu v daném adresáři, hlášení fokusu, `kill()`, který zabije **popředí pty**, ne jen shell, a od #460 `hasForegroundJob` (běží tam něco?) se `send(line:)` |
 
-Rozhodnutí, která k tomu patří, jsou v `Policy` (`App/Policy/TerminalDrawer.swift`): výška zásuvky
+Rozhodnutí, která k tomu patří, jsou v `Policy` — `App/Policy/TerminalDrawer.swift` (výška zásuvky
 a její ořez, jestli zkratka ustupuje terminálu, kde shell startuje, jak se cesta zkrátí na `~`, co
-se spustí a s jakým prostředím, a na co se aplikace zeptá při ukončení.
+se spustí a s jakým prostředím, na co se aplikace zeptá při ukončení a co se řekne po `▶`)
+a `App/Policy/TerminalSlots.swift` (#460: kdo smí vzniknout, co se kvůli stropu vytlačí, co je na
+záložce vidět).
+
+### Víc relací naráz (#460)
+
+Do #460 platilo „jedna zásuvka = jeden shell na pull request“. Nefungovalo to v tom stavu, kvůli
+kterému zásuvka vznikla: aplikace pouští review **paralelně** (`maxConcurrentReviews`, ve výchozí
+konfiguraci tři), takže se člověk chce dívat na dvě session naráz — a jeden shell ho nutil jednu
+z nich ukončit, aby viděl druhou. Návrh, sekce 35, poznámka 112.
+
+Zásuvka proto drží **N relací** a přepíná se mezi nimi **záložkami** v hlavičce (`.term-tabs`
+z návrhu; ne rozbalovací nabídkou — relace jsou dvě až tři, pořád jedna běží, a nabídka by po
+každém pohledu na druhou stála dva kliky místo jednoho). **Holý shell je jedna z relací**, tedy to,
+co dá `` ⌃` ``, ne něco vedle nich.
+
+Šest věcí, které na tom nejsou zjevné:
+
+- **Klíčem je `(PR, role)`, ne skill.** Pracovní adresář je adresář **toho** PR, takže relace
+  stejného jména na dvou pull requestech jsou dvě různé věci a nesmí se potkat v mapě hostitele.
+- **Adresář se drží per relace**, ne per PR: holý shell stojí v klonu nebo ve stromu posledního
+  review, kdežto relace dráhy ve stromu **té** session — a `claude --resume` hledá vlákno podle
+  adresáře.
+- **Plocha se v SwiftUI klíčuje relací** (`.id(activeSlot)`), a je to podmínka, ne optimalizace:
+  `makeNSView` se volá jen při vzniku representable, takže bez změněné identity by po přepnutí
+  záložky zůstala v hierarchii plocha té předchozí. Plochy vlastní hostitel, takže odebraná relace
+  běží dál.
+- **Strop je pět** (`Policy.maxTerminalSlots`) a je složený ze dvou čísel: zdola z toho, že
+  `maxConcurrentReviews` je tři a k paralelním reviewerům patří ještě holý shell (čtyři jsou tedy
+  běžný stav, ne krajnost); shora z toho, že přepínač je **řádek v hlavičce** vedle cesty a kapsle
+  `plná práva`. Neomezený počet by byl past ne kvůli paměti, ale proto, že každá relace je
+  **skutečný proces**, který se musí uklidit — a co se nedá spočítat, to se špatně uklízí.
+- **Vytlačuje se jedině neběžící relace, a vždycky ta nejstarší.** Zahodit běžící shell by
+  znamenalo zabít rozdělanou práci kvůli kliknutí, které o ní nic neví; zahodit doběhlou stojí
+  **jen její výpis**. Když neběžící žádná není, nová relace **nevznikne** a řekne se to
+  (`Policy.slotsFullNotice`) — mlčky nevzniklá záložka vypadá jako rozbité tlačítko. Zavírací
+  křížek u záložky návrh nekreslí, takže tohle a zavření záložky PR jsou **jediné** dvě cesty, jak
+  relace ubývají.
+- **Relace končí se záložkou pull requestu, ne dřív.** Je to tatáž hranice jako u jednoho shellu
+  v #459 — zavřená záložka je konec kontextu —, jen se maže **celý seznam**: `stopTerminals(for:)`
+  jde přes všechny relace toho PR, protože osiřela by zrovna ta, která nebyla vidět. Ukončení
+  aplikace zabíjí všechny (`stopAllTerminals`) a značku v `sessions.json` má **každá relace
+  vlastní**.
+
+**Puntík u záložky má tři stavy, i když návrh kreslí dva** (`.term-tab .d` a `.term-tab.live .d`),
+a je to vědomé rozšíření o jednu barvu na prvku, který nakreslený **je**: do #460 stála v hlavičce
+kapsle `skončil (kód)` a odlišit `exit 1` od `exit 0` bylo zrovna to, kvůli čemu se na ni člověk
+podíval. S víc relacemi se tři kódy do hlavičky nevejdou, takže z toho je puntík — ale úplně beze
+stopy ta informace zmizet nesmí. `crit` proto znamená **nenulový** konec a celý kód zůstává
+v nápovědě záložky (`Policy.terminalSlotHelp`). Kód, který **nedorazil**, se přitom kreslí jako
+klid, ne jako chyba: je to odpověď „nevíme“, a červený puntík by tvrdil víc, než data unesou.
+
+### Změna velikosti — co se u #460 naměřilo
+
+Hlášení z #459 znělo „resize ne úplně funguje, asi se přeskládává text“. Rozpadá se na tři otázky
+a **všechny tři vyšly čistě** (`TerminalResizeProbe`, měřeno přes `NSHostingView`, aby v cestě stál
+i `TerminalSurface` a rámec od SwiftUI):
+
+| Co se měřilo | Naměřeno |
+|---|---|
+| Dojde šířka okna přes SwiftUI do emulátoru? | 1 200 b → **163** sloupců, 700 b → **92**, zpátky 1 000 b → **134**. Řádky se u toho **nehnuly** (14), takže šířka nepřesází nic, co s ní nesouvisí |
+| Ví jádro totéž co emulátor? | Plocha 1 000×300: emulátor **138×21**, jádro **138×21** buněk a **1 000×300 px**. Po zúžení na 600 b: **82×21** na obou stranách. Pixelové rozměry nejsou nula (sixel a `kitty` protokol na nich stojí) |
+| Neposílá se `TIOCSWINSZ` častěji, než se rozměr mění? | 61 průchodů rozvržení přes 60 bodů → **8** změn šířky v jádře (buňka je široká ~7 b). `claude` tedy nedostane desítky `SIGWINCH` se stejnou velikostí |
+
+**Co z toho plyne**: přeskládání textu, které je vidět, je **reflow scrollbacku** — a `SwiftTerm`
+ho dělá podle správné úmluvy. `Buffer.isReflowEnabled` je `hasScrollback`, takže se přesází
+**jen normální buffer**; alternativní, do kterého kreslí celoobrazovkové TUI, se **nereflowuje**
+vůbec, jen změní rozměr a aplikace si ho překreslí sama. Přesně tak se chová `Terminal.app`
+i `iTerm`. **Neopravovalo se tedy nic** a je to zapsané schválně: bez toho to příště někdo zkusí
+znovu.
+
+Jedna věc zůstává **neověřená a je to poznamenané**: jak vypadá obsah po přesázení, se z harnessu
+přečíst nedá (#459 — `LocalProcess` doručuje bajty přes hladovou hlavní frontu), takže „vypadá to
+rozbitě, nebo jen jinak“ posoudí jedině člověk na běžící aplikaci.
 
 **Proč je to devátý modul, a ne jen view.** Shell je cizí proces — tedy vnější svět jako `gh`,
 `git` a `claude` —, takže patří za protokol se stejným zdůvodněním: nejcennější tvrzení kolem něj

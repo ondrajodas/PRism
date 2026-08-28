@@ -80,7 +80,8 @@ struct TerminalSessionTests {
     func theShellLineEntersTheWorktreeFirst() {
         let session = TerminalSession(
             directory: URL(filePath: "/Users/o/Library/Application Support/PRism/worktrees/o/r/6-abc"),
-            command: "claude --resume abc-123"
+            command: "claude --resume abc-123",
+            skill: "php-review"
         )
 
         #expect(
@@ -96,7 +97,8 @@ struct TerminalSessionTests {
     func anApostropheInThePathSurvives() {
         let session = TerminalSession(
             directory: URL(filePath: "/tmp/it's here"),
-            command: "claude --resume abc"
+            command: "claude --resume abc",
+            skill: "php-review"
         )
 
         #expect(session.shellLine == "cd '/tmp/it'\\''s here' && claude --resume abc")

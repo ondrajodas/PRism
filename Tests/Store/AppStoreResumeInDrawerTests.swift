@@ -3,21 +3,31 @@ import Testing
 
 @testable import PRism
 
-/// `▶` v hlavičce dráhy pouští session v **zásuvce**, ne v `Terminal.app` (#460).
+/// `▶` pouští session v **zásuvce**, a zásuvka jich drží víc naráz (#460).
 ///
-/// Nejcennější jsou tady dvě tvrzení o tom, co se **ne**stane: po `busy` se nepřepíše cesta
-/// v hlavičce zásuvky (shell dál stojí tam, kde stál, takže popiska, která by tvrdila jinak, je
-/// horší než stará pravda), a store bez hostitele si nevymyslí hlášku o něčem, o co se nikdo
-/// nepokusil.
-@Suite("AppStore — session v zásuvce (#460)")
+/// Nejcennější jsou tady tři tvrzení o tom, co se **ne**stane: druhá session tu první
+/// **nepřebije** (kvůli tomu se celé #460 měnilo — aplikace pouští review paralelně), po `busy`
+/// se **nepřepíše cesta v hlavičce** (shell dál stojí tam, kde stál) a strop **nevytlačí běžící
+/// relaci** (zahodit rozdělaný `claude --resume` kvůli kliknutí jinde by byl nevratný omyl).
+@Suite("AppStore — relace v zásuvce (#460)")
 @MainActor
 struct AppStoreResumeInDrawerTests {
     private let pullRequest = PRIdentifier("cli/cli#42")!
     private let worktree = URL(filePath: "/Users/o/Library/Application Support/PRism/w/6-abc")
 
-    private var session: TerminalSession {
-        TerminalSession(directory: worktree, command: Policy.resumeCommand(sessionID: "8c1f-42"))
+    private func session(_ skill: String, id: String = "8c1f-42") -> TerminalSession {
+        TerminalSession(
+            directory: worktree,
+            command: Policy.resumeCommand(sessionID: id),
+            skill: skill
+        )
     }
+
+    private func slot(_ skill: String) -> TerminalSlot {
+        TerminalSlot(pullRequest: pullRequest, role: .session(skill))
+    }
+
+    private var shell: TerminalSlot { TerminalSlot(pullRequest: pullRequest, role: .shell) }
 
     private func store(_ host: FakeTerminalHost) -> AppStore {
         let store = AppStore(
@@ -38,97 +48,218 @@ struct AppStoreResumeInDrawerTests {
         let host = FakeTerminalHost()
         let store = store(host)
 
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.isTerminalOpen)
         let run = try #require(host.ran.first)
         #expect(host.ran.count == 1)
-        #expect(run.pr == pullRequest)
+        #expect(run.slot == slot("php-review"))
         #expect(run.directory == worktree)
+        #expect(store.activeTerminalSlot(for: pullRequest) == slot("php-review"))
         #expect(store.terminalFailure == nil)
     }
 
     /// **Tatáž řádka, jakou od #453 dostával `Terminal.app`** — s `cd` do pracovního stromu
-    /// a s uzávorkovanou cestou. `cd` není nadbytečné: zásuvka smí mít shell puštěný `` ⌃` ``
-    /// nad klonem, a `claude --resume` hledá vlákno podle adresáře.
-    @Test("Do zásuvky jde cd do stromu a teprve pak resume")
+    /// a s uzávorkovanou cestou.
+    @Test("Do relace jde cd do stromu a teprve pak resume")
     func theWorktreeComesFirst() {
         let host = FakeTerminalHost()
 
-        store(host).resumeInDrawer(session, for: pullRequest)
+        store(host).resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(
             host.ran.first?.line
                 == "cd '/Users/o/Library/Application Support/PRism/w/6-abc' && claude --resume 8c1f-42"
         )
-        #expect(host.ran.first?.line == session.shellLine)
+        #expect(host.ran.first?.line == session("php-review").shellLine)
     }
 
-    /// Hlavička zásuvky ukazuje cestu, ve které shell stojí — a po `▶` je to strom té session,
-    /// ať už tam shell startoval, nebo ho tam poslalo `cd`.
-    @Test("Cesta v hlavičce se přepíše na strom té session")
-    func theHeaderPathFollowsTheSession() {
+    // MARK: - Víc relací naráz
+
+    /// **Tohle je ta věc, kvůli které se #460 měnilo.** Aplikace pouští review paralelně, takže
+    /// druhá session nesmí tu první přebít — obě mají vlastní relaci a přepíná se mezi nimi.
+    @Test("Druhá session první nepřebije")
+    func theSecondSessionKeepsTheFirst() {
         let host = FakeTerminalHost()
         let store = store(host)
-        store.terminalDirectories[pullRequest] = URL(filePath: "/tmp/jinde")
 
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review", id: "aaa"), for: pullRequest)
+        store.resumeInDrawer(session("security-review", id: "bbb"), for: pullRequest)
 
-        #expect(store.terminalDirectory(for: pullRequest) == worktree)
+        #expect(store.terminalSlots[pullRequest] == [slot("php-review"), slot("security-review")])
+        #expect(store.activeTerminalSlot(for: pullRequest) == slot("security-review"))
+        // Dvě relace = dvě pty, tedy dvě různá volání hostitele.
+        #expect(host.ran.map(\.slot) == [slot("php-review"), slot("security-review")])
+    }
+
+    /// Klik na záložku přepínače **nic nespouští ani nezabíjí** — je to pohled.
+    @Test("Klik na záložku jen přepne")
+    func selectingATabOnlySwitches() {
+        let host = FakeTerminalHost()
+        let store = store(host)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        store.resumeInDrawer(session("security-review"), for: pullRequest)
+
+        store.selectTerminalSlot(slot("php-review"))
+
+        #expect(store.activeTerminalSlot(for: pullRequest) == slot("php-review"))
+        #expect(host.ran.count == 2)
+        #expect(host.stopped.isEmpty)
+    }
+
+    /// Relace, kterou zásuvka nemá, se vybrat nedá — jinak by hlavička ukazovala prázdno.
+    @Test("Neexistující relace se nevybere")
+    func anUnknownSlotIsIgnored() {
+        let store = store(FakeTerminalHost())
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        store.selectTerminalSlot(slot("docs-review"))
+
+        #expect(store.activeTerminalSlot(for: pullRequest) == slot("php-review"))
+    }
+
+    /// `` ⌃` `` dává relaci `shell` — tedy jednu z relací, ne něco vedle nich.
+    ///
+    /// Sekvence je ta skutečná: `▶` zásuvku vytáhne, první `` ⌃` `` ji schová a druhé zase
+    /// vytáhne. Teprve to druhé je „vytáhni mi terminál“, a **nesmí přepnout** na `shell`:
+    /// dostat místo běžícího `claude --resume` prázdný prompt je to jediné, co na téhle klávese
+    /// může překvapit.
+    @Test("⌃` dá relaci shell a běžící session nepřebije")
+    func theShellIsOneOfTheSlots() async {
+        let store = store(FakeTerminalHost())
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        await store.toggleTerminal()
+        #expect(!store.isTerminalOpen)
+        await store.toggleTerminal()
+
+        #expect(store.isTerminalOpen)
+        #expect(store.terminalSlots[pullRequest] == [slot("php-review"), shell])
+        #expect(store.activeTerminalSlot(for: pullRequest) == slot("php-review"))
+    }
+
+    /// Nad pull requestem, který v zásuvce ještě nic neměl, `` ⌃` `` relaci `shell` **ukáže** —
+    /// jinak by se vytáhla prázdná zásuvka bez jediné záložky.
+    @Test("Na prázdné zásuvce se ⌃` na shell přepne")
+    func theShellIsShownWhenTheDrawerIsEmpty() async {
+        let store = store(FakeTerminalHost())
+
+        await store.toggleTerminal()
+
+        #expect(store.terminalSlots[pullRequest] == [shell])
+        #expect(store.activeTerminalSlot(for: pullRequest) == shell)
+    }
+
+    /// Záložky přepínače nesou puntík podle stavu **té** relace, ne jednoho stavu na zásuvku.
+    @Test("Přepínač nese stav každé relace zvlášť")
+    func everyTabCarriesItsOwnState() throws {
+        let store = store(FakeTerminalHost())
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        store.resumeInDrawer(session("security-review"), for: pullRequest)
+        store.terminalStates[slot("php-review")] = .running
+        store.terminalStates[slot("security-review")] = .exited(code: 130)
+
+        let rows = store.terminalRows(for: pullRequest)
+
+        #expect(rows.map(\.title) == ["php-review", "security-review"])
+        #expect(rows.map(\.mark) == [.running, .failed])
+        #expect(rows.map(\.isActive) == [false, true])
+        #expect(try #require(rows.last).help.contains("130"))
+    }
+
+    // MARK: - Strop
+
+    /// **Běžící relace se nevytlačuje.** Když je plno a všechny běží, nová nevznikne a řekne se to
+    /// — mlčky nevzniklá záložka vypadá jako rozbité tlačítko.
+    @Test("Plný strop s běžícími relacemi novou nepustí")
+    func afullDrawerRefusesAndSaysSo() throws {
+        let host = FakeTerminalHost()
+        let store = store(host)
+        let taken = (0..<Policy.maxTerminalSlots).map { slot("reviewer-\($0)") }
+        store.terminalSlots[pullRequest] = taken
+        for slot in taken { store.terminalStates[slot] = .running }
+
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        #expect(store.terminalSlots[pullRequest] == taken)
+        #expect(host.ran.isEmpty)
+        #expect(host.stopped.isEmpty)
+        let failure = try #require(store.terminalFailure)
+        #expect(failure.contains("php-review"))
+        #expect(failure.contains("\(Policy.maxTerminalSlots)"))
+    }
+
+    /// Vytlačí se **nejstarší neběžící**: zahodí se jen výpis, který je z definice minulost.
+    @Test("Plný strop vytlačí nejstarší doběhlou relaci")
+    func afullDrawerEvictsTheOldestIdleSlot() {
+        let host = FakeTerminalHost()
+        let store = store(host)
+        let taken = (0..<Policy.maxTerminalSlots).map { slot("reviewer-\($0)") }
+        store.terminalSlots[pullRequest] = taken
+        for slot in taken.dropFirst() { store.terminalStates[slot] = .running }
+        store.terminalStates[taken[0]] = .exited(code: 0)
+
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        #expect(host.stopped == [taken[0]])
+        #expect(store.terminalSlots[pullRequest]?.contains(taken[0]) == false)
+        #expect(store.terminalSlots[pullRequest]?.last == slot("php-review"))
+        #expect(host.ran.count == 1)
     }
 
     // MARK: - Když se nic neposlalo
 
-    /// **Zásuvka se otevře i tehdy, když se nic neposlalo**: běžící příkaz je přesně to, na co se
-    /// má člověk podívat, než se rozhodne, co s ním.
-    @Test("Zaneprázdněná zásuvka se řekne a stejně se vytáhne")
-    func aBusyDrawerIsReportedAndShown() throws {
+    /// **Přepne se na tu relaci, i když se nic neposlalo**: běžící příkaz je přesně to, na co se
+    /// má člověk podívat — a od #460 to není slepá ulička.
+    @Test("Zaneprázdněná relace se řekne a stejně se ukáže")
+    func abusySlotIsReportedAndShown() throws {
         let host = FakeTerminalHost()
         host.outcome = .busy
         let store = store(host)
-        store.terminalDirectories[pullRequest] = URL(filePath: "/tmp/jinde")
+        store.terminalSlots[pullRequest] = [slot("php-review")]
+        store.terminalDirectories[slot("php-review")] = URL(filePath: "/tmp/jinde")
 
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.isTerminalOpen)
+        #expect(store.activeTerminalSlot(for: pullRequest) == slot("php-review"))
         let failure = try #require(store.terminalFailure)
+        #expect(failure.contains("php-review"))
         #expect(failure.contains("něco běží"))
         // Cesta zůstává stará: shell se nikam nepřesunul, takže by nová popiska lhala.
-        #expect(store.terminalDirectory(for: pullRequest) == URL(filePath: "/tmp/jinde"))
+        #expect(store.terminalDirectory(of: slot("php-review")) == URL(filePath: "/tmp/jinde"))
     }
 
     /// Prázdná plocha bez věty vypadá k nerozeznání od toho, že se nekliklo.
     ///
     /// **Cesta se u toho přesto zapíše**, a je to rozhodnutí, ne nedůslednost (nález Copilota):
     /// bez ní kreslí zásuvka větu „Tenhle pull request nemá v cache pracovní kopii“, a ta by
-    /// lhala — strom na disku je, nepovedl se shell. S cestou je v hlavičce pravda o tom, odkud
-    /// se startovalo, a kapsle stavu řekne `skončil`.
+    /// lhala — strom na disku je, nepovedl se shell.
     @Test("Nespuštěný shell se řekne, ale cesta v hlavičce zůstane pravdivá")
     func aShellThatNeverStartedIsReported() throws {
         let host = FakeTerminalHost()
         host.outcome = .noShell
 
         let store = store(host)
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         let failure = try #require(store.terminalFailure)
         #expect(failure.contains("nepodařilo spustit"))
-        #expect(store.terminalDirectory(for: pullRequest) == worktree)
+        #expect(store.terminalDirectory(of: slot("php-review")) == worktree)
     }
 
-    /// Hláška zmizí teprve tehdy, když se to **doopravdy povede**. Jedna instance se dvěma
-    /// odpověďmi schválně: dvě by o zahození netvrdily nic.
+    /// Hláška zmizí teprve tehdy, když se to **doopravdy povede**.
     @Test("Povedený pokus po nepovedeném hlášku zahodí")
     func aSuccessfulRetryClearsTheNotice() {
         let host = FakeTerminalHost()
         host.outcome = .busy
         let store = store(host)
 
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
         #expect(store.terminalFailure != nil)
 
         host.outcome = .sent
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.terminalFailure == nil)
         #expect(host.ran.count == 2)
@@ -136,8 +267,7 @@ struct AppStoreResumeInDrawerTests {
 
     // MARK: - Bez zásuvky
 
-    /// **Tlačítko se nekreslí**, místo aby tiše spadlo zpátky na `Terminal.app` — dvě různá
-    /// chování pod jednou ikonou znamenají, že se nedá spolehnout ani na jedno.
+    /// **Tlačítko se nekreslí**, místo aby tiše spadlo zpátky na `Terminal.app`.
     @Test("Bez hostitele se ▶ nenabízí a nic se nestane")
     func withoutAHostThereIsNoButton() {
         let store = AppStore(
@@ -149,10 +279,11 @@ struct AppStoreResumeInDrawerTests {
 
         #expect(!store.hasTerminalDrawer)
 
-        store.resumeInDrawer(session, for: pullRequest)
+        store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(!store.isTerminalOpen)
         #expect(store.terminalFailure == nil)
+        #expect(store.terminalSlots[pullRequest] == nil)
     }
 
     @Test("S hostitelem se ▶ nabízí")

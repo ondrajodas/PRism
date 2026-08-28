@@ -351,8 +351,13 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      `▶` v tabu `Průběh`): `cd '<strom>' && claude --resume <id>`, skládaná
      `Policy.resumeCommand(sessionID:)` a `ShellQuoting` — **tedy tentýž text, jaký kopíruje
      `⧉`**, a jinou aplikace poslat neumí. Do běžícího jobu se přitom **nepíše vůbec**
-     (`hasForegroundJob`), protože řádka je pro něj vstup. Plnou moc má dál **člověk**: cokoli
-     jiného než tuhle jednu řádku napíše jedině on.
+     (`hasForegroundJob`), protože řádka je pro něj vstup; místo toho se na tu relaci **přepne**.
+     Plnou moc má dál **člověk**: cokoli jiného než tuhle jednu řádku napíše jedině on.
+   - **A relací je v zásuvce víc než jedna** (#460), takže úklid z bodů výš platí **pro každou**:
+     `stopTerminals(for:)` při zavření záložky, `stopAllTerminals()` při ukončení aplikace
+     a značka v `sessions.json` u každé zvlášť — jinak po zabité aplikaci osiří zrovna ta, která
+     nebyla vidět. Počet je proto **omezený** (`Policy.maxTerminalSlots`, pět) a vytlačuje se
+     jedině **neběžící** relace; když všechny běží, nová **nevznikne** a řekne se to.
 
    Podrobnosti — proč zásuvka a ne záložka, proč `SwiftTerm` a proč zrovna verze 1.11.2, jak se
    ten proces zabíjí a co je proti návrhu jinak — jsou
@@ -456,7 +461,7 @@ viz tvrdá podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kter�
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři** a od #465 **mergnout vlastní PR** | `gh` CLI |
-| `TerminalHost` | Vestavěný terminál (#459) — **jeden shell na pull request** v checkoutu toho PR, pty a VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty. Od #460 do něj umí napsat **jednu řádku** (`▶`), a jen tehdy, když v něm nic neběží. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
+| `TerminalHost` | Vestavěný terminál (#459) — od #460 **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Umí do relace napsat **jednu řádku** (`▶`), a jen tehdy, když v ní nic neběží. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá

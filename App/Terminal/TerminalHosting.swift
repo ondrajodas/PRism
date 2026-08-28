@@ -18,7 +18,8 @@ import AppKit
 /// pořád tentýž seznam souborů, a comment navíc by ten slib porušil, aniž by co přidal.
 @MainActor
 protocol TerminalHosting: AnyObject {
-    /// Kolik shellů právě běží. Čte se při ukončení aplikace (#264, #94).
+    /// Kolik shellů právě běží — **přes všechny relace a všechny pull requesty** (#264, #94, #460).
+    /// Od #460 jich je víc než jeden na PR, takže je to počet, ne příznak.
     var runningTerminals: Int { get }
 
     /// Kam se hlásí změna stavu shellu, aby ji mohlo okno nakreslit.
@@ -26,7 +27,7 @@ protocol TerminalHosting: AnyObject {
     /// Uzávěr, ne `@Observable` na protokolu: pozorování přes existenciál nefunguje, kdežto stav
     /// v `AppStore` je to, co okno kreslí odjakživa. Je to tentýž tvar jako `health.lastCall`
     /// nebo `polling.afterSuccessfulTick`.
-    var report: (@MainActor (PRIdentifier, TerminalRunState) -> Void)? { get set }
+    var report: (@MainActor (TerminalSlot, TerminalRunState) -> Void)? { get set }
 
     /// Kam se hlásí, že zásuvka získala nebo ztratila fokus.
     ///
@@ -35,11 +36,13 @@ protocol TerminalHosting: AnyObject {
     /// okno, ne na pull request** — fokus má v jednu chvíli právě jedno místo.
     var focusChanged: (@MainActor (Bool) -> Void)? { get set }
 
-    /// Plocha terminálu toho pull requestu — **vyrobí ji, když ještě není, jinak vrátí tutéž**.
+    /// Plocha té relace — **vyrobí ji, když ještě není, jinak vrátí tutéž**.
     ///
     /// Idempotence je podmínka, ne pohodlí: `makeNSView` se volá při každém složení SwiftUI stromu,
     /// takže nová plocha při každém překreslení by znamenala nový shell při každém překreslení.
-    func terminal(for pr: PRIdentifier, in directory: URL) -> NSView
+    /// Od #460 je klíčem **relace, ne pull request**: zásuvka jich drží víc naráz a přepíná se
+    /// mezi nimi.
+    func terminal(for slot: TerminalSlot, in directory: URL) -> NSView
 
     /// Napíše řádku do zásuvky toho pull requestu — `▶` v hlavičce dráhy (#460).
     ///
@@ -53,17 +56,23 @@ protocol TerminalHosting: AnyObject {
     @discardableResult
     func run(
         _ commandLine: String,
-        for pr: PRIdentifier,
+        for slot: TerminalSlot,
         in directory: URL
     ) -> TerminalCommandOutcome
 
-    /// Zabije shell toho pull requestu; `true`, když nějaký běžel.
+    /// Zabije shell **jedné relace**; `true`, když nějaký běžel.
     ///
-    /// **Volá se ze zavření záložky, ne ze schování zásuvky.** Zásuvka je pohled — `` ⌃` `` shell
+    /// Volá se, když relaci vytlačí strop (`Policy.terminalSlotAdmission`). Musí být bezpečné
+    /// zavolat to nad relací, která terminál nikdy neměla.
+    @discardableResult func stopTerminal(for slot: TerminalSlot) -> Bool
+
+    /// Zabije **všechny relace toho pull requestu**; `true`, když aspoň jedna běžela.
+    ///
+    /// **Volá se ze zavření záložky, ne ze schování zásuvky.** Zásuvka je pohled — `` ⌃` `` shelly
     /// nechává běžet, protože uprostřed `claude --resume` by to byl nevratný omyl; zavřená záložka
-    /// je naproti tomu konec kontextu. Musí být bezpečné zavolat to nad pull requestem, který
-    /// terminál nikdy neměl.
-    @discardableResult func stopTerminal(for pr: PRIdentifier) -> Bool
+    /// je naproti tomu konec kontextu, a od #460 jich v ní končí víc než jeden. Musí být bezpečné
+    /// zavolat to nad pull requestem, který terminál nikdy neměl.
+    @discardableResult func stopTerminals(for pr: PRIdentifier) -> Bool
 
     /// Zabije všechny — ukončení aplikace (#264, #351).
     func stopAllTerminals()

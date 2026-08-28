@@ -7,18 +7,25 @@ import SwiftUI
 /// výstup příkazu. Záložka by diff schovala a udělala z terminálu druhé okno, do kterého se stejně
 /// přepíná.
 ///
+/// **Relací drží víc a přepíná se mezi nimi záložkami** (#460): aplikace pouští review paralelně,
+/// takže jeden shell nutil jednu session ukončit, aby byla vidět druhá. Které to jsou a co je na
+/// nich napsané, skládá `Policy` (`terminalSlotRows`) — tohle view z toho jen kreslí.
+///
 /// Rozměr se **předává, nevyjednává** (#220): výška je spočítaná (`Policy.terminalDrawerHeight`)
 /// a šířku dostane plocha od rodiče. Pružná výška by tady byla obzvlášť drahá — plocha terminálu si
 /// z ní počítá řádky a každé přeměření znamená `TIOCSWINSZ` a překreslení celého TUI.
 struct TerminalDrawerView: View {
-    let pullRequest: PRIdentifier
-    /// Adresář, ve kterém shell stojí. `nil` = v cache pro tenhle PR nic není.
+    /// Relace v přepínači, v pořadí vzniku. Skládá je `Policy`, ne tohle view.
+    let rows: [TerminalSlotRow]
+    /// Která relace je vidět. `nil` = zásuvka žádnou nemá.
+    let activeSlot: TerminalSlot?
+    /// Adresář, ve kterém shell té relace stojí. `nil` = v cache pro ni nic není.
     let directory: URL?
-    let state: TerminalRunState?
     /// Kdo drží plochu. `nil` znamená, že se zásuvka nekreslí — v testech, kde terminál není.
     let host: (any TerminalHosting)?
     /// Kolik místa má detail PR celkem — z něj je strop výšky.
     let available: CGFloat
+    let select: (TerminalSlot) -> Void
     let close: () -> Void
 
     /// Výška, kterou si člověk natáhl. **Přežívá restart** — je to údaj o tom, kolik místa terminál
@@ -104,15 +111,22 @@ struct TerminalDrawerView: View {
 
     // MARK: - Hlavička
 
-    /// `.term-bar` z návrhu: jméno, cesta, kapsle a vpravo zkratka s tlačítkem na zavření.
+    /// `.term-bar` z návrhu: **přepínač relací**, cesta, kapsle a vpravo zkratka s tlačítkem
+    /// na zavření.
+    ///
+    /// Do #460 tu stálo jméno `Terminál` a vpravo kapsle `běží` / `skončil (kód)`. Obojí nahradil
+    /// přepínač: relací je víc, takže „která z nich běží“ se ptá u každé zvlášť — a jméno
+    /// `Terminál` vedle záložek nic nepřidávalo.
     private var bar: some View {
         HStack(spacing: 9) {
-            Text(verbatim: "Terminál")
+            switcher
             if let directory {
                 Text(verbatim: Policy.terminalDirectoryLabel(directory, home: Self.home))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Palette.ink3)
                     .lineLimit(1)
+                    // **Zkracuje se zepředu** a od #460 to není kosmetika: přepínač si vzal místo,
+                    // takže z cesty zbude konec — a ten je ta odpovídající půlka (`vault/85`).
                     .truncationMode(.head)
                     .help(directory.path(percentEncoded: false))
             }
@@ -130,10 +144,6 @@ struct TerminalDrawerView: View {
                     .help("Co se pustí odsud, běží pod tvým účtem a s tvým `gh` — aplikace to nijak neomezuje.")
             }
             Spacer(minLength: 8)
-            // **Vpravo, jako v návrhu** — vlevo stojí to, co se nemění (jméno, cesta, práva),
-            // vpravo to, co se mění během běhu. Kdyby stav sedl doleva, posouval by kapsli
-            // `plná práva` pokaždé, když shell skončí.
-            statePill
             Text(verbatim: Policy.windowShortcut(.toggleTerminal).display)
                 .font(.system(size: 10.5, design: .monospaced))
                 .foregroundStyle(Palette.ink3)
@@ -143,7 +153,7 @@ struct TerminalDrawerView: View {
             HeaderButton(
                 symbol: "chevron.down",
                 label: "Schovat terminál",
-                help: Policy.shortcutHelp("Schovat terminál (shell běží dál)", .toggleTerminal),
+                help: Policy.shortcutHelp("Schovat terminál (shelly běží dál)", .toggleTerminal),
                 action: close
             )
         }
@@ -156,35 +166,62 @@ struct TerminalDrawerView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
-    /// Kapsle stavu shellu.
+    /// `.term-tabs` z návrhu — **záložky, ne rozbalovací nabídka**.
     ///
-    /// **Ne příkaz, který zrovna běží**, jak ho kreslí návrh (`claude --resume 8c1f…`). Zjistit ho
-    /// znamená ptát se jádra na popředí pty (`tcgetpgrp` + jméno procesu) v pravidelném taktu — tedy
-    /// zavést v okně další časovač kvůli popisce. Zásuvka místo toho říká to, co ví bez ptaní:
-    /// jestli shell běží, a když ne, s jakým kódem skončil. Je to méně, než slibuje návrh, ale nic
-    /// z toho není nepravda — a odlišit `exit 1` od `exit 0` je zrovna to, kvůli čemu se na kapsli
-    /// člověk podívá.
-    @ViewBuilder private var statePill: some View {
-        switch state {
-        case .running:
-            Text(verbatim: "běží")
-                .designPill(tint: Palette.accent, background: Palette.accentWeak)
-        case .exited(let code?) where code != 0:
-            Text(verbatim: "skončil (\(code))")
-                .designPill(tint: Palette.crit, background: Palette.crit.opacity(0.15))
-        case .exited:
-            Text(verbatim: "skončil")
-                .designPill(tint: Palette.ink2, background: Palette.raised)
-        case nil:
-            EmptyView()
+    /// Relace jsou dvě až tři a pořád jedna běží, takže nabídka by po každém pohledu na druhou
+    /// stála dva kliky místo jednoho (návrh, sekce 35).
+    private var switcher: some View {
+        HStack(spacing: 3) {
+            ForEach(rows) { row in
+                Button { select(row.slot) } label: { tab(row) }
+                    .buttonStyle(.plain)
+                    .help(row.help)
+                    .accessibilityLabel(row.help)
+            }
+        }
+    }
+
+    /// `.term-tab` — puntík a jméno relace.
+    private func tab(_ row: TerminalSlotRow) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(Self.markTint(row.mark))
+                .frame(width: 6, height: 6)
+            // Jméno dráhy se **nezalamuje**: přepínač je jeden řádek v hlavičce, takže druhá
+            // řádka by zásuvce sebrala výšku, kterou si člověk natáhl na obsah.
+            Text(verbatim: row.title)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 2)
+        .foregroundStyle(row.isActive ? Palette.ink : Palette.ink3)
+        .background(row.isActive ? Palette.raised : .clear, in: .rect(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(row.isActive ? Palette.line : .clear, lineWidth: 1)
+        }
+    }
+
+    /// Barva puntíku. **Tři, i když návrh kreslí dvě** — zdůvodnění je u `TerminalSlotMark`.
+    private static func markTint(_ mark: TerminalSlotMark) -> Color {
+        switch mark {
+        case .running: Palette.accent
+        case .failed: Palette.crit
+        case .idle: Palette.ink3
         }
     }
 
     // MARK: - Plocha
 
     @ViewBuilder private var surface: some View {
-        if let directory, let host {
-            TerminalSurface(pullRequest: pullRequest, directory: directory, host: host)
+        if let directory, let host, let activeSlot {
+            TerminalSurface(slot: activeSlot, directory: directory, host: host)
+                // **`id` na relaci je podmínka, ne optimalizace** (#460): bez ní by SwiftUI po
+                // přepnutí záložky nechal v hierarchii plochu předchozí relace, protože
+                // `makeNSView` se volá jen při vzniku representable. Se změněnou identitou se
+                // representable postaví znovu a hostitel vydá plochu té nové relace; ta stará
+                // zůstane u něj a shell v ní běží dál.
+                .id(activeSlot)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // `.term-body { padding: 10px 12px }` z návrhu. Emulátor sám kreslí od `0,0`, takže
                 // bez toho lepí první znak na hranu okna — a přesně o ten odstup se v návrhu jedná.
@@ -223,12 +260,12 @@ struct TerminalDrawerView: View {
 /// každém složení stromu, takže vlastní plocha by znamenala nový shell po každém zavření
 /// a otevření zásuvky.
 private struct TerminalSurface: NSViewRepresentable {
-    let pullRequest: PRIdentifier
+    let slot: TerminalSlot
     let directory: URL
     let host: any TerminalHosting
 
     func makeNSView(context: Context) -> NSView {
-        host.terminal(for: pullRequest, in: directory)
+        host.terminal(for: slot, in: directory)
     }
 
     /// **Prázdné schválně.** Plocha si všechno řídí sama: velikost dostane rozvržením (a přepošle ji

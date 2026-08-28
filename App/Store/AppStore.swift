@@ -680,14 +680,28 @@ final class AppStore {
     /// nedají (zdůvodnění je u `EmbeddedTerminalView.hasFocus`).
     var isTerminalFocused = false
 
-    /// Jak si stojí shell toho PR. Co v mapě není, nikdy neběželo.
-    var terminalStates: [PRIdentifier: TerminalRunState] = [:]
+    /// Jak si stojí shell té relace. Co v mapě není, nikdy neběželo.
+    ///
+    /// **Klíčem je od #460 relace, ne pull request**: zásuvka jich drží víc naráz a puntík
+    /// u každé záložky se ptá právě téhle mapy.
+    var terminalStates: [TerminalSlot: TerminalRunState] = [:]
 
-    /// Ve kterém adresáři shell toho PR stojí — **zjištěné jednou, při otevření zásuvky**.
+    /// Ve kterém adresáři ta relace stojí — **zjištěné jednou, při jejím vzniku**.
     ///
     /// Drží se proto, že rozhodnutí („strom review, nebo klon?“) potřebuje sáhnout na disk, a to se
-    /// v `body` dělat nesmí (#224). Klíč je PR, ne repo: pracovní strom je per PR i per commit.
-    var terminalDirectories: [PRIdentifier: URL] = [:]
+    /// v `body` dělat nesmí (#224). Klíč je **relace**, ne repo ani PR: holý shell stojí v klonu
+    /// nebo ve stromu posledního review, kdežto relace dráhy ve stromu **té** session — a `claude
+    /// --resume` hledá vlákno podle adresáře.
+    var terminalDirectories: [TerminalSlot: URL] = [:]
+
+    /// Které relace zásuvka pro ten PR drží, **v pořadí vzniku** (#460).
+    ///
+    /// Pořadí je pořadí záložek v přepínači a nesmí se přeskládat pod rukama; strop hlídá
+    /// `Policy.maxTerminalSlots`.
+    var terminalSlots: [PRIdentifier: [TerminalSlot]] = [:]
+
+    /// Která relace je zrovna vidět. Co v mapě není, ještě se nezobrazilo.
+    var activeTerminalSlots: [PRIdentifier: TerminalSlot] = [:]
 
     init(
         gateway: any GitHubGateway,
@@ -805,7 +819,7 @@ final class AppStore {
         }
         // Terminál si stav nedrží sám (#459) — hlásí ho sem, protože okno kreslí stav ze store
         // a druhé místo se stavem by se s tímhle rozešlo. Je to tentýž tvar jako `lastCall` výš.
-        self.terminals?.report = { [weak self] pr, state in self?.terminalStates[pr] = state }
+        self.terminals?.report = { [weak self] slot, state in self?.terminalStates[slot] = state }
         self.terminals?.focusChanged = { [weak self] hasFocus in
             self?.isTerminalFocused = hasFocus
         }

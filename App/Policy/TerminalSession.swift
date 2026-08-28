@@ -13,6 +13,10 @@ struct TerminalSession: Equatable, Sendable {
     /// Co se v tom adresáři pustí. **Týž příkaz, jaký kopíruje `Zkopírovat resume`** — skládá ho
     /// `Policy.resumeCommand(sessionID:)`.
     let command: String
+    /// Skill té dráhy. Od #460 z něj je **relace v zásuvce** (`TerminalSlot.Role.session`) a její
+    /// popisek v přepínači — dvě session dvou reviewerů se totiž musí dát rozeznat a otevřít vedle
+    /// sebe. Do #460 tady nebyl, protože cizí okno terminálu se neoznačovalo ničím.
+    let skill: String
 
     /// Řádka pro shell. Od #460 ji dostává **zásuvka**, do #460 ji dostával `Terminal.app`.
     ///
@@ -53,6 +57,10 @@ extension Policy {
     /// rozdíl není teoretický (soubory z doby před #203).
     static func terminalSession(of lane: ReviewerLane) -> TerminalSession? {
         guard let sessionID = lane.sessionID, let worktree = lane.worktree else { return nil }
-        return TerminalSession(directory: worktree, command: resumeCommand(sessionID: sessionID))
+        return TerminalSession(
+            directory: worktree,
+            command: resumeCommand(sessionID: sessionID),
+            skill: lane.skill
+        )
     }
 }

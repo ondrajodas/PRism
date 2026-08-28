@@ -3670,6 +3670,31 @@ a `claude --resume` hledá vlákno **podle adresáře**, ve kterém se spustí. 
 jen `command` a spoléhat na startovní adresář: fungovalo by to právě do prvního `` ⌃` `` před
 review a selhalo by **větou o session**, ne o adresáři — tedy nejhůř čitelným způsobem.
 
+#### Zásuvka drží víc relací (změna proti první podobě #460)
+
+**Změna zadání během PR, a je to zapsané jako změna, ne jako součást plánu.** První podoba #460
+psala `▶` do **jediného** shellu zásuvky, protože sekce 35 nakreslila jeden. Při proklikání se
+ukázalo, že to nefunguje v tom stavu, kvůli kterému zásuvka vznikla: aplikace pouští review
+**paralelně** (`maxConcurrentReviews` je ve výchozí konfiguraci **3**), takže se člověk chce dívat
+na dvě session naráz — a jeden shell ho nutil jednu z nich ukončit, aby viděl druhou. Návrh se
+kvůli tomu překreslil (sekce 35, `.term-tabs`) a **brána na vzhled proběhla znovu**, dřív než se
+sáhlo na kód.
+
+Zásuvka proto drží **N relací** (`TerminalSlot`) a přepíná se **záložkami**. Rozhodnutí, která
+k tomu patří:
+
+| Rozhodnutí | Proč tak, a co bylo zamítnuté |
+|---|---|
+| **Klíčem je `(pull request, role)`** | Pracovní adresář je adresář *toho* PR, takže relace stejného jména na dvou PR jsou dvě různé věci. Klíčovat jen skillem by je slilo v mapě hostitele a druhý PR by dostal cizí shell |
+| **Holý shell je jedna z relací** | `` ⌃` `` dává právě jeho. Kdyby stál vedle, existovaly by dva mechanismy na tutéž věc — a přepínač by musel kreslit „něco a k tomu ještě terminál“ |
+| **Záložky, ne rozbalovací nabídka** | Relace jsou dvě až tři a pořád jedna běží; nabídka by po každém pohledu na druhou stála dva kliky místo jednoho (rozhodnutí je v návrhu) |
+| **Strop pět** | Zdola: `maxConcurrentReviews` je 3 a k paralelním reviewerům patří holý shell, takže čtyři jsou běžný stav. Shora: přepínač je řádek v hlavičce vedle cesty a kapsle `plná práva`. Neomezený počet je past ne kvůli paměti, ale proto, že každá relace je **skutečný proces**, který se musí uklidit — a co se nedá spočítat, to se špatně uklízí i špatně vysvětluje v dialogu při ukončení |
+| **Vytlačuje se jedině neběžící relace, nejstarší** | Zahodit běžící shell znamená zabít rozdělanou práci kvůli kliknutí, které o ní nic neví. Zahodit doběhlou stojí **jen její výpis**, a ten je z definice minulost. Zamítnuté: vytlačovat nejstarší bez ohledu na běh, a ptát se dialogem (u třetího kliknutí na `▶` za minutu je dialog otrava) |
+| **Když všechny běží, nová nevznikne a řekne se to** | Mlčky nevzniklá záložka vypadá k nerozeznání od rozbitého tlačítka. Věta jmenuje relaci a **říká, co s tím** — zavírací křížek u záložky návrh nekreslí, takže jediná cesta zpět vede přes ukončení toho, co v některé relaci běží |
+| **Relace končí se záložkou pull requestu** | Tatáž hranice jako u jednoho shellu v #459: zavřená záložka je konec kontextu, kdežto `` ⌃` `` je pohled. Nově se ale maže **celý seznam** (`stopTerminals(for:)`), protože osiřela by zrovna ta relace, která nebyla vidět. Zamítnuté: nechat relace žít po zavření záložky — shell bez okna, ve kterém by šel vidět, je přesně sirotek z #264 a #351, jen pomalejší |
+| **Plocha se v SwiftUI klíčuje relací** (`.id(activeSlot)`) | `makeNSView` se volá jen při vzniku representable, takže bez změněné identity by po přepnutí záložky zůstala v hierarchii plocha předchozí relace. Plochy vlastní hostitel, takže odebraná relace běží dál |
+| **Puntík má tři stavy, i když návrh kreslí dva** | Do #460 stála v hlavičce kapsle `skončil (kód)` a odlišit `exit 1` od `exit 0` bylo zrovna to, kvůli čemu se na ni člověk podíval. S víc relacemi se tři kódy do hlavičky nevejdou, takže z toho je puntík — ale zmizet ta informace nesmí. `crit` znamená **nenulový** konec, celý kód je v nápovědě záložky. Kód, který **nedorazil**, se kreslí jako klid: je to odpověď „nevíme“, ne chyba |
+
 #### Když v zásuvce něco běží, nepíše se tam
 
 Řádka poslaná do shellu je pro program, který v něm běží, **vstup**: v rozdělaném `claude` by
@@ -3686,11 +3711,12 @@ Zvažovaly se tři jiné odpovědi a všechny jsou zamítnuté:
 | Přerušit, co běží (`⌃C`), a pak poslat | Aplikace by rozhodovala za člověka o tom, co je jeho práce. `⌃C` do rozdělaného rebase nebo do běžícího testu je přesně ta věc, kterou musí odmáčknout on |
 | Pustit druhý shell vedle | Zásuvka je **jedna plocha na pull request** (#459), takže druhý shell znamená druhou plochu a přepínač mezi nimi — nové UI kvůli okrajovému stavu, a k tomu mimo mockup |
 
-Zbývá to **říct**: zásuvka se vytáhne (běžící příkaz je zrovna to, na co se má člověk podívat)
-a ve stavovém řádku stojí, že se nic neposlalo a jaké jsou dvě cesty dál — ukončit, co běží, nebo
-si příkaz vzít přes `⧉`. Hlásí to `AppStore.terminalFailure`, tedy **totéž pole**, kterým se od
-#453 hlásí neotevřený `Terminal.app`: z `▶` vede pokaždé právě jedna cesta, takže dvě pole by
-znamenala dvě místa, která se musí nezávisle zahazovat.
+Zbývá to **říct**: zásuvka se na tu relaci **přepne** (běžící příkaz je zrovna to, na co se má
+člověk podívat) a ve stavovém řádku stojí, že se nic neposlalo. **Slepá ulička z toho po zavedení
+víc relací není** — do té doby bylo „něco tam běží“ konečná odpověď, teď je to jen důvod, proč se
+nic nepřipsalo k tomu, co je vidět. Hlásí to `AppStore.terminalFailure`, tedy **totéž pole**,
+kterým se od #453 hlásí neotevřený `Terminal.app`: z `▶` vede pokaždé právě jedna cesta, takže dvě
+pole by znamenala dvě místa, která se musí nezávisle zahazovat.
 
 **Skončený shell se pustí znovu.** `▶` je žádost o běžící session, takže tlačítko, které po jednom
 `exit` přestane fungovat, by nechalo jako jedinou cestu zpátky zavření celé záložky. Startuje se na
@@ -3714,6 +3740,29 @@ by stav navíc a **nové selhání** pro shell, který sám od sebe nic nevypí�
 nikdy nepustí“ místo jednoho řádku ozvěny. Ověřit to navíc nejde v harnessu (#459 změřilo, že
 hlavní dispatch fronta testovacího hostu se nedrání), takže by to byl mechanismus, který se
 neotestuje ani vloženou regresí.
+
+#### Změna velikosti: měřilo se, neopravovalo
+
+Hlášení z #459 znělo „resize ne úplně funguje, **asi se přeskládává text**“. Rozpadá se na tři
+otázky a `TerminalResizeProbe` je měří přes `NSHostingView`, aby v cestě stál i `TerminalSurface`
+a rámec od SwiftUI — sonda nad holým `EmbeddedTerminalView` by ztrátu rozměru v té vrstvě neviděla
+a hlásila by, že je čisto.
+
+Naměřeno: šířka okna dojede do emulátoru (1 200 b → **163** sloupců, 700 b → **92**, zpátky
+1 000 b → **134**) a **řádky se u toho nehnou**; jádro ví totéž co emulátor (**138×21** buněk
+a **1 000×300 px** na ploše 1 000×300, po zúžení **82×21**); a `TIOCSWINSZ` chodí jen na skutečnou
+změnu — **8** změn na 61 průchodů rozvržení přes 60 bodů, protože buňka je široká ~7 b.
+
+**Nic se proto neopravovalo, a je to zapsané schválně**: přeskládání, které je vidět, je **reflow
+scrollbacku**, a `SwiftTerm` ho dělá podle správné úmluvy — `Buffer.isReflowEnabled` je
+`hasScrollback`, takže se přesází **jen normální buffer**, kdežto alternativní (do kterého kreslí
+celoobrazovkové TUI) se nereflowuje vůbec. Tak se chová `Terminal.app` i `iTerm`. Zamítnuté bylo
+„opravit“ to tak, že se reflow vypne: přišlo by se tím o zalomení dlouhých řádků při zúžení, tedy
+o věc, kterou od terminálu čeká každý.
+
+**Co zůstává neověřené a je to poznamenané**: jak obsah po přesázení *vypadá*, se z harnessu
+přečíst nedá (#459 — `LocalProcess` doručuje bajty přes hladovou hlavní frontu, která se
+v testovacím hostu nedrání), takže „rozbité, nebo jen jiné“ posoudí jedině člověk.
 
 #### `▶` si nebere fokus
 

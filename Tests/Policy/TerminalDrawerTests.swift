@@ -263,22 +263,26 @@ struct TerminalDrawerTests {
     /// před očima — a stavový řádek se tím naučí ignorovat.
     @Test("Povedený konec nic nehlásí")
     func aSuccessSaysNothing() {
-        #expect(Policy.resumeNotice(.started) == nil)
-        #expect(Policy.resumeNotice(.sent) == nil)
+        #expect(Policy.resumeNotice(.started, in: "php-review") == nil)
+        #expect(Policy.resumeNotice(.sent, in: "php-review") == nil)
     }
 
     /// Obojí je stav, ve kterém se **v zásuvce nic nezměnilo** — bez věty by `▶` vypadalo jako
     /// tlačítko, které nic nedělá. Vyjmenované zvlášť, protože se s každým naloží jinak.
     @Test("Neposlaná řádka se řekne, a s důvodem")
     func aRefusalIsSpelledOut() throws {
-        let busy = try #require(Policy.resumeNotice(.busy))
+        let busy = try #require(Policy.resumeNotice(.busy, in: "php-review"))
         #expect(busy.contains("něco běží"))
-        // **Druhá cesta patří do věty**: přerušit běžící příkaz kvůli tomu, že se někam neposlal
-        // jiný, je rozhodnutí člověka, ne jediná nabídnutá možnost.
-        #expect(busy.contains("Zkopírovat resume"))
+        // **Věta jmenuje relaci** (#460): zásuvka jich drží víc, takže „něco běží“ bez jména by
+        // nutilo hledat, ve které.
+        #expect(busy.contains("php-review"))
+        // A říká to podstatnější: z odmítnutí se od #460 **nestává slepá ulička**, protože se
+        // zásuvka na tu relaci přepne.
+        #expect(busy.contains("přepnutá"))
 
-        let noShell = try #require(Policy.resumeNotice(.noShell))
+        let noShell = try #require(Policy.resumeNotice(.noShell, in: "php-review"))
         #expect(noShell.contains("nepodařilo spustit"))
+        #expect(noShell.contains("php-review"))
         // Důvod se **nehádá** — sem se dojde, až když selhal i `/bin/zsh`.
         #expect(!noShell.contains("SHELL"))
     }

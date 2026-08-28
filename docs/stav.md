@@ -5288,49 +5288,71 @@ a zavřít ho má člověk, ne tik pollingu, se tím **neruší**: mluví o poll
 zavírá klik na `Mergnout`. Rozdělané review se zavřením neztrácí — draft leží na disku, takže se
 nezavírá s ptaním, ani se nemaže.
 
-## #460 — `▶` v `Průběhu` pouští session v zásuvce, ne v `Terminal.app`
+## #460 — `▶` v `Průběhu` pouští session v zásuvce, a zásuvka drží víc relací naráz
 
-Tlačítko `▶` v hlavičce dráhy přestalo otevírat cizí okno a **vytáhne zásuvku** (#459), ve které
-pustí `claude --resume <id>` v pracovním stromě té session. Návrh to má zakreslený od #459 — sekce
-35, poznámka 112 —, takže brána na vzhled proběhla dřív, než issue vzniklo; sekce 34 zůstává
-záznamem toho, co bylo dřív. `⧉` (`Zkopírovat resume`) **zůstává**: kdo si session pouští v iTermu,
-tmuxu nebo na jiném stroji, potřebuje text. `Policy.resumeCommand(sessionID:)` a `ShellQuoting` se
-použily **beze změny**, takže to, co se kopíruje, a to, co se pouští, se nemá čím rozejít.
+Tlačítko `▶` v hlavičce dráhy přestalo otevírat cizí okno a **vytáhne zásuvku** (#459), přepne na
+relaci té dráhy a pustí v ní `claude --resume <id>` v pracovním stromě té session. `⧉`
+(`Zkopírovat resume`) **zůstává**: kdo si session pouští v iTermu, tmuxu nebo na jiném stroji,
+potřebuje text. `Policy.resumeCommand(sessionID:)` a `ShellQuoting` se použily **beze změny**,
+takže to, co se kopíruje, a to, co se pouští, se nemá čím rozejít.
+
+**Zadání se během PR rozšířilo, a je to zapsané jako změna, ne jako součást plánu.** První podoba
+psala do **jediného** shellu zásuvky, protože sekce 35 nakreslila jeden. Při proklikání se ukázalo,
+že to nefunguje v tom stavu, kvůli kterému zásuvka vznikla: aplikace pouští review **paralelně**
+(`maxConcurrentReviews` je ve výchozí konfiguraci 3), takže se člověk chce dívat na dvě session
+naráz — a jeden shell ho nutil jednu ukončit, aby viděl druhou. Návrh se kvůli tomu překreslil
+(sekce 35, `.term-tabs`, poznámka 112) a **brána na vzhled proběhla znovu**, dřív než se sáhlo na kód.
+
+**Zásuvka proto drží N relací** (`TerminalSlot` = pull request + role, kde role je holý `shell`
+nebo `session(skill)`) a přepíná se mezi nimi **záložkami**. Klíčem je dvojice, ne jen skill:
+pracovní adresář je adresář *toho* PR. Plocha se v SwiftUI klíčuje relací (`.id(activeSlot)`), jinak
+by po přepnutí záložky zůstala v hierarchii ta předchozí — `makeNSView` se volá jen při vzniku
+representable.
+
+**Strop je pět a vytlačuje se jedině neběžící relace, nejstarší.** Zdola je to `maxConcurrentReviews`
+plus holý shell (čtyři jsou tedy běžný stav), shora řádek v hlavičce vedle cesty a kapsle
+`plná práva`. Zahodit běžící shell by znamenalo zabít rozdělanou práci kvůli kliknutí, které o ní
+nic neví; když neběžící žádná není, nová relace **nevznikne** a řekne se to — mlčky nevzniklá
+záložka vypadá jako rozbité tlačítko. **Úklid platí pro všechny relace**: zavření záložky PR jde
+přes seznam (`stopTerminals(for:)`), ne přes tu aktivní, protože osiřela by zrovna ta, která nebyla
+vidět; ukončení aplikace zabíjí všechno a značku v `sessions.json` má každá relace vlastní.
+
+**Puntík u záložky má tři stavy, i když návrh kreslí dva.** Do #460 stála v hlavičce kapsle
+`skončil (kód)` a odlišit `exit 1` od `exit 0` bylo zrovna to, kvůli čemu se na ni člověk podíval;
+tři kódy se do hlavičky nevejdou, takže z toho je puntík — ale `crit` znamená **nenulový** konec
+a celý kód zůstává v nápovědě. Kód, který **nedorazil**, se kreslí jako klid: je to odpověď
+„nevíme“, ne chyba.
 
 **Posílá se celá `shellLine`** — `cd '<strom>' && claude --resume <id>`, tedy tatáž řádka, jakou od
-#453 dostával `Terminal.app`. `cd` v ní není nadbytečné: zásuvka smí mít shell puštěný odjinud
-(`` ⌃` `` nad bare klonem, protože review ještě neběželo) a `claude --resume` hledá vlákno **podle
-adresáře**. Bez něj by to selhalo právě v tom případě a **větou o session**, ne o adresáři.
+#453 dostával `Terminal.app`. `cd` v ní není nadbytečné ani u vlastní relace: `▶` umí přijít i na
+relaci, která už existuje a stojí jinde. **Do běžícího jobu se pořád nepíše** (`tcgetpgrp` jedním
+voláním ve chvíli kliknutí, ne v časovači), jen se z toho přestala dělat slepá ulička — zásuvka se
+na tu relaci přepne.
 
-**Když v zásuvce něco běží, nepíše se tam.** Řádka poslaná do shellu je pro běžící program **vstup**
-— v rozdělaném `claude` by z toho byla odeslaná zpráva —, takže se `▶` jedním voláním zeptá jádra na
-popředí pty (`tcgetpgrp`, totéž, co dělá `kill()`) a při obsazeném popředí **nepošle nic**. Zásuvka
-se přesto vytáhne (běžící příkaz je zrovna to, na co je potřeba se podívat) a ve stavovém řádku
-stojí, co se stalo a jaké jsou dvě cesty dál. Zamítnuté bylo poslat to tam stejně, přerušit běžící
-příkaz za člověka a pustit druhý shell vedle. **Skončený shell `▶` pustí znovu** na téže ploše, aby
-tlačítko nepřestalo fungovat po jednom `exit`; starý výpis v ní zůstane.
+**Dvě věci jsou změřené pty sondou**: píše se `CR` (to, co posílá `↵`; `CR` i `LF` projdou stejně,
+4 ze 4 v obou fázích, takže rozhodlo pravidlo) a **nečeká se na prompt** (bajty zapsané dřív, než
+`ZLE` naběhne, počká linková disciplína — 5 z 5, i s `.zshrc`, který sekundu spí). Cena je jedna
+ozvěna řádky navíc nad promptem.
 
-**Dvě věci jsou změřené pty sondou, ne odhadnuté.** Píše se `CR` (to, co posílá `↵`) a měřením
-vyšlo, že `CR` i `LF` projdou stejně — 4 běhy ze 4 v obou fázích —, takže rozhodlo pravidlo, ne
-rozdíl. A **nečeká se na prompt**: bajty zapsané dřív, než `ZLE` naběhne, počká linková disciplína
-ve vstupním bufferu a shell je zpracuje na prvním promptu (5 z 5, i s `.zshrc`, který před promptem
-sekundu spí). Cena je jedna **ozvěna řádky navíc nad promptem**; zamítnuté bylo počkat na první
-výstup shellu, protože by to přidalo stav a **nové selhání** pro shell, který sám od sebe nic
-nevypíše — a v harnessu se to nedá ověřit vůbec (#459 změřilo, že hlavní dispatch fronta
-testovacího hostu se nedrání).
+**Resize se měřil, ne opravoval** (`TerminalResizeProbe`, přes `NSHostingView`, aby v cestě stál
+i `TerminalSurface`). Šířka okna dojede do emulátoru (1 200 b → 163 sloupců, 700 b → 92, zpátky
+1 000 b → 134) a **řádky se u toho nehnou**; jádro ví totéž (138×21 buněk, 1 000×300 px, po zúžení
+82×21); a `TIOCSWINSZ` chodí jen na skutečnou změnu — **8** změn na 61 průchodů rozvržení přes
+60 bodů. Přeskládání, které je vidět, je proto **reflow scrollbacku**, a `SwiftTerm` ho dělá podle
+správné úmluvy: `isReflowEnabled == hasScrollback`, takže se přesází jen normální buffer, kdežto
+alternativní (do kterého kreslí celoobrazovkové TUI) se nereflowuje vůbec. Tak se chová
+`Terminal.app` i `iTerm`.
 
 **`AppleScriptTerminal` se nemaže** — zůstává bez volajícího i s `NSAppleEventsUsageDescription`,
 a je to rozhodnutí na jedno vydání s napsanou podmínkou zániku (specifikace, *Osud
 `AppleScriptTerminal`*): shell v zásuvce se zabije se zavřením aplikace, kdežto okno `Terminal.app`
-session přežije, a PRism se restartuje po každém mergi. Jestli to v praxi chybí, se pozná jedině
-používáním. Mrtvé pole z toho nezůstane: do `AppStore.terminalFailure` od #460 píše `▶` sám.
+session přežije, a PRism se restartuje po každém mergi. Mrtvé pole z toho nezůstane: do
+`AppStore.terminalFailure` od #460 píše `▶` sám.
 
-Testů **4319**, všechny zelené — z toho **9 nových**: `Policy` výčtem (mlčí se nad povedeným koncem,
-u `busy` je ve větě i druhá cesta, u `noShell` se důvod nehádá) a to podstatné ze storu —
-**zásuvka se vytáhne**, jde do ní `session.shellLine`, po `busy` se **nepřepíše cesta v hlavičce**
-a store bez hostitele **nenabízí `▶` a nevymýšlí si hlášku**.
+Testů **4345**, všechny zelené — z toho **35 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
+vytlačí, co je na záložce, co se řekne), store (**druhá session první nepřebije**, zavření záložky
+zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
 
-**Co ověřuje jedině člověk**: že se session v zásuvce doopravdy naváže a že `claude` v ní vypadá
-jako v Terminálu. Do pty se v harnessu psát nedá (změřeno u #459: `send` jde přes druhý `DispatchIO`
-kanál nad deskriptorem, jehož první kanál visí na hladové hlavní frontě, takže `exit` vycházel
-2 z 5) a obsah emulátoru se odtud nepřečte vůbec.
+**Co ověřuje jedině člověk**: že se session v zásuvce doopravdy naváže, že přepínání mezi dvěma
+běžícími nic neukončí a jak obsah po přesázení **vypadá**. Do pty se v harnessu psát nedá a obsah
+emulátoru se odtud nepřečte vůbec (změřeno u #459).

@@ -13,6 +13,7 @@ import Testing
 @MainActor
 struct AppStoreTerminalDrawerTests {
     private let pullRequest = PRIdentifier("cli/cli#42")!
+    private var shell: TerminalSlot { TerminalSlot(pullRequest: pullRequest, role: .shell) }
 
     private func store(_ host: FakeTerminalHost) -> AppStore {
         let store = AppStore(
@@ -49,6 +50,7 @@ struct AppStoreTerminalDrawerTests {
         await store.toggleTerminal()
 
         #expect(host.stopped.isEmpty)
+        #expect(host.stoppedPullRequests.isEmpty)
         #expect(host.stoppedAll == 0)
     }
 
@@ -70,16 +72,25 @@ struct AppStoreTerminalDrawerTests {
     // MARK: - Konec kontextu
 
     /// Zavřená záložka je jediné místo, kde kontext PR doopravdy končí.
-    @Test("Zavření záložky shell zabije")
-    func closingTheTabKillsTheShell() {
+    @Test("Zavření záložky zabije všechny relace toho PR")
+    func closingTheTabKillsEveryShell() {
         let host = FakeTerminalHost()
         let store = store(host)
-        store.terminalStates[pullRequest] = .running
+        let lane = TerminalSlot(pullRequest: pullRequest, role: .session("php-review"))
+        store.terminalSlots[pullRequest] = [shell, lane]
+        store.activeTerminalSlots[pullRequest] = lane
+        store.terminalStates[shell] = .running
+        store.terminalStates[lane] = .running
 
         store.closeTab(pullRequest)
 
-        #expect(host.stopped == [pullRequest])
-        #expect(store.terminalStates[pullRequest] == nil)
+        // **Přes pull request, ne přes aktivní relaci** (#460): kdyby se zabíjela jen ta, která
+        // je vidět, osiřela by zrovna ta, na kterou se člověk zrovna nedíval.
+        #expect(host.stoppedPullRequests == [pullRequest])
+        #expect(store.terminalStates[shell] == nil)
+        #expect(store.terminalStates[lane] == nil)
+        #expect(store.terminalSlots[pullRequest] == nil)
+        #expect(store.activeTerminalSlots[pullRequest] == nil)
     }
 
     /// Ukončení aplikace (#264): co aplikace spustila, to i ukončí.
@@ -126,9 +137,9 @@ struct AppStoreTerminalDrawerTests {
         let store = store(FakeTerminalHost())
         store.checkoutStates[pullRequest.repo] = .ready(clone)
 
-        await store.resolveTerminalDirectory(for: pullRequest)
+        await store.prepareTerminalDrawer(for: pullRequest)
 
-        #expect(store.terminalDirectory(for: pullRequest) == clone)
+        #expect(store.terminalDirectory(of: shell) == clone)
     }
 
     /// **Tvrzení o tom, co se nestane**: cesta, která na disku není, se nesmí nabídnout. Shell
@@ -141,9 +152,9 @@ struct AppStoreTerminalDrawerTests {
             URL(filePath: "/tmp/prism-terminal-\(UUID().uuidString)")
         )
 
-        await store.resolveTerminalDirectory(for: pullRequest)
+        await store.prepareTerminalDrawer(for: pullRequest)
 
-        #expect(store.terminalDirectory(for: pullRequest) == nil)
+        #expect(store.terminalDirectory(of: shell) == nil)
     }
 }
 
@@ -153,40 +164,48 @@ struct AppStoreTerminalDrawerTests {
 @MainActor
 final class FakeTerminalHost: TerminalHosting {
     var running = 0
-    private(set) var stopped: [PRIdentifier] = []
-    private(set) var stoppedAll = 0
-    private(set) var handed: [PRIdentifier: URL] = [:]
 
-    /// Jak dopadne příští `run(_:for:in:)` (#460). Rozhodnutí, jestli je zásuvka zaneprázdněná,
+    /// Jak dopadne příští `run(_:for:in:)` (#460). Rozhodnutí, jestli je v relaci obsazené popředí,
     /// dělá živý hostitel z jádra (`tcgetpgrp`), takže se sem v testu podstrčí hotový výsledek.
     var outcome: TerminalCommandOutcome = .started
 
-    /// Co po sobě `▶` nechalo: řádka, pull request a adresář.
-    private(set) var ran: [(line: String, pr: PRIdentifier, directory: URL)] = []
+    private(set) var stopped: [TerminalSlot] = []
+    private(set) var stoppedPullRequests: [PRIdentifier] = []
+    private(set) var stoppedAll = 0
+    private(set) var handed: [TerminalSlot: URL] = [:]
 
-    var report: (@MainActor (PRIdentifier, TerminalRunState) -> Void)?
+    /// Co po sobě `▶` nechalo: řádka, relace a adresář.
+    private(set) var ran: [(line: String, slot: TerminalSlot, directory: URL)] = []
+
+    var report: (@MainActor (TerminalSlot, TerminalRunState) -> Void)?
     var focusChanged: (@MainActor (Bool) -> Void)?
 
     var runningTerminals: Int { running }
 
-    func terminal(for pr: PRIdentifier, in directory: URL) -> NSView {
-        handed[pr] = directory
+    func terminal(for slot: TerminalSlot, in directory: URL) -> NSView {
+        handed[slot] = directory
         return NSView()
     }
 
     @discardableResult
     func run(
         _ commandLine: String,
-        for pr: PRIdentifier,
+        for slot: TerminalSlot,
         in directory: URL
     ) -> TerminalCommandOutcome {
-        ran.append((commandLine, pr, directory))
+        ran.append((commandLine, slot, directory))
         return outcome
     }
 
     @discardableResult
-    func stopTerminal(for pr: PRIdentifier) -> Bool {
-        stopped.append(pr)
+    func stopTerminal(for slot: TerminalSlot) -> Bool {
+        stopped.append(slot)
+        return true
+    }
+
+    @discardableResult
+    func stopTerminals(for pr: PRIdentifier) -> Bool {
+        stoppedPullRequests.append(pr)
         return true
     }
 

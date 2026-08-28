@@ -1072,13 +1072,27 @@ nemá kde dojít, takže se běžící shell zapisuje do `sessions.json` a osiř
 stejně jako u review (#351). **Zavření záložky** shell zabije taky; **schování zásuvky ne** —
 `` ⌃` `` je pohled, ne konec práce.
 
-**Shell je jeden na pull request**, protože pracovní adresář je checkout **toho** PR. Když v cache
-žádná kopie repa není, zásuvka to místo prázdné plochy řekne — terminál bez repozitáře je obyčejný
-shell a ten má člověk vedle.
+**Relací je v zásuvce víc, ne jedna** (#460). Aplikace pouští review **paralelně**, takže „jedna
+zásuvka = jeden shell“ by nutila jednu session ukončit, aby byla vidět druhá — a to je zrovna ten
+stav, ve kterém se na ně chce člověk dívat. Přepíná se **záložkami** v hlavičce; puntík u záložky
+nese, jestli v ní něco běží (a **červený** znamená, že to skončilo nenulově — celý kód je
+v nápovědě). `shell` je jedna z relací, ta, kterou dá `` ⌃` ``.
 
-**Známé omezení proti návrhu:** kapsle v hlavičce ukazuje `běží` / `skončil (kód)`, ne příkaz,
-který zrovna běží. Zjistit ho znamená ptát se jádra na popředí pty v pravidelném taktu — tedy další
-časovač v okně kvůli popisce.
+**Relace jsou vázané na pull request**, protože pracovní adresář je checkout **toho** PR. Drží se
+jich nejvíc **pět**; když je plno, vytlačí se **nejstarší doběhlá**, a když všechny běží, nová
+nevznikne a řekne se to. Zavření záložky PR zabije **všechny** jeho relace. Když v cache žádná kopie
+repa není, zásuvka to místo prázdné plochy řekne — terminál bez repozitáře je obyčejný shell a ten
+má člověk vedle.
+
+**Známé omezení proti návrhu:** v hlavičce není napsaný příkaz, který zrovna běží — jen puntík
+u záložky. Zjistit ho znamená ptát se jádra na popředí pty v pravidelném taktu, tedy další časovač
+v okně kvůli popisce.
+
+**Změna velikosti je změřená** (#460): šířka okna dojede přes SwiftUI do emulátoru i do jádra
+(buňky i pixely) a `TIOCSWINSZ` chodí jen na skutečnou změnu, ne na každý průchod rozvržení. Co je
+při zúžení vidět jako přeskládaný text, je **reflow scrollbacku** — `SwiftTerm` přesází jen
+normální buffer, kdežto alternativní (do kterého kreslí celoobrazovkové TUI) nechá být. Tak se
+chová `Terminal.app` i `iTerm`.
 
 ### Záložka `Nálezy` (#242)
 
@@ -1253,11 +1267,12 @@ Co odchodu do `Terminal.app` zůstalo: session tam **přežije zavření PRismu*
 v zásuvce se s ním zabije. Cesta ven do `Terminal.app` je proto v kódu ještě chvíli **jako
 záloha**; z okna se dnes nepoužije.
 
-**Když v zásuvce zrovna něco běží, `▶` do toho nepíše.** Řádka poslaná do běžícího programu je
-pro něj vstup, takže by z `claude --resume …` byla zpráva odeslaná do rozdělaného `claude`.
-Zásuvka se v tom případě jen vytáhne (běžící příkaz je zrovna to, na co je potřeba se podívat)
-a ve stavovém řádku stojí, že se nic neposlalo a co s tím. Když v zásuvce shell skončil, `▶` ho
-pustí znovu — starý výpis v ní přitom zůstane.
+**Každá dráha má v zásuvce vlastní relaci**, takže `▶` u druhého reviewera tu první nepřebije —
+přepne se na ni. **Když v té relaci zrovna něco běží, `▶` do toho nepíše**: řádka poslaná do
+běžícího programu je pro něj vstup, takže by z `claude --resume …` byla zpráva odeslaná do
+rozdělaného `claude`. Zásuvka se v tom případě jen přepne (běžící příkaz je zrovna to, na co je
+potřeba se podívat) a ve stavovém řádku stojí, že se nic neposlalo. Když v relaci shell skončil,
+`▶` ho pustí znovu — starý výpis v ní přitom zůstane.
 
 Nabízí se to **jen tam, kde je co obnovit**: bez `session_id` **a bez pracovního stromu** se
 tlačítko nekreslí (ne zašedle — u dráhy, která teprve čeká na slot, by zašedlé slibovalo něco,
@@ -2251,8 +2266,8 @@ App/                      zdrojáky aplikace — target PRism
                           AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Terminal/               vestavěný terminál (#459): plocha SwiftTermu obarvená paletou, hlášení fokusu
-                          a zabití popředí pty; hostitel drží jeden shell na pull request
-                          a od #460 do něj umí napsat řádku (▶ v tabu Průběh)
+                          a zabití popředí pty; hostitel drží od #460 víc relací na pull request
+                          (TerminalSlot) a do každé umí napsat řádku (▶ v tabu Průběh)
   Support/                sdílené drobnosti bez příslušnosti k modulu;
                           diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361) —
                           včetně rotace jejího záznamu při startu sezení (#412)

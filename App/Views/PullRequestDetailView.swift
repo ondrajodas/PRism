@@ -160,7 +160,7 @@ struct PullRequestDetailView: View {
         // to nepřestěhuje: ten si drží ten svůj adresář, ve kterém startoval.
         .task(id: pullRequest.id) {
             guard store.isTerminalOpen else { return }
-            await store.resolveTerminalDirectory(for: pullRequest.id)
+            await store.prepareTerminalDrawer(for: pullRequest.id)
         }
         // Klíčem je celé shrnutí, ne jen identifikátor: nový commit změní `updatedAt`,
         // a to je přesně chvíle, kdy se má diff načíst znovu i bez přepnutí PR.
@@ -476,12 +476,14 @@ struct PullRequestDetailView: View {
     /// zásuvka nulové výšky by běžícímu TUI ohlásila `0×0`.
     @ViewBuilder private var terminalDrawer: some View {
         if store.isTerminalOpen {
+            let active = store.activeTerminalSlot(for: pullRequest.id)
             TerminalDrawerView(
-                pullRequest: pullRequest.id,
-                directory: store.terminalDirectory(for: pullRequest.id),
-                state: store.terminalStates[pullRequest.id],
+                rows: store.terminalRows(for: pullRequest.id),
+                activeSlot: active,
+                directory: active.flatMap { store.terminalDirectory(of: $0) },
                 host: store.terminals,
                 available: detailHeight,
+                select: { store.selectTerminalSlot($0) },
                 close: { Task { await store.toggleTerminal() } }
             )
         }

@@ -1,0 +1,229 @@
+import Foundation
+
+// MARK: - Zásuvka s terminálem (#459, víc relací #460)
+
+extension AppStore {
+    /// `⌃\`` — vytáhne nebo schová zásuvku.
+    ///
+    /// **Schování nic nezabíjí.** Shelly běží dál a při dalším vytažení je v nich to, co v nich
+    /// bylo — je to tentýž vztah jako mezi sbaleným panelem nálezů a nálezy samotnými. Zabíjí se
+    /// jedině zavřením záložky a ukončením aplikace, tedy tam, kde ten kontext doopravdy končí.
+    ///
+    /// **Dává relaci `shell`**, tedy tu jednu z relací, která nemá skill (návrh, sekce 35).
+    /// Když už nějaká relace je vidět, `` ⌃` `` jen přepne zásuvku a **nepřebíjí ji** — vytáhnout
+    /// zásuvku uprostřed běžícího `claude --resume` a dostat místo něj prázdný prompt by bylo to
+    /// jediné, co na téhle klávese může překvapit.
+    ///
+    /// Adresář se hledá **při otevírání**, ne v `body`: rozhodnutí, jestli se startuje v pracovním
+    /// stromu review, nebo v klonu, potřebuje sáhnout na disk.
+    func toggleTerminal() async {
+        isTerminalOpen.toggle()
+        guard isTerminalOpen else {
+            // Schovaná zásuvka fokus mít nemůže. AppKit ho sice při odebrání plochy z okna sám
+            // odevzdá, jenže to je pořadí, na které se nedá spolehnout — a příznak, který zůstane
+            // viset, znamená okno s vypnutými zkratkami nad terminálem, který není vidět.
+            isTerminalFocused = false
+            return
+        }
+        guard let pr = activeTab.pullRequest else { return }
+        await prepareTerminalDrawer(for: pr)
+    }
+
+    /// Je v tomhle okně zásuvka? `false` = **`▶` se nekreslí** (testovací store bez hostitele).
+    ///
+    /// Nekreslí se schválně, místo aby tiše spadlo zpátky na `Terminal.app` (#460): dvě různá
+    /// chování pod jednou ikonou znamenají, že se nedá spolehnout ani na jedno. Je to tatáž úvaha
+    /// jako u `Policy.terminalSession(of:)`, jen o druhou podmínku dál.
+    var hasTerminalDrawer: Bool { terminals != nil }
+
+    // MARK: - Co je v zásuvce vidět
+
+    /// Záložky přepínače pro ten PR. Prázdné = zásuvka zatím žádnou relaci nemá.
+    func terminalRows(for pr: PRIdentifier) -> [TerminalSlotRow] {
+        Policy.terminalSlotRows(
+            terminalSlots[pr] ?? [],
+            active: activeTerminalSlots[pr],
+            states: terminalStates
+        )
+    }
+
+    /// Která relace je vidět. `nil` = zásuvka pro ten PR ještě žádnou nemá.
+    func activeTerminalSlot(for pr: PRIdentifier) -> TerminalSlot? { activeTerminalSlots[pr] }
+
+    /// Kde stojí shell té relace. `nil` = v cache pro ni **není adresář**, a zásuvka to řekne.
+    func terminalDirectory(of slot: TerminalSlot) -> URL? { terminalDirectories[slot] }
+
+    /// Klik na záložku přepínače.
+    ///
+    /// **Nic nespouští ani nezabíjí** — je to pohled, stejně jako `` ⌃` ``. Plochu vyrobí až
+    /// `TerminalSurface`, protože ta zná i adresář.
+    func selectTerminalSlot(_ slot: TerminalSlot) {
+        guard terminalSlots[slot.pullRequest]?.contains(slot) == true else { return }
+        activeTerminalSlots[slot.pullRequest] = slot
+    }
+
+    // MARK: - Vznik relací
+
+    /// Připraví zásuvku pro ten PR: relace `shell`, a přepnout na ni **jen když zásuvka pro něj
+    /// žádnou nemá**.
+    ///
+    /// Volá se ze dvou míst a v obou znamená totéž: z `` ⌃` `` a z přepnutí na jiný pull request
+    /// s vytaženou zásuvkou — jinak by nad novým PR zůstala cesta do checkoutu toho předchozího.
+    func prepareTerminalDrawer(for pr: PRIdentifier) async {
+        let slot = TerminalSlot(pullRequest: pr, role: .shell)
+        let hadNone = activeTerminalSlots[pr] == nil
+        // Adresář se hledá **pokaždé**: pracovní strom se posune s novým commitem a eviction ho umí
+        // sebrat, takže zapamatovaná cesta zestárne — a shell spuštěný ve smazané složce je horší
+        // než žádný. Adresář už běžícího shellu se tím nemění; ten si drží ten svůj.
+        let directory = await resolvedShellDirectory(for: pr)
+        guard admit(slot, showing: hadNone) else { return }
+        terminalDirectories[slot] = directory
+    }
+
+    /// `▶` v hlavičce dráhy (#460) — **přepne na relaci té dráhy** a pustí v ní `claude --resume`.
+    ///
+    /// Do #460 to psalo do jediného shellu zásuvky a při obsazeném popředí končilo slepou uličkou.
+    /// Relace na dráhu tu uličku ruší: dvě běžící review mají dvě relace a přepíná se mezi nimi.
+    ///
+    /// Posílá se **celá `shellLine`**, tedy `cd '<strom>' && claude --resume <id>`, a je to tatáž
+    /// řádka, jakou dostával `Terminal.app` od #453. `cd` v ní není nadbytečné ani u vlastní
+    /// relace: shell v ní startuje v adresáři, který dostal, jenže `▶` umí přijít i na relaci,
+    /// která už existuje a stojí jinde (starší strom téže dráhy). S `&&` navíc zůstane po zmizelém
+    /// stromu `cd: no such file or directory`, což je pravda, podle které se dá jednat.
+    ///
+    /// **Do běžícího jobu se pořád nepíše** (`busy`) — řádka je pro něj vstup, takže by
+    /// v rozdělaném `claude` byla odeslaná zpráva. Nově se z toho ale nestává slepá ulička:
+    /// přepne se na tu relaci, takže je vidět, co v ní běží.
+    ///
+    /// **Fokus si to nebere.** Sebrat ho znamená sáhnout na první responder v tomtéž průchodu,
+    /// ve kterém se plocha teprve staví (past z #184), a ověřit se to dá jedině na běžící
+    /// aplikaci. Kliknout do zásuvky je proti tomu jeden klik.
+    func resumeInDrawer(_ session: TerminalSession, for pr: PRIdentifier) {
+        // Bez hostitele se `▶` nekreslí, takže sem se nedojde — a kdyby přece, nesmí se vymyslet
+        // hláška o něčem, o co se nikdo nepokusil.
+        guard let terminals else { return }
+        let slot = TerminalSlot(pullRequest: pr, role: .session(session.skill))
+        isTerminalOpen = true
+        guard admit(slot, showing: true) else {
+            terminalFailure = Policy.slotsFullNotice(Policy.terminalSlotTitle(slot.role))
+            return
+        }
+        let outcome = terminals.run(session.shellLine, for: slot, in: session.directory)
+        // Cesta v hlavičce se přepisuje **všude, kde se plocha postavila** — tedy i po `noShell`.
+        // Vypadá to jako nedůslednost (řádka přece neodešla), ale je to naopak: bez cesty kreslí
+        // zásuvka větu „Tenhle pull request nemá v cache pracovní kopii“, a ta by po nepovedeném
+        // startu **lhala** — strom je na disku, nepovedl se shell. S cestou je v hlavičce pravda
+        // (odkud se startovalo) a puntík řekne, že relace neběží.
+        //
+        // Po `busy` se naopak **nepřepisuje**: tam se plocha nestavěla a shell dál stojí tam, kde
+        // stál, takže nová popiska by tvrdila něco, co není.
+        if outcome != .busy { terminalDirectories[slot] = session.directory }
+        terminalFailure = Policy.resumeNotice(outcome, in: Policy.terminalSlotTitle(slot.role))
+    }
+
+    /// Zapíše relaci do seznamu, uklidí po vytlačené a případně na ni přepne.
+    ///
+    /// `false` = **nevznikla**, protože strop je plný a všechny relace běží. Vytlačuje se jedině
+    /// neběžící relace (`Policy.terminalSlotAdmission`), takže se tímhle nikdy nezabije rozdělaná
+    /// práce — zahodí se jen výpis, který je z definice minulost.
+    @discardableResult
+    private func admit(_ slot: TerminalSlot, showing: Bool) -> Bool {
+        let slots = terminalSlots[slot.pullRequest] ?? []
+        switch Policy.terminalSlotAdmission(of: slot, in: slots, states: terminalStates) {
+        case .refused:
+            return false
+        case .existing:
+            if showing { activeTerminalSlots[slot.pullRequest] = slot }
+            return true
+        case .added(let victim):
+            if let victim { discard(victim) }
+            terminalSlots[slot.pullRequest] = Policy.terminalSlots(
+                terminalSlots[slot.pullRequest] ?? [],
+                adding: slot,
+                evicting: victim
+            )
+            if showing || activeTerminalSlots[slot.pullRequest] == nil {
+                activeTerminalSlots[slot.pullRequest] = slot
+            }
+            return true
+        }
+    }
+
+    /// Zahodí jednu relaci i s jejím shellem a stavem.
+    ///
+    /// Na koho se přepnout, když zmizela ta aktivní, rozhoduje **`Policy`, ne `if` tady**
+    /// (`terminalSlotAfterRemoval`): je to pravidlo nad daty, a napsané na dvou místech by se
+    /// rozešlo první úpravou.
+    private func discard(_ slot: TerminalSlot) {
+        terminals?.stopTerminal(for: slot)
+        terminalStates[slot] = nil
+        terminalDirectories[slot] = nil
+        let slots = terminalSlots[slot.pullRequest] ?? []
+        if activeTerminalSlots[slot.pullRequest] == slot {
+            activeTerminalSlots[slot.pullRequest] = Policy.terminalSlotAfterRemoval(
+                of: slot,
+                from: slots
+            )
+        }
+        terminalSlots[slot.pullRequest] = slots.filter { $0 != slot }
+    }
+
+    // MARK: - Kde relace startuje
+
+    /// Adresář pro relaci `shell`: pracovní strom posledního review, jinak bare klon.
+    private func resolvedShellDirectory(for pr: PRIdentifier) async -> URL? {
+        // Osa posledního review — z ní je cesta ke stromu, ve kterém `claude --resume` session
+        // najde (vlákna se klíčují adresářem, viz `TerminalSession.directory`).
+        let worktree = timelines(for: pr).compactMap(\.worktree).last
+        let clone = checkoutPath(for: pr)
+        return Policy.terminalWorkingDirectory(
+            worktree: await existingDirectory(worktree),
+            clone: await existingDirectory(clone)
+        )
+    }
+
+    /// Existuje ta složka? **Mimo hlavní vlákno** — je to sice jeden `stat`, ale disk umí zaseknout
+    /// (síťový svazek, spící externí disk), a okno se kvůli hledání adresáře zaseknout nesmí.
+    private func existingDirectory(_ url: URL?) async -> URL? {
+        guard let url else { return nil }
+        return await Task.detached {
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(
+                atPath: url.path(percentEncoded: false),
+                isDirectory: &isDirectory
+            )
+            return exists && isDirectory.boolValue ? url : nil
+        }.value
+    }
+
+    // MARK: - Konec
+
+    /// Kolik shellů právě běží — čte se při ukončení aplikace (#264). Od #460 **přes všechny
+    /// relace**, ne jeden na PR.
+    var runningTerminals: Int { terminals?.runningTerminals ?? 0 }
+
+    /// Zabije **všechny relace** toho pull requestu.
+    ///
+    /// Volá se ze zavření záložky: ta je jediné místo, kde kontext PR doopravdy končí — cesta ke
+    /// checkoutu, nálezy i rozdělané review se dají otevřít znovu, kdežto shelly by po zavřené
+    /// záložce zůstaly běžet bez okna, ve kterém by šly vidět. Od #460 je jich víc a **osiřela by
+    /// zrovna ta, která nebyla vidět**, takže se maže celý seznam, ne jen aktivní relace.
+    func stopTerminal(for pr: PRIdentifier) {
+        terminals?.stopTerminals(for: pr)
+        for slot in terminalSlots[pr] ?? [] {
+            terminalStates[slot] = nil
+            terminalDirectories[slot] = nil
+        }
+        terminalSlots[pr] = nil
+        activeTerminalSlots[pr] = nil
+    }
+
+    /// Zabije všechny shelly, protože se zavírá aplikace (#264, #351).
+    ///
+    /// **Synchronní**, na rozdíl od `stopReviewsBeforeTermination()`: signál odchází přímo z téhle
+    /// cesty (`kill(2)`), ne přes zrušení tasku, takže není na co čekat — a čekání by naopak dalo
+    /// systému čas aplikaci zavřít dřív, než by signál odešel.
+    func stopTerminalsBeforeTermination() {
+        terminals?.stopAllTerminals()
+    }
+}

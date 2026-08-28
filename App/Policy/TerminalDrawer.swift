@@ -249,27 +249,39 @@ extension Policy {
     ///
     /// Mlčí se schválně u obou úspěšných konců: co se povedlo, je vidět v zásuvce, která se
     /// zrovna otevřela — hláška o tom by byla text navíc nad tím, co má člověk před očima.
-    /// Zbylé dva konce vidět **nejsou**: `busy` znamená zásuvku, ve které se nic nezměnilo, a
+    /// Zbylé dva konce vidět **nejsou**: `busy` znamená relaci, ve které se nic nezměnilo, a
     /// `noShell` prázdnou plochu. Bez věty by obojí vypadalo jako tlačítko, které nic nedělá —
     /// tedy přesně to, co u `Terminal.app` hlídal `AppStore.terminalFailure` od #453.
-    static func resumeNotice(_ outcome: TerminalCommandOutcome) -> String? {
-        switch outcome {
-        case .started, .sent: nil
+    ///
+    /// **Věta jmenuje relaci**, protože jich zásuvka od #460 drží víc — „něco běží“ bez jména by
+    /// nutilo hledat, ve které.
+    static func resumeNotice(_ outcome: TerminalCommandOutcome, in slot: String) -> String? {
         // **Bez zpětných apostrofů kolem příkazu.** Věty ze stavu jdou do `Text` jako proměnná,
         // ne jako literál, takže z nich SwiftUI markdown nedělá — apostrofy by se nakreslily.
+        switch outcome {
+        case .started, .sent: nil
         case .busy:
             // **Neříká „ukonči to“ jako jedinou cestu**: přerušit běžící příkaz kvůli tomu, že se
-            // někam neposlal jiný, je rozhodnutí člověka. Druhá cesta je proto vyjmenovaná a je
-            // to ta, kterou #453 nechalo v hlavičce dráhy schválně.
-            "V zásuvce toho pull requestu něco běží, takže se claude --resume neposlal. "
-                + "Ukonči, co běží, a klikni znovu — nebo si příkaz vezmi tlačítkem "
-                + "Zkopírovat resume."
+            // někam neposlal jiný, je rozhodnutí člověka. Od #460 k tomu přibyla ta podstatnější
+            // věta — relace je vidět, takže se z odmítnutí nestává slepá ulička.
+            "V relaci \(slot) něco běží, takže se claude --resume neposlal. "
+                + "Zásuvka je na ní přepnutá, tak se podívej, co v ní je."
         case .noShell:
             // Důvod se **nehádá**: `EmbeddedTerminalView.start` už na chybějící `SHELL` sáhne po
             // `/bin/zsh`, takže sem se dojde jedině tehdy, když selhalo i to — a vymyšlená
             // příčina by byla horší než žádná.
-            "Shell se v zásuvce nepodařilo spustit, takže se claude --resume nepustil."
+            "Shell se v relaci \(slot) nepodařilo spustit, takže se claude --resume nepustil."
         }
+    }
+
+    /// Věta pro stav, kdy relace **vůbec nevznikla**, protože strop je plný a všechny běží.
+    ///
+    /// Mlčet se tady nesmí: nevzniklá záložka vypadá k nerozeznání od rozbitého tlačítka. A věta
+    /// musí říct, **co s tím** — zavírací křížek u záložky návrh nekreslí, takže jediná cesta zpět
+    /// vede přes ukončení toho, co v některé relaci běží.
+    static func slotsFullNotice(_ slot: String) -> String {
+        "Zásuvka drží nejvíc \(maxTerminalSlots) relací a ve všech něco běží, "
+            + "takže relace \(slot) nevznikla. Ukonči, co v některé běží, a klikni znovu."
     }
 
     // MARK: - Ukončení aplikace
