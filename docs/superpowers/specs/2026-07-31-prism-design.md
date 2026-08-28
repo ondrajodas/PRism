@@ -3746,5 +3746,5 @@ bloku 9 %, `sizeThatFits` 7 % — a **skládání řádků 1 %**. Roste to s po�
 
 **Co z toho zbývá jako pravidlo.** Cesta k dalšímu zlevnění nevede přes počet prvků — třikrát
 nezávisle vyšlo, že ubrat vykreslené řádky cenou skoro nehne. Kdo se do toho pustí znovu, ať začne
-tím, že **změří přerovnání okna** (dnes 11 ms): tři ze čtyř pokusů se rozbily právě o něj.
+tím, že **změří přerovnání okna** (dnes 11 ms): tři ze čtyř zamítnutých se rozbily právě o něj.
 

@@ -6656,7 +6656,7 @@ Tři věci, bez kterých z toho nic není:
 #### Tři čtvrtiny přepnutí nemá s diffem co dělat
 
 Pohon `přepnutí tabu bez diffu` (`Přehled` ↔ `Kontroly`, tedy dva taby, ve kterých žádný dlouhý
-seznam není) je ablace k tomu výš — a odpovídá na otázku, kterou se čtyři pokusy o zlevnění diffu
+seznam není) je ablace k tomu výš — a odpovídá na otázku, kterou se čtyři pokusy z #472 o zlevnění diffu
 marně snažily obejít:
 
 | Přepnutí | 500 řádků |
@@ -6691,7 +6691,7 @@ se do detailu vůbec sestoupí. Ve `sample`u té fáze je naše vlastní práce 
 `Policy` 15, `PullRequestDetailView` 36 vzorků ze 14 726); zbytek je `GraphHost.flushTransactions`
 (1 947), `NSHostingView.layout` (1 630) a `LayoutEngineBox.sizeThatFits` (1 222).
 
-#### Čtyři pokusy o zlevnění přepnutí tabu s diffem (#476)
+#### Pět pokusů o zlevnění přepnutí tabu s diffem — jeden nasazený, čtyři zamítnuté (#476)
 
 Po #472 stálo přepnutí tabu **s diffem** 243 ms u 500řádkového a 466 ms u 2000řádkového diffu proti
 **62 ms** bez diffu. Rozklad (tři velikosti, aby se dalo ověřit, že je to přímka) ukázal, že je to

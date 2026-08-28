@@ -5400,5 +5400,5 @@ by posunulo pilulku na komentář i kotvu ⇧ kliku, aniž by se to kdekoli ohl�
 
 **Zbytek je tedy doložený, ne odstraněný**: přepnutí na tab s diffem stojí 433 ms u 2000řádkového
 diffu a je to cena **prvního rozvržení** obsahu, který se přepnutím zahodí a staví znovu. Kdo se
-do toho pustí znovu, ať měří **přerovnání okna** jako první — tři ze čtyř pokusů se rozbily o něj.
+do toho pustí znovu, ať měří **přerovnání okna** jako první — tři ze čtyř zamítnutých se rozbily o něj.
 
