@@ -64,11 +64,12 @@ struct ContentView: View {
                 // třída jako #220 a #361, jen o patro výš: neplatí se za seznam, ale za to, že
                 // detail vůbec visí ve stacku.
                 //
-                // Naměřeno (`DetailRelayoutMeasurement`, ablace `slepá kostra` — rail, hlavička
+                // Naměřeno ablací **slepá kostra** (`DetailRelayoutMeasurement`): rail, hlavička
                 // i stavový řádek nahrazené obarvenými obdélníky, takže se měří **tvar**, ne
-                // sousedé): jeden průchod tělem detailu stál **78 ms** s pružným rámcem a **9 ms**
-                // se změřenou štěrbinou, přepnutí tabu **245 ms** proti **38 ms**. Sousedé sami
-                // jsou z toho 7 ms — cenu dělalo vyjednávání, ne oni.
+                // sousedé — a ti sami jsou z toho jen 7 ms. Čísla a postup jsou v
+                // [`docs/testovani.md`](../../docs/testovani.md), aby nebyla na dvou místech
+                // a nerozešla se: řádově je to **desetinásobek** na průchod tělem detailu
+                // a **pětinásobek** na přepnutí tabu.
                 content.fillingSlot(alignment: .topLeading)
             }
             StatusBarView(store: store)
