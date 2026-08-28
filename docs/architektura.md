@@ -989,6 +989,31 @@ z toho nevzniká právě proto, že pruh **nemění vlastníka** — při přeje
 pruhu nic nezmizí na místě: pruh odjede nahoru se svým blokem a další přijede zdola takový, jaký je.
 Na hraně okna proto někdy nic není a je to správná odpověď, ne chybějící prvek.
 
+### Rámečky řádků jedním průchodem (#476)
+
+`lineFrames()` vydává rámeček každého řádku bloku — z nich je geometrie gutteru (#252), poloha
+pilulky na komentář a kotvy pro ⇧ klik (`DiffRowFrames`). Do #476 se pro **každý** řádek volalo
+`boundingRect(forGlyphRange:in:)`, a to je u `NSLayoutManager` drahá cesta: ve vzorku z přepínání
+tabů drželo `lineFrames()` **697 vzorků z 1 519**, které stál celý `updateNSView` bloku, a uvnitř
+z toho `_rectArrayForRange` → `_insertionPointHelperForCharacterAtIndex` **653**.
+
+Od #476 se fragmenty vyberou **naráz** (`enumerateLineFragments`) a přiřadí se řádkům podle pozice
+znaku — řádky se dělí zalomením, takže každý fragment patří právě jednomu řádku a zalomený řádek si
+své fragmenty sjednotí. Přepnutí tabu z toho vyšlo **462 → 433 ms** u 2000řádkového a
+**225 → 196 ms** u 500řádkového diffu.
+
+**Dvě věci, které se u toho musely trefit přesně, a obě chytil test** (`DiffLineFramesTests`):
+
+- `usedRect` fragmentu **obsahuje `lineFragmentPadding`**, kdežto `boundingRect` vrací rámeček
+  samotných glyfů — bez odečtení vyšly rámečky o **5 bodů** vedle;
+- u **zalomeného** řádku vrací `boundingRect` šířku **celého kontejneru**, kdežto sjednocení
+  použitých částí jen tu nejdelší — rozdíl 70–78 bodů. Řádek s víc fragmenty proto bere vodorovný
+  rozměr ze sjednocení **fragmentů**, ne použitých částí.
+
+Obojí by byla **tichá** vada: pilulka i kotva by seděly vedle a nic by se neohlásilo. Referencí
+v testu je proto `frame(ofLine:)`, tedy ta stará cesta — v kódu zůstává pro jednotlivé dotazy
+a jako záchrana pro řádek, na který se v průchodu nedostane.
+
 ### Stráž v `updateNSView` (#393)
 
 **`updateNSView` se volá při každém přepočtu geometrie bloku, ne při jeho změně.** Ve ztuhlém okně
