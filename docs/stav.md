@@ -5357,10 +5357,40 @@ se proto dřív než `kill()`, a značku v `sessions.json` to neohrozí, tu maž
 a nový adresář si nevezme — popiska by tedy ukazovala jinam, než kde shell stojí. Adresář se hledá
 jen relaci, která ho ještě nemá.
 
-Testů **4346**, všechny zelené — z toho **36 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
+**Tři věci z druhého proklikání, a dvě z nich se ukázaly jako správné chování.**
+
+**Dotaz na důvěru ke složce se odstranil.** Interaktivní `claude` se v neznámém adresáři ptá
+*„Is this a project you created or one you trust?“*; review sessions to netrápí (běží s `-p`), ale
+`--resume` v zásuvce ano — a protože **každý PR dostane vlastní pracovní strom**, přišel by ten
+dialog u každého PR znovu. Volba ani proměnná prostředí na to **není** (`--help` zná jen `-p`),
+takže se zapisuje `hasTrustDialogAccepted` do `~/.claude.json` — což je cesta, na kterou **odkazuje
+sám `claude`** ve své binárce. Změřeno, že se důvěra **dědí z libovolného předka**, takže stačí
+**jeden záznam na kořen cache**, ne jeden na PR; klíčem je `realpath`, protože Foundation `/tmp`
+ani `/var` schválně nerozvíjí. Je to **první zápis aplikace mimo vlastní cache** a drží ho tři
+věci: na soubor, kterému nerozumí, **nesáhne**, zapisuje **atomicky** s přenesenými právy
+a **jen jednou**.
+
+**Session z `▶` běží v auto režimu** (`--permission-mode auto`). Je to **jiná třída session než ta
+z tvrdé podmínky č. 2**: tam jde o session, které pouští aplikace, a jejich sady se **nemění ani
+o položku**. Tahle je session, kterou **řídí člověk ve svém shellu** — a **nová práva nedostává**,
+protože zásuvka je plnohodnotný shell s kapslí `plná práva`; odpadají dotazy, ne hranice. Z šesti
+režimů je `auto` jediný s **vyjmenovanými a čitelnými pravidly** (`claude auto-mode defaults`);
+`bypassPermissions` je „bypass all permission checks“ a do repa nepatří. **Napevno, ne v nastavení.**
+`⧉` přepínač **nedostane**, takže se `▶` a `⧉` poprvé rozcházejí — skládá je ale pořád jedna funkce.
+
+**Rolování se měřilo, neopravovalo.** Tři otázky, tři měření, **žádná chyba**: kolečko padne do
+plochy emulátoru (`hitTest` **v okně** — bez okna vrátí kořen a plochu nenajde, což první podoba
+sondy hlásila jako chybu, která není), scrollback má **500 řádků** a výřez se hýbe (`yDisp` 380 →
+377), a nad alternativním bufferem se nehýbe. Rozhoduje to poslední: změřeno, že `claude` posílá
+`ESC[?1049h` **a k tomu plné hlášení myši** (`?1000h`, `?1002h`, `?1003h`, `?1006h`), takže kolečko
+se **doručuje jemu** a terminál nemá kam couvnout — alternativní buffer je z definice bez historie.
+Tak se chová `Terminal.app` i `iTerm`.
+
+Testů **4362**, všechny zelené — z toho **52 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
 vytlačí, co je na záložce, co se řekne), store (**druhá session první nepřebije**, zavření záložky
 zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
 
 **Co ověřuje jedině člověk**: že se session v zásuvce doopravdy naváže, že přepínání mezi dvěma
-běžícími nic neukončí a jak obsah po přesázení **vypadá**. Do pty se v harnessu psát nedá a obsah
-emulátoru se odtud nepřečte vůbec (změřeno u #459).
+běžícími nic neukončí, že se **neobjeví dotaz na důvěru ke složce** (ten dialog je interaktivní)
+a jak obsah po přesázení **vypadá**. Do pty se v harnessu psát nedá a obsah emulátoru se odtud
+nepřečte vůbec (změřeno u #459).

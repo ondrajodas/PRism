@@ -407,6 +407,29 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    Odmítnutý nástroj **není chyba běhu**: session pokračuje a skončí `success`, odmítnutí je
    vidět v `permission_denials`.
 
+   **Session z `▶` v zásuvce pod tuhle podmínku nespadá, a je to hranice, ne výjimka** (#460).
+   Podmínka mluví o session, které **pouští aplikace** — reviewer, kontrola nálezů, překlad,
+   dotažení textu issue, `Zeptat se` —, a jejich vyjmenované sady se **nemění ani o položku**.
+   `claude --resume` v zásuvce je proti tomu session, kterou **řídí člověk ve svém shellu**: běží
+   s `--permission-mode auto`, aby nepřerušovala práci dotazem u každého kroku. **Nová práva to
+   nedává** — zásuvka je plnohodnotný shell s kapslí `plná práva`, takže cokoli, co ta session
+   udělá, si tam člověk může napsat sám; odpadají **dotazy**, ne hranice. Vybraný je `auto`
+   schválně: z šesti režimů `--permission-mode` je jediný, který má **vyjmenovaná a čitelná
+   pravidla** (`claude auto-mode defaults` vypíše `allow`, `soft_deny` i `hard_deny`).
+   **`bypassPermissions` ani `--dangerously-skip-permissions` v tomhle repu nemají co dělat**
+   a `⧉` režim povolení **nedostane** — kdo si příkaz kopíruje jinam, dostane ho tak, jak by ho
+   psal. Rozhoduje `Policy.drawerResumeCommand(sessionID:)`
+   ([záznam rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#auto-mode-v-zásuvce-460)).
+
+   **A od #460 aplikace zapisuje do konfigurace cizího nástroje** (`~/.claude.json`,
+   `WorkspaceTrusting`) — jedinou hodnotu, **důvěru ke kořeni vlastní cache**, aby se interaktivní
+   `claude` neptal na důvěru u každého nového pracovního stromu. Je to postup, na který odkazuje
+   sám `claude` ve své binárce, a hranice u něj drží tři věci: **na soubor, kterému nerozumí,
+   nesáhne** (rozbitá cizí konfigurace by byla ztráta cizí práce, kdežto neúspěch stojí jeden
+   dialog navíc a **je vidět sám**), **zapisuje atomicky a zachová, co v souboru je**, a **zapisuje
+   jednou** — hotová důvěra se nepřepisuje, takže běžný případ je čisté čtení. Podrobnosti a to,
+   co se u toho změřilo, jsou v [`docs/claude-cli.md`](docs/claude-cli.md).
+
    Co na téhle podmínce **nic nemění**, a proč: **kontrola nálezů z minula** (#150) má vlastní
    prompt, ale bere **tytéž konstanty** `ClaudeCommand.allowedTools` a `disallowedTools`
    a předchozí nálezy dostane jako materiál v promptu, ne jako nástroj

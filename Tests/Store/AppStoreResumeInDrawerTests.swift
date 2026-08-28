@@ -18,7 +18,7 @@ struct AppStoreResumeInDrawerTests {
     private func session(_ skill: String, id: String = "8c1f-42") -> TerminalSession {
         TerminalSession(
             directory: worktree,
-            command: Policy.resumeCommand(sessionID: id),
+            command: Policy.drawerResumeCommand(sessionID: id),
             skill: skill
         )
     }
@@ -29,11 +29,12 @@ struct AppStoreResumeInDrawerTests {
 
     private var shell: TerminalSlot { TerminalSlot(pullRequest: pullRequest, role: .shell) }
 
-    private func store(_ host: FakeTerminalHost) -> AppStore {
+    private func store(_ host: FakeTerminalHost, trust: FakeWorkspaceTrust? = nil) -> AppStore {
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
             time: FakeTimeSource(),
-            terminals: host
+            terminals: host,
+            workspaceTrust: trust
         )
         store.openTabs = [pullRequest]
         store.activeTab = .pullRequest(pullRequest)
@@ -44,11 +45,11 @@ struct AppStoreResumeInDrawerTests {
 
     /// Celý slib #460: `▶` **vytáhne zásuvku** místo cizího okna a session v ní naváže.
     @Test("▶ vytáhne zásuvku a pustí v ní session")
-    func theDrawerOpensAndTheSessionResumes() throws {
+    func theDrawerOpensAndTheSessionResumes() async throws {
         let host = FakeTerminalHost()
         let store = store(host)
 
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.isTerminalOpen)
         let run = try #require(host.ran.first)
@@ -62,14 +63,15 @@ struct AppStoreResumeInDrawerTests {
     /// **Tatáž řádka, jakou od #453 dostával `Terminal.app`** — s `cd` do pracovního stromu
     /// a s uzávorkovanou cestou.
     @Test("Do relace jde cd do stromu a teprve pak resume")
-    func theWorktreeComesFirst() {
+    func theWorktreeComesFirst() async {
         let host = FakeTerminalHost()
 
-        store(host).resumeInDrawer(session("php-review"), for: pullRequest)
+        await store(host).resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(
             host.ran.first?.line
-                == "cd '/Users/o/Library/Application Support/PRism/w/6-abc' && claude --resume 8c1f-42"
+                == "cd '/Users/o/Library/Application Support/PRism/w/6-abc' "
+                + "&& claude --resume 8c1f-42 --permission-mode auto"
         )
         #expect(host.ran.first?.line == session("php-review").shellLine)
     }
@@ -79,12 +81,12 @@ struct AppStoreResumeInDrawerTests {
     /// **Tohle je ta věc, kvůli které se #460 měnilo.** Aplikace pouští review paralelně, takže
     /// druhá session nesmí tu první přebít — obě mají vlastní relaci a přepíná se mezi nimi.
     @Test("Druhá session první nepřebije")
-    func theSecondSessionKeepsTheFirst() {
+    func theSecondSessionKeepsTheFirst() async {
         let host = FakeTerminalHost()
         let store = store(host)
 
-        store.resumeInDrawer(session("php-review", id: "aaa"), for: pullRequest)
-        store.resumeInDrawer(session("security-review", id: "bbb"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review", id: "aaa"), for: pullRequest)
+        await store.resumeInDrawer(session("security-review", id: "bbb"), for: pullRequest)
 
         #expect(store.terminalSlots[pullRequest] == [slot("php-review"), slot("security-review")])
         #expect(store.activeTerminalSlot(for: pullRequest) == slot("security-review"))
@@ -94,11 +96,11 @@ struct AppStoreResumeInDrawerTests {
 
     /// Klik na záložku přepínače **nic nespouští ani nezabíjí** — je to pohled.
     @Test("Klik na záložku jen přepne")
-    func selectingATabOnlySwitches() {
+    func selectingATabOnlySwitches() async {
         let host = FakeTerminalHost()
         let store = store(host)
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
-        store.resumeInDrawer(session("security-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("security-review"), for: pullRequest)
 
         store.selectTerminalSlot(slot("php-review"))
 
@@ -109,9 +111,9 @@ struct AppStoreResumeInDrawerTests {
 
     /// Relace, kterou zásuvka nemá, se vybrat nedá — jinak by hlavička ukazovala prázdno.
     @Test("Neexistující relace se nevybere")
-    func anUnknownSlotIsIgnored() {
+    func anUnknownSlotIsIgnored() async {
         let store = store(FakeTerminalHost())
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         store.selectTerminalSlot(slot("docs-review"))
 
@@ -127,7 +129,7 @@ struct AppStoreResumeInDrawerTests {
     @Test("⌃` dá relaci shell a běžící session nepřebije")
     func theShellIsOneOfTheSlots() async {
         let store = store(FakeTerminalHost())
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         await store.toggleTerminal()
         #expect(!store.isTerminalOpen)
@@ -168,10 +170,10 @@ struct AppStoreResumeInDrawerTests {
 
     /// Záložky přepínače nesou puntík podle stavu **té** relace, ne jednoho stavu na zásuvku.
     @Test("Přepínač nese stav každé relace zvlášť")
-    func everyTabCarriesItsOwnState() throws {
+    func everyTabCarriesItsOwnState() async throws {
         let store = store(FakeTerminalHost())
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
-        store.resumeInDrawer(session("security-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("security-review"), for: pullRequest)
         store.terminalStates[slot("php-review")] = .running
         store.terminalStates[slot("security-review")] = .exited(code: 130)
 
@@ -188,14 +190,14 @@ struct AppStoreResumeInDrawerTests {
     /// **Běžící relace se nevytlačuje.** Když je plno a všechny běží, nová nevznikne a řekne se to
     /// — mlčky nevzniklá záložka vypadá jako rozbité tlačítko.
     @Test("Plný strop s běžícími relacemi novou nepustí")
-    func afullDrawerRefusesAndSaysSo() throws {
+    func afullDrawerRefusesAndSaysSo() async throws {
         let host = FakeTerminalHost()
         let store = store(host)
         let taken = (0..<Policy.maxTerminalSlots).map { slot("reviewer-\($0)") }
         store.terminalSlots[pullRequest] = taken
         for slot in taken { store.terminalStates[slot] = .running }
 
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.terminalSlots[pullRequest] == taken)
         #expect(host.ran.isEmpty)
@@ -207,7 +209,7 @@ struct AppStoreResumeInDrawerTests {
 
     /// Vytlačí se **nejstarší neběžící**: zahodí se jen výpis, který je z definice minulost.
     @Test("Plný strop vytlačí nejstarší doběhlou relaci")
-    func afullDrawerEvictsTheOldestIdleSlot() {
+    func afullDrawerEvictsTheOldestIdleSlot() async {
         let host = FakeTerminalHost()
         let store = store(host)
         let taken = (0..<Policy.maxTerminalSlots).map { slot("reviewer-\($0)") }
@@ -215,7 +217,7 @@ struct AppStoreResumeInDrawerTests {
         for slot in taken.dropFirst() { store.terminalStates[slot] = .running }
         store.terminalStates[taken[0]] = .exited(code: 0)
 
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(host.stopped == [taken[0]])
         #expect(store.terminalSlots[pullRequest]?.contains(taken[0]) == false)
@@ -228,14 +230,14 @@ struct AppStoreResumeInDrawerTests {
     /// **Přepne se na tu relaci, i když se nic neposlalo**: běžící příkaz je přesně to, na co se
     /// má člověk podívat — a od #460 to není slepá ulička.
     @Test("Zaneprázdněná relace se řekne a stejně se ukáže")
-    func abusySlotIsReportedAndShown() throws {
+    func abusySlotIsReportedAndShown() async throws {
         let host = FakeTerminalHost()
         host.outcome = .busy
         let store = store(host)
         store.terminalSlots[pullRequest] = [slot("php-review")]
         store.terminalDirectories[slot("php-review")] = URL(filePath: "/tmp/jinde")
 
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.isTerminalOpen)
         #expect(store.activeTerminalSlot(for: pullRequest) == slot("php-review"))
@@ -252,12 +254,12 @@ struct AppStoreResumeInDrawerTests {
     /// bez ní kreslí zásuvka větu „Tenhle pull request nemá v cache pracovní kopii“, a ta by
     /// lhala — strom na disku je, nepovedl se shell.
     @Test("Nespuštěný shell se řekne, ale cesta v hlavičce zůstane pravdivá")
-    func aShellThatNeverStartedIsReported() throws {
+    func aShellThatNeverStartedIsReported() async throws {
         let host = FakeTerminalHost()
         host.outcome = .noShell
 
         let store = store(host)
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         let failure = try #require(store.terminalFailure)
         #expect(failure.contains("nepodařilo spustit"))
@@ -266,16 +268,16 @@ struct AppStoreResumeInDrawerTests {
 
     /// Hláška zmizí teprve tehdy, když se to **doopravdy povede**.
     @Test("Povedený pokus po nepovedeném hlášku zahodí")
-    func aSuccessfulRetryClearsTheNotice() {
+    func aSuccessfulRetryClearsTheNotice() async {
         let host = FakeTerminalHost()
         host.outcome = .busy
         let store = store(host)
 
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
         #expect(store.terminalFailure != nil)
 
         host.outcome = .sent
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(store.terminalFailure == nil)
         #expect(host.ran.count == 2)
@@ -285,7 +287,7 @@ struct AppStoreResumeInDrawerTests {
 
     /// **Tlačítko se nekreslí**, místo aby tiše spadlo zpátky na `Terminal.app`.
     @Test("Bez hostitele se ▶ nenabízí a nic se nestane")
-    func withoutAHostThereIsNoButton() {
+    func withoutAHostThereIsNoButton() async {
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([])),
             time: FakeTimeSource()
@@ -295,7 +297,7 @@ struct AppStoreResumeInDrawerTests {
 
         #expect(!store.hasTerminalDrawer)
 
-        store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
         #expect(!store.isTerminalOpen)
         #expect(store.terminalFailure == nil)
@@ -305,5 +307,87 @@ struct AppStoreResumeInDrawerTests {
     @Test("S hostitelem se ▶ nabízí")
     func withAHostTheButtonIsOffered() {
         #expect(store(FakeTerminalHost()).hasTerminalDrawer)
+    }
+
+    // MARK: - Důvěra ke složce (#460)
+
+    /// **Zapisuje se dřív, než se řádka pošle** — jinak by `claude` stihl vyskočit s dotazem.
+    /// A zapisuje se **kořen cache**, ne strom toho PR: důvěra se dědí, takže jeden záznam
+    /// pokryje všechny pull requesty.
+    @Test("▶ napřed zapíše důvěru ke kořeni cache, pak pustí session")
+    func trustIsRegisteredBeforeTheCommandGoesOut() async {
+        let host = FakeTerminalHost()
+        let trust = FakeWorkspaceTrust()
+        let store = store(host, trust: trust)
+
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        #expect(trust.trusted == [CacheLayout.applicationSupport.root])
+        #expect(host.ran.count == 1)
+    }
+
+    /// **Konfigurace se nečte při každém otevření zásuvky**: `~/.claude.json` má přes 200 kB
+    /// a hodnota se mění jednou za život složky.
+    @Test("Důvěra se zapisuje jednou, ne při každém otevření")
+    func trustIsRegisteredOnlyOnce() async {
+        let host = FakeTerminalHost()
+        let trust = FakeWorkspaceTrust()
+        let store = store(host, trust: trust)
+
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(session("security-review"), for: pullRequest)
+        await store.toggleTerminal()
+
+        #expect(trust.trusted.count == 1)
+    }
+
+    /// **Po neúspěchu se to zkusí znovu.** Dokud se to nepovede, chodí ten dotaz na důvěru —
+    /// a vzdát to po prvním pokusu by znamenalo, že se z něj nikdy nevyhrabeme.
+    @Test("Nepovedený zápis se zkusí při dalším otevření znovu")
+    func afailedRegistrationIsRetried() async {
+        let host = FakeTerminalHost()
+        let trust = FakeWorkspaceTrust()
+        trust.failure = WorkspaceTrustError.configurationUnreadable
+        let store = store(host, trust: trust)
+
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+        #expect(trust.trusted.count == 1)
+        // **A session se pustí i tak** — dialog navíc je pořád lepší než tlačítko, které nic neudělá.
+        #expect(host.ran.count == 1)
+        #expect(store.terminalFailure == nil)
+
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        #expect(trust.trusted.count == 2)
+    }
+
+    /// Store bez té závislosti nesmí spadnout ani si nic vymyslet — tak jsou na tom testy, které
+    /// o konfiguraci Claude Code nestojí.
+    @Test("Bez závislosti se nic nezapisuje")
+    func withoutTheDependencyNothingIsWritten() async {
+        let host = FakeTerminalHost()
+        let store = store(host)
+
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+
+        #expect(host.ran.count == 1)
+    }
+}
+
+/// Zápis důvěry, který nic nezapisuje — jen si pamatuje, na co se ho kdo ptal.
+///
+/// `@MainActor` schválně: volá se z `AppStore`, který na hlavním aktoru je, takže si fake vystačí
+/// s jeho izolací a nepotřebuje zámek (a zámky se v `async` kontextu brát nesmí).
+@MainActor
+final class FakeWorkspaceTrust: WorkspaceTrusting {
+    private(set) var trusted: [URL] = []
+
+    /// Když je nastavená, `trust(_:)` ji vyhodí — pokus se ale **zaznamená**, takže se dá tvrdit,
+    /// že se opakuje.
+    var failure: (any Error)?
+
+    func trust(_ directory: URL) async throws {
+        trusted.append(directory)
+        if let failure { throw failure }
     }
 }

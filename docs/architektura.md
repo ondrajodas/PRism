@@ -9168,6 +9168,54 @@ stopy ta informace zmizet nesmí. `crit` proto znamená **nenulový** konec a ce
 v nápovědě záložky (`Policy.terminalSlotHelp`). Kód, který **nedorazil**, se přitom kreslí jako
 klid, ne jako chyba: je to odpověď „nevíme“, a červený puntík by tvrdil víc, než data unesou.
 
+### Důvěra ke složce a auto-mode (#460)
+
+`▶` pouští **interaktivní** `claude`, a to s sebou nese dvě věci, které se review sessions netýkají
+(ty běží s `-p`):
+
+- **Dotaz na důvěru ke složce.** Interaktivní `claude` se v neznámém adresáři ptá *„Is this
+  a project you created or one you trust?“* — a protože **každý PR dostane vlastní pracovní
+  strom**, přišel by ten dialog u každého PR znovu. Zapisuje se proto `hasTrustDialogAccepted`
+  do `~/.claude.json`, a to **jednou, na kořen cache**: změřeno, že se důvěra dědí z libovolného
+  předka. Je to postup, na který odkazuje sám `claude` ve své binárce, a je to zároveň **přesně ta
+  hranice, kterou aplikace už má** (tvrdá podmínka č. 3). Měření a tvar záznamu jsou
+  v [`docs/claude-cli.md`](claude-cli.md).
+- **Režim povolení `auto`** (`Policy.drawerResumeCommand`). Session, kterou řídí člověk ve svém
+  shellu, nemá přerušovat práci dotazem u každého kroku. **Nová práva to nedává** — zásuvka je
+  plnohodnotný shell s kapslí `plná práva`, takže odpadají **dotazy**, ne hranice. `auto` je z těch
+  šesti režimů jediný s vyjmenovanými a čitelnými pravidly; `bypassPermissions` je „bypass all
+  permission checks“ a do repa nepatří.
+
+Dvě věci na tom nejsou zjevné:
+
+- **`⧉` a `▶` se od #460 rozcházejí, a je to vědomá změna proti #453.** Do té doby tu stálo, že je
+  to týž příkaz. Zůstává z toho to podstatné — **skládá to jedna funkce**
+  (`drawerResumeCommand` = `resumeCommand` + režim), takže se ty dva texty nemají čím rozejít, a
+  liší se přesně o jednu vyjmenovanou věc. `⧉` ji nedostane schválně: kdo si příkaz kopíruje jinam,
+  dostane ho tak, jak by ho psal.
+- **Selhání zápisu důvěry se nehlásí ve stavovém řádku**, a je to zapsaná výjimka z pravidla
+  o spolknutých chybách. Otázka, kterou to pravidlo klade, zní „pozná uživatel, že se to
+  nepovedlo?“ — a tady zní odpověď **ano, sám od sebe**: objeví se ten dotaz na důvěru, tedy přesně
+  to, co to mělo ušetřit.
+
+### Rolování — co se u #460 naměřilo
+
+Hlášení znělo „nejde mi scrollovat v tom terminálu“. Rozpadá se na tři otázky, každá znamená jinou
+opravu, a **žádná z nich nevyšla jako chyba** (`TerminalScrollProbe`):
+
+| Co se měřilo | Naměřeno |
+|---|---|
+| Dostane kolečko emulátor, nebo ho spolkne něco nad ním? | `hitTest` uprostřed zásuvky padne **do plochy emulátoru**. Měří se **v okně**: bez okna vrátí `hitTest` kořen a plochu vůbec nenajde, přestože v hierarchii je — sonda bez okna by tedy hlásila chybu, která není |
+| Má čím rolovat? | Scrollback **500 řádků**; po kolečku se výřez posune (`yDisp` 380 → 377) |
+| A nad běžícím TUI? | `yDisp` 0 → 0 — **správně**: alternativní buffer scrollback nemá |
+
+**Rozhodující je ta třetí řádka.** `claude` posílá `ESC[?1049h` (alternativní buffer) **a k tomu
+plné hlášení myši** (`?1000h`, `?1002h`, `?1003h`, `?1006h`) — změřeno pty sondou. Kolečko se mu
+tedy **doručuje jako událost** a co s ním udělá, je jeho rozhodnutí; terminál nemá kam couvnout,
+protože alternativní buffer je z definice bez historie. Tak se chová `Terminal.app` i `iTerm`.
+**Neopravovalo se proto nic** — v holém shellu se roluje normálně a nad běžícím `claude` se roluje
+uvnitř `claude`.
+
 ### Změna velikosti — co se u #460 naměřilo
 
 Hlášení z #459 znělo „resize ne úplně funguje, asi se přeskládává text“. Rozpadá se na tři otázky
@@ -9287,6 +9335,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
 | `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
 | `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
+| `WorkspaceTrusting` | Protokol: zapiš důvěru ke složce do `~/.claude.json` (#460). `ClaudeWorkspaceTrust` — **jediné místo, kde aplikace píše mimo svoji cache**. Na soubor, kterému nerozumí, **nesáhne**; zapisuje **atomicky** (`replaceItemAt`, přenese `0600`) a **jen jednou** — hotová důvěra se nepřepisuje, takže běžný případ je čisté čtení |
 | `TerminalOpening` | Protokol: pusť řádku v novém okně terminálu (#453). `AppleScriptTerminal` nad `/usr/bin/osascript` — **není to druhá cesta ven**, terminál je mimo aplikaci. Příkaz jde do skriptu jako `argv`, ne vlepený do jeho zdrojáku, a selhání se **vrací jako chyba** (`TerminalError`), ne mlčí. **Od #460 to nikdo nevolá** — drží se jako záloha i s `NSAppleEventsUsageDescription`, viz specifikace |
 
 Nad notifikacemi (#88) platí:

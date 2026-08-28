@@ -50,21 +50,45 @@ struct TerminalSessionTests {
         )
 
         #expect(session.directory == URL(filePath: "/tmp/w"))
-        #expect(session.command == "claude --resume abc-123")
+        #expect(session.command == "claude --resume abc-123 --permission-mode auto")
     }
 
     // MARK: - Týž příkaz, jaký se kopíruje
 
-    /// Celý slib #453 je „**tentýž** příkaz, jen rovnou puštěný“. Kdyby se ty dva texty rozešly,
-    /// pozná se to jedině tím, že jeden z nich nefunguje — proto je skládá jedna funkce a proto
-    /// se to tvrdí tady.
-    @Test("Terminál pouští týž příkaz, jaký kopíruje ⧉")
-    func theTerminalRunsWhatTheCopyButtonCopies() throws {
+    /// Do #460 to byl **týž** příkaz. Od #460 se liší přesně o jednu vyjmenovanou věc — režim
+    /// povolení —, a co ze slibu #453 zůstává, je to podstatné: **skládá to jedna funkce**, takže
+    /// se ty dva texty nemají čím rozejít.
+    @Test("Zásuvka pouští příkaz z ⧉ a k němu režim povolení")
+    func thedrawerRunsTheCopiedCommandPlusTheMode() throws {
         let session = try #require(
             Policy.terminalSession(of: lane(session: "8c1f-42", worktree: URL(filePath: "/tmp/w")))
         )
 
-        #expect(session.command == Policy.resumeCommand(sessionID: "8c1f-42"))
+        #expect(session.command.hasPrefix(Policy.resumeCommand(sessionID: "8c1f-42")))
+        #expect(session.command == Policy.drawerResumeCommand(sessionID: "8c1f-42"))
+    }
+
+    /// **`⧉` režim povolení nedostane, a je to schválně**: kdo si příkaz kopíruje do iTermu nebo
+    /// na jiný stroj, dostane ho tak, jak by ho psal.
+    @Test("Kopírovaný příkaz zůstává holý")
+    func thecopiedCommandStaysBare() {
+        #expect(Policy.resumeCommand(sessionID: "8c1f-42") == "claude --resume 8c1f-42")
+        #expect(!Policy.resumeCommand(sessionID: "8c1f-42").contains("--permission-mode"))
+    }
+
+    /// **`auto`, ne `bypassPermissions` a ne `dontAsk`.** Je to jediný z režimů, který má
+    /// vyjmenovaná a čitelná pravidla (`claude auto-mode defaults` vypíše `allow`, `soft_deny`
+    /// i `hard_deny`), takže hranice zůstávají — odpadají dotazy, ne hranice.
+    @Test("Zásuvka běží v auto režimu, ne v obcházení povolení")
+    func thedrawerRunsInAutoMode() {
+        #expect(Policy.drawerPermissionMode == "auto")
+        #expect(
+            Policy.drawerResumeCommand(sessionID: "abc")
+                == "claude --resume abc --permission-mode auto"
+        )
+        for forbidden in ["bypassPermissions", "dangerously", "dontAsk"] {
+            #expect(!Policy.drawerResumeCommand(sessionID: "abc").contains(forbidden))
+        }
     }
 
     @Test("Příkaz je claude --resume s identifikátorem")
@@ -89,6 +113,8 @@ struct TerminalSessionTests {
                 == "cd '/Users/o/Library/Application Support/PRism/worktrees/o/r/6-abc' "
                 + "&& claude --resume abc-123"
         )
+        // Řádka se skládá z toho, co dostala — `cd` a `&&` k příkazu nic nepřidávají.
+        #expect(session.shellLine.hasSuffix(session.command))
     }
 
     /// Cesta s apostrofem uzávorkování rozbije **potichu** — příkaz se pustí rozstřelený a pozná

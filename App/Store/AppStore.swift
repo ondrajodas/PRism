@@ -430,6 +430,12 @@ final class AppStore {
     /// **Od #460 to `▶` nepoužívá** — drží se jako záloha, viz `openInTerminal(_:)`.
     let terminal: (any TerminalOpening)?
 
+    /// Důvěra ke složce v konfiguraci Claude Code (#460). `nil` = odsud se nezapisuje (testy).
+    ///
+    /// Nepovinné ze stejného důvodu jako `terminal`: živá implementace sahá na soubor **mimo naši
+    /// cache**, takže by z každého testu, který si složí store, byl test píšící do `~/.claude.json`.
+    let workspaceTrust: (any WorkspaceTrusting)?
+
     /// Co má terminál za novinu. `nil` = nic se nepokazilo.
     ///
     /// **Musí být vidět, a je to celý důvod, proč ten stav existuje**: výsledek téhle akce je
@@ -694,6 +700,16 @@ final class AppStore {
     /// --resume` hledá vlákno podle adresáře.
     var terminalDirectories: [TerminalSlot: URL] = [:]
 
+    /// Je už zapsaná důvěra ke kořeni cache? (#460)
+    ///
+    /// **Drží se proto, aby se konfigurace Claude Code nečetla při každém otevření zásuvky**:
+    /// `~/.claude.json` má na tomhle stroji přes 200 kB a rozebrat ho kvůli hodnotě, která se mění
+    /// **jednou za život složky**, je zrovna to čtení všeho, kde stačí předfiltr.
+    ///
+    /// Nastavuje se **jen po úspěchu**, takže se po neúspěšném zápisu zkusí příště znovu — a to je
+    /// důležitější než ušetřené čtení: dokud se to nepovede, chodí ten dotaz na důvěru.
+    var hasRegisteredWorkspaceTrust = false
+
     /// Které relace zásuvka pro ten PR drží, **v pořadí vzniku** (#460).
     ///
     /// Pořadí je pořadí záložek v přepínači a nesmí se přeskládat pod rukama; strop hlídá
@@ -711,6 +727,7 @@ final class AppStore {
         eviction: CacheEviction? = nil,
         checkout: (any RepoCheckout)? = nil,
         terminals: (any TerminalHosting)? = nil,
+        workspaceTrust: (any WorkspaceTrusting)? = nil,
         reviewer: (any ReviewRunning)? = nil,
         reviews: ReviewStore? = nil,
         drafts: ReviewDraftStore? = nil,
@@ -761,6 +778,7 @@ final class AppStore {
         self.gateway = gateway
         self.checkout = checkout
         self.terminals = terminals
+        self.workspaceTrust = workspaceTrust
         self.reviewer = reviewer
         self.reviews = reviews
         draftStore = drafts
@@ -845,6 +863,7 @@ final class AppStore {
             checkout: checkout,
             // Zásuvka s terminálem (#459). Živá jedině tady — testy shell nespouštějí.
             terminals: TerminalHost(),
+            workspaceTrust: ClaudeWorkspaceTrust.inHomeDirectory,
             reviewer: ClaudeReviewRunner(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,

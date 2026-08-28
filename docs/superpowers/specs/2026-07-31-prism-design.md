@@ -3778,6 +3778,86 @@ jako otrava, je to samostatná změna s vlastním měřením.
 ikonou znamenají, že se nedá spolehnout ani na jedno. Je to tatáž úvaha jako u
 `Policy.terminalSession(of:)`, jen o druhou podmínku dál.
 
+#### Důvěra ke složce (#460)
+
+`▶` pouští **interaktivní** `claude`, který se v neznámém adresáři ptá *„Is this a project you
+created or one you trust?“*. Review sessions na to nenarazí (běží s `-p`), jenže **každý pull
+request dostane vlastní pracovní strom**, takže by ten dialog přišel u **každého PR znovu** — a z
+`▶` by nadobro byla dvoukroková akce.
+
+Pořadí, ve kterém se hledalo řešení, a co z něj vyšlo:
+
+1. **Volba nebo proměnná prostředí** — **není.** `claude --help` zná jen `-p` (a obecně
+   neinteraktivní režim), což je přesně to, co v zásuvce použít nejde.
+2. **Předregistrovat cestu do `~/.claude.json`** — **tudy to jde**, a není to obcházení: v binárce
+   `claude` stojí **dvakrát** věta *„…accept the trust dialog here once interactively, or set
+   `projects[<cesta>].hasTrustDialogAccepted` in `~/.claude.json`“*. Je to tedy dokumentovaná
+   druhá cesta, ne trik.
+3. Nedělat nic — zamítnuto, protože ten jeden klik by nebyl jeden, ale jeden na každý PR.
+
+**Zapisuje se do konfigurace cizího nástroje, a to je v tomhle repu nová věc** (do #460 psala
+aplikace jedině do své cache). Obhajitelné je to tím, **co** se zapisuje: důvěra ke složce, kterou
+**vyrobila aplikace sama** z repozitáře, jejž si uživatel nakonfiguroval.
+
+| Rozhodnutí | Proč tak |
+|---|---|
+| **Registruje se kořen cache, ne cesta na každý PR** | Změřeno, že se důvěra **dědí z libovolného předka** (registrovaný adresář o tři patra výš dialog potlačil). Jeden záznam za život tedy pokryje všechny pracovní stromy i bare klony — a je to **přesně ta hranice, kterou aplikace už má** (tvrdá podmínka č. 3) |
+| **Klíčem je `realpath`, ne `URL.resolvingSymlinksInPath()`** | Změřeno: `claude` nad `/tmp/x` hlásí `/private/tmp/x`, kdežto Foundation `/tmp` ani `/var` schválně nerozvíjí (vrátí `/tmp`) — a přesně tyhle dva prefixy jsou na macOS symlinky |
+| **Na soubor, kterému nerozumí, se nesáhne** | Ztráta při nezapsání je **jeden dialog navíc**; přepsaná konfigurace by byla ztráta cizí práce. Chybějící soubor se proto **ani nezakládá**: `claude` si ho založí sám a při té příležitosti se zeptá |
+| **Atomicky, a s přenesenými právy** | Dočasný soubor ve stejné složce a `replaceItemAt`, takže při pádu uprostřed zůstane původní verze — a `0600` se zachová, aby se konfigurace nezpřístupnila |
+| **Zapisuje se jen jednou** | Hotová důvěra se nepřepisuje, takže běžný případ je **čisté čtení**. Je to zároveň jediná ochrana proti souběžnému zápisu `claude` samotného, kterou máme: okno, ve kterém se dá o cizí změnu přijít, je **jedno jediné zapsání za život té složky** |
+| **Selhání se nehlásí ve stavovém řádku** | Zapsaná výjimka z pravidla o spolknutých chybách. Otázka toho pravidla zní „pozná uživatel, že se to nepovedlo?“ — a tady **ano, sám od sebe**: objeví se ten dotaz na důvěru, tedy přesně to, co to mělo ušetřit. Hláška navíc by přišla při každém otevření zásuvky a nic by nepřidala |
+
+Co to **stojí a je to zapsané**: `JSONSerialization` pořadí klíčů nezachovává, takže první zápis
+soubor **přeskládá**. Je to jediná viditelná změna, kterou to udělá — obsah zůstává.
+
+#### Auto-mode v zásuvce (#460)
+
+Session z `▶` běží s **`--permission-mode auto`**, aby se neptala na povolení u každého kroku:
+člověk na `▶` klikne proto, aby se ptal on, ne aby odklikával dialogy.
+
+**Je to jiná třída session než ta, o které mluví tvrdá podmínka č. 2**, a v dokumentaci to musí být
+vidět jako dvě věci, ne jako rozvolnění jedné. Podmínka mluví o session, které **pouští aplikace**
+(reviewer, kontrola nálezů, překlad, text issue, `Zeptat se`) — jejich vyjmenované sady se **nemění
+ani o položku**. `claude --resume` v zásuvce je proti tomu session, kterou **řídí člověk ve svém
+shellu**.
+
+**Nová práva to nedává**, a je to ta podstatná věta: zásuvka je plnohodnotný shell s kapslí
+`plná práva`, takže cokoli, co ta session udělá, si tam člověk může napsat sám. Odpadají **dotazy**,
+ne hranice.
+
+Z šesti hodnot `--permission-mode` (`acceptEdits`, `auto`, `bypassPermissions`, `manual`,
+`dontAsk`, `plan`) je vybraný `auto`, protože je **jediný s vyjmenovanými a čitelnými pravidly** —
+`claude auto-mode defaults` vypíše `allow`, `soft_deny` i `hard_deny`. `bypassPermissions` je podle
+`--help` doslova „Bypass all permission checks“ (to, co zapíná `--dangerously-skip-permissions`)
+a do tohohle repa nepatří; `manual` a `acceptEdits` dotazy neodstraní, `plan` mění, co session
+dělá, a `dontAsk` nemá sadu pravidel, podle které by se dalo posoudit, co ještě zastaví.
+
+**Napevno, ne v nastavení**, a je to rozhodnutí: konfigurace pro jedno tlačítko je předčasná
+a `config.json` je dlouhý. Až si někdo řekne o opak, je to jeden klíč navíc.
+
+**`⧉` režim povolení nedostane** — kdo si příkaz kopíruje do iTermu nebo na jiný stroj, dostane ho
+tak, jak by ho psal. Tím se `▶` a `⧉` **poprvé rozcházejí** (do #460 tu stálo, že je to týž
+příkaz), ale to podstatné ze slibu #453 zůstává: **skládá to jedna funkce**
+(`drawerResumeCommand` = `resumeCommand` + režim), takže se ty dva texty nemají čím rozejít a liší
+se přesně o jednu vyjmenovanou věc.
+
+#### Rolování se měřilo, neopravovalo (#460)
+
+Hlášení znělo „nejde mi scrollovat v tom terminálu“. Rozpadá se na tři otázky a **žádná nevyšla
+jako chyba**: kolečko padne do plochy emulátoru (`hitTest` **v okně**), scrollback má 500 řádků
+a výřez se po kolečku hýbe (`yDisp` 380 → 377), a nad alternativním bufferem se nehýbe — což je
+**správné chování**.
+
+Rozhoduje ta třetí věc. Změřeno pty sondou, že `claude` posílá `ESC[?1049h` (alternativní buffer)
+**a k tomu plné hlášení myši** (`?1000h`, `?1002h`, `?1003h`, `?1006h`): kolečko se mu tedy
+**doručuje jako událost** a co s ním udělá, je jeho rozhodnutí, kdežto terminál nemá kam couvnout,
+protože alternativní buffer je z definice bez historie. Tak se chová `Terminal.app` i `iTerm`.
+
+**Sonda se u toho sama málem zmýlila, a je to zapsané**: `hitTest` nad `NSHostingView` **bez okna**
+vrátí kořen a plochu emulátoru vůbec nenajde, přestože v hierarchii je. První podoba sondy takhle
+hlásila chybu, která není. Měří se proto v okně (`orderFrontUnanimated()`, #462).
+
 #### Osud `AppleScriptTerminal` (#460)
 
 **Zůstává, bez volajícího, i s `NSAppleEventsUsageDescription` v `Info.plist`** — a je to

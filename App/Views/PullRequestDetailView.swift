@@ -1455,7 +1455,7 @@ struct PullRequestDetailView: View {
             // stavový řádek. `nil` = v tomhle okně zásuvka není, takže se `▶` **nekreslí** —
             // tichý pád zpátky do `Terminal.app` by byla dvě chování pod jednou ikonou.
             resumeInDrawer: store.hasTerminalDrawer
-                ? { session in store.resumeInDrawer(session, for: pullRequest.id) }
+                ? { session in Task { await store.resumeInDrawer(session, for: pullRequest.id) } }
                 : nil,
             slug: "\(pullRequest.repo)#\(pullRequest.number)"
         )

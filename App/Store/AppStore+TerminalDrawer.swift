@@ -26,6 +26,7 @@ extension AppStore {
             return
         }
         guard let pr = activeTab.pullRequest else { return }
+        await registerWorkspaceTrust()
         await prepareTerminalDrawer(for: pr)
     }
 
@@ -101,12 +102,16 @@ extension AppStore {
     /// **Fokus si to nebere.** Sebrat ho znamená sáhnout na první responder v tomtéž průchodu,
     /// ve kterém se plocha teprve staví (past z #184), a ověřit se to dá jedině na běžící
     /// aplikaci. Kliknout do zásuvky je proti tomu jeden klik.
-    func resumeInDrawer(_ session: TerminalSession, for pr: PRIdentifier) {
+    func resumeInDrawer(_ session: TerminalSession, for pr: PRIdentifier) async {
         // Bez hostitele se `▶` nekreslí, takže sem se nedojde — a kdyby přece, nesmí se vymyslet
         // hláška o něčem, o co se nikdo nepokusil.
         guard let terminals else { return }
         let slot = TerminalSlot(pullRequest: pr, role: .session(session.skill))
         isTerminalOpen = true
+        // **Důvěra ke složce se zapisuje dřív, než se řádka pošle** (#460): `claude --resume` je
+        // interaktivní, takže by se v novém pracovním stromu zeptal, jestli té složce věřit —
+        // a strom je nový u **každého** PR, takže by ten dotaz přišel pokaždé znovu.
+        await registerWorkspaceTrust()
         guard admit(slot, showing: true) else {
             terminalFailure = Policy.slotsFullNotice(Policy.terminalSlotTitle(slot.role))
             return
@@ -169,6 +174,32 @@ extension AppStore {
             )
         }
         terminalSlots[slot.pullRequest] = slots.filter { $0 != slot }
+    }
+
+    /// Zapíše důvěru ke **kořeni cache** do konfigurace Claude Code (#460).
+    ///
+    /// **Jeden záznam na všechno, ne jeden na pull request.** Změřeno, že se důvěra dědí
+    /// z libovolného předka (registrovaný adresář o tři patra výš dialog potlačil), takže kořen
+    /// cache pokryje i pracovní stromy, i bare klony — a nemusí se zapisovat znovu s každým novým
+    /// PR. Je to zároveň **přesně ta hranice, kterou aplikace už má**: tvrdá podmínka č. 3 říká,
+    /// že se pracuje výhradně tady a nikdy v uživatelových klonech.
+    ///
+    /// **Selhání se nehlásí ve stavovém řádku, a je to zapsaná výjimka** z pravidla o spolknutých
+    /// chybách. Otázka, kterou to pravidlo klade, zní „pozná uživatel, že se to nepovedlo?“ — a
+    /// tady zní odpověď **ano, sám od sebe**: v zásuvce se objeví ten dotaz na důvěru, tedy přesně
+    /// to, co tohle mělo ušetřit. Hláška navíc by k tomu nic nepřidala a přišla by při každém
+    /// otevření zásuvky. Co se **nesmí** stát, je rozbitá cizí konfigurace — to hlídá
+    /// `ClaudeWorkspaceTrust` tím, že na soubor, kterému nerozumí, vůbec nesáhne.
+    private func registerWorkspaceTrust() async {
+        guard let workspaceTrust, !hasRegisteredWorkspaceTrust else { return }
+        do {
+            try await workspaceTrust.trust(CacheLayout.applicationSupport.root)
+            hasRegisteredWorkspaceTrust = true
+        } catch {
+            // **Nehlásí se, a jen tady**: příznak zůstává `false`, takže se to při dalším otevření
+            // zásuvky zkusí znovu — a než se to povede, přijde ten dotaz na důvěru, což je ta
+            // viditelná půlka.
+        }
     }
 
     // MARK: - Kde relace startuje

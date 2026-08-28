@@ -1274,6 +1274,23 @@ rozdělaného `claude`. Zásuvka se v tom případě jen přepne (běžící př
 potřeba se podívat) a ve stavovém řádku stojí, že se nic neposlalo. Když v relaci shell skončil,
 `▶` ho pustí znovu — starý výpis v ní přitom zůstane.
 
+**Session z `▶` běží v auto režimu** (`--permission-mode auto`), takže nepřerušuje práci dotazem
+u každého kroku — klikáš na `▶` proto, aby se ptala tebe, ne abys odklikával dialogy. **Nová práva
+to nedává**: zásuvka je plnohodnotný shell s kapslí `plná práva`, takže cokoli, co ta session
+udělá, si tam můžeš napsat sám; odpadají dotazy, ne hranice. `⧉` ten přepínač **nekopíruje** — kdo
+si příkaz pouští jinde, dostane ho tak, jak by ho psal.
+
+**A neptá se na důvěru ke složce.** Interaktivní `claude` se v neznámém adresáři ptá *„Is this
+a project you created or one you trust?“*, a protože každý PR dostane vlastní pracovní strom, přišel
+by ten dotaz u každého PR znovu. PRism proto jednou zapíše důvěru ke **kořeni své cache** do
+`~/.claude.json` — je to cesta, na kterou odkazuje sám `claude`, a důvěra se dědí na všechno pod ní.
+Na konfiguraci, které nerozumí, **nesáhne**; když se zápis nepovede, přijde jen ten dialog.
+
+**Rolovat jde v shellu, ne nad běžícím `claude` — a to je správně.** Celoobrazovkové TUI kreslí do
+alternativního bufferu, který z definice nemá historii, a `claude` si navíc zapíná hlášení myši,
+takže kolečko dostává on. Roluje se tedy uvnitř něj; v holém shellu má zásuvka 500 řádků historie.
+Stejně se chová `Terminal.app` i iTerm.
+
 Nabízí se to **jen tam, kde je co obnovit**: bez `session_id` **a bez pracovního stromu** se
 tlačítko nekreslí (ne zašedle — u dráhy, která teprve čeká na slot, by zašedlé slibovalo něco,
 co přijde samo). **Nekreslí se ani tam, kde zásuvka není** — tichý pád zpátky do `Terminal.app`

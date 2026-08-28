@@ -6701,9 +6701,30 @@ Co z toho stojí za zapamatování:
 - **Že zavření záložky zabije i tu relaci, která nebyla vidět**, se tvrdí přes seznam, ne přes
   aktivní relaci: `stopTerminals(for:)` dostane pull request, ne slot. Je to tvrzení o sirotkovi
   z #264 a #351, jen o jednu úroveň dál.
+- **U důvěry ke složce (#460) jsou nejcennější tvrzení o tom, co se NEpřepíše**
+  (`WorkspaceTrustTests`): rozbitá konfigurace, konfigurace, která není objekt, a chybějící soubor
+  se **nezakládá**. Píše se do souboru, který aplikace nevlastní, takže chyba tady nestojí funkci,
+  ale cizí práci — a ztráta při nezapsání je **jeden dialog navíc**. K tomu se tvrdí, že cizí klíče
+  přežijí a že se hotová důvěra **nezapisuje znovu** (přes čas změny souboru, ne přes obsah).
 - **Že do zásuvky jde `session.shellLine`, se tvrdí i literálem.** Text se porovnává s celou
   řádkou `cd '…' && claude --resume …` **a** s `session.shellLine`: první podoba chytí změnu
   uzávorkování, druhá to, že se `⧉` a `▶` rozešly.
+
+#### Sonda `TerminalScrollProbe` — tři různá „nejde scrollovat“ (#460)
+
+Vznikla na hlášení „nejde mi scrollovat v tom terminálu“ a **měří tři věci, protože každá znamená
+jinou opravu**: kdo dostane kolečko (`hitTest` nad zásuvkou), jestli má emulátor čím rolovat
+(scrollback a `yDisp` po kolečku) a co dělá kolečko **nad alternativním bufferem**.
+
+Dvě věci, které z ní plynou a bez ní by se hádaly:
+
+- **Hit test se musí měřit v okně** (`orderFrontUnanimated()`, #462). Bez okna vrátí `hitTest`
+  kořenový `NSHostingView` a plochu emulátoru vůbec nenajde, **přestože v hierarchii je** —
+  změřeno. Sonda bez okna by tedy hlásila chybu, která není, a poslala by opravu do vrstvy, kde
+  žádná není potřeba.
+- **Nad alternativním bufferem je „nejde rolovat“ správná odpověď.** Kolečko se tam nemá o co
+  opřít (scrollback z definice není) a `claude` si navíc zapíná plné hlášení myši, takže událost
+  dostane on. Tvrdí se to tedy jako **tvrzení o tom, co se nestane**: `yDisp` se nesmí pohnout.
 
 #### Sonda `TerminalResizeProbe` — kam až dojede rozměr (#460)
 
@@ -6789,6 +6810,14 @@ aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
 11. **Změna velikosti** (#460): rozměr do jádra dojede správně (změřeno, viz sonda níž), ale jak
     obsah po přesázení **vypadá**, se z harnessu přečíst nedá. Roztáhni okno i zásuvku nad běžícím
     `claude` a posuď, jestli se překreslí čitelně.
+12. **Dotaz na důvěru ke složce se nesmí objevit** (#460): klikni `▶` na PR, na kterém zásuvka
+    ještě nikdy nebyla — `claude` se **nesmí** zeptat *„Is this a project you created or one you
+    trust?“*. Ověřit se to dá jedině spuštěním, protože ten dialog je interaktivní.
+13. **Session z `▶` se neptá na povolení u každého kroku** (`--permission-mode auto`) — a `⧉`
+    kopíruje příkaz **bez** toho přepínače.
+14. **Rolování** (#460): v holém shellu (`ls -R /usr/share | head -500`) kolečko roluje; **nad
+    běžícím `claude` ne, a je to správně** — alternativní buffer scrollback nemá a `claude` si
+    hlášení myši zapíná sám, takže se roluje uvnitř něj.
 
 ### `⌃Tab` a shift, který mění klávesu (#245)
 
