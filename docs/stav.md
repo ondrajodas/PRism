@@ -5296,9 +5296,13 @@ při práci ale 0,5–0,9 s CPU **na každou sekundu**, a to skoro minutu v kuse
 
 **Neplatí, a je to změřené.** `DetailRelayoutMeasurement` staví skutečný `ContentView` nad skutečným
 `AppStore` a míchá čtyři osy (scéna, pohon, tab, náplň store). Jedno zneplatnění detailu stojí
-**33–43 ms** a **nezávisí ani na délce diffu** (500 proti 2000 řádkům: 38 proti 43 ms), **ani na
+**95–116 ms** a **nezávisí ani na délce diffu** (500 proti 2000 řádkům: 99 proti 105 ms), **ani na
 tabu** — `Přehled`, kde žádný dlouhý seznam není, vyšel dokonce nejdráž. `DiffView.body` se u toho
 **vůbec nepřeloží**. Cenu tedy nedělá eager diff; #469 zůstává, jak bylo.
+
+**Ta čísla jsou z opravené sondy a je to poučení samo o sobě**: první podoba předepisovala rozměr
+**obsahu**, a tím zmrazila dotaz na minimum okna (`.windowResizability(.contentMinSize)`) — vyšlo
+z ní 33–43 ms, tedy třikrát míň, a **neměřila, co dělá aplikace**. Rozměr proto předepisuje okno.
 
 **Co ji dělá, je hrubost sledované vlastnosti.** `PollingService` držel všech pět hodnot v jednom
 `PollState`u, a `@Observable` sleduje po vlastnostech — takže `isRefreshing = true` na začátku tiku

@@ -6554,7 +6554,7 @@ různé věci a odpověď na #472 je v jejich rozdílu.
 
 | Sonda | Co měří | Co z ní vyšlo |
 |---|---|---|
-| `DiffShapeProbe.relayoutCost` | **tvar seznamu** — přerovnání shora nad předpočítanými řádky, líný proti pevnému | pevný stack je dražší **3×**, ale absolutně málo (6000 řádků: **3 ms** proti **9 ms** na přerovnání) |
+| `DiffShapeProbe.relayoutCost` | **tvar seznamu** — přerovnání shora nad předpočítanými řádky, líný proti pevnému. Neměří scénář z aplikace, měří tvar | pevný stack je dražší **3×**, ale absolutně málo (6000 řádků: **3 ms** proti **9 ms** na přerovnání) |
 | `DetailRelayoutMeasurement.relayoutCost` | **cesta, kterou kód doopravdy jde** (#275) — skutečný `ContentView` nad skutečným `AppStore` | jedno zneplatnění detailu stojí **95–116 ms** a **nezávisí ani na délce diffu, ani na tabu** |
 
 #### Čtyři osy, protože bez ablace se to neodliší
@@ -6564,13 +6564,16 @@ hostitele / zápis do sledované vlastnosti / tichý tik pollingu), **tab** (`So
 diffem, `Přehled` bez dlouhého seznamu, `Kontroly` navíc bez panelu vpravo) a **náplň store**
 (prázdný / vlastní PR s nálezy a draftem). Čísla z jednoho sezení (okno 1512×874, Debug):
 
+Čísla jsou z **opravené** podoby sondy (rozměr předepisuje okno, ne obsah — viz odstavec pod
+tabulkou); starší běhy vycházely třikrát nižší a **neměřily to, co dělá aplikace**:
+
 | Případ | ms na přerovnání |
 |---|---|
-| okno, `Soubory`, **hostitel** (tělo `ContentView`) | 2–6, a **nula průchodů tělem** |
-| okno, `Soubory`, zápis do store | 38–46 |
-| okno, `Přehled`, zápis do store | 39–48 |
-| okno, `Kontroly` (bez panelu), zápis do store | 33–41 |
-| jen detail, `Soubory`, zápis do store | 9–11 |
+| okno, `Soubory`, **hostitel** (tělo `ContentView`) | **4–6**, a **nula průchodů tělem** |
+| okno, `Soubory`, zápis do store | **94–116** |
+| okno, `Přehled`, zápis do store | **114–117** |
+| okno, `Kontroly` (bez panelu), zápis do store | **90–102** |
+| jen detail, `Soubory`, zápis do store | **22–27** |
 | jen detail, `Soubory`, prázdný store | 7–9 |
 
 Čtyři věci z toho plynou a všechny jsou pro #472 rozhodující:
@@ -6581,7 +6584,7 @@ diffem, `Přehled` bez dlouhého seznamu, `Kontroly` navíc bez panelu vpravo) a
 2. **Délka diffu na ceně nic nemění** (500 proti 2000 řádkům: 38 proti 43 ms) a `DiffView.body` se
    při přerovnání detailu **vůbec nepřeloží**. Hypotéza z hlavičky #472 — že cenu násobí eager diff
    z #469 — tím padla; `Přehled`, kde žádný dlouhý seznam není, je dokonce ten nejdražší tab.
-3. **Panel vpravo je z toho ~5 ms** (rozdíl `Přehled` proti `Kontrolám`), takže ani on to není.
+3. **Panel vpravo je z toho ~15 ms** (rozdíl `Přehled` proti `Kontrolám`), takže ani on to není.
 4. **Tři čtvrtiny ceny jsou mimo detail** (~100 ms v okně proti ~10 ms nad samotným detailem)
    a jsou v **rozvržení**, ne v tělech. Ve `sample`u z toho běhu drží `NSHostingView.layout()` →
    `render` hlavní podíl a **`updateWindowContentSizeExtremaIfNecessary` je z toho 15–50 %** podle

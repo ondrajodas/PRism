@@ -3667,7 +3667,7 @@ tím na pravidlo: co se mění jinak často a čte jinde, patří do vlastní vl
 |---|---|
 | Psát jen změnu (`if pullRequests != merged { … }`) | **Změřeno, že to nic nedělá**: zápis téže hodnoty `@Observable` na tomhle toolchainu nehlásí (ověřeno vloženou regresí z obou stran). Byl by to `if`, který nic nemění — a takový kód se v tomhle repu nedrží. Pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`, takže se to pozná, kdyby se chování změnilo |
 | Stráž na `forget(whatIsNotIn:)` (přes třicet map, přepisovaných po každém tiku výsledkem `filter`u) | Tentýž důvod: se stráží i bez ní vychází tvrzení o nezneplatnění stejně. Bylo to napsané a **zase zahozené**, aby diff nebyl o třicet míst větší za nic |
-| Vrátit #469 (líný diff) | Hypotéza z hlavičky #472. **Změřeno, že cenu nedělá**: jedno zneplatnění detailu stojí 33–43 ms **bez ohledu na délku diffu** (500 proti 2000 řádkům: 38 proti 43 ms) i na tabu (`Přehled` bez dlouhého seznamu je nejdražší), a `DiffView.body` se u toho vůbec nepřeloží |
+| Vrátit #469 (líný diff) | Hypotéza z hlavičky #472. **Změřeno, že cenu nedělá**: jedno zneplatnění detailu stojí 95–116 ms **bez ohledu na délku diffu** (500 proti 2000 řádkům: 99 proti 105 ms) i na tabu (`Přehled` bez dlouhého seznamu je nejdražší), a `DiffView.body` se u toho vůbec nepřeloží |
 | Zlevnit `updateWindowContentSizeExtremaIfNecessary` (`.windowResizability(.contentMinSize)`) | Je to 15–50 % rozvržení podle fáze, takže je to reálná nitka — ale `.contentMinSize` je tam kvůli tomu, že s `.automatic` **nešlo okno zmenšit na výšku**, a ověřit tu změnu jde jedině rukou na běžícím okně. Zapsáno jako nedodělané, ne zamítnuté |
 
 **Co zůstalo nedokázané.** Průchodů tělem ubylo šedesátkrát, ale cena tichého tiku spadla jen

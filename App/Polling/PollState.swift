@@ -6,7 +6,7 @@ import Foundation
 /// jedinou vlastnost `state`, a to znamenalo, že `@Observable` hlásil **jednu** změnu za všech
 /// pět polí naráz: zápis `isRefreshing = true` na začátku tiku zneplatnil i každého, kdo četl
 /// jen seznam PR — tedy `AppStore.author(of:)`, na kterém visí `ownership`, a s ním celý detail
-/// PR. Naměřeno, že jedno takové zneplatnění stojí **33–43 ms** rozvržení okna
+/// PR. Naměřeno, že jedno takové zneplatnění stojí **95–116 ms** rozvržení okna
 /// (`DetailRelayoutMeasurement`), a tik jich vyrábí několik.
 ///
 /// Je to tatáž úvaha jako u `DiffViewport` (#469): `@Observable` sleduje **po vlastnostech**,

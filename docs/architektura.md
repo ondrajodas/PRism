@@ -6821,9 +6821,10 @@ polovina opravy a **není** — `@Observable` na tomhle toolchainu zápis téže
 i bez ní vychází tvrzení o nezneplatnění stejně.
 
 **Co tím opravené není**: sedm průchodů tělem `DiffView` a tisíc řádků diffu za dvacet tichých
-tiků zbývá, a nevysvětlené je i to, proč cena tiku spadla jen o třetinu, když průchodů tělem ubylo
-šedesátkrát. Zbytek leží v rozvržení okna, ne v tělech — viz *Kolik stojí přerovnání okna* v
-[`docs/testovani.md`](testovani.md).
+tiků zbývá, a cena tiku spadla jen o třetinu, přestože průchodů tělem ubylo šedesátkrát. Zbytek
+leží v **rozvržení okna**, ne v tělech — vlastní práce aplikace je ve `sample`u té fáze **~1,5 %**
+hlavního vlákna a **tři zlevnění vedle rozvržení se změřila a zahodila**; viz *Kolik stojí
+přerovnání okna* v [`docs/testovani.md`](testovani.md#kolik-stojí-přerovnání-okna-472).
 
 `run()` je smyčka (obnovit → počkat → opakovat), `refresh()` jeden cyklus. Tlačítko
 „obnovit teď“ volá `refresh()` — ruční obnovení není nic jiného než tik mimo pořadí.

@@ -116,11 +116,14 @@ struct DiffShapeProbe {
 
     /// Co stojí **přerovnání shora** (#472), tedy průchod tělem `PullRequestDetailView`.
     ///
-    /// Je to druhá polovina rozhodnutí z #469 a ta, kterou #469 neměřilo. Projíždění se od té doby
-    /// zlevnilo, jenže diff se nepřerovnává jen scrollováním: tělo detailu se překládá při **každém**
-    /// průchodu tělem `ContentView` (tik pollingu, přepnutí, cokoli ve frontě), a to tělo skládá
-    /// `DiffView` znovu — s jinými uzávěry, takže se přeloží i ono. V líném seznamu se tím
-    /// poskládaly jen viditelné řádky, v pevném **všechny**.
+    /// Je to druhá polovina rozhodnutí z #469 a ta, kterou #469 neměřilo: diff se nepřerovnává jen
+    /// scrollováním. Když se jeho tělo přeloží, poskládají se v líném seznamu jen viditelné řádky,
+    /// v pevném **všechny**.
+    ///
+    /// **Co tělo detailu překládá, měří `DetailRelayoutMeasurement`** — a vyšlo z toho, že to
+    /// **není** průchod tělem `ContentView` (ten detail nechá být, protože se nezměnil), ale
+    /// **zápis do sledované vlastnosti**, kterou detail čte. Tahle sonda proto neměří scénář
+    /// z aplikace, ale **tvar seznamu**: co stojí přerovnání shora, ať ho vyvolá cokoli.
     ///
     /// Měří se **cena přerovnání, ne příprava** (#274): okno se nechá usadit a teprve pak se
     /// generace bumpne dvacetkrát s kolem runloopu po každém bumpnutí.

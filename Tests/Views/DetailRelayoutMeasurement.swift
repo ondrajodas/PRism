@@ -11,15 +11,17 @@ import Testing
 /// **cestu, kterou kód doopravdy jde** (#275): skutečný `ContentView` nad skutečným `AppStore`,
 /// tedy i se skládáním řádků, uzávěrů a parametrů panelu.
 ///
-/// Měří se čtyři osy, protože #472 se ptá na dvě různé věci naráz a bez ablace se od sebe
-/// neodliší:
+/// Měří se čtyři osy, protože #472 se ptá na víc věcí naráz a bez ablace se od sebe neodliší:
 ///
 /// | Osa | Krajnosti | Na co odpovídá |
 /// |---|---|---|
 /// | scéna | okno / samotný detail | kolik z ceny patří tomu, co je vedle detailu |
-/// | pohon | hostitel / zápis do store | přeloží průchod tělem `ContentView` i detail? |
+/// | pohon | hostitel / zápis do store / tik / přepnutí tabu | co detail vůbec zneplatní — a co z toho je nejdražší |
 /// | tab | soubory / přehled / kontroly | patří cena dlouhému seznamu, nebo panelu? |
 /// | store | plný / prázdný | patří cena datům, nad kterými okno v provozu stojí? |
+///
+/// Výčet `cases` níž je **průnik**, ne všechny kombinace: každá série staví okno znovu a nechává
+/// ho usadit, takže úplná mřížka by běžela desítky minut a odpověď navíc by nedala.
 ///
 /// Vedle času se vypisuje **snímek počitadel** (`RenderDiagnostics`), protože „stálo to 300 ms“
 /// a „přeložilo se 90 řádků diffu“ jsou dvě různá tvrzení a rozhodnutí visí na obojím.
@@ -126,6 +128,11 @@ struct DetailRelayoutMeasurement {
         Case(scene: .window, tab: .filesChanged, driver: .tab),
         Case(scene: .window, tab: .filesChanged, driver: .store),
         Case(scene: .window, tab: .filesChanged, driver: .poll),
+        Case(scene: .window, tab: .filesChanged, driver: .host),
+        Case(scene: .window, tab: .overview, driver: .store),
+        Case(scene: .window, tab: .checks, driver: .store),
+        Case(scene: .detail, tab: .filesChanged, driver: .store),
+        Case(scene: .detail, tab: .filesChanged, driver: .store, payload: .bare),
     ]
 
     /// Jedna série: okno se nechá usadit (**příprava se neměří**, #274) a teprve pak se dvacetkrát
