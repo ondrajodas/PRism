@@ -150,6 +150,9 @@ struct DetailRelayoutMeasurement {
         // samotnému. Drží se v sondě, protože je to jediné místo, kde je ten rozdíl vidět jako
         // číslo — v aplikaci už měřená štěrbina je.
         Case(scene: .chrome, tab: .checks, driver: .store),
+        // **Táž scéna, jen prázdný store** — jediný způsob, jak říct „cenu nedělá obsah“ uvnitř
+        // jednoho běhu; srovnávat čísla napříč sezeními zakazuje drift (#274).
+        Case(scene: .chrome, tab: .checks, driver: .store, payload: .bare),
         Case(scene: .chromeMeasured, tab: .checks, driver: .store),
         Case(scene: .chrome, tab: .checks, driver: .tabWithoutDiff),
         Case(scene: .chromeMeasured, tab: .checks, driver: .tabWithoutDiff),

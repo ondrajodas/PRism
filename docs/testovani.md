@@ -6612,6 +6612,47 @@ Na jedno přepnutí se přeloží **294 těl `DiffRowView`** (2000řádkový dif
 bloky** — `bloků 50, nasazení 50` proti `bloků 5` v ustáleném stavu, protože změřená výška bloku
 zaniká s podstromem. **Roste to s velikostí diffu**, na rozdíl od přerovnání.
 
+#### Ablace „slepá kostra“ — jak se pozná, jestli cenu dělá obsah, nebo tvar
+
+Tohle je **postup, ne jednorázové měření**, a je to ten, kterým se #472 nakonec vyřešilo. Otázka
+zní: **stojí to, co je uvnitř, nebo to, kam je to zasazené?** Bez ní se optimalizuje uvnitř
+podstromu, který je levný — a přesně to se u #472 stalo čtyřikrát po sobě.
+
+Dělá se to tak, že se měřený view nechá **beze změny** a vymění se jeho **sousedé** za obarvené
+obdélníky téže velikosti (`Color.gray.frame(height:)`, `frame(width:)`). Vzniknou tři scény, které
+se od sebe liší jedním krokem:
+
+| Scéna | Co je v ní | Na co odpovídá |
+|---|---|---|
+| `jen detail` | měřený view sám v okně | co stojí on |
+| `detail ve slepé kostře` | tentýž view v **kostře** z aplikace, sousedé slepí | co stojí **zasazení** |
+| `okno` | skutečný `ContentView` | co stojí **sousedé** (rozdíl proti kostře) |
+
+Čísla z #472 (realistická data — konverzace 200 uzlů, 48 nálezů, 12 checků, 24 commitů):
+
+| Scéna | průchod tělem detailu | přepnutí tabu (bez diffu) |
+|---|---|---|
+| jen detail | 18 ms | 88 ms |
+| slepá kostra, **pružný rámec** | **81–89 ms** | **282–295 ms** |
+| slepá kostra, pružný rámec, **prázdný store** | 70 ms | — |
+| slepá kostra, **měřená štěrbina** | **7–8 ms** | **56 ms** |
+| skutečné okno (po opravě) | 10–11 ms | 62 ms |
+
+Čte se z toho, že **sousedé stáli 7 ms** a **zasazení 71 ms** — tedy že cenu dělal tvar, ne obsah.
+Čtvrtá scéna (`slepá kostra, měřená štěrbina`) je pak ta samá kostra s opravou, takže se rozdíl dá
+přečíst na jednom řádku a **nezávisí na tom, co je zrovna v aplikaci**.
+
+Tři věci, bez kterých z toho nic není:
+
+- **Slepí sousedé musí mít rozměry z aplikace.** Rail 56, hlavička 92, stavový řádek 28 bodů —
+  jinak se měří jiný tvar.
+- **Data musí být realistická, i když se měří tvar** — a porovnat se musí **uvnitř jednoho běhu**
+  (drift sezení je větší než hledaný rozdíl, #274). Táž kostra vyšla **81 ms s plným storem
+  a 70 ms s prázdným**, tedy obsah dělá **14 %**. Malý rozdíl je tady **výsledek**, ne důvod
+  fixture nedoplnit: bez něj by se nedalo tvrdit, že cenu nedělá obsah.
+- **Rozměr předepisuje okno, ne scéna.** `frame(width:height:)` na obsahu zmrazí dotaz na minimum
+  a čísla vyjdou třikrát nižší — viz odstavec o hostování výš.
+
 #### Tři čtvrtiny přepnutí nemá s diffem co dělat
 
 Pohon `přepnutí tabu bez diffu` (`Přehled` ↔ `Kontroly`, tedy dva taby, ve kterých žádný dlouhý
@@ -6641,8 +6682,12 @@ nezkoušel podruhé:
 | **Úseky řádků** (#472, redesign): řádky po šestnácti, úsek mimo pás nahrazený jedním prázdným místem známé výšky — aby měl pevný stack desítky dětí místo tisíců | průchodů tělem `DiffRowView` na jedno přepnutí **294 → 147**, tedy polovina pryč | 389 / 638 ms proti **407 / 602 ms**. **Půlka dětí zmizela a cena se nehnula** — což je zároveň ten nejsilnější doklad, že cena není v počtu řádků |
 
 **Co z toho plyne:** cenu **nedrží počet řádků** — půlka jich zmizela a nezměnilo to nic —
-a u přepnutí tabu jsou **tři čtvrtiny ceny mimo diff** (tabulka výš). Zbývá rozvržení detailu
-a okna jako celku. Ve `sample`u té fáze je naše vlastní práce **~1,5 %** hlavního vlákna (`AppStore` 21,
+a u přepnutí tabu jsou **tři čtvrtiny ceny mimo diff**. Zbývalo rozvržení detailu a okna jako
+celku, a **tam ta cena taky byla**: obsah okna byl pružné dítě `HStack`u, takže mu stack posílal
+průzkumné nabídky na pružnost a rámec je předával dolů celým detailem. Našla to ablace *slepá
+kostra* výš; oprava je `fillingSlot()` na obsahu v `ContentView`. **Všechny čtyři zamítnuté pokusy
+tím dávají smysl zpětně** — zlevňovaly věci **uvnitř** detailu, kdežto platilo se za to, kolikrát
+se do detailu vůbec sestoupí. Ve `sample`u té fáze je naše vlastní práce **~1,5 %** hlavního vlákna (`AppStore` 21,
 `Policy` 15, `PullRequestDetailView` 36 vzorků ze 14 726); zbytek je `GraphHost.flushTransactions`
 (1 947), `NSHostingView.layout` (1 630) a `LayoutEngineBox.sizeThatFits` (1 222).
 

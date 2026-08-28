@@ -593,11 +593,17 @@ než pravidlo obejdeš**, protože většina z nich se v harnessu neprojeví.
   při pohybu myši. Cena se proto **neodhaduje z tabulky pro šířku**. Zakázaná je **v řádku**, ne
   plošně — ohraničené formy jsou
   [vyjmenované](docs/architektura.md#šířka-v-okně-appviewsavailablewidthswift).
-- **Líný seznam ve `ScrollView`u rozměr nevyjednává vůbec** (#361) — dostane ho změřený
-  (`fillingSlot()`), protože na každý dotaz pružného rámce odpovídá `LazyVStack` **zápisem** do
-  téže krabice, ze které kreslí `placeSubviews`; hlídá to `LazyIdealSizeTests`
-  ([rozbor](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361)). Je to
-  ale [zlevnění, ne oprava](docs/architektura.md#nezastavilo-to-nic-a-je-to-změřené-361-třinácté-kolo).
+- **Rozměr nevyjednává líný seznam** (#361) **ani obsah okna** (#472) — oba ho dostanou změřený
+  (`fillingSlot()`). U líného seznamu proto, že na každý dotaz pružného rámce odpovídá `LazyVStack`
+  **zápisem** do téže krabice, ze které kreslí `placeSubviews` (hlídá to `LazyIdealSizeTests`;
+  [rozbor](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361)), a je to
+  tam [zlevnění, ne oprava](docs/architektura.md#nezastavilo-to-nic-a-je-to-změřené-361-třinácté-kolo).
+  U obsahu okna proto, že pružné dítě `HStack`u dostane průzkumné nabídky na pružnost a rámec je
+  **předá dolů celým detailem**: naměřeno **89 → 8 ms** na průchod tělem detailu a **282 → 56 ms**
+  na přepnutí tabu
+  ([rozbor](docs/architektura.md#obsah-okna-dostane-změřenou-štěrbinu-472)). **Sousedé ani obsah
+  v tom nejsou** — skutečný rail, hlavička a stavový řádek stojí proti slepým obdélníkům 7 ms
+  a plný store proti prázdnému 14 %.
 - **`LazyVStack` v diffu ani na ose konverzace nepatří, a je to změna proti #361** (#469). Do #469
   tu stálo, že líný seznam patří tam, kde je seznam neomezený — tedy do diffu. Kolo z #361 se ale
   po opravě osy **přestěhovalo právě tam** (dva `sample`y ze živého záchvatu, `LazySubviewPlacements`
@@ -627,7 +633,7 @@ než pravidlo obejdeš**, protože většina z nich se v harnessu neprojeví.
 ```bash
 grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'    # výčet k posouzení, ne prázdný
-grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'       # šest míst + modifikátor sám
+grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'       # osm míst + modifikátor sám
 # Prázdný (#361, #469) — filtr zahazuje komentáře, ve kterých se to rozhodnutí vysvětluje.
 grep -n 'LazyVStack' App/Views/ConversationView.swift App/Views/DiffView.swift |
     grep -vE ':[0-9]+: *//|:[0-9]+: *///'
@@ -646,12 +652,6 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   `if x != new { x = new }` je porovnání navíc, které nic nemění.
   Čísla i zamítnuté varianty jsou
   v [`docs/architektura.md`](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
-- **Obsah okna nesmí být pružné dítě stacku** (#472). `ContentView` dává tabu **změřenou štěrbinu**
-  (`fillingSlot()`), ne pružný rámec: pružné dítě dostane od stacku průzkumné nabídky na pružnost
-  a rámec je **předá dolů celým detailem**. Naměřeno ablací se slepými sousedy: průchod tělem
-  detailu **89 → 8 ms**, přepnutí tabu **282 → 56 ms**. Je to tatáž třída jako #220 a #361, jen nad
-  celým tabem — a **sousedé ani obsah v tom nejsou**: skutečný rail, hlavička a stavový řádek stojí
-  proti slepým obdélníkům 7 ms a realistická data proti chudé fixture 15 %.
 - **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — ve `sample`u je vlastní práce
   aplikace **~1,5 %** hlavního vlákna. Než začneš zlevňovat vedle rozvržení, přečti si
   [*Tři zlevnění, která se změřila a zahodila*](docs/testovani.md#tři-zlevnění-která-se-změřila-a-zahodila):

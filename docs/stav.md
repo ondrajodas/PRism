@@ -5348,7 +5348,34 @@ byla). **Mechanicky to fungovalo** — průchodů tělem `DiffRowView` na jedno 
 zmizela a nezměnilo to nic, což je zároveň ten nejsilnější doklad, že **cena není v počtu řádků**.
 Zahozeno.
 
-**A ablace ukázala, kde ta cena doopravdy je**: přepnutí mezi dvěma taby **bez diffu**
+**A pak se ta cena našla.** Ablace *slepá kostra* (rail, hlavička a stavový řádek nahrazené
+obarvenými obdélníky, takže se měří **tvar**, ne sousedé) ukázala, že **obsah okna byl pružné dítě
+`HStack`u**: stack mu při každém rozvržení posílá průzkumné nabídky na pružnost a pružný rámec je
+**předá dolů celým detailem** — panelem, pruhem záložek i obsahem tabu. Je to tatáž třída jako #220
+a #361, jen o patro výš.
+
+Oprava je jeden modifikátor (`content.fillingSlot(alignment: .topLeading)` v `ContentView`) a na
+realistických datech (konverzace 200 uzlů, 48 nálezů, 12 checků, 24 commitů) vyšla:
+
+| Scénář (skutečné okno) | před | po |
+|---|---|---|
+| tichý tik pollingu | 512 ms | **20 ms** |
+| přerovnání (zápis do store) | 104 ms | **10 ms** |
+| přepnutí tabu bez diffu | 318 ms | **62 ms** |
+| přepnutí tabu s diffem, 500 řádků | 410 ms | **243 ms** |
+| přepnutí tabu s diffem, 2000 řádků | 638 ms | **466 ms** |
+
+**Sousedé ani obsah v tom nebyli**: skutečný rail, hlavička a stavový řádek stojí proti slepým
+obdélníkům **7 ms**, a táž kostra vyšla 81 ms s plným storem proti 70 ms s prázdným — obsah tedy
+dělá **14 %**. Zbylých 86 % byla struktura — a **zpětně to vysvětluje všechny čtyři zamítnuté pokusy**:
+zlevňovaly věci **uvnitř** detailu, kdežto platilo se za to, kolikrát se do detailu vůbec sestoupí.
+
+**Zbývá pojmenovaná mezera**: přepnutí tabu **s diffem** stojí pořád 243 ms u 500řádkového a 466 ms
+u 2000řádkového diffu, tedy o 180–400 ms víc než přepnutí bez něj. Roste to s velikostí diffu
+a první rozvržení pevného seznamu z #469 je nejpravděpodobnější příčina; zkusit se to dá tím, že
+se `fillingSlot()` dostane i **dovnitř** tabu, mezi obsah a jeho části.
+
+**Původní ablace ukázala, kde ta cena doopravdy je**: přepnutí mezi dvěma taby **bez diffu**
 (`Přehled` ↔ `Kontroly`) stojí **309 ms** proti 410 ms s diffem. **Tři čtvrtiny přepnutí tedy
 s diffem nemají co dělat** — je to přestavba detailu samotného (hlavička, pruh záložek, panel,
 `.task` kaskáda), která se přepnutím zahodí a staví znovu. Kdo na tom bude pracovat dál, má začít
