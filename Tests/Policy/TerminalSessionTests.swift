@@ -96,6 +96,24 @@ struct TerminalSessionTests {
         #expect(Policy.resumeCommand(sessionID: "8c1f-42") == "claude --resume 8c1f-42")
     }
 
+    // MARK: - Co o tom říkají popisky
+
+    /// **Nápověda musí říkat, co se doopravdy pustí** (nález Copilota). Od #460 se `▶` a `⧉` liší
+    /// o režim povolení, a text, který by ten rozdíl zamlčel, by tvrdil víc, než data unesou —
+    /// zvlášť když ty dvě ikony stojí vedle sebe a nápověda je jediné, čím se od sebe liší.
+    ///
+    /// Tvrdí se to nad **oběma** popisky naráz, protože chyba je právě v tom, že se rozejdou.
+    @Test("Nápovědy u ⧉ a ▶ říkají každá to svoje")
+    func thehelpTextsSayWhatEachButtonDoes() {
+        let copy = ReviewerLaneText.copyResume(sessionID: "8c1f-42")
+        let run = ReviewerLaneText.resumeInDrawerHelp(sessionID: "8c1f-42")
+
+        #expect(copy.contains(Policy.resumeCommand(sessionID: "8c1f-42")))
+        #expect(!copy.contains("--permission-mode"))
+        #expect(run.contains(Policy.drawerResumeCommand(sessionID: "8c1f-42")))
+        #expect(run.contains("--permission-mode auto"))
+    }
+
     // MARK: - Řádka pro shell
 
     /// **`&&`, ne `;`**: strom umí zmizet (úklid cache), a `claude --resume` spuštěný místo něj

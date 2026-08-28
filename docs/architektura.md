@@ -2051,7 +2051,8 @@ za víc než dvě desetiny sekundy v Debug buildu.
 
 Vedle `⧉` (`Zkopírovat resume`) stojí v hlavičce dráhy `▶` — **`Pustit session v terminálu`**,
 které vytáhne **zásuvku** (#459), **přepne na relaci té dráhy**, přejde v ní do **pracovního
-stromu** té session a pustí tam tentýž příkaz. Návrh je sekce 35, poznámka 112; sekce 34 zůstává záznamem toho, co
+stromu** té session a pustí tam tentýž příkaz — od #460 i s režimem povolení (`--permission-mode
+auto`, viz níž). Návrh je sekce 35, poznámka 112; sekce 34 zůstává záznamem toho, co
 bylo dřív. Kopírování zůstává, protože kdo si session pouští jinde (iTerm, tmux, jiný stroj),
 potřebuje text, ne cizí plochu.
 
@@ -2096,7 +2097,8 @@ Sedm věcí, které na tom nejsou zjevné:
   `busy` a **nepošle nic**. Není to ten pravidelný takt, kvůli kterému kapsle v hlavičce neukazuje
   běžící příkaz: ptá se to ve chvíli kliknutí, ne v časovači. **Slepá ulička z toho ale není**:
   zásuvka se na tu relaci **přepne**, takže je vidět, co v ní běží.
-- **Posílá se celá `shellLine`, i do zásuvky** (#460), tedy `cd '<strom>' && claude --resume <id>`.
+- **Posílá se celá `shellLine`, i do zásuvky** (#460), tedy `cd '<strom>' && claude --resume <id>
+  --permission-mode auto`.
   `cd` není nadbytečné ani u vlastní relace: `▶` umí přijít i na relaci, která už existuje a stojí
   jinde (starší strom téže dráhy), a `claude --resume` hledá vlákno **podle adresáře**. Cesta v hlavičce zásuvky se proto po `▶` přepisuje na strom té
   session — a to **i po `noShell`**, i když řádka neodešla: bez cesty kreslí zásuvka větu

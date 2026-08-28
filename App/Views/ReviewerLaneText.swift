@@ -101,9 +101,13 @@ enum ReviewerLaneText {
     /// jediné, čím se `▶` představuje dřív, než se na něj klikne.
     static let resumeInDrawer = "Pustit session v terminálu"
 
+    /// **Nápověda ukazuje to, co se doopravdy pustí**, tedy včetně režimu povolení — od #460 se
+    /// to od textu u `⧉` liší a text, který by ten rozdíl zamlčel, by tvrdil víc, než data unesou.
+    /// Skládá to `Policy.drawerResumeCommand`, takže se s tím, co odejde do zásuvky, nemá čím
+    /// rozejít.
     static func resumeInDrawerHelp(sessionID: String) -> String {
         "Vytáhne zásuvku s terminálem, přejde v ní do pracovního stromu té session a pustí "
-            + "\(Policy.resumeCommand(sessionID: sessionID))."
+            + "\(Policy.drawerResumeCommand(sessionID: sessionID))."
     }
 
     /// Odznak v hlavičce dráhy, když zadání pro reviewera nebylo celé (#345).

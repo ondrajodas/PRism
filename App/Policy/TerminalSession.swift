@@ -10,8 +10,12 @@ struct TerminalSession: Equatable, Sendable {
     /// Není to kosmetika: `claude --resume` hledá vlákno podle adresáře, ve kterém se spustí
     /// (`~/.claude/projects/<zakódovaná cesta>/`), takže tentýž příkaz jinde session **nenajde**.
     let directory: URL
-    /// Co se v tom adresáři pustí. **Týž příkaz, jaký kopíruje `Zkopírovat resume`** — skládá ho
-    /// `Policy.resumeCommand(sessionID:)`.
+    /// Co se v tom adresáři pustí — `Policy.drawerResumeCommand(sessionID:)`.
+    ///
+    /// **Od #460 to není doslova to, co kopíruje `⧉`**: je v tom navíc režim povolení
+    /// (`--permission-mode auto`), protože session, kterou v zásuvce řídí člověk, nemá přerušovat
+    /// práci dotazem u každého kroku. Skládá to ale pořád **jedna funkce** nad `resumeCommand`,
+    /// takže se ty dva texty nemají čím rozejít a liší se přesně o jednu vyjmenovanou věc.
     let command: String
     /// Skill té dráhy. Od #460 z něj je **relace v zásuvce** (`TerminalSlot.Role.session`) a její
     /// popisek v přepínači — dvě session dvou reviewerů se totiž musí dát rozeznat a otevřít vedle
@@ -36,9 +40,13 @@ struct TerminalSession: Equatable, Sendable {
 extension Policy {
     /// Příkaz, kterým se session obnoví.
     ///
-    /// **Jedno místo, a je to podmínka toho, co #453 slibuje**: `⧉` ten text kopíruje a `▶` ho
-    /// pouští, takže dvě kopie by se rozešly první úpravou — a rozdíl mezi „co mám ve schránce“
-    /// a „co se mi otevřelo“ se nedá poznat jinak než tím, že jedno z toho nefunguje.
+    /// **Jedno místo, a je to podmínka toho, co #453 slibuje**: tenhle text kopíruje `⧉`
+    /// a **staví na něm** i to, co pouští `▶` (`drawerResumeCommand`), takže dvě kopie by se
+    /// rozešly první úpravou — a rozdíl mezi „co mám ve schránce“ a „co se mi otevřelo“ se nedá
+    /// poznat jinak než tím, že jedno z toho nefunguje.
+    ///
+    /// **Do #460 to byl doslova týž příkaz.** Od #460 se liší o režim povolení, který dostane
+    /// jedině zásuvka — zdůvodnění je u `drawerPermissionMode`.
     static func resumeCommand(sessionID: String) -> String {
         "claude --resume \(sessionID)"
     }

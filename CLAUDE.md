@@ -348,9 +348,9 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    - **Tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache aplikace (pracovní strom
      review, nebo bare klon), nikdy v uživatelově klonu.
    - **Od #460 do toho shellu píše i aplikace, a je to jedna řádka** (`TerminalHosting.run`,
-     `▶` v tabu `Průběh`): `cd '<strom>' && claude --resume <id>`, skládaná
-     `Policy.resumeCommand(sessionID:)` a `ShellQuoting` — **tedy tentýž text, jaký kopíruje
-     `⧉`**, a jinou aplikace poslat neumí. Do běžícího jobu se přitom **nepíše vůbec**
+     `▶` v tabu `Průběh`): `cd '<strom>' && claude --resume <id> --permission-mode auto`, skládaná
+     `Policy.drawerResumeCommand(sessionID:)` a `ShellQuoting` — **tedy text, který kopíruje `⧉`,
+     a k němu režim povolení** (zdůvodnění o kus níž), a jinou aplikace poslat neumí. Do běžícího jobu se přitom **nepíše vůbec**
      (`hasForegroundJob`), protože řádka je pro něj vstup; místo toho se na tu relaci **přepne**.
      Plnou moc má dál **člověk**: cokoli jiného než tuhle jednu řádku napíše jedině on.
    - **A relací je v zásuvce víc než jedna** (#460), takže úklid z bodů výš platí **pro každou**:

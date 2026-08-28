@@ -5386,7 +5386,7 @@ sondy hlásila jako chybu, která není), scrollback má **500 řádků** a vý�
 se **doručuje jemu** a terminál nemá kam couvnout — alternativní buffer je z definice bez historie.
 Tak se chová `Terminal.app` i `iTerm`.
 
-Testů **4362**, všechny zelené — z toho **52 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
+Testů **4363**, všechny zelené — z toho **53 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
 vytlačí, co je na záložce, co se řekne), store (**druhá session první nepřebije**, zavření záložky
 zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
 

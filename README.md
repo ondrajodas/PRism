@@ -1257,7 +1257,8 @@ a cesta zpátky do session zůstává `Zkopírovat resume`.
 **Do běžící session se dá vstoupit rovnou v okně** (#453, od #460 návrh sekce 35, poznámka 112).
 Vedle `⧉` (zkopíruje `claude --resume <id>`) je `▶` — **`Pustit session v terminálu`**,
 které vytáhne **zásuvku** (viz *Terminál v zásuvce* výš), přejde v ní **do pracovního stromu té
-session** a pustí tam tentýž příkaz. Strom je podmínka, ne kosmetika: `claude --resume` hledá
+session** a pustí tam tentýž příkaz i s režimem povolení (viz níž). Strom je podmínka, ne
+kosmetika: `claude --resume` hledá
 vlákno podle adresáře, ve kterém se spustí. Kopírování **zůstává**: kdo si session pouští jinde
 (iTerm, tmux, jiný stroj), potřebuje text — jsou to dvě akce, ne dvě podoby jedné.
 

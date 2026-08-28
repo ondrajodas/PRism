@@ -157,7 +157,7 @@ struct ReviewerLaneView: View {
         .help(ReviewerLaneText.copyResume(sessionID: sessionID))
     }
 
-    /// Tentýž příkaz, jen rovnou puštěný — `▶` z návrhu, sekce 34 a poznámka 112 (#453, #460).
+    /// Týž příkaz i s režimem povolení, rovnou puštěný — `▶` z návrhu, sekce 35, poznámka 112.
     ///
     /// **Od #460 míří do zásuvky, ne do `Terminal.app`**: session je odteď v okně, tak není důvod
     /// odcházet. Do #459 tady stálo, že vestavěný terminál to nebude, protože by se z okna dal

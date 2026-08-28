@@ -89,11 +89,13 @@ extension AppStore {
     /// Do #460 to psalo do jediného shellu zásuvky a při obsazeném popředí končilo slepou uličkou.
     /// Relace na dráhu tu uličku ruší: dvě běžící review mají dvě relace a přepíná se mezi nimi.
     ///
-    /// Posílá se **celá `shellLine`**, tedy `cd '<strom>' && claude --resume <id>`, a je to tatáž
-    /// řádka, jakou dostával `Terminal.app` od #453. `cd` v ní není nadbytečné ani u vlastní
-    /// relace: shell v ní startuje v adresáři, který dostal, jenže `▶` umí přijít i na relaci,
-    /// která už existuje a stojí jinde (starší strom téže dráhy). S `&&` navíc zůstane po zmizelém
-    /// stromu `cd: no such file or directory`, což je pravda, podle které se dá jednat.
+    /// Posílá se **celá `shellLine`**, tedy `cd '<strom>' && claude --resume <id> --permission-mode
+    /// auto`. Proti řádce, kterou od #453 dostával `Terminal.app`, je v ní navíc **režim
+    /// povolení** — session, kterou v zásuvce řídí člověk, nemá přerušovat práci dotazem u každého
+    /// kroku (zdůvodnění je u `Policy.drawerPermissionMode`). `cd` v ní není nadbytečné ani
+    /// u vlastní relace: shell v ní startuje v adresáři, který dostal, jenže `▶` umí přijít i na
+    /// relaci, která už existuje a stojí jinde (starší strom téže dráhy). S `&&` navíc zůstane po
+    /// zmizelém stromu `cd: no such file or directory`, což je pravda, podle které se dá jednat.
     ///
     /// **Do běžícího jobu se pořád nepíše** (`busy`) — řádka je pro něj vstup, takže by
     /// v rozdělaném `claude` byla odeslaná zpráva. Nově se z toho ale nestává slepá ulička:
