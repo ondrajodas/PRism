@@ -646,6 +646,12 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   `if x != new { x = new }` je porovnání navíc, které nic nemění.
   Čísla i zamítnuté varianty jsou
   v [`docs/architektura.md`](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
+- **Obsah okna nesmí být pružné dítě stacku** (#472). `ContentView` dává tabu **změřenou štěrbinu**
+  (`fillingSlot()`), ne pružný rámec: pružné dítě dostane od stacku průzkumné nabídky na pružnost
+  a rámec je **předá dolů celým detailem**. Naměřeno ablací se slepými sousedy: průchod tělem
+  detailu **89 → 8 ms**, přepnutí tabu **282 → 56 ms**. Je to tatáž třída jako #220 a #361, jen nad
+  celým tabem — a **sousedé ani obsah v tom nejsou**: skutečný rail, hlavička a stavový řádek stojí
+  proti slepým obdélníkům 7 ms a realistická data proti chudé fixture 15 %.
 - **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — ve `sample`u je vlastní práce
   aplikace **~1,5 %** hlavního vlákna. Než začneš zlevňovat vedle rozvržení, přečti si
   [*Tři zlevnění, která se změřila a zahodila*](docs/testovani.md#tři-zlevnění-která-se-změřila-a-zahodila):

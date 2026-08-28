@@ -6791,6 +6791,40 @@ Drží seznam PR aktuální: v intervalu (default 60 s) se zeptá všech zdrojů
 `PullRequestList` a publikuje výsledek. `@MainActor` a `@Observable` — jeho stav je to,
 co kreslí okno; síťová práce stejně probíhá v podprocesech `gh`.
 
+### Obsah okna dostane změřenou štěrbinu (#472)
+
+`ContentView` staví `VStack { hlavička; HStack { rail; obsah }; stavový řádek }` — a `obsah`
+(detail PR, nebo dashboard) byl do #472 **pružné dítě**. Stack se pružného dítěte při každém
+rozvržení ptá průzkumnými nabídkami na pružnost (`nil×nil`, `0×0`, `0×∞`, `∞×0`, `∞×∞`, …) a pružný
+rámec je **předá dolů** — celým detailem, panelem, pruhem záložek i obsahem tabu. Je to tatáž třída
+jako #220 a #361, jen o patro výš: neplatí se za seznam, ale za to, že detail vůbec visí ve stacku.
+
+**Změřeno ablací „slepá kostra“** (`DetailRelayoutMeasurement`): rail, hlavička i stavový řádek
+nahrazené obarvenými obdélníky, takže se měří **tvar**, ne sousedé. Data jsou realistická —
+konverzace o 200 uzlech, 48 nálezů, 12 checků, 24 commitů, rozdělané review, vlastní PR.
+
+| Scéna | průchod tělem detailu | přepnutí tabu (bez diffu) |
+|---|---|---|
+| slepá kostra, **pružný rámec** (stav do #472) | **89 ms** | **282 ms** |
+| slepá kostra, **měřená štěrbina** | **8 ms** | **56 ms** |
+| jen detail, bez kostry | 18 ms | 88 ms |
+| skutečné okno **po opravě** | **9 ms** | **60 ms** |
+
+Tři věci, které z toho plynou:
+
+1. **Sousedé nejsou vinni.** Skutečný rail, hlavička a stavový řádek stojí proti slepým obdélníkům
+   **7 ms** — cenu dělalo vyjednávání, ne jejich obsah.
+2. **Nedělá ji ani obsah detailu.** Přechod z chudé fixture na realistickou (44 → 200 uzlů
+   konverzace, 24 → 48 nálezů, plus checky a commity) posunul cenu **78 → 89 ms**, tedy o 15 %.
+   Zbylých 85 % byla struktura.
+3. **Je to nejlevnější varianta ze všech tří** — 8 ms je míň než detail bez kostry (18 ms), protože
+   se dotazy zastaví u `GeometryReader`u i směrem k hostující vrstvě.
+
+Opravou je `fillingSlot()` na `obsah` v `ContentView` — týž modifikátor a týž důvod jako u líných
+seznamů v #361, jen nad celým tabem. **Zpětně to vysvětluje, proč čtyři dřívější pokusy o zlevnění
+nezměnily nic**: zkratka na minimum okna, výšky bloků, uzávěry po souborech i úseky řádků zlevňovaly
+věci **uvnitř** detailu, kdežto cena byla v tom, kolikrát se do detailu vůbec sestoupí.
+
 ### Pět vlastností, ne jeden `PollState` (#472)
 
 Do #472 držel `PollingService` **jednu** sledovanou vlastnost — `var state = PollState()` se všemi

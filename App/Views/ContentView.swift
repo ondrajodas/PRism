@@ -58,7 +58,18 @@ struct ContentView: View {
                     appearance: store.configuration.global.appearance,
                     setAppearance: { mode in Task { await store.setAppearance(mode) } }
                 )
-                content
+                // **Změřená štěrbina, ne pružný rámec** (#472). Obsah okna je pružné dítě
+                // `HStack`u, takže se ho stack při každém rozvržení ptá průzkumnými nabídkami na
+                // pružnost — a pružný rámec je **předá dolů**, celým detailem PR. Je to tatáž
+                // třída jako #220 a #361, jen o patro výš: neplatí se za seznam, ale za to, že
+                // detail vůbec visí ve stacku.
+                //
+                // Naměřeno (`DetailRelayoutMeasurement`, ablace `slepá kostra` — rail, hlavička
+                // i stavový řádek nahrazené obarvenými obdélníky, takže se měří **tvar**, ne
+                // sousedé): jeden průchod tělem detailu stál **78 ms** s pružným rámcem a **9 ms**
+                // se změřenou štěrbinou, přepnutí tabu **245 ms** proti **38 ms**. Sousedé sami
+                // jsou z toho 7 ms — cenu dělalo vyjednávání, ne oni.
+                content.fillingSlot(alignment: .topLeading)
             }
             StatusBarView(store: store)
         }

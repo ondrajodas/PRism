@@ -77,6 +77,17 @@ struct DetailRelayoutMeasurement {
     enum Scene: String {
         case window = "okno"
         case detail = "jen detail"
+        /// **Detail ve stejné kostře jako v okně, ale se slepými sousedy** — místo railu,
+        /// hlavičky a stavového řádku stojí obarvené obdélníky téže velikosti.
+        ///
+        /// Je to ablace, která dělí dvě věci, co se jinak nedají odlišit: **stavbu sousedů**
+        /// (jejich těla, jejich obsah) od **vyjednávání ve stacku**, do kterého je detail
+        /// zasazený. Když vyjde blízko okna, cenu dělá kostra; když blízko samotného detailu,
+        /// dělají ji sousedé.
+        case chrome = "detail ve slepé kostře"
+        /// Totéž, ale detail dostane **změřenou štěrbinu** (`fillingSlot()`) místo pružného
+        /// rámce — tedy ta oprava, kterou repo na tuhle třídu má (#220, #361).
+        case chromeMeasured = "slepá kostra, měřená štěrbina"
     }
 
     /// Čím se přerovnání vyvolá. **Dvě cesty, protože nejsou totéž** a rozdíl mezi nimi je
@@ -129,15 +140,20 @@ struct DetailRelayoutMeasurement {
     /// (`PullRequestTab.showsReviewPanel`) — bez těch dvou by z čísel nebylo poznat, kolik z ceny
     /// patří seznamu a kolik panelu.
     private static let cases: [Case] = [
+        // Scénář, na který si člověk stěžuje, je **první**: přepnutí tabu nad diffem.
         Case(scene: .window, tab: .filesChanged, driver: .tab),
         Case(scene: .window, tab: .checks, driver: .tabWithoutDiff),
         Case(scene: .window, tab: .filesChanged, driver: .store),
         Case(scene: .window, tab: .filesChanged, driver: .poll),
         Case(scene: .window, tab: .filesChanged, driver: .host),
-        Case(scene: .window, tab: .overview, driver: .store),
-        Case(scene: .window, tab: .checks, driver: .store),
-        Case(scene: .detail, tab: .filesChanged, driver: .store),
-        Case(scene: .detail, tab: .filesChanged, driver: .store, payload: .bare),
+        // Ablace na to, **kde ta cena byla** (#472): kostra proti měřené štěrbině proti detailu
+        // samotnému. Drží se v sondě, protože je to jediné místo, kde je ten rozdíl vidět jako
+        // číslo — v aplikaci už měřená štěrbina je.
+        Case(scene: .chrome, tab: .checks, driver: .store),
+        Case(scene: .chromeMeasured, tab: .checks, driver: .store),
+        Case(scene: .chrome, tab: .checks, driver: .tabWithoutDiff),
+        Case(scene: .chromeMeasured, tab: .checks, driver: .tabWithoutDiff),
+        Case(scene: .detail, tab: .checks, driver: .store),
     ]
 
     /// Jedna série: okno se nechá usadit (**příprava se neměří**, #274) a teprve pak se dvacetkrát
@@ -183,6 +199,12 @@ struct DetailRelayoutMeasurement {
         print("SONDA scéna \(scenario.scene.rawValue): \(store.pullRequests.count) PR v seznamu,"
             + " aktivní \(store.activeTab), tab \(store.detailTab(for: pr).czechLabel),"
             + " okno \(window.frame.size)")
+
+        // **Snímek okna**, když si o něj někdo řekne (`PRISM_RENDER_DIR`). Měřená štěrbina je
+        // změna rozvržení, takže se musí dát porovnat i očima, ne jen číslem.
+        if let directory = ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"], scenario.scene == .window {
+            Self.write(host, to: URL(filePath: directory).appending(path: "okno-\(scenario.tab.czechLabel).png"))
+        }
 
         // Počitadla se zapínají **až po usazení**, aby v snímku nebyla příprava.
         let diagnostics = try Self.counters()
@@ -230,6 +252,28 @@ struct DetailRelayoutMeasurement {
         }
     }
 
+    /// Snímek okna do PNG — z okna na obrazovce přes `cacheDisplay`, protože blok kódu je
+    /// AppKitové view a `ImageRenderer` na něj nedosáhne (tatáž cesta jako `DiffWindowRenderProbe`).
+    private static func write(_ view: NSView, to url: URL) {
+        guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+            print("SONDA kresba \(url.lastPathComponent): view nevydalo bitmapu")
+            return
+        }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        guard let data = bitmap.representation(using: .png, properties: [:]) else {
+            print("SONDA kresba \(url.lastPathComponent): bitmapa se nedala zapsat")
+            return
+        }
+        // Selhání zápisu sondu nepokládá, ale mlčet se nesmí: „render se neuložil“ nesmí být
+        // k nerozeznání od „nespustil jsem ho“.
+        do {
+            try data.write(to: url)
+            print("SONDA kresba → \(url.lastPathComponent)")
+        } catch {
+            print("SONDA kresba \(url.lastPathComponent) se neuložila: \(error.localizedDescription)")
+        }
+    }
+
     /// Počitadla průchodů tělem. Zapisují do složky, která se hned zahodí — sondu zajímá
     /// `snapshot()`, ne soubor.
     private static func counters() throws -> RenderDiagnostics {
@@ -253,7 +297,7 @@ struct DetailRelayoutMeasurement {
             always: .success([Self.summary]),
             detail: .success(Self.detail),
             diffs: [.success(DiffMaterial.text(lines: lines))],
-            conversations: [.success(try Self.conversation())]
+            conversations: [.success(Self.conversation())]
         )
         // **Viewer je autor PR**, takže je to `Moje PR` — a právě na vlastním PR skládá panel
         // zadání pro agenta při každém překreslení (#333). Prázdný store to nemá, a proto je
@@ -278,6 +322,10 @@ struct DetailRelayoutMeasurement {
             await store.loadViewer()
             store.reviewRecords[pr] = Self.record
             store.setDraftBody("Zbytek vypadá dobře, jen ta jedna kontrola.", for: pr)
+            // **Checky a commity taky** — pruh záložek si na ně sahá kvůli odznakům při **každém**
+            // průchodu tělem detailu, takže prázdné mapy měřily spodní hranici scénáře.
+            store.checks[pr] = Self.checks
+            store.commits[pr] = Self.commits
         }
         store.openTab(pr)
         return (store, directory)
@@ -287,7 +335,7 @@ struct DetailRelayoutMeasurement {
     /// vzniklo, jich reviewer hlásí desítky, a panel, pruh záložek i tabulka je při každém
     /// překreslení procházejí.
     private static var record: ReviewRecord {
-        let reported = (0..<24).map { index in
+        let reported = (0..<48).map { index in
             makeReported(
                 file: "src/Module\(index % 8)/Handler\(index % 8).swift",
                 line: 12 + index * 3,
@@ -303,14 +351,39 @@ struct DetailRelayoutMeasurement {
         )
     }
 
-    /// Konverzace ze skutečného výstupu `gh` — tatáž fixture jako v `DetailTabRenderProbe`.
+    /// Konverzace o **dvou stech uzlech** (`ConversationFixture`, tatáž jako u dlouhé osy v #361).
     ///
-    /// Číslo je z fixture (13084), ne z `pr` téhle sondy: `conversation(id:)` si ověřuje, že
-    /// GraphQL odpověděl na to, na co se ptal.
-    private static func conversation() throws -> Conversation {
-        let text = try Fixture.text("gh/conversation-threads.json")
-        let response = try GhOutput.decoder.decode(GhConversationResponse.self, from: Data(text.utf8))
-        return try response.conversation(id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13084))
+    /// **Ne čtyřicetipoložková fixture z `gh`** (#472, druhé kolo měření): detail si konverzaci
+    /// sahá i mimo tab `Konverzace` — bere z ní `viewer`, počet nevyřízených vláken a materiál pro
+    /// zadání agentovi —, takže s krátkou konverzací měřila sonda **spodní hranici** toho, co má
+    /// uživatel na obrazovce.
+    private static func conversation() -> Conversation {
+        ConversationFixture.conversation(comments: 200)
+    }
+
+    /// Checky, které mají v pruhu záložek odznak. Skutečné tvary, ne prázdný seznam.
+    private static let checks: [PullRequestCheck] = (0..<12).map { index in
+        PullRequestCheck(
+            name: "kontrola \(index) / job",
+            outcome: index % 4 == 0 ? .failed : .passed,
+            link: URL(string: "https://github.com/cli/cli/actions/runs/\(index)"),
+            startedAt: Date(timeIntervalSince1970: 0),
+            completedAt: Date(timeIntervalSince1970: 100 + Double(index))
+        )
+    }
+
+    private static let commits: [PullRequestCommit] = (0..<24).map { index in
+        let sha = String(format: "%040x", index + 1)
+        let when = Date(timeIntervalSince1970: 1_753_000_000 + Double(index) * 3600)
+        return PullRequestCommit(
+            sha: sha,
+            message: "commit \(index): oprava, která se v ose pozná podle titulku",
+            authorName: index % 2 == 0 ? "Octo Cat" : "Hub Ot",
+            authorLogin: index % 2 == 0 ? "octocat" : "hubot",
+            avatarURL: nil,
+            committedAt: when,
+            isMerge: false
+        )
     }
 
     private static let summary = PullRequestSummary(
@@ -351,11 +424,39 @@ struct WindowRelayoutHost: View {
     /// úložiště, a na tom stojí, že se detail poznává jako nezměněný.
     @State private var merge: MergeSubmission?
 
+    /// Kostra z `ContentView`: hlavička nahoře, rail vlevo, stavový řádek dole. Rozměry jsou
+    /// z aplikace, obsah slepý — měří se **tvar**, ne sousedé.
+    private func skeleton<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            Color.gray.opacity(0.2).frame(height: 92)
+            HStack(spacing: 0) {
+                Color.gray.opacity(0.2).frame(width: 56)
+                content()
+            }
+            Color.gray.opacity(0.2).frame(height: 28)
+        }
+    }
+
+    private var detailView: some View {
+        PullRequestDetailView(
+            store: store,
+            pullRequest: summary,
+            submission: $submission,
+            merge: $merge
+        )
+    }
+
     var body: some View {
         let _ = clock.tick
         switch scene {
         // Kořen okna má tvar z `RootView`, včetně jeho podlahy — na ní stojí dotaz na minimum.
         case .window: ContentView(store: store).frame(minWidth: 700, minHeight: 400)
+        // Kostra z `ContentView`: hlavička nahoře, rail vlevo, stavový řádek dole. Rozměry jsou
+        // z aplikace, obsah slepý — měří se **tvar**, ne sousedé.
+        case .chrome:
+            skeleton { detailView }
+        case .chromeMeasured:
+            skeleton { detailView.fillingSlot(alignment: .topLeading) }
         case .detail:
             PullRequestDetailView(
                 store: store,
