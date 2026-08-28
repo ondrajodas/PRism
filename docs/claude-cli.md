@@ -431,3 +431,69 @@ V instalaci na tomhle stroji jsou **dva** slash commandy s tímhle jménem:
 Aplikace pouští ten **pluginový**, protože jako jediný jde adresovat nástrojem `Skill`
 (vestavěný slash command skill není). Rozdíl proti tomu, co tu stálo do #78: pod promptem
 aplikace na GitHub nesáhne — viz měření výš — a zákaz `Bash(gh:*)` je nad tím pojistka.
+
+
+## Důvěra ke složce a režimy povolení (#460)
+
+Obojí se týká **interaktivního** `claude`, tedy toho, co pouští `▶` v zásuvce. Review sessions se
+to netýká: běží s `-p` a `--help` říká výslovně, že *„the workspace trust dialog is skipped when
+Claude is run in non-interactive mode“*.
+
+### Dotaz na důvěru ke složce
+
+Interaktivní `claude` se v neznámém adresáři ptá **„Is this a project you created or one you
+trust?“**. Pro PRism je to problém, který se sám neopotřebuje: **každý pull request dostane vlastní
+pracovní strom**, takže je to pokaždé nová cesta a dialog by přišel u každého PR znovu.
+
+Změřeno pty sondou (`claude` spuštěný v pty, čtení výstupu, žádný zápis do skutečné konfigurace —
+podstrčený `HOME`):
+
+| Scénář | Výsledek |
+|---|---|
+| Adresář, který v konfiguraci není | **dialog** |
+| `projects[<cesta>].hasTrustDialogAccepted = true` | bez dialogu |
+| Registrovaný **předek o tři patra výš** | **bez dialogu** — důvěra se dědí |
+| Náš pracovní strom pod `~/Projects/PRism` (ten je důvěryhodný) | bez dialogu, potvrzuje dědění na skutečném stromě |
+
+Dvě věci, které z toho plynou a nejsou zjevné:
+
+- **Stačí zaregistrovat jednoho předka.** PRism proto zapisuje **kořen své cache**, ne cestu na
+  každý PR — je to zároveň přesně ta hranice, kterou aplikace už má (tvrdá podmínka č. 3).
+- **Klíčem je rozvinutá cesta.** Nad `/tmp/x` hlásí `claude` workspace `/private/tmp/x`. Rozvíjí to
+  `realpath`, **ne `URL.resolvingSymlinksInPath()`** — ta `/tmp` ani `/var` schválně nerozvíjí
+  (změřeno: vrátí `/tmp`), a přesně tyhle dva prefixy jsou na macOS symlinky.
+
+**Že je to podporovaná cesta, říká sám `claude`**: v jeho binárce stojí dvakrát věta *„…accept the
+trust dialog here once interactively, or set `projects[<cesta>].hasTrustDialogAccepted` in
+`~/.claude.json`“*. Žádná volba ani proměnná prostředí na to není — `--help` zná jen `-p`
+(neinteraktivní režim), což je přesně to, co v zásuvce použít nejde.
+
+### Režimy povolení
+
+`--permission-mode` má šest hodnot: `acceptEdits`, `auto`, `bypassPermissions`, `manual`, `dontAsk`,
+`plan`. Zásuvka pouští `auto`, a je to vybrané, ne odhadnuté:
+
+- **`auto` má vyjmenovaná a čitelná pravidla.** `claude auto-mode defaults` vypíše `allow`,
+  `soft_deny` a `hard_deny` — hranice tedy existují a dá se do nich podívat. Je to jediný z těch
+  šesti, u kterého to platí.
+- **`bypassPermissions` je podle `--help` doslova „Bypass all permission checks“** — to, co zapíná
+  `--dangerously-skip-permissions`. Do tohohle repa nepatří.
+- **`manual` a `acceptEdits` dotazy neodstraní** (druhý jen u editací), **`plan` mění, co session
+  dělá**, a `dontAsk` nemá vypsatelnou sadu pravidel, podle které by se dalo posoudit, co ještě
+  zastaví.
+
+## Co `claude` dělá s terminálem (#460)
+
+Změřeno pty sondou nad běžícím `claude` — které řídicí sekvence pošle:
+
+| Sekvence | Co znamená | Poslal? |
+|---|---|---|
+| `ESC[?1049h` | přepnutí do **alternativního bufferu** | **ano** |
+| `ESC[?1000h`, `?1002h`, `?1003h` | hlášení kliknutí, tažení a **každého pohybu** myši | **ano** |
+| `ESC[?1006h` | SGR režim souřadnic myši | **ano** |
+| `ESC[?1007h` / `?1007l` | alternate scroll zapnout/vypnout | **nepošle ani jedno** |
+
+Plyne z toho odpověď na „nejde mi v tom terminálu scrollovat“, a **není to chyba emulátoru**:
+alternativní buffer scrollback **nemá** (proto není kam couvnout) a `claude` si navíc zapne **plné
+hlášení myši**, takže kolečko se mu **doručuje jako událost** a co s ním udělá, je jeho rozhodnutí.
+V holém shellu se roluje normálně — scrollback má 500 řádků a je změřené, že se výřez hýbe.

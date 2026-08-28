@@ -255,4 +255,35 @@ struct TerminalDrawerTests {
         #expect(both.contains("reviewer nahlásil"))
         #expect(both.contains("nikam neukládá"))
     }
+
+    // MARK: - Co se řekne po `▶` (#460)
+
+    /// **Nejcennější tvrzení téhle části**: nad povedeným koncem se mlčí. Hláška „session se
+    /// pustila“ nad zásuvkou, ve které je ta session vidět, je text navíc nad tím, co má člověk
+    /// před očima — a stavový řádek se tím naučí ignorovat.
+    @Test("Povedený konec nic nehlásí")
+    func aSuccessSaysNothing() {
+        #expect(Policy.resumeNotice(.started, in: "php-review") == nil)
+        #expect(Policy.resumeNotice(.sent, in: "php-review") == nil)
+    }
+
+    /// Obojí je stav, ve kterém se **v zásuvce nic nezměnilo** — bez věty by `▶` vypadalo jako
+    /// tlačítko, které nic nedělá. Vyjmenované zvlášť, protože se s každým naloží jinak.
+    @Test("Neposlaná řádka se řekne, a s důvodem")
+    func aRefusalIsSpelledOut() throws {
+        let busy = try #require(Policy.resumeNotice(.busy, in: "php-review"))
+        #expect(busy.contains("něco běží"))
+        // **Věta jmenuje relaci** (#460): zásuvka jich drží víc, takže „něco běží“ bez jména by
+        // nutilo hledat, ve které.
+        #expect(busy.contains("php-review"))
+        // A říká to podstatnější: z odmítnutí se od #460 **nestává slepá ulička**, protože se
+        // zásuvka na tu relaci přepne.
+        #expect(busy.contains("přepnutá"))
+
+        let noShell = try #require(Policy.resumeNotice(.noShell, in: "php-review"))
+        #expect(noShell.contains("nepodařilo spustit"))
+        #expect(noShell.contains("php-review"))
+        // Důvod se **nehádá** — sem se dojde, až když selhal i `/bin/zsh`.
+        #expect(!noShell.contains("SHELL"))
+    }
 }

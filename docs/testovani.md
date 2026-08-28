@@ -6889,12 +6889,13 @@ TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/prism xcodebuild \
 se **přeskočí** — `xcodebuild` skončí `TEST SUCCEEDED` a v cílové složce nic není, což vypadá jako
 rozbitá sonda.
 
-### Zásuvka s terminálem (#459)
+### Zásuvka s terminálem (#459, `▶` do ní #460)
 
 Testuje se **rozhodnutí a stav, ne emulátor**: `TerminalDrawerTests` (čisté funkce),
 `AppStoreTerminalTests` (co store udělá s otevřením, zavřením záložky a ukončením — proti
-`FakeTerminalHost`, který žádný shell nespouští) a `AppDelegateTerminationTests` (dotaz při
-zavírání). Co se **v harnessu ověřit nedá a proto to zkouší člověk**, je vypsané níž.
+`FakeTerminalHost`, který žádný shell nespouští), `AppStoreResumeInDrawerTests` (`▶`, #460)
+a `AppDelegateTerminationTests` (dotaz při zavírání). Co se **v harnessu ověřit nedá a proto to
+zkouší člověk**, je vypsané níž.
 
 Co z toho stojí za zapamatování:
 
@@ -6910,6 +6911,68 @@ Co z toho stojí za zapamatování:
   ve smazané složce není teoretický stav; test to zkouší nad cestou, která nikdy neexistovala.
 - **Emulátor se netestuje** a je to vědomé: `SwiftTerm` má vlastní sadu testů. Rozhraní mezi ním
   a naším kódem je úzké — start, kill, fokus, barvy —, a to podstatné z něj měří sonda níž.
+- **U `▶` (#460) se tvrdí, co se do zásuvky poslalo, ne co se v ní stalo.** Rozhodnutí „běží tam
+  něco?“ dělá živý hostitel z jádra (`tcgetpgrp`), takže fake dostane výsledek podstrčený
+  (`FakeTerminalHost.outcome`) a testuje se, co s ním store udělá. Nejcennější jsou tři tvrzení
+  o tom, co se **ne**stane: **druhá session nepřebije první** (kvůli tomu se #460 měnilo), po
+  `busy` se **nepřepíše cesta v hlavičce** zásuvky a store **bez** hostitele si nevymyslí hlášku
+  o něčem, o co se nikdo nepokusil.
+- **U relací (#460) je nejcennější, že se běžící nikdy nevytlačí** (`TerminalSlotsTests`). Zahodit
+  rozdělaný `claude --resume` kvůli kliknutí, které o něm nic neví, je nevratný omyl — a rozbije se
+  to potichu, protože zásuvka po tom vypadá, jako by se nic nestalo. Vedle toho se výčtem tvrdí, že
+  relace **bez hlášeného stavu** se za běžící nepovažuje (jinak by zásuvka po restartu byla plná
+  něčím, co v ní nikdy nebylo) a že **kód, který nedorazil**, se kreslí jako klid, ne jako chyba.
+- **Že zavření záložky zabije i tu relaci, která nebyla vidět**, se tvrdí přes seznam, ne přes
+  aktivní relaci: `stopTerminals(for:)` dostane pull request, ne slot. Je to tvrzení o sirotkovi
+  z #264 a #351, jen o jednu úroveň dál.
+- **U důvěry ke složce (#460) jsou nejcennější tvrzení o tom, co se NEpřepíše**
+  (`WorkspaceTrustTests`): rozbitá konfigurace, konfigurace, která není objekt, a chybějící soubor
+  se **nezakládá**. Píše se do souboru, který aplikace nevlastní, takže chyba tady nestojí funkci,
+  ale cizí práci — a ztráta při nezapsání je **jeden dialog navíc**. K tomu se tvrdí, že cizí klíče
+  přežijí a že se hotová důvěra **nezapisuje znovu** (přes čas změny souboru, ne přes obsah).
+- **Že do zásuvky jde `session.shellLine`, se tvrdí i literálem.** Text se porovnává s celou
+  řádkou `cd '…' && claude --resume …` **a** s `session.shellLine`: první podoba chytí změnu
+  uzávorkování, druhá to, že se `⧉` a `▶` rozešly.
+
+#### Sonda `TerminalScrollProbe` — tři různá „nejde scrollovat“ (#460)
+
+Vznikla na hlášení „nejde mi scrollovat v tom terminálu“ a **měří tři věci, protože každá znamená
+jinou opravu**: kdo dostane kolečko (`hitTest` nad zásuvkou), jestli má emulátor čím rolovat
+(scrollback a `yDisp` po kolečku) a co dělá kolečko **nad alternativním bufferem**.
+
+Dvě věci, které z ní plynou a bez ní by se hádaly:
+
+- **Hit test se musí měřit v okně** (`orderFrontUnanimated()`, #462). Bez okna vrátí `hitTest`
+  kořenový `NSHostingView` a plochu emulátoru vůbec nenajde, **přestože v hierarchii je** —
+  změřeno. Sonda bez okna by tedy hlásila chybu, která není, a poslala by opravu do vrstvy, kde
+  žádná není potřeba.
+- **Nad alternativním bufferem je „nejde rolovat“ správná odpověď.** Kolečko se tam nemá o co
+  opřít (scrollback z definice není) a `claude` si navíc zapíná plné hlášení myši, takže událost
+  dostane on. Tvrdí se to tedy jako **tvrzení o tom, co se nestane**: `yDisp` se nesmí pohnout.
+
+#### Sonda `TerminalResizeProbe` — kam až dojede rozměr (#460)
+
+Vznikla na hlášení „resize ne úplně funguje, asi se přeskládává text“. **Měří přes
+`NSHostingView`, ne nad holým `EmbeddedTerminalView`**, a je to celý smysl: mezi oknem a emulátorem
+stojí `TerminalSurface` (`NSViewRepresentable`) a rámec od SwiftUI, takže sonda nad holým view by
+ztrátu rozměru v té vrstvě neviděla a hlásila by, že je čisto.
+
+Tři tvrzení, tři různé konce cesty:
+
+- **Emulátor** (`terminal.cols`) — stav, který `SwiftTerm` mění **synchronně** v `setFrameSize`,
+  takže na něj hladová hlavní fronta nedosáhne. Naměřeno 1 200 b → 163 sloupců, 700 b → 92,
+  zpátky 1 000 b → 134; **řádky se se šířkou nehnuly**.
+- **Jádro** (`TIOCGWINSZ` na master deskriptoru) — tohle je ta půlka, kvůli které se `claude`
+  překreslí, protože `SIGWINCH` posílá jádro, ne emulátor. Naměřeno 138×21 buněk a 1 000×300 px,
+  po zúžení 82×21. Pixely se tvrdí schválně: nula v nich je stav, který se z okna nepozná, a stojí
+  na nich sixel i `kitty` protokol. **Se skutečným shellem**, tedy jen pod `PRISM_MEASURE`.
+- **Kolikrát** se to do jádra pošle — 61 průchodů rozvržení přes 60 bodů dalo **8** změn (buňka je
+  široká ~7 b). Kdyby se posílalo na každý průchod, dostal by `claude` desítky `SIGWINCH` se
+  stejnou velikostí a přesázel by se pokaždé.
+
+**Sonda tedy neodhalila chybu, a to je její výsledek** — přeskládání je reflow scrollbacku, který
+`SwiftTerm` dělá podle správné úmluvy (`isReflowEnabled == hasScrollback`, takže alternativní
+buffer se nereflowuje). Zapsané je to proto, aby to příště nikdo neměřil znovu od nuly.
 
 #### Sonda `EmbeddedTerminalProbe` — skutečný shell, ale bez emulátoru
 
@@ -6957,6 +7020,28 @@ aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
 5. Zavření okna s běžícím procesem se **zeptá**, a po `Ukončit` po sobě nic nenechá:
    `ps -o pid,ppid,command -p <pid shellu>` a `pgrep -f claude` nemají co vrátit.
 6. Na české klávesnici funguje `⌃;`.
+7. **`▶` v hlavičce dráhy v tabu `Průběh`** (#460): vytáhne zásuvku, **přepne na relaci té dráhy**
+   a session v ní **naváže** — `claude` se rozjede a nabídne pokračování toho vlákna, ne nové.
+   Po `exit` v relaci `▶` shell **pustí znovu** a starý výpis nad ním zůstane.
+8. **Dvě session naráz** (#460 — tohle je ten stav, kvůli kterému se zadání měnilo): pusť review se
+   dvěma reviewery, klikni `▶` u obou. V hlavičce mají být **dvě záložky** a přepínání mezi nimi
+   nesmí ani jednu ukončit; puntík u běžící svítí, u doběhlé zhasne a u nenulového konce je
+   **červený**. `` ⌃` `` k tomu přidá třetí relaci `shell` a **nepřepne** na ni.
+9. **Do relace, ve které něco běží, se nesmí nic napsat**: pusť v ní `sleep 30`, klikni na `▶`
+   a v terminálu nesmí přibýt ani znak; místo toho se zásuvka na tu relaci přepne a dole je věta.
+10. **Zavření záložky PR zabije všechny relace, i tu, která nebyla vidět** — po zavření nesmí
+    `pgrep -f claude` ani `ps` na PID těch shellů nic vrátit. Totéž při ukončení aplikace.
+11. **Změna velikosti** (#460): rozměr do jádra dojede správně (změřeno, viz sonda níž), ale jak
+    obsah po přesázení **vypadá**, se z harnessu přečíst nedá. Roztáhni okno i zásuvku nad běžícím
+    `claude` a posuď, jestli se překreslí čitelně.
+12. **Dotaz na důvěru ke složce se nesmí objevit** (#460): klikni `▶` na PR, na kterém zásuvka
+    ještě nikdy nebyla — `claude` se **nesmí** zeptat *„Is this a project you created or one you
+    trust?“*. Ověřit se to dá jedině spuštěním, protože ten dialog je interaktivní.
+13. **Session z `▶` se neptá na povolení u každého kroku** (`--permission-mode auto`) — a `⧉`
+    kopíruje příkaz **bez** toho přepínače.
+14. **Rolování** (#460): v holém shellu (`ls -R /usr/share | head -500`) kolečko roluje; **nad
+    běžícím `claude` ne, a je to správně** — alternativní buffer scrollback nemá a `claude` si
+    hlášení myši zapíná sám, takže se roluje uvnitř něj.
 
 ### `⌃Tab` a shift, který mění klávesu (#245)
 
