@@ -5340,8 +5340,16 @@ je **jiný a dražší scénář** než přerovnání — 407–682 ms proti 95�
 rozvržení** pevného seznamu z #469: 294 průchodů tělem `DiffRowView` a nasazení **všech** bloků
 (50 z 50 proti pěti v ustáleném stavu).
 
-**Zbývá tedy jedna cesta a je to redesign, ne úprava**: seřadit řádky do úseků a ty mimo výřez
-nahradit jedním prázdným místem známé výšky, aby pevný stack měl řádově **desítky** dětí místo
-tisíců. Laznost by zůstala mimo rozvržení (žádný `LazyVStack`, tedy ani kolo z #361), ale sahá to
-na kotvy skoku na nález, na split pohled i na pruh z #422 — proto se to do #472 nevešlo.
-A sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+**Ten redesign se pak zkusil — a je to čtvrtý zamítnutý kandidát.** Řádky se seskupily po
+šestnácti a úsek mimo pás se nahradil jedním prázdným místem známé výšky (paměť výšek v `@State`
+detailu, aby přežila přepnutí tabu; skok na nález si svůj úsek vynucuje, aby kotva v hierarchii
+byla). **Mechanicky to fungovalo** — průchodů tělem `DiffRowView` na jedno přepnutí ubylo
+**z 294 na 147** —, a **cena se nehnula**: 389/638 ms proti 407/602 ms. Půlka dětí ve stacku
+zmizela a nezměnilo to nic, což je zároveň ten nejsilnější doklad, že **cena není v počtu řádků**.
+Zahozeno.
+
+**A ablace ukázala, kde ta cena doopravdy je**: přepnutí mezi dvěma taby **bez diffu**
+(`Přehled` ↔ `Kontroly`) stojí **309 ms** proti 410 ms s diffem. **Tři čtvrtiny přepnutí tedy
+s diffem nemají co dělat** — je to přestavba detailu samotného (hlavička, pruh záložek, panel,
+`.task` kaskáda), která se přepnutím zahodí a staví znovu. Kdo na tom bude pracovat dál, má začít
+tam, ne v diffu; a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.

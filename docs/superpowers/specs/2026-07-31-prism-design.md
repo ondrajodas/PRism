@@ -3693,9 +3693,25 @@ stojí vedle něj. Přepnutí tabu je přitom **jiný a dražší scénář** ne
 95–116 ms) a jako jediné **roste s velikostí diffu**: obsah tabu se zahodí a platí se **první**
 rozvržení.
 
-**Zbývající cesta je redesign, ne úprava.** Seřadit řádky do úseků a ty mimo výřez nahradit jedním
-prázdným místem známé výšky, aby pevný stack měl desítky dětí místo tisíců — laznost by zůstala
-mimo rozvržení, takže by kolo z #361 nemělo kde vzniknout. Sahá to ale na kotvy skoku na nález, na
-split pohled i na trvalý pruh z #422, takže to je vlastní issue s vlastní pauzou, ne dodatek
-k #472. **Vrátit `LazyVStack` zamítnuto beze změny** (#469): zaseknuté okno je horší vada než pomalé.
+**A ten redesign se pak na pokyn uživatele zkusil — jako čtvrtý, se stejným výsledkem.** Řádky se
+seskupily po šestnácti (`Policy.diffChunks`), úsek mimo pás se nahradil jedním prázdným místem
+známé výšky, paměť výšek žila v `@State` detailu (aby přežila přepnutí tabu) a skok na nález si
+svůj úsek vynucoval, aby kotva v hierarchii byla. **Mechanicky to fungovalo**: průchodů tělem
+`DiffRowView` na jedno přepnutí ubylo **z 294 na 147**. **Cena se nehnula** — 389/638 ms proti
+407/602 ms.
+
+**Půlka dětí ve stacku zmizela a nezměnilo to nic.** To je zároveň ten nejsilnější doklad
+z celého #472: **cena není v počtu řádků**, takže ani dotažení té druhé půlky by nepomohlo.
+Zahozeno, aby v repu nezůstal složitý a rizikový mechanismus, který se nedá obhájit číslem.
+
+**Kde ta cena je, ukázala ablace, která měla přijít dřív**: přepnutí mezi dvěma taby **bez diffu**
+(`Přehled` ↔ `Kontroly`) stojí **309 ms** proti 410 ms s diffem. **Tři čtvrtiny přepnutí tedy
+s diffem nemají co dělat** — je to přestavba **detailu samotného**: hlavička, pruh záložek, panel
+a `.task` kaskáda se přepnutím zahodí a staví znovu (`PullRequestDetailView=2` a `MarkdownText=1`
+na přepnutí i tam, kde žádný seznam není). Kdo na tom bude pracovat dál, má začít **tam**.
+
+**Poučení pro příště, a je obecné:** u téhle třídy se **napřed měří, která část scénáře je drahá**,
+a teprve pak se optimalizuje. Čtyři pokusy zlevnily věci, které dohromady dělaly čtvrtinu problému.
+
+**Vrátit `LazyVStack` zamítnuto beze změny** (#469): zaseknuté okno je horší vada než pomalé.
 

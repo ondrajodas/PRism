@@ -98,6 +98,10 @@ struct DetailRelayoutMeasurement {
         /// se přepnutím **zahodí a postaví znovu**, takže se platí **první rozvržení**, ne
         /// přerovnání. A první rozvržení je u pevného diffu (#469) vědomě drahé.
         case tab = "přepnutí tabu tam a zpět"
+        /// **Přepnutí mezi dvěma taby bez diffu** (`Přehled` ↔ `Kontroly`) — ablace k tomu výš.
+        /// Bez ní se nedá říct, kolik z ceny přepnutí patří diffu a kolik tomu, že se přestaví
+        /// detail: obojí se přepnutím zahodí a staví znovu.
+        case tabWithoutDiff = "přepnutí tabu bez diffu"
     }
 
     /// Co v store leží. **Ablace**: prázdný store je harness, plný je to, nad čím okno v provozu
@@ -126,6 +130,7 @@ struct DetailRelayoutMeasurement {
     /// patří seznamu a kolik panelu.
     private static let cases: [Case] = [
         Case(scene: .window, tab: .filesChanged, driver: .tab),
+        Case(scene: .window, tab: .checks, driver: .tabWithoutDiff),
         Case(scene: .window, tab: .filesChanged, driver: .store),
         Case(scene: .window, tab: .filesChanged, driver: .poll),
         Case(scene: .window, tab: .filesChanged, driver: .host),
@@ -196,6 +201,10 @@ struct DetailRelayoutMeasurement {
                 store.setDetailTab(.overview, for: pr)
                 _ = spinMainRunLoop(seconds: 0.016)
                 store.setDetailTab(.filesChanged, for: pr)
+            case .tabWithoutDiff:
+                store.setDetailTab(.overview, for: pr)
+                _ = spinMainRunLoop(seconds: 0.016)
+                store.setDetailTab(.checks, for: pr)
             }
             _ = spinMainRunLoop(seconds: 0.016)
         }

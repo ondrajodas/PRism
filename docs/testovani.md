@@ -6612,7 +6612,23 @@ Na jedno přepnutí se přeloží **294 těl `DiffRowView`** (2000řádkový dif
 bloky** — `bloků 50, nasazení 50` proti `bloků 5` v ustáleném stavu, protože změřená výška bloku
 zaniká s podstromem. **Roste to s velikostí diffu**, na rozdíl od přerovnání.
 
-#### Tři zlevnění, která se změřila a zahodila
+#### Tři čtvrtiny přepnutí nemá s diffem co dělat
+
+Pohon `přepnutí tabu bez diffu` (`Přehled` ↔ `Kontroly`, tedy dva taby, ve kterých žádný dlouhý
+seznam není) je ablace k tomu výš — a odpovídá na otázku, kterou se čtyři pokusy o zlevnění diffu
+marně snažily obejít:
+
+| Přepnutí | 500 řádků |
+|---|---|
+| `Přehled` ↔ `Soubory` | **410 ms** |
+| `Přehled` ↔ `Kontroly` (bez diffu) | **309 ms** |
+
+**Diff je z toho ~100 ms, zbytek je přestavba detailu samotného** — hlavička, pruh záložek, panel
+a `.task` kaskáda, které se přepnutím zahodí a staví znovu (`PullRequestDetailView=2`
+a `MarkdownText=1` na přepnutí i v tabu bez diffu). U 2000řádkového diffu je diffová část větší
+(~230 ms z 638), ale ta fixní zůstává.
+
+#### Čtyři zlevnění, která se změřila a zahodila
 
 Všechna tři **mechanicky fungují** a **na ceně nezměnila nic**. Jsou tady proto, aby je nikdo
 nezkoušel podruhé:
@@ -6622,9 +6638,11 @@ nezkoušel podruhé:
 | `Layout` v kořeni okna, který na dotaz na **minimum** (`0×0`) odpoví konstantou místo zanoření — cílem bylo `updateWindowContentSizeExtremaIfNecessary`, které ve `sample`u drží 15–50 % rozvržení | `WindowMinimumProbe`: pod kořenem zbyla **jedna** nabídka místo dvou | 94 ms proti **98 ms** — cena té druhé aktualizace grafu **není v tom sestupu** |
 | **Zapamatované výšky bloků**, které přežijí přepnutí tabu (aby se nemusely nasazovat všechny) | počitadlo v cache: **5 778 použití z 6 924 dotazů** | 422 / 576 ms proti **428 / 602 ms** — mount `NSTextView` není to, co přepnutí stojí |
 | Skládat uzávěry tažení a kopírování **jednou za soubor** místo za řádek (8 místo 2 352 alokací) | — | 407 / 682 ms proti **428 / 602 ms**, tedy uvnitř rozptylu; **zůstalo jako kratší kód**, ne jako zlevnění |
+| **Úseky řádků** (#472, redesign): řádky po šestnácti, úsek mimo pás nahrazený jedním prázdným místem známé výšky — aby měl pevný stack desítky dětí místo tisíců | průchodů tělem `DiffRowView` na jedno přepnutí **294 → 147**, tedy polovina pryč | 389 / 638 ms proti **407 / 602 ms**. **Půlka dětí zmizela a cena se nehnula** — což je zároveň ten nejsilnější doklad, že cena není v počtu řádků |
 
-**Co z toho plyne:** cenu drží **rozvržení pevného seznamu**, ne nic z toho, co jde obejít vedle
-něj. Ve `sample`u té fáze je naše vlastní práce **~1,5 %** hlavního vlákna (`AppStore` 21,
+**Co z toho plyne:** cenu **nedrží počet řádků** — půlka jich zmizela a nezměnilo to nic —
+a u přepnutí tabu jsou **tři čtvrtiny ceny mimo diff** (tabulka výš). Zbývá rozvržení detailu
+a okna jako celku. Ve `sample`u té fáze je naše vlastní práce **~1,5 %** hlavního vlákna (`AppStore` 21,
 `Policy` 15, `PullRequestDetailView` 36 vzorků ze 14 726); zbytek je `GraphHost.flushTransactions`
 (1 947), `NSHostingView.layout` (1 630) a `LayoutEngineBox.sizeThatFits` (1 222).
 
