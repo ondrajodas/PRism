@@ -114,9 +114,10 @@ struct ToolStepRenderProbe {
             // `Ukázat session` (#327). Sbalený řádek ho dostane taky — doběhlá dráha je ta
             // častější, takže na obrázku má být vidět v obou podobách.
             showRawSession: {},
-            // `Otevřít session v Terminálu` (#453) — na obrázku je vidět vedle `⧉` v hlavičce,
-            // tedy to, co kreslí sekce 34 návrhu.
-            openInTerminal: {}
+            // `Pustit session v terminálu` (#453, od #460 do zásuvky) — na obrázku je vidět vedle
+            // `⧉` v hlavičce, tedy to, co kreslí sekce 34 návrhu. Kresba se přepojením nemění,
+            // změnil se jen cíl kliknutí a popisek.
+            resumeInDrawer: {}
         )
     }
 

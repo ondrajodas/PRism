@@ -5380,3 +5380,110 @@ se `fillingSlot()` dostane i **dovnitř** tabu, mezi obsah a jeho části.
 s diffem nemají co dělat** — je to přestavba detailu samotného (hlavička, pruh záložek, panel,
 `.task` kaskáda), která se přepnutím zahodí a staví znovu. Kdo na tom bude pracovat dál, má začít
 tam, ne v diffu; a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+
+## #460 — `▶` v `Průběhu` pouští session v zásuvce, a zásuvka drží víc relací naráz
+
+Tlačítko `▶` v hlavičce dráhy přestalo otevírat cizí okno a **vytáhne zásuvku** (#459), přepne na
+relaci té dráhy a pustí v ní `claude --resume <id>` v pracovním stromě té session. `⧉`
+(`Zkopírovat resume`) **zůstává**: kdo si session pouští v iTermu, tmuxu nebo na jiném stroji,
+potřebuje text. `Policy.resumeCommand(sessionID:)` a `ShellQuoting` se použily **beze změny**,
+takže to, co se kopíruje, a to, co se pouští, se nemá čím rozejít.
+
+**Zadání se během PR rozšířilo, a je to zapsané jako změna, ne jako součást plánu.** První podoba
+psala do **jediného** shellu zásuvky, protože sekce 35 nakreslila jeden. Při proklikání se ukázalo,
+že to nefunguje v tom stavu, kvůli kterému zásuvka vznikla: aplikace pouští review **paralelně**
+(`maxConcurrentReviews` je ve výchozí konfiguraci 3), takže se člověk chce dívat na dvě session
+naráz — a jeden shell ho nutil jednu ukončit, aby viděl druhou. Návrh se kvůli tomu překreslil
+(sekce 35, `.term-tabs`, poznámka 112) a **brána na vzhled proběhla znovu**, dřív než se sáhlo na kód.
+
+**Zásuvka proto drží N relací** (`TerminalSlot` = pull request + role, kde role je holý `shell`
+nebo `session(skill)`) a přepíná se mezi nimi **záložkami**. Klíčem je dvojice, ne jen skill:
+pracovní adresář je adresář *toho* PR. Plocha se v SwiftUI klíčuje relací (`.id(activeSlot)`), jinak
+by po přepnutí záložky zůstala v hierarchii ta předchozí — `makeNSView` se volá jen při vzniku
+representable.
+
+**Strop je pět a vytlačuje se jedině neběžící relace, nejstarší.** Zdola je to `maxConcurrentReviews`
+plus holý shell (čtyři jsou tedy běžný stav), shora řádek v hlavičce vedle cesty a kapsle
+`plná práva`. Zahodit běžící shell by znamenalo zabít rozdělanou práci kvůli kliknutí, které o ní
+nic neví; když neběžící žádná není, nová relace **nevznikne** a řekne se to — mlčky nevzniklá
+záložka vypadá jako rozbité tlačítko. **Úklid platí pro všechny relace**: zavření záložky PR jde
+přes seznam (`stopTerminals(for:)`), ne přes tu aktivní, protože osiřela by zrovna ta, která nebyla
+vidět; ukončení aplikace zabíjí všechno a značku v `sessions.json` má každá relace vlastní.
+
+**Puntík u záložky má tři stavy, i když návrh kreslí dva.** Do #460 stála v hlavičce kapsle
+`skončil (kód)` a odlišit `exit 1` od `exit 0` bylo zrovna to, kvůli čemu se na ni člověk podíval;
+tři kódy se do hlavičky nevejdou, takže z toho je puntík — ale `crit` znamená **nenulový** konec
+a celý kód zůstává v nápovědě. Kód, který **nedorazil**, se kreslí jako klid: je to odpověď
+„nevíme“, ne chyba.
+
+**Posílá se celá `shellLine`** — `cd '<strom>' && claude --resume <id>`, tedy tatáž řádka, jakou od
+#453 dostával `Terminal.app`. `cd` v ní není nadbytečné ani u vlastní relace: `▶` umí přijít i na
+relaci, která už existuje a stojí jinde. **Do běžícího jobu se pořád nepíše** (`tcgetpgrp` jedním
+voláním ve chvíli kliknutí, ne v časovači), jen se z toho přestala dělat slepá ulička — zásuvka se
+na tu relaci přepne.
+
+**Dvě věci jsou změřené pty sondou**: píše se `CR` (to, co posílá `↵`; `CR` i `LF` projdou stejně,
+4 ze 4 v obou fázích, takže rozhodlo pravidlo) a **nečeká se na prompt** (bajty zapsané dřív, než
+`ZLE` naběhne, počká linková disciplína — 5 z 5, i s `.zshrc`, který sekundu spí). Cena je jedna
+ozvěna řádky navíc nad promptem.
+
+**Resize se měřil, ne opravoval** (`TerminalResizeProbe`, přes `NSHostingView`, aby v cestě stál
+i `TerminalSurface`). Šířka okna dojede do emulátoru (1 200 b → 163 sloupců, 700 b → 92, zpátky
+1 000 b → 134) a **řádky se u toho nehnou**; jádro ví totéž (138×21 buněk, 1 000×300 px, po zúžení
+82×21); a `TIOCSWINSZ` chodí jen na skutečnou změnu — **8** změn na 61 průchodů rozvržení přes
+60 bodů. Přeskládání, které je vidět, je proto **reflow scrollbacku**, a `SwiftTerm` ho dělá podle
+správné úmluvy: `isReflowEnabled == hasScrollback`, takže se přesází jen normální buffer, kdežto
+alternativní (do kterého kreslí celoobrazovkové TUI) se nereflowuje vůbec. Tak se chová
+`Terminal.app` i `iTerm`.
+
+**`AppleScriptTerminal` se nemaže** — zůstává bez volajícího i s `NSAppleEventsUsageDescription`,
+a je to rozhodnutí na jedno vydání s napsanou podmínkou zániku (specifikace, *Osud
+`AppleScriptTerminal`*): shell v zásuvce se zabije se zavřením aplikace, kdežto okno `Terminal.app`
+session přežije, a PRism se restartuje po každém mergi. Mrtvé pole z toho nezůstane: do
+`AppStore.terminalFailure` od #460 píše `▶` sám.
+
+**Dvě věci našel Copilot a obě byly reálné.** `stopTerminal` zabíjel plochu s **navěšenými
+uzávěry**, takže asynchronně ohlášený konec procesu zapsal stav relace, která už v seznamu nebyla
+(záznam, který nikdo nekreslí — a po vzniku stejnojmenné relace by ukázal cizí minulost); odpojují
+se proto dřív než `kill()`, a značku v `sessions.json` to neohrozí, tu maže `kill()` sám. A `` ⌃` ``
+**přepisovalo cestu v hlavičce i relaci, která už běží**, přestože hostitel vrací existující plochu
+a nový adresář si nevezme — popiska by tedy ukazovala jinam, než kde shell stojí. Adresář se hledá
+jen relaci, která ho ještě nemá.
+
+**Tři věci z druhého proklikání, a dvě z nich se ukázaly jako správné chování.**
+
+**Dotaz na důvěru ke složce se odstranil.** Interaktivní `claude` se v neznámém adresáři ptá
+*„Is this a project you created or one you trust?“*; review sessions to netrápí (běží s `-p`), ale
+`--resume` v zásuvce ano — a protože **každý PR dostane vlastní pracovní strom**, přišel by ten
+dialog u každého PR znovu. Volba ani proměnná prostředí na to **není** (`--help` zná jen `-p`),
+takže se zapisuje `hasTrustDialogAccepted` do `~/.claude.json` — což je cesta, na kterou **odkazuje
+sám `claude`** ve své binárce. Změřeno, že se důvěra **dědí z libovolného předka**, takže stačí
+**jeden záznam na kořen cache**, ne jeden na PR; klíčem je `realpath`, protože Foundation `/tmp`
+ani `/var` schválně nerozvíjí. Je to **první zápis aplikace mimo vlastní cache** a drží ho tři
+věci: na soubor, kterému nerozumí, **nesáhne**, zapisuje **atomicky** s přenesenými právy
+a **jen jednou**.
+
+**Session z `▶` běží v auto režimu** (`--permission-mode auto`). Je to **jiná třída session než ta
+z tvrdé podmínky č. 2**: tam jde o session, které pouští aplikace, a jejich sady se **nemění ani
+o položku**. Tahle je session, kterou **řídí člověk ve svém shellu** — a **nová práva nedostává**,
+protože zásuvka je plnohodnotný shell s kapslí `plná práva`; odpadají dotazy, ne hranice. Z šesti
+režimů je `auto` jediný s **vyjmenovanými a čitelnými pravidly** (`claude auto-mode defaults`);
+`bypassPermissions` je „bypass all permission checks“ a do repa nepatří. **Napevno, ne v nastavení.**
+`⧉` přepínač **nedostane**, takže se `▶` a `⧉` poprvé rozcházejí — skládá je ale pořád jedna funkce.
+
+**Rolování se měřilo, neopravovalo.** Tři otázky, tři měření, **žádná chyba**: kolečko padne do
+plochy emulátoru (`hitTest` **v okně** — bez okna vrátí kořen a plochu nenajde, což první podoba
+sondy hlásila jako chybu, která není), scrollback má **500 řádků** a výřez se hýbe (`yDisp` 380 →
+377), a nad alternativním bufferem se nehýbe. Rozhoduje to poslední: změřeno, že `claude` posílá
+`ESC[?1049h` **a k tomu plné hlášení myši** (`?1000h`, `?1002h`, `?1003h`, `?1006h`), takže kolečko
+se **doručuje jemu** a terminál nemá kam couvnout — alternativní buffer je z definice bez historie.
+Tak se chová `Terminal.app` i `iTerm`.
+
+Testů **4373**, všechny zelené — z toho **53 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
+vytlačí, co je na záložce, co se řekne), store (**druhá session první nepřebije**, zavření záložky
+zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
+
+**Co ověřuje jedině člověk**: že se session v zásuvce doopravdy naváže, že přepínání mezi dvěma
+běžícími nic neukončí, že se **neobjeví dotaz na důvěru ke složce** (ten dialog je interaktivní)
+a jak obsah po přesázení **vypadá**. Do pty se v harnessu psát nedá a obsah emulátoru se odtud
+nepřečte vůbec (změřeno u #459).

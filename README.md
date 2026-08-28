@@ -1043,7 +1043,8 @@ je horší než drahá.
 **`` ⌃` `` vytáhne přes spodek záložky shell**, který stojí v **kopii repa toho pull requestu**
 v cache aplikace. Do #459 se dal terminál otevřít jedním tlačítkem v tabu `Průběh` (#453), jenže
 to pořád znamená **odejít z okna**: kdo se během review potřebuje podívat na `git log`, pustit test
-nebo dopsat otázku do běžící session, odejde a vrátí se za deset minut.
+nebo dopsat otázku do běžící session, odejde a vrátí se za deset minut. Od #460 do zásuvky míří
+i to tlačítko: `▶` v tabu `Průběh` v ní rovnou pustí `claude --resume` (viz níž).
 
 **Zásuvka, ne devátá záložka**, a je to celý smysl: půlka užitku je, že je vidět diff a **pod ním**
 výstup příkazu. Roztahuje se **tažením za horní hranu** a výška si pamatuje mezi spuštěními; nad
@@ -1071,13 +1072,27 @@ nemá kde dojít, takže se běžící shell zapisuje do `sessions.json` a osiř
 stejně jako u review (#351). **Zavření záložky** shell zabije taky; **schování zásuvky ne** —
 `` ⌃` `` je pohled, ne konec práce.
 
-**Shell je jeden na pull request**, protože pracovní adresář je checkout **toho** PR. Když v cache
-žádná kopie repa není, zásuvka to místo prázdné plochy řekne — terminál bez repozitáře je obyčejný
-shell a ten má člověk vedle.
+**Relací je v zásuvce víc, ne jedna** (#460). Aplikace pouští review **paralelně**, takže „jedna
+zásuvka = jeden shell“ by nutila jednu session ukončit, aby byla vidět druhá — a to je zrovna ten
+stav, ve kterém se na ně chce člověk dívat. Přepíná se **záložkami** v hlavičce; puntík u záložky
+nese, jestli v ní něco běží (a **červený** znamená, že to skončilo nenulově — celý kód je
+v nápovědě). `shell` je jedna z relací, ta, kterou dá `` ⌃` ``.
 
-**Známé omezení proti návrhu:** kapsle v hlavičce ukazuje `běží` / `skončil (kód)`, ne příkaz,
-který zrovna běží. Zjistit ho znamená ptát se jádra na popředí pty v pravidelném taktu — tedy další
-časovač v okně kvůli popisce.
+**Relace jsou vázané na pull request**, protože pracovní adresář je checkout **toho** PR. Drží se
+jich nejvíc **pět**; když je plno, vytlačí se **nejstarší doběhlá**, a když všechny běží, nová
+nevznikne a řekne se to. Zavření záložky PR zabije **všechny** jeho relace. Když v cache žádná kopie
+repa není, zásuvka to místo prázdné plochy řekne — terminál bez repozitáře je obyčejný shell a ten
+má člověk vedle.
+
+**Známé omezení proti návrhu:** v hlavičce není napsaný příkaz, který zrovna běží — jen puntík
+u záložky. Zjistit ho znamená ptát se jádra na popředí pty v pravidelném taktu, tedy další časovač
+v okně kvůli popisce.
+
+**Změna velikosti je změřená** (#460): šířka okna dojede přes SwiftUI do emulátoru i do jádra
+(buňky i pixely) a `TIOCSWINSZ` chodí jen na skutečnou změnu, ne na každý průchod rozvržení. Co je
+při zúžení vidět jako přeskládaný text, je **reflow scrollbacku** — `SwiftTerm` přesází jen
+normální buffer, kdežto alternativní (do kterého kreslí celoobrazovkové TUI) nechá být. Tak se
+chová `Terminal.app` i `iTerm`.
 
 ### Záložka `Nálezy` (#242)
 
@@ -1188,10 +1203,10 @@ od proběhlé jen barvou odznaku, protože na důvod ani na konec logu nebylo m�
 a `spadlo` se slít nesmí.
 
 Podrobný výpis toho, co reviewer spouštěl — který soubor čte, co hledá, jaký příkaz spustil —
-je pod rozbalením každé dráhy. Skládá se nativně z eventů, ne přeposíláním textu, takže
-aplikace nepotřebuje vestavěný terminál; když je potřeba se do session vrátit, zkopíruje
-se `claude --resume <id>` jedním tlačítkem — nebo se od #453 rovnou **otevře v Terminálu**,
-viz níž. Osa zůstane i po doběhnutí běhu — a od #203
+je pod rozbalením každé dráhy. Skládá se nativně z eventů, ne přeposíláním textu, takže se dá
+číst i bez terminálu; když je potřeba se do session vrátit, zkopíruje se `claude --resume <id>`
+jedním tlačítkem — nebo se od #453 rovnou **pustí** (do #460 v `Terminal.app`, od #460
+v zásuvce), viz níž. Osa zůstane i po doběhnutí běhu — a od #203
 **přežije i restart aplikace**: ukládá se k běhu, takže se k ní dá vrátit druhý den i s tím
 `sessionID`. Delší běh nadělá stovky událostí, proto se drží posledních 300 a kolik se jich
 nevešlo, je u rozbalení vidět; ořezává se **začátek**, protože se do osy kouká kvůli tomu, čím
@@ -1239,24 +1254,48 @@ tam pořád leží. *Prázdný* nabídne opakování, protože u běžící sess
 sheet by vypadal jako „session nic nedělala“. Do sheetu se **nepíše**: čte se, vybírá a kopíruje,
 a cesta zpátky do session zůstává `Zkopírovat resume`.
 
-**Do běžící session se dá vstoupit, jen ne uvnitř okna** (#453, návrh sekce 34). Vedle `⧉`
-(zkopíruje `claude --resume <id>`) je `▶` — **`Otevřít session v Terminálu`**, které tentýž
-příkaz rovnou pustí v `Terminal.app`, a to **v pracovním stromu té session**, aby `--resume`
-navázal tam, kde běžel. Kopírování **zůstává**: kdo si session pouští jinde (iTerm, tmux, jiný
-stroj), potřebuje text, ne cizí okno — jsou to dvě akce, ne dvě podoby jedné.
+**Do běžící session se dá vstoupit rovnou v okně** (#453, od #460 návrh sekce 35, poznámka 112).
+Vedle `⧉` (zkopíruje `claude --resume <id>`) je `▶` — **`Pustit session v terminálu`**,
+které vytáhne **zásuvku** (viz *Terminál v zásuvce* výš), přejde v ní **do pracovního stromu té
+session** a pustí tam tentýž příkaz i s režimem povolení (viz níž). Strom je podmínka, ne
+kosmetika: `claude --resume` hledá
+vlákno podle adresáře, ve kterém se spustí. Kopírování **zůstává**: kdo si session pouští jinde
+(iTerm, tmux, jiný stroj), potřebuje text — jsou to dvě akce, ne dvě podoby jedné.
 
-**Tvrdé podmínky se tím nemění, a to je jádro té změny.** Terminál je **mimo aplikaci**: je to
-totéž, jako když si člověk příkaz vlepí sám, jen bez těch tří kroků. Uvnitř okna žádný terminál
-nevzniká, `ReviewPublishing` zůstává jedinou cestou ven a plnou moc má ta session tam, kde ji
-člověk čeká — ve svém terminálu, pod svým jménem a se svým `gh`. **Vestavěný terminál je
-zamítnutý**: znamenal by, že se z okna dá spustit `gh pr merge` i `git push`, a nešel by uhlídat
-testem, protože ta cesta nevede přes kód aplikace.
+**Do #460 se tím otevíralo okno `Terminal.app`.** Změnilo se to proto, že od #459 je terminál
+v okně, takže odcházet do cizí aplikace kvůli session, která se dá pustit o kus níž, nemá důvod.
+Co odchodu do `Terminal.app` zůstalo: session tam **přežije zavření PRismu**, kdežto shell
+v zásuvce se s ním zabije. Cesta ven do `Terminal.app` je proto v kódu ještě chvíli **jako
+záloha**; z okna se dnes nepoužije.
+
+**Každá dráha má v zásuvce vlastní relaci**, takže `▶` u druhého reviewera tu první nepřebije —
+přepne se na ni. **Když v té relaci zrovna něco běží, `▶` do toho nepíše**: řádka poslaná do
+běžícího programu je pro něj vstup, takže by z `claude --resume …` byla zpráva odeslaná do
+rozdělaného `claude`. Zásuvka se v tom případě jen přepne (běžící příkaz je zrovna to, na co je
+potřeba se podívat) a ve stavovém řádku stojí, že se nic neposlalo. Když v relaci shell skončil,
+`▶` ho pustí znovu — starý výpis v ní přitom zůstane.
+
+**Session z `▶` běží v auto režimu** (`--permission-mode auto`), takže nepřerušuje práci dotazem
+u každého kroku — klikáš na `▶` proto, aby se ptala tebe, ne abys odklikával dialogy. **Nová práva
+to nedává**: zásuvka je plnohodnotný shell s kapslí `plná práva`, takže cokoli, co ta session
+udělá, si tam můžeš napsat sám; odpadají dotazy, ne hranice. `⧉` ten přepínač **nekopíruje** — kdo
+si příkaz pouští jinde, dostane ho tak, jak by ho psal.
+
+**A neptá se na důvěru ke složce.** Interaktivní `claude` se v neznámém adresáři ptá *„Is this
+a project you created or one you trust?“*, a protože každý PR dostane vlastní pracovní strom, přišel
+by ten dotaz u každého PR znovu. PRism proto jednou zapíše důvěru ke **kořeni své cache** do
+`~/.claude.json` — je to cesta, na kterou odkazuje sám `claude`, a důvěra se dědí na všechno pod ní.
+Na konfiguraci, které nerozumí, **nesáhne**; když se zápis nepovede, přijde jen ten dialog.
+
+**Rolovat jde v shellu, ne nad běžícím `claude` — a to je správně.** Celoobrazovkové TUI kreslí do
+alternativního bufferu, který z definice nemá historii, a `claude` si navíc zapíná hlášení myši,
+takže kolečko dostává on. Roluje se tedy uvnitř něj; v holém shellu má zásuvka 500 řádků historie.
+Stejně se chová `Terminal.app` i iTerm.
 
 Nabízí se to **jen tam, kde je co obnovit**: bez `session_id` **a bez pracovního stromu** se
 tlačítko nekreslí (ne zašedle — u dráhy, která teprve čeká na slot, by zašedlé slibovalo něco,
-co přijde samo). Když se okno neotevře — typicky proto, že se PRismu nepovolilo ovládat Terminal
-(Nastavení systému → Soukromí a zabezpečení → Automatizace) —, **řekne se to ve stavovém řádku**
-i s tím, čím to systém vysvětlil. Neotevřené okno se totiž z aplikace nedá poznat jinak.
+co přijde samo). **Nekreslí se ani tam, kde zásuvka není** — tichý pád zpátky do `Terminal.app`
+by znamenal dvě různá chování pod jednou ikonou, tedy že se nedá spolehnout ani na jedno.
 
 U doběhlého revieweera je v hlavičce **cena, trvání a počet kol** — `0,23 $ · 11,8 s · 3 kola`.
 Bere se to z toho, co nahlásila sama session, takže **zabitý běh je nemá**: nula by tvrdila, že
@@ -2245,7 +2284,8 @@ App/                      zdrojáky aplikace — target PRism
                           AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Terminal/               vestavěný terminál (#459): plocha SwiftTermu obarvená paletou, hlášení fokusu
-                          a zabití popředí pty; hostitel drží jeden shell na pull request
+                          a zabití popředí pty; hostitel drží od #460 víc relací na pull request
+                          (TerminalSlot) a do každé umí napsat řádku (▶ v tabu Průběh)
   Support/                sdílené drobnosti bez příslušnosti k modulu;
                           diagnostika kreslení za přepínačem PRISM_DIAGNOSE (#361) —
                           včetně rotace jejího záznamu při startu sezení (#412)

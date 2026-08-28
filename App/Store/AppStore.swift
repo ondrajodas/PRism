@@ -426,14 +426,26 @@ final class AppStore {
     ///
     /// Nepovinné ze stejného důvodu jako `notifications`: živá implementace posílá Apple event do
     /// `Terminal.app`, takže by z každého testu, který si složí store, byl test otevírající okna.
+    ///
+    /// **Od #460 to `▶` nepoužívá** — drží se jako záloha, viz `openInTerminal(_:)`.
     let terminal: (any TerminalOpening)?
 
-    /// Proč se poslední pokus otevřít session v Terminálu nepovedl. `nil` = nic se nepokazilo.
+    /// Důvěra ke složce v konfiguraci Claude Code (#460). `nil` = odsud se nezapisuje (testy).
     ///
-    /// **Musí být vidět, a je to celý důvod, proč ten stav existuje**: okno se otevírá **mimo
-    /// aplikaci**, takže neúspěch vypadá úplně stejně jako by se nekliklo — nic se nestane a nic
-    /// se neřekne. `try?` nad tou cestou je přesně ten vzor, který `CLAUDE.md` vypisuje jako
-    /// opakovaný nález. Kreslí to `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“.
+    /// Nepovinné ze stejného důvodu jako `terminal`: živá implementace sahá na soubor **mimo naši
+    /// cache**, takže by z každého testu, který si složí store, byl test píšící do `~/.claude.json`.
+    let workspaceTrust: (any WorkspaceTrusting)?
+
+    /// Co má terminál za novinu. `nil` = nic se nepokazilo.
+    ///
+    /// **Musí být vidět, a je to celý důvod, proč ten stav existuje**: výsledek téhle akce je
+    /// buď mimo aplikaci (#453, okno `Terminal.app`), nebo v zásuvce, ve které se **nic
+    /// nezměnilo** (#460, `busy` a `noShell`) — a obojí vypadá úplně stejně jako by se nekliklo.
+    /// `try?` nad tou cestou je přesně ten vzor, který `CLAUDE.md` vypisuje jako opakovaný nález.
+    /// Kreslí to `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“.
+    ///
+    /// Jedno pole na obojí schválně: je to jedna věta o jedné akci a dvě pole by znamenala dvě
+    /// místa, která se musí nezávisle zahazovat — z `▶` přitom vede pokaždé právě jedna cesta.
     var terminalFailure: String?
 
     /// Počitadlo načtení přepisu. Viz `RawSessionSnapshot.generation` — bez něj by dvě čtení téhož
@@ -674,14 +686,38 @@ final class AppStore {
     /// nedají (zdůvodnění je u `EmbeddedTerminalView.hasFocus`).
     var isTerminalFocused = false
 
-    /// Jak si stojí shell toho PR. Co v mapě není, nikdy neběželo.
-    var terminalStates: [PRIdentifier: TerminalRunState] = [:]
+    /// Jak si stojí shell té relace. Co v mapě není, nikdy neběželo.
+    ///
+    /// **Klíčem je od #460 relace, ne pull request**: zásuvka jich drží víc naráz a puntík
+    /// u každé záložky se ptá právě téhle mapy.
+    var terminalStates: [TerminalSlot: TerminalRunState] = [:]
 
-    /// Ve kterém adresáři shell toho PR stojí — **zjištěné jednou, při otevření zásuvky**.
+    /// Ve kterém adresáři ta relace stojí — **zjištěné jednou, při jejím vzniku**.
     ///
     /// Drží se proto, že rozhodnutí („strom review, nebo klon?“) potřebuje sáhnout na disk, a to se
-    /// v `body` dělat nesmí (#224). Klíč je PR, ne repo: pracovní strom je per PR i per commit.
-    var terminalDirectories: [PRIdentifier: URL] = [:]
+    /// v `body` dělat nesmí (#224). Klíč je **relace**, ne repo ani PR: holý shell stojí v klonu
+    /// nebo ve stromu posledního review, kdežto relace dráhy ve stromu **té** session — a `claude
+    /// --resume` hledá vlákno podle adresáře.
+    var terminalDirectories: [TerminalSlot: URL] = [:]
+
+    /// Je už zapsaná důvěra ke kořeni cache? (#460)
+    ///
+    /// **Drží se proto, aby se konfigurace Claude Code nečetla při každém otevření zásuvky**:
+    /// `~/.claude.json` má na tomhle stroji přes 200 kB a rozebrat ho kvůli hodnotě, která se mění
+    /// **jednou za život složky**, je zrovna to čtení všeho, kde stačí předfiltr.
+    ///
+    /// Nastavuje se **jen po úspěchu**, takže se po neúspěšném zápisu zkusí příště znovu — a to je
+    /// důležitější než ušetřené čtení: dokud se to nepovede, chodí ten dotaz na důvěru.
+    var hasRegisteredWorkspaceTrust = false
+
+    /// Které relace zásuvka pro ten PR drží, **v pořadí vzniku** (#460).
+    ///
+    /// Pořadí je pořadí záložek v přepínači a nesmí se přeskládat pod rukama; strop hlídá
+    /// `Policy.maxTerminalSlots`.
+    var terminalSlots: [PRIdentifier: [TerminalSlot]] = [:]
+
+    /// Která relace je zrovna vidět. Co v mapě není, ještě se nezobrazilo.
+    var activeTerminalSlots: [PRIdentifier: TerminalSlot] = [:]
 
     init(
         gateway: any GitHubGateway,
@@ -691,6 +727,7 @@ final class AppStore {
         eviction: CacheEviction? = nil,
         checkout: (any RepoCheckout)? = nil,
         terminals: (any TerminalHosting)? = nil,
+        workspaceTrust: (any WorkspaceTrusting)? = nil,
         reviewer: (any ReviewRunning)? = nil,
         reviews: ReviewStore? = nil,
         drafts: ReviewDraftStore? = nil,
@@ -741,6 +778,7 @@ final class AppStore {
         self.gateway = gateway
         self.checkout = checkout
         self.terminals = terminals
+        self.workspaceTrust = workspaceTrust
         self.reviewer = reviewer
         self.reviews = reviews
         draftStore = drafts
@@ -799,7 +837,7 @@ final class AppStore {
         }
         // Terminál si stav nedrží sám (#459) — hlásí ho sem, protože okno kreslí stav ze store
         // a druhé místo se stavem by se s tímhle rozešlo. Je to tentýž tvar jako `lastCall` výš.
-        self.terminals?.report = { [weak self] pr, state in self?.terminalStates[pr] = state }
+        self.terminals?.report = { [weak self] slot, state in self?.terminalStates[slot] = state }
         self.terminals?.focusChanged = { [weak self] hasFocus in
             self?.isTerminalFocused = hasFocus
         }
@@ -825,6 +863,7 @@ final class AppStore {
             checkout: checkout,
             // Zásuvka s terminálem (#459). Živá jedině tady — testy shell nespouštějí.
             terminals: TerminalHost(),
+            workspaceTrust: ClaudeWorkspaceTrust.inHomeDirectory,
             reviewer: ClaudeReviewRunner(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,

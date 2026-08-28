@@ -327,7 +327,9 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    **Otevřít session v uživatelově terminálu (#453) devátou cestou ven není**, a je to hranice, ne
    výjimka: terminál je **mimo aplikaci** — totéž, jako když si člověk `claude --resume` vlepí
    sám. Uvnitř okna žádný terminál nevzniká, `TerminalOpening` nemá čím na GitHub sáhnout
-   a `grep ReviewPublishing App/` vypisuje týž seznam.
+   a `grep ReviewPublishing App/` vypisuje týž seznam. **Od #460 to `▶` nepoužívá** (míří do
+   zásuvky) a ta cesta se drží **bez volajícího, jako záloha**; kdy a s čím jde ven, je
+   v [záznamu rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#osud-applescriptterminal-460).
 
    **Od #459 je terminál i uvnitř okna, a je to vědomá změna téhle podmínky** — ne její obejití.
    Do #459 tu stálo, že vestavěný terminál je **zamítnutý**, protože by nešel uhlídat testem.
@@ -345,6 +347,17 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      `plná práva`, protějšek `čte · neodesílá` z tabu `Zeptat se`.
    - **Tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache aplikace (pracovní strom
      review, nebo bare klon), nikdy v uživatelově klonu.
+   - **Od #460 do toho shellu píše i aplikace, a je to jedna řádka** (`TerminalHosting.run`,
+     `▶` v tabu `Průběh`): `cd '<strom>' && claude --resume <id> --permission-mode auto`, skládaná
+     `Policy.drawerResumeCommand(sessionID:)` a `ShellQuoting` — **tedy text, který kopíruje `⧉`,
+     a k němu režim povolení** (zdůvodnění o kus níž), a jinou aplikace poslat neumí. Do běžícího jobu se přitom **nepíše vůbec**
+     (`hasForegroundJob`), protože řádka je pro něj vstup; místo toho se na tu relaci **přepne**.
+     Plnou moc má dál **člověk**: cokoli jiného než tuhle jednu řádku napíše jedině on.
+   - **A relací je v zásuvce víc než jedna** (#460), takže úklid z bodů výš platí **pro každou**:
+     `stopTerminals(for:)` při zavření záložky, `stopAllTerminals()` při ukončení aplikace
+     a značka v `sessions.json` u každé zvlášť — jinak po zabité aplikaci osiří zrovna ta, která
+     nebyla vidět. Počet je proto **omezený** (`Policy.maxTerminalSlots`, pět) a vytlačuje se
+     jedině **neběžící** relace; když všechny běží, nová **nevznikne** a řekne se to.
 
    Podrobnosti — proč zásuvka a ne záložka, proč `SwiftTerm` a proč zrovna verze 1.11.2, jak se
    ten proces zabíjí a co je proti návrhu jinak — jsou
@@ -393,6 +406,29 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 
    Odmítnutý nástroj **není chyba běhu**: session pokračuje a skončí `success`, odmítnutí je
    vidět v `permission_denials`.
+
+   **Session z `▶` v zásuvce pod tuhle podmínku nespadá, a je to hranice, ne výjimka** (#460).
+   Podmínka mluví o session, které **pouští aplikace** — reviewer, kontrola nálezů, překlad,
+   dotažení textu issue, `Zeptat se` —, a jejich vyjmenované sady se **nemění ani o položku**.
+   `claude --resume` v zásuvce je proti tomu session, kterou **řídí člověk ve svém shellu**: běží
+   s `--permission-mode auto`, aby nepřerušovala práci dotazem u každého kroku. **Nová práva to
+   nedává** — zásuvka je plnohodnotný shell s kapslí `plná práva`, takže cokoli, co ta session
+   udělá, si tam člověk může napsat sám; odpadají **dotazy**, ne hranice. Vybraný je `auto`
+   schválně: z šesti režimů `--permission-mode` je jediný, který má **vyjmenovaná a čitelná
+   pravidla** (`claude auto-mode defaults` vypíše `allow`, `soft_deny` i `hard_deny`).
+   **`bypassPermissions` ani `--dangerously-skip-permissions` v tomhle repu nemají co dělat**
+   a `⧉` režim povolení **nedostane** — kdo si příkaz kopíruje jinam, dostane ho tak, jak by ho
+   psal. Rozhoduje `Policy.drawerResumeCommand(sessionID:)`
+   ([záznam rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#auto-mode-v-zásuvce-460)).
+
+   **A od #460 aplikace zapisuje do konfigurace cizího nástroje** (`~/.claude.json`,
+   `WorkspaceTrusting`) — jedinou hodnotu, **důvěru ke kořeni vlastní cache**, aby se interaktivní
+   `claude` neptal na důvěru u každého nového pracovního stromu. Je to postup, na který odkazuje
+   sám `claude` ve své binárce, a hranice u něj drží tři věci: **na soubor, kterému nerozumí,
+   nesáhne** (rozbitá cizí konfigurace by byla ztráta cizí práce, kdežto neúspěch stojí jeden
+   dialog navíc a **je vidět sám**), **zapisuje atomicky a zachová, co v souboru je**, a **zapisuje
+   jednou** — hotová důvěra se nepřepisuje, takže běžný případ je čisté čtení. Podrobnosti a to,
+   co se u toho změřilo, jsou v [`docs/claude-cli.md`](docs/claude-cli.md).
 
    Co na téhle podmínce **nic nemění**, a proč: **kontrola nálezů z minula** (#150) má vlastní
    prompt, ale bere **tytéž konstanty** `ClaudeCommand.allowedTools` a `disallowedTools`
@@ -448,7 +484,7 @@ viz tvrdá podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kter�
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři** a od #465 **mergnout vlastní PR** | `gh` CLI |
-| `TerminalHost` | Vestavěný terminál (#459) — **jeden shell na pull request** v checkoutu toho PR, pty a VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty. Zápisovou metodu nemá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
+| `TerminalHost` | Vestavěný terminál (#459) — od #460 **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Umí do relace napsat **jednu řádku** (`▶`), a jen tehdy, když v ní nic neběží. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá

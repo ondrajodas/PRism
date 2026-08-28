@@ -1000,6 +1000,18 @@ tr.del mark.w { background: var(--del-hi); }
   font-size: 11.5px; color: var(--ink-2);
 }
 .term-bar .cwd { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+/* Přepínač relací v zásuvce (#460). **Záložky, ne rozbalovací nabídka**: relace jsou dvě až tři,
+   pořád jedna běží, a nabídka by po každém pohledu na druhou stála dva kliky místo jednoho.
+   Puntík u záložky nese, jestli v ní něco běží — je to tatáž úmluva jako na záložce okna. */
+.term-tabs { display: flex; align-items: center; gap: 3px; }
+.term-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border-radius: 6px;
+  font-size: 11.5px; color: var(--ink-3); border: 1px solid transparent;
+}
+.term-tab.on { background: var(--panel-3); border-color: var(--line); color: var(--ink); }
+.term-tab .d { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ink-3); }
+.term-tab.live .d { background: var(--accent); }
 .term-bar .sp { flex: 1; }
 .term-body {
   padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
@@ -12312,6 +12324,25 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
         a tím by z terminálu udělala druhé okno, do kterého se stejně přepíná.
       </p>
       <p class="muted">
+        <b>Relací je v zásuvce víc, ne jedna.</b> Aplikace pouští review <b>paralelně</b>
+        (<code>maxConcurrentReviews</code>), takže „jedna zásuvka = jeden shell“ nutí člověka jednu session
+        ukončit, aby viděl druhou — a to je zrovna ten stav, ve kterém se na ně chce dívat.
+        Přepíná se <b>záložkami</b> v hlavičce, ne rozbalovací nabídkou: relace jsou dvě až tři,
+        pořád jedna běží, a nabídka by po každém pohledu na druhou stála dva kliky místo jednoho.
+        <b>Puntík u záložky nese, jestli v ní něco běží</b> — tatáž úmluva jako na záložce okna.
+      </p>
+      <p class="muted">
+        <b><code>▶</code> u dráhy tedy nepíše do toho, co zrovna běží — přepne na její relaci</b>
+        (a když ještě není, založí ji). Odmítnutí zápisu do rozdělaného <code>claude</code>
+        <b>platí dál</b>, protože řádka poslaná běžícímu programu je pro něj vstup, tedy odeslaná
+        zpráva; jen se z něj přestává dělat slepá ulička.
+      </p>
+      <p class="muted">
+        <b>Co to stojí: zásuvka drží víc pty naráz.</b> Úklid při zavření okna proto musí pobrat
+        <b>všechny</b>, ne jen tu vpředu — jinak po zabité aplikaci osiří zrovna ty, které nebyly
+        vidět. Značka v <code>sessions.json</code> platí pro každou z nich.
+      </p>
+      <p class="muted">
         <b>Jen v záložce pull requestu, a pracovní adresář je jeho kopie repa.</b> Terminál bez
         repozitáře je obyčejný shell a ten má člověk vedle; smysl mu dává až to, že startuje
         <b>v tom checkoutu, na který se zrovna kouká</b> — v cache aplikace, nikdy v uživatelově
@@ -12379,13 +12410,18 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
 
         <div class="term">
           <div class="term-bar">
-            <span>Terminál</span>
-            <span class="cwd">~/Library/Application Support/PRism/checkouts/vault/85</span>
+            <!-- Relací je víc, protože review běží paralelně (#460). Přepíná se **záložkami**,
+                 puntík nese, jestli v té relaci něco běží. `shell` je ta, kterou dá `` ⌃` ``. -->
+            <span class="term-tabs">
+              <span class="term-tab on live"><span class="d"></span>php-review</span>
+              <span class="term-tab live"><span class="d"></span>security-review</span>
+              <span class="term-tab"><span class="d"></span>shell</span>
+            </span>
+            <span class="cwd">~/…/checkouts/vault/85</span>
             <!-- Kapsle říká pravdu o té ploše, ne o aplikaci: odsud jde všechno, co jde
                  z terminálu. Je to protějšek `čte · neodesílá` v tabu `Zeptat se`. -->
             <span class="pill crit">plná práva</span>
             <span class="sp"></span>
-            <span class="pill run">claude --resume 8c1f…</span>
             <span class="kbd">⌃`</span>
             <span class="tbtn">⌄</span>
           </div>

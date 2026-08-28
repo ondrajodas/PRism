@@ -97,11 +97,17 @@ enum ReviewerLaneText {
         "Zkopírovat \(Policy.resumeCommand(sessionID: sessionID))"
     }
 
-    static let openInTerminal = "Otevřít session v Terminálu"
+    /// **Od #460 je cíl zásuvka, ne `Terminal.app`** — a popisek to musí říct, protože je to
+    /// jediné, čím se `▶` představuje dřív, než se na něj klikne.
+    static let resumeInDrawer = "Pustit session v terminálu"
 
-    static func openInTerminalHelp(sessionID: String) -> String {
-        "Otevře nové okno Terminálu v pracovním stromu té session a pustí v něm "
-            + "\(Policy.resumeCommand(sessionID: sessionID))."
+    /// **Nápověda ukazuje to, co se doopravdy pustí**, tedy včetně režimu povolení — od #460 se
+    /// to od textu u `⧉` liší a text, který by ten rozdíl zamlčel, by tvrdil víc, než data unesou.
+    /// Skládá to `Policy.drawerResumeCommand`, takže se s tím, co odejde do zásuvky, nemá čím
+    /// rozejít.
+    static func resumeInDrawerHelp(sessionID: String) -> String {
+        "Vytáhne zásuvku s terminálem, přejde v ní do pracovního stromu té session a pustí "
+            + "\(Policy.drawerResumeCommand(sessionID: sessionID))."
     }
 
     /// Odznak v hlavičce dráhy, když zadání pro reviewera nebylo celé (#345).

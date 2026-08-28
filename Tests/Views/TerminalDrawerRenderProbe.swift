@@ -69,12 +69,30 @@ struct TerminalDrawerRenderProbe {
         state: TerminalRunState?,
         host: any TerminalHosting
     ) -> some View {
-        TerminalDrawerView(
-            pullRequest: pullRequest,
+        // Tři relace, jak je kreslí návrh (sekce 35): dvě běžící session a holý shell. Aktivní je
+        // ta první, takže se z ní kreslí plocha.
+        let active = TerminalSlot(pullRequest: pullRequest, role: .session("php-review"))
+        let states: [TerminalSlot: TerminalRunState?] = [
+            active: state,
+            TerminalSlot(pullRequest: pullRequest, role: .session("security-review")): .running,
+            TerminalSlot(pullRequest: pullRequest, role: .shell): nil,
+        ]
+        let order = [
+            active,
+            TerminalSlot(pullRequest: pullRequest, role: .session("security-review")),
+            TerminalSlot(pullRequest: pullRequest, role: .shell),
+        ]
+        return TerminalDrawerView(
+            rows: Policy.terminalSlotRows(
+                order,
+                active: active,
+                states: states.compactMapValues { $0 }
+            ),
+            activeSlot: active,
             directory: directory,
-            state: state,
             host: directory == nil ? nil : host,
             available: 700,
+            select: { _ in },
             close: {}
         )
     }
@@ -140,26 +158,43 @@ struct TerminalDrawerRenderProbe {
 @MainActor
 private final class ProbeTerminalHost: TerminalHosting {
     private let script: String
-    private var views: [PRIdentifier: EmbeddedTerminalView] = [:]
+    private var views: [TerminalSlot: EmbeddedTerminalView] = [:]
 
     init(script: String) { self.script = script }
 
-    var report: (@MainActor (PRIdentifier, TerminalRunState) -> Void)?
+    var report: (@MainActor (TerminalSlot, TerminalRunState) -> Void)?
     var focusChanged: (@MainActor (Bool) -> Void)?
     var runningTerminals: Int { views.count }
 
-    func terminal(for pr: PRIdentifier, in directory: URL) -> NSView {
-        if let existing = views[pr] { return existing }
+    func terminal(for slot: TerminalSlot, in directory: URL) -> NSView {
+        if let existing = views[slot] { return existing }
         let view = EmbeddedTerminalView(frame: CGRect(x: 0, y: 0, width: 1_048, height: 260))
         view.font = TerminalHost.font
         view.applyPalette()
         view.feed(text: script)
-        views[pr] = view
+        views[slot] = view
         return view
     }
 
+    /// Sonda kreslí, nespouští — a bez shellu není kam psát (#460).
     @discardableResult
-    func stopTerminal(for pr: PRIdentifier) -> Bool { views.removeValue(forKey: pr) != nil }
+    func run(
+        _ commandLine: String,
+        for slot: TerminalSlot,
+        in directory: URL
+    ) -> TerminalCommandOutcome {
+        .noShell
+    }
+
+    @discardableResult
+    func stopTerminal(for slot: TerminalSlot) -> Bool { views.removeValue(forKey: slot) != nil }
+
+    @discardableResult
+    func stopTerminals(for pr: PRIdentifier) -> Bool {
+        let victims = views.keys.filter { $0.pullRequest == pr }
+        for slot in victims { views.removeValue(forKey: slot) }
+        return !victims.isEmpty
+    }
 
     func stopAllTerminals() { views.removeAll() }
 }

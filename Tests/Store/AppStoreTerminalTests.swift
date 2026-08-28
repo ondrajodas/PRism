@@ -13,7 +13,8 @@ import Testing
 struct AppStoreTerminalTests {
     private let session = TerminalSession(
         directory: URL(filePath: "/Users/o/cache/worktrees/o/r/6-abc"),
-        command: "claude --resume abc-123"
+        command: "claude --resume abc-123",
+        skill: "php-review"
     )
 
     private func store(_ terminal: FakeTerminal) -> AppStore {
