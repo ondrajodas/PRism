@@ -3715,3 +3715,36 @@ a teprve pak se optimalizuje. Čtyři pokusy zlevnily věci, které dohromady d�
 
 **Vrátit `LazyVStack` zamítnuto beze změny** (#469): zaseknuté okno je horší vada než pomalé.
 
+### Záznam rozhodnutí — přepnutí tabu s diffem, a proč se zamítnutí z #472 otevíralo (#476)
+
+**Co se rozhodlo.** Přepnutí tabu s diffem (466 ms u 2000řádkového proti 62 ms bez něj) **zůstává
+tak, jak je**. Nasazená je jediná změna — `lineFrames()` jedním průchodem (462 → 433 ms) —, zbytek
+je zapsaný jako zamítnuté cesty s čísly.
+
+**Proč se zamítnutí z #472 vůbec otevíralo, a je to pravidlo, ne výjimka.** U #472 padly „úseky
+řádků“ na měření, které ubralo **těla** řádků. Pozdější vzorek ale ukázal, že těla jsou **1 %** ceny
+— ten pokus tedy nikdy netestoval hypotézu, o které si myslel, že ji testuje. **Zamítnutí, které
+stojí na měření mimo cíl, není zamítnuté; je nezměřené**, a patří se k němu vrátit. Rozhodnutí se
+přehodnocují měřením, ne náladou.
+
+**A po přeměření se potvrdilo.** Úseky řádků ubraly polovinu vykreslených řádků (7 080 → 3 540
+průchodů tělem) a cena spadla o **7,6 %** — pod práh, který byl dohodnutý předem. Zamítnutí tedy
+platí, teď už z měření, které míří na cíl. Totéž se stalo se **zapamatovanými výškami bloků**: taky
+zamítnuté u #472, taky přeměřené a taky potvrzené (465 proti 462 ms).
+
+**Kde ta cena je.** V rozvržení, ne v našem kódu: stavba display listu 20 % vzorku, `updateNSView`
+bloku 9 %, `sizeThatFits` 7 % — a **skládání řádků 1 %**. Roste to s počtem vykreslených prvků.
+
+**Zamítnuté varianty a proč:**
+
+| Varianta | Proč ne |
+|---|---|
+| **Úseky řádků** (řádky po šestnácti, úsek mimo pás jako prázdné místo známé výšky) | Mechanicky funguje — polovina řádků se nekreslí —, ale cena spadne jen o **7,6 %**. Za to se kupuje úsek, paměť výšek, vynucený úsek u skoku a čtyři nové způsoby, jak **tiše** rozbít kotvu na nález |
+| **Zapamatované výšky bloků** přes přepnutí tabu | 5 778 použití z 6 924 dotazů, a **465 proti 462 ms**. Nasazení `NSTextView` není to, co přepnutí stojí |
+| **Nezahazovat obsah tabu** při přepnutí (držet diff naživu) | Přepnutí s diffem **433 → 132 ms**, jenže skrytý obsah se pořád účastní rozvržení: **přerovnání okna 11 → 52 ms** a přepnutí mezi dvěma taby bez diffu **60 → 252 ms**. Vzalo by to výhru z #472 — tedy věc, kterou člověk potká při každém kliknutí — za zlevnění věci, kterou potká při přepnutí na diff |
+| Vrátit `LazyVStack` | Beze změny (#469): zaseknuté okno je horší vada než pomalé |
+
+**Co z toho zbývá jako pravidlo.** Cesta k dalšímu zlevnění nevede přes počet prvků — třikrát
+nezávisle vyšlo, že ubrat vykreslené řádky cenou skoro nehne. Kdo se do toho pustí znovu, ať začne
+tím, že **změří přerovnání okna** (dnes 11 ms): tři ze čtyř pokusů se rozbily právě o něj.
+

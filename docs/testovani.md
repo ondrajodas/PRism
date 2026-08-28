@@ -6691,6 +6691,49 @@ se do detailu vůbec sestoupí. Ve `sample`u té fáze je naše vlastní práce 
 `Policy` 15, `PullRequestDetailView` 36 vzorků ze 14 726); zbytek je `GraphHost.flushTransactions`
 (1 947), `NSHostingView.layout` (1 630) a `LayoutEngineBox.sizeThatFits` (1 222).
 
+#### Čtyři pokusy o zlevnění přepnutí tabu s diffem (#476)
+
+Po #472 stálo přepnutí tabu **s diffem** 243 ms u 500řádkového a 466 ms u 2000řádkového diffu proti
+**62 ms** bez diffu. Rozklad (tři velikosti, aby se dalo ověřit, že je to přímka) ukázal, že je to
+**lineární v počtu řádků** — a vzorek ukázal, že to **není v jejich skládání**:
+
+| | vzorků z 16 539 | podíl |
+|---|---|---|
+| rozvržení (`NSHostingView.layout` → `render`) | 9 283 | 56 % |
+| ├─ stavba **display listu** | 3 391 | 20 % |
+| ├─ `updateNSView` bloku | 1 519 | 9 % |
+| │   └─ z toho `DiffTextView.lineFrames()` | 697 | 4 % |
+| ├─ `LayoutEngineBox.sizeThatFits` | 1 215 | 7 % |
+| **stavba těl `DiffRowView`** | **170** | **1 %** |
+
+Vyšlo z toho **jedno zlevnění a čtyři zamítnutí**:
+
+| Pokus | Že mechanicky funguje | Cena (2000 řádků) |
+|---|---|---|
+| **`lineFrames()` jedním průchodem** místo dotazu na každý řádek | `DiffLineFramesTests` — rámečky se shodují s `frame(ofLine:)` | **462 → 433 ms**, **nasazeno** |
+| zapamatované **výšky bloků** přes přepnutí tabu | 5 778 použití z 6 924 dotazů | 465 proti 462 ms |
+| **úseky řádků** po šestnácti, úsek mimo pás jako prázdné místo známé výšky | průchodů tělem `DiffRowView` **7 080 → 3 540** | 433 → **400 ms** (7,6 %) |
+| **nezahazovat obsah tabu** při přepnutí (držet diff naživu) | přepnutí s diffem **433 → 132 ms** | **zabilo výhru z #472** — viz níž |
+| vrátit `LazyVStack` | — | zamítnuto beze změny (#469): zaseknuté okno je horší vada než pomalé |
+
+**Třikrát nezávisle vyšlo totéž: cena není v počtu řádků.** Ubrat polovinu vykreslených řádků
+pohnulo cenou o 7,6 %, protože řádky jsou 1 % vzorku.
+
+**Držet tab naživu je ta nejzajímavější prohra a stojí za zapamatování**, protože vypadá jako výhra,
+dokud se člověk nepodívá vedle. Skrytý obsah se totiž **pořád účastní rozvržení**:
+
+| Scénář (2000 řádků) | dnes | s živým tabem |
+|---|---|---|
+| přepnutí tabu **s diffem** | 433 ms | **132 ms** |
+| přepnutí tabu **bez diffu** | 60 ms | **252 ms** |
+| **zápis do store** (přerovnání okna) | **11 ms** | **52 ms** |
+
+Přepnutí na diff by zlevnilo třikrát, ale **přerovnání okna by zdražilo pětkrát** — a to je ta věc
+z #472, kterou člověk potká při každém kliknutí, kdežto diff jen při přepnutí na něj. V diagnostice
+je to vidět i bez čísel: na **zápis do store** se najednou přeloží 3 540 těl `DiffRowView` (dnes
+nula) a bloky se nasazují dokola (135–155 nasazení proti 10). **Kdo to bude zkoušet znovu, ať měří
+tohle jako první.**
+
 #### Pohon „tichý tik pollingu“ je ten, kvůli kterému #472 vzniklo
 
 `await store.refresh()` nad fake gatewayí, která vrací pořád tentýž seznam — tedy přesně to, co

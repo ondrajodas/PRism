@@ -5380,3 +5380,25 @@ se `fillingSlot()` dostane i **dovnitř** tabu, mezi obsah a jeho části.
 s diffem nemají co dělat** — je to přestavba detailu samotného (hlavička, pruh záložek, panel,
 `.task` kaskáda), která se přepnutím zahodí a staví znovu. Kdo na tom bude pracovat dál, má začít
 tam, ne v diffu; a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+
+### #476 — přepnutí tabu s diffem: jedno zlevnění a čtyři zamítnutí
+
+Po #472 stálo přepnutí tabu s diffem 466 ms u 2000řádkového proti **62 ms** bez něj a rostlo
+s velikostí diffu. Rozklad na třech velikostech ukázal, že je to lineární v počtu řádků — a vzorek
+ukázal, že to **není v jejich skládání**: stavba display listu 20 %, `updateNSView` bloku 9 %,
+`sizeThatFits` 7 %, **stavba těl `DiffRowView` 1 %**.
+
+**Nasazené je jedno zlevnění**: `lineFrames()` vybírá fragmenty jedním průchodem místo dotazu na
+každý řádek — **462 → 433 ms** u 2000řádkového a 225 → 196 ms u 500řádkového diffu. Jeho test hned
+chytil dvě **tiché** vady: `usedRect` fragmentu obsahuje `lineFragmentPadding` (rámečky o 5 bodů
+vedle) a u zalomeného řádku vrací `boundingRect` šířku celého kontejneru (rozdíl 70–78 bodů). Obojí
+by posunulo pilulku na komentář i kotvu ⇧ kliku, aniž by se to kdekoli ohlásilo.
+
+**Čtyři cesty jsou zamítnuté a všechny s čísly** — úseky řádků (7,6 %), zapamatované výšky bloků
+(465 proti 462 ms), držení tabu naživu (vzalo by výhru z #472: přerovnání okna 11 → 52 ms) a návrat
+`LazyVStack`u (beze změny z #469). **Třikrát nezávisle vyšlo, že cena není v počtu řádků.**
+
+**Zbytek je tedy doložený, ne odstraněný**: přepnutí na tab s diffem stojí 433 ms u 2000řádkového
+diffu a je to cena **prvního rozvržení** obsahu, který se přepnutím zahodí a staví znovu. Kdo se
+do toho pustí znovu, ať měří **přerovnání okna** jako první — tři ze čtyř pokusů se rozbily o něj.
+
