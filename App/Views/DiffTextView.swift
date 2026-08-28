@@ -291,10 +291,82 @@ final class DiffTextView: NSTextView {
     }
 
     /// Rámečky všech řádků. Volá se po layoutu, takže se dá poslat do SwiftUI.
+    ///
+    /// **Jedním průchodem přes fragmenty, ne dotazem na každý řádek** (#476). Do #476 se pro každý
+    /// řádek volalo `boundingRect(forGlyphRange:in:)`, a to je u `NSLayoutManager` drahá cesta:
+    /// ve vzorku z přepínání tabů drželo `lineFrames()` **697 vzorků z 1 519**, které stál celý
+    /// `updateNSView` bloku — a uvnitř z toho `_rectArrayForRange` →
+    /// `_insertionPointHelperForCharacterAtIndex` **653**. Fragmenty přitom layout manager umí
+    /// vydat **naráz**, a protože se řádky dělí zalomením, patří každý fragment právě jednomu
+    /// řádku; zalomený řádek si své fragmenty sjednotí.
+    ///
+    /// **Řádek, na který se v průchodu nedostane, se dopočítá po starém.** Počet vrácených rámečků
+    /// musí sedět na počet řádků — je z nich geometrie gutteru (#252) i kotvy pro ⇧ klik
+    /// (`DiffRowFrames`), takže chybějící řádek by byl tichá díra v obojím.
     func lineFrames() -> [(line: DiffLine, index: Int, rect: NSRect)] {
-        lines.enumerated().compactMap { index, line in
-            frame(ofLine: index).map { (line: line, index: index, rect: $0) }
+        guard let layoutManager, let textContainer, !lines.isEmpty else { return [] }
+        let origin = textContainerOrigin
+        // **Odsazení kontejneru se musí odečíst.** `usedRect` fragmentu ho na obou koncích
+        // **obsahuje**, kdežto `boundingRect(forGlyphRange:)` vrací rámeček samotných glyfů —
+        // rozdíl je přesně `lineFragmentPadding` a projevil by se posunutou pilulkou na komentář
+        // a kotvou pro ⇧ klik o pět bodů vedle. Chytil to `DiffLineFramesTests`.
+        let padding = textContainer.lineFragmentPadding
+        var rects = [NSRect?](repeating: nil, count: lines.count)
+        // **Zalomený řádek je vodorovně široký jako kontejner**, ne jako jeho nejdelší fragment —
+        // tak to vrací `boundingRect(forGlyphRange:)`, a rámečky se nesmí lišit ani tímhle. Proto
+        // se u řádku s víc fragmenty bere sjednocení **fragmentů**, u nezalomeného **použité části**.
+        var fragments = [NSRect?](repeating: nil, count: lines.count)
+        var counts = [Int](repeating: 0, count: lines.count)
+        layoutManager.enumerateLineFragments(
+            forGlyphRange: NSRange(location: 0, length: layoutManager.numberOfGlyphs)
+        ) { fragment, used, _, glyphRange, _ in
+            let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+            guard let index = self.lineIndex(atCharacter: characters.location) else { return }
+            rects[index] = rects[index].map { $0.union(used) } ?? used
+            fragments[index] = fragments[index].map { $0.union(fragment) } ?? fragment
+            counts[index] += 1
         }
+        return lines.indices.compactMap { index in
+            guard var rect = rects[index] else {
+                // Nedopočítaný řádek po staru — radši dotaz navíc než chybějící rámeček.
+                return frame(ofLine: index).map { (line: lines[index], index: index, rect: $0) }
+            }
+            if counts[index] > 1, let wide = fragments[index] {
+                rect.origin.x = wide.minX
+                rect.size.width = wide.width
+            }
+            rect.origin.x += origin.x + padding
+            rect.size.width = max(rect.width - padding * 2, 0)
+            rect.origin.y += origin.y
+            // Prázdný řádek nemá glyfy, takže by vyšel nulově vysoký — vezme se výška písma.
+            if rect.height == 0 {
+                rect.size.height = FontMetric.shared.lineHeight(of: font ?? .systemFont(ofSize: 12))
+            }
+            return (line: lines[index], index: index, rect: rect)
+        }
+    }
+
+    /// Do kterého řádku patří znak na téhle pozici.
+    ///
+    /// Rozsahy jdou po sobě a mezi nimi je právě jedno zalomení, takže úsek
+    /// `[začátek_i, začátek_i+1)` pokrývá řádek i **včetně** jeho zalomení — a hledá se tedy
+    /// poslední řádek, který začíná nejvýš na téhle pozici. Půlením, ne procházením: fragmentů je
+    /// u dlouhého bloku tolik co řádků a lineární hledání by z toho udělalo kvadrát.
+    private func lineIndex(atCharacter location: Int) -> Int? {
+        guard !lineRanges.isEmpty, location >= 0 else { return nil }
+        var low = 0
+        var high = lineRanges.count - 1
+        var found: Int?
+        while low <= high {
+            let middle = (low + high) / 2
+            if lineRanges[middle].location <= location {
+                found = middle
+                low = middle + 1
+            } else {
+                high = middle - 1
+            }
+        }
+        return found
     }
 
     /// **Barva výběru se nemění podle fokusu.** AppKit sáhne u neaktivního textu po

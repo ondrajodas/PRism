@@ -41,7 +41,7 @@ struct DetailRelayoutMeasurement {
 
     @Test("Kolik stojí přerovnání okna nad otevřeným PR")
     func relayoutCost() async throws {
-        for lines in [500, 2000] {
+        for lines in Self.diffSizes {
             var costs: [Case: [Double]] = [:]
             var passes: [Case: [String]] = [:]
             // Série se střídají A/B/A/B — drift sezení je větší než hledaný rozdíl (#274).
@@ -139,24 +139,20 @@ struct DetailRelayoutMeasurement {
     /// seznam vůbec a `Kontroly` k tomu nemají ani panel vpravo
     /// (`PullRequestTab.showsReviewPanel`) — bez těch dvou by z čísel nebylo poznat, kolik z ceny
     /// patří seznamu a kolik panelu.
+    /// Velikosti diffu, na kterých se měří. **Tři, ne dvě**: ze dvou bodů se dá spočítat přímka,
+    /// ale ne ověřit, že je to přímka — a otázka #476 zní právě „kolik je pevná cena tabu a kolik
+    /// roste s řádky“.
+    static let diffSizes = [100, 500, 2000]
+
     private static let cases: [Case] = [
-        // Scénář, na který si člověk stěžuje, je **první**: přepnutí tabu nad diffem.
+        // #476: přepnutí tabu nad diffem proti témuž přepnutí bez něj, na třech velikostech.
         Case(scene: .window, tab: .filesChanged, driver: .tab),
         Case(scene: .window, tab: .checks, driver: .tabWithoutDiff),
         Case(scene: .window, tab: .filesChanged, driver: .store),
-        Case(scene: .window, tab: .filesChanged, driver: .poll),
-        Case(scene: .window, tab: .filesChanged, driver: .host),
         // Ablace na to, **kde ta cena byla** (#472): kostra proti měřené štěrbině proti detailu
         // samotnému. Drží se v sondě, protože je to jediné místo, kde je ten rozdíl vidět jako
         // číslo — v aplikaci už měřená štěrbina je.
-        Case(scene: .chrome, tab: .checks, driver: .store),
-        // **Táž scéna, jen prázdný store** — jediný způsob, jak říct „cenu nedělá obsah“ uvnitř
-        // jednoho běhu; srovnávat čísla napříč sezeními zakazuje drift (#274).
-        Case(scene: .chrome, tab: .checks, driver: .store, payload: .bare),
-        Case(scene: .chromeMeasured, tab: .checks, driver: .store),
-        Case(scene: .chrome, tab: .checks, driver: .tabWithoutDiff),
-        Case(scene: .chromeMeasured, tab: .checks, driver: .tabWithoutDiff),
-        Case(scene: .detail, tab: .checks, driver: .store),
+        Case(scene: .detail, tab: .filesChanged, driver: .tab),
     ]
 
     /// Jedna série: okno se nechá usadit (**příprava se neměří**, #274) a teprve pak se dvacetkrát
