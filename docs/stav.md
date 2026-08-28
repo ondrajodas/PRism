@@ -5349,7 +5349,15 @@ a je to rozhodnutí na jedno vydání s napsanou podmínkou zániku (specifikace
 session přežije, a PRism se restartuje po každém mergi. Mrtvé pole z toho nezůstane: do
 `AppStore.terminalFailure` od #460 píše `▶` sám.
 
-Testů **4345**, všechny zelené — z toho **35 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
+**Dvě věci našel Copilot a obě byly reálné.** `stopTerminal` zabíjel plochu s **navěšenými
+uzávěry**, takže asynchronně ohlášený konec procesu zapsal stav relace, která už v seznamu nebyla
+(záznam, který nikdo nekreslí — a po vzniku stejnojmenné relace by ukázal cizí minulost); odpojují
+se proto dřív než `kill()`, a značku v `sessions.json` to neohrozí, tu maže `kill()` sám. A `` ⌃` ``
+**přepisovalo cestu v hlavičce i relaci, která už běží**, přestože hostitel vrací existující plochu
+a nový adresář si nevezme — popiska by tedy ukazovala jinam, než kde shell stojí. Adresář se hledá
+jen relaci, která ho ještě nemá.
+
+Testů **4346**, všechny zelené — z toho **36 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
 vytlačí, co je na záložce, co se řekne), store (**druhá session první nepřebije**, zavření záložky
 zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
 

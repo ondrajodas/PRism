@@ -9146,6 +9146,14 @@ co dá `` ⌃` ``, ne něco vedle nich.
   (`Policy.slotsFullNotice`) — mlčky nevzniklá záložka vypadá jako rozbité tlačítko. Zavírací
   křížek u záložky návrh nekreslí, takže tohle a zavření záložky PR jsou **jediné** dvě cesty, jak
   relace ubývají.
+- **Uzávěry se odpojí dřív, než se plocha zabije.** `kill()` končí `terminate()`, po kterém
+  knihovna ohlásí konec procesu **asynchronně** — a ten hlas by zapsal stav relace, která už
+  v seznamu není. Vznikl by záznam, který nikdo nekreslí a který by po vzniku stejnojmenné relace
+  ukázal cizí minulost. **Značku v `sessions.json` to neohrozí**: tu maže `kill()` sám, ne callback.
+- **Cesta v hlavičce se hotové relaci nepřepisuje.** `` ⌃` `` adresář hledá znovu, protože pracovní
+  strom se posune s novým commitem a eviction ho umí sebrat — ale jen relaci, která ho ještě nemá.
+  `TerminalHost` totiž vrací **existující** plochu a nový adresář si nevezme, takže by popiska
+  ukazovala jinam, než kde shell doopravdy stojí.
 - **Relace končí se záložkou pull requestu, ne dřív.** Je to tatáž hranice jako u jednoho shellu
   v #459 — zavřená záložka je konec kontextu —, jen se maže **celý seznam**: `stopTerminals(for:)`
   jde přes všechny relace toho PR, protože osiřela by zrovna ta, která nebyla vidět. Ukončení

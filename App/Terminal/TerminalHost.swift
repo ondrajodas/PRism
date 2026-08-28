@@ -89,6 +89,12 @@ final class TerminalHost: TerminalHosting {
     func stopTerminal(for slot: TerminalSlot) -> Bool {
         guard let view = views.removeValue(forKey: slot) else { return false }
         let wasRunning = view.isRunning
+        // **Uzávěry se odpojí dřív, než se plocha zabije** (nález Copilota). `kill()` končí
+        // `terminate()`, po kterém knihovna ohlásí konec procesu **asynchronně** — a ten hlas by
+        // zapsal stav relace, která už v seznamu není. Vznikl by záznam, který nikdo nekreslí
+        // a který by po vzniku stejnojmenné relace ukázal cizí minulost.
+        view.stateChanged = nil
+        view.focusChanged = nil
         view.kill()
         // Fokus se hlásí ručně: zabitá plocha zmizí z hierarchie, aniž by jí AppKit stihl poslat
         // `resignFirstResponder` — a okno by pak mělo zkratky vypnuté nad terminálem, který není.

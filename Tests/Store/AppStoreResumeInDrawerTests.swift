@@ -150,6 +150,22 @@ struct AppStoreResumeInDrawerTests {
         #expect(store.activeTerminalSlot(for: pullRequest) == shell)
     }
 
+    /// **Hotové relaci se cesta v hlavičce nepřepisuje** (nález Copilota). Hostitel vrací
+    /// existující plochu a nový adresář si nevezme, takže by popiska ukazovala jinam, než kde
+    /// shell doopravdy stojí — a to je text, který tvrdí víc, než data unesou.
+    @Test("Znovuotevření zásuvky nepřepíše cestu běžící relaci")
+    func reopeningKeepsTheDirectoryOfALiveSlot() async {
+        let store = store(FakeTerminalHost())
+        let standing = URL(filePath: "/tmp/kde-shell-stoji")
+        store.terminalSlots[pullRequest] = [shell]
+        store.terminalDirectories[shell] = standing
+        store.terminalStates[shell] = .running
+
+        await store.toggleTerminal()
+
+        #expect(store.terminalDirectory(of: shell) == standing)
+    }
+
     /// Záložky přepínače nesou puntík podle stavu **té** relace, ne jednoho stavu na zásuvku.
     @Test("Přepínač nese stav každé relace zvlášť")
     func everyTabCarriesItsOwnState() throws {

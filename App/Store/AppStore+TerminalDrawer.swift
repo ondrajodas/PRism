@@ -72,10 +72,13 @@ extension AppStore {
     func prepareTerminalDrawer(for pr: PRIdentifier) async {
         let slot = TerminalSlot(pullRequest: pr, role: .shell)
         let hadNone = activeTerminalSlots[pr] == nil
-        // Adresář se hledá **pokaždé**: pracovní strom se posune s novým commitem a eviction ho umí
-        // sebrat, takže zapamatovaná cesta zestárne — a shell spuštěný ve smazané složce je horší
-        // než žádný. Adresář už běžícího shellu se tím nemění; ten si drží ten svůj.
-        let directory = await resolvedShellDirectory(for: pr)
+        // **Adresář se hledá jen relaci, která ho ještě nemá** (nález Copilota). Hledá se proto,
+        // že pracovní strom se posune s novým commitem a eviction ho umí sebrat — shell spuštěný
+        // ve smazané složce je horší než žádný. Jenže hotové relaci ho přepsat **nesmí**:
+        // `TerminalHost` vrací existující plochu a nový adresář si nevezme, takže by popiska
+        // v hlavičce ukazovala jinam, než kde shell doopravdy stojí.
+        var directory = terminalDirectories[slot]
+        if directory == nil { directory = await resolvedShellDirectory(for: pr) }
         guard admit(slot, showing: hadNone) else { return }
         terminalDirectories[slot] = directory
     }
