@@ -312,9 +312,9 @@ struct AppStoreResumeInDrawerTests {
     // MARK: - Důvěra ke složce (#460)
 
     /// **Zapisuje se dřív, než se řádka pošle** — jinak by `claude` stihl vyskočit s dotazem.
-    /// A zapisuje se **kořen cache**, ne strom toho PR: důvěra se dědí, takže jeden záznam
-    /// pokryje všechny pull requesty.
-    @Test("▶ napřed zapíše důvěru ke kořeni cache, pak pustí session")
+    /// A zapisuje se **strom té session, ne jen kořen cache** (#479): do git pracovního stromu se
+    /// důvěra z předka **nedědí**, takže samotný kořen dialog nad stromem review nepotlačí.
+    @Test("▶ napřed zapíše důvěru stromu i kořeni, pak pustí session")
     func trustIsRegisteredBeforeTheCommandGoesOut() async {
         let host = FakeTerminalHost()
         let trust = FakeWorkspaceTrust()
@@ -322,14 +322,15 @@ struct AppStoreResumeInDrawerTests {
 
         await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
-        #expect(trust.trusted == [CacheLayout.applicationSupport.root])
+        #expect(trust.trusted == [worktree, CacheLayout.applicationSupport.root])
         #expect(host.ran.count == 1)
     }
 
     /// **Konfigurace se nečte při každém otevření zásuvky**: `~/.claude.json` má přes 200 kB
-    /// a hodnota se mění jednou za život složky.
-    @Test("Důvěra se zapisuje jednou, ne při každém otevření")
-    func trustIsRegisteredOnlyOnce() async {
+    /// a hodnota se mění jednou za život složky. Zapsané složce se tedy nepíše znovu — ani té,
+    /// kterou si vyžádala druhá session z téhož stromu.
+    @Test("Zapsané složce se důvěra nezapisuje znovu")
+    func trustIsRegisteredOnlyOncePerDirectory() async {
         let host = FakeTerminalHost()
         let trust = FakeWorkspaceTrust()
         let store = store(host, trust: trust)
@@ -338,11 +339,47 @@ struct AppStoreResumeInDrawerTests {
         await store.resumeInDrawer(session("security-review"), for: pullRequest)
         await store.toggleTerminal()
 
-        #expect(trust.trusted.count == 1)
+        #expect(trust.trusted == [worktree, CacheLayout.applicationSupport.root])
+    }
+
+    /// **Jiný strom si vyžádá vlastní zápis** (#479) — a je to celý důvod, proč je ve storu množina
+    /// a ne příznak. Příznak by po prvním pull requestu zavřel cestu všem dalším, tedy přesně tam,
+    /// kde dialog chodil.
+    @Test("Druhý pracovní strom dostane vlastní zápis")
+    func asecondWorktreeIsTrustedToo() async {
+        let host = FakeTerminalHost()
+        let trust = FakeWorkspaceTrust()
+        let store = store(host, trust: trust)
+        let other = URL(filePath: "/Users/o/Library/Application Support/PRism/w/9-def")
+
+        await store.resumeInDrawer(session("php-review"), for: pullRequest)
+        await store.resumeInDrawer(
+            TerminalSession(directory: other, command: "x", skill: "php-review"),
+            for: pullRequest
+        )
+
+        #expect(trust.trusted == [worktree, CacheLayout.applicationSupport.root, other])
+    }
+
+    /// `` ⌃` `` je druhá cesta do zásuvky a **zapisuje totéž**: shell v bare klonu je místo, kde si
+    /// člověk `claude` napíše rukou, a ten se ptá stejně jako ten z `▶`.
+    @Test("⌃` zapíše důvěru i ke složce, ve které shell stojí")
+    func theShellDirectoryIsTrustedToo() async {
+        let trust = FakeWorkspaceTrust()
+        let store = store(FakeTerminalHost(), trust: trust)
+        let clone = URL(filePath: "/Users/o/Library/Application Support/PRism/repos/cli/cli.git")
+        store.terminalDirectories[shell] = clone
+
+        await store.toggleTerminal()
+
+        #expect(trust.trusted == [clone, CacheLayout.applicationSupport.root])
     }
 
     /// **Po neúspěchu se to zkusí znovu.** Dokud se to nepovede, chodí ten dotaz na důvěru —
     /// a vzdát to po prvním pokusu by znamenalo, že se z něj nikdy nevyhrabeme.
+    ///
+    /// **A neúspěch u jedné složky nezastaví tu druhou**: obě se zkusí pokaždé, takže z jednoho
+    /// otevření zásuvky jsou dva pokusy.
     @Test("Nepovedený zápis se zkusí při dalším otevření znovu")
     func afailedRegistrationIsRetried() async {
         let host = FakeTerminalHost()
@@ -351,14 +388,14 @@ struct AppStoreResumeInDrawerTests {
         let store = store(host, trust: trust)
 
         await store.resumeInDrawer(session("php-review"), for: pullRequest)
-        #expect(trust.trusted.count == 1)
+        #expect(trust.trusted == [worktree, CacheLayout.applicationSupport.root])
         // **A session se pustí i tak** — dialog navíc je pořád lepší než tlačítko, které nic neudělá.
         #expect(host.ran.count == 1)
         #expect(store.terminalFailure == nil)
 
         await store.resumeInDrawer(session("php-review"), for: pullRequest)
 
-        #expect(trust.trusted.count == 2)
+        #expect(trust.trusted.count == 4)
     }
 
     /// Store bez té závislosti nesmí spadnout ani si nic vymyslet — tak jsou na tom testy, které

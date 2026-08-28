@@ -9264,7 +9264,7 @@ stopy ta informace zmizet nesmí. `crit` proto znamená **nenulový** konec a ce
 v nápovědě záložky (`Policy.terminalSlotHelp`). Kód, který **nedorazil**, se přitom kreslí jako
 klid, ne jako chyba: je to odpověď „nevíme“, a červený puntík by tvrdil víc, než data unesou.
 
-### Důvěra ke složce a auto-mode (#460)
+### Důvěra ke složce a auto-mode (#460, oprava #479)
 
 `▶` pouští **interaktivní** `claude`, a to s sebou nese dvě věci, které se review sessions netýkají
 (ty běží s `-p`):
@@ -9272,10 +9272,9 @@ klid, ne jako chyba: je to odpověď „nevíme“, a červený puntík by tvrdi
 - **Dotaz na důvěru ke složce.** Interaktivní `claude` se v neznámém adresáři ptá *„Is this
   a project you created or one you trust?“* — a protože **každý PR dostane vlastní pracovní
   strom**, přišel by ten dialog u každého PR znovu. Zapisuje se proto `hasTrustDialogAccepted`
-  do `~/.claude.json`, a to **jednou, na kořen cache**: změřeno, že se důvěra dědí z libovolného
-  předka. Je to postup, na který odkazuje sám `claude` ve své binárce, a je to zároveň **přesně ta
-  hranice, kterou aplikace už má** (tvrdá podmínka č. 3). Měření a tvar záznamu jsou
-  v [`docs/claude-cli.md`](claude-cli.md).
+  do `~/.claude.json`. Je to postup, na který odkazuje sám `claude` ve své binárce, a je to zároveň
+  **přesně ta hranice, kterou aplikace už má** (tvrdá podmínka č. 3). Měření a tvar záznamu jsou
+  v [`docs/claude-cli.md`](claude-cli.md); **co přesně se zapisuje, se u #479 změnilo** — viz níž.
 - **Režim povolení `auto`** (`Policy.drawerResumeCommand`). Session, kterou řídí člověk ve svém
   shellu, nemá přerušovat práci dotazem u každého kroku. **Nová práva to nedává** — zásuvka je
   plnohodnotný shell s kapslí `plná práva`, takže odpadají **dotazy**, ne hranice. `auto` je z těch
@@ -9293,6 +9292,46 @@ Dvě věci na tom nejsou zjevné:
   o spolknutých chybách. Otázka, kterou to pravidlo klade, zní „pozná uživatel, že se to
   nepovedlo?“ — a tady zní odpověď **ano, sám od sebe**: objeví se ten dotaz na důvěru, tedy přesně
   to, co to mělo ušetřit.
+
+#### Zapisuje se složka, ve které shell stojí — ne jen kořen cache (#479)
+
+Do #479 se zapisoval **jeden záznam, na kořen cache**, a stálo to na měření z #460, že se důvěra
+dědí z libovolného předka. Dialog se přesto objevoval dál.
+
+**Dědí se, ale ne do git pracovního stromu** — a strom review je přesně to, kam `▶` míří. Změřeno
+na skutečném stromu v cache: nad stromem, jehož bare klon není důvěryhodný, dialog vyskočí, i když
+kořen cache důvěryhodný **je**; se zapsanou přesnou cestou nevyskočí. Obyčejná složka i **bare
+klon** dědí do libovolné hloubky (měřeno 1 až 6 pater), takže zásuvka otevřená nad klonem — tedy
+nad PR, na kterém review ještě neběželo — v pořádku byla už předtím. Celá tabulka je
+v [`docs/claude-cli.md`](claude-cli.md).
+
+**Podezření z issue se přitom nepotvrdilo**: explicitní `hasTrustDialogAccepted: false` na přesné
+cestě zděděné `true` **nepřebíjí**, chová se k nerozeznání od nezapsaného záznamu. Opravu to
+nezměnilo, zápis ano.
+
+Co z toho v kódu vzniklo:
+
+- **`Policy.workspacesToTrust(root:shell:)`** vydá výčet: **napřed složka shellu, pak kořen cache**.
+  Pořadí je pojistka pro případ, že by jeden zápis selhal — hotový je dřív ten, na kterém dialog
+  stojí. Kořen **zůstává**, protože pokrývá složky, které v době zápisu ještě neexistují (klon
+  dotažený později, strom příštího review). Kořen se do výčtu nedostane dvakrát ani tehdy, když
+  shell stojí zrovna v něm.
+- **`AppStore.trustedWorkspaces` je množina, ne příznak.** Složek je jedna na pull request, takže
+  příznak by po prvním zápisu zavřel cestu všem dalším — tedy přesně tam, kde dialog chodil. Do
+  množiny se zapisuje **jen po úspěchu**, takže se nepovedený zápis příště zkusí znovu; cyklus se
+  po chybě **nepřerušuje**, protože neúspěch u jedné složky neříká nic o té druhé.
+- **Zapsané `false` na naší cestě se přepíše**, a je to rozhodnutí (`ClaudeWorkspaceTrust`).
+  Změřeno, že si tu hodnotu `claude` zakládá **sám** při každém běhu nad složkou, kterou
+  v konfiguraci ještě nemá — není to tedy odpověď člověka „nevěřím“, ale výchozí hodnota záznamu.
+  Zapsané `true` se dál nepřepisuje, takže běžný případ zůstává čisté čtení.
+- **Volá se ze dvou míst, obou před shellem**: z `prepareTerminalDrawer` (tedy z `` ⌃` `` i z
+  přepnutí PR s vytaženou zásuvkou) hned po nalezení adresáře a **před `admit`**, protože plochu
+  staví až `TerminalSurface`; a z `resumeInDrawer` pro `session.directory`, protože tam `shellLine`
+  napřed `cd` udělá — `claude` se tedy ptá na **strom**, ne na to, kde shell startoval.
+
+Čtyři pojistky z #460 platí beze změny a mají svoje testy: na soubor, kterému aplikace nerozumí, se
+**nesahá** (a chybějící se ani nezakládá), zachová se, co v souboru je, píše se **atomicky**
+s právy `0600` a **jen když je to potřeba**.
 
 ### Rolování — co se u #460 naměřilo
 
@@ -9431,7 +9470,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `SystemNotificationCenter` | `UNUserNotificationCenter` za tím protokolem — **statická jediná instance** a delegát, který kliknutí převádí na hodnotu v proudu |
 | `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
 | `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
-| `WorkspaceTrusting` | Protokol: zapiš důvěru ke složce do `~/.claude.json` (#460). `ClaudeWorkspaceTrust` — **jediné místo, kde aplikace píše mimo svoji cache**. Na soubor, kterému nerozumí, **nesáhne**; zapisuje **atomicky** (`replaceItemAt`, přenese `0600`) a **jen jednou** — hotová důvěra se nepřepisuje, takže běžný případ je čisté čtení |
+| `WorkspaceTrusting` | Protokol: zapiš důvěru ke složce do `~/.claude.json` (#460). `ClaudeWorkspaceTrust` — **jediné místo, kde aplikace píše mimo svoji cache**. Na soubor, kterému nerozumí, **nesáhne**; zapisuje **atomicky** (`replaceItemAt`, přenese `0600`) a **jen když je to potřeba** — zapsané `true` se nepřepisuje, takže běžný případ je čisté čtení. Zapsané `false` na naší cestě se naopak přepsat **smí** (#479): zakládá si ho `claude` sám, není to odpověď člověka. Složek je od #479 víc než jedna, výčet vydá `Policy.workspacesToTrust(root:shell:)` |
 | `TerminalOpening` | Protokol: pusť řádku v novém okně terminálu (#453). `AppleScriptTerminal` nad `/usr/bin/osascript` — **není to druhá cesta ven**, terminál je mimo aplikaci. Příkaz jde do skriptu jako `argv`, ne vlepený do jeho zdrojáku, a selhání se **vrací jako chyba** (`TerminalError`), ne mlčí. **Od #460 to nikdo nevolá** — drží se jako záloha i s `NSAppleEventsUsageDescription`, viz specifikace |
 
 Nad notifikacemi (#88) platí:

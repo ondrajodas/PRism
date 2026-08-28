@@ -700,15 +700,19 @@ final class AppStore {
     /// --resume` hledá vlákno podle adresáře.
     var terminalDirectories: [TerminalSlot: URL] = [:]
 
-    /// Je už zapsaná důvěra ke kořeni cache? (#460)
+    /// Ke kterým složkám už je v konfiguraci Claude Code zapsaná důvěra (#460, od #479 množina).
     ///
     /// **Drží se proto, aby se konfigurace Claude Code nečetla při každém otevření zásuvky**:
     /// `~/.claude.json` má na tomhle stroji přes 200 kB a rozebrat ho kvůli hodnotě, která se mění
     /// **jednou za život složky**, je zrovna to čtení všeho, kde stačí předfiltr.
     ///
-    /// Nastavuje se **jen po úspěchu**, takže se po neúspěšném zápisu zkusí příště znovu — a to je
-    /// důležitější než ušetřené čtení: dokud se to nepovede, chodí ten dotaz na důvěru.
-    var hasRegisteredWorkspaceTrust = false
+    /// **Množina, ne příznak** (#479): od #479 se nezapisuje jen kořen cache, ale i ta složka, ve
+    /// které shell doopravdy stojí — a těch je jedna na pull request. Příznak by po prvním zápisu
+    /// zavřel cestu všem ostatním.
+    ///
+    /// Zapisuje se sem **jen po úspěchu**, takže se po neúspěšném zápisu zkusí příště znovu — a to
+    /// je důležitější než ušetřené čtení: dokud se to nepovede, chodí ten dotaz na důvěru.
+    var trustedWorkspaces: Set<URL> = []
 
     /// Které relace zásuvka pro ten PR drží, **v pořadí vzniku** (#460).
     ///

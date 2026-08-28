@@ -3870,7 +3870,7 @@ aplikace jedině do své cache). Obhajitelné je to tím, **co** se zapisuje: d�
 
 | Rozhodnutí | Proč tak |
 |---|---|
-| **Registruje se kořen cache, ne cesta na každý PR** | Změřeno, že se důvěra **dědí z libovolného předka** (registrovaný adresář o tři patra výš dialog potlačil). Jeden záznam za život tedy pokryje všechny pracovní stromy i bare klony — a je to **přesně ta hranice, kterou aplikace už má** (tvrdá podmínka č. 3) |
+| ~~**Registruje se kořen cache, ne cesta na každý PR**~~ | Změřeno, že se důvěra **dědí z libovolného předka** (registrovaný adresář o tři patra výš dialog potlačil). Jeden záznam za život tedy pokryje všechny pracovní stromy i bare klony — a je to **přesně ta hranice, kterou aplikace už má** (tvrdá podmínka č. 3). **Změněno u #479** — dědí se, ale **ne do git pracovního stromu**; záznam rozhodnutí je níž |
 | **Klíčem je `realpath`, ne `URL.resolvingSymlinksInPath()`** | Změřeno: `claude` nad `/tmp/x` hlásí `/private/tmp/x`, kdežto Foundation `/tmp` ani `/var` schválně nerozvíjí (vrátí `/tmp`) — a přesně tyhle dva prefixy jsou na macOS symlinky |
 | **Na soubor, kterému nerozumí, se nesáhne** | Ztráta při nezapsání je **jeden dialog navíc**; přepsaná konfigurace by byla ztráta cizí práce. Chybějící soubor se proto **ani nezakládá**: `claude` si ho založí sám a při té příležitosti se zeptá |
 | **Atomicky, a s přenesenými právy** | Dočasný soubor ve stejné složce a `replaceItemAt`, takže při pádu uprostřed zůstane původní verze — a `0600` se zachová, aby se konfigurace nezpřístupnila |
@@ -3879,6 +3879,38 @@ aplikace jedině do své cache). Obhajitelné je to tím, **co** se zapisuje: d�
 
 Co to **stojí a je to zapsané**: `JSONSerialization` pořadí klíčů nezachovává, takže první zápis
 soubor **přeskládá**. Je to jediná viditelná změna, kterou to udělá — obsah zůstává.
+
+##### Záznam rozhodnutí — zapisuje se složka shellu, ne jen kořen cache (#479)
+
+Dialog se objevoval dál. Podezření v issue padlo na **explicitní `false`** u bare klonů: hypotéza
+zněla, že přebije zděděné `true`. **Změřeno, a nepotvrdilo se** — `false` se chová k nerozeznání od
+nezapsaného záznamu a zděděné `true` zůstává v platnosti.
+
+Vyšlo z toho něco jiného, a je to jediná výjimka z dědění, kterou se podařilo najít: **do git
+pracovního stromu se důvěra z předka nedědí.** Obyčejná složka i bare klon dědí do libovolné
+hloubky (měřeno 1 až 6 pater); složka, ve které je `.git`, si žádá **vlastní záznam** — nebo záznam
+na svém repozitáři. A strom review je právě to, kam `▶` míří, takže samotný kořen cache dialog nad
+ním nepotlačil. Reprodukováno na **skutečném** stromu v cache s **kopií** skutečné konfigurace,
+kde je vidět obojí: strom, jehož bare klon je `true`, projde; strom, jehož klon je `false`,
+vyskočí — a se zapsanou přesnou cestou nevyskočí ani ten. Tabulka je v
+[`docs/claude-cli.md`](../../claude-cli.md), postup sondy i pět pastí v
+[`docs/testovani.md`](../../testovani.md).
+
+| Rozhodnutí | Zamítnutá varianta | Proč tak |
+|---|---|---|
+| **Zapisuje se složka shellu i kořen cache** | Jen složka shellu | Kořen pokrývá to, co v době zápisu ještě neexistuje — bare klon dotažený později, strom příštího review. U obojího se dědění **potvrdilo**, takže je to jeden zápis navíc za to, že první otevření zásuvky nad novým repem nemusí čekat na nic |
+| **Nejdřív strom, pak kořen** | Opačně, nebo bez pořadí | Pojistka pro případ, že by jeden zápis selhal: hotový je dřív ten, na kterém dialog stojí. Výčet vydává `Policy.workspacesToTrust(root:shell:)`, takže se to rozhoduje **nad daty**, ne v storu |
+| **Množina zapsaných složek, ne příznak** | Nechat `Bool` a přidat druhý zápis | Složek je **jedna na pull request**. Příznak by po prvním zapsal jednu a všem dalším cestu zavřel — tedy přesně tam, kde dialog chodil. Cena je jedno čtení konfigurace na PR, ne na otevření zásuvky |
+| **Zapsané `false` na naší cestě se přepíše** | Nesahat na nic, co už v konfiguraci je | Změřeno, že si `false` zakládá **`claude` sám** při běhu nad složkou, kterou v konfiguraci nemá — není to odpověď člověka „nevěřím“, ale výchozí hodnota záznamu. A je to složka v naší cache, kterou vyrobila aplikace. Cizích projektů se to netýká: sahá se jedině na klíč, který jsme dostali |
+| **Chová se to stejně k bare klonu i ke stromu** | Zapisovat jen tam, kde je `.git` | Rozvětvení podle toho, co je to za složku, znamená sáhnout na disk kvůli rozhodnutí, které se dá udělat nad daty — a jeden zápis navíc je levnější než druhá pravda o tom, kdy se dědí |
+
+**Co z toho zůstalo nedovysvětlené, a je to zapsané**: proč byl kořen cache v konfiguraci
+`true`, a přesto se dialog objevoval i tam, kde by podle měření vyskočit neměl (slotové kořeny
+`PRism-a`, `-b`, `-c` v konfiguraci **vůbec nejsou**, přestože zásuvka v těch slotech běžela).
+Vyloučit se podařilo aspoň jedno vysvětlení: **`claude` cizí zápis nepřepisuje** — značkový klíč
+zapsaný do konfigurace během jeho běhu přežil ve všech třech měřených okamžicích. Na opravu to
+nemá vliv: zápis přesné cesty je hotový **bezprostředně před** spuštěním shellu, takže na tom, co
+se s kořenem stalo dřív, přestává záležet.
 
 #### Auto-mode v zásuvce (#460)
 

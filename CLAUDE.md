@@ -422,13 +422,19 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    ([záznam rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#auto-mode-v-zásuvce-460)).
 
    **A od #460 aplikace zapisuje do konfigurace cizího nástroje** (`~/.claude.json`,
-   `WorkspaceTrusting`) — jedinou hodnotu, **důvěru ke kořeni vlastní cache**, aby se interaktivní
+   `WorkspaceTrusting`) — jedinou hodnotu, **důvěru ke složkám vlastní cache**, aby se interaktivní
    `claude` neptal na důvěru u každého nového pracovního stromu. Je to postup, na který odkazuje
    sám `claude` ve své binárce, a hranice u něj drží tři věci: **na soubor, kterému nerozumí,
    nesáhne** (rozbitá cizí konfigurace by byla ztráta cizí práce, kdežto neúspěch stojí jeden
    dialog navíc a **je vidět sám**), **zapisuje atomicky a zachová, co v souboru je**, a **zapisuje
-   jednou** — hotová důvěra se nepřepisuje, takže běžný případ je čisté čtení. Podrobnosti a to,
-   co se u toho změřilo, jsou v [`docs/claude-cli.md`](docs/claude-cli.md).
+   jen když je potřeba** — zapsané `true` se nepřepisuje, takže běžný případ je čisté čtení.
+
+   **Od #479 to není jen kořen cache, ale i ta složka, ve které shell doopravdy stojí** (pracovní
+   strom review, nebo bare klon; výčet vydá `Policy.workspacesToTrust`). Důvěra se z předka sice
+   dědí, ale **ne do git pracovního stromu** — a strom review je přesně to, kam `▶` míří. Zapsané
+   `false` **na naší cestě** se u toho přepsat **smí**: zakládá si ho `claude` sám, není to odpověď
+   člověka. Podrobnosti a to, co se změřilo — včetně **vyvrácené** hypotézy, že `false` přebíjí
+   zděděné `true` —, jsou v [`docs/claude-cli.md`](docs/claude-cli.md).
 
    Co na téhle podmínce **nic nemění**, a proč: **kontrola nálezů z minula** (#150) má vlastní
    prompt, ale bere **tytéž konstanty** `ClaudeCommand.allowedTools` a `disallowedTools`

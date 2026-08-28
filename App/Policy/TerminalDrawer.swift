@@ -178,6 +178,25 @@ extension Policy {
         worktree ?? clone
     }
 
+    /// Kterým složkám se zapíše důvěra v konfiguraci Claude Code, než se v zásuvce něco pustí
+    /// (#460, opraveno #479).
+    ///
+    /// **Napřed ta složka, ve které shell doopravdy stojí, a teprve pak kořen cache.** Do #479 se
+    /// zapisoval jen kořen a stálo to na měření, že se důvěra dědí z libovolného předka. Dědí —
+    /// ale **ne do git pracovního stromu**: složka s `.git` si žádá vlastní záznam a důvěryhodný
+    /// předek jí je k ničemu (změřeno, viz [`docs/claude-cli.md`](../../docs/claude-cli.md)).
+    /// A pracovní strom review je přesně to, kam `▶` míří, takže dialog chodil dál.
+    ///
+    /// **Kořen zůstává**, protože pokrývá složky, které v době zápisu ještě neexistují — bare klon
+    /// dotažený později, strom příštího review; u obojího se dědění potvrdilo. Pořadí je pojistka
+    /// pro případ, že by jeden ze zápisů selhal: ten, na kterém dialog stojí, je hotový dřív.
+    ///
+    /// `nil` u `shell` znamená, že se adresář nenašel — pak zbývá jen kořen.
+    static func workspacesToTrust(root: URL, shell: URL?) -> [URL] {
+        guard let shell, shell != root else { return [root] }
+        return [shell, root]
+    }
+
     /// Cesta tak, jak se píše do hlavičky zásuvky — s `~` místo domovské složky.
     ///
     /// Vlastní funkce, ne `NSString.abbreviatingWithTildeInPath`: ta si domov bere z prostředí

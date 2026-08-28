@@ -26,7 +26,6 @@ extension AppStore {
             return
         }
         guard let pr = activeTab.pullRequest else { return }
-        await registerWorkspaceTrust()
         await prepareTerminalDrawer(for: pr)
     }
 
@@ -80,6 +79,10 @@ extension AppStore {
         // v hlavičce ukazovala jinam, než kde shell doopravdy stojí.
         var directory = terminalDirectories[slot]
         if directory == nil { directory = await resolvedShellDirectory(for: pr) }
+        // **Dřív, než se relace zobrazí** (#479): plochu staví až `TerminalSurface`, takže tohle je
+        // poslední místo před shellem — a `claude` napsaný v něm rukou se ptá na důvěru stejně jako
+        // ten z `▶`.
+        await registerWorkspaceTrust(for: directory)
         guard admit(slot, showing: hadNone) else { return }
         terminalDirectories[slot] = directory
     }
@@ -113,7 +116,11 @@ extension AppStore {
         // **Důvěra ke složce se zapisuje dřív, než se řádka pošle** (#460): `claude --resume` je
         // interaktivní, takže by se v novém pracovním stromu zeptal, jestli té složce věřit —
         // a strom je nový u **každého** PR, takže by ten dotaz přišel pokaždé znovu.
-        await registerWorkspaceTrust()
+        //
+        // **Pro strom té session, ne jen pro kořen cache** (#479): `shellLine` do něj napřed `cd`
+        // udělá, takže `claude` se ptá na **něj** — a je to git pracovní strom, kam se důvěra
+        // z předka nedědí.
+        await registerWorkspaceTrust(for: session.directory)
         guard admit(slot, showing: true) else {
             terminalFailure = Policy.slotsFullNotice(Policy.terminalSlotTitle(slot.role))
             return
@@ -178,13 +185,27 @@ extension AppStore {
         terminalSlots[slot.pullRequest] = slots.filter { $0 != slot }
     }
 
-    /// Zapíše důvěru ke **kořeni cache** do konfigurace Claude Code (#460).
+    /// Zapíše důvěru do konfigurace Claude Code (#460) — **té složce, ve které shell stojí, a ke
+    /// kořeni cache** (#479).
     ///
-    /// **Jeden záznam na všechno, ne jeden na pull request.** Změřeno, že se důvěra dědí
-    /// z libovolného předka (registrovaný adresář o tři patra výš dialog potlačil), takže kořen
-    /// cache pokryje i pracovní stromy, i bare klony — a nemusí se zapisovat znovu s každým novým
-    /// PR. Je to zároveň **přesně ta hranice, kterou aplikace už má**: tvrdá podmínka č. 3 říká,
-    /// že se pracuje výhradně tady a nikdy v uživatelových klonech.
+    /// **Do #479 to byl jen kořen** a stálo to na měření, že se důvěra dědí z libovolného předka.
+    /// Dědí se, ale **ne do git pracovního stromu**: složka s `.git` si žádá vlastní záznam
+    /// (změřeno na skutečném stromu review v cache, [`docs/claude-cli.md`](../../docs/claude-cli.md)).
+    /// Kořen tedy pokrýval bare klony a dialog nad pracovním stromem chodil dál — přesně tam, kam
+    /// `▶` míří. Co se zapisuje, rozhoduje `Policy.workspacesToTrust(root:shell:)`.
+    ///
+    /// Obojí je v cache aplikace, takže **tvrdá podmínka č. 3 platí beze změny**: zapisuje se
+    /// důvěra ke složkám, které aplikace sama vyrobila, nikdy k uživatelovu klonu.
+    ///
+    /// **Každá složka jednou za běh aplikace** (`trustedWorkspaces`), aby se 200kB konfigurace
+    /// nečetla při každém otevření zásuvky. Zapsané složce se nepíše znovu, ale **neúspěch se
+    /// nepamatuje**, takže se příště zkusí znovu.
+    ///
+    /// **Existence složky se neověřuje, a je to rozhodnutí.** Z `resumeInDrawer` umí přijít strom,
+    /// který mezitím sebral úklid cache — záznam pro cestu, na které nic není, ale nikomu nevadí:
+    /// `claude` si takové sám vyrábí desítkami (v konfiguraci leží záznamy po dávno smazaných
+    /// klonech) a `shellLine` v takovém stromě stejně skončí na `cd`. `stat` navíc před každým
+    /// otevřením zásuvky by se platil za nic.
     ///
     /// **Selhání se nehlásí ve stavovém řádku, a je to zapsaná výjimka** z pravidla o spolknutých
     /// chybách. Otázka, kterou to pravidlo klade, zní „pozná uživatel, že se to nepovedlo?“ — a
@@ -192,15 +213,22 @@ extension AppStore {
     /// to, co tohle mělo ušetřit. Hláška navíc by k tomu nic nepřidala a přišla by při každém
     /// otevření zásuvky. Co se **nesmí** stát, je rozbitá cizí konfigurace — to hlídá
     /// `ClaudeWorkspaceTrust` tím, že na soubor, kterému nerozumí, vůbec nesáhne.
-    private func registerWorkspaceTrust() async {
-        guard let workspaceTrust, !hasRegisteredWorkspaceTrust else { return }
-        do {
-            try await workspaceTrust.trust(CacheLayout.applicationSupport.root)
-            hasRegisteredWorkspaceTrust = true
-        } catch {
-            // **Nehlásí se, a jen tady**: příznak zůstává `false`, takže se to při dalším otevření
-            // zásuvky zkusí znovu — a než se to povede, přijde ten dotaz na důvěru, což je ta
-            // viditelná půlka.
+    private func registerWorkspaceTrust(for directory: URL?) async {
+        guard let workspaceTrust else { return }
+        let wanted = Policy.workspacesToTrust(
+            root: CacheLayout.applicationSupport.root,
+            shell: directory
+        )
+        for workspace in wanted where !trustedWorkspaces.contains(workspace) {
+            do {
+                try await workspaceTrust.trust(workspace)
+                trustedWorkspaces.insert(workspace)
+            } catch {
+                // **Nehlásí se, a jen tady**: složka se nezapíše do `trustedWorkspaces`, takže se
+                // to při dalším otevření zásuvky zkusí znovu — a než se to povede, přijde ten dotaz
+                // na důvěru, což je ta viditelná půlka. Cyklus se **nepřerušuje**: neúspěch u jedné
+                // složky neříká nic o té druhé.
+            }
         }
     }
 

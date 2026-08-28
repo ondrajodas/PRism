@@ -446,22 +446,48 @@ trust?“**. Pro PRism je to problém, který se sám neopotřebuje: **každý p
 pracovní strom**, takže je to pokaždé nová cesta a dialog by přišel u každého PR znovu.
 
 Změřeno pty sondou (`claude` spuštěný v pty, čtení výstupu, žádný zápis do skutečné konfigurace —
-podstrčený `HOME`):
+podstrčený `HOME`). **Přeměřeno u #479 na `claude 2.1.250`**, protože měření z #460 se nedalo
+zopakovat; postup i pasti, o které se ta první sonda rozbila, jsou
+v [`docs/testovani.md`](testovani.md#sonda-na-dotaz-o-důvěru-ke-složce-479).
 
 | Scénář | Výsledek |
 |---|---|
 | Adresář, který v konfiguraci není | **dialog** |
 | `projects[<cesta>].hasTrustDialogAccepted = true` | bez dialogu |
-| Registrovaný **předek o tři patra výš** | **bez dialogu** — důvěra se dědí |
-| Náš pracovní strom pod `~/Projects/PRism` (ten je důvěryhodný) | bez dialogu, potvrzuje dědění na skutečném stromě |
+| Registrovaný **předek** (1 až 6 pater výš) | **bez dialogu** — důvěra se dědí, a hloubka na tom nic nemění |
+| Předek `true` + přesná cesta `false` | **bez dialogu** — `false` zděděné `true` **nepřebíjí** |
+| Přesná cesta `false` a nic nad ní | **dialog** — `false` je tedy k nerozeznání od „nezapsáno“ |
+| Předek `false` + přesná cesta `true` | bez dialogu |
+| **Bare klon** (`git init --bare`) tři patra pod důvěryhodným předkem | bez dialogu |
+| **Git pracovní strom** (`.git`) tři patra pod důvěryhodným předkem | **dialog** |
+| Skutečný strom review v cache, jehož **bare klon je `true`** | bez dialogu |
+| Skutečný strom review v cache, jehož bare klon je `false` (kořen cache `true`) | **dialog** |
+| Týž strom se zapsanou **přesnou cestou** | bez dialogu |
 
-Dvě věci, které z toho plynou a nejsou zjevné:
+Čtyři věci, které z toho plynou a nejsou zjevné:
 
-- **Stačí zaregistrovat jednoho předka.** PRism proto zapisuje **kořen své cache**, ne cestu na
-  každý PR — je to zároveň přesně ta hranice, kterou aplikace už má (tvrdá podmínka č. 3).
+- **Dědění se láme na git pracovním stromě, a je to jediná výjimka, kterou se podařilo najít.**
+  Obyčejná složka i bare klon dědí důvěru z předka do libovolné hloubky; složka, ve které je `.git`,
+  si žádá **vlastní záznam** — nebo záznam na svém repozitáři (strom `job-queue` prošel proto, že
+  bare klon `job-queue.git` byl `true`). Kvůli tomu **PRism od #479 zapisuje i tu složku, ve které
+  shell doopravdy stojí**, ne jen kořen cache: strom review je přesně to, kam `▶` míří.
+- **Hypotéza z #479 se nepotvrdila.** Podezření padlo na explicitní `false` u bare klonů, jenže
+  `false` se chová jako nezapsáno: zděděné `true` zůstává v platnosti (řádek 4 tabulky). Zapsané
+  `hasTrustDialogAccepted: false` na naší cestě se proto přepsat **smí** — a taky se přepisuje.
+- **Ta `false` si tam píše `claude` sám.** Nad složkou, kterou v konfiguraci nemá a která je
+  důvěryhodná přes předka, si během startu záznam **založí** — s `hasTrustDialogAccepted: false`
+  a s celou další výbavou (`allowedTools`, `mcpServers`, `lastVersionBase`, …). Není to tedy
+  odpověď člověka „nevěřím“, ale výchozí hodnota záznamu. Když dialog **vyskočí a nikdo
+  neodpoví**, nezapíše se naopak nic.
 - **Klíčem je rozvinutá cesta.** Nad `/tmp/x` hlásí `claude` workspace `/private/tmp/x`. Rozvíjí to
   `realpath`, **ne `URL.resolvingSymlinksInPath()`** — ta `/tmp` ani `/var` schválně nerozvíjí
   (změřeno: vrátí `/tmp`), a přesně tyhle dva prefixy jsou na macOS symlinky.
+
+**Co se naopak nepotvrdilo a stálo za měření: `claude` cizí zápis do konfigurace nepřepisuje.**
+Podezření bylo, že si soubor přečte při startu a na konci ho uloží ze své kopie, takže by náš
+záznam zmizel. Změřeno tak, že se do podstrčené konfigurace během běhu (v `t = 1`, `6` a `15` s)
+zapsal značkový klíč — **ve všech třech případech přežil** a `claude` si vedle něj svůj záznam
+založil. Čte tedy soubor znovu, než ho zapíše.
 
 **Že je to podporovaná cesta, říká sám `claude`**: v jeho binárce stojí dvakrát věta *„…accept the
 trust dialog here once interactively, or set `projects[<cesta>].hasTrustDialogAccepted` in

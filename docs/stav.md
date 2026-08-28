@@ -5381,7 +5381,6 @@ s diffem nemají co dělat** — je to přestavba detailu samotného (hlavička,
 `.task` kaskáda), která se přepnutím zahodí a staví znovu. Kdo na tom bude pracovat dál, má začít
 tam, ne v diffu; a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
 
-<<<<<<< HEAD
 ### #476 — přepnutí tabu s diffem: jedno zlevnění a čtyři zamítnutí
 
 Po #472 stálo přepnutí tabu s diffem 466 ms u 2000řádkového proti **62 ms** bez něj a rostlo
@@ -5403,7 +5402,6 @@ by posunulo pilulku na komentář i kotvu ⇧ kliku, aniž by se to kdekoli ohl�
 diffu a je to cena **prvního rozvržení** obsahu, který se přepnutím zahodí a staví znovu. Kdo se
 do toho pustí znovu, ať měří **přerovnání okna** jako první — tři ze čtyř zamítnutých se rozbily o něj.
 
-=======
 ## #460 — `▶` v `Průběhu` pouští session v zásuvce, a zásuvka drží víc relací naráz
 
 Tlačítko `▶` v hlavičce dráhy přestalo otevírat cizí okno a **vytáhne zásuvku** (#459), přepne na
@@ -5481,10 +5479,10 @@ jen relaci, která ho ještě nemá.
 dialog u každého PR znovu. Volba ani proměnná prostředí na to **není** (`--help` zná jen `-p`),
 takže se zapisuje `hasTrustDialogAccepted` do `~/.claude.json` — což je cesta, na kterou **odkazuje
 sám `claude`** ve své binárce. Změřeno, že se důvěra **dědí z libovolného předka**, takže stačí
-**jeden záznam na kořen cache**, ne jeden na PR; klíčem je `realpath`, protože Foundation `/tmp`
-ani `/var` schválně nerozvíjí. Je to **první zápis aplikace mimo vlastní cache** a drží ho tři
-věci: na soubor, kterému nerozumí, **nesáhne**, zapisuje **atomicky** s přenesenými právy
-a **jen jednou**.
+**jeden záznam na kořen cache**, ne jeden na PR (**opraveno u #479** — do git pracovního stromu se
+nedědí, viz níž); klíčem je `realpath`, protože Foundation `/tmp` ani `/var` schválně nerozvíjí.
+Je to **první zápis aplikace mimo vlastní cache** a drží ho tři věci: na soubor, kterému nerozumí,
+**nesáhne**, zapisuje **atomicky** s přenesenými právy a **jen jednou**.
 
 **Session z `▶` běží v auto režimu** (`--permission-mode auto`). Je to **jiná třída session než ta
 z tvrdé podmínky č. 2**: tam jde o session, které pouští aplikace, a jejich sady se **nemění ani
@@ -5510,4 +5508,49 @@ zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
 běžícími nic neukončí, že se **neobjeví dotaz na důvěru ke složce** (ten dialog je interaktivní)
 a jak obsah po přesázení **vypadá**. Do pty se v harnessu psát nedá a obsah emulátoru se odtud
 nepřečte vůbec (změřeno u #459).
->>>>>>> origin/main
+
+## #479 — dotaz na důvěru: zapisuje se složka, ve které shell stojí
+
+Po #460 se dialog *„Is this a project you created or one you trust?“* objevoval **dál**, přestože
+kořen cache byl v `~/.claude.json` zapsaný jako `true`. Aplikace teď zapisuje důvěru **i té složce,
+ve které shell doopravdy startuje** — pracovnímu stromu review, nebo bare klonu —, takže na chování
+dědění přestává záležet. Kořen **zůstává**: pokrývá složky, které v době zápisu ještě neexistují.
+
+**Hypotéza z issue se nepotvrdila, a to je hlavní výsledek měření.** Podezření padlo na explicitní
+`hasTrustDialogAccepted: false` u bare klonů — že přebije zděděné `true`. Změřeno na `claude
+2.1.250` v pty s podstrčeným `HOME`, šest scénářů: `false` se chová **k nerozeznání od
+nezapsaného** záznamu a zděděné `true` zůstává v platnosti.
+
+**Skutečná příčina je jinde a je to jediná výjimka z dědění, kterou se podařilo najít: do git
+pracovního stromu se důvěra z předka nedědí.** Obyčejná složka i bare klon dědí do libovolné
+hloubky (měřeno 1 až 6 pater); složka s `.git` si žádá **vlastní záznam** — nebo záznam na svém
+repozitáři. A strom review je přesně to, kam `▶` míří, takže kořen cache dialog nad ním nikdy
+nepotlačil. **Bare klony, na které padlo podezření, byly celou dobu v pořádku.**
+
+**Reprodukováno na skutečných datech**, ne na vymyšlených: do podstrčeného `HOME` se **zkopírovala**
+skutečná konfigurace (nikdy se do ní nepsalo) a `claude` se pustil ve **skutečných** stromech
+v cache. Strom, jehož bare klon je `true`, projde; strom, jehož klon je `false`, dialog vyvolá —
+a se zapsanou přesnou cestou nevyvolá. Zapsané `false` **na naší cestě** se proto přepsat **smí**:
+změřeno, že si ho `claude` zakládá **sám** při běhu nad složkou, kterou v konfiguraci nemá, takže
+to není odpověď člověka „nevěřím“, ale výchozí hodnota záznamu.
+
+**Vyloučila se i jedna alternativa**: `claude` cizí zápis do konfigurace **nepřepisuje** —
+značkový klíč zapsaný během jeho běhu (v `t = 1`, `6` a `15` s) přežil ve všech třech případech.
+
+Čtyři pojistky z #460 platí **beze změny** a mají testy: na soubor, kterému aplikace nerozumí, se
+nesahá (a chybějící se ani nezakládá), zachová se, co v souboru je, píše se atomicky s `0600`
+a jen když je to potřeba. Ve storu je místo příznaku **množina** zapsaných složek — příznak by po
+prvním pull requestu zavřel cestu všem dalším, tedy přesně tam, kde dialog chodil. Výčet složek
+vydává `Policy.workspacesToTrust(root:shell:)`: **napřed strom, pak kořen**.
+
+Testů **4382**, všechny zelené; **osm nových** (tři nad `Policy`, čtyři nad storem, jeden nad
+zápisem do konfigurace) a **obě strany ověřené vloženou regresí**. Sonda testem není a nebude:
+pouští skutečný interaktivní `claude` v pty, takže by z běhu testů dělala minuty čekání — postup
+i **pět pastí**, o které se ta první sonda rozbila, jsou v [`docs/testovani.md`](testovani.md).
+
+**Na tomhle není co vidět a člověk ověřuje jediné**: že se dialog neobjeví ani nad bare klonem,
+tedy u PR, na kterém review ještě neběželo. Do pty se v harnessu psát nedá.
+
+**Cestou se opravily zapomenuté značky konfliktu v tomhle souboru** — `<<<<<<< HEAD`, `=======`
+a `>>>>>>> origin/main` se do `main`u dostaly s #477 a rozdělovaly záznamy #476 a #460. Odstranily
+se jen ty tři řádky, obsah obou stran zůstal.

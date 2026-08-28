@@ -145,6 +145,39 @@ struct TerminalDrawerTests {
         #expect(Policy.terminalWorkingDirectory(worktree: nil, clone: nil) == nil)
     }
 
+    // MARK: - Kterým složkám se zapíše důvěra (#479)
+
+    /// **Napřed strom, pak kořen.** Do #479 se zapisoval jen kořen a stálo to na dědění důvěry —
+    /// jenže do git pracovního stromu se nedědí, a strom review je přesně to, kam `▶` míří.
+    /// Pořadí je pojistka: kdyby jeden zápis selhal, ten, na kterém dialog stojí, je hotový dřív.
+    @Test("Důvěra se zapisuje složce shellu a teprve pak kořeni cache")
+    func theShellDirectoryComesBeforeTheCacheRoot() {
+        let root = URL(filePath: "/cache")
+        let worktree = URL(filePath: "/cache/worktrees/cli/cli/42-abc")
+
+        #expect(Policy.workspacesToTrust(root: root, shell: worktree) == [worktree, root])
+    }
+
+    /// **Kořen se nezapisuje dvakrát**, ani když je shell zrovna v něm — dva zápisy téže hodnoty
+    /// jsou dvě čtení 200kB konfigurace za sebou.
+    @Test("Bez adresáře i nad kořenem samotným zbývá jediný zápis")
+    func theRootIsNeverListedTwice() {
+        let root = URL(filePath: "/cache")
+
+        #expect(Policy.workspacesToTrust(root: root, shell: nil) == [root])
+        #expect(Policy.workspacesToTrust(root: root, shell: root) == [root])
+    }
+
+    /// **Bare klon dostane vlastní záznam taky**, i když se do něj důvěra dědí: je to tatáž cesta
+    /// kódu a jeden zápis navíc je levnější než rozvětvení podle toho, co je to za složku.
+    @Test("Bare klon se zapisuje stejně jako pracovní strom")
+    func abareCloneIsTreatedLikeAnyOtherShellDirectory() {
+        let root = URL(filePath: "/cache")
+        let clone = URL(filePath: "/cache/repos/cli/cli.git")
+
+        #expect(Policy.workspacesToTrust(root: root, shell: clone) == [clone, root])
+    }
+
     /// **Zkracuje se jen celý prefix po hranici složky.** Bez té podmínky by `/Users/ondrej`
     /// vyšlo jako `~j`, což je cesta, která neexistuje.
     @Test("Cesta se zkracuje na ~ jen na hranici složky")
