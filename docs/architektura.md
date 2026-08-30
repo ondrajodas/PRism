@@ -3380,7 +3380,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
 | `AppStore+Terminal.swift` | `openInTerminal(_:)` do `Terminal.app` (#453) — od #460 **bez volajícího**, drží se jako záloha (viz specifikace) | 47 |
-| `AppStore+TerminalDrawer.swift` | Zásuvka (#459) a **relace v ní** (#460): `toggleTerminal()`, `prepareTerminalDrawer(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `resumeInDrawer(_:for:)` za `▶`, `selectTerminalSlot(_:)`, `terminalRows(for:)` a úklid — `stopTerminal(for:)` maže **celý seznam relací** toho PR, `stopTerminalsBeforeTermination()` všechny. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 222 |
+| `AppStore+TerminalDrawer.swift` | Zásuvka (#459) a **relace v ní** (#460): `toggleTerminal()`, `prepareTerminalDrawer(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `resumeInDrawer(_:for:)` za `▶`, `selectTerminalSlot(_:)`, `terminalRows(for:)` a úklid — `stopTerminal(for:)` maže **celý seznam relací** toho PR, `stopTerminalsBeforeTermination()` všechny. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 308 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -9327,7 +9327,16 @@ Co z toho v kódu vzniklo:
 - **Volá se ze dvou míst, obou před shellem**: z `prepareTerminalDrawer` (tedy z `` ⌃` `` i z
   přepnutí PR s vytaženou zásuvkou) hned po nalezení adresáře a **před `admit`**, protože plochu
   staví až `TerminalSurface`; a z `resumeInDrawer` pro `session.directory`, protože tam `shellLine`
-  napřed `cd` udělá — `claude` se tedy ptá na **strom**, ne na to, kde shell startoval.
+  napřed `cd` udělá — `claude` se tedy ptá na **strom**, ne na to, kde shell startoval. Zápis před
+  `admit` znamená jeden zápis navíc, když je strop relací plný; obráceně by mezi zapsaným slotem
+  a zapsaným adresářem stála odmlka, ve které zásuvka kreslí větu o chybějící pracovní kopii.
+- **Hranice cache se u toho tvrdí kontrolou, ne konstrukcí.** Do #479 byla zapisovaná cesta
+  konstanta (kořen), takže tvrdou podmínku č. 3 držel typ. Od #479 je to hodnota z dat — osa
+  review a checkout —, takže ji drží `CacheFile.isInsideCache`, tedy **to jedno místo, kde
+  hranice cache v repu bydlí** (#452). Složka mimo cache se přeskočí **potichu**, se stejnou
+  viditelnou půlkou jako chyba zápisu (přijde dotaz na důvěru); zapsané `true` u cizí složky
+  v uživatelově konfiguraci by naopak nepoznal nikdo. **Kořen sám se `contains` doptat nedá** —
+  posuzuje **rodiče**, takže na kořeni vrací `false`, a je proto vedle rovnosti s ním.
 
 Čtyři pojistky z #460 platí beze změny a mají svoje testy: na soubor, kterému aplikace nerozumí, se
 **nesahá** (a chybějící se ani nezakládá), zachová se, co v souboru je, píše se **atomicky**

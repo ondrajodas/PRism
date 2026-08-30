@@ -79,9 +79,15 @@ extension AppStore {
         // v hlavičce ukazovala jinam, než kde shell doopravdy stojí.
         var directory = terminalDirectories[slot]
         if directory == nil { directory = await resolvedShellDirectory(for: pr) }
-        // **Dřív, než se relace zobrazí** (#479): plochu staví až `TerminalSurface`, takže tohle je
-        // poslední místo před shellem — a `claude` napsaný v něm rukou se ptá na důvěru stejně jako
-        // ten z `▶`.
+        // **Dřív, než se relace zobrazí** (#479): plochu staví až `TerminalSurface` z adresáře,
+        // který se zapíše o dva řádky níž, takže tohle je poslední místo před shellem — a `claude`
+        // napsaný v něm rukou se ptá na důvěru stejně jako ten z `▶`.
+        //
+        // **Před `admit`, i za cenu zápisu pro relaci, která nevznikne.** Obráceně by mezi zapsaným
+        // slotem a zapsaným adresářem stála odmlka (`await` na hlavním vlákně pustí překreslení)
+        // a zásuvka by v ní nakreslila větu o chybějící pracovní kopii. Cena téhle volby je jeden
+        // zápis navíc, když je strop relací plný — a i ten je pro složku toho pull requestu, ne pro
+        // cizí.
         await registerWorkspaceTrust(for: directory)
         guard admit(slot, showing: hadNone) else { return }
         terminalDirectories[slot] = directory
@@ -195,7 +201,11 @@ extension AppStore {
     /// `▶` míří. Co se zapisuje, rozhoduje `Policy.workspacesToTrust(root:shell:)`.
     ///
     /// Obojí je v cache aplikace, takže **tvrdá podmínka č. 3 platí beze změny**: zapisuje se
-    /// důvěra ke složkám, které aplikace sama vyrobila, nikdy k uživatelovu klonu.
+    /// důvěra ke složkám, které aplikace sama vyrobila, nikdy k uživatelovu klonu. **Od #479 to
+    /// tvrdí kontrola, ne konstrukce** — do té doby byla zapisovaná cesta konstanta, kdežto teď jde
+    /// o hodnotu z dat (osa review, checkout), a `CacheFile.isInsideCache` je pravidlo o hranici
+    /// cache, které v repu už bydlí na jednom místě. Kořen sám se doptat nedá (`contains` posuzuje
+    /// **rodiče**, takže na kořeni vyjde `false`), proto je vedle rovnosti s ním.
     ///
     /// **Každá složka jednou za běh aplikace** (`trustedWorkspaces`), aby se 200kB konfigurace
     /// nečetla při každém otevření zásuvky. Zapsané složce se nepíše znovu, ale **neúspěch se
@@ -215,11 +225,16 @@ extension AppStore {
     /// `ClaudeWorkspaceTrust` tím, že na soubor, kterému nerozumí, vůbec nesáhne.
     private func registerWorkspaceTrust(for directory: URL?) async {
         guard let workspaceTrust else { return }
-        let wanted = Policy.workspacesToTrust(
-            root: CacheLayout.applicationSupport.root,
-            shell: directory
-        )
+        let layout = CacheLayout.applicationSupport
+        let wanted = Policy.workspacesToTrust(root: layout.root, shell: directory)
         for workspace in wanted where !trustedWorkspaces.contains(workspace) {
+            // **Hranice cache, a ne opsaná**: verdikt vydává `CacheFile`, kde to pravidlo bydlí
+            // (#452). Složka mimo cache se **přeskočí potichu** — je to tatáž volba jako u chyby
+            // níž a s touž viditelnou půlkou: přijde dotaz na důvěru. Zapsat `true` cizí složce do
+            // uživatelovy konfigurace by naopak nikdo nepoznal.
+            guard workspace == layout.root || CacheFile.isInsideCache(workspace, in: layout) else {
+                continue
+            }
             do {
                 try await workspaceTrust.trust(workspace)
                 trustedWorkspaces.insert(workspace)

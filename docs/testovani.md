@@ -6938,6 +6938,19 @@ Co z toho stojí za zapamatování:
   zapisuje **strom té session**, že **druhý strom dostane vlastní zápis** (kvůli tomu se #479
   dělalo — příznak by po prvním PR zavřel cestu všem dalším), že `` ⌃` `` zapisuje **složku
   shellu** a že neúspěch **nezastaví druhou složku ani další pokus**.
+- **Práva `0600` se u #479 doplnila taky**, protože to byla jediná ze čtyř pojistek #460, na kterou
+  se dokumentace odvolávala a test na ni nebyl. Tvrdí se, že práva zápis přežijí a že po sobě
+  **nezůstane dočasný soubor** — obojí je vlastnost `replaceItemAt`, takže je to tvrzení
+  o atomickém zápisu, ne o zvlášť nastavovaných právech. **Vloženou regresí ověřené pásmem**:
+  „zjednodušení“ na `Data.write(to:options: .atomic)` test **nechytá** (Foundation atributy
+  původního souboru přenese taky, změřeno), kdežto `removeItem` + `moveItem` ano — vyjde `0644`.
+  Hlídá tedy tu cestu, kterou se to doopravdy dá rozbít.
+- **A nejcennější tvrzení celé téhle oblasti je, že se složce mimo cache důvěra NEzapíše** (#479).
+  Rozbije se potichu — zapsané `true` v cizí konfiguraci nikdo neuvidí —, a proto k němu patří
+  druhá půlka: **fixtury se přestěhovaly pod skutečný kořen cache**. Cesta `/Users/o/…` od téhle
+  změny tvrdí něco, co v provozu nenastane, takže by test procházel a hranici by neověřoval nic.
+  Cenou je, že řádka do zásuvky se porovnává s **interpolovanou** cestou; uzávorkování a zbytek
+  řádky zůstávají literál, tedy to, na čem to tvrzení stojí.
 - **Že do zásuvky jde `session.shellLine`, se tvrdí i literálem.** Text se porovnává s celou
   řádkou `cd '…' && claude --resume …` **a** s `session.shellLine`: první podoba chytí změnu
   uzávorkování, druhá to, že se `⧉` a `▶` rozešly.

@@ -712,6 +712,11 @@ final class AppStore {
     ///
     /// Zapisuje se sem **jen po úspěchu**, takže se po neúspěšném zápisu zkusí příště znovu — a to
     /// je důležitější než ušetřené čtení: dokud se to nepovede, chodí ten dotaz na důvěru.
+    ///
+    /// **Mez tady vyjmenovaná není, a je to rozhodnutí**: přibývá jedna cesta na pull request, nad
+    /// kterým se vytáhla zásuvka, takže strop je velikost fronty, ne délka běhu. Pravidlo o cache,
+    /// která si musí říct, co ji vyprazdňuje (#224), mluví o tom, co roste s **daty** — tohle roste
+    /// s tím, kolik PR člověk za odpoledne otevře.
     var trustedWorkspaces: Set<URL> = []
 
     /// Které relace zásuvka pro ten PR drží, **v pořadí vzniku** (#460).

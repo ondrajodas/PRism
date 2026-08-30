@@ -433,8 +433,11 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    strom review, nebo bare klon; výčet vydá `Policy.workspacesToTrust`). Důvěra se z předka sice
    dědí, ale **ne do git pracovního stromu** — a strom review je přesně to, kam `▶` míří. Zapsané
    `false` **na naší cestě** se u toho přepsat **smí**: zakládá si ho `claude` sám, není to odpověď
-   člověka. Podrobnosti a to, co se změřilo — včetně **vyvrácené** hypotézy, že `false` přebíjí
-   zděděné `true` —, jsou v [`docs/claude-cli.md`](docs/claude-cli.md).
+   člověka. Zapisovaná cesta tím ale přestala být konstanta, takže **hranici cache drží od #479
+   kontrola** (`CacheFile.isInsideCache`, tedy totéž místo jako zbytek repa) — tvrdá podmínka č. 3
+   se tím nemění, jen se z konstrukce stala ověřená vlastnost. Podrobnosti a to, co se změřilo —
+   včetně **vyvrácené** hypotézy, že `false` přebíjí zděděné `true` —, jsou
+   v [`docs/claude-cli.md`](docs/claude-cli.md).
 
    Co na téhle podmínce **nic nemění**, a proč: **kontrola nálezů z minula** (#150) má vlastní
    prompt, ale bere **tytéž konstanty** `ClaudeCommand.allowedTools` a `disallowedTools`

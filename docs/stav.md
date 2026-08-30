@@ -5537,14 +5537,27 @@ to není odpověď člověka „nevěřím“, ale výchozí hodnota záznamu.
 **Vyloučila se i jedna alternativa**: `claude` cizí zápis do konfigurace **nepřepisuje** —
 značkový klíč zapsaný během jeho běhu (v `t = 1`, `6` a `15` s) přežil ve všech třech případech.
 
-Čtyři pojistky z #460 platí **beze změny** a mají testy: na soubor, kterému aplikace nerozumí, se
-nesahá (a chybějící se ani nezakládá), zachová se, co v souboru je, píše se atomicky s `0600`
-a jen když je to potřeba. Ve storu je místo příznaku **množina** zapsaných složek — příznak by po
-prvním pull requestu zavřel cestu všem dalším, tedy přesně tam, kde dialog chodil. Výčet složek
-vydává `Policy.workspacesToTrust(root:shell:)`: **napřed strom, pak kořen**.
+Čtyři pojistky z #460 platí **beze změny**: na soubor, kterému aplikace nerozumí, se nesahá
+(a chybějící se ani nezakládá), zachová se, co v souboru je, píše se atomicky s `0600` a jen když
+je to potřeba. **Testy na ně měly díru a #479 ji zavřelo** — na práva `0600` se dokumentace
+odvolávala, ale tvrzení nebylo nikde, takže je teď: práva zápis přežijí a dočasný soubor po sobě
+nezůstane. Ve storu je místo příznaku **množina** zapsaných složek — příznak by po prvním pull
+requestu zavřel cestu všem dalším, tedy přesně tam, kde dialog chodil. Výčet složek vydává
+`Policy.workspacesToTrust(root:shell:)`: **napřed strom, pak kořen**.
 
-Testů **4382**, všechny zelené; **osm nových** (tři nad `Policy`, čtyři nad storem, jeden nad
-zápisem do konfigurace) a **obě strany ověřené vloženou regresí**. Sonda testem není a nebude:
+**Hranici cache u toho drží kontrola, ne konstrukce.** Do #479 byla zapisovaná cesta konstanta
+(kořen cache), takže tvrdou podmínku č. 3 držel typ; teď je to hodnota z osy review a z checkoutu,
+takže ji drží `CacheFile.isInsideCache` — **to jedno místo, kde hranice cache v repu bydlí** (#452).
+Zapsat `true` cizí složce do uživatelovy konfigurace je ta nejcitlivější věc, kterou aplikace umí,
+a nikdo by to nepoznal; ověřeno vloženou regresí, že bez té kontroly `/Users/o/Projects/PRism`
+zapsané `true` dostane.
+
+Testů **4384**, všechny zelené; **osm nových** (tři nad `Policy`, tři nad storem, dva nad zápisem
+do konfigurace) a tři přepsaná tvrzení ve storu — jejich fixtury se u toho **přestěhovaly do
+cache**, protože cesta `/Users/o/…` od téhle změny tvrdí něco, co v provozu nenastane. **Ověřeno
+vloženou regresí u všech čtyř** — u práv navíc **pásmem**: `Data.write(to:options: .atomic)` test
+nechytá (Foundation atributy přenese taky), `removeItem` + `moveItem` ano. Sonda testem není
+a nebude:
 pouští skutečný interaktivní `claude` v pty, takže by z běhu testů dělala minuty čekání — postup
 i **pět pastí**, o které se ta první sonda rozbila, jsou v [`docs/testovani.md`](testovani.md).
 
