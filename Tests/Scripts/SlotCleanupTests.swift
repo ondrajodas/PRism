@@ -408,7 +408,7 @@ struct SlotCleanupTests {
         // `${CLAUDE_TEMP}` je ta jediná výjimka a **není mimo slot**: je to soubor, který skript sám
         // vyrobil `mktemp`em vedle konfigurace a maže ho, když se přepis nepovede. Že vzniká
         // `mktemp`em, tvrdí řádek níž — bez toho by ta výjimka pustila do výčtu jakoukoli cestu.
-        #expect(lines.contains { $0.contains("CLAUDE_TEMP=\"$(mktemp \"${CLAUDE_CONFIG}") })
+        #expect(lines.contains { $0.contains("CLAUDE_TEMP=\"$(mktemp \"${CLAUDE_CONFIG}.prism-XXXXXX\")\"") })
         #expect(lines.contains { $0.contains("CLAUDE_CONFIG=") && $0.contains("${HOME}") })
 
         let slotScoped = ["${INSTALLED}", "${CACHE}", "${PLIST}", "${BUNDLE_ID}", "${CLAUDE_TEMP}"]
