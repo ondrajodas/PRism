@@ -232,9 +232,14 @@ extension AppStore {
             // (#452). Složka mimo cache se **přeskočí potichu** — je to tatáž volba jako u chyby
             // níž a s touž viditelnou půlkou: přijde dotaz na důvěru. Zapsat `true` cizí složce do
             // uživatelovy konfigurace by naopak nikdo nepoznal.
-            guard workspace == layout.root || CacheFile.isInsideCache(workspace, in: layout) else {
-                continue
-            }
+            //
+            // **`refusal`, ne `isInsideCache`** (nález Copilota): to druhé je verdikt pro **mazání**
+            // a symbolický odkaz na **samotné složce** neodmítá, protože `contains` rozbaluje jen
+            // rodiče. Jenže klíč do konfigurace skládá `realpath`, který rozvine i poslední
+            // komponentu — odkaz uvnitř cache mířící ven by tedy prošel kontrolou a zapsal se
+            // **cizí cestou**. Zápis je zápis, takže si žádá obě kontroly.
+            guard workspace == layout.root || CacheFile.refusal(for: workspace, in: layout) == nil
+            else { continue }
             do {
                 try await workspaceTrust.trust(workspace)
                 trustedWorkspaces.insert(workspace)

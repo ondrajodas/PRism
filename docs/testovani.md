@@ -6951,6 +6951,14 @@ Co z toho stojí za zapamatování:
   změny tvrdí něco, co v provozu nenastane, takže by test procházel a hranici by neověřoval nic.
   Cenou je, že řádka do zásuvky se porovnává s **interpolovanou** cestou; uzávorkování a zbytek
   řádky zůstávají literál, tedy to, na čem to tvrzení stojí.
+- **A `CacheFileVerdictTests` hlídá, že si zápis bere ten přísnější ze dvou verdiktů** (#479, nález
+  Copilota). `CacheFile` nabízí `isInsideCache` pro **mazání** a `refusal` pro **čtení a zápis**;
+  liší se odkazem na **samotné složce**, protože `contains` rozbaluje jen rodiče. Suita to tvrdí
+  dvakrát: nad **skutečným odkazem** ve scratch layoutu (mazací verdikt ho pustí, zápisový ne)
+  a **nad zdrojákem** volajícího, protože `AppStore` si layout bere staticky — odkaz by tedy musel
+  vzniknout ve **skutečné** cache aplikace, kam test sahat nemá. Je to tentýž postup jako
+  u `GlobalAppearanceTests` a `FontMetricTests`. Do #479 na `CacheFile` přímý test **nebyl vůbec**,
+  přestože je to jediné místo, kde tvrdá podmínka č. 3 bydlí.
 - **Že do zásuvky jde `session.shellLine`, se tvrdí i literálem.** Text se porovnává s celou
   řádkou `cd '…' && claude --resume …` **a** s `session.shellLine`: první podoba chytí změnu
   uzávorkování, druhá to, že se `⧉` a `▶` rozešly.

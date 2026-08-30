@@ -3380,7 +3380,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
 | `AppStore+Terminal.swift` | `openInTerminal(_:)` do `Terminal.app` (#453) — od #460 **bez volajícího**, drží se jako záloha (viz specifikace) | 47 |
-| `AppStore+TerminalDrawer.swift` | Zásuvka (#459) a **relace v ní** (#460): `toggleTerminal()`, `prepareTerminalDrawer(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `resumeInDrawer(_:for:)` za `▶`, `selectTerminalSlot(_:)`, `terminalRows(for:)` a úklid — `stopTerminal(for:)` maže **celý seznam relací** toho PR, `stopTerminalsBeforeTermination()` všechny. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 308 |
+| `AppStore+TerminalDrawer.swift` | Zásuvka (#459) a **relace v ní** (#460): `toggleTerminal()`, `prepareTerminalDrawer(for:)` (hledání adresáře **mimo hlavní vlákno**, protože eviction klony maže), `resumeInDrawer(_:for:)` za `▶`, `selectTerminalSlot(_:)`, `terminalRows(for:)` a úklid — `stopTerminal(for:)` maže **celý seznam relací** toho PR, `stopTerminalsBeforeTermination()` všechny. **Nedrží plochu ani proces** — ty jsou v `TerminalHost` za protokolem | 313 |
 
 Čtyři věci, na kterých to rozdělení stojí:
 
@@ -9337,6 +9337,12 @@ Co z toho v kódu vzniklo:
   viditelnou půlkou jako chyba zápisu (přijde dotaz na důvěru); zapsané `true` u cizí složky
   v uživatelově konfiguraci by naopak nepoznal nikdo. **Kořen sám se `contains` doptat nedá** —
   posuzuje **rodiče**, takže na kořeni vrací `false`, a je proto vedle rovnosti s ním.
+
+  **A bere se `refusal`, tedy verdikt pro zápis, ne `isInsideCache` pro mazání** (nález Copilota na
+  PR #481). Ty dva se liší **odkazem na samotné složce**: `contains` rozbaluje jen rodiče, takže
+  odkaz uvnitř cache mířící ven jím projde — a klíč do konfigurace přitom skládá `realpath`, který
+  poslední komponentu **rozvine**. Zapsalo by se tedy `true` cizí cestou. Rozdíl obou verdiktů
+  hlídá `CacheFileVerdictTests`; do #479 na `CacheFile` přímý test nebyl vůbec.
 
 Čtyři pojistky z #460 platí beze změny a mají svoje testy: na soubor, kterému aplikace nerozumí, se
 **nesahá** (a chybějící se ani nezakládá), zachová se, co v souboru je, píše se **atomicky**

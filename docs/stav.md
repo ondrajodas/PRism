@@ -5552,12 +5552,19 @@ Zapsat `true` cizí složce do uživatelovy konfigurace je ta nejcitlivější v
 a nikdo by to nepoznal; ověřeno vloženou regresí, že bez té kontroly `/Users/o/Projects/PRism`
 zapsané `true` dostane.
 
-Testů **4384**, všechny zelené; **osm nových** (tři nad `Policy`, tři nad storem, dva nad zápisem
-do konfigurace) a tři přepsaná tvrzení ve storu — jejich fixtury se u toho **přestěhovaly do
-cache**, protože cesta `/Users/o/…` od téhle změny tvrdí něco, co v provozu nenastane. **Ověřeno
-vloženou regresí u všech čtyř** — u práv navíc **pásmem**: `Data.write(to:options: .atomic)` test
-nechytá (Foundation atributy přenese taky), `removeItem` + `moveItem` ano. Sonda testem není
-a nebude:
+**Bere se přitom `refusal`, tedy verdikt pro zápis — a to je nález Copilota.** První podoba brala
+`isInsideCache`, což je verdikt pro **mazání**: rozbaluje jen **rodiče**, takže symbolický odkaz
+uvnitř cache mířící ven by jím prošel, a klíč do konfigurace skládá `realpath`, který poslední
+komponentu **rozvine**. Zapsalo by se `true` cizí cestou. Rozdíl obou verdiktů teď hlídá
+`CacheFileVerdictTests` — do #479 na `CacheFile` přímý test **nebyl vůbec**, přestože je to jediné
+místo, kde hranice cache v repu bydlí.
+
+Testů **4387**, všechny zelené; **jedenáct nových** (tři nad `Policy`, tři nad storem, dva nad
+zápisem do konfigurace, tři nad hranicí cache) a tři přepsaná tvrzení ve storu — jejich fixtury se
+u toho **přestěhovaly do cache**, protože cesta `/Users/o/…` od téhle změny tvrdí něco, co v provozu
+nenastane. **Ověřeno vloženou regresí** — u práv navíc **pásmem**: `Data.write(to:options:
+.atomic)` test nechytá (Foundation atributy přenese taky), `removeItem` + `moveItem` ano. Sonda
+testem není a nebude:
 pouští skutečný interaktivní `claude` v pty, takže by z běhu testů dělala minuty čekání — postup
 i **pět pastí**, o které se ta první sonda rozbila, jsou v [`docs/testovani.md`](testovani.md).
 
