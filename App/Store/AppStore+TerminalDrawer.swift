@@ -203,9 +203,10 @@ extension AppStore {
     /// Obojí je v cache aplikace, takže **tvrdá podmínka č. 3 platí beze změny**: zapisuje se
     /// důvěra ke složkám, které aplikace sama vyrobila, nikdy k uživatelovu klonu. **Od #479 to
     /// tvrdí kontrola, ne konstrukce** — do té doby byla zapisovaná cesta konstanta, kdežto teď jde
-    /// o hodnotu z dat (osa review, checkout), a `CacheFile.isInsideCache` je pravidlo o hranici
-    /// cache, které v repu už bydlí na jednom místě. Kořen sám se doptat nedá (`contains` posuzuje
-    /// **rodiče**, takže na kořeni vyjde `false`), proto je vedle rovnosti s ním.
+    /// o hodnotu z dat (osa review, checkout), a `CacheFile` je pravidlo o hranici cache, které
+    /// v repu už bydlí na jednom místě. Bere se z něj **verdikt pro zápis** (`refusal`), ne ten pro
+    /// mazání. Kořen sám se doptat nedá (`contains` posuzuje **rodiče**, takže na kořeni vyjde
+    /// `false`), proto je vedle rovnosti s ním.
     ///
     /// **Každá složka jednou za běh aplikace** (`trustedWorkspaces`), aby se 200kB konfigurace
     /// nečetla při každém otevření zásuvky. Zapsané složce se nepíše znovu, ale **neúspěch se
