@@ -22,8 +22,10 @@ extension Policy {
     static let terminalWheelUpButton = 4
     static let terminalWheelDownButton = 5
 
-    /// Co poslat aplikaci v terminálu, když se zatočí kolečkem. `nil` = **nehlásit nic** a nechat
-    /// knihovnu rolovat vlastní historii.
+    /// Co poslat aplikaci v terminálu, když se zatočí kolečkem. `nil` = **nehlásit nic** a rolovat
+    /// vlastní historii terminálu — **naším kódem**, ne knihovním `scrollWheel`em. Událost se
+    /// spolkne tak jako tak, aby se zaklesnutí výřezu (`terminalViewportPin`) zapsalo **po**
+    /// posunu; rozhodnutí, o kolik se posune, je `terminalWheelLines` na obou větvích totéž.
     ///
     /// **Rozhoduje se při každé události**, ne jednou při vzniku plochy: `mouseMode` je stav
     /// emulátoru, který si mění aplikace pod ním — celoobrazovkové TUI si o myš řekne při startu
