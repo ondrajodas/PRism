@@ -11,7 +11,7 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **36** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **38** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30:
 
@@ -55,7 +55,11 @@ sebou. Stejné páry jsou **02 a 24** a **19 a 25** (#390): 02 a 19 kreslí dne�
 Od zakreslení nového labelu z nabídky stojí vedle **24** ještě **26**, a je to tentýž vztah, jen
 o krok dál: 24 se mergnutím #392 stala záznamem dneška (nabídka labelů v panelu v okně opravdu
 je), takže se do ní zakládání nekreslí — 26 kreslí **jen dvě obrazovky nabídky a jednu větu
-v panelu**, ne celý panel znovu.
+v panelu**, ne celý panel znovu. Ve stejném vztahu stojí **38 k 04**: 04 je záznam dnešní
+*Konverzace* i s composerem, 38 kreslí **jen ten composer s nabídkou emotikonů**, protože se
+nemění nic jiného. A **37 vedle 36** je jiný případ — nejsou to dvě podoby jedné obrazovky, ale
+dvě akce v téže sekci panelu (*Větev*), takže spolu leží na stránce *Panel u vlastního PR* a ani
+jedna z nich zatím není záznamem dneška.
 
 **Sekce, do které se z obrazovky jen přijde, leží na stránce toho místa, odkud se otevírá.**
 Sekce 20 kreslí surovou session na stránce *Průběh*, protože se otevírá z výpisu kroků; **28**
