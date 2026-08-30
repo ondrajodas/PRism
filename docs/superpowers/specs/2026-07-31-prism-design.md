@@ -3983,3 +3983,46 @@ bloku 9 %, `sizeThatFits` 7 % — a **skládání řádků 1 %**. Roste to s po�
 **Co z toho zbývá jako pravidlo.** Cesta k dalšímu zlevnění nevede přes počet prvků — třikrát
 nezávisle vyšlo, že ubrat vykreslené řádky cenou skoro nehne. Kdo se do toho pustí znovu, ať začne
 tím, že **změří přerovnání okna** (dnes 11 ms): tři ze čtyř zamítnutých se rozbily právě o něj.
+
+### Záznam rozhodnutí — kolečko se bere odběrem, ne přebitím metody (#478)
+
+**Problém.** `SwiftTerm` kolečko aplikaci v terminálu **nikdy nepředá** — `MacTerminalView`
+`scrollWheel` roluje jen vlastní scrollback, který v alternativním bufferu není. Nad běžícím
+`claude` tedy kolečko nedělalo nic. Opravou je přeložit ho na hlášení myši (tlačítka 64 / 65), jako
+to dělá `Terminal.app` i iTerm, a poslat aplikaci — jenže **`scrollWheel(with:)` se přebít nedá**:
+`TerminalView` je `open`, ale tuhle metodu deklaruje jako `public override`, a `public` člen se
+z cizího modulu přepsat nesmí. Ověřeno překladačem (`overriding non-open instance method outside of
+its defining module`), ne odhadem.
+
+**Rozhodnutí.** Událost se bere **lokálním odběrem** `NSEvent.addLocalMonitorForEvents(matching:
+.scrollWheel)`, který žije s oknem (`viewDidMoveToWindow`) a událost, kterou si vezme, **spolkne**
+(vrátí `nil`). Historii pak roluje náš kód, ne knihovna.
+
+**Proč ne druhá cesta**, tedy podhled přes plochu, který si o kolečko řekne v `hitTest`u: `hitTest`
+typ události nezná, takže „ber jen kolečko“ se tou cestou dá říct jedině přes `NSApp.currentEvent`
+— a ten je za hit testem jen **naposledy doručená** událost, tedy domněnka, která platí i mimo
+doručování (kurzorové obdélníky, přístupnost). Pořadí odběru je proti tomu popsané v dokumentaci
+API: monitor běží **před** doručením do okna. Vyměnila se tedy globální působnost za jistotu
+o pořadí, a působnost se dá zúžit podmínkou, kdežto domněnka se ověřit nedá.
+
+**Co se za to platí a jak se to splácí.** Odběr je na celý proces, takže jím projde **každá**
+otočka kolečka v aplikaci — i nad diffem, kde je cena projíždění měřená věc (#469). Rozhodnutí „je
+to naše?“ proto jde od nejlevnějšího: `event.window === window` → `visibleRect.contains(…)` →
+teprve pak hit test celého okna. Prostřední krok je zároveň odpověď na víc relací v zásuvce (#460):
+neaktivní plocha je v hierarchii dál, ale s prázdným výřezem, takže si o kolečko neřekne.
+
+**Spolkne se i to, co se nehlásí**, a je to kvůli pořadí, ne kvůli úspoře: zaklesnutí výřezu se musí
+zapsat **po** posunu, kdežto propuštěná událost by se rolovala až po návratu z odběru a zapsala by
+se poloha před ním. Cenou je opsaná křivka rychlosti (`calcScrollingVelocity` je v knihovně
+`private`) — a ta se stejně opsat musela, protože počet hlášení je to jediné, čím se dá rychlost
+rolování v aplikaci vyjádřit. Že se s knihovnou nerozešla, hlídá test **chováním**.
+
+**Zamítnuté taky:** swizzling selektoru `scrollWheel:` (tichá změna cizí třídy za běhu, kterou by
+žádná stráž v repu nechytla) a fork `SwiftTermu` (jedna závislost třetí strany je v tomhle repu
+vědomě jedna, a připnutá na `1.11.2` z měření — viz *Prostředí* v `CLAUDE.md`).
+
+**Co z toho zbývá jako pravidlo.** Kolečko je druhá věc, kterou aplikace píše do pty, a **tvrdá
+podmínka č. 1 se tím nemění**: hlášení myši se skládá jen z čísla tlačítka a buňky pod kurzorem,
+takže z něj text ani příkaz vzniknout nemůže. Je to doplněné do `CLAUDE.md` k té podmínce, ne
+schované sem — věta „cokoli jiného než tuhle jednu řádku napíše jedině člověk“ by po #478 nebyla
+pravdivá.

@@ -96,6 +96,9 @@ class EmbeddedTerminalView: LocalProcessTerminalView {
     /// programem, který si spodek plochy překresluje sám, z toho je „kolečko nefunguje“: odrolovaný
     /// pohled se vrátí dřív, než ho stačí kdo přečíst. Měřeno na `claude` v zásuvce, viz
     /// `docs/testovani.md`.
+    ///
+    /// **Obyčejná vlastnost plochy, ne sledovaný stav** — mění se při každé otočce kolečka, takže
+    /// v observable stavu by z ní byl přepočet okna na každý snímek rolování (#252, #472).
     private var pinnedRow: Int?
 
     /// Stojí výřez dole, tedy jede s výstupem?
@@ -103,6 +106,85 @@ class EmbeddedTerminalView: LocalProcessTerminalView {
     /// `canScroll` je v tom schválně: v alternativním bufferu a nad plochou bez historie **není co
     /// držet**, takže „dole“ je tam jediná pravdivá odpověď.
     private var followsOutput: Bool { !canScroll || scrollPosition >= 1 }
+
+    /// Odběr kolečka, dokud je plocha v okně. `Any?` je neprůhledný token, který vydá `NSEvent`.
+    private var wheelMonitor: Any?
+
+    /// **`scrollWheel` se přebít nedá, a je to vlastnost knihovny, ne přehlédnutí.**
+    /// `TerminalView` je sice `open`, ale tuhle metodu deklaruje jako `public override` — a `public`
+    /// se z cizího modulu přepsat nesmí (`overriding non-open instance method outside of its
+    /// defining module`, ověřeno překladačem). Událost se proto bere **dřív, než se k ploše
+    /// dostane**, lokálním odběrem: ten je dokumentovaně volaný **před** doručením do okna, takže
+    /// vrácené `nil` znamená, že se k `MacTerminalView.scrollWheel` událost vůbec nedostane.
+    ///
+    /// Zamítnuté bylo položit přes plochu podhled, který si o kolečko řekne v `hitTest`u:
+    /// `hitTest` typ události nezná, takže „ber jen kolečko“ se tou cestou dá říct jedině přes
+    /// `NSApp.currentEvent` — a ten je za hit testem jen **naposledy doručená** událost, tedy
+    /// domněnka. Pořadí odběru je proti tomu popsané v dokumentaci.
+    ///
+    /// Odběr žije jen s oknem — plocha mimo okno nemá co zachytávat.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopWatchingWheel() } else { startWatchingWheel() }
+    }
+
+    private func startWatchingWheel() {
+        guard wheelMonitor == nil else { return }
+        // **Dovnitř `assumeIsolated` jde rozhodnutí, ven `Bool`.** Návratová hodnota musí být
+        // `Sendable` a `NSEvent` není (`conformance of 'NSEvent' to 'Sendable' is unavailable`),
+        // takže se událost zahazuje až tady venku. Odběr je volaný z doručování událostí, tedy
+        // z hlavního vlákna — `assumeIsolated` je tvrzení o tom, ne převod fronty.
+        //
+        // **`?? false` je odpověď, ne zametená chyba**: `self` je slabé a zaniklá plocha nemá co
+        // zachytávat, takže se událost propustí dál — přesně jako by odběr neexistoval.
+        wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            let taken = MainActor.assumeIsolated { self?.takeWheel(event) ?? false }
+            return taken ? nil : event
+        }
+    }
+
+    private func stopWatchingWheel() {
+        guard let wheelMonitor else { return }
+        NSEvent.removeMonitor(wheelMonitor)
+        self.wheelMonitor = nil
+    }
+
+    /// Pojistka pro plochu, která zanikne i s oknem — tam `viewDidMoveToWindow(nil)` přijít nemusí.
+    ///
+    /// **`isolated deinit`, ne `MainActor.assumeIsolated`**: běžný `deinit` je nezaizolovaný, takže
+    /// by na cizím vlákně `assumeIsolated` **spadl** a `NSEvent.removeMonitor` by na něm byl navíc
+    /// volání AppKitu mimo hlavní vlákno. Izolovaný `deinit` si o hlavní actor řekne sám.
+    isolated deinit {
+        stopWatchingWheel()
+    }
+
+    /// Vezmi si tuhle otočku, pokud je naše. `false` = ať jde dál, kam měla.
+    private func takeWheel(_ event: NSEvent) -> Bool {
+        guard claimsWheel(event) else { return false }
+        handle(wheel: event)
+        return true
+    }
+
+    /// Je tahle otočka kolečka naše? Rozhoduje **poloha kurzoru**, ne fokus — tak se kolečko
+    /// v macOS doručuje a tak se chová i knihovna.
+    ///
+    /// **Napřed obdélník, teprve pak hit test**, a není to mikrooptimalizace: odběr je na celý
+    /// proces, takže tímhle projde **každá** otočka kolečka v aplikaci — i ta nad diffem, kde je
+    /// cena projíždění měřená věc (#469). `visibleRect` je obdélníkové porovnání a odmítne skoro
+    /// všechno; hit test celého okna se pustí teprve nad plochou.
+    ///
+    /// **`visibleRect`, ne `bounds`**: v zásuvce může být víc relací (#460) a ta neaktivní je
+    /// v hierarchii pořád — s prázdným výřezem, takže si o kolečko neřekne. Hit test za tím pak
+    /// odpoví na druhou půlku: neleží nad plochou ještě něco (popover, sheet)?
+    private func claimsWheel(_ event: NSEvent) -> Bool {
+        guard let window, event.window === window else { return false }
+        guard visibleRect.contains(convert(event.locationInWindow, from: nil)) else { return false }
+        // `hitTest` bere bod v souřadnicích **nadřazeného** view, a nadřazený obsahovému je rám
+        // okna — tedy `locationInWindow` beze změny. Převádět ho do souřadnic `contentView` je
+        // tichá chyba: v okně s titulkem to sedne, s `fullSizeContentView` ne.
+        guard let hit = window.contentView?.hitTest(event.locationInWindow) else { return false }
+        return hit.isDescendant(of: self)
+    }
 
     /// Kolečko — buď hlášení myši aplikaci, nebo vlastní historie.
     ///
@@ -112,7 +194,16 @@ class EmbeddedTerminalView: LocalProcessTerminalView {
     ///
     /// **Ptá se při každé události**, ne jednou při vzniku plochy: `mouseMode` si mění aplikace pod
     /// námi. `allowMouseReporting` je vypínač knihovny (kvůli výběru textu myší) a platí i tady.
-    override func scrollWheel(with event: NSEvent) {
+    ///
+    /// Historii odroluje **tenhle kód, ne knihovna**, i když se nehlásí nic. Je to kvůli pořadí:
+    /// zaklesnutí výřezu se musí zapsat **po** posunu, kdežto propuštěná událost by se rolovala až
+    /// po návratu odsud a zapsala by se poloha před ním. `scrollUp`/`scrollDown` jsou veřejné
+    /// a `Policy.terminalWheelLines` je táž křivka, jakou knihovna počítá sama (hlídá to test),
+    /// takže se tím nemění chování — jen se to děje ve známém pořadí.
+    ///
+    /// **Internal, ne private, a je to kvůli testům** (#478): bez pty se tahle vidlička nedá projet
+    /// jinak než zavoláním napřímo, protože odběr událostí testovací host nerozpohybuje.
+    func handle(wheel event: NSEvent) {
         guard
             let report = Policy.terminalWheelReport(
                 deltaY: event.deltaY,
@@ -120,11 +211,18 @@ class EmbeddedTerminalView: LocalProcessTerminalView {
                 rows: terminal.rows
             )
         else {
-            super.scrollWheel(with: event)
-            pinViewport()
+            scrollHistory(deltaY: event.deltaY)
             return
         }
         send(wheel: report, at: event)
+    }
+
+    /// Vlastní historie terminálu — to, co se dělo dosud, když aplikace o myš nestojí.
+    private func scrollHistory(deltaY: CGFloat) {
+        guard deltaY != 0, deltaY.isFinite else { return }
+        let lines = Policy.terminalWheelLines(deltaY: deltaY, rows: terminal.rows)
+        if deltaY > 0 { scrollUp(lines: lines) } else { scrollDown(lines: lines) }
+        pinViewport()
     }
 
     /// Pošle hlášení kolečka na buňku pod kurzorem, `count`krát za sebou.
@@ -189,6 +287,17 @@ class EmbeddedTerminalView: LocalProcessTerminalView {
     /// Zapamatuje si, kde výřez zůstal.
     private func pinViewport() {
         pinnedRow = Policy.terminalViewportPin(row: terminal.buffer.yDisp, atBottom: followsOutput)
+    }
+
+    /// Přepnutí mezi normálním a alternativním bufferem (`ESC[?1049h/l`) — **zaklesnutí padá**.
+    ///
+    /// Bez toho by zaklesnutí přežilo start celoobrazovkového TUI: `claude` má vlastní buffer, ve
+    /// kterém se `yDisp` drží na nule, takže by se v něm zapamatovaný řádek neuplatnil — a ožil by
+    /// až po jeho skončení, kdy je poloha z doby před ním dávno nesmyslná. Výřez by se tedy sám od
+    /// sebe odrolil nahoru ve chvíli, kdy se člověk vrátil do shellu.
+    override func bufferActivated(source: Terminal) {
+        super.bufferActivated(source: source)
+        pinnedRow = nil
     }
 
     /// Výstup z pty. Po nakrmení se výřez vrací tam, kde ho člověk nechal.

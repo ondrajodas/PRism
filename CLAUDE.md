@@ -353,6 +353,11 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      a k němu režim povolení** (zdůvodnění o kus níž), a jinou aplikace poslat neumí. Do běžícího jobu se přitom **nepíše vůbec**
      (`hasForegroundJob`), protože řádka je pro něj vstup; místo toho se na tu relaci **přepne**.
      Plnou moc má dál **člověk**: cokoli jiného než tuhle jednu řádku napíše jedině on.
+   - **Od #478 posílá aplikace do pty ještě jednu věc, a druhá řádka to není: hlášení myši.**
+     Kolečko, které `SwiftTerm` aplikaci v terminálu nepředá sám. Obsah je
+     `ESC[<64;<sloupec>;<řádek>M` a skládá se **jen** z čísla tlačítka a buňky pod kurzorem, takže
+     z něj text ani příkaz vzniknout nemůže. Odejde jedině tehdy, když si o hlášení myši řekla
+     aplikace v terminálu (`mouseMode != .off`) **a** člověk otočil kolečkem.
    - **A relací je v zásuvce víc než jedna** (#460), takže úklid z bodů výš platí **pro každou**:
      `stopTerminals(for:)` při zavření záložky, `stopAllTerminals()` při ukončení aplikace
      a značka v `sessions.json` u každé zvlášť — jinak po zabité aplikaci osiří zrovna ta, která
@@ -484,7 +489,7 @@ viz tvrdá podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kter�
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta ven**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři** a od #465 **mergnout vlastní PR** | `gh` CLI |
-| `TerminalHost` | Vestavěný terminál (#459) — od #460 **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Umí do relace napsat **jednu řádku** (`▶`), a jen tehdy, když v ní nic neběží. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
+| `TerminalHost` | Vestavěný terminál (#459) — od #460 **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Umí do relace napsat **jednu řádku** (`▶`), a jen tehdy, když v ní nic neběží; od #478 **předá kolečko** aplikaci, která si o hlášení myši řekla. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
@@ -887,6 +892,11 @@ Zásady, které platí všude:
   čekání nedostane (#391, [rozbor](docs/architektura.md#diagnostika-kreslení-361)); a u cizího
   privátního API rozhoduje **pád v testu v hostu**, ne odhad z footprintu (#361 —
   `AGGraphDescription` je autoreleased).
+- **Měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“, netvrdí nic** (#478) — a vypadá
+  u toho zeleně. Sonda z #460 měřila u kolečka nad `claude` **výřez emulátoru**, jenže nula je tam
+  správná odpověď v obou světech; rozdíl byl vidět jedině na tom, **co odešlo do procesu**. Když
+  měření končí větou „neopravovalo se nic“, patří k němu druhá otázka: **naměřilo by rozdíl, kdyby
+  ta chyba byla?** ([rozbor](docs/testovani.md#kolečko-v-zásuvce-478--co-jde-tvrdit-bez-pty))
 - **Testy se nespouštějí rourou do `grepu`** — viz *Příkazy* níž, umí to zaseknout na neurčito.
 
 ## Příkazy

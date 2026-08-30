@@ -6950,6 +6950,62 @@ Dvě věci, které z ní plynou a bez ní by se hádaly:
   opřít (scrollback z definice není) a `claude` si navíc zapíná plné hlášení myši, takže událost
   dostane on. Tvrdí se to tedy jako **tvrzení o tom, co se nestane**: `yDisp` se nesmí pohnout.
 
+  > **Druhá půlka toho odstavce byla nepravdivá a opravilo ji #478** — a je to poučení o sondě, ne
+  > jen o terminálu. `claude` si o hlášení myši doopravdy řekl, jenže `SwiftTerm` kolečko aplikaci
+  > **nikdy nepředá**, takže „událost dostane on“ neplatilo a rolovat nešlo vůbec. **Sonda to
+  > nechytla proto, že se ptala na špatnou stranu**: měřila `yDisp`, tedy stav **emulátoru**,
+  > a nad alternativním bufferem je nula správná odpověď **v obou** světech. Rozdíl je vidět jedině
+  > na tom, **co odešlo do procesu**, a na to se neptal nikdo.
+  >
+  > Zapsané je to jako pravidlo, ne jako historka: **měřidlo, které vydá tutéž hodnotu pro
+  > „funguje“ i „nefunguje“, netvrdí nic** — a vypadá u toho zeleně. Když měření končí větou
+  > „neopravovalo se nic“, patří k němu druhá otázka: **naměřilo by rozdíl, kdyby ta chyba byla?**
+
+#### Kolečko v zásuvce (#478) — co jde tvrdit bez pty
+
+`TerminalWheelTests` (plocha) a `TerminalWheelPolicyTests` (rozhodnutí). Obojí běží **v běžném
+běhu**, žádné `PRISM_MEASURE`: nespouští se shell, jen se krmí emulátor.
+
+Dvě věci to obchází, a stojí za to je znát, protože se hodí i jinde:
+
+- **Hlášení myši se zapne toutéž sekvencí, jakou pošle `claude`** — `ESC[?1000h` (hlášení
+  tlačítek) a `ESC[?1006h` (kódování `SGR`, aby to, co odejde, byl čitelný text `ESC[<64;1;1M`
+  místo netisknutelných bajtů). `Terminal.mouseMode` je `public private(set)`, takže se jinak
+  nastavit ani nedá.
+- **Co odešlo do procesu, se čte z podtřídy plochy.** `EmbeddedTerminalView` **není `final`**
+  právě proto: testovací podtřída si přepíše `send(source: TerminalView, data:)` a bajty si
+  zapamatuje. Je to jediná cesta z emulátoru ven — `Terminal.sendEvent` přes `sendResponse`
+  skončí právě tam —, takže tímhle se přečte hlášení myši bez pty. **Bez `super`**, protože
+  knihovní implementace píše do `process`, který v testu neběží.
+
+Čtyři tvrzení a každé je jiná půlka #478:
+
+- **Zapnuté hlášení → událost odejde** (a začíná `ESC[<64;` nahoru, `ESC[<65;` dolů).
+- **Vypnuté → neodejde nic** a místo toho se pohne historie. Tohle je to tvrzení, které se rozbije
+  potichu: kdyby se hlásilo i do `zsh`, objevily by se na promptu znaky místo rolování.
+- **Počet hlášení = počet řádků** (`Policy.terminalWheelLines`), protože hlášení nese jen
+  „cvaklo“. A **křivka se porovnává s knihovnou chováním**, ne opisem: `calcScrollingVelocity` je
+  `private`, takže se pustí knihovní `scrollWheel(with:)` napřímo a změří se, o kolik se posunul
+  `yDisp`. Před měřením se výřez srovná na dno (`scrollDown(lines: 1000)`), jinak by se místo
+  křivky měřila mez bufferu.
+- **Odrolovaný pohled přežije přiteklý výstup.** K tomu patří test, který schválně tvrdí **chybu
+  cizího kódu** (`theLibrarySnapsTheViewportBack`): `Terminal.userScrolling` se v `1.11.2` nikdy
+  nenastaví, takže knihovna sama srovná výřez na dno. Naměřeno na ploše 800×300 (**21 řádků**)
+  se 400 nakrmenými řádky: `scrollUp(lines: 20)` dá `yDisp` **360**, jediný další řádek **381**.
+  Přes `dataReceived` s naší kompenzací **377 → 377**. Až knihovna svůj příznak opraví, tenhle
+  test **spadne** — a to je zpráva, že naše kompenzace může jít pryč.
+
+**Rozdíl mezi `feed(text:)` a `dataReceived(slice:)` je v těch testech nosný, ne kosmetický.**
+`feed` jde do emulátoru přímo, tedy **mimo** naši kompenzaci, a měří se jím knihovna;
+`dataReceived` je cesta, kterou chodí bajty z pty, a měří se jí náš kód. Zaměnit je znamená měřit
+něco jiného, než co je v hlášce.
+
+**Co se tady ověřit nedá a dělá to člověk**: že se událost k `handle(wheel:)` doopravdy dostane.
+Kolečko chodí lokálním odběrem (`NSEvent.addLocalMonitorForEvents`) a **doručování událostí
+testovací host nerozpohybuje** — je to tatáž hranice jako u fokusu (#184). Patří to proto do popisu
+PR jako věc na proklikání: rolování nad běžícím `claude` v zásuvce, rolování v holém shellu a to,
+že se odrolovaný pohled nevrátí dolů, když přiteče výstup.
+
 #### Sonda `TerminalResizeProbe` — kam až dojede rozměr (#460)
 
 Vznikla na hlášení „resize ne úplně funguje, asi se přeskládává text“. **Měří přes

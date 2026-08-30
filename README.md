@@ -1287,10 +1287,12 @@ by ten dotaz u každého PR znovu. PRism proto jednou zapíše důvěru ke **ko�
 `~/.claude.json` — je to cesta, na kterou odkazuje sám `claude`, a důvěra se dědí na všechno pod ní.
 Na konfiguraci, které nerozumí, **nesáhne**; když se zápis nepovede, přijde jen ten dialog.
 
-**Rolovat jde v shellu, ne nad běžícím `claude` — a to je správně.** Celoobrazovkové TUI kreslí do
-alternativního bufferu, který z definice nemá historii, a `claude` si navíc zapíná hlášení myši,
-takže kolečko dostává on. Roluje se tedy uvnitř něj; v holém shellu má zásuvka 500 řádků historie.
-Stejně se chová `Terminal.app` i iTerm.
+**Rolovat jde v shellu i nad běžícím `claude`** (#478). V holém shellu se roluje 500 řádků vlastní
+historie; nad celoobrazovkovým TUI, které si o hlášení myši řeklo, se kolečko **předá jemu** jako
+tlačítka 64 / 65 — stejně jako to dělá `Terminal.app` a iTerm. Do #478 se nepředávalo, protože
+`SwiftTerm` kolečko aplikaci nepředá sám, takže rolovat nad `claude` nešlo vůbec. K tomu druhá
+polovina téže opravy: **odrolovaný pohled se přiteklým výstupem nesrovná dolů**, dokud se člověk
+sám nevrátí na konec.
 
 Nabízí se to **jen tam, kde je co obnovit**: bez `session_id` **a bez pracovního stromu** se
 tlačítko nekreslí (ne zašedle — u dráhy, která teprve čeká na slot, by zašedlé slibovalo něco,
