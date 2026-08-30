@@ -555,6 +555,33 @@ code {
 .nl-step .why { font-size: 11.5px; color: var(--ink-3); }
 .pkr-foot .sp { flex: 1; }
 
+/* --- našeptávání emotikonů (sekce 38) -------------------------------------------------
+   **Tentýž popover jako u labelů**, ne vlastní komponenta: nadpis, řádky, patka s klávesami.
+   Hledací pole v něm ale **není a nemá být** — dotaz se píše do textu zprávy (`:ta`), takže
+   druhé pole by ukazovalo totéž na dvou místech a jedno z nich by bylo to falešné. Ze stejného
+   důvodu dotaz nestojí ani v `.cap`: ta je `text-transform: uppercase` a `:ta` by se vysázelo
+   jako `:TA` — u shortcodu je malé písmeno **data**, ne dekorace (tatáž past jako u slugu
+   v sekci 26).
+
+   Nabídka se kotví **nad polem, ne ke kurzoru**. Zdůvodnění je u sekce 38; z hlediska CSS je
+   podstatné jen to, že si `.pkr` bere `width: min(300px, 100%)`, takže v panelu vyjde na jeho
+   obsahovou šířku a v široké konverzaci na 300 bodů — stejně jako nabídka labelů. */
+.emo-g { width: 18px; flex: none; font-size: 14px; line-height: 1; }
+/* Jméno se **zalomí, neořeže** — je to jediné, podle čeho se pozná, který znak se vloží, tedy
+   tatáž úvaha jako u jména nového labelu v `.nl-add`. `anywhere`, protože shortcode je jedno
+   slovo s podtržítky a bez toho by z řádku **přetekl** (změřeno na 44 znacích: řádek zůstal
+   26 b vysoký a text vyjel ven). Na jménech, která se v katalogu vyskytují, se to neprojeví —
+   `:woman_in_motorized_wheelchair:` (30 znaků) vyjde v panelu na jeden řádek s 20 b rezervy. */
+.emo-nm { font-family: var(--mono); font-size: 11.5px; color: var(--ink); overflow-wrap: anywhere; }
+/* Řádek je **na znak, ne na jméno**: `:+1:` a `:thumbsup:` jsou tentýž znak, takže dva řádky
+   s jedním 👍 by byly nabídka, ve které se nedá vybrat ani dobře, ani špatně. Když shoda přišla
+   přes alias, je alias vidět vpravo — jinak by řádek `:+1:` vypadal na dotaz `:thu` jako omyl. */
+.emo-alias { margin-left: auto; flex: none; font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+/* Kurzor stojí, protože statická kresba blikat nemá čím — v okně bliká. **Vlastní jméno, ne
+   `.caret`**: ten je v dokumentu třikrát vnořený (`.pkr-q`, `.term-body`, `.pal-input`), takže
+   naholo definovaný by se podstrčil všem třem — past z #390. */
+.emo-caret { display: inline-block; width: 1px; height: 13px; background: var(--ink); vertical-align: middle; margin-left: 1px; }
+
 /* Reviewer je **řádek**, ne chip: panel je sloupec, takže se do něj vejde iniciálka, jméno
    a slovo o tom, jak odpověděl — a to slovo je jediný důvod, proč se na sekci kouká. Když se
    panel zúží, ustoupí **jméno** (ořeže se), odpověď zůstává celá. */
@@ -8579,6 +8606,270 @@ projeví hned v tom dalším.</div>
     </div>
   </section>
 
+  <section class="section" id="s38">
+    <div class="section-head">
+      <div class="eyebrow">38 — Emotikony a našeptávání při psaní</div>
+      <h2>Píše se <code>:ta</code>, vloží se 🎉 — a odejde ten znak, ne zkratka</h2>
+      <p class="muted">
+        Okno má <b>tři místa, kde se píše text, který jde na GitHub</b>: composer komentáře pod
+        PR (#216), odpověď do vlákna u řádku (#73) a tělo review v panelu. Ve všech třech je to
+        dneska holé pole — emotikon se do něj dá jedině vlepit odjinud. Na GitHubu se přitom píše
+        <code>:tada:</code> a nabídka doplní zbytek; je to zvyk, který si člověk nese do každého
+        pole, kde diskutuje nad kódem.
+      </p>
+      <p class="muted">
+        <b>Cesta ven se tím nemění o nic.</b> Není to devátá metoda
+        <code>ReviewPublishing</code>, není to nové volání <code>GitHubGateway</code> a není to
+        nové povolení — je to <b>chování textového pole</b>. Text odchází dál těmi třemi metodami,
+        které pro něj v protokolu jsou (<code>comment</code>, <code>reply</code>,
+        <code>submit</code>), takže <code>grep ReviewPublishing App/</code> vypíše po téhle změně
+        <b>týž seznam</b> a <code>SingleWayOutTests</code> se nedotkne.
+      </p>
+      <p class="muted">
+        <b>Odejde znak, ne shortcode.</b> GitHub vykreslí obojí stejně, jenže composer je obyčejné
+        textové pole: co v něm stojí, to jde ven. Kdyby se vkládalo <code>:tada:</code>, stálo by
+        v okně něco jiného, než co uvidí čtenář na GitHubu — tedy náhled, který lže. Je to tatáž
+        úvaha, kvůli které se u nového labelu posílá hex <b>vždycky</b> (#413): náhled má být
+        pravda.
+      </p>
+      <p class="muted">
+        <b>Reakce pod komentářem to není</b> — 👍 jako reakce je jiná věc, jiné API
+        (<code>POST …/reactions</code>) a byla by to <b>desátá metoda</b> protokolu. Zůstává mimo
+        schválně, aby „emotikony jako na GitHubu“ potichu nevyrostly v něco, co odesílá.
+      </p>
+    </div>
+
+    <h3>Nabídka nad polem — v konverzaci i v panelu</h3>
+    <p class="muted">
+      Je to <b>tentýž popover jako u labelů</b> (sekce 24 a 26): nadpis, řádky, patka s klávesami.
+      Hledací pole v něm ale <b>není</b> — dotaz se píše rovnou do zprávy a druhé pole by ukazovalo
+      totéž na dvou místech. Kotví se <b>nad textovým polem, ne u kurzoru</b>: kurzorový obdélník
+      se ve SwiftUI bez sestupu do AppKitu nezjistí a v panelu širokém 300 bodů by 300bodová
+      nabídka stejně neměla kam ustoupit do stran — skončila by přesně tam, kde je takhle.
+      V široké konverzaci si bere svých 300 bodů u levé hrany pole, jako nabídka labelů.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Konverzace · komentář pod PR</div>
+        <div class="frame flat" style="padding: 14px; display: flex; flex-direction: column;
+                                       gap: 8px; align-items: flex-start;">
+          <div class="pkr">
+            <span class="cap">Emotikon</span>
+            <div class="pkr-row on"><span class="emo-g">🎉</span><span class="emo-nm">:tada:</span></div>
+            <div class="pkr-row"><span class="emo-g">🌮</span><span class="emo-nm">:taco:</span></div>
+            <div class="pkr-row"><span class="emo-g">🎋</span><span class="emo-nm">:tanabata_tree:</span></div>
+            <div class="pkr-row"><span class="emo-g">🚕</span><span class="emo-nm">:taxi:</span></div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vloží</span><span>esc zavře</span></div>
+          </div>
+          <div class="composer" style="margin: 0; padding: 0; border-top: 0; align-self: stretch;">
+            <div class="ta" style="color: var(--ink);">Díky za úklid anotací :ta<span class="emo-caret"></span></div>
+            <div class="send">Odeslat komentář →</div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Dotaz zůstává vidět <b>v textu</b>, ne v nadpisu nabídky. <code>.cap</code> je
+          <code>uppercase</code>, takže by z <code>:ta</code> udělal <code>:TA</code> — a u
+          shortcodu je malé písmeno data, ne dekorace (tatáž past jako u slugu v sekci 26).
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Panel 300 b · tělo review</div>
+        <div class="frame flat" style="box-sizing: border-box; padding: 11px; max-width: 300px;
+                                       display: flex; flex-direction: column; gap: 8px;">
+          <div class="pkr">
+            <span class="cap">Emotikon</span>
+            <!-- Řádek je na **znak**, ne na jméno: `:+1:` a `:thumbsup:` je jeden 👍. Když shoda
+                 přišla přes alias, je alias vpravo — jinak by řádek `:+1:` vypadal na dotaz
+                 `:thu` jako omyl nabídky. -->
+            <div class="pkr-row on">
+              <span class="emo-g">👍</span><span class="emo-nm">:+1:</span>
+              <span class="emo-alias">thumbsup</span>
+            </div>
+            <div class="pkr-row">
+              <span class="emo-g">👎</span><span class="emo-nm">:-1:</span>
+              <span class="emo-alias">thumbsdown</span>
+            </div>
+            <div class="pkr-row"><span class="emo-g">⛈️</span><span class="emo-nm">:thunder_cloud_and_rain:</span></div>
+            <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vloží</span><span>esc zavře</span></div>
+          </div>
+          <div class="composer" style="margin: 0; padding: 0; border-top: 0;">
+            <div class="ta" style="color: var(--ink);">Jinak dobrý, díky za úklid anotací :thu<span class="emo-caret"></span></div>
+            <div class="verdicts">
+              <span class="vbtn">Komentář</span>
+              <span class="vbtn">Schválit</span>
+              <span class="vbtn on">Změny<span class="hint">z návrhu</span></span>
+            </div>
+            <div class="send">Odeslat review na GitHub →</div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Nabídka je <code>width: min(300px, 100%)</code>, takže v panelu vyjde na <b>278 b</b>
+          (276 obsahu plus linka rámu) a v široké konverzaci na svých 300. Nejdelší řádek téhle
+          kresby — <code>:+1:</code> s aliasem — je 260 b z 276, a dlouhé jméno z toho katalogu
+          (<code>:woman_in_motorized_wheelchair:</code>, 30 znaků) vyjde na jeden řádek s 20 body
+          rezervy. Co se přesto nevejde, se <b>zalomí, neořeže</b> (změřeno na 44 znacích): jméno
+          je jediné, podle čeho se pozná, který znak se vloží — tatáž úvaha jako u jména nového
+          labelu (#413).
+        </p>
+      </div>
+    </div>
+
+    <h3>Kdy se nabídka otevře — a kdy schválně ne</h3>
+    <p class="muted">
+      Dvojtečka je v próze běžný znak, takže rozhodovat nemůže sama. Nabídka se otevře, jedině
+      když je <code>:</code> <b>na začátku řádku nebo po mezeře</b> a za ní stojí
+      <b>aspoň jedno písmeno</b>. Tím vypadnou tři nejčastější plané poplachy naráz:
+      <code>12:30</code> (dvojtečka po číslici), <code>https://…</code> (po písmenu)
+      a <code>Poznámka:</code> (po písmenu, a za ní mezera). Je to čistá funkce
+      (<code>Policy.emojiQuery</code>), takže se testuje výčtem, ne klikáním. Zavírá ji
+      <code>esc</code>, mezera, dotaz bez jediné shody, odchod kurzoru jinam a samotné vložení.
+    </p>
+    <p class="muted">
+      <b>V tabu <em>Zeptat se</em> nabídka není</b> (#452). Není to text pro GitHub, ale prompt
+      pro session — a je to zrovna to jediné pole v okně, které si už bere klávesu
+      <code>Return</code> (<code>Policy.claimsReturnShortcut</code>). Přidat do něj druhého
+      zájemce o tutéž klávesu je přesně ten postup, po kterém #184 popsalo, čím končí: vyhraje
+      to zaregistrované později a druhá zkratka „nefunguje“.
+    </p>
+    <p class="muted">
+      <b>Klávesy si bere pole, ne okno.</b> <code>↑↓</code>, <code>↵</code> i <code>esc</code>
+      jdou přes <code>onKeyPress</code> na poli — touž cestou jako <code>⌥↵</code> u zakládání
+      labelu (sekce 26), a proto si s okenními zkratkami nekonkurují. <code>⌘⏎</code> tím zůstává
+      oknu (<code>Otevřít potvrzení odeslání</code>) a nabídka si bere <b>holý</b>
+      <code>Return</code>, který by v tom poli jinak zalomil řádek. <code>esc</code> je
+      <b>ustupující</b>: zavře nabídku, a teprve když žádná není, dostane se k němu okno
+      (<code>Zpět na seznam commitů</code>) — tatáž úmluva jako u zásuvky s terminálem.
+    </p>
+
+    <h3>Co doopravdy odejde</h3>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh — v poli je znak, odejde znak</div>
+        <div class="pl-mono">POST /repos/keboola/vault/issues/85/comments
+body: <b>Díky za úklid anotací 🎉</b></div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Composer je obyčejné textové pole a odchází jeho obsah — takže se náhled a výsledek
+          nemají jak rozejít. Vložení je <b>záměna napsaného dotazu za znak</b>
+          (<code>:ta</code> → 🎉), ne přidání na konec.
+        </p>
+      </div>
+      <div class="pane">
+        <div class="tag"><i></i>Zamítnuto — vkládat shortcode</div>
+        <div class="pl-mono">body: <b>Díky za úklid anotací :tada:</b></div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          GitHub by to vykreslil stejně. Jenže v okně by pak stálo <code>:tada:</code> a na
+          GitHubu 🎉 — a to je náhled, který tvrdí něco jiného než výsledek. Navíc by nabídka
+          vkládala <b>zpátky to, co člověk zrovna napsal</b>, takže by po ní nebylo poznat, jestli
+          zabrala.
+        </p>
+      </div>
+    </div>
+
+    <h3>Vlákno u řádku je třetí místo, ne výjimka</h3>
+    <p class="muted">
+      Odpověď do vlákna se píše do stejného tvaru pole a chová se stejně. Kdyby se našeptávání
+      nasadilo jen do dvou ze tří míst, byl by z toho třetí, ve kterém <code>:</code> nedělá nic —
+      a to se pozná až ve chvíli, kdy tam někdo píše.
+    </p>
+    <div class="pane new" style="max-width: 420px;">
+      <div class="tag"><i></i>Konverzace · odpověď do vlákna</div>
+      <div class="frame flat" style="padding: 14px; display: flex; flex-direction: column;
+                                     gap: 8px; align-items: flex-start;">
+        <div class="pkr">
+          <span class="cap">Emotikon</span>
+          <div class="pkr-row on"><span class="emo-g">✅</span><span class="emo-nm">:white_check_mark:</span></div>
+          <div class="pkr-row"><span class="emo-g">⚠️</span><span class="emo-nm">:warning:</span></div>
+          <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vloží</span><span>esc zavře</span></div>
+        </div>
+        <div class="reply" style="align-self: stretch; border-top: 0; padding: 0;">
+          <span class="av sm">OJ</span>
+          <span class="box" style="color: var(--ink);">Máš pravdu, ten log jsem smazal :w<span class="emo-caret"></span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">17</span>
+        <span class="body">
+          <b>Odejde znak, ne zkratka</b>
+          <span>Composer je textové pole a odchází jeho obsah. Kdyby se vkládalo
+          <code>:tada:</code>, stálo by v okně něco jiného než na GitHubu — náhled, který lže. Je
+          to tatáž úvaha jako u hexu nového labelu (#413).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">18</span>
+        <span class="body">
+          <b>Shortcody bez znaku v nabídce nejsou</b>
+          <span><code>:shipit:</code>, <code>:octocat:</code> a <code>:trollface:</code> jsou
+          obrázky GitHubu, ne Unicode. Byl by z nich <b>jediný řádek, který se chová jinak</b>
+          (vloží text místo znaku) a který se navíc nedá ukázat. Napsané rukou zůstanou textem
+          a GitHub si je vykreslí sám — aplikace do nich nesahá.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">19</span>
+        <span class="body">
+          <b>Dvojtečka otevírá jen na hranici slova</b>
+          <span>Na začátku řádku nebo po mezeře, a s aspoň jedním písmenem za sebou. Tím vypadne
+          <code>12:30</code>, <code>https://…</code> i <code>Poznámka:</code>.
+          <code>Policy.emojiQuery</code> je čistá funkce, takže se to testuje výčtem — planý
+          poplach v textovém poli se jinak pozná až v provozu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">20</span>
+        <span class="body">
+          <b>Klávesy bere pole, ne okno</b>
+          <span><code>↑↓</code>, <code>↵</code> a <code>esc</code> přes <code>onKeyPress</code>,
+          jako <code>⌥↵</code> u zakládání labelu. <code>⌘⏎</code> zůstává oknu; nabídka bere
+          <b>holý</b> <code>Return</code>, který by jinak zalomil řádek. <code>esc</code>
+          ustupuje ve dvou krocích — napřed nabídka, pak okno.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">21</span>
+        <span class="body">
+          <b>V tabu <em>Zeptat se</em> nabídka není</b>
+          <span>Není to text pro GitHub a je to jediné pole v okně, které si už bere
+          <code>Return</code> (<code>Policy.claimsReturnShortcut</code>, #452). Druhý zájemce
+          o tutéž klávesu je postup, jehož konec popsalo #184.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">22</span>
+        <span class="body">
+          <b>Řádek je na znak, ne na jméno</b>
+          <span><code>:+1:</code> a <code>:thumbsup:</code> je jeden 👍, takže dva řádky by byly
+          nabídka, ve které se nedá vybrat ani dobře, ani špatně. Alias je vidět vpravo, jinak by
+          řádek <code>:+1:</code> na dotaz <code>:thu</code> vypadal jako omyl.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">23</span>
+        <span class="body">
+          <b>Katalog je v aplikaci, ne z GitHubu</b>
+          <span><code>GET /emojis</code> vrací jména a <b>adresy obrázků</b>, ne znaky (kód se dá
+          vyloupnout z názvu souboru, ale to je rozbor cizí adresy, ne API). Seznam se navíc
+          nemění, takže síťové volání kvůli textovému poli by byla závislost bez užitku
+          — a <code>GitHubGateway</code> zůstává bez nového dotazu. Vygenerovaný Swiftový soubor,
+          protože do <code>App/</code> patří jen zdrojáky.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">24</span>
+        <span class="body">
+          <b>Reakce pod komentářem to není</b>
+          <span>👍 jako reakce je jiné API (<code>POST …/reactions</code>) a byla by to
+          <b>desátá</b> metoda protokolu. Zůstává mimo schválně: „emotikony jako na GitHubu“
+          se dá číst i takhle, a výčet cest ven neroste omylem.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#pr-commity"><span class="dir">← předchozí</span><span class="t">Commity</span></a>
           <a class="next" href="#pr-kontroly"><span class="dir">další →</span><span class="t">Kontroly</span></a>
@@ -11677,6 +11968,250 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
           <span>Rebase zůstane rozdělaný v kopii repa a nabídne se terminál (sekce 35), kde už
           mám plnou moc a kontext připravený. Uhádané slití, které projde testy a rozbije se
           v provozu, je horší výsledek než věta „na tohle nestačím“.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s37">
+    <div class="section-head">
+      <div class="eyebrow">37 — Vlastní PR · z draftu do fronty</div>
+      <h2>Jediná překážka mergnutí, kterou aplikace umí odklidit jedním kliknutím</h2>
+      <p class="muted">
+        Sekce <em>Větev</em> (sekce 36) vypisuje, proč se nedá mergnout. Většina těch důvodů je
+        práce: spravit červený check, srovnat větev, dovyřídit blokující nález. Jeden z nich je
+        ale <b>jedno kliknutí kdesi jinde</b> — a aplikace to o sobě dneska sama píše.
+        <code>MergeObstacle.draftPullRequest</code> má v <code>Policy</code> větu
+        <em>„Pull request je rozpracovaný. <b>Označ ho na GitHubu jako připravený.</b>“</em>
+        Ta druhá půlka je návod, jak odejít z okna.
+      </p>
+      <p class="muted">
+        Je to tatáž třída jako labely a vyžádání reviewera (#392) nebo merge (#465): <b>práce
+        s vlastní frontou</b>, kterou člověk dělá právě ve chvíli, kdy je v tomhle okně a kouká
+        na svůj PR. Přibývá proto <b>devátá metoda</b> <code>ReviewPublishing</code>
+        — <code>markReadyForReview(on:)</code> — a s ní se přepisuje výčet v tvrdé podmínce č. 1
+        i <code>SingleWayOutTests</code>, které ty metody tvrdí jmenovitě. Zakázané zůstává, co
+        zakázané bylo: approve mimo review, zavření PR, milník a <code>deleteLabel</code>.
+      </p>
+      <p class="muted">
+        <b>Jednosměrná schválně.</b> Metoda nemá parametr, kterým by se PR vrátil do draftu, a je
+        to rozhodnutí, ne opomenutí — obousměrná metoda by měla polovinu bez volajícího, a výčet,
+        ve kterém je něco, co aplikace nedělá, přestává být tím, čím je: seznamem toho, co umí
+        odejít ven. Kdyby se ukázalo, že se zpátky do draftu chodí, bude to <b>desátá</b> metoda
+        a vlastní rozhodnutí.
+      </p>
+      <p class="muted">
+        <b>Jen na vlastním PR — a tam se to řeší samo.</b> Rozhoduje
+        <code>Policy.metadataEditing</code> jako u labelů; na cizím PR se přitom nekreslí
+        <b>celá sekce <em>Větev</em></b> (<code>Policy.branchSection</code> vrací
+        <code>nil</code>), takže tlačítko nemá kde být ani omylem. Brána je tatáž —
+        <code>allowsPublishing</code> globálně i per repo, a s vypnutou je akce zašedlá
+        s důvodem <b>napsaným v panelu</b>.
+      </p>
+      <p class="muted">
+        <b>Stav se v okně nekreslí podruhé.</b> Že je PR rozpracovaný, stojí už dneska v hlavičce
+        (<code>state-chip</code>, <code>PullRequestState.czechLabel</code> = „rozpracovaný“)
+        a v řádku seznamu. Sekce 37 tedy nepřidává další místo, kde se to říká — přidává
+        <b>akci</b> tam, kde je napsané, co překáží.
+      </p>
+    </div>
+
+    <h3>Tlačítko stojí pod větou, která ho vysvětluje</h3>
+    <p class="muted">
+      Výřez sekce <em>Větev</em> v panelu širokém <b>300 bodů</b>
+      (<code>ReviewPanel.defaultWidth</code>). Vlevo dnešní podoba, vpravo návrh. Mění se dvě věci:
+      z výstrahy zmizí věta, která posílá do prohlížeče, a <b>pod ní</b> přibude jedno pojmenované
+      tlačítko přes celou šířku. Do řady s <code>Mergnout…</code> nejde, a je to změřené — jenom
+      těsněji, než by se čekalo: tři tlačítka <code>.mini</code> vedle sebe
+      (<code>Připravit k review</code> 98 b, <code>Mergnout…</code> 82 b,
+      <code>Srovnat s main</code> 87 b a dvě mezery po 6) potřebují <b>279 bodů</b> z 278, které
+      mezi okraji panelu zbývají. <b>O jediný bod</b> — takže je flexbox srazí, popisky se uvnitř
+      tlačítek zalomí a řádek naroste z 26 bodů na 45.
+    </p>
+    <p class="muted">
+      <b>Zkrátit popisku by to nespravilo, jen odsunulo.</b> Panel se tahá <b>od 240 bodů</b>
+      (<code>ReviewPanel.minimumWidth</code>) a tam zbývá 218; samotná tři tlačítka jsou 267, takže
+      přetečou i po sražení — změřeno o 3 body ven z panelu. Vlastní řádek je tedy jediné místo,
+      kde se akce vejde celá <b>při každé šířce</b>, a shodou okolností to je i to správné místo:
+      sedí u důvodu, který odklízí.
+    </p>
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Dnes — panel pošle do prohlížeče</div>
+        <div class="frame flat" style="box-sizing: border-box; padding: 11px; max-width: 300px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">issue-320-timeout → main</span><span class="ans done">srovnaná</span></div>
+              <div class="rv-row"><span class="who">4 commity · 6 checků</span><span class="ans done">zeleno</span></div>
+            </div>
+            <div class="warnbox" style="margin-top: 4px;">
+              <span class="i">▲</span>
+              <span>Mergnout nejde: pull request je <b>rozpracovaný</b>. Označ ho na GitHubu jako
+              připravený.</span>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <span class="mini" style="opacity: 0.45;">Mergnout…</span>
+              <span class="mini">Srovnat s main</span>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Všechno ostatní je zeleno. Chybí jeden bit, a ten se jde přepnout jinam.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh — důvod zůstane, návod se změní v akci</div>
+        <div class="frame flat" style="box-sizing: border-box; padding: 11px; max-width: 300px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">issue-320-timeout → main</span><span class="ans done">srovnaná</span></div>
+              <div class="rv-row"><span class="who">4 commity · 6 checků</span><span class="ans done">zeleno</span></div>
+            </div>
+            <div class="warnbox" style="margin-top: 4px;">
+              <span class="i">▲</span>
+              <span>Mergnout nejde: pull request je <b>rozpracovaný</b>.</span>
+            </div>
+            <!-- Přes celou šířku a `.send`, tedy tvar, který v panelu už je (odeslání review).
+                 Je to jediná akce sekce, která se **nabízí**; `Mergnout…` a `Srovnat s main`
+                 zůstávají v řadě pod ní, aby se tlačítko pod rukou nestěhovalo. -->
+            <div class="send" style="margin-top: 2px;">Připravit k review</div>
+            <span style="font-size: 11.5px; line-height: 1.45; color: var(--ink-2);">
+              Kdo je v <code>CODEOWNERS</code>, dostane vyžádání review. Zpátky do draftu se
+              chodí na GitHub.
+            </span>
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <span class="mini" style="opacity: 0.45;">Mergnout…</span>
+              <span class="mini">Srovnat s main</span>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Po úspěchu se stav PR načte znovu: tlačítko i věta o rozpracovanosti zmizí a
+          <code>Mergnout…</code> se rozsvítí, když nic jiného nepřekáží.
+        </p>
+      </div>
+    </div>
+
+    <h3>Bez potvrzovacího sheetu — a co je za to napsané v panelu</h3>
+    <p class="muted">
+      Potvrzení <b>nedostane</b>, a je to úvaha o obsahu, ne o počtu kliknutí. Sheet je v tomhle
+      okně u odeslání review (#68) a u mergnutí (#465), a obojí má společné to, že
+      <b>payload je dlouhý a aplikace je jediné místo, kde se dá celý přečíst</b> — tělo review
+      s každým komentářem, u merge větev, metoda, počet commitů a titulek. Tady je payload
+      <b>jeden bit</b>. Sheet, jehož výpis <em>Co se stane</em> má jediný řádek, se neptá na obsah;
+      ptá se „opravdu?“ — a přesně tenhle druh potvrzení repo u labelů, odpovědi do vlákna
+      i komentáře pod PR (#73, #216, #392) zamítlo ve prospěch <b>jednoho pojmenovaného
+      tlačítka</b>.
+    </p>
+    <p class="muted">
+      <b>Nevratná část na tom je, a je to ta, o které se nemluví.</b> Podle dokumentace GitHubu
+      označení <em>ready for review</em> <b>vyžádá review od vlastníků kódu</b>
+      (<em>„Marking a pull request as ready for review will request reviews from any code
+      owners.“</em>). Tedy komu chodí upozornění, tomu přijde — a request se odebráním nevezme
+      zpět. Je to tatáž situace, kterou #392 vyřešilo u <code>+ reviewer</code>, a odpověď zůstává
+      tatáž: <b>ne sheet, ale sloveso tam, kde se kliká</b>. Věta pod tlačítkem to říká a je
+      pravdivá i v repu, který <code>CODEOWNERS</code> nemá — když nikdo nesedí, nikdo se
+      nevyžádá.
+    </p>
+    <p class="muted">
+      Co za to <b>musí platit</b>: tlačítko nesmí mít výchozí akci (žádný <code>Enter</code>), aby
+      se nedalo spustit průchodem klávesnicí — tatáž mez jako u potvrzení merge a u založení labelu.
+    </p>
+
+    <h3>Když volání nedopadne</h3>
+    <p class="muted">
+      Jedno volání, takže žádný mezistav jako u <em>Založit a přidat</em> (#413): buď se PR
+      přepne, nebo ne. Neúspěch se hlásí <b>větou v panelu</b>, ne zmizelým kliknutím — na tomtéž
+      místě, kde už chyby odesílání jsou (<code>MetadataActionState.failed</code>). Popover se dá
+      zavřít, panel ne, a chyba, kterou nikdo nepřečte, je chyba, která se neopraví.
+    </p>
+    <div class="pane new" style="max-width: 300px;">
+      <div class="tag"><i></i>Nepovedlo se — a je to vidět tam, kde se klikalo</div>
+      <div class="frame flat" style="padding: 12px;">
+        <div class="pl-sec">
+          <span class="cap">Větev</span>
+          <div class="rv-list">
+            <div class="rv-row"><span class="who">issue-320-timeout → main</span><span class="ans done">srovnaná</span></div>
+            <div class="rv-row"><span class="who">4 commity · 6 checků</span><span class="ans done">zeleno</span></div>
+          </div>
+          <div class="warnbox" style="margin-top: 4px;">
+            <span class="i">▲</span>
+            <span>Mergnout nejde: pull request je <b>rozpracovaný</b>.</span>
+          </div>
+          <div class="send" style="margin-top: 2px;">Připravit k review</div>
+          <div style="display: flex; align-items: flex-start; gap: 7px; font-size: 11.5px;
+                      line-height: 1.45; color: var(--ink-2);">
+            <span style="color: var(--crit);">⚠</span>
+            <span>Přepnout na <b style="font-weight: 600;">Ready for review</b> se nepovedlo:
+            <code>HTTP 403</code>. Pull request je pořád rozpracovaný.</span>
+            <span class="mini" style="flex: none;">Zavřít</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">117</span>
+        <span class="body">
+          <b>Devátá metoda, a jednosměrná</b>
+          <span><code>markReadyForReview(on:)</code> přibývá do výčtu
+          <code>ReviewPublishing</code> vedle osmi dosavadních; <code>SingleWayOutTests</code> se
+          přepíšou <b>vědomě</b>. Obousměrná metoda s parametrem by měla půlku bez volajícího —
+          a výčet, ve kterém stojí něco, co aplikace nedělá, přestává být seznamem toho, co umí
+          odejít ven.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">118</span>
+        <span class="body">
+          <b>Sheet se řídí obsahem, ne nevratností</b>
+          <span>Potvrzení je tam, kde je <b>co číst</b> (review #68, merge #465). Jeden bit se
+          nečte. Proto jedno pojmenované tlačítko, jako u labelů a odpovědi do vlákna — a
+          <b>bez výchozí akce</b>, aby se nedalo spustit <code>Enterem</code>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">119</span>
+        <span class="body">
+          <b>Vyžádání od <code>CODEOWNERS</code> je napsané pod tlačítkem</b>
+          <span>GitHub při přepnutí na <em>ready</em> vyžádá review od vlastníků kódu — tedy odešle
+          upozornění, které se odebráním nevezme zpět. #392 na tenhle druh věci odpovědělo
+          <b>slovesem u kliknutí</b>, ne modálním oknem, a tady platí totéž. Věta je pravdivá i tam,
+          kde <code>CODEOWNERS</code> nikoho nevrátí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">120</span>
+        <span class="body">
+          <b>Zpátky do draftu odsud nejde, a paleta ⌘K to nespraví</b>
+          <span>Tlačítko, které by viselo u <b>každého</b> vlastního PR kvůli akci jednou za
+          pololetí, je mrtvá váha z tabulky Copilotových nálezů. A do palety to nepatří:
+          <code>CommandPalette.Action</code> má v komentáři napsané, že <b>nic v ní neodesílá na
+          GitHub</b> — plocha bez potvrzení je to poslední místo, kam přidat zápis.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">121</span>
+        <span class="body">
+          <b>Věta o překážce se zkrátí</b>
+          <span><code>MergeObstacle.draftPullRequest</code> ztrácí druhou půlku
+          („Označ ho na GitHubu jako připravený.“) — s tlačítkem pod sebou by to byl návod, jak
+          odejít od tlačítka. Text je v <code>Policy</code>, tedy na jednom místě, a mění se
+          jedině tam.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">122</span>
+        <span class="body">
+          <b>Hlava se u téhle akce neověřuje</b>
+          <span>Váže se na <b>pull request</b>, ne na commit — jako labely, odpověď do vlákna
+          a komentář (#73, #216, #392). Ověřuje se <b>stav PR</b>: nad zavřeným ani mergnutým se
+          nekreslí. Pojistky proti závodu s pushnutým commitem má schválně jedině review
+          a merge.</span>
         </span>
       </div>
     </div>
