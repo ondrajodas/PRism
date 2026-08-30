@@ -173,8 +173,8 @@ class EmbeddedTerminalView: LocalProcessTerminalView {
     /// cena projíždění měřená věc (#469). `visibleRect` je obdélníkové porovnání a odmítne skoro
     /// všechno; hit test celého okna se pustí teprve nad plochou.
     ///
-    /// **`visibleRect`, ne `bounds`**: v zásuvce může být víc relací (#460) a ta neaktivní je
-    /// v hierarchii pořád — s prázdným výřezem, takže si o kolečko neřekne. Hit test za tím pak
+    /// **`visibleRect`, ne `bounds`**: plocha je zanořená ve SwiftUI a zásuvka ji umí oříznout,
+    /// takže `bounds` by si řekly i o kolečko nad kusem, který není vidět. Hit test za tím pak
     /// odpoví na druhou půlku: neleží nad plochou ještě něco (popover, sheet)?
     private func claimsWheel(_ event: NSEvent) -> Bool {
         guard let window, event.window === window else { return false }

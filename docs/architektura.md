@@ -9350,8 +9350,10 @@ Opravou je hlásit totéž, ale **musí se to vzít dřív než knihovna**:
 - **Kdo si událost vezme, rozhoduje `claimsWheel`, a napřed obdélníkem.** Odběr je na celý proces,
   takže jím projde **každá** otočka kolečka v aplikaci — i ta nad diffem, kde je cena projíždění
   měřená věc (#469). Pořadí je proto `event.window === window` → `visibleRect.contains(…)` →
-  teprve pak hit test celého okna. **`visibleRect`, ne `bounds`**: v zásuvce může být relací víc
-  (#460) a ta neaktivní má prázdný výřez, takže si o kolečko neřekne. A **`hitTest` bere bod
+  teprve pak hit test celého okna. **`visibleRect`, ne `bounds`**: plocha je zanořená ve SwiftUI
+  a zásuvka ji umí oříznout, takže `bounds` by si řekly i o kolečko nad kusem, který není vidět.
+  (Dvě relace vedle sebe to řešit nemusí — plocha se klíčuje `.id(activeSlot)`, takže v hierarchii
+  je jen ta aktivní a té odcházející odběr sundá `viewDidMoveToWindow(nil)`.) A **`hitTest` bere bod
   v souřadnicích nadřazeného view**, tedy `locationInWindow` beze změny — převádět ho do souřadnic
   `contentView` je tichá chyba, která v okně s titulkem sedne a s `fullSizeContentView` ne.
 - **Rychlost je v počtu hlášení.** Jedno hlášení nese jen „cvaklo“, takže se posílá tolikrát,
