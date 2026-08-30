@@ -14,7 +14,10 @@ import SwiftTerm
 /// `LocalProcessTerminalView` si `terminalDelegate` nastavuje sám a proxuje ho do `processDelegate`
 /// — proto se do prvního nesahá; přepsat ho znamená rozbít vnitřek knihovny (píše to v její
 /// dokumentaci).
-final class EmbeddedTerminalView: LocalProcessTerminalView {
+///
+/// **Není `final`, a je to kvůli testům** (#478): co odsud odejde do procesu, se bez pty nedá
+/// přečíst jinak než tím, že si testovací podtřída přepíše `send(source:data:)`.
+class EmbeddedTerminalView: LocalProcessTerminalView {
     /// Komu se hlásí fokus. Na něm stojí to, že se okenní zkratky na `Control` neuplatní
     /// (`Policy.shortcutYieldsToTerminal`).
     var focusChanged: (@MainActor (Bool) -> Void)?
@@ -80,6 +83,136 @@ final class EmbeddedTerminalView: LocalProcessTerminalView {
         guard process.running, process.childfd >= 0 else { return false }
         send(txt: line + "\r")
         return true
+    }
+
+    // MARK: - Kolečko (#478)
+
+    /// Řádek v bufferu, u kterého výřez zůstane, i když pod ním přiteče výstup. `nil` = jedeme
+    /// s ním, jako to dělá knihovna sama.
+    ///
+    /// Existuje proto, že `SwiftTerm 1.11.2` má na tohle vlastní příznak (`Terminal.userScrolling`),
+    /// ale **nikdy ho nenastaví** — čte se na třech místech a nezapisuje se do něj z jediného.
+    /// Každý řádek, který přiteče, proto srovná výřez dolů (`buffer.yDisp = buffer.yBase`), a nad
+    /// programem, který si spodek plochy překresluje sám, z toho je „kolečko nefunguje“: odrolovaný
+    /// pohled se vrátí dřív, než ho stačí kdo přečíst. Měřeno na `claude` v zásuvce, viz
+    /// `docs/testovani.md`.
+    private var pinnedRow: Int?
+
+    /// Stojí výřez dole, tedy jede s výstupem?
+    ///
+    /// `canScroll` je v tom schválně: v alternativním bufferu a nad plochou bez historie **není co
+    /// držet**, takže „dole“ je tam jediná pravdivá odpověď.
+    private var followsOutput: Bool { !canScroll || scrollPosition >= 1 }
+
+    /// Kolečko — buď hlášení myši aplikaci, nebo vlastní historie.
+    ///
+    /// **Knihovna kolečko aplikaci nepředá nikdy** (`MacTerminalView.scrollWheel` roluje jen
+    /// historii), přestože kliknutí a pohyb myši předává. Program, který si o myš řekl, tak
+    /// dostával všechno kromě kolečka — tohle je ta chybějící půlka.
+    ///
+    /// **Ptá se při každé události**, ne jednou při vzniku plochy: `mouseMode` si mění aplikace pod
+    /// námi. `allowMouseReporting` je vypínač knihovny (kvůli výběru textu myší) a platí i tady.
+    override func scrollWheel(with event: NSEvent) {
+        guard
+            let report = Policy.terminalWheelReport(
+                deltaY: event.deltaY,
+                reportsMouse: allowMouseReporting && terminal.mouseMode != .off,
+                rows: terminal.rows
+            )
+        else {
+            super.scrollWheel(with: event)
+            pinViewport()
+            return
+        }
+        send(wheel: report, at: event)
+    }
+
+    /// Pošle hlášení kolečka na buňku pod kurzorem, `count`krát za sebou.
+    ///
+    /// **Tolikrát, o kolik řádků by se posunula historie** — hlášení nese jen „cvaklo“, takže
+    /// rychlost je v počtu. Jedno na událost by znamenalo, že se v `claude` nebo `htop` roluje
+    /// řádek po řádku, kdežto v shellu vedle po trojicích.
+    private func send(wheel report: TerminalWheelReport, at event: NSEvent) {
+        let modifiers = event.modifierFlags
+        let buttonFlags = terminal.encodeButton(
+            button: report.button,
+            release: false,
+            shift: modifiers.contains(.shift),
+            meta: modifiers.contains(.option),
+            control: modifiers.contains(.control)
+        )
+        let target = wheelTarget(of: event)
+        for _ in 0..<report.count {
+            terminal.sendEvent(
+                buttonFlags: buttonFlags,
+                x: target.column,
+                y: target.row,
+                pixelX: target.pixelX,
+                pixelY: target.pixelY
+            )
+        }
+    }
+
+    /// Buňka pod kurzorem. Hlášení myši je **adresné** — aplikace s víc oblastmi (třeba `tmux`
+    /// s panely) podle toho pozná, čeho se kolečko týká.
+    private func wheelTarget(of event: NSEvent) -> (column: Int, row: Int, pixelX: Int, pixelY: Int) {
+        let point = convert(event.locationInWindow, from: nil)
+        let cell = cellSize
+        let x = min(max(point.x, 0), bounds.width)
+        let y = min(max(point.y, 0), bounds.height)
+        return (
+            column: min(Int(x / cell.width), max(0, terminal.cols - 1)),
+            row: min(Int((bounds.height - y) / cell.height), max(0, terminal.rows - 1)),
+            pixelX: Int(x),
+            pixelY: Int(bounds.height - y)
+        )
+    }
+
+    /// Rozměr jedné buňky.
+    ///
+    /// **Dopočítává se z `getOptimalFrameSize()`**, protože `cellDimension` knihovny je `internal`.
+    /// Ta metoda vrací `buňka × (cols, rows)` a k šířce **přičítá posuvník** — a ten se proto měří
+    /// na skutečném `NSScroller`u v podhledech, ne z konstanty: šířku si posuvník bere ze stylu,
+    /// který si knihovna drží u sebe (taky `internal`), takže opsané číslo by se s ní umělo rozejít
+    /// potichu. Dělit `bounds` by bylo o chlup jednodušší a **špatně**: řádků se vejde
+    /// `floor(výška / buňka)`, takže zbytek pod posledním řádkem by se rozpustil do všech a spodní
+    /// řádky by vycházely o jeden vedle.
+    private var cellSize: CGSize {
+        let optimal = getOptimalFrameSize().size
+        let scroller = subviews.compactMap { $0 as? NSScroller }.first?.frame.width ?? 0
+        return CGSize(
+            width: max((optimal.width - scroller) / CGFloat(max(1, terminal.cols)), 1),
+            height: max(optimal.height / CGFloat(max(1, terminal.rows)), 1)
+        )
+    }
+
+    /// Zapamatuje si, kde výřez zůstal.
+    private func pinViewport() {
+        pinnedRow = Policy.terminalViewportPin(row: terminal.buffer.yDisp, atBottom: followsOutput)
+    }
+
+    /// Výstup z pty. Po nakrmení se výřez vrací tam, kde ho člověk nechal.
+    ///
+    /// **Až po `super`**, protože teprve to nakrmení výřezem hne. Vrací se jedině **dolů → nahoru**
+    /// (`terminalViewportRewind`), takže rolování mezitím tahle cesta nikdy nepřebije.
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        super.dataReceived(slice: slice)
+        let rewind = Policy.terminalViewportRewind(pinned: pinnedRow, current: terminal.buffer.yDisp)
+        guard rewind > 0 else { return }
+        scrollUp(lines: rewind)
+    }
+
+    /// Cokoli, co jde z plochy do procesu — klávesy, vložený text, řádka z `▶` i **odpověď emulátoru
+    /// na dotaz aplikace**.
+    ///
+    /// Zaklesnutí se tu **přepočítá, ne zruší natvrdo**, a ten rozdíl je celý smysl: `send(data:)`
+    /// srovná výřez na kurzor (`ensureCaretIsVisible`) **ještě před** tímhle voláním, takže po
+    /// vstupu od člověka jsme dole a zaklesnutí padá — napsat něco znamená chtít vidět, co to
+    /// udělá. Odpověď na dotaz (`DA`, `XTVERSION`) tou cestou nejde, takže odrolovaný pohled
+    /// nechá být.
+    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        pinViewport()
+        super.send(source: source, data: data)
     }
 
     // MARK: - Start
