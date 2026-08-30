@@ -1283,9 +1283,11 @@ si příkaz pouští jinde, dostane ho tak, jak by ho psal.
 
 **A neptá se na důvěru ke složce.** Interaktivní `claude` se v neznámém adresáři ptá *„Is this
 a project you created or one you trust?“*, a protože každý PR dostane vlastní pracovní strom, přišel
-by ten dotaz u každého PR znovu. PRism proto jednou zapíše důvěru ke **kořeni své cache** do
-`~/.claude.json` — je to cesta, na kterou odkazuje sám `claude`, a důvěra se dědí na všechno pod ní.
-Na konfiguraci, které nerozumí, **nesáhne**; když se zápis nepovede, přijde jen ten dialog.
+by ten dotaz u každého PR znovu. PRism proto zapíše důvěru do `~/.claude.json` — je to cesta, na
+kterou odkazuje sám `claude`. Zapisuje se **kořen cache i ta složka, ve které se shell doopravdy
+pouští**: důvěra se sice dědí na všechno pod zapsanou složkou, ale **ne do git pracovního stromu**,
+a strom review je právě to, kam `▶` míří. Sahá se jedině na složky, které si aplikace vyrobila sama;
+na konfiguraci, které nerozumí, **nesáhne**, a když se zápis nepovede, přijde jen ten dialog.
 
 **Rolovat jde v shellu i nad běžícím `claude`** (#478). V holém shellu se roluje 500 řádků vlastní
 historie; nad celoobrazovkovým TUI, které si o hlášení myši řeklo, se kolečko **předá jemu** jako

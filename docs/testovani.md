@@ -6930,6 +6930,35 @@ Co z toho stojí za zapamatování:
   se **nezakládá**. Píše se do souboru, který aplikace nevlastní, takže chyba tady nestojí funkci,
   ale cizí práci — a ztráta při nezapsání je **jeden dialog navíc**. K tomu se tvrdí, že cizí klíče
   přežijí a že se hotová důvěra **nezapisuje znovu** (přes čas změny souboru, ne přes obsah).
+- **A od #479 se tvrdí i to, co se přepsat SMÍ**: zapsané `false` **na naší cestě** se přepíše na
+  `true` a zbytek toho záznamu (`allowedTools`) zůstane. Je to protipól řádku výš, takže obě
+  tvrzení musí stát vedle sebe — jinak se dá „nepřepisujeme“ zpřísnit tak, že to zavře i tenhle
+  případ. Vedle toho stojí `TerminalDrawerTests` nad `Policy.workspacesToTrust` (pořadí *nejprve
+  strom, pak kořen*, žádný kořen dvakrát) a čtyři tvrzení ve `AppStoreResumeInDrawerTests`: že se
+  zapisuje **strom té session**, že **druhý strom dostane vlastní zápis** (kvůli tomu se #479
+  dělalo — příznak by po prvním PR zavřel cestu všem dalším), že `` ⌃` `` zapisuje **složku
+  shellu** a že neúspěch **nezastaví druhou složku ani další pokus**.
+- **Práva `0600` se u #479 doplnila taky**, protože to byla jediná ze čtyř pojistek #460, na kterou
+  se dokumentace odvolávala a test na ni nebyl. Tvrdí se, že práva zápis přežijí a že po sobě
+  **nezůstane dočasný soubor** — obojí je vlastnost `replaceItemAt`, takže je to tvrzení
+  o atomickém zápisu, ne o zvlášť nastavovaných právech. **Vloženou regresí ověřené pásmem**:
+  „zjednodušení“ na `Data.write(to:options: .atomic)` test **nechytá** (Foundation atributy
+  původního souboru přenese taky, změřeno), kdežto `removeItem` + `moveItem` ano — vyjde `0644`.
+  Hlídá tedy tu cestu, kterou se to doopravdy dá rozbít.
+- **A nejcennější tvrzení celé téhle oblasti je, že se složce mimo cache důvěra NEzapíše** (#479).
+  Rozbije se potichu — zapsané `true` v cizí konfiguraci nikdo neuvidí —, a proto k němu patří
+  druhá půlka: **fixtury se přestěhovaly pod skutečný kořen cache**. Cesta `/Users/o/…` od téhle
+  změny tvrdí něco, co v provozu nenastane, takže by test procházel a hranici by neověřoval nic.
+  Cenou je, že řádka do zásuvky se porovnává s **interpolovanou** cestou; uzávorkování a zbytek
+  řádky zůstávají literál, tedy to, na čem to tvrzení stojí.
+- **A `CacheFileVerdictTests` hlídá, že si zápis bere ten přísnější ze dvou verdiktů** (#479, nález
+  Copilota). `CacheFile` nabízí `isInsideCache` pro **mazání** a `refusal` pro **čtení a zápis**;
+  liší se odkazem na **samotné složce**, protože `contains` rozbaluje jen rodiče. Suita to tvrdí
+  dvakrát: nad **skutečným odkazem** ve scratch layoutu (mazací verdikt ho pustí, zápisový ne)
+  a **nad zdrojákem** volajícího, protože `AppStore` si layout bere staticky — odkaz by tedy musel
+  vzniknout ve **skutečné** cache aplikace, kam test sahat nemá. Je to tentýž postup jako
+  u `GlobalAppearanceTests` a `FontMetricTests`. Do #479 na `CacheFile` přímý test **nebyl vůbec**,
+  přestože je to jediné místo, kde tvrdá podmínka č. 3 bydlí.
 - **Že do zásuvky jde `session.shellLine`, se tvrdí i literálem.** Text se porovnává s celou
   řádkou `cd '…' && claude --resume …` **a** s `session.shellLine`: první podoba chytí změnu
   uzávorkování, druhá to, že se `⧉` a `▶` rozešly.
@@ -7064,6 +7093,65 @@ Plyne z toho pravidlo širší než #459: **co v aplikaci chodí přes `Dispatch
 pozorovat nedá.** Kde to jde, hledá se jiný pozorovatelný konec (tady jádro); kde ne, ověřuje se to
 rukama.
 
+#### Sonda na dotaz o důvěru ke složce (#479)
+
+Není to test v `Tests/` a schválně: pouští **skutečný interaktivní `claude`** v pty, takže by
+z běhu testů dělala minuty čekání. Je to postup, který se pustí rukou, když je potřeba znovu
+posoudit, kdy se dialog *„Is this a project you created or one you trust?“* objeví. Naměřené
+odpovědi jsou v [`docs/claude-cli.md`](claude-cli.md).
+
+Kostra je krátká — **`expect`, ne `script`**: `script` bere stdin z volajícího, takže mimo terminál
+dostane hned EOF a pošle `claude` ^D.
+
+```tcl
+log_file -noappend $logfile
+set timeout $secs
+set env(HOME) $home          ;# podstrčený domov — na skutečnou konfiguraci se nesahá
+set env(TERM) "xterm-256color"
+cd $dir
+spawn -noecho /Users/ondra/.local/bin/claude
+expect timeout { }           ;# nic se neposílá, jen se kouká, co vypíše
+exec kill -9 [exp_pid]
+```
+
+Scénář se zadává **jako obsah `projects`** a fixture se skládá z opravdové konfigurace:
+`jq --argjson p "$scenar" 'del(.projects) | .projects = $p' ~/.claude.json > $H/.claude.json`.
+
+**Pět pastí, o které se ta první sonda (#460) rozbila. Každá je změřená a každá umí vyrobit
+falešné „dialog není“:**
+
+1. **Název složky nesmí obsahovat hledané slovo.** Dialog vypisuje **pracovní adresář**, takže
+   sonda ve složce `…/trustprobe/` najde svoje vlastní jméno a hlásí dialog i tam, kde není.
+   Pískoviště se proto jmenuje neutrálně (`/private/tmp/p479run/w/a/b/c`).
+2. **`claude` si při každém spuštění zapíše záznam do konfigurace.** Nad složkou, která je
+   důvěryhodná (i přes předka), si ji **založí** s `hasTrustDialogAccepted: false`. Druhý běh nad
+   toutéž cestou proto dialog nemá — konfigurace se musí obnovit **před každým během**, jinak
+   sonda měří svoji vlastní stopu.
+3. **Prázdný podstrčený `HOME` se zasekne na prvním spuštění** (výběr motivu) a k dialogu se vůbec
+   nedostane. Do fixture patří **dokončený onboarding** — tedy všechny klíče z opravdové
+   konfigurace kromě `projects`.
+4. **Znění dialogu se mění.** V `claude 2.1.250` zní *„Quick safety check: Is this a project you
+   created or one you trust?“* s volbami `No, exit` / `Yes, I trust this folder`. Hledaný řetězec
+   **ověř na běhu, o kterém víš, že dialog mít má** (scénář „nic zapsaného“), ne z paměti.
+5. **Hledá se jedno slovo, nikdy dvě.** TUI sází mezi slova sekvence pro posun kurzoru
+   (`Quick^[[8Gsafety^[[15Gcheck:`), takže `grep` na `you trust` **nikdy** nenajde nic, i když
+   dialog na obrazovce je. Použitelný je `safety`; a musí to být slovo, které není v cestě
+   k pískovišti (past č. 1 z druhé strany).
+
+**A šestá, kterou zaplatila tahle sonda:** pískoviště nesmí ležet uvnitř složky se sondou.
+`/tmp` je na macOS symlink na `/private/tmp`, takže `rm -rf /private/tmp/p479` smaže i skripty
+v `/tmp/p479` — sonda si tím smaže sama sebe a vypadá to jako selhání `expect`u.
+
+Dvě věci, které se tímhle postupem daly změřit a bez něj by se hádaly:
+
+- **Reprodukce na skutečné konfiguraci a skutečných cestách.** Do podstrčeného `HOME` se **zkopíruje**
+  `~/.claude.json` (nikdy se do něj nepíše) a `claude` se pustí ve **skutečném** stromu review
+  v cache. Tak se rozdíl „strom, jehož klon je `true`“ proti „strom, jehož klon je `false`“ ukázal
+  na datech, která ten problém vyrobila, ne na vymyšlených.
+- **Že cizí zápis nepřežije se dá vyloučit taky.** Do podstrčené konfigurace se během běhu zapsal
+  značkový klíč (v `t = 1`, `6` a `15` s) — přežil ve všech třech případech, takže `claude`
+  konfiguraci nepřepisuje ze snímku, který si vzal při startu.
+
 **Co ověří jedině člověk na běžící aplikaci** (v harnessu ne, protože testovací host nedostane
 aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
 
@@ -7090,9 +7178,12 @@ aktivaci, takže nemá key okno — #392, #434 — a stisk nemá kam sednout):
 11. **Změna velikosti** (#460): rozměr do jádra dojede správně (změřeno, viz sonda níž), ale jak
     obsah po přesázení **vypadá**, se z harnessu přečíst nedá. Roztáhni okno i zásuvku nad běžícím
     `claude` a posuď, jestli se překreslí čitelně.
-12. **Dotaz na důvěru ke složce se nesmí objevit** (#460): klikni `▶` na PR, na kterém zásuvka
-    ještě nikdy nebyla — `claude` se **nesmí** zeptat *„Is this a project you created or one you
-    trust?“*. Ověřit se to dá jedině spuštěním, protože ten dialog je interaktivní.
+12. **Dotaz na důvěru ke složce se nesmí objevit** (#460, upraveno #479): klikni `▶` na PR, na
+    kterém zásuvka ještě nikdy nebyla — `claude` se **nesmí** zeptat *„Is this a project you created
+    or one you trust?“*. Od #479 k tomu patří i druhá půlka: `` ⌃` `` na PR, na kterém **review
+    ještě neběželo** (zásuvka tedy startuje v bare klonu), a v shellu ručně napsané `claude` —
+    dialog se nesmí objevit ani tam. Ověřit se to dá jedině spuštěním: dialog je interaktivní a do
+    pty se v harnessu psát nedá.
 13. **Session z `▶` se neptá na povolení u každého kroku** (`--permission-mode auto`) — a `⧉`
     kopíruje příkaz **bez** toho přepínače.
 14. **Rolování** (#460): v holém shellu (`ls -R /usr/share | head -500`) kolečko roluje; **nad
