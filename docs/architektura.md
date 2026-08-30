@@ -7095,6 +7095,8 @@ Věci, které se u toho nemají rozbít:
 | `Policy.resumeNotice(_:in:)`, `slotsFullNotice(_:)` | Co se řekne po `▶` (#460) → `TerminalCommandOutcome`. `nil` = **mlčet**: co se povedlo, je vidět v zásuvce, která se zrovna otevřela. Zbylé konce vidět nejsou — `busy` je relace, ve které se nic nezměnilo, `noShell` prázdná plocha a plný strop **nevzniklá záložka** —, takže by `▶` bez věty vypadalo jako tlačítko, které nic nedělá. Věta **jmenuje relaci**, protože jich zásuvka drží víc |
 | `Policy.terminalSlotAdmission(of:in:states:limit:)`, `terminalSlots(_:adding:evicting:)`, `terminalSlotAfterRemoval(of:from:)` | Kdo smí do zásuvky (#460) a co kvůli němu odejde. **Vytlačuje se jedině neběžící relace, a vždycky nejstarší**; když všechny běží, nová **nevznikne**. Pořadí je pořadí vzniku — přepínač se nemá přeskládat pod rukama |
 | `Policy.terminalSlotTitle(_:)`, `terminalSlotMark(_:)`, `terminalSlotHelp(_:state:)`, `terminalSlotRows(_:active:states:)` | Co je na záložce přepínače vidět (#460) → `TerminalSlotRow`. Jméno dráhy, ne `session_id`; puntík má **tři** stavy, i když návrh kreslí dva, a **návratový kód žije v nápovědě** — do puntíku se nevejde a tři kódy do hlavičky taky ne |
+| `Policy.terminalWheelReport(deltaY:reportsMouse:rows:)`, `terminalWheelLines(deltaY:rows:)` | Kolečko nad plochou terminálu (#478) → `TerminalWheelReport`, kde `nil` = **nehlásit a rolovat historii**. Nese i **počet**, protože hlášení myši umí jen „cvaklo“ a rychlost je tedy v tom, kolikrát se pošle. Křivka je **opsaná ze `SwiftTermu`** (`calcScrollingVelocity` je `private`) a stupeň se určuje z celé části, ne ze zaokrouhlení. **Nula se nehlásí** — trackpad umí poslat událost s nulovým posunem |
+| `Policy.terminalViewportPin(row:atBottom:)`, `terminalViewportRewind(pinned:current:)` | Kde výřez zůstane, když pod ním přiteče výstup (#478). Existuje proto, že `Terminal.userScrolling` se v `SwiftTerm 1.11.2` **nikdy nenastaví**. **Dole se nezaklesává** (tam je „jet s výstupem“ správně) a vrací se jedině **dolů → nahoru**, aby rolování mezitím nikdy nepřebilo |
 | `Policy.quitPrompt(reviews:terminals:)` | Na co se aplikace zeptá při ukončení (#94, #264, #459) → `QuitPrompt`. `nil` = **neptat se**. Věty se liší podle toho, co běží: „Běží 2 věci“ nedává důvod kliknout na Zpět. A **neslibují víc, než co data unesou** — z review se dá dotáhnout, co reviewer nahlásil, kdežto výpis shellu se nikam neukládá |
 | `Policy.summary(of:)` (checky), `Policy.sorted(_:)` (checky) | Souhrn a pořadí kontrol z GitHub Actions (#209) — nejhorší stav vyhrává, spadlé nahoru |
 | `Policy.checksTab(checks:failure:)` | Co je v tabu `Kontroly` k vidění (#306) — čtyři stavy z šesti kombinací vstupů (`ChecksTabState`). Neprázdný seznam přebíjí poruchu, porucha přebíjí obě prázdna. **Nahradila `Policy.tabs(hasChecks:)`** (#215), která vracela zúžený pruh záložek: od #306 se kreslí všech sedm vždycky, takže seznam záložek není funkcí dat a rozhodovat se má **obsah** tabu |
@@ -9200,13 +9202,14 @@ něco jiného:
 | `TerminalSlot` | **Jedna relace = jedno pty** (#460): `(pull request, role)`, kde role je holý `shell` nebo `session(skill)`. Klíčem je dvojice, ne jen skill — pracovní adresář je adresář *toho* PR |
 | `TerminalHosting` | Protokol: kolik shellů běží, plocha pro **relaci**, **napsat do ní řádku** (#460), zabít jednu relaci, zabít **všechny relace jednoho PR**, zabít všechno, a dva uzávěry (stav, fokus). **Bez zápisové metody a bez `gh`** |
 | `TerminalHost` | Živá implementace — **jeden `EmbeddedTerminalView` na relaci**, řez a barvy z palety; plochu vyrábí jedno místo (`surface(for:in:)`), aby `` ⌃` `` a `▶` nedaly dva různé shelly |
-| `EmbeddedTerminalView` | `SwiftTerm.LocalProcessTerminalView` s pěti věcmi navíc: start login shellu v daném adresáři, hlášení fokusu, `kill()`, který zabije **popředí pty**, ne jen shell, a od #460 `hasForegroundJob` (běží tam něco?) se `send(line:)` |
+| `EmbeddedTerminalView` | `SwiftTerm.LocalProcessTerminalView` s pěti věcmi navíc: start login shellu v daném adresáři, hlášení fokusu, `kill()`, který zabije **popředí pty**, ne jen shell, a od #460 `hasForegroundJob` (běží tam něco?) se `send(line:)`. Od #478 k tomu **kolečko** — hlášení myši aplikaci, která si o něj řekla, a zaklesnutí výřezu proti chybě v knihovně |
 
 Rozhodnutí, která k tomu patří, jsou v `Policy` — `App/Policy/TerminalDrawer.swift` (výška zásuvky
 a její ořez, jestli zkratka ustupuje terminálu, kde shell startuje, jak se cesta zkrátí na `~`, co
 se spustí a s jakým prostředím, na co se aplikace zeptá při ukončení a co se řekne po `▶`)
 a `App/Policy/TerminalSlots.swift` (#460: kdo smí vzniknout, co se kvůli stropu vytlačí, co je na
-záložce vidět).
+záložce vidět) a `App/Policy/TerminalWheel.swift` (#478: hlásit kolečko, nebo rolovat historii,
+kolikrát, a kde výřez zůstane, když pod ním přiteče výstup).
 
 ### Víc relací naráz (#460)
 
@@ -9365,6 +9368,101 @@ tedy **doručuje jako událost** a co s ním udělá, je jeho rozhodnutí; termi
 protože alternativní buffer je z definice bez historie. Tak se chová `Terminal.app` i `iTerm`.
 **Neopravovalo se proto nic** — v holém shellu se roluje normálně a nad běžícím `claude` se roluje
 uvnitř `claude`.
+
+> **Druhá půlka téhle věty byla nepravdivá a opravilo ji #478.** `claude` si o hlášení myši
+> **řekl** (to sedí), ale `SwiftTerm` kolečko aplikaci **nikdy nepředá** — `MacTerminalView`
+> `scrollWheel` roluje jen vlastní historii, a ta v alternativním bufferu není. Kolečko se tedy
+> nedoručovalo nikam a „rolovat se má uvnitř `claude`“ znamenalo, že se nedá rolovat vůbec.
+> Sonda to nechytla proto, že se ptala na **výřez emulátoru** (`yDisp` 0 → 0), což je nad
+> alternativním bufferem správná odpověď na obou stranách — pravdivou od nepravdivé ji dělí až
+> otázka *co odešlo do procesu*, a ta v sondě nebyla. Co s tím dál, je v sekci níž.
+
+### Kolečko aplikaci v terminálu (#478)
+
+Dvě chyby vedle sebe, obě se projeví jako „v zásuvce nejde rolovat“, a **každá potřebuje jinou
+opravu** — proto se drží zvlášť i v kódu.
+
+#### 1. Knihovna kolečko aplikaci nepředá
+
+`MacTerminalView.scrollWheel` roluje **jen scrollback** (`scrollUp`/`scrollDown`). Kliknutí a pohyb
+myši knihovna aplikaci předává (`encodeMouseEvent`, `sendEvent`), kolečko ne — je to chybějící
+půlka hlášení myši. `Terminal.app` i iTerm ho překládají na tlačítka **64 nahoru / 65 dolů**
+a posílají; proto v nich rolování nad `claude` funguje.
+
+Opravou je hlásit totéž, ale **musí se to vzít dřív než knihovna**:
+
+- **`scrollWheel(with:)` se přebít nedá** (ověřeno překladačem: `overriding non-open instance
+  method outside of its defining module`). `TerminalView` je `open`, jenže tuhle metodu deklaruje
+  jako `public override` — a `public` člen se z cizího modulu přepsat nesmí. Kolečko se proto bere
+  **lokálním odběrem** (`NSEvent.addLocalMonitorForEvents(matching: .scrollWheel)`), který je
+  volaný **před** doručením do okna; vrácené `nil` znamená, že se k `MacTerminalView` událost
+  nedostane.
+- **Zamítnutá varianta**: podhled přes plochu, který si o kolečko řekne v `hitTest`u. `hitTest`
+  typ události nezná, takže se to dá říct jedině přes `NSApp.currentEvent` — a ten je za hit
+  testem jen **naposledy doručená** událost, tedy domněnka. Pořadí odběru je proti tomu popsané
+  v dokumentaci API.
+- **Kdo si událost vezme, rozhoduje `claimsWheel`, a napřed obdélníkem.** Odběr je na celý proces,
+  takže jím projde **každá** otočka kolečka v aplikaci — i ta nad diffem, kde je cena projíždění
+  měřená věc (#469). Pořadí je proto `event.window === window` → `visibleRect.contains(…)` →
+  teprve pak hit test celého okna. **`visibleRect`, ne `bounds`**: plocha je zanořená ve SwiftUI
+  a zásuvka ji umí oříznout, takže `bounds` by si řekly i o kolečko nad kusem, který není vidět.
+  (Dvě relace vedle sebe to řešit nemusí — plocha se klíčuje `.id(activeSlot)`, takže v hierarchii
+  je jen ta aktivní a té odcházející odběr sundá `viewDidMoveToWindow(nil)`.) A **`hitTest` bere bod
+  v souřadnicích nadřazeného view**, tedy `locationInWindow` beze změny — převádět ho do souřadnic
+  `contentView` je tichá chyba, která v okně s titulkem sedne a s `fullSizeContentView` ne.
+- **Rychlost je v počtu hlášení.** Jedno hlášení nese jen „cvaklo“, takže se posílá tolikrát,
+  o kolik řádků by se posunula historie (`Policy.terminalWheelLines`, opsaná
+  `calcScrollingVelocity` — v knihovně `private`). Bez toho by se v `claude` rolovalo o řádek na
+  otočku, kdežto v shellu vedle po trojicích: dvě různé rychlosti v jedné ploše. Že se opsaná
+  křivka s knihovnou nerozešla, hlídá test **chováním**
+  (`TerminalWheelTests.theCurveStillMatchesTheLibrary`) — a stupeň se určuje z **celé části**
+  (`Int(abs(deltaY))`), ne ze zaokrouhlení.
+- **Historii roluje náš kód, i když se nehlásí nic.** Událost se spolkne vždycky — je to kvůli
+  pořadí: zaklesnutí výřezu (níž) se musí zapsat **po** posunu, kdežto propuštěná událost by se
+  rolovala až po návratu z odběru a zapsala by se poloha před ním.
+- **Rozhoduje se při každé události**, ne jednou při vzniku plochy: `mouseMode` je stav emulátoru,
+  který si mění aplikace pod ním — `claude` ho zapne při startu a při odchodu vypne. Bere se
+  k tomu i `allowMouseReporting`, tedy vypínač knihovny kvůli výběru textu myší.
+- **`isolated deinit`, ne `MainActor.assumeIsolated`.** Odběr sundává `viewDidMoveToWindow(nil)`;
+  `deinit` je pojistka pro plochu, která zanikne i s oknem. Běžný `deinit` je nezaizolovaný, takže
+  by na cizím vlákně `assumeIsolated` **spadl** a `NSEvent.removeMonitor` by k tomu byl voláním
+  AppKitu mimo hlavní vlákno. A **návratová hodnota `assumeIsolated` musí být `Sendable`**, což
+  `NSEvent` není (`conformance of 'NSEvent' to 'Sendable' is unavailable`) — dovnitř proto jde
+  rozhodnutí, ven `Bool`, a událost se zahazuje až venku.
+
+#### 2. `Terminal.userScrolling` se v `SwiftTerm 1.11.2` nikdy nenastaví
+
+Druhá půlka, a bez ní by ta první k ničemu nebyla: **odrolovaný pohled se vrátil dolů dřív, než ho
+stačil kdo přečíst.**
+
+`Terminal` má na to vlastní příznak. Čte se **třikrát** (`Terminal.swift:5074`, `5084` a `5110`,
+všechno uvnitř `scroll()`) a rozhoduje o tom, jestli nový řádek stáhne výřez dolů
+(`buffer.yDisp = buffer.yBase`). **Nezapisuje se do něj z jediného místa.** Zápisy, které v balíčku
+jsou (`AppleTerminalView.swift:1497` a `1514`, uvnitř `scroll(toPosition:)`), míří na
+**stejnojmennou vlastnost plochy** (`MacTerminalView.swift:493`, `iOSTerminalView.swift:1142`) —
+a tu zase nečte nikdo. Jsou to dvě mrtvé poloviny jednoho příznaku.
+
+Změřeno chováním, ne jen čtením kódu (`TerminalWheelTests.theLibrarySnapsTheViewportBack`, plocha
+800×300 = **21 řádků**, 400 nakrmených řádků): po `scrollUp(lines: 20)` je `yDisp` **360**, po
+jediném dalším řádku **381**, tedy dno. Jeden řádek výstupu tedy zahodí celou stránku odrolování.
+
+Kompenzují to čtyři místa v `EmbeddedTerminalView`:
+
+- **`pinnedRow`** — kde výřez zůstal (`Policy.terminalViewportPin`). **Dole se nezaklesává**, tam
+  je „jet s výstupem“ ta správná odpověď; zaklesnutí se proto ruší tím, že se člověk vrátí dolů.
+- **`dataReceived(slice:)`** vrátí výřez zpátky **až po `super`** (teprve nakrmení s ním hne)
+  a jedině **dolů → nahoru** (`Policy.terminalViewportRewind`), takže rolování mezitím tuhle cestu
+  nikdy nepřebije. Měřeno na téže scéně: `yDisp` 377 → 377.
+- **`bufferActivated(source:)` zaklesnutí zahodí.** Bez toho by poloha z doby před `claude` ožila
+  ve chvíli, kdy se člověk vrátí do shellu, a výřez by se sám odrolil nahoru — v alternativním
+  bufferu se `yDisp` drží na nule, takže se tam zapamatovaný řádek neuplatní a jen čeká.
+- **`send(source:data:)` zaklesnutí přepočítá, ne zruší natvrdo.** `send(data:)` srovná výřez na
+  kurzor (`ensureCaretIsVisible`) **ještě před** tím voláním, takže po vstupu od člověka jsme dole
+  a zaklesnutí padá — napsat něco znamená chtít vidět, co to udělá. Odpověď emulátoru na dotaz
+  aplikace (`DA`, `XTVERSION`) touhle cestou nejde, takže odrolovaný pohled nechá být.
+
+**Až knihovna svůj příznak opraví, jde tahle půlka pryč** — a pozná se to podle toho, že
+`theLibrarySnapsTheViewportBack` **spadne**. Je to test, který schválně tvrdí chybu cizího kódu.
 
 ### Změna velikosti — co se u #460 naměřilo
 

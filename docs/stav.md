@@ -5500,6 +5500,9 @@ sondy hlásila jako chybu, která není), scrollback má **500 řádků** a vý�
 se **doručuje jemu** a terminál nemá kam couvnout — alternativní buffer je z definice bez historie.
 Tak se chová `Terminal.app` i `iTerm`.
 
+> **Ten závěr byl z poloviny nepravdivý a opravilo ho #478** (níž): `claude` si o hlášení myši
+> doopravdy řekl, ale `SwiftTerm` mu kolečko **nikdy nepředal**, takže se nedoručovalo nikam.
+
 Testů **4373**, všechny zelené — z toho **53 nových**: `Policy` výčtem (kdo smí do zásuvky, co se
 vytlačí, co je na záložce, co se řekne), store (**druhá session první nepřebije**, zavření záložky
 zabije i neviditelnou relaci, plný strop novou nepustí) a sonda velikosti.
@@ -5574,3 +5577,57 @@ tedy u PR, na kterém review ještě neběželo. Do pty se v harnessu psát ned�
 **Cestou se opravily zapomenuté značky konfliktu v tomhle souboru** — `<<<<<<< HEAD`, `=======`
 a `>>>>>>> origin/main` se do `main`u dostaly s #477 a rozdělovaly záznamy #476 a #460. Odstranily
 se jen ty tři řádky, obsah obou stran zůstal.
+
+## #478 — kolečko se v zásuvce nepředalo aplikaci, která si o hlášení myši řekla
+
+**Opravuje závěr z #460 a je to změna zjištění, ne názoru.** Tam se „nejde rolovat nad běžícím
+`claude`“ uzavřelo jako správné chování s odůvodněním, že si `claude` zapíná alternativní buffer
+**a hlášení myši**, takže kolečko dostává on. **První polovina platila, druhá ne.**
+
+**`SwiftTerm` kolečko aplikaci nepředá nikdy.** `MacTerminalView.scrollWheel` roluje jen vlastní
+scrollback — a ten v alternativním bufferu z definice není, takže se nestalo **nic** a `claude`
+o kolečku nevěděl. Kliknutí a pohyb myši knihovna přitom předává; chybí jí právě ta jedna půlka.
+`Terminal.app` i iTerm kolečko překládají na tlačítka **64 nahoru / 65 dolů** a posílají, proto
+v nich rolování nad `claude` funguje.
+
+**Sonda z #460 to nechytla, protože se ptala na špatnou stranu**, a to je z celého issue to
+nejpřenositelnější zjištění. Měřila `yDisp`, tedy stav **emulátoru** — a nad alternativním bufferem
+je nula správná odpověď **jak když to funguje, tak když ne**. Rozdíl je vidět jedině na tom, **co
+odešlo do procesu**, a na to se neptal nikdo. Odtud pravidlo v `docs/testovani.md`: měřidlo, které
+vydá tutéž hodnotu pro obě odpovědi, netvrdí nic — a vypadá u toho zeleně.
+
+**`scrollWheel(with:)` se přebít nedá.** `TerminalView` je sice `open`, ale tuhle metodu deklaruje
+jako `public override`, a `public` člen se z cizího modulu přepsat nesmí (`overriding non-open
+instance method outside of its defining module`, ověřeno překladačem). Kolečko se proto bere
+**lokálním odběrem** (`NSEvent.addLocalMonitorForEvents`), který je volaný **před** doručením do
+okna. **Zamítnutá** byla druhá cesta — podhled, který si o kolečko řekne v `hitTest`u —, protože
+`hitTest` typ události nezná a šlo by to říct jedině přes `NSApp.currentEvent`, tedy přes
+domněnku. Kdo si otočku vezme, rozhoduje `claimsWheel`: **napřed obdélník `visibleRect`, teprve pak
+hit test**, protože odběr je na celý proces a projde jím i každá otočka nad diffem (#469).
+
+**Druhá půlka „nejde rolovat“ je chyba v knihovně a měřila se zvlášť.** `Terminal.userScrolling` se
+v `SwiftTerm 1.11.2` čte **třikrát** a **nezapisuje se do něj z jediného místa** — zápisy, které
+v balíčku jsou, míří na stejnojmennou vlastnost **plochy**, a tu zase nikdo nečte. Jsou to dvě mrtvé
+poloviny jednoho příznaku, takže každý přiteklý řádek srovná výřez na dno. Změřeno chováním na ploše
+800×300 (**21 řádků**) se 400 nakrmenými řádky: po `scrollUp(lines: 20)` je `yDisp` **360**, po
+jediném dalším řádku **381**. Jeden řádek výstupu tedy zahodí celou stránku odrolování. Kompenzuje
+to zaklesnutí výřezu (`pinnedRow`, `Policy.terminalViewportPin`/`terminalViewportRewind`), které se
+vrací jedině **dolů → nahoru**, ruší se návratem na dno a **zahazuje se při přepnutí bufferu** —
+jinak by poloha z doby před `claude` ožila ve chvíli, kdy se člověk vrátí do shellu.
+
+**Rychlost je v počtu hlášení**, protože hlášení myši nese jen „cvaklo“. Posílá se proto tolikrát,
+o kolik řádků by se posunula historie; křivka je opsaná ze `SwiftTermu` (`calcScrollingVelocity` je
+`private`) a že se s ním nerozešla, hlídá test **chováním** — knihovní `scrollWheel` se pustí
+napřímo a porovná se posun výřezu.
+
+**Zapomenuté značky konfliktu z #477 se v tomhle souboru opravily dvakrát nezávisle** — tady i na
+#479, které mergovalo dřív. Obě větve smazaly tytéž tři řádky, takže je git sloučil bez konfliktu;
+zapsané to zůstává u #479 výš.
+
+Testů **4394**, všechny zelené — z toho **21 nových**: `Policy` výčtem (hlásit / nehlásit, směr,
+počet, zaklesnutí a návrat) a plocha bez pty (co odešlo do procesu, shoda křivky s knihovnou,
+zaklesnutý výřez a **test, který schválně tvrdí chybu cizího kódu**). Všechny tři nové kusy chování
+se ověřily **vloženou regresí**.
+
+**Co ověřuje jedině člověk**: že se událost k `handle(wheel:)` doopravdy dostane. Doručování
+událostí testovací host nerozpohybuje — je to tatáž hranice jako u fokusu (#184).

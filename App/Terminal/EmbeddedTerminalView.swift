@@ -14,7 +14,10 @@ import SwiftTerm
 /// `LocalProcessTerminalView` si `terminalDelegate` nastavuje sám a proxuje ho do `processDelegate`
 /// — proto se do prvního nesahá; přepsat ho znamená rozbít vnitřek knihovny (píše to v její
 /// dokumentaci).
-final class EmbeddedTerminalView: LocalProcessTerminalView {
+///
+/// **Není `final`, a je to kvůli testům** (#478): co odsud odejde do procesu, se bez pty nedá
+/// přečíst jinak než tím, že si testovací podtřída přepíše `send(source:data:)`.
+class EmbeddedTerminalView: LocalProcessTerminalView {
     /// Komu se hlásí fokus. Na něm stojí to, že se okenní zkratky na `Control` neuplatní
     /// (`Policy.shortcutYieldsToTerminal`).
     var focusChanged: (@MainActor (Bool) -> Void)?
@@ -80,6 +83,245 @@ final class EmbeddedTerminalView: LocalProcessTerminalView {
         guard process.running, process.childfd >= 0 else { return false }
         send(txt: line + "\r")
         return true
+    }
+
+    // MARK: - Kolečko (#478)
+
+    /// Řádek v bufferu, u kterého výřez zůstane, i když pod ním přiteče výstup. `nil` = jedeme
+    /// s ním, jako to dělá knihovna sama.
+    ///
+    /// Existuje proto, že `SwiftTerm 1.11.2` má na tohle vlastní příznak (`Terminal.userScrolling`),
+    /// ale **nikdy ho nenastaví** — čte se na třech místech a nezapisuje se do něj z jediného.
+    /// Každý řádek, který přiteče, proto srovná výřez dolů (`buffer.yDisp = buffer.yBase`), a nad
+    /// programem, který si spodek plochy překresluje sám, z toho je „kolečko nefunguje“: odrolovaný
+    /// pohled se vrátí dřív, než ho stačí kdo přečíst. Měřeno na `claude` v zásuvce, viz
+    /// `docs/testovani.md`.
+    ///
+    /// **Obyčejná vlastnost plochy, ne sledovaný stav** — mění se při každé otočce kolečka, takže
+    /// v observable stavu by z ní byl přepočet okna na každý snímek rolování (#252, #472).
+    private var pinnedRow: Int?
+
+    /// Stojí výřez dole, tedy jede s výstupem?
+    ///
+    /// `canScroll` je v tom schválně: v alternativním bufferu a nad plochou bez historie **není co
+    /// držet**, takže „dole“ je tam jediná pravdivá odpověď.
+    private var followsOutput: Bool { !canScroll || scrollPosition >= 1 }
+
+    /// Odběr kolečka, dokud je plocha v okně. `Any?` je neprůhledný token, který vydá `NSEvent`.
+    private var wheelMonitor: Any?
+
+    /// **`scrollWheel` se přebít nedá, a je to vlastnost knihovny, ne přehlédnutí.**
+    /// `TerminalView` je sice `open`, ale tuhle metodu deklaruje jako `public override` — a `public`
+    /// se z cizího modulu přepsat nesmí (`overriding non-open instance method outside of its
+    /// defining module`, ověřeno překladačem). Událost se proto bere **dřív, než se k ploše
+    /// dostane**, lokálním odběrem: ten je dokumentovaně volaný **před** doručením do okna, takže
+    /// vrácené `nil` znamená, že se k `MacTerminalView.scrollWheel` událost vůbec nedostane.
+    ///
+    /// Zamítnuté bylo položit přes plochu podhled, který si o kolečko řekne v `hitTest`u:
+    /// `hitTest` typ události nezná, takže „ber jen kolečko“ se tou cestou dá říct jedině přes
+    /// `NSApp.currentEvent` — a ten je za hit testem jen **naposledy doručená** událost, tedy
+    /// domněnka. Pořadí odběru je proti tomu popsané v dokumentaci.
+    ///
+    /// Odběr žije jen s oknem — plocha mimo okno nemá co zachytávat.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopWatchingWheel() } else { startWatchingWheel() }
+    }
+
+    private func startWatchingWheel() {
+        guard wheelMonitor == nil else { return }
+        // **Dovnitř `assumeIsolated` jde rozhodnutí, ven `Bool`.** Návratová hodnota musí být
+        // `Sendable` a `NSEvent` není (`conformance of 'NSEvent' to 'Sendable' is unavailable`),
+        // takže se událost zahazuje až tady venku. Odběr je volaný z doručování událostí, tedy
+        // z hlavního vlákna — `assumeIsolated` je tvrzení o tom, ne převod fronty.
+        //
+        // **`?? false` je odpověď, ne zametená chyba**: `self` je slabé a zaniklá plocha nemá co
+        // zachytávat, takže se událost propustí dál — přesně jako by odběr neexistoval.
+        wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            let taken = MainActor.assumeIsolated { self?.takeWheel(event) ?? false }
+            return taken ? nil : event
+        }
+    }
+
+    private func stopWatchingWheel() {
+        guard let wheelMonitor else { return }
+        NSEvent.removeMonitor(wheelMonitor)
+        self.wheelMonitor = nil
+    }
+
+    /// Pojistka pro plochu, která zanikne i s oknem — tam `viewDidMoveToWindow(nil)` přijít nemusí.
+    ///
+    /// **`isolated deinit`, ne `MainActor.assumeIsolated`**: běžný `deinit` je nezaizolovaný, takže
+    /// by na cizím vlákně `assumeIsolated` **spadl** a `NSEvent.removeMonitor` by na něm byl navíc
+    /// volání AppKitu mimo hlavní vlákno. Izolovaný `deinit` si o hlavní actor řekne sám.
+    isolated deinit {
+        stopWatchingWheel()
+    }
+
+    /// Vezmi si tuhle otočku, pokud je naše. `false` = ať jde dál, kam měla.
+    private func takeWheel(_ event: NSEvent) -> Bool {
+        guard claimsWheel(event) else { return false }
+        handle(wheel: event)
+        return true
+    }
+
+    /// Je tahle otočka kolečka naše? Rozhoduje **poloha kurzoru**, ne fokus — tak se kolečko
+    /// v macOS doručuje a tak se chová i knihovna.
+    ///
+    /// **Napřed obdélník, teprve pak hit test**, a není to mikrooptimalizace: odběr je na celý
+    /// proces, takže tímhle projde **každá** otočka kolečka v aplikaci — i ta nad diffem, kde je
+    /// cena projíždění měřená věc (#469). `visibleRect` je obdélníkové porovnání a odmítne skoro
+    /// všechno; hit test celého okna se pustí teprve nad plochou.
+    ///
+    /// **`visibleRect`, ne `bounds`**: plocha je zanořená ve SwiftUI a zásuvka ji umí oříznout,
+    /// takže `bounds` by si řekly i o kolečko nad kusem, který není vidět. Hit test za tím pak
+    /// odpoví na druhou půlku: neleží nad plochou ještě něco (popover, sheet)?
+    private func claimsWheel(_ event: NSEvent) -> Bool {
+        guard let window, event.window === window else { return false }
+        guard visibleRect.contains(convert(event.locationInWindow, from: nil)) else { return false }
+        // `hitTest` bere bod v souřadnicích **nadřazeného** view, a nadřazený obsahovému je rám
+        // okna — tedy `locationInWindow` beze změny. Převádět ho do souřadnic `contentView` je
+        // tichá chyba: v okně s titulkem to sedne, s `fullSizeContentView` ne.
+        guard let hit = window.contentView?.hitTest(event.locationInWindow) else { return false }
+        return hit.isDescendant(of: self)
+    }
+
+    /// Kolečko — buď hlášení myši aplikaci, nebo vlastní historie.
+    ///
+    /// **Knihovna kolečko aplikaci nepředá nikdy** (`MacTerminalView.scrollWheel` roluje jen
+    /// historii), přestože kliknutí a pohyb myši předává. Program, který si o myš řekl, tak
+    /// dostával všechno kromě kolečka — tohle je ta chybějící půlka.
+    ///
+    /// **Ptá se při každé události**, ne jednou při vzniku plochy: `mouseMode` si mění aplikace pod
+    /// námi. `allowMouseReporting` je vypínač knihovny (kvůli výběru textu myší) a platí i tady.
+    ///
+    /// Historii odroluje **tenhle kód, ne knihovna**, i když se nehlásí nic. Je to kvůli pořadí:
+    /// zaklesnutí výřezu se musí zapsat **po** posunu, kdežto propuštěná událost by se rolovala až
+    /// po návratu odsud a zapsala by se poloha před ním. `scrollUp`/`scrollDown` jsou veřejné
+    /// a `Policy.terminalWheelLines` je táž křivka, jakou knihovna počítá sama (hlídá to test),
+    /// takže se tím nemění chování — jen se to děje ve známém pořadí.
+    ///
+    /// **Internal, ne private, a je to kvůli testům** (#478): bez pty se tahle vidlička nedá projet
+    /// jinak než zavoláním napřímo, protože odběr událostí testovací host nerozpohybuje.
+    func handle(wheel event: NSEvent) {
+        guard
+            let report = Policy.terminalWheelReport(
+                deltaY: event.deltaY,
+                reportsMouse: allowMouseReporting && terminal.mouseMode != .off,
+                rows: terminal.rows
+            )
+        else {
+            scrollHistory(deltaY: event.deltaY)
+            return
+        }
+        send(wheel: report, at: event)
+    }
+
+    /// Vlastní historie terminálu — to, co se dělo dosud, když aplikace o myš nestojí.
+    private func scrollHistory(deltaY: CGFloat) {
+        guard deltaY != 0, deltaY.isFinite else { return }
+        let lines = Policy.terminalWheelLines(deltaY: deltaY, rows: terminal.rows)
+        if deltaY > 0 { scrollUp(lines: lines) } else { scrollDown(lines: lines) }
+        pinViewport()
+    }
+
+    /// Pošle hlášení kolečka na buňku pod kurzorem, `count`krát za sebou.
+    ///
+    /// **Tolikrát, o kolik řádků by se posunula historie** — hlášení nese jen „cvaklo“, takže
+    /// rychlost je v počtu. Jedno na událost by znamenalo, že se v `claude` nebo `htop` roluje
+    /// řádek po řádku, kdežto v shellu vedle po trojicích.
+    private func send(wheel report: TerminalWheelReport, at event: NSEvent) {
+        let modifiers = event.modifierFlags
+        let buttonFlags = terminal.encodeButton(
+            button: report.button,
+            release: false,
+            shift: modifiers.contains(.shift),
+            meta: modifiers.contains(.option),
+            control: modifiers.contains(.control)
+        )
+        let target = wheelTarget(of: event)
+        for _ in 0..<report.count {
+            terminal.sendEvent(
+                buttonFlags: buttonFlags,
+                x: target.column,
+                y: target.row,
+                pixelX: target.pixelX,
+                pixelY: target.pixelY
+            )
+        }
+    }
+
+    /// Buňka pod kurzorem. Hlášení myši je **adresné** — aplikace s víc oblastmi (třeba `tmux`
+    /// s panely) podle toho pozná, čeho se kolečko týká.
+    private func wheelTarget(of event: NSEvent) -> (column: Int, row: Int, pixelX: Int, pixelY: Int) {
+        let point = convert(event.locationInWindow, from: nil)
+        let cell = cellSize
+        let x = min(max(point.x, 0), bounds.width)
+        let y = min(max(point.y, 0), bounds.height)
+        return (
+            column: min(Int(x / cell.width), max(0, terminal.cols - 1)),
+            row: min(Int((bounds.height - y) / cell.height), max(0, terminal.rows - 1)),
+            pixelX: Int(x),
+            pixelY: Int(bounds.height - y)
+        )
+    }
+
+    /// Rozměr jedné buňky.
+    ///
+    /// **Dopočítává se z `getOptimalFrameSize()`**, protože `cellDimension` knihovny je `internal`.
+    /// Ta metoda vrací `buňka × (cols, rows)` a k šířce **přičítá posuvník** — a ten se proto měří
+    /// na skutečném `NSScroller`u v podhledech, ne z konstanty: šířku si posuvník bere ze stylu,
+    /// který si knihovna drží u sebe (taky `internal`), takže opsané číslo by se s ní umělo rozejít
+    /// potichu. Dělit `bounds` by bylo o chlup jednodušší a **špatně**: řádků se vejde
+    /// `floor(výška / buňka)`, takže zbytek pod posledním řádkem by se rozpustil do všech a spodní
+    /// řádky by vycházely o jeden vedle.
+    private var cellSize: CGSize {
+        let optimal = getOptimalFrameSize().size
+        let scroller = subviews.compactMap { $0 as? NSScroller }.first?.frame.width ?? 0
+        return CGSize(
+            width: max((optimal.width - scroller) / CGFloat(max(1, terminal.cols)), 1),
+            height: max(optimal.height / CGFloat(max(1, terminal.rows)), 1)
+        )
+    }
+
+    /// Zapamatuje si, kde výřez zůstal.
+    private func pinViewport() {
+        pinnedRow = Policy.terminalViewportPin(row: terminal.buffer.yDisp, atBottom: followsOutput)
+    }
+
+    /// Přepnutí mezi normálním a alternativním bufferem (`ESC[?1049h/l`) — **zaklesnutí padá**.
+    ///
+    /// Bez toho by zaklesnutí přežilo start celoobrazovkového TUI: `claude` má vlastní buffer, ve
+    /// kterém se `yDisp` drží na nule, takže by se v něm zapamatovaný řádek neuplatnil — a ožil by
+    /// až po jeho skončení, kdy je poloha z doby před ním dávno nesmyslná. Výřez by se tedy sám od
+    /// sebe odrolil nahoru ve chvíli, kdy se člověk vrátil do shellu.
+    override func bufferActivated(source: Terminal) {
+        super.bufferActivated(source: source)
+        pinnedRow = nil
+    }
+
+    /// Výstup z pty. Po nakrmení se výřez vrací tam, kde ho člověk nechal.
+    ///
+    /// **Až po `super`**, protože teprve to nakrmení výřezem hne. Vrací se jedině **dolů → nahoru**
+    /// (`terminalViewportRewind`), takže rolování mezitím tahle cesta nikdy nepřebije.
+    override func dataReceived(slice: ArraySlice<UInt8>) {
+        super.dataReceived(slice: slice)
+        let rewind = Policy.terminalViewportRewind(pinned: pinnedRow, current: terminal.buffer.yDisp)
+        guard rewind > 0 else { return }
+        scrollUp(lines: rewind)
+    }
+
+    /// Cokoli, co jde z plochy do procesu — klávesy, vložený text, řádka z `▶` i **odpověď emulátoru
+    /// na dotaz aplikace**.
+    ///
+    /// Zaklesnutí se tu **přepočítá, ne zruší natvrdo**, a ten rozdíl je celý smysl: `send(data:)`
+    /// srovná výřez na kurzor (`ensureCaretIsVisible`) **ještě před** tímhle voláním, takže po
+    /// vstupu od člověka jsme dole a zaklesnutí padá — napsat něco znamená chtít vidět, co to
+    /// udělá. Odpověď na dotaz (`DA`, `XTVERSION`) tou cestou nejde, takže odrolovaný pohled
+    /// nechá být.
+    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        pinViewport()
+        super.send(source: source, data: data)
     }
 
     // MARK: - Start
