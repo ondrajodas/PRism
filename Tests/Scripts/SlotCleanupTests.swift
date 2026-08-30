@@ -233,6 +233,134 @@ struct SlotCleanupTests {
         return result.exitCode == 0
     }
 
+    // MARK: - Záznamy v ~/.claude.json
+
+    /// Konfigurace Claude Code v podstrčeném `HOME`, ve které leží vedle sebe **záznamy slotu
+    /// a záznamy, kterých se úklid nesmí dotknout** (#484).
+    ///
+    /// Klíče se skládají `ClaudeWorkspaceTrust.key(for:)`, tedy **toutéž funkcí, kterou je do
+    /// souboru zapisuje aplikace** — je to rozvinutá cesta (`realpath`), a `${TMPDIR}` testovacího
+    /// hosta leží za symlinkem (`/var` → `/private/var`). Klíč složený od oka by se s tím, co
+    /// v souboru doopravdy stojí, minul.
+    ///
+    /// Kořen slotu je tu schválně **dvakrát**: jednou jak ho vidí skript ze svého `${HOME}`
+    /// a jednou rozvinutý. Obě podoby musí zmizet, protože která z nich v souboru stojí, závisí
+    /// na tom, jestli domovská složka leží za symlinkem.
+    private struct ClaudeConfigDecoy {
+        let file: URL
+        /// Klíče, které se mají smazat, a klíče, které musí zůstat.
+        let doomed: [String]
+        let spared: [String]
+
+        static func make(home: URL, slot: String) throws -> ClaudeConfigDecoy {
+            let support = home.appending(path: "Library/Application Support")
+            let cache = support.appending(path: "PRism-\(slot)")
+            let worktree = cache.appending(path: "worktrees/cli-gh-1")
+            // Slot, jehož jméno začíná tím naším — bez lomítka v porovnání by ho úklid vzal s sebou.
+            let sibling = support.appending(path: "PRism-\(slot)b/repos/cli-gh.git")
+            let main = support.appending(path: "PRism/repos/cli-gh.git")
+            for directory in [worktree, sibling, main] {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+
+            let doomed = [
+                cache.path(percentEncoded: false),
+                ClaudeWorkspaceTrust.key(for: cache),
+                ClaudeWorkspaceTrust.key(for: worktree),
+            ]
+            let spared = [
+                ClaudeWorkspaceTrust.key(for: sibling),
+                ClaudeWorkspaceTrust.key(for: main),
+                "/Users/nekdo/Projects/cizi-projekt",
+            ]
+            var projects: [String: Any] = [:]
+            for key in doomed + spared {
+                projects[key] = ["hasTrustDialogAccepted": true]
+            }
+            let root: [String: Any] = ["numStartups": 7, "projects": projects]
+            let file = home.appending(path: ".claude.json")
+            try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted]).write(to: file)
+            return ClaudeConfigDecoy(file: file, doomed: doomed, spared: spared)
+        }
+
+        func projectKeys() throws -> Set<String> {
+            let decoded = try JSONSerialization.jsonObject(with: Data(contentsOf: file))
+            let root = decoded as? [String: Any]
+            return Set((root?["projects"] as? [String: Any])?.keys.map { $0 } ?? [])
+        }
+
+        /// Co v souboru zůstalo mimo `projects` — přepis nesmí zahodit zbytek konfigurace.
+        func startups() throws -> Int? {
+            let decoded = try JSONSerialization.jsonObject(with: Data(contentsOf: file))
+            return (decoded as? [String: Any])?["numStartups"] as? Int
+        }
+    }
+
+    /// Aplikace zapisuje do `~/.claude.json` důvěru ke složkám **své** cache (#460), od #479 ke
+    /// každému pracovnímu stromu review zvlášť — takže záznamů po slotu zbývají desítky a bundle,
+    /// cache ani doména je s sebou nevezmou (#484).
+    ///
+    /// **Nejcennější půlka tohohle testu je ta negativní**: sousední slot, jehož jméno začíná tím
+    /// naším, hlavní instance a cizí projekt musí zůstat. Ubraný cizí klíč by byl potichu — nikdo
+    /// se na ten soubor nedívá, dokud se `claude` nezeptá na důvěru ke složce, kterou už znal.
+    @Test("Záznamy slotu v ~/.claude.json zmizí, cizí ani hlavní instance ne")
+    func deletesSlotProjectsFromClaudeConfig() async throws {
+        let decoy = try MainInstanceDecoy()
+        let slot = scratchSlot()
+        let config = try ClaudeConfigDecoy.make(home: decoy.root.url, slot: slot)
+
+        let result = try await cleanup([slot], home: decoy.root.url)
+
+        #expect(result.exitCode == 0)
+        #expect(result.standardOutput.contains("smazáno záznamů v \(config.file.path)"))
+        let remaining = try config.projectKeys()
+        for key in config.doomed {
+            #expect(!remaining.contains(key), "záznam slotu zůstal: \(key)")
+        }
+        for key in config.spared {
+            #expect(remaining.contains(key), "smazal se cizí záznam: \(key)")
+        }
+        #expect(try config.startups() == 7, "přepis zahodil zbytek konfigurace")
+        #expect(decoy.untouched, "Hlavní instance se změnila: \(decoy.fingerprint())")
+    }
+
+    /// Soubor, ve kterém po slotu nic není, se **nepřepisuje vůbec** — porovnávají se bajty, takže
+    /// by test spadl i na pouhém přeskládání klíčů. Přepsat cizí konfiguraci bez důvodu je zbytečné
+    /// riziko: `claude` do ní zapisuje sám a každý zápis je okno, ve kterém se dá o cizí změnu přijít.
+    @Test("Konfigurace bez záznamů slotu zůstane bajt po bajtu stejná")
+    func leavesClaudeConfigWithoutSlotKeysAlone() async throws {
+        let decoy = try MainInstanceDecoy()
+        let file = decoy.root.url.appending(path: ".claude.json")
+        let content = "{\"projects\":{\"/Users/nekdo/Projects/cizi\":{\"hasTrustDialogAccepted\":true}}}"
+        try content.write(to: file, atomically: true, encoding: .utf8)
+
+        let result = try await cleanup([scratchSlot()], home: decoy.root.url)
+
+        #expect(result.exitCode == 0)
+        #expect(result.standardOutput.contains("záznam po slotu v něm nebyl"))
+        #expect(try String(contentsOf: file, encoding: .utf8) == content)
+    }
+
+    /// **Na soubor, kterému skript nerozumí, se nesahá** — tatáž pojistka, jakou má zápis
+    /// v aplikaci (`ClaudeWorkspaceTrust`). Ztráta je pár záznamů, které v konfiguraci zůstanou
+    /// a jdou smazat ručně; přepsaný soubor by byl ztráta cizí práce. Hlásí se to a úklid
+    /// pokračuje, protože zbytek slotu se uklidit má.
+    @Test("Nečitelná konfigurace se nepřepíše, jen ohlásí")
+    func keepsUnreadableClaudeConfig() async throws {
+        let decoy = try MainInstanceDecoy()
+        let file = decoy.root.url.appending(path: ".claude.json")
+        let content = "tohle není JSON"
+        try content.write(to: file, atomically: true, encoding: .utf8)
+
+        let result = try await cleanup([scratchSlot()], home: decoy.root.url)
+
+        #expect(result.exitCode == 3)
+        #expect(result.standardError.contains("nedá přečíst jako objekt JSON"))
+        #expect(try String(contentsOf: file, encoding: .utf8) == content)
+        #expect(result.standardOutput.contains("doména v UserDefaults: nebyla"))
+        #expect(result.standardOutput.contains("zbývá to, co je vypsané výš"))
+    }
+
     // MARK: - Chybové větve
 
     /// Chybějící `lsregister` je stav, který se **hlásí, ale nepokládá skript**: kvůli záznamu
@@ -277,9 +405,27 @@ struct SlotCleanupTests {
         #expect(lines.contains { $0.contains("CACHE=") && $0.contains("${NAME}") })
         #expect(lines.contains { $0.contains("PLIST=") && $0.contains("${BUNDLE_ID}") })
 
-        let slotScoped = ["${INSTALLED}", "${CACHE}", "${PLIST}", "${BUNDLE_ID}"]
+        // `${CLAUDE_TEMP}` je ta jediná výjimka a **není mimo slot**: je to soubor, který skript sám
+        // vyrobil `mktemp`em vedle konfigurace a maže ho, když se přepis nepovede. Že vzniká
+        // `mktemp`em, tvrdí řádek níž — bez toho by ta výjimka pustila do výčtu jakoukoli cestu.
+        #expect(lines.contains { $0.contains("CLAUDE_TEMP=\"$(mktemp \"${CLAUDE_CONFIG}.prism-XXXXXX\")\"") })
+        #expect(lines.contains { $0.contains("CLAUDE_CONFIG=") && $0.contains("${HOME}") })
+
+        let slotScoped = ["${INSTALLED}", "${CACHE}", "${PLIST}", "${BUNDLE_ID}", "${CLAUDE_TEMP}"]
         for line in lines where line.contains("rm -rf") || line.contains("rm -f") || line.contains("defaults delete") {
             #expect(slotScoped.contains { line.contains($0) }, "mazání mimo slot: \(line)")
+        }
+
+        // **Záznamy v `~/.claude.json` se nemažou `rm`em, takže je výčet výš nevidí** (#484) —
+        // zahazuje je filtr `jq`. Rozsah mu drží dvě proměnné složené ze slotu a **lomítko**
+        // v porovnání: bez něj by úklid slotu `a` vzal i záznamy slotu `ab`.
+        #expect(lines.contains { $0.contains("CACHE_KEY=\"${CACHE}\"") })
+        #expect(lines.contains { $0.contains("CACHE_KEY_REAL=") && $0.contains("${NAME}") })
+        #expect(lines.contains { $0.contains("jq --arg root \"${CACHE_KEY}\" --arg real \"${CACHE_KEY_REAL}\"") })
+        #expect(lines.contains { $0.contains("startswith($root + \"/\")") })
+        #expect(lines.contains { $0.contains("startswith($real + \"/\")") })
+        for line in lines where line.contains("with_entries") {
+            #expect(line.contains("$root"), "zahazování klíčů mimo kořen slotu: \(line)")
         }
 
         // `killall` by sestřelil i instanci, se kterou pracuje někdo jiný — a rozdělané review

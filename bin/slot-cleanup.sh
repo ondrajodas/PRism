@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Ukliď po slotu (#398, #399): ukončit jeho aplikaci, smazat bundle, cache **a doménu
-# v UserDefaults** i prázdný plist po ní — a nakonec zamést databázi LaunchServices.
+# Ukliď po slotu (#398, #399, #484): ukončit jeho aplikaci, smazat bundle, cache, **záznamy
+# o jeho složkách v `~/.claude.json`** (#484) **a doménu v UserDefaults** i prázdný plist po ní
+# — a nakonec zamést databázi LaunchServices.
 #
 #     ./bin/slot-cleanup.sh      # slot se přečte z .prism-slot v tomhle stromě
 #     ./bin/slot-cleanup.sh a    # slot výslovně
@@ -67,6 +68,11 @@ CACHE="${HOME}/Library/Application Support/${NAME}"
 # tomtéž písmenu by nastartoval s nastavením po předchůdci, tedy i s tím, co z něj `slot-config.sh`
 # schválně vyndal.
 PLIST="${HOME}/Library/Preferences/${BUNDLE_ID}.plist"
+# Konfigurace Claude Code (#484). Aplikace do ní zapisuje důvěru ke složkám **své** cache
+# (`WorkspaceTrusting`, #460) — od #479 nejen ke kořeni, ale ke každému pracovnímu stromu review,
+# takže záznamů za život slotu vznikne řádově víc než jeden. Bundle, cache ani doména je s sebou
+# nevezmou: po zaniklých slotech `a`, `b` a `c` ležely v souboru dál.
+CLAUDE_CONFIG="${HOME}/.claude.json"
 # Kopie z buildu v **tomhle** stromě. Registruje ji Xcode na konci buildu a `xcodebuild test`
 # testovacího hosta navíc spouští, čímž ho registruje taky (#139) — a protože strom po úklidu
 # obvykle zaniká, nebude ji potom kdo odregistrovat.
@@ -128,6 +134,122 @@ if [ -d "${CACHE}" ]; then
     echo "  smazáno: ${CACHE}"
 else
     echo "  cache: nebyla"
+fi
+
+# **Záznamy o složkách slotu v `~/.claude.json`** (#484). Tři věci, na kterých to stojí, a každá
+# odpovídá na jinou otázku „co když“ — jsou to tytéž pojistky, jaké má zápis v aplikaci:
+#
+#  1. **Na soubor, kterému skript nerozumí, se nesahá.** Bez `jq`, nebo když se obsah nedá přečíst
+#     jako objekt JSON, se **nepíše nic** a řekne se to. Neúspěch stojí pár řádků, které v souboru
+#     zůstanou; přepsaná cizí konfigurace by byla ztráta cizí práce.
+#  2. **Maže se jedině to, co leží pod kořenem cache tohohle slotu** — klíč rovný
+#     `…/Application Support/PRism-<slot>`, nebo začínající toutéž cestou a lomítkem. **Lomítko
+#     je podstatné**: bez něj by úklid slotu `a` vzal i záznamy slotu `ab`. Hlavní instance
+#     (`…/PRism/`) se pod ten prefix nedostane a cizí projekty tím spíš — a `SLOT` je v tuhle
+#     chvíli neprázdný, protože `case` výš prázdný odmítl.
+#  3. **Rozhoduje kořen slotu, ne disk.** Cache je o pár řádků výš smazaná, takže vybírat klíče
+#     podle toho, co na disku zbylo, by nenašlo nic. Porovnává se s **cestou**, čímž na pořadí
+#     kroků nezáleží.
+#
+# Ověřuje se **nad výsledkem, ne nad filtrem** (tatáž volba jako v `bin/slot-config.sh`): než se
+# soubor vymění, musí v něm zbýt nula záznamů pod naším kořenem **a přesně tolik ostatních, kolik
+# jich v něm bylo**. Ubraný cizí projekt je nejhorší možný konec tohohle kroku, takže se v takovém
+# případě nezapíše nic.
+
+# Kolik klíčů v `projects` leží pod kořenem slotu. Vrací nenulu, když se soubor nedá přečíst.
+claude_slot_projects() {
+    jq -r --arg root "$1" --arg real "$2" '[(.projects // {} | keys[])
+        | select(. == $root or startswith($root + "/") or . == $real or startswith($real + "/"))]
+        | length' "$3"
+}
+
+# Kolik jich je celkem — druhá polovina kontroly nad výsledkem.
+claude_all_projects() {
+    jq -r '(.projects // {}) | length' "$1"
+}
+
+# Klíč, pod kterým si `claude` projekt pamatuje, je **rozvinutá cesta** (`realpath`, změřeno
+# u #460) a domovská složka umí ležet za symlinkem — na macOS jsou to zrovna `/tmp` a `/var`.
+# Porovnává se proto s oběma podobami kořene. Rozvíjí se `${HOME}`, ne cache: ta v tuhle chvíli
+# na disku už není, takže by se rozvinout nedala.
+CACHE_KEY="${CACHE}"
+if HOME_REAL="$(cd "${HOME}" && pwd -P)"; then
+    CACHE_KEY_REAL="${HOME_REAL}/Library/Application Support/${NAME}"
+else
+    CACHE_KEY_REAL="${CACHE_KEY}"
+fi
+
+if [ ! -f "${CLAUDE_CONFIG}" ]; then
+    echo "  ${CLAUDE_CONFIG}: nebyl"
+elif ! command -v jq > /dev/null 2>&1; then
+    echo "Pozor: jq na stroji není, záznamy slotu v ${CLAUDE_CONFIG} zůstaly." >&2
+    echo "       Bez něj se ten soubor nedá bezpečně přečíst ani přepsat." >&2
+    TROUBLE=1
+elif ! jq -e 'type == "object"' "${CLAUDE_CONFIG}" > /dev/null 2>&1; then
+    echo "Pozor: ${CLAUDE_CONFIG} se nedá přečíst jako objekt JSON, tak jsem se ho nedotkl." >&2
+    echo "       Záznamy po slotu „${SLOT}“ v něm zůstaly — ukliď to ručně." >&2
+    TROUBLE=1
+else
+    # Počty se čtou do proměnných a **návratový kód se hlídá**: kdyby `jq` selhal, zůstal by
+    # v proměnné prázdný řetězec a `[ "" -eq 0 ]` není nepravdivé, ale rozbité (`[` vrátí 2,
+    # `if` z toho udělá else) — tedy přesně ta past, kterou popisuje `prism_sweep_registrations`
+    # v `bin/lib/bundles.sh`. Přepis by se pak pustil nad souborem, o kterém se nic neví.
+    DOOMED=""
+    BEFORE=""
+    if ! DOOMED="$(claude_slot_projects "${CACHE_KEY}" "${CACHE_KEY_REAL}" "${CLAUDE_CONFIG}")" ||
+        ! BEFORE="$(claude_all_projects "${CLAUDE_CONFIG}")"; then
+        echo "Pozor: v ${CLAUDE_CONFIG} se nedají přečíst projekty, tak jsem se ho nedotkl." >&2
+        echo "       Záznamy po slotu „${SLOT}“ v něm zůstaly — ukliď to ručně." >&2
+        TROUBLE=1
+    elif [ "${DOOMED}" -eq 0 ]; then
+        echo "  ${CLAUDE_CONFIG}: záznam po slotu v něm nebyl"
+    else
+        # Dočasný soubor **vedle cílového**, aby výměna byla přejmenování v jedné složce, ne kopie
+        # přes hranici svazku. `mktemp` ho založí s právy `0600`; `chmod` pod ta, která soubor měl,
+        # ho pak srovná i pro případ, že by je uživatel měl jiná.
+        CLAUDE_TEMP="$(mktemp "${CLAUDE_CONFIG}.prism-XXXXXX")"
+        # Aby v domovské složce nezůstal ležet ani po ⌃C — jako v `bin/slot-config.sh`. Po výměně
+        # se past sundá, jinak by `rm` sáhlo na jméno, které už patří hotovému souboru.
+        trap 'rm -f "${CLAUDE_TEMP}"' EXIT
+        # Neúspěšný `chmod` se **nepokládá za chybu**: `mktemp` zakládá `0600`, tedy nanejvýš
+        # přísněji, než měl původní soubor. Zpřístupnit ho tím nejde a to je to, na čem záleží.
+        if MODE="$(stat -f '%Lp' "${CLAUDE_CONFIG}")"; then
+            chmod "${MODE}" "${CLAUDE_TEMP}" || true
+        fi
+        if ! jq --arg root "${CACHE_KEY}" --arg real "${CACHE_KEY_REAL}" '
+                if (.projects | type) == "object" then
+                    .projects |= with_entries(select((.key == $root
+                        or (.key | startswith($root + "/"))
+                        or .key == $real
+                        or (.key | startswith($real + "/"))) | not))
+                else . end' "${CLAUDE_CONFIG}" > "${CLAUDE_TEMP}"; then
+            rm -f "${CLAUDE_TEMP}"
+            echo "Pozor: ${CLAUDE_CONFIG} se nepodařilo přepsat, nic jsem nezapsal." >&2
+            echo "       Záznamy po slotu „${SLOT}“ v něm zůstaly." >&2
+            TROUBLE=1
+        else
+            LEFT=""
+            AFTER=""
+            EXPECTED=$((BEFORE - DOOMED))
+            if ! LEFT="$(claude_slot_projects "${CACHE_KEY}" "${CACHE_KEY_REAL}" "${CLAUDE_TEMP}")" ||
+                ! AFTER="$(claude_all_projects "${CLAUDE_TEMP}")" ||
+                [ "${LEFT}" -ne 0 ] || [ "${AFTER}" -ne "${EXPECTED}" ]; then
+                rm -f "${CLAUDE_TEMP}"
+                echo "Pozor: přepsaný ${CLAUDE_CONFIG} kontrolou neprošel, nic jsem nezapsal." >&2
+                echo "       Zbylo by v něm ${LEFT:-?} záznamů slotu a ${AFTER:-?} projektů" >&2
+                echo "       místo ${EXPECTED} — ukliď to ručně." >&2
+                TROUBLE=1
+            elif mv "${CLAUDE_TEMP}" "${CLAUDE_CONFIG}"; then
+                echo "  smazáno záznamů v ${CLAUDE_CONFIG}: ${DOOMED} (pod ${CACHE_KEY})"
+            else
+                rm -f "${CLAUDE_TEMP}"
+                echo "Pozor: ${CLAUDE_CONFIG} se nepodařilo vyměnit, zůstal, jak byl." >&2
+                echo "       Záznamy po slotu „${SLOT}“ v něm tedy zůstaly." >&2
+                TROUBLE=1
+            fi
+        fi
+        trap - EXIT
+    fi
 fi
 
 # **Doména v UserDefaults** (#399). Dvě věci, které se tady dělají jinak, než by člověk napsal
@@ -194,4 +316,5 @@ if [ "${TROUBLE}" -ne 0 ]; then
     echo "Po slotu „${SLOT}“ zbývá to, co je vypsané výš."
     exit 3
 fi
-echo "Po slotu „${SLOT}“ nezbylo nic: ani aplikace, cache, doména, ani záznam v LaunchServices."
+echo "Po slotu „${SLOT}“ nezbylo nic: ani aplikace, cache, záznam v konfiguraci Claude Code,"
+echo "doména v UserDefaults, ani záznam v LaunchServices."

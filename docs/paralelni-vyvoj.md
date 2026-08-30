@@ -376,7 +376,8 @@ ve svém stromě:
 ```
 
 Ukončí aplikaci slotu (Apple eventem, ne `killall`em), smaže bundle z `/Applications`, cache,
-**doménu v `UserDefaults`** i prázdný plist po ní a nakonec zamete databázi LaunchServices.
+**záznamy o složkách slotu v `~/.claude.json`** (#484), **doménu v `UserDefaults`** i prázdný plist
+po ní a nakonec zamete databázi LaunchServices.
 Návratový kód: `0` uklizeno (nebo nebylo co uklízet), `1` nepoužitelný slot — **včetně prázdného**,
 tedy hlavní instance —, `2` aplikace slotu běží dál a nesmazalo se nic, `3` něco se nedotáhlo (co,
 je vypsané) a zbytek je uklizený. Když se v `/Applications` hlásí cizím identifikátorem, **nesmaže
@@ -404,6 +405,16 @@ Past, kterou skript řeší a ruční postup přehlížel: `defaults delete` po 
 `~/Library/Preferences/` ale leží dál. **Ověřuje se proto zpětným čtením, ne návratovým kódem**;
 `defaults delete` navíc nad doménou, která neexistuje, vrací **nenulu**, takže „nebylo co mazat“
 by ruční postup pod `set -e` položilo.
+
+**A od #484 i záznamy v `~/.claude.json`.** Aplikace tam zapisuje důvěru ke složkám své cache
+(#460) — od #479 ke **každému pracovnímu stromu review** zvlášť, takže jich po slotu zbývají
+desítky a smazaný bundle, cache ani doména je s sebou nevezmou (po slotech `a`, `b` a `c` tam
+ležely dál). Je to soubor **cizího nástroje**, takže platí tytéž pojistky jako na zápis v aplikaci:
+na soubor, kterému skript nerozumí, se **nesahá** (bez `jq` nebo nad nečitelným obsahem se to jen
+ohlásí a pokračuje se), zachová se, co v něm je, a píše se **atomicky** a s právy původního
+souboru. Maže se jedině klíč rovný kořeni cache toho slotu, nebo začínající jím **a lomítkem** —
+bez lomítka by úklid slotu `a` vzal i slot `ab`. Rozhoduje **cesta, ne disk**: cache je v tu chvíli
+smazaná, takže vybírat záznamy podle toho, co na ní zbylo, by nenašlo nic.
 
 **Uklízí se jedině vlastní slot.** Cizí instance se nesmí ukončit ani odregistrovat — může na ní
 běžet jiný agent nebo ji může mít otevřenou člověk. Zametení databáze je proti tomu bezpečné
