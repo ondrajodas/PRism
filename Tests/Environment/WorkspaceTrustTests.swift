@@ -100,6 +100,55 @@ struct WorkspaceTrustTests {
         #expect(before == after, "soubor se přepsal, i když se nic měnit nemělo")
     }
 
+    /// **Zapsané `false` na naší cestě se přepsat smí** (#479), a je to rozhodnutí, ne nedopatření:
+    /// `claude` si tu hodnotu zapisuje **sám** při každém běhu nad složkou, kterou v konfiguraci
+    /// ještě nemá (změřeno) — není to tedy odpověď člověka „nevěřím“, ale výchozí hodnota záznamu.
+    /// A je to složka v naší cache, kterou aplikace vyrobila.
+    ///
+    /// **Zbytek toho záznamu přitom zůstane**: přepisuje se jedna hodnota, ne celý projekt.
+    @Test("Zapsané false na naší cestě se přepíše, zbytek záznamu zůstane")
+    func anexplicitFalseOnOurOwnPathIsOverwritten() async throws {
+        let home = try scratch()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let config = home.appending(path: ".claude.json")
+        let key = workspace.path(percentEncoded: false)
+        try write(
+            #"{"projects":{"\#(key)":{"hasTrustDialogAccepted":false,"allowedTools":["Read"]}}}"#,
+            to: config
+        )
+
+        try await ClaudeWorkspaceTrust(configuration: config).trust(workspace)
+
+        let projects = try #require(try read(config)["projects"] as? [String: Any])
+        let entry = try #require(projects[key] as? [String: Any])
+        #expect(entry["hasTrustDialogAccepted"] as? Bool == true)
+        #expect(entry["allowedTools"] as? [String] == ["Read"])
+    }
+
+    /// **Práva `0600` se zápisem neztratí** — je to soubor s přihlašovacími údaji cizího nástroje
+    /// a rozšířit k němu přístup by bylo horší než ten dialog, který se tím spoří. Drží to
+    /// `replaceItemAt`, které atributy původního souboru přenese; jde tedy o tvrzení o **atomickém
+    /// zápisu**, ne o zvlášť nastavovaná práva.
+    ///
+    /// **A dočasný soubor po sobě nezůstane**: leží v domovské složce vedle konfigurace, takže
+    /// zapomenutý by se tam hromadil jeden na každý zápis. Při úspěchu ho `replaceItemAt`
+    /// spotřebuje — ověřuje se to proto, že je to jediná cesta, kterou se pozná, že se spotřeboval.
+    @Test("Práva 0600 přežijí zápis a dočasný soubor po sobě nezůstane")
+    func thefilePermissionsAndTemporaryFileSurviveTheWrite() async throws {
+        let home = try scratch()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let config = home.appending(path: ".claude.json")
+        try write(#"{"projects":{}}"#, to: config)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
+
+        try await ClaudeWorkspaceTrust(configuration: config).trust(workspace)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: config.path)
+        #expect(attributes[.posixPermissions] as? Int == 0o600)
+        let left = try FileManager.default.contentsOfDirectory(atPath: home.path)
+        #expect(left == [".claude.json"], "v domovské složce zbylo \(left)")
+    }
+
     // MARK: - Co se nepřepíše
 
     /// **Rozbitá konfigurace se nepřepisuje.** Ztráta je jeden dialog navíc; přepsaný soubor by

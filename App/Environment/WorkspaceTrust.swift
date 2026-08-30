@@ -21,6 +21,11 @@ import Foundation
 /// adresáři a ne o jedno patro výš, než kam aplikace sahá. Podrobnosti a zamítnuté varianty jsou
 /// ve specifikaci.
 ///
+/// **Od #479 se to volá na víc složek než jednu.** Do #479 stačil kořen cache, protože se důvěra
+/// dědí z předka — jenže do **git pracovního stromu** se nedědí (změřeno), a strom review je právě
+/// to, kam `▶` míří. Který výčet složek to je, rozhoduje `Policy.workspacesToTrust(root:shell:)`;
+/// tenhle typ dál umí zapsat **jednu** a nic o tom výčtu neví.
+///
 /// Za protokolem ze stejného důvodu jako zbytek `Environment/`: je to soubor **mimo naši cache**,
 /// takže se v testech nesmí sáhnout na ten skutečný.
 protocol WorkspaceTrusting: Sendable {
@@ -100,6 +105,12 @@ struct ClaudeWorkspaceTrust: WorkspaceTrusting {
             // **Hotová důvěra se nepřepisuje.** Běžný případ je tím pádem čisté čtení, což je
             // jediná ochrana, kterou proti souběžnému zápisu `claude` samotného máme: okno, ve
             // kterém se dá o cizí změnu přijít, je jedno jediné zapsání za život té složky.
+            //
+            // **Zapsané `false` se naopak přepsat smí, a je to rozhodnutí, ne nedopatření** (#479).
+            // Je to složka v naší cache, kterou aplikace sama vyrobila — a `false` si tam `claude`
+            // zapisuje **sám** při každém běhu nad složkou, kterou v konfiguraci ještě nemá
+            // (změřeno). Není to tedy odpověď člověka „nevěřím“, ale výchozí hodnota záznamu.
+            // U cizích projektů se to netýká ničeho: sahá se jedině na klíč, který jsme dostali.
             if project["hasTrustDialogAccepted"] as? Bool == true { return }
             project["hasTrustDialogAccepted"] = true
             projects[key] = project
