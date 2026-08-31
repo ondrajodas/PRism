@@ -7295,10 +7295,10 @@ grep -a 'MĚŘENÍ #421' /tmp/m421.log
    byla?* A protože se zašpinění naměřit **podařilo**, ta otázka má odpověď i z druhé strany.
 
 **A hierarchie se po měření musí zahodit, ne jen zavřít okno.** `orderOut(nil)` scénu jen schová
-a schovaná dál dostává průchody tělem: druhý scénář hlásil `ContentView` a `RefreshHeaderButton`
-i tehdy, když v jeho okně žádný `ContentView` není. Sonda proto v `defer`u nastavuje `window
-.contentViewController = NSViewController()`. Sondy, které měří CPU, tuhle past nemají — počitadla
-průchodů tělem ano.
+a schovaná dál dostává průchody tělem: druhý scénář hlásil `ContentView` i tehdy, když v jeho okně
+žádný `ContentView` není, a k tomu 382 průchodů `DiffRowView`u z cizí scény. Sonda proto v `defer`u
+nastavuje `contentViewController` na prázdný `NSViewController`. Sondy, které měří CPU, tuhle past
+nemají — počitadla průchodů tělem ano.
 
 #### Čísla
 
@@ -7338,8 +7338,9 @@ scénářích týž, takže se dá počítat: **cena je lineární v počtu blok
 
 `store.isRefreshing` se čte **v těle `ContentView`u** dvakrát (tlačítko `⟳` a povolení pro `⌘R`)
 a příznak se mění dvakrát za tik — vypadá to tedy na tutéž vadu jako #472, jen o patro výš: hrubé
-**místo čtení** místo hrubé vlastnosti. Přestěhování do dvou vlastních views (`RefreshHeaderButton`,
-`RefreshShortcut`) se napsalo, změřilo **A/B nad toutéž scénou** a zahodilo:
+**místo čtení** místo hrubé vlastnosti. Přestěhování do dvou vlastních views (jmenovala se
+`RefreshHeaderButton` a `RefreshShortcut`; v repu nejsou) se napsalo, změřilo **A/B nad toutéž
+scénou** a zahodilo:
 
 | | `ContentView` | dvě nová views | `DiffView` | `DiffRow.id` |
 |---|---|---|---|---|
