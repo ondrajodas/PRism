@@ -5752,6 +5752,36 @@ a `Zahodit rebase`; `Zavřít` u ní schválně **není**), hledá se v cache p�
 PR (`syncWorktreeState`) a **druhý rebase se nad ním nenabízí** — přehrát commity znovu nad
 výsledkem, který neodešel, by tu práci zahodilo potichu.
 
+### Po force pushi se čeká na hlavu, ne na `mergeable`
+
+**Třetí nález z proklikání** („po force push nejde mergnout“) a uživatel rozhodl, že se řeší tady,
+ne vlastním issue. Změřeno na `prism-review-sandbox#10` (čtyři force pushe): hlava (`headRefOid`) je
+aktuální po **1,45–2,16 s**, `mergeable` usazený po **0,65–2,74 s**. Detail načtený hned po pushi
+tedy nese **starou** hlavu — a merge s ní skončí na `409`, protože ji posílá v payloadu.
+
+**Past je, že `mergeable` se usadí dřív, než dorazí hlava**, takže ta usazená odpověď platí pro
+starou hlavu; čekat na `mergeable != UNKNOWN` by bylo **zavádějící**, ne jen nedostatečné. Rozhoduje
+proto shoda hlavy: `awaitPushedHead` se ptá `fetchHeads` (`cost = 1`), dokud PR nehlásí sha, kterou
+jsme pushnuli. Stráž z #465 to neporušuje — čeká se na **známý fakt**, ne na líné pole, strop je
+tvrdý (8 × 0,4 s) a po jeho vyčerpání se nic netvrdí.
+
+Spravilo to i `syncWorktreeState`: přerovnaná větev se pozná tím, že hlava stromu není hlavou PR —
+se starou hlavou by po pushi nabídla pushnout znovu.
+
+### Sheet se po úspěšném force pushi zavírá
+
+Jako u mergu a **jedině po úspěchu**; záložka se ale **nezavírá**, na rozdíl od mergu. Zavírá se na
+**přechodu stavu**, ne za `await push()`: ten čeká i na úklid (a ten na hlavu), takže by sheet nad
+hotovým pushem visel několik sekund. Výsledek nese **panel** hláškou, kterou store nastavuje dřív,
+než úklid začne — je na to test, protože bez něj by se ta informace zavřením mohla ztratit.
+
+### Akce se jmenují `Rebase` a `Force push`
+
+Rozhodnutí uživatele, které má přednost před pravidlem o českých uživatelských textech: gitové
+operace se v téhle branži nepřekládají. Mění se **jména akcí**, ne próza okolo. Jméno základu
+z popisku zmizelo, protože ho nese řádek stavu i nápověda — a `Srovnat s main` mělo 87 bodů, se
+kterými tři tlačítka v řadě potřebovala 279 z 278 dostupných.
+
 ### Poloha větve se přeptává, protože razítko PR na ni nesedí
 
 **Druhý nález z proklikání.** Panel tvrdil `srovnaná` nad větví o commit pozadu a nespravilo to ani
