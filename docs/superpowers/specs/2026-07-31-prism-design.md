@@ -4077,3 +4077,74 @@ podmínka č. 1 se tím nemění**: hlášení myši se skládá jen z čísla t
 takže z něj text ani příkaz vzniknout nemůže. Je to doplněné do `CLAUDE.md` k té podmínce, ne
 schované sem — věta „cokoli jiného než tuhle jednu řádku napíše jedině člověk“ by po #478 nebyla
 pravdivá.
+
+### Záznam rozhodnutí — nabídku emotikonů kreslí volající, ne pole (#483)
+
+Zadání i návrh (sekce 38) říkají „kotví se **nad polem**, ne u kurzoru“. Implementace tomu vyhověla,
+ale kotvení skončilo o úroveň výš, než by z té věty čekal — a je to změna z měření, ne z pohodlí.
+
+**Co se změřilo.** `overlay`, který přesahuje plochu rodiče, ořízne **každý ořezávající předek**.
+Ověřeno na skutečné hierarchii (`NSHostingView` v okně, jeden průchod runloopem, `cacheDisplay`),
+protože `ImageRenderer` na tuhle otázku odpovědět neumí: `ScrollView` offscreen nevykreslí vůbec,
+takže prázdný render nerozliší „ořízlo“ od „nenakreslilo se“. Scéna měla tři varianty vedle sebe —
+ve `ScrollView`u, v ploše s `clipShape` a **bez ořezu**; ta třetí je kontrola měřidla. Výsledek:
+v prvních dvou chybí nabídce horní hrana **i vybraný řádek**, ve třetí je celá.
+
+**Proč to vadí zrovna tady.** Dvě ze tří polí v takovém předkovi sedí. Tělo review je **první** věc
+ve `ScrollView`u panelu, takže by se nabídka uřízla hned; odpověď do vlákna je v bublině
+s `clipShape`, a bublina o jednom komentáři má **97 bodů** proti 203 plné nabídky — neuřízl by se
+z ní kus, ale většina. Ořezaná nabídka je přitom horší než žádná: chybí jí zrovna ta půlka, na kterou
+se kouká.
+
+**Zvažované a zamítnuté:**
+
+- **`popover`.** `NSPopover` si bere fokus, takže by v poli přestalo jít psát — a psaní je tady
+  zároveň to hledání. Vylučuje ho samotné zadání („klávesy si bere pole“).
+- **Nabídka jako prvek rozvržení** (v `VStack`u nad polem, jak ji kreslí statický zákres). Neořízne
+  se, ale **hýbe polem, do kterého se zrovna píše**: v panelu by tělo review odsunula o 200 bodů,
+  případně mimo viditelnou část panelu. Pole, které při psaní uteče, je horší než nabídka o úroveň
+  výš.
+- **Vlastní hostitel nabídky na úrovni okna** s polohou pole ze `onGeometryChange`. Je to
+  „správné“ řešení a taky nejdražší: sdílený stav, který se přepisuje při každém úhozu a čte ho
+  kořen okna, je přesně ta výkonová vada, kterou popsalo #472. Zůstává jako cesta, kdyby se ukázalo,
+  že ani nové kotvení nestačí.
+
+**Co se tedy udělalo.** Nabídku kreslí **volající** — na tom předkovi, který neořezává (composer nad
+celým pruhem, panel nad svým `ScrollView`em, bublina až za `clipShape`) — a stav si podávají přes
+`EmojiSuggestionBox`. Ten je `@Observable`, ne `Equatable` hodnota ve `@State` majitele, a je to
+tatáž úvaha jako u rozdělení `PollState`u (#472): majitelem je tab `Konverzace`, panel a bublina,
+takže hodnota by úhozem překreslovala je. `rows` čte **jedině** nabídka, proto z ní čte i prázdný
+stav.
+
+**Co z toho zbývá jako pravidlo**: věta o ořezu je v `CLAUDE.md` v sekci o kresbě, ne schovaná sem —
+je to věc, kterou je potřeba znát **dřív**, než se první `overlay` napíše.
+
+**Známé omezení, které měření nepokrývá.** Nová kotvení jsou v okně, ale osa konverzace a diff jsou
+samy `ScrollView`y, takže nabídka nad bublinou, která je zrovna u horní hrany výřezu, se uříznout
+pořád může. Není to regrese proti stavu před #483 (tam nebyla vůbec) a nedá se to změřit v harnessu;
+kdyby to v provozu vadilo, je odpověď ten zamítnutý hostitel na úrovni okna.
+
+### Záznam rozhodnutí — čtvrté pole, které nabídku nedostalo (#483)
+
+Zadání vyjmenovává tři pole. Textů, které z okna odcházejí na GitHub, je ale **čtyři**: čtvrtý je
+řádkový komentář v diffu (`DraftCommentBubbleView`), který jde ven jako součást review. Argument ze
+zadání — „pole, ve kterém `:` nedělá nic, se pozná až ve chvíli, kdy tam někdo píše“ — na něj platí
+zrovna tak.
+
+Nedostal ji přesto, a důvod je tentýž ořez: bublina řádkového komentáře má `clipShape` a sedí uvnitř
+diffu, tedy uvnitř druhého ořezu. Kotvit nabídku „nad bublinou“ by u komentáře, který visí na řádku,
+znamenalo nabídku přes kód — a nad tím ořez diffu. Do #483 se to tedy nevešlo vědomě, ne opomenutím;
+je to napsané v `DraftTextEditor.suggestions`, aby to příště nevypadalo jako chybějící řádek.
+
+### Záznam rozhodnutí — řádky nabídky se nedají kliknout (#483)
+
+Nabídka vypadá jako `.pkr` z návrhu, tedy jako popover labelů — a v tom se řádky kliknout **dají**.
+Tady schválně ne.
+
+Vložení stojí celé na tom, kde je kurzor (`Policy.emojiQuery` ho bere jako vstup). Kliknutí do
+plochy, která visí nad zaměřeným polem, je přitom zrovna ta jediná interakce, po které se první
+responder umí přesunout jinam — a bez kurzoru není kam vkládat. Vstup je proto klávesnice, jak ho
+kreslí patka nabídky (`↑↓ vybírá · ↵ vloží · esc zavře`), a návrh o kliknutí nemluví.
+
+Kdyby se to mělo doplnit, patří k tomu ověření na běžící aplikaci, že fokus v poli po kliknutí
+zůstane — ne domněnka, že `buttonStyle(.plain)` stačí.

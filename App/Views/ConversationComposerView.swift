@@ -21,6 +21,11 @@ struct ConversationComposerView: View {
     var commit: (String) -> Void = { _ in }
     var send: () -> Void = {}
 
+    /// Otevřená nabídka emotikonů (#483). Drží ji composer, protože **on tu nabídku kreslí** — nad
+    /// celým pruhem, tedy mimo dosah osy konverzace, která je `ScrollView` a ořezávala by (viz
+    /// `EmojiSuggestionBox`). Pruh je poslední dítě tabu, takže se nabídka kreslí přes osu.
+    @State private var emoji = EmojiSuggestionBox()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top, spacing: 8) {
@@ -36,6 +41,9 @@ struct ConversationComposerView: View {
                     placeholder: "Napsat do konverzace pod PR…",
                     minHeight: 46,
                     maxHeight: 46,
+                    // Emotikony s našeptáváním (#483) — první ze tří polí, ze kterých text odchází
+                    // na GitHub.
+                    suggestions: emoji,
                     commit: commit
                 )
                 .disabled(state?.isBusy == true)
@@ -47,6 +55,10 @@ struct ConversationComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.chrome)
         .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
+        // **Nad pruhem, ne nad polem**, a je to o osm bodů výš, než kreslí návrh: pruh nic
+        // neořezává a nabídka se tak nemá o co uříznout. Pole je uvnitř téhož pruhu, takže je
+        // nabídka pořád těsně nad ním.
+        .emojiMenuAbove { EmojiSuggestionMenu(suggestions: emoji) }
     }
 
     private var controls: some View {

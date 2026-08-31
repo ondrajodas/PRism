@@ -31,6 +31,12 @@ struct DraftPanel: View {
 
     @State private var isConfirmingDiscard = false
 
+    /// Otevřená nabídka emotikonů v těle review (#483). Drží ji panel, protože **on tu nabídku
+    /// kreslí** — nad svým `ScrollView`em, ne uvnitř: uvnitř by se ořízla o jeho horní hranu
+    /// a tělo review leží zrovna nahoře (změřeno, viz `EmojiSuggestionBox`). Nad panelem je
+    /// hlavička, labely a segmenty, tedy dost místa a žádný ořez.
+    @State private var emoji = EmojiSuggestionBox()
+
     /// Výška, kterou panel doopravdy má — z ní se počítá, jestli se obsah ještě vejde.
     /// Jen měření (`onGeometryChange`), takže do rozvržení nezasahuje; `GeometryReader` by
     /// naopak sám zabral místo, a v tomhle okně už to jednou uškodilo.
@@ -62,6 +68,9 @@ struct DraftPanel: View {
             .frame(maxWidth: .infinity, minHeight: available, alignment: .topLeading)
         }
         .onGeometryChange(for: Double.self) { $0.size.height } action: { available = $0 }
+        // **Nad `ScrollView`em, ne nad polem** (#483): tělo review je první věc ve scrollu, takže
+        // nabídka nad polem by se uřízla o jeho horní hranu. Odsud se kreslí přes hlavičku panelu.
+        .emojiMenuAbove { EmojiSuggestionMenu(suggestions: emoji) }
     }
 
     // MARK: - Hlavička
@@ -333,6 +342,9 @@ struct DraftPanel: View {
                 text: draft?.body ?? "",
                 placeholder: "Souhrn k celému PR. Nálezy mimo diff se sem přidají jako odkaz na kód.",
                 minHeight: 80,
+                // Emotikony s našeptáváním (#483) — druhé ze tří polí. Nabídku kreslí `body`, ne
+                // tohle pole: uvnitř `ScrollView`u by se ořízla.
+                suggestions: emoji,
                 commit: actions.setBody
             )
             .disabled(unavailable != nil)
