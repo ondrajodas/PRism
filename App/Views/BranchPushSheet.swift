@@ -31,7 +31,14 @@ struct BranchPushSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 320, idealHeight: 380)
+        // **Bez `ideal*`, a je to vědomé.** SwiftUI u sheetu `idealWidth` **zahodí**, dokud k němu
+        // není `presentationSizing(.fitted)` (změřeno u #327, druhý výskyt v `CodeTextSheet`) —
+        // takže `idealWidth: 520` tvrdilo šířku, kterou sheet nikdy nedostal, a otevíral se
+        // v podlaze 460. Zamítnuto přidat `.fitted`: byla by to **nezměřená** změna velikosti
+        // sheetu, který takhle člověk už proklikal a 460 mu stačilo — a rozměr sheetu se
+        // v harnessu ověřit nedá. Zůstává tedy podlaha, která platí, místo ideálu, který ne.
+        // Tentýž vzor má `MergeSheet` z #465; sahat na velikost cizí hotové obrazovky sem nepatří.
+        .frame(minWidth: 460, minHeight: 320)
         // Zavřít okno uprostřed volání by znamenalo nevědět, jestli se pushovalo.
         .interactiveDismissDisabled(submission.state == .pushing)
         // **Zavření visí na stavu, ne na tlačítku** (#466, z proklikání). Rozhoduje o tom

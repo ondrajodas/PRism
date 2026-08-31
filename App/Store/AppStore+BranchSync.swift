@@ -149,7 +149,14 @@ extension AppStore {
         // Brána a vlastnictví se ověřují **i tady**, ne jen u prvního kroku: mezi rebasem
         // a potvrzením se mohla vypnout v nastavení, a tlačítko, které skončí na bráně, je horší
         // než zašedlé. Sám pusher si ji ověří ještě jednou.
-        guard let section = branchSection(for: id), section.syncPlan != nil else { return nil }
+        // **Plán se rozbaluje, ne testuje na `nil`.** Do #466 tu stál `section.syncPlan != nil`
+        // a jméno větve se pak bralo přes `?? ""` — fallback, který byl sice nedosažitelný, ale
+        // kdyby se ten guard někdy uvolnil, složil by **potichu** plán s prázdným jménem a push
+        // by mířil na `refs/heads/`. U cesty do remote je „nedosažitelné“ slabá záruka; rozbalení
+        // ji dělá nemožnou.
+        guard let section = branchSection(for: id), let syncPlan = section.syncPlan else {
+            return nil
+        }
         // **Jedna odpověď pro celý panel** — tatáž funkce, kterou se ptá první krok i labely,
         // ne opsaná podmínka.
         guard metadataEditing(for: id).isAllowed else { return nil }
@@ -158,7 +165,7 @@ extension AppStore {
             pullRequest: pullRequest,
             plan: BranchPushPlan(
                 pullRequest: id,
-                branch: section.syncPlan?.branch ?? "",
+                branch: syncPlan.branch,
                 expectedRemoteSha: rebased.rebasedFrom,
                 sha: rebased.headSha,
                 worktree: rebased.worktree
