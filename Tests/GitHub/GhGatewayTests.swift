@@ -192,6 +192,51 @@ struct GhGatewayTests {
         #expect(pullRequest.baseRef.isEmpty)
     }
 
+    /// **Hlava ve forku se musí přečíst jako `true`** (#466) — na tom stojí guard, který odsud
+    /// nedovolí pushnout. Fixture je **skutečný** výstup `gh pr view` nad `cli/cli#14294`, tedy
+    /// PR z forku (`AlexisAMZ/cli`); tělo je zkrácené na první řádku, protože fixture dokládá to
+    /// jedno pole, ne 3,5 kB cizí prózy.
+    @Test("Hlava v jiném repozitáři se přečte jako fork")
+    func detailReadsACrossRepositoryHead() async throws {
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: Fixture.text("gh/pr-view-fork.json"))
+        let id = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14294)
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: id)
+
+        #expect(pullRequest.isCrossRepository == true)
+        #expect(pullRequest.headRef == "feat/pr-revert-branch-base")
+        #expect(pullRequest.baseRef == "trunk")
+    }
+
+    /// **Chybějící pole je `nil`, ne `false`** (#466), a je to ten nejcennější z téhle trojice:
+    /// `nil` u srovnání větve **blokuje**, kdežto `false` by pustilo push podle odpovědi, kterou
+    /// nikdo nedal. Sem se dojde starším uloženým detailem — a `false` by z něj udělalo tvrzení
+    /// „hlava je v tomhle repozitáři“, které z dat neplyne.
+    @Test("Chybějící odpověď o forku je nevím, ne ne")
+    func missingCrossRepositoryIsUnknown() async throws {
+        let json = try Fixture.text("gh/pr-view-open.json")
+        // Řádky přes `TextLines` (#295) — pravidlo repa platí i v testech.
+        let stripped = TextLines.content(json)
+            .filter { !$0.contains("\"isCrossRepository\"") }
+            .joined(separator: "\n")
+        let runner = FakeProcessRunner(exitCode: 0, standardOutput: stripped)
+        let id = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13997)
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: id)
+
+        #expect(pullRequest.isCrossRepository == nil)
+        // A z „nevím“ plyne zákaz, ne povolení — tvrdí to `Policy` na jednom místě.
+        #expect(
+            Policy.branchSyncOffer(
+                editing: .allowed,
+                plan: nil,
+                detail: pullRequest,
+                status: nil,
+                sync: nil
+            ).obstacles.contains(.foreignBranch(known: false))
+        )
+    }
+
     @Test("Detail o jiném PR, než na který jsme se ptali, se zahodí")
     func rejectsDetailOfDifferentPullRequest() async throws {
         // Identifikátor se bere z dotazu, ne z odpovědi — kdyby se rozešly, klíčovaly by

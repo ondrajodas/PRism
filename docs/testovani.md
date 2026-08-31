@@ -832,6 +832,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     a platí jen tehdy, když to `git` doopravdy tak dělá. Rozdělaný rebase se přitom **rozjede
     naostro**, ne vyrobením složky `rebase-merge` — jinak by se testovala vlastní domněnka o tom, jak
     to `git` dělá. A jedno tvrzení je o tvrdé podmínce č. 5: **strom review se nepohne**.
+  - **`GhGatewayTests`** (rozšířené) — **`isCrossRepository` ve třech podobách**, protože na tom
+    stojí guard: `false` z otevřeného PR, `true` ze **skutečného PR z forku** (fixture
+    `gh/pr-view-fork.json`, změřená na `cli/cli#14294` — hlava v `AlexisAMZ/cli`; tělo zkrácené na
+    první řádku, protože fixture dokládá to jedno pole) a **chybějící pole jako `nil`, ne `false`**.
+    To poslední je z té trojice nejcennější: `nil` u srovnání **blokuje**, kdežto `false` by pustilo
+    push podle odpovědi, kterou nikdo nedal — a starší uložený detail to pole nemá. Ověřeno vloženou
+    regresí (`?? false` v dekodéru položí dvě tvrzení). K tomu se ptá i `Policy`, aby se „nevím“
+    a „zákaz“ nedaly rozejít.
   - **`SingleWayOutTests`** (rozšířené) — **čtyři nová tvrzení, protože jedno by nestačilo**: tři
     soubory s `BranchPushing`, jedna metoda protokolu (a jmenovitě zakázané `commit`,
     `deleteBranch`, `pushTag`, `createBranch`), **argument `"push"` jen v `GitBranchPush`** a **holé
@@ -840,10 +848,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     že `Checkout/` ani `GitHub/` do remote nezapisují — půlka podmínky, která se nezměnila; šestým,
     že `Bash(git push:*)` zůstává v `ClaudeCommand.disallowedTools`, tvrzeno **literálem**.
 
-  **Ověřeno vložením regrese, třikrát** (a je to u téhle změny podmínka, ne pečlivost): holé
+  **Ověřeno vložením regrese, čtyřikrát** (a je to u téhle změny podmínka, ne pečlivost): holé
   `--force` místo leasu položí `SingleWayOutTests` **i** `GitBranchPushTests`; vyndaný guard na
-  autorství položí „Na cizí pull request se nepushuje“ a pusher pak doopravdy pushne; a
-  `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení o jednom místě.
+  autorství položí „Na cizí pull request se nepushuje“ a pusher pak doopravdy pushne;
+  `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení o jednom místě; a `?? false`
+  v dekodéru `isCrossRepository` položí tvrzení, že chybějící pole je „nevím“.
 
   **Co testy neověří:** že `git push` projde z běžící aplikace — brána je ve slotové konfiguraci
   vypnutá schválně. Ověřené je to **mimo aplikaci**, na sandboxu; postup je níž

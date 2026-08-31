@@ -1,0 +1,20 @@
+{
+  "author": {
+    "id": "U_kgDOCKomwA",
+    "is_bot": false,
+    "login": "AlexisAMZ",
+    "name": "Alexis \"AMZ\" DA CRUZ"
+  },
+  "baseRefName": "trunk",
+  "baseRefOid": "40b742f76d68e6b1f472942a6368db4b5d765641",
+  "body": "Closes #14281",
+  "headRefName": "feat/pr-revert-branch-base",
+  "headRefOid": "3facd3a4c87d4715d22cc0e0d20dadbdd45d43aa",
+  "isCrossRepository": true,
+  "isDraft": false,
+  "number": 14294,
+  "state": "OPEN",
+  "title": "feat(pr revert): add --branch and --base flags",
+  "updatedAt": "2026-08-30T02:01:11Z",
+  "url": "https://github.com/cli/cli/pull/14294"
+}

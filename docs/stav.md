@@ -5766,10 +5766,11 @@ Vedle nich **integrační test proti skutečnému `gitu`** (`RealBranchRebaseTes
 že se rozdělaný rebase **najde a nepřepíše** a že neznámý základ skončí chybou, ne konfliktem. Tuhle
 půlku se namockovat nedá.
 
-**Ověřeno vložením regrese, třikrát**: holé `--force` místo leasu položí `SingleWayOutTests`
+**Ověřeno vložením regrese, čtyřikrát**: holé `--force` místo leasu položí `SingleWayOutTests`
 i `GitBranchPushTests`; vyndaný guard na autorství položí „Na cizí pull request se nepushuje“
-(a pusher pak pushne); a `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení, že
-se push skládá jen na jednom místě.
+(a pusher pak pushne); `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení, že
+se push skládá jen na jednom místě; a `?? false` v dekodéru `isCrossRepository` položí tvrzení, že
+chybějící pole je „nevím“, ne „ne“.
 
 **Na obrazovce vidět je** — druhé tlačítko v sekci `Větev`, počet commitů vzadu v řádku stavu a věta
 o tom, jak srovnání dopadlo.
