@@ -1,6 +1,6 @@
 import Foundation
 
-/// Srovnání vlastní větve se základem — `Srovnat s main` (#466).
+/// Srovnání vlastní větve se základem — `Rebase` (#466).
 ///
 /// **Dva kroky, dvě různé váhy, a je to celý tvar téhle akce.** Rebase je lokální práce v cache
 /// (`RepoCheckout`), kterou lze vzít zpět, takže stojí na jedno kliknutí. Přetlačení je **nevratné**

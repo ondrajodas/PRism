@@ -8,7 +8,7 @@ import Foundation
 /// za `master` vrátila `CLEAN`, ne `BEHIND`. `BEHIND` GitHub vydá jedině tam, kde je na základu
 /// ochrana *Require branches to be up to date*; jinde je „pozadu“ stav, který mergi nebrání,
 /// takže o něm `mergeStateStatus` mlčí. Sekce `Větev` ho přesto potřebuje: podle něj se rozhoduje,
-/// jestli má smysl nabízet `Srovnat s main`, a stojí v ní jako `o N commitů vzadu`.
+/// jestli má smysl nabízet `Rebase`, a stojí v ní jako `o N commitů vzadu`.
 ///
 /// **`compare` na `Ref`, ne `compare` REST API.** REST `GET /compare` vrací k tomu jednomu číslu
 /// i seznam souborů (do 300 položek), kdežto GraphQL vydá jen ta tři pole. Změřeno na živém API:

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Co se stane při `Srovnat s main` (#466) — **snímek z dat pull requestu**, ne z toho, co leží
+/// Co se stane při `Rebase` (#466) — **snímek z dat pull requestu**, ne z toho, co leží
 /// v cache.
 ///
 /// Celý plán se skládá z odpovědi GitHubu (`Policy.branchSyncPlan`), a je to první polovina

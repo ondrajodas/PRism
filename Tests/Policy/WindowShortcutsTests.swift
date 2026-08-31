@@ -299,7 +299,7 @@ struct WindowShortcutsTests {
             // merguje, zkratku **nemá** — poslední klik před nevratnou věcí je klik.
             "Views/MergeSheet.swift",
             // Potvrzení přetlačení větve (#466): totéž a ze stejného důvodu. `⎋` na `Zrušit`,
-            // `Přetlačit větev` **bez klávesy** — `Enter` nesmí přepsat historii větve.
+            // `Force push` **bez klávesy** — `Enter` nesmí přepsat historii větve.
             "Views/BranchPushSheet.swift",
             "Views/Settings/SettingsView.swift",
             "Views/Settings/SettingsScene.swift",

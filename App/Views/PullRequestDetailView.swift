@@ -576,8 +576,8 @@ struct PullRequestDetailView: View {
     /// `Mergnout…` **jen otevře potvrzení**: `mergeSubmission(for:)` vrátí `nil`, když mergnout
     /// nejde, takže se sheet nad neproveditelným mergem neotevře ani tehdy, kdyby se na zakázané
     /// tlačítko nějak kliknout dalo.
-    /// `Srovnat s main` (#466) je **dvoukrokové**: první tlačítko spustí rebase v kopii repa
-    /// rovnou (lokální práce, dá se vzít zpět), druhé (`Přetlačit…`) jen **otevře potvrzení** —
+    /// `Rebase` (#466) je **dvoukrokové**: první tlačítko spustí rebase v kopii repa
+    /// rovnou (lokální práce, dá se vzít zpět), druhé (`Force push…`) jen **otevře potvrzení** —
     /// `branchPushSubmission(for:)` vrátí `nil`, když v cache nic nečeká, takže se sheet nad
     /// ničím neotevře. Stav mezi krokem jedna a dva si drží store, takže překliknutí tabu ani
     /// zavření panelu ho neztratí.

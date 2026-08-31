@@ -54,7 +54,7 @@ enum BranchSyncState: Equatable, Sendable {
 
     /// Přerovnaná větev, která čeká na přetlačení. `nil` = nečeká nic.
     ///
-    /// Na tomhle stojí tlačítko `Přetlačit…` v panelu **i** to, že se druhý rebase nenabídne:
+    /// Na tomhle stojí tlačítko `Force push…` v panelu **i** to, že se druhý rebase nenabídne:
     /// přehrát commity znovu nad výsledkem, který ještě neodešel, by tu práci zahodilo potichu.
     var rebasedBranch: RebasedBranch? {
         if case .rebased(let branch) = self { branch } else { nil }

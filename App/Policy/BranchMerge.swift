@@ -7,7 +7,7 @@ import Foundation
 /// panel `if`em nad čtyřmi mapami storu, byla by ta odpověď tolikrát, kolik je míst, která se
 /// ptají.
 ///
-/// Sekce je zároveň **místo pro druhou akci** (`Srovnat s main`, #466): stav, ze kterého se
+/// Sekce je zároveň **místo pro druhou akci** (`Rebase`, #466): stav, ze kterého se
 /// rozhoduje o mergi, je tentýž, ze kterého se rozhoduje o srovnání větve — proto je `BranchSection`
 /// složená ze `stavu` a `nabídky`, ne z jednoho tlačítka.
 extension Policy {
@@ -143,11 +143,11 @@ extension Policy {
         /// Co se potvrzuje. `nil` = není z čeho ho složit; pak je `merge` vždycky `blocked`
         /// s `factsMissing`.
         let plan: MergePlan?
-        /// Druhá akce sekce — `Srovnat s main` (#466).
+        /// Druhá akce sekce — `Rebase` (#466).
         let sync: SyncOffer
         /// Co se přehraje a přes co se přetlačí. `nil` = není z čeho to složit.
         let syncPlan: BranchSyncPlan?
-        /// Která z akcí je hlavní. Z návrhu: `Mergnout…` když je zeleno, jinak `Srovnat s main`.
+        /// Která z akcí je hlavní. Z návrhu: `Mergnout…` když je zeleno, jinak `Rebase`.
         let primary: BranchAction
     }
 

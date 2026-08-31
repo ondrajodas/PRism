@@ -3,7 +3,7 @@ import Testing
 
 @testable import PRism
 
-/// Nabídka `Srovnat s main` (#466) — **výčtem, protože je to čistá funkce**.
+/// Nabídka `Rebase` (#466) — **výčtem, protože je to čistá funkce**.
 ///
 /// Nejcennější tvrzení tady jsou ta záporná: na **cizím** PR se akce nekreslí vůbec, na PR
 /// z **forku** se nenabízí, nad **srovnanou** větví se nenabízí a nad **rozdělaným rebasem** se
@@ -273,7 +273,7 @@ struct BranchSyncOfferTests {
 
     // MARK: - Která akce je hlavní
 
-    /// Z návrhu (sekce 36): když je zeleno, je hlavní `Mergnout…`; jinak `Srovnat s main`.
+    /// Z návrhu (sekce 36): když je zeleno, je hlavní `Mergnout…`; jinak `Rebase`.
     @Test("Hlavní akce se řídí tím, jestli jde mergnout")
     func picksThePrimaryAction() {
         #expect(Policy.primaryBranchAction(merge: .allowed) == .merge)

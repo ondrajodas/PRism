@@ -26,7 +26,7 @@ import Foundation
 /// **Zakázané zůstává**: cokoli, co by přepsalo cizí větev (proto lease), push do základní větve
 /// (cílem je vždycky `plan.branch`, tedy hlava PR), mazání větví a tagy.
 protocol BranchPushing: Sendable {
-    /// Přetlačí větev vlastního pull requestu. **Jediná zápisová metoda tohohle protokolu.**
+    /// Pushne větev vlastního pull requestu. **Jediná zápisová metoda tohohle protokolu.**
     ///
     /// Vrací se hlava, kterou remote přijal — tedy to, co se doopravdy stalo, ne to, co se
     /// chtělo. Chyby se **nepolykají**: odmítnutý lease je vlastní případ

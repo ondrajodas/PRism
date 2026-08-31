@@ -3,7 +3,7 @@ import Testing
 
 @testable import PRism
 
-/// Srovnání větve, jak ho skládá store (#466) — `Srovnat s main`.
+/// Srovnání větve, jak ho skládá store (#466) — `Rebase`.
 ///
 /// **Nic se nepushuje.** `git` je podstrčený shell skript v dočasné složce, který zapíše, s jakými
 /// argumenty byl spuštěn, a vypíše připravený výstup. Fake pusher by se sem podstrčit nedal —

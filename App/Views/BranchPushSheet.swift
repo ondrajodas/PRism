@@ -3,11 +3,11 @@ import SwiftUI
 /// Potvrzení přetlačení větve (#466) — poslední obrazovka před tím, než se přepíše historie větve
 /// na remote.
 ///
-/// **Dvě kliknutí, dvě různá tlačítka**, jako u merge (#465) a odeslání review (#68): `Přetlačit…`
+/// **Dvě kliknutí, dvě různá tlačítka**, jako u merge (#465) a odeslání review (#68): `Force push…`
 /// v panelu jen otevře tenhle sheet, teprve tlačítko tady zavolá pusher. A **bez výchozí akce** —
 /// poslední klik před nevratnou věcí je klik, ne `Enter`.
 ///
-/// **Proč sheet, a ne pojmenované tlačítko v panelu:** návrh (sekce 36) kreslí `Přetlačit větev`
+/// **Proč sheet, a ne pojmenované tlačítko v panelu:** návrh (sekce 36) kreslí `Force push`
 /// jako tlačítko v patičce sheetu **nad vypsaným výsledkem**, a to i pro konfliktní cestu (#467).
 /// Kdyby bezkonfliktní cesta měla tlačítko v panelu, byly by z toho dva tvary téhož potvrzení a #467
 /// by ho musel stěhovat. Do panelu se navíc nevejde ani výstraha o lease — má 300 bodů.
@@ -221,7 +221,7 @@ struct BranchPushSheet: View {
 
     /// Tlačítko je pojmenované **akcí** a **není výchozí**: `.keyboardShortcut` na něm schválně
     /// žádný není, takže `Enter` nic nepřetlačí. `.borderedProminent` je vzhled, ne klávesa.
-    /// Popisek je `Přetlačit větev` z návrhu (sekce 36), aby se nerozešel s tím, co #467 kreslí.
+    /// Popisek je `Force push` z návrhu (sekce 36), aby se nerozešel s tím, co #467 kreslí.
     private var pushButton: some View {
         Button("Force push") {
             Task {

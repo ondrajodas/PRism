@@ -1,6 +1,6 @@
 import Foundation
 
-/// Druhá akce sekce `Větev` — **`Srovnat s main`** (#466, návrh sekce 36).
+/// Druhá akce sekce `Větev` — **`Rebase`** (#466, návrh sekce 36).
 ///
 /// Je to čistá funkce ze stejného důvodu jako `mergeOffer`: `git push` do vlastní větve je věc,
 /// která se dá udělat špatně jen jednou, takže otázka „smí se to nabídnout, a když ne, proč“ má
@@ -9,7 +9,7 @@ import Foundation
 /// **Nabídka a plán se skládají zvlášť.** Plán (`BranchSyncPlan`) je snímek toho, co se stane,
 /// a existuje i tehdy, když se akce nabídnout nesmí — panel z něj bere počty do nápovědy.
 extension Policy {
-    /// Proč `Srovnat s main` teď nejde.
+    /// Proč `Rebase` teď nejde.
     ///
     /// **Vlastní výčet, ne `MergeObstacle`.** Rebase brání něco jiného než mergi: červený check
     /// mu nevadí (srovnat větev je zrovna to, co se s ním dělá), kdežto konflikt nebo rozdělaný
@@ -168,7 +168,7 @@ extension Policy {
     }
 
     /// Která z akcí sekce je hlavní (návrh, sekce 36): **`Mergnout…` když je zeleno, jinak
-    /// `Srovnat s main`**.
+    /// `Rebase`**.
     ///
     /// Obě jsou v panelu vždycky — srovnat větev dává smysl i tehdy, když už mergnout jde,
     /// a schovávat akci podle stavu by znamenalo, že se tlačítko pod rukou stěhuje. Mění se jen
@@ -204,13 +204,13 @@ extension Policy {
             case .statusLoading, .statusFailed, .upToDate, .conflicting: false
             // O tomhle mluví hláška **pod** akcemi (`BranchSyncState.sentence`), a ta je
             // konkrétnější: zná jména kolidujících souborů, počet přehraných commitů a nese
-            // tlačítka `Přetlačit…` a `Zahodit`.
+            // tlačítka `Force push…` a `Zahodit`.
             case .running, .unfinishedRebase, .rebasedNotPushed: false
             }
         }
     }
 
-    /// Co se stane, **než se to stane** — nápověda pod kurzorem u povoleného `Srovnat s main`.
+    /// Co se stane, **než se to stane** — nápověda pod kurzorem u povoleného `Rebase`.
     ///
     /// **Mluví jen o prvním kroku, a je to celá pointa rozdělení akce**: tlačítko přehraje commity
     /// v kopii repa a **do remote nesáhne**. Věta o lease se odsud přestěhovala do potvrzení, kde

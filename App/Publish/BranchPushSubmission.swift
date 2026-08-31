@@ -7,7 +7,7 @@ import Observation
 /// **Tvarem `MergeSubmission`, a je to vědomá volba, ne shoda.** Do rozdělení akce na dva kroky to
 /// byla struktura bez stavu, kterou si `AppStore` složil a hned zavolal; od chvíle, kdy má
 /// přetlačení **vlastní potvrzovací obrazovku**, je to tatáž věc jako merge: objekt vzniká
-/// kliknutím na `Přetlačit…`, drží **snímek** toho, co se potvrzuje, a zaniká zavřením sheetu.
+/// kliknutím na `Force push…`, drží **snímek** toho, co se potvrzuje, a zaniká zavřením sheetu.
 /// Proč zrovna sheet a ne tlačítko v panelu, je v [záznamu
 /// rozhodnutí](../../docs/superpowers/specs/2026-07-31-prism-design.md).
 ///
@@ -124,7 +124,7 @@ final class BranchPushSubmission: Identifiable {
     /// Věta o pojistce do potvrzení. Skládá ji `Policy`, ne tenhle typ ani sheet.
     var leaseWarning: String { Policy.leaseWarning(for: plan) }
 
-    /// Přetlačí. **Jediné místo v aplikaci, které volá `BranchPushing.push`.**
+    /// Pushne. **Jediné místo v aplikaci, které volá `BranchPushing.push`.**
     func push() async {
         guard canPush else { return }
         state = .pushing

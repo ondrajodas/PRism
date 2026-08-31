@@ -195,7 +195,7 @@ struct PanelBranchView: View {
     /// zahodit — a `Zavřít` u nich schválně **není**, protože zavřít hlášku o práci v cache by ji
     /// schovalo, aniž by zmizela. To je zrovna ten tichý stav, kterému se tahle akce vyhýbá.
     /// **Dvě tlačítka jdou na vlastní řádek, jedno zůstává u věty** — a je to změřené, ne odhadnuté.
-    /// `Přetlačit…` a `Zahodit rebase` si vedle sebe vezmou ~213 z 278 bodů, které panel na obsah
+    /// `Force push…` a `Zahodit rebase` si vedle sebe vezmou ~213 z 278 bodů, které panel na obsah
     /// má, takže na text zbyde ~50: věta o devíti slovech se v renderu složila do **devíti řádků**
     /// po jednom slově. Je to tatáž past, jakou u sekce `Větev` změřilo #392 v hlavičce PR a #37
     /// u třetího tlačítka — a tentýž závěr: **vlastní řádek je jediné místo, kde se dvě akce vejdou
@@ -257,7 +257,7 @@ struct PanelBranchView: View {
 
     /// Dvojice u přerovnané větve, která neodešla — **na vlastním řádku**.
     ///
-    /// `Přetlačit…` má tři tečky, protože **otevírá potvrzení**; je to tatáž konvence jako
+    /// `Force push…` má tři tečky, protože **otevírá potvrzení**; je to tatáž konvence jako
     /// u `Mergnout…` a ze stejného důvodu: co je za tím kliknutím nevratné, se potvrzuje.
     private var pairedNoticeButtons: some View {
         HStack(spacing: Self.actionSpacing) {
