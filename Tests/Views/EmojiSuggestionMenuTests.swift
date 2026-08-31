@@ -72,7 +72,7 @@ struct EmojiSuggestionMenuTests {
     /// Strop je **210 bodů** a je z něj vidět, co ho drží: šest řádků, nadpis a patka. Kdyby
     /// `Policy.emojiSuggestionLimit` povyrostl, spadne to tady — a to je správné místo, protože
     /// nabídka, která nemá kam, se ořízne o hranu bubliny.
-    @Test("Plná nabídka se vejde do dvou set bodů")
+    @Test("Plná nabídka se vejde do 210 bodů")
     func staysShortEnoughToFitAboveTheField() {
         let full = height(of: Scene.full.rows, width: Self.panel)
 

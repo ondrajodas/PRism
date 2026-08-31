@@ -612,12 +612,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a do #216 se to neprojevilo nikde jinde než na obrazovce. Hlídají to dva testy: jeden nad
   `Policy.inserting`/`applying` (obě cesty), druhý nad storem. **Ověřeno vložením regrese** —
   po vrácení původního kódu test spadne na `events.items == []`.
-- **Našeptávání emotikonů (#483)** — čtyři suity, každá na jinou otázku, a **nejcennější půlka
+- **Našeptávání emotikonů (#483)** — pět suit, každá na jinou otázku, a **nejcennější půlka
   tvrdí, že se něco NEstalo**.
   - **`EmojiQueryTests`** — kdy je dotaz otevřený, **vyčerpávajícím výčtem**: dvanáct vstupů, které
     nabídku otevřít mají (začátek textu, po mezeře, po `LF` i po `CRLF`, kurzor uprostřed slova,
-    podtržítka a znaménka, diakritika, velká písmena, po emotikonu), a **dvacet, které ne** — každý
-    s napsaným důvodem. Planý poplach v textovém poli se jinak pozná až v provozu, takže sem patří
+    podtržítka a znaménka, diakritika, velká písmena, po emotikonu), a **devatenáct, které ne** —
+    každý s napsaným důvodem. Planý poplach v textovém poli se jinak pozná až v provozu, takže sem patří
     `12:30`, `https:…`, `Poznámka:`, `Poznámka: `, `::ta`, `:1`, `:+1`, `:tada:`, kurzor před
     dvojtečkou i za mezerou a kurzor mimo text.
 
@@ -643,6 +643,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     vložení), že je katalog **seřazený**, že je znak v něm **jednou**, a že `:shipit:`, `:octocat:`,
     `:trollface:` ani `:bowtie:` v něm **nejsou**. Rozbor je totální — vadný řádek se zahodí
     a zbytek unese, protože prázdná nabídka kvůli jednomu řádku je ta horší polovina téhož problému.
+    A dvě čísla, na kterých stojí věty o zalamování, se **tvrdí, ne opisují**: nejdelší jméno
+    (42 znaků s dvojtečkami) a nejdelší úsek **mezi oddělovači** (16). To druhé musí zůstat malé,
+    jinak by zlomy nestačily a jméno by přeteklo i s nimi — a spadne to v katalogu, ne v kresbě.
 
     Dvě čísla se **jen vypisují** (`MĚŘENÍ`), netvrdí se strop: rozbor tabulky a jeden dotaz nad ní.
     První se platí jednou za běh procesu, druhý při **každém úhozu** s otevřenou nabídkou — takže

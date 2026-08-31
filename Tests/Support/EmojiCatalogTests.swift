@@ -81,6 +81,26 @@ struct EmojiCatalogTests {
         #expect(parsed[safely: 1]?.aliases == ["thumbsup"])
     }
 
+    /// **Věty o zalamování stojí na dvou číslech z katalogu, takže se tvrdí, ne opisují.**
+    ///
+    /// Nejdelší jméno se do nabídky **nevejde** a musí se zalomit (`EmojiSuggestionMenuTests`), kdežto
+    /// nejdelší úsek **mezi oddělovači** se vejít musí — jinak by zlomy z
+    /// `Policy.emojiShortcodeLabel(of:)` nestačily a jméno by přeteklo i s nimi. Kdyby zdroj někdy
+    /// dostal dlouhé jméno bez podtržítka, spadne to tady, ne v kresbě.
+    @Test("Nejdelší jméno a nejdelší úsek mezi oddělovači")
+    func measuresTheLongestNameAndChunk() throws {
+        let names = EmojiCatalog.all.flatMap(\.names)
+        let longest = try #require(names.max { $0.count < $1.count })
+        let chunks = names.flatMap { $0.split(whereSeparator: { $0 == "_" || $0 == "-" || $0 == "+" }) }
+        let longestChunk = try #require(chunks.max { $0.count < $1.count })
+
+        print("MĚŘENÍ nejdelší jméno: :\(longest): (\(longest.count + 2) znaků), "
+            + "nejdelší úsek: \(longestChunk) (\(longestChunk.count))")
+        #expect(longest == "hand_with_index_finger_and_thumb_crossed")
+        #expect(longest.count + 2 == 42)
+        #expect(longestChunk.count == 16, "úsek bez zlomu má \(longestChunk.count) znaků")
+    }
+
     /// **Rozbor stojí jeden průchod za běh procesu, ne jeden za úhoz** — `static let` je líné, takže
     /// se změří, co ten průchod dělá, a vypíše se to. Kdyby to jednou začalo být drahé, je z čeho
     /// vyjít; strop se netvrdí, protože číslo z testovacího hosta pod zátěží nic neznamená (#296).
