@@ -344,7 +344,7 @@ final class AppStore {
     /// **Ne pusher a ani továrna na něj**, ze stejného důvodu jako u `gh`: cesta do remote se
     /// skládá až v `BranchPushSubmission.push`, takže `AppStore` sám pushnout nic neumí a grep
     /// `BranchPushing App/` ho schválně nevypíše. `nil` v testech znamená „odsud se nepushuje“
-    /// a `branchSyncSubmission(for:)` pak nevrátí nic.
+    /// a `branchPushSubmission(for:)` pak nevrátí nic.
     let git: URL?
 
     /// Cache, ve které se pracuje (#466) — **tatáž, ve které stojí checkout**.

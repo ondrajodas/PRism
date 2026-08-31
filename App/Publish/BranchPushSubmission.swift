@@ -36,8 +36,11 @@ final class BranchPushSubmission: Identifiable {
     enum State: Equatable {
         case ready
         case pushing
-        /// Nepovedlo se. **Odmítnutý lease znamená, že se nic nepřepsalo** a dá se to zkusit znovu;
-        /// ostatní chyby ne — rozhoduje o tom `BranchSyncError.canRetry`.
+        /// Nepovedlo se. Jestli se dá zkusit znovu, rozhoduje `BranchSyncError.canRetry` — a dělí
+        /// to podle toho, jestli je překážka **pomíjivá** (odmítnutý lease, posunutá hlava, timeout)
+        /// nebo **strukturální** (cizí PR, fork, vypnutá brána); u strukturální by druhý pokus
+        /// dopadl stejně. Odmítnutý lease je z těch pomíjivých ten, u kterého se navíc ví, že se
+        /// **nic nepřepsalo**.
         case failed(BranchSyncError)
         /// Server větev přijal; tohle je hlava, která na ní teď leží.
         case pushed(String)

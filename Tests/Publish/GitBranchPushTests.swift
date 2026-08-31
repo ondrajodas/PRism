@@ -244,4 +244,46 @@ struct GitBranchPushTests {
                 .push(plan())
         }
     }
+
+    /// **`canRetry` se tvrdí výčtem všech třinácti případů, ne jedním.**
+    ///
+    /// Přidáno po nálezu z revize: doc komentář u `canRetry` tvrdil, že se znovu dá zkusit jedině
+    /// odmítnutý lease, kdežto kód pouštěl šest případů. Drift prošel právě proto, že test pinoval
+    /// **jediný** z nich — a `canRetry` přitom rozhoduje o tom, jestli je v sheetu tlačítko živé.
+    ///
+    /// Dělící čára není konkrétní chyba, ale **pomíjivá proti strukturální**: co druhý pokus může
+    /// minout (lease, posunutá hlava, přerovnaná větev, timeout, přerušení, neznámá chyba od
+    /// `gitu`) proti tomu, co dopadne stejně, dokud se nezmění něco jinde (cizí PR, fork, neznámý
+    /// původ, zavřený PR, mimo cache, vypnutá brána, chybějící `git`).
+    @Test("Zkusit znovu jde jen u pomíjivé překážky")
+    func retriesOnlyTransientObstacles() {
+        let transient: [BranchSyncError] = [
+            .leaseRejected,
+            .headMoved(expected: "aaa", actual: "bbb"),
+            .branchChanged(expected: "moje", actual: "jina"),
+            .timedOut,
+            .interrupted,
+            .failed("cokoli od gitu"),
+        ]
+        let structural: [BranchSyncError] = [
+            .notAllowed("brána je vypnutá"),
+            .notMine(author: "someone"),
+            .foreignBranch,
+            .unknownBranchOrigin,
+            .pullRequestNotOpen(.closed),
+            .outsideCache("/mimo/cache"),
+            .toolUnavailable("git není"),
+        ]
+
+        for error in transient {
+            #expect(error.canRetry, "\(error) je pomíjivá, druhý pokus ji může minout")
+        }
+        for error in structural {
+            #expect(!error.canRetry, "\(error) je strukturální, druhý pokus dopadne stejně")
+        }
+        // Že jsou to doopravdy **všechny** případy, drží tenhle součet — nový case bez zařazení
+        // do jedné z těch dvou skupin ho položí, a s ním i tvrzení výš.
+        #expect(transient.count + structural.count == 13)
+    }
+
 }

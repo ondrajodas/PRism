@@ -162,9 +162,16 @@ enum BranchSyncError: Error, Equatable, Sendable {
 
     /// Dá se to zkusit znovu bez toho, aby se něco změnilo jinde?
     ///
-    /// **Odmítnutý lease ano** (po obnovení dat), **ostatní ne**: dokud je PR cizí, zavřený nebo
-    /// ve forku, dopadne druhý pokus stejně a tlačítko, po kterém se nic nestane, je horší než
-    /// zašedlé.
+    /// **Dělí se to podle toho, jestli je překážka pomíjivá, nebo strukturální** — ne podle
+    /// jednoho konkrétního chybového stavu.
+    ///
+    /// **Ano** u překážek, které druhý pokus může minout: odmítnutý lease, posunutá hlava
+    /// a přerovnaná větev zmizí po obnovení dat, `timedOut` a `interrupted` jsou o tom, že se běh
+    /// nedokončil, a `failed` je neznámá chyba, o které se nedá tvrdit, že se zopakuje.
+    ///
+    /// **Ne** tam, kde druhý pokus dopadne stejně: dokud je PR cizí, zavřený nebo ve forku, dokud
+    /// je brána vypnutá, cesta mimo cache nebo `git` nedostupný, nezmění se opakováním nic —
+    /// a tlačítko, po kterém se nic nestane, je horší než zašedlé.
     var canRetry: Bool {
         switch self {
         case .leaseRejected, .headMoved, .branchChanged, .timedOut, .interrupted, .failed: true
