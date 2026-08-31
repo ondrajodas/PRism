@@ -4358,3 +4358,64 @@ sekundě**, a když se do té doby neusadí, vrátí `UNKNOWN` — což `Policy.
 už zastihne hodnotu usazenou, což přesně odpovídá tomu, že „to srovná refresh“. Potvrdit se to dá
 jedině na živém PR: force pushnout a čtením `mergeable` změřit, za jak dlouho se usadí. Opravovat
 to znamená sáhnout na **trpělivost** z #465, takže to patří do vlastního issue, ne do tohohle PR.
+
+### Záznam rozhodnutí — po force pushi se čeká na hlavu, ne na `mergeable` (#466, změřeno)
+
+**Uživatel rozhodl, že to nejde do vlastního issue** („můžeš to vyřešit ať nemusím volat refresh?“),
+takže sáhnout na trpělivost z #465 je v rozsahu — vědomě a zapsaně.
+
+**Měření nejdřív, a hypotéza z minulého kola vyšla jinak, než jsem ji formuloval.** Čtyři force pushe
+na `prism-review-sandbox#10`, `gh pr view --json mergeable,headRefOid` v cyklu hned po acku pushe:
+
+| Kolo | `headRefOid` aktuální | `mergeable` usazený |
+|---|---|---|
+| 0 | 1,61 s | 2,74 s |
+| 1 | 2,16 s | 1,23 s |
+| 2 | 1,45 s | 0,65 s |
+| 3 | 1,91 s | 0,67 s |
+
+**Co z toho plyne — a past, kterou jsem minule přehlédl.** Hlava dorazí za **1,45–2,16 s**, takže
+dotaz položený hned po pushi vrátí **starou** hlavu. To je nahlášená vada doslova („není refreshnutý
+poslední commit“): merge posílá `sha` v payloadu, takže se se starou hlavou nemůže povést.
+
+Past je druhá polovina: **`mergeable` se usadí dřív, než dorazí hlava** (0,65 s proti 1,45 s) — a ta
+usazená odpověď platí pro **starou** hlavu. Čekat na `mergeable != UNKNOWN` by tedy bylo nejen
+nedostatečné, ale **zavádějící**: dostal bys hotové „MERGEABLE“ o commitu, který na větvi už není.
+
+**Rozhoduje proto shoda hlavy** (`Policy.awaitsPushedHead`): po úspěšném pushi se ptá `fetchHeads`
+(`cost = 1`, jedna hodnota), dokud pull request nehlásí sha, kterou jsme pushnuli — a teprve pak se
+načte plný detail tou jedinou cestou, která to umí správně.
+
+**Proč to není polling zakázaný v #465.** Ta stráž zakazuje dotazovat **líné pole** dokola, protože
+u něj není vidět, na co se čeká. Tady se čeká na **známý fakt** — sha, kterou jsme sami pushnuli —,
+takže má čekání ukončovací podmínku, ptá se **jen na hlavu** (ne na `mergeable`) a má **tvrdý strop**:
+osm pokusů po 0,4 s, tedy 3,2 s nad naměřeným maximem 2,16 s. Když hlava nedorazí, přestane se ptát
+a nechá se, co GitHub říká — **„nevím“ se s „mergovatelné“ neslévá**, a příští tik nebo `⟳` to
+dorovná. Selhání dotazu čekání **ukončí**: „nezeptal jsem se“ není „hlava nedorazila“.
+
+**Vedlejší efekt, který se tím spravil:** `syncWorktreeState` pozná přerovnanou větev tím, že hlava
+stromu **není** hlavou PR. Se starou hlavou v detailu by po pushi vyšla `.rebased`, tedy nabídka
+force pushnout něco, co už odešlo. S dotaženou hlavou vyjde `.empty`.
+
+### Záznam rozhodnutí — sheet se po úspěšném force pushi zavírá (#466, z proklikání)
+
+**Rozhodnutí:** `BranchPushSheet` se po úspěchu zavírá sám, jako u mergu (#465) — a **jedině po
+úspěchu**. Po odmítnutém leasu, `409`, timeoutu i spadlé síti zůstává otevřený, protože je to jediné
+místo, kde je ta chyba vidět. **Záložka se nezavírá**, na rozdíl od mergu: člověk na pull requestu
+zůstává a jde mergovat.
+
+**Zavírá se na přechodu stavu, ne za `await push()`**, a to je ta netriviální část. `push()` čeká
+i na úklid, a ten od tohohle PR čeká na hlavu (1,45–2,16 s) a pak tahá detail — sheet by nad hotovým
+pushem visel několik sekund a vypadalo by to, že se zavřít nechce. Rozhoduje proto
+`.onChange(of: submission.state)` nad `closesItself`; úklid běží dál ve svém `Task`u, který není
+vázaný na životnost view, takže ho dismiss nezruší.
+
+**Výsledek nese panel, ne sheet.** `branchSyncStates[id] = .pushed(replayed:)` se nastavuje **dřív**,
+než úklid začne, takže hláška `Hotovo — force push poslal N commitů.` je na obrazovce od chvíle, kdy
+sheet zmizí; `findUnfinishedSync` ji nepřepíše (guard na `branchSyncStates[pr] == nil`). Je na to
+test — bez něj by se zavřením sheetu ta informace mohla potichu ztratit, což je celý důvod, proč se
+zavírá jen po úspěchu.
+
+**Dvě mrtvé obrazovky se tím smazaly**: stav `Pushnuto jako …` a patka s `Zavřít` a odkazem na
+GitHub. Na `.pushed` je sheet zavřený, takže by je nikdo neviděl — držet je by byl ten vzor
+z `CLAUDE.md`, na který Copilot chodí (*stav, který se drží, ale nikdo ho nečte*).

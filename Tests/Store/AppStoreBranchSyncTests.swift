@@ -573,6 +573,106 @@ struct AppStoreBranchSyncTests {
         #expect(store.branchSyncState(for: pr)?.rebasedBranch != nil)
     }
 
+    /// **Po pushi se čeká na hlavu, a teprve pak se tahá detail** (#466, z proklikání).
+    ///
+    /// Změřeno na `prism-review-sandbox#10`: objekt pull requestu je po force pushi 1,45–2,16 s
+    /// nekonzistentní, takže detail načtený hned po acku pushe nese **starou** hlavu — a merge
+    /// s ní skončí na `409`, protože ji posílá v payloadu. Tady se to modeluje tím, že `fetchHeads`
+    /// vrátí nejdřív starou hlavu a až potom tu novou.
+    @Test("Po pushi se čeká, dokud PR nehlásí pushnutou hlavu")
+    func waitsForThePushedHead() async throws {
+        let (store, _, gateway) = await prepared(outcome: .success(try rebased()))
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+        gateway.detailsInOrder = [.success(detail()), .success(pushedDetail())]
+        // **Sekvence, ne odmlka**: první dva dotazy vidí starou hlavu, třetí tu novou. Časovat to
+        // pauzou nešlo — první dotaz padne až za podprocesem `git`, takže test měřil něco jiného.
+        gateway.headsInOrder = [
+            [pr: PullRequestHead(sha: Self.head, committedAt: nil)],
+            [pr: PullRequestHead(sha: Self.head, committedAt: nil)],
+            [pr: PullRequestHead(sha: "cccc3333", committedAt: nil)],
+        ]
+
+        await submission.push()
+
+        #expect(submission.state == .pushed("cccc3333"))
+        #expect(store.detail(of: pr)?.headSha == "cccc3333")
+        // **Ptalo se `fetchHeads`, ne plným detailem** — je to `cost = 1` a jedna hodnota.
+        #expect(gateway.headRequests == [[pr], [pr], [pr]])
+    }
+
+    /// **Čekání má tvrdý strop.** Kdyby ho nemělo, byl by z toho dotazovací cyklus nad cizím API —
+    /// a to je ta věc, které se stráž z #465 vyhýbá. Tady hlava nedorazí **nikdy**, takže se musí
+    /// přestat ptát a nechat, co GitHub říká; příští tik nebo `⟳` to dorovná.
+    @Test("Když pushnutá hlava nedorazí, přestane se ptát")
+    func stopsAskingWhenTheHeadNeverArrives() async throws {
+        let (store, _, gateway) = await prepared(outcome: .success(try rebased()))
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+        // Hlava nedorazí nikdy — poslední odpověď sekvence se opakuje.
+        gateway.headsInOrder = [[pr: PullRequestHead(sha: Self.head, committedAt: nil)]]
+
+        await submission.push()
+
+        #expect(submission.state == .pushed("cccc3333"))
+        #expect(gateway.headRequests.count == Policy.pushedHeadAttempts)
+        // A **netvrdí se nová hlava**: co GitHub naposled řekl, to v okně zůstane.
+        #expect(store.detail(of: pr)?.headSha == Self.head)
+    }
+
+    /// **Selhání dotazu na hlavu čekání ukončí**, neopakuje se. „Nezeptal jsem se“ není „hlava
+    /// nedorazila“, a opakovat něco, co spadlo na síti, by jen protahovalo zavření sheetu.
+    @Test("Selhání dotazu na hlavu se neopakuje")
+    func doesNotRetryAfterAFailedHeadQuery() async throws {
+        let (store, _, gateway) = await prepared(outcome: .success(try rebased()))
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+        gateway.headsFailure = GitHubError.timedOut
+
+        await submission.push()
+
+        #expect(submission.state == .pushed("cccc3333"))
+        #expect(gateway.headRequests.count == 1)
+    }
+
+    /// **Hláška o úspěchu je v panelu dřív, než začne úklid** — na tom stojí zavírání sheetu.
+    /// Sheet se na `.pushed` zavře, takže kdyby výsledek nesl jen on, zmizel by s ním.
+    @Test("Panel nese výsledek pushe, i když se sheet zavře")
+    func theOutcomeStaysInThePanel() async throws {
+        let (store, _, gateway) = await prepared(outcome: .success(try rebased()))
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+        gateway.detailsInOrder = [.success(detail()), .success(pushedDetail())]
+        gateway.headsInOrder = [[pr: PullRequestHead(sha: "cccc3333", committedAt: nil)]]
+
+        await submission.push()
+
+        #expect(submission.closesItself, "sheet se po úspěchu zavírá")
+        let sentence = try #require(store.branchSyncState(for: pr)?.sentence)
+        #expect(sentence.contains("force push"))
+        #expect(sentence.contains("2"), "věta nese počet přehraných commitů")
+    }
+
+    /// **Po selhání se sheet nezavírá** — je to jediné místo, kde je vidět, co server odmítl.
+    @Test("Po selhání se sheet nezavírá")
+    func keepsTheSheetOpenOnFailure() async throws {
+        let refusal = """
+        To https://github.com/ondrajodas/prism-review-sandbox.git
+         ! [rejected]        cccc3333 -> prism-sync-probe (stale info)
+        error: failed to push some refs
+        """
+        let (store, _, _) = await prepared(
+            git: try fakeGit(output: refusal, exitCode: 1),
+            outcome: .success(try rebased())
+        )
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+
+        await submission.push()
+
+        #expect(!submission.closesItself)
+    }
+
     /// Detail s **novou** hlavou — tedy to, co na remote leží po úspěšném force pushi.
     private func pushedDetail() -> PullRequest {
         PullRequest(

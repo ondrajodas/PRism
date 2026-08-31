@@ -7486,3 +7486,36 @@ aspoň jednu odpověď“), takže „neptalo se vůbec“ se tvrdí přes `runn
 scénářem s **nespotřebovanou** odpovědí. A pád na precondition v testovacím hostu se v logu pozná
 tím, že `Test run with N tests passed` je **menší** N než obvykle a na konci stojí `TEST FAILED` —
 rozhoduje návratový kód a ten poslední řádek, ne to zelené hlášení nad ním.
+
+### Jak se změřilo, za jak dlouho GitHub po force pushi řekne pravdu (#466)
+
+Prerekvizita opravy, ne dekorace: bez tohohle čísla by se nedalo rozhodnout, na **co** se po pushi
+čeká. Měřeno na `prism-review-sandbox#10` (sandbox, force pushovat se na něj dá kolikrát je třeba):
+
+```bash
+# rebase na master a force push s leasem, pak čtení v cyklu hned po acku
+git push --force-with-lease=refs/heads/<větev>:<stará-hlava> origin <větev>
+PUSHED=$(date +%s.%N)
+for i in $(seq 1 60); do
+    gh pr view 10 --repo ondrajodas/prism-review-sandbox --json mergeable,headRefOid
+    # ... a k tomu čas od PUSHED
+done
+```
+
+**Čtyři kola:** hlava (`headRefOid`) aktuální po **1,61 / 2,16 / 1,45 / 1,91 s**, `mergeable` usazený
+po **2,74 / 1,23 / 0,65 / 0,67 s**.
+
+**Dvě věci, které se z toho nedají uhádnout:**
+
+1. **Objekt pull requestu je po force pushi chvíli nekonzistentní**, i když **ref je aktuální
+   okamžitě** (změřeno zvlášť: `git/ref/heads/…` vrátilo novou hlavu na první pokus). Měřit ref
+   a usoudit z něj na PR je proto chyba — udělal jsem ji v předchozím kole.
+2. **`mergeable` se usadí dřív, než dorazí hlava**, a ta usazená odpověď platí pro **starou** hlavu.
+   Čekání na `mergeable != UNKNOWN` je tedy **zavádějící**, ne jen nedostatečné.
+
+**Pro test z toho plyne, že se ta scéna nesmí časovat.** První pokus o `headsInOrder` byla odmlka
+mezi `async let push` a přepsáním `gateway.heads` — a test byl **falešně zelený**, protože první
+dotaz na hlavu padne až za podprocesem `git`, takže pauza skončila dřív, než se vůbec zeptal
+(`headRequests.count == 1` místo tří). Fake proto dostal **`headsInOrder`**: odpovědi v pořadí,
+poslední se opakuje. Je to tentýž postup jako u `detailsInOrder` a tentýž závěr jako u posunu
+základu — **když se scéna nedá vyjádřit, uprav fake, ne časování**.

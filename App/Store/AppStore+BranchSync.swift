@@ -170,9 +170,9 @@ extension AppStore {
             gateway: gateway,
             scope: publishScope,
             mine: ownLogins,
-            afterSuccess: { [weak self] in
+            afterSuccess: { [weak self] head in
                 self?.branchSyncStates[id] = .pushed(replayed: rebased.replayed)
-                await self?.branchWasPushed(pullRequest)
+                await self?.branchWasPushed(pullRequest, expecting: head)
             }
         )
     }
@@ -191,10 +191,39 @@ extension AppStore {
     ///
     /// Cache se zahazuje **ručně**: detail jde podle `updatedAt` shrnutí, a to se v našem seznamu
     /// změní až dalším tikem.
-    private func branchWasPushed(_ pullRequest: PullRequestSummary) async {
+    private func branchWasPushed(_ pullRequest: PullRequestSummary, expecting head: String) async {
+        // **Napřed se počká na hlavu, teprve pak se tahá detail.** Obráceně to nešlo: objekt pull
+        // requestu je po force pushi 1,45–2,16 s nekonzistentní (změřeno, viz
+        // `Policy.awaitsPushedHead`), takže detail načtený hned po acku pushe nese **starou**
+        // hlavu — a merge s ní skončí na `409`, protože ji posílá v payloadu.
+        await awaitPushedHead(head, for: pullRequest.id)
         detailStates[pullRequest.id] = nil
         branchStatuses[pullRequest.id] = nil
         await loadDetail(for: pullRequest)
         await loadBranchStatus(for: pullRequest)
+    }
+
+    /// Ptá se na **hlavu**, dokud pull request nehlásí tu, kterou jsme pushnuli.
+    ///
+    /// **`fetchHeads`, ne `fetchDetail`** — je to `cost = 1` a jeden dotaz, kdežto plný detail
+    /// s sebou tahá checky, commity i labely. Čeká se na jednu hodnotu, tak se ptá jen na ni;
+    /// plný detail se pak načte **jednou**, tou jedinou cestou, která to umí správně.
+    ///
+    /// **Na `mergeable` se tady nečeká vůbec**, a je to schválně: usadí se dřív než dorazí hlava
+    /// (0,65 s proti 1,45 s), takže by to byla hotová odpověď o **starém** commitu. Jak dorazí
+    /// hlava, je celý objekt konzistentní a `loadBranchStatus` si zbytek dořeší svými pokusy.
+    ///
+    /// **Selhání dotazu čekání ukončí.** Nemá cenu opakovat něco, co spadlo na síti — a hlavně:
+    /// „nezeptal jsem se“ není „hlava nedorazila“. Zbytek dopadne na `loadDetail` a příští tik.
+    private func awaitPushedHead(_ head: String, for id: PRIdentifier) async {
+        var seen: String?
+        for attempt in 0... {
+            guard Policy.awaitsPushedHead(expected: head, actual: seen, attempt: attempt) else {
+                return
+            }
+            if attempt > 0 { try? await Task.sleep(for: Policy.pushedHeadRetryDelay) }
+            guard let heads = try? await gateway.fetchHeads(of: [id]) else { return }
+            seen = heads[id]?.sha
+        }
     }
 }

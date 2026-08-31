@@ -50,14 +50,14 @@ final class BranchPushSubmission: Identifiable {
     private let pusher: @MainActor () -> any BranchPushing
     /// Co udělat po úspěchu — načíst detail a stav větve znovu, protože se hlava změnila. Skládá to
     /// `AppStore`, protože je to jeho stav; tenhle objekt o něm nic neví.
-    private let afterSuccess: @MainActor () async -> Void
+    private let afterSuccess: @MainActor (String) async -> Void
 
     init(
         pullRequest: PullRequestSummary,
         plan: BranchPushPlan,
         replayed: Int,
         pusher: @escaping @MainActor () -> any BranchPushing,
-        afterSuccess: @escaping @MainActor () async -> Void
+        afterSuccess: @escaping @MainActor (String) async -> Void
     ) {
         self.pullRequest = pullRequest
         self.plan = plan
@@ -79,7 +79,7 @@ final class BranchPushSubmission: Identifiable {
         gateway: any GitHubGateway,
         scope: PublishScope,
         mine: Set<String>,
-        afterSuccess: @escaping @MainActor () async -> Void
+        afterSuccess: @escaping @MainActor (String) async -> Void
     ) {
         self.init(
             pullRequest: pullRequest,
@@ -133,7 +133,7 @@ final class BranchPushSubmission: Identifiable {
             // Stav se přepíná **před** úklidem, jako u merge: načíst PR znovu je práce po síti
             // a potvrzení, že push prošel, na ni nemá čekat.
             state = .pushed(head)
-            await afterSuccess()
+            await afterSuccess(head)
         } catch let error as BranchSyncError {
             state = .failed(error)
         } catch is CancellationError {

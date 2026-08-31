@@ -11935,13 +11935,26 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       </div>
     </div>
 
-    <h3>Potvrzení přetlačení</h3>
+    <h3>Potvrzení force pushe</h3>
     <p class="muted">
       Vypsané je <b>všechno, co odejde</b>, jako u merge: která větev, kolik commitů, jaká hlava
       z toho vznikla a na jakou hlavu čeká <code>--force-with-lease</code>. K tomu <b>výstraha
       o pojistce</b> — z „lease čeká hlavu <code>9bb4352</code>“ plyne, co se stane, když se remote
       mezitím pohnul: <b>nic</b>. <b>Výchozí akci to potvrzení nemá</b>, takže <code>Enter</code>
       historii větve nepřepíše.
+    </p>
+    <p class="muted">
+      <b>Po úspěchu se sheet zavře sám</b> — jako u mergu (#465), a <b>jedině po úspěchu</b>: po
+      odmítnutém leasu, <code>409</code>, timeoutu ani spadlé síti zůstane otevřený, protože je to
+      jediné místo, kde je ta chyba vidět. <b>Záložku ale nezavírá</b>, na rozdíl od mergu: člověk
+      na pull requestu zůstává a jde mergovat.
+    </p>
+    <p class="muted">
+      <b>Výsledek proto nese panel, ne sheet</b> — hláška <code>Hotovo — force push poslal
+      N&nbsp;commitů.</code> Sheet žádnou obrazovku „hotovo“ nekreslí; byl by to stav, který nikdo
+      neuvidí. Zavírá se přitom <b>na přechodu stavu, ne po dokončení úklidu</b>: úklid čeká na
+      hlavu pull requestu (změřeno <b>1,45–2,16 s</b>, než ji GitHub po force pushi ohlásí), takže
+      by sheet nad hotovým pushem visel několik sekund a vypadalo by to, že se zavřít nechce.
     </p>
     <p class="muted">
       <b>Zahodit se dá i odsud.</b> Sheet je to místo, kde je vidět, co v kopii repa leží — tedy

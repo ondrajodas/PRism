@@ -426,14 +426,33 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     var headRequests: [[PRIdentifier]] { lock.withLock { headsAsked } }
 
     private var headsAsked: [[PRIdentifier]] = []
+    private var headsQueue: [[PRIdentifier: PullRequestHead]] = []
+    private var headsQueueUsed = 0
+
+    /// Odpovědi na `fetchHeads` **v pořadí, poslední se opakuje** — jako `detailsInOrder`.
+    ///
+    /// Existuje kvůli scéně „po force pushi GitHub chvíli hlásí starou hlavu“ (#466, změřeno
+    /// 1,45–2,16 s). Časovat ji odmlkou v testu **nešlo**: první dotaz na hlavu padne až za
+    /// podprocesem `git`, takže se pauza rozešla s tím, co se měřilo, a test byl falešně zelený.
+    /// Sekvence tu časovou závislost odstraňuje úplně.
+    var headsInOrder: [[PRIdentifier: PullRequestHead]] {
+        get { lock.withLock { headsQueue } }
+        set { lock.withLock { headsQueue = newValue; headsQueueUsed = 0 } }
+    }
 
     func fetchHeads(of ids: [PRIdentifier]) async throws -> [PRIdentifier: PullRequestHead] {
         // Prázdný dotaz se nezaznamenává ani nespouští — jako ve `GhGateway`, ať se na tom dá
         // tvrdit, že se na nic neptáme.
         guard !ids.isEmpty else { return [:] }
-        lock.withLock { headsAsked.append(ids) }
+        let queued: [PRIdentifier: PullRequestHead]? = lock.withLock {
+            headsAsked.append(ids)
+            guard !headsQueue.isEmpty else { return nil }
+            let answer = headsQueue[min(headsQueueUsed, headsQueue.count - 1)]
+            headsQueueUsed += 1
+            return answer
+        }
         if let headsFailure { throw headsFailure }
-        return heads.filter { ids.contains($0.key) }
+        return (queued ?? heads).filter { ids.contains($0.key) }
     }
 
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {

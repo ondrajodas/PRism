@@ -9587,6 +9587,37 @@ dotazu přepsala novější data po přepnutí PR.
 **A selhání nic nemaže**: odpověď, kterou máme, je lepší než prázdno a příští tik to zkusí znovu —
 tatáž nesymetrie jako u razítek rozhlídky (#335).
 
+### Po force pushi se čeká na hlavu, ne na `mergeable` (#466, změřeno)
+
+**Objekt pull requestu je po force pushi chvíli nekonzistentní** — a je to změřené na
+`prism-review-sandbox#10`, čtyři kola:
+
+| Kolo | `headRefOid` aktuální | `mergeable` usazený |
+|---|---|---|
+| 0 | 1,61 s | 2,74 s |
+| 1 | 2,16 s | 1,23 s |
+| 2 | 1,45 s | 0,65 s |
+| 3 | 1,91 s | 0,67 s |
+
+Detail načtený hned po acku pushe proto nese **starou** hlavu, a merge s ní skončí na `409`
+(posílá `sha` v payloadu). **Past je druhá polovina:** `mergeable` se usadí **dřív** než dorazí
+hlava, takže usazená odpověď platí pro starou hlavu — čekat na `mergeable != UNKNOWN` je
+**zavádějící**, ne jen nedostatečné.
+
+`branchWasPushed` proto nejdřív čeká na **shodu hlavy** (`awaitPushedHead` +
+`Policy.awaitsPushedHead`) a teprve pak tahá detail. Ptá se `fetchHeads` (`cost = 1`, jedna
+hodnota), ne plným detailem; **na `mergeable` se nečeká vůbec** — jak dorazí hlava, je celý objekt
+konzistentní a `loadBranchStatus` si zbytek dořeší svými pokusy.
+
+**Proti stráži z #465 to nejde**, a rozdíl je v ukončovací podmínce: ta stráž zakazuje dotazovat
+**líné pole** dokola, protože u něj není vidět, na co se čeká. Tady se čeká na **známý fakt** — sha,
+kterou jsme sami pushnuli. Strop je přesto tvrdý (`pushedHeadAttempts` 8 × 0,4 s = 3,2 s, nad
+naměřeným maximem 2,16 s); po jeho vyčerpání se přestane ptát a nechá se, co GitHub říká, aby se
+**„nevím“ neslilo s „mergovatelné“**. Selhání dotazu čekání **ukončí**.
+
+**Spravilo to i `syncWorktreeState`**: přerovnaná větev se pozná tím, že hlava stromu není hlavou
+PR — se starou hlavou by po pushi vyšla `.rebased`, tedy nabídka pushnout něco, co už odešlo.
+
 ## Vestavěný terminál (#459)
 
 `App/Terminal/` — shell v zásuvce pod diffem, návrh sekce 35. Jsou to tři soubory a každý drží

@@ -34,6 +34,16 @@ struct BranchPushSheet: View {
         .frame(minWidth: 460, idealWidth: 520, minHeight: 320, idealHeight: 380)
         // Zavřít okno uprostřed volání by znamenalo nevědět, jestli se pushovalo.
         .interactiveDismissDisabled(submission.state == .pushing)
+        // **Zavření visí na stavu, ne na tlačítku** (#466, z proklikání). Rozhoduje o tom
+        // `closesItself`, tedy tentýž typ, který ví, co se stalo — takže se zavírá **jedině po
+        // úspěchu**: po odmítnutém leasu, `409`, timeoutu ani spadlé síti se stav na `.pushed`
+        // nedostane a sheet zůstane otevřený, protože je to jediné místo, kde je ta chyba vidět.
+        //
+        // Proč na stavu a ne za `await push()`: `push()` čeká i na úklid, a ten čeká na hlavu pull
+        // requestu (změřeno 1,45–2,16 s) — sheet by nad hotovým pushem visel několik sekund.
+        .onChange(of: submission.state) { _, _ in
+            if submission.closesItself { close() }
+        }
     }
 
     // MARK: - Hlavička
@@ -162,15 +172,12 @@ struct BranchPushSheet: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        case .pushed(let head):
-            Label {
-                Text(verbatim: "Pushnuto jako \(head.prefix(7)).")
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "checkmark.circle.fill")
-            }
-            .font(.callout)
-            .foregroundStyle(Palette.ok)
+        // **Úspěch se tady nekreslí, a je to schválně**: na `.pushed` se sheet zavírá, takže by
+        // to byl stav, který nikdo neuvidí. Výsledek nese **panel** hláškou `Hotovo — force push
+        // poslal N commitů.`, kterou store nastavuje **dřív** než začne úklid — takže je na
+        // obrazovce od chvíle, kdy sheet zmizí.
+        case .pushed:
+            EmptyView()
         }
     }
 
@@ -197,13 +204,11 @@ struct BranchPushSheet: View {
         }
     }
 
+    /// **Bez větve pro `.pushed`**: na ten stav se sheet zavírá, takže tlačítka pod hotovým pushem
+    /// by nikdo neviděl. Do #466 tu stál `Zavřít` a odkaz na GitHub — obojí zmizelo s tím, že se
+    /// zavírá samo.
     @ViewBuilder private var buttons: some View {
         switch submission.state {
-        case .pushed:
-            Link("otevřít na GitHubu", destination: submission.pullRequest.url)
-                .font(.callout)
-            Button("Zavřít", action: close)
-                .keyboardShortcut(.cancelAction)
         default:
             // **Zahodit se dá i odsud**, ne jen z panelu: sheet je to místo, kde je vidět, co
             // v cache leží, takže je to zrovna ta chvíle, kdy se člověk rozhodne to nepushovat.
@@ -224,12 +229,12 @@ struct BranchPushSheet: View {
     /// Popisek je `Force push` z návrhu (sekce 36), aby se nerozešel s tím, co #467 kreslí.
     private var pushButton: some View {
         Button("Force push") {
-            Task {
-                await submission.push()
-                // **Až po úspěchu, ne po kliknutí.** Po odmítnutém lease i po spadlé síti zůstává
-                // sheet otevřený: je to jediné místo, kde je vidět, co server odmítl.
-                if submission.closesItself { close() }
-            }
+            // **Zavírá se na přechodu stavu, ne po dokončení `push()`** — a je to změna
+            // z proklikání. `push()` totiž čeká i na úklid po pushi, a ten od té doby čeká na
+            // hlavu pull requestu (1,45–2,16 s změřeno) a pak tahá detail: sheet by nad hotovým
+            // pushem visel několik sekund a vypadalo by to, že se zavřít nechce. Úklid běží dál
+            // ve svém `Task`u — ten není vázaný na životnost view, takže dismiss ho nezruší.
+            Task { await submission.push() }
         }
         .buttonStyle(.borderedProminent)
         .disabled(!submission.canPush)

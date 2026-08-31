@@ -232,6 +232,47 @@ extension Policy {
             + "a nic se nepřepíše."
     }
 
+    /// Kolikrát se po **vlastním force pushi** přeptat, dokud pull request nehlásí hlavu, kterou
+    /// jsme právě pushnuli — a jak dlouho mezi tím čekat.
+    ///
+    /// **Objekt pull requestu je po force pushi chvíli nekonzistentní, a je to změřené** na
+    /// `prism-review-sandbox#10` (čtyři force pushe, `gh pr view --json mergeable,headRefOid`
+    /// v cyklu hned po acku pushe):
+    ///
+    /// | Kolo | `headRefOid` aktuální | `mergeable` usazený |
+    /// |---|---|---|
+    /// | 0 | 1,61 s | 2,74 s |
+    /// | 1 | 2,16 s | 1,23 s |
+    /// | 2 | 1,45 s | 0,65 s |
+    /// | 3 | 1,91 s | 0,67 s |
+    ///
+    /// **Dvě věci z toho plynou a jedna je past.** Hlava dorazí za 1,45–2,16 s, takže dotaz
+    /// položený hned po pushi vrátí **starou** hlavu — a to je přesně nahlášená vada („po force
+    /// pushi nejde mergnout, není refreshnutý poslední commit“): merge posílá `sha` v payloadu,
+    /// takže se se starou hlavou nemůže povést.
+    ///
+    /// Past je ta druhá polovina: **`mergeable` se usadí dřív než dorazí hlava** (0,65 s proti
+    /// 1,45 s), a ta usazená odpověď platí pro **starou** hlavu. Čekat na `mergeable != UNKNOWN`
+    /// by tedy bylo nejen nedostatečné, ale **zavádějící** — dostaneš hotovou odpověď o commitu,
+    /// který už na větvi není. Rozhoduje proto **shoda hlavy**, ne usazenost `mergeable`.
+    ///
+    /// **Není to trpělivost naslepo, a v tom je rozdíl proti stráži z #465.** Ta zakazuje dotazovat
+    /// líné pole `mergeable` dokola, protože se u něj neví, na co se čeká. Tady se čeká na
+    /// **známý fakt** — sha, kterou jsme sami pushnuli —, takže má čekání ukončovací podmínku
+    /// a ptá se jedině `fetchHeads` (`cost = 1`), ne na `mergeable`. Strop je přesto **tvrdý**:
+    /// když hlava do rozpočtu nedorazí, přestane se ptát a nechá se, co GitHub říká. Tvrdit
+    /// „mergovatelné“ bez potvrzené hlavy se nesmí — „nevím“ a „nejde“ se nesmí slít.
+    static func awaitsPushedHead(expected: String, actual: String?, attempt: Int) -> Bool {
+        guard attempt < pushedHeadAttempts else { return false }
+        return actual != expected
+    }
+
+    /// Osm pokusů po 0,4 s je **3,2 s čekání** — nad naměřeným maximem 2,16 s s rezervou, a pořád
+    /// řádově pod tikem pollingu. Krok je krátký schválně: hlava obvykle dorazí do dvou sekund
+    /// a delší krok by to čekání zaokrouhlil nahoru.
+    static let pushedHeadAttempts = 8
+    static let pushedHeadRetryDelay = Duration.milliseconds(400)
+
     /// Na kterém PR se má v tiku přeptat na **polohu větve proti základu** (#466, z proklikání).
     ///
     /// **Existuje proto, že „pozadu“ nezávisí na hlavě pull requestu, a razítko `updatedAt` proto
