@@ -130,7 +130,7 @@ struct DetailTabRenderProbe {
             pullRequest: Self.summary,
             submission: .constant(nil),
             merge: .constant(nil),
-                branchPush: .constant(nil)
+            branchPush: .constant(nil)
         )
         .frame(width: width, height: Self.height)
         .background(Palette.background)

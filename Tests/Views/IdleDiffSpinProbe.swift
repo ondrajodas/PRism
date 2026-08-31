@@ -1223,7 +1223,7 @@ struct IdleDiffSpinProbe {
             pullRequest: Self.summary,
             submission: .constant(nil),
             merge: .constant(nil),
-                branchPush: .constant(nil)
+            branchPush: .constant(nil)
         )
         let controller = NSHostingController(
             rootView: Group {

@@ -146,7 +146,7 @@ struct CheckLogRoomProbe {
             pullRequest: Self.summary,
             submission: .constant(nil),
             merge: .constant(nil),
-                branchPush: .constant(nil)
+            branchPush: .constant(nil)
         )
         .frame(width: contentWidth, height: height)
         .background(Palette.background)

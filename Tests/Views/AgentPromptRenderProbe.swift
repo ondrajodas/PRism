@@ -214,7 +214,7 @@ struct AgentPromptRenderProbe {
             pullRequest: Self.summary,
             submission: .constant(nil),
             merge: .constant(nil),
-                branchPush: .constant(nil)
+            branchPush: .constant(nil)
         )
         .frame(width: 1400, height: Self.height)
         .background(Palette.background)
