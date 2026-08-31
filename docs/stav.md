@@ -5778,7 +5778,7 @@ zprávy se ze sazby nedostane nic — vkládá se znak.
 `.diacriticInsensitive` by na `:čá` nabídlo `taco` (shortcody jsou ASCII) a cena — 1,88 ms proti
 0,50 ms na dotaz nad 1913 jmény (`-O`). Běží to při každém úhozu s otevřenou nabídkou.
 
-Testů **4443**, všechny zelené — z toho **35 nových** v pěti suitách. Cenná je na nich negativní
+Testů **4447**, všechny zelené — z toho **35 nových** v pěti suitách. Cenná je na nich negativní
 půlka: devatenáct vstupů, u kterých se nabídka otevřít **nesmí** (`12:30`, `https:…`, `Poznámka:`,
 `::ta`, `:1`, `:tada:`, kurzor mimo text), zastaralý rozsah, který **nevloží nic**, `:čá` bez shody,
 a nad zdrojáky, že nabídku zapínají **jmenovitě tři** pole a tab `Zeptat se` mezi nimi není. Jedno
