@@ -505,9 +505,14 @@ struct AppStoreBranchSyncTests {
         #expect(gateway.detailRequests.count > 1)
     }
 
-    /// **Odmítnutý lease je vlastní stav a vlastní věta** (zadání #466): remote se pohnul, nic se
-    /// nepřepsalo a dá se to zkusit znovu. Text `stale info` je ten, který `git` v té situaci
-    /// doopravdy vypíše — změřeno na `prism-review-sandbox`.
+    /// **Odmítnutý lease je vlastní stav a vlastní věta** (zadání #466): remote se pohnul a nic se
+    /// nepřepsalo. Text `stale info` je ten, který `git` v té situaci doopravdy vypíše — změřeno na
+    /// `prism-review-sandbox`.
+    ///
+    /// **Druhý pokus se odsud ale nenabízí, a je to změna ze čtvrtého kola revize.** Do té doby tu
+    /// stálo „dá se to zkusit znovu“ a `canPush` se tvrdilo `true`. Retry přitom posílá **tentýž
+    /// plán** s tímtéž `expectedRemoteSha`, takže by lease odmítl **identicky** — cesta dál vede
+    /// přes obnovení dat, a to je to, co říká i věta u té chyby.
     @Test("Odmítnutý lease se pozná od jiné chyby")
     func tellsARejectedLeaseFromOtherFailures() async throws {
         let refusal = """
@@ -527,8 +532,8 @@ struct AppStoreBranchSyncTests {
         #expect(submission.state == .failed(.leaseRejected))
         #expect(BranchSyncError.leaseRejected.sentence.contains("pohnula"))
         #expect(!BranchSyncError.leaseRejected.sentence.contains("stale info"))
-        // **Dá se zkusit znovu** — z odmítnutého lease plyne, že se nic nepřepsalo.
-        #expect(submission.canPush)
+        // **Druhý pokus se nenabízí**: tentýž plán by narazil na tentýž lease.
+        #expect(!submission.canPush)
         // A **mezistav v cache zůstává**, takže se k druhému pokusu dá vrátit i po zavření sheetu.
         #expect(store.branchSyncState(for: pr)?.rebasedBranch != nil)
     }

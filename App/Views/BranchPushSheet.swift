@@ -47,9 +47,12 @@ struct BranchPushSheet: View {
             Text(verbatim: submission.pullRequest.id.description)
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.secondary)
-            // **Věta o tom, co se ještě nestalo**, ne o nevratnosti: rebase je hotový a leží
-            // v cache, do remote se zatím nesáhlo. Přesně tak to kreslí návrh.
-            Text("Rebase je hotový v kopii repa. Do remote se zatím nesáhlo.")
+            // **Věta o mechanismu, ne o aktuálním stavu remote.** Do #466 tu stálo „Do remote se
+            // zatím nesáhlo.“ — a přestávalo to být pravda, jakmile push běžel nebo doběhl,
+            // protože hlavička v sheetu **zůstává ve všech stavech**. U `timedOut` by navíc
+            // tvrdila jistotu, kterou nemáme (`aftermath` u něj schválně říká „nevím, jestli push
+            // doběhl“). Popis kroku platí v každém stavu; co se stalo s remote, říká patka.
+            Text("Rebase je hotový v kopii repa. Přetlačení je druhý krok.")
                 .font(.callout)
                 .foregroundStyle(Palette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -171,13 +174,26 @@ struct BranchPushSheet: View {
         }
     }
 
-    /// Co z chyby plyne o stavu remote. **Tři různé věty, ne jedna** — a `interrupted` s `timedOut`
-    /// jsou ty, u kterých se **nedá** tvrdit, že se nic nestalo.
+    /// Co z chyby plyne o stavu remote. **Tři různé věty, ne jedna**, a dělí se podle toho, co se
+    /// o remote doopravdy **ví**.
+    ///
+    /// Dvě opravy po revizi, obě ze stejné třídy („text tvrdí víc, než data unesou“):
+    ///
+    /// - **`leaseRejected` nesmí říkat „na větvi se nic nezměnilo“.** Vedle věty z `error.sentence`
+    ///   („Větev se na GitHubu mezitím pohnula…“) to vyznělo protichůdně, protože každá mluví
+    ///   o jiné změně — ta první o cizím pushi, tahle o tom našem. Říká se proto výslovně, že to
+    ///   **náš** push nepřepsal.
+    /// - **`failed` patří k nejistým, ne do `default`u.** Byla to neznámá chyba od `gitu`
+    ///   v košíku, který tvrdil „nic se nezměnilo“ — u nevratné akce zrovna to tvrzení nesmí padnout
+    ///   naslepo. Jistotu máme jedině u chyb z **pre-flightu** (cizí PR, fork, mimo cache, zavřený
+    ///   PR, vypnutá brána): tam se `git push` **nespustil**, takže se nezměnit nemohlo nic.
     private func aftermath(of error: BranchSyncError) -> String {
         switch error {
-        case .leaseRejected: "Na větvi se nic nezměnilo. Načti pull request znovu."
-        case .timedOut, .interrupted: "Zkontroluj větev na GitHubu — nevím, jestli push doběhl."
-        default: "Na větvi se nic nezměnilo."
+        case .leaseRejected:
+            "Tvůj push větev nepřepsal — pojistka zabrala. Načti pull request znovu."
+        case .timedOut, .interrupted, .failed:
+            "Zkontroluj větev na GitHubu — nevím, jestli push doběhl."
+        default: "Na větvi se nic nezměnilo — push se ani nespustil."
         }
     }
 

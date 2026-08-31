@@ -201,6 +201,11 @@ extension AppStore {
                 head: detail.headSha
             )
         } catch {
+            // **Spolknuto schválně, a uživatel o to nepřijde.** Je to obnovení hodnoty, kterou už
+            // v panelu má — ne první načtení —, takže „nepovedlo se přeptat“ nemá co nakreslit:
+            // stará odpověď platí dál a příští tik to zkusí znovu. Že GitHub neodpovídá, drží
+            // stavový řádek z pollingu. Tatáž nesymetrie jako u razítek rozhlídky (#335)
+            // a u `refreshStaleHeads`.
             return
         }
 
@@ -210,6 +215,10 @@ extension AppStore {
             current == status, currentUpdatedAt == updatedAt
         else { return }
         var refreshed = status
+        // **`nil` se zapisuje, chyba ne** — a ten rozdíl je záměr, ne nedůslednost. `nil` je
+        // odpověď („zeptal jsem se a GitHub polohu neurčil“, typicky smazaný ref), takže držet nad
+        // ní starou hodnotu by znamenalo tvrdit polohu, kterou nikdo nepotvrdil. Chyba je naopak
+        // „nezeptal jsem se“ — a tam je stará odpověď pořád ta nejlepší, kterou máme.
         refreshed.divergence = divergence
         branchStatuses[id] = .loaded(refreshed, updatedAt: updatedAt)
     }

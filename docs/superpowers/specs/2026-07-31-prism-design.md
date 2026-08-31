@@ -4264,3 +4264,41 @@ scéna „PR se nezměnil, ale základ ano“ nebyla v tom modelu vyjádřiteln�
 `divergence` jako **vlastní** hodnotu, ne jako `branchStatus.divergence` — s jedním polem by ten
 případ nešlo složit. Je to tatáž třída jako u `canRetry` na tomtéž PR: vada ležela v rozhodnutí,
 které nikdo netvrdil výčtem.
+
+### Záznam rozhodnutí — retry v potvrzení posílá tentýž plán (#466, čtvrté kolo revize)
+
+**Rozhodnutí:** `BranchSyncError.canRetrySamePlan` (dřív `canRetry`) je `true` jedině u chyb, kde se
+pokus **nedokončil** — `timedOut`, `interrupted`, `failed`. U **neshody stavu** (`leaseRejected`,
+`headMoved`, `branchChanged`) je `false`.
+
+**Proč.** Retry v potvrzovacím sheetu neskládá plán znovu — pošle **tentýž** `BranchPushPlan`, tedy
+tentýž `expectedRemoteSha` a totéž jméno větve. U neshody stavu proto pre-flight srovnává tentýž
+očekávaný SHA proti téže posunuté skutečnosti a druhý pokus dopadne **identicky**. Živé tlačítko
+vedle věty „obnov okno a zkus to znovu“ zve k opakování, které nemůže vyjít. Věty u všech tří
+posílají obnovit data (`Obnov okno`, `Načti pull request znovu`) a je na to test — zhasnuté tlačítko
+bez cesty dál by byla druhá polovina téhož problému.
+
+**Jméno se změnilo schválně.** `canRetry` znělo bezkontextově, ačkoli ta otázka je vždycky „s týmž
+plánem“. Právě ta nejednoznačnost stála dvě kola revize, takže ji nese jméno, ne jen komentář.
+
+**Historie je poučnější než to rozhodnutí.** Vlastnost byla napsaná se šesti `true`, komentář u ní
+tvrdil jediný případ. Třetí kolo revize ten rozpor našlo a komentář se srovnal **s kódem** — včetně
+nového vyčerpávajícího testu a ověření vloženou regresí. Čtvrté kolo ukázalo, že špatně byl **kód**:
+test tím pádem pinoval nesprávné pravidlo, jen důkladně. **Poučení: když se komentář rozejde
+s kódem, není předem jasné, která strana je ta chybná** — a odpověď dá teprve otázka „co se
+doopravdy stane, když na to tlačítko kliknu dvakrát“. Výčtový test je pořád ta správná odpověď na
+drift; nestačí ale ptát se, **co kód dělá** — je potřeba se ptát, co dělat **má**.
+
+**Ve stejném kole se opravily dvě věty, které tvrdily víc, než data unesou** (tatáž třída z tabulky
+v `CLAUDE.md`):
+
+- **Hlavička sheetu** říkala `Do remote se zatím nesáhlo.` — a hlavička v sheetu **zůstává ve všech
+  stavech**, takže to přestávalo být pravda, jakmile push běžel nebo doběhl; u `timedOut` by
+  tvrdila jistotu, kterou nemáme. Nahrazeno popisem kroku (`Přetlačení je druhý krok.`), který platí
+  v každém stavu. **Mockup se tím mění taky** — sekce 36 na dvou místech, včetně sheetu, který kreslí
+  #467, protože je to **tentýž** sheet.
+- **`aftermath(of:)`** říkalo u `leaseRejected` „Na větvi se nic nezměnilo“ vedle věty „Větev se na
+  GitHubu mezitím pohnula“ — dvě různé změny, dohromady protimluv. A `failed` (neznámá chyba od
+  `gitu`) leželo v `default`u, který tvrdí „nic se nezměnilo“; u nevratné akce to naslepo padnout
+  nesmí. Jistotu máme jedině u chyb z **pre-flightu**, kde se `git push` vůbec nespustil — a tak to
+  ta věta teď říká.

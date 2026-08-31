@@ -160,23 +160,36 @@ enum BranchSyncError: Error, Equatable, Sendable {
         }
     }
 
-    /// Dá se to zkusit znovu bez toho, aby se něco změnilo jinde?
+    /// Dá se to zkusit znovu **s týmž plánem**?
     ///
-    /// **Dělí se to podle toho, jestli je překážka pomíjivá, nebo strukturální** — ne podle
-    /// jednoho konkrétního chybového stavu.
+    /// **Jméno nese „s týmž plánem“ schválně**, protože právě to se u téhle otázky dvakrát
+    /// přehlédlo (viz níž). Retry v potvrzovacím sheetu neskládá plán znovu — pošle **tentýž**
+    /// `BranchPushPlan`, tedy tentýž `expectedRemoteSha` a totéž jméno větve.
     ///
-    /// **Ano** u překážek, které druhý pokus může minout: odmítnutý lease, posunutá hlava
-    /// a přerovnaná větev zmizí po obnovení dat, `timedOut` a `interrupted` jsou o tom, že se běh
-    /// nedokončil, a `failed` je neznámá chyba, o které se nedá tvrdit, že se zopakuje.
+    /// **Ano** jedině tam, kde se pokus **nedokončil**: `timedOut`, `interrupted` a `failed`.
+    /// Plán je pořád platný, takže druhý pokus má proti čemu uspět. `failed` je neznámá chyba —
+    /// tam je opakování ta mírnější volba a `--force-with-lease` pořád chrání.
     ///
-    /// **Ne** tam, kde druhý pokus dopadne stejně: dokud je PR cizí, zavřený nebo ve forku, dokud
-    /// je brána vypnutá, cesta mimo cache nebo `git` nedostupný, nezmění se opakováním nic —
-    /// a tlačítko, po kterém se nic nestane, je horší než zašedlé.
-    var canRetry: Bool {
+    /// **Ne** u **neshody stavu**: `leaseRejected`, `headMoved` a `branchChanged`. Tady je plán
+    /// **zastaralý z definice** — pre-flight bude srovnávat tentýž očekávaný SHA (resp. jméno
+    /// větve) proti téže posunuté skutečnosti, takže druhý pokus dopadne **identicky**. Věty
+    /// u všech tří proto posílají obnovit data (`Obnov okno`, `Načti pull request znovu`)
+    /// a tlačítko musí být zhasnuté: živé tlačítko vedle věty „obnov a zkus to znovu“ zve
+    /// k opakování, které nemůže vyjít.
+    ///
+    /// **Ne** ani u strukturálních překážek: dokud je PR cizí, zavřený nebo ve forku, dokud je
+    /// brána vypnutá, cesta mimo cache nebo `git` nedostupný, nezmění se opakováním nic.
+    ///
+    /// **Historie téhle vlastnosti je poučnější než ona sama.** Napsaná byla se šesti `true`,
+    /// komentář u ní tvrdil jediné (`leaseRejected`). Revize to označila za rozpor a komentář se
+    /// srovnal **s kódem** — jenže špatně byl kód, ne komentář. Až druhá revize ukázala, že retry
+    /// s týmž plánem nemá u neshody stavu jak uspět. Poučení: **když se komentář rozejde s kódem,
+    /// není předem jasné, která strana je ta chybná.**
+    var canRetrySamePlan: Bool {
         switch self {
-        case .leaseRejected, .headMoved, .branchChanged, .timedOut, .interrupted, .failed: true
-        case .notAllowed, .notMine, .foreignBranch, .unknownBranchOrigin, .pullRequestNotOpen,
-            .outsideCache, .toolUnavailable:
+        case .timedOut, .interrupted, .failed: true
+        case .leaseRejected, .headMoved, .branchChanged, .notAllowed, .notMine, .foreignBranch,
+            .unknownBranchOrigin, .pullRequestNotOpen, .outsideCache, .toolUnavailable:
             false
         }
     }

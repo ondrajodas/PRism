@@ -208,7 +208,8 @@ struct GitBranchPushTests {
         await #expect(throws: BranchSyncError.leaseRejected) {
             try await pusher(runner: runner).push(plan())
         }
-        #expect(BranchSyncError.leaseRejected.canRetry)
+        // Retry s **týmž** plánem u odmítnutého lease nemá jak uspět (viz výčet níž), takže se
+        // tady tvrdí jen ta věta — ta je na leaseRejected to podstatné.
         #expect(BranchSyncError.leaseRejected.sentence.contains("nic nepřepsalo"))
     }
 
@@ -245,26 +246,37 @@ struct GitBranchPushTests {
         }
     }
 
-    /// **`canRetry` se tvrdí výčtem všech třinácti případů, ne jedním.**
+    /// **`canRetrySamePlan` se tvrdí výčtem všech třinácti případů, ne jedním.**
     ///
-    /// Přidáno po nálezu z revize: doc komentář u `canRetry` tvrdil, že se znovu dá zkusit jedině
-    /// odmítnutý lease, kdežto kód pouštěl šest případů. Drift prošel právě proto, že test pinoval
-    /// **jediný** z nich — a `canRetry` přitom rozhoduje o tom, jestli je v sheetu tlačítko živé.
+    /// **Dvě revize, dvě různé chyby na tomtéž místě** — a ta druhá je ta zajímavá:
     ///
-    /// Dělící čára není konkrétní chyba, ale **pomíjivá proti strukturální**: co druhý pokus může
-    /// minout (lease, posunutá hlava, přerovnaná větev, timeout, přerušení, neznámá chyba od
-    /// `gitu`) proti tomu, co dopadne stejně, dokud se nezmění něco jinde (cizí PR, fork, neznámý
-    /// původ, zavřený PR, mimo cache, vypnutá brána, chybějící `git`).
-    @Test("Zkusit znovu jde jen u pomíjivé překážky")
-    func retriesOnlyTransientObstacles() {
-        let transient: [BranchSyncError] = [
-            .leaseRejected,
-            .headMoved(expected: "aaa", actual: "bbb"),
-            .branchChanged(expected: "moje", actual: "jina"),
+    /// 1. Doc komentář tvrdil jediný retryovatelný případ, kód pouštěl šest. Prošlo to proto, že
+    ///    test pinoval **jediný** z nich. Srovnalo se to tehdy **s kódem**.
+    /// 2. Jenže špatně byl **kód**. Retry v sheetu posílá **tentýž plán**, takže u neshody stavu
+    ///    (`leaseRejected`, `headMoved`, `branchChanged`) pre-flight srovnává tentýž očekávaný SHA
+    ///    proti téže posunuté skutečnosti a druhý pokus dopadne **identicky**. Živé tlačítko vedle
+    ///    věty „obnov okno a zkus to znovu“ zve k opakování, které nemůže vyjít.
+    ///
+    /// Poučení, které si tenhle test nese: **když se komentář rozejde s kódem, není předem jasné,
+    /// která strana je ta chybná** — a výčet je to, co odpověď vynutí.
+    ///
+    /// Dělící čára je **nedokončený pokus proti neshodě stavu**: plán je pořád platný jedině tam,
+    /// kde se push nedokončil.
+    @Test("Zkusit znovu s týmž plánem jde jen u nedokončeného pokusu")
+    func retriesOnlyUnfinishedAttempts() {
+        // Pokus se nedokončil — plán platí dál, druhý má proti čemu uspět.
+        let unfinished: [BranchSyncError] = [
             .timedOut,
             .interrupted,
             .failed("cokoli od gitu"),
         ]
+        // Neshoda stavu: plán je zastaralý z definice, druhý pokus dopadne identicky.
+        let mismatched: [BranchSyncError] = [
+            .leaseRejected,
+            .headMoved(expected: "aaa", actual: "bbb"),
+            .branchChanged(expected: "moje", actual: "jina"),
+        ]
+        // Strukturální překážka: nezmění se opakováním nic.
         let structural: [BranchSyncError] = [
             .notAllowed("brána je vypnutá"),
             .notMine(author: "someone"),
@@ -275,15 +287,28 @@ struct GitBranchPushTests {
             .toolUnavailable("git není"),
         ]
 
-        for error in transient {
-            #expect(error.canRetry, "\(error) je pomíjivá, druhý pokus ji může minout")
+        for error in unfinished {
+            #expect(error.canRetrySamePlan, "\(error): pokus se nedokončil, plán platí dál")
         }
-        for error in structural {
-            #expect(!error.canRetry, "\(error) je strukturální, druhý pokus dopadne stejně")
+        for error in mismatched + structural {
+            #expect(!error.canRetrySamePlan, "\(error): druhý pokus s týmž plánem dopadne stejně")
         }
         // Že jsou to doopravdy **všechny** případy, drží tenhle součet — nový case bez zařazení
-        // do jedné z těch dvou skupin ho položí, a s ním i tvrzení výš.
-        #expect(transient.count + structural.count == 13)
+        // do jedné ze tří skupin ho položí, a s ním i tvrzení výš.
+        #expect(unfinished.count + mismatched.count + structural.count == 13)
+    }
+
+    /// **U neshody stavu věta posílá obnovit data.** Je to protějšek zhasnutého tlačítka: kdyby
+    /// text neřekl, co dělat, zůstal by uživatel u chyby bez cesty dál.
+    @Test("Neshoda stavu posílá obnovit data")
+    func mismatchSentencesPointAtRefreshing() {
+        #expect(BranchSyncError.leaseRejected.sentence.contains("Načti pull request znovu"))
+        #expect(
+            BranchSyncError.headMoved(expected: "aaa", actual: "bbb").sentence.contains("Obnov okno")
+        )
+        #expect(
+            BranchSyncError.branchChanged(expected: "a", actual: "b").sentence.contains("Obnov okno")
+        )
     }
 
 }

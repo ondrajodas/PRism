@@ -36,11 +36,11 @@ final class BranchPushSubmission: Identifiable {
     enum State: Equatable {
         case ready
         case pushing
-        /// Nepovedlo se. Jestli se dá zkusit znovu, rozhoduje `BranchSyncError.canRetry` — a dělí
-        /// to podle toho, jestli je překážka **pomíjivá** (odmítnutý lease, posunutá hlava, timeout)
-        /// nebo **strukturální** (cizí PR, fork, vypnutá brána); u strukturální by druhý pokus
-        /// dopadl stejně. Odmítnutý lease je z těch pomíjivých ten, u kterého se navíc ví, že se
-        /// **nic nepřepsalo**.
+        /// Nepovedlo se. Jestli se dá zkusit znovu, rozhoduje `BranchSyncError.canRetrySamePlan`:
+        /// retry odsud posílá **tentýž plán**, takže má smysl jedině tam, kde se pokus
+        /// **nedokončil** (timeout, přerušení, neznámá chyba). U **neshody stavu** — odmítnutý
+        /// lease, posunutá hlava, přejmenovaná větev — je plán zastaralý z definice a druhý pokus
+        /// by dopadl identicky; tam věta posílá obnovit data a tlačítko zhasne.
         case failed(BranchSyncError)
         /// Server větev přijal; tohle je hlava, která na ní teď leží.
         case pushed(String)
@@ -103,13 +103,14 @@ final class BranchPushSubmission: Identifiable {
 
     /// Dá se (znovu) přetlačit?
     ///
-    /// **Po selhání jen tam, kde z chyby plyne, že druhý pokus má smysl** — rozhoduje
-    /// `BranchSyncError.canRetry`, tedy tatáž funkce, podle které se skládá věta. Tlačítko, po
-    /// kterém se nic nestane, je horší než zašedlé.
+    /// **Po selhání jen tam, kde druhý pokus s týmž plánem může uspět** — rozhoduje
+    /// `BranchSyncError.canRetrySamePlan`. Tlačítko, po kterém se nic nestane, je horší než
+    /// zašedlé; a živé tlačítko vedle věty „obnov okno a zkus to znovu“ je ještě horší, protože
+    /// zve k opakování, které nemůže vyjít.
     var canPush: Bool {
         switch state {
         case .ready: true
-        case .failed(let error): error.canRetry
+        case .failed(let error): error.canRetrySamePlan
         case .pushing, .pushed: false
         }
     }

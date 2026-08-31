@@ -249,6 +249,27 @@ struct AppStoreMergeTests {
         #expect(store.branchStatusState(for: pr)?.status?.divergence?.ahead == 3)
     }
 
+    /// **`nil` se zapíše, chyba ne** — a ten rozdíl je záměr, ne nedůslednost, takže se tvrdí.
+    ///
+    /// `nil` je odpověď („zeptal jsem se a GitHub polohu neurčil“, typicky smazaný ref); držet nad
+    /// ní starou hodnotu by znamenalo tvrdit polohu, kterou nikdo nepotvrdil. Protějšek téhle
+    /// scény je „Selhání přeptání nezahodí, co už víme“ — tam se stará hodnota **drží**.
+    @Test("Odpověď nevím starou polohu přepíše")
+    func overwritesTheKnownDivergenceWithAnUnknownAnswer() async throws {
+        let (store, gateway) = await prepared(
+            status: BranchStatus(
+                mergeability: .mergeable,
+                mergeState: .clean,
+                divergence: BranchDivergence(ahead: 3, behind: 0)
+            )
+        )
+        gateway.divergence = nil
+
+        await store.refreshOpenDivergence()
+
+        #expect(store.branchStatusState(for: pr)?.status?.divergence == nil)
+    }
+
     /// **Bez načteného stavu se nepřeptává.** Načíst ho od nuly umí `loadBranchStatus`; dvě místa,
     /// která tahají tentýž stav, by po otevření PR znamenala dva souběžné dotazy.
     @Test("Nenačtený stav se přeptáním nezakládá")
