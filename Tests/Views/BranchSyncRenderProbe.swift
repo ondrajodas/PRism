@@ -40,7 +40,10 @@ struct BranchSyncRenderProbe {
         ("04-prehravam", Scene(behind: 4, checkFailed: false, sync: .rebasing)),
         ("04b-mezistav", Scene(behind: 4, checkFailed: false, sync: .rebased(Self.rebased(replayed: 4)))),
         ("04c-mezistav-jeden", Scene(behind: 1, checkFailed: false, sync: .rebased(Self.rebased(replayed: 1)))),
-        ("05-pretlaceno", Scene(behind: 4, checkFailed: false, sync: .pushed(replayed: 4))),
+        // **`behind: 0` schválně**: po úspěšném force pushi je větev nad základem, takže scéna
+        // s „o 4 commity vzadu“ vedle „force push poslal 4 commity“ by si protiřečila. Od #466 je
+        // to i pravda v aplikaci — hlava se dotáhne, takže se divergence přepočítá.
+        ("05-pretlaceno", Scene(behind: 0, checkFailed: false, sync: .pushed(replayed: 4))),
         ("06-uz-bylo", Scene(behind: 4, checkFailed: false, sync: .alreadyInSync)),
         ("07-konflikt", Scene(behind: 4, checkFailed: false, sync: .conflicted(files: ["composer.lock", "src/Vault/SecretClient.php", "tests/VaultTest.php", "README.md"]))),
         ("08-rozdelany-rebase", Scene(behind: 4, checkFailed: false, sync: .unfinished(files: ["composer.lock"]))),
