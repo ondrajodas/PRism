@@ -876,6 +876,13 @@ grep -rnE '\.(green|red|yellow|orange)([^A-Za-z0-9_]|$)' App | grep -vE ':[0-9]+
   srovnal výšku s kresbou **na sílu** a rozejití by nebylo jak poznat. U výšky řádku navíc nesmí
   rozhodovat **ikona** — SF Symboly jednu výšku nemají (15 / 14 / 12 bodů), takže je srovná
   `imageScale(.small)`; rámcem to nejde.
+- **`overlay`, který přesahuje plochu rodiče, ořízne každý ořezávající předek** (#483), a v tomhle
+  okně jsou dva: `ScrollView` (panel review, osa konverzace) a `clipShape` (bublina vlákna). Změřeno
+  na skutečné hierarchii (`NSHostingView` v okně + `cacheDisplay`, což `ImageRenderer` neumí):
+  nabídce zmizela horní hrana **i vybraný řádek**. Co má viset nad polem, se proto kotví na tom
+  předkovi, který **neořezává**, a stav se k němu podává — u emotikonů `EmojiSuggestionBox`, jeden
+  na majitele. `popover` to neřeší: bere fokus, takže by v poli přestalo jít psát
+  ([rozbor](docs/architektura.md#našeptávání-emotikonů-483)).
 - **Sheet dostane `idealWidth` jedině s `presentationSizing(.fitted)`** (#327) — bez toho
   modifikátoru je široký jako `minWidth`, a nerozhoduje o tom okno za ním. S `.fitted` a pružným
   rámcem navíc dostane `.resizable` do `styleMask`u, takže se dá **roztáhnout myší**. Kdo si
@@ -1003,6 +1010,7 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
 ./bin/slot-cleanup.sh                  # ukliď po slotu: bundle, cache, ~/.claude.json, UserDefaults, LS
 ./bin/setup-signing.sh                 # jednorázově: certifikát + Signing.local.xcconfig
 swift bin/make-icon.swift [split] [/tmp/x]    # překreslí ikonu do App/Assets.xcassets
+swift bin/make-emoji.swift                    # přegeneruje katalog emotikonů (#483)
 ```
 
 Co každý z nich dělá a jaké má návratové kódy, je v jeho hlavičce a v README (sekce
