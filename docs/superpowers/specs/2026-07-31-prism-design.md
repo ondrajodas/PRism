@@ -4077,3 +4077,50 @@ podmínka č. 1 se tím nemění**: hlášení myši se skládá jen z čísla t
 takže z něj text ani příkaz vzniknout nemůže. Je to doplněné do `CLAUDE.md` k té podmínce, ne
 schované sem — věta „cokoli jiného než tuhle jednu řádku napíše jedině člověk“ by po #478 nebyla
 pravdivá.
+
+### Záznam rozhodnutí — #421 se změřilo, opravilo napůl a nechalo otevřené
+
+Zadání #421 mělo dva legitimní konce: buď je vada po #469, #472 a #476 pryč a issue se zavře
+s měřením, nebo tam pořád je a dostane opravu. Vyšel **třetí** stav, a rozhodnutí je právě o tom, co
+se s ním udělalo.
+
+**Vada tam je.** Deset tichých tiků pollingu dá nad usazeným diffem `DiffView`u šest průchodů tělem
+a 2 541 dotazů na `DiffRow.id`; tentýž rozsekaný běh smyčky bez tiku dá nulu. Čísla, postup a to,
+čím se ověřilo, že měřidlo rozdíl vůbec umí najít, jsou
+v [`docs/testovani.md`](../../testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421).
+
+**Zamítnutá oprava, a proč se zamítla až po napsání.** `store.isRefreshing` se čte v těle
+`ContentView`u, tedy v kořeni okna, a mění se dvakrát za tik — vypadalo to na tutéž třídu jako #472,
+tam hrubá vlastnost, tady hrubé místo čtení. Přestěhování do dvou vlastních views se napsalo
+a změřilo A/B nad toutéž scénou: `ContentView` 13–21 → 9 průchodů tělem za deset tiků, **zato dvě
+nová views 9 + 9**, tedy celkem víc, a na diffu (`DiffView` 6, `DiffRow.id` 2 541) **nezměnilo
+nic**. To rozpětí u `ContentView`u není nepřesné měření — počitadlo se mezi běhy doopravdy hýbe,
+kdežto `DiffView` a `DiffRow.id` vyjdou do jedničky stejně, takže se na tom sloupci nedá stavět.
+
+Zahozeno, a rozhodlo o tom pravidlo z #275: zlevnění, které práci jen přesune jinam, není zlevnění.
+Kdo by chtěl tvrdit, že pár velkých těl je lepší než osmnáct malých, musí změřit **čas**; z počitadla
+průchodů to neplyne, a bez čísla by v repu zůstal nový soubor, dva nové typy a přestěhovaná
+registrace `⌘R` (kterou navíc umí ověřit jedině člověk, #184) za nedoloženou úsporu. Zapsané to je
+proto, aby se to nezkoušelo znovu jako oprava #421.
+
+**A jedno měřicí poučení z toho vypadlo navíc.** První pokus dal `ContentView` 58 → 19, což vypadalo
+na trojnásobek — jenže to „před“ vzniklo v běhu, kde vedle běžely další sondy z téže sady, a
+`RenderDiagnostics.current` je **jedna hodnota na proces**. Sada `IdleDiffSpinProbe` je proto od #421
+`.serialized`; je to tatáž třída jako #367 a bez ní by se z ní daly vyrobit libovolné výsledky.
+
+**Proč se issue nezavřelo.** „Hotovo“ z jeho zadání zní *odstranit pohon, ne zlevnit následek*, a to
+splněné není. Zavřít ho s tím, že se ubralo 39 průchodů tělem někde jinde, by znamenalo, že za rok
+nikdo nepozná, že se ta minutová vlna diffu pořád děje. Místo toho je v issue dopsané, **co je
+vyloučené** — `LazyVStack` (po #469 v tom zásobníku není), data (z jednadvaceti čtení probudí tik
+jediné, `isRefreshing`), práce po úspěšném tiku (všech pět kroků `afterSuccessfulTick` nula)
+a hlášení ve stavovém řádku (v té scéně žádné nesvítí) — a **kam se jít podívat**: během tiku se
+mění změřená **výška** plochy diffu (643 → 659 → 643 → 675), a každý ten skok je jeden průchod
+tělem.
+
+**Zamítnutá varianta: uhlídat to testem „tělo `DiffView`u se nepřeloží“.** Tvrzení, které zadání
+#421 chtělo, se nad storem napsat nedá a v okně by dnes bylo červené — vada trvá. Zapsalo se proto
+to, co pravdivé je a co se rozbije potichu: `PollObservationTests
+.quietTickDoesNotWakeWhatTheDiffDrawsFrom` vyjmenuje všechna čtení storu, která `DiffView.body` dělá
+přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. Je to slabší věta, ale **ověřená
+vloženou regresí** a hlavně pravdivá; test, který by musel čekat na okno a měřit v sekundách, by byl
+navíc falešně červený pod souběžným buildem (#296).
