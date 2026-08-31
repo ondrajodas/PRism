@@ -51,6 +51,14 @@ struct PullRequest: Hashable, Codable, Sendable {
     /// PR sám. Bere se z detailu, který se od #66 stejně dotahuje při výběru řádku, takže to
     /// nestojí ani jedno volání navíc.
     let body: String
+    /// Je hlava pull requestu v **jiném** repozitáři (fork)? `nil` = **nevím** (#466).
+    ///
+    /// **Optional, a `nil` blokuje**, ne propouští: `git push` míří do klonu základního
+    /// repozitáře, takže u PR z forku by přetlačil **jinou větev, než na kterou se člověk dívá**.
+    /// Starší uložená data pole nemají a dostanou tedy `nil`; v okně se sekce `Větev` skládá
+    /// z čerstvě načteného detailu, takže se to v praxi projeví jedině tehdy, když detail
+    /// nedorazil.
+    var isCrossRepository: Bool?
 
     init(
         id: PRIdentifier,
@@ -63,7 +71,8 @@ struct PullRequest: Hashable, Codable, Sendable {
         url: URL,
         updatedAt: Date,
         state: PullRequestState,
-        body: String = ""
+        body: String = "",
+        isCrossRepository: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -76,6 +85,7 @@ struct PullRequest: Hashable, Codable, Sendable {
         self.updatedAt = updatedAt
         self.state = state
         self.body = body
+        self.isCrossRepository = isCrossRepository
     }
 
     var repo: RepoID { id.repo }

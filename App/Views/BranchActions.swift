@@ -6,10 +6,23 @@ import Foundation
 /// hodnotu, takže se dá složit i **bez** nich (offscreen render, náhled) a nemusí u toho znát
 /// `AppStore`.
 ///
-/// **Struktura, i když je akce zatím jedna.** Sekce je základ pro `Srovnat s main` (#466)
-/// a `Řešení konfliktů session` (#467), takže druhá akce sem přibude jako pole — kdežto uzávěr
-/// předaný napřímo by se v tu chvíli musel měnit na všech místech, která panel skládají.
+/// **Struktura, i když byla akce zpočátku jedna.** Sekce je základ i pro `Řešení konfliktů
+/// session` (#467), takže další akce sem přibude jako pole — kdežto uzávěr předaný napřímo by se
+/// v tu chvíli musel měnit na všech místech, která panel skládají.
 struct BranchActions: Sendable {
     /// Otevřít potvrzení merge. **Neodesílá nic** — sheet je poslední brána a odesílá se z něj.
     var merge: @MainActor () -> Void = {}
+    /// **První krok** srovnání větve (#466): přehrát commity nad základem **v kopii repa**.
+    ///
+    /// Potvrzení nemá, a je to schválně: rebase běží v cache, nic neopouští stroj a dá se to vzít
+    /// zpět jedním tlačítkem. Nevratná je až druhá půlka — proto `push` níž.
+    var sync: @MainActor () -> Void = {}
+    /// **Druhý krok**: otevřít potvrzení přetlačení. **Neodesílá nic** — sheet je poslední brána
+    /// a pushuje se z něj, tatáž konstrukce jako u merge.
+    var push: @MainActor () -> Void = {}
+    /// Zahodit, co po srovnání zůstalo v cache — rozdělaný rebase **i** přerovnanou větev, která
+    /// neodešla.
+    var discardSync: @MainActor () -> Void = {}
+    /// Zapomenout hlášku o tom, jak dopadlo poslední srovnání.
+    var clearSync: @MainActor () -> Void = {}
 }

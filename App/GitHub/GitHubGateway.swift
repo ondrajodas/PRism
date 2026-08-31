@@ -246,7 +246,50 @@ protocol GitHubGateway: Sendable {
     /// a jak dlouho čekat, drží implementace; volající dostane **usazenou** odpověď, nebo
     /// `UNKNOWN` po vyčerpání pokusů, což je pořád odpověď.
     ///
+    /// **Odpovídá i na „o kolik je větev vedle základu“** (#466), a proto bere `base` a `head`.
+    /// Je to druhé volání uvnitř téže metody: sekce `Větev` se ptá na **jednu** věc („co se dá
+    /// s touhle větví udělat“), takže je za tím **jeden stav a jedna cache** — dvě by znamenaly dvě
+    /// různá „nevím“ v jednom řádku panelu. Selhání se **nepolyká**: když neodpoví jedno z těch dvou
+    /// volání, neodpoví celá metoda — panel pak píše, že se stav větve nepodařilo zjistit,
+    /// a nenabízí ani merge, ani srovnání.
+    ///
+    /// **Do #466 tu stálo, že druhá metoda protokolu na divergenci vzniknout nesmí. Vznikla
+    /// (`fetchDivergence`) a je to vědomá změna, ne obejití** — vynutilo si ji proklikání.
+    /// Ty dvě poloviny se totiž **invalidují každá jinak**: `mergeable` závisí na hlavě PR, kdežto
+    /// „pozadu“ na hlavě **základu**, o které pull request nevypovídá vůbec. Jedna metoda proto
+    /// znamenala i jedno razítko (`updatedAt`) — a to je nad divergencí špatný klíč, takže panel
+    /// tvrdil `srovnaná` nad větví o commit pozadu. Původní důvod (**jeden stav, jedna cache**)
+    /// tím **neodpadl a platí dál**: `fetchDivergence` nezakládá druhý stav ani druhou cache, jen
+    /// přepíše pole `divergence` uvnitř té existující. Přidalo se druhé **volání**, ne druhá
+    /// pravda.
+    ///
+    /// `base` je jméno cílové větve a `head` **oid hlavy**, obojí z detailu PR: jméno větve se dá
+    /// nastavit na cokoli, kdežto `headRefOid` patří k pull requestu.
+    ///
     /// **Dvaadvacátá metoda protokolu**; čtení je čtení a tvrdá podmínka č. 1 platí dál —
-    /// mergnout umí jedině `ReviewPublishing`.
-    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus
+    /// mergnout umí jedině `ReviewPublishing` a pushnout jedině `BranchPushing`.
+    func fetchBranchStatus(id: PRIdentifier, base: String, head: String) async throws -> BranchStatus
+
+    /// Jen **poloha větve proti základu** (#466, z proklikání) — bez slévatelnosti.
+    ///
+    /// **Existuje kvůli klíči, ne kvůli výkonu.** „Pozadu“ se mění posunem **základu**, a ten se na
+    /// pull requestu neprojeví: změřeno na `prism-review-sandbox#9`, že po commitu do `master`u
+    /// zůstal `updated_at` PR **nezměněný** a `base.sha` i `baseRefOid` pořád ukazovaly hlavu z doby
+    /// vzniku PR. Stav klíčovaný razítvem PR se tedy o posun základu **nemá jak dozvědět**; tahle
+    /// metoda je ta cesta, jak se zeptat znovu, aniž by se znovu počítala drahá polovina.
+    ///
+    /// **Není to `fetchBranchStatus` bez čekání.** Neopakuje se a **neptá se na `mergeable`** —
+    /// `compare` nad refem je hotová hodnota, kdežto `mergeable` je líné pole, které se dotazem
+    /// teprve spouští. Změřeno: `cost=1` a 0,51–0,62 s. Právě proto se tímhle neruší stráž z #465,
+    /// která vznikla proti tomu, aby se z líného pole stal tik.
+    ///
+    /// `nil` je platná odpověď („nevím“) — stejně jako u divergence uvnitř `fetchBranchStatus`,
+    /// a panel ji umí ukázat. Prázdné `base` nebo `head` se **neptá vůbec**.
+    ///
+    /// **Třiadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál.
+    func fetchDivergence(
+        id: PRIdentifier,
+        base: String,
+        head: String
+    ) async throws -> BranchDivergence?
 }

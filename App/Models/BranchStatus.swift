@@ -68,8 +68,38 @@ struct BranchStatus: Hashable, Codable, Sendable {
     let mergeability: Mergeability
     let mergeState: MergeState
 
+    /// O kolik je větev vedle základu (#466). `nil` = **nevím**.
+    ///
+    /// **Vlastní pole, protože `mergeStateStatus` na tuhle otázku neodpovídá** — a je to změřené:
+    /// větev o commit pozadu za `master` vrátila na `prism-review-sandbox#9` `mergeStateStatus:
+    /// CLEAN`, ne `BEHIND`. `BEHIND` GitHub vydá jedině tam, kde to vyžaduje ochrana větve
+    /// („Require branches to be up to date“); jinde je „pozadu“ stav, o kterém `mergeStateStatus`
+    /// mlčí, protože mergi nebrání. Odpověď proto přináší `compare` z GraphQL.
+    var divergence: BranchDivergence?
+
+    init(mergeability: Mergeability, mergeState: MergeState, divergence: BranchDivergence? = nil) {
+        self.mergeability = mergeability
+        self.mergeState = mergeState
+        self.divergence = divergence
+    }
+
     /// Ví už GitHub, jak to dopadne? Na tom stojí, jestli má smysl ptát se znovu.
     var isSettled: Bool { mergeability != .unknown }
+}
+
+/// O kolik je hlava pull requestu vedle svého základu (#466).
+///
+/// **Z pohledu hlavy, ne základu** — `behind` je „kolik commitů základu ve větvi chybí“, `ahead`
+/// „kolik commitů větev nese navíc“. Změřeno na GraphQL `Ref.compare(headRef:)`: base `master`
+/// proti commitu o jeden zpátky vrátilo `aheadBy: 0, behindBy: 1, status: BEHIND`, kdežto proti
+/// větvi s vlastním commitem `aheadBy: 1, behindBy: 1, status: DIVERGED`.
+struct BranchDivergence: Hashable, Codable, Sendable {
+    /// Kolik commitů větev nese nad základem — tedy kolik se jich při srovnání přehraje.
+    let ahead: Int
+    /// O kolik commitů je větev pozadu. `0` = srovnaná.
+    let behind: Int
+
+    var isBehind: Bool { behind > 0 }
 }
 
 /// Stav dotažení slévatelnosti jednoho PR (#465).

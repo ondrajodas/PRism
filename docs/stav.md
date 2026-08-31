@@ -5275,7 +5275,7 @@ který se povedlo vyrobit.
 nedává a `compare` API by za to číslo stáhlo celý seznam souborů. Přijde s #466, kde bude po ruce
 klon v cache a spočítá se lokálně.
 
-Sekce je postavená tak, aby do ní šla přidat **druhá akce** (`Srovnat s main`, #466): je to
+Sekce je postavená tak, aby do ní šla přidat **druhá akce** (`Rebase`, #466): je to
 `stav + nabídka`, ne jedno tlačítko, a akce se kreslí řadou i s jedním prvkem.
 
 **Po úspěšném mergi se zavírá potvrzení i záložka toho PR** — přidáno do #465 ještě před mergem,
@@ -5668,6 +5668,221 @@ regrese, dvakrát**: bez lomítka v porovnání zmizí sousední slot (padnou dv
 **Zbylé záznamy po slotech `a`, `b` a `c`** uklidí nejbližší běh skriptu v tom kterém slotu, nebo se
 smažou ručně; tenhle PR do konfigurace na stroji nesáhl.
 
+<<<<<<< HEAD
+## #466 — srovnat vlastní větev s `main`, a první zápis do remote
+
+Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: větev je pozadu za `main`em
+a musí se srovnat. Bez konfliktu je to nudná operace — a přesně proto ji od #466 dělá okno. V sekci
+`Větev` (#465) přibylo druhé tlačítko **`Rebase`**: rebase v kopii repa v cache a přetlačení
+výsledku přes `--force-with-lease`.
+
+**Tvrdá podmínka č. 1 se tím mění, a je to nová třída, ne rozšíření výčtu.** Do #466 aplikace do
+remote **nezapisovala vůbec**: `GitHubGateway` je read-only, `RepoCheckout` pracuje lokálně
+a `git push` je výslovně v `--disallowedTools` revieweera. Přibyl proto **druhý protokol**,
+`BranchPushing`, s **jedinou** metodou `push` a třemi soubory v `App/Publish/` — a ne devátá metoda
+`ReviewPublishing`, protože ten mluví přes `gh` s GitHub API, kdežto tohle přes `git` se serverem.
+Slít je do jednoho by znamenalo, že se z výčtu přestane dát přečíst, co odchází kudy.
+
+**Co z podmínky zůstalo**: `grep ReviewPublishing App/` vypisuje **týž seznam** a jeho tvrzení
+v `SingleWayOutTests` prošla beze změny; `GitHubGateway` je pořád bez zápisu; `RepoCheckout`
+rebasuje, ale **nemá čím nic odeslat**; brána je tatáž (`PublishScope`); pusher **není pole**
+`AppStore`; `Bash(git push:*)` zůstává session zakázaný. Podrobný rozbor je
+v [`architektura.md`](architektura.md#zápis-do-remote--branchpushing-466), zdůvodnění změny
+v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--zápis-do-remote-466).
+
+### Dva guardy, oba změřené spuštěním
+
+**První — cílem smí být jedině hlava vlastního PR, posuzováno proti datům pull requestu.** Pre-flight
+ověří **pět** věcí: autora, fork (`isCrossRepository`), stav PR, jméno větve a hlavu. Jméno větve si
+nastaví kdokoli na cokoli, takže shoda jména by byla kontrola, která jenom **vypadá** jako kontrola;
+`isCrossRepository == nil` je proto zákaz, ne povolení — `origin` v klonu aplikace je **základní**
+repozitář, takže by push u PR z forku mířil jinam, než na co se člověk dívá.
+
+**Druhý — `--force-with-lease` s vypsanou hodnotou, nikdy holé `--force`.** Změřeno na
+`prism-review-sandbox` z klonu naklonovaného **přesně jako ten aplikace** (`--bare
+--filter=blob:none`, refspec `+refs/heads/*:refs/heads/*`):
+
+| Pokus | Výsledek | Hlava na remote po pokusu |
+|---|---|---|
+| lease čeká `65aff25`, na remote leží cizí `9bb4352` | `! [rejected] … (stale info)`, kód **1** | zůstala cizí |
+| **holý** `--force-with-lease` bez hodnoty | `! [rejected] … (stale info)`, kód **1** | nezměněna |
+| lease čeká `9bb4352`, tedy to, co tam je | `+ 9bb4352…2bf096a (forced update)`, kód 0 | přetlačeno |
+| **kontrast: holé `--force`** s toutéž zastaralou znalostí | `+ f3e243e…2bf096a (forced update)`, kód 0 | **cizí commit zahozen** |
+
+Dvě věci z toho: **rozdíl je doložený, ne teoretický** (v téže situaci, ve které lease odmítl a cizí
+commit nechal, ho `--force` zahodilo), a **vypsaná hodnota je nutnost, ne opatrnost** — holý lease si
+očekávanou hodnotu bere z remote-tracking refu, a ten v klonu aplikace **neexistuje** (`git config
+--get-all remote.origin.fetch` nevypíše nic, `for-each-ref refs/remotes/` je prázdný), takže selže
+i tam, kde se nic nepohnulo.
+
+### Poloha větve: `mergeStateStatus` na to neodpovídá
+
+**Změřeno na `prism-review-sandbox#9`** a je to jádro toho, jestli se akce vůbec nabídne: větev
+o commit pozadu vrátila `mergeStateStatus: CLEAN`, kdežto GraphQL `ref(master).compare(headRef:)`
+`aheadBy: 1, behindBy: 1`. `BEHIND` GitHub vydá **jedině tam, kde to vyžaduje ochrana větve**;
+jinde je „pozadu“ stav, o kterém `mergeStateStatus` mlčí, protože mergi nebrání. Kdyby se
+rozhodovalo podle něj, akce by se na většině repozitářů nenabídla nikdy.
+
+**Do #465 tady stálo, že počet přijde z klonu v cache** — to se změnilo a je to vědomé: klon by ho
+dal až po `fetch`i, tedy až po práci na síti, kdežto panel ho potřebuje hned při otevření PR. Cena je
+jeden GraphQL dotaz na dvě pole, jako **druhé volání uvnitř téže metody** protokolu (`fetchBranchStatus`),
+ne jako druhá metoda: sekce se ptá na jednu věc a dvě metody by znamenaly dva stavy, dvě cache a dvě
+různá „nevím“ v jednom řádku panelu. Číslo teď stojí v panelu jako `o 4 commity vzadu`, tak jak to
+kreslí návrh.
+
+### Dva kroky, a dělí se podle vratnosti
+
+**Změna z proklikání, ne ze zadání.** Původní implementace byla jedno kliknutí, které přehrálo
+commity a hned přetlačilo. Na pauze to neobstálo, a bylo to správně: **rebase** je vratný (běží
+v cache, nic neopouští stroj), **force push** ne. Rebase proto zůstal na jedno kliknutí a přetlačení
+dostalo **potvrzovací sheet** s úplným výpisem (`Co odejde`: větev, počet commitů, nová hlava, hlava
+pro lease), výstrahou o pojistce a tlačítkem `Force push` **bez výchozí akce**.
+
+Hranice je **vratnost, ne složitost** — tatáž, podle které má sheet merge (#465) a nemá ho label
+(#392). Sheet a ne tlačítko v panelu proto, že návrh (sekce 36) `Force push` kreslí v patičce
+sheetu i pro konfliktní cestu, do 300bodového panelu se nevejde výstraha o lease, a repo u nevratných
+věcí potvrzuje výpisem.
+
+**#467 tím dostává hotovou půlku své práce**, a je to v záznamu rozhodnutí schválně: sheet, výpis,
+výstraha i obě tlačítka existují. #467 do **téhož** sheetu jen přidá, co session udělala s konflikty,
+a diff toho, co vzniklo.
+
+**Mezi kroky je stav `rebased` — normální, ne porucha.** Drží ho panel (hláška s `Force push…`
+a `Zahodit rebase`; `Zavřít` u ní schválně **není**), hledá se v cache při každém otevření vlastního
+PR (`syncWorktreeState`) a **druhý rebase se nad ním nenabízí** — přehrát commity znovu nad
+výsledkem, který neodešel, by tu práci zahodilo potichu.
+
+### `Co odejde` počítá dvě různé věci a obě se jmenují
+
+**Pátý nález z proklikání**, ze screenshotu sheetu. Změřeno na `#10`: přehrál se **jeden** vlastní
+commit, ale refu na remote chyběly **dva** — rebase dostal do historie větve i ten commit z base,
+kvůli kterému byla pozadu. `commitů 1` bylo pravdivé, ale odpovídalo na jinou otázku, než jakou
+klade nadpis.
+
+Vypisuje se proto `rebasedFrom..HEAD` (co na větvi bude), čísla jsou dvě a pojmenovaná (`přibude`,
+`z toho tvých`) a commit z base má v seznamu značku. Nad výpisem přibyl nadpisek. `replayed` je
+zpátky vlastní číslo — nejsou to dvě čísla o téže věci, ale dvě různé veličiny.
+
+### Potvrzení force pushe vypisuje commity
+
+**Čtvrtý nález z proklikání**: `Co odejde` říkalo *kolik* commitů, ne *které* — a potvrzení
+u nevratné akce má být místo, kde se přečte celý payload. Vypisuje se krátká sha **po rebasu**
+(dá se po pushi porovnat s GitHubem) a první řádek zprávy.
+
+Strop je **osm**, zbytek se počítá (`a další N`); vnořený scroll byl zamítnutý, protože sheet je
+rolovací plocha už teď. Ověřeno renderem na 50 commitech, že strop drží a výstraha o lease zůstává
+vidět bez rolování, a na titulcích přes 120 znaků, že se zalomí. **Selhání nevzniká jako prázdný
+výpis**: když se `git log` nepřečte, mezistav nevznikne vůbec.
+
+### Po force pushi se čeká na hlavu, ne na `mergeable`
+
+**Třetí nález z proklikání** („po force push nejde mergnout“) a uživatel rozhodl, že se řeší tady,
+ne vlastním issue. Změřeno na `prism-review-sandbox#10` (čtyři force pushe): hlava (`headRefOid`) je
+aktuální po **1,45–2,16 s**, `mergeable` usazený po **0,65–2,74 s**. Detail načtený hned po pushi
+tedy nese **starou** hlavu — a merge s ní skončí na `409`, protože ji posílá v payloadu.
+
+**Past je, že `mergeable` se usadí dřív, než dorazí hlava**, takže ta usazená odpověď platí pro
+starou hlavu; čekat na `mergeable != UNKNOWN` by bylo **zavádějící**, ne jen nedostatečné. Rozhoduje
+proto shoda hlavy: `awaitPushedHead` se ptá `fetchHeads` (`cost = 1`), dokud PR nehlásí sha, kterou
+jsme pushnuli. Stráž z #465 to neporušuje — čeká se na **známý fakt**, ne na líné pole, strop je
+tvrdý (8 × 0,4 s) a po jeho vyčerpání se nic netvrdí.
+
+Spravilo to i `syncWorktreeState`: přerovnaná větev se pozná tím, že hlava stromu není hlavou PR —
+se starou hlavou by po pushi nabídla pushnout znovu.
+
+### Sheet se po úspěšném force pushi zavírá
+
+Jako u mergu a **jedině po úspěchu**; záložka se ale **nezavírá**, na rozdíl od mergu. Zavírá se na
+**přechodu stavu**, ne za `await push()`: ten čeká i na úklid (a ten na hlavu), takže by sheet nad
+hotovým pushem visel několik sekund. Výsledek nese **panel** hláškou, kterou store nastavuje dřív,
+než úklid začne — je na to test, protože bez něj by se ta informace zavřením mohla ztratit.
+
+### Akce se jmenují `Rebase` a `Force push`
+
+Rozhodnutí uživatele, které má přednost před pravidlem o českých uživatelských textech: gitové
+operace se v téhle branži nepřekládají. Mění se **jména akcí**, ne próza okolo. Jméno základu
+z popisku zmizelo, protože ho nese řádek stavu i nápověda — a `Srovnat s main` mělo 87 bodů, se
+kterými tři tlačítka v řadě potřebovala 279 z 278 dostupných.
+
+### Poloha větve se přeptává, protože razítko PR na ni nesedí
+
+**Druhý nález z proklikání.** Panel tvrdil `srovnaná` nad větví o commit pozadu a nespravilo to ani
+obnovení, ani zavření a otevření záložky — jedině restart. Změřeno na `prism-review-sandbox#9`, že
+posunem základu se `updated_at` pull requestu **nezmění** a `base.sha` ani `baseRefOid` živou hlavu
+základu nenesou, takže stav klíčovaný razítkem PR se o ten posun nemá jak dozvědět.
+
+Sekce `Větev` proto obnovuje **po polovinách**: slévatelnost dál podle `updatedAt` (stráž z #465
+beze změny), poloha větve přeptáním v tiku u otevřeného vlastního PR. Není to polling `mergeable` —
+`compare` nad refem je hotová hodnota, `cost=1` a 0,51–0,62 s, kdežto `mergeable` je líné pole,
+které se dotazem teprve spouští. Strop je nejvýš jedno PR na tik.
+
+Cennější než ten nález je, **proč prošel testy**: test na cache existoval, ale hlídal jen směr
+„neptá se, když se nic nezměnilo“. Druhý směr se s tehdejším fakem ani napsat nedal.
+
+**Pojistka, která z rozdělení vypadla a v zadání nebyla**: lease se skládá z hlavy, **ze které se
+rebasovalo**, ne z aktuální. Mezi rebasem a potvrzením se hlava PR může pohnout, a s aktuální
+hodnotou by lease po cizím pushi **prošel** a ten commit přepsal. Takhle na něj narazí pre-flight
+(`headMoved`) a nepřetlačí nic.
+
+### Rozdělaný rebase je stav, ne chyba
+
+Rebase běží ve **vlastním** stromě v cache (`<pr>-sync`), ne v tom od review — ten drží kód, proti
+kterému platí nálezy a ve kterém stojí shell v zásuvce, a přehrát ho pod nimi je přesně ta tichá
+divnost, které se tvrdá podmínka č. 5 vyhýbá. Klíčuje se **jen pull requestem**, aby se rozdělaný
+rebase našel i po restartu aplikace.
+
+Konflikt se **zahodí** (`git rebase --abort`) a řekne se to; když se zahodit nepovede, zůstane v cache
+a v panelu se objeví věta s tlačítkem **`Zahodit rebase`**. Samo zahazování z okna přitom **maže
+strom**, ne `rebase --abort`: od rozdělení akce se zahazují dvě různé věci a `--abort` umí jen
+rozdělaný rebase — nad dokončeným by neudělal nic. Že `worktree remove --force --force` zvládne
+i strom uprostřed rebase, je změřené integračním testem. Hledá se přitom **při každém otevření
+vlastního PR**, ne jen po neúspěšném pokusu: aplikaci zabitou uprostřed rebase nemá kde nic zapsat.
+Poznat ho jde jedině `gitem` (`rev-parse --git-path rebase-merge`) — u pracovního stromu ta složka
+leží **uvnitř klonu**, ne ve stromě, takže dotaz `FileManageru` na `<strom>/.git/rebase-merge` by vyšel
+prázdný. **Vlastní řešení konfliktů je #467**, ne tohle.
+
+**`alreadyInSync` není `pushed(0)`** a **`unfinished` není `failed`** — „nic se neposlalo“ a „poslalo
+se nula commitů“ jsou dvě různé věty a jenom jedna z nich je pravda; a z rozdělaného rebase plyne
+jiný další krok než ze selhání. Když rebase vydá tutéž hlavu, **nepushuje se vůbec**.
+
+### Co se u toho našlo v dokumentaci
+
+Dvě věci, které #465 nedotáhlo a srovnaly se tady: `docs/architektura.md` tvrdila, že
+`GitHubGateway` má **dvacet jedna** metod, ačkoli `fetchBranchStatus` byla dvaadvacátá; a `BranchStatus`
+ani `BranchStatusState` nebyly v tabulce doménových modelů vůbec.
+
+### Testy
+
+Testů **4491**, všechny zelené — z toho **48 nových**. Nejcennější jsou ta negativní: bez povolení,
+na cizím PR, na PR z forku, bez odpovědi o původu větve, nad konfliktem, nad rozdělaným rebasem
+a při nezměněné hlavě se `git push` **nespustí** (měří se to zápisem argumentů podstrčeného `gitu`,
+protože fake pusher by se do store podstrčit nedal — tvrdá podmínka č. 1 mu tam nedovolí ani
+továrnu).
+
+**Nejcennější z celého rozdělení** je ale test, který tvrdí, že **první krok nepushuje**: rebase
+doběhne, v cache leží srovnaná větev a `git` se nespustil. Kdyby se to někdy „zjednodušilo“ zpátky,
+pozná se to tam — ověřeno vloženou regresí, na kterou zareagovalo **pět** testů.
+
+Vedle nich **integrační test proti skutečnému `gitu`** (`RealBranchRebaseTests`, remote je `file://`):
+že se commity doopravdy přehrají, že se strom review nepohne, že se konflikt pozná a rebase zahodí,
+že se rozdělaný rebase **najde a nepřepíše**, že se **přerovnaná větev najde i bez paměti aplikace**
+(tedy po restartu), že nedotčený strom **není** přerovnaná větev, že se zahodit dá **i dokončený**
+rebase a že neznámý základ skončí chybou, ne konfliktem. Tuhle půlku se namockovat nedá.
+
+**Ověřeno vložením regrese, šestkrát**: první krok, který pushne sám, položí **pět** testů
+(nejhlasitěji „Rebase nepushuje a skončí mezistavem“); `switch detail?.isCrossRepository` položí
+tvrzení o nenačtené hlavičce. A k tomu čtyři z prvního kola: holé `--force` místo leasu položí
+`SingleWayOutTests`
+i `GitBranchPushTests`; vyndaný guard na autorství položí „Na cizí pull request se nepushuje“
+(a pusher pak pushne); `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení, že
+se push skládá jen na jednom místě; a `?? false` v dekodéru `isCrossRepository` položí tvrzení, že
+chybějící pole je „nevím“, ne „ne“.
+
+**Na obrazovce vidět je** — druhé tlačítko v sekci `Větev`, počet commitů vzadu v řádku stavu, věta
+o tom, jak srovnání dopadlo, a potvrzovací sheet přetlačení. **Mockup (sekce 36) je překreslený
+a publikovaný** ve stejném commitu: přibyl mezistav v panelu, potvrzení a dvě poznámky o tom, proč
+se dělí podle vratnosti.
+=======
 ## #421 — tělo `DiffView`u se při tichém tiku pollingu pořád špiní (změřeno, nezavřeno)
 
 Zadání #421 bylo z jiného soudku než ostatní: nejdřív **zjistit, jestli ta vada ještě je**, protože
@@ -5736,6 +5951,9 @@ vydal nulu, tedy „nezašpinilo se“ nad tím, co se právě zašpinilo). Je t
 
 **Na obrazovce není co vidět**: aplikace se nezměnila, přibyly jen sondy, jedno tvrzení
 a dokumentace.
+<<<<<<< HEAD
+>>>>>>> origin/main
+=======
 
 ## #483 — Emotikony s našeptáváním shortcodů ve třech polích, která posílají text ven
 
@@ -5797,3 +6015,4 @@ vloženou regresí**.
 
 **Co ověřuje jedině člověk**: že klávesy zaberou (#184). `↑↓`, `↵`, ustupující `esc` a `⌘⏎`
 s otevřenou nabídkou testovací host neunese — aktivaci nedostane.
+>>>>>>> origin/main

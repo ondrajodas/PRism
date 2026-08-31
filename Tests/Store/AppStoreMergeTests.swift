@@ -179,6 +179,111 @@ struct AppStoreMergeTests {
         #expect(gateway.branchStatusRequests == [pr])
     }
 
+    // MARK: - Posun základu (#466, z proklikání)
+
+    /// **Tohle je ta chybějící polovina tvrzení o cache.** „Druhý příchod na PR se neptá znovu“
+    /// výš hlídá směr, ve kterém je držení stavu **správné** — a právě proto vada prošla: nic
+    /// netvrdilo opačný směr, tedy že se stav přeptá, když se pohnul **základ**.
+    ///
+    /// Napsat se to s razítkem `updatedAt` ani nedalo. Změřeno na `prism-review-sandbox#9`: po
+    /// commitu do `master`u zůstal `updated_at` PR **nezměněný** a `base.sha` i `baseRefOid`
+    /// ukazovaly hlavu z doby vzniku PR — takže „PR se nezměnil, ale základ ano“ je stav, o kterém
+    /// razítko PR nevypovídá vůbec.
+    @Test("Tik přeptá polohu větve, i když se PR nezměnil")
+    func refreshesDivergenceWhenTheBaseMoves() async throws {
+        let (store, gateway) = await prepared()
+        // Stav načtený s detailem tvrdí `srovnaná`.
+        #expect(store.branchStatusState(for: pr)?.status?.divergence?.behind == nil)
+
+        // Do základu přišel commit. Na pull requestu se tím nezměnilo nic — `summary()` vrací
+        // pořád totéž razítko, což je celý ten měřený případ.
+        gateway.divergence = BranchDivergence(ahead: 1, behind: 1)
+        await store.refreshOpenDivergence()
+
+        #expect(store.branchStatusState(for: pr)?.status?.divergence?.behind == 1)
+        #expect(gateway.divergenceQueries.map(\.id) == [pr])
+        // **Drahá polovina se nepřepočítávala**: stráž z #465 platí dál, takže na `mergeable` padl
+        // pořád jen ten jeden dotaz z načtení detailu.
+        #expect(gateway.branchStatusRequests == [pr])
+    }
+
+    /// **Na cizí PR se neptáme ani na polohu větve.** Sekce `Větev` se tam nekreslí, takže by to
+    /// bylo volání za nic — tatáž podmínka jako u slévatelnosti.
+    @Test("Na cizí PR se na polohu větve neptáme")
+    func doesNotRefreshDivergenceOnAForeignPullRequest() async throws {
+        let (store, gateway) = await prepared(mine: false)
+
+        await store.refreshOpenDivergence()
+
+        #expect(gateway.divergenceQueries.isEmpty)
+    }
+
+    /// **Bez otevřené záložky se neptáme.** Ta hodnota se kreslí jedině v panelu otevřeného PR;
+    /// seznam ani přehled o „pozadu“ netvrdí nic, takže by je dotaz jen zdržoval.
+    @Test("Bez otevřeného PR se na polohu větve neptáme")
+    func doesNotRefreshDivergenceWithNoOpenPullRequest() async throws {
+        let (store, gateway) = await prepared()
+        store.closeTab(pr)
+
+        await store.refreshOpenDivergence()
+
+        #expect(gateway.divergenceQueries.isEmpty)
+    }
+
+    /// **Selhání nic nemaže.** Odpověď, kterou máme, je pořád lepší než prázdno — a příští tik to
+    /// zkusí znovu. Kdyby se při chybě sítě stav zahodil, blikalo by „nezjistil jsem to“ nad
+    /// panelem při každém odpojení.
+    @Test("Selhání přeptání nezahodí, co už víme")
+    func keepsTheKnownDivergenceOnFailure() async throws {
+        let (store, gateway) = await prepared(
+            status: BranchStatus(
+                mergeability: .mergeable,
+                mergeState: .clean,
+                divergence: BranchDivergence(ahead: 3, behind: 0)
+            )
+        )
+        gateway.divergenceFailure = GitHubError.timedOut
+
+        await store.refreshOpenDivergence()
+
+        #expect(store.branchStatusState(for: pr)?.status?.divergence?.ahead == 3)
+    }
+
+    /// **`nil` se zapíše, chyba ne** — a ten rozdíl je záměr, ne nedůslednost, takže se tvrdí.
+    ///
+    /// `nil` je odpověď („zeptal jsem se a GitHub polohu neurčil“, typicky smazaný ref); držet nad
+    /// ní starou hodnotu by znamenalo tvrdit polohu, kterou nikdo nepotvrdil. Protějšek téhle
+    /// scény je „Selhání přeptání nezahodí, co už víme“ — tam se stará hodnota **drží**.
+    @Test("Odpověď nevím starou polohu přepíše")
+    func overwritesTheKnownDivergenceWithAnUnknownAnswer() async throws {
+        let (store, gateway) = await prepared(
+            status: BranchStatus(
+                mergeability: .mergeable,
+                mergeState: .clean,
+                divergence: BranchDivergence(ahead: 3, behind: 0)
+            )
+        )
+        gateway.divergence = nil
+
+        await store.refreshOpenDivergence()
+
+        #expect(store.branchStatusState(for: pr)?.status?.divergence == nil)
+    }
+
+    /// **Bez načteného stavu se nepřeptává.** Načíst ho od nuly umí `loadBranchStatus`; dvě místa,
+    /// která tahají tentýž stav, by po otevření PR znamenala dva souběžné dotazy.
+    @Test("Nenačtený stav se přeptáním nezakládá")
+    func doesNotCreateStatusFromScratch() async throws {
+        let (store, gateway) = await prepared(mine: false)
+        // Cizí PR stav nemá, takže je to zároveň scéna „stav chybí“.
+        #expect(store.branchStatusState(for: pr) == nil)
+
+        await store.refreshOpenDivergence()
+
+        #expect(store.branchStatusState(for: pr) == nil)
+        #expect(gateway.divergenceQueries.isEmpty)
+    }
+
     /// **„Nedá se mergnout“ a „nezjistil jsem to“ se nesmí slít.** Po chybě sítě je stav `failed`
     /// a merge se nenabízí — ne proto, že by to nešlo, ale proto, že se to neví.
     @Test("Selhání se nezahodí do prázdna")

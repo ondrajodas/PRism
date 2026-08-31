@@ -146,6 +146,139 @@ struct SingleWayOutTests {
         }
     }
 
+    // MARK: - Zápis do remote (#466)
+
+    /// **Druhá cesta ven je `BranchPushing`, a má tři soubory** (#466).
+    ///
+    /// Je to **nová třída**, ne devátá metoda `ReviewPublishing`: do #466 aplikace do remote
+    /// nezapisovala vůbec a `git push` byl výslovně v `--disallowedTools` revieweera. Tvrzení má
+    /// proto tvar toho o publisherovi, a to schválně — kdyby se ta cesta rozlezla, má se to poznat
+    /// tady, ne až na cizí větvi.
+    ///
+    /// Protokol, `GitBranchPush` (implementace) a `BranchPushSubmission` (jediný volající). Všechny
+    /// v `Publish/`, tedy tam, kde je i ta první cesta ven.
+    ///
+    /// **Volající se u rozdělení akce na dva kroky přejmenoval** (`BranchSyncSubmission` →
+    /// `BranchPushSubmission`) a je to samo tvrzení: od chvíle, kdy má přetlačení potvrzovací
+    /// obrazovku, je to objekt s životností jako `MergeSubmission`, ne bezstavová struktura. Počet
+    /// souborů se tím **nezvedl** — rebase do `Publish/` nepřibyl a nemá tam co dělat.
+    @Test("BranchPushing zná tři soubory")
+    func namesEveryWayIntoTheRemote() throws {
+        let using = try swiftFiles()
+            .filter { $0.code.contains("BranchPushing") }
+            .map(\.path)
+            .sorted()
+
+        #expect(using == [
+            "Publish/BranchPushSubmission.swift",
+            "Publish/BranchPushing.swift",
+            "Publish/GitBranchPush.swift",
+        ])
+        #expect(using.allSatisfy { $0.hasPrefix("Publish/") })
+    }
+
+    /// Protokol má **jednu metodu**: `push`, a nic dalšího.
+    ///
+    /// Vyjmenované je i to, co mezi ně nepatří, ne jen počet — přejmenovaná jediná metoda by počet
+    /// nezměnila. `commit` a `deleteBranch` jsou zakázané proto, že by z lokální práce v cache
+    /// udělaly druhý zápis ven; `pushTag` proto, že tag je věc repozitáře, ne pull requestu (tatáž
+    /// úvaha jako u `deleteLabel`, #413).
+    @Test("BranchPushing má jednu metodu")
+    func hasOnePushMethod() throws {
+        guard let file = try swiftFiles().first(where: { $0.path == "Publish/BranchPushing.swift" })
+        else {
+            Issue.record("soubor s protokolem se nenašel")
+            return
+        }
+        let methods = TextLines.content(file.code)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("func ") }
+
+        #expect(methods.count == 1)
+        #expect(methods.contains { $0.hasPrefix("func push") })
+        for forbidden in [
+            "func commit", "func deleteBranch", "func pushTag", "func createBranch",
+        ] {
+            #expect(
+                !methods.contains { $0.hasPrefix(forbidden) },
+                "\(forbidden) je zápis, který podmínka nepřipouští"
+            )
+        }
+    }
+
+    /// **`git push` se v aplikaci skládá na jednom místě** — a jedině tam.
+    ///
+    /// Tvrzení je nad **argumentem** `"push"`, ne nad jménem typu: kdyby si někdo poskládal push
+    /// v checkoutu nebo ve store, `BranchPushing` by v tom souboru nemusel stát vůbec a tvrzení
+    /// výš by prošlo. `ClaudeCommand` se odečítá schválně — tam `git push` stojí v **zákazu**
+    /// (`--disallowedTools`), tedy jako opak cesty ven.
+    @Test("Argument push se skládá jen v GitBranchPush")
+    func buildsThePushCommandInOnePlace() throws {
+        let pushing = try swiftFiles()
+            .filter { $0.code.contains("\"push\"") || $0.code.contains("push --") }
+            .map(\.path)
+            .sorted()
+
+        #expect(pushing == ["Publish/GitBranchPush.swift"])
+    }
+
+    /// **Holé `--force` se u pushe nepoužije nikdy** (#466, druhý guard ze zadání).
+    ///
+    /// Změřeno, ne přečteno v dokumentaci `gitu`: s toutéž zastaralou znalostí remote skončil
+    /// `--force-with-lease` na `! [rejected] … (stale info)` s návratovým kódem 1 a hlava na
+    /// remote zůstala **cizí**, kdežto holé `--force` cizí commit **zahodilo** (`+ f3e243e…2bf096a
+    /// (forced update)`, kód 0). Je to tedy rozdíl mezi „přetlačím svoji větev“ a „přetlačím, co
+    /// tam kdo mezitím dal“.
+    ///
+    /// Tvrzení je **dvojité**, protože ani jedna půlka sama nestačí: že tam lease je, neznamená, že
+    /// vedle něj nestojí `--force`, a naopak. `worktree remove --force` v checkoutu tomuhle
+    /// nepodléhá — je to lokální mazání stromu v cache, ne push —, takže se hledá **jen** v tom
+    /// souboru, který push skládá.
+    @Test("Push jde jen s lease, holé --force v něm není")
+    func neverForcesWithoutALease() throws {
+        guard let file = try swiftFiles().first(where: { $0.path == "Publish/GitBranchPush.swift" })
+        else {
+            Issue.record("soubor s pusherem se nenašel")
+            return
+        }
+
+        #expect(file.code.contains("--force-with-lease="))
+        // Každý výskyt `--force` v kódu musí být ten lease. `replacingOccurrences` je tady
+        // čitelnější než regulární výraz: co po odstranění leasů zbude, je holý `--force`.
+        let withoutLeases = file.code.replacingOccurrences(of: "--force-with-lease=", with: "")
+        #expect(!withoutLeases.contains("--force"), "holé --force v cestě do remote")
+    }
+
+    /// **Reviewer má `git push` dál v zákazu** (tvrdá podmínka č. 2).
+    ///
+    /// Že umí pushnout **aplikace**, není důvod to povolit session — pushuje se přes protokol,
+    /// s bránou a se dvěma guardy, kdežto session by to udělala bez nich. Tvrzení je nad
+    /// **literálem**, jako u #345 a #452: kdyby se ta konstanta přeskládala, má se to poznat tady.
+    @Test("Zákaz git push v session zůstává")
+    func keepsThePushBanForSessions() throws {
+        #expect(ClaudeCommand.disallowedTools == "Bash(gh:*),Bash(git push:*)")
+    }
+
+    /// **Rebase je lokální práce, takže `RepoCheckout` do remote nezapisuje** (#466).
+    ///
+    /// Je to ta půlka tvrdé podmínky č. 1, která se u #466 **nezměnila**: přehrání commitů běží
+    /// v cache a modul, který ho dělá, nemá čím nic odeslat. Kdyby si push složil sám, byla by to
+    /// třetí cesta ven — a tu by `namesEveryWayIntoTheRemote` výš nechytl, protože `BranchPushing`
+    /// by v tom souboru nestál.
+    @Test("Checkout ani gateway do remote nezapisují")
+    func keepsTheLocalModulesReadOnly() throws {
+        let files = try swiftFiles().filter {
+            $0.path.hasPrefix("Checkout/") || $0.path.hasPrefix("GitHub/")
+        }
+
+        #expect(!files.isEmpty)
+        for file in files {
+            #expect(!file.code.contains("\"push\""), "\(file.path) skládá push")
+            #expect(!file.code.contains("--force-with-lease"), "\(file.path) pushuje s lease")
+            #expect(!file.code.contains("BranchPushing"), "\(file.path) zná cestu do remote")
+        }
+    }
+
     /// **Zadání pro agenta (#333) cestu ven nemá.** Prompt končí ve schránce nebo v souboru, který
     /// si vybere člověk — takže ani jeden z jeho souborů nesmí publisher volat, skládat payload,
     /// sahat na API ani spouštět podproces. Kdyby se to změnilo, byla by to druhá cesta ven, a tu

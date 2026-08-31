@@ -25,13 +25,18 @@ extension AppStore {
             commits: commits[pr],
             status: branchStatusState(for: pr),
             checks: checks[pr],
-            blockingFindings: blockingFindingCount(for: pr)
+            blockingFindings: blockingFindingCount(for: pr),
+            sync: branchSyncStates[pr]
         )
     }
 
     /// Načtený detail PR, nebo `nil`. Zvlášť proto, že `detailStates` drží i „načítá se“
     /// a „nepovedlo se“ — a z obojího plyne pro sekci `Větev` totéž: plán se nesestaví.
-    private func detail(of pr: PRIdentifier) -> PullRequest? {
+    ///
+    /// **Ne `private`**, protože totéž potřebuje i srovnání větve (#466): hledání rozdělané práce
+    /// v cache se ptá na hlavu a základ z **načteného** detailu. Dvě kopie téhle jedné podmínky by
+    /// znamenaly dvě různá „nevím“ nad tou samou sekcí.
+    func detail(of pr: PRIdentifier) -> PullRequest? {
         guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
         return detail
     }
@@ -63,12 +68,23 @@ extension AppStore {
     func loadBranchStatus(for pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
         guard ownership(of: id) == .mine else { return }
-        guard let state = detail(of: id)?.state, state == .open || state == .draft else { return }
+        guard let detail = detail(of: id), detail.state == .open || detail.state == .draft else {
+            return
+        }
+        // Rozdělaná práce po srovnání větve (#466) se hledá **při každém otevření vlastního PR**,
+        // ne jen po neúspěšném pokusu: aplikaci zabitou uprostřed rebase — a stejně tak zavřenou
+        // mezi rebasem a potvrzením přetlačení — nemá kde nic zapsat, takže by o té práci okno po
+        // restartu mlčelo a příští akce nad tím PR by se nad ní zachovala divně.
+        await findUnfinishedSync(for: id)
         guard !hasCurrentBranchStatus(for: pullRequest) else { return }
         branchStatuses[id] = .loading
 
         do {
-            let status = try await gateway.fetchBranchStatus(id: id)
+            let status = try await gateway.fetchBranchStatus(
+                id: id,
+                base: detail.baseRef,
+                head: detail.headSha
+            )
             branchStatuses[id] = .loaded(status, updatedAt: pullRequest.updatedAt)
         } catch is CancellationError {
             // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout.
@@ -153,5 +169,57 @@ extension AppStore {
     private func hasCurrentBranchStatus(for pullRequest: PullRequestSummary) -> Bool {
         guard case .loaded(_, let updatedAt) = branchStatuses[pullRequest.id] else { return false }
         return updatedAt == pullRequest.updatedAt
+    }
+
+    /// Přeptá se na **polohu větve proti základu** u otevřeného vlastního PR (#466, z proklikání).
+    ///
+    /// **Obnovuje jen levnou polovinu stavu.** Razítko `updatedAt` u `branchStatuses` se schválně
+    /// **nemění** — drahá polovina (`mergeable`, `mergeStateStatus`) se tím dál obnovuje jedině
+    /// tehdy, když se pohnul pull request, takže stráž z #465 zůstává, jak byla. Přepisuje se
+    /// **pole `divergence` uvnitř** už načteného stavu: jeden stav, jedna cache, jen druhé volání.
+    ///
+    /// **Ptá se jedině tehdy, když už stav načtený je.** Když není, není co obnovovat a načte ho
+    /// `loadBranchStatus` — dvě místa, která tahají tentýž stav od nuly, by znamenala dva souběžné
+    /// dotazy hned po otevření PR.
+    ///
+    /// **Selhání nic nemaže.** Odpověď, kterou máme, je pořád lepší než prázdno, a příští tik to
+    /// zkusí znovu — tatáž nesymetrie jako u razítek rozhlídky (#335). Do okna se to nehlásí:
+    /// stav GitHubu drží stavový řádek z pollingu.
+    func refreshOpenDivergence() async {
+        guard let id = Policy.divergenceProbe(open: activeTab, ownership: { ownership(of: $0) })
+        else { return }
+        guard case .loaded(let status, let updatedAt) = branchStatuses[id] else { return }
+        guard let detail = detail(of: id), detail.state == .open || detail.state == .draft else {
+            return
+        }
+
+        let divergence: BranchDivergence?
+        do {
+            divergence = try await gateway.fetchDivergence(
+                id: id,
+                base: detail.baseRef,
+                head: detail.headSha
+            )
+        } catch {
+            // **Spolknuto schválně, a uživatel o to nepřijde.** Je to obnovení hodnoty, kterou už
+            // v panelu má — ne první načtení —, takže „nepovedlo se přeptat“ nemá co nakreslit:
+            // stará odpověď platí dál a příští tik to zkusí znovu. Že GitHub neodpovídá, drží
+            // stavový řádek z pollingu. Tatáž nesymetrie jako u razítek rozhlídky (#335)
+            // a u `refreshStaleHeads`.
+            return
+        }
+
+        // Mezitím se mohlo přepnout PR nebo doběhnout plné načtení, takže se zapisuje jedině do
+        // toho stavu, nad kterým se ptalo — jinak by odpověď přepsala novější data.
+        guard case .loaded(let current, let currentUpdatedAt) = branchStatuses[id],
+            current == status, currentUpdatedAt == updatedAt
+        else { return }
+        var refreshed = status
+        // **`nil` se zapisuje, chyba ne** — a ten rozdíl je záměr, ne nedůslednost. `nil` je
+        // odpověď („zeptal jsem se a GitHub polohu neurčil“, typicky smazaný ref), takže držet nad
+        // ní starou hodnotu by znamenalo tvrdit polohu, kterou nikdo nepotvrdil. Chyba je naopak
+        // „nezeptal jsem se“ — a tam je stará odpověď pořád ta nejlepší, kterou máme.
+        refreshed.divergence = divergence
+        branchStatuses[id] = .loaded(refreshed, updatedAt: updatedAt)
     }
 }

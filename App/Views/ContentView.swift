@@ -34,6 +34,10 @@ struct ContentView: View {
     /// jediná cesta ven (tvrdá podmínka č. 1).
     @State private var merge: MergeSubmission?
 
+    /// Rozdělané přetlačení větve (#466). Drží se **tady**, ne v detailu PR, ze stejného důvodu jako
+    /// merge: sheet je to jediné místo, kde je vidět, jak push dopadl, a nesmí zmizet s tabem.
+    @State private var branchPush: BranchPushSubmission?
+
     var body: some View {
         // Průchod tělem se počítá, jen když je zapnutá diagnostika (#361) — jinak je to načtení
         // jednoho statického `Optional`u. Viz `RenderDiagnostics`.
@@ -99,6 +103,15 @@ struct ContentView: View {
         // sheet co ukazovat, takže `nil` je zavřený stav i zdroj dat naráz.
         .sheet(item: $merge) { merge in
             MergeSheet(submission: merge) { self.merge = nil }
+        }
+        // Potvrzení přetlačení větve (#466). `item:` ze stejného důvodu: bez snímku toho, co leží
+        // v cache, nemá sheet co ukazovat.
+        .sheet(item: $branchPush) { push in
+            BranchPushSheet(
+                submission: push,
+                close: { self.branchPush = nil },
+                discard: { Task { await store.discardSync(for: push.pullRequest.id) } }
+            )
         }
         .hiddenShortcuts { shortcuts }
         // Paleta je **překryv okna, ne sheet**: sheet si bere šířku okna a přijíždí shora jako
@@ -319,7 +332,8 @@ struct ContentView: View {
                     store: store,
                     pullRequest: summary,
                     submission: $submission,
-                    merge: $merge
+                    merge: $merge,
+                    branchPush: $branchPush
                 )
             } else {
                 EmptyStateView(

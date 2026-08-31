@@ -28,6 +28,8 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private var asked: [String] = []
     private var detailsAsked: [PRIdentifier] = []
     private var overriddenDetail: Result<PullRequest, any Error>?
+    private var detailQueue: [Result<PullRequest, any Error>] = []
+    private var detailQueueUsed = 0
     private var diffsAsked: [PRIdentifier] = []
     private var rangeDiffsAsked: [(repo: RepoID, base: String, head: String)] = []
     private var filesAsked: [(id: PRIdentifier, path: String)] = []
@@ -77,6 +79,19 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     var detailFromNowOn: Result<PullRequest, any Error>? {
         get { lock.withLock { overriddenDetail } }
         set { lock.withLock { overriddenDetail = newValue } }
+    }
+
+    /// Odpovědi na `fetchDetail` **v pořadí, poslední se opakuje** — jako u `releases`.
+    ///
+    /// Existuje kvůli scéně „po force pushi se hlava změnila“ (#466, z proklikání), která se jinak
+    /// **nedá složit**: `detailFromNowOn` platí od nastavení dál, takže by novou hlavu viděl
+    /// i **pre-flight** a ten by push odmítl jako `headMoved` — tedy přesně to, co se ve scéně stát
+    /// nemá. Sekvence odděluje „co GitHub říkal před pushem“ od „co říká po něm“.
+    ///
+    /// Nastavením se **počítadlo resetuje**, aby test nemusel vědět, kolik dotazů proběhlo předtím.
+    var detailsInOrder: [Result<PullRequest, any Error>] {
+        get { lock.withLock { detailQueue } }
+        set { lock.withLock { detailQueue = newValue; detailQueueUsed = 0 } }
     }
 
     var detailRequests: [PRIdentifier] { lock.withLock { detailsAsked } }
@@ -311,12 +326,48 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// neptáme vůbec**.
     var branchStatusRequests: [PRIdentifier] { lock.withLock { branchStatusAsked } }
 
-    private var branchStatusAsked: [PRIdentifier] = []
+    /// **Čím** se ptalo na polohu větve (#466) — základ a hlava. Vlastní typ, ne tuple: tuple
+    /// v Swiftu není `Equatable`, takže by se pole nedalo srovnat jedním tvrzením.
+    struct BranchStatusQuery: Equatable, Sendable {
+        let id: PRIdentifier
+        let base: String
+        let head: String
+    }
 
-    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus {
-        lock.withLock { branchStatusAsked.append(id) }
+    var branchStatusQueries: [BranchStatusQuery] { lock.withLock { branchStatusAskedAbout } }
+
+    private var branchStatusAsked: [PRIdentifier] = []
+    private var branchStatusAskedAbout: [BranchStatusQuery] = []
+
+    func fetchBranchStatus(id: PRIdentifier, base: String, head: String) async throws -> BranchStatus {
+        lock.withLock {
+            branchStatusAsked.append(id)
+            branchStatusAskedAbout.append(BranchStatusQuery(id: id, base: base, head: head))
+        }
         if let branchStatusFailure { throw branchStatusFailure }
         return branchStatus
+    }
+
+    /// Co vrátí `fetchDivergence` (#466). **Vlastní hodnota, ne `branchStatus.divergence`** — celý
+    /// smysl té metody je, že se odpověď na „pozadu“ může změnit, aniž by se změnilo cokoli
+    /// ostatního, a s jedním polem by se ten případ nedal napsat.
+    var divergence: BranchDivergence?
+
+    /// Čím `fetchDivergence` spadne. `nil` = vrátí `divergence`.
+    var divergenceFailure: (any Error)?
+
+    /// Na co se kdo ptal, v pořadí. Na počtu stojí tvrzení, že se **na cizí ani na neotevřené PR
+    /// neptáme vůbec**.
+    var divergenceQueries: [BranchStatusQuery] { lock.withLock { divergenceAskedAbout } }
+
+    private var divergenceAskedAbout: [BranchStatusQuery] = []
+
+    func fetchDivergence(id: PRIdentifier, base: String, head: String) async throws -> BranchDivergence? {
+        lock.withLock {
+            divergenceAskedAbout.append(BranchStatusQuery(id: id, base: base, head: head))
+        }
+        if let divergenceFailure { throw divergenceFailure }
+        return divergence
     }
 
     /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
@@ -375,19 +426,45 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     var headRequests: [[PRIdentifier]] { lock.withLock { headsAsked } }
 
     private var headsAsked: [[PRIdentifier]] = []
+    private var headsQueue: [[PRIdentifier: PullRequestHead]] = []
+    private var headsQueueUsed = 0
+
+    /// Odpovědi na `fetchHeads` **v pořadí, poslední se opakuje** — jako `detailsInOrder`.
+    ///
+    /// Existuje kvůli scéně „po force pushi GitHub chvíli hlásí starou hlavu“ (#466, změřeno
+    /// 1,45–2,16 s). Časovat ji odmlkou v testu **nešlo**: první dotaz na hlavu padne až za
+    /// podprocesem `git`, takže se pauza rozešla s tím, co se měřilo, a test byl falešně zelený.
+    /// Sekvence tu časovou závislost odstraňuje úplně.
+    var headsInOrder: [[PRIdentifier: PullRequestHead]] {
+        get { lock.withLock { headsQueue } }
+        set { lock.withLock { headsQueue = newValue; headsQueueUsed = 0 } }
+    }
 
     func fetchHeads(of ids: [PRIdentifier]) async throws -> [PRIdentifier: PullRequestHead] {
         // Prázdný dotaz se nezaznamenává ani nespouští — jako ve `GhGateway`, ať se na tom dá
         // tvrdit, že se na nic neptáme.
         guard !ids.isEmpty else { return [:] }
-        lock.withLock { headsAsked.append(ids) }
+        let queued: [PRIdentifier: PullRequestHead]? = lock.withLock {
+            headsAsked.append(ids)
+            guard !headsQueue.isEmpty else { return nil }
+            let answer = headsQueue[min(headsQueueUsed, headsQueue.count - 1)]
+            headsQueueUsed += 1
+            return answer
+        }
         if let headsFailure { throw headsFailure }
-        return heads.filter { ids.contains($0.key) }
+        return (queued ?? heads).filter { ids.contains($0.key) }
     }
 
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)
+            if !detailQueue.isEmpty {
+                // Poslední se opakuje, takže sekvence nikdy „nedojde“ — dojití by z chybějící
+                // odpovědi udělalo `notFound`, tedy jinou scénu, než jakou test píše.
+                let answer = detailQueue[min(detailQueueUsed, detailQueue.count - 1)]
+                detailQueueUsed += 1
+                return answer
+            }
             return overriddenDetail ?? detail
         }
         guard let answer else { throw GitHubError.notFound("Fake gateway detail nezná.") }

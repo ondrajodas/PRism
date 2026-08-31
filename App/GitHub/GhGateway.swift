@@ -388,13 +388,36 @@ struct GhGateway: GitHubGateway {
     /// **Mergnutý a zavřený PR vrací `UNKNOWN` navždycky** (změřeno na `PRism#470`), takže se
     /// na něm vyčerpají všechny pokusy. Nevadí to: sekce `Větev` se kreslí na otevřeném PR
     /// a `Policy.mergeOffer` má stav PR mezi překážkami dřív, než se na tohle pole ptá.
-    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus {
+    func fetchBranchStatus(id: PRIdentifier, base: String, head: String) async throws -> BranchStatus {
         var status = try await branchStatus(id: id)
         for _ in 1..<Self.branchStatusAttempts where !status.isSettled {
             try await Task.sleep(for: branchStatusDelay)
             status = try await branchStatus(id: id)
         }
+        // Divergence je **druhé volání**, protože `gh pr view --json` na ni pole nemá a `compare`
+        // je jen v GraphQL (#466). Neopakuje se: `compare` líné pole není, spočítá se hned.
+        //
+        // **Bez jména větve nebo bez hlavy se na ni neptáme.** Prázdné hodnoty by z dotazu udělaly
+        // `ref(qualifiedName: "refs/heads/")`, tedy jistou chybu za jedno volání navíc; `nil`
+        // divergence je přitom platná odpověď („nevím“), kterou panel umí ukázat.
+        guard !base.isEmpty, !head.isEmpty else { return status }
+        status.divergence = try await divergence(repo: id.repo, base: base, head: head)
         return status
+    }
+
+    func fetchDivergence(id: PRIdentifier, base: String, head: String) async throws -> BranchDivergence? {
+        // Tatáž ochrana jako v `fetchBranchStatus`: prázdné hodnoty by z dotazu udělaly
+        // `ref(qualifiedName: "refs/heads/")`, tedy jistou chybu za jedno volání navíc.
+        guard !base.isEmpty, !head.isEmpty else { return nil }
+        return try await divergence(repo: id.repo, base: base, head: head)
+    }
+
+    private func divergence(repo: RepoID, base: String, head: String) async throws -> BranchDivergence? {
+        try await run(
+            BranchDivergenceQuery.arguments(repo: repo, base: base, head: head),
+            phase: "Poloha větve proti základu",
+            decodedAs: GhBranchDivergence.self
+        ).divergence
     }
 
     private func branchStatus(id: PRIdentifier) async throws -> BranchStatus {

@@ -422,6 +422,7 @@ struct WindowRelayoutHost: View {
     /// `submission`, takže ho i sonda musí držet stejně: binding z `@State` má stálou identitu
     /// úložiště, a na tom stojí, že se detail poznává jako nezměněný.
     @State private var merge: MergeSubmission?
+    @State private var branchPush: BranchPushSubmission?
 
     /// Kostra z `ContentView`: hlavička nahoře, rail vlevo, stavový řádek dole. Rozměry jsou
     /// z aplikace, obsah slepý — měří se **tvar**, ne sousedé.
@@ -441,7 +442,8 @@ struct WindowRelayoutHost: View {
             store: store,
             pullRequest: summary,
             submission: $submission,
-            merge: $merge
+            merge: $merge,
+            branchPush: $branchPush
         )
     }
 
@@ -461,7 +463,8 @@ struct WindowRelayoutHost: View {
                 store: store,
                 pullRequest: summary,
                 submission: $submission,
-                merge: $merge
+                merge: $merge,
+                branchPush: $branchPush
             )
         }
     }

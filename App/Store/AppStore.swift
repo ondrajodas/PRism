@@ -339,6 +339,22 @@ final class AppStore {
     /// neposílá“ a `submission(for:)` pak nevrátí nic.
     let gh: URL?
 
+    /// Cesta ke `gitu` — jediné, co si store kvůli přetlačení větve drží (#466).
+    ///
+    /// **Ne pusher a ani továrna na něj**, ze stejného důvodu jako u `gh`: cesta do remote se
+    /// skládá až v `BranchPushSubmission.push`, takže `AppStore` sám pushnout nic neumí a grep
+    /// `BranchPushing App/` ho schválně nevypíše. `nil` v testech znamená „odsud se nepushuje“
+    /// a `branchPushSubmission(for:)` pak nevrátí nic.
+    let git: URL?
+
+    /// Cache, ve které se pracuje (#466) — **tatáž, ve které stojí checkout**.
+    ///
+    /// Drží se tady kvůli jedné věci: pusher si ověřuje, že strom, ze kterého pushuje, leží
+    /// v cache (tvrdá podmínka č. 3), a ta kontrola má mluvit o **té** cache, ve které rebase
+    /// doopravdy proběhl. Dvě výchozí hodnoty na dvou místech by v provozu vyšly stejně a v testu
+    /// by se rozešly — a ta kontrola by se pak nedala ověřit odjinud než z pusheru samotného.
+    let cacheLayout: CacheLayout
+
     let checkout: (any RepoCheckout)?
 
     /// Vestavěné terminály (#459). `nil` = **zásuvka se nekreslí** — tak jsou na tom testy, které
@@ -749,6 +765,8 @@ final class AppStore {
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
+        git: URL? = nil,
+        cacheLayout: CacheLayout = .applicationSupport,
         health: HealthMonitor? = nil,
         notifications: (any UserNotifying)? = nil,
         announced: AnnouncedPullRequests? = nil,
@@ -770,6 +788,8 @@ final class AppStore {
         self.appearance = appearance
         self.time = time
         self.gh = gh
+        self.git = git
+        self.cacheLayout = cacheLayout
         self.health = health
         self.notifications = notifications
         self.announced = announced
@@ -829,6 +849,13 @@ final class AppStore {
             // limitu se netiká, takže se ani nekouká) a nepotřebuje druhý časovač. Kolik dotazů
             // z toho je, rozhoduje `Policy.activitySweep` — na klidný den nula.
             await self?.refreshOwnActivity(in: summaries)
+            // Poloha větve proti základu (#466, z proklikání) — základ se může pohnout, aniž by se
+            // na pull requestu změnilo cokoli, co jde vyčíst z `updatedAt`, takže bez tohohle by
+            // otevřené okno tvrdilo `srovnaná` nad větví o commit pozadu až do restartu. Uvnitř
+            // úspěšného tiku ze stejného důvodu jako rozhlídky výš: vejde se to do backoffu
+            // pollingu a nepotřebuje druhý časovač. Kolik dotazů z toho je, rozhoduje
+            // `Policy.divergenceProbe` — **nejvýš jeden**, a jedině když je otevřené vlastní PR.
+            await self?.refreshOpenDivergence()
             // Útrata se počítá od půlnoci (#148), takže aplikace, která běží přes noc, by
             // ráno ukazovala včerejší součet. Tik je nejlevnější místo, kde se to dá srovnat
             // — účetní kniha si den pamatuje, takže se na disk sahá jednou za den, ne jednou
@@ -901,6 +928,7 @@ final class AppStore {
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
+            git: toolPaths.git,
             health: HealthMonitor(),
             notifications: SystemNotificationCenter.shared,
             announced: AnnouncedPullRequests(),
@@ -1296,6 +1324,13 @@ final class AppStore {
     /// u vlastních otevřených PR** — jinde by se sekce `Větev` nekreslila a odpověď GitHubu by
     /// stejně byla `UNKNOWN`.
     var branchStatuses: [PRIdentifier: BranchStatusState] = [:]
+
+    /// Co se právě děje se srovnáním větve (#466). Chybějící klíč = nic se neděje.
+    ///
+    /// **Stav, ne cesta ven** — tatáž konstrukce jako u `metadataActionStates`: akce se ovládá
+    /// z panelu a musí přežít překliknutí tabu. Drží i **rozdělaný rebase v cache**, který se
+    /// hledá při každém otevření vlastního PR: bez toho by o něm okno po restartu mlčelo.
+    var branchSyncStates: [PRIdentifier: BranchSyncState] = [:]
 
     /// Který commit je v tabu `Commity` rozkliknutý (#317). Chybějící klíč = v tabu je seznam.
     ///

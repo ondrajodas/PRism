@@ -16,6 +16,42 @@ protocol RepoCheckout: Sendable {
     /// Idempotentní: existující strom pro stejné `(PR, sha)` se použije znovu.
     func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL
 
+    /// Přehraje commity pull requestu nad základem (#466) — **ve vlastním stromě v cache**.
+    ///
+    /// **Nepushuje a nemá čím** (tvrdá podmínka č. 1): tenhle modul zůstává lokální, do remote
+    /// zapisuje jedině `BranchPushing`. Výsledek nese cestu ke stromu, ze kterého se dá pushnout,
+    /// a hlavu, která z rebasu vypadla.
+    ///
+    /// **Konflikt není chyba, ale návratová hodnota** — vede jinam než „nedá se spustit `git`“.
+    /// Když se povede rebase zahodit, v cache po něm nic nezůstane; když ne, leží tam rozdělaný
+    /// a musí to být vidět v okně.
+    ///
+    /// Základ se dotahuje pokaždé (`prepare`), protože rebase nad zastaralým `main`em by srovnal
+    /// větev s něčím, co už není.
+    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome
+
+    /// Zahodí, co ve stromě pro srovnání větve leží — **rozdělaný rebase i přerovnanou větev, která
+    /// neodešla** (#466). Chybějící strom není chyba: na remote se nesáhlo, takže není co vracet.
+    ///
+    /// **Maže celý strom, ne `rebase --abort`.** Od rozdělení akce na dva kroky se zahazují dvě různé
+    /// věci a `--abort` umí jen jednu z nich — nad dokončeným rebasem by neudělal nic a v cache by
+    /// zůstaly přehrané commity, přestože panel hlásí uklizeno. Smazání stromu je jedna operace
+    /// s jedním významem a příští rebase si strom založí znovu.
+    func discardSync(for pr: PRIdentifier) async throws
+
+    /// Co leží ve stromě pro srovnání větve (#466) — **tři stavy, ne „běží rebase“**.
+    ///
+    /// Ptá se `gitu` (`rev-parse`), ne `FileManageru`: u pracovního stromu leží `rebase-merge`
+    /// uvnitř klonu (`<klon>/worktrees/<jméno>/`), ne v něm samotném — změřeno.
+    ///
+    /// `headSha` je hlava pull requestu, `base` jméno jeho základní větve: podle prvního se pozná
+    /// **přerovnaná** větev od nedotčené, podle druhého se dopočítá, kolik commitů nad základem leží.
+    func syncWorktreeState(
+        for pr: PRIdentifier,
+        at headSha: String,
+        onto base: String
+    ) async -> SyncWorktreeState
+
     /// Cesty souborů, které repo verzuje — podklad pro odhad jazyka projektu.
     ///
     /// Ptá se `gitu`, ne `FileManageru`: ignorované složky (`vendor/`, `node_modules/`,

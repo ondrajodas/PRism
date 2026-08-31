@@ -65,6 +65,11 @@ struct PullRequestDetailView: View {
     /// hláškou, kvůli které je otevřený.
     @Binding var merge: MergeSubmission?
 
+    /// Rozdělané přetlačení větve (#466). Zakládá se tady, ale **drží ho `ContentView`** — tatáž
+    /// past jako u merge: sheet zavěšený na detailu zmizí, jakmile se pod ním záložka přestane
+    /// kreslit, a to je zrovna ta chvíle, kdy je v něm vidět, jak to dopadlo.
+    @Binding var branchPush: BranchPushSubmission?
+
     /// Výška celého detailu — z ní je strop zásuvky s terminálem (#459).
     ///
     /// Měří se `onGeometryChange`, protože **akce se při nezměněné hodnotě nespustí** (změřeno
@@ -536,6 +541,7 @@ struct PullRequestDetailView: View {
             // `nil` a nekreslí se ani nadpis.
             branch: store.branchSection(for: pullRequest.id),
             branchActions: branchActions,
+            branchSync: store.branchSyncState(for: pullRequest.id),
             // Proti kterému kódu nálezy platí (#392). Rozhoduje `Policy` — panel z toho jen sází
             // větu, takže se okno neptá dvakrát jinak.
             headNotice: headNotice,
@@ -570,9 +576,21 @@ struct PullRequestDetailView: View {
     /// `Mergnout…` **jen otevře potvrzení**: `mergeSubmission(for:)` vrátí `nil`, když mergnout
     /// nejde, takže se sheet nad neproveditelným mergem neotevře ani tehdy, kdyby se na zakázané
     /// tlačítko nějak kliknout dalo.
+    /// `Rebase` (#466) je **dvoukrokové**: první tlačítko spustí rebase v kopii repa
+    /// rovnou (lokální práce, dá se vzít zpět), druhé (`Force push…`) jen **otevře potvrzení** —
+    /// `branchPushSubmission(for:)` vrátí `nil`, když v cache nic nečeká, takže se sheet nad
+    /// ničím neotevře. Stav mezi krokem jedna a dva si drží store, takže překliknutí tabu ani
+    /// zavření panelu ho neztratí.
     private var branchActions: BranchActions {
         let summary = pullRequest
-        return BranchActions(merge: { merge = store.mergeSubmission(for: summary) })
+        let id = summary.id
+        return BranchActions(
+            merge: { merge = store.mergeSubmission(for: summary) },
+            sync: { Task { await store.syncBranch(summary) } },
+            push: { branchPush = store.branchPushSubmission(for: summary) },
+            discardSync: { Task { await store.discardSync(for: id) } },
+            clearSync: { store.clearBranchSync(for: id) }
+        )
     }
 
     /// Věta o tom, proti které hlavě nálezy platí (#392).

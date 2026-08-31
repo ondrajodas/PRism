@@ -83,6 +83,8 @@ struct ReviewPanel: View {
     /// nekreslí vůbec; rozhoduje o tom `Policy.branchSection`, ne panel.
     var branch: Policy.BranchSection?
     var branchActions = BranchActions()
+    /// Jak dopadlo poslední srovnání větve (#466). `nil` = nedělo se nic.
+    var branchSync: BranchSyncState?
     /// Proti kterému kódu nálezy platí (#392). Kreslí se **jen v tabu `Commity`** — rozhoduje
     /// `Policy.findingsHeadNotice`, ne panel.
     var headNotice: Policy.FindingsHeadNotice = .none
@@ -159,6 +161,7 @@ struct ReviewPanel: View {
                         PanelBranchView(
                             section: branch,
                             contentWidth: metadataContentWidth,
+                            syncState: branchSync,
                             actions: branchActions
                         )
                     }
