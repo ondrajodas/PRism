@@ -8531,7 +8531,7 @@ Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvaadvacet** metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **třiadvacet** metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
 „čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané. Tři přidala
 #392: labely a reviewery PR a nabídky lidí a týmů k nim. Jednu #420: hlavy víc PR jedním dotazem.
@@ -8540,7 +8540,7 @@ u #466**, kdy se tatáž metoda musela sáhnout znovu.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol (dvaadvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchHeads(of:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)`, `fetchBranchStatus(id:base:head:)` |
+| `GitHubGateway` | Protokol (třiadvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchHeads(of:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)`, `fetchBranchStatus(id:base:head:)`, `fetchDivergence(id:base:head:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -9544,6 +9544,46 @@ neodešlo — tatáž úvaha jako u review a merge.
 **Konflikty tohle issue neřeší** — to je #467 a v návrhu je to sheet se session, která smí psát.
 Do té doby se nedokončený rebase **zahodí** a řekne se to; když se zahodit nepovede, zůstane
 v cache a nabídne se tlačítko `Zahodit rebase`.
+
+### Poloha větve se klíčuje základem, ne razítkem PR (#466, z druhého proklikání)
+
+**Sekce `Větev` má jednu cache, ale dvě rychlosti obnovy** — a je to jediné místo v repu, kde se
+jeden stav obnovuje po polovinách. Důvod je datový, ne výkonový: ty dvě poloviny závisí na různých
+věcech.
+
+| Polovina | Závisí na | Klíč | Kdo obnovuje |
+|---|---|---|---|
+| `mergeability`, `mergeState` | hlavě **pull requestu** | `pullRequest.updatedAt` | `loadBranchStatus` (stráž z #465, beze změny) |
+| `divergence` (`ahead`/`behind`) | hlavě **základu** | žádný — přeptává se | `refreshOpenDivergence` v tiku |
+
+**Proč razítko PR na divergenci nesedí**, změřeno na `prism-review-sandbox#9` po commitu do
+`master`u:
+
+```
+PR #9 updated_at      = 2026-08-31T08:30:37Z   (čas force pushe — posunem základu se NEZMĚNIL)
+PR .base.sha  (REST)  = d16347a                 (hlava z doby vzniku PR)
+   baseRefOid (GraphQL) = d16347a               (taky frozen — netrackuje ref)
+skutečná hlava master = 6cbdf16
+```
+
+Základ se pohne, aniž by se na pull requestu změnilo cokoli, co jde vyčíst z jeho razítka **nebo
+z jeho polí**. Panel proto tvrdil `srovnaná` nad větví o commit pozadu, a nespravilo to ani
+obnovení, ani zavření a otevření záložky — jedině restart. **`baseRefOid` je vyvrácená hypotéza**:
+kdyby bylo živé, vzalo by se ze seznamu, který tik dělá tak jako tak.
+
+**`fetchDivergence` není `fetchBranchStatus` bez čekání.** Neptá se na `mergeable` vůbec, a na tom
+ten návrh stojí: `mergeable` je líné pole, které se dotazem teprve spouští (proto ta smyčka pokusů),
+kdežto `compare` nad refem je hotová hodnota — **`cost=1`, 0,51–0,62 s** na dotaz pokrývající dva
+repozitáře. Stráž z #465 tím zůstává, jak byla; zakazuje polling **líného pole**, ne dotaz na ref.
+Hlídá to `divergenceAloneIsOneCall` **počtem volání**, ne komentářem.
+
+**Strop drží `Policy.divergenceProbe`**: jedině vlastní PR (na cizím se sekce nekreslí), jedině
+otevřené (jinde se ta hodnota nekreslí) a nejvýš jedno na tik (z počtu vlastních PR nemá růst počet
+volání). Zápis je navíc **podmíněný tím, že se stav mezitím nezměnil** — jinak by odpověď z pomalého
+dotazu přepsala novější data po přepnutí PR.
+
+**A selhání nic nemaže**: odpověď, kterou máme, je lepší než prázdno a příští tik to zkusí znovu —
+tatáž nesymetrie jako u razítek rozhlídky (#335).
 
 ## Vestavěný terminál (#459)
 

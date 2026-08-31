@@ -4207,3 +4207,60 @@ to nevyžádalo — stačí správná hodnota v payloadu a narazí na to existuj
 jednu; nad dokončeným rebasem by neudělal nic a v cache by zůstaly přehrané commity, přestože panel
 hlásí uklizeno. Že `git worktree remove --force --force` zvládne i strom uprostřed rebase, je
 **změřené integračním testem**, ne předpokládané.
+
+### Záznam rozhodnutí — poloha větve se klíčuje základem, ne razítkem PR (#466, z druhého proklikání)
+
+**Rozhodnutí:** stav sekce `Větev` se dál drží v jedné cache, ale **obnovuje se po polovinách**.
+Slévatelnost (`mergeable`, `mergeStateStatus`) zůstává klíčovaná `pullRequest.updatedAt`; **poloha
+větve proti základu** (`divergence`) se přeptává v tiku u **otevřeného vlastního PR** vlastní,
+levnou cestou (`GitHubGateway.fetchDivergence`).
+
+**Co bylo špatně.** Panel tvrdil `srovnaná` nad větví, která byla o commit pozadu — a nešlo to
+spravit ani obnovením, ani zavřením a otevřením záložky, jedině restartem aplikace. Našlo se to
+proklikáním na `prism-review-sandbox#9`.
+
+**Měření, ze kterého to plyne** (a je to celý důvod, proč původní návrh nemohl fungovat):
+
+| Co | Hodnota |
+|---|---|
+| `PR #9 updated_at` | `2026-08-31T08:30:37Z` — čas force pushe, **posunem základu se nezměnil** |
+| `PR .base.sha` (REST) | `d16347a` — hlava z doby vzniku PR |
+| `baseRefOid` (GraphQL) | `d16347a` — **taky frozen**, netrackuje ref |
+| skutečná hlava `master` | `6cbdf16` |
+
+Základ se tedy může pohnout, aniž by se na pull requestu změnilo **cokoli**, co jde vyčíst z jeho
+razítka nebo z jeho polí. `hasCurrentBranchStatus` přitom stálo na `updatedAt == pullRequest.updatedAt`
+a `loadBranchStatus` se ptalo jedině při `branchStatuses[id] == nil` — dohromady se `behind` nemělo
+jak dozvědět. **`baseRefOid` bylo první, co jsem zkusil, a je to vyvrácená hypotéza**: kdyby živé
+bylo, stačilo by ho vzít ze seznamu, který tik dělá tak jako tak, a nevzniklo by ani jedno volání
+navíc.
+
+**Změna proti #465, a je to změna, ne obejití.** V protokolu do #466 stálo, že druhá metoda na
+divergenci vzniknout **nesmí**, protože „dvě metody by znamenaly dva stavy, dvě cache a dvě různá
+nevím v jednom řádku panelu“. Ten důvod **platí dál a neruší se** — proto `fetchDivergence`
+nezakládá druhý stav ani druhou cache: přepíše pole `divergence` uvnitř té existující a razítko
+nechá být. Padla jen ta část, že stačí **jedno volání**: dvě poloviny s různým invalidačním klíčem
+se do jednoho razítka nevejdou. Přidalo se druhé **volání**, ne druhá pravda.
+
+**Proč to není polling `mergeable`**, což je jediná věc, kterou stráž z #465 zakazuje: `mergeable`
+je u GitHubu **líné pole** — dotaz ho teprve spouští, proto ho `fetchBranchStatus` opakuje, dokud se
+neusadí. `compare` nad refem je proti tomu hotová hodnota. Změřeno: **`cost=1` a 0,51–0,62 s** na
+dotaz pokrývající dva repozitáře. Drahá polovina se dál nepřepočítává.
+
+**Strop je jedno PR na tik**, a je to `Policy.divergenceProbe`: jedině **vlastní** (na cizím se
+sekce nekreslí), jedině **otevřené** (jinde se ta hodnota nekreslí) a **nejvýš jedno** (z počtu
+vlastních PR nemá růst počet volání).
+
+**Zamítnuto:** obnovovat divergenci **jen na explicitní obnovení** (levné, ale neopravuje otevřené
+okno bez zásahu — a to je zrovna ten scénář, na který ta funkce je); a **sonda na hlavy všech
+základů** v tiku (jeden dotaz na všechna repa, `cost=1`, ale žádá si vlastní evidenci
+`baseHeads` a invalidaci, což je víc mechaniky za opravu stavu, který se kreslí jedině
+v otevřeném panelu).
+
+**Proč to neprošlo testy, a je to cennější než ten nález.** Test „Druhý příchod na PR se neptá
+znovu“ existoval — hlídal ale **jen ten směr, ve kterém je držení stavu správné**. Opačný směr
+(„po posunu základu se přeptá“) netvrdil nikdo, a s razítkem `updatedAt` se ani napsat nedal:
+scéna „PR se nezměnil, ale základ ano“ nebyla v tom modelu vyjádřitelná. Fake proto dostal
+`divergence` jako **vlastní** hodnotu, ne jako `branchStatus.divergence` — s jedním polem by ten
+případ nešlo složit. Je to tatáž třída jako u `canRetry` na tomtéž PR: vada ležela v rozhodnutí,
+které nikdo netvrdil výčtem.

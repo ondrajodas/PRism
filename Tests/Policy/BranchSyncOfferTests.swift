@@ -412,4 +412,27 @@ struct BranchSyncOfferTests {
         // A na povolené nabídce nemá co varovat.
         #expect(Policy.syncWarnings(offer(detail: detail(), status: status())).isEmpty)
     }
+
+    // MARK: - Na co se přeptat v tiku (#466, z proklikání)
+
+    /// **Výčtem, protože je to čistá funkce a rozhoduje o dotazu na GitHub.**
+    ///
+    /// Existuje proto, že „pozadu“ nezávisí na hlavě PR: změřeno na `prism-review-sandbox#9`, že
+    /// po commitu do `master`u zůstal `updated_at` PR nezměněný, takže se stav klíčovaný razítkem
+    /// PR o posun základu nemá jak dozvědět.
+    @Test("Přeptá se jen na otevřeném vlastním PR")
+    func probesOnlyTheOpenOwnPullRequest() {
+        let foreign = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 1)
+        let ownership: (PRIdentifier) -> PullRequestOwnership = { $0 == self.mine ? .mine : .theirs }
+
+        // Vlastní a otevřené — jediný případ, kdy se ptáme.
+        #expect(Policy.divergenceProbe(open: .pullRequest(mine), ownership: ownership) == mine)
+
+        // Cizí PR: sekce `Větev` se tam nekreslí, byl by to dotaz za nic.
+        #expect(Policy.divergenceProbe(open: .pullRequest(foreign), ownership: ownership) == nil)
+
+        // Domácí záložka: ta hodnota se nikde nekreslí.
+        #expect(Policy.divergenceProbe(open: .home, ownership: ownership) == nil)
+    }
+
 }

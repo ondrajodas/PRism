@@ -5751,6 +5751,21 @@ a `Zahodit rebase`; `Zavřít` u ní schválně **není**), hledá se v cache p�
 PR (`syncWorktreeState`) a **druhý rebase se nad ním nenabízí** — přehrát commity znovu nad
 výsledkem, který neodešel, by tu práci zahodilo potichu.
 
+### Poloha větve se přeptává, protože razítko PR na ni nesedí
+
+**Druhý nález z proklikání.** Panel tvrdil `srovnaná` nad větví o commit pozadu a nespravilo to ani
+obnovení, ani zavření a otevření záložky — jedině restart. Změřeno na `prism-review-sandbox#9`, že
+posunem základu se `updated_at` pull requestu **nezmění** a `base.sha` ani `baseRefOid` živou hlavu
+základu nenesou, takže stav klíčovaný razítkem PR se o ten posun nemá jak dozvědět.
+
+Sekce `Větev` proto obnovuje **po polovinách**: slévatelnost dál podle `updatedAt` (stráž z #465
+beze změny), poloha větve přeptáním v tiku u otevřeného vlastního PR. Není to polling `mergeable` —
+`compare` nad refem je hotová hodnota, `cost=1` a 0,51–0,62 s, kdežto `mergeable` je líné pole,
+které se dotazem teprve spouští. Strop je nejvýš jedno PR na tik.
+
+Cennější než ten nález je, **proč prošel testy**: test na cache existoval, ale hlídal jen směr
+„neptá se, když se nic nezměnilo“. Druhý směr se s tehdejším fakem ani napsat nedal.
+
 **Pojistka, která z rozdělení vypadla a v zadání nebyla**: lease se skládá z hlavy, **ze které se
 rebasovalo**, ne z aktuální. Mezi rebasem a potvrzením se hlava PR může pohnout, a s aktuální
 hodnotou by lease po cizím pushi **prošel** a ten commit přepsal. Takhle na něj narazí pre-flight

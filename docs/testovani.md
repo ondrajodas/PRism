@@ -7444,3 +7444,45 @@ gh api graphql -f query='query($o:String!,$n:String!,$b:String!,$h:String!){
 Naměřeno: `{"mergeStateStatus":"CLEAN","mergeable":"MERGEABLE"}` proti
 `{"aheadBy":1,"behindBy":1,"status":"DIVERGED"}`. **Jeden dotaz na tuhle otázku neodpovídá** —
 a kdyby se měřil jen ten první, vyšlo by z něj, že větev srovnaná je.
+
+### Posun základu: test, který chyběl v opačném směru (#466)
+
+Stálo to nález až z proklikání, a je to obecnější lekce než ten nález sám.
+
+Cache stavu sekce `Větev` **měla** test — „Druhý příchod na PR se neptá znovu“. Hlídal ale jen ten
+směr, ve kterém je držení stavu **správné**: že se neptáme dvakrát. Opačný směr — že se **přeptáme**,
+když se pohnul základ — netvrdil nikdo, a proto vada prošla i přes zelený plný běh.
+
+**S tehdejším modelem se ten test ani napsat nedal.** Stav byl klíčovaný `pullRequest.updatedAt`
+a fake vracel divergenci jako součást `branchStatus`, takže scéna „PR se nezměnil, ale základ ano“
+v něm nebyla vyjádřitelná — což je ta pravá příčina. Fake proto dostal `divergence` jako **vlastní**
+hodnotu (`FakeGitHubGateway.divergence`), nezávislou na `branchStatus`; teprve tím ta scéna vznikla.
+
+Co z toho platí obecně: **u cache se tvrdí oba směry.** „Neptá se, když se nic nezměnilo“ je jen
+polovina — druhá je „ptá se, když se změnilo to, na čem ta hodnota doopravdy závisí“. Když se druhá
+polovina nedá napsat, není to důvod ji vynechat: je to signál, že fake (nebo klíč) neumí vyjádřit
+stav, který v produkci nastane.
+
+**Jak se to změřilo na živém API** (bez toho by to byla domněnka):
+
+```bash
+gh api repos/ondrajodas/prism-review-sandbox/pulls/9 \
+    --jq '"updated_at: \(.updated_at)  base.sha: \(.base.sha)  head: \(.head.sha)"'
+gh api repos/ondrajodas/prism-review-sandbox/git/ref/heads/master --jq '.object.sha'
+# updated_at se posunem base nezmění, base.sha zůstane hlava z doby vzniku PR.
+
+# A že to nespraví ani `baseRefOid` z GraphQL — vyvrácená hypotéza, ne přeskočená:
+gh pr view 9 --repo ondrajodas/prism-review-sandbox --json baseRefName,baseRefOid,headRefOid
+```
+
+**Cena dotazu, kterým se to řeší**, změřená střídavě třemi běhy (`rateLimit { cost }` v témže
+dokumentu): `cost=1` a **0,51–0,62 s** na dotaz, který se ptá na hlavy základů ve **dvou**
+repozitářích naráz. Je to `ref { compare }`, tedy hotová hodnota — ne líné `mergeable`, které se
+dotazem teprve spouští. Právě na tom rozdílu stojí tvrzení, že se tím nezavádí polling zakázaný
+v #465, a hlídá ho `divergenceAloneIsOneCall` **počtem volání**.
+
+**Pozor na `ScriptedProcessRunner([])`**: prázdný scénář padá na `precondition` („Runner potřebuje
+aspoň jednu odpověď“), takže „neptalo se vůbec“ se tvrdí přes `runner.invocations.isEmpty` nad
+scénářem s **nespotřebovanou** odpovědí. A pád na precondition v testovacím hostu se v logu pozná
+tím, že `Test run with N tests passed` je **menší** N než obvykle a na konci stojí `TEST FAILED` —
+rozhoduje návratový kód a ten poslední řádek, ne to zelené hlášení nad ním.

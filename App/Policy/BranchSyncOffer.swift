@@ -246,4 +246,36 @@ extension Policy {
             + "\(plan.expectedRemoteSha.prefix(7)) — když se mezitím pohnula, push selže "
             + "a nic se nepřepíše."
     }
+
+    /// Na kterém PR se má v tiku přeptat na **polohu větve proti základu** (#466, z proklikání).
+    ///
+    /// **Existuje proto, že „pozadu“ nezávisí na hlavě pull requestu, a razítko `updatedAt` proto
+    /// na tuhle veličinu nesedí.** Změřeno na `prism-review-sandbox#9`: do `master`u přišel commit,
+    /// a `updated_at` PR se **neposunul ani o sekundu** (zůstal na času force pushe z dopoledne);
+    /// `base.sha` v objektu PR je pořád hlava z doby vzniku PR a `baseRefOid` z GraphQL taky.
+    /// Základ se tedy může pohnout, aniž by se na pull requestu změnilo cokoli, co jde vyčíst
+    /// z jeho razítka — takže stav klíčovaný `updatedAt` tvrdil `srovnaná` nad větví o commit
+    /// pozadu, a to i po obnovení a po zavření a otevření záložky.
+    ///
+    /// **Vrací nejvýš jedno PR, a jedině to otevřené a vlastní.** Tři důvody, každý svůj:
+    ///
+    /// - **Vlastní**, protože na cizím se sekce `Větev` nekreslí — byl by to dotaz za nic
+    ///   (tatáž podmínka, jakou má `loadBranchStatus` na `ownership == .mine`).
+    /// - **Otevřené**, protože jinde se ta hodnota nekreslí. Seznam ani přehled o „pozadu“ nic
+    ///   netvrdí, takže je nemá proč zdržovat.
+    /// - **Jedno**, protože z počtu vlastních PR nemá růst počet volání. Kdo se koukne na druhé,
+    ///   dostane odpověď při příštím tiku.
+    ///
+    /// **Není to polling `mergeable`, a v tom je celý rozdíl proti stráži z #465.** Ta vznikla
+    /// proti tomu, aby se z **líného** pole `mergeable` stal tik: GitHub ho počítá až na dotaz,
+    /// proto ho `fetchBranchStatus` opakuje, dokud se neusadí. Tady se ptáme jedině na `compare`
+    /// nad refem, což je hotová hodnota — změřeno **`cost=1` a 0,51–0,62 s** na dotaz pokrývající
+    /// dva repozitáře. Drahá polovina stavu se dál obnovuje jen podle `updatedAt`.
+    static func divergenceProbe(
+        open tab: WindowTab,
+        ownership: (PRIdentifier) -> PullRequestOwnership
+    ) -> PRIdentifier? {
+        guard let pr = tab.pullRequest, ownership(pr) == .mine else { return nil }
+        return pr
+    }
 }

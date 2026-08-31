@@ -698,6 +698,38 @@ struct GhGatewayTests {
         #expect(runner.commands.last?.contains("head=deadbeef") == true)
     }
 
+    /// **`fetchDivergence` se na `mergeable` neptá, a na tom stojí celý ten návrh** (#466,
+    /// z proklikání). Kdyby se ptalo, byl by z toho polling nad líným polem — přesně to, proti
+    /// čemu vznikla stráž v #465. Tvrdí se to **počtem volání**: jedno, ne dvě.
+    @Test("Přeptání na polohu je jedno volání a mergeable v něm není")
+    func divergenceAloneIsOneCall() async throws {
+        let runner = ScriptedProcessRunner([divergence(ahead: 1, behind: 1)])
+
+        let result = try await promptGateway(runner).fetchDivergence(
+            id: prism,
+            base: "main",
+            head: "deadbeef"
+        )
+
+        #expect(result == BranchDivergence(ahead: 1, behind: 1))
+        #expect(runner.invocations.count == 1)
+        // A to jedno volání je `compare`, ne `pr view` — jinak by to bylo líné pole.
+        #expect(runner.invocations[0].arguments.contains("graphql"))
+    }
+
+    /// Bez základu ani hlavy se **neptá vůbec** ani tady — tatáž ochrana jako u plného stavu.
+    @Test("Přeptání bez základu a hlavy se neptá")
+    func divergenceAloneSkipsWithoutRefs() async throws {
+        // Odpověď, která se **nesmí** spotřebovat — prázdný scénář runner neumí (padá na
+        // precondition), takže „neptalo se“ se tvrdí přes `invocations`, ne přes prázdný vstup.
+        let runner = ScriptedProcessRunner([divergence(ahead: 9, behind: 9)])
+
+        let result = try await promptGateway(runner).fetchDivergence(id: prism, base: "", head: "")
+
+        #expect(result == nil)
+        #expect(runner.invocations.isEmpty)
+    }
+
     /// Bez jména základu nebo bez hlavy se **na polohu neptáme vůbec**: dotaz by mířil na
     /// `refs/heads/`, tedy na jistou chybu za jedno volání navíc — a `nil` divergence je platná
     /// odpověď, kterou panel umí ukázat.

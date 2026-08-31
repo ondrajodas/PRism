@@ -405,6 +405,13 @@ struct GhGateway: GitHubGateway {
         return status
     }
 
+    func fetchDivergence(id: PRIdentifier, base: String, head: String) async throws -> BranchDivergence? {
+        // Tatáž ochrana jako v `fetchBranchStatus`: prázdné hodnoty by z dotazu udělaly
+        // `ref(qualifiedName: "refs/heads/")`, tedy jistou chybu za jedno volání navíc.
+        guard !base.isEmpty, !head.isEmpty else { return nil }
+        return try await divergence(repo: id.repo, base: base, head: head)
+    }
+
     private func divergence(repo: RepoID, base: String, head: String) async throws -> BranchDivergence? {
         try await run(
             BranchDivergenceQuery.arguments(repo: repo, base: base, head: head),

@@ -333,6 +333,28 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return branchStatus
     }
 
+    /// Co vrátí `fetchDivergence` (#466). **Vlastní hodnota, ne `branchStatus.divergence`** — celý
+    /// smysl té metody je, že se odpověď na „pozadu“ může změnit, aniž by se změnilo cokoli
+    /// ostatního, a s jedním polem by se ten případ nedal napsat.
+    var divergence: BranchDivergence?
+
+    /// Čím `fetchDivergence` spadne. `nil` = vrátí `divergence`.
+    var divergenceFailure: (any Error)?
+
+    /// Na co se kdo ptal, v pořadí. Na počtu stojí tvrzení, že se **na cizí ani na neotevřené PR
+    /// neptáme vůbec**.
+    var divergenceQueries: [BranchStatusQuery] { lock.withLock { divergenceAskedAbout } }
+
+    private var divergenceAskedAbout: [BranchStatusQuery] = []
+
+    func fetchDivergence(id: PRIdentifier, base: String, head: String) async throws -> BranchDivergence? {
+        lock.withLock {
+            divergenceAskedAbout.append(BranchStatusQuery(id: id, base: base, head: head))
+        }
+        if let divergenceFailure { throw divergenceFailure }
+        return divergence
+    }
+
     /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
     /// vyrobit label.
     var repositoryLabels: [PullRequestLabel] = []

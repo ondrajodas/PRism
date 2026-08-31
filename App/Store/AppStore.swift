@@ -849,6 +849,13 @@ final class AppStore {
             // limitu se netiká, takže se ani nekouká) a nepotřebuje druhý časovač. Kolik dotazů
             // z toho je, rozhoduje `Policy.activitySweep` — na klidný den nula.
             await self?.refreshOwnActivity(in: summaries)
+            // Poloha větve proti základu (#466, z proklikání) — základ se může pohnout, aniž by se
+            // na pull requestu změnilo cokoli, co jde vyčíst z `updatedAt`, takže bez tohohle by
+            // otevřené okno tvrdilo `srovnaná` nad větví o commit pozadu až do restartu. Uvnitř
+            // úspěšného tiku ze stejného důvodu jako rozhlídky výš: vejde se to do backoffu
+            // pollingu a nepotřebuje druhý časovač. Kolik dotazů z toho je, rozhoduje
+            // `Policy.divergenceProbe` — **nejvýš jeden**, a jedině když je otevřené vlastní PR.
+            await self?.refreshOpenDivergence()
             // Útrata se počítá od půlnoci (#148), takže aplikace, která běží přes noc, by
             // ráno ukazovala včerejší součet. Tik je nejlevnější místo, kde se to dá srovnat
             // — účetní kniha si den pamatuje, takže se na disk sahá jednou za den, ne jednou
