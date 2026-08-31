@@ -149,13 +149,20 @@ struct PanelBranchView: View {
             .help(section.merge.isAllowed ? Self.mergeHelp : obstacleHelp)
     }
 
-    /// `Srovnat s main` — **bez tří teček**, protože nic neotevírá: přehraje commity v kopii repa
-    /// a přetlačí větev `--force-with-lease`. Co přesně se stane, stojí v nápovědě pod kurzorem
-    /// (`Policy.branchSyncHelp`) — je to jediná cesta, kterou aplikace zapisuje do remote, takže
-    /// „co se stane“ má být k přečtení **dřív**, než se to stane.
+    /// `Rebase` — **bez tří teček**, protože nic neotevírá: přehraje commity v kopii repa a do
+    /// remote nesáhne. Co přesně se stane, stojí v nápovědě pod kurzorem
+    /// (`Policy.branchSyncHelp`).
     ///
-    /// Popisek nese **jméno základu**, ne slovo „základ“: cíl je vidět na tlačítku, ne až v textu
-    /// vedle. Odkud se to jméno bere, rozhoduje `Policy.syncBase(of:)`, ne view.
+    /// **Gitové jméno, ne české sloveso**, a je to výslovné rozhodnutí uživatele: `rebase`
+    /// a `force push` se v téhle branži nepřekládají a `Přetlačit` je slovo, které nikdo
+    /// nepoužívá. Přebíjí to pravidlo o českých uživatelských textech z `CLAUDE.md` — próza
+    /// kolem zůstává česky, mění se **jména akcí**.
+    ///
+    /// **Jméno základu z popisku zmizelo, a je to změřené.** Nese ho řádek stavu nad tlačítky
+    /// (`head → base`) i nápověda pod kurzorem, takže se neztratilo; a `Srovnat s main` mělo
+    /// 87 bodů, se kterými tři tlačítka v řadě potřebovala **279 z 278** dostupných (a 267 z 218
+    /// na podlaze panelu). `Rebase na master` by bylo **delší** — zhoršilo by tedy změřený
+    /// problém, kdežto `Rebase` ho odklízí.
     private var syncButton: some View {
         Button(syncTitle, action: actions.sync)
             .buttonStyle(isPrimary(.sync) ? .miniPrimary : .mini)
@@ -171,7 +178,7 @@ struct PanelBranchView: View {
         return action == .merge ? section.merge.isAllowed : section.sync.isAllowed
     }
 
-    private var syncTitle: String { "Srovnat s \(Policy.syncBase(of: section))" }
+    private var syncTitle: String { "Rebase" }
 
     private var syncHelp: String {
         guard section.sync.isAllowed, let plan = section.syncPlan else {
@@ -264,7 +271,7 @@ struct PanelBranchView: View {
         }
     }
 
-    private static let pushTitle = "Přetlačit…"
+    private static let pushTitle = "Force push…"
     private static let discardTitle = "Zahodit rebase"
 
     private static let noticeFontSize = 12.0

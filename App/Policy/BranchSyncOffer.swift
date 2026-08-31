@@ -46,7 +46,7 @@ extension Policy {
             case .notOpen(let state): "Pull request není otevřený — je \(state.czechLabel)."
             case .foreignBranch(let known):
                 known
-                    ? "Hlava pull requestu je v jiném repozitáři (fork). Srovnat ji odsud nejde."
+                    ? "Hlava pull requestu je v jiném repozitáři (fork). Rebase odsud nejde."
                     : "Z dat pull requestu neplyne, kde jeho větev leží. Obnov okno."
             case .statusLoading: "Zjišťuju, jestli je větev pozadu."
             case .statusFailed(let reason): "Stav větve se nepodařilo zjistit. \(reason)"
@@ -57,7 +57,7 @@ extension Policy {
             case .running: "Právě se to srovnává."
             case .unfinishedRebase: "V kopii repa leží rozdělaný rebase. Napřed ho zahoď."
             case .rebasedNotPushed:
-                "V kopii repa leží srovnaná větev, která ještě neodešla. Přetlač ji, nebo zahoď."
+                "V kopii repa leží přerovnaná větev, která ještě neodešla. Udělej force push, nebo ji zahoď."
             }
         }
     }
@@ -182,21 +182,6 @@ extension Policy {
         merge.isAllowed ? .merge : .sync
     }
 
-    /// Jméno základu do popisku `Srovnat s …`.
-    ///
-    /// **Bere se z prvního plánu, který ho zná**, a to je rozhodnutí, ne shoda: plán merge si žádá
-    /// detail a commity, plán srovnání k tomu **ještě divergenci**, takže dorazí o jedno volání
-    /// později. Tvrdit `main` v repozitáři, kde se základ jmenuje `master`, by přitom bylo zbytečné
-    /// zrovna v té chvíli, kdy už jeho jméno **víme**.
-    ///
-    /// `fallbackBase` je z návrhu (sekce 36) a platí jedině tehdy, než dorazí hlavička PR — v tom
-    /// stavu je tlačítko stejně zakázané.
-    static func syncBase(of section: BranchSection) -> String {
-        section.syncPlan?.base ?? section.plan?.base ?? fallbackBase
-    }
-
-    static let fallbackBase = "main"
-
     /// Které překážky srovnání si žádají **vlastní větu ve výstraze v panelu**.
     ///
     /// Pravidlo z #392 a #465 říká, že zašedlé tlačítko musí mít důvod **napsaný v panelu**, ne jen
@@ -233,7 +218,7 @@ extension Policy {
     static func branchSyncHelp(for plan: BranchSyncPlan) -> String {
         let replaying = Plural.czech(plan.replaying, one: "commit", few: "commity", many: "commitů")
         return "Přehraje \(replaying) nad \(plan.base) v kopii repa. "
-            + "Do remote se nesáhne — přetlačení se potvrzuje zvlášť."
+            + "Do remote se nesáhne — force push se potvrzuje zvlášť."
     }
 
     /// Věta o pojistce do potvrzení přetlačení (#466).
@@ -242,7 +227,7 @@ extension Policy {
     /// X“ plyne, že se v tom případě nepřepíše nic. Skládá ji `Policy`, aby ji panel ani sheet
     /// neopisovaly každý po svém.
     static func leaseWarning(for plan: BranchPushPlan) -> String {
-        "Přetlačí se tvoje větev \(plan.branch) přes --force-with-lease. Čeká na remote hlavu "
+        "Force push pošle tvoji větev \(plan.branch) přes --force-with-lease. Čeká na remote hlavu "
             + "\(plan.expectedRemoteSha.prefix(7)) — když se mezitím pohnula, push selže "
             + "a nic se nepřepíše."
     }

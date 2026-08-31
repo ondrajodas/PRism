@@ -319,14 +319,22 @@ struct BranchSyncOfferTests {
         #expect(section.facts.first?.answer == "srovnaná")
     }
 
-    // MARK: - Jméno základu v popisku
+    // MARK: - Jméno základu se z popisku přestěhovalo
 
-    /// **Popisek nesmí tvrdit `main` v repozitáři, kde se základ jmenuje `master`.** Tři stavy,
-    /// protože jméno dorazí ve **třech různých chvílích**: plán srovnání ho zná až s divergencí,
-    /// plán merge už s detailem a commity, a než přijde hlavička, není odkud ho vzít.
-    @Test("Popisek bere jméno základu z prvního plánu, který ho zná")
-    func namesTheBaseFromTheFirstPlanThatKnowsIt() throws {
-        let full = try #require(
+    /// **Popisek je od té doby jen `Rebase`, ale jméno základu se neztratilo** — a tohle tvrzení
+    /// je jeho pojistka.
+    ///
+    /// Do přejmenování akcí (rozhodnutí uživatele: `Rebase` a `Force push` místo českých sloves)
+    /// nesl popisek `Srovnat s master`, takže se jméno základu tvrdilo přímo na tlačítku. Krátký
+    /// popisek je změřený: `Srovnat s main` mělo 87 bodů a tři tlačítka v řadě potřebovala 279
+    /// z 278 dostupných, takže `Rebase na master` by ten problém zhoršilo.
+    ///
+    /// Jméno proto nese **nápověda pod kurzorem** (a k tomu řádek stavu `head → base`, o kterém
+    /// mluví `BranchMergeTests`). Kdyby zmizelo i odsud, přestalo by být v repozitáři s `master`
+    /// poznat, nad co se vlastně rebasuje.
+    @Test("Nápověda nese jméno základu, i když popisek už ne")
+    func theHelpStillNamesTheBase() throws {
+        let section = try #require(
             Policy.branchSection(
                 editing: .allowed,
                 detail: detail(base: "master"),
@@ -336,25 +344,17 @@ struct BranchSyncOfferTests {
                 blockingFindings: 0
             )
         )
-        #expect(Policy.syncBase(of: full) == "master")
+        let plan = try #require(section.syncPlan)
 
-        // Bez divergence se plán srovnání nesloží — jméno ale zná plán merge, takže se `master`
-        // v popisku **neztratí**.
-        let withoutDivergence = try #require(
-            Policy.branchSection(
-                editing: .allowed,
-                detail: detail(base: "master"),
-                commits: [],
-                status: .loading,
-                checks: [],
-                blockingFindings: 0
-            )
-        )
-        #expect(withoutDivergence.syncPlan == nil)
-        #expect(Policy.syncBase(of: withoutDivergence) == "master")
+        #expect(Policy.branchSyncHelp(for: plan).contains("master"))
+        // A **ne** `main` z návrhu: v tomhle repozitáři se základ jmenuje jinak.
+        #expect(!Policy.branchSyncHelp(for: plan).contains("main"))
+    }
 
-        // Bez hlavičky PR není odkud jméno vzít; teprve tady platí `main` z návrhu — a v tom stavu
-        // je tlačítko stejně zakázané.
+    /// Bez hlavičky PR se akce **nenabízí** — dřív to viselo u testu na jméno základu, ale je to
+    /// vlastní tvrzení a s popiskem nemá co dělat.
+    @Test("Bez hlavičky PR se rebase nenabízí")
+    func offersNothingWithoutTheHeader() throws {
         let empty = try #require(
             Policy.branchSection(
                 editing: .allowed,
@@ -365,9 +365,11 @@ struct BranchSyncOfferTests {
                 blockingFindings: 0
             )
         )
-        #expect(Policy.syncBase(of: empty) == Policy.fallbackBase)
+
+        #expect(empty.syncPlan == nil)
         #expect(!empty.sync.isAllowed)
     }
+
 
     // MARK: - Které překážky si žádají větu v panelu
 

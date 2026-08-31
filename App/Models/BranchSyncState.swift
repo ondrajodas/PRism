@@ -70,12 +70,12 @@ enum BranchSyncState: Equatable, Sendable {
         switch self {
         case .rebasing: "Přehrávám commity nad základem."
         case .rebased(let branch):
-            "Srovnáno v kopii repa — \(Plural.czech(branch.replayed, one: "commit přehraný", few: "commity přehrané", many: "commitů přehraných")). "
+            "Rebase hotový v kopii repa — \(Plural.czech(branch.replayed, one: "commit přehraný", few: "commity přehrané", many: "commitů přehraných")). "
                 + "Do remote se zatím nesáhlo."
-        case .pushing: "Přetlačuju větev."
+        case .pushing: "Pushuju větev."
         case .discarding: "Zahazuju rozdělanou práci."
         case .pushed(let replayed):
-            "Srovnáno — přetlačeno \(Plural.czech(replayed, one: "commit", few: "commity", many: "commitů"))."
+            "Hotovo — force push poslal \(Plural.czech(replayed, one: "commit", few: "commity", many: "commitů"))."
         case .alreadyInSync: "Větev už nad základem byla, do remote se nesáhlo."
         case .conflicted(let files):
             "Rebase narazil na konflikt (\(Self.list(files))) a je zahozený — v kopii repa po něm nic nezůstalo. "
@@ -135,9 +135,9 @@ enum BranchSyncError: Error, Equatable, Sendable {
         switch self {
         case .notAllowed(let reason): reason
         case .notMine(let author):
-            "Pull request je od @\(author) — přetlačit se dá jedině vlastní větev."
+            "Pull request je od @\(author) — force push jde jedině na vlastní větev."
         case .foreignBranch:
-            "Hlava pull requestu je v jiném repozitáři (fork). Srovnat ji odsud nejde."
+            "Hlava pull requestu je v jiném repozitáři (fork). Rebase odsud nejde."
         case .unknownBranchOrigin:
             "Z dat pull requestu neplyne, kde jeho větev leží. Obnov okno a zkus to znovu."
         case .headMoved(let expected, let actual):

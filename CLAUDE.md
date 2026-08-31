@@ -405,7 +405,7 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    - **Akce je rozdělená na dva kroky a dělí se podle vratnosti, ne podle složitosti.** **Rebase**
      běží v cache, nic neopouští stroj a jde vzít zpět, takže stojí na jedno kliknutí. **Force
      push je nevratný**, takže má **potvrzovací sheet s úplným výpisem** (`BranchPushSheet`) —
-     tatáž třída jako merge, `Přetlačit větev` **bez výchozí akce**, takže `Enter` historii větve
+     tatáž třída jako merge, `Force push` **bez výchozí akce**, takže `Enter` historii větve
      nepřepíše. Do #466 tady stálo, že potvrzení tahle akce nemá; **změnilo se to na připomínku
      z proklikání** a je to zpřesnění, ne obejití. Mezi kroky je stav *přerovnáno, nepřetlačeno*
      (`BranchSyncState.rebased`) — **normální stav, ne porucha**: je vidět v panelu, jde zahodit

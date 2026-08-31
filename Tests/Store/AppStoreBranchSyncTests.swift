@@ -505,6 +505,91 @@ struct AppStoreBranchSyncTests {
         #expect(gateway.detailRequests.count > 1)
     }
 
+    // MARK: - Po force pushi se hlava dotáhne (z proklikání)
+
+    /// **Po úspěšném force pushi musí být hlava PR nová, jinak nejde mergnout.**
+    ///
+    /// Merge posílá `sha` **v payloadu** (tvrdá podmínka č. 1, druhá pojistka z #465), takže
+    /// s vlastní starou hlavou skončí na `409`. Po pushi se proto zahazuje `detailStates`
+    /// a detail se načte znovu.
+    ///
+    /// **Hlava se nezapisuje z výsledku rebasu, ptá se GitHub** — a je to rozhodnutí. Náš sha je
+    /// pravda k okamžiku pushe; kdyby nás mezitím někdo přeběhl, byla by z něj lež a panel by
+    /// tvrdil hlavu, kterou nikdo nepotvrdil. Navíc se po force pushi **přepočítávají checky**,
+    /// které merge blokují, takže se detail musí načíst celý, ne jen jedno pole. Že se ref po
+    /// acku pushe čte **okamžitě aktuální**, je změřené na `prism-review-sandbox`
+    /// (`git/ref/heads/…` vrátilo novou hlavu na první pokus).
+    ///
+    /// Scéna je vyjádřitelná jedině proto, že fake umí **změnit odpověď** (`detailFromNowOn`) —
+    /// tatáž věc, která u posunu základu chyběla.
+    @Test("Po úspěšném force pushi je hlava nová")
+    func fetchesTheNewHeadAfterASuccessfulPush() async throws {
+        let (store, _, gateway) = await prepared(outcome: .success(try rebased()))
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+        // **Pre-flight ještě vidí starou hlavu** (jinak by push odmítl jako `headMoved`),
+        // po pushi už je na remote ta nová. Poslední odpověď se opakuje.
+        gateway.detailsInOrder = [.success(detail()), .success(pushedDetail())]
+        let before = gateway.detailRequests.count
+
+        await submission.push()
+
+        #expect(submission.state == .pushed("cccc3333"))
+        #expect(gateway.detailRequests.count > before, "detail se po pushi musí načíst znovu")
+        #expect(store.detail(of: pr)?.headSha == "cccc3333")
+        // A to je zrovna ta hodnota, kterou merge posílá v payloadu.
+        #expect(Policy.mergePlan(of: store.detail(of: pr), commits: [])?.headSha == "cccc3333")
+    }
+
+    /// **Druhý směr: po neúspěšném pushi se hlava nemění.** Tohle je ta cennější polovina —
+    /// přepsat detail po selhání by zahodilo stav, ve kterém je vidět, co se nepovedlo, a hlavně
+    /// by tvrdilo hlavu, která na remote není.
+    @Test("Po neúspěšném force pushi se hlava nemění")
+    func keepsTheOldHeadAfterAFailedPush() async throws {
+        let refusal = """
+        To https://github.com/ondrajodas/prism-review-sandbox.git
+         ! [rejected]        cccc3333 -> prism-sync-probe (stale info)
+        error: failed to push some refs
+        """
+        let (store, _, gateway) = await prepared(
+            git: try fakeGit(output: refusal, exitCode: 1),
+            outcome: .success(try rebased())
+        )
+        await store.syncBranch(summary())
+        let submission = try #require(store.branchPushSubmission(for: summary()))
+        // Pre-flight vidí starou hlavu, takže se dojde až k pushi — a ten selže. Druhá odpověď je
+        // v sekvenci schválně: kdyby se po selhání detail načítal, dostala by se do okna nová
+        // hlava, která na remote **není**.
+        gateway.detailsInOrder = [.success(detail()), .success(pushedDetail())]
+
+        await submission.push()
+
+        #expect(submission.state == .failed(.leaseRejected))
+        // **Tvrdí se uložená hlava, ne počet dotazů.** Pre-flight se na detail ptá vždycky, i když
+        // push potom selže, takže počet by tady měřil pre-flight — ne to, jestli se po selhání
+        // obnovovalo. Rozhoduje, co zůstalo v okně.
+        #expect(store.detail(of: pr)?.headSha == Self.head)
+        // A stav větve zůstává taky, takže je pořád vidět, co selhalo.
+        #expect(store.branchSyncState(for: pr)?.rebasedBranch != nil)
+    }
+
+    /// Detail s **novou** hlavou — tedy to, co na remote leží po úspěšném force pushi.
+    private func pushedDetail() -> PullRequest {
+        PullRequest(
+            id: pr,
+            title: "chore: sync probe",
+            author: "autor",
+            headSha: "cccc3333",
+            baseSha: "bbbb2222",
+            headRef: "prism-sync-probe",
+            baseRef: "master",
+            url: URL(string: "https://github.com/\(pr.repo)/pull/\(pr.number)")!,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            state: .open,
+            isCrossRepository: false
+        )
+    }
+
     /// **Odmítnutý lease je vlastní stav a vlastní věta** (zadání #466): remote se pohnul a nic se
     /// nepřepsalo. Text `stale info` je ten, který `git` v té situaci doopravdy vypíše — změřeno na
     /// `prism-review-sandbox`.

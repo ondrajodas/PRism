@@ -4302,3 +4302,59 @@ v `CLAUDE.md`):
   `gitu`) leželo v `default`u, který tvrdí „nic se nezměnilo“; u nevratné akce to naslepo padnout
   nesmí. Jistotu máme jedině u chyb z **pre-flightu**, kde se `git push` vůbec nespustil — a tak to
   ta věta teď říká.
+
+### Záznam rozhodnutí — akce se jmenují `Rebase` a `Force push` (#466, rozhodnutí uživatele)
+
+**Rozhodnutí:** tlačítka a nadpisy nesou **gitová jména**: `Rebase`, `Force push…`, sheet
+`Force push?` a v patce `Force push`. Do té doby to bylo `Srovnat s main` a `Přetlačit…`.
+
+**Je to výslovná instrukce uživatele a má přednost před pravidlem o českých uživatelských textech**
+v `CLAUDE.md`. Doslova: *„použij tam `Rebase` místo `Srovnat s master` nebo co to tam je a
+`Force push` místo `přetlačit`“*. Důvod: gitové operace se v téhle branži nepřekládají a
+`přetlačit` je slovo, které nikdo nepoužívá — přeložený název nutí člověka překládat si ho zpátky
+na to, co se doopravdy stane. **Příští session to tedy nemá vracet na češtinu podle `CLAUDE.md`.**
+
+**Mění se jména akcí, ne próza okolo.** Hlášky zůstávají české (`Rebase hotový v kopii repa —
+4 commity přehrané. Do remote se zatím nesáhlo.`), jen se s novým názvem tlačítka nesmí rozejít;
+proto `Srovnáno v kopii repa` → `Rebase hotový v kopii repa` a `Přetlačuju větev.` → `Pushuju
+větev.` Slovo `srovnaná` v řádku stavu **zůstává** — je to popis stavu větve („je nad základem“),
+ne jméno akce.
+
+**Jméno základu z popisku zmizelo, a rozhodlo o tom měření**, ne úspornost. `Srovnat s main` mělo
+87 bodů a tři tlačítka `.mini` v řadě potřebovala **279 z 278** dostupných (na podlaze panelu 267
+z 218) — popisek už tehdy tu řadu přetékal. `Rebase na master` by byl **delší**, tedy horší;
+`Rebase` ten měřený problém naopak odklízí. **Ztratit se nemůže**, protože základ nese řádek stavu
+(`head → base`) a nápověda pod kurzorem — a je na to test (`theHelpStillNamesTheBase`).
+`Policy.syncBase(of:)` a `fallbackBase` tím zůstaly bez čtenáře, takže jsou **smazané**.
+
+### Záznam — po force pushi se hlava dotahovala už předtím; chyběl test (#466)
+
+**Zadání znělo hlavu po pushi dotáhnout. Ukázalo se, že se dotahovala** —
+`branchWasPushed` zahazuje `detailStates[id]`, načte detail znovu a s ním i checky, commity
+a stav větve; záložka se **nezavírá** (na rozdíl od merge). Co chybělo, byl **test**.
+
+Doplněný je **v obou směrech**, jak si to žádá pravidlo z `docs/testovani.md`: po úspěšném pushi je
+hlava nová a merge ji nese v payloadu, po neúspěšném se **nemění nic**. Ověřeno vložením regrese
+(bez zahození `detailStates` zůstane hlava stará).
+
+**Scéna se dala napsat teprve po úpravě fakeu, a je to tentýž kořen jako u posunu základu.**
+`detailFromNowOn` platí od nastavení dál, takže by novou hlavu viděl i **pre-flight** a ten by push
+odmítl jako `headMoved` — tedy jiná scéna, než jakou test píše. Fake proto dostal
+**`detailsInOrder`** (odpovědi v pořadí, poslední se opakuje, nastavení resetuje počítadlo), což
+odděluje „co GitHub říkal před pushem“ od „co říká po něm“.
+
+**Hlava se ptá GitHubu, nezapisuje se z výsledku rebasu**, a je to rozhodnutí: náš sha je pravda
+k okamžiku pushe, ale kdyby nás mezitím někdo přeběhl, byla by z něj lež a panel by tvrdil hlavu,
+kterou nikdo nepotvrdil. Navíc se po force pushi přepočítávají **checky**, které merge blokují,
+takže se musí načíst celý detail, ne jedno pole. Že se ref po acku pushe čte **okamžitě
+aktuální**, je změřené na `prism-review-sandbox` (`git/ref/heads/…` vrátilo novou hlavu na první
+pokus), takže na dotaz „hned po pushi“ není potřeba čekat.
+
+**Co tím pádem zůstává jako podezřelý na „po force pushi nejde mergnout“**, a je to
+**nezměřená hypotéza**, ne tvrzení: `mergeable` je u GitHubu **líné pole**, které se force pushem
+zneplatní a dotazem teprve spouští. `GhGateway.fetchBranchStatus` na něj čeká **třikrát po
+sekundě**, a když se do té doby neusadí, vrátí `UNKNOWN` — což `Policy.mergeObstacles` promění na
+`.statusUnknown` a merge **zablokuje** (je na to test v `BranchMergeTests`). Další tik nebo `⟳`
+už zastihne hodnotu usazenou, což přesně odpovídá tomu, že „to srovná refresh“. Potvrdit se to dá
+jedině na živém PR: force pushnout a čtením `mergeable` změřit, za jak dlouho se usadí. Opravovat
+to znamená sáhnout na **trpělivost** z #465, takže to patří do vlastního issue, ne do tohohle PR.

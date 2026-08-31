@@ -11782,7 +11782,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       </p>
       <p class="muted">
         <b>Potvrzení je jedno, ne dvě.</b> Bezkonfliktní i konfliktní cesta končí týmž sheetem
-        s tlačítkem <code>Přetlačit větev</code> nad vypsaným výsledkem — u konfliktu (níž) se do
+        s tlačítkem <code>Force push</code> nad vypsaným výsledkem — u konfliktu (níž) se do
         něj jen <b>přidá</b>, co s nimi session udělala, a diff. Dva různé tvary potvrzení téže
         akce by znamenaly, že se člověk musí naučit obojí.
       </p>
@@ -11793,20 +11793,20 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       Nová sekce <em>Větev</em> pod labely a reviewery. Nese <b>stav</b> (o kolik je za základem
       a jestli jde mergnout) a k němu <b>obě akce</b> — mění se jen to, <b>která z nich je hlavní</b>:
       když je zeleno, je hlavní <code>Mergnout…</code>, a když je větev pozadu nebo něco brání,
-      je hlavní <code>Srovnat s main</code>. Obě jsou tam schválně: srovnat větev dává smysl
+      je hlavní <code>Rebase</code>. Obě jsou tam schválně: přerovnat větev dává smysl
       i tehdy, když už mergnout jde, a schovávat akci podle stavu by znamenalo, že se tlačítko
       pod rukou stěhuje. Zašedlé tlačítko s důvodem je tu naopak správně: je to stav, který se
       mění, na rozdíl od cizího PR, kde se akce nekreslí vůbec.
     </p>
     <p class="muted">
       <b>Pod akcemi je řádek o tom, co se stalo</b> — a u stavu <em>přerovnáno, nepřetlačeno</em>
-      nese vlastní tlačítka: <code>Přetlačit…</code> (se třemi tečkami, protože otevírá potvrzení)
+      nese vlastní tlačítka: <code>Force push…</code> (se třemi tečkami, protože otevírá potvrzení)
       a <code>Zahodit rebase</code>. <code>Zavřít</code> u něj schválně <b>není</b>: zavřít hlášku
       o práci, která leží v kopii repa, by ji schovalo, aniž by zmizela.
     </p>
     <p class="muted">
       <b>Dvě tlačítka jdou na vlastní řádek, jedno zůstává u věty</b> — a je to změřené, ne od oka.
-      Vedle věty si <code>Přetlačit…</code> a <code>Zahodit rebase</code> vezmou <b>~213 z 278
+      Vedle věty si <code>Force push…</code> a <code>Zahodit rebase</code> vezmou <b>~213 z 278
       bodů</b>, které panel na obsah má, takže na text zbyde ~50: v renderu se devítislovná věta
       složila do <b>devíti řádků po jednom slově</b>. Je to tatáž past, jakou u téhle sekce změřilo
       #37 u třetího tlačítka, a tentýž závěr — vlastní řádek je jediné místo, kde se dvě akce
@@ -11824,7 +11824,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 2px;">
               <span class="mini pri">Mergnout…</span>
-              <span class="mini">Srovnat s main</span>
+              <span class="mini">Rebase</span>
             </div>
           </div>
         </div>
@@ -11849,7 +11849,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 2px;">
               <span class="mini" style="opacity: 0.45;">Mergnout…</span>
-              <span class="mini pri">Srovnat s main</span>
+              <span class="mini pri">Rebase</span>
             </div>
           </div>
         </div>
@@ -11869,7 +11869,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
     </p>
     <div class="duo">
       <div class="pane new">
-        <div class="tag"><i></i>Srovnáno v kopii repa · čeká na potvrzení</div>
+        <div class="tag"><i></i>Rebase hotový v kopii repa · čeká na potvrzení</div>
         <div class="frame flat" style="padding: 12px;">
           <div class="pl-sec">
             <span class="cap">Větev</span>
@@ -11879,9 +11879,9 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 2px;">
               <span class="mini pri">Mergnout…</span>
-              <span class="mini" style="opacity: 0.45;">Srovnat s main</span>
+              <span class="mini" style="opacity: 0.45;">Rebase</span>
             </div>
-            <!-- Hláška pod akcemi. U mezistavu nese `Přetlačit…` a `Zahodit rebase`; `Zavřít`
+            <!-- Hláška pod akcemi. U mezistavu nese `Force push…` a `Zahodit rebase`; `Zavřít`
                  tady schválně není.
 
                  **Dvě tlačítka jdou na vlastní řádek**, a je to změřené: vedle věty si vezmou
@@ -11891,17 +11891,17 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 7px; font-size: 12px; color: var(--ink-2);">
               <div style="display: flex; gap: 7px; align-items: baseline;">
                 <span style="color: var(--stale);">↑</span>
-                <span>Srovnáno v kopii repa — 4 commity přehrané. Do remote se zatím nesáhlo.</span>
+                <span>Rebase hotový v kopii repa — 4 commity přehrané. Do remote se zatím nesáhlo.</span>
               </div>
               <div style="display: flex; gap: 6px;">
-                <span class="mini pri" style="white-space: nowrap;">Přetlačit…</span>
+                <span class="mini pri" style="white-space: nowrap;">Force push…</span>
                 <span class="mini" style="white-space: nowrap;">Zahodit rebase</span>
               </div>
             </div>
           </div>
         </div>
         <p style="font-size: 13.5px; color: var(--ink-2);">
-          <code>Srovnat s main</code> je teď <b>zašedlé</b>: druhý rebase nad výsledkem, který ještě
+          <code>Rebase</code> je teď <b>zašedlé</b>: druhý rebase nad výsledkem, který ještě
           neodešel, by tu práci zahodil potichu. Buď se přetlačí, nebo zahodí.
         </p>
       </div>
@@ -11917,7 +11917,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 2px;">
               <span class="mini" style="opacity: 0.45;">Mergnout…</span>
-              <span class="mini" style="opacity: 0.45;">Srovnat s main</span>
+              <span class="mini" style="opacity: 0.45;">Rebase</span>
             </div>
             <div style="display: flex; gap: 7px; align-items: baseline; margin-top: 7px; font-size: 12px; color: var(--ink-2);">
               <span style="color: var(--stale);">▲</span>
@@ -11951,7 +11951,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       <div class="tag"><i></i>Druhé kliknutí, na druhém tlačítku</div>
       <div class="frame flat">
         <div class="sheet-head">
-          <span class="t">Přetlačit větev?</span>
+          <span class="t">Force push?</span>
           <span class="slug">keboola/vault #85</span>
           <span class="sub">Rebase je hotový v kopii repa. Přetlačení je druhý krok.</span>
         </div>
@@ -11976,7 +11976,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
           <span class="mini">Zahodit rebase</span>
           <span class="mini">Zrušit</span>
           <span class="sp"></span>
-          <span class="mini pri">Přetlačit větev</span>
+          <span class="mini pri">Force push</span>
         </div>
       </div>
     </div>
@@ -12017,7 +12017,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
 
     <h3>Když srovnání narazí na konflikt</h3>
     <p class="muted">
-      Bez konfliktu je <em>Srovnat s main</em> nudné: rebase v kopii repa a potvrzené přetlačení
+      Bez konfliktu je <em>Rebase</em> nudný: přehrání commitů v kopii repa a potvrzený force push
       (výš). Zajímavý je ten druhý případ — a řeší ho <b>session s <code>Write</code>
       a <code>Edit</code></b>, tedy první svého druhu v téhle aplikaci. Drží ji tři věci, a všechny
       tři jsou vidět na obrazovce:
@@ -12032,7 +12032,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       co s nimi session udělala a diff toho, co z toho vzniklo. <b>Bez kliknutí se nepushuje nic</b>
       — jinak by to byl agent, který mi beze slova přepíše větev. Je to <b>tentýž sheet</b> jako
       u bezkonfliktní cesty výš, jen s tím obsahem navíc: výpis <em>Co odejde</em>, výstraha
-      o lease a tlačítko <code>Přetlačit větev</code> jsou stejné.
+      o lease a tlačítko <code>Force push</code> jsou stejné.
     </p>
     <p class="muted">
       <b>Co nerozřeší, nechá být.</b> Nedokončený rebase zůstane v kopii repa a nabídne se
@@ -12073,7 +12073,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
           <span class="mini">Zahodit rebase</span>
           <span class="mini">Otevřít v terminálu</span>
           <span class="sp"></span>
-          <span class="mini pri">Přetlačit větev</span>
+          <span class="mini pri">Force push</span>
         </div>
       </div>
       <p style="font-size: 13.5px; color: var(--ink-2);">
@@ -12197,10 +12197,14 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       z výstrahy zmizí věta, která posílá do prohlížeče, a <b>pod ní</b> přibude jedno pojmenované
       tlačítko přes celou šířku. Do řady s <code>Mergnout…</code> nejde, a je to změřené — jenom
       těsněji, než by se čekalo: tři tlačítka <code>.mini</code> vedle sebe
-      (<code>Připravit k review</code> 98 b, <code>Mergnout…</code> 82 b,
+      (<code>Připravit k review</code> 98 b, <code>Mergnout…</code> 82 b, tehdejší
       <code>Srovnat s main</code> 87 b a dvě mezery po 6) potřebují <b>279 bodů</b> z 278, které
       mezi okraji panelu zbývají. <b>O jediný bod</b> — takže je flexbox srazí, popisky se uvnitř
       tlačítek zalomí a řádek naroste z 26 bodů na 45.
+      <b>Tohle měření je i důvod, proč se popisek jmenuje jen <code>Rebase</code></b>: jméno
+      základu z něj zmizelo, protože ho nese řádek stavu <code>head → base</code> nad tlačítky
+      i nápověda pod kurzorem — kdežto <code>Rebase na master</code> by bylo <b>delší</b> než ta
+      měřená hodnota, tedy horší.
     </p>
     <p class="muted">
       <b>Zkrátit popisku by to nespravilo, jen odsunulo.</b> Panel se tahá <b>od 240 bodů</b>
@@ -12226,7 +12230,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             </div>
             <div style="display: flex; gap: 6px; margin-top: 2px;">
               <span class="mini" style="opacity: 0.45;">Mergnout…</span>
-              <span class="mini">Srovnat s main</span>
+              <span class="mini">Rebase</span>
             </div>
           </div>
         </div>
@@ -12249,7 +12253,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <span>Mergnout nejde: pull request je <b>rozpracovaný</b>.</span>
             </div>
             <!-- Přes celou šířku a `.send`, tedy tvar, který v panelu už je (odeslání review).
-                 Je to jediná akce sekce, která se **nabízí**; `Mergnout…` a `Srovnat s main`
+                 Je to jediná akce sekce, která se **nabízí**; `Mergnout…` a `Rebase`
                  zůstávají v řadě pod ní, aby se tlačítko pod rukou nestěhovalo. -->
             <div class="send" style="margin-top: 2px;">Připravit k review</div>
             <span style="font-size: 11.5px; line-height: 1.45; color: var(--ink-2);">
@@ -12258,7 +12262,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             </span>
             <div style="display: flex; gap: 6px; margin-top: 2px;">
               <span class="mini" style="opacity: 0.45;">Mergnout…</span>
-              <span class="mini">Srovnat s main</span>
+              <span class="mini">Rebase</span>
             </div>
           </div>
         </div>

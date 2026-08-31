@@ -5275,7 +5275,7 @@ který se povedlo vyrobit.
 nedává a `compare` API by za to číslo stáhlo celý seznam souborů. Přijde s #466, kde bude po ruce
 klon v cache a spočítá se lokálně.
 
-Sekce je postavená tak, aby do ní šla přidat **druhá akce** (`Srovnat s main`, #466): je to
+Sekce je postavená tak, aby do ní šla přidat **druhá akce** (`Rebase`, #466): je to
 `stav + nabídka`, ne jedno tlačítko, a akce se kreslí řadou i s jedním prvkem.
 
 **Po úspěšném mergi se zavírá potvrzení i záložka toho PR** — přidáno do #465 ještě před mergem,
@@ -5672,7 +5672,7 @@ smažou ručně; tenhle PR do konfigurace na stroji nesáhl.
 
 Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: větev je pozadu za `main`em
 a musí se srovnat. Bez konfliktu je to nudná operace — a přesně proto ji od #466 dělá okno. V sekci
-`Větev` (#465) přibylo druhé tlačítko **`Srovnat s main`**: rebase v kopii repa v cache a přetlačení
+`Větev` (#465) přibylo druhé tlačítko **`Rebase`**: rebase v kopii repa v cache a přetlačení
 výsledku přes `--force-with-lease`.
 
 **Tvrdá podmínka č. 1 se tím mění, a je to nová třída, ne rozšíření výčtu.** Do #466 aplikace do
@@ -5735,10 +5735,10 @@ kreslí návrh.
 commity a hned přetlačilo. Na pauze to neobstálo, a bylo to správně: **rebase** je vratný (běží
 v cache, nic neopouští stroj), **force push** ne. Rebase proto zůstal na jedno kliknutí a přetlačení
 dostalo **potvrzovací sheet** s úplným výpisem (`Co odejde`: větev, počet commitů, nová hlava, hlava
-pro lease), výstrahou o pojistce a tlačítkem `Přetlačit větev` **bez výchozí akce**.
+pro lease), výstrahou o pojistce a tlačítkem `Force push` **bez výchozí akce**.
 
 Hranice je **vratnost, ne složitost** — tatáž, podle které má sheet merge (#465) a nemá ho label
-(#392). Sheet a ne tlačítko v panelu proto, že návrh (sekce 36) `Přetlačit větev` kreslí v patičce
+(#392). Sheet a ne tlačítko v panelu proto, že návrh (sekce 36) `Force push` kreslí v patičce
 sheetu i pro konfliktní cestu, do 300bodového panelu se nevejde výstraha o lease, a repo u nevratných
 věcí potvrzuje výpisem.
 
@@ -5746,7 +5746,7 @@ věcí potvrzuje výpisem.
 výstraha i obě tlačítka existují. #467 do **téhož** sheetu jen přidá, co session udělala s konflikty,
 a diff toho, co vzniklo.
 
-**Mezi kroky je stav `rebased` — normální, ne porucha.** Drží ho panel (hláška s `Přetlačit…`
+**Mezi kroky je stav `rebased` — normální, ne porucha.** Drží ho panel (hláška s `Force push…`
 a `Zahodit rebase`; `Zavřít` u ní schválně **není**), hledá se v cache při každém otevření vlastního
 PR (`syncWorktreeState`) a **druhý rebase se nad ním nenabízí** — přehrát commity znovu nad
 výsledkem, který neodešel, by tu práci zahodilo potichu.

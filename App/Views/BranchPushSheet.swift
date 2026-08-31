@@ -40,7 +40,7 @@ struct BranchPushSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Přetlačit větev?")
+            Text("Force push?")
                 .font(.headline)
             // `verbatim` a ruční skládání: `Text("…#\(number)")` by číslo PR prohnalo locale
             // a z #21663 udělalo „#21 663“.
@@ -52,7 +52,7 @@ struct BranchPushSheet: View {
             // protože hlavička v sheetu **zůstává ve všech stavech**. U `timedOut` by navíc
             // tvrdila jistotu, kterou nemáme (`aftermath` u něj schválně říká „nevím, jestli push
             // doběhl“). Popis kroku platí v každém stavu; co se stalo s remote, říká patka.
-            Text("Rebase je hotový v kopii repa. Přetlačení je druhý krok.")
+            Text("Rebase je hotový v kopii repa. Force push je druhý krok.")
                 .font(.callout)
                 .foregroundStyle(Palette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -143,7 +143,7 @@ struct BranchPushSheet: View {
         case .pushing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Přetlačuju…").font(.callout).foregroundStyle(.secondary)
+                Text("Pushuju…").font(.callout).foregroundStyle(.secondary)
             }
         case .failed(let error):
             VStack(alignment: .leading, spacing: 2) {
@@ -164,7 +164,7 @@ struct BranchPushSheet: View {
             }
         case .pushed(let head):
             Label {
-                Text(verbatim: "Přetlačeno jako \(head.prefix(7)).")
+                Text(verbatim: "Pushnuto jako \(head.prefix(7)).")
                     .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: "checkmark.circle.fill")
@@ -223,7 +223,7 @@ struct BranchPushSheet: View {
     /// žádný není, takže `Enter` nic nepřetlačí. `.borderedProminent` je vzhled, ne klávesa.
     /// Popisek je `Přetlačit větev` z návrhu (sekce 36), aby se nerozešel s tím, co #467 kreslí.
     private var pushButton: some View {
-        Button("Přetlačit větev") {
+        Button("Force push") {
             Task {
                 await submission.push()
                 // **Až po úspěchu, ne po kliknutí.** Po odmítnutém lease i po spadlé síti zůstává

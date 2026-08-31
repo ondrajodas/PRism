@@ -28,6 +28,8 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     private var asked: [String] = []
     private var detailsAsked: [PRIdentifier] = []
     private var overriddenDetail: Result<PullRequest, any Error>?
+    private var detailQueue: [Result<PullRequest, any Error>] = []
+    private var detailQueueUsed = 0
     private var diffsAsked: [PRIdentifier] = []
     private var rangeDiffsAsked: [(repo: RepoID, base: String, head: String)] = []
     private var filesAsked: [(id: PRIdentifier, path: String)] = []
@@ -77,6 +79,19 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     var detailFromNowOn: Result<PullRequest, any Error>? {
         get { lock.withLock { overriddenDetail } }
         set { lock.withLock { overriddenDetail = newValue } }
+    }
+
+    /// Odpovědi na `fetchDetail` **v pořadí, poslední se opakuje** — jako u `releases`.
+    ///
+    /// Existuje kvůli scéně „po force pushi se hlava změnila“ (#466, z proklikání), která se jinak
+    /// **nedá složit**: `detailFromNowOn` platí od nastavení dál, takže by novou hlavu viděl
+    /// i **pre-flight** a ten by push odmítl jako `headMoved` — tedy přesně to, co se ve scéně stát
+    /// nemá. Sekvence odděluje „co GitHub říkal před pushem“ od „co říká po něm“.
+    ///
+    /// Nastavením se **počítadlo resetuje**, aby test nemusel vědět, kolik dotazů proběhlo předtím.
+    var detailsInOrder: [Result<PullRequest, any Error>] {
+        get { lock.withLock { detailQueue } }
+        set { lock.withLock { detailQueue = newValue; detailQueueUsed = 0 } }
     }
 
     var detailRequests: [PRIdentifier] { lock.withLock { detailsAsked } }
@@ -424,6 +439,13 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)
+            if !detailQueue.isEmpty {
+                // Poslední se opakuje, takže sekvence nikdy „nedojde“ — dojití by z chybějící
+                // odpovědi udělalo `notFound`, tedy jinou scénu, než jakou test píše.
+                let answer = detailQueue[min(detailQueueUsed, detailQueue.count - 1)]
+                detailQueueUsed += 1
+                return answer
+            }
             return overriddenDetail ?? detail
         }
         guard let answer else { throw GitHubError.notFound("Fake gateway detail nezná.") }

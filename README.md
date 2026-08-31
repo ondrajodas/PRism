@@ -864,10 +864,10 @@ a komentáře; s vypnutým odesíláním jsou akce zakázané s důvodem, což j
 říkají, **kam se to slévá** (`issue-465-… → main`, a jestli je větev srovnaná, **o kolik commitů je
 vzadu**, nebo v konfliktu) a **co je na tom hotové** (`3 commity · 6 checků` / `zeleno`). Pod nimi
 jsou **dvě akce**: `Mergnout…` — se třemi tečkami, protože otevírá potvrzení; merge je nevratný
-a týká se `main`u, ne jen pull requestu — a od #466 `Srovnat s main`.
+a týká se `main`u, ne jen pull requestu — a od #466 `Rebase`.
 
 **Obě akce jsou v panelu vždycky, mění se jen to, která z nich je zvýrazněná**: `Mergnout…` když je
-zeleno, jinak `Srovnat s main`. Srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat
+zeleno, jinak `Rebase`. Srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat
 akci podle stavu by znamenalo, že se tlačítko pod rukou stěhuje.
 
 **Potvrzení vypisuje, co se stane**, jako u odeslání review: větev → base, metoda (`squash`,
@@ -904,17 +904,17 @@ check naopak nebrání.
 pokusy) — bez toho by tlačítko u čerstvého PR svítilo zašedle podle náhody. A ptá se **jen na
 vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „nevím“ navždycky.
 
-### `Srovnat s main` — jediné místo, odkud aplikace zapisuje do remote (#466)
+### `Rebase` a `Force push` — jediné místo, odkud aplikace zapisuje do remote (#466)
 
 Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: **`main` mezitím ujel a větev
 se musí srovnat.**
 
-**Jsou to dva kroky, a dělí se podle vratnosti.** `Srovnat s main` udělá **rebase v kopii repa
+**Jsou to dva kroky, a dělí se podle vratnosti.** `Rebase` udělá **rebase v kopii repa
 v cache aplikace** a **do remote nesáhne** — je to vratná práce, takže stojí na jedno kliknutí a co
-udělá, stojí v nápovědě pod kurzorem. Přetlačení je nevratné, takže se **potvrzuje zvlášť**:
-`Přetlačit…` otevře sheet, ve kterém je vypsané, co odejde (větev, kolik commitů, jaká hlava
+udělá, stojí v nápovědě pod kurzorem. Force push je nevratný, takže se **potvrzuje zvlášť**:
+`Force push…` otevře sheet, ve kterém je vypsané, co odejde (větev, kolik commitů, jaká hlava
 z rebase vznikla a na jakou hlavu čeká pojistka), k tomu výstraha o tom, co se stane při pohnutém
-remote — a tlačítko `Přetlačit větev` **není výchozí akce**, takže `Enter` historii větve nepřepíše.
+remote — a tlačítko `Force push` **není výchozí akce**, takže `Enter` historii větve nepřepíše.
 
 **Do #466 aplikace do remote nezapisovala vůbec.** Je to proto jediná akce svého druhu a drží ji
 dvě pojistky, které platí obě:
@@ -938,7 +938,7 @@ základem, tlačítko to řekne (`Větev je nad main — není co přehrávat`).
 byla, do remote se nesáhlo` — ne „přetlačeno 0 commitů“.
 
 **Mezi krokem jedna a dva je stav, ne mezikrok.** Po rebasu stojí v panelu `Srovnáno v kopii repa —
-4 commity přehrané. Do remote se zatím nesáhlo.` a k tomu dvě tlačítka: `Přetlačit…`
+4 commity přehrané. Do remote se zatím nesáhlo.` a k tomu dvě tlačítka: `Force push…`
 a `Zahodit rebase`. **Zavřít se ta hláška nedá schválně** — zavřít ji by tu práci schovalo, aniž by
 zmizela. Dá se v tom stavu zavřít okno a přijít za hodinu: **hledá se v kopii repa při každém
 otevření vlastního PR**, takže se o ní okno dozví i po restartu. A **druhý rebase se nad ní

@@ -38,7 +38,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `BranchStatus` | Co GitHub říká o **slévatelnosti větve** (#465) — `mergeability` a `mergeState`, od #466 i `divergence`. **Dvě pole, ne jeden boolean**: první je o obsahu (jdou složit?), druhé o pravidlech repozitáře (pustí to ochrana?). Slít je do jednoho by znamenalo, že se v panelu nedá napsat proč. `Mergeability` má **tři** hodnoty — `unknown` je odpověď „ještě jsem nepočítal“, ne konflikt |
 | `BranchDivergence` | O kolik je hlava PR vedle základu (#466) — `ahead` a `behind`, **z pohledu hlavy**. Vlastní pole ve `BranchStatus`, protože `mergeStateStatus` na tuhle otázku neodpovídá (změřeno) |
 | `BranchStatusState` | `loading` / `loaded` / `failed` u toho stavu. Tentýž tvar a důvod jako `MetadataState`: **„nedá se mergnout“ a „nezjistil jsem, jestli to jde“ se nesmí slít** |
-| `BranchSyncPlan` | Co se stane při `Srovnat s main` (#466) — **snímek z dat pull requestu**, ne z toho, co leží v cache: větev, základ, `expectedRemoteSha` (jde do leasu) a počty. Je to první polovina prvního guardu tvrdé podmínky č. 1 |
+| `BranchSyncPlan` | Co se stane při `Rebase` (#466) — **snímek z dat pull requestu**, ne z toho, co leží v cache: větev, základ, `expectedRemoteSha` (jde do leasu) a počty. Je to první polovina prvního guardu tvrdé podmínky č. 1 |
 | `BranchPushPlan` | Co se má přetlačit (#466) — payload jediné cesty do remote. **Vlastní typ vedle `BranchSyncPlan`**, ne tentýž: plán je snímek toho, co se chystá, tohle vzniká **až po rebasu**. Kdyby to bylo pole v plánu, dal by se plán složit bez rebasu — a tím i pushnout něco, co nikdo nepřehrál |
 | `RebaseOutcome`, `RebasedBranch` | Jak dopadlo přehrání commitů (#466). **Konflikt je v návratové hodnotě, ne v `throw`**: vede jinam než „nedá se spustit `git`“. `aborted` říká, jestli se strom povedlo vrátit tam, kde byl |
 | `BranchSyncState`, `BranchSyncError` | Co se právě děje se srovnáním (#466) a proč se nepovedlo. **`unfinished` není `failed`** a **`leaseRejected` není `failed(text z gitu)`** — z každého plyne jiný další krok ([rozbor](#stavy-v-panelu--a-proč-je-rozdělaný-rebase-vlastní-případ)) |
@@ -8453,7 +8453,7 @@ Nad odesílatelností draftu (#68) platí:
 
 Třetí sekce nad segmenty, pod labely a reviewery (návrh, sekce 36). Nese **stav** (kam se to slévá,
 jestli je větev srovnaná, jak dopadly checky) a **akci, která z toho stavu plyne**; je to zároveň
-základ pro `Srovnat s main` (#466), proto je to `stav + nabídka`, ne jedno tlačítko.
+základ pro `Rebase` (#466), proto je to `stav + nabídka`, ne jedno tlačítko.
 
 **Rozhoduje `Policy.branchSection`, ne view.** Řádek „srovnaná / za základem“ a zašednutí tlačítka
 odpovídají na tutéž otázku, takže dvě skládání by uměla říct každé něco jiného — a u nevratné akce
@@ -8492,7 +8492,7 @@ Ve `MergeObstacle.behind` číslo schválně **není**: stojí v řádku stavu n
 výstraze odpovídá na jinou otázku (proč merge nejde). Dvakrát totéž číslo ve dvou po sobě jdoucích
 řádcích panelu vypadá jako dvě různé překážky.
 
-**Od #466 má sekce druhou akci** — `Srovnat s main`, s vlastní nabídkou (`Policy.SyncOffer`), vlastním
+**Od #466 má sekce druhou akci** — `Rebase`, s vlastní nabídkou (`Policy.SyncOffer`), vlastním
 výčtem překážek (`SyncObstacle`) a vlastním plánem. **Vlastní výčet, ne `MergeObstacle`**: rebase
 brání něco jiného než mergi — červený check mu nevadí, kdežto rozdělaný rebase v cache ho zastaví,
 aniž by mergi vadil ([rozbor](#zápis-do-remote--branchpushing-466)).
@@ -8523,11 +8523,13 @@ Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.
   Vlastní věta proto zbývá **jediné**: `foreignBranch`. `switch` je vyčerpávající schválně —
   nová překážka si vynutí rozhodnutí při překladu. **Našlo to renderem**, ne review: na PR z forku
   bylo tlačítko zašedlé a v panelu o tom nestálo nic.
-- **`Policy.syncBase(of:)`** — jméno základu do popisku `Srovnat s …`. **Z prvního plánu, který ho
-  zná**: plán merge stačí detail a commity, plán srovnání k tomu ještě divergenci. Tvrdit `main`
-  v repozitáři, kde se základ jmenuje `master`, by bylo zbytečné zrovna v té chvíli, kdy jeho jméno
-  **víme** — `Policy.fallbackBase` proto platí jedině, dokud nedorazí hlavička PR, a v tom stavu je
-  tlačítko stejně zakázané.
+- **`Policy.syncBase(of:)` a `fallbackBase` jsou od přejmenování akcí smazané**, a je to záznam
+  o odstranění, ne opomenutí. Existovaly kvůli popisku `Srovnat s …`, který nesl jméno základu;
+  akce se ale na výslovné rozhodnutí uživatele jmenuje `Rebase` (viz záznam rozhodnutí), takže tu
+  hodnotu nikdo nečte. Držet ji dál by byl přesně ten vzor z `CLAUDE.md`, na který Copilot v tomhle
+  repu chodí — *stav, který se drží, ale nikdo ho nečte*. **Jméno základu se přitom neztratilo**:
+  nese ho řádek stavu (`head → base`, `BranchMerge.swift`) a nápověda pod kurzorem
+  (`Policy.branchSyncHelp`), a je na to test.
 
 ## `GitHubGateway` (`App/GitHub/`)
 
@@ -8916,7 +8918,7 @@ ref(refs/heads/master).compare(headRef: <hlava PR>) → {"aheadBy":1,"behindBy":
 `BEHIND` GitHub vydá **jedině tam, kde to vyžaduje ochrana větve** (*Require branches to be up to
 date before merging*); jinde je „pozadu“ stav, o kterém `mergeStateStatus` mlčí, protože mergi
 nebrání. Sekce `Větev` ho přesto potřebuje na dvě věci: podle něj se rozhoduje, jestli má smysl
-nabízet `Srovnat s main`, a stojí v řádku stavu jako `o 4 commity vzadu` (návrh, sekce 36). **Kdyby
+nabízet `Rebase`, a stojí v řádku stavu jako `o 4 commity vzadu` (návrh, sekce 36). **Kdyby
 se rozhodovalo podle `mergeStateStatus`, akce by se na většině repozitářů nenabídla nikdy.**
 
 Odpověď proto přináší **druhé volání** uvnitř téže metody — `BranchDivergenceQuery` nad GraphQL
@@ -9311,7 +9313,7 @@ odchází kudy — a přesně to je jediné, co tu podmínku drží kontrolovate
 | `BranchPushing` | Protokol s **jedinou** metodou: `push(_ plan: BranchPushPlan) async throws -> String` |
 | `GitBranchPush` | Implementace nad `git`. Brána, hranice cache, pre-flight, `--force-with-lease` |
 | `BranchPushSubmission` | Jediný volající, od #466 **s potvrzovacím sheetem**. Tvarem `MergeSubmission`: vzniká kliknutím, drží snímek, zaniká zavřením. Pusher se skládá **až** v `push` |
-| `BranchPushSheet` | Potvrzení — výpis `Co odejde`, výstraha o lease, `Přetlačit větev` **bez výchozí akce** |
+| `BranchPushSheet` | Potvrzení — výpis `Co odejde`, výstraha o lease, `Force push` **bez výchozí akce** |
 | `BranchPushPlan` | Co se má přetlačit — větev, lease, nová hlava, strom v cache |
 | `GitCredentials` | Jak se `gitu` řekne, kde vzít přihlášení. Sdílené s `GitRepoCheckout` |
 
@@ -9405,7 +9407,7 @@ parametrů, ne u té, která bolí. Je to **tatáž** hranice, podle které má 
 
 **Potvrzení je sheet, ne pojmenované tlačítko v panelu**, a jsou pro to tři důvody:
 
-- **Návrh (sekce 36) kreslí `Přetlačit větev` v patičce sheetu** — a to i pro konfliktní cestu
+- **Návrh (sekce 36) kreslí `Force push` v patičce sheetu** — a to i pro konfliktní cestu
   (#467). Tlačítko v panelu by znamenalo, že #467 tu akci bude **stěhovat**, tedy dva tvary
   potvrzení téže věci.
 - **Do panelu se nevejde výstraha o lease.** Má 300 bodů; čtyři řádky výpisu, warnbox a dvě
@@ -9414,13 +9416,13 @@ parametrů, ne u té, která bolí. Je to **tatáž** hranice, podle které má 
   výpisem** (#68 review, #465 merge).
 
 **#467 tím dostává hotovou půlku své práce**, a je to zapsané schválně: sheet, výpis, výstraha
-o lease, `Přetlačit větev` i `Zahodit rebase` už existují. #467 do **téhož** sheetu jen **přidá**,
+o lease, `Force push` i `Zahodit rebase` už existují. #467 do **téhož** sheetu jen **přidá**,
 co session udělala s konflikty, a diff toho, co vzniklo — nezakládá druhou obrazovku.
 
 **Mezistav `rebased` je normální stav, ne mezikrok.** Mezi krokem jedna a dva se dá okno zavřít
 a přijít za hodinu, takže:
 
-- **drží ho panel**, ne sheet — hláška s `Přetlačit…` a `Zahodit rebase`, a `Zavřít` u ní
+- **drží ho panel**, ne sheet — hláška s `Force push…` a `Zahodit rebase`, a `Zavřít` u ní
   **schválně není** (zavřít hlášku o práci v cache by ji schovalo, aniž by zmizela);
 - **hledá se v cache při každém otevření vlastního PR** (`syncWorktreeState`), protože aplikaci
   zavřenou mezi krokem jedna a dva nemá kde nic zapsat. **Strom je ten záznam** — nikam jinam se to
@@ -9537,7 +9539,7 @@ neodešlo — tatáž úvaha jako u review a merge.
   něm rebase by tuhle akci vypnulo tam, kde je nejužitečnější. Merge naopak draft blokuje.
 - **Červený check srovnání nebrání.** Srovnat větev je zrovna to, co se s ním dělá.
 - **Obě tlačítka jsou v panelu vždycky, mění se jen zvýraznění** (`Policy.primaryBranchAction`):
-  `Mergnout…` když je zeleno, jinak `Srovnat s main`. Schovávat akci podle stavu by znamenalo, že se
+  `Mergnout…` když je zeleno, jinak `Rebase`. Schovávat akci podle stavu by znamenalo, že se
   tlačítko pod rukou stěhuje. Zvýrazní se přitom jen ta akce, do které se **dá kliknout** —
   zvýrazněné zašedlé tlačítko by na sebe táhlo oči kvůli něčemu, co teď stejně nejde.
 
