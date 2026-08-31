@@ -5778,12 +5778,22 @@ zprávy se ze sazby nedostane nic — vkládá se znak.
 `.diacriticInsensitive` by na `:čá` nabídlo `taco` (shortcody jsou ASCII) a cena — 1,88 ms proti
 0,50 ms na dotaz nad 1913 jmény (`-O`). Běží to při každém úhozu s otevřenou nabídkou.
 
-Testů **4447**, všechny zelené — z toho **35 nových** v pěti suitách. Cenná je na nich negativní
+Testů **4449**, všechny zelené — z toho **37 nových** v pěti suitách. Cenná je na nich negativní
 půlka: devatenáct vstupů, u kterých se nabídka otevřít **nesmí** (`12:30`, `https:…`, `Poznámka:`,
 `::ta`, `:1`, `:tada:`, kurzor mimo text), zastaralý rozsah, který **nevloží nic**, `:čá` bez shody,
 a nad zdrojáky, že nabídku zapínají **jmenovitě tři** pole a tab `Zeptat se` mezi nimi není. Jedno
 tvrzení se muselo utáhnout po vložené regresi: `suggestions: emoji` stojí v obou voláních, takže test
 „kdo box podá, ten nabídku kreslí“ prošel i s polem, kterému se box vyndal.
+
+**Proklikání našlo jednu věc a stála za to**: `:+` nabídku neotevřelo, takže `:+1:` ani `:-1:` —
+dva nejčastější shortcody na GitHubu — se od dvojtečky napsat nedaly. Pravidlo se rozšířilo
+**nesymetricky**: `+` projde hned, `-` až s druhým znakem. Důvod je `:-)` a `:-(`, které jsou v české
+próze běžnější než `:-1:`: na samotném `:-` má katalog čtyři shody (👎, 📧 přes alias `e-mail`, 🚱,
+🦖), takže by nabídka u každého smajlíku na jeden úhoz problikla. Zamítnutá symetrická varianta
+i cena té zvolené jsou v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--znaménka-v-dotazu-a-smajlík-483).
+Výčet v testu se tím rozšířil o pět otevírajících a pět zavřených vstupů a asymetrie je **ověřená
+vloženou regresí**.
 
 **Co ověřuje jedině člověk**: že klávesy zaberou (#184). `↑↓`, `↵`, ustupující `esc` a `⌘⏎`
 s otevřenou nabídkou testovací host neunese — aktivaci nedostane.

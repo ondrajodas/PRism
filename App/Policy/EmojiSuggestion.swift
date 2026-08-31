@@ -46,9 +46,9 @@ extension Policy {
     /// Dotaz na emotikon pro text a polohu kurzoru. `nil` = nabídka se nemá otevřít.
     ///
     /// **Dvojtečka je v próze běžný znak, takže rozhodovat nemůže sama.** Otevře se, jedině když je
-    /// `:` na **začátku textu nebo po mezeře** a za ní stojí **aspoň jedno písmeno**. Tím vypadnou
-    /// tři nejčastější plané poplachy naráz: `12:30` (dvojtečka po číslici), `https://…` (po
-    /// písmenu) a `Poznámka:` (po písmenu, a za ní mezera).
+    /// `:` na **začátku textu nebo po mezeře** a za ní stojí něco, z čeho může být shortcode — viz
+    /// `emojiQueryHasSubstance(_:)`. Tím vypadnou tři nejčastější plané poplachy naráz: `12:30`
+    /// (dvojtečka po číslici), `https://…` (po písmenu) a `Poznámka:` (po písmenu, a za ní mezera).
     ///
     /// „Po mezeře“ znamená po **jakémkoli bílém znaku** — tedy i na začátku řádku uprostřed textu.
     /// `Character.isWhitespace` je na to ta správná otázka a `CRLF` je v něm jeden znak, takže se
@@ -74,15 +74,41 @@ extension Policy {
         guard text[colonIndex] == ":" else { return nil }
 
         let query = String(text[start..<caretIndex])
-        // **Aspoň jedno písmeno**, ne aspoň jeden znak: bez toho by `:1` otvíralo nabídku a `:+`
-        // taky, přitom ani jedno není začátek shortcodu, který by šel dopsat.
-        guard query.contains(where: \.isLetter) else { return nil }
+        guard emojiQueryHasSubstance(query) else { return nil }
         // Dvojtečka na začátku textu, nebo po bílém znaku.
         guard colonIndex == text.startIndex
             || text[text.index(before: colonIndex)].isWhitespace
         else { return nil }
 
         return EmojiQuery(text: query, colon: caret - length - 1, caret: caret)
+    }
+
+    /// Může z toho, co je za dvojtečkou, být shortcode? (#483, rozšířeno po proklikání)
+    ///
+    /// Tři pravidla, a **nejsou symetrická schválně**:
+    ///
+    /// 1. **Písmeno kdekoli v dotazu** — to je ta obvyklá cesta (`:ta`, `:e-mail`, `:u7121`).
+    /// 2. **Dotaz začínající `+`** projde hned, tedy i samotné `:+`. Do prvního proklikání sem
+    ///    patřilo jen písmeno, čímž vypadly `:+1:` a `:-1:` — dva nejčastější shortcody na GitHubu.
+    ///    `:+` je přitom v próze po mezeře skoro nemožné, takže se za to neplatí ničím.
+    /// 3. **Dotaz začínající `-` potřebuje ještě jeden znak.** `:-1` tedy projde, samotné `:-` ne —
+    ///    a je to kvůli **textovým smajlíkům**: `:-)` a `:-(` jsou v české próze běžnější než
+    ///    `:-1:` a začínají přesně tou kombinací. Bez tohohle pravidla by nabídka na `:-` **problikla**
+    ///    (👎, 🚱, 🦖) a při dopsání `)` zmizela — a to není detail, to je viditelné chování
+    ///    v každé druhé větě. Hotový smajlík nabídku neotevře ani tak (`)` a `(` nejsou znaky
+    ///    dotazu), takže se tímhle zavírá právě a jen ten mezistav.
+    ///
+    /// **Číslice sama nestačí** (`:1`, `:30`) a podtržítko taky ne (`:_`): ani jedno není začátek
+    /// shortcodu, který by šel dopsat.
+    ///
+    /// Zvažovaná a zamítnutá varianta (symetrická, `+` i `-` hned) je v záznamu rozhodnutí ve
+    /// specifikaci.
+    private static func emojiQueryHasSubstance(_ query: String) -> Bool {
+        if query.contains(where: \.isLetter) { return true }
+        guard let first = query.first else { return false }
+        if first == "+" { return true }
+        if first == "-" { return query.count > 1 }
+        return false
     }
 
     /// Smí ten znak stát v dotazu za dvojtečkou?

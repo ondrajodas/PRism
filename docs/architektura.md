@@ -8488,9 +8488,20 @@ Píše se `:ta`, nabídne se 🎉 — a do textu se vloží **znak, ne shortcode
 **Rozhodnutí jsou čtyři čisté funkce** (`App/Policy/EmojiSuggestion.swift`):
 
 - **`Policy.emojiQuery(in:caret:)`** — je otevřený dotaz? Otevře se, jedině když je `:` na začátku
-  textu **nebo po bílém znaku** a za ní stojí **aspoň jedno písmeno**. Tím vypadnou tři nejčastější
-  plané poplachy: `12:30`, `https://…` a `Poznámka:`. Kurzor musí stát na **konci** dotazu, takže
-  odchod kurzoru jinam nabídku zavírá sám, bez druhého pravidla.
+  textu **nebo po bílém znaku** a za ní stojí něco, z čeho může být shortcode. Tím vypadnou tři
+  nejčastější plané poplachy: `12:30`, `https://…` a `Poznámka:`. Kurzor musí stát na **konci**
+  dotazu, takže odchod kurzoru jinam nabídku zavírá sám, bez druhého pravidla.
+
+  **Co je „něco, z čeho může být shortcode“, rozhoduje `emojiQueryHasSubstance` a nejsou to
+  symetrická pravidla** (rozšířeno po prvním proklikání): **písmeno kdekoli**, **dotaz začínající
+  `+`** hned (tedy i samotné `:+`), ale **dotaz začínající `-` až s druhým znakem**. Do proklikání
+  tu stálo jen písmeno, čímž vypadly `:+1:` a `:-1:` — dva nejčastější shortcody na GitHubu.
+  Nesymetrie je kvůli **textovým smajlíkům**: `:-)` a `:-(` jsou v české próze běžnější než `:-1:`,
+  takže na samotném `:-` by nabídka **problikla** (👎, 🚱, 🦖, 📧) a při dopsání `)` zmizela. Hotový
+  smajlík ji neotevře ani tak, protože `)` a `(` nejsou znaky dotazu — zavírá se tímhle právě a jen
+  ten mezistav. `:+` je proti tomu v próze po mezeře skoro nemožné, takže se za jeho puštění neplatí
+  ničím. Číslice ani podtržítko samy nestačí ([záznam
+  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--znaménka-v-dotazu-a-smajlík-483)).
 
   **Kurzor se předává jako počet znaků, ne `String.Index`, a je to podmínka.** Pole mění text
   a kurzor ve dvou různých zápisech, takže se do výpočtu umí dostat index z **předchozí** verze

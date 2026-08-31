@@ -27,6 +27,16 @@ struct EmojiQueryTests {
         ("první\r\n:ta", 9, "ta", 6),
         // Kurzor **uprostřed** rozepsaného shortcodu: dotaz je to, co je vlevo od něj.
         (":tada", 3, "ta", 0),
+        // **Znaménka bez písmene** (nález z proklikání): `:+1:` a `:-1:` jsou dva nejčastější
+        // shortcody na GitHubu, takže se od dvojtečky musí dát napsat. `:+` projde hned,
+        // `:-` potřebuje ještě jeden znak — kvůli smajlíkům, viz `closed` níž.
+        (":+", 2, "+", 0),
+        (":+1", 3, "+1", 0),
+        ("Díky :+1", 8, "+1", 5),
+        (":-1", 3, "-1", 0),
+        // `-` a za ním cokoli, co znakem dotazu je: shodu to mít nemusí (nabídka se pak nekreslí),
+        // ale dotaz otevřený je — pravidlo o smajlíkovi mluví o **délce jednoho znaku**, ne o obsahu.
+        (":--", 3, "--", 0),
         // Podtržítko, číslice a znaménko jsou součástí shortcodu, dokud je v dotazu písmeno.
         (":white_check", 12, "white_check", 0),
         (":e-mail", 7, "e-mail", 0),
@@ -55,10 +65,18 @@ struct EmojiQueryTests {
         ("Poznámka:", 9, "dvojtečka bez dotazu na konci textu"),
         ("Poznámka: ", 10, "za dvojtečkou mezera"),
         ("Poznámka: ta", 12, "kurzor za mezerou, dvojtečka daleko vlevo"),
-        // Dotaz musí mít aspoň jedno **písmeno**.
+        // Číslice ani podtržítko samy začátek shortcodu nejsou.
         (":1", 2, "dotaz jen z číslice"),
-        (":+1", 3, "dotaz jen ze znaménka a číslice"),
+        (":30", 3, "dotaz jen z číslic"),
         (":_", 2, "dotaz jen z podtržítka"),
+        // **Textové smajlíky.** `:-)` a `:-(` jsou v próze běžnější než `:-1:`, takže samotné `:-`
+        // nabídku otevřít nesmí — jinak by na každém smajlíku probliknul 👎. Hotový smajlík ji
+        // nepustí ani tak, protože `)` a `(` nejsou znaky dotazu; to první je ten mezistav.
+        (":-", 2, "začátek smajlíku `:-)`"),
+        ("Díky :-", 7, "začátek smajlíku i po mezeře"),
+        (":-)", 3, "hotový smajlík"),
+        (":-(", 3, "hotový smajlík"),
+        (":+)", 3, "závorka není znak dotazu"),
         // Mezera dotaz zavírá.
         (":ta ", 4, "za dotazem mezera"),
         (":ta x", 5, "kurzor v dalším slově"),

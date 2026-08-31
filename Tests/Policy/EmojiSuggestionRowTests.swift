@@ -60,6 +60,40 @@ struct EmojiSuggestionRowTests {
         #expect(moon.alias == "waxing_gibbous_moon")
     }
 
+    /// **`:+` musí nabídnout 👍 jako první řádek** — to je druhá polovina nálezu z proklikání. Pustit
+    /// znaménko do dotazu je k ničemu, když by na `:+` vyšlo něco jiného než palec.
+    ///
+    /// `:-1` je proti tomu tvrzení o tom, že se palec dolů dá napsat celý; samotné `:-` nabídku
+    /// neotevře (`EmojiQueryTests`), takže se tady netestuje.
+    @Test("Znaménkové dotazy nabídnou palce", arguments: [
+        ("+", "👍"), ("+1", "👍"), ("-1", "👎"),
+    ])
+    func offersTheThumbsForSignQueries(input: (query: String, emoji: String)) throws {
+        let rows = Policy.emojiSuggestions(for: input.query)
+
+        let first = try #require(rows.first, "dotaz „\(input.query)“ nenabídl nic")
+        #expect(first.emoji.character == input.emoji)
+        // A shoda přišla přes **jméno**, ne alias, takže se v řádku kreslí `:+1:` / `:-1:`.
+        #expect(first.alias == nil)
+    }
+
+    /// `:+` má v katalogu **jedinou** shodu, takže nabídka nemá čím zmást — `+` je v jediném
+    /// shortcodu. U `-` jsou čtyři a řadí se váhou: začátek jména (`-1`) váží víc než pomlčka
+    /// uvnitř.
+    ///
+    /// **`email` je v tom seznamu překvapení, a je to správná odpověď**: pomlčku má v aliasu
+    /// (`e-mail`), ne ve jméně. Napsal jsem ten výčet nejdřív bez něj a test to shodil — je to
+    /// zároveň doklad, že se hledá i podle aliasů.
+    @Test("Znaménko v katalogu má málo shod")
+    func keepsTheSignQueriesNarrow() throws {
+        #expect(Policy.emojiSuggestions(for: "+").map(\.emoji.name) == ["+1"])
+
+        let dashes = Policy.emojiSuggestions(for: "-")
+        #expect(dashes.map(\.emoji.name) == ["-1", "email", "non-potable_water", "t-rex"])
+        let email = try #require(dashes.first { $0.emoji.name == "email" })
+        #expect(email.alias == "e-mail")
+    }
+
     // MARK: - Řazení a strop
 
     /// **Váha shody rozhoduje, pořadí katalogu je až druhé kritérium** — tedy stejně jako nabídky

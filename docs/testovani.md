@@ -614,12 +614,19 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   po vrácení původního kódu test spadne na `events.items == []`.
 - **Našeptávání emotikonů (#483)** — pět suit, každá na jinou otázku, a **nejcennější půlka
   tvrdí, že se něco NEstalo**.
-  - **`EmojiQueryTests`** — kdy je dotaz otevřený, **vyčerpávajícím výčtem**: dvanáct vstupů, které
+  - **`EmojiQueryTests`** — kdy je dotaz otevřený, **vyčerpávajícím výčtem**: sedmnáct vstupů, které
     nabídku otevřít mají (začátek textu, po mezeře, po `LF` i po `CRLF`, kurzor uprostřed slova,
-    podtržítka a znaménka, diakritika, velká písmena, po emotikonu), a **devatenáct, které ne** —
+    podtržítka a znaménka, diakritika, velká písmena, po emotikonu), a **dvacet čtyři, které ne** —
     každý s napsaným důvodem. Planý poplach v textovém poli se jinak pozná až v provozu, takže sem patří
-    `12:30`, `https:…`, `Poznámka:`, `Poznámka: `, `::ta`, `:1`, `:+1`, `:tada:`, kurzor před
+    `12:30`, `https:…`, `Poznámka:`, `Poznámka: `, `::ta`, `:1`, `:30`, `:tada:`, kurzor před
     dvojtečkou i za mezerou a kurzor mimo text.
+
+    **Znaménka a smajlíci jsou vlastní řádky výčtu, ne jeden případ** (nález z proklikání): na jedné
+    straně `:+`, `:+1`, `Díky :+1`, `:-1` a `:--`, na druhé `:-`, `Díky :-`, `:-)`, `:-(` a `:+)`.
+    Zrovna tady je výčet celý smysl toho, že rozhoduje čistá funkce — pravidla **nejsou symetrická**
+    (`+` hned, `-` až s druhým znakem) a bez řádku na každou stranu by se ta asymetrie neuhlídala.
+    **Ověřeno vložením regrese**: pustit `-` hned shodí dva vstupy (`:-` a `Díky :-`), tedy zrovna
+    ty, kvůli kterým to pravidlo je.
 
     K tomu jedno tvrzení, které jeden vstup unést nemůže: **na spočítané poloze dvojtečka doopravdy
     je**, ověřené průchodem přes **všechny** polohy kurzoru v jedné větě. U jednoho vstupu by se
@@ -627,7 +634,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **`EmojiSuggestionRowTests`** — slučování aliasů, řazení, sazba a vložení, nad **skutečným
     katalogem**: fixture by nesla pořadí a aliasy, které v aplikaci nejsou, a zrovna na nich to
     stojí. `:thu` vrátí 👍 **jednou** a nese alias `thumbsup`; shoda přes jméno alias nedopisuje;
-    `waxing_gib` najde 🌔, jehož jméno je `moon`. Řazení se tvrdí **celým seznamem** (`:ta` →
+    `waxing_gib` najde 🌔, jehož jméno je `moon`. A **znaménkové dotazy vydají palce**: `+`, `+1`
+    i `-1` mají první řádek s palcem a shoda přišla přes jméno, takže se v řádku kreslí `:+1:` /
+    `:-1:` — to je druhá polovina nálezu z proklikání, protože pustit znaménko do dotazu je
+    k ničemu, když by na `:+` vyšlo něco jiného. Výčet shod pro `-` je u toho doklad, že se hledá
+    i podle aliasů: `email` je v něm kvůli aliasu `e-mail` a napsaný bez něj ten test spadl. Řazení se tvrdí **celým seznamem** (`:ta` →
     `taco, tada, taiwan, tajikistan, takeout_box, tamale`), protože bez druhého kritéria by řádky
     mezi úhozy přeskakovaly. Strop se tvrdí i pro `limit: 0` — nula znamená „nic“, ne „bez stropu“.
 

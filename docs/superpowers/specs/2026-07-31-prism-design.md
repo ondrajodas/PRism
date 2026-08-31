@@ -4195,3 +4195,38 @@ kreslí patka nabídky (`↑↓ vybírá · ↵ vloží · esc zavře`), a návr
 
 Kdyby se to mělo doplnit, patří k tomu ověření na běžící aplikaci, že fokus v poli po kliknutí
 zůstane — ne domněnka, že `buttonStyle(.plain)` stačí.
+
+### Záznam rozhodnutí — znaménka v dotazu a smajlík (#483)
+
+Do prvního proklikání platilo pravidlo přesně tak, jak ho vyslovilo zadání: nabídka se otevře, když
+je `:` na začátku řádku nebo po mezeře a **za ní stojí aspoň jedno písmeno**. Nález z proklikání:
+tím vypadly `:+1:` a `:-1:`, tedy **dva nejčastější shortcody na GitHubu**. V katalogu jsou (👍 se
+najde přes `:thu`), ale kdo je píše zvykem od dvojtečky, nedostal nic.
+
+**Past, kterou puštění znaménka otevírá, jsou textoví smajlíci.** `:-)` a `:-(` jsou v české próze
+běžnější než `:-1:` a začínají přesně tou kombinací, kterou chceme povolit. `:+` je proti tomu
+v próze po mezeře skoro nemožné — ty dva znaky tedy **nejsou symetrické** a je legitimní rozhodnout
+každý jinak.
+
+**Rozhodnuto nesymetricky:** `+` projde hned (i samotné `:+`), `-` **až s druhým znakem** (`:-1`
+ano, `:-` ne).
+
+**Zamítnutá varianta: pustit obojí hned** a spolehnout se na to, že „dotaz bez jediné shody nabídku
+zavírá“. Fungovalo by to v tom smyslu, že hotový `:-)` nabídku neotevře — `)` a `(` nejsou znaky
+dotazu, takže se dotaz zavře sám. Jenže mezistav `:-` shody **má**, a ne jednu: 👎 `:-1:`,
+📧 `:email:` (přes alias `e-mail`), 🚱 `:non-potable_water:` a 🦖 `:t-rex:`. Nabídka by tedy
+u každého smajlíku na jeden úhoz **problikla** čtyřmi řádky a při dopsání `)` zmizela. To není
+detail, který se schová do „zavře se sama“ — je to viditelné chování v každé druhé větě, a zaplatilo
+by se za něj tím, co má být na nabídce nejcennější: že se objeví, jedině když ji člověk chtěl.
+
+Cena zvolené varianty je jedna věta vysvětlení navíc a to, že `:-1` se nabídne o úhoz později než
+`:+1`. Za nic z toho se v okně neplatí problikáváním.
+
+**Co z toho zbývá jako pravidlo**: rozhoduje `Policy.emojiQueryHasSubstance(_:)`, testuje se
+**vyčerpávajícím výčtem na obě strany** (`:+`, `:+1`, `:-1`, `:--` otevírají; `:-`, `:-)`, `:-(`,
+`:+)`, `:1`, `:30`, `:_` ne) a asymetrie je ověřená **vloženou regresí** — pustit `-` hned shodí
+zrovna ty dva vstupy, kvůli kterým to pravidlo je.
+
+**Zadání i kresba (sekce 38) říkají „aspoň jedno písmeno“ slovy**, takže je tohle rozhodnutí odchylka
+od obojího. Do mockupu se u #483 nesahalo (držela ho jiná větev), takže ta věta v něm zůstává
+nepřesná — je to zapsaná mezera, ne záměr.
