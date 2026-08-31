@@ -7363,3 +7363,131 @@ Celý soubor rozdělený na bloky je kontrola, **co rozdělení stojí**; v `Ima
 (150–280 ms bez trendu), protože offscreen render nic nelení. Přínos stropu proto z druhé série
 vidět **není** a nesmí se z ní vyvozovat — plyne z lenosti `LazyVStack`u, kterou harness nemá jak
 napodobit.
+
+### Co zašpiní tělo `DiffView`u nad nečinným diffem (#421)
+
+Zadání #421 přišlo z instrumentace #397: nad nečinným diffem se každou minutu vrací pomalý snímek,
+`DiffRow.id` má 6 767 zásahů a `changed` vstup je ve 113 ze 123 vzorků týž — `StaticBody` toho
+`LazyVStack`u v `DiffView`u. Otázka byla, **jestli to po #469, #472 a #476 ještě platí**.
+
+Měří to **`IdleDiffSpinProbe.whatDirtiesTheDiffBody`** (`PRISM_MEASURE`), a jsou u toho tři věci,
+bez kterých by čísla netvrdila nic:
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 xcodebuild -project PRism.xcodeproj -scheme PRism \
+    -derivedDataPath build.noindex test \
+    -only-testing:'PRismTests/IdleDiffSpinProbe/whatDirtiesTheDiffBody()' > /tmp/m421.log 2>&1
+grep -a 'MĚŘENÍ #421' /tmp/m421.log
+```
+
+1. **Nečinný úsek.** Bez něj by se nedalo poznat, jestli čísla mluví o tiku, nebo o scéně.
+2. **Tentýž rozsekaný běh smyčky, ale bez jediného tiku** (#478). Tiky se pouští ve slicích
+   0,4 s + 0,2 s, aby se `isRefreshing = true` stihlo projevit ve vlastním snímku jako v běžící
+   aplikaci; **kdyby ty slice samy něco přerovnávaly, vypadalo by to jako tik**. Vyšlo nula, takže
+   nevypadají.
+3. **Kontrola měřidla**: tělo se zašpiní schválně (přepnutý pohled diffu). Bez toho by nula
+   v úsecích 1 a 2 netvrdila nic — to je odpověď na otázku *naměřilo by to rozdíl, kdyby ta chyba
+   byla?* A protože se zašpinění naměřit **podařilo**, ta otázka má odpověď i z druhé strany.
+
+**A hierarchie se po měření musí zahodit, ne jen zavřít okno.** `orderOut(nil)` scénu jen schová
+a schovaná dál dostává průchody tělem: druhý scénář hlásil `ContentView` i tehdy, když v jeho okně
+žádný `ContentView` není, a k tomu 382 průchodů `DiffRowView`u z cizí scény. Sonda proto v `defer`u
+nastavuje `contentViewController` na prázdný `NSViewController`. Sondy, které měří CPU, tuhle past
+nemají — počitadla průchodů tělem ano.
+
+#### Čísla
+
+Usazené okno, 201 bloků kódu, 1 210 prvků, split, 1512×874. Opakovatelné do jedničky napříč běhy.
+
+| úsek | `DiffView` | `DiffRowView` | `DiffRow.id` | `FileDiff.id` |
+|---|---|---|---|---|
+| nečinnost 5 s | 0 | 0 | 0 | 0 |
+| 10× tentýž běh smyčky **bez tiku** | 0 | 0 | 0 | 0 |
+| **10 tichých tiků pollingu** | **6** | **1 182** | **2 541** | **246** |
+| kontrola měřidla (přepnutý pohled) | 4 | 788 | 1 656 | 164 |
+| 10 tiků, **jen detail PR bez chromu okna** | 2 | 382 | 824 | 82 |
+
+Jeden špinavý průchod tělem `DiffView`u tedy dnes stojí **~197 průchodů tělem `DiffRowView`u
+a ~423 dotazů na `DiffRow.id`** (1 182 / 6, 2 541 / 6). Poměr je v obou pohledech i v obou
+scénářích týž, takže se dá počítat: **cena je lineární v počtu bloků, ne v počtu zašpinění.**
+
+#### Co se tím přišpendlilo
+
+- **`LazyVStack` z toho zásobníku po #469 zmizel.** `changed` vstup je dnes
+  `StaticBody<ViewBodyAccessor<SystemScrollViewContainer<ModifiedContent<VStack<ForEach<Array<FileDiff>…`
+  Zadání #421 tipovalo, že s líným seznamem zmizí i vada; **vyvráceno** — zmizela jen část ceny.
+- **Cesta na diff nevede přes data.** `IdleDiffSpinProbe.whichPropertyTheTickInvalidates` natáhne
+  jednorázový odběr (`withObservationTracking`, jako #472) nad jednadvacet čtení, která okno nad
+  nečinným diffem dělá, a pustí jeden tik: probudí se **jediné, `isRefreshing`**. Ani `diffState`,
+  ani `expansion`, ani `isFolded`, ani `anchoredThreads`, ani `draftComments`, ani `pullRequests`,
+  ani `ownership`. **#472 tedy drží** a je to jediné měření, které vydá **jméno** vlastnosti —
+  sonda s oknem umí říct jen „tělo se zašpinilo“.
+- **Není to práce po úspěšném tiku.** `IdleDiffSpinProbe.whichPartOfTheTickDirtiesTheDiffBody`
+  pustí všech pět kroků `afterSuccessfulTick` zvlášť (`startAutomaticReviews`,
+  `announceNewPullRequests`, `refreshStaleHeads`, `refreshOwnActivity`, `loadDailySpend`) — **každý
+  nula**, celý tik 6. `forget(whatIsNotIn:)` je `private`, takže vychází jako zbytek.
+- **Chrome okna to ztrojnásobuje** (poslední řádek tabulky), takže hlavní pohon sedí v hlavičce a ve
+  stavovém řádku, ne v detailu PR.
+
+#### Co se nepodařilo zlevnit, a proč to sem patří
+
+`store.isRefreshing` se čte **v těle `ContentView`u** dvakrát (tlačítko `⟳` a povolení pro `⌘R`)
+a příznak se mění dvakrát za tik — vypadá to tedy na tutéž vadu jako #472, jen o patro výš: hrubé
+**místo čtení** místo hrubé vlastnosti. Přestěhování do dvou vlastních views (jmenovala se
+`RefreshHeaderButton` a `RefreshShortcut`; v repu nejsou) se napsalo, změřilo **A/B nad toutéž
+scénou** a zahodilo:
+
+| | `ContentView` | dvě nová views | `DiffView` | `DiffRow.id` |
+|---|---|---|---|---|
+| jak to je | 13–21 | — | 6 | 2 541 |
+| s přestěhováním | 9 | 9 + 9 | 6 | 2 541 |
+
+Kořen okna se tedy špiní o pár průchodů méně, ale **celkem průchodů tělem přibude** a na tom, co je
+drahé — na diffu —, se nezmění **nic**. Počitadlo `ContentView`u se navíc mezi běhy hýbe (13–21),
+kdežto `DiffView` a `DiffRow.id` vyjdou do jedničky stejně, takže je to ze tří sloupců ten nejhůř
+měřitelný. Je to učebnicové „zlevnění, které práci jen
+přesunulo jinam“ (pravidlo z #275), takže do repa nešlo. Zapisuje se to proto, aby to příště nikdo
+nezkoušel znovu jako opravu #421 — a kdyby se to zkusilo, měřit se má **čas**, ne počty průchodů:
+pár velkých těl proti osmnácti malým se z počitadla rozhodnout nedá.
+
+**A obojí číslo musí být z A/B nad toutéž scénou v tomtéž běhu** (#274). První pokus dal
+`ContentView` 58 → 19, což vypadalo na trojnásobek — jenže to „před“ vzniklo v běhu, kde vedle
+běžely další sondy z téže sady (viz `.serialized` níž), takže do počitadla sbíraly i ony. Čísla
+z tabulky výš jsou z dvou běhů **jednoho** testu, mezi kterými se změnil jedině ten kód.
+
+#### Sonda z téhle sady nesmí běžet vedle jiné
+
+`RenderDiagnostics.current` je **jedna hodnota na celý proces**, tedy tatáž třída jako
+`NSApp.appearance` u #367 — a Swift Testing pouští testy v jedné suitě **paralelně**. Naměřeno na
+třech sondách #421 naráz: `DiffView` vyšel **9 místo 6**, `DiffRow.id` 3 509 místo 2 541, a úsek
+`kontrola měřidla` vydal **nulu**, tedy tvrzení „tělo se nezašpinilo“ nad tím, co se právě zašpinilo.
+Sada `IdleDiffSpinProbe` je proto od #421 **`.serialized`**; platí to i pro její řádky, které měří
+CPU — dvě okna na obrazovce naráz jsou dvě různé scény.
+
+#### Kde zbývající pohon je, a jak se to zjistilo
+
+Zbytek nevede přes tělo `ContentView`u ani přes data, ale přes **rozvržení**. Naměřeno dočasným
+`print`em v `action:` u `onGeometryChange` v `DiffView`u (do repa se to nekomitovalo — je to ablace,
+ne sonda): během úseku s tiky se **výška** změřené plochy diffu skáče
+
+```
+643,0 → 659,0 → 643,0 → 675,0     (šířka konstantní 1388,0)
+```
+
+a v nečinném úseku ani v úseku bez tiků se nezmění ani jednou. Každý ten skok přepíše
+`viewportHeight` v `@State`u `DiffView`u, a to je průchod tělem.
+
+Odkud těch **16 a 32 bodů** je, se najít nepodařilo, a jedna hypotéza je **vyvrácená**: hlášení
+v levé části stavového řádku (`AppNoticesView`) to nejsou. Vypsané flagy v každém tiku
+(`isAutomaticStopped`, `notificationFailure`, `configurationFailure`, `draftFailure`,
+`dismissalFailure`, `intentFailure`, `askFailure`, `appearanceFailure`, `terminalFailure`,
+`unreadableReviewFiles`, `unreadableDraftFiles`) jsou v té scéně **všechny vypnuté a nemění se**,
+takže `AppNoticesView` nekreslí nic. Zbývají tedy zdravotní puntíky a útrata ve stavovém řádku —
+`healthReports` jde přes `gitHubCall`, tedy přes `polling.status` a `polling.lastSuccess`.
+
+**Trvalé tvrzení k tomu**, co z toho jde uhlídat bez okna, je `PollObservationTests
+.quietTickDoesNotWakeWhatTheDiffDrawsFrom`: vyjmenuje všechna čtení storu, která `DiffView.body`
+dělá přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. **Netvrdí, že se tělo `DiffView`u
+nepřeloží** — to nad storem nejde a v okně to po #421 pořád neplatí; tvrdí, že když se přeloží,
+není to kvůli datům. Ověřeno vložením regrese (`foldedFiles = foldedFiles.filter { _ in false }`
+v `forget(whatIsNotIn:)` → `tichý tik probudil isFolded(_:in:)`).

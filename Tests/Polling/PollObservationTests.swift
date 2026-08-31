@@ -204,4 +204,71 @@ struct PollObservationTests {
 
         #expect(!watcher.woken)
     }
+
+    /// **A nezneplatní ani nic, z čeho `DiffView` kreslí** (#421).
+    ///
+    /// Zadání #421 tvrdilo, že tělo `DiffView`u se nad nečinným diffem špiní každou minutu, a bylo
+    /// to na tichém tiku pollingu — naměřeno **6 průchodů tělem `DiffView`u a 2 541 dotazů na
+    /// `DiffRow.id` za deset tiků** (`IdleDiffSpinProbe.whatDirtiesTheDiffBody`). První otázka
+    /// u toho byla, jestli se tik nedostal k **datům** diffu; sonda
+    /// `IdleDiffSpinProbe.whichPropertyTheTickInvalidates` vyšla tak, že ne — z jednadvaceti čtení
+    /// probudí tik **jediné**, a to `isRefreshing`.
+    ///
+    /// Tohle je ta odpověď zapsaná jako tvrzení, které se dá rozbít potichu. Vyjmenovává **všechna
+    /// čtení storu, která `DiffView.body` dělá přes uzávěry z detailu** — tedy to, čím by se do
+    /// diffu dalo dostat daty. `expansion(of:in:)` má vlastní test o kus výš (byl u #472 první),
+    /// ostatní jsou tady.
+    ///
+    /// **Netvrdí, že se tělo `DiffView`u nepřeloží** — to by nad storem nešlo a v okně to po
+    /// #421 pořád neplatí. Tvrdí, že když se přeloží, **není to kvůli datům**.
+    @Test("Tichý tik nezneplatní nic, z čeho kreslí diff")
+    func quietTickDoesNotWakeWhatTheDiffDrawsFrom() async throws {
+        let pr = PRIdentifier("cli/cli#1")!
+        let path = "App/Views/DiffView.swift"
+        let gateway = FakeGitHubGateway(always: .success([summary("cli/cli#1")]))
+        let directory = try TemporaryDirectory()
+        defer { _ = directory }
+        let store = AppStore(
+            gateway: gateway,
+            time: FakeTimeSource(),
+            drafts: ReviewDraftStore(layout: CacheLayout(root: directory.url))
+        )
+        await store.refresh()
+        // **Mapy musí být neprázdné**, jinak by test procházel nad ničím: `filter` nad prázdnou
+        // mapou nic neubere ani s vadou. Tentýž důvod jako u `quietTickDoesNotWakeTheDiffReader`.
+        store.foldedFiles.insert(FileExpansionKey(pullRequest: pr, path: path, commit: nil))
+        store.diffStates[pr] = .failed("nezáleží na tom, co v tom stavu je")
+
+        let reads: [(name: String, read: @MainActor () -> Void)] = [
+            ("diffState(for:)", { _ = store.diffState(for: pr) }),
+            ("isFolded(_:in:)", { _ = store.isFolded(path, in: pr) }),
+            ("hasRevealedLines(in:)", { _ = store.hasRevealedLines(in: pr) }),
+            ("anchoredThreads(for:)", { _ = store.anchoredThreads(for: pr) }),
+            ("draftComments(for:)", { _ = store.draftComments(for: pr) }),
+            ("canComposeDraft(for:)", { _ = store.canComposeDraft(for: pr) }),
+            ("commentDrag", { _ = store.commentDrag }),
+        ]
+        let watchers = reads.map { entry -> (name: String, watcher: Watcher) in
+            let watcher = Watcher()
+            watcher.watch(entry.read)
+            return (entry.name, watcher)
+        }
+        await store.refresh()
+
+        for entry in watchers {
+            #expect(!entry.watcher.woken, "tichý tik probudil \(entry.name)")
+        }
+
+        // **Ověřeno i obráceně**, jinak by tahle sada mohla být zelená nad nesledovanými
+        // vlastnostmi: skutečná změna těch dvou map ty dva čtenáře probudit **musí**.
+        let folding = Watcher()
+        folding.watch { _ = store.isFolded(path, in: pr) }
+        store.foldedFiles.removeAll()
+        #expect(folding.woken)
+
+        let diff = Watcher()
+        diff.watch { _ = store.diffState(for: pr) }
+        store.diffStates[pr] = .loading
+        #expect(diff.woken)
+    }
 }

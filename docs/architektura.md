@@ -6899,6 +6899,15 @@ polovina opravy a **není** — `@Observable` na tomhle toolchainu zápis téže
 `forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u: se stráží
 i bez ní vychází tvrzení o nezneplatnění stejně.
 
+**A pozor na to, co z toho pravidlo NENÍ** (#421). Nabízí se dovodit, že vadné je i **hrubé místo
+čtení**: `store.isRefreshing` se čte v těle `ContentView`u — dvakrát, v `headerActions` (tlačítko
+`⟳`) a v `hiddenShortcuts` (povolení pro `⌘R`) —, takže se kořen okna špiní dvakrát za tik i po
+#472. U #421 se to přestěhování do dvou vlastních views napsalo a **změřilo**: `ContentView` 13–21 → 9
+průchodů tělem za deset tiků, zato dvě nová views 9 + 9, **celkem tedy víc, ne méně** — a na diffu
+(`DiffView` 6, `DiffRow.id` 2 541) se nezměnilo **nic**. Zahozeno; kdo to bude zkoušet znovu, musí
+měřit **čas**, ne počty. Rozbor je v [`docs/testovani.md`, *Co zašpiní tělo
+`DiffView`u*](testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421).
+
 **Co tím opravené není**: sedm průchodů tělem `DiffView` a tisíc řádků diffu za dvacet tichých
 tiků zbývá, a cena tiku spadla jen o třetinu, přestože průchodů tělem ubylo šedesátkrát. Zbytek
 leží v **rozvržení okna**, ne v tělech — vlastní práce aplikace je ve `sample`u té fáze **~1,5 %**
