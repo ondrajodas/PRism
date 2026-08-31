@@ -805,6 +805,49 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Co testy neověří:** že `PUT /pulls/{n}/merge` projde z běžící aplikace — brána je ve slotové
   konfiguraci vypnutá schválně, takže se akce v proklikávané instanci nenabídne, dokud si ji člověk
   nezapne. Ověřené je to **mimo aplikaci**, tímtéž voláním na sondě.
+- **Srovnání větve s `main` (#466)** — **druhá cesta ven a první zápis do remote**, takže se u ní
+  hlídá jiná trojice než u těch osmi: **že se nepushlo**, **že guard nejde obejít** a **že rebase
+  v cache dělá to, co si o něm myslíme**.
+  - **`BranchSyncOfferTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve
+    kterých se akce **nenabídne**: cizí PR (nekreslí se ani nadpis), vypnutá brána, **fork**,
+    **neznámý původ větve**, zavřený a mergnutý PR (tam se výčet **ukončí**), srovnaná větev,
+    konflikt, nenačtený i nepovedený stav větve, **rozdělaný rebase v cache** a běžící srovnání. Dvě
+    rozhodnutí, která se dají potichu obrátit, jsou tvrzená zvlášť: **draft se srovnat smí**
+    a **nezelené checky srovnání nebrání** — obojí je opak toho, co platí u merge.
+  - **`GitBranchPushTests`** — devět z třinácti testů tvrdí, že **`runner.invocations` je prázdný**:
+    cizí PR, fork, neznámý původ, zavřený PR, posunutá hlava, přejmenovaná větev, vypnutá brána
+    a **strom mimo cache**. K tomu tvrzení o tom, co se posílá, když se poslat má: **lease s vypsanou
+    hodnotou** a **holé `--force` v argumentech není**, a zdrojová strana je `sha` z rebase, **ne
+    `HEAD`** (mezi rebasem a pushem si člověk mohl ve stromě něco zkusit z terminálu).
+  - **`AppStoreBranchSyncTests`** — nula spuštění `git`u bez brány, na cizím PR, na PR z forku, bez
+    odpovědi o původu větve, nad konfliktem, nad rozdělaným rebasem a **při nezměněné hlavě**. Měří
+    se to **zápisem argumentů podstrčeného `gitu`** do souboru; fake pusher se sem podstrčit nedá,
+    protože `AppStore` si podle tvrdé podmínky č. 1 nesmí držet ani továrnu na cestu ven — tatáž
+    scéna jako u labelů a merge. Cesta ke `gitu` se přitom předává **i těm testům, které tvrdí, že
+    se nepushlo**: bez ní by akci zakázala už brána a tvrzení by měřilo chybějící nástroj, ne guard.
+  - **`RealBranchRebaseTests`** — integrace proti **skutečnému `gitu`**, remote je `file://`. Tuhle
+    půlku se namockovat nedá: **jak se pozná konflikt** (`git` skončí nenulově i u neznámého základu,
+    takže se rozhoduje podle toho, jestli po pádu rebase **běží dál**) a **kde leží rozdělaný rebase**
+    (u pracovního stromu **uvnitř klonu**, ne ve stromě) jsou obojí věci, na kterých něco stojí,
+    a platí jen tehdy, když to `git` doopravdy tak dělá. Rozdělaný rebase se přitom **rozjede
+    naostro**, ne vyrobením složky `rebase-merge` — jinak by se testovala vlastní domněnka o tom, jak
+    to `git` dělá. A jedno tvrzení je o tvrdé podmínce č. 5: **strom review se nepohne**.
+  - **`SingleWayOutTests`** (rozšířené) — **čtyři nová tvrzení, protože jedno by nestačilo**: tři
+    soubory s `BranchPushing`, jedna metoda protokolu (a jmenovitě zakázané `commit`,
+    `deleteBranch`, `pushTag`, `createBranch`), **argument `"push"` jen v `GitBranchPush`** a **holé
+    `--force` nikde v cestě do remote**. Třetí z nich je ten, který se dá nejsnáz přehlédnout: bez
+    něj by se push dal poskládat ve store a tvrzení o třech souborech by prošlo. Pátým tvrzením je,
+    že `Checkout/` ani `GitHub/` do remote nezapisují — půlka podmínky, která se nezměnila; šestým,
+    že `Bash(git push:*)` zůstává v `ClaudeCommand.disallowedTools`, tvrzeno **literálem**.
+
+  **Ověřeno vložením regrese, třikrát** (a je to u téhle změny podmínka, ne pečlivost): holé
+  `--force` místo leasu položí `SingleWayOutTests` **i** `GitBranchPushTests`; vyndaný guard na
+  autorství položí „Na cizí pull request se nepushuje“ a pusher pak doopravdy pushne; a
+  `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení o jednom místě.
+
+  **Co testy neověří:** že `git push` projde z běžící aplikace — brána je ve slotové konfiguraci
+  vypnutá schválně. Ověřené je to **mimo aplikaci**, na sandboxu; postup je níž
+  (*Jak se změřil `--force-with-lease`*).
 - **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
   test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
   rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají
@@ -7268,3 +7311,91 @@ Celý soubor rozdělený na bloky je kontrola, **co rozdělení stojí**; v `Ima
 (150–280 ms bez trendu), protože offscreen render nic nelení. Přínos stropu proto z druhé série
 vidět **není** a nesmí se z ní vyvozovat — plyne z lenosti `LazyVStack`u, kterou harness nemá jak
 napodobit.
+
+### Jak se změřil `--force-with-lease` (#466)
+
+Zadání #466 říká výslovně: **ověř to spuštěním proti větvi, která se mezitím posunula, ne přečtením
+dokumentace `gitu`.** Je to na tom celé podstatné — dokumentace popisuje, co lease dělá, ale
+neodpoví na otázku, která tady rozhoduje: **chová se tak i v klonu, jaký si dělá tahle aplikace?**
+Odpověď je *ne úplně*, a proto se ta hodnota posílá vypsaná.
+
+Sandbox je `ondrajodas/prism-review-sandbox`, tentýž jako u #465. Postup má **čtyři pokusy** a klon,
+který je naklonovaný **přesně jako ten aplikace** — bez toho by se ta odchylka neprojevila:
+
+```bash
+GH=$(which gh); export GIT_TERMINAL_PROMPT=0
+BR=prism-lease-probe-466
+
+# 1. „Autorský“ klon: odsud vznikne větev a později do ní strčí cizí commit.
+git clone https://github.com/ondrajodas/prism-review-sandbox.git author
+cd author && git checkout -b "${BR}" origin/master
+echo probe > lease-probe.txt && git add . && git commit -m "probe: base"
+git push origin "${BR}" && BASE=$(git rev-parse HEAD) && cd ..
+
+# 2. Klon aplikace: bare, partial, refspec RUČNĚ (`clone --bare` ho nenastaví).
+git clone --bare --filter=blob:none https://github.com/ondrajodas/prism-review-sandbox.git app-clone
+git -C app-clone -c "credential.helper=!'${GH}' auth git-credential" \
+    fetch --prune origin '+refs/heads/*:refs/heads/*'
+git -C app-clone config --get-all remote.origin.fetch   # nevypíše NIC
+git -C app-clone for-each-ref refs/remotes/             # je PRÁZDNÉ
+
+# 3. Pracovní strom a commit, který „vypadl z rebase“.
+git -C app-clone worktree add --detach "${PWD}/app-worktree" "${BASE}"
+cd app-worktree && echo moje > mine.txt && git add . && git commit -m "probe: po rebase"
+MINE=$(git rev-parse HEAD) && cd ..
+
+# 4. Cizí ruka posune remote.
+cd author && echo cizi > theirs.txt && git add . && git commit -m "probe: cizi" \
+    && git push origin "${BR}" && cd ..
+```
+
+A teď ty čtyři pokusy — **v `zsh` musí být `${MINE}` ve složených závorkách**: `"$MINE:refs/heads/…"`
+si `zsh` přečte jako modifikátor `:r` a z refspecu udělá `2bf096a…efs/heads/…`, což skončí `src
+refspec … does not match any`. Stálo to jeden falešný „lease selhal“ hned v prvním kole.
+
+```bash
+push() {   # $1 = argument force
+  git -C app-worktree -c "credential.helper=!'${GH}' auth git-credential" \
+      push "$1" origin "${MINE}:refs/heads/${BR}"; echo "exit=$?"
+  gh api "repos/ondrajodas/prism-review-sandbox/git/ref/heads/${BR}" --jq .object.sha
+}
+push "--force-with-lease=refs/heads/${BR}:${BASE}"     # zastaralá znalost
+push --force-with-lease                                # HOLÝ lease
+push "--force-with-lease=refs/heads/${BR}:${FOREIGN}"  # znalost, která sedí
+push --force                                           # KONTRAST
+```
+
+| Pokus | Výstup `gitu` | Kód | Hlava na remote po pokusu |
+|---|---|---|---|
+| lease čeká `65aff25`, na remote leží cizí `9bb4352` | `! [rejected] … (stale info)` | **1** | zůstala cizí `9bb4352` |
+| **holý** `--force-with-lease` | `! [rejected] … (stale info)` | **1** | nezměněna |
+| lease čeká `9bb4352`, tedy to, co tam je | `+ 9bb4352…2bf096a (forced update)` | 0 | přetlačeno |
+| **holé `--force`** s toutéž zastaralou znalostí | `+ f3e243e…2bf096a (forced update)` | 0 | **cizí commit zahozen** |
+
+**Ten čtvrtý pokus je celý smysl měření.** Bez něj by první tři řádky říkaly jen „lease umí
+odmítnout“; s ním je vidět, že v **téže** situaci holé `--force` cizí commit **zahodí**. To je ten
+rozdíl, kvůli kterému je guard guardem a ne dekorací — a je to zrovna to, co by z dokumentace
+`gitu` vyšlo jako věta, kterou se dá přeskočit.
+
+**Druhý pokus je ten, který se nedal odhadnout.** Holý lease selhal i tehdy, když by hodnota sedla:
+`git clone --bare` `remote.origin.fetch` nenastavuje, takže v tom klonu **žádný remote-tracking ref
+neexistuje** a lease nemá odkud vzít očekávanou hodnotu. Kdyby se v aplikaci poslal holý, akce by
+**nešla nikdy** — a v panelu by pro to nebyl důvod.
+
+**Úklid**: probe větev se maže hned (`gh api -X DELETE …/git/refs/heads/${BR}`); v sandboxu zůstává
+jedině `prism-sync-probe-466` (PR #9), na kterém je změřená
+[poloha větve proti základu](architektura.md#poloha-větve-proti-základu-466--mergestatestatus-na-to-neodpovídá)
+— je to doklad k tvrzení v dokumentaci, takže se nemaže.
+
+**Poloha větve se měří dvěma dotazy vedle sebe**, a musí to být tytéž hodnoty:
+
+```bash
+gh pr view 9 --repo ondrajodas/prism-review-sandbox --json mergeable,mergeStateStatus,headRefOid
+gh api graphql -f query='query($o:String!,$n:String!,$b:String!,$h:String!){
+    repository(owner:$o,name:$n){ref(qualifiedName:$b){compare(headRef:$h){aheadBy behindBy status}}}}' \
+  -F o=ondrajodas -F n=prism-review-sandbox -F b=refs/heads/master -F h=<headRefOid>
+```
+
+Naměřeno: `{"mergeStateStatus":"CLEAN","mergeable":"MERGEABLE"}` proti
+`{"aheadBy":1,"behindBy":1,"status":"DIVERGED"}`. **Jeden dotaz na tuhle otázku neodpovídá** —
+a kdyby se měřil jen ten první, vyšlo by z něj, že větev srovnaná je.

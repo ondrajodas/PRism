@@ -19,7 +19,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 |---|---|
 | `RepoID` | `owner/repo` |
 | `PRIdentifier` | `owner/repo#číslo` — klíč všeho, co se váže k PR: dedup zdrojů, review stav, uložené nálezy |
-| `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav, **popis** (`body`) |
+| `PullRequest` | Metadata z `gh`: `id`, titulek, autor, `headSha`, `baseSha`, url, `updatedAt`, stav, **popis** (`body`) a od #466 `isCrossRepository`. To poslední je **`Bool?` a `nil` blokuje**, ne propouští: `git push` míří do klonu **základního** repozitáře, takže u PR z forku by přetlačil jinou větev, než na kterou se člověk dívá. Starší uložená data pole nemají |
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
 | `PullRequestHead` | Hlava PR a **kdy vznikla** (#420) — odpověď dávkového dotazu na `headRefOid`. **Vlastní model vedle `PullRequest`**, ne jeho zúžení: detail je odpověď na „všechno o tomhle PR“ pro jeden pull request, tohle je jedna otázka pro celou frontu naráz. `committedAt == nil` znamená „datum nevíme“, ne dnešek |
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Výchozí dvojice je `Source.reviewRequested` a `Source.mine` (#330) |
@@ -35,6 +35,13 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `RequestedReviewer` | Kdo na PR stojí a jak odpověděl. Je to **stav, ne událost**: konverzace zná `reviewRequested`/`reviewRequestRemoved`, tedy „to se stalo“ |
 | `PullRequestMetadata` | Snímek labelů a reviewerů (#392). **Vlastní vedle `PullRequest`**, protože `fetchDetail` volá i pre-flight publisheru a `latestReviews` nese celá těla review |
 | `MetadataState` | `loading` / `loaded` / `failed` u toho snímku. Existuje kvůli jedné věci: **„labely tu nejsou“ se nesmí splést s „labely jsem nezjistil“** — podle prvního se sekce nekreslí, podle druhého se nesmí dát měnit sada, kterou aplikace nezná |
+| `BranchStatus` | Co GitHub říká o **slévatelnosti větve** (#465) — `mergeability` a `mergeState`, od #466 i `divergence`. **Dvě pole, ne jeden boolean**: první je o obsahu (jdou složit?), druhé o pravidlech repozitáře (pustí to ochrana?). Slít je do jednoho by znamenalo, že se v panelu nedá napsat proč. `Mergeability` má **tři** hodnoty — `unknown` je odpověď „ještě jsem nepočítal“, ne konflikt |
+| `BranchDivergence` | O kolik je hlava PR vedle základu (#466) — `ahead` a `behind`, **z pohledu hlavy**. Vlastní pole ve `BranchStatus`, protože `mergeStateStatus` na tuhle otázku neodpovídá (změřeno) |
+| `BranchStatusState` | `loading` / `loaded` / `failed` u toho stavu. Tentýž tvar a důvod jako `MetadataState`: **„nedá se mergnout“ a „nezjistil jsem, jestli to jde“ se nesmí slít** |
+| `BranchSyncPlan` | Co se stane při `Srovnat s main` (#466) — **snímek z dat pull requestu**, ne z toho, co leží v cache: větev, základ, `expectedRemoteSha` (jde do leasu) a počty. Je to první polovina prvního guardu tvrdé podmínky č. 1 |
+| `BranchPushPlan` | Co se má přetlačit (#466) — payload jediné cesty do remote. **Vlastní typ vedle `BranchSyncPlan`**, ne tentýž: plán je snímek toho, co se chystá, tohle vzniká **až po rebasu**. Kdyby to bylo pole v plánu, dal by se plán složit bez rebasu — a tím i pushnout něco, co nikdo nepřehrál |
+| `RebaseOutcome`, `RebasedBranch` | Jak dopadlo přehrání commitů (#466). **Konflikt je v návratové hodnotě, ne v `throw`**: vede jinam než „nedá se spustit `git`“. `aborted` říká, jestli se strom povedlo vrátit tam, kde byl |
+| `BranchSyncState`, `BranchSyncError` | Co se právě děje se srovnáním (#466) a proč se nepovedlo. **`unfinished` není `failed`** a **`leaseRejected` není `failed(text z gitu)`** — z každého plyne jiný další krok ([rozbor](#stavy-v-panelu--a-proč-je-rozdělaný-rebase-vlastní-případ)) |
 | `ReviewState` | Stav review v řádku seznamu — jedenáct případů, viz níž |
 | `InconclusiveReason` | Proč se z doběhlého review **čisto tvrdit nedá** (#383): `droppedFindings`, `noReport`, `unreadCode`. Nese i pořadí přednosti (`byPrecedence`) — v jednom záznamu se ty důvody umí sejít |
 | `ReviewVerdict` | Návrh, co s PR udělat: `approve` / `requestChanges`. Jako jediný **není `Codable`** — neukládá se, odvozuje se z uložených nálezů |
@@ -3065,7 +3072,7 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 | Typ | Co dělá |
 |---|---|
-| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest` a `trackedPullRequests`. Vše idempotentní |
+| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest`, `trackedPullRequests` a od #466 `rebase`, `discardRebase`, `rebaseInProgress`. Vše idempotentní. **Bez zápisu do remote** — pushuje jedině `BranchPushing` |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
 | `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache, a u běžící instance se odvozuje z `CFBundleName` (#228) |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
@@ -3095,6 +3102,13 @@ Věci, které se u toho nemají rozbít:
 - **Worktree je klíčovaný `(PR, headSha)`**, ne jen PR. Nálezy visí na `headSha`, takže dva
   běhy nad různými commity téhož PR si nesmí sáhnout na stejný strom. Naopak dva skilly
   nad **stejným** commitem strom sdílejí — proto je vytvoření idempotentní.
+
+  **Strom pro srovnání větve je z tohohle pravidla vědomá výjimka** (#466,
+  `CacheLayout.syncWorktree` → `<pr>-sync`): klíčuje se **jen pull requestem**, protože rebase
+  `HEAD` z `headSha` posune a rozdělaný rebase se v něm musí dát najít i po restartu aplikace, kdy
+  se hlava PR mezitím mohla pohnout. Je to zároveň důvod, proč to **není** strom od review — ten
+  drží kód, proti kterému platí nálezy a ve kterém stojí shell v zásuvce
+  ([rozbor](#rebase-je-lokální-práce-push-je-cesta-ven)).
 - **Zadání pro reviewera leží vedle stromu, ne v něm** (#120,
   `CacheLayout.intentFile(for:at:)` → `worktrees/<owner>/<repo>/<pr>-<sha>.md`). Uvnitř pracovní
   kopie by ho `git status` i `git diff` vypsaly jako součást změny, kterou má reviewer posoudit —
@@ -5778,7 +5792,7 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
   - **Konec logu má omezenou výšku a scrolluje se v něm.** Tři stovky řádků nasazených naplno odtlačí
     zbytek seznamu checků mimo obrazovku, tedy zrovna to, kvůli čemu se detail z `Přehledu` stěhoval.
     Zarovnání doleva u toho **potřebuje spočítanou šířku** (`availableWidth`, #220): `ScrollView`
-    obsah užší než viewport vystředí a uvnitž dvouosého scrollu se šířka vyjednat nedá, protože
+    obsah užší než viewport vystředí a uvnitř dvouosého scrollu se šířka vyjednat nedá, protože
     obsah dostane neomezenou nabídku. `Spacer` ani `frame(maxWidth:)` to nespraví — chyceno
     offscreen renderem.
   - **Log nejde přes obarvování po řádcích.** `SelectableCodeView` bez známého jazyka sází text
@@ -8466,20 +8480,54 @@ Dvě rozhodnutí, která nejsou zjevná:
   a hlavně **i tomu, kdo do repozitáře nemá zápis** — změřeno na `cli/cli#14278`, kde vyšel
   u `MERGEABLE`. Věta proto jmenuje **všechny tři** možnosti; vybrat jednu by byla určitá nepravda.
 
-**Počet commitů „o kolik je větev vzadu“ v #465 není**, ačkoli ho návrh kreslí. `mergeStateStatus`
-ho nedává a `compare` API by za jedno číslo stáhlo celý seznam souborů. Přijde s #466, kde bude po
-ruce klon v cache a spočítá se lokálně; do té doby stojí v řádku `za základem` bez čísla.
+**Počet commitů „o kolik je větev vzadu“ v #465 nebyl**, ačkoli ho návrh kreslí. `mergeStateStatus`
+ho nedává a REST `compare` by za jedno číslo stáhlo celý seznam souborů, takže v řádku stálo
+`za základem` bez čísla.
+
+**Od #466 tam číslo je** (`o 4 commity vzadu`) — a přišlo **z GraphQL `compare`, ne z klonu v cache**,
+jak tady do #465 stálo. Klon by ho dal až po `fetch`i, tedy až po práci na síti, kdežto panel ho
+potřebuje hned při otevření PR; cena je jeden dotaz na dvě pole
+([rozbor a měření](#poloha-větve-proti-základu-466--mergestatestatus-na-to-neodpovídá)).
+Ve `MergeObstacle.behind` číslo schválně **není**: stojí v řádku stavu nad výstrahou a věta ve
+výstraze odpovídá na jinou otázku (proč merge nejde). Dvakrát totéž číslo ve dvou po sobě jdoucích
+řádcích panelu vypadá jako dvě různé překážky.
+
+**Od #466 má sekce druhou akci** — `Srovnat s main`, s vlastní nabídkou (`Policy.SyncOffer`), vlastním
+výčtem překážek (`SyncObstacle`) a vlastním plánem. **Vlastní výčet, ne `MergeObstacle`**: rebase
+brání něco jiného než mergi — červený check mu nevadí, kdežto rozdělaný rebase v cache ho zastaví,
+aniž by mergi vadil ([rozbor](#zápis-do-remote--branchpushing-466)).
+
+Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.swift`):
+
+- **`Policy.branchSection(editing:detail:commits:status:checks:blockingFindings:sync:)`** — celá sekce,
+  nebo `nil` na cizím PR. Jediné místo, které skládá řádky stavu i obě nabídky.
+- **`Policy.mergeOffer(…)`**, **`Policy.mergePlan(of:commits:)`**, **`Policy.branchFacts(…)`** (#465).
+- **`Policy.branchSyncOffer(editing:plan:detail:status:sync:)`** — smí se srovnat, a když ne, proč.
+  **Pořadí důvodů je pořadí, ve kterém se s nimi dá něco dělat**: napřed to, co je mimo větev (brána,
+  stav PR, fork), pak to, co se právě děje, pak to, co ještě nevíme, a nakonec to, co plyne z polohy
+  větve. U zavřeného a mergnutého PR se výčet **ukončí** — nad mergnutým PR nemá smysl psát nic
+  dalšího.
+- **`Policy.branchSyncPlan(of:status:)`** — snímek toho, co se stane. **Bez jména větve, bez základu,
+  bez hlavy a bez divergence se nesestaví**: jméno a hlava jsou to, čím se guard v pusheru brání
+  omylu, a divergence to, co říká, kolik commitů se přehraje. Plán s kteroukoli chybějící hodnotou
+  by tvrdil něco, co nevíme.
+- **`Policy.branchSyncHelp(for:)`** — co se stane, **než se to stane**: kolik commitů se přehraje
+  a na jakou hlavu čeká lease. Druhá věta je o pojistce, ne o postupu — z „lease čeká hlavu X“ plyne,
+  co se stane, když se remote mezitím pohnul: nic.
+- **`Policy.primaryBranchAction(merge:)`** — která akce je hlavní.
 
 ## `GitHubGateway` (`App/GitHub/`)
 
-Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvacet jedna** metod
+Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvaadvacet** metod
 a **schválně žádnou, kterou by šlo něco odeslat** — read-only je vidět z typu. (Do #330 tu stálo
 „čtrnáct“, ačkoli výčet v tabulce měl patnáct položek; teď je s ním číslo srovnané. Tři přidala
-#392: labely a reviewery PR a nabídky lidí a týmů k nim. Jednu #420: hlavy víc PR jedním dotazem.)
+#392: labely a reviewery PR a nabídky lidí a týmů k nim. Jednu #420: hlavy víc PR jedním dotazem.
+Jednu #465: slévatelnost větve — **to číslo u ní zůstalo na dvacet jedné a srovnalo se až
+u #466**, kdy se tatáž metoda musela sáhnout znovu.)
 
 | Typ | Co dělá |
 |---|---|
-| `GitHubGateway` | Protokol (dvacet jedna metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchHeads(of:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)` |
+| `GitHubGateway` | Protokol (dvaadvacet metod): `checkAuth()`, `fetchViewer()`, `searchPullRequests(query:)`, `fetchDetail(id:)`, `fetchHeads(of:)`, `fetchChecks(id:)`, `fetchDiff(id:)`, `fetchDiff(repo:from:to:)`, `fetchDiff(repo:commit:)`, `fetchFile(id:path:)`, `fetchFile(repo:path:at:)`, `fetchConversation(id:)`, `fetchReleases()`, `fetchAnnotations(repo:checkRunID:)`, `fetchJobLogSize(repo:jobID:)`, `fetchJobLog(repo:jobID:)`, `fetchCommits(id:)`, `fetchMetadata(id:)`, `fetchRepositoryLabels(repo:)`, `fetchAssignableUsers(repo:)`, `fetchAssignableTeams(repo:)`, `fetchBranchStatus(id:base:head:)` |
 | `GhGateway` | Implementace nad `gh`; `checkAuth()` deleguje na `GhAuthCheck` z `Environment` |
 | `GitHubError` | Typované chyby + klasifikace výstupu `gh` jako **čistá funkce** |
 | `GhResponseHeaders` | Rozbor hlaviček z `gh api -i` a `ContentLengthReading` — **čistá funkce** (#292) |
@@ -8842,6 +8890,46 @@ volání za nic — a je to zrovna to volání, které si na straně GitHubu vy�
 poslední** v řadě za detailem, checky, commity a labely, ze stejného důvodu jako ostatní: každé je
 `gh` podproces a paralelní spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících.
 
+### Poloha větve proti základu (#466) — `mergeStateStatus` na to neodpovídá
+
+**Změřené, a je to ten nejdůležitější údaj celého #466**: větev **o commit pozadu** za základem
+vrátila `mergeStateStatus: CLEAN`, ne `BEHIND`. Ověřeno na `prism-review-sandbox#9`:
+
+```
+gh pr view 9 --json mergeable,mergeStateStatus   → {"mergeStateStatus":"CLEAN","mergeable":"MERGEABLE"}
+ref(refs/heads/master).compare(headRef: <hlava PR>) → {"aheadBy":1,"behindBy":1,"status":"DIVERGED"}
+```
+
+`BEHIND` GitHub vydá **jedině tam, kde to vyžaduje ochrana větve** (*Require branches to be up to
+date before merging*); jinde je „pozadu“ stav, o kterém `mergeStateStatus` mlčí, protože mergi
+nebrání. Sekce `Větev` ho přesto potřebuje na dvě věci: podle něj se rozhoduje, jestli má smysl
+nabízet `Srovnat s main`, a stojí v řádku stavu jako `o 4 commity vzadu` (návrh, sekce 36). **Kdyby
+se rozhodovalo podle `mergeStateStatus`, akce by se na většině repozitářů nenabídla nikdy.**
+
+Odpověď proto přináší **druhé volání** uvnitř téže metody — `BranchDivergenceQuery` nad GraphQL
+`Ref.compare(headRef:)`. Čtyři rozhodnutí u toho:
+
+- **Druhé volání, ne druhá metoda protokolu.** Sekce se ptá na **jednu** věc („co se dá s touhle
+  větví udělat“) a dvě metody by znamenaly dva stavy, dvě cache a dvě různá „nevím“ v jednom řádku
+  panelu. Selhání se přitom **nepolyká**: když neodpoví jedno z těch dvou volání, neodpoví celá
+  metoda — panel pak píše, že se stav větve nepodařilo zjistit, a nenabízí ani merge, ani srovnání.
+- **GraphQL `compare` na `Ref`, ne REST `GET /compare`.** REST k tomu jednomu číslu vrací i seznam
+  souborů (do 300 položek); GraphQL vydá jen `aheadBy` a `behindBy`. Do #465 stálo v dokumentaci, že
+  se to kvůli té ceně dělat nebude a počet přijde z klonu v cache — **to se u #466 změnilo a je to
+  vědomé**: klon by číslo dal až po `fetch`i, tedy až po práci na síti, kdežto panel ho potřebuje
+  hned při otevření PR. Cena je jeden GraphQL dotaz na tři pole.
+- **Hlava jde jako `oid`, ne jako jméno větve.** Tatáž úvaha jako u prvního guardu tvrdé podmínky
+  č. 1: jméno se dá nastavit na cokoli, kdežto `headRefOid` patří k pull requestu — a odpověď má
+  popisovat tu hlavu, kterou okno ukazuje, ne tu, na kterou se větev mezitím pohnula.
+- **Čísla jsou z pohledu hlavy, ne základu.** `behind` = kolik commitů základu ve větvi chybí,
+  `ahead` = kolik commitů větev nese navíc. Změřeno: base `master` proti commitu o jeden zpátky
+  vrátilo `aheadBy: 0, behindBy: 1`.
+
+**Neopakuje se, na rozdíl od slévatelnosti** — `compare` líné pole není, spočítá se hned. A **bez
+jména základu nebo bez hlavy se na ni neptáme vůbec**: prázdné hodnoty by z dotazu udělaly
+`ref(qualifiedName: "refs/heads/")`, tedy jistou chybu za jedno volání navíc, kdežto chybějící
+divergence je platná odpověď („nevím“), kterou panel umí ukázat.
+
 ## `ReviewPublisher` (`App/Publish/`)
 
 **Jediná cesta, kterou z aplikace něco odejde na GitHub.** Vznikl v #67 a nahradil tvrdou
@@ -9191,6 +9279,202 @@ Co je na téhle metodě jiné než na sedmi před ní:
   pokrývá i `Base branch was modified`, protože další krok je u obou tentýž.
 - **Co v zákazu zůstává**: approve mimo review, **zavření PR**, **milník** a `deleteLabel`.
   `SingleWayOutTests` je hlídají jmenovitě dál — jen bez `merge`.
+
+## Zápis do remote — `BranchPushing` (#466)
+
+**Druhá cesta ven, a je to nová třída, ne devátá metoda `ReviewPublishing`.** Do #466 aplikace do
+remote **nezapisovala vůbec**: `GitHubGateway` je read-only, `RepoCheckout` pracuje lokálně
+a `git push` je výslovně v `--disallowedTools` revieweera. Tvrdá podmínka č. 1 se tím mění a je to
+vědomé rozhodnutí, ne obejití — zdůvodnění a co se ruší je v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--zápis-do-remote-466).
+
+**Proč vlastní protokol, a ne metoda `ReviewPublishing`:** ten protokol mluví přes `gh` s GitHub
+API a bere adresy, ze kterých se pozná repo. Tohle mluví přes `git` se **serverem** a bere pracovní
+strom na disku. Slít je do jednoho by znamenalo, že se z výčtu metod přestane dát přečíst, co
+odchází kudy — a přesně to je jediné, co tu podmínku drží kontrolovatelnou.
+
+| Typ | Co dělá |
+|---|---|
+| `BranchPushing` | Protokol s **jedinou** metodou: `push(_ plan: BranchPushPlan) async throws -> String` |
+| `GitBranchPush` | Implementace nad `git`. Brána, hranice cache, pre-flight, `--force-with-lease` |
+| `BranchSyncSubmission` | Jediný volající. Pusher se skládá **až** v `push`, takže store ho nemá kde držet |
+| `BranchPushPlan` | Co se má přetlačit — větev, lease, nová hlava, strom v cache |
+| `GitCredentials` | Jak se `gitu` řekne, kde vzít přihlášení. Sdílené s `GitRepoCheckout` |
+
+**Grep, který to hlídá**, je tvarem ten od publisheru: `grep BranchPushing App/` má vypsat **tři
+soubory**, všechny v `App/Publish/`. Od #466 to tvrdí `SingleWayOutTests`, ne jen grep — a **čtyřmi
+tvrzeními, protože jedno by nestačilo**:
+
+1. **Tři soubory**, jmenovitě, všechny v `Publish/`.
+2. **Jedna metoda** protokolu (`push`), a jmenovitě zakázané `commit`, `deleteBranch`, `pushTag`,
+   `createBranch`.
+3. **Argument `"push"` se skládá jen v `GitBranchPush`.** Bez tohohle tvrzení by se dal push
+   poskládat v checkoutu nebo ve store, `BranchPushing` by v tom souboru nemusel stát vůbec — a bod
+   1 by prošel. (Ověřeno vloženou regresí: `["push", "--force"]` v `AppStore+BranchSync` test
+   položí.)
+4. **`Checkout/` ani `GitHub/` do remote nezapisují** — ta půlka podmínky, která se u #466
+   nezměnila.
+
+### Dva guardy, oba povinné a nezávislé
+
+**Ani jeden nenahrazuje druhý** — chrání proti dvěma různým omylům.
+
+**První: cílem smí být jedině hlava vlastního pull requestu, posuzováno proti datům PR.** Pre-flight
+v `GitBranchPush` si detail dotáhne přes read-only gateway a ověří **pět** věcí, protože každá
+znamená něco jiného, co se mezitím mohlo změnit:
+
+| Kontrola | Chyba | Dá se zkusit znovu? |
+|---|---|---|
+| autor je můj (`Policy.ownership`) | `notMine(author:)` | ne |
+| hlava není ve forku (`isCrossRepository`) | `foreignBranch` / `unknownBranchOrigin` | ne |
+| PR je otevřený nebo draft | `pullRequestNotOpen` | ne |
+| jméno větve pořád sedí | `branchChanged` | ano |
+| hlava pořád sedí | `headMoved` | ano |
+
+**Proti jménu větve se to neposuzuje, a to je celé jádro toho guardu**: jméno si nastaví kdokoli na
+cokoli, takže shoda jména by byla kontrola, která jenom **vypadá** jako kontrola. `headRefName`
+a `headRefOid` patří k pull requestu a k jeho autorovi.
+
+**`isCrossRepository == nil` je zákaz, ne povolení.** `origin` v klonu aplikace je **základní**
+repozitář, takže by push u PR z forku mířil jinam, než na co se člověk dívá — a větev toho jména by
+tam klidně mohl vyrobit. „Nevím“ je jediná odpověď, ze které neplyne, kam se píše. Pole je proto
+`Bool?` a starší uložená data dostanou `nil`.
+
+**Druhý: `--force-with-lease` s vypsanou hodnotou, nikdy holé `--force`.** Změřeno spuštěním na
+`prism-review-sandbox`, ne přečteno v dokumentaci `gitu` — tři pokusy z jednoho klonu, který je
+naklonovaný **přesně jako ten aplikace** (`--bare --filter=blob:none`, refspec
+`+refs/heads/*:refs/heads/*`):
+
+| Pokus | Výsledek | Hlava na remote po pokusu |
+|---|---|---|
+| lease čeká `65aff25`, na remote leží cizí `9bb4352` | `! [rejected] … (stale info)`, kód **1** | zůstala cizí `9bb4352` |
+| **holý** `--force-with-lease` (bez hodnoty) | `! [rejected] … (stale info)`, kód **1** | nezměněna |
+| lease čeká `9bb4352`, tedy to, co tam doopravdy je | `+ 9bb4352…2bf096a (forced update)`, kód 0 | přetlačeno |
+| **kontrast: holé `--force`** s toutéž zastaralou znalostí | `+ f3e243e…2bf096a (forced update)`, kód **0** | **cizí commit zahozen** |
+
+Z toho plynou dvě věci, a druhá není zjevná:
+
+- **Rozdíl mezi lease a `--force` je doložený, ne teoretický.** V téže situaci, ve které lease
+  odmítl a nechal cizí commit na místě, ho holé `--force` **zahodilo** — to je celý rozdíl mezi
+  „přetlačím svoji větev“ a „přetlačím, co tam kdo mezitím dal“.
+- **Vypsaná hodnota je nutnost, ne opatrnost.** Holý `--force-with-lease` si očekávanou hodnotu
+  bere z **remote-tracking refu**, a ten v klonu aplikace **neexistuje**: `git clone --bare`
+  `remote.origin.fetch` nenastavuje (ověřeno — `git config --get-all remote.origin.fetch` v tom
+  klonu nevypíše nic a `for-each-ref refs/remotes/` je prázdný) a fetch z #4 míří na
+  `+refs/heads/*:refs/heads/*`. Holý lease proto skončí `(stale info)` **vždycky**, tedy i tam, kde
+  se nic nepohnulo. Vypsaná hodnota je navíc ta jediná, která znamená „co jsem viděl v okně“ —
+  remote-tracking ref by šlo aktualizovat tím fetchem, který děláme před rebasem, takže by lease
+  chránil proti ničemu.
+
+**Odmítnutý lease je vlastní stav a vlastní věta** (`BranchSyncError.leaseRejected`), ne
+`failed(text z gitu)`. Znamená, že se remote pohnul, **nic se nepřepsalo** a dá se to zkusit znovu
+po obnovení dat — kdežto z odmítnutého přihlášení nebo cizího PR plyne, že druhý pokus dopadne
+stejně. Pozná se podle fráze **`stale info`**; ostatní selhání jdou přes tutéž klasifikaci jako
+u checkoutu (`CheckoutError(failure:)`), aby nevznikl druhý seznam frází, který se s prvním
+rozejde.
+
+### Rebase je lokální práce, push je cesta ven
+
+Dva kroky, dva moduly, a store je jediné místo, které je spojuje (`AppStore.syncBranch`) — protože
+jedině on ví, co je v panelu a jaký stav se má ukázat.
+
+**`RepoCheckout` dostal `rebase`, `discardRebase` a `rebaseInProgress` — a pořád nemá čím nic
+odeslat.** To je ta půlka tvrdé podmínky č. 1, která se nezměnila; hlídá to
+`SingleWayOutTests.keepsTheLocalModulesReadOnly`.
+
+- **Vlastní strom v cache** (`CacheLayout.syncWorktree`, `<pr>-sync`), **ne ten od review**, a jsou
+  pro to dva důvody. Rebase posune `HEAD` pryč z `headSha` — a strom review je právě ten kód, proti
+  kterému nálezy vznikly a ve kterém stojí shell v zásuvce (#459); přehrát ho pod nimi je přesně ta
+  tichá divnost, které se tvrdá podmínka č. 5 vyhýbá. Druhý důvod: tenhle strom **nesmí být
+  klíčovaný commitem**, aby se v něm rozdělaný rebase našel i po restartu aplikace, kdy se hlava PR
+  mezitím mohla pohnout. Ověřeno integračním testem (`RealBranchRebaseTests` —
+  `leavesTheReviewWorktreeAlone`).
+- **Úklid jde tou cestou, která existuje**: `CacheEviction.discardUnwantedWorktrees` čte číslo PR
+  z prefixu jména (`42-sync` → 42), takže strom odejde s tím, jak PR vypadne ze sledovaného
+  seznamu.
+- **Základ se dotahuje pokaždé** (`prepare`), i když se strom dá použít znovu: rebase nad
+  zastaralým `main`em by větev srovnal s něčím, co už není.
+- **Konflikt se pozná podle toho, že po pádu `rebase` běží dál** — ne podle textu chyby. `git`
+  skončí nenulově i tehdy, když je základ neznámý nebo je strom špinavý, a to jsou chyby, které se
+  mají hlásit, ne vydávat za konflikt. Hlídá to `RealBranchRebaseTests.unknownBaseIsAFailure`.
+- **Rozdělaný rebase leží u pracovního stromu uvnitř klonu**, ne ve stromě samotném — změřeno,
+  a proto se na jeho cestu ptá `git rev-parse --git-path rebase-merge`, ne `FileManager` na
+  `<strom>/.git/rebase-merge`. Hledají se **obě** jména (`rebase-merge` u výchozího backendu,
+  `rebase-apply` u `--apply`), protože zahodit se musí obojí.
+- **Rozdělaný rebase z minula se nepřepisuje.** Je to rozdělaná práce, o které rozhoduje člověk —
+  zahodit tlačítkem, nebo dokončit v terminálu. Druhý pokus ho tedy najde a **nechá ležet**.
+- **Počet přehraných commitů se čte po rebasu z výsledku** (`rev-list --count <base>..HEAD`)
+  a **nečte se `?? 0`**: nesrozumitelný výstup `gitu` je porucha, a nula by v panelu tvrdila
+  „nepřehrálo se nic“ nad větví, která se přehrála celá.
+
+**Hranice cache je tatáž jako jinde v repu** (`CacheFile.refusal`), ne opsaná potřetí — ta přísnější
+z obou podob: `contains` rozbaluje symlinky v rodičích, `isSymbolicLink` odchytí odkaz na poslední
+komponentě. Strom, který je odkazem ven, by `git` použil na svém cíli, tedy v uživatelově klonu.
+
+**A ta kontrola mluví o té cache, ve které rebase doopravdy proběhl.** Layout se proto pusherovi
+**předává** (`AppStore.cacheLayout` → `BranchSyncSubmission` → `GitBranchPush`) a v `GitBranchPush`
+nemá výchozí hodnotu, jako brána. Dvě výchozí hodnoty na dvou místech by v provozu vyšly stejně a
+v testu se rozešly — a ta kontrola by se pak nedala ověřit odjinud než z pusheru samotného.
+
+**`GitCredentials` je vlastní typ, protože přihlášení potřebují dva** — `GitRepoCheckout` (klon,
+fetch, worktree) a `GitBranchPush`. Opsat to podruhé by znamenalo dvě místa, na kterých se dá
+zapomenout na escapování cesty do shellového helperu, a jedno z nich by bylo zrovna to, které
+pushuje. Token aplikace nedrží (tvrdá podmínka č. 4): helper se předává jako `-c` u jednoho volání,
+ne přes `gh auth setup-git`, který zapisuje do **globálního** git configu uživatele.
+
+### Stavy v panelu — a proč je rozdělaný rebase vlastní případ
+
+`BranchSyncState` ve `AppStore.branchSyncStates`, tvarem `MetadataActionState` a ze stejného
+důvodu: akce se ovládá z panelu a musí přežít překliknutí tabu. **Pusher se ve store nedrží.**
+
+| Stav | Věta v panelu odpovídá na |
+|---|---|
+| `rebasing`, `pushing`, `discarding` | co se právě děje (`isBusy`, akce zašedlá) |
+| `pushed(replayed:)` | kolik commitů se přetlačilo |
+| `alreadyInSync` | **do remote se nesáhlo** |
+| `conflicted(files:)` | konflikt, rebase zahozený — v cache po něm nic není |
+| `unfinished(files:)` | konflikt a **v cache leží rozdělaný rebase**, jde zahodit |
+| `failed(BranchSyncError)` | co selhalo, **třinácti** různými větami |
+
+Tři rozhodnutí, která nejsou zjevná:
+
+- **`alreadyInSync` není `pushed(0)`.** „Nic se neposlalo“ a „poslalo se nula commitů“ jsou dvě
+  různé věty a jenom jedna z nich je pravda. Když rebase vydá tutéž hlavu, **nepushuje se vůbec** —
+  push, po kterém se na remote nic nezmění, je zbytečné sáhnutí na cizí server.
+- **`unfinished` není `failed`.** Selhání říká „nepovedlo se, nic tu nezůstalo“; tohle říká „v kopii
+  repa leží rozdělaná práce a jde zahodit“ — a to je jiný další krok. Tichý rozdělaný stav v cache
+  je horší než chyba, protože příští akce nad tím PR se nad ním zachová divně.
+- **Rozdělaný rebase se hledá při každém otevření vlastního PR** (`findUnfinishedRebase`), ne jen
+  po neúspěšném srovnání: aplikaci zabitou uprostřed rebase nemá kde nic zapsat, takže by o něm
+  okno po restartu mlčelo. **Existující stav se přitom nepřepisuje** — hláška z právě proběhlého
+  pokusu zná jména kolidujících souborů, kdežto tenhle nález ne, a prázdný seznam má proto vlastní,
+  hrubší větu.
+
+**Zrušení není „nic se nestalo“.** Zrušit jde i během pushe, takže se nedá tvrdit, že do remote nic
+neodešlo — tatáž úvaha jako u review a merge.
+
+### Co je na téhle akci jinak než na mergi (#465)
+
+- **Potvrzení nemá.** Přetlačuje se **vlastní** větev vlastního PR, `--force-with-lease` na pohnutý
+  remote nesáhne a co se stane, stojí v nápovědě nad tlačítkem (`Policy.branchSyncHelp` — kolik
+  commitů se přehraje **a** na jakou hlavu čeká lease). Je to tatáž třída jako label nebo komentář,
+  jedno pojmenované tlačítko, ne jako merge, který mění `main`.
+- **Záložka se po úspěchu nezavírá.** Pull request žije dál a člověk na něm obvykle pokračuje.
+  Detail a stav větve se ale **načtou znovu** (`branchWasPushed`), protože se hlava změnila — jinak
+  by v panelu stála stará hlava a akce by se nabízela podruhé nad tím, co už je hotové. Nálezy se
+  překlíčováním hlavy stanou zastaralými samy (tvrdá podmínka č. 5); je to tatáž cesta jako po
+  pushi z terminálu, jen se nečeká na tik pollingu.
+- **Draft se srovnat smí.** Rozpracovaný PR je zrovna ten, na kterém se pushuje nejvíc — zakázat na
+  něm rebase by tuhle akci vypnulo tam, kde je nejužitečnější. Merge naopak draft blokuje.
+- **Červený check srovnání nebrání.** Srovnat větev je zrovna to, co se s ním dělá.
+- **Obě tlačítka jsou v panelu vždycky, mění se jen zvýraznění** (`Policy.primaryBranchAction`):
+  `Mergnout…` když je zeleno, jinak `Srovnat s main`. Schovávat akci podle stavu by znamenalo, že se
+  tlačítko pod rukou stěhuje. Zvýrazní se přitom jen ta akce, do které se **dá kliknout** —
+  zvýrazněné zašedlé tlačítko by na sebe táhlo oči kvůli něčemu, co teď stejně nejde.
+
+**Konflikty tohle issue neřeší** — to je #467 a v návrhu je to sheet se session, která smí psát.
+Do té doby se nedokončený rebase **zahodí** a řekne se to; když se zahodit nepovede, zůstane
+v cache a nabídne se tlačítko `Zahodit rebase`.
 
 ## Vestavěný terminál (#459)
 

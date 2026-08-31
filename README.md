@@ -861,10 +861,14 @@ odesílání vypnuté, jsou akce zakázané a **důvod je napsaný pod sekcemi**
 a komentáře; s vypnutým odesíláním jsou akce zakázané s důvodem, což je jiný stav než cizí PR.
 
 **Pod nimi je od #465 sekce `Větev`** — stav vlastní větve a to, co se s ní dá udělat. Dva řádky
-říkají, **kam se to slévá** (`issue-465-… → main`, a jestli je větev srovnaná, za základem, nebo
-v konfliktu) a **co je na tom hotové** (`3 commity · 6 checků` / `zeleno`). Pod nimi je
-`Mergnout…` — se třemi tečkami, protože otevírá potvrzení; merge je nevratný a týká se `main`u,
-ne jen pull requestu.
+říkají, **kam se to slévá** (`issue-465-… → main`, a jestli je větev srovnaná, **o kolik commitů je
+vzadu**, nebo v konfliktu) a **co je na tom hotové** (`3 commity · 6 checků` / `zeleno`). Pod nimi
+jsou **dvě akce**: `Mergnout…` — se třemi tečkami, protože otevírá potvrzení; merge je nevratný
+a týká se `main`u, ne jen pull requestu — a od #466 `Srovnat s main`.
+
+**Obě akce jsou v panelu vždycky, mění se jen to, která z nich je zvýrazněná**: `Mergnout…` když je
+zeleno, jinak `Srovnat s main`. Srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat
+akci podle stavu by znamenalo, že se tlačítko pod rukou stěhuje.
 
 **Potvrzení vypisuje, co se stane**, jako u odeslání review: větev → base, metoda (`squash`,
 jiná se odsud neposílá — kdo chce jinou, jde na GitHub), kolik commitů se slévá do jednoho, jaký
@@ -899,6 +903,49 @@ check naopak nebrání.
 **Slévatelnost se u GitHubu počítá až na vyžádání**, takže se na ni aplikace ptá opakovaně (tři
 pokusy) — bez toho by tlačítko u čerstvého PR svítilo zašedle podle náhody. A ptá se **jen na
 vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „nevím“ navždycky.
+
+### `Srovnat s main` — jediné místo, odkud aplikace zapisuje do remote (#466)
+
+Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: **`main` mezitím ujel a větev
+se musí srovnat.** `Srovnat s main` udělá rebase **v kopii repa v cache aplikace** a přetlačí
+výsledek. Bez tří teček, protože nic neotevírá — a **co se stane, stojí v nápovědě pod kurzorem**:
+kolik commitů se přehraje a na jakou hlavu čeká pojistka.
+
+**Do #466 aplikace do remote nezapisovala vůbec.** Je to proto jediná akce svého druhu a drží ji
+dvě pojistky, které platí obě:
+
+- **Cílem smí být jedině hlava pull requestu, jehož autorem jsem já** — a posuzuje se to proti
+  **datům pull requestu**, ne proti jménu větve. Jméno se dá nastavit na cokoli, takže shoda jména
+  by byla kontrola, která jenom vypadá jako kontrola. Ověřuje se autor, stav PR, jméno větve, hlava
+  a **jestli hlava neleží ve forku** — u PR z forku by push mířil jinam, než na co se člověk dívá,
+  takže se odsud nedělá.
+- **`--force-with-lease`, nikdy holé `--force`.** Když se větev na GitHubu mezitím pohnula, push
+  **selže a nic se nepřepíše**; v panelu je pak věta, že se nic nestalo a že to jde zkusit znovu po
+  obnovení. Je to jiná věta než u ostatních selhání schválně: z odmítnuté pojistky plyne „zkus to
+  znovu“, z odmítnutého přihlášení něco jiného.
+
+**Nabídne se jen na vlastním otevřeném PR se zapnutým odesíláním a jen když je větev pozadu.**
+Rozpracovaný PR (draft) se srovnat smí — je to zrovna ten, na kterém se pushuje nejvíc — a **červený
+check srovnání nebrání**, protože srovnat větev je zrovna to, co se s ním dělá. Když je větev nad
+základem, tlačítko to řekne (`Větev je nad main — není co přehrávat`).
+
+**Když se hlava po rebasu nezmění, do remote se nesáhne** a v panelu stojí `Větev už nad základem
+byla, do remote se nesáhlo` — ne „přetlačeno 0 commitů“.
+
+**Konflikt je stav, ne chyba.** Nedokončený rebase se **zahodí** a v panelu je napsané, na kterých
+souborech uvázl (nejvýš tři jména) a že se má vyřešit v terminálu. Když se zahodit nepovede, **leží
+rozdělaný v kopii repa** a je to napsané taky — s tlačítkem **`Zahodit rebase`**, protože tichý
+rozdělaný stav v cache je horší než chyba: příští akce nad tím pull requestem by se nad ním
+zachovala divně. Hledá se přitom **při každém otevření vlastního PR**, ne jen po neúspěšném pokusu —
+aplikaci zabitou uprostřed rebase nemá kde nic zapsat.
+
+**Záložka zůstává otevřená**, na rozdíl od merge: pull request žije dál. Detail a stav větve se ale
+načtou znovu, protože se hlava změnila — nálezy proti staré hlavě se tím stanou zastaralými, stejně
+jako po pushi z terminálu.
+
+**Rebase běží ve vlastním pracovním stromě**, ne v tom, ve kterém běželo review — ten drží kód,
+proti kterému nálezy platí a ve kterém stojí terminál v zásuvce. Nikdy se nesahá na klony mimo cache
+aplikace.
 
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
 nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu
@@ -1934,7 +1981,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Prompt review** | Psaná **šablona** se zástupnými texty a **jádro**, které se připojí vždycky. Dělí se to proto, že věta o `ReportFindings` není styl, ale kontrakt: bez ní reviewer nálezy napíše textem a rozbitý sběr vypadá jako čisté review. Výchozí šablona je doslova ten text, co byl v kódu, prázdná znamená „ber výchozí“ a chybějící zástupný text je chyba u pole — neplatná šablona se neuloží a review se s ní nespustí. Globálně, ne per repo: prompt je „jak vypadá review u mě“, ne vlastnost repozitáře. |
 | **Časový limit běhu** | V nastavení, globálně i per repo, s rozsahem 5–60 minut a **bez volby „bez limitu“**: timeout je jediná pojistka proti session, která se zacyklí, kdežto denní strop a limit souběhu omezují jen počet běhů. Horní mez je vazba na účet (strop krát denní limit je nejhorší den), dolní proti tomu, aby limit dělal `timedOut` z review, které fungovalo. Putuje s požadavkem, takže rozjetý běh doběhne s tím svým; ke staršímu výsledku se číslo nepíše, protože uložený běh limit nenese. Sdílí ho kontrola nálezů — tatáž session, tentýž strom, tytéž peníze. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
-| **Odesílání na GitHub** | Platí pro review, odpovědi do vláken, komentáře pod PR, labely s reviewery a od #465 i **merge vlastního PR**. Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl — u merge navíc **hlava v payloadu**, na kterou GitHub odpoví `409` a nemergne nic. |
+| **Odesílání na GitHub** | Platí pro review, odpovědi do vláken, komentáře pod PR, labely s reviewery, od #465 **merge vlastního PR** a od #466 **přetlačení vlastní větve** (`git push --force-with-lease`, jediný zápis do remote v celé aplikaci). Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl — u merge navíc **hlava v payloadu**, na kterou GitHub odpoví `409` a nemergne nic. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
 | **Vzhled okna** | Tmavý, světlý, nebo podle systému — ovládá se **z levé lišty**, kde ho má návrh, a rozhoduje o tom jediný řádek (`NSApp.appearance`), ne větvení podle režimu. Barvy zůstávají v paletě, kde jednu hodnotu vybírá dynamická systémová barva podle vzhledu, ve kterém se zrovna kreslí; přepínač proto volí režim, ne paletu, a platí naráz pro všechna okna. Uplatňuje se na tom jednom místě, kterým konfigurace vchází do běžící aplikace — ve view by se minul okna, které zrovna není otevřené. |

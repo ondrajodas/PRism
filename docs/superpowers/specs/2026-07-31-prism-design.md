@@ -4077,3 +4077,82 @@ podmínka č. 1 se tím nemění**: hlášení myši se skládá jen z čísla t
 takže z něj text ani příkaz vzniknout nemůže. Je to doplněné do `CLAUDE.md` k té podmínce, ne
 schované sem — věta „cokoli jiného než tuhle jednu řádku napíše jedině člověk“ by po #478 nebyla
 pravdivá.
+
+### Záznam rozhodnutí — zápis do remote (#466)
+
+**Rozhodnutí:** aplikace smí `git push`, ale jedině přes **vlastní protokol** `BranchPushing`
+s jedinou metodou, jediným volajícím a dvěma nezávislými guardy. Tvrdá podmínka č. 1 se tím mění
+a je to zapsané u ní, ne schované sem.
+
+**Proč vůbec.** Srovnat vlastní větev, když ujel `main`, je druhá věc, kvůli které se od hotového
+review odchází do prohlížeče (tou první byl merge, #465). Bez konfliktu je to nudná operace: fetch,
+rebase, push. Přesně takové věci má dělat okno — a je to práce s **vlastní** frontou, tedy tatáž
+třída jako labely (#392) a merge (#465).
+
+**Proč vlastní protokol, a ne devátá metoda `ReviewPublishing`.** Zvažovalo se obojí. `ReviewPublishing`
+mluví přes `gh` s **GitHub API** a každá jeho metoda bere adresu, ze které se pozná repo. Push mluví
+přes `git` se **serverem** a bere pracovní strom na disku. Kdyby to byla devátá metoda, přestalo by
+se z toho výčtu dát přečíst, co odchází kudy — a přesně to je jediné, co tu podmínku drží
+kontrolovatelnou. Dva krátké výčty vedle sebe jsou čitelnější než jeden, ve kterém se míchají dva
+protokoly. **Cena:** druhý grep, druhá sada tvrzení v `SingleWayOutTests` a druhý řádek v tabulce
+modulů; přijato.
+
+**Proč dva guardy, a ne jeden.** Chrání proti dvěma **různým** omylům a ani jeden nenahrazuje druhý:
+
+- Guard na **autorství** brání tomu pushnout do cizí větve. Posuzuje se proti **datům pull requestu**,
+  ne proti jménu větve — jméno si nastaví kdokoli na cokoli, takže shoda jména by byla kontrola,
+  která jenom **vypadá** jako kontrola. **Zamítnuto** proto: porovnání `plan.branch` s jménem větve
+  bez dotazu na PR (levnější o jedno volání, ale nechrání proti ničemu).
+- Guard **`--force-with-lease`** brání tomu přepsat commit, který na větev mezitím přišel jinak než
+  odsud (druhý stroj, terminál, GitHub UI). Autorství o tom neříká nic — vlastní větev se dá přepsat
+  stejně dobře jako cizí.
+
+**`isCrossRepository == nil` blokuje, ne propouští.** `origin` v klonu aplikace je **základní**
+repozitář, takže u PR z forku by push mířil jinam, než na co se člověk dívá — a větev toho jména by
+tam klidně mohl vyrobit. „Nevím“ je jediná odpověď, ze které neplyne, kam se píše. **Zamítnuto:**
+`Bool` s výchozím `false` (starší uložená data by tichým `false` prošla).
+
+**Vypsaná hodnota leasu není opatrnost, ale nutnost — a je to změřené.** Holý `--force-with-lease` si
+očekávanou hodnotu bere z **remote-tracking refu**, který v klonu aplikace neexistuje: `git clone
+--bare` `remote.origin.fetch` nenastavuje. Ověřeno v klonu naklonovaném přesně jako ten aplikace —
+`git config --get-all remote.origin.fetch` nevypsal nic, `for-each-ref refs/remotes/` bylo prázdné
+a holý lease skončil `(stale info)` i tam, kde se nic nepohnulo. Vypsaná hodnota je navíc ta jediná,
+která znamená „co jsem viděl v okně“; remote-tracking ref by šlo aktualizovat tím fetchem, který
+děláme před rebasem, takže by lease chránil proti ničemu. Čísla jsou
+v [`architektura.md`](../../architektura.md#zápis-do-remote--branchpushing-466).
+
+**Rebase zůstal v `RepoCheckoutu`, push v `Publish/`.** Zvažovalo se dát obojí do pusheru (jedna
+akce, jedno místo). **Zamítnuto:** rebase je lokální práce v cache a `RepoCheckout` je právě ten
+modul, který lokální práci s `gitem` dělá; přesunout ho do `Publish/` by znamenalo, že se v cestě ven
+octne kus, který ven vůbec nechodí, a tvrzení „`Publish/` je to, co odesílá“ by zhrublo. Spojuje je
+`AppStore.syncBranch`, protože jedině store ví, co je v panelu a jaký stav se má ukázat.
+
+**Vlastní pracovní strom, ne ten od review.** Rebase posune `HEAD` pryč z `headSha`, a strom review
+je právě ten kód, proti kterému platí nálezy (tvrdá podmínka č. 5) a ve kterém stojí shell v zásuvce
+(#459). **Zamítnuto:** rebasovat ve stromě review (levnější o jeden checkout, ale nálezy i terminál
+by se octly nad jiným kódem, než na který ukazují). Klíčuje se **jen pull requestem**, na rozdíl od
+stromu review — jinak by se rozdělaný rebase po restartu aplikace nenašel.
+
+**Potvrzení tahle akce nemá, na rozdíl od merge.** Zvažovalo se dát jí sheet jako mergi. **Zamítnuto:**
+přetlačuje se **vlastní** větev vlastního PR, lease na pohnutý remote nesáhne, a co se stane, stojí
+v nápovědě nad tlačítkem (kolik commitů se přehraje a na jakou hlavu čeká lease). Merge má sheet
+proto, že mění `main`; tohle mění jednu větev, kterou vlastním. Je to tatáž třída jako label nebo
+komentář — jedno pojmenované tlačítko.
+
+**Poloha větve jde z GraphQL `compare`, ne z klonu v cache — a to je změna proti #465.** V `#465` se
+zapsalo, že počet „o kolik je větev vzadu“ přijde s #466 z klonu, protože REST `compare` by za jedno
+číslo stáhlo celý seznam souborů. **Změnilo se to:** klon by číslo dal až po `fetch`i, tedy až po
+práci na síti, kdežto panel ho potřebuje hned při otevření PR — a GraphQL `Ref.compare(headRef:)`
+vydá jen `aheadBy` a `behindBy`, takže původní důvod (cena) padl. Zapsané je to i tam, kde stálo
+původní tvrzení.
+
+**Co z toho zbývá jako pravidlo.** V `CLAUDE.md` je u tvrdé podmínky č. 1 vypsané, co **zůstává**
+(`ReviewPublishing` je jediná cesta na API, `GitHubGateway` a `RepoCheckout` bez zápisu do remote,
+tatáž brána, pusher není pole store, `Bash(git push:*)` zůstává session zakázaný) a co je **nově
+zakázané** v novém protokolu (`commit`, `deleteBranch`, `pushTag`, `createBranch`, push do základní
+větve). Hlídá to `SingleWayOutTests` čtyřmi tvrzeními, ne jedním — samotný počet souborů by push
+poskládaný jinde nechytl.
+
+**Konflikty tohle nezahrnuje.** Nedokončený rebase se zahodí a řekne se to; když se zahodit nepovede,
+zůstane v cache, je to vidět v panelu a jde zahodit tlačítkem. Session s `Write`/`Edit` je **#467**
+a je to **další** vědomá změna podmínek, ne tahle.

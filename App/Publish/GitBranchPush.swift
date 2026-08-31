@@ -110,9 +110,9 @@ struct GitBranchPush: BranchPushing {
 
     /// **První guard**: cílem smí být jedině hlava pull requestu, jehož autorem jsem já.
     ///
-    /// Ptá se **dat pull requestu**, ne jména větve — a ověřuje čtyři věci, protože každá z nich
-    /// znamená něco jiného, co se mezitím mohlo změnit: autora, repozitář hlavy (fork), stav PR
-    /// a jméno větve s hlavou. Čtení jde přes read-only gateway, takže se tím nic neotvírá.
+    /// Ptá se **dat pull requestu**, ne jména větve — a ověřuje pět věcí, protože každá z nich
+    /// znamená něco jiného, co se mezitím mohlo změnit: autora, repozitář hlavy (fork), stav PR,
+    /// jméno větve a hlavu. Čtení jde přes read-only gateway, takže se tím nic neotvírá.
     private func preflight(_ plan: BranchPushPlan) async throws {
         let pullRequest: PullRequest
         do {
