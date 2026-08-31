@@ -4662,3 +4662,28 @@ by pak tvrdil nepravdu.
 
 **Strop osm zůstal a je ověřený renderem po téhle změně**: u 50 commitů se vypíše osm, `a další 42`
 a výstraha o lease zůstává vidět bez rolování.
+
+### Záznam rozhodnutí — kolik commitů force push zahodí se nevypisuje (#466)
+
+**Rozhodnutí:** potvrzení force pushe vypisuje `přibude` a `z toho tvých`, ale **ne** třetí číslo
+„kolik commitů se na refu zahodí“. Měřením vyšlo (na `prism-review-sandbox#10`) jako **1** —
+`36fcfab`, vlastní commit před rebasem — takže existuje a dalo by se ukázat.
+
+**Proč se nevypisuje, a je to strukturální důvod, ne úspornost.** Lease je připnutý na
+`rebasedFrom`, takže push projde **jedině** tehdy, když na remote leží pořád ta hlava, ze které se
+rebasovalo. Zahazovaná množina je pak vždycky přesně `rebasedFrom` minus to, co je dosažitelné
+z nové hlavy — a to jsou **vlastní commity před rebasem**, nikdy cizí: commity z base zůstávají
+dosažitelné (rebasovalo se na jejich potomka) a cizí commit na tom refu být nemůže, protože kdyby
+tam byl, lease push **zastaví a nezahodí nic**.
+
+Z toho plyne obojí: číslo by bylo skoro vždycky rovné `z toho tvých` (u #10 1 = 1), tedy čtvrtá
+hodnota v pětiřádkovém výpisu, která duplikuje druhou — a popisovalo by ten **bezpečný** případ,
+kdežto ten nebezpečný už není popsaný, ale **zabráněný**, a to říká řádek `lease čeká` s výstrahou
+pod výpisem. „Přepíšeš 1 commit“ by u vlastního rebasu navíc vyděsilo kvůli něčemu, co ztráta není:
+obsah přežívá jako přerovnaná kopie, mění se jedině sha.
+
+**Zamítnutá varianta, ke které se dá vrátit:** doplnit do výstrahy o lease půlvětu ve smyslu
+*„tvoje verze před rebasem (`36fcfab`) z větve zmizí“*. Pojmenovala by, co se děje, aniž by to
+vypadalo jako ztráta práce — a je to lepší tvar než číslo, kdyby to jednou bylo potřeba. Neudělalo
+se to proto, že si to uživatel nevyžádal a výstraha už jednu větu o pojistce nese; druhá by ji
+zeslabila.
