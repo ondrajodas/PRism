@@ -476,7 +476,24 @@ struct BranchSyncOfferTests {
 
         let shown = Policy.pushedCommitList(commits).shown
 
-        #expect(shown.map(\.title) == (0..<8).map { "krok \($0)" })
+        #expect(shown.map(\.commit.title) == (0..<8).map { "krok \($0)" })
+    }
+
+    /// **Původ řádku vede po pořadí, a je to změřené:** po rebasu leží commity z base **dole**
+    /// a přehrané nad nimi, takže prvních `fromBase` řádků je z base. Bez tohohle tvrzení by se
+    /// značka `z base` mohla obrátit a nikdo by si toho nevšiml.
+    @Test("Z base jsou první řádky, přehrané ty nad nimi")
+    func marksTheCommitsThatCameFromTheBase() {
+        let commits = (0..<5).map { RebasedCommit(sha: "sha\($0)", title: "krok \($0)") }
+
+        // Dva z base, tři přehrané — tedy tvar, který vyšel z měření (#10: 1 z base, 1 přehraný).
+        let rows = Policy.pushedCommitList(commits, fromBase: 2).shown
+
+        #expect(rows.map(\.isFromBase) == [true, true, false, false, false])
+        // A když z base nepřišlo nic, není označený ani jeden.
+        #expect(Policy.pushedCommitList(commits, fromBase: 0).shown.allSatisfy { !$0.isFromBase })
+        // Identita řádku je sha commitu, ne pořadí — na tom stojí `ForEach` bez `enumerated()`.
+        #expect(rows.map(\.id) == commits.map(\.sha))
     }
 
     /// Krátká sha je **sedm znaků**, jako všude jinde v okně.

@@ -87,7 +87,8 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
                 worktree: URL(filePath: "/tmp/sync"),
                 headSha: "rebased",
                 rebasedFrom: "puvodni",
-                commits: []
+                arriving: [],
+                replayed: 0
             )
         )
     )

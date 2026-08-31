@@ -29,11 +29,15 @@ final class BranchPushSubmission: Identifiable {
     /// odejde, i kdyby mezitím dorazil polling s jinými čísly.
     let plan: BranchPushPlan
     /// Kolik commitů se přehrálo — do výpisu v potvrzení. Z výsledku rebase, ne z plánu.
-    /// Commity, které odejdou — **snímek z výsledku rebasu**, ne z aktuální větve. Vypisuje je
-    /// potvrzení; `replayed` je jejich počet, aby se dvě čísla o jedné věci nemohla rozejít.
-    let commits: [RebasedCommit]
+    /// Commity, které **na větvi přibudou** — snímek z výsledku rebasu. Vypisuje je potvrzení.
+    let arriving: [RebasedCommit]
 
-    var replayed: Int { commits.count }
+    /// Kolik z nich je **tvých přehraných**. Vlastní číslo, protože je to jiná veličina než délka
+    /// seznamu (změřeno 1 proti 2) — a v potvrzení se obojí jmenuje.
+    let replayed: Int
+
+    /// Kolik se pod ně dostalo z base. Dopočítané, ať nejde tvrdit dvě různá čísla.
+    var fromBase: Int { max(0, arriving.count - replayed) }
 
     private(set) var state: State
 
@@ -59,13 +63,15 @@ final class BranchPushSubmission: Identifiable {
     init(
         pullRequest: PullRequestSummary,
         plan: BranchPushPlan,
-        commits: [RebasedCommit],
+        arriving: [RebasedCommit],
+        replayed: Int,
         pusher: @escaping @MainActor () -> any BranchPushing,
         afterSuccess: @escaping @MainActor (String) async -> Void
     ) {
         self.pullRequest = pullRequest
         self.plan = plan
-        self.commits = commits
+        self.arriving = arriving
+        self.replayed = replayed
         self.pusher = pusher
         self.afterSuccess = afterSuccess
         state = .ready
@@ -76,7 +82,8 @@ final class BranchPushSubmission: Identifiable {
     convenience init(
         pullRequest: PullRequestSummary,
         plan: BranchPushPlan,
-        commits: [RebasedCommit],
+        arriving: [RebasedCommit],
+        replayed: Int,
         git: URL,
         gh: URL,
         layout: CacheLayout,
@@ -88,7 +95,8 @@ final class BranchPushSubmission: Identifiable {
         self.init(
             pullRequest: pullRequest,
             plan: plan,
-            commits: commits,
+            arriving: arriving,
+            replayed: replayed,
             // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako plán.
             pusher: {
                 GitBranchPush(

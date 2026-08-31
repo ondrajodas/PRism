@@ -4618,3 +4618,47 @@ větou. `try?` v té cestě není a `?? []` taky ne.
 **Sonda navíc**, protože dva stavy nejsou klikatelné: `BranchPushSheetRenderProbe` kreslí dlouhý
 titulek a padesát commitů. K padesáti přehraným commitům by bylo potřeba PR, které je o padesát
 commitů pozadu.
+
+### Záznam rozhodnutí — `Co odejde` počítá dvě různé věci a obě se jmenují (#466, ze screenshotu)
+
+**Nález uživatele ze sheetu na `#10`:** *„nemělo by odejít víc commitu? třeba které se pullnuly
+a nad které jsem rebasnul? a chtělo by to nadpisek k těm commitum.. a ten počet commitu asi taky
+není ok"*. Měl pravdu na obojím.
+
+**Změřeno v živém stromě po rebasu** (`#10`, hlava `36b62a4`, remote `36fcfab`):
+
+| Otázka | Rozsah | Kolik |
+|---|---|---|
+| kolik mých commitů se přehrálo | `master..HEAD` | **1** ← dřívější `commitů 1` |
+| co refu na remote chybí, tedy co push zanese | `36fcfab..HEAD` | **2** |
+| co force push na tom refu zahodí | `HEAD..36fcfab` | **1** (můj commit před rebasem) |
+
+`commitů 1` bylo **pravdivé, ale odpovídalo na jinou otázku**, než jakou klade nadpis `Co odejde`:
+rebase dostal do historie větve i ten commit z base, kvůli kterému byla pozadu.
+
+**Rozhodnutí:** vypisují se commity, které **na větvi budou** (`rebasedFrom..HEAD`), a čísla jsou
+**dvě, obě pojmenovaná** — `přibude` (co ref získá) a `z toho tvých` (kolik z nich je přehraných).
+V seznamu má commit z base značku `z base`. Nadpisek nad výpisem přibyl: bez něj se čte jako
+pokračování řádků nad ním.
+
+**Nadpis mluví o větvi, ne o nahrávání**, a je to ta poctivá formulace: objekty commitu z base na
+remote **už jsou** (leží v base) a `--force-with-lease` přepisuje jedině **ref větve**.
+
+**Zamítnuto: vypsat jen přehrané.** Otázka před force pushem je „jak bude ta větev vypadat“, a
+commit z base člověk nemusel nikdy vidět, když přišel od někoho jiného. Zamítnuto i **jedno číslo**:
+tohle je přesně ten případ, kdy dvě veličiny pod jedním jménem zmatou — a je to tatáž úvaha, jakou
+`replayed` už jednou vedla (tam se dvě čísla o **téže** věci slila do jednoho; tady jsou to dvě
+**různé** věci, takže se naopak rozdělují a pojmenují).
+
+**`replayed` proto přestalo být `commits.count`** a je zpátky vlastní číslo z `rev-list --count`.
+Není to návrat toho, co #466 rušilo: tehdy šlo o dvě čísla popisující totéž, teď o dvě různé
+veličiny, které nesmí splynout.
+
+**Původ řádku vede po pořadí, ne druhým dotazem do `gitu`** (`Policy.pushedCommitList`, řádky nese
+`PushedCommitRow` s identitou v `sha`): po rebasu leží commity z base **dole** a přehrané nad nimi,
+takže prvních `fromBase` řádků je z base. Druhý dotaz by byl druhá pravda o tomtéž. Značka je
+**na řádku, ne skupinový nadpis** — strop výpisu umí prořízt blok z base v půlce a skupinový nadpis
+by pak tvrdil nepravdu.
+
+**Strop osm zůstal a je ověřený renderem po téhle změně**: u 50 commitů se vypíše osm, `a další 42`
+a výstraha o lease zůstává vidět bez rolování.

@@ -248,13 +248,22 @@ extension Policy {
     /// to, co má být přečtené. Celý seznam se dá přečíst v terminálu nebo po pushi na GitHubu.
     static func pushedCommitList(
         _ commits: [RebasedCommit],
+        fromBase: Int = 0,
         limit: Int = pushedCommitLimit
-    ) -> (shown: [RebasedCommit], hidden: Int) {
-        guard commits.count > limit else { return (commits, 0) }
-        return (Array(commits.prefix(limit)), commits.count - limit)
+    ) -> (shown: [PushedCommitRow], hidden: Int) {
+        // **Původ se nese v řádku, ne dopočítává ve view.** Po rebasu leží commity z base **dole**
+        // a přehrané nad nimi, takže prvních `fromBase` je z base — ale to je rozhodnutí, ne kresba,
+        // a `ForEach` má iterovat pole s **uloženou identitou**, ne tuply z `enumerated()` (#361).
+        let rows = commits.enumerated().map {
+            PushedCommitRow(commit: $0.element, isFromBase: $0.offset < fromBase)
+        }
+        guard rows.count > limit else { return (rows, 0) }
+        return (Array(rows.prefix(limit)), rows.count - limit)
     }
 
     static let pushedCommitLimit = 8
+
+
 
     /// Kolikrát se po **vlastním force pushi** přeptat, dokud pull request nehlásí hlavu, kterou
     /// jsme právě pushnuli — a jak dlouho mezi tím čekat.

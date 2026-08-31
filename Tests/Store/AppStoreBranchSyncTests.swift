@@ -97,7 +97,8 @@ struct AppStoreBranchSyncTests {
             worktree: try syncWorktree(),
             headSha: headSha,
             rebasedFrom: from,
-            commits: Self.commits(replayed)
+            arriving: Self.commits(replayed),
+            replayed: replayed
         )
     }
 

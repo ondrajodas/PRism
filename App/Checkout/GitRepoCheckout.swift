@@ -146,11 +146,19 @@ struct GitRepoCheckout: RepoCheckout {
         // Počet se dopočítá z výsledku, ne z paměti. Když se nedá přečíst, je to `.empty`, ne
         // `.rebased` s nulou: nabídnout přetlačení a u toho tvrdit „nula commitů“ je horší než
         // nechat člověka spustit rebase znovu.
-        guard let commits = try? await commits(in: path, above: "refs/heads/\(base)") else {
-            return .empty
-        }
+        // **Dva rozsahy, dvě různé veličiny** (změřeno 1 proti 2): co refu na remote chybí
+        // (`headSha..HEAD`, tedy co push zanese) a kolik z toho je přehraných (`base..HEAD`).
+        guard let arriving = try? await commits(in: path, from: headSha),
+            let replayed = try? await commitCount(in: path, from: "refs/heads/\(base)")
+        else { return .empty }
         return .rebased(
-            RebasedBranch(worktree: path, headSha: head, rebasedFrom: headSha, commits: commits)
+            RebasedBranch(
+                worktree: path,
+                headSha: head,
+                rebasedFrom: headSha,
+                arriving: arriving,
+                replayed: replayed
+            )
         )
     }
 
@@ -187,14 +195,30 @@ struct GitRepoCheckout: RepoCheckout {
                 worktree: worktree,
                 headSha: head,
                 rebasedFrom: headSha,
-                commits: try await commits(in: worktree, above: base)
+                arriving: try await commits(in: worktree, from: headSha),
+                replayed: try await commitCount(in: worktree, from: base)
             )
         )
     }
 
-    /// Které commity leží nad základem. **Nečte se `?? []`**: nesrozumitelný výstup `gitu` je
-    /// porucha, a prázdný seznam by v potvrzení tvrdil „nic neodejde“ nad větví, která se přehrála
-    /// celá — u nevratné akce ten nejhorší možný omyl.
+    /// Kolik commitů leží nad daným bodem. **Nečte se `?? 0`**: nesrozumitelný výstup `gitu` je
+    /// porucha, a nula by tvrdila „nepřehrálo se nic“ nad větví, která se přehrála celá.
+    private func commitCount(in worktree: URL, from start: String) async throws -> Int {
+        let output = try await run([
+            "-C", worktree.path(percentEncoded: false), "rev-list", "--count", "\(start)..HEAD",
+        ])
+        guard let count = Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw CheckoutError.gitFailed(
+                exitCode: 0,
+                message: "Počet přehraných commitů nejde přečíst z „\(output)“."
+            )
+        }
+        return count
+    }
+
+    /// Které commity **na větvi přibudou** a kolik z nich je přehraných. **Nečte se `?? []`**:
+    /// nesrozumitelný výstup `gitu` je porucha, a prázdný seznam by v potvrzení tvrdil „nic
+    /// neodejde“ nad větví, která se přehrála celá — u nevratné akce ten nejhorší možný omyl.
     /// Commity nad základem — sha a první řádek zprávy, **od nejstaršího**.
     ///
     /// **Jedno volání místo dvou.** Do #466 tu stál `rev-list --count`, tedy jen počet; počet se
@@ -204,10 +228,10 @@ struct GitRepoCheckout: RepoCheckout {
     /// `git` v `%s` nevydá, kdežto mezera je v titulcích samozřejmě. Řádky dělí `TextLines`
     /// (pravidlo z `CLAUDE.md`: `split(separator: "\n")` na `CRLF` nerozdělí vůbec) a titulek se
     /// sráží `String.singleLine`, protože je to cizí text.
-    private func commits(in worktree: URL, above base: String) async throws -> [RebasedCommit] {
+    private func commits(in worktree: URL, from start: String) async throws -> [RebasedCommit] {
         let output = try await run([
             "-C", worktree.path(percentEncoded: false),
-            "log", "--reverse", "--format=%H%x09%s", "\(base)..HEAD",
+            "log", "--reverse", "--format=%H%x09%s", "\(start)..HEAD",
         ])
         var commits: [RebasedCommit] = []
         for line in TextLines.nonEmpty(output) {

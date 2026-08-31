@@ -9776,6 +9776,24 @@ lepší než dovysvětlovat větou: prázdný výpis v potvrzení o pushi vypad�
 dlouhý titulek a padesát commitů. K padesáti přehraným commitům by bylo potřeba PR, které je
 o padesát commitů pozadu.
 
+**A vypisuje se `rebasedFrom..HEAD`, ne `base..HEAD`** — změřeno na `prism-review-sandbox#10`, že
+to jsou dvě různá čísla:
+
+| Otázka | Rozsah | Kolik |
+|---|---|---|
+| kolik mých commitů se přehrálo (`replayed`) | `base..HEAD` | 1 |
+| co refu na remote chybí, tedy co push zanese (`arriving`) | `rebasedFrom..HEAD` | 2 |
+| co force push na tom refu zahodí | `HEAD..rebasedFrom` | 1 |
+
+Rebase totiž dostane do historie větve i ten commit z base, kvůli kterému byla pozadu. Sheet proto
+nese **dvě pojmenovaná čísla** (`přibude`, `z toho tvých`), nadpisek nad výpisem a u commitů z base
+značku. `RebasedBranch.replayed` je od té doby **vlastní číslo**, ne `arriving.count`: nejsou to dvě
+čísla o téže věci, ale dvě různé veličiny.
+
+**Původ řádku vede po pořadí** (`Policy.pushedCommitList` → `PushedCommitRow`), ne druhým dotazem do
+`gitu`: po rebasu jsou commity z base dole a přehrané nad nimi, takže prvních `fromBase` řádků je
+z base. Značka je **na řádku**, ne skupinový nadpis — strop umí prořízt blok z base v půlce.
+
 ## Vestavěný terminál (#459)
 
 `App/Terminal/` — shell v zásuvce pod diffem, návrh sekce 35. Jsou to tři soubory a každý drží

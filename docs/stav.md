@@ -5752,6 +5752,17 @@ a `Zahodit rebase`; `Zavřít` u ní schválně **není**), hledá se v cache p�
 PR (`syncWorktreeState`) a **druhý rebase se nad ním nenabízí** — přehrát commity znovu nad
 výsledkem, který neodešel, by tu práci zahodilo potichu.
 
+### `Co odejde` počítá dvě různé věci a obě se jmenují
+
+**Pátý nález z proklikání**, ze screenshotu sheetu. Změřeno na `#10`: přehrál se **jeden** vlastní
+commit, ale refu na remote chyběly **dva** — rebase dostal do historie větve i ten commit z base,
+kvůli kterému byla pozadu. `commitů 1` bylo pravdivé, ale odpovídalo na jinou otázku, než jakou
+klade nadpis.
+
+Vypisuje se proto `rebasedFrom..HEAD` (co na větvi bude), čísla jsou dvě a pojmenovaná (`přibude`,
+`z toho tvých`) a commit z base má v seznamu značku. Nad výpisem přibyl nadpisek. `replayed` je
+zpátky vlastní číslo — nejsou to dvě čísla o téže věci, ale dvě různé veličiny.
+
 ### Potvrzení force pushe vypisuje commity
 
 **Čtvrtý nález z proklikání**: `Co odejde` říkalo *kolik* commitů, ne *které* — a potvrzení

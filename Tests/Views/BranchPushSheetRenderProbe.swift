@@ -32,18 +32,21 @@ struct BranchPushSheetRenderProbe {
     @Test("Vyrendrovat potvrzení s dlouhým titulkem a s mnoha commity")
     func rendersTheHardCases() throws {
         let directory = Self.outputDirectory
-        let scenes: [(String, [RebasedCommit])] = [
-            ("bezne", Self.ordinary),
-            ("dlouhy-titulek", Self.longTitles),
-            ("hodne-commitu", Self.many),
-            ("jeden", [Self.ordinary[0]]),
+        // `replayed` je počet **tvých** přehraných; zbytek seznamu je z base a v kresbě dostane
+        // značku. Scéna `z-base` je ta, kvůli které tenhle rozdíl vznikl (změřeno 1 proti 2).
+        let scenes: [(String, [RebasedCommit], Int)] = [
+            ("bezne", Self.ordinary, 3),
+            ("z-base", Self.ordinary, 1),
+            ("dlouhy-titulek", Self.longTitles, 2),
+            ("hodne-commitu", Self.many, 44),
+            ("jeden", [Self.ordinary[0]], 1),
         ]
-        for (name, commits) in scenes {
+        for (name, commits, replayed) in scenes {
             for scheme in [ColorScheme.light, .dark] {
                 let file = "push-\(name)-\(scheme == .dark ? "tmavy" : "svetly").png"
                 let url = directory.appending(path: file)
-                try render(commits, scheme: scheme, to: url)
-                print("SONDA \(url.path) — \(commits.count) commitů")
+                try render(commits, replayed: replayed, scheme: scheme, to: url)
+                print("SONDA \(url.path) — \(commits.count) na větvi, \(replayed) tvých")
             }
         }
     }
@@ -53,13 +56,19 @@ struct BranchPushSheetRenderProbe {
     /// vysoký ten obsah **je**, ne jak se ořízne.
     private static let size = CGSize(width: 460, height: 620)
 
-    private func render(_ commits: [RebasedCommit], scheme: ColorScheme, to url: URL) throws {
+    private func render(
+        _ commits: [RebasedCommit],
+        replayed: Int,
+        scheme: ColorScheme,
+        to url: URL
+    ) throws {
         // **Pusher, který nikdy nespustí nic** — sonda jen kreslí. Bere se ten init, který cestu
         // ven dostane jako uzávěr, takže se sem `gh` ani brána nemusí tahat.
         let submission = BranchPushSubmission(
             pullRequest: Self.summary,
             plan: Self.plan,
-            commits: commits,
+            arriving: commits,
+            replayed: replayed,
             pusher: { NeverPusher() },
             afterSuccess: { _ in }
         )

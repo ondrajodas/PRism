@@ -1639,6 +1639,9 @@ footer.end {
 .cm-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
 .cm-sha { flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .cm-t { color: var(--ink); line-height: 1.45; }
+/* Odkud se commit na větvi vzal. Vpravo a tiše — je to vysvětlení, ne obsah řádku. `flex: none`,
+   ať to titulek nezmáčkne. */
+.cm-from { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-3); }
 /* `a další N` je tatáž úmluva jako `+2` u labelů: co se nevešlo, se **počítá**. */
 .cm-more { font-size: 11.5px; color: var(--ink-3); }
 
@@ -11956,10 +11959,26 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       historii větve nepřepíše.
     </p>
     <p class="muted">
-      <b>Vypsané jsou i commity, které odejdou</b> — sha po rebasu a první řádek zprávy.
-      <em>Co odejde</em> výš říká <em>kolik</em>; potvrzení u nevratné akce má být místo, kde se
-      přečte <b>celý</b> payload, a u mergu to tak je. Sha je vidět schválně: dá se po pushi
-      porovnat s tím, co je na GitHubu, kdežto titulek se přerovnáním nezmění a nic nedokazuje.
+      <b>Vypsané jsou i commity, které na větvi budou</b> — sha po rebasu a první řádek zprávy.
+      Potvrzení u nevratné akce má být místo, kde se přečte <b>celý</b> payload, a u mergu to tak je.
+      Sha je vidět schválně: dá se po pushi porovnat s tím, co je na GitHubu, kdežto titulek se
+      přerovnáním nezmění a nic nedokazuje. <b>Nadpisek nad seznamem je podmínka</b> — bez něj se
+      výpis čte jako pokračování řádků nad ním a není poznat, co to je.
+    </p>
+    <p class="muted">
+      <b>Dvě čísla, obě pojmenovaná, a je to změřené.</b> Na <code>prism-review-sandbox#10</code> se
+      přehrál <b>jeden</b> vlastní commit, ale refu na remote chyběly <b>dva</b>: ten přehraný a k němu
+      commit z base, kvůli kterému byla větev pozadu — rebase ho dostal do historie větve. Jeden
+      nepojmenovaný <em>commitů 1</em> tedy odpovídal na jinou otázku, než jakou klade nadpis, a přesně
+      na tom se dá zaseknout. Proto <code>přibude</code> (co ref získá) a <code>z toho tvých</code>
+      (kolik z nich je přehraných), a v seznamu značka <code>z base</code> u těch, které přišly zespodu.
+    </p>
+    <p class="muted">
+      <b>Nadpis mluví o větvi, ne o nahrávání.</b> Objekty commitu z base na remote <b>už jsou</b>
+      (leží v base) a <code>--force-with-lease</code> přepisuje jedině <b>ref větve</b> — „odejde“ by
+      u něj bylo nepřesné, kdežto „na větvi bude“ platí. Zvažovalo se vypsat jen přehrané: zamítnuto,
+      protože otázka před force pushem je „jak bude ta větev vypadat“, a commit z base člověk nemusel
+      nikdy vidět, když přišel od někoho jiného.
     </p>
     <p class="muted">
       <b>Strop je osm a zbytek se počítá</b> (<code>a další N</code>), ne ořezává potichu — tatáž
@@ -12006,7 +12025,8 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
             <span class="cap">Co odejde</span>
             <div class="rv-list">
               <div class="rv-row"><span class="who">větev</span><span class="ans">chore/deps</span></div>
-              <div class="rv-row"><span class="who">commitů</span><span class="ans">4</span></div>
+              <div class="rv-row"><span class="who">přibude</span><span class="ans">5</span></div>
+              <div class="rv-row"><span class="who">z toho tvých</span><span class="ans">4</span></div>
               <div class="rv-row"><span class="who">nová hlava</span><span class="ans">2bf096a</span></div>
               <div class="rv-row"><span class="who">lease čeká</span><span class="ans">9bb4352</span></div>
             </div>
@@ -12017,7 +12037,11 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
                hranu a z potvrzení zbude seznam commitů. Titulek se **zalamuje** — sheet je široký
                jako podlaha, takže rozšířit ho kvůli cizímu textu nejde. -->
           <div class="pl-sec">
+            <span class="cap">Commity, které na větvi budou</span>
             <div class="cm-list">
+              <!-- Commit z base: rebase ho dostal **pod** přehrané, takže na větvi bude — ale
+                   jeho objekty na remote už leží (v base). Značka to rozlišuje. -->
+              <div class="cm-row"><span class="cm-sha">7f1e0aa</span><span class="cm-t">chore: move master ahead</span><span class="cm-from">z base</span></div>
               <div class="cm-row"><span class="cm-sha">a1b2c3d</span><span class="cm-t">chore: bump symfony to 8.0</span></div>
               <div class="cm-row"><span class="cm-sha">b2c3d4e</span><span class="cm-t">fix: nezahazovat token při souběžném refreshi</span></div>
               <div class="cm-row"><span class="cm-sha">c3d4e5f</span><span class="cm-t">refactor: rozdělit BranchAwareClient na dvě třídy a přesunout cachování secretů do vlastní vrstvy</span></div>

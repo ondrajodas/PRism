@@ -71,20 +71,33 @@ struct RebasedBranch: Hashable, Sendable {
     /// by ten nový commit; s touhle hodnotou narazí pre-flight na `headMoved` a nepřetlačí nic.
     /// Rebase se pak musí spustit znovu.
     let rebasedFrom: String
-    /// Commity, které se přehrály — **v pořadí od nejstaršího**, tedy tak, jak leží na větvi.
+    /// Commity, které **na větvi přibudou** — v pořadí od nejstaršího, tedy jak na ní budou ležet.
     ///
-    /// **Přečtené po rebasu z výsledku**, ne převzaté z plánu ani z toho, co bylo na větvi předtím:
-    /// rebase commitům mění sha, takže seznam „co odejde“ musí být ten z pracovního stromu.
+    /// **Je to `rebasedFrom..HEAD`, ne `base..HEAD`, a je to změřené.** Na
+    /// `prism-review-sandbox#10` se přehrál **jeden** vlastní commit, ale refu na remote chyběly
+    /// **dva**: ten přehraný a k tomu commit z base, kvůli kterému byla větev pozadu — rebase ho
+    /// dostal do historie větve. Do #466 se tady vypisovalo `base..HEAD`, takže sheet pod nadpisem
+    /// `Co odejde` tvrdil jeden commit tam, kde push zanese dva.
+    ///
+    /// **Nadpis proto mluví o větvi, ne o nahrávání.** Objekty commitu z base na remote **už jsou**
+    /// (leží v base), force push přepisuje jedině **ref větve** — takže „odejde“ by u něj bylo
+    /// nepřesné, kdežto „na větvi přibude“ platí.
     ///
     /// **Když se log přečíst nepodaří, `RebasedBranch` nevznikne vůbec** — `commits(in:above:)`
-    /// hodí chybu a `syncWorktreeState` odpoví `.empty`. Je to schválně a je to tatáž úvaha, jakou
-    /// tu měl počet: nabídnout force push a u toho vypsat prázdný seznam by vypadalo jako „nic
-    /// neodejde“, což je ten nejhorší možný omyl u nevratné akce.
-    let commits: [RebasedCommit]
+    /// hodí chybu a `syncWorktreeState` odpoví `.empty`. Je to schválně: nabídnout force push
+    /// a u toho vypsat prázdný seznam by vypadalo jako „nic neodejde“, což je ten nejhorší možný
+    /// omyl u nevratné akce.
+    let arriving: [RebasedCommit]
 
-    /// Kolik commitů se přehrálo. **Z délky seznamu**, ne z vlastního dotazu — dvě čísla o jedné
-    /// věci se umí rozejít, a to zrovna mezi hláškou v panelu a výpisem v potvrzení.
-    var replayed: Int { commits.count }
+    /// Kolik z nich je **tvých přehraných** (`base..HEAD`).
+    ///
+    /// **Vlastní číslo, ne délka seznamu**, a je to změna proti #466: jsou to doopravdy **dvě různé
+    /// veličiny** (změřeno 1 proti 2), takže je nemá slévat jedno číslo — má je rozlišit jméno.
+    /// Panel mluví dál o přehraných commitech, potvrzení vypisuje obojí pojmenované.
+    let replayed: Int
+
+    /// Kolik commitů z base se pod ně dostalo — dopočítané, aby nešlo tvrdit dvě různá čísla.
+    var fromBase: Int { max(0, arriving.count - replayed) }
 }
 
 /// Jeden přehraný commit — to, co se vypisuje v potvrzení force pushe (#466, z proklikání).
@@ -97,6 +110,19 @@ struct RebasedCommit: Hashable, Sendable {
     let title: String
 
     var shortSha: String { String(sha.prefix(7)) }
+}
+
+/// Řádek výpisu v potvrzení force pushe — commit a **odkud se na větvi vzal**.
+///
+/// **Vlastní typ, ne tuple v `ForEach`i** (#361): identita se má brát z uloženého pole, ne přes
+/// `Array(…enumerated())`, kde se čte skrz tuple. `id` je `sha`, protože ta je v jednom rozsahu
+/// jednoznačná.
+struct PushedCommitRow: Hashable, Sendable, Identifiable {
+    let commit: RebasedCommit
+    /// Přišel rebasem z base (dole v historii), nebo je to tvůj přehraný (nad nimi)?
+    let isFromBase: Bool
+
+    var id: String { commit.sha }
 }
 
 /// Co leží ve stromě pro srovnání větve (#466).

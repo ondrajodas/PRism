@@ -103,13 +103,21 @@ struct RealBranchRebaseTests {
             Issue.record("čekal se rebase, přišlo \(outcome)")
             return
         }
-        #expect(rebased.commits.map(\.title) == ["feat: první krok", "fix: druhý krok"])
+        // **`arriving` je to, co refu na remote chybí — tedy i commit z base.** Tohle je ta vada
+        // z proklikání: `replayed` říká „přehrály se dva“, ale na větev přijdou **tři**, protože
+        // rebase pod ně dostal i ten commit, kvůli kterému byla pozadu. Změřeno na
+        // `prism-review-sandbox#10` (1 proti 2), tady se to reprodukuje naostro.
+        #expect(rebased.arriving.map(\.title) == ["na mainu", "feat: první krok", "fix: druhý krok"])
         #expect(rebased.replayed == 2)
+        #expect(rebased.fromBase == 1)
         // **Nové sha**: rebase je přepsal, takže se ani jedno nesmí rovnat tomu, co bylo na větvi.
-        #expect(!rebased.commits.map(\.sha).contains(firstOnBranch))
-        #expect(!rebased.commits.map(\.sha).contains(feature))
+        #expect(!rebased.arriving.map(\.sha).contains(firstOnBranch))
+        #expect(!rebased.arriving.map(\.sha).contains(feature))
         // A posledním z nich je hlava po rebasu.
-        #expect(rebased.commits.last?.sha == rebased.headSha)
+        #expect(rebased.arriving.last?.sha == rebased.headSha)
+        // **Commit z base je ten první a je to doopravdy ten z `mainu`** — ne přepsaná kopie:
+        // rebase ho nepřehrává, jen se pod přehrané dostane.
+        #expect(rebased.arriving.first?.title == "na mainu")
     }
 
     /// **Přerovnaná větev, která neodešla, se v cache najde** (#466) — a je to ta půlka, která

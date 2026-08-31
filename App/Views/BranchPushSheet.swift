@@ -88,7 +88,15 @@ struct BranchPushSheet: View {
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 7) {
                     row("větev", plan.branch)
-                    row("commitů", "\(submission.replayed)")
+                    // **Dvě čísla, obě pojmenovaná** — a je to změřené: přehraných může být
+                    // jeden, kdežto refu na remote chybí dva (ten druhý přišel z base rebasem).
+                    // Do #466 tu stálo jedno `commitů`, které odpovídalo na jinou otázku, než jakou
+                    // klade nadpis `Co odejde`.
+                    // `přibude`, ne `na větvi přibude`: v úzkém sloupci popisků se ta delší
+                    // varianta zalomila na dva řádky (vidět v sondě). Čeho se to týká, říká nadpis
+                    // sekce a nadpisek výpisu pod ní.
+                    row("přibude", "\(submission.arriving.count)")
+                    row("z toho tvých", "\(submission.replayed)")
                     // Obojí ze **snímku**, ne z aktuálního detailu: co je vidět, to odejde.
                     row("nová hlava", String(plan.sha.prefix(7)))
                     // Hlava, na kterou čeká lease. Je to **podmínka volání**, ne údaj — proto je
@@ -167,17 +175,32 @@ struct BranchPushSheet: View {
     ///
     /// **Sha je `monospaced` a nezalamuje se** — je to sedm znaků, které se čtou po znaku.
     @ViewBuilder private var commitList: some View {
-        let list = Policy.pushedCommitList(submission.commits)
+        let list = Policy.pushedCommitList(
+            submission.arriving,
+            fromBase: submission.fromBase
+        )
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(list.shown, id: \.sha) { commit in
+            // **Nadpisek, protože bez něj není poznat, co ten seznam je.** Zbytek sekce má u každé
+            // hodnoty slovo vlevo; výpis byl jediná věc, která ho neměla — a čtl se pak jako
+            // pokračování řádků nad ním.
+            Text("Commity, které na větvi budou")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(list.shown) { row in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(verbatim: commit.shortSha)
+                    Text(verbatim: row.commit.shortSha)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
-                    Text(verbatim: commit.title)
+                    Text(verbatim: row.commit.title)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
+                    // **Odkud se ten commit vzal** — rozhoduje `Policy`, ne tenhle výpis.
+                    if row.isFromBase {
+                        Text("z base")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             // **Zbytek se počítá, neořezává potichu.** Rozhoduje `Policy`, ne tenhle výpis.
