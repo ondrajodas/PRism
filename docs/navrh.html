@@ -8670,10 +8670,12 @@ projeví hned v tom dalším.</div>
                                        gap: 8px; align-items: flex-start;">
           <div class="pkr">
             <span class="cap">Emotikon</span>
-            <div class="pkr-row on"><span class="emo-g">🎉</span><span class="emo-nm">:tada:</span></div>
             <div class="pkr-row"><span class="emo-g">🌮</span><span class="emo-nm">:taco:</span></div>
-            <div class="pkr-row"><span class="emo-g">🎋</span><span class="emo-nm">:tanabata_tree:</span></div>
-            <div class="pkr-row"><span class="emo-g">🚕</span><span class="emo-nm">:taxi:</span></div>
+            <div class="pkr-row on"><span class="emo-g">🎉</span><span class="emo-nm">:tada:</span></div>
+            <div class="pkr-row"><span class="emo-g">🇹🇼</span><span class="emo-nm">:taiwan:</span></div>
+            <div class="pkr-row"><span class="emo-g">🇹🇯</span><span class="emo-nm">:tajikistan:</span></div>
+            <div class="pkr-row"><span class="emo-g">🥡</span><span class="emo-nm">:takeout_box:</span></div>
+            <div class="pkr-row"><span class="emo-g">🫔</span><span class="emo-nm">:tamale:</span></div>
             <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vloží</span><span>esc zavře</span></div>
           </div>
           <div class="composer" style="margin: 0; padding: 0; border-top: 0; align-self: stretch;">
@@ -8705,7 +8707,11 @@ projeví hned v tom dalším.</div>
               <span class="emo-g">👎</span><span class="emo-nm">:-1:</span>
               <span class="emo-alias">thumbsdown</span>
             </div>
-            <div class="pkr-row"><span class="emo-g">⛈️</span><span class="emo-nm">:thunder_cloud_and_rain:</span></div>
+            <div class="pkr-row">
+              <span class="emo-g">🫰</span>
+              <span class="emo-nm">:hand_with_index_finger_and_thumb_crossed:</span>
+            </div>
+            <div class="pkr-row"><span class="emo-g">🇱🇹</span><span class="emo-nm">:lithuania:</span></div>
             <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vloží</span><span>esc zavře</span></div>
           </div>
           <div class="composer" style="margin: 0; padding: 0; border-top: 0;">
@@ -8733,10 +8739,16 @@ projeví hned v tom dalším.</div>
     <h3>Kdy se nabídka otevře — a kdy schválně ne</h3>
     <p class="muted">
       Dvojtečka je v próze běžný znak, takže rozhodovat nemůže sama. Nabídka se otevře, jedině
-      když je <code>:</code> <b>na začátku řádku nebo po mezeře</b> a za ní stojí
-      <b>aspoň jedno písmeno</b>. Tím vypadnou tři nejčastější plané poplachy naráz:
+      když je <code>:</code> <b>na začátku řádku nebo po mezeře</b> a za ní stojí něco, z čeho
+      shortcode být může: <b>písmeno kdekoli v dotazu</b>, <b><code>+</code> hned</b> (tedy i samotné
+      <code>:+</code>), a <b><code>-</code> až s druhým znakem</b> — <code>:-1</code> ano, samotné
+      <code>:-</code> ne. Tím vypadnou tři nejčastější plané poplachy naráz:
       <code>12:30</code> (dvojtečka po číslici), <code>https://…</code> (po písmenu)
-      a <code>Poznámka:</code> (po písmenu, a za ní mezera). Je to čistá funkce
+      a <code>Poznámka:</code> (po písmenu, a za ní mezera) — a k nim <b>textové smajlíky</b>:
+      <code>:-)</code> a <code>:-(</code> jsou v próze běžnější než <code>:-1:</code> a bez toho
+      třetího pravidla by na nich nabídka na jeden úhoz problikla (👎, 🚱, 🦖). Znaménka nejsou
+      symetrická schválně: <code>:+1:</code> a <code>:-1:</code> jsou dva nejčastější shortcody na
+      GitHubu, kdežto <code>:+</code> v próze po mezeře skoro nejde napsat. Je to čistá funkce
       (<code>Policy.emojiQuery</code>), takže se testuje výčtem, ne klikáním. Zavírá ji
       <code>esc</code>, mezera, dotaz bez jediné shody, odchod kurzoru jinam a samotné vložení.
     </p>
@@ -8794,12 +8806,12 @@ body: <b>Díky za úklid anotací 🎉</b></div>
         <div class="pkr">
           <span class="cap">Emotikon</span>
           <div class="pkr-row on"><span class="emo-g">✅</span><span class="emo-nm">:white_check_mark:</span></div>
-          <div class="pkr-row"><span class="emo-g">⚠️</span><span class="emo-nm">:warning:</span></div>
+          <div class="pkr-row"><span class="emo-g">⚪</span><span class="emo-nm">:white_circle:</span></div>
           <div class="pkr-foot"><span>↑↓ vybírá</span><span>↵ vloží</span><span>esc zavře</span></div>
         </div>
         <div class="reply" style="align-self: stretch; border-top: 0; padding: 0;">
           <span class="av sm">OJ</span>
-          <span class="box" style="color: var(--ink);">Máš pravdu, ten log jsem smazal :w<span class="emo-caret"></span></span>
+          <span class="box" style="color: var(--ink);">Máš pravdu, ten log jsem smazal :white_c<span class="emo-caret"></span></span>
         </div>
       </div>
     </div>
@@ -8828,7 +8840,9 @@ body: <b>Díky za úklid anotací 🎉</b></div>
         <span class="num">19</span>
         <span class="body">
           <b>Dvojtečka otevírá jen na hranici slova</b>
-          <span>Na začátku řádku nebo po mezeře, a s aspoň jedním písmenem za sebou. Tím vypadne
+          <span>Na začátku řádku nebo po mezeře, a s písmenem kdekoli v dotazu — nebo se
+          znaménkem: <code>+</code> hned, <code>-</code> až s druhým znakem, aby na
+          <code>:-)</code> nic neproblikávalo. Tím vypadne
           <code>12:30</code>, <code>https://…</code> i <code>Poznámka:</code>.
           <code>Policy.emojiQuery</code> je čistá funkce, takže se to testuje výčtem — planý
           poplach v textovém poli se jinak pozná až v provozu.</span>

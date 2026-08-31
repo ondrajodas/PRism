@@ -128,8 +128,8 @@ extension Policy {
     /// **Šest, a je to strop kresby, ne libovůle.** Bez stropu by dotaz `:a` vydal stovky řádků
     /// a nabídka by přerostla okno; se stropem má **203 bodů** (změřeno, `EmojiSuggestionMenuTests`
     /// na to má strop 210), takže nepotřebuje scroll — a bez scrollu je `↑↓` prostě posun po
-    /// řádcích, ne posun po řádcích plus rolování. Návrh (sekce 38) kreslí čtyři, tři a dva řádky,
-    /// tedy nic, co by se stropem naráželo.
+    /// řádcích, ne posun po řádcích plus rolování. Návrh (sekce 38) kreslí šest, čtyři a dva řádky,
+    /// tedy jednu scénu **na** stropu a dvě pod ním.
     static let emojiSuggestionLimit = 6
 
     /// Řádky nabídky pro daný dotaz. Prázdný výsledek znamená **nabídka se nekreslí**.
