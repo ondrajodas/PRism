@@ -1,0 +1,221 @@
+import SwiftUI
+
+/// Potvrzení přetlačení větve (#466) — poslední obrazovka před tím, než se přepíše historie větve
+/// na remote.
+///
+/// **Dvě kliknutí, dvě různá tlačítka**, jako u merge (#465) a odeslání review (#68): `Přetlačit…`
+/// v panelu jen otevře tenhle sheet, teprve tlačítko tady zavolá pusher. A **bez výchozí akce** —
+/// poslední klik před nevratnou věcí je klik, ne `Enter`.
+///
+/// **Proč sheet, a ne pojmenované tlačítko v panelu:** návrh (sekce 36) kreslí `Přetlačit větev`
+/// jako tlačítko v patičce sheetu **nad vypsaným výsledkem**, a to i pro konfliktní cestu (#467).
+/// Kdyby bezkonfliktní cesta měla tlačítko v panelu, byly by z toho dva tvary téhož potvrzení a #467
+/// by ho musel stěhovat. Do panelu se navíc nevejde ani výstraha o lease — má 300 bodů.
+/// #467 pak do tohohle sheetu jen **přidá** obsah: co s konflikty udělala session a diff toho, co
+/// vzniklo.
+///
+/// **Nebydlí v detailu PR, ale v `ContentView`** — tatáž past jako u merge. Sheet zavěšený na
+/// detailu zmizí, jakmile se pod ním záložka přestane kreslit, a to je zrovna ta chvíle, kdy je
+/// v něm vidět, jak to dopadlo.
+struct BranchPushSheet: View {
+    let submission: BranchPushSubmission
+    let close: () -> Void
+    /// Zahodit, co leží v cache. Zavře sheet — dál už není co potvrzovat.
+    let discard: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            ScrollView { content.padding(16) }
+            Divider()
+            footer
+        }
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 320, idealHeight: 380)
+        // Zavřít okno uprostřed volání by znamenalo nevědět, jestli se pushovalo.
+        .interactiveDismissDisabled(submission.state == .pushing)
+    }
+
+    // MARK: - Hlavička
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Přetlačit větev?")
+                .font(.headline)
+            // `verbatim` a ruční skládání: `Text("…#\(number)")` by číslo PR prohnalo locale
+            // a z #21663 udělalo „#21 663“.
+            Text(verbatim: submission.pullRequest.id.description)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.secondary)
+            // **Věta o tom, co se ještě nestalo**, ne o nevratnosti: rebase je hotový a leží
+            // v cache, do remote se zatím nesáhlo. Přesně tak to kreslí návrh.
+            Text("Rebase je hotový v kopii repa. Do remote se zatím nesáhlo.")
+                .font(.callout)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+    }
+
+    // MARK: - Co odejde
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Co odejde")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 7) {
+                    row("větev", plan.branch)
+                    row("commitů", "\(submission.replayed)")
+                    // Obojí ze **snímku**, ne z aktuálního detailu: co je vidět, to odejde.
+                    row("nová hlava", String(plan.sha.prefix(7)))
+                    // Hlava, na kterou čeká lease. Je to **podmínka volání**, ne údaj — proto je
+                    // ve výpisu a proto o ní mluví i výstraha pod ním.
+                    row("lease čeká", String(plan.expectedRemoteSha.prefix(7)))
+                }
+            }
+            leaseWarning
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Výstraha o pojistce. **Sazba `.warnbox` z návrhu**, tatáž jako v panelu — je to tentýž druh
+    /// věty, jen na jiném místě.
+    private var leaseWarning: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // Ikona je jen vizuální, takže se z accessibility stromu schová: čtečka by ji přečetla
+            // jako jméno symbolu před větou, která to samé říká slovy.
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(Palette.stale)
+                .accessibilityHidden(true)
+            // Věta je z `Policy`, ne opsaná tady: kdyby ji sázel sheet i panel každý po svém,
+            // rozešly by se.
+            Text(verbatim: submission.leaseWarning)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(Palette.stale.opacity(0.11), in: .rect(cornerRadius: 7))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.stale.opacity(0.4))
+        }
+    }
+
+    private func row(_ caption: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(verbatim: caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 76, alignment: .leading)
+            Text(verbatim: value)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var plan: BranchPushPlan { submission.plan }
+
+    // MARK: - Patička
+
+    private var footer: some View {
+        HStack(spacing: 12) {
+            status
+            Spacer(minLength: 12)
+            buttons
+        }
+        .padding(16)
+    }
+
+    @ViewBuilder private var status: some View {
+        switch submission.state {
+        case .ready:
+            EmptyView()
+        case .pushing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Přetlačuju…").font(.callout).foregroundStyle(.secondary)
+            }
+        case .failed(let error):
+            VStack(alignment: .leading, spacing: 2) {
+                Label {
+                    Text(verbatim: error.sentence)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
+                .font(.callout)
+                // **Odmítnutý lease není červený.** Znamená, že pojistka zabrala a nic se
+                // nepřepsalo — je to výsledek, ne porucha, a barva to má říkat dřív než text.
+                .foregroundStyle(error == .leaseRejected ? Palette.stale : Palette.crit)
+                Text(verbatim: aftermath(of: error))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .pushed(let head):
+            Label {
+                Text(verbatim: "Přetlačeno jako \(head.prefix(7)).")
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "checkmark.circle.fill")
+            }
+            .font(.callout)
+            .foregroundStyle(Palette.ok)
+        }
+    }
+
+    /// Co z chyby plyne o stavu remote. **Tři různé věty, ne jedna** — a `interrupted` s `timedOut`
+    /// jsou ty, u kterých se **nedá** tvrdit, že se nic nestalo.
+    private func aftermath(of error: BranchSyncError) -> String {
+        switch error {
+        case .leaseRejected: "Na větvi se nic nezměnilo. Načti pull request znovu."
+        case .timedOut, .interrupted: "Zkontroluj větev na GitHubu — nevím, jestli push doběhl."
+        default: "Na větvi se nic nezměnilo."
+        }
+    }
+
+    @ViewBuilder private var buttons: some View {
+        switch submission.state {
+        case .pushed:
+            Link("otevřít na GitHubu", destination: submission.pullRequest.url)
+                .font(.callout)
+            Button("Zavřít", action: close)
+                .keyboardShortcut(.cancelAction)
+        default:
+            // **Zahodit se dá i odsud**, ne jen z panelu: sheet je to místo, kde je vidět, co
+            // v cache leží, takže je to zrovna ta chvíle, kdy se člověk rozhodne to nepushovat.
+            Button("Zahodit rebase") {
+                discard()
+                close()
+            }
+            .disabled(submission.state == .pushing)
+            Button("Zrušit", role: .cancel, action: close)
+                .keyboardShortcut(.cancelAction)
+                .disabled(submission.state == .pushing)
+            pushButton
+        }
+    }
+
+    /// Tlačítko je pojmenované **akcí** a **není výchozí**: `.keyboardShortcut` na něm schválně
+    /// žádný není, takže `Enter` nic nepřetlačí. `.borderedProminent` je vzhled, ne klávesa.
+    /// Popisek je `Přetlačit větev` z návrhu (sekce 36), aby se nerozešel s tím, co #467 kreslí.
+    private var pushButton: some View {
+        Button("Přetlačit větev") {
+            Task {
+                await submission.push()
+                // **Až po úspěchu, ne po kliknutí.** Po odmítnutém lease i po spadlé síti zůstává
+                // sheet otevřený: je to jediné místo, kde je vidět, co server odmítl.
+                if submission.closesItself { close() }
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!submission.canPush)
+    }
+}

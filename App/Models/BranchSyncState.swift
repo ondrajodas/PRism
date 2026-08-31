@@ -13,9 +13,16 @@ import Foundation
 enum BranchSyncState: Equatable, Sendable {
     /// Dotahuje se základ a přehrávají commity.
     case rebasing
+    /// **Přerovnáno, nepřetlačeno** — commity leží srovnané v kopii repa a do remote se nesáhlo.
+    ///
+    /// Vlastní stav, protože je to **normální mezistav, ne porucha**: první krok akce doběhl a na
+    /// druhý (nevratný) se čeká na potvrzení. Musí být z panelu poznat, že v cache něco leží, a musí
+    /// to jít zahodit jedním tlačítkem — tatáž úvaha jako u rozdělaného rebase, jen tady nic
+    /// neselhalo.
+    case rebased(RebasedBranch)
     /// Přetlačuje se — **jediný okamžik, kdy aplikace zapisuje do remote**.
     case pushing
-    /// Zahazuje se rozdělaný rebase.
+    /// Zahazuje se rozdělaný nebo nepřetlačený rebase.
     case discarding
     /// Hotovo: přehrálo se `replayed` commitů a větev je přetlačená.
     case pushed(replayed: Int)
@@ -36,7 +43,7 @@ enum BranchSyncState: Equatable, Sendable {
     var isBusy: Bool {
         switch self {
         case .rebasing, .pushing, .discarding: true
-        case .pushed, .alreadyInSync, .conflicted, .unfinished, .failed: false
+        case .rebased, .pushed, .alreadyInSync, .conflicted, .unfinished, .failed: false
         }
     }
 
@@ -45,14 +52,28 @@ enum BranchSyncState: Equatable, Sendable {
         if case .unfinished = self { true } else { false }
     }
 
+    /// Přerovnaná větev, která čeká na přetlačení. `nil` = nečeká nic.
+    ///
+    /// Na tomhle stojí tlačítko `Přetlačit…` v panelu **i** to, že se druhý rebase nenabídne:
+    /// přehrát commity znovu nad výsledkem, který ještě neodešel, by tu práci zahodilo potichu.
+    var rebasedBranch: RebasedBranch? {
+        if case .rebased(let branch) = self { branch } else { nil }
+    }
+
+    /// Leží v cache něco, co má smysl zahodit? Rozdělaný rebase **i** nepřetlačený výsledek.
+    var hasDiscardableWork: Bool { hasUnfinishedRebase || rebasedBranch != nil }
+
     /// Věta do panelu. **U každého stavu jiná** — a u selhání jiná podle toho, co selhalo:
     /// odmítnutý lease se od ostatních chyb pozná (`BranchSyncError.leaseRejected`), protože
     /// z něj plyne jiný další krok.
     var sentence: String {
         switch self {
         case .rebasing: "Přehrávám commity nad základem."
+        case .rebased(let branch):
+            "Srovnáno v kopii repa — \(Plural.czech(branch.replayed, one: "commit přehraný", few: "commity přehrané", many: "commitů přehraných")). "
+                + "Do remote se zatím nesáhlo."
         case .pushing: "Přetlačuju větev."
-        case .discarding: "Zahazuju rozdělaný rebase."
+        case .discarding: "Zahazuju rozdělanou práci."
         case .pushed(let replayed):
             "Srovnáno — přetlačeno \(Plural.czech(replayed, one: "commit", few: "commity", many: "commitů"))."
         case .alreadyInSync: "Větev už nad základem byla, do remote se nesáhlo."

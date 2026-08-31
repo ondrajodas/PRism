@@ -62,7 +62,31 @@ struct RebasedBranch: Hashable, Sendable {
     let worktree: URL
     /// Hlava po rebasu.
     let headSha: String
+    /// **Ze které hlavy se přehrávalo** — hlava pull requestu ve chvíli rebase.
+    ///
+    /// Vzniklo to rozdělením akce na dva kroky (rebase a přetlačení zvlášť) a **je to pojistka, ne
+    /// údaj**. Mezi rebasem a potvrzením přetlačení může být libovolně dlouhá pauza — okno se dá
+    /// zavřít a přijít znovu —, takže se hlava PR mezitím může pohnout (push z jiného stroje,
+    /// z terminálu, z GitHubu). Kdyby se lease skládal z **aktuální** hlavy, prošel by a přepsal
+    /// by ten nový commit; s touhle hodnotou narazí pre-flight na `headMoved` a nepřetlačí nic.
+    /// Rebase se pak musí spustit znovu.
+    let rebasedFrom: String
     /// Kolik commitů se přehrálo. **Spočítané po rebasu z výsledku**, ne převzaté z plánu:
     /// plán mluví o tom, co se čekalo, tohle o tom, co vzniklo.
     let replayed: Int
+}
+
+/// Co leží ve stromě pro srovnání větve (#466).
+///
+/// **Tři stavy, ne boolean „běží rebase“.** Rozdělením akce na dva kroky vznikl mezistav
+/// *přerovnáno, nepřetlačeno* — a ten je stejně důležitý jako rozdělaný rebase: v obou případech
+/// leží v kopii repa práce, o které má rozhodnout člověk, a v obou by o ní okno po restartu
+/// aplikace mlčelo, kdyby se nehledala. Tichý stav v cache je horší než chyba.
+enum SyncWorktreeState: Equatable, Sendable {
+    /// Strom není, nebo v něm stojí přesně hlava pull requestu — tedy nic rozdělaného.
+    case empty
+    /// Leží tam rozdělaný rebase (`rebase-merge` / `rebase-apply`).
+    case unfinishedRebase
+    /// Rebase doběhl a výsledek **neodešel**.
+    case rebased(RebasedBranch)
 }

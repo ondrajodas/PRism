@@ -82,11 +82,19 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     /// Jak dopadne `rebase`. Výchozí je **úspěch bez přehraných commitů**, protože v drtivé
     /// většině testů jde o něco jiného.
     var rebaseOutcome: Result<RebaseOutcome, CheckoutError> = .success(
-        .rebased(RebasedBranch(worktree: URL(filePath: "/tmp/sync"), headSha: "rebased", replayed: 0))
+        .rebased(
+            RebasedBranch(
+                worktree: URL(filePath: "/tmp/sync"),
+                headSha: "rebased",
+                rebasedFrom: "puvodni",
+                replayed: 0
+            )
+        )
     )
-    /// Leží v cache rozdělaný rebase?
-    var unfinishedRebase = false
-    /// Čím spadne `discardRebase`. `nil` = povede se.
+    /// Co „leží“ ve stromě pro srovnání větve. Výchozí je **prázdno**, protože v drtivé většině
+    /// testů v cache nic nečeká.
+    var syncWorktree: SyncWorktreeState = .empty
+    /// Čím spadne `discardSync`. `nil` = povede se.
     var discardFailure: CheckoutError?
 
     /// Na co se kdo ptal, v pořadí. Na počtu stojí testy, které tvrdí, že se **nerebasovalo**.
@@ -101,13 +109,17 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         return try rebaseOutcome.get()
     }
 
-    func discardRebase(for pr: PRIdentifier) async throws {
+    func discardSync(for pr: PRIdentifier) async throws {
         lock.withLock { discarded.append(pr) }
         if let discardFailure { throw discardFailure }
-        unfinishedRebase = false
+        syncWorktree = .empty
     }
 
-    func rebaseInProgress(for pr: PRIdentifier) async -> Bool { unfinishedRebase }
+    func syncWorktreeState(
+        for pr: PRIdentifier,
+        at headSha: String,
+        onto base: String
+    ) async -> SyncWorktreeState { syncWorktree }
 }
 
 

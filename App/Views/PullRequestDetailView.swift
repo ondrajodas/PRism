@@ -65,6 +65,11 @@ struct PullRequestDetailView: View {
     /// hláškou, kvůli které je otevřený.
     @Binding var merge: MergeSubmission?
 
+    /// Rozdělané přetlačení větve (#466). Zakládá se tady, ale **drží ho `ContentView`** — tatáž
+    /// past jako u merge: sheet zavěšený na detailu zmizí, jakmile se pod ním záložka přestane
+    /// kreslit, a to je zrovna ta chvíle, kdy je v něm vidět, jak to dopadlo.
+    @Binding var branchPush: BranchPushSubmission?
+
     /// Výška celého detailu — z ní je strop zásuvky s terminálem (#459).
     ///
     /// Měří se `onGeometryChange`, protože **akce se při nezměněné hodnotě nespustí** (změřeno
@@ -571,16 +576,19 @@ struct PullRequestDetailView: View {
     /// `Mergnout…` **jen otevře potvrzení**: `mergeSubmission(for:)` vrátí `nil`, když mergnout
     /// nejde, takže se sheet nad neproveditelným mergem neotevře ani tehdy, kdyby se na zakázané
     /// tlačítko nějak kliknout dalo.
-    /// `Srovnat s main` (#466) proti tomu **potvrzení nemá** a spouští práci rovnou: rebase běží
-    /// v kopii repa a přetlačení hlídají dva guardy v `GitBranchPush`. Stav běhu si drží store,
-    /// takže překliknutí tabu ani zavření panelu ho neztratí.
+    /// `Srovnat s main` (#466) je **dvoukrokové**: první tlačítko spustí rebase v kopii repa
+    /// rovnou (lokální práce, dá se vzít zpět), druhé (`Přetlačit…`) jen **otevře potvrzení** —
+    /// `branchPushSubmission(for:)` vrátí `nil`, když v cache nic nečeká, takže se sheet nad
+    /// ničím neotevře. Stav mezi krokem jedna a dva si drží store, takže překliknutí tabu ani
+    /// zavření panelu ho neztratí.
     private var branchActions: BranchActions {
         let summary = pullRequest
         let id = summary.id
         return BranchActions(
             merge: { merge = store.mergeSubmission(for: summary) },
             sync: { Task { await store.syncBranch(summary) } },
-            discardRebase: { Task { await store.discardRebase(for: id) } },
+            push: { branchPush = store.branchPushSubmission(for: summary) },
+            discardSync: { Task { await store.discardSync(for: id) } },
             clearSync: { store.clearBranchSync(for: id) }
         )
     }

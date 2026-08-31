@@ -229,18 +229,46 @@ struct BranchSyncOfferTests {
         #expect(Policy.branchSyncPlan(of: nil, status: status()) == nil)
     }
 
-    /// Nápověda musí odpovědět na obojí, na co se u přetlačení ptáš: **kolik commitů** a **přes
-    /// co**.
-    @Test("Nápověda říká, co se stane, dřív než se to stane")
-    func explainsWhatWillHappen() throws {
+    /// **Nápověda u prvního tlačítka mluví jen o prvním kroku, a je to celá pointa rozdělení
+    /// akce.** Tlačítko přehraje commity v kopii repa a do remote nesáhne — takže **nesmí** slibovat
+    /// přetlačení ani vysvětlovat lease. Ta věta se přestěhovala do potvrzení, kde patří.
+    ///
+    /// Tvrdí se proto obojí: co v nápovědě **je** a co v ní **není**. Bez té druhé půlky by se dala
+    /// věta o pushi vrátit a nikdo by si toho nevšiml.
+    @Test("Nápověda mluví o rebasu, ne o přetlačení")
+    func explainsOnlyTheFirstStep() throws {
         let plan = try #require(Policy.branchSyncPlan(of: detail(), status: status(ahead: 3, behind: 4)))
         let help = Policy.branchSyncHelp(for: plan)
 
         #expect(help.contains("3 commity"))
         #expect(help.contains("main"))
-        #expect(help.contains("issue-466-sync-branch"))
-        #expect(help.contains("9c1de02"))
-        #expect(help.contains("push selže"))
+        #expect(help.contains("kopii repa"))
+        #expect(help.contains("Do remote se nesáhne"))
+        // Co v ní být **nesmí**: lease ani slib, že se něco přetlačí.
+        #expect(!help.contains("push selže"))
+        #expect(!help.contains("9c1de02"))
+        #expect(!help.lowercased().contains("force-with-lease"))
+    }
+
+    /// **Věta o pojistce patří do potvrzení** — tam, kde se doopravdy pushuje. Vypsané je, přes co
+    /// se přetlačuje, na jakou hlavu lease čeká a **co se stane, když se remote pohnul**.
+    @Test("Výstraha v potvrzení mluví o lease a o tom, co se stane")
+    func warnsAboutTheLeaseInTheConfirmation() {
+        let warning = Policy.leaseWarning(
+            for: BranchPushPlan(
+                pullRequest: mine,
+                branch: "issue-466-sync-branch",
+                expectedRemoteSha: "9c1de02aa1b2c3d4e5f60718293a4b5c6d7e8f90",
+                sha: "1111222233334444555566667777888899990000",
+                worktree: URL(filePath: "/tmp/sync")
+            )
+        )
+
+        #expect(warning.contains("issue-466-sync-branch"))
+        #expect(warning.contains("--force-with-lease"))
+        #expect(warning.contains("9c1de02"))
+        #expect(warning.contains("push selže"))
+        #expect(warning.contains("nic se nepřepíše"))
     }
 
     // MARK: - Která akce je hlavní

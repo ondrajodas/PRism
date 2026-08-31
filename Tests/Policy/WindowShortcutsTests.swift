@@ -298,6 +298,9 @@ struct WindowShortcutsTests {
             // Potvrzení merge (#465): `⎋` na `Zrušit`, jako u potvrzení review. Tlačítko, které
             // merguje, zkratku **nemá** — poslední klik před nevratnou věcí je klik.
             "Views/MergeSheet.swift",
+            // Potvrzení přetlačení větve (#466): totéž a ze stejného důvodu. `⎋` na `Zrušit`,
+            // `Přetlačit větev` **bez klávesy** — `Enter` nesmí přepsat historii větve.
+            "Views/BranchPushSheet.swift",
             "Views/Settings/SettingsView.swift",
             "Views/Settings/SettingsScene.swift",
             "Views/ReleaseNotes/ReleaseNotesScene.swift",

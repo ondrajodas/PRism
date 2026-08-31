@@ -32,7 +32,11 @@ extension AppStore {
 
     /// Načtený detail PR, nebo `nil`. Zvlášť proto, že `detailStates` drží i „načítá se“
     /// a „nepovedlo se“ — a z obojího plyne pro sekci `Větev` totéž: plán se nesestaví.
-    private func detail(of pr: PRIdentifier) -> PullRequest? {
+    ///
+    /// **Ne `private`**, protože totéž potřebuje i srovnání větve (#466): hledání rozdělané práce
+    /// v cache se ptá na hlavu a základ z **načteného** detailu. Dvě kopie téhle jedné podmínky by
+    /// znamenaly dvě různá „nevím“ nad tou samou sekcí.
+    func detail(of pr: PRIdentifier) -> PullRequest? {
         guard case .loaded(let detail, _) = detailStates[pr] else { return nil }
         return detail
     }
@@ -67,10 +71,11 @@ extension AppStore {
         guard let detail = detail(of: id), detail.state == .open || detail.state == .draft else {
             return
         }
-        // Rozdělaný rebase v cache (#466) se hledá **při každém otevření vlastního PR**, ne jen po
-        // neúspěšném srovnání: aplikaci zabitou uprostřed rebase nemá kde nic zapsat, takže by
-        // o něm okno po restartu mlčelo — a příští akce nad tím PR by se zachovala divně.
-        await findUnfinishedRebase(for: id)
+        // Rozdělaná práce po srovnání větve (#466) se hledá **při každém otevření vlastního PR**,
+        // ne jen po neúspěšném pokusu: aplikaci zabitou uprostřed rebase — a stejně tak zavřenou
+        // mezi rebasem a potvrzením přetlačení — nemá kde nic zapsat, takže by o té práci okno po
+        // restartu mlčelo a příští akce nad tím PR by se nad ní zachovala divně.
+        await findUnfinishedSync(for: id)
         guard !hasCurrentBranchStatus(for: pullRequest) else { return }
         branchStatuses[id] = .loading
 

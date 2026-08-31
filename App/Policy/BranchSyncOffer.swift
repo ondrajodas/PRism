@@ -34,6 +34,9 @@ extension Policy {
         case running
         /// V cache leží rozdělaný rebase — napřed se musí zahodit.
         case unfinishedRebase
+        /// V cache leží **přerovnaná větev, která ještě neodešla**. Druhý rebase nad ní by tu práci
+        /// zahodil potichu, takže se nenabízí — buď se přetlačí, nebo zahodí.
+        case rebasedNotPushed
 
         /// Věta do nápovědy pod kurzorem. **Ke každé patří i další krok** tam, kde nějaký je.
         var sentence: String {
@@ -53,6 +56,8 @@ extension Policy {
                     + "otevři terminál."
             case .running: "Právě se to srovnává."
             case .unfinishedRebase: "V kopii repa leží rozdělaný rebase. Napřed ho zahoď."
+            case .rebasedNotPushed:
+                "V kopii repa leží srovnaná větev, která ještě neodešla. Přetlač ji, nebo zahoď."
             }
         }
     }
@@ -138,6 +143,7 @@ extension Policy {
         if let sync {
             if sync.isBusy { obstacles.append(.running) }
             if sync.hasUnfinishedRebase { obstacles.append(.unfinishedRebase) }
+            if sync.rebasedBranch != nil { obstacles.append(.rebasedNotPushed) }
         }
 
         switch status {
@@ -212,21 +218,32 @@ extension Policy {
             // vzadu`) a u mergnutí i jeho vlastní výstraha.
             case .statusLoading, .statusFailed, .upToDate, .conflicting: false
             // O tomhle mluví hláška **pod** akcemi (`BranchSyncState.sentence`), a ta je
-            // konkrétnější: zná jména kolidujících souborů a nese tlačítko `Zahodit rebase`.
-            case .running, .unfinishedRebase: false
+            // konkrétnější: zná jména kolidujících souborů, počet přehraných commitů a nese
+            // tlačítka `Přetlačit…` a `Zahodit`.
+            case .running, .unfinishedRebase, .rebasedNotPushed: false
             }
         }
     }
 
     /// Co se stane, **než se to stane** — nápověda pod kurzorem u povoleného `Srovnat s main`.
     ///
-    /// Vypsané je obojí, na co se u přetlačení ptáš: **kolik commitů se přehraje** a **přes co se
-    /// přetlačí**. Druhá věta je o pojistce, ne o postupu: z „lease čeká hlavu X“ plyne, co se
-    /// stane, když se remote mezitím pohnul — nic.
+    /// **Mluví jen o prvním kroku, a je to celá pointa rozdělení akce**: tlačítko přehraje commity
+    /// v kopii repa a **do remote nesáhne**. Věta o lease se odsud přestěhovala do potvrzení, kde
+    /// patří — pod kurzorem by ji člověk čekal až u toho kliknutí, které doopravdy pushuje.
     static func branchSyncHelp(for plan: BranchSyncPlan) -> String {
         let replaying = Plural.czech(plan.replaying, one: "commit", few: "commity", many: "commitů")
-        return "Přehraje \(replaying) nad \(plan.base) a přetlačí větev \(plan.branch). "
-            + "Čeká na remote hlavu \(plan.expectedRemoteSha.prefix(7)) — když se mezitím pohnula, "
-            + "push selže a nic se nepřepíše."
+        return "Přehraje \(replaying) nad \(plan.base) v kopii repa. "
+            + "Do remote se nesáhne — přetlačení se potvrzuje zvlášť."
+    }
+
+    /// Věta o pojistce do potvrzení přetlačení (#466).
+    ///
+    /// **Je o tom, co se stane, když se remote mezitím pohnul**, ne o postupu: z „lease čeká hlavu
+    /// X“ plyne, že se v tom případě nepřepíše nic. Skládá ji `Policy`, aby ji panel ani sheet
+    /// neopisovaly každý po svém.
+    static func leaseWarning(for plan: BranchPushPlan) -> String {
+        "Přetlačí se tvoje větev \(plan.branch) přes --force-with-lease. Čeká na remote hlavu "
+            + "\(plan.expectedRemoteSha.prefix(7)) — když se mezitím pohnula, push selže "
+            + "a nic se nepřepíše."
     }
 }

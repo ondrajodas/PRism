@@ -51,7 +51,8 @@ struct AgentPromptRenderProbe {
                 store: store,
                 pullRequest: Self.summary,
                 submission: .constant(nil),
-                merge: .constant(nil)
+                merge: .constant(nil),
+                branchPush: .constant(nil)
             )
             .frame(width: 1400, height: Self.height)
             .background(Palette.background)
@@ -70,7 +71,8 @@ struct AgentPromptRenderProbe {
                 store: store,
                 pullRequest: Self.summary,
                 submission: .constant(nil),
-                merge: .constant(nil)
+                merge: .constant(nil),
+                branchPush: .constant(nil)
             )
             .frame(width: width, height: Self.height)
             .background(Palette.background)
@@ -211,7 +213,8 @@ struct AgentPromptRenderProbe {
             store: store,
             pullRequest: Self.summary,
             submission: .constant(nil),
-            merge: .constant(nil)
+            merge: .constant(nil),
+                branchPush: .constant(nil)
         )
         .frame(width: 1400, height: Self.height)
         .background(Palette.background)

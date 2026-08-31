@@ -183,8 +183,10 @@ struct PanelBranchView: View {
     /// Jak dopadlo srovnání větve — **věta v panelu, ne jen v logu**. Drží se, dokud ji člověk
     /// nezavře: hláška, která zmizí sama, je hláška, kterou nikdo nepřečte.
     ///
-    /// **Rozdělaný rebase má vlastní tlačítko.** Je to stav, ne chyba — v kopii repa leží
-    /// rozdělaná práce a musí jít zahodit odsud, jinak se příští akce nad tím PR zachová divně.
+    /// **Práce, která leží v cache, má vlastní tlačítka.** Jsou to stavy, ne chyby: u rozdělaného
+    /// rebase se dá jedině zahodit, u **přerovnané větve, která neodešla**, se dá přetlačit nebo
+    /// zahodit — a `Zavřít` u nich schválně **není**, protože zavřít hlášku o práci v cache by ji
+    /// schovalo, aniž by zmizela. To je zrovna ten tichý stav, kterému se tahle akce vyhýbá.
     @ViewBuilder private func syncNotice(_ state: BranchSyncState) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Image(systemName: Self.noticeIcon(state))
@@ -194,15 +196,7 @@ struct PanelBranchView: View {
                 .foregroundStyle(Palette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
-            if state.hasUnfinishedRebase {
-                Button("Zahodit rebase", action: actions.discardRebase)
-                    .buttonStyle(.mini)
-                    .fixedSize()
-            } else if !state.isBusy {
-                Button("Zavřít", action: actions.clearSync)
-                    .buttonStyle(.mini)
-                    .fixedSize()
-            }
+            noticeButtons(state)
         }
         // **Velikost vypsaná, ne `.caption`.** Celá sekce sází explicitními body (12 popis, 11
         // odpověď) a `.caption` je proti tomu systémová hodnota, která se s nimi rozejde při první
@@ -211,12 +205,41 @@ struct PanelBranchView: View {
         .font(.system(size: Self.noticeFontSize))
     }
 
+    /// Co se u hlášky dá udělat. **Tři různé sady, ne jedna se `if`y** — každý stav vede jinam.
+    ///
+    /// `Přetlačit…` má tři tečky, protože **otevírá potvrzení**; je to tatáž konvence jako
+    /// u `Mergnout…` a ze stejného důvodu: co je za tím kliknutím nevratné, se potvrzuje.
+    @ViewBuilder private func noticeButtons(_ state: BranchSyncState) -> some View {
+        if state.rebasedBranch != nil {
+            Button(Self.pushTitle, action: actions.push)
+                .buttonStyle(.miniPrimary)
+                .fixedSize()
+            Button(Self.discardTitle, action: actions.discardSync)
+                .buttonStyle(.mini)
+                .fixedSize()
+        } else if state.hasUnfinishedRebase {
+            Button(Self.discardTitle, action: actions.discardSync)
+                .buttonStyle(.mini)
+                .fixedSize()
+        } else if !state.isBusy {
+            Button("Zavřít", action: actions.clearSync)
+                .buttonStyle(.mini)
+                .fixedSize()
+        }
+    }
+
+    private static let pushTitle = "Přetlačit…"
+    private static let discardTitle = "Zahodit rebase"
+
     private static let noticeFontSize = 12.0
 
     /// **Ikona ze stavu, ne z barvy** — a `checkmark` jedině u toho, co doopravdy doběhlo.
     private static func noticeIcon(_ state: BranchSyncState) -> String {
         switch state {
         case .rebasing, .pushing, .discarding: "arrow.triangle.2.circlepath"
+        // **Ne `checkmark`.** První krok doběhl, ale akce hotová není — do remote se nesáhlo,
+        // a zaškrtnutí by tvrdilo, že je uklizeno.
+        case .rebased: "arrow.up.circle"
         case .pushed, .alreadyInSync: "checkmark.circle"
         case .conflicted, .unfinished, .failed: "exclamationmark.triangle"
         }
@@ -227,7 +250,9 @@ struct PanelBranchView: View {
         switch state {
         case .rebasing, .pushing, .discarding: Palette.ink3
         case .pushed, .alreadyInSync: Palette.ok
-        case .unfinished: Palette.stale
+        // Mezistav není ani hotovo, ani porucha — **čeká na rozhodnutí**, a to je tentýž tón jako
+        // u rozdělaného rebase.
+        case .rebased, .unfinished: Palette.stale
         case .conflicted, .failed: Palette.crit
         }
     }

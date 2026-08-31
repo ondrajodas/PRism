@@ -155,8 +155,13 @@ struct SingleWayOutTests {
     /// proto tvar toho o publisherovi, a to schválně — kdyby se ta cesta rozlezla, má se to poznat
     /// tady, ne až na cizí větvi.
     ///
-    /// Protokol, `GitBranchPush` (implementace) a `BranchSyncSubmission` (jediný volající). Všechny
+    /// Protokol, `GitBranchPush` (implementace) a `BranchPushSubmission` (jediný volající). Všechny
     /// v `Publish/`, tedy tam, kde je i ta první cesta ven.
+    ///
+    /// **Volající se u rozdělení akce na dva kroky přejmenoval** (`BranchSyncSubmission` →
+    /// `BranchPushSubmission`) a je to samo tvrzení: od chvíle, kdy má přetlačení potvrzovací
+    /// obrazovku, je to objekt s životností jako `MergeSubmission`, ne bezstavová struktura. Počet
+    /// souborů se tím **nezvedl** — rebase do `Publish/` nepřibyl a nemá tam co dělat.
     @Test("BranchPushing zná tři soubory")
     func namesEveryWayIntoTheRemote() throws {
         let using = try swiftFiles()
@@ -165,8 +170,8 @@ struct SingleWayOutTests {
             .sorted()
 
         #expect(using == [
+            "Publish/BranchPushSubmission.swift",
             "Publish/BranchPushing.swift",
-            "Publish/BranchSyncSubmission.swift",
             "Publish/GitBranchPush.swift",
         ])
         #expect(using.allSatisfy { $0.hasPrefix("Publish/") })

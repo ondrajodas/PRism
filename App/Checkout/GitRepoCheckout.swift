@@ -105,30 +105,63 @@ struct GitRepoCheckout: RepoCheckout {
             }
 
             let worktree = try await preparedSyncWorktree(for: pr, at: headSha, in: clone, at: path)
-            return try await replay(in: worktree, onto: "refs/heads/\(base)")
+            return try await replay(in: worktree, from: headSha, onto: "refs/heads/\(base)")
         }
     }
 
-    func discardRebase(for pr: PRIdentifier) async throws {
+    /// **Maže celý strom, ne `rebase --abort`.** Od #466 se zahazují dvě různé věci — rozdělaný
+    /// rebase i přerovnaná větev, která neodešla — a `--abort` umí jen tu první: nad dokončeným
+    /// rebasem by neudělal nic a v cache by zůstaly přehrané commity, přestože panel hlásí
+    /// uklizeno. `git worktree remove --force --force` zvládne obojí naráz (ověřeno integračním
+    /// testem, i nad stromem uprostřed rebase), takže je to jedna operace s jedním významem.
+    ///
+    /// **Selhání se nepolyká**: `discardWorktree` hlásí všechno kromě „nic tam nebylo“, takže se
+    /// nemůže stát, že okno hlásí uklizeno a v cache zůstane rozdělaná práce.
+    func discardSync(for pr: PRIdentifier) async throws {
         let path = layout.syncWorktree(for: pr)
-        try await coordinator.run(key: Self.worktreeKey(path), kind: "abort") {
-            // Nejdřív se zjistí, jestli je co zahazovat — teprve pak se maže „naostro“. Kdyby se
-            // výsledek `abortu` jen spolkl, prošla by tudy i skutečná chyba `gitu` a rozdělaný
-            // rebase by v cache zůstal, přestože okno hlásí uklizeno. Tatáž konstrukce jako
-            // u `forgetPullRequest`.
-            guard await hasRebaseInProgress(at: path) else { return }
-            try await run(["-C", path.path(percentEncoded: false), "rebase", "--abort"])
+        guard FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) else { return }
+        try await coordinator.run(key: Self.worktreeKey(path), kind: "discard-sync") {
+            try await discardWorktree(for: pr, at: path)
         }
     }
 
-    func rebaseInProgress(for pr: PRIdentifier) async -> Bool {
-        await hasRebaseInProgress(at: layout.syncWorktree(for: pr))
+    func syncWorktreeState(
+        for pr: PRIdentifier,
+        at headSha: String,
+        onto base: String
+    ) async -> SyncWorktreeState {
+        let path = layout.syncWorktree(for: pr)
+        guard FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) else {
+            return .empty
+        }
+        if await hasRebaseInProgress(at: path) { return .unfinishedRebase }
+        // **Přerovnaná větev se pozná tím, že hlava stromu není hlavou PR.** Je to jediná
+        // informace, která v cache po restartu aplikace zůstane — v `sessions.json` se tohle
+        // nikam nezapisuje a zapisovat nemá: strom **je** ten záznam.
+        guard let head = try? await run([
+            "-C", path.path(percentEncoded: false), "rev-parse", "HEAD",
+        ]).trimmingCharacters(in: .whitespacesAndNewlines),
+            !head.isEmpty, head != headSha
+        else { return .empty }
+        // Počet se dopočítá z výsledku, ne z paměti. Když se nedá přečíst, je to `.empty`, ne
+        // `.rebased` s nulou: nabídnout přetlačení a u toho tvrdit „nula commitů“ je horší než
+        // nechat člověka spustit rebase znovu.
+        guard let replayed = try? await commitCount(in: path, above: "refs/heads/\(base)") else {
+            return .empty
+        }
+        return .rebased(
+            RebasedBranch(worktree: path, headSha: head, rebasedFrom: headSha, replayed: replayed)
+        )
     }
 
     /// Vlastní přehrání. **Konflikt se pozná podle toho, že po pádu `rebase` běží dál** — ne podle
     /// textu chyby: `git` skončí nenulově i tehdy, když je základ neznámý nebo je strom špinavý,
     /// a to jsou chyby, které se mají hlásit, ne vydávat za konflikt.
-    private func replay(in worktree: URL, onto base: String) async throws -> RebaseOutcome {
+    private func replay(
+        in worktree: URL,
+        from headSha: String,
+        onto base: String
+    ) async throws -> RebaseOutcome {
         let path = worktree.path(percentEncoded: false)
         do {
             // `GIT_EDITOR=true` je pojistka, ne nutnost: neinteraktivní rebase editor nespouští,
@@ -153,6 +186,7 @@ struct GitRepoCheckout: RepoCheckout {
             RebasedBranch(
                 worktree: worktree,
                 headSha: head,
+                rebasedFrom: headSha,
                 replayed: try await commitCount(in: worktree, above: base)
             )
         )
