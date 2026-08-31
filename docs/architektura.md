@@ -8515,6 +8515,14 @@ Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.
   a na jakou hlavu čeká lease. Druhá věta je o pojistce, ne o postupu — z „lease čeká hlavu X“ plyne,
   co se stane, když se remote mezitím pohnul: nic.
 - **`Policy.primaryBranchAction(merge:)`** — která akce je hlavní.
+- **`Policy.syncWarnings(_:)`** — které překážky srovnání si žádají **vlastní větu ve výstraze**.
+  Pravidlo „zašedlé tlačítko má důvod napsaný v panelu“ (#392, #465) platí dál, ale většina
+  překážek srovnání je v panelu napsaná **už jinde** — stav větve v řádcích nad výstrahou, běžící
+  rebase i rozdělaný rebase v hlášce pod akcemi, a brána se stavem PR ve výstraze mergnutí.
+  Vypsat je všechny by znamenalo totéž dvakrát, a věta, která se opakuje, se přestane číst.
+  Vlastní věta proto zbývá **jediné**: `foreignBranch`. `switch` je vyčerpávající schválně —
+  nová překážka si vynutí rozhodnutí při překladu. **Našlo to renderem**, ne review: na PR z forku
+  bylo tlačítko zašedlé a v panelu o tom nestálo nic.
 - **`Policy.syncBase(of:)`** — jméno základu do popisku `Srovnat s …`. **Z prvního plánu, který ho
   zná**: plán merge stačí detail a commity, plán srovnání k tomu ještě divergenci. Tvrdit `main`
   v repozitáři, kde se základ jmenuje `master`, by bylo zbytečné zrovna v té chvíli, kdy jeho jméno

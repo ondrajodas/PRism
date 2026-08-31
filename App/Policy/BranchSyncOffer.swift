@@ -182,6 +182,33 @@ extension Policy {
 
     static let fallbackBase = "main"
 
+    /// Které překážky srovnání si žádají **vlastní větu ve výstraze v panelu**.
+    ///
+    /// Pravidlo z #392 a #465 říká, že zašedlé tlačítko musí mít důvod **napsaný v panelu**, ne jen
+    /// v nápovědě pod kurzorem. U srovnání je ale většina důvodů v panelu **už napsaná jinde**,
+    /// takže vypsat je všechny znamená totéž dvakrát — a věta, která se opakuje, se přestane číst.
+    /// Rozhoduje se to tady, ne ve view, a `switch` je vyčerpávající schválně: nová překážka si
+    /// vynutí rozhodnutí při překladu.
+    ///
+    /// Vlastní věta zbývá **jediné** — hlavě v jiném repozitáři. Ta se nikde jinde v sekci
+    /// neobjeví, takže by u ní zašedlé tlačítko mlčelo.
+    static func syncWarnings(_ offer: SyncOffer) -> [SyncObstacle] {
+        offer.obstacles.filter { obstacle in
+            switch obstacle {
+            case .foreignBranch: true
+            // Tytéž věty už nese výstraha mergnutí — `editing.reason`, stav PR i nenačtená
+            // hlavička jsou překážky **obou** akcí a `MergeObstacle` je má taky.
+            case .notAllowed, .notOpen, .factsMissing: false
+            // O stavu větve mluví řádky nad výstrahou (`srovnaná`, `konflikt`, `o N commitů
+            // vzadu`) a u mergnutí i jeho vlastní výstraha.
+            case .statusLoading, .statusFailed, .upToDate, .conflicting: false
+            // O tomhle mluví hláška **pod** akcemi (`BranchSyncState.sentence`), a ta je
+            // konkrétnější: zná jména kolidujících souborů a nese tlačítko `Zahodit rebase`.
+            case .running, .unfinishedRebase: false
+            }
+        }
+    }
+
     /// Co se stane, **než se to stane** — nápověda pod kurzorem u povoleného `Srovnat s main`.
     ///
     /// Vypsané je obojí, na co se u přetlačení ptáš: **kolik commitů se přehraje** a **přes co se

@@ -848,6 +848,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Co testy neověří:** že `git push` projde z běžící aplikace — brána je ve slotové konfiguraci
   vypnutá schválně. Ověřené je to **mimo aplikaci**, na sandboxu; postup je níž
   (*Jak se změřil `--force-with-lease`*).
+
+  **A jak sekce vypadá, ověřil render, ne review** — `BranchSyncRenderProbe` (sonda, vypnutá
+  `.disabled`, pouští se ručně). Vyrenderuje **dvanáct scén ve světlém i tmavém režimu** do PNG na
+  skutečné šířce panelu (278 bodů), takže se dá srovnat s návrhem po řádcích. Našly se tím dvě věci,
+  které z diffu vidět nebyly: na PR **z forku** bylo tlačítko zašedlé a v panelu o tom nestálo nic
+  (odtud `Policy.syncWarnings`), a hláška pod akcemi sázela `.font(.caption)`, tedy systémovou
+  hodnotu v sekci, která jinak sází explicitními body. **Sonda nezastupuje tvrzení** — co má platit,
+  tvrdí `BranchSyncOfferTests`.
 - **Místo na diff commitu vedle panelu (#392)** — `CommitPanelRoomTests` je **měření zapsané jako
   test**, ne mez v aplikaci. Počítá produkční funkcí (`Policy.charactersPerSide`) a skutečnými
   rozměry (šířka znaku mono písma, `DiffLineView.contentInset(for:)`), takže čísla nezastarají

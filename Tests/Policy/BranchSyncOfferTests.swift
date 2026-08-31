@@ -319,4 +319,48 @@ struct BranchSyncOfferTests {
         #expect(Policy.syncBase(of: empty) == Policy.fallbackBase)
         #expect(!empty.sync.isAllowed)
     }
+
+    // MARK: - Které překážky si žádají větu v panelu
+
+    /// **Zašedlé tlačítko bez věty v panelu je otázka, na kterou okno neodpoví** (#392, #465) —
+    /// ale většina překážek srovnání je v panelu napsaná **už jinde**, takže vypsat je všechny
+    /// znamená totéž dvakrát. Tvrdí se tedy obojí: co větu dostane, a co ne.
+    ///
+    /// Fork je ten jediný důvod, o kterém v sekci nemluví nic jiného — ani řádek stavu, ani hláška
+    /// pod akcemi. Bez věty by u něj tlačítko mlčelo.
+    @Test("Vlastní větu v panelu dostane jedině hlava v jiném repozitáři")
+    func warnsInThePanelOnlyAboutAForeignHead() throws {
+        let fork = offer(detail: detail(cross: true), status: status())
+        #expect(Policy.syncWarnings(fork) == [.foreignBranch(known: true)])
+
+        let unknown = offer(detail: detail(cross: nil), status: status())
+        #expect(Policy.syncWarnings(unknown) == [.foreignBranch(known: false)])
+
+        // Vypnutá brána, stav PR a nenačtená hlavička jsou překážky **obou** akcí, takže je nese
+        // výstraha mergnutí — druhá věta by byla tatáž věta podruhé.
+        let gateOff = offer(
+            editing: .blocked("Odesílání na GitHub je vypnuté."),
+            detail: detail(),
+            status: status()
+        )
+        #expect(Policy.syncWarnings(gateOff).isEmpty)
+        #expect(!gateOff.obstacles.isEmpty)
+
+        // O srovnané větvi, o konfliktu i o rozdělaném rebasu mluví řádky nad výstrahou, resp.
+        // hláška pod akcemi — a ta je konkrétnější.
+        #expect(Policy.syncWarnings(offer(detail: detail(), status: status(ahead: 3, behind: 0))).isEmpty)
+        #expect(
+            Policy.syncWarnings(offer(detail: detail(), status: status(.conflicting, .dirty))).isEmpty
+        )
+        #expect(
+            Policy.syncWarnings(
+                offer(detail: detail(), status: status(), sync: .unfinished(files: ["a.php"]))
+            ).isEmpty
+        )
+        #expect(Policy.syncWarnings(offer(detail: detail(), status: .loading)).isEmpty)
+        #expect(Policy.syncWarnings(offer(detail: detail(), status: status(), sync: .rebasing)).isEmpty)
+
+        // A na povolené nabídce nemá co varovat.
+        #expect(Policy.syncWarnings(offer(detail: detail(), status: status())).isEmpty)
+    }
 }

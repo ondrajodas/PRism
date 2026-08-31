@@ -39,7 +39,7 @@ struct PanelBranchView: View {
                         row(fact.element)
                     }
                 }
-                if !obstacles.isEmpty { warning }
+                if !warnings.isEmpty { warning }
                 actionRow
                 if let syncState { syncNotice(syncState) }
             }
@@ -99,8 +99,13 @@ struct PanelBranchView: View {
                 // Důvodů může být víc a **každý vede jinam**, takže se nesčítají do jedné věty:
                 // „červený check“ se opraví pushem, „větev je pozadu“ srovnáním, vypnutá brána
                 // v nastavení. Sjednocené je to už v `Policy`, tady se jen sází.
-                ForEach(Array(obstacles.enumerated()), id: \.offset) { obstacle in
-                    Text(verbatim: obstacle.element.sentence)
+                //
+                // **Věty jsou ze dvou výčtů**, protože akce jsou dvě — a co z nich do výstrahy
+                // patří, rozhoduje `Policy`, ne view (`syncWarnings`): většina překážek srovnání
+                // je v panelu napsaná už jinde, takže vypsat je všechny by znamenalo totéž
+                // dvakrát. Řetězce jsou proto pole, ne dva `ForEach`e nad různými typy.
+                ForEach(Array(warnings.enumerated()), id: \.offset) { warning in
+                    Text(verbatim: warning.element)
                         .foregroundStyle(Palette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -199,8 +204,14 @@ struct PanelBranchView: View {
                     .fixedSize()
             }
         }
-        .font(.caption)
+        // **Velikost vypsaná, ne `.caption`.** Celá sekce sází explicitními body (12 popis, 11
+        // odpověď) a `.caption` je proti tomu systémová hodnota, která se s nimi rozejde při první
+        // změně nastavení textu. Dvanáct je tatáž hodnota jako ve výstraze — je to tatáž třída
+        // věty o stavu.
+        .font(.system(size: Self.noticeFontSize))
     }
+
+    private static let noticeFontSize = 12.0
 
     /// **Ikona ze stavu, ne z barvy** — a `checkmark` jedině u toho, co doopravdy doběhlo.
     private static func noticeIcon(_ state: BranchSyncState) -> String {
@@ -225,6 +236,12 @@ struct PanelBranchView: View {
     private static let mergeHelp = "Otevře potvrzení. Odešle se až z něj."
 
     private var obstacles: [Policy.MergeObstacle] { section.merge.obstacles }
+
+    /// Věty do výstrahy — **z obou akcí**. Co z překážek srovnání si vlastní větu žádá, rozhoduje
+    /// `Policy.syncWarnings`; ostatní jsou v panelu napsané jinde.
+    private var warnings: [String] {
+        obstacles.map(\.sentence) + Policy.syncWarnings(section.sync).map(\.sentence)
+    }
 
     /// Nápověda pod kurzorem u zakázaného tlačítka — **tytéž věty jako v panelu**, na jednom
     /// řádku. Druhý text by znamenal dvě různá vysvětlení jednoho zašednutí.
