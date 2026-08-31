@@ -9351,6 +9351,13 @@ Co z toho v kódu vzniklo:
 **nesahá** (a chybějící se ani nezakládá), zachová se, co v souboru je, píše se **atomicky**
 s právy `0600` a **jen když je to potřeba**.
 
+**A po slotu ty záznamy někdo uklízí — od #484 `bin/slot-cleanup.sh`.** Jeden záznam na repozitář
+by ještě přežít mohl, ale záznam na **každý pracovní strom review** je řád, který slot přežije:
+bundle, cache ani doména je s sebou nevezmou. Skript maže klíče **pod kořenem cache toho slotu**
+(rovnost, nebo prefix s lomítkem — bez něj by úklid slotu `a` vzal i slot `ab`) a jede na tytéž
+čtyři pojistky, jaké jsou o odstavec výš; podrobnosti a co se u toho ověřuje, jsou v README, sekci
+*Paralelní vývoj — sloty*.
+
 ### Rolování — co se u #460 naměřilo
 
 Hlášení znělo „nejde mi scrollovat v tom terminálu“. Rozpadá se na tři otázky, každá znamená jinou

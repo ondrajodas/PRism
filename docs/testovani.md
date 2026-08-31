@@ -4311,6 +4311,25 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   nad zdrojákem skriptu (tatáž konstrukce jako `SingleWayOutTests`), protože za běhu se ta cesta
   pustit nedá — pustit se musí přesně to, co se nikdy nemá stát.
 
+  **Záznamy v `~/.claude.json` (#484) mají tvrzení dvě, a to cenné je zase to negativní.** Test
+  si v podstrčeném `HOME` vyrobí konfiguraci, ve které leží vedle sebe kořen cache slotu, jeho
+  pracovní strom review, **sousední slot, jehož jméno tím naším začíná** (`PRism-<slot>b`), hlavní
+  instance a cizí projekt. Po úklidu musí být pryč jen ty první dva a zbytek nedotčený — ubraný
+  cizí klíč by byl potichu, protože na ten soubor se nikdo nedívá, dokud se `claude` nezeptá na
+  důvěru ke složce, kterou už znal. Klíče se skládají **`ClaudeWorkspaceTrust.key(for:)`**, tedy
+  toutéž funkcí, kterou je do souboru zapisuje aplikace: je to rozvinutá cesta (`realpath`)
+  a `${TMPDIR}` testovacího hosta leží za symlinkem, takže klíč složený od oka by se s obsahem
+  souboru minul. K tomu dva testy o tom, kdy se **nepíše vůbec**: konfigurace bez záznamů slotu
+  musí zůstat **bajt po bajtu** stejná (přeskládané klíče by test položily) a nečitelný soubor se
+  jen ohlásí — úklid pokračuje a skončí `3`.
+
+  **Ověřeno vložením regrese, dvakrát.** (1) Z porovnání se vyndá lomítko
+  (`startswith($root + "/")` → `startswith($root)`) — padne tvrzení, že sousední slot zůstal,
+  i strukturní tvrzení nad zdrojákem. (2) Zahodí se kontrola, že je soubor čitelný objekt JSON —
+  skript umře na parse erroru `jq` s kódem `5` a **neuklidí ani doménu a databázi**, takže padnou
+  čtyři tvrzení najednou. Ta druhá regrese ukazuje víc, než na co se test ptal: pojistka „nesahej
+  na soubor, kterému nerozumíš“ drží i zbytek úklidu.
+
   Doména v `UserDefaults` (#399) se testuje **na vyrobeném slotu s UUID** v názvu: test si domenu
   sám vypíše (`defaults write com.ondrajodas.prism.zztest-…`) a po úklidu ověří **zpětným čtením**,
   že `defaults read` selže a že plist v `~/Library/Preferences/` neexistuje. Obojí je potřeba:

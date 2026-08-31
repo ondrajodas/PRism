@@ -2171,8 +2171,8 @@ git worktree remove ../PRism-a
 ```
 
 Skript ukončí aplikaci slotu (Apple eventem, ne `killall`em — běžící review se tedy ohlásí), smaže
-bundle z `/Applications`, cache, **doménu v `UserDefaults`** i prázdný plist po ní, a nakonec zamete
-databázi LaunchServices. Bez slotu **odmítne**: cílem by byla hlavní instance, tedy ta aplikace,
+bundle z `/Applications`, cache, **záznamy o složkách slotu v `~/.claude.json`**, **doménu
+v `UserDefaults`** i prázdný plist po ní, a nakonec zamete databázi LaunchServices. Bez slotu **odmítne**: cílem by byla hlavní instance, tedy ta aplikace,
 která se používá — a v `/Applications` nesmaže bundle, který se hlásí cizím identifikátorem (tatáž
 kontrola, jakou má `bin/run.sh` u instalace, a od #398 na jednom místě).
 
@@ -2181,6 +2181,24 @@ by nastartoval s nastavením po předchůdci, tedy i s tím, co z něj `bin/slot
 vyndal. `defaults delete` má u toho dvě pasti a obě jsou změřené — nad neexistující doménou vrací
 **nenulu** a po sobě nechá **prázdný plist** (42 B), na kterém `defaults read` už tvrdí, že doména
 neexistuje. Úklid proto maže obojí a ověřuje se **zpětným čtením, ne návratovým kódem**.
+
+**Záznamy v `~/.claude.json` se od #484 uklízejí taky.** Aplikace do konfigurace Claude Code
+zapisuje důvěru ke složkám **své** cache (#460), a od #479 ne jen ke kořeni, ale ke **každému
+pracovnímu stromu review** — záznamů po slotu tedy vzniknou desítky a bundle, cache ani doména je
+s sebou nevezmou. Sahá se přitom do souboru cizího nástroje, takže na to platí tytéž pojistky jako
+na zápis v aplikaci: **na soubor, kterému skript nerozumí, se nesahá** (bez `jq`, nebo když se
+obsah nedá přečíst jako objekt JSON, se nepíše nic a řekne se to), **zachová se, co v něm je**,
+a **píše se atomicky** — přes soubor vedle cílového, s právy, která měl původní.
+
+Maže se jedině to, co leží pod kořenem cache **toho slotu**: klíč rovný
+`…/Application Support/PRism-<slot>`, nebo začínající toutéž cestou **a lomítkem**. Lomítko je
+podstatné — bez něj by úklid slotu `a` vzal i záznamy slotu `ab`; hlavní instance (`…/PRism/`) ani
+cizí projekty se pod ten prefix nedostanou. Porovnává se s **cestou, ne s tím, co na disku zbylo**
+(cache je v tu chvíli o krok dřív smazaná), a to v obou podobách kořene — rozvinuté i nerozvinuté,
+protože klíč si `claude` ukládá přes `realpath` a domovská složka umí ležet za symlinkem.
+Kontroluje se to **nad výsledkem, ne nad filtrem**: než se soubor vymění, musí v něm zbýt nula
+záznamů pod kořenem slotu a **přesně tolik ostatních, kolik jich v něm bylo** — jinak se nezapíše
+nic. Záznamy po slotech, které zanikly dřív, uklidí nejbližší běh skriptu.
 
 ### Ikona
 
@@ -2323,7 +2341,7 @@ Tests/                    unit testy — target PRismTests
 bin/run.sh                build + spuštění jedním příkazem (--diagnose zapne diagnostiku kreslení)
 bin/worktree.sh           pracovní strom se slotem — paralelní vývoj vedle běžící aplikace
 bin/slot-config.sh        očištěná konfigurace do cache slotu (jediné místo, kde ta očista je)
-bin/slot-cleanup.sh       úklid po slotu — aplikace, cache, doména v UserDefaults, LaunchServices
+bin/slot-cleanup.sh       úklid po slotu — aplikace, cache, ~/.claude.json, doména v UserDefaults, LaunchServices
 bin/lib/bundles.sh        sdílené funkce nad PRism bundly a databází LaunchServices (sourcuje se)
 bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)

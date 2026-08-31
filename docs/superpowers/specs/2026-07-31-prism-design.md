@@ -2922,6 +2922,23 @@ Obojí je „co po sobě slot nechává“, proto jeden PR: dvě větve by zname
 | **Cesta k `lsregister` se dá přebít proměnnou `PRISM_LSREGISTER`** | Zadrátovat ji a chybové větve jen přečíst | Bez ní se **obě chybové větve nedají spustit** — a kontrola, která hlásí jen výjimečně, je bez spuštění k nerozeznání od funkční (#61). `/nekde/neni` je chybějící binárka, `/usr/bin/false` neúspěšný výpis. Vedlejší užitek: testy, které o LaunchServices nejsou, si databázi nechají projít `/usr/bin/true` a stojí desetiny sekundy místo pěti |
 | **Skripty se testují harnessem** (`Tests/Scripts/`) | Nechat je na ověření spuštěním, jako zbytek `bin/` | Tyhle dva rozhodují o **mazání**, a nejcennější tvrzení („hlavní instance se nedotkne“) je negativní, tedy přesně to, co se rozbije potichu. Že se maže jedině cesta složená ze slotu, se tvrdí nad **zdrojákem** (jako `SingleWayOutTests`), protože tu druhou cestu za běhu pustit nejde. A regrese na přeskakování existujících cest se **nesmí pustit na skutečnou databázi** — bez toho `if`u by odregistrovala hlavní aplikaci —, takže se ověřuje proti záznamníku místo `lsregister` |
 
+### Záznam rozhodnutí — záznamy slotu v `~/.claude.json` (#484)
+
+Třetí věc, kterou po sobě slot nechával: **záznamy o důvěře ke složkám** v konfiguraci Claude Code.
+Aplikace je tam zapisuje od #460 a od #479 ne jen pro kořen cache, ale pro **každý pracovní strom
+review** — takže jich za život slotu vzniknou desítky a smazaný bundle, cache ani doména je s sebou
+nevezmou (po zaniklých slotech `a`, `b` a `c` v souboru ležely dál). Rozšiřuje se tím
+`bin/slot-cleanup.sh`, ne vzniká nový skript: je to táž otázka „co po sobě slot nechává“ a týž
+důvod, proč to není řádek v dokumentaci.
+
+| Rozhodnutí | Zamítnuté alternativy | Proč |
+|---|---|---|
+| **Klíč se vybírá porovnáním s kořenem cache slotu** — rovnost, nebo prefix **s lomítkem** | Projít složky, které v cache zbyly, a mazat záznamy podle nich; nebo mazat vše, co obsahuje `PRism-<slot>` | Cache je v tu chvíli o krok dřív smazaná, takže výběr podle disku by nenašel nic — a pořadí kroků by se stalo skrytou podmínkou. Lomítko je to, co dělí slot `a` od slotu `ab`; bez něj by úklid jednoho slotu vzal záznamy druhého, a **potichu**. Hlavní instance (`…/PRism/`) se pod ten prefix nedostane, protože slot je v tu chvíli neprázdný (odmítá se dřív, než se složí jakákoli cesta) |
+| **Porovnává se s oběma podobami kořene**, rozvinutou i nerozvinutou | Vzít cestu tak, jak ji skript složil z `${HOME}` | Klíč si `claude` ukládá přes `realpath` (změřeno u #460) a domovská složka umí ležet za symlinkem — na macOS jsou to zrovna `/tmp` a `/var`, tedy i `${TMPDIR}` testovacího hosta. Rozvíjí se `${HOME}`, ne cache: ta v tu chvíli na disku už není, takže by se rozvinout nedala |
+| **Bez `jq` nebo nad nečitelným souborem se nepíše nic** a jen se to ohlásí (`exit 3`) | Přepsat soubor `sed`em; nebo skončit chybou dřív, než se uklidí zbytek | Je to konfigurace **cizího nástroje**: rozbít ji je ztráta cizí práce, kdežto neúspěch stojí pár záznamů, které v ní zůstanou a jdou smazat ručně. Tytéž pojistky má zápis v aplikaci (`ClaudeWorkspaceTrust`). Ověřeno vložením regrese: bez té kontroly skript umře na parse erroru `jq` s kódem `5` a **neuklidí ani doménu a databázi** |
+| **Kontroluje se výsledek, ne filtr** — nula záznamů pod kořenem slotu a **přesně tolik ostatních, kolik jich bylo** | Věřit filtru `jq`, případně jen zpětně dopočítat, že něco ubylo | Tatáž volba jako v `bin/slot-config.sh` (#262), kde v přečteném a „zjevně správném“ filtru deset dnů chyběl `mode` u rep. Ubraný cizí projekt je nejhorší možný konec tohohle kroku, takže když kontrola neprojde, **nezapíše se nic** — přepisuje se soubor vedle cílového, takže je co zahodit |
+| **Soubor bez záznamů slotu se nepřepisuje vůbec** | Přepsat ho vždycky, je to idempotentní | Každý zápis je okno, ve kterém se dá přijít o změnu, kterou tam mezitím udělal `claude` sám (aplikace to řeší stejně: hotová důvěra se nepřepisuje, takže běžný případ je čisté čtení). Test to tvrdí **na bajtech**, takže by ho položilo i pouhé přeskládání klíčů |
+
 ### Záznam rozhodnutí — odznak v railu a kapsle stavu podle návrhu (#366, #348)
 
 Dvě odchylky **aplikace** od toho, co v mockupu už nakreslené je, tedy bez schvalovací brány (jako

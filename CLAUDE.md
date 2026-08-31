@@ -926,7 +926,7 @@ příští spuštění skriptu: je to **tatáž cesta**, kterou odregistrovává
 ./bin/run.sh --diagnose                # totéž + diagnostika kreslení (#361, #412)
 ./bin/worktree.sh a issue-231-neco     # strom pro paralelní vývoj ve slotu „a“ (#228)
 ./bin/slot-config.sh                   # očištěná konfigurace do cache slotu (#262)
-./bin/slot-cleanup.sh                  # ukliď po slotu: bundle, cache, UserDefaults, LS (#398)
+./bin/slot-cleanup.sh                  # ukliď po slotu: bundle, cache, ~/.claude.json, UserDefaults, LS
 ./bin/setup-signing.sh                 # jednorázově: certifikát + Signing.local.xcconfig
 swift bin/make-icon.swift [split] [/tmp/x]    # překreslí ikonu do App/Assets.xcassets
 ```

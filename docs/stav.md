@@ -5631,3 +5631,39 @@ se ověřily **vloženou regresí**.
 
 **Co ověřuje jedině člověk**: že se událost k `handle(wheel:)` doopravdy dostane. Doručování
 událostí testovací host nerozpohybuje — je to tatáž hranice jako u fokusu (#184).
+
+## #484 — `slot-cleanup.sh` po sobě uklidí i záznamy slotu z `~/.claude.json`
+
+Skript uklízel bundle, cache, doménu v `UserDefaults`, plist i záznam v LaunchServices — ale ne to,
+co si slot nechal v konfiguraci Claude Code. Po zaniklých slotech `a`, `b` a `c` tam ležely cesty
+do jejich dávno smazaných cache. Všiml si toho subagent u #479 mimo zadání.
+
+**Do #479 vznikal jeden záznam na repozitář, od #479 na každý pracovní strom review** — a to je
+ten důvod, proč to začalo vadit teď: záznamů přibývá řádově víc a slot, který je vyrobil, přežijí.
+
+Uklízí se **klíč rovný kořeni cache toho slotu, nebo začínající jím a lomítkem**. Lomítko je celý
+rozdíl mezi slotem `a` a slotem `ab`; hlavní instance (`…/PRism/`) ani cizí projekty se pod ten
+prefix nedostanou. Porovnává se s **cestou, ne s tím, co na disku zbylo** — cache je v tu chvíli
+o krok dřív smazaná, takže výběr podle disku by nenašel nic a pořadí kroků by se stalo skrytou
+podmínkou. A porovnává se s **oběma podobami kořene**, rozvinutou i nerozvinutou: klíč si `claude`
+ukládá přes `realpath` a domovská složka umí ležet za symlinkem.
+
+**Sahá se do souboru cizího nástroje, takže platí tytéž čtyři pojistky jako na zápis v aplikaci**
+(`ClaudeWorkspaceTrust`): na soubor, kterému skript nerozumí, se **nesahá** (bez `jq` nebo nad
+nečitelným obsahem se to jen ohlásí, úklid pokračuje a skončí `3`), zachová se, co v něm je, píše se
+**atomicky** přes soubor vedle cílového a **s právy, která měl původní**, a když v něm po slotu nic
+není, **nepřepíše se vůbec**. Kontroluje se to **nad výsledkem, ne nad filtrem** (tatáž volba jako
+v `bin/slot-config.sh`): než se soubor vymění, musí v něm zbýt nula záznamů pod kořenem slotu
+a **přesně tolik ostatních, kolik jich v něm bylo** — jinak se nezapíše nic.
+
+Testů **4408**, všechny zelené — z toho **tři nové** v `SlotCleanupTests`. Cenné je na nich to
+negativní: v podstrčeném `HOME` leží vedle záznamů slotu i **sousední slot, jehož jméno tím naším
+začíná**, hlavní instance a cizí projekt, a všechny tři musí úklid přežít. Klíče skládá
+`ClaudeWorkspaceTrust.key(for:)`, tedy táž funkce, kterou je zapisuje aplikace. **Ověřeno vložením
+regrese, dvakrát**: bez lomítka v porovnání zmizí sousední slot (padnou dvě tvrzení), bez kontroly
+čitelnosti umře skript na parse erroru `jq` s kódem `5` a **neuklidí ani doménu a databázi**.
+
+**Na obrazovce není co vidět** — je to shell skript, aplikace se nezměnila.
+
+**Zbylé záznamy po slotech `a`, `b` a `c`** uklidí nejbližší běh skriptu v tom kterém slotu, nebo se
+smažou ručně; tenhle PR do konfigurace na stroji nesáhl.
