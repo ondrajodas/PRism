@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 
@@ -24,9 +25,17 @@ import Testing
 /// rozměr okna a to, že v něm doopravdy jsou bloky kódu — proto ta dvě čísla ve výpisu.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`.
+///
+/// **`.serialized`, a je to podmínka, ne opatrnost** (#421). Počitadlo průchodů tělem je
+/// `RenderDiagnostics.current`, tedy **jedna hodnota na celý proces** — tatáž třída jako
+/// `NSApp.appearance` u #367. Když dva testy z téhle sady běží naráz, sbírají si do sebe navzájem
+/// a navzájem si ji nulují: naměřeno, že `DiffView` vyšel 9 místo 6 a úsek `kontrola měřidla`
+/// vydal **nulu**, tedy tvrzení „tělo se nezašpinilo“ nad tím, co se právě zašpinilo. Platí to
+/// i pro řádky, které měří CPU — dvě okna na obrazovce naráz jsou dvě různé scény.
 @MainActor
 @Suite(
     "Nečinné okno s diffem (#361)",
+    .serialized,
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
 )
 struct IdleDiffSpinProbe {
@@ -113,6 +122,270 @@ struct IdleDiffSpinProbe {
         for tab in [PullRequestTab.overview, .commits, .checks] {
             try await measure("\(Self.slug(of: tab)), plné okno", tab: tab, layout: .unified, big: false, full: true)
         }
+    }
+
+    /// **Co zašpiní tělo `DiffView`u nad nečinným diffem** (#421).
+    ///
+    /// Zadání #421 stálo na záznamu z 2026-08-23: `DiffRow.id` **6 767** zásahů, `FileDiff.id`
+    /// 1 324, a ve 113 ze 123 vzorků týž `changed` vstup — `StaticBody` toho `LazyVStack`u
+    /// v `DiffView`u. Otázka byla, **kdo si o to řekne**, když se v diffu nic nemění.
+    ///
+    /// **Odpověď je tik pollingu, a vada tím pořád trvá.** Naměřeno nad usazeným oknem
+    /// (201 bloků kódu, 1 210 prvků, split, 1512×874): deset tichých tiků dá `DiffView`u
+    /// **6 průchodů tělem**, `DiffRowView`u **1 182** a `DiffRow.id` **2 541 dotazů**, kdežto
+    /// týž běh smyčky **bez tiku** dá nulu. `LazyVStack` z toho zásobníku po #469 zmizel —
+    /// `changed` vstup je dnes `StaticBody<…VStack<ForEach<Array<FileDiff>…` —, takže se změnila
+    /// **cena** jednoho zašpinění, ne to, že k němu dochází.
+    ///
+    /// Sonda dělí běh na čtyři úseky, protože každý odpovídá na jinou otázku:
+    ///
+    /// 1. **Čirá nečinnost.** Scéna sama — nikdo nic nepíše, nikdo nescrolluje. Nula.
+    /// 2. **Tentýž rozsekaný běh smyčky, ale bez tiku.** Kontrola tvaru měření (#478): bez ní by
+    ///    se čísla z úseku 3 dala vysvětlit tím, že se runloop pouští po kouscích. Nula.
+    /// 3. **Tiché tiky pollingu.** Tik se **zdržuje** (`duringSearch`), aby se
+    ///    `isRefreshing = true` stihlo projevit ve vlastním snímku jako v běžící aplikaci —
+    ///    a **páry 2 s po sobě** ze záznamu jsou zrovna ty dva zápisy příznaku okolo `gh` volání.
+    /// 4. **Kontrola měřidla.** Tělo se zašpiní **schválně** (přepnutý pohled diffu), aby bylo
+    ///    vidět, co jeden špinavý průchod dnes stojí — a hlavně **že by to sonda naměřila**.
+    ///    Bez tohohle úseku by nula v úsecích 1 a 2 netvrdila nic (#478).
+    ///
+    /// Měří se **dvakrát**, s chromem okna i bez něj, protože se ta dvě čísla liší trojnásobně
+    /// (`DiffView` 6 proti 2 za deset tiků) — cesta na diff tedy vede převážně přes hlavičku
+    /// a stavový řádek, ne přes detail PR. Co se z toho podařilo přišpendlit a co zbývá, je
+    /// v [`docs/testovani.md`](../../docs/testovani.md).
+    @Test("Co zašpiní tělo DiffView nad nečinným diffem (#421)")
+    func whatDirtiesTheDiffBody() async throws {
+        // **Dvakrát, s chromem okna i bez něj.** Bez toho druhého průchodu by se nedalo poznat,
+        // jestli pohon sedí v hlavičce a ve stavovém řádku, nebo uvnitř detailu PR.
+        for full in [true, false] {
+            try await measureTickDirt(full: full)
+        }
+    }
+
+    private func measureTickDirt(full: Bool) async throws {
+        let scene = try await preparedScene(big: true, full: full)
+        defer { _ = scene.directory }
+        let store = scene.store
+        store.setDetailTab(.filesChanged, for: pr)
+        store.setDiffLayout(.split)
+        let window = show(store: store, full: full)
+        // **`orderOut` scénu nezbourá, jen ji schová** — a schovaná dál dostává průchody tělem.
+        // Naměřeno: druhý scénář hlásil `ContentView` (382 průchodů `DiffRowView`u) i tehdy, když
+        // v jeho okně žádný `ContentView` není, protože počitadla sbírala i to první. Sonda, která
+        // počítá průchody tělem, tedy musí hierarchii **zahodit**, ne jen zavřít okno.
+        defer {
+            window.orderOut(nil)
+            window.contentViewController = NSViewController()
+        }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        // **Scéna se musí doložit**, jinak by nula mohla být nula nad prázdným oknem — tatáž past
+        // jako u ostatních řádků téhle sondy.
+        let chrome = full ? "s chromem okna" : "jen detail PR"
+        print("SONDA #421 \(chrome): \(Self.blocks(in: root)) bloků kódu, \(Self.descendants(of: root)) prvků")
+
+        let diagnostics = RenderDiagnostics(
+            log: DiagnosticsLog(url: scene.directory.url.appending(path: "d421.log")),
+            interval: 1
+        )
+        RenderDiagnostics.current = diagnostics
+        // Bez tohohle nepřijde ani jeden zásobník a `changed` vstup by se nedozvěděl nikdo.
+        #expect(GraphProbe.prepare())
+        defer { RenderDiagnostics.current = nil }
+        _ = diagnostics.snapshot()
+        diagnostics.reset()
+
+        _ = spinMainRunLoop(seconds: 5)
+        print("MĚŘENÍ #421 [\(chrome)] nečinnost 5 s — \(Self.report(diagnostics))")
+
+        // **Kontrola tvaru měření, ne tiku** (#478): tentýž rozsekaný běh runloopu, ale bez
+        // jediného tiku. Bez tohohle řádku by se nedalo poznat, jestli čísla u tiků mluví
+        // o tiku, nebo o tom, že se smyčka pouští po kouscích.
+        let ticks = 10
+        for _ in 0..<ticks {
+            _ = spinMainRunLoop(seconds: 0.4)
+            _ = spinMainRunLoop(seconds: 0.2)
+        }
+        print("MĚŘENÍ #421 [\(chrome)] \(ticks)× tentýž běh smyčky bez tiku — \(Self.report(diagnostics))")
+
+        // Zdržený tik: `isRefreshing = true`, kolo runloopu, pak `= false` a další kolo.
+        // **Odmlka jde přes `TestWait`**, ne přes vlastní `Task.sleep` (#296): čekání má v tomhle
+        // repu jedno místo. Nečeká se tu na jev — jde o to, aby `isRefreshing = true` přežilo
+        // aspoň jedno kolo smyčky, jako když `gh` odpovídá sekundy.
+        scene.gateway.duringSearch = { await TestWait.pause() }
+        for _ in 0..<ticks {
+            let tick = Task { await store.refresh() }
+            _ = spinMainRunLoop(seconds: 0.4)
+            await tick.value
+            _ = spinMainRunLoop(seconds: 0.2)
+        }
+        // **Zásobníky, ne jen počty**: `changed` vstup je jediné, co pojmenuje toho, kdo si
+        // o přepočet řekl — je to tentýž údaj, ze kterého vznikl histogram v zadání #421.
+        let stacks = diagnostics.graphStacks()
+        print("MĚŘENÍ #421 [\(chrome)] \(ticks) tichých tiků — \(Self.report(diagnostics))")
+        for (index, stack) in stacks.enumerated() {
+            print("MĚŘENÍ #421 [\(chrome)] zásobník \(index + 1)/\(stacks.count):\n\(stack)")
+        }
+
+        store.setDiffLayout(.unified)
+        _ = spinMainRunLoop(seconds: 2)
+        print("MĚŘENÍ #421 [\(chrome)] kontrola měřidla — \(Self.report(diagnostics))")
+    }
+
+    /// **Který kus tiku to je** (#421). Bisekce nad toutéž scénou: každý krok, který
+    /// `afterSuccessfulTick` dělá, se pustí zvlášť a vypíše se, co po něm zbylo v okně.
+    ///
+    /// Bez tohohle by z předchozí sondy plynulo jen „tik zašpiní diff“, což je vstup do opravy,
+    /// ne příčina. `forget(whatIsNotIn:)` je `private`, takže se nedá zavolat přímo — vychází
+    /// **jako zbytek** po odečtení vyjmenovaných kroků od celého tiku.
+    ///
+    /// **Naměřeno: všech pět vyjmenovaných kroků dá nulu**, celý tik dá `DiffView=6`. Práce po
+    /// úspěšném tiku — úklid map, automat, notifikace, rozhlídka po hlavách a po cizí aktivitě,
+    /// součet útraty — tedy v tom není; zbývá `isRefreshing` a `forget(whatIsNotIn:)`.
+    @Test("Který kus tiku zašpiní tělo DiffView (#421)")
+    func whichPartOfTheTickDirtiesTheDiffBody() async throws {
+        let scene = try await preparedScene(big: true, full: true)
+        defer { _ = scene.directory }
+        let store = scene.store
+        store.setDetailTab(.filesChanged, for: pr)
+        store.setDiffLayout(.split)
+        let window = show(store: store, full: true)
+        // Hierarchie se zahazuje, ne jen schovává — viz `measureTickDirt`.
+        defer {
+            window.orderOut(nil)
+            window.contentViewController = NSViewController()
+        }
+        _ = spinMainRunLoop(seconds: 2)
+        let root = try #require(window.contentView)
+        print("SONDA #421 scéna: \(Self.blocks(in: root)) bloků kódu, \(Self.descendants(of: root)) prvků")
+
+        let diagnostics = RenderDiagnostics(
+            log: DiagnosticsLog(url: scene.directory.url.appending(path: "d421b.log")),
+            interval: 1
+        )
+        RenderDiagnostics.current = diagnostics
+        defer { RenderDiagnostics.current = nil }
+        diagnostics.reset()
+        _ = spinMainRunLoop(seconds: 3)
+        print("MĚŘENÍ #421b nečinnost 3 s — \(Self.report(diagnostics))")
+
+        let summaries = Self.summaries
+        let steps: [(String, () async -> Void)] = [
+            ("startAutomaticReviews", { await store.startAutomaticReviews(for: summaries) }),
+            ("announceNewPullRequests", { await store.announceNewPullRequests(in: summaries) }),
+            ("refreshStaleHeads", { await store.refreshStaleHeads(in: summaries) }),
+            ("refreshOwnActivity", { await store.refreshOwnActivity(in: summaries) }),
+            ("loadDailySpend", { await store.loadDailySpend() }),
+        ]
+        for (name, step) in steps {
+            for _ in 0..<10 { await step() }
+            _ = spinMainRunLoop(seconds: 1)
+            print("MĚŘENÍ #421b 10× \(name) — \(Self.report(diagnostics))")
+        }
+
+        // **Odmlka jde přes `TestWait`**, ne přes vlastní `Task.sleep` (#296): čekání má v tomhle
+        // repu jedno místo. Nečeká se tu na jev — jde o to, aby `isRefreshing = true` přežilo
+        // aspoň jedno kolo smyčky, jako když `gh` odpovídá sekundy.
+        scene.gateway.duringSearch = { await TestWait.pause() }
+        for _ in 0..<10 {
+            let tick = Task { await store.refresh() }
+            _ = spinMainRunLoop(seconds: 0.4)
+            await tick.value
+            _ = spinMainRunLoop(seconds: 0.2)
+        }
+        print("MĚŘENÍ #421b 10× celý tik — \(Self.report(diagnostics))")
+    }
+
+    /// **Kterou vlastnost storu tik zneplatní** (#421). Bez okna a bez hodin: nad každým
+    /// čtením, které `DiffView.body` dělá **přes uzávěry z detailu**, se natáhne jednorázový
+    /// odběr a pak se pustí jeden celý tik. Vypíše se, kdo se probudil.
+    ///
+    /// Je to tentýž postup jako v `PollObservationTests` (#472), jen přes celý výčet — a je to
+    /// jediné měření, které vydá **jméno** vlastnosti; sonda s oknem umí říct jen „tělo se
+    /// zašpinilo“.
+    ///
+    /// **Naměřeno: z jednadvaceti čtení probudí tichý tik jediné — `isRefreshing`.** Ani
+    /// `diffState`, ani `expansion`, ani `isFolded`, ani `pullRequests`, ani `ownership`. #472
+    /// tedy drží a cesta na diff **nevede přes data**, ale přes **rozvržení** — a přestěhování toho
+    /// jednoho čtení z těla `ContentView`u se změřilo a zahodilo, protože na diffu nezměnilo nic
+    /// (viz [`docs/testovani.md`](../../docs/testovani.md)). Trvalé tvrzení o datech je
+    /// v `PollObservationTests`.
+    @Test("Kterou vlastnost storu tichý tik zneplatní (#421)")
+    func whichPropertyTheTickInvalidates() async throws {
+        let scene = try await preparedScene(big: true, full: true)
+        defer { _ = scene.directory }
+        let store = scene.store
+        let id = pr
+        guard case .loaded(let loaded, _) = store.diffState(for: id) else {
+            Issue.record("scéna nemá načtený diff, měřilo by se nad prázdnem")
+            return
+        }
+        let path = try #require(loaded.files.first?.displayPath)
+
+        let reads: [(String, @MainActor () -> Void)] = [
+            ("expansion(of:in:)", { _ = store.expansion(of: path, in: id) }),
+            ("hasRevealedLines(in:)", { _ = store.hasRevealedLines(in: id) }),
+            ("isFolded(_:in:)", { _ = store.isFolded(path, in: id) }),
+            ("diffState(for:)", { _ = store.diffState(for: id) }),
+            ("anchoredThreads(for:)", { _ = store.anchoredThreads(for: id) }),
+            ("conversation(for:)", { _ = store.conversation(for: id) }),
+            ("draftComments(for:)", { _ = store.draftComments(for: id) }),
+            ("canComposeDraft(for:)", { _ = store.canComposeDraft(for: id) }),
+            ("commentDrag", { _ = store.commentDrag }),
+            ("isRefreshing", { _ = store.isRefreshing }),
+            ("pullRequests", { _ = store.pullRequests }),
+            ("openTabSummaries", { _ = store.openTabSummaries }),
+            ("railQueueCount", { _ = store.railQueueCount }),
+            ("railMineCount", { _ = store.railMineCount }),
+            ("railActivityCount", { _ = store.railActivityCount }),
+            ("pullRequestsWithDraft", { _ = store.pullRequestsWithDraft }),
+            ("activeTab", { _ = store.activeTab }),
+            ("railSection", { _ = store.railSection }),
+            ("isPaletteOpen", { _ = store.isPaletteOpen }),
+            ("diffLayout", { _ = store.diffLayout }),
+            ("ownership(of:)", { _ = store.ownership(of: id) }),
+        ]
+        let watchers = reads.map { name, read -> (String, Watcher) in
+            let watcher = Watcher()
+            watcher.watch(read)
+            return (name, watcher)
+        }
+        await store.refresh()
+        let woken = watchers.filter { $0.1.woken }.map(\.0)
+        let quiet = watchers.filter { !$0.1.woken }.map(\.0)
+        print("MĚŘENÍ #421c tik probudil: \(woken.isEmpty ? ["nikoho"] : woken)")
+        print("MĚŘENÍ #421c tik neprobudil: \(quiet)")
+    }
+
+    /// Čtenář, který si pamatuje, jestli ho někdo probudil. Kopie z `PollObservationTests` (#472)
+    /// — `withObservationTracking` je jednorázové a sondě stačí „přišla vůbec nějaká změna?“.
+    private final class Watcher: @unchecked Sendable {
+        private(set) var woken = false
+
+        func watch(_ read: @escaping @MainActor () -> Void) {
+            MainActor.assumeIsolated {
+                withObservationTracking { read() } onChange: { [self] in woken = true }
+            }
+        }
+    }
+
+    /// Průchody těly **a** místa uvnitř aktualizace grafu za jeden úsek — a **vynuluje** obojí.
+    ///
+    /// Pořadí čtení je podstatné: `reset()` maže obojí, takže se graf musí přečíst dřív, než
+    /// se počitadla těl vynulují.
+    private static func report(_ diagnostics: RenderDiagnostics) -> String {
+        let sites = diagnostics.graphSnapshot()
+        let bodies = diagnostics.snapshot()
+        diagnostics.reset()
+        return "těla: \(Self.tally(bodies)) | graf: \(Self.tally(sites))"
+    }
+
+    private static func tally(_ counts: [String: Int]) -> String {
+        guard !counts.isEmpty else { return "žádné" }
+        return counts
+            .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: " ")
     }
 
     private static func slug(of tab: PullRequestTab) -> String {
@@ -983,6 +1256,17 @@ struct IdleDiffSpinProbe {
     /// tisíce řádků; `full` přidá to, co v okně u #361 bylo — tři otevřené záložky, nálezy
     /// v diffu a konverzaci.
     private func prepared(big: Bool, full: Bool) async throws -> (store: AppStore, directory: TemporaryDirectory) {
+        let scene = try await preparedScene(big: big, full: full)
+        return (scene.store, scene.directory)
+    }
+
+    /// Totéž, ale **i s gateway**. Sonda k #421 potřebuje tik pollingu zdržet, aby se příznak
+    /// `ptáme se` stihl projevit ve vlastním snímku, jako v běžící aplikaci — a to jde jedině
+    /// přes `duringSearch` na té fake instanci.
+    private func preparedScene(
+        big: Bool,
+        full: Bool
+    ) async throws -> (store: AppStore, directory: TemporaryDirectory, gateway: FakeGitHubGateway) {
         var text = try Fixture.text("gh/pr-diff-ordinary.diff")
         if big { text += Self.synthetic(files: 12, hunks: 4, lines: 40) }
         let gateway = FakeGitHubGateway(
@@ -1002,7 +1286,7 @@ struct IdleDiffSpinProbe {
         store.noteVisit(to: pr)
         guard full else {
             store.openTab(pr)
-            return (store, directory)
+            return (store, directory, gateway)
         }
         await store.loadConversation(for: Self.summary)
         // Commity a kontroly patří do storu **taky**, jinak by se na těch záložkách měřilo
@@ -1018,7 +1302,7 @@ struct IdleDiffSpinProbe {
         for summary in Self.summaries { store.openTab(summary.id) }
         store.activeTab = .pullRequest(pr)
         store.selection = pr
-        return (store, directory)
+        return (store, directory, gateway)
     }
 
     /// Syntetický diff k fixture. Skutečný diff z veřejného repa je malý; cena rozvržení roste

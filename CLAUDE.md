@@ -700,6 +700,18 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   `PullRequestDetailView` za dvacet tiků, po rozdělení 1**. Naopak **psát „jen změnu“ nemá smysl**
   — zápis téže hodnoty toolchain nehlásí (změřeno, pinuje to `PollObservationTests`), takže
   `if x != new { x = new }` je porovnání navíc, které nic nemění.
+
+  **A „hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421):
+  `store.isRefreshing` se čte v těle `ContentView`u (tlačítko `⟳` a povolení pro `⌘R`), takže se
+  kořen okna špiní dvakrát za tik i po #472 — přestěhování do dvou vlastních views ale dalo
+  `ContentView` 13–21 → 9 průchodů tělem za deset tiků **a k tomu 9 + 9 nových**, tedy celkem víc,
+  a na diffu (`DiffView` 6, `DiffRow.id` 2 541) **nezměnilo nic**. Zahozeno podle pravidla o řádek
+  níž; kdo to zkusí znovu, ať měří **čas**, ne počty průchodů. **#421 je pořád otevřené** a než na
+  něj sáhneš, přečti si
+  [*Co zašpiní tělo `DiffView`u*](docs/testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421)
+  — je tam, co je vyloučené (líný seznam, data, práce po tiku, hlášení ve stavovém řádku) a kam se
+  jít podívat (mění se změřená **výška** plochy diffu).
+
   Čísla i zamítnuté varianty jsou
   v [`docs/architektura.md`](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
 - **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — ve `sample`u je vlastní práce
