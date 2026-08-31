@@ -203,8 +203,13 @@ struct PanelBranchView: View {
                     .foregroundStyle(Palette.ink2)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                // Jediné tlačítko se do řádku vejde — `Zahodit rebase` je nejdelší z nich a v renderu
-                // zbylo textu 160 bodů, tedy tři řádky u nejdelší věty.
+                // Jediné tlačítko se do řádku vejde — `Zahodit rebase` je nejdelší z nich a nechá
+                // textu ~160 bodů. Změřeno renderem: krátká věta (`Srovnáno — přetlačeno…`) se sází
+                // na dva řádky, nejdelší (konflikt se jménem souboru) na šest. Šest řádků po třech
+                // slovech je pořád věta, kdežto u dvojice tlačítek zbylo ~50 bodů a **slovo na
+                // řádek** — to je ten rozdíl, kvůli kterému jde na vlastní řádek jenom dvojice.
+                // Vlastní řádek u jediného tlačítka je zamítnutý: u `Zavřít` nad dvouřádkovou větou
+                // je to řádek navíc v panelu, který má 300 bodů.
                 if Self.noticeActions(state) == .one { singleNoticeButton(state) }
             }
             if Self.noticeActions(state) == .two { pairedNoticeButtons }
