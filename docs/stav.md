@@ -5736,3 +5736,64 @@ vydal nulu, tedy „nezašpinilo se“ nad tím, co se právě zašpinilo). Je t
 
 **Na obrazovce není co vidět**: aplikace se nezměnila, přibyly jen sondy, jedno tvrzení
 a dokumentace.
+
+## #483 — Emotikony s našeptáváním shortcodů ve třech polích, která posílají text ven
+
+Okno má tři místa, kde se píše text pro GitHub: composer komentáře pod PR (#216), odpověď do vlákna
+(#73) a tělo review v panelu. Ve všech třech to bylo holé pole — emotikon se do něj dal jedině
+vlepit odjinud. Od #483 se v nich píše `:ta` a nabídka doplní zbytek. Návrh, sekce 38.
+
+**Odejde znak, ne shortcode.** Composer je obyčejné textové pole a odchází jeho obsah, takže vložený
+`:tada:` by byl náhled, který tvrdí něco jiného než výsledek na GitHubu — tatáž úvaha, kvůli které se
+u nového labelu posílá hex vždycky (#413). Shortcody bez Unicode (`:shipit:`, `:octocat:`) proto
+v nabídce nejsou.
+
+**Cesta ven se nezměnila o nic**: `grep ReviewPublishing App/` vypisuje týž seznam, `GitHubGateway`
+nedostal dotaz a `SingleWayOutTests` se nesáhlo. Je to chování textového pole.
+
+**Katalog je v aplikaci** (1870 znaků, 1913 shortcodů), generovaný `bin/make-emoji.swift` ze zdroje
+v repu (`db/emoji.json` z github/gemoji, MIT). `GET /emojis` vrací jména a adresy obrázků, ne znaky.
+Vygenerovaný soubor je **jeden velký řetězec**, protože doslovné pole 1870 struktur by type-checker
+překládal minuty; řádky jsou **abecedně podle prvního shortcodu**, jinak by na dotaz `:ta` vyhrálo
+jídlo (zdroj je seskupený po kategoriích) a `:tada:` by se do šesti řádků nevešlo.
+
+**Dvě věci vyšly proti zadání jinak, a obě z měření.**
+
+První: **nabídku nekreslí pole, ale volající.** `overlay`, který přesahuje plochu rodiče, ořízne
+každý ořezávající předek — změřeno na skutečné hierarchii (`NSHostingView` v okně + `cacheDisplay`;
+`ImageRenderer` `ScrollView` nevykreslí vůbec), a v obou případech zmizela nabídce horní hrana
+**i vybraný řádek**. Dvě ze tří polí v takovém předkovi sedí: tělo review je první věc ve `ScrollView`u
+panelu, odpověď do vlákna je v bublině s `clipShape` (97 bodů proti 203 plné nabídky). Nabídka se
+proto kotví na tom předkovi, který neořezává, a stav si podávají přes `EmojiSuggestionBox`
+(`@Observable`, jeden na majitele — hodnota ve `@State` by úhozem překreslovala tab, #472).
+`popover` to nevyřeší: bere fokus, takže by v poli přestalo jít psát.
+
+Druhé: **dlouhé jméno se samo nezalomí.** `Text` ve SwiftUI uvnitř slova nezalamuje, takže nejdelší
+jméno v katalogu (`:hand_with_index_finger_and_thumb_crossed:`, 42 znaků) zůstalo na jednom řádku
+a **přeteklo** za hranu, aniž by se změnila výška. Zlomy proto nabízí `Policy.emojiShortcodeLabel`
+nulovou mezerou za `_`, `-` a `+`; nejdelší úsek mezi oddělovači má v katalogu 16 znaků. Do textu
+zprávy se ze sazby nedostane nic — vkládá se znak.
+
+**Hledání se s panelem dělí ve stupních shody, ne v `searchRange`**, a to ze dvou důvodů:
+`.diacriticInsensitive` by na `:čá` nabídlo `taco` (shortcody jsou ASCII) a cena — 1,88 ms proti
+0,50 ms na dotaz nad 1913 jmény (`-O`). Běží to při každém úhozu s otevřenou nabídkou.
+
+Testů **4449**, všechny zelené — z toho **37 nových** v pěti suitách. Cenná je na nich negativní
+půlka: devatenáct vstupů, u kterých se nabídka otevřít **nesmí** (`12:30`, `https:…`, `Poznámka:`,
+`::ta`, `:1`, `:tada:`, kurzor mimo text), zastaralý rozsah, který **nevloží nic**, `:čá` bez shody,
+a nad zdrojáky, že nabídku zapínají **jmenovitě tři** pole a tab `Zeptat se` mezi nimi není. Jedno
+tvrzení se muselo utáhnout po vložené regresi: `suggestions: emoji` stojí v obou voláních, takže test
+„kdo box podá, ten nabídku kreslí“ prošel i s polem, kterému se box vyndal.
+
+**Proklikání našlo jednu věc a stála za to**: `:+` nabídku neotevřelo, takže `:+1:` ani `:-1:` —
+dva nejčastější shortcody na GitHubu — se od dvojtečky napsat nedaly. Pravidlo se rozšířilo
+**nesymetricky**: `+` projde hned, `-` až s druhým znakem. Důvod je `:-)` a `:-(`, které jsou v české
+próze běžnější než `:-1:`: na samotném `:-` má katalog čtyři shody (👎, 📧 přes alias `e-mail`, 🚱,
+🦖), takže by nabídka u každého smajlíku na jeden úhoz problikla. Zamítnutá symetrická varianta
+i cena té zvolené jsou v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--znaménka-v-dotazu-a-smajlík-483).
+Výčet v testu se tím rozšířil o pět otevírajících a pět zavřených vstupů a asymetrie je **ověřená
+vloženou regresí**.
+
+**Co ověřuje jedině člověk**: že klávesy zaberou (#184). `↑↓`, `↵`, ustupující `esc` a `⌘⏎`
+s otevřenou nabídkou testovací host neunese — aktivaci nedostane.

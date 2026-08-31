@@ -2200,6 +2200,27 @@ Kontroluje se to **nad výsledkem, ne nad filtrem**: než se soubor vymění, mu
 záznamů pod kořenem slotu a **přesně tolik ostatních, kolik jich v něm bylo** — jinak se nezapíše
 nic. Záznamy po slotech, které zanikly dřív, uklidí nejbližší běh skriptu.
 
+### Katalog emotikonů
+
+Ve třech polích, ze kterých text odchází na GitHub — komentář pod PR, odpověď do vlákna a tělo
+review v panelu — se píše `:ta` a nabídka doplní zbytek; do textu se vloží **znak, ne zkratka**
+(`:tada:` by byl náhled, který tvrdí něco jiného než výsledek na GitHubu). Vybírá se klávesnicí
+(`↑↓`, `↵`, `esc`), v tabu `Zeptat se` nabídka **není** — to není text pro GitHub a `Return` si
+tam bere odeslání otázky.
+
+Katalog je **v aplikaci, ne z GitHubu**: `GET /emojis` vrací jména a adresy obrázků, ne znaky, a
+seznam se nemění. Generuje se ze zdroje v repu:
+
+```bash
+swift bin/make-emoji.swift    # bin/emoji-sources/gemoji-emoji.json → App/Support/EmojiTable.swift
+```
+
+Zdroj je `db/emoji.json` z [github/gemoji](https://github.com/github/gemoji) (MIT) — ten seznam,
+ze kterého GitHub své shortcody bere. Leží v repu schválně: bez něj by se katalog nedal vyrobit
+znovu. Vygenerovaný soubor je **jeden velký řetězec, ne pole 1870 struktur** (doslovné pole té
+velikosti by type-checker překládal minuty) a shortcody bez Unicode (`:shipit:`, `:octocat:`)
+v něm nejsou — nemají znak, který by se vložil.
+
 ### Ikona
 
 Ikona je **generovaná z kódu**, ne obrázek přinesený zvenčí:
@@ -2347,6 +2368,8 @@ bin/copilot-review.sh     vyžádání Copilot review na PR
 bin/setup-signing.sh      jednorázová příprava stálého podpisu (self-signed certifikát)
 bin/make-icon.swift       vykreslí ikonu do asset catalogu (bez závislosti, přes ImageRenderer)
 bin/icon-sources/         oficiální značky, ze kterých se ikona skládá
+bin/make-emoji.swift      vygeneruje katalog emotikonů do App/Support/EmojiTable.swift
+bin/emoji-sources/        db/emoji.json z github/gemoji — zdroj toho katalogu
 Info.plist                název aplikace, verze, minimální systém
 PRism.entitlements        vypnutý App Sandbox
 Signing.xcconfig          podpis: ad-hoc default + volitelný Signing.local.xcconfig

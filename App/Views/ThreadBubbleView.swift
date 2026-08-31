@@ -35,6 +35,10 @@ struct ThreadBubbleView: View {
     var actions: ThreadActions?
     var placement: Placement = .code
 
+    /// Otevřená nabídka emotikonů v odpovědi (#483). Drží ji bublina, protože **ona tu nabídku
+    /// kreslí** — až za svým `clipShape`, viz `body`.
+    @State private var emoji = EmojiSuggestionBox()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -68,6 +72,10 @@ struct ThreadBubbleView: View {
         .background(Palette.chrome, in: .rect(cornerRadius: 7))
         .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.line, lineWidth: 1) }
         .clipShape(.rect(cornerRadius: 7))
+        // **Nabídka emotikonů až za `clipShape`** (#483), tedy nad celou bublinou: uvnitř by se
+        // ořízla o její horní hranu, a to i v bublině, která je vyšší než ona — ořez je na hraně
+        // plochy, ne na hraně obsahu (změřeno, viz `EmojiSuggestionBox`).
+        .emojiMenuAbove { EmojiSuggestionMenu(suggestions: emoji) }
         .padding(.leading, indent)   // u kódu do sloupce s obsahem, na ose nula
         .padding(.trailing, 16)
         .padding(.vertical, 4)
@@ -315,6 +323,9 @@ struct ThreadBubbleView: View {
                     text: actions.reply(thread),
                     placeholder: "Odpovědět do vlákna…",
                     minHeight: 26,
+                    // Emotikony s našeptáváním (#483) — vlákno je třetí místo, ne výjimka. Pole,
+                    // ve kterém `:` nedělá nic, se pozná až ve chvíli, kdy tam někdo píše.
+                    suggestions: emoji,
                     commit: { actions.setReply(thread, $0) }
                 )
                 // Identita per vlákno: bublina je buňka líného seznamu a po odscrollování

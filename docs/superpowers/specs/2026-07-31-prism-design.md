@@ -4124,3 +4124,109 @@ to, co pravdivé je a co se rozbije potichu: `PollObservationTests
 přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. Je to slabší věta, ale **ověřená
 vloženou regresí** a hlavně pravdivá; test, který by musel čekat na okno a měřit v sekundách, by byl
 navíc falešně červený pod souběžným buildem (#296).
+
+### Záznam rozhodnutí — nabídku emotikonů kreslí volající, ne pole (#483)
+
+Zadání i návrh (sekce 38) říkají „kotví se **nad polem**, ne u kurzoru“. Implementace tomu vyhověla,
+ale kotvení skončilo o úroveň výš, než by z té věty čekal — a je to změna z měření, ne z pohodlí.
+
+**Co se změřilo.** `overlay`, který přesahuje plochu rodiče, ořízne **každý ořezávající předek**.
+Ověřeno na skutečné hierarchii (`NSHostingView` v okně, jeden průchod runloopem, `cacheDisplay`),
+protože `ImageRenderer` na tuhle otázku odpovědět neumí: `ScrollView` offscreen nevykreslí vůbec,
+takže prázdný render nerozliší „ořízlo“ od „nenakreslilo se“. Scéna měla tři varianty vedle sebe —
+ve `ScrollView`u, v ploše s `clipShape` a **bez ořezu**; ta třetí je kontrola měřidla. Výsledek:
+v prvních dvou chybí nabídce horní hrana **i vybraný řádek**, ve třetí je celá.
+
+**Proč to vadí zrovna tady.** Dvě ze tří polí v takovém předkovi sedí. Tělo review je **první** věc
+ve `ScrollView`u panelu, takže by se nabídka uřízla hned; odpověď do vlákna je v bublině
+s `clipShape`, a bublina o jednom komentáři má **97 bodů** proti 203 plné nabídky — neuřízl by se
+z ní kus, ale většina. Ořezaná nabídka je přitom horší než žádná: chybí jí zrovna ta půlka, na kterou
+se kouká.
+
+**Zvažované a zamítnuté:**
+
+- **`popover`.** `NSPopover` si bere fokus, takže by v poli přestalo jít psát — a psaní je tady
+  zároveň to hledání. Vylučuje ho samotné zadání („klávesy si bere pole“).
+- **Nabídka jako prvek rozvržení** (v `VStack`u nad polem, jak ji kreslí statický zákres). Neořízne
+  se, ale **hýbe polem, do kterého se zrovna píše**: v panelu by tělo review odsunula o 200 bodů,
+  případně mimo viditelnou část panelu. Pole, které při psaní uteče, je horší než nabídka o úroveň
+  výš.
+- **Vlastní hostitel nabídky na úrovni okna** s polohou pole ze `onGeometryChange`. Je to
+  „správné“ řešení a taky nejdražší: sdílený stav, který se přepisuje při každém úhozu a čte ho
+  kořen okna, je přesně ta výkonová vada, kterou popsalo #472. Zůstává jako cesta, kdyby se ukázalo,
+  že ani nové kotvení nestačí.
+
+**Co se tedy udělalo.** Nabídku kreslí **volající** — na tom předkovi, který neořezává (composer nad
+celým pruhem, panel nad svým `ScrollView`em, bublina až za `clipShape`) — a stav si podávají přes
+`EmojiSuggestionBox`. Ten je `@Observable`, ne `Equatable` hodnota ve `@State` majitele, a je to
+tatáž úvaha jako u rozdělení `PollState`u (#472): majitelem je tab `Konverzace`, panel a bublina,
+takže hodnota by úhozem překreslovala je. `rows` čte **jedině** nabídka, proto z ní čte i prázdný
+stav.
+
+**Co z toho zbývá jako pravidlo**: věta o ořezu je v `CLAUDE.md` v sekci o kresbě, ne schovaná sem —
+je to věc, kterou je potřeba znát **dřív**, než se první `overlay` napíše.
+
+**Známé omezení, které měření nepokrývá.** Nová kotvení jsou v okně, ale osa konverzace a diff jsou
+samy `ScrollView`y, takže nabídka nad bublinou, která je zrovna u horní hrany výřezu, se uříznout
+pořád může. Není to regrese proti stavu před #483 (tam nebyla vůbec) a nedá se to změřit v harnessu;
+kdyby to v provozu vadilo, je odpověď ten zamítnutý hostitel na úrovni okna.
+
+### Záznam rozhodnutí — čtvrté pole, které nabídku nedostalo (#483)
+
+Zadání vyjmenovává tři pole. Textů, které z okna odcházejí na GitHub, je ale **čtyři**: čtvrtý je
+řádkový komentář v diffu (`DraftCommentBubbleView`), který jde ven jako součást review. Argument ze
+zadání — „pole, ve kterém `:` nedělá nic, se pozná až ve chvíli, kdy tam někdo píše“ — na něj platí
+zrovna tak.
+
+Nedostal ji přesto, a důvod je tentýž ořez: bublina řádkového komentáře má `clipShape` a sedí uvnitř
+diffu, tedy uvnitř druhého ořezu. Kotvit nabídku „nad bublinou“ by u komentáře, který visí na řádku,
+znamenalo nabídku přes kód — a nad tím ořez diffu. Do #483 se to tedy nevešlo vědomě, ne opomenutím;
+je to napsané v `DraftTextEditor.suggestions`, aby to příště nevypadalo jako chybějící řádek.
+
+### Záznam rozhodnutí — řádky nabídky se nedají kliknout (#483)
+
+Nabídka vypadá jako `.pkr` z návrhu, tedy jako popover labelů — a v tom se řádky kliknout **dají**.
+Tady schválně ne.
+
+Vložení stojí celé na tom, kde je kurzor (`Policy.emojiQuery` ho bere jako vstup). Kliknutí do
+plochy, která visí nad zaměřeným polem, je přitom zrovna ta jediná interakce, po které se první
+responder umí přesunout jinam — a bez kurzoru není kam vkládat. Vstup je proto klávesnice, jak ho
+kreslí patka nabídky (`↑↓ vybírá · ↵ vloží · esc zavře`), a návrh o kliknutí nemluví.
+
+Kdyby se to mělo doplnit, patří k tomu ověření na běžící aplikaci, že fokus v poli po kliknutí
+zůstane — ne domněnka, že `buttonStyle(.plain)` stačí.
+
+### Záznam rozhodnutí — znaménka v dotazu a smajlík (#483)
+
+Do prvního proklikání platilo pravidlo přesně tak, jak ho vyslovilo zadání: nabídka se otevře, když
+je `:` na začátku řádku nebo po mezeře a **za ní stojí aspoň jedno písmeno**. Nález z proklikání:
+tím vypadly `:+1:` a `:-1:`, tedy **dva nejčastější shortcody na GitHubu**. V katalogu jsou (👍 se
+najde přes `:thu`), ale kdo je píše zvykem od dvojtečky, nedostal nic.
+
+**Past, kterou puštění znaménka otevírá, jsou textoví smajlíci.** `:-)` a `:-(` jsou v české próze
+běžnější než `:-1:` a začínají přesně tou kombinací, kterou chceme povolit. `:+` je proti tomu
+v próze po mezeře skoro nemožné — ty dva znaky tedy **nejsou symetrické** a je legitimní rozhodnout
+každý jinak.
+
+**Rozhodnuto nesymetricky:** `+` projde hned (i samotné `:+`), `-` **až s druhým znakem** (`:-1`
+ano, `:-` ne).
+
+**Zamítnutá varianta: pustit obojí hned** a spolehnout se na to, že „dotaz bez jediné shody nabídku
+zavírá“. Fungovalo by to v tom smyslu, že hotový `:-)` nabídku neotevře — `)` a `(` nejsou znaky
+dotazu, takže se dotaz zavře sám. Jenže mezistav `:-` shody **má**, a ne jednu: 👎 `:-1:`,
+📧 `:email:` (přes alias `e-mail`), 🚱 `:non-potable_water:` a 🦖 `:t-rex:`. Nabídka by tedy
+u každého smajlíku na jeden úhoz **problikla** čtyřmi řádky a při dopsání `)` zmizela. To není
+detail, který se schová do „zavře se sama“ — je to viditelné chování v každé druhé větě, a zaplatilo
+by se za něj tím, co má být na nabídce nejcennější: že se objeví, jedině když ji člověk chtěl.
+
+Cena zvolené varianty je jedna věta vysvětlení navíc a to, že `:-1` se nabídne o úhoz později než
+`:+1`. Za nic z toho se v okně neplatí problikáváním.
+
+**Co z toho zbývá jako pravidlo**: rozhoduje `Policy.emojiQueryHasSubstance(_:)`, testuje se
+**vyčerpávajícím výčtem na obě strany** (`:+`, `:+1`, `:-1`, `:--` otevírají; `:-`, `:-)`, `:-(`,
+`:+)`, `:1`, `:30`, `:_` ne) a asymetrie je ověřená **vloženou regresí** — pustit `-` hned shodí
+zrovna ty dva vstupy, kvůli kterým to pravidlo je.
+
+**Zadání i kresba (sekce 38) říkají „aspoň jedno písmeno“ slovy**, takže je tohle rozhodnutí odchylka
+od obojího. Do mockupu se u #483 nesahalo (držela ho jiná větev), takže ta věta v něm zůstává
+nepřesná — je to zapsaná mezera, ne záměr.

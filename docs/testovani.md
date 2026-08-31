@@ -612,6 +612,78 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a do #216 se to neprojevilo nikde jinde než na obrazovce. Hlídají to dva testy: jeden nad
   `Policy.inserting`/`applying` (obě cesty), druhý nad storem. **Ověřeno vložením regrese** —
   po vrácení původního kódu test spadne na `events.items == []`.
+- **Našeptávání emotikonů (#483)** — pět suit, každá na jinou otázku, a **nejcennější půlka
+  tvrdí, že se něco NEstalo**.
+  - **`EmojiQueryTests`** — kdy je dotaz otevřený, **vyčerpávajícím výčtem**: sedmnáct vstupů, které
+    nabídku otevřít mají (začátek textu, po mezeře, po `LF` i po `CRLF`, kurzor uprostřed slova,
+    podtržítka a znaménka, diakritika, velká písmena, po emotikonu), a **dvacet čtyři, které ne** —
+    každý s napsaným důvodem. Planý poplach v textovém poli se jinak pozná až v provozu, takže sem patří
+    `12:30`, `https:…`, `Poznámka:`, `Poznámka: `, `::ta`, `:1`, `:30`, `:tada:`, kurzor před
+    dvojtečkou i za mezerou a kurzor mimo text.
+
+    **Znaménka a smajlíci jsou vlastní řádky výčtu, ne jeden případ** (nález z proklikání): na jedné
+    straně `:+`, `:+1`, `Díky :+1`, `:-1` a `:--`, na druhé `:-`, `Díky :-`, `:-)`, `:-(` a `:+)`.
+    Zrovna tady je výčet celý smysl toho, že rozhoduje čistá funkce — pravidla **nejsou symetrická**
+    (`+` hned, `-` až s druhým znakem) a bez řádku na každou stranu by se ta asymetrie neuhlídala.
+    **Ověřeno vložením regrese**: pustit `-` hned shodí dva vstupy (`:-` a `Díky :-`), tedy zrovna
+    ty, kvůli kterým to pravidlo je.
+
+    K tomu jedno tvrzení, které jeden vstup unést nemůže: **na spočítané poloze dvojtečka doopravdy
+    je**, ověřené průchodem přes **všechny** polohy kurzoru v jedné větě. U jednoho vstupu by se
+    posun o konstantu neprojevil, a je to zrovna ta chyba, po které vložení sežere znak před `:`.
+  - **`EmojiSuggestionRowTests`** — slučování aliasů, řazení, sazba a vložení, nad **skutečným
+    katalogem**: fixture by nesla pořadí a aliasy, které v aplikaci nejsou, a zrovna na nich to
+    stojí. `:thu` vrátí 👍 **jednou** a nese alias `thumbsup`; shoda přes jméno alias nedopisuje;
+    `waxing_gib` najde 🌔, jehož jméno je `moon`. A **znaménkové dotazy vydají palce**: `+`, `+1`
+    i `-1` mají první řádek s palcem a shoda přišla přes jméno, takže se v řádku kreslí `:+1:` /
+    `:-1:` — to je druhá polovina nálezu z proklikání, protože pustit znaménko do dotazu je
+    k ničemu, když by na `:+` vyšlo něco jiného. Výčet shod pro `-` je u toho doklad, že se hledá
+    i podle aliasů: `email` je v něm kvůli aliasu `e-mail` a napsaný bez něj ten test spadl. Řazení se tvrdí **celým seznamem** (`:ta` →
+    `taco, tada, taiwan, tajikistan, takeout_box, tamale`), protože bez druhého kritéria by řádky
+    mezi úhozy přeskakovaly. Strop se tvrdí i pro `limit: 0` — nula znamená „nic“, ne „bez stropu“.
+
+    A dvě negativní: **`čá` ani `tádá` nesmí nabídnout nic** (kdyby se sem vzalo diakritiku
+    ignorující hledání z panelu, nabídlo by `:čá` po složení `taco`) a **zastaralý rozsah nevloží
+    nic** — čtyři podoby rozejití, u každé je `nil` jediná správná odpověď. Kdyby se rozsah jen
+    ořezal do délky textu, vloží se znak doprostřed cizí věty a pozná se to až z odeslaného
+    komentáře. Vedle toho průchod **všemi polohami kurzoru** znovu: dotaz a vložení do sebe musí
+    zapadnout na každé z nich.
+  - **`EmojiCatalogTests`** — vygenerovaná tabulka. Počty se tvrdí **literálem** (1870 znaků, 1913
+    shortcodů), ne `> 0`: je to jediné místo, kde je vidět, že se katalog vygeneroval z toho, z čeho
+    měl. K tomu že je každý znak **jeden `Character`** (jinak by se rozešla poloha kurzoru po
+    vložení), že je katalog **seřazený**, že je znak v něm **jednou**, a že `:shipit:`, `:octocat:`,
+    `:trollface:` ani `:bowtie:` v něm **nejsou**. Rozbor je totální — vadný řádek se zahodí
+    a zbytek unese, protože prázdná nabídka kvůli jednomu řádku je ta horší polovina téhož problému.
+    A dvě čísla, na kterých stojí věty o zalamování, se **tvrdí, ne opisují**: nejdelší jméno
+    (42 znaků s dvojtečkami) a nejdelší úsek **mezi oddělovači** (16). To druhé musí zůstat malé,
+    jinak by zlomy nestačily a jméno by přeteklo i s nimi — a spadne to v katalogu, ne v kresbě.
+
+    Dvě čísla se **jen vypisují** (`MĚŘENÍ`), netvrdí se strop: rozbor tabulky a jeden dotaz nad ní.
+    První se platí jednou za běh procesu, druhý při **každém úhozu** s otevřenou nabídkou — takže
+    kdyby to jednou začalo být drahé, je z čeho vyjít. Strop by byl číslo z testovacího hosta pod
+    zátěží, tedy nic (#296).
+  - **`EmojiFieldWiringTests`** — tvrzení nad **zdrojáky**, protože stav se plní klávesnicí, kterou
+    host nemá. Tři pole **jmenovitě** (ne „aspoň tři“ a ne počet — kdyby jedno ubylo a jiné přibylo,
+    počet vyjde stejně), jeden box na majitele, tab `Zeptat se` bez nabídky, `TextEditor(text:
+    selection:)` **v jediném souboru**, a že soubory #483 neznají `ReviewPublishing`,
+    `GitHubGateway`, `ToolPaths` ani `Subprocess`. K tomu, že se `/emojis` v `App/` neobjeví —
+    katalog je v aplikaci.
+
+    **Jedno z těch tvrzení se muselo utáhnout po vložené regresi.** `suggestions: emoji` stojí
+    v obou voláních (do pole i do nabídky), takže test „kdo box podá, ten nabídku kreslí“ prošel
+    i s polem, kterému se box vyndal. Rozlišuje se proto **čárkou proti závorce** za jménem boxu.
+  - **`EmojiSuggestionMenuTests`** — rozměr a kotvení, tedy to, co se dá pokazit jedině kresbou.
+    Přetečení se měří **pixely** (`OverflowProbe`) na pěti scénách ze skutečného katalogu a ve dvou
+    šířkách (300 b konverzace, 278 b panelu). **Stín u toho musel jít z nabídky ven** do
+    `emojiMenuAbove`: rozostření kreslí body za rámem, takže by sonda měřila jeho, ne obsah — a to
+    je ten druh rozbité sondy, který vypadá jako chyba v aplikaci.
+
+    Zalomení dlouhého jména se tvrdí **výškou proti krátkému jménu**, ne pohledem: `Text` uvnitř
+    slova nezalamuje, a kdyby zlomy z `Policy.emojiShortcodeLabel` zmizely, zůstalo by jméno na
+    jednom řádku — tedy **stejná výška** a přetečení, které chytne až sonda vedle. Plná nabídka má
+    naměřených **203 b** a tvrdí se strop 210: kdyby `emojiSuggestionLimit` povyrostl, spadne to
+    tady. A že se kreslí **nad polem**, se měří prvním nakresleným řádkem v jednom sloupci; přesná
+    mezera se netvrdí, protože měřená hrana je hrana stínu, ne rámu.
 - **Labely a vyžádaní reviewery (#392)** — pátá a šestá cesta ven, takže se u nich hlídá **totéž
   co u vláken a komentářů**, a k tomu tři věci, které se dají pokazit tiše. Rozdělené je to na pět
   suit schválně: každá odpovídá na jinou otázku, takže se z červeného testu pozná, **co** se rozbilo.
@@ -5124,6 +5196,40 @@ uvnitř getteru dá jiné `updatedAt` při každém přístupu a cache detailu s
 jedině `print`em **z těla view** (`let _ = print(…)`), ne z hodnot ve store před renderem: ty jsou
 v pořádku. Vedle toho zůstává platné, že AppKitem hostované části (avatar v hlavičce) vyjdou jako žlutý
 placeholder — render se z nich nemá co dozvědět.
+
+### Jak zjistit, co ořezává (#483)
+
+`ImageRenderer` na tuhle otázku odpovědět **neumí**: `ScrollView` offscreen nevykreslí vůbec (viz
+výš), takže z prázdného renderu se nedá poznat, jestli obsah ořezal, nebo se jen nenakreslil. A přitom
+je to otázka, na které stojí každý `overlay`, který má přesahovat plochu rodiče — u našeptávání
+emotikonů (#483) rozhodla o tom, **kdo nabídku kreslí**.
+
+Odpověď dá **skutečná hierarchie**: `NSHostingView` v okně, jeden průchod runloopem na rozvržení
+a `cacheDisplay(in:to:)`, který kreslí přes AppKitový layer tree — tedy včetně `NSScrollView`
+a `clipShape`. Je to čtyřicet řádků ve `swift` skriptu a scéna se do něj napíše tak, jak stojí
+v aplikaci:
+
+```swift
+let hosting = NSHostingView(rootView: Scene())
+hosting.frame = NSRect(x: 0, y: 0, width: 1000, height: 460)
+let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless],
+                      backing: .buffered, defer: false)
+window.contentView = hosting
+RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.6))   // bez tohohle se text nesází
+hosting.layoutSubtreeIfNeeded()
+let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds)!
+hosting.cacheDisplay(in: hosting.bounds, to: rep)
+try rep.representation(using: .png, properties: [:])!.write(to: url)
+```
+
+**Scéna musí mít tři varianty vedle sebe**, jinak z obrázku nic neplyne: ve `ScrollView`u,
+v ploše s `clipShape` a **bez ořezu**. Ta třetí je kontrola měřidla — kdyby se overlay nenakreslil
+ani tam, neměří se ořez, ale rozvržení. U #483 vyšlo: **ve `ScrollView`u i v `clipShape` chybí
+nabídce horní hrana a vybraný řádek, bez ořezu je celá.** Z toho pak plyne to rozhodnutí — nabídka
+se kotví na předkovi, který neořezává, a stav se k němu podává boxem.
+
+**`setActivationPolicy(.prohibited)`** k tomu patří: bez ní si skript vyskočí dopředu a přebere
+fokus, což při souběžné práci ve slotech není zdvořilé ani bezpečné.
 
 ### Jak změřit pořadí a hladinu oken (#243)
 

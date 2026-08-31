@@ -30,6 +30,14 @@ struct DraftTextEditor: View {
     ///
     /// U těla review ne: tam prázdno neznamená nic a zápis by byl jen práce navíc.
     var commitsEmpty = false
+    /// Kam se zapisuje otevřená nabídka emotikonů (#483). Podrobnosti u
+    /// `DraftTextField.suggestions`.
+    ///
+    /// **Nepředává ho řádkový komentář v diffu**, což je čtvrtý uživatel tohohle pole a taky posílá
+    /// text na GitHub. Důvod je kresba, ne opomenutí: `DraftCommentBubbleView` má na bublině
+    /// `clipShape` a sedí uvnitř diffu, takže nabídka by se ořízla o hranu bubliny (změřeno, viz
+    /// `EmojiSuggestionBox`). Zadání (#483) vyjmenovává tři pole a tohle mezi nimi není.
+    var suggestions: EmojiSuggestionBox?
     let commit: (String) -> Void
 
     @State private var value = ""
@@ -45,7 +53,8 @@ struct DraftTextEditor: View {
             text: $value,
             placeholder: placeholder,
             minHeight: minHeight,
-            maxHeight: maxHeight
+            maxHeight: maxHeight,
+            suggestions: suggestions
         )
         .onAppear { adopt(text) }
         .onChange(of: text) { _, new in

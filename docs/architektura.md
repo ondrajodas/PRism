@@ -8479,6 +8479,122 @@ Dvě rozhodnutí, která nejsou zjevná:
 ho nedává a `compare` API by za jedno číslo stáhlo celý seznam souborů. Přijde s #466, kde bude po
 ruce klon v cache a spočítá se lokálně; do té doby stojí v řádku `za základem` bez čísla.
 
+### Našeptávání emotikonů (#483)
+
+Píše se `:ta`, nabídne se 🎉 — a do textu se vloží **znak, ne shortcode**. Návrh, sekce 38. Je to
+**chování textového pole**, ne nová cesta ven: `grep ReviewPublishing App/` vypisuje týž seznam,
+`GitHubGateway` nedostal dotaz a `SingleWayOutTests` se nesáhlo. Hlídá to `EmojiFieldWiringTests`.
+
+**Rozhodnutí jsou čtyři čisté funkce** (`App/Policy/EmojiSuggestion.swift`):
+
+- **`Policy.emojiQuery(in:caret:)`** — je otevřený dotaz? Otevře se, jedině když je `:` na začátku
+  textu **nebo po bílém znaku** a za ní stojí něco, z čeho může být shortcode. Tím vypadnou tři
+  nejčastější plané poplachy: `12:30`, `https://…` a `Poznámka:`. Kurzor musí stát na **konci**
+  dotazu, takže odchod kurzoru jinam nabídku zavírá sám, bez druhého pravidla.
+
+  **Co je „něco, z čeho může být shortcode“, rozhoduje `emojiQueryHasSubstance` a nejsou to
+  symetrická pravidla** (rozšířeno po prvním proklikání): **písmeno kdekoli**, **dotaz začínající
+  `+`** hned (tedy i samotné `:+`), ale **dotaz začínající `-` až s druhým znakem**. Do proklikání
+  tu stálo jen písmeno, čímž vypadly `:+1:` a `:-1:` — dva nejčastější shortcody na GitHubu.
+  Nesymetrie je kvůli **textovým smajlíkům**: `:-)` a `:-(` jsou v české próze běžnější než `:-1:`,
+  takže na samotném `:-` by nabídka **problikla** (👎, 🚱, 🦖, 📧) a při dopsání `)` zmizela. Hotový
+  smajlík ji neotevře ani tak, protože `)` a `(` nejsou znaky dotazu — zavírá se tímhle právě a jen
+  ten mezistav. `:+` je proti tomu v próze po mezeře skoro nemožné, takže se za jeho puštění neplatí
+  ničím. Číslice ani podtržítko samy nestačí ([záznam
+  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--znaménka-v-dotazu-a-smajlík-483)).
+
+  **Kurzor se předává jako počet znaků, ne `String.Index`, a je to podmínka.** Pole mění text
+  a kurzor ve dvou různých zápisech, takže se do výpočtu umí dostat index z **předchozí** verze
+  textu — a `distance(from:to:)` na něm proces **položí**. `EmojiSuggesting.caretOffset()` ho proto
+  počítá **průchodem od začátku** (porovnává jen index s indexem, což bezpečné je) a když se cesta
+  s cílem nepotká přesně, vrátí `nil`.
+- **`Policy.emojiSuggestions(for:in:limit:)`** — co se nabídne. Řádek je **na znak, ne na jméno**
+  (`:+1:` a `:thumbsup:` je jeden 👍) a když shoda přišla přes alias, nese ho řádek vpravo. Řadí se
+  váhou shody, při shodě **pořadím katalogu**; strop je **šest řádků** (`emojiSuggestionLimit`), aby
+  se nabídka vešla do ~200 bodů a nepotřebovala scroll.
+
+  **Nedělí se `searchRange` ani `pickerRank`**, a jsou to dva důvody: `.diacriticInsensitive` by
+  přidalo shody, které nikdo nechce (`:čá` by nabídlo `taco`, protože shortcody jsou ASCII), a cena
+  — `range(of:options:)` nad 1913 jmény stojí **1,88 ms** proti **0,50 ms** u prostého `range(of:)`
+  nad dotazem složeným na malá písmena (`-O`, v Debug buildu je to čtyřnásobek obojího). `pickerRank`
+  by k tomu dotaz 1913× tokenizoval na slova, přitom mezera v dotazu být nemůže. **Stupně shody se
+  dělí** (`searchStartsWord`): začátek, hranice slova, vnitřek.
+- **`Policy.emojiShortcodeLabel(of:)`** — jak se `:jméno:` vysází. Nabízí **zlomy nulovou mezerou**
+  (`U+200B`) za `_`, `-` a `+`, protože `Text` ve SwiftUI uvnitř slova nezalamuje: nejdelší jméno
+  v katalogu (`:hand_with_index_finger_and_thumb_crossed:`, 42 znaků) se do 278 bodů nevejde a bez
+  zlomů **přetečelo** za hranu, aniž by se změnila výška (takže by to `fittingSize` neodhalil).
+  Nejdelší úsek mezi oddělovači má v katalogu 16 znaků, takže se tím zalomí každé jméno, které se
+  nevejde. Do textu zprávy se ze sazby nedostane nic — vkládá se znak.
+- **`Policy.emojiInsertion(into:replacing:with:)`** — **záměna napsaného dotazu za znak**
+  (`:ta` → 🎉), ne přidání na konec. `nil` u zastaralého rozsahu je jediná správná odpověď: vložit
+  znak na spočítané místo v jiném textu znamená rozsekat cizí větu. Je na to test.
+
+**Katalog je v aplikaci, ne z GitHubu.** `GET /emojis` vrací jména a **adresy obrázků**, ne znaky;
+seznam se navíc nemění, takže volání kvůli textovému poli by byla závislost bez užitku. Zdroj je
+`bin/emoji-sources/gemoji-emoji.json` (`db/emoji.json` z github/gemoji, MIT) a generátor
+`bin/make-emoji.swift` z něj vyrobí `App/Support/EmojiTable.swift` — **jeden velký řetězec, ne pole
+1870 struktur**, protože doslovné pole té velikosti by type-checker žvýkal minuty; rozebírá to
+`EmojiCatalog` líně a jednou za běh procesu. Řádky jsou **abecedně podle prvního shortcodu**: pořadí
+katalogu je druhé kritérium řazení, a zdroj je seskupený po kategoriích, takže na dotaz `:ta` by
+vyhrálo jídlo a `:tada:` by se do šesti řádků nevešlo. **Shortcody bez Unicode** (`:shipit:`,
+`:octocat:`) v tabulce nejsou — byl by z nich jediný řádek, který se chová jinak.
+
+#### Kotví se nad polem, a kreslí ji volající
+
+**`popover` to není, a je to podmínka, ne styl:** `NSPopover` si bere fokus, takže by v poli
+přestalo jít psát — a psaní je tady zároveň to hledání. Kreslí se proto `overlay`em
+(`emojiMenuAbove`, `alignmentGuide` posune dítě o jeho vlastní výšku plus 8 bodů nahoru), který
+navíc **nezabírá místo**, takže se pole pod nabídkou nehýbe.
+
+**Overlay ale ořízne každý ořezávající předek**, a v tomhle okně jsou dva. Změřeno na skutečné
+hierarchii (`NSHostingView` v okně + `cacheDisplay`; `ImageRenderer` `ScrollView` nevykreslí vůbec):
+ve `ScrollView`u zmizela nabídce **horní hrana i vybraný řádek**, v ploše s `clipShape` totéž. Proto
+nabídku **nekreslí pole, ale volající** — na tom předkovi, který neořezává:
+
+| Pole | Kdo nabídku kreslí | Proč tam |
+|---|---|---|
+| Composer komentáře pod PR (#216) | `ConversationComposerView`, nad celým pruhem | Pruh je poslední dítě tabu a nic neořezává; osa vedle něj je `ScrollView` |
+| Tělo review v panelu | `DraftPanel`, nad svým `ScrollView`em | Tělo je **první** věc ve scrollu, takže uvnitř by se nabídka uřízla hned |
+| Odpověď do vlákna (#73) | `ThreadBubbleView`, **až za `clipShape`** | Bublina o jednom komentáři má 97 bodů proti 203 plné nabídky, takže uvnitř by se uřízla většina |
+
+Stav si podávají přes **`EmojiSuggestionBox`** (`@Observable`, jeden na majitele): pole ho plní,
+`EmojiSuggestionMenu` z něj čte. **Není to `Equatable` struktura ve `@State` majitele**, a je to
+výkonové rozhodnutí (#472): majitelem je tab `Konverzace`, panel a bublina, takže by úhoz
+překresloval je. `@Observable` sleduje po vlastnostech a `rows` čte **jedině** nabídka — proto z ní
+čte i prázdný stav (`if rows.isEmpty` u volajícího by byl týž problém).
+
+**Řádky se pamatují, nepočítají se z těla** (#224): jeden dotaz je průchod katalogem o 1870 znacích,
+kdežto tělo se vyhodnocuje i tehdy, když se dotaz nezměnil. Cache vyprazdňuje `refresh()` a klíč je
+**text dotazu**.
+
+**Čtvrté pole, které text taky posílá na GitHub, nabídku nemá**: řádkový komentář v diffu
+(`DraftCommentBubbleView`). Není to opomenutí — bublina má `clipShape` a sedí uvnitř diffu, takže by
+se nabídka ořízla; zadání #483 vyjmenovává tři pole a tohle mezi nimi není.
+
+#### Klávesy si bere pole, ne okno
+
+`↑↓`, `↵` a `esc` jdou přes `onKeyPress` **na poli** — touž cestou, jakou si `⌥↵` bere pole
+u zakládání labelu (#413). `Policy.windowShortcut` se **nemění** a katalog zkratek zůstává, jaký byl.
+
+- **`↵` bere nabídka holý**, protože právě ten by v poli zalomil řádek. S `⌘` (a s čímkoli jiným) se
+  klávesa **propustí**, takže `⌘⏎` zůstává oknu (`Otevřít potvrzení odeslání`). Je to **jeden
+  handler**, ne dva: `onKeyPress(_:modifiers:)` bere `modifiers` jako množinu, ve které stisk *smí*
+  ležet, takže dva zápisy by se přebíjely (tatáž past jako u #413).
+- **`esc` je ustupující**: `.handled` jedině s otevřenou nabídkou, jinak `.ignored` a dostane se
+  k němu okno (`Zpět na seznam commitů`). Tatáž úmluva jako u zásuvky s terminálem (#459).
+- **`esc` zavře nabídku jen do dalšího úhozu.** Dotaz se počítá z textu a kurzoru, takže po dopsání
+  dalšího písmene je to jiný dotaz a nabídka se otevře znovu; držet „zavřeno“ napříč psaním by
+  znamenalo druhý stav, který v okně není vidět.
+- **V tabu `Zeptat se` nabídka není** (#452). Není to text pro GitHub, ale zadání pro session — a je
+  to jediné pole v okně, které si už bere `Return` (`Policy.claimsReturnShortcut`). Druhý zájemce
+  o tutéž klávesu je postup, jehož konec popsalo #184.
+- **Řádky se nedají kliknout, a je to rozhodnutí.** Vložení stojí celé na tom, kde je kurzor;
+  kliknutí do plochy nad zaměřeným polem je zrovna ta jediná interakce, po které se první responder
+  umí přesunout jinam. Vstup je proto klávesnice, jak ho kreslí patka; návrh o kliknutí nemluví.
+
+**Že klávesa zabere, se v harnessu ověřit nedá** (#184) — testovací host aktivaci nedostane, takže
+`↑↓`, `↵`, ustupující `esc` i `⌘⏎` s otevřenou nabídkou zkouší **člověk** na běžící aplikaci.
+
 ## `GitHubGateway` (`App/GitHub/`)
 
 Jediná cesta aplikace k GitHubu, celá přes `gh`. Protokol `GitHubGateway` má **dvacet jedna** metod
