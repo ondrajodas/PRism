@@ -115,6 +115,27 @@ struct BranchSyncOfferTests {
 
     /// **„Nevím, kde větev leží“ je taky zákaz.** Je to jediná odpověď, ze které neplyne, kam se
     /// píše — a u zápisu do remote se z nevědomosti povolení dělat nesmí.
+    /// **Nenačtená hlavička není „neznámý původ větve“** (nález Copilota na #466). Jsou to dvě
+    /// různé věci a v panelu se z nich píšou dvě různé věty: „hlavička ještě nedorazila“ se za
+    /// chvíli spraví sama, kdežto „z dat neplyne, kde větev leží“ říká, že dorazila a mlčí.
+    ///
+    /// Druhá půlka tvrzení je o tom, co se předčasným `return`em **zahazovalo**: ostatní překážky.
+    /// Zrovna ty jsou přitom to, se čím se dá něco dělat.
+    @Test("Nenačtená hlavička není odpověď o původu větve")
+    func doesNotBlameTheBranchOriginBeforeTheDetailArrives() throws {
+        let waiting = offer(detail: nil, status: nil, sync: .unfinished(files: ["a.php"]))
+
+        #expect(!waiting.isAllowed)
+        #expect(waiting.obstacles.contains(.factsMissing))
+        #expect(!waiting.obstacles.contains(.foreignBranch(known: false)))
+        #expect(!waiting.obstacles.contains(.foreignBranch(known: true)))
+        // Rozdělaný rebase i nenačtený stav větve se dozvíme dál — předčasný `return` je zahazoval.
+        #expect(waiting.obstacles.contains(.unfinishedRebase))
+        #expect(waiting.obstacles.contains(.statusLoading))
+        // A výstraha v panelu o původu větve **mlčí**, protože ho nemá odkud znát.
+        #expect(Policy.syncWarnings(waiting).isEmpty)
+    }
+
     @Test("Neznámý původ větve se odsud nesrovná")
     func refusesUnknownOrigin() {
         let offer = offer(detail: detail(cross: nil), status: status())

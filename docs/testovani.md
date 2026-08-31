@@ -854,6 +854,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení o jednom místě; a `?? false`
   v dekodéru `isCrossRepository` položí tvrzení, že chybějící pole je „nevím“.
 
+  **Nález Copilota na #466** je v `BranchSyncOfferTests` jako vlastní test a je to tatáž třída jako
+  všechny ostatní zákazy: **nenačtená hlavička není odpověď o původu větve.** `switch
+  detail?.isCrossRepository` slil „hlavička ještě nedorazila“ a „dorazila a o původu mlčí“ do jedné
+  věty a předčasným `return`em k tomu zahodil ostatní překážky. Tvrdí se proto obojí — že věta
+  o původu **nepadne** a že se ostatní překážky **dozvíme**. Ověřeno vloženou regresí (pátou).
+
   **Co testy neověří:** že `git push` projde z běžící aplikace — brána je ve slotové konfiguraci
   vypnutá schválně. Ověřené je to **mimo aplikaci**, na sandboxu; postup je níž
   (*Jak se změřil `--force-with-lease`*).

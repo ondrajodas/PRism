@@ -118,12 +118,21 @@ extension Policy {
             case .merged, .closed: return .blocked(obstacles + [.notOpen(state)])
             }
         }
-        switch detail?.isCrossRepository {
-        case .some(true): return .blocked(obstacles + [.foreignBranch(known: true)])
-        case .some(false): break
-        // `nil` je „nevím“ — a to je u zápisu do remote zákaz, ne povolení. Sem se dojde jedině
-        // s nenačteným detailem (pak níž stejně chybí plán) nebo se starými uloženými daty.
-        case .none: return .blocked(obstacles + [.foreignBranch(known: false)])
+        // **Na původ větve se ptáme jedině tehdy, když hlavička dorazila** (nález Copilota na
+        // #466). `switch detail?.isCrossRepository` by slil dvě různé věci do jedné: „hlavička
+        // ještě nedorazila“ a „hlavička dorazila a o původu mlčí“. První je `factsMissing` níž,
+        // druhé `foreignBranch` — a věta o původu větve nad nenačteným detailem je text, který
+        // tvrdí víc, než data unesou. Předčasný `return` k tomu zahazoval ostatní překážky
+        // (běžící srovnání, rozdělaný rebase, stav větve), takže by v panelu chyběly zrovna ty,
+        // se kterými se dá něco dělat.
+        if let detail {
+            switch detail.isCrossRepository {
+            case .some(true): return .blocked(obstacles + [.foreignBranch(known: true)])
+            case .some(false): break
+            // `nil` je „nevím“ — a to je u zápisu do remote zákaz, ne povolení. Sem se dojde se
+            // starými uloženými daty, která to pole ještě nemají.
+            case .none: return .blocked(obstacles + [.foreignBranch(known: false)])
+            }
         }
 
         if let sync {
