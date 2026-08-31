@@ -187,16 +187,27 @@ struct PanelBranchView: View {
     /// rebase se dá jedině zahodit, u **přerovnané větve, která neodešla**, se dá přetlačit nebo
     /// zahodit — a `Zavřít` u nich schválně **není**, protože zavřít hlášku o práci v cache by ji
     /// schovalo, aniž by zmizela. To je zrovna ten tichý stav, kterému se tahle akce vyhýbá.
+    /// **Dvě tlačítka jdou na vlastní řádek, jedno zůstává u věty** — a je to změřené, ne odhadnuté.
+    /// `Přetlačit…` a `Zahodit rebase` si vedle sebe vezmou ~213 z 278 bodů, které panel na obsah
+    /// má, takže na text zbyde ~50: věta o devíti slovech se v renderu složila do **devíti řádků**
+    /// po jednom slově. Je to tatáž past, jakou u sekce `Větev` změřilo #392 v hlavičce PR a #37
+    /// u třetího tlačítka — a tentýž závěr: **vlastní řádek je jediné místo, kde se dvě akce vejdou
+    /// při každé šířce panelu** (tahá se od 240 bodů).
     @ViewBuilder private func syncNotice(_ state: BranchSyncState) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Image(systemName: Self.noticeIcon(state))
-                .foregroundStyle(Self.noticeTint(state))
-                .accessibilityHidden(true)
-            Text(verbatim: state.sentence)
-                .foregroundStyle(Palette.ink2)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            noticeButtons(state)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Image(systemName: Self.noticeIcon(state))
+                    .foregroundStyle(Self.noticeTint(state))
+                    .accessibilityHidden(true)
+                Text(verbatim: state.sentence)
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                // Jediné tlačítko se do řádku vejde — `Zahodit rebase` je nejdelší z nich a v renderu
+                // zbylo textu 160 bodů, tedy tři řádky u nejdelší věty.
+                if Self.noticeActions(state) == .one { singleNoticeButton(state) }
+            }
+            if Self.noticeActions(state) == .two { pairedNoticeButtons }
         }
         // **Velikost vypsaná, ne `.caption`.** Celá sekce sází explicitními body (12 popis, 11
         // odpověď) a `.caption` je proti tomu systémová hodnota, která se s nimi rozejde při první
@@ -205,26 +216,46 @@ struct PanelBranchView: View {
         .font(.system(size: Self.noticeFontSize))
     }
 
-    /// Co se u hlášky dá udělat. **Tři různé sady, ne jedna se `if`y** — každý stav vede jinam.
+    /// Kolik akcí u hlášky stojí. **Rozhoduje o rozvržení**, takže je to vlastní odpověď, ne
+    /// `if`y rozeseté po dvou místech.
+    private enum NoticeActions {
+        case none
+        case one
+        case two
+    }
+
+    private static func noticeActions(_ state: BranchSyncState) -> NoticeActions {
+        if state.rebasedBranch != nil { return .two }
+        if state.hasUnfinishedRebase { return .one }
+        return state.isBusy ? .none : .one
+    }
+
+    /// Jedno tlačítko u věty: `Zahodit rebase` u rozdělané práce, jinak `Zavřít` u hlášky.
+    @ViewBuilder private func singleNoticeButton(_ state: BranchSyncState) -> some View {
+        if state.hasUnfinishedRebase {
+            Button(Self.discardTitle, action: actions.discardSync)
+                .buttonStyle(.mini)
+                .fixedSize()
+        } else {
+            Button("Zavřít", action: actions.clearSync)
+                .buttonStyle(.mini)
+                .fixedSize()
+        }
+    }
+
+    /// Dvojice u přerovnané větve, která neodešla — **na vlastním řádku**.
     ///
     /// `Přetlačit…` má tři tečky, protože **otevírá potvrzení**; je to tatáž konvence jako
     /// u `Mergnout…` a ze stejného důvodu: co je za tím kliknutím nevratné, se potvrzuje.
-    @ViewBuilder private func noticeButtons(_ state: BranchSyncState) -> some View {
-        if state.rebasedBranch != nil {
+    private var pairedNoticeButtons: some View {
+        HStack(spacing: Self.actionSpacing) {
             Button(Self.pushTitle, action: actions.push)
                 .buttonStyle(.miniPrimary)
                 .fixedSize()
             Button(Self.discardTitle, action: actions.discardSync)
                 .buttonStyle(.mini)
                 .fixedSize()
-        } else if state.hasUnfinishedRebase {
-            Button(Self.discardTitle, action: actions.discardSync)
-                .buttonStyle(.mini)
-                .fixedSize()
-        } else if !state.isBusy {
-            Button("Zavřít", action: actions.clearSync)
-                .buttonStyle(.mini)
-                .fixedSize()
+            Spacer(minLength: 0)
         }
     }
 

@@ -825,6 +825,18 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     protože `AppStore` si podle tvrdé podmínky č. 1 nesmí držet ani továrnu na cestu ven — tatáž
     scéna jako u labelů a merge. Cesta ke `gitu` se přitom předává **i těm testům, které tvrdí, že
     se nepushlo**: bez ní by akci zakázala už brána a tvrzení by měřilo chybějící nástroj, ne guard.
+
+    **Od rozdělení akce na dva kroky je tady nejcennější test celého issue: „Rebase nepushuje
+    a skončí mezistavem“.** První krok doběhne, v cache leží srovnaná větev — a `git` se **nespustil**.
+    Do rozdělení dělalo jedno kliknutí obojí naráz, takže kdyby se to někdy „zjednodušilo“ zpátky,
+    pozná se to jedině tady. **Ověřeno vloženou regresí** (`syncBranch` na konci sám zavolá
+    `push()`): zareagovalo **pět** testů, ten dedikovaný třemi tvrzeními.
+
+    K tomu tři tvrzení o mezistavu, která se dají potichu obrátit: **druhý rebase se nad ním
+    nenabízí** (`rebasedNotPushed`), **hlášku o práci v cache nejde „zavřít“** (jen zahodit) a
+    **lease nese hlavu, ze které se rebasovalo** — ne tu aktuální. To poslední je pojistka, která
+    vznikla až rozdělením a v zadání nebyla; bez ní by lease po cizím pushi prošel a ten commit
+    přepsal.
   - **`RealBranchRebaseTests`** — integrace proti **skutečnému `gitu`**, remote je `file://`. Tuhle
     půlku se namockovat nedá: **jak se pozná konflikt** (`git` skončí nenulově i u neznámého základu,
     takže se rozhoduje podle toho, jestli po pádu rebase **běží dál**) a **kde leží rozdělaný rebase**
@@ -832,6 +844,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     a platí jen tehdy, když to `git` doopravdy tak dělá. Rozdělaný rebase se přitom **rozjede
     naostro**, ne vyrobením složky `rebase-merge` — jinak by se testovala vlastní domněnka o tom, jak
     to `git` dělá. A jedno tvrzení je o tvrdé podmínce č. 5: **strom review se nepohne**.
+
+    **Od rozdělení akce se tady doměřily tři věci**, které z fake runneru vidět nejsou: že se
+    **přerovnaná větev najde i bez paměti aplikace** (čerstvá instance checkoutu, tedy scéna po
+    restartu), že **nedotčený strom není přerovnaná větev** (rozhoduje hlava stromu, ne existence
+    složky) a že `git worktree remove --force --force` **zvládne strom uprostřed rebase** — na tom
+    stojí, že `discardSync` nemusí napřed volat `rebase --abort` a zahození obou druhů rozdělané
+    práce je jedna operace. Bez toho tvrzení by to byla domněnka.
   - **`GhGatewayTests`** (rozšířené) — **`isCrossRepository` ve třech podobách**, protože na tom
     stojí guard: `false` z otevřeného PR, `true` ze **skutečného PR z forku** (fixture
     `gh/pr-view-fork.json`, změřená na `cli/cli#14294` — hlava v `AlexisAMZ/cli`; tělo zkrácené na
@@ -841,18 +860,21 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     regresí (`?? false` v dekodéru položí dvě tvrzení). K tomu se ptá i `Policy`, aby se „nevím“
     a „zákaz“ nedaly rozejít.
   - **`SingleWayOutTests`** (rozšířené) — **čtyři nová tvrzení, protože jedno by nestačilo**: tři
-    soubory s `BranchPushing`, jedna metoda protokolu (a jmenovitě zakázané `commit`,
+    soubory s `BranchPushing` (`BranchPushSheet` mezi nimi **není** — sheet volá submission, ne
+    protokol), jedna metoda protokolu (a jmenovitě zakázané `commit`,
     `deleteBranch`, `pushTag`, `createBranch`), **argument `"push"` jen v `GitBranchPush`** a **holé
     `--force` nikde v cestě do remote**. Třetí z nich je ten, který se dá nejsnáz přehlédnout: bez
     něj by se push dal poskládat ve store a tvrzení o třech souborech by prošlo. Pátým tvrzením je,
     že `Checkout/` ani `GitHub/` do remote nezapisují — půlka podmínky, která se nezměnila; šestým,
     že `Bash(git push:*)` zůstává v `ClaudeCommand.disallowedTools`, tvrzeno **literálem**.
 
-  **Ověřeno vložením regrese, čtyřikrát** (a je to u téhle změny podmínka, ne pečlivost): holé
+  **Ověřeno vložením regrese, šestkrát** (a je to u téhle změny podmínka, ne pečlivost): holé
   `--force` místo leasu položí `SingleWayOutTests` **i** `GitBranchPushTests`; vyndaný guard na
   autorství položí „Na cizí pull request se nepushuje“ a pusher pak doopravdy pushne;
-  `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení o jednom místě; a `?? false`
-  v dekodéru `isCrossRepository` položí tvrzení, že chybějící pole je „nevím“.
+  `["push", "--force"]` složené ve `AppStore+BranchSync` položí tvrzení o jednom místě; `?? false`
+  v dekodéru `isCrossRepository` položí tvrzení, že chybějící pole je „nevím“; `switch
+  detail?.isCrossRepository` položí tvrzení o nenačtené hlavičce; a **první krok, který pushne sám,
+  položí pět testů** — to je ta stráž nad rozdělením akce.
 
   **Nález Copilota na #466** je v `BranchSyncOfferTests` jako vlastní test a je to tatáž třída jako
   všechny ostatní zákazy: **nenačtená hlavička není odpověď o původu větve.** `switch
@@ -865,8 +887,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (*Jak se změřil `--force-with-lease`*).
 
   **A jak sekce vypadá, ověřil render, ne review** — `BranchSyncRenderProbe` (sonda, vypnutá
-  `.disabled`, pouští se ručně). Vyrenderuje **dvanáct scén ve světlém i tmavém režimu** do PNG na
-  skutečné šířce panelu (278 bodů), takže se dá srovnat s návrhem po řádcích. Našly se tím dvě věci,
+  `.disabled`, pouští se ručně). Vyrenderuje scény ve světlém i tmavém režimu do PNG na skutečné
+  šířce panelu (278 bodů), takže se dá srovnat s návrhem po řádcích. Našly se tím dvě věci,
   které z diffu vidět nebyly: na PR **z forku** bylo tlačítko zašedlé a v panelu o tom nestálo nic
   (odtud `Policy.syncWarnings`), a hláška pod akcemi sázela `.font(.caption)`, tedy systémovou
   hodnotu v sekci, která jinak sází explicitními body. **Sonda nezastupuje tvrzení** — co má platit,

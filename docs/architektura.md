@@ -9310,12 +9310,14 @@ odchází kudy — a přesně to je jediné, co tu podmínku drží kontrolovate
 |---|---|
 | `BranchPushing` | Protokol s **jedinou** metodou: `push(_ plan: BranchPushPlan) async throws -> String` |
 | `GitBranchPush` | Implementace nad `git`. Brána, hranice cache, pre-flight, `--force-with-lease` |
-| `BranchSyncSubmission` | Jediný volající. Pusher se skládá **až** v `push`, takže store ho nemá kde držet |
+| `BranchPushSubmission` | Jediný volající, od #466 **s potvrzovacím sheetem**. Tvarem `MergeSubmission`: vzniká kliknutím, drží snímek, zaniká zavřením. Pusher se skládá **až** v `push` |
+| `BranchPushSheet` | Potvrzení — výpis `Co odejde`, výstraha o lease, `Přetlačit větev` **bez výchozí akce** |
 | `BranchPushPlan` | Co se má přetlačit — větev, lease, nová hlava, strom v cache |
 | `GitCredentials` | Jak se `gitu` řekne, kde vzít přihlášení. Sdílené s `GitRepoCheckout` |
 
 **Grep, který to hlídá**, je tvarem ten od publisheru: `grep BranchPushing App/` má vypsat **tři
-soubory**, všechny v `App/Publish/`. Od #466 to tvrdí `SingleWayOutTests`, ne jen grep — a **čtyřmi
+soubory**, všechny v `App/Publish/` (`BranchPushSheet` mezi ně nepatří — sheet volá submission, ne
+protokol). Od #466 to tvrdí `SingleWayOutTests`, ne jen grep — a **čtyřmi
 tvrzeními, protože jedno by nestačilo**:
 
 1. **Tři soubory**, jmenovitě, všechny v `Publish/`.
@@ -9386,6 +9388,53 @@ stejně. Pozná se podle fráze **`stale info`**; ostatní selhání jdou přes 
 u checkoutu (`CheckoutError(failure:)`), aby nevznikl druhý seznam frází, který se s prvním
 rozejde.
 
+### Dva kroky, a dělí se podle vratnosti (#466, změna z proklikání)
+
+**Do prvního proklikání to bylo jedno kliknutí, které udělalo rebase i push.** Uživatel na to
+narazil hned: „ono to udělá najednou? chtělo by to rozdělit… a ten force push na potvrzení.“ Je to
+**zpřesnění, ne obejití** — a hranice je **vratnost**, ne složitost:
+
+| Krok | Vratné? | Co za to |
+|---|---|---|
+| **rebase** v cache | ano — nic neopouští stroj, jde zahodit tlačítkem | jedno kliknutí, bez potvrzení |
+| **force push** | ne — přepisuje historii větve na remote | **potvrzovací sheet** s úplným výpisem |
+
+**Kdyby se dělilo podle toho, co je „složité“**, skončilo by potvrzení u té operace, která má víc
+parametrů, ne u té, která bolí. Je to **tatáž** hranice, podle které má sheet merge (#465, mění
+`main`) a nemá ho label (#392, vratný jedním klikem).
+
+**Potvrzení je sheet, ne pojmenované tlačítko v panelu**, a jsou pro to tři důvody:
+
+- **Návrh (sekce 36) kreslí `Přetlačit větev` v patičce sheetu** — a to i pro konfliktní cestu
+  (#467). Tlačítko v panelu by znamenalo, že #467 tu akci bude **stěhovat**, tedy dva tvary
+  potvrzení téže věci.
+- **Do panelu se nevejde výstraha o lease.** Má 300 bodů; čtyři řádky výpisu, warnbox a dvě
+  tlačítka z něj udělají odstavec.
+- **Precedens**: „výslovný pokyn člověka“ je v tomhle repu u nevratných věcí **sheet s úplným
+  výpisem** (#68 review, #465 merge).
+
+**#467 tím dostává hotovou půlku své práce**, a je to zapsané schválně: sheet, výpis, výstraha
+o lease, `Přetlačit větev` i `Zahodit rebase` už existují. #467 do **téhož** sheetu jen **přidá**,
+co session udělala s konflikty, a diff toho, co vzniklo — nezakládá druhou obrazovku.
+
+**Mezistav `rebased` je normální stav, ne mezikrok.** Mezi krokem jedna a dva se dá okno zavřít
+a přijít za hodinu, takže:
+
+- **drží ho panel**, ne sheet — hláška s `Přetlačit…` a `Zahodit rebase`, a `Zavřít` u ní
+  **schválně není** (zavřít hlášku o práci v cache by ji schovalo, aniž by zmizela);
+- **hledá se v cache při každém otevření vlastního PR** (`syncWorktreeState`), protože aplikaci
+  zavřenou mezi krokem jedna a dva nemá kde nic zapsat. **Strom je ten záznam** — nikam jinam se to
+  nezapisuje;
+- **druhý rebase se nad ním nenabízí** (`SyncObstacle.rebasedNotPushed`): přehrát commity znovu nad
+  výsledkem, který ještě neodešel, by tu práci zahodilo potichu.
+
+**A lease se skládá z hlavy, ze které se rebasovalo** (`RebasedBranch.rebasedFrom`), ne z té, kterou
+má detail v okamžiku potvrzení. **Je to pojistka, která vznikla až tím rozdělením**: mezi rebasem
+a potvrzením se hlava PR může pohnout (push z jiného stroje, z terminálu, z GitHubu), a s aktuální
+hodnotou by lease **prošel** a ten nový commit přepsal. S touhle na něj narazí pre-flight
+(`headMoved`) a nepřetlačí nic — nové chybové stavy k tomu tedy nebyly potřeba, jen správná hodnota
+v payloadu.
+
 ### Rebase je lokální práce, push je cesta ven
 
 Dva kroky, dva moduly, a store je jediné místo, které je spojuje (`AppStore.syncBranch`) — protože
@@ -9416,6 +9465,12 @@ odeslat.** To je ta půlka tvrdé podmínky č. 1, která se nezměnila; hlídá
   `rebase-apply` u `--apply`), protože zahodit se musí obojí.
 - **Rozdělaný rebase z minula se nepřepisuje.** Je to rozdělaná práce, o které rozhoduje člověk —
   zahodit tlačítkem, nebo dokončit v terminálu. Druhý pokus ho tedy najde a **nechá ležet**.
+- **`discardSync` maže celý strom, ne `rebase --abort`.** Od rozdělení akce se zahazují **dvě různé
+  věci** — rozdělaný rebase i přerovnaná větev, která neodešla — a `--abort` umí jen tu první: nad
+  dokončeným rebasem by neudělal nic a v cache by zůstaly přehrané commity, přestože panel hlásí
+  uklizeno. **Změřeno integračním testem**, že `git worktree remove --force --force` zvládne
+  i strom **uprostřed rebase**, takže je to jedna operace s jedním významem; příští rebase si strom
+  založí znovu.
 - **Počet přehraných commitů se čte po rebasu z výsledku** (`rev-list --count <base>..HEAD`)
   a **nečte se `?? 0`**: nesrozumitelný výstup `gitu` je porucha, a nula by v panelu tvrdila
   „nepřehrálo se nic“ nad větví, která se přehrála celá.
@@ -9443,6 +9498,7 @@ důvodu: akce se ovládá z panelu a musí přežít překliknutí tabu. **Pushe
 | Stav | Věta v panelu odpovídá na |
 |---|---|
 | `rebasing`, `pushing`, `discarding` | co se právě děje (`isBusy`, akce zašedlá) |
+| `rebased(RebasedBranch)` | **přerovnáno, nepřetlačeno** — kolik commitů leží v cache a že se do remote nesáhlo |
 | `pushed(replayed:)` | kolik commitů se přetlačilo |
 | `alreadyInSync` | **do remote se nesáhlo** |
 | `conflicted(files:)` | konflikt, rebase zahozený — v cache po něm nic není |
@@ -9468,10 +9524,10 @@ neodešlo — tatáž úvaha jako u review a merge.
 
 ### Co je na téhle akci jinak než na mergi (#465)
 
-- **Potvrzení nemá.** Přetlačuje se **vlastní** větev vlastního PR, `--force-with-lease` na pohnutý
-  remote nesáhne a co se stane, stojí v nápovědě nad tlačítkem (`Policy.branchSyncHelp` — kolik
-  commitů se přehraje **a** na jakou hlavu čeká lease). Je to tatáž třída jako label nebo komentář,
-  jedno pojmenované tlačítko, ne jako merge, který mění `main`.
+- **Potvrzení má, ale jen druhý krok.** První (rebase) je jedno kliknutí a nápověda u něj mluví
+  **jen o něm** (`Policy.branchSyncHelp`: kolik commitů se přehraje a že se do remote nesáhne).
+  Věta o lease se přestěhovala do potvrzení (`Policy.leaseWarning`), kde patří — pod kurzorem by ji
+  člověk čekal až u toho kliknutí, které doopravdy pushuje.
 - **Záložka se po úspěchu nezavírá.** Pull request žije dál a člověk na něm obvykle pokračuje.
   Detail a stav větve se ale **načtou znovu** (`branchWasPushed`), protože se hlava změnila — jinak
   by v panelu stála stará hlava a akce by se nabízela podruhé nad tím, co už je hotové. Nálezy se

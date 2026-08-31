@@ -38,6 +38,8 @@ struct BranchSyncRenderProbe {
         ("02-pozadu", Scene(behind: 4, checkFailed: true, sync: nil)),
         ("03-brana-vypnuta", Scene(behind: 4, checkFailed: false, sync: nil, editing: .blocked("Odesílání na GitHub je vypnuté."))),
         ("04-prehravam", Scene(behind: 4, checkFailed: false, sync: .rebasing)),
+        ("04b-mezistav", Scene(behind: 4, checkFailed: false, sync: .rebased(Self.rebased(replayed: 4)))),
+        ("04c-mezistav-jeden", Scene(behind: 1, checkFailed: false, sync: .rebased(Self.rebased(replayed: 1)))),
         ("05-pretlaceno", Scene(behind: 4, checkFailed: false, sync: .pushed(replayed: 4))),
         ("06-uz-bylo", Scene(behind: 4, checkFailed: false, sync: .alreadyInSync)),
         ("07-konflikt", Scene(behind: 4, checkFailed: false, sync: .conflicted(files: ["composer.lock", "src/Vault/SecretClient.php", "tests/VaultTest.php", "README.md"]))),
@@ -99,6 +101,16 @@ struct BranchSyncRenderProbe {
     // MARK: - Data scény
 
     private static let pr = PRIdentifier(repo: RepoID(owner: "ondrajodas", name: "PRism"), number: 466)
+
+    /// Přerovnaná větev, která čeká na přetlačení — mezistav z rozdělení akce na dva kroky (#466).
+    private static func rebased(replayed: Int) -> RebasedBranch {
+        RebasedBranch(
+            worktree: URL(filePath: "/tmp/prism-sync"),
+            headSha: "1111222233334444555566667777888899990000",
+            rebasedFrom: "9c1de02aa1b2c3d4e5f60718293a4b5c6d7e8f90",
+            replayed: replayed
+        )
+    }
 
     private static func detail(crossRepository: Bool? = false) -> PullRequest {
         PullRequest(

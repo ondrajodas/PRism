@@ -907,9 +907,14 @@ vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „n
 ### `Srovnat s main` — jediné místo, odkud aplikace zapisuje do remote (#466)
 
 Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: **`main` mezitím ujel a větev
-se musí srovnat.** `Srovnat s main` udělá rebase **v kopii repa v cache aplikace** a přetlačí
-výsledek. Bez tří teček, protože nic neotevírá — a **co se stane, stojí v nápovědě pod kurzorem**:
-kolik commitů se přehraje a na jakou hlavu čeká pojistka.
+se musí srovnat.**
+
+**Jsou to dva kroky, a dělí se podle vratnosti.** `Srovnat s main` udělá **rebase v kopii repa
+v cache aplikace** a **do remote nesáhne** — je to vratná práce, takže stojí na jedno kliknutí a co
+udělá, stojí v nápovědě pod kurzorem. Přetlačení je nevratné, takže se **potvrzuje zvlášť**:
+`Přetlačit…` otevře sheet, ve kterém je vypsané, co odejde (větev, kolik commitů, jaká hlava
+z rebase vznikla a na jakou hlavu čeká pojistka), k tomu výstraha o tom, co se stane při pohnutém
+remote — a tlačítko `Přetlačit větev` **není výchozí akce**, takže `Enter` historii větve nepřepíše.
 
 **Do #466 aplikace do remote nezapisovala vůbec.** Je to proto jediná akce svého druhu a drží ji
 dvě pojistky, které platí obě:
@@ -932,12 +937,25 @@ základem, tlačítko to řekne (`Větev je nad main — není co přehrávat`).
 **Když se hlava po rebasu nezmění, do remote se nesáhne** a v panelu stojí `Větev už nad základem
 byla, do remote se nesáhlo` — ne „přetlačeno 0 commitů“.
 
+**Mezi krokem jedna a dva je stav, ne mezikrok.** Po rebasu stojí v panelu `Srovnáno v kopii repa —
+4 commity přehrané. Do remote se zatím nesáhlo.` a k tomu dvě tlačítka: `Přetlačit…`
+a `Zahodit rebase`. **Zavřít se ta hláška nedá schválně** — zavřít ji by tu práci schovalo, aniž by
+zmizela. Dá se v tom stavu zavřít okno a přijít za hodinu: **hledá se v kopii repa při každém
+otevření vlastního PR**, takže se o ní okno dozví i po restartu. A **druhý rebase se nad ní
+nenabízí**, protože přehrát commity znovu nad výsledkem, který neodešel, by tu práci zahodilo
+potichu.
+
 **Konflikt je stav, ne chyba.** Nedokončený rebase se **zahodí** a v panelu je napsané, na kterých
 souborech uvázl (nejvýš tři jména) a že se má vyřešit v terminálu. Když se zahodit nepovede, **leží
 rozdělaný v kopii repa** a je to napsané taky — s tlačítkem **`Zahodit rebase`**, protože tichý
 rozdělaný stav v cache je horší než chyba: příští akce nad tím pull requestem by se nad ním
 zachovala divně. Hledá se přitom **při každém otevření vlastního PR**, ne jen po neúspěšném pokusu —
 aplikaci zabitou uprostřed rebase nemá kde nic zapsat.
+
+**Lease čeká na tu hlavu, ze které se rebasovalo** — ne na tu, kterou má PR v okamžiku potvrzení.
+Mezi rebasem a potvrzením se hlava může pohnout (push z jiného stroje, z terminálu, z GitHubu)
+a s aktuální hodnotou by pojistka takový commit přepsala; takhle se přetlačení odmítne a řekne, že
+se hlava posunula.
 
 **Záložka zůstává otevřená**, na rozdíl od merge: pull request žije dál. Detail a stav větve se ale
 načtou znovu, protože se hlava změnila — nálezy proti staré hlavě se tím stanou zastaralými, stejně

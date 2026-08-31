@@ -388,7 +388,8 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      Rebase je lokální práce v cache a `RepoCheckout.rebase` nemá čím nic odeslat; hlídá to test.
    - **Přibývá druhý protokol, `BranchPushing`, s jedinou metodou `push`.** `grep BranchPushing
      App/` má vypsat **tři soubory**: protokol, `GitBranchPush` (implementace)
-     a `BranchSyncSubmission` (jediný volající). Všechny v `App/Publish/`. **Zakázané je**
+     a `BranchPushSubmission` (jediný volající, od #466 s potvrzovacím sheetem). Všechny
+     v `App/Publish/`. **Zakázané je**
      `commit`, `deleteBranch`, `pushTag`, `createBranch` — a **push do základní větve** (cílem je
      vždycky `plan.branch`, tedy hlava PR).
    - **Brána je tatáž** (`PublishScope`, `allowsPublishing`), ne druhý přepínač. **Pusher není pole
@@ -401,9 +402,19 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      ne**, v bare partial klonu selže vždycky. Obojí **změřeno spuštěním** na
      `prism-review-sandbox`, ne přečteno v dokumentaci `gitu`: v téže situaci, ve které lease
      odmítl (`stale info`, kód 1) a nechal cizí commit na místě, ho holé `--force` **zahodilo**.
-   - **Potvrzení tahle akce nemá, a je to schválně**: přetlačuje se vlastní větev vlastního PR,
-     lease na pohnutý remote nesáhne a co se stane, stojí v nápovědě nad tlačítkem. Tatáž třída
-     jako label nebo komentář, ne jako merge.
+   - **Akce je rozdělená na dva kroky a dělí se podle vratnosti, ne podle složitosti.** **Rebase**
+     běží v cache, nic neopouští stroj a jde vzít zpět, takže stojí na jedno kliknutí. **Force
+     push je nevratný**, takže má **potvrzovací sheet s úplným výpisem** (`BranchPushSheet`) —
+     tatáž třída jako merge, `Přetlačit větev` **bez výchozí akce**, takže `Enter` historii větve
+     nepřepíše. Do #466 tady stálo, že potvrzení tahle akce nemá; **změnilo se to na připomínku
+     z proklikání** a je to zpřesnění, ne obejití. Mezi kroky je stav *přerovnáno, nepřetlačeno*
+     (`BranchSyncState.rebased`) — **normální stav, ne porucha**: je vidět v panelu, jde zahodit
+     jedním tlačítkem a **hledá se v cache při každém otevření vlastního PR**, protože aplikaci
+     zavřenou mezi krokem jedna a dva nemá kde nic zapsat.
+   - **Lease se skládá z hlavy, ze které se rebasovalo** (`RebasedBranch.rebasedFrom`), ne z té,
+     kterou má detail v okamžiku potvrzení. Je to pojistka, která vznikla až tím rozdělením: mezi
+     rebasem a potvrzením se hlava PR může pohnout, a s aktuální hodnotou by lease prošel a ten
+     nový commit přepsal.
    - **Tvrdá podmínka č. 3 platí beze změny**: rebase běží ve **vlastním** stromě v cache
      (`CacheLayout.syncWorktree`, ne ten od review) a hranici hlídá **tatáž kontrola jako jinde
      v repu** (`CacheFile.refusal`). Layout se pusherovi **předává**, ne bere z výchozí hodnoty —
@@ -411,7 +422,8 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    - **Tvrdá podmínka č. 2 platí beze změny**: `Bash(git push:*)` zůstává
      v `ClaudeCommand.disallowedTools` a tvrdí to test **literálem**. Že umí pushnout aplikace,
      není důvod to povolit session — aplikace to dělá přes protokol, s bránou a se dvěma guardy.
-   - **Od #466 to hlídá test, ne jen grep** (`SingleWayOutTests` — tři soubory, jedna metoda,
+   - **Od #466 to hlídá test, ne jen grep** (`SingleWayOutTests` — tři soubory
+     (`BranchPushing`, `GitBranchPush`, `BranchPushSubmission`), jedna metoda,
      jmenovitě zakázané čtyři, `"push"` **jen** v `GitBranchPush`, holé `--force` nikde a čistý
      `Checkout/` i `GitHub/`). Rozbor a naměřená čísla jsou
      v [`docs/architektura.md`](docs/architektura.md#zápis-do-remote--branchpushing-466), zdůvodnění
@@ -547,7 +559,7 @@ aplikace — tamtéž.
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta na GitHub API**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři** a od #465 **mergnout vlastní PR** | `gh` CLI |
-| `BranchPushing` | **Jediná cesta do remote** (#466): přetlačit větev **vlastního** PR přes `--force-with-lease`. Jedna metoda, dva guardy, tatáž brána. Rebase v tom **není** — ten je lokální práce `RepoCheckoutu` | `git` |
+| `BranchPushing` | **Jediná cesta do remote** (#466): přetlačit větev **vlastního** PR přes `--force-with-lease`, **jedině z potvrzení**. Jedna metoda, dva guardy, tatáž brána. Rebase v tom **není** — ten je lokální práce `RepoCheckoutu` | `git` |
 | `TerminalHost` | Vestavěný terminál (#459) — od #460 **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Umí do relace napsat **jednu řádku** (`▶`), a jen tehdy, když v ní nic neběží; od #478 **předá kolečko** aplikaci, která si o hlášení myši řekla. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle devítku stojí

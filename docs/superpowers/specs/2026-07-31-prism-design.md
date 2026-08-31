@@ -4156,3 +4156,54 @@ poskládaný jinde nechytl.
 **Konflikty tohle nezahrnuje.** Nedokončený rebase se zahodí a řekne se to; když se zahodit nepovede,
 zůstane v cache, je to vidět v panelu a jde zahodit tlačítkem. Session s `Write`/`Edit` je **#467**
 a je to **další** vědomá změna podmínek, ne tahle.
+
+### Záznam rozhodnutí — rebase a force push jsou dva kroky (#466, z proklikání)
+
+**Rozhodnutí:** `Srovnat s main` je **dvoukrokové**. Rebase v cache je jedno kliknutí, **force push
+si žádá potvrzovací sheet** s úplným výpisem a bez výchozí akce. Mezi tím je stav *přerovnáno,
+nepřetlačeno*, který drží panel a který jde zahodit jedním tlačítkem.
+
+**Proč se to změnilo.** Původní zadání #466 mluvilo o jedné akci a implementace ji tak udělala: jedno
+kliknutí, které přehrálo commity a hned přetlačilo. Na pauze u prvního proklikání to neobstálo —
+„ono to udělá najednou? chtělo by to rozdělit… a ten force push na potvrzení.“ **Je to zpřesnění
+zadání, ne přehození stolu**: cíl (nechodit kvůli srovnání do prohlížeče) zůstal, změnil se počet
+bran před nevratnou částí.
+
+**Hranice je vratnost, ne složitost**, a to je celé jádro rozhodnutí. Rebase nic neopouští stroj
+a jde zahodit; force push přepisuje historii větve na remote. Kdyby se dělilo podle toho, co je
+„složité“, skončilo by potvrzení u operace s víc parametry, ne u té, která bolí — a je to **tatáž**
+hranice, podle které má sheet merge (#465) a nemá ho label (#392).
+
+**Proč sheet, a ne pojmenované tlačítko v panelu.** Zvažovalo se obojí; koordinátor to nechal na mně
+s jedinou podmínkou — nevymýšlet **třetí** tvar potvrzení. Rozhodlo tohle:
+
+- **Návrh (sekce 36) kreslí `Přetlačit větev` v patičce sheetu** i pro konfliktní cestu (#467).
+  Tlačítko v panelu by znamenalo, že #467 tu akci **stěhuje** — tedy dva tvary téhož potvrzení,
+  přesně to, čemu se mělo zabránit.
+- **Panel má 300 bodů a výstraha o lease se do něj nevejde.** Čtyři řádky výpisu, warnbox a dvě
+  tlačítka z panelu udělají odstavec, ve kterém se ta věta ztratí.
+- **Precedens repa**: u nevratných věcí je „výslovný pokyn člověka“ sheet s úplným výpisem (#68,
+  #465), u vratných jedno pojmenované tlačítko (#73, #216, #392, #413).
+
+**Zamítnuto:** tlačítko `Přetlačit větev` přímo v panelu (levnější o jeden view, ale viz výš);
+a potvrzení u **obou** kroků (rebase je vratný, takže by to byla klikačka bez obsahu — sheet, jehož
+výpis nikdo nečte, se za týden odklikává poslepu).
+
+**Co to znamená pro #467, ať to příští session nedohledává z diffu.** Cesta zápisu se rozdělila,
+takže **část toho, co mělo stavět #467, vzniká už tady**: potvrzovací sheet (`BranchPushSheet`),
+výpis `Co odejde`, výstraha o lease, `Přetlačit větev` bez výchozí akce, `Zahodit rebase` v patičce
+i mezistav *přerovnáno, nepřetlačeno* ve store. **#467 tedy nezakládá druhou obrazovku** — do
+**téhož** sheetu přidá dvě věci: co session udělala s kolidujícími soubory, a diff toho, co
+vzniklo. Zůstává mu tím celá jeho vlastní práce (session s `Write`/`Edit`, její meze, řešení
+konfliktů) a nezbývá mu potvrzení, které by musel vymýšlet znovu.
+
+**Pojistka, která z toho vypadla a nebyla v zadání.** Mezi rebasem a potvrzením může být libovolně
+dlouhá pauza — okno se dá zavřít a přijít znovu. Lease se proto skládá z hlavy, **ze které se
+rebasovalo** (`RebasedBranch.rebasedFrom`), ne z té aktuální: s aktuální hodnotou by lease po cizím
+pushi **prošel** a ten nový commit přepsal, tedy přesně to, proti čemu lease je. Nové chybové stavy
+to nevyžádalo — stačí správná hodnota v payloadu a narazí na to existující `headMoved` v pre-flightu.
+
+**A `discardSync` maže strom, ne `rebase --abort`.** Zahazují se dvě různé věci a `--abort` umí jen
+jednu; nad dokončeným rebasem by neudělal nic a v cache by zůstaly přehrané commity, přestože panel
+hlásí uklizeno. Že `git worktree remove --force --force` zvládne i strom uprostřed rebase, je
+**změřené integračním testem**, ne předpokládané.
