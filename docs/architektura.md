@@ -3072,7 +3072,7 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 | Typ | Co dělá |
 |---|---|
-| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest`, `trackedPullRequests` a od #466 `rebase`, `discardRebase`, `rebaseInProgress`. Vše idempotentní. **Bez zápisu do remote** — pushuje jedině `BranchPushing` |
+| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest`, `trackedPullRequests` a od #466 `rebase`, `discardSync`, `syncWorktreeState`. Vše idempotentní. **Bez zápisu do remote** — pushuje jedině `BranchPushing` |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
 | `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache, a u běžící instance se odvozuje z `CFBundleName` (#228) |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
@@ -9440,7 +9440,7 @@ v payloadu.
 Dva kroky, dva moduly, a store je jediné místo, které je spojuje (`AppStore.syncBranch`) — protože
 jedině on ví, co je v panelu a jaký stav se má ukázat.
 
-**`RepoCheckout` dostal `rebase`, `discardRebase` a `rebaseInProgress` — a pořád nemá čím nic
+**`RepoCheckout` dostal `rebase`, `discardSync` a `syncWorktreeState` — a pořád nemá čím nic
 odeslat.** To je ta půlka tvrdé podmínky č. 1, která se nezměnila; hlídá to
 `SingleWayOutTests.keepsTheLocalModulesReadOnly`.
 
@@ -9480,7 +9480,7 @@ z obou podob: `contains` rozbaluje symlinky v rodičích, `isSymbolicLink` odchy
 komponentě. Strom, který je odkazem ven, by `git` použil na svém cíli, tedy v uživatelově klonu.
 
 **A ta kontrola mluví o té cache, ve které rebase doopravdy proběhl.** Layout se proto pusherovi
-**předává** (`AppStore.cacheLayout` → `BranchSyncSubmission` → `GitBranchPush`) a v `GitBranchPush`
+**předává** (`AppStore.cacheLayout` → `BranchPushSubmission` → `GitBranchPush`) a v `GitBranchPush`
 nemá výchozí hodnotu, jako brána. Dvě výchozí hodnoty na dvou místech by v provozu vyšly stejně a
 v testu se rozešly — a ta kontrola by se pak nedala ověřit odjinud než z pusheru samotného.
 

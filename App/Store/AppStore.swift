@@ -342,7 +342,7 @@ final class AppStore {
     /// Cesta ke `gitu` — jediné, co si store kvůli přetlačení větve drží (#466).
     ///
     /// **Ne pusher a ani továrna na něj**, ze stejného důvodu jako u `gh`: cesta do remote se
-    /// skládá až v `BranchSyncSubmission.push`, takže `AppStore` sám pushnout nic neumí a grep
+    /// skládá až v `BranchPushSubmission.push`, takže `AppStore` sám pushnout nic neumí a grep
     /// `BranchPushing App/` ho schválně nevypíše. `nil` v testech znamená „odsud se nepushuje“
     /// a `branchSyncSubmission(for:)` pak nevrátí nic.
     let git: URL?

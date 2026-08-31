@@ -174,13 +174,6 @@ struct RealBranchRebaseTests {
         #expect(await checkout().syncWorktreeState(for: pr, at: feature, onto: "main") == .empty)
     }
 
-    /// **Rozdělaný rebase se najde a nepřepíše se.**
-    ///
-    /// Tři tvrzení v jednom, protože jsou to tři kroky jednoho stavu: že se pozná (a to je ta
-    /// změřená věc — `rebase-merge` leží u pracovního stromu **uvnitř klonu**, takže dotaz
-    /// `FileManageru` na `<strom>/.git/rebase-merge` by vyšel prázdný), že ho druhý pokus
-    /// **nezahodí** (je to rozdělaná práce, o které rozhoduje člověk) a že ho `discardRebase`
-    /// ukliší.
     /// **Rozdělaný rebase se najde, nepřepíše a jde zahodit.**
     ///
     /// Tři tvrzení v jednom, protože jsou to tři kroky jednoho stavu: že se pozná (a to je ta

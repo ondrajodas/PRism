@@ -11,7 +11,7 @@ import Foundation
 /// - **`GitHubGateway` je pořád bez zápisu** a `RepoCheckout` taky — rebase je lokální práce
 ///   v cache a `RepoCheckout.rebase` nemá čím nic odeslat.
 /// - **`grep BranchPushing App/` vyjmenuje všechna místa, odkud se pushuje**: protokol,
-///   `GitBranchPush` (implementace) a `BranchSyncSubmission` (jediný volající). Všechny leží
+///   `GitBranchPush` (implementace) a `BranchPushSubmission` (jediný volající). Všechny leží
 ///   v `App/Publish/`, tedy tam, kde je i ta druhá cesta ven.
 /// - **Protokol má jednu metodu.** `push` a nic jiného: žádné `commit`, žádné `pushTag`, žádné
 ///   `deleteBranch`. Výčet je krátký schválně — je z něj vidět, co všechno aplikace umí zapsat.
