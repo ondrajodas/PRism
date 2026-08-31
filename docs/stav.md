@@ -5668,6 +5668,7 @@ regrese, dvakrát**: bez lomítka v porovnání zmizí sousední slot (padnou dv
 **Zbylé záznamy po slotech `a`, `b` a `c`** uklidí nejbližší běh skriptu v tom kterém slotu, nebo se
 smažou ručně; tenhle PR do konfigurace na stroji nesáhl.
 
+<<<<<<< HEAD
 ## #466 — srovnat vlastní větev s `main`, a první zápis do remote
 
 Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: větev je pozadu za `main`em
@@ -5829,3 +5830,73 @@ chybějící pole je „nevím“, ne „ne“.
 o tom, jak srovnání dopadlo, a potvrzovací sheet přetlačení. **Mockup (sekce 36) je překreslený
 a publikovaný** ve stejném commitu: přibyl mezistav v panelu, potvrzení a dvě poznámky o tom, proč
 se dělí podle vratnosti.
+=======
+## #421 — tělo `DiffView`u se při tichém tiku pollingu pořád špiní (změřeno, nezavřeno)
+
+Zadání #421 bylo z jiného soudku než ostatní: nejdřív **zjistit, jestli ta vada ještě je**, protože
+mezi jejím záznamem (2026-08-23) a dneškem prošly tři opravy téhle třídy — #469 (`LazyVStack` z diffu
+pryč, pevný `VStack` a nasazování bloků), #472 (`PollState` rozdělený na pět vlastností) a #476
+(`lineFrames()` na jeden průchod).
+
+**Vada je pořád tam, a pohonem je tik pollingu.** Naměřeno nad usazeným oknem (201 bloků kódu,
+1 210 prvků, split, 1512×874) — čísla, postup a co z nich plyne jsou
+v [`docs/testovani.md`](testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421):
+
+| úsek | `DiffView` | `DiffRowView` | `DiffRow.id` |
+|---|---|---|---|
+| nečinnost 5 s | 0 | 0 | 0 |
+| 10× tentýž rozsekaný běh smyčky **bez tiku** | 0 | 0 | 0 |
+| **10 tichých tiků pollingu** | **6** | **1 182** | **2 541** |
+| kontrola měřidla (přepnutý pohled diffu) | 4 | 788 | 1 656 |
+
+Co se z toho **přišpendlilo**:
+
+- **`LazyVStack` z toho zásobníku po #469 doopravdy zmizel.** `changed` vstup je dnes
+  `StaticBody<…VStack<ForEach<Array<FileDiff>…`, ne `…LazyVStack<…`. Změnila se tedy **cena** jednoho
+  zašpinění, ne to, že k němu dochází — zadání #421 tipovalo, že s `LazyVStack`em zmizí i vada, a to
+  je vyvrácené.
+- **Cesta na diff nevede přes data, a #472 drží.** Z jednadvaceti čtení, která okno nad nečinným
+  diffem dělá, probudí tichý tik **jediné** — `isRefreshing`. Ani `diffState`, ani `expansion`, ani
+  `isFolded`, ani `pullRequests`, ani `ownership`.
+- **Není to práce po úspěšném tiku.** Bisekce přes všech pět kroků `afterSuccessfulTick`
+  (`startAutomaticReviews`, `announceNewPullRequests`, `refreshStaleHeads`, `refreshOwnActivity`,
+  `loadDailySpend`) dá **nulu**; celý tik dá 6.
+- **Chrome okna to ztrojnásobuje.** Bez hlavičky a stavového řádku (jen detail PR) dá deset tiků
+  `DiffView=2`, s nimi `DiffView=6`.
+
+**Kde zbývající pohon je:** ne v tělech a ne v datech, ale v **rozvržení**. Během tiku se změřená
+**výška** plochy diffu skáče (643 → 659 → 643 → 675 bodů, šířka konstantní 1388) a každý ten skok
+přepíše `viewportHeight` v `@State`u `DiffView`u — což je průchod tělem. V nečinném úseku ani v úseku
+bez tiků se nezmění ani jednou. Odkud těch 16 a 32 bodů je, se najít nepodařilo; jedna hypotéza je
+**vyvrácená** — hlášení ve stavovém řádku (`AppNoticesView`) to nejsou, v té scéně žádné nesvítí ani
+se nemění.
+
+**Oprava, která se zkusila a zahodila.** `store.isRefreshing` se čte **v těle `ContentView`u**
+dvakrát (tlačítko `⟳` a povolení pro `⌘R`) a mění se dvakrát za tik, takže to vypadalo na tutéž vadu
+jako #472, jen o patro výš — hrubé **místo čtení** místo hrubé vlastnosti. Přestěhování do dvou
+vlastních views se napsalo a **změřilo, a pak zahodilo**:
+
+| | `ContentView` | dvě nová views | `DiffView` | `DiffRow.id` |
+|---|---|---|---|---|
+| jak to je | 13–21 | — | 6 | 2 541 |
+| s přestěhováním | 9 | 9 + 9 | 6 | 2 541 |
+
+Kořen okna se tedy špiní o pár průchodů méně, ale **celkem průchodů tělem přibude** a na tom, co je
+drahé, se nezmění **nic**. Počitadlo `ContentView`u se navíc mezi běhy hýbe (13–21), kdežto
+`DiffView` a `DiffRow.id` vyjdou do jedničky stejně — je to tedy ze tří sloupců ten nejhůř
+měřitelný. Je to učebnicové „zlevnění, které práci jen přesunulo jinam“
+(pravidlo z #275), takže do repa nešlo — a zapisuje se to sem proto, aby to příště nikdo nezkoušel
+jako opravu #421 znovu.
+
+**Issue proto zůstává otevřené** — „hotovo“ z jeho zadání (odstranit pohon, ne zlevnit následek)
+splněné není. Dopsaná je do něj mapa toho, co je vyloučené a kam se jít podívat.
+
+Testů **4412**, všechny zelené — z toho **jeden nový** (`PollObservationTests`, ověřený vloženou
+regresí) a tři nové sondy pod `PRISM_MEASURE`. Sada sond je od téhle změny **`.serialized`**, a je to
+podmínka: `RenderDiagnostics.current` je jedna hodnota na proces, takže dvě sondy naráz si do sebe
+sbírají a navzájem si ji nulují (naměřeno — `DiffView` vyšel 9 místo 6 a úsek `kontrola měřidla`
+vydal nulu, tedy „nezašpinilo se“ nad tím, co se právě zašpinilo). Je to tatáž třída jako #367.
+
+**Na obrazovce není co vidět**: aplikace se nezměnila, přibyly jen sondy, jedno tvrzení
+a dokumentace.
+>>>>>>> origin/main
