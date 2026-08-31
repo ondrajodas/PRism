@@ -1,0 +1,436 @@
+import Foundation
+import Testing
+
+@testable import PRism
+
+/// Srovnání větve, jak ho skládá store (#466) — `Srovnat s main`.
+///
+/// **Nic se nepushuje.** `git` je podstrčený shell skript v dočasné složce, který zapíše, s jakými
+/// argumenty byl spuštěn, a vypíše připravený výstup. Fake pusher by se sem podstrčit nedal —
+/// `AppStore` si podle tvrdé podmínky č. 1 nesmí držet ani továrnu na cestu ven —, takže je zápis
+/// argumentů **jediný** způsob, jak ověřit, že se nepushovalo. Tatáž scéna jako u merge (#465).
+///
+/// Nejcennější tvrzení jsou tady ta, která říkají, že se **nestalo nic**: bez povolení, na cizím
+/// PR, nad konfliktem ani nad rozdělaným rebasem se `git push` nespustí.
+@Suite("AppStore — srovnání větve")
+@MainActor
+struct AppStoreBranchSyncTests {
+    private let directory: TemporaryDirectory
+    private let layout: CacheLayout
+    private let pr = PRIdentifier("ondrajodas/prism-review-sandbox#8")!
+    private let calls: URL
+
+    init() throws {
+        directory = try TemporaryDirectory()
+        layout = CacheLayout(root: directory.url)
+        calls = directory.url.appending(path: "git-calls.log")
+    }
+
+    // MARK: - Prostředí testu
+
+    private func configuration(publishing: Bool, mine: Bool) -> Configuration {
+        var configuration = Configuration.standard
+        if publishing {
+            configuration.setRepository(RepositoryConfig(allowsPublishing: true), for: pr.repo)
+        }
+        configuration.global.ownLogins = mine ? ["autor"] : []
+        return configuration
+    }
+
+    private func summary() -> PullRequestSummary {
+        PullRequestSummary(
+            id: pr,
+            title: "chore: sync probe",
+            author: "autor",
+            url: URL(string: "https://github.com/\(pr.repo)/pull/\(pr.number)")!,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            state: .open
+        )
+    }
+
+    private func detail(
+        state: PullRequestState = .open,
+        crossRepository: Bool? = false
+    ) -> PullRequest {
+        PullRequest(
+            id: pr,
+            title: "chore: sync probe",
+            author: "autor",
+            headSha: "aaaa1111",
+            baseSha: "bbbb2222",
+            headRef: "prism-sync-probe",
+            baseRef: "master",
+            url: URL(string: "https://github.com/\(pr.repo)/pull/\(pr.number)")!,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            state: state,
+            isCrossRepository: crossRepository
+        )
+    }
+
+    /// Stav větve, která je **o dva commity pozadu** — tedy stav, ve kterém se akce nabízí.
+    private func behind(_ behind: Int = 2, ahead: Int = 1) -> BranchStatus {
+        BranchStatus(
+            mergeability: .mergeable,
+            mergeState: .clean,
+            divergence: BranchDivergence(ahead: ahead, behind: behind)
+        )
+    }
+
+    /// Pracovní strom **v cache**, jak ho vydá skutečný checkout. Mimo cache by pusher odmítl
+    /// pushnout (tvrdá podmínka č. 3) a testy o úspěšné cestě by měřily tu kontrolu, ne push.
+    private func syncWorktree() throws -> URL {
+        let url = layout.syncWorktree(for: pr)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func rebased(headSha: String = "cccc3333", replayed: Int = 2) throws -> RebaseOutcome {
+        .rebased(RebasedBranch(worktree: try syncWorktree(), headSha: headSha, replayed: replayed))
+    }
+
+    /// Podstrčený `git`: zapíše celou svoji řádku argumentů a skončí zadaným kódem.
+    private func fakeGit(output: String = "", exitCode: Int32 = 0) throws -> URL {
+        let script = directory.url.appending(path: "git-\(UUID().uuidString).sh")
+        let redirect = exitCode == 0 ? "" : ">&2"
+        let text = """
+        #!/bin/sh
+        echo "$@" >> "\(calls.path(percentEncoded: false))"
+        cat \(redirect) <<'PRISMOUT'
+        \(output)
+        PRISMOUT
+        exit \(exitCode)
+        """
+        try text.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: script.path(percentEncoded: false)
+        )
+        return script
+    }
+
+    /// Řádky, se kterými se `git` doopravdy spustil. Prázdno znamená „nepushovalo se“.
+    private func gitCalls() -> [String] {
+        guard let text = try? String(contentsOf: calls, encoding: .utf8) else { return [] }
+        return TextLines.nonEmpty(text).map(String.init)
+    }
+
+    /// `git` se předává **vždycky**, i v testech, které tvrdí, že se nepushovalo: bez cesty ke
+    /// `gitu` by akci zakázala už brána (`Policy.metadataEditing`) a tvrzení „nepushlo se“ by
+    /// měřilo chybějící nástroj, ne guard, o kterém má být řeč.
+    private func prepared(
+        git: URL? = nil,
+        publishing: Bool = true,
+        mine: Bool = true,
+        state: PullRequestState = .open,
+        crossRepository: Bool? = false,
+        status: BranchStatus? = nil,
+        outcome: Result<RebaseOutcome, CheckoutError>? = nil,
+        unfinished: Bool = false
+    ) async -> (AppStore, FakeRepoCheckout, FakeGitHubGateway) {
+        let gateway = FakeGitHubGateway(
+            always: .success([summary()]),
+            detail: .success(detail(state: state, crossRepository: crossRepository))
+        )
+        gateway.branchStatus = status ?? behind()
+        let checkout = FakeRepoCheckout()
+        if let outcome { checkout.rebaseOutcome = outcome }
+        checkout.unfinishedRebase = unfinished
+        let tool = try? git ?? fakeGit()
+        let store = AppStore(
+            gateway: gateway,
+            configuration: configuration(publishing: publishing, mine: mine),
+            configStore: ConfigStore(layout: layout),
+            time: FakeTimeSource(),
+            checkout: checkout,
+            gh: tool,
+            git: tool,
+            cacheLayout: layout
+        )
+        await store.loadDetail(for: summary())
+        store.openTab(pr)
+        return (store, checkout, gateway)
+    }
+
+    // MARK: - Kdy se akce nabízí
+
+    @Test("Vlastní PR pozadu za základem akci nabízí")
+    func offersOnAnOwnBranchBehindItsBase() async throws {
+        let (store, _, _) = await prepared()
+
+        let section = try #require(store.branchSection(for: pr))
+        #expect(section.sync.isAllowed)
+        #expect(section.syncPlan?.branch == "prism-sync-probe")
+        #expect(section.syncPlan?.expectedRemoteSha == "aaaa1111")
+        #expect(section.syncPlan?.behind == 2)
+    }
+
+    /// **Otázka na polohu větve jde s hlavou z detailu, ne s jménem větve** — tatáž úvaha jako
+    /// u prvního guardu: jméno se dá nastavit na cokoli.
+    @Test("Na polohu větve se ptáme základem a hlavou z detailu")
+    func asksAboutDivergenceWithTheHeadOid() async throws {
+        let (_, _, gateway) = await prepared()
+
+        #expect(
+            gateway.branchStatusQueries
+                == [FakeGitHubGateway.BranchStatusQuery(id: pr, base: "master", head: "aaaa1111")]
+        )
+    }
+
+    @Test("Srovnaná větev se nenabízí")
+    func doesNotOfferOnABranchThatIsUpToDate() async throws {
+        let (store, _, _) = await prepared(status: behind(0))
+
+        let section = try #require(store.branchSection(for: pr))
+        #expect(!section.sync.isAllowed)
+        #expect(section.sync.obstacles.contains(.upToDate(base: "master")))
+    }
+
+    // MARK: - Nepushovalo se
+
+    /// **Bez povolení se nesloží ani snímek akce**, takže se k pushi nedá dokliknout ani tehdy,
+    /// kdyby se na zakázané tlačítko nějak kliknout dalo.
+    @Test("Bez povolení se nepushuje a akce se nesloží")
+    func refusesToBuildASubmissionWithoutPermission() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), publishing: false)
+
+        #expect(store.branchSyncSubmission(for: pr) == nil)
+        await store.syncBranch(summary())
+
+        #expect(checkout.rebaseRequests.isEmpty)
+        #expect(gitCalls().isEmpty)
+    }
+
+    /// **Na cizím PR se sekce nekreslí vůbec**, takže se odsud nepushuje ani omylem.
+    @Test("Na cizí PR se nepushuje a sekce se nekreslí")
+    func doesNothingOnAForeignPullRequest() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), mine: false)
+
+        #expect(store.branchSection(for: pr) == nil)
+        await store.syncBranch(summary())
+
+        #expect(checkout.rebaseRequests.isEmpty)
+        #expect(gitCalls().isEmpty)
+        // Sekce se nekreslí, takže se ani nemá co hlásit — hláška u nekreslené sekce by byla
+        // věta, kterou nemá kdo přečíst.
+        #expect(store.branchSyncState(for: pr) == nil)
+    }
+
+    /// **Hlava z forku je zákaz**, ne jen varování: `origin` je základní repozitář, takže by push
+    /// mířil jinam, než na co se člověk dívá.
+    @Test("Na PR z forku se nepushuje")
+    func doesNotPushIntoAFork() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), crossRepository: true)
+
+        let section = try #require(store.branchSection(for: pr))
+        #expect(section.sync.obstacles.contains(.foreignBranch(known: true)))
+        await store.syncBranch(summary())
+
+        #expect(checkout.rebaseRequests.isEmpty)
+        #expect(gitCalls().isEmpty)
+    }
+
+    /// **„Nevím, kde větev leží“ je taky zákaz.** Starší uložený detail pole nemá, a z chybějící
+    /// odpovědi neplyne, kam se píše.
+    @Test("Bez odpovědi o původu větve se nepushuje")
+    func doesNotPushWithUnknownBranchOrigin() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), crossRepository: nil)
+
+        let section = try #require(store.branchSection(for: pr))
+        #expect(section.sync.obstacles.contains(.foreignBranch(known: false)))
+        await store.syncBranch(summary())
+
+        #expect(checkout.rebaseRequests.isEmpty)
+        #expect(gitCalls().isEmpty)
+    }
+
+    /// **Konflikt se nepřetlačuje.** Rebase se zahodil, v cache po něm nic nezůstalo — a `git`
+    /// se spustil jedině na ten rebase, ne na push.
+    @Test("Nad konfliktem se nepushuje")
+    func doesNotPushOverAConflict() async throws {
+        let (store, checkout, _) = await prepared(
+            git: try fakeGit(),
+            outcome: .success(.conflicted(files: ["composer.lock"], aborted: true))
+        )
+
+        await store.syncBranch(summary())
+
+        #expect(checkout.rebaseRequests == [pr])
+        #expect(gitCalls().isEmpty)
+        #expect(store.branchSyncState(for: pr) == .conflicted(files: ["composer.lock"]))
+    }
+
+    /// **Nezměněná hlava znamená, že se nesáhne na remote.** Push, po kterém se na remote nic
+    /// nezmění, je zbytečné sáhnutí na cizí server a v panelu věta, která tvrdí víc, než co se
+    /// stalo — proto vlastní stav, ne `pushed(0)`.
+    @Test("Když se hlava nezměnila, do remote se nesáhne")
+    func doesNotPushWhenTheHeadDidNotMove() async throws {
+        let (store, _, _) = await prepared(
+            git: try fakeGit(),
+            outcome: .success(try rebased(headSha: "aaaa1111", replayed: 0))
+        )
+
+        await store.syncBranch(summary())
+
+        #expect(gitCalls().isEmpty)
+        #expect(store.branchSyncState(for: pr) == .alreadyInSync)
+    }
+
+    /// **Rozdělaný rebase v cache akci zastaví**, dokud ho člověk nezahodí — a je to jediné
+    /// místo, odkud se to dělá.
+    @Test("Rozdělaný rebase akci zastaví a jde zahodit")
+    func stopsOnAnUnfinishedRebaseAndCanDiscardIt() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), unfinished: true)
+
+        #expect(store.branchSyncState(for: pr) == .unfinished(files: []))
+        let section = try #require(store.branchSection(for: pr))
+        #expect(!section.sync.isAllowed)
+        #expect(section.sync.obstacles.contains(.unfinishedRebase))
+
+        await store.discardRebase(for: pr)
+
+        #expect(checkout.discardRequests == [pr])
+        #expect(store.branchSyncState(for: pr) == nil)
+        #expect(gitCalls().isEmpty)
+        #expect(try #require(store.branchSection(for: pr)).sync.isAllowed)
+    }
+
+    /// **Rozdělaný rebase se hledá při každém otevření vlastního PR**, ne jen po neúspěšném
+    /// pokusu: aplikaci zabitou uprostřed rebase nemá kde nic zapsat.
+    @Test("Hláška z posledního pokusu se nálezem nepřepíše")
+    func doesNotOverwriteAFresherState() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), unfinished: true)
+        store.clearBranchSync(for: pr)
+        checkout.rebaseOutcome = .success(.conflicted(files: ["src/App.php"], aborted: false))
+
+        await store.syncBranch(summary())
+        #expect(store.branchSyncState(for: pr) == .unfinished(files: ["src/App.php"]))
+
+        // Druhý příchod na PR: nález jména souborů nezná, takže by věta zhrubla.
+        await store.loadBranchStatus(for: summary())
+
+        #expect(store.branchSyncState(for: pr) == .unfinished(files: ["src/App.php"]))
+    }
+
+    /// **Selhání zahození se hlásí**, nespolkne: rozdělaný rebase by v cache zůstal, kdežto okno
+    /// by hlásilo uklizeno.
+    @Test("Nepovedené zahození se hlásí")
+    func reportsAFailedDiscard() async throws {
+        let (store, checkout, _) = await prepared(git: try fakeGit(), unfinished: true)
+        checkout.discardFailure = .gitFailed(exitCode: 128, message: "no rebase in progress")
+
+        await store.discardRebase(for: pr)
+
+        #expect(store.branchSyncState(for: pr)?.isBusy == false)
+        #expect(store.branchSyncState(for: pr)?.hasUnfinishedRebase == false)
+        let sentence = try #require(store.branchSyncState(for: pr)?.sentence)
+        #expect(sentence.contains("Nepovedlo se"))
+    }
+
+    // MARK: - Pushlo se
+
+    /// Úspěšná cesta: rebase v cache, push s **vypsaným leasem** na hlavu z dat PR.
+    @Test("Push jde s lease na hlavu z dat pull requestu")
+    func pushesWithALeaseOnThePullRequestHead() async throws {
+        let (store, _, _) = await prepared(
+            git: try fakeGit(),
+            outcome: .success(try rebased())
+        )
+
+        await store.syncBranch(summary())
+
+        let push = try #require(gitCalls().first { $0.contains(" push ") })
+        #expect(push.contains("--force-with-lease=refs/heads/prism-sync-probe:aaaa1111"))
+        #expect(push.contains("cccc3333:refs/heads/prism-sync-probe"))
+        // Zdrojová strana je **sha z rebase, ne `HEAD`**: mezi rebasem a pushem si člověk mohl
+        // ve stromě něco zkusit z terminálu.
+        #expect(!push.contains(" HEAD:"))
+        #expect(store.branchSyncState(for: pr) == .pushed(replayed: 2))
+    }
+
+    /// **Záložka zůstává otevřená**, na rozdíl od merge (#465): pull request žije dál a člověk na
+    /// něm obvykle pokračuje.
+    @Test("Po přetlačení se záložka nezavírá")
+    func keepsTheTabOpenAfterPushing() async throws {
+        let (store, _, gateway) = await prepared(
+            git: try fakeGit(),
+            outcome: .success(try rebased())
+        )
+
+        await store.syncBranch(summary())
+
+        #expect(store.openTabs == [pr])
+        // Hlava se změnila, takže se detail i stav větve načtou znovu — jinak by v panelu stála
+        // stará hlava a akce by se nabízela podruhé nad tím, co už je hotové.
+        #expect(gateway.detailRequests.count > 1)
+    }
+
+    /// **Odmítnutý lease je vlastní stav a vlastní věta** (zadání #466): remote se pohnul, nic se
+    /// nepřepsalo a dá se to zkusit znovu. Text `stale info` je ten, který `git` v té situaci
+    /// doopravdy vypíše — změřeno na `prism-review-sandbox`.
+    @Test("Odmítnutý lease se pozná od jiné chyby")
+    func tellsARejectedLeaseFromOtherFailures() async throws {
+        let refusal = """
+        To https://github.com/ondrajodas/prism-review-sandbox.git
+         ! [rejected]        cccc3333 -> prism-sync-probe (stale info)
+        error: failed to push some refs
+        """
+        let (store, _, _) = await prepared(
+            git: try fakeGit(output: refusal, exitCode: 1),
+            outcome: .success(try rebased())
+        )
+
+        await store.syncBranch(summary())
+
+        #expect(store.branchSyncState(for: pr) == .failed(.leaseRejected))
+        let sentence = try #require(store.branchSyncState(for: pr)?.sentence)
+        #expect(sentence.contains("pohnula"))
+        #expect(!sentence.contains("stale info"))
+    }
+
+    /// Jiné selhání pushe **nesmí** vyjít jako odmítnutý lease: z lease plyne „zkus to znovu“,
+    /// z odmítnutého přihlášení něco jiného.
+    @Test("Jiné selhání pushe má jinou větu")
+    func hasADifferentSentenceForOtherFailures() async throws {
+        let (store, _, _) = await prepared(
+            git: try fakeGit(output: "fatal: Authentication failed", exitCode: 128),
+            outcome: .success(try rebased())
+        )
+
+        await store.syncBranch(summary())
+
+        #expect(store.branchSyncState(for: pr) != .failed(.leaseRejected))
+        #expect(store.branchSyncState(for: pr)?.isBusy == false)
+    }
+
+    /// **Selhání rebase se nevydává za konflikt.** Neznámý základ nebo nespustitelný `git` jsou
+    /// chyby, ze kterých plyne něco jiného než „vyřeš to v terminálu“.
+    @Test("Selhání rebase se hlásí jako chyba, ne jako konflikt")
+    func reportsARebaseFailureAsAFailure() async throws {
+        let (store, _, _) = await prepared(
+            git: try fakeGit(),
+            outcome: .failure(.gitFailed(exitCode: 128, message: "unknown revision"))
+        )
+
+        await store.syncBranch(summary())
+
+        #expect(gitCalls().isEmpty)
+        #expect(store.branchSyncState(for: pr)?.hasUnfinishedRebase == false)
+        let sentence = try #require(store.branchSyncState(for: pr)?.sentence)
+        #expect(!sentence.contains("konflikt"))
+    }
+
+    /// Hlášku jde **zavřít**, ale jen když nic neběží — jinak by z panelu zmizela věta o práci,
+    /// která pořád jde.
+    @Test("Hláška se zavře, běžící stav ne")
+    func clearsTheNoticeButNotARunningState() async throws {
+        let (store, _, _) = await prepared(
+            git: try fakeGit(),
+            outcome: .success(try rebased())
+        )
+        await store.syncBranch(summary())
+        #expect(store.branchSyncState(for: pr) != nil)
+
+        store.clearBranchSync(for: pr)
+        #expect(store.branchSyncState(for: pr) == nil)
+    }
+}

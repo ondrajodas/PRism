@@ -347,6 +347,14 @@ final class AppStore {
     /// a `branchSyncSubmission(for:)` pak nevrátí nic.
     let git: URL?
 
+    /// Cache, ve které se pracuje (#466) — **tatáž, ve které stojí checkout**.
+    ///
+    /// Drží se tady kvůli jedné věci: pusher si ověřuje, že strom, ze kterého pushuje, leží
+    /// v cache (tvrdá podmínka č. 3), a ta kontrola má mluvit o **té** cache, ve které rebase
+    /// doopravdy proběhl. Dvě výchozí hodnoty na dvou místech by v provozu vyšly stejně a v testu
+    /// by se rozešly — a ta kontrola by se pak nedala ověřit odjinud než z pusheru samotného.
+    let cacheLayout: CacheLayout
+
     let checkout: (any RepoCheckout)?
 
     /// Vestavěné terminály (#459). `nil` = **zásuvka se nekreslí** — tak jsou na tom testy, které
@@ -758,6 +766,7 @@ final class AppStore {
         spend: SpendLedger? = nil,
         gh: URL? = nil,
         git: URL? = nil,
+        cacheLayout: CacheLayout = .applicationSupport,
         health: HealthMonitor? = nil,
         notifications: (any UserNotifying)? = nil,
         announced: AnnouncedPullRequests? = nil,
@@ -780,6 +789,7 @@ final class AppStore {
         self.time = time
         self.gh = gh
         self.git = git
+        self.cacheLayout = cacheLayout
         self.health = health
         self.notifications = notifications
         self.announced = announced

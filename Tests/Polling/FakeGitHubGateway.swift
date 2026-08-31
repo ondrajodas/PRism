@@ -311,10 +311,24 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
     /// neptáme vůbec**.
     var branchStatusRequests: [PRIdentifier] { lock.withLock { branchStatusAsked } }
 
+    /// **Čím** se ptalo na polohu větve (#466) — základ a hlava. Vlastní typ, ne tuple: tuple
+    /// v Swiftu není `Equatable`, takže by se pole nedalo srovnat jedním tvrzením.
+    struct BranchStatusQuery: Equatable, Sendable {
+        let id: PRIdentifier
+        let base: String
+        let head: String
+    }
+
+    var branchStatusQueries: [BranchStatusQuery] { lock.withLock { branchStatusAskedAbout } }
+
     private var branchStatusAsked: [PRIdentifier] = []
+    private var branchStatusAskedAbout: [BranchStatusQuery] = []
 
     func fetchBranchStatus(id: PRIdentifier, base: String, head: String) async throws -> BranchStatus {
-        lock.withLock { branchStatusAsked.append(id) }
+        lock.withLock {
+            branchStatusAsked.append(id)
+            branchStatusAskedAbout.append(BranchStatusQuery(id: id, base: base, head: head))
+        }
         if let branchStatusFailure { throw branchStatusFailure }
         return branchStatus
     }

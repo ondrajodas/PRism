@@ -42,7 +42,10 @@ struct GitBranchPush: BranchPushing {
     init(
         git: URL,
         gh: URL,
-        layout: CacheLayout = .applicationSupport,
+        /// **Bez výchozí hodnoty**, jako brána: kontrola hranice cache má mluvit o té cache, ve
+        /// které rebase proběhl, a dvě výchozí hodnoty na dvou místech by v provozu vyšly stejně
+        /// a v testu se rozešly.
+        layout: CacheLayout,
         runner: ProcessRunning,
         gateway: any GitHubGateway,
         scope: PublishScope,

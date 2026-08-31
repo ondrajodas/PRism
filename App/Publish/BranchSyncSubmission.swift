@@ -24,10 +24,15 @@ struct BranchSyncSubmission {
 
     /// Ostrá cesta: pusher se skládá z `gitu`, `gh` (přihlášení), read-only gateway (pre-flight),
     /// brány a mých loginů — a skládá se **až** ve chvíli pushnutí.
+    ///
+    /// `layout` se **předává**, ne bere z výchozí hodnoty: pusher si jím ověřuje, že strom, ze
+    /// kterého pushuje, leží v cache (tvrdá podmínka č. 3), a ta kontrola má mluvit o té cache,
+    /// ve které rebase doopravdy proběhl.
     init(
         plan: BranchSyncPlan,
         git: URL,
         gh: URL,
+        layout: CacheLayout,
         gateway: any GitHubGateway,
         scope: PublishScope,
         mine: Set<String>
@@ -36,6 +41,7 @@ struct BranchSyncSubmission {
             GitBranchPush(
                 git: git,
                 gh: gh,
+                layout: layout,
                 runner: SubprocessRunner(),
                 gateway: gateway,
                 scope: scope,

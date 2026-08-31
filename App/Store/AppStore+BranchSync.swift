@@ -128,6 +128,7 @@ extension AppStore {
             plan: plan,
             git: git,
             gh: gh,
+            layout: cacheLayout,
             gateway: gateway,
             scope: publishScope,
             mine: ownLogins
