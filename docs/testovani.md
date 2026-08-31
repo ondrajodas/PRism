@@ -7647,3 +7647,25 @@ dotaz na hlavu padne až za podprocesem `git`, takže pauza skončila dřív, ne
 (`headRequests.count == 1` místo tří). Fake proto dostal **`headsInOrder`**: odpovědi v pořadí,
 poslední se opakuje. Je to tentýž postup jako u `detailsInOrder` a tentýž závěr jako u posunu
 základu — **když se scéna nedá vyjádřit, uprav fake, ne časování**.
+
+### Sonda na potvrzení force pushe (#466)
+
+Dva stavy sheetu `Force push?` se **klikáním nedají vyrobit**: dlouhý titulek commitu a velký počet
+přehraných commitů (k padesáti by bylo potřeba PR o padesát commitů pozadu). Na to je
+`BranchPushSheetRenderProbe` — `NSHostingView` + `cacheDisplay`, čtyři scény ve světlém i tmavém.
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/push \
+    xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+    -only-testing:PRismTests/BranchPushSheetRenderProbe > /tmp/probe.log 2>&1
+grep SONDA /tmp/probe.log
+```
+
+**Prefix `TEST_RUNNER_` je podmínka, ne kosmetika** — tím `xcodebuild` proměnnou předá hostu. Bez něj
+se sonda **nespustí a vypadá to, že prošla**: `Test run with 1 test … passed`, `TEST SUCCEEDED` a nula
+obrázků. Naletěl jsem na to při psaní téhle sondy, přesto že to `CodeSheetRenderProbe` v komentáři
+říká. Kontrola je proto `grep SONDA` nad logem, ne návratový kód.
+
+**Co z těch dvou scén vyšlo:** dlouhý titulek (přes 120 znaků) se na 460 bodech zalomí na tři řádky,
+sha zůstane na jedné a výstraha o lease je pořád vidět. U 50 commitů se vypíše osm, pak `a další 42
+commitů`, a výstraha zůstává nad hranou — tedy strop `Policy.pushedCommitLimit` drží to, na co je.

@@ -146,11 +146,11 @@ struct GitRepoCheckout: RepoCheckout {
         // Počet se dopočítá z výsledku, ne z paměti. Když se nedá přečíst, je to `.empty`, ne
         // `.rebased` s nulou: nabídnout přetlačení a u toho tvrdit „nula commitů“ je horší než
         // nechat člověka spustit rebase znovu.
-        guard let replayed = try? await commitCount(in: path, above: "refs/heads/\(base)") else {
+        guard let commits = try? await commits(in: path, above: "refs/heads/\(base)") else {
             return .empty
         }
         return .rebased(
-            RebasedBranch(worktree: path, headSha: head, rebasedFrom: headSha, replayed: replayed)
+            RebasedBranch(worktree: path, headSha: head, rebasedFrom: headSha, commits: commits)
         )
     }
 
@@ -187,24 +187,48 @@ struct GitRepoCheckout: RepoCheckout {
                 worktree: worktree,
                 headSha: head,
                 rebasedFrom: headSha,
-                replayed: try await commitCount(in: worktree, above: base)
+                commits: try await commits(in: worktree, above: base)
             )
         )
     }
 
-    /// Kolik commitů leží nad základem. **Nečte se `?? 0`**: nesrozumitelný výstup `gitu` je
-    /// porucha, a nula by v panelu tvrdila „nepřehrálo se nic“ nad větví, která se přehrála celá.
-    private func commitCount(in worktree: URL, above base: String) async throws -> Int {
+    /// Které commity leží nad základem. **Nečte se `?? []`**: nesrozumitelný výstup `gitu` je
+    /// porucha, a prázdný seznam by v potvrzení tvrdil „nic neodejde“ nad větví, která se přehrála
+    /// celá — u nevratné akce ten nejhorší možný omyl.
+    /// Commity nad základem — sha a první řádek zprávy, **od nejstaršího**.
+    ///
+    /// **Jedno volání místo dvou.** Do #466 tu stál `rev-list --count`, tedy jen počet; počet se
+    /// teď bere z délky seznamu, protože dvě čísla o jedné věci se umí rozejít.
+    ///
+    /// **`%x09` jako oddělovač, ne mezera:** tabulátor se v sha vyskytnout nemůže a v titulku ho
+    /// `git` v `%s` nevydá, kdežto mezera je v titulcích samozřejmě. Řádky dělí `TextLines`
+    /// (pravidlo z `CLAUDE.md`: `split(separator: "\n")` na `CRLF` nerozdělí vůbec) a titulek se
+    /// sráží `String.singleLine`, protože je to cizí text.
+    private func commits(in worktree: URL, above base: String) async throws -> [RebasedCommit] {
         let output = try await run([
-            "-C", worktree.path(percentEncoded: false), "rev-list", "--count", "\(base)..HEAD",
+            "-C", worktree.path(percentEncoded: false),
+            "log", "--reverse", "--format=%H%x09%s", "\(base)..HEAD",
         ])
-        guard let count = Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw CheckoutError.gitFailed(
-                exitCode: 0,
-                message: "Počet přehraných commitů nejde přečíst z „\(output)“."
+        var commits: [RebasedCommit] = []
+        for line in TextLines.nonEmpty(output) {
+            let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
+            guard let sha = parts.first, !sha.isEmpty else {
+                throw CheckoutError.gitFailed(
+                    exitCode: 0,
+                    message: "Seznam přehraných commitů nejde přečíst z „\(output)“."
+                )
+            }
+            let title = parts.count > 1 ? String(parts[1]).singleLine : ""
+            commits.append(
+                RebasedCommit(
+                    sha: String(sha),
+                    // Prázdná zpráva je platný commit, ale prázdný řádek ve výpisu „co odejde“ je
+                    // díra — tak se řekne, že zpráva chybí.
+                    title: title.isEmpty ? "(bez zprávy)" : title
+                )
             )
         }
-        return count
+        return commits
     }
 
     /// Strom, ve kterém se srovnává. Klíčovaný **jen pull requestem**, takže se v něm dá

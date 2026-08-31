@@ -13,12 +13,15 @@ enum GitCredentials {
     /// Argumenty `-c credential.helper=…`. `gh` se volá **absolutní cestou**, protože helper
     /// spouští shell, který `PATH` z GUI aplikace nezdědil.
     static func configuration(gh: URL) -> [String] {
-        // Helper spouští shell, takže cesta musí do apostrofů — a apostrof v ní se musí
-        // odescapovat, jinak by je předčasně uzavřela. Cesta k `gh` sice pochází z preflightu,
-        // ne od uživatele, ale skládat shellový příkaz bez escapování je zvyk, který se dřív nebo
-        // později vymstí.
-        let quoted = gh.path(percentEncoded: false).replacingOccurrences(of: "'", with: "'\\''")
-        return ["-c", "credential.helper=!'\(quoted)' auth git-credential"]
+        // Helper spouští shell, takže cesta musí do apostrofů — a apostrof v ní se musí odescapovat,
+        // jinak by je předčasně uzavřela. Cesta k `gh` sice pochází z preflightu, ne od uživatele,
+        // ale skládat shellový příkaz bez escapování je zvyk, který se dřív nebo později vymstí.
+        //
+        // **Uzávorkuje `ShellQuoting`, ne tenhle typ.** Do #466 tu stálo vlastní
+        // `replacingOccurrences` — a byla to **doslova tatáž operace**: ověřeno, že výstup je
+        // znak po znaku shodný na čtyřech cestách včetně apostrofů v nich. Dvě kopie escapování
+        // znamenají dvě místa, na kterých se dá rozejít, a jedno z nich obsluhuje **push**.
+        ["-c", "credential.helper=!\(ShellQuoting.quoted(gh)) auth git-credential"]
     }
 
     /// Prostředí pro `git`. Bez `GIT_TERMINAL_PROMPT=0` by se `git` na chybějící heslo zeptal

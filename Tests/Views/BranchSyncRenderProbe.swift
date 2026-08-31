@@ -111,7 +111,9 @@ struct BranchSyncRenderProbe {
             worktree: URL(filePath: "/tmp/prism-sync"),
             headSha: "1111222233334444555566667777888899990000",
             rebasedFrom: "9c1de02aa1b2c3d4e5f60718293a4b5c6d7e8f90",
-            replayed: replayed
+            commits: (0..<replayed).map {
+                RebasedCommit(sha: "abcdef\($0)000000", title: "chore: krok \($0)")
+            }
         )
     }
 

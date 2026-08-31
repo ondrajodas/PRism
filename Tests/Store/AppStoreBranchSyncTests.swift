@@ -97,7 +97,7 @@ struct AppStoreBranchSyncTests {
             worktree: try syncWorktree(),
             headSha: headSha,
             rebasedFrom: from,
-            replayed: replayed
+            commits: Self.commits(replayed)
         )
     }
 
@@ -107,6 +107,12 @@ struct AppStoreBranchSyncTests {
         replayed: Int = 2
     ) throws -> RebaseOutcome {
         .rebased(try rebasedBranch(headSha: headSha, from: from, replayed: replayed))
+    }
+
+    /// `N` přehraných commitů. Počet se v testech zadává jako číslo (na tom stojí věty v panelu),
+    /// seznam je to, co drží model — tak se dopočítá.
+    static func commits(_ count: Int) -> [RebasedCommit] {
+        (0..<count).map { RebasedCommit(sha: "sha\($0)0000000", title: "chore: krok \($0)") }
     }
 
     /// Podstrčený `git`: zapíše celou svoji řádku argumentů a skončí zadaným kódem.

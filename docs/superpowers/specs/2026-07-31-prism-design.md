@@ -4466,3 +4466,49 @@ zavírá jen po úspěchu.
 **Dvě mrtvé obrazovky se tím smazaly**: stav `Pushnuto jako …` a patka s `Zavřít` a odkazem na
 GitHub. Na `.pushed` je sheet zavřený, takže by je nikdo neviděl — držet je by byl ten vzor
 z `CLAUDE.md`, na který Copilot chodí (*stav, který se drží, ale nikdo ho nečte*).
+
+### Záznam rozhodnutí — potvrzení force pushe vypisuje commity (#466, z proklikání)
+
+**Rozhodnutí:** sheet `Force push?` vypisuje pod `Co odejde` **commity, které odejdou** — krátkou
+sha po rebasu a první řádek zprávy. Strop je **osm**, zbytek se počítá (`a další N`).
+
+**Proč vůbec.** `Co odejde` říkalo *kolik* commitů, ne *které*. Potvrzení u nevratné akce přitom
+existuje právě proto, že aplikace je jediné místo, kde se dá celý payload přečíst (#68, #465) —
+u force pushe to platilo jen napůl.
+
+**Sha je vidět, a je to rozhodnutí.** Titulek se přerovnáním nezmění, takže sám nedokazuje nic;
+sha po rebasu se naopak dá po pushi porovnat s tím, co je na GitHubu. Sedm znaků, jako všude jinde.
+
+**Seznam je ze výsledku rebasu, ne z větve.** Rebase commitům mění sha, takže „co odejde“ musí
+přijít z pracovního stromu (`git log --reverse --format=%H%x09%s base..HEAD`). Čte se **jedním**
+voláním a `replayed` je od té doby **délka seznamu** — dvě čísla o jedné věci se umí rozejít, a to
+zrovna mezi hláškou v panelu a výpisem v potvrzení.
+
+**Strop osm, ne scrollovaný seznam.** Tělo sheetu je `ScrollView` už teď, takže vnořený scroll by
+byly dvě rolovací plochy nad sebou — a ta vnitřní by u nevratné akce schovávala zrovna to, co má
+být přečtené. Osm je číslo, při kterém se do prvního pohledu vejde i **výstraha o lease** pod
+výpisem; ověřeno renderem na 50 commitech, že strop drží a výstraha zůstává vidět bez rolování.
+Zbytek se **počítá** (`a další N`) — tatáž úmluva jako `+2` u labelů (#392): z useknutého seznamu
+se nepozná, že něco chybí, a u nevratné akce je „nepozná se“ ta nejdražší vlastnost. Řádek
+`commitů N` ve výpisu **zůstává** a je to schválně: nad stropem je to jediné místo s pravdivým
+součtem.
+
+**Titulek je cizí text**, takže se sráží `String.singleLine` (zapsaná výjimka z pravidla o dělení
+řádků) a řádky logu dělí `TextLines`, ne `split(separator: "\n")`. Oddělovač je `%x09`, ne mezera:
+tabulátor `git` v `%s` nevydá, kdežto mezery jsou v titulcích samozřejmě. Prázdná zpráva je platný
+commit, ale prázdný řádek ve výpisu je díra — píše se `(bez zprávy)`.
+
+**Zalamuje se, neořezává** — a je to daň za to, že sheet je široký jako podlaha (`idealWidth` u něj
+SwiftUI zahodí a `.fitted` se vědomě nepřidalo). Rozšířit sheet kvůli cizímu textu nejde, ořezaný
+titulek by ale byl ořez zrovna té informace, kvůli které ten výpis vznikl. Ověřeno renderem na
+titulcích přes 120 znaků: zalomí se na tři řádky a nic nepřeteče.
+
+**Selhání se neschovává do prázdna.** Když se `git log` přečíst nepodaří, `commits(in:above:)` hodí
+chybu a `RebasedBranch` **nevznikne vůbec** (`syncWorktreeState` odpoví `.empty`, `rebase` chybu
+ohlásí) — takže se nikdy nedostaneš k potvrzení s prázdným výpisem. To je ta odpověď na „prázdný
+seznam v sheetu o pushi vypadá jako *nic se neodešle*“: nevzniká, místo aby se dovysvětlovala
+větou. `try?` v té cestě není a `?? []` taky ne.
+
+**Sonda navíc**, protože dva stavy nejsou klikatelné: `BranchPushSheetRenderProbe` kreslí dlouhý
+titulek a padesát commitů. K padesáti přehraným commitům by bylo potřeba PR, které je o padesát
+commitů pozadu.

@@ -170,7 +170,7 @@ extension AppStore {
                 sha: rebased.headSha,
                 worktree: rebased.worktree
             ),
-            replayed: rebased.replayed,
+            commits: rebased.commits,
             git: git,
             gh: gh,
             layout: cacheLayout,

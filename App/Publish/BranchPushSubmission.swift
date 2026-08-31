@@ -29,7 +29,11 @@ final class BranchPushSubmission: Identifiable {
     /// odejde, i kdyby mezitím dorazil polling s jinými čísly.
     let plan: BranchPushPlan
     /// Kolik commitů se přehrálo — do výpisu v potvrzení. Z výsledku rebase, ne z plánu.
-    let replayed: Int
+    /// Commity, které odejdou — **snímek z výsledku rebasu**, ne z aktuální větve. Vypisuje je
+    /// potvrzení; `replayed` je jejich počet, aby se dvě čísla o jedné věci nemohla rozejít.
+    let commits: [RebasedCommit]
+
+    var replayed: Int { commits.count }
 
     private(set) var state: State
 
@@ -55,13 +59,13 @@ final class BranchPushSubmission: Identifiable {
     init(
         pullRequest: PullRequestSummary,
         plan: BranchPushPlan,
-        replayed: Int,
+        commits: [RebasedCommit],
         pusher: @escaping @MainActor () -> any BranchPushing,
         afterSuccess: @escaping @MainActor (String) async -> Void
     ) {
         self.pullRequest = pullRequest
         self.plan = plan
-        self.replayed = replayed
+        self.commits = commits
         self.pusher = pusher
         self.afterSuccess = afterSuccess
         state = .ready
@@ -72,7 +76,7 @@ final class BranchPushSubmission: Identifiable {
     convenience init(
         pullRequest: PullRequestSummary,
         plan: BranchPushPlan,
-        replayed: Int,
+        commits: [RebasedCommit],
         git: URL,
         gh: URL,
         layout: CacheLayout,
@@ -84,7 +88,7 @@ final class BranchPushSubmission: Identifiable {
         self.init(
             pullRequest: pullRequest,
             plan: plan,
-            replayed: replayed,
+            commits: commits,
             // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako plán.
             pusher: {
                 GitBranchPush(

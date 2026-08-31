@@ -1630,6 +1630,18 @@ footer.end {
   padding: 5px 11px; border-radius: 7px; font-size: 12.5px; font-weight: 620;
   background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit);
 }
+/* --- výpis commitů v potvrzení force pushe (sekce 36) --------------------------------
+   **Sha je mono a nezalamuje se, titulek se zalamuje.** Sheet je široký jako podlaha
+   (`idealWidth` u sheetu SwiftUI zahodí), takže se dlouhý titulek musí vejít zalomením —
+   rozšířit sheet kvůli cizímu textu nejde. `flex: none` u sha je proto podmínka, ne kosmetika:
+   bez něj by se sedmiznakové sha zmáčkla dřív než titulek. */
+.cm-list { display: flex; flex-direction: column; gap: 6px; }
+.cm-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.cm-sha { flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.cm-t { color: var(--ink); line-height: 1.45; }
+/* `a další N` je tatáž úmluva jako `+2` u labelů: co se nevešlo, se **počítá**. */
+.cm-more { font-size: 11.5px; color: var(--ink-3); }
+
 .warnbox {
   display: flex; align-items: flex-start; gap: 8px; padding: 9px 11px;
   border-radius: var(--radius-sm); font-size: 12px; line-height: 1.5;
@@ -11944,6 +11956,27 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       historii větve nepřepíše.
     </p>
     <p class="muted">
+      <b>Vypsané jsou i commity, které odejdou</b> — sha po rebasu a první řádek zprávy.
+      <em>Co odejde</em> výš říká <em>kolik</em>; potvrzení u nevratné akce má být místo, kde se
+      přečte <b>celý</b> payload, a u mergu to tak je. Sha je vidět schválně: dá se po pushi
+      porovnat s tím, co je na GitHubu, kdežto titulek se přerovnáním nezmění a nic nedokazuje.
+    </p>
+    <p class="muted">
+      <b>Strop je osm a zbytek se počítá</b> (<code>a další N</code>), ne ořezává potichu — tatáž
+      úmluva jako <code>+2</code> u labelů. Osm proto, že tělo sheetu je rolovací plocha a jde o to,
+      aby se do prvního pohledu vešla i <b>výstraha o lease</b> pod výpisem; delší seznam ji odroluje
+      pod hranu a z potvrzení zbude seznam commitů. <b>Vnořený scroll byl zamítnutý</b>: dvě rolovací
+      plochy nad sebou by u nevratné akce schovávaly zrovna to, co má být přečtené. Ověřeno renderem
+      na <b>50 commitech</b> — strop drží a výstraha zůstává vidět bez rolování.
+    </p>
+    <p class="muted">
+      <b>Titulek je cizí text</b>, takže se sráží na první řádek (víceřádková zpráva se do výpisu
+      vysypat nesmí) a <b>zalamuje se</b>, ne ořezává: sheet je široký jako podlaha, takže se
+      rozšířit kvůli titulku nedá. Ověřeno renderem na titulcích přes 120 znaků. A když se log
+      přečíst nepodaří, <b>nevznikne mezistav vůbec</b> — prázdný výpis v potvrzení o pushi by
+      vypadal jako „nic neodejde“, což je u nevratné akce ten nejdražší možný omyl.
+    </p>
+    <p class="muted">
       <b>Po úspěchu se sheet zavře sám</b> — jako u mergu (#465), a <b>jedině po úspěchu</b>: po
       odmítnutém leasu, <code>409</code>, timeoutu ani spadlé síti zůstane otevřený, protože je to
       jediné místo, kde je ta chyba vidět. <b>Záložku ale nezavírá</b>, na rozdíl od mergu: člověk
@@ -11976,6 +12009,19 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <div class="rv-row"><span class="who">commitů</span><span class="ans">4</span></div>
               <div class="rv-row"><span class="who">nová hlava</span><span class="ans">2bf096a</span></div>
               <div class="rv-row"><span class="who">lease čeká</span><span class="ans">9bb4352</span></div>
+            </div>
+          </div>
+          <!-- Které commity odejdou — **titulky, ne jen počet**. Sha jsou ty **po rebasu**, takže
+               se dají po pushi porovnat s GitHubem. Strop je **osm** a zbytek se počítá
+               (`a další N`), ne ořezává potichu: neomezený výpis odroluje výstrahu o lease pod
+               hranu a z potvrzení zbude seznam commitů. Titulek se **zalamuje** — sheet je široký
+               jako podlaha, takže rozšířit ho kvůli cizímu textu nejde. -->
+          <div class="pl-sec">
+            <div class="cm-list">
+              <div class="cm-row"><span class="cm-sha">a1b2c3d</span><span class="cm-t">chore: bump symfony to 8.0</span></div>
+              <div class="cm-row"><span class="cm-sha">b2c3d4e</span><span class="cm-t">fix: nezahazovat token při souběžném refreshi</span></div>
+              <div class="cm-row"><span class="cm-sha">c3d4e5f</span><span class="cm-t">refactor: rozdělit BranchAwareClient na dvě třídy a přesunout cachování secretů do vlastní vrstvy</span></div>
+              <div class="cm-row"><span class="cm-sha">2bf096a</span><span class="cm-t">test: pokrýt prázdný secret</span></div>
             </div>
           </div>
           <div class="warnbox">

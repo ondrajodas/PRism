@@ -437,4 +437,54 @@ struct BranchSyncOfferTests {
         #expect(Policy.divergenceProbe(open: .home, ownership: ownership) == nil)
     }
 
+
+    // MARK: - Výpis commitů v potvrzení (#466, z proklikání)
+
+    /// **Výčtem u stropu, protože o něm rozhoduje jedno číslo a plete se o jeden.**
+    @Test("Výpis commitů má strop a zbytek počítá")
+    func capsTheCommitList() {
+        func commits(_ n: Int) -> [RebasedCommit] {
+            (0..<n).map { RebasedCommit(sha: "sha\($0)", title: "krok \($0)") }
+        }
+
+        // Pod stropem i na stropu se vypíše všechno a nic nezbývá.
+        #expect(Policy.pushedCommitList(commits(0)) == ([], 0))
+        #expect(Policy.pushedCommitList(commits(1)).shown.count == 1)
+        #expect(Policy.pushedCommitList(commits(1)).hidden == 0)
+        #expect(Policy.pushedCommitList(commits(8)).shown.count == 8)
+        #expect(Policy.pushedCommitList(commits(8)).hidden == 0)
+
+        // Nad stropem se vypíše strop a **zbytek se počítá**, neořezává potichu.
+        #expect(Policy.pushedCommitList(commits(9)).shown.count == 8)
+        #expect(Policy.pushedCommitList(commits(9)).hidden == 1)
+        #expect(Policy.pushedCommitList(commits(70)).shown.count == 8)
+        #expect(Policy.pushedCommitList(commits(70)).hidden == 62)
+
+        // Součet vždycky vyjde na celý seznam — jinak by se něco „ztratilo“ mezi vypsaným
+        // a spočítaným.
+        for n in 0...20 {
+            let list = Policy.pushedCommitList(commits(n))
+            #expect(list.shown.count + list.hidden == n)
+        }
+    }
+
+    /// **Vypisuje se od nejstaršího a v tom pořadí, v jakém leží na větvi** — pořadí je informace:
+    /// z výpisu se má poznat, co se na co přehrálo.
+    @Test("Výpis zachovává pořadí")
+    func keepsTheOrder() {
+        let commits = (0..<12).map { RebasedCommit(sha: "sha\($0)", title: "krok \($0)") }
+
+        let shown = Policy.pushedCommitList(commits).shown
+
+        #expect(shown.map(\.title) == (0..<8).map { "krok \($0)" })
+    }
+
+    /// Krátká sha je **sedm znaků**, jako všude jinde v okně.
+    @Test("Krátká sha má sedm znaků")
+    func shortensTheSha() {
+        let commit = RebasedCommit(sha: "1111222233334444555566667777888899990000", title: "x")
+
+        #expect(commit.shortSha == "1111222")
+    }
+
 }

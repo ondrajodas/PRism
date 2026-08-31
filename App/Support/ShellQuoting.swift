@@ -9,9 +9,13 @@ import Foundation
 /// pro Terminál. Obojí jsou příkazy, které pak někdo doopravdy spustí, takže se rozejít nesmí.
 ///
 /// **Escapování uvnitř už uzávorkovaného řetězce sem nepatří**, a je to jiná operace:
-/// `ClaudeCommand.environment` i `GitRepoCheckout` skládají hodnotu, kterou do apostrofů
-/// zabalí až vrstva nad nimi (`!'<cesta>' auth git-credential`), takže by ji tahle funkce
-/// uzávorkovala podruhé.
+/// `ClaudeCommand.environment` skládá hodnotu, kterou do apostrofů zabalí až vrstva nad ní, takže
+/// by ji tahle funkce uzávorkovala podruhé.
+///
+/// **`GitCredentials` mezi ty výjimky ale nepatří, a do #466 tu byla vedená omylem** — apostrofy
+/// si tam kolem cesty přidává `credential.helper=!'<cesta>'` **sám**, takže je to přesně
+/// `quoted(_:)`, ne escapování do cizích uvozovek. Ověřeno srovnáním výstupu znak po znaku na
+/// čtyřech cestách včetně apostrofů. Od #466 to proto vede přes tuhle funkci.
 enum ShellQuoting {
     /// Hodnota jako jeden argument pro shell.
     ///

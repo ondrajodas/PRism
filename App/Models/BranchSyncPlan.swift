@@ -71,9 +71,32 @@ struct RebasedBranch: Hashable, Sendable {
     /// by ten nový commit; s touhle hodnotou narazí pre-flight na `headMoved` a nepřetlačí nic.
     /// Rebase se pak musí spustit znovu.
     let rebasedFrom: String
-    /// Kolik commitů se přehrálo. **Spočítané po rebasu z výsledku**, ne převzaté z plánu:
-    /// plán mluví o tom, co se čekalo, tohle o tom, co vzniklo.
-    let replayed: Int
+    /// Commity, které se přehrály — **v pořadí od nejstaršího**, tedy tak, jak leží na větvi.
+    ///
+    /// **Přečtené po rebasu z výsledku**, ne převzaté z plánu ani z toho, co bylo na větvi předtím:
+    /// rebase commitům mění sha, takže seznam „co odejde“ musí být ten z pracovního stromu.
+    ///
+    /// **Když se log přečíst nepodaří, `RebasedBranch` nevznikne vůbec** — `commits(in:above:)`
+    /// hodí chybu a `syncWorktreeState` odpoví `.empty`. Je to schválně a je to tatáž úvaha, jakou
+    /// tu měl počet: nabídnout force push a u toho vypsat prázdný seznam by vypadalo jako „nic
+    /// neodejde“, což je ten nejhorší možný omyl u nevratné akce.
+    let commits: [RebasedCommit]
+
+    /// Kolik commitů se přehrálo. **Z délky seznamu**, ne z vlastního dotazu — dvě čísla o jedné
+    /// věci se umí rozejít, a to zrovna mezi hláškou v panelu a výpisem v potvrzení.
+    var replayed: Int { commits.count }
+}
+
+/// Jeden přehraný commit — to, co se vypisuje v potvrzení force pushe (#466, z proklikání).
+struct RebasedCommit: Hashable, Sendable {
+    /// Sha **po** rebasu. Krátká podoba je v potvrzení vidět schválně: dá se porovnat s tím, co je
+    /// po pushi na GitHubu, kdežto samotný titulek se u přerovnané větve nezmění a nic nedokazuje.
+    let sha: String
+    /// První řádek zprávy. Sražený `String.singleLine`, protože je to **cizí text** — víceřádková
+    /// zpráva se do řádku výpisu vysypat nesmí.
+    let title: String
+
+    var shortSha: String { String(sha.prefix(7)) }
 }
 
 /// Co leží ve stromě pro srovnání větve (#466).

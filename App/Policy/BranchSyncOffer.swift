@@ -232,6 +232,30 @@ extension Policy {
             + "a nic se nepřepíše."
     }
 
+    /// Které commity se v potvrzení force pushe vypíšou a kolik jich zbyde (#466, z proklibání).
+    ///
+    /// **Strop je osm.** Počet přehraných commitů je neomezený a sheet už jednou přetékal, takže
+    /// výpis strop mít musí. Osm proto, že tělo sheetu je `ScrollView` a **patka s tlačítky je nad
+    /// ním**, tedy vidět pořád — jde tu o to, aby se do prvního pohledu vešla i **výstraha o lease**
+    /// pod výpisem. Delší seznam ji odroluje pod hranu a z potvrzení zbude seznam commitů.
+    ///
+    /// **Zbytek se počítá, neořezává potichu** — `a další N` je tatáž úmluva jako `+2` u labelů
+    /// (#392) a patka `Zobrazit všech N` u front: z prostě useknutého seznamu se nepozná, že něco
+    /// chybí, a u nevratné akce je „nepozná se“ ta nejdražší vlastnost.
+    ///
+    /// **Scrollovaný seznam byl zamítnutý:** sheet je `ScrollView` už teď, takže vnořený scroll by
+    /// znamenal dvě rolovací plochy nad sebou — a ta vnitřní by u nevratné akce schovávala zrovna
+    /// to, co má být přečtené. Celý seznam se dá přečíst v terminálu nebo po pushi na GitHubu.
+    static func pushedCommitList(
+        _ commits: [RebasedCommit],
+        limit: Int = pushedCommitLimit
+    ) -> (shown: [RebasedCommit], hidden: Int) {
+        guard commits.count > limit else { return (commits, 0) }
+        return (Array(commits.prefix(limit)), commits.count - limit)
+    }
+
+    static let pushedCommitLimit = 8
+
     /// Kolikrát se po **vlastním force pushi** přeptat, dokud pull request nehlásí hlavu, kterou
     /// jsme právě pushnuli — a jak dlouho mezi tím čekat.
     ///

@@ -5752,6 +5752,17 @@ a `Zahodit rebase`; `Zavřít` u ní schválně **není**), hledá se v cache p�
 PR (`syncWorktreeState`) a **druhý rebase se nad ním nenabízí** — přehrát commity znovu nad
 výsledkem, který neodešel, by tu práci zahodilo potichu.
 
+### Potvrzení force pushe vypisuje commity
+
+**Čtvrtý nález z proklikání**: `Co odejde` říkalo *kolik* commitů, ne *které* — a potvrzení
+u nevratné akce má být místo, kde se přečte celý payload. Vypisuje se krátká sha **po rebasu**
+(dá se po pushi porovnat s GitHubem) a první řádek zprávy.
+
+Strop je **osm**, zbytek se počítá (`a další N`); vnořený scroll byl zamítnutý, protože sheet je
+rolovací plocha už teď. Ověřeno renderem na 50 commitech, že strop drží a výstraha o lease zůstává
+vidět bez rolování, a na titulcích přes 120 znaků, že se zalomí. **Selhání nevzniká jako prázdný
+výpis**: když se `git log` nepřečte, mezistav nevznikne vůbec.
+
 ### Po force pushi se čeká na hlavu, ne na `mergeable`
 
 **Třetí nález z proklikání** („po force push nejde mergnout“) a uživatel rozhodl, že se řeší tady,

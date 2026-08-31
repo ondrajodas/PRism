@@ -96,6 +96,7 @@ struct BranchPushSheet: View {
                     row("lease čeká", String(plan.expectedRemoteSha.prefix(7)))
                 }
             }
+            commitList
             leaseWarning
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,6 +152,41 @@ struct BranchPushSheet: View {
             buttons
         }
         .padding(16)
+    }
+
+    /// Které commity odejdou — **titulky, ne jen počet** (#466, z proklikání).
+    ///
+    /// `Co odejde` výš říká *kolik*; potvrzení u nevratné akce má být místo, kde se přečte **celý**
+    /// payload, a u merge (#465) to tak je. Seznam je ze **snímku po rebasu**, takže sha jsou ta
+    /// nová — dají se po pushi porovnat s GitHubem.
+    ///
+    /// **Titulek se zalamuje, sha ne.** Sheet je široký jako `minWidth` (`idealWidth` u něj SwiftUI
+    /// zahodí, viz `body`), takže se dlouhý titulek musí vejít **zalomením** — rozšířit sheet kvůli
+    /// cizímu textu nejde. `fixedSize(vertical:)` je to, co zalomení dovolí; bez něj by se titulek
+    /// ořezal na jednu řádku a z „co odejde“ by zbyla polovina věty.
+    ///
+    /// **Sha je `monospaced` a nezalamuje se** — je to sedm znaků, které se čtou po znaku.
+    @ViewBuilder private var commitList: some View {
+        let list = Policy.pushedCommitList(submission.commits)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(list.shown, id: \.sha) { commit in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(verbatim: commit.shortSha)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Text(verbatim: commit.title)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+            }
+            // **Zbytek se počítá, neořezává potichu.** Rozhoduje `Policy`, ne tenhle výpis.
+            if list.hidden > 0 {
+                Text(verbatim: "a další \(Plural.czech(list.hidden, one: "commit", few: "commity", many: "commitů"))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     @ViewBuilder private var status: some View {

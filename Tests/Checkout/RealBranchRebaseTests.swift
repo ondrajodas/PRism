@@ -75,6 +75,43 @@ struct RealBranchRebaseTests {
         #expect(FileManager.default.fileExists(atPath: rebased.worktree.appending(path: "main.txt").path))
     }
 
+    /// **Titulky přehraných commitů se čtou z výsledku rebasu** (#466, z proklikání) — potvrzení
+    /// force pushe je vypisuje, takže musí být ty **nové** sha, ne to, co bylo na větvi předtím.
+    ///
+    /// Tři věci naráz, protože jsou to tři kroky jedné hodnoty: že se přečtou v **pořadí od
+    /// nejstaršího**, že se **víceřádková zpráva srazí na první řádek** (je to cizí text) a že sha
+    /// jsou **jiné** než před rebasem.
+    @Test("Přehrané commity nesou nové sha a první řádek zprávy")
+    func readsTheReplayedCommitTitles() async throws {
+        try await makeScratchRepository()
+        try await git(["checkout", "-b", "feature"], in: origin)
+        try "první\n".write(to: origin.appending(path: "a.txt"), atomically: true, encoding: .utf8)
+        try await git(["add", "a.txt"], in: origin)
+        try await git(["commit", "-m", "feat: první krok"], in: origin)
+        let firstOnBranch = try await revision("HEAD", in: origin)
+        try "druhý\n".write(to: origin.appending(path: "b.txt"), atomically: true, encoding: .utf8)
+        try await git(["add", "b.txt"], in: origin)
+        // **Víceřádková zpráva** — přesně to, co se do řádku výpisu vysypat nesmí.
+        try await git(["commit", "-m", "fix: druhý krok\n\nDelší popis, který v titulku být nemá."], in: origin)
+        let feature = try await revision("HEAD", in: origin)
+        try await git(["checkout", "main"], in: origin)
+        try await advanceMain(file: "main.txt", content: "cizí\n")
+
+        let outcome = try await checkout().rebase(pr, at: feature, onto: "main")
+
+        guard case .rebased(let rebased) = outcome else {
+            Issue.record("čekal se rebase, přišlo \(outcome)")
+            return
+        }
+        #expect(rebased.commits.map(\.title) == ["feat: první krok", "fix: druhý krok"])
+        #expect(rebased.replayed == 2)
+        // **Nové sha**: rebase je přepsal, takže se ani jedno nesmí rovnat tomu, co bylo na větvi.
+        #expect(!rebased.commits.map(\.sha).contains(firstOnBranch))
+        #expect(!rebased.commits.map(\.sha).contains(feature))
+        // A posledním z nich je hlava po rebasu.
+        #expect(rebased.commits.last?.sha == rebased.headSha)
+    }
+
     /// **Přerovnaná větev, která neodešla, se v cache najde** (#466) — a je to ta půlka, která
     /// rozhoduje o tom, co okno ukáže po restartu aplikace. Mezi rebasem a potvrzením přetlačení
     /// může být libovolně dlouhá pauza; strom **je** ten záznam, nikam jinam se to nezapisuje.

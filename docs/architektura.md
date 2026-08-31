@@ -9627,6 +9627,39 @@ naměřeným maximem 2,16 s); po jeho vyčerpání se přestane ptát a nechá s
 **Spravilo to i `syncWorktreeState`**: přerovnaná větev se pozná tím, že hlava stromu není hlavou
 PR — se starou hlavou by po pushi vyšla `.rebased`, tedy nabídka pushnout něco, co už odešlo.
 
+### Potvrzení force pushe vypisuje commity (#466, z proklikání)
+
+**`Co odejde` říká i *které*, ne jen *kolik*.** Pod výpisem stojí seznam: krátká sha **po rebasu**
+a první řádek zprávy. Sha je vidět schválně — titulek se přerovnáním nezmění a nic nedokazuje,
+kdežto sha se dá po pushi porovnat s GitHubem.
+
+**Seznam je z výsledku rebasu**, ne z větve: `GitRepoCheckout.commits(in:above:)` čte
+`git log --reverse --format=%H%x09%s base..HEAD` **jedním** voláním a `RebasedBranch.replayed` je od
+té doby **délka seznamu**. Dvě čísla o jedné věci se umí rozejít, a to zrovna mezi hláškou v panelu
+a výpisem v potvrzení.
+
+| Věc | Jak a proč |
+|---|---|
+| oddělovač `%x09` | tabulátor `git` v `%s` nevydá, mezera je v titulcích samozřejmě |
+| řádky | `TextLines`, ne `split(separator: "\n")` — pravidlo z `CLAUDE.md` |
+| titulek | `String.singleLine` (cizí text; víceřádková zpráva se do řádku vysypat nesmí) |
+| prázdná zpráva | `(bez zprávy)` — prázdný řádek ve výpisu je díra |
+| strop | `Policy.pushedCommitList`, osm; zbytek jako `a další N` |
+| dlouhý titulek | **zalomí se**, neořeže — sheet se rozšířit nedá (`idealWidth` u sheetu SwiftUI zahodí) |
+
+**Strop je osm, ne vnořený scroll.** Tělo sheetu je `ScrollView` už teď, takže vnořená rolovací
+plocha by u nevratné akce schovávala zrovna to, co má být přečtené. Osm je číslo, při kterém se do
+prvního pohledu vejde i výstraha o lease — ověřeno renderem na 50 commitech. Řádek `commitů N`
+ve výpisu zůstává: nad stropem je to jediné místo s pravdivým součtem.
+
+**Selhání nevzniká jako prázdný výpis.** Když se log nepřečte, `commits(in:above:)` hodí chybu
+a `RebasedBranch` **nevznikne** — takže se k potvrzení s prázdným seznamem nedá dostat. Je to
+lepší než dovysvětlovat větou: prázdný výpis v potvrzení o pushi vypadá jako „nic neodejde“.
+
+**Dva stavy nejsou klikatelné**, takže má sheet vlastní sondu (`BranchPushSheetRenderProbe`):
+dlouhý titulek a padesát commitů. K padesáti přehraným commitům by bylo potřeba PR, které je
+o padesát commitů pozadu.
+
 ## Vestavěný terminál (#459)
 
 `App/Terminal/` — shell v zásuvce pod diffem, návrh sekce 35. Jsou to tři soubory a každý drží
