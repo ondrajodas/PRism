@@ -8515,6 +8515,11 @@ Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.
   a na jakou hlavu čeká lease. Druhá věta je o pojistce, ne o postupu — z „lease čeká hlavu X“ plyne,
   co se stane, když se remote mezitím pohnul: nic.
 - **`Policy.primaryBranchAction(merge:)`** — která akce je hlavní.
+- **`Policy.syncBase(of:)`** — jméno základu do popisku `Srovnat s …`. **Z prvního plánu, který ho
+  zná**: plán merge stačí detail a commity, plán srovnání k tomu ještě divergenci. Tvrdit `main`
+  v repozitáři, kde se základ jmenuje `master`, by bylo zbytečné zrovna v té chvíli, kdy jeho jméno
+  **víme** — `Policy.fallbackBase` proto platí jedině, dokud nedorazí hlavička PR, a v tom stavu je
+  tlačítko stejně zakázané.
 
 ## `GitHubGateway` (`App/GitHub/`)
 

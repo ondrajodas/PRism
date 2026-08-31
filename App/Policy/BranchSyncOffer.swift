@@ -167,6 +167,21 @@ extension Policy {
         merge.isAllowed ? .merge : .sync
     }
 
+    /// Jméno základu do popisku `Srovnat s …`.
+    ///
+    /// **Bere se z prvního plánu, který ho zná**, a to je rozhodnutí, ne shoda: plán merge si žádá
+    /// detail a commity, plán srovnání k tomu **ještě divergenci**, takže dorazí o jedno volání
+    /// později. Tvrdit `main` v repozitáři, kde se základ jmenuje `master`, by přitom bylo zbytečné
+    /// zrovna v té chvíli, kdy už jeho jméno **víme**.
+    ///
+    /// `fallbackBase` je z návrhu (sekce 36) a platí jedině tehdy, než dorazí hlavička PR — v tom
+    /// stavu je tlačítko stejně zakázané.
+    static func syncBase(of section: BranchSection) -> String {
+        section.syncPlan?.base ?? section.plan?.base ?? fallbackBase
+    }
+
+    static let fallbackBase = "main"
+
     /// Co se stane, **než se to stane** — nápověda pod kurzorem u povoleného `Srovnat s main`.
     ///
     /// Vypsané je obojí, na co se u přetlačení ptáš: **kolik commitů se přehraje** a **přes co se

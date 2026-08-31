@@ -269,4 +269,54 @@ struct BranchSyncOfferTests {
 
         #expect(section.facts.first?.answer == "srovnaná")
     }
+
+    // MARK: - Jméno základu v popisku
+
+    /// **Popisek nesmí tvrdit `main` v repozitáři, kde se základ jmenuje `master`.** Tři stavy,
+    /// protože jméno dorazí ve **třech různých chvílích**: plán srovnání ho zná až s divergencí,
+    /// plán merge už s detailem a commity, a než přijde hlavička, není odkud ho vzít.
+    @Test("Popisek bere jméno základu z prvního plánu, který ho zná")
+    func namesTheBaseFromTheFirstPlanThatKnowsIt() throws {
+        let full = try #require(
+            Policy.branchSection(
+                editing: .allowed,
+                detail: detail(base: "master"),
+                commits: [],
+                status: status(),
+                checks: [],
+                blockingFindings: 0
+            )
+        )
+        #expect(Policy.syncBase(of: full) == "master")
+
+        // Bez divergence se plán srovnání nesloží — jméno ale zná plán merge, takže se `master`
+        // v popisku **neztratí**.
+        let withoutDivergence = try #require(
+            Policy.branchSection(
+                editing: .allowed,
+                detail: detail(base: "master"),
+                commits: [],
+                status: .loading,
+                checks: [],
+                blockingFindings: 0
+            )
+        )
+        #expect(withoutDivergence.syncPlan == nil)
+        #expect(Policy.syncBase(of: withoutDivergence) == "master")
+
+        // Bez hlavičky PR není odkud jméno vzít; teprve tady platí `main` z návrhu — a v tom stavu
+        // je tlačítko stejně zakázané.
+        let empty = try #require(
+            Policy.branchSection(
+                editing: .allowed,
+                detail: nil,
+                commits: nil,
+                status: nil,
+                checks: nil,
+                blockingFindings: 0
+            )
+        )
+        #expect(Policy.syncBase(of: empty) == Policy.fallbackBase)
+        #expect(!empty.sync.isAllowed)
+    }
 }

@@ -211,6 +211,12 @@ struct GitRepoCheckout: RepoCheckout {
     ///
     /// Obě jména schválně: `rebase-merge` zakládá výchozí backend, `rebase-apply` ten starší
     /// (`git rebase --apply`), a zahodit se musí obojí.
+    ///
+    /// **`try?` je tady v pořádku, i když se jinak v tomhle repu nesmí**, a nestojí to na tom, že
+    /// návratový typ je `Bool`. `rev-parse --git-path` je **výpočet cesty**, ne práce s daty:
+    /// selže právě tehdy, když ta složka není pracovní strom `gitu` — a v tom případě v ní žádný
+    /// rebase neběží, takže `false` je správná odpověď, ne spolknutá. Že by selhal proto, že `git`
+    /// nejde spustit, se sem nedonese: `rebase` začíná `prepare`m, který na tom padne dřív.
     private func hasRebaseInProgress(at worktree: URL) async -> Bool {
         guard FileManager.default.fileExists(atPath: worktree.path(percentEncoded: false)) else {
             return false

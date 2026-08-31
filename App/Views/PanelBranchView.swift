@@ -150,7 +150,7 @@ struct PanelBranchView: View {
     /// „co se stane“ má být k přečtení **dřív**, než se to stane.
     ///
     /// Popisek nese **jméno základu**, ne slovo „základ“: cíl je vidět na tlačítku, ne až v textu
-    /// vedle. Bez plánu se jmenuje podle návrhu (`main`) — a v tom stavu je stejně zakázané.
+    /// vedle. Odkud se to jméno bere, rozhoduje `Policy.syncBase(of:)`, ne view.
     private var syncButton: some View {
         Button(syncTitle, action: actions.sync)
             .buttonStyle(isPrimary(.sync) ? .miniPrimary : .mini)
@@ -166,7 +166,7 @@ struct PanelBranchView: View {
         return action == .merge ? section.merge.isAllowed : section.sync.isAllowed
     }
 
-    private var syncTitle: String { "Srovnat s \(section.syncPlan?.base ?? "main")" }
+    private var syncTitle: String { "Srovnat s \(Policy.syncBase(of: section))" }
 
     private var syncHelp: String {
         guard section.sync.isAllowed, let plan = section.syncPlan else {
