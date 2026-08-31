@@ -105,7 +105,7 @@ struct GhGatewayTests {
             .init(executable: gh, arguments: [
                 "pr", "view", "32",
                 "--repo", "ondrajodas/PRism",
-                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName",
+                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName,isCrossRepository",
             ]),
         ])
     }
@@ -546,10 +546,12 @@ struct GhGatewayTests {
     func asksOnceWhenGitHubKnows() async throws {
         let runner = ScriptedProcessRunner([branchStatus("MERGEABLE", "CLEAN")])
 
-        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism, base: "main", head: "abc123")
 
-        #expect(status == BranchStatus(mergeability: .mergeable, mergeState: .clean))
-        #expect(runner.invocations.count == 1)
+        #expect(status.mergeability == .mergeable)
+        #expect(status.mergeState == .clean)
+        // Dvě volání: `gh pr view` na slévatelnost a `gh api graphql` na polohu proti základu.
+        #expect(runner.invocations.count == 2)
         #expect(runner.commands.first?.prefix(2) == ["pr", "view"])
         #expect(runner.commands.first?.contains("mergeable,mergeStateStatus") == true)
     }
@@ -563,10 +565,11 @@ struct GhGatewayTests {
             branchStatus("MERGEABLE", "BLOCKED"),
         ])
 
-        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism, base: "main", head: "abc123")
 
-        #expect(status == BranchStatus(mergeability: .mergeable, mergeState: .blocked))
-        #expect(runner.invocations.count == 2)
+        #expect(status.mergeability == .mergeable)
+        #expect(status.mergeState == .blocked)
+        #expect(runner.invocations.count == 3)
     }
 
     /// **Strop je tři pokusy a `UNKNOWN` po nich je odpověď**, ne chyba: panel z ní udělá větu
@@ -576,10 +579,11 @@ struct GhGatewayTests {
     func givesUpAfterThreeAttempts() async throws {
         let runner = ScriptedProcessRunner([branchStatus("UNKNOWN", "UNKNOWN")])
 
-        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism, base: "main", head: "abc123")
 
-        #expect(status == BranchStatus(mergeability: .unknown, mergeState: .unknown))
-        #expect(runner.invocations.count == 3)
+        #expect(status.mergeability == .unknown)
+        #expect(status.mergeState == .unknown)
+        #expect(runner.invocations.count == 4)
     }
 
     /// Neznámá hodnota se **nehádá**: nové jméno stavu z GitHubu je `unknown`, ne „nejspíš čisto“.
@@ -587,7 +591,7 @@ struct GhGatewayTests {
     func doesNotGuessAnUnknownState() async throws {
         let runner = ScriptedProcessRunner([branchStatus("MERGEABLE", "SOMETHING_NEW")])
 
-        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism, base: "main", head: "abc123")
 
         #expect(status.mergeState == .unknown)
     }
@@ -606,8 +610,78 @@ struct GhGatewayTests {
             ),
         ])
 
-        let status = try await promptGateway(runner).fetchBranchStatus(id: prism)
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism, base: "main", head: "abc123")
 
-        #expect(status == BranchStatus(mergeability: .mergeable, mergeState: .unknown))
+        #expect(status.mergeability == .mergeable)
+        #expect(status.mergeState == .unknown)
+    }
+
+    // MARK: - Poloha větve proti základu (#466)
+
+    private func divergence(ahead: Int, behind: Int) -> Result<ProcessResult, ProcessError> {
+        .success(
+            ProcessResult(
+                exitCode: 0,
+                standardOutput: #"{"data":{"repository":{"ref":{"compare":"#
+                    + #"{"aheadBy":\#(ahead),"behindBy":\#(behind)}}}}}"#,
+                standardError: ""
+            )
+        )
+    }
+
+    /// **`mergeStateStatus` na „je větev pozadu“ neodpovídá** — změřeno na
+    /// `prism-review-sandbox#9`, kde větev o commit pozadu vrátila `CLEAN`. Odpověď proto přináší
+    /// `compare` z GraphQL a musí dojít až do `BranchStatus`.
+    @Test("Poloha proti základu se dotáhne a připojí ke stavu")
+    func addsDivergenceToTheStatus() async throws {
+        let runner = ScriptedProcessRunner([
+            branchStatus("MERGEABLE", "CLEAN"),
+            divergence(ahead: 3, behind: 4),
+        ])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(
+            id: prism,
+            base: "main",
+            head: "deadbeef"
+        )
+
+        #expect(status.divergence == BranchDivergence(ahead: 3, behind: 4))
+        #expect(runner.commands.last?.prefix(2) == ["api", "graphql"])
+        // Základ jde jako **plný ref** a hlava jako **oid**, ne jako jméno větve: jméno se dá
+        // nastavit na cokoli, kdežto `headRefOid` patří k pull requestu.
+        #expect(runner.commands.last?.contains("base=refs/heads/main") == true)
+        #expect(runner.commands.last?.contains("head=deadbeef") == true)
+    }
+
+    /// Bez jména základu nebo bez hlavy se **na polohu neptáme vůbec**: dotaz by mířil na
+    /// `refs/heads/`, tedy na jistou chybu za jedno volání navíc — a `nil` divergence je platná
+    /// odpověď, kterou panel umí ukázat.
+    @Test("Bez základu a hlavy se na polohu neptá")
+    func skipsDivergenceWithoutRefs() async throws {
+        let runner = ScriptedProcessRunner([branchStatus("MERGEABLE", "CLEAN")])
+
+        let status = try await promptGateway(runner).fetchBranchStatus(id: prism, base: "", head: "")
+
+        #expect(status.divergence == nil)
+        #expect(runner.invocations.count == 1)
+    }
+
+    /// **Selhání se nepolyká.** Když neodpoví druhé volání, neodpoví celá metoda — panel pak píše,
+    /// že se stav větve nepodařilo zjistit, a nenabízí ani merge, ani srovnání. Tichá `nil`
+    /// divergence by z „nezjistil jsem to“ udělala „větev je srovnaná“.
+    @Test("Selhání dotazu na polohu položí celou odpověď")
+    func failsWhenDivergenceFails() async throws {
+        let runner = ScriptedProcessRunner([
+            branchStatus("MERGEABLE", "CLEAN"),
+            .success(ProcessResult(exitCode: 1, standardOutput: "", standardError: "boom")),
+        ])
+
+        await #expect(throws: GitHubError.self) {
+            try await promptGateway(runner).fetchBranchStatus(
+                id: prism,
+                base: "main",
+                head: "deadbeef"
+            )
+        }
     }
 }

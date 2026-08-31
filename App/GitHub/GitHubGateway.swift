@@ -246,7 +246,17 @@ protocol GitHubGateway: Sendable {
     /// a jak dlouho čekat, drží implementace; volající dostane **usazenou** odpověď, nebo
     /// `UNKNOWN` po vyčerpání pokusů, což je pořád odpověď.
     ///
+    /// **Odpovídá i na „o kolik je větev vedle základu“** (#466), a proto bere `base` a `head`.
+    /// Je to druhé volání uvnitř téže metody, ne druhá metoda protokolu: sekce `Větev` se ptá na
+    /// **jednu** věc („co se dá s touhle větví udělat“) a dvě metody by znamenaly dva stavy, dvě
+    /// cache a dvě různá „nevím“ v jednom řádku panelu. Selhání se **nepolyká**: když neodpoví
+    /// jedno z těch dvou volání, neodpoví celá metoda — panel pak píše, že se stav větve nepodařilo
+    /// zjistit, a nenabízí ani merge, ani srovnání.
+    ///
+    /// `base` je jméno cílové větve a `head` **oid hlavy**, obojí z detailu PR: jméno větve se dá
+    /// nastavit na cokoli, kdežto `headRefOid` patří k pull requestu.
+    ///
     /// **Dvaadvacátá metoda protokolu**; čtení je čtení a tvrdá podmínka č. 1 platí dál —
-    /// mergnout umí jedině `ReviewPublishing`.
-    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus
+    /// mergnout umí jedině `ReviewPublishing` a pushnout jedině `BranchPushing`.
+    func fetchBranchStatus(id: PRIdentifier, base: String, head: String) async throws -> BranchStatus
 }

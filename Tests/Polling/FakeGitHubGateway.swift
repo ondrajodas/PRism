@@ -313,7 +313,7 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
 
     private var branchStatusAsked: [PRIdentifier] = []
 
-    func fetchBranchStatus(id: PRIdentifier) async throws -> BranchStatus {
+    func fetchBranchStatus(id: PRIdentifier, base: String, head: String) async throws -> BranchStatus {
         lock.withLock { branchStatusAsked.append(id) }
         if let branchStatusFailure { throw branchStatusFailure }
         return branchStatus

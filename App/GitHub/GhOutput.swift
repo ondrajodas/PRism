@@ -86,8 +86,13 @@ struct GhPullRequestDetail: Decodable {
     /// položit celý detail. V hlavičce se pak prostě nekreslí.
     let headRefName: String?
     let baseRefName: String?
+    /// Je hlava PR v **jiném** repozitáři (fork)? Optional ze stejného důvodu jako `body`:
+    /// chybějící pole nemá položit celý detail. `nil` znamená **nevím**, a u srovnání větve
+    /// (#466) se z toho stane zákaz — pushnout se dá jedině do repozitáře, který máme
+    /// naklonovaný, a to je ten základní.
+    let isCrossRepository: Bool?
 
-    static let jsonFields = "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName"
+    static let jsonFields = "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName,isCrossRepository"
 
     /// Identifikátor se bere z dotazu — `gh pr view` neříká, ze kterého repa PR je, protože
     /// jsme mu ho zadali. Číslo se přesto ověřuje: nálezy se klíčují `headSha` konkrétního
@@ -107,7 +112,8 @@ struct GhPullRequestDetail: Decodable {
             url: url,
             updatedAt: updatedAt,
             state: try GhOutput.state(raw: state, isDraft: isDraft),
-            body: body ?? ""
+            body: body ?? "",
+            isCrossRepository: isCrossRepository
         )
     }
 }

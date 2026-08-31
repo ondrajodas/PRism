@@ -339,6 +339,14 @@ final class AppStore {
     /// neposílá“ a `submission(for:)` pak nevrátí nic.
     let gh: URL?
 
+    /// Cesta ke `gitu` — jediné, co si store kvůli přetlačení větve drží (#466).
+    ///
+    /// **Ne pusher a ani továrna na něj**, ze stejného důvodu jako u `gh`: cesta do remote se
+    /// skládá až v `BranchSyncSubmission.push`, takže `AppStore` sám pushnout nic neumí a grep
+    /// `BranchPushing App/` ho schválně nevypíše. `nil` v testech znamená „odsud se nepushuje“
+    /// a `branchSyncSubmission(for:)` pak nevrátí nic.
+    let git: URL?
+
     let checkout: (any RepoCheckout)?
 
     /// Vestavěné terminály (#459). `nil` = **zásuvka se nekreslí** — tak jsou na tom testy, které
@@ -749,6 +757,7 @@ final class AppStore {
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
+        git: URL? = nil,
         health: HealthMonitor? = nil,
         notifications: (any UserNotifying)? = nil,
         announced: AnnouncedPullRequests? = nil,
@@ -770,6 +779,7 @@ final class AppStore {
         self.appearance = appearance
         self.time = time
         self.gh = gh
+        self.git = git
         self.health = health
         self.notifications = notifications
         self.announced = announced
@@ -901,6 +911,7 @@ final class AppStore {
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
+            git: toolPaths.git,
             health: HealthMonitor(),
             notifications: SystemNotificationCenter.shared,
             announced: AnnouncedPullRequests(),
@@ -1296,6 +1307,13 @@ final class AppStore {
     /// u vlastních otevřených PR** — jinde by se sekce `Větev` nekreslila a odpověď GitHubu by
     /// stejně byla `UNKNOWN`.
     var branchStatuses: [PRIdentifier: BranchStatusState] = [:]
+
+    /// Co se právě děje se srovnáním větve (#466). Chybějící klíč = nic se neděje.
+    ///
+    /// **Stav, ne cesta ven** — tatáž konstrukce jako u `metadataActionStates`: akce se ovládá
+    /// z panelu a musí přežít překliknutí tabu. Drží i **rozdělaný rebase v cache**, který se
+    /// hledá při každém otevření vlastního PR: bez toho by o něm okno po restartu mlčelo.
+    var branchSyncStates: [PRIdentifier: BranchSyncState] = [:]
 
     /// Který commit je v tabu `Commity` rozkliknutý (#317). Chybějící klíč = v tabu je seznam.
     ///

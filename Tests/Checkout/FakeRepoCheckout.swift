@@ -76,6 +76,38 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     func pruneWorktrees(in repo: RepoID) async throws {
         lock.withLock { pruned.append(repo) }
     }
+
+    // MARK: - Srovnání větve (#466)
+
+    /// Jak dopadne `rebase`. Výchozí je **úspěch bez přehraných commitů**, protože v drtivé
+    /// většině testů jde o něco jiného.
+    var rebaseOutcome: Result<RebaseOutcome, CheckoutError> = .success(
+        .rebased(RebasedBranch(worktree: URL(filePath: "/tmp/sync"), headSha: "rebased", replayed: 0))
+    )
+    /// Leží v cache rozdělaný rebase?
+    var unfinishedRebase = false
+    /// Čím spadne `discardRebase`. `nil` = povede se.
+    var discardFailure: CheckoutError?
+
+    /// Na co se kdo ptal, v pořadí. Na počtu stojí testy, které tvrdí, že se **nerebasovalo**.
+    var rebaseRequests: [PRIdentifier] { lock.withLock { rebased } }
+    var discardRequests: [PRIdentifier] { lock.withLock { discarded } }
+
+    private var rebased: [PRIdentifier] = []
+    private var discarded: [PRIdentifier] = []
+
+    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome {
+        lock.withLock { rebased.append(pr) }
+        return try rebaseOutcome.get()
+    }
+
+    func discardRebase(for pr: PRIdentifier) async throws {
+        lock.withLock { discarded.append(pr) }
+        if let discardFailure { throw discardFailure }
+        unfinishedRebase = false
+    }
+
+    func rebaseInProgress(for pr: PRIdentifier) async -> Bool { unfinishedRebase }
 }
 
 

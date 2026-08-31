@@ -25,7 +25,8 @@ extension AppStore {
             commits: commits[pr],
             status: branchStatusState(for: pr),
             checks: checks[pr],
-            blockingFindings: blockingFindingCount(for: pr)
+            blockingFindings: blockingFindingCount(for: pr),
+            sync: branchSyncStates[pr]
         )
     }
 
@@ -63,12 +64,22 @@ extension AppStore {
     func loadBranchStatus(for pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
         guard ownership(of: id) == .mine else { return }
-        guard let state = detail(of: id)?.state, state == .open || state == .draft else { return }
+        guard let detail = detail(of: id), detail.state == .open || detail.state == .draft else {
+            return
+        }
+        // Rozdělaný rebase v cache (#466) se hledá **při každém otevření vlastního PR**, ne jen po
+        // neúspěšném srovnání: aplikaci zabitou uprostřed rebase nemá kde nic zapsat, takže by
+        // o něm okno po restartu mlčelo — a příští akce nad tím PR by se zachovala divně.
+        await findUnfinishedRebase(for: id)
         guard !hasCurrentBranchStatus(for: pullRequest) else { return }
         branchStatuses[id] = .loading
 
         do {
-            let status = try await gateway.fetchBranchStatus(id: id)
+            let status = try await gateway.fetchBranchStatus(
+                id: id,
+                base: detail.baseRef,
+                head: detail.headSha
+            )
             branchStatuses[id] = .loaded(status, updatedAt: pullRequest.updatedAt)
         } catch is CancellationError {
             // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout.

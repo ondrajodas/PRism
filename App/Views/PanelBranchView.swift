@@ -3,10 +3,9 @@ import SwiftUI
 /// Sekce `Větev` v pravém panelu (#465) — **pod labely a reviewery**, jak to kreslí návrh
 /// (sekce 36).
 ///
-/// Nese **stav** (kam se to slévá, jestli je větev srovnaná, jak dopadly checky) a k němu
-/// **akci, která z toho stavu plyne**. Je to základ pro zbytek milníku: `Srovnat s main` (#466)
-/// přibude jako druhé tlačítko v téže řadě, takže se akce kreslí `HStack`em i tehdy, když je
-/// zatím jedna.
+/// Nese **stav** (kam se to slévá, jestli je větev srovnaná a o kolik je pozadu, jak dopadly
+/// checky) a k němu **obě akce, které z toho stavu plynou** — `Mergnout…` (#465) a `Srovnat
+/// s main` (#466). Obě jsou vidět vždycky; mění se jen to, která z nich je hlavní.
 ///
 /// **Nekreslí se na cizím PR** — rozhoduje o tom `Policy.branchSection`, které vrátí `nil`.
 /// Mergnout cizí frontu se odsud nedělá nikdy, takže tam není ani nadpis, natož zašedlé tlačítko;
@@ -16,6 +15,8 @@ struct PanelBranchView: View {
     let section: Policy.BranchSection
     /// Šířka, kterou má panel na obsah — **spočítaná, ne vyjednaná** (pravidlo #220).
     let contentWidth: Double
+    /// Co se právě děje se srovnáním větve (#466). `nil` = nic se nedělo.
+    var syncState: BranchSyncState?
     var actions = BranchActions()
 
     /// Odsazení bloku bere **z toho typu, který kreslí sekci nad ním**: dvě konstanty by
@@ -40,6 +41,7 @@ struct PanelBranchView: View {
                 }
                 if !obstacles.isEmpty { warning }
                 actionRow
+                if let syncState { syncNotice(syncState) }
             }
         }
         .padding(.horizontal, Self.insetHorizontal)
@@ -116,11 +118,13 @@ struct PanelBranchView: View {
         }
     }
 
-    /// Řada akcí. **`HStack` i s jednou položkou** — `Srovnat s main` (#466) sem přibude vedle,
-    /// a řada, která vznikne až s druhým tlačítkem, znamená přepsat rozvržení znovu.
+    /// Řada akcí. **Obě tlačítka jsou vidět vždycky** (návrh, sekce 36) — mění se jen to, které
+    /// z nich je hlavní: srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat akci
+    /// podle stavu by znamenalo, že se tlačítko pod rukou stěhuje.
     private var actionRow: some View {
         HStack(spacing: Self.actionSpacing) {
             mergeButton
+            syncButton
             Spacer(minLength: 0)
         }
     }
@@ -133,11 +137,88 @@ struct PanelBranchView: View {
     /// se dal přečíst i tam, kde je zrovna kurzor.
     private var mergeButton: some View {
         Button(Self.mergeTitle, action: actions.merge)
-            .buttonStyle(section.merge.isAllowed ? .miniPrimary : .mini)
+            .buttonStyle(isPrimary(.merge) ? .miniPrimary : .mini)
             .disabled(!section.merge.isAllowed)
             // `.disabled` u vlastního `ButtonStyle`u sám nic neztlumí — návrh má `opacity: 0.45`.
             .opacity(section.merge.isAllowed ? 1 : 0.45)
             .help(section.merge.isAllowed ? Self.mergeHelp : obstacleHelp)
+    }
+
+    /// `Srovnat s main` — **bez tří teček**, protože nic neotevírá: přehraje commity v kopii repa
+    /// a přetlačí větev `--force-with-lease`. Co přesně se stane, stojí v nápovědě pod kurzorem
+    /// (`Policy.branchSyncHelp`) — je to jediná cesta, kterou aplikace zapisuje do remote, takže
+    /// „co se stane“ má být k přečtení **dřív**, než se to stane.
+    ///
+    /// Popisek nese **jméno základu**, ne slovo „základ“: cíl je vidět na tlačítku, ne až v textu
+    /// vedle. Bez plánu se jmenuje podle návrhu (`main`) — a v tom stavu je stejně zakázané.
+    private var syncButton: some View {
+        Button(syncTitle, action: actions.sync)
+            .buttonStyle(isPrimary(.sync) ? .miniPrimary : .mini)
+            .disabled(!section.sync.isAllowed)
+            .opacity(section.sync.isAllowed ? 1 : 0.45)
+            .help(syncHelp)
+    }
+
+    /// Hlavní je ta akce, která z návrhu plyne — a **jen když se do ní dá kliknout**: zvýrazněné
+    /// tlačítko, které je zašedlé, by na sebe táhlo oči kvůli něčemu, co teď stejně nejde.
+    private func isPrimary(_ action: Policy.BranchAction) -> Bool {
+        guard section.primary == action else { return false }
+        return action == .merge ? section.merge.isAllowed : section.sync.isAllowed
+    }
+
+    private var syncTitle: String { "Srovnat s \(section.syncPlan?.base ?? "main")" }
+
+    private var syncHelp: String {
+        guard section.sync.isAllowed, let plan = section.syncPlan else {
+            return section.sync.obstacles.map(\.sentence).joined(separator: " ")
+        }
+        return Policy.branchSyncHelp(for: plan)
+    }
+
+    /// Jak dopadlo srovnání větve — **věta v panelu, ne jen v logu**. Drží se, dokud ji člověk
+    /// nezavře: hláška, která zmizí sama, je hláška, kterou nikdo nepřečte.
+    ///
+    /// **Rozdělaný rebase má vlastní tlačítko.** Je to stav, ne chyba — v kopii repa leží
+    /// rozdělaná práce a musí jít zahodit odsud, jinak se příští akce nad tím PR zachová divně.
+    @ViewBuilder private func syncNotice(_ state: BranchSyncState) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Image(systemName: Self.noticeIcon(state))
+                .foregroundStyle(Self.noticeTint(state))
+                .accessibilityHidden(true)
+            Text(verbatim: state.sentence)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if state.hasUnfinishedRebase {
+                Button("Zahodit rebase", action: actions.discardRebase)
+                    .buttonStyle(.mini)
+                    .fixedSize()
+            } else if !state.isBusy {
+                Button("Zavřít", action: actions.clearSync)
+                    .buttonStyle(.mini)
+                    .fixedSize()
+            }
+        }
+        .font(.caption)
+    }
+
+    /// **Ikona ze stavu, ne z barvy** — a `checkmark` jedině u toho, co doopravdy doběhlo.
+    private static func noticeIcon(_ state: BranchSyncState) -> String {
+        switch state {
+        case .rebasing, .pushing, .discarding: "arrow.triangle.2.circlepath"
+        case .pushed, .alreadyInSync: "checkmark.circle"
+        case .conflicted, .unfinished, .failed: "exclamationmark.triangle"
+        }
+    }
+
+    /// **Barva ze škály se bere z palety, nikdy ze systému** (#432).
+    private static func noticeTint(_ state: BranchSyncState) -> Color {
+        switch state {
+        case .rebasing, .pushing, .discarding: Palette.ink3
+        case .pushed, .alreadyInSync: Palette.ok
+        case .unfinished: Palette.stale
+        case .conflicted, .failed: Palette.crit
+        }
     }
 
     private static let mergeTitle = "Mergnout…"

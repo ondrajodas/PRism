@@ -206,6 +206,22 @@ struct CacheLayout: Sendable, Equatable {
         worktrees(of: pr.repo).appending(path: "\(pr.number)-\(headSha)")
     }
 
+    /// Pracovní strom pro srovnání větve: `worktrees/<owner>/<repo>/<pr>-sync` (#466).
+    ///
+    /// **Vlastní strom, ne ten od review**, a jsou pro to dva důvody. Rebase posune `HEAD` pryč
+    /// z `headSha` — a strom review je právě ten kód, proti kterému nálezy vznikly a ve kterém
+    /// stojí shell v zásuvce (#459); přehrát ho pod nimi je přesně ta tichá divnost, které se
+    /// tvrdá podmínka č. 5 vyhýbá. Druhý důvod je, že tenhle strom **nesmí být klíčovaný
+    /// commitem**: rozdělaný rebase se musí dát najít i po restartu aplikace, kdy se hlava PR
+    /// mezitím mohla pohnout.
+    ///
+    /// **Úklid jde tou cestou, která existuje**: `CacheEviction.discardUnwantedWorktrees` čte
+    /// číslo PR z prefixu jména (`42-sync` → 42), takže strom odejde s tím, jak PR vypadne ze
+    /// sledovaného seznamu, a `evict` ho vezme s celou složkou repa.
+    func syncWorktree(for pr: PRIdentifier) -> URL {
+        worktrees(of: pr.repo).appending(path: "\(pr.number)-sync")
+    }
+
     /// Zadání jednoho review: `worktrees/<owner>/<repo>/<pr>-<sha>.md` (#120).
     ///
     /// **Vedle stromu, ne v něm**, a je to celý důvod, proč to leží tady a ne v `worktree(for:at:)`:

@@ -51,9 +51,13 @@ extension Policy {
         case statusUnknown
         /// Větve jdou proti sobě.
         case conflicting(base: String)
-        /// Větev je pozadu za základem. **Bez počtu commitů**, ten přijde s #466 (srovnání větve),
-        /// kde bude po ruce klon v cache a dá se spočítat lokálně — `compare` API by za to jedno
-        /// číslo tahalo celý seznam souborů.
+        /// Větev je pozadu za základem podle **pravidel repozitáře** (`BEHIND`), tedy merge to
+        /// doopravdy blokuje.
+        ///
+        /// **Bez počtu commitů schválně**, i když ho od #466 známe: číslo stojí v řádku stavu nad
+        /// výstrahou (`o 4 commity vzadu`) a věta ve výstraze odpovídá na jinou otázku — proč
+        /// merge nejde. Dvakrát totéž číslo ve dvou po sobě jdoucích řádcích panelu vypadá jako
+        /// dvě různé překážky.
         case behind(base: String)
         /// Merge nepouštějí pravidla repozitáře (`BLOCKED`).
         case protected
@@ -139,6 +143,12 @@ extension Policy {
         /// Co se potvrzuje. `nil` = není z čeho ho složit; pak je `merge` vždycky `blocked`
         /// s `factsMissing`.
         let plan: MergePlan?
+        /// Druhá akce sekce — `Srovnat s main` (#466).
+        let sync: SyncOffer
+        /// Co se přehraje a přes co se přetlačí. `nil` = není z čeho to složit.
+        let syncPlan: BranchSyncPlan?
+        /// Která z akcí je hlavní. Z návrhu: `Mergnout…` když je zeleno, jinak `Srovnat s main`.
+        let primary: BranchAction
     }
 
     /// Celá sekce z toho, co o PR víme.
@@ -151,21 +161,33 @@ extension Policy {
         commits: [PullRequestCommit]?,
         status: BranchStatusState?,
         checks: [PullRequestCheck]?,
-        blockingFindings: Int
+        blockingFindings: Int,
+        sync: BranchSyncState? = nil
     ) -> BranchSection? {
         guard editing.isVisible else { return nil }
         let plan = mergePlan(of: detail, commits: commits)
+        let merge = mergeOffer(
+            editing: editing,
+            plan: plan,
+            state: detail?.state,
+            status: status,
+            checks: checks,
+            blockingFindings: blockingFindings
+        )
+        let syncPlan = branchSyncPlan(of: detail, status: status)
         return BranchSection(
             facts: branchFacts(plan: plan, commits: commits, status: status, checks: checks),
-            merge: mergeOffer(
+            merge: merge,
+            plan: plan,
+            sync: branchSyncOffer(
                 editing: editing,
-                plan: plan,
-                state: detail?.state,
+                plan: syncPlan,
+                detail: detail,
                 status: status,
-                checks: checks,
-                blockingFindings: blockingFindings
+                sync: sync
             ),
-            plan: plan
+            syncPlan: syncPlan,
+            primary: primaryBranchAction(merge: merge)
         )
     }
 
@@ -195,6 +217,17 @@ extension Policy {
     private static func syncAnswer(of status: BranchStatus) -> (String, BranchFact.Tone) {
         if status.mergeability == .conflicting || status.mergeState == .dirty {
             return ("konflikt", .blocked)
+        }
+        // **Počet z `compare`, ne z `mergeStateStatus`** (#466, návrh sekce 36 ho kreslí jako
+        // `o 4 commity vzadu`). Do #465 tu stálo jen `za základem` bez čísla, protože
+        // `mergeStateStatus` na tuhle otázku neodpovídá — `BEHIND` vydá GitHub jedině tam, kde je
+        // na základu ochrana *Require branches to be up to date*. Změřeno, viz
+        // `BranchDivergenceQuery`.
+        if let divergence = status.divergence, divergence.isBehind {
+            let commits = Plural.czech(
+                divergence.behind, one: "commit", few: "commity", many: "commitů"
+            )
+            return ("o \(commits) vzadu", .blocked)
         }
         return switch status.mergeState {
         case .behind: ("za základem", .blocked)

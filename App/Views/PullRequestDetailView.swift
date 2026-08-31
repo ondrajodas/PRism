@@ -536,6 +536,7 @@ struct PullRequestDetailView: View {
             // `nil` a nekreslí se ani nadpis.
             branch: store.branchSection(for: pullRequest.id),
             branchActions: branchActions,
+            branchSync: store.branchSyncState(for: pullRequest.id),
             // Proti kterému kódu nálezy platí (#392). Rozhoduje `Policy` — panel z toho jen sází
             // větu, takže se okno neptá dvakrát jinak.
             headNotice: headNotice,
@@ -570,9 +571,18 @@ struct PullRequestDetailView: View {
     /// `Mergnout…` **jen otevře potvrzení**: `mergeSubmission(for:)` vrátí `nil`, když mergnout
     /// nejde, takže se sheet nad neproveditelným mergem neotevře ani tehdy, kdyby se na zakázané
     /// tlačítko nějak kliknout dalo.
+    /// `Srovnat s main` (#466) proti tomu **potvrzení nemá** a spouští práci rovnou: rebase běží
+    /// v kopii repa a přetlačení hlídají dva guardy v `GitBranchPush`. Stav běhu si drží store,
+    /// takže překliknutí tabu ani zavření panelu ho neztratí.
     private var branchActions: BranchActions {
         let summary = pullRequest
-        return BranchActions(merge: { merge = store.mergeSubmission(for: summary) })
+        let id = summary.id
+        return BranchActions(
+            merge: { merge = store.mergeSubmission(for: summary) },
+            sync: { Task { await store.syncBranch(summary) } },
+            discardRebase: { Task { await store.discardRebase(for: id) } },
+            clearSync: { store.clearBranchSync(for: id) }
+        )
     }
 
     /// Věta o tom, proti které hlavě nálezy platí (#392).

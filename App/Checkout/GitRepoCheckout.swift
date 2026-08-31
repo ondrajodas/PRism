@@ -88,6 +88,165 @@ struct GitRepoCheckout: RepoCheckout {
         return TextLines.nonEmpty(output).compactMap { Int($0.split(separator: "/").last ?? "") }
     }
 
+    // MARK: - Srovnání větve (#466)
+
+    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome {
+        let path = layout.syncWorktree(for: pr)
+        return try await coordinator.run(key: Self.worktreeKey(path), kind: "rebase") {
+            // **Základ se dotahuje pokaždé**, i když se strom dá použít znovu: rebase nad
+            // zastaralým `main`em by větev srovnal s něčím, co už není. `prepare` jde přes
+            // koordinátor pod **jiným** klíčem (`clone:`), takže se tím nečeká samo na sebe.
+            let clone = try await prepare(pr.repo)
+
+            // Rozdělaný rebase z minula se **nepřepisuje**: je to rozdělaná práce, o které má
+            // rozhodnout člověk (zahodit tlačítkem, nebo dokončit v terminálu).
+            if await hasRebaseInProgress(at: path) {
+                return .conflicted(files: await conflictingFiles(at: path), aborted: false)
+            }
+
+            let worktree = try await preparedSyncWorktree(for: pr, at: headSha, in: clone, at: path)
+            return try await replay(in: worktree, onto: "refs/heads/\(base)")
+        }
+    }
+
+    func discardRebase(for pr: PRIdentifier) async throws {
+        let path = layout.syncWorktree(for: pr)
+        try await coordinator.run(key: Self.worktreeKey(path), kind: "abort") {
+            // Nejdřív se zjistí, jestli je co zahazovat — teprve pak se maže „naostro“. Kdyby se
+            // výsledek `abortu` jen spolkl, prošla by tudy i skutečná chyba `gitu` a rozdělaný
+            // rebase by v cache zůstal, přestože okno hlásí uklizeno. Tatáž konstrukce jako
+            // u `forgetPullRequest`.
+            guard await hasRebaseInProgress(at: path) else { return }
+            try await run(["-C", path.path(percentEncoded: false), "rebase", "--abort"])
+        }
+    }
+
+    func rebaseInProgress(for pr: PRIdentifier) async -> Bool {
+        await hasRebaseInProgress(at: layout.syncWorktree(for: pr))
+    }
+
+    /// Vlastní přehrání. **Konflikt se pozná podle toho, že po pádu `rebase` běží dál** — ne podle
+    /// textu chyby: `git` skončí nenulově i tehdy, když je základ neznámý nebo je strom špinavý,
+    /// a to jsou chyby, které se mají hlásit, ne vydávat za konflikt.
+    private func replay(in worktree: URL, onto base: String) async throws -> RebaseOutcome {
+        let path = worktree.path(percentEncoded: false)
+        do {
+            // `GIT_EDITOR=true` je pojistka, ne nutnost: neinteraktivní rebase editor nespouští,
+            // ale konfigurace uživatele (`rebase.autosquash`, aliasy) ho vyvolat umí — a podproces
+            // bez terminálu by na něm visel až do timeoutu.
+            try await run(
+                ["-C", path, "rebase", base],
+                environment: environment.merging(["GIT_EDITOR": "true"]) { _, new in new }
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            guard await hasRebaseInProgress(at: worktree) else { throw error }
+            let files = await conflictingFiles(at: worktree)
+            let aborted = try await succeeds(["-C", path, "rebase", "--abort"])
+            return .conflicted(files: files, aborted: aborted)
+        }
+
+        let head = try await run(["-C", path, "rev-parse", "HEAD"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return .rebased(
+            RebasedBranch(
+                worktree: worktree,
+                headSha: head,
+                replayed: try await commitCount(in: worktree, above: base)
+            )
+        )
+    }
+
+    /// Kolik commitů leží nad základem. **Nečte se `?? 0`**: nesrozumitelný výstup `gitu` je
+    /// porucha, a nula by v panelu tvrdila „nepřehrálo se nic“ nad větví, která se přehrála celá.
+    private func commitCount(in worktree: URL, above base: String) async throws -> Int {
+        let output = try await run([
+            "-C", worktree.path(percentEncoded: false), "rev-list", "--count", "\(base)..HEAD",
+        ])
+        guard let count = Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw CheckoutError.gitFailed(
+                exitCode: 0,
+                message: "Počet přehraných commitů nejde přečíst z „\(output)“."
+            )
+        }
+        return count
+    }
+
+    /// Strom, ve kterém se srovnává. Klíčovaný **jen pull requestem**, takže se v něm dá
+    /// rozdělaný rebase najít i po restartu aplikace.
+    private func preparedSyncWorktree(
+        for pr: PRIdentifier,
+        at headSha: String,
+        in clone: URL,
+        at path: URL
+    ) async throws -> URL {
+        if await isUsableWorktree(at: path, expecting: headSha) { return path }
+        // Co použitelné není, se zahodí — tak jako u stromu pro review. Rozdělaný rebase je
+        // odchycený výš, takže se tudy nezahazuje rozdělaná práce.
+        //
+        // Přímo `discardWorktree`, ne `removeWorktree`: to jde přes koordinátor pod **stejným
+        // klíčem**, pod kterým už běžíme.
+        if FileManager.default.fileExists(atPath: path.path(percentEncoded: false)) {
+            try await discardWorktree(for: pr, at: path)
+        }
+        try await ensureCommit(headSha, of: pr, in: clone)
+        try createParentDirectory(of: path)
+        try await run([
+            "-C", clone.path(percentEncoded: false),
+        ] + credentialConfiguration + [
+            "worktree", "add", "--detach",
+            path.path(percentEncoded: false),
+            headSha,
+        ])
+        return path
+    }
+
+    /// Běží ve stromě rebase?
+    ///
+    /// Ptá se `gitu` na **cestu** ke složce rozdělaného rebase, ne `FileManageru` na `.git`:
+    /// u pracovního stromu leží `rebase-merge` uvnitř klonu (`<klon>/worktrees/<jméno>/`) —
+    /// změřeno. `git` vrátí cestu absolutní i relativní podle toho, kde strom je, takže se
+    /// relativní doplní o kořen stromu.
+    ///
+    /// Obě jména schválně: `rebase-merge` zakládá výchozí backend, `rebase-apply` ten starší
+    /// (`git rebase --apply`), a zahodit se musí obojí.
+    private func hasRebaseInProgress(at worktree: URL) async -> Bool {
+        guard FileManager.default.fileExists(atPath: worktree.path(percentEncoded: false)) else {
+            return false
+        }
+        for directory in ["rebase-merge", "rebase-apply"] {
+            guard let path = try? await run([
+                "-C", worktree.path(percentEncoded: false), "rev-parse", "--git-path", directory,
+            ]) else { continue }
+            let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let resolved = trimmed.hasPrefix("/")
+                ? URL(filePath: trimmed)
+                : worktree.appending(path: trimmed)
+            if FileManager.default.fileExists(atPath: resolved.path(percentEncoded: false)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Které soubory se nepodařilo slít. **Prázdný seznam je odpověď „nevím“**, ne „žádné“ —
+    /// věta v okně to rozlišuje (`BranchSyncState.sentence` píše `soubory nezjištěny`).
+    ///
+    /// `try?` je tady v pořádku, i když se jinak v tomhle repu nesmí: **volá se až nad
+    /// konfliktem, který se hlásí tak jako tak**, takže se tím neztrácí zpráva o selhání, jen
+    /// výčet jmen. A zrušení se nepolyká doopravdy: hned po tomhle volání jde `rebase --abort`
+    /// přes `succeeds`, který `CancellationError` propouští.
+    private func conflictingFiles(at worktree: URL) async -> [String] {
+        let output = try? await run([
+            "-C", worktree.path(percentEncoded: false),
+            "diff", "--name-only", "--diff-filter=U",
+        ])
+        // Řádky přes `TextLines` (#295) — jedno místo, kde se rozhoduje, co je řádek.
+        return TextLines.nonEmpty(output ?? "").map(String.init)
+    }
+
     func trackedFiles(in worktree: URL) async throws -> [String] {
         // `-c` je sice výchozí, ale vypsané je z příkazu vidět, že jde o index, ne o to,
         // co zrovna leží na disku.
@@ -289,26 +448,14 @@ struct GitRepoCheckout: RepoCheckout {
     }
 
     /// Přihlášení k privátním repům se deleguje na `gh`, stejně jako všude jinde —
-    /// aplikace token nedrží.
-    ///
-    /// Helper se předává jako `-c` u jednoho volání, ne přes `gh auth setup-git`: ten
-    /// zapisuje do **globálního** git configu uživatele, a do toho aplikace sahat nemá.
-    /// `gh` se volá absolutní cestou, protože helper spouští shell, který `PATH`
-    /// z GUI aplikace nezdědil.
-    private var credentialConfiguration: [String] {
-        // Helper spouští shell, takže cesta musí do apostrofů — a apostrof v ní se musí
-        // odescapovat, jinak by je předčasně uzavřela. Cesta k `gh` sice pochází
-        // z preflightu, ne od uživatele, ale skládat shellový příkaz bez escapování je
-        // zvyk, který se dřív nebo později vymstí.
-        let quoted = gh.path(percentEncoded: false).replacingOccurrences(of: "'", with: "'\\''")
-        return ["-c", "credential.helper=!'\(quoted)' auth git-credential"]
-    }
+    /// aplikace token nedrží. Skládá to `GitCredentials`, protože totéž potřebuje
+    /// i `GitBranchPush` (#466) a dvě opsané kopie by znamenaly dvě místa, kde se dá zapomenout
+    /// na escapování.
+    private var credentialConfiguration: [String] { GitCredentials.configuration(gh: gh) }
 
     /// Bez toho by se `git` na chybějící heslo zeptal a čekal — podproces bez terminálu
     /// by na tom visel až do timeoutu.
-    private var environment: [String: String] {
-        ["GIT_TERMINAL_PROMPT": "0"]
-    }
+    private var environment: [String: String] { GitCredentials.environment }
 
     /// „Nic tam nebylo“ je normální stav, cokoli jiného ne. Spolknout selhání mazání by
     /// znamenalo, že se `git` zakousne na „destination path already exists“ a skutečná

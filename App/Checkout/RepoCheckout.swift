@@ -16,6 +16,30 @@ protocol RepoCheckout: Sendable {
     /// Idempotentní: existující strom pro stejné `(PR, sha)` se použije znovu.
     func worktree(for pr: PRIdentifier, at headSha: String) async throws -> URL
 
+    /// Přehraje commity pull requestu nad základem (#466) — **ve vlastním stromě v cache**.
+    ///
+    /// **Nepushuje a nemá čím** (tvrdá podmínka č. 1): tenhle modul zůstává lokální, do remote
+    /// zapisuje jedině `BranchPushing`. Výsledek nese cestu ke stromu, ze kterého se dá pushnout,
+    /// a hlavu, která z rebasu vypadla.
+    ///
+    /// **Konflikt není chyba, ale návratová hodnota** — vede jinam než „nedá se spustit `git`“.
+    /// Když se povede rebase zahodit, v cache po něm nic nezůstane; když ne, leží tam rozdělaný
+    /// a musí to být vidět v okně.
+    ///
+    /// Základ se dotahuje pokaždé (`prepare`), protože rebase nad zastaralým `main`em by srovnal
+    /// větev s něčím, co už není.
+    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome
+
+    /// Zahodí rozdělaný rebase (`git rebase --abort`). Chybějící strom ani „žádný rebase neběží“
+    /// není chyba — na remote se nesáhlo, takže není co vracet.
+    func discardRebase(for pr: PRIdentifier) async throws
+
+    /// Leží ve stromě pro srovnání větve rozdělaný rebase (#466)?
+    ///
+    /// Ptá se `gitu` (`rev-parse --git-path`), ne `FileManageru`: u pracovního stromu leží
+    /// `rebase-merge` uvnitř klonu (`<klon>/worktrees/<jméno>/`), ne v něm samotném — změřeno.
+    func rebaseInProgress(for pr: PRIdentifier) async -> Bool
+
     /// Cesty souborů, které repo verzuje — podklad pro odhad jazyka projektu.
     ///
     /// Ptá se `gitu`, ne `FileManageru`: ignorované složky (`vendor/`, `node_modules/`,
