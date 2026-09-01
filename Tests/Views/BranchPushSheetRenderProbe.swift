@@ -34,18 +34,25 @@ struct BranchPushSheetRenderProbe {
         let directory = Self.outputDirectory
         // `replayed` je počet **tvých** přehraných; zbytek seznamu je z base a v kresbě dostane
         // značku. Scéna `z-base` je ta, kvůli které tenhle rozdíl vznikl (změřeno 1 proti 2).
-        let scenes: [(String, [RebasedCommit], Int)] = [
-            ("bezne", Self.ordinary, 3),
-            ("z-base", Self.ordinary, 1),
-            ("dlouhy-titulek", Self.longTitles, 2),
-            ("hodne-commitu", Self.many, 44),
-            ("jeden", [Self.ordinary[0]], 1),
+        let scenes: [(String, [RebasedCommit], Int, ConflictResolution?)] = [
+            ("bezne", Self.ordinary, 3, nil),
+            ("z-base", Self.ordinary, 1, nil),
+            ("dlouhy-titulek", Self.longTitles, 2, nil),
+            ("hodne-commitu", Self.many, 44, nil),
+            ("jeden", [Self.ordinary[0]], 1, nil),
+            // #467 — po doběhnutí session, před přetlačením (návrh sekce 36). Tři scény, protože
+            // jsou to tři různé otázky na obrázek: jestli je pod výpisem a diffem **pořád vidět
+            // výstraha o lease**, jestli se dlouhý diff usekne na stropu, a jak vypadá stav, ve
+            // kterém session soubory nezměnila.
+            ("konflikt", Self.ordinary, 3, Self.resolution),
+            ("konflikt-dlouhy-diff", Self.ordinary, 3, Self.longDiffResolution),
+            ("konflikt-bez-diffu", Self.ordinary, 3, Self.emptyDiffResolution),
         ]
-        for (name, commits, replayed) in scenes {
+        for (name, commits, replayed, resolution) in scenes {
             for scheme in [ColorScheme.light, .dark] {
                 let file = "push-\(name)-\(scheme == .dark ? "tmavy" : "svetly").png"
                 let url = directory.appending(path: file)
-                try render(commits, replayed: replayed, scheme: scheme, to: url)
+                try render(commits, replayed: replayed, resolution: resolution, scheme: scheme, to: url)
                 print("SONDA \(url.path) — \(commits.count) na větvi, \(replayed) tvých")
             }
         }
@@ -59,6 +66,7 @@ struct BranchPushSheetRenderProbe {
     private func render(
         _ commits: [RebasedCommit],
         replayed: Int,
+        resolution: ConflictResolution? = nil,
         scheme: ColorScheme,
         to url: URL
     ) throws {
@@ -69,10 +77,19 @@ struct BranchPushSheetRenderProbe {
             plan: Self.plan,
             arriving: commits,
             replayed: replayed,
+            base: "main",
+            resolution: resolution,
             pusher: { NeverPusher() },
             afterSuccess: { _ in }
         )
-        let scene = BranchPushSheet(submission: submission, close: {}, discard: {})
+        let scene = BranchPushSheet(
+            submission: submission,
+            close: {},
+            discard: {},
+            // Terminál se kreslí **jedině nad výsledkem session** (#467), takže sonda tu podmínku
+            // musí kopírovat — jinak by ukazovala patku, jakou aplikace nikdy nenakreslí.
+            openTerminal: resolution == nil ? nil : {}
+        )
             .environment(\.colorScheme, scheme)
             .frame(width: Self.size.width, height: Self.size.height)
             .background(Palette.surface)
@@ -149,6 +166,51 @@ struct BranchPushSheetRenderProbe {
                 + "a composer.lock přegenerovaný proti novému minoru"
         ),
     ]
+
+    // MARK: - Výsledek session (#467)
+
+    /// Účet ze zákresu (návrh sekce 36) — dva slité soubory a jeden, který session nechala být.
+    private static let resolution = ConflictResolution(
+        files: [
+            ResolvedConflictFile(path: "composer.lock", action: .tookBoth),
+            ResolvedConflictFile(path: "src/Vault/SecretClient.php", action: .manual),
+            ResolvedConflictFile(path: "tests/VaultTest.php", action: .unchanged),
+        ],
+        diff: """
+            diff --git a/src/Vault/SecretClient.php b/src/Vault/SecretClient.php
+            index 8948000..0663daf 100644
+            --- a/src/Vault/SecretClient.php
+            +++ b/src/Vault/SecretClient.php
+            @@ -112,7 +112,7 @@ final class SecretClient
+                     $client = $this->factory->create();
+            -        $timeout = 30;
+            +        $timeout = $this->config->timeout();
+                     return $client->withTimeout($timeout);
+            """,
+        rounds: 1,
+        usage: RunUsage(cost: 0.68),
+        caveats: "U composer.lock jsem obě sady balíčků jen slil — lockfile může chtít přegenerovat."
+    )
+
+    /// Diff přes strop: otázka je, jestli se usekne a jestli pod ním **zůstane vidět výstraha
+    /// o lease**. Neomezený výpis by ji odrolil pod hranu a z potvrzení by zbyl diff.
+    private static var longDiffResolution: ConflictResolution {
+        var resolution = resolution
+        resolution.diff = (0..<120)
+            .map { $0 % 3 == 0 ? "+ pridany radek \($0)" : ($0 % 3 == 1 ? "- smazany radek \($0)" : "  kontext \($0)") }
+            .joined(separator: "\n")
+        return resolution
+    }
+
+    /// Session soubory nezměnila (vzala jednu stranu tak, jak byla), nebo se diff nepodařilo
+    /// přečíst. **Prázdné místo pod nadpiskem se nesmí čtl jako „nic se nezměnilo“**, takže sonda
+    /// kontroluje, že tam stojí věta.
+    private static var emptyDiffResolution: ConflictResolution {
+        var resolution = resolution
+        resolution.diff = ""
+        resolution.caveats = nil
+        return resolution
+    }
 
     /// Padesát commitů — tedy stav, ve kterém se pozná, jestli strop drží a jestli je pod výpisem
     /// pořád vidět výstraha o lease.

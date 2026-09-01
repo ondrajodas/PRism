@@ -105,10 +105,57 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     private var rebased: [PRIdentifier] = []
     private var discarded: [PRIdentifier] = []
 
-    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome {
-        lock.withLock { rebased.append(pr) }
+    func rebase(
+        _ pr: PRIdentifier,
+        at headSha: String,
+        onto base: String,
+        keepingConflict: Bool
+    ) async throws -> RebaseOutcome {
+        lock.withLock {
+            rebased.append(pr)
+            keptConflicts.append(keepingConflict)
+        }
         return try rebaseOutcome.get()
     }
+
+    /// Zapíše slité soubory a vydá diff (#467). **Vrací připravenou odpověď**, aby se dal
+    /// vyzkoušet i ten směr, ve kterém v souborech zůstaly značky.
+    func stageResolution(in worktree: URL, paths: [String]) async throws -> ConflictStaging {
+        lock.withLock { staged.append((worktree, paths)) }
+        if let stageFailure { throw stageFailure }
+        return staging
+    }
+
+    func continueRebase(
+        _ pr: PRIdentifier,
+        at headSha: String,
+        onto base: String,
+        keepingConflict: Bool
+    ) async throws -> RebaseOutcome {
+        let index = lock.withLock {
+            continued.append(pr)
+            return continued.count - 1
+        }
+        // **Výsledky se berou po kolech**, ne jedna hodnota dokola: kolo za kolem je zrovna to,
+        // co má u slévání konfliktů smysl testovat (rebase se zastaví u každého kolizního commitu).
+        // Když jich je připraveno málo, platí ten poslední — testu, který chce jedno kolo, tak
+        // stačí jeden prvek.
+        guard !continueOutcomes.isEmpty else { return try rebaseOutcome.get() }
+        return try continueOutcomes[min(index, continueOutcomes.count - 1)].get()
+    }
+
+    /// Co dostal `stageResolution` (#467) — na tom stojí tvrzení „soubor se značkami se nezapsal“.
+    private(set) var staged: [(worktree: URL, paths: [String])] = []
+    /// S jakou hodnotou `keepingConflict` se rebase volal. **Tvrdí se oba směry**: s resolverem se
+    /// konflikt nechává stát, bez něj se zahazuje.
+    private(set) var keptConflicts: [Bool] = []
+    /// Kolikrát se dokončoval rebase (#467).
+    private(set) var continued: [PRIdentifier] = []
+    /// Co vydá `stageResolution`.
+    var staging = ConflictStaging()
+    var stageFailure: (any Error)?
+    /// Výsledky `continueRebase` po kolech. Prázdné = použije se `rebaseOutcome`.
+    var continueOutcomes: [Result<RebaseOutcome, any Error>] = []
 
     func discardSync(for pr: PRIdentifier) async throws {
         lock.withLock { discarded.append(pr) }

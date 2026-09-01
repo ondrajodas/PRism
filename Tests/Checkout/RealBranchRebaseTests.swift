@@ -58,7 +58,7 @@ struct RealBranchRebaseTests {
         let feature = try await makeBranch("feature", file: "feature.txt", content: "moje\n")
         try await advanceMain(file: "main.txt", content: "cizí\n")
 
-        let outcome = try await checkout().rebase(pr, at: feature, onto: "main")
+        let outcome = try await checkout().rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
         guard case .rebased(let rebased) = outcome else {
             Issue.record("čekal se rebase, přišlo \(outcome)")
@@ -97,7 +97,7 @@ struct RealBranchRebaseTests {
         try await git(["checkout", "main"], in: origin)
         try await advanceMain(file: "main.txt", content: "cizí\n")
 
-        let outcome = try await checkout().rebase(pr, at: feature, onto: "main")
+        let outcome = try await checkout().rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
         guard case .rebased(let rebased) = outcome else {
             Issue.record("čekal se rebase, přišlo \(outcome)")
@@ -129,7 +129,7 @@ struct RealBranchRebaseTests {
         let feature = try await makeBranch("feature", file: "feature.txt", content: "moje\n")
         try await advanceMain(file: "main.txt", content: "cizí\n")
         let checkout = checkout()
-        _ = try await checkout.rebase(pr, at: feature, onto: "main")
+        _ = try await checkout.rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
         // Čerstvá instance, tedy žádný stav v paměti — přesně jako po restartu aplikace.
         let state = await self.checkout().syncWorktreeState(for: pr, at: feature, onto: "main")
@@ -153,7 +153,7 @@ struct RealBranchRebaseTests {
         let checkout = checkout()
         // Strom si založí review, ne rebase — takže v něm stojí přesně hlava PR.
         _ = try await checkout.worktree(for: pr, at: feature)
-        _ = try await checkout.rebase(pr, at: feature, onto: "main")
+        _ = try await checkout.rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
         #expect(await checkout.syncWorktreeState(for: pr, at: feature, onto: "main") == .empty)
     }
@@ -169,7 +169,7 @@ struct RealBranchRebaseTests {
         let checkout = checkout()
         let review = try await checkout.worktree(for: pr, at: feature)
 
-        let outcome = try await checkout.rebase(pr, at: feature, onto: "main")
+        let outcome = try await checkout.rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
         guard case .rebased(let rebased) = outcome else {
             Issue.record("čekal se rebase, přišlo \(outcome)")
@@ -192,7 +192,7 @@ struct RealBranchRebaseTests {
         try await makeScratchRepository()
         let feature = try await makeBranch("feature", file: "feature.txt", content: "moje\n")
 
-        let outcome = try await checkout().rebase(pr, at: feature, onto: "main")
+        let outcome = try await checkout().rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
         guard case .rebased(let rebased) = outcome else {
             Issue.record("čekal se rebase, přišlo \(outcome)")
@@ -211,9 +211,9 @@ struct RealBranchRebaseTests {
         let feature = try await makeBranch("feature", file: "README.md", content: "moje verze\n")
         try await advanceMain(file: "README.md", content: "cizí verze\n")
 
-        let outcome = try await checkout().rebase(pr, at: feature, onto: "main")
+        let outcome = try await checkout().rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
-        #expect(outcome == .conflicted(files: ["README.md"], aborted: true))
+        #expect(outcome == .conflicted(files: ["README.md"], aborted: true, worktree: layout.syncWorktree(for: pr)))
         // Zahozený rebase znamená, že se v tom stromě dá hned pracovat dál — a hlavně že v cache
         // po něm **nezůstala** přerovnaná větev, kterou by okno nabídlo k přetlačení.
         #expect(await checkout().syncWorktreeState(for: pr, at: feature, onto: "main") == .empty)
@@ -237,14 +237,14 @@ struct RealBranchRebaseTests {
         try await advanceMain(file: "README.md", content: "cizí verze\n")
         let checkout = checkout()
         // První pokus si strom založí a rebase zahodí; druhý ho pak najde rozdělaný.
-        _ = try await checkout.rebase(pr, at: feature, onto: "main")
+        _ = try await checkout.rebase(pr, at: feature, onto: "main", keepingConflict: false)
         try await startConflictingRebase(in: layout.syncWorktree(for: pr))
 
         #expect(await checkout.syncWorktreeState(for: pr, at: feature, onto: "main") == .unfinishedRebase)
 
-        let outcome = try await checkout.rebase(pr, at: feature, onto: "main")
+        let outcome = try await checkout.rebase(pr, at: feature, onto: "main", keepingConflict: false)
 
-        #expect(outcome == .conflicted(files: ["README.md"], aborted: false))
+        #expect(outcome == .conflicted(files: ["README.md"], aborted: false, worktree: layout.syncWorktree(for: pr)))
         // **Nepřepsal se**: druhý pokus rozdělanou práci nechal ležet.
         #expect(await checkout.syncWorktreeState(for: pr, at: feature, onto: "main") == .unfinishedRebase)
 
@@ -265,7 +265,7 @@ struct RealBranchRebaseTests {
         let feature = try await makeBranch("feature", file: "feature.txt", content: "moje\n")
         try await advanceMain(file: "main.txt", content: "cizí\n")
         let checkout = checkout()
-        _ = try await checkout.rebase(pr, at: feature, onto: "main")
+        _ = try await checkout.rebase(pr, at: feature, onto: "main", keepingConflict: false)
         // Kontrola scény: doopravdy tam něco leží, jinak by tvrzení níž neznamenalo nic.
         guard case .rebased = await checkout.syncWorktreeState(for: pr, at: feature, onto: "main") else {
             Issue.record("scéna nesedí — v cache nic nečeká")
@@ -299,7 +299,7 @@ struct RealBranchRebaseTests {
         let feature = try await makeBranch("feature", file: "feature.txt", content: "moje\n")
 
         await #expect(throws: CheckoutError.self) {
-            _ = try await checkout().rebase(pr, at: feature, onto: "takova-vetev-neni")
+            _ = try await checkout().rebase(pr, at: feature, onto: "takova-vetev-neni", keepingConflict: false)
         }
         #expect(
             await checkout().syncWorktreeState(for: pr, at: feature, onto: "main") == .empty

@@ -7935,3 +7935,90 @@ obrázků. Naletěl jsem na to při psaní téhle sondy, přesto že to `CodeShe
 **Co z těch dvou scén vyšlo:** dlouhý titulek (přes 120 znaků) se na 460 bodech zalomí na tři řádky,
 sha zůstane na jedné a výstraha o lease je pořád vidět. U 50 commitů se vypíše osm, pak `a další 42
 commitů`, a výstraha zůstává nad hranou — tedy strop `Policy.pushedCommitLimit` drží to, na co je.
+
+## Slévání konfliktů: co jde tvrdit v harnessu a co jedině spuštěním (#467)
+
+Session, která smí měnit soubory, má **tři různé vrstvy** a každá se ověřuje jinde. Splést je
+znamená napsat zelený test, který o té podstatné věci nic netvrdí.
+
+| Co se ptá | Kde se to ověří | Čím ne |
+|---|---|---|
+| Je sada nástrojů ta, o které si myslíme? | `SessionToolSetsTests` — **literálem**, všechny čtyři session na jednom místě | Porovnáním proti konstantě: po jejím rozšíření by test prošel dál |
+| Rozhoduje o pokračování `git`, ne model? | `AppStoreConflictSyncTests` s fake resolverem — **nula `git add`** nad zbylými značkami | Testem nad „šťastnou“ cestou; ten projde i bez té kontroly |
+| Rozumí tomu `git` a vypadne z toho, co čekáme? | `RealConflictStagingTests` — **skutečný `git`**, `file://` remote, bez sítě | Fakem: `zdiff3`, tvar diffu nad nesloučenou cestou ani `--continue` bez editoru se namockovat nedají |
+| Slije to model doopravdy, a pustí ho brána? | **spuštěním** (`ConflictPromptProbe` vypíše prompt a argumenty) | Ničím v harnessu — je to cizí model, síť a peníze |
+| Vejde se to do sheetu a panelu? | `BranchPushSheetRenderProbe`, `BranchSyncRenderProbe` | Číslem: šířka sheetu ani zalomení věty se nedají spočítat |
+
+### Jak se změřilo, že rozsah zápisu je brána (#467)
+
+**Prompt brána není a být nemůže**, takže se měřilo `--allowedTools`. Postup je dvakrát tentýž pokus
+s obráceným rozsahem — a **ta druhá polovina je podstatná**:
+
+```bash
+S=/tmp/probe; mkdir -p "$S/inside" "$S/outside"
+cd "$S/inside" && claude -p "…zapiš do $S/inside/a.txt a do $S/outside/b.txt…" \
+    --output-format stream-json --verbose \
+    --allowedTools "Read,Grep,Glob,Write(//$S/inside/**),Edit(//$S/inside/**)" \
+    --disallowedTools "Bash(gh:*),Bash(git push:*)" > run.jsonl
+python3 -c "import json;[print(e.get('permission_denials')) for e in map(json.loads,open('run.jsonl')) if e.get('type')=='result']"
+```
+
+- **S rozsahem na `cwd`**: zápis dovnitř prošel, zápis ven skončil v `permission_denials`.
+- **S rozsahem na sousední složku**: prošel zápis **tam** a zápis **do `cwd`** se odmítl.
+
+Bez toho druhého pokusu se první dá vysvětlit i tak, že scoped pravidlo nepovoluje nic a zápis do
+`cwd` prošel sám od sebe — tedy měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“
+(#478). Odmítnutí je v `permission_denials` a **běh na něm nekončí chybou**, takže návratový kód
+netvrdí nic; čte se to pole.
+
+### Jak se změřilo, že to model doopravdy slije
+
+Scéna se vybírá tak, aby měla **jednu správnou odpověď**: `master` změní jeden řádek, přehrávaný
+commit pod něj **přidá** jiný. „Vezmi obojí“ je pak jediné rozumné slití a dá se poznat pohledem, ne
+dojmem. Prompt a argumenty se vypíšou sondou, aby se měřil **ten text, který aplikace posílá**, ne
+jeho parafráze:
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/c \
+    TEST_RUNNER_PRISM_CONFLICT_WORKTREE=/tmp/repo TEST_RUNNER_PRISM_CONFLICT_FILES=A.php \
+    xcodebuild … test -only-testing:PRismTests/ConflictPromptProbe > /tmp/p.log 2>&1
+grep SONDA /tmp/p.log
+```
+
+Co se čte z výsledku, a proč všechno čtyři naráz: **obsah souboru** (zůstala značka?), **`file_path`
+u každého `Write`/`Edit`** (mířilo to do stromu?), **`result`** (dá se účet přečíst
+`ConflictCommand.parse`?) a **`total_cost_usd`** (kolik jedno kolo stojí). Naměřeno **$0,355, 4 kola
+modelu, 23 s**; účet přišel jako `{"files":[{"path":"…","action":"both"}],"caveats":"…"}` a `caveats`
+nesly věc, kterou by aplikace sama nezjistila.
+
+### Kde se ověřila regrese vložením regrese
+
+U dvou věcí, na kterých celý #467 stojí, se chyba **dočasně vrátila** a koukalo se, jestli testy
+spadnou:
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| kontrola konfliktních značek vypnutá (`unresolved = []`) | *Soubor se zbylými značkami se nezapisuje* a *Zapíše se, co je hotové* |
+| `merge.conflictStyle=zdiff3` z volání odebrán | *Konfliktní značka nese obě strany i základ* |
+
+Bez toho by zelený běh znamenal jen „testy jsou zelené“. Třetí věc — že se **nepokračuje** po zápisu
+mimo strom — se ověřuje fakem, který takový pokus nahlásí, a tvrdí se **nula** `git add` i **nula**
+`--continue`; ten směr se s existujícím fakem napsat dal, protože `writesOutside` je pole v odpovědi.
+
+### Co z renderu vyšlo (#467)
+
+Dvě věci, které by se z čísel nepoznaly, a jedna, která opravila kód:
+
+- **Diff uprostřed sheetu odrolil výstrahu o lease pod hranu** — a s ní **celý** výpis `Co odejde`.
+  Proto je diff v potvrzení až za výstrahou. Podlaha sheetu je 460 × 620 (`idealWidth` u sheetu
+  SwiftUI zahodí, #327).
+- **Čtvrté tlačítko v patce se nevejde**: z `Otevřít v terminálu` zbylo `Otevřít v termi…`. Odtud
+  `Terminál`.
+- **`beze změny` mělo `✓`** a tvrdilo tím, že za to slití někdo ručí. Glyf odpovídá na „sáhla na to
+  session“ (`Action.isTouched`), ne na „dá se to commitnout“ — v návrhu je tam `—`.
+
+Panel se kouká sondou `BranchSyncRenderProbe` (scény `13-slevam`, `14-nerozreseno`,
+`15-nerozreseno-dlouha-veta`). Ta poslední je tam schválně: `detail` je **cizí text neznámé délky**,
+a se seznamem souborů před podmětem se věta rozpadla („Konflikt v a, b, c session nerozřešila…“).
+Odtud pořadí *Session konflikt nerozřešila (…)*.
+

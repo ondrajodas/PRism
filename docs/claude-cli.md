@@ -349,6 +349,85 @@ Dvě věci, které z toho plynou a nejsou zjevné:
   je cena u **každé** odpovědi v okně vidět a počítá se do `Dneska stálo`; strop se nedává, protože
   za každou otázkou stojí člověk.
 
+## Slévání konfliktů (#467) — čtvrtá session, a první, která píše
+
+Sada je `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)`, zákazy jsou **tatáž konstanta**
+`ClaudeCommand.disallowedTools`, a **`Bash` v ní není vůbec**.
+
+### `Write` a `Edit` jen ve svém stromě (#467)
+
+**Holé `Write` v `--allowedTools` cestu neomezuje vůbec.** Změřeno: session s `cwd` v jedné složce
+a `--allowedTools "Read,Grep,Glob,Write,Edit"` dostala dva úkoly — připsat řádek do souboru v `cwd`
+a přepsat soubor v **sousední** složce. Provedla **obojí**. Prompt tedy brána není a být nemůže.
+
+**Scoped pravidlo `Write(//<absolutní cesta>/**)` povoluje právě ten podstrom.** Se stejným
+promptem, ale rozsahem na `cwd`, prošel zápis dovnitř a zápis ven skončil v `permission_denials`:
+
+| Zadaná cesta | Rozsah = `cwd` | Rozsah = sousední složka |
+|---|---|---|
+| soubor v `cwd` | **projde** | **odmítnuto** |
+| soubor v sousední složce | **odmítnuto** | **projde** |
+
+Druhý sloupec je ta půlka, kterou bylo potřeba doměřit: bez něj se první výsledek dá vysvětlit
+i tak, že scoped pravidlo nepovoluje nic a zápis do `cwd` prošel sám od sebe. **`cwd` implicitně
+zapisovatelný není.**
+
+**Obě obejití, která se nabízejí, se odmítnou.** Zkoušeno doslovnou cestou v `file_path` (s pokynem
+ji nenormalizovat):
+
+- `<strom>/../jinam/soubor` — **odmítnuto**; v hlášce už stojí normalizovaná cesta, takže se `..`
+  vyhodnotí **před** kontrolou oprávnění;
+- `<strom>/odkaz/soubor`, kde `odkaz` je symlink mimo strom — **odmítnuto**.
+
+Odmítnutí je v `permission_denials` a **běh na něm nekončí chybou** (`subtype: success`) — tedy
+tatáž vlastnost jako u odmítnutého `gh` u revieweera.
+
+### Bez `Bash`e, se `zdiff3` místo něj
+
+Sada `Bash` **nemá**, protože session nesmí commitovat: `git add` a `git rebase --continue` dělá
+aplikace. Držet to výčtem zákazů by znamenalo hádat, co všechno se dá napsat — `git -C <strom>
+commit` na vzor `Bash(git commit:*)` nezačíná.
+
+Co se tím platí: session neuvidí `git show :1:soubor`, tedy **základ** konfliktu. Vyrovnává to
+`git -c merge.conflictStyle=zdiff3 rebase`, po kterém je základ **ve značce**:
+
+```
+<<<<<<< HEAD
+        $timeout = $this->config->timeout();
+||||||| parent of 9a54877 (feat: add retries)
+        $timeout = 30;
+=======
+        $timeout = 30;
+        $retries = 3;
+>>>>>>> 9a54877 (feat: add retries)
+```
+
+**Při rebase je `HEAD` základ, ne moje práce** — obráceně, než jak to člověk čte u merge. Prompt to
+říká výslovně; model, který si to splete, zahodí zrovna tu práci, o kterou jde.
+
+### Co to udělalo naostro
+
+Změřeno na scratch repu s konfliktem, který má **správnou odpověď „vezmi obojí“**: `master` změnil
+`$timeout` na hodnotu z konfigurace, přehrávaný commit pod něj přidal `$retries`.
+
+| | |
+|---|---|
+| Výsledek | oba záměry zachované, **žádná značka nezůstala** |
+| Kroky | `Read`, `Glob`, `Edit` — všechny **uvnitř** stromu |
+| Účet | `{"files":[{"path":"SecretClient.php","action":"both"}],"caveats":"Proměnná $retries zůstává v metodě nepoužitá…"}` |
+| Cena | **$0,355**, 4 kola, **23 s** |
+| `permission_denials` | prázdné |
+
+Dvě věci, které z toho plynou:
+
+- **Odpověď přišla v tom tvaru, který `ConflictCommand.parse` čte** — objekt, `action: "both"`,
+  `caveats` česky. Kontrakt tedy drží na obou stranách, ne jen v testu nad vymyšleným JSONem.
+- **`caveats` nese informaci, kterou by aplikace sama nezjistila** (proměnná zůstala nepoužitá).
+  Právě proto se ta věta ukazuje u výsledku a ne zahazuje.
+
+Cena jednoho kola je řádově **desetina** rozhovoru nad PR — session čte kód kolem značky, ne celý
+diff. Kol může být víc (rebase se zastaví u každého kolizního commitu), a proto je jich strop tři.
+
 ## Fixtures
 
 | Soubor | Co dokazuje |

@@ -110,7 +110,13 @@ struct ContentView: View {
             BranchPushSheet(
                 submission: push,
                 close: { self.branchPush = nil },
-                discard: { Task { await store.discardSync(for: push.pullRequest.id) } }
+                discard: { Task { await store.discardSync(for: push.pullRequest.id) } },
+                // **Jedině nad výsledkem session** (#467): bez konfliktů není v tom stromě co
+                // dohlédnout a bylo by to tlačítko navíc v patce. Rozhoduje snímek v potvrzení,
+                // ne živý stav — sheet ukazuje to, co platí k tomu, co odejde.
+                openTerminal: push.resolution == nil
+                    ? nil
+                    : { Task { await store.openConflictTerminal(for: push.pullRequest.id) } }
             )
         }
         .hiddenShortcuts { shortcuts }

@@ -33,6 +33,30 @@ struct RunUsage: Codable, Hashable, Sendable {
         self.turns = turns
     }
 
+    /// Součet dvou běhů — kolik stálo slévání konfliktů dohromady (#467).
+    ///
+    /// **`nil` se chová jako „nevíme“, ne jako nula**, a je to tatáž úvaha, kvůli které jsou ta
+    /// pole volitelná: kolo, které cenu nenahlásilo (zabitá session), peníze stálo taky. Sečte se
+    /// proto **to, co víme** — dvě známé hodnoty se sečtou, jedna známá zůstane, dvě neznámé
+    /// vydají `nil`. Do `Dneska stálo` se každé kolo zapisuje **zvlášť** (`SpendLedger.record`),
+    /// takže tenhle součet je jen to, co se ukáže u výsledku.
+    static func summed(_ left: RunUsage?, _ right: RunUsage?) -> RunUsage? {
+        guard let left else { return right }
+        guard let right else { return left }
+        let summed = RunUsage(
+            cost: added(left.cost, right.cost),
+            duration: added(left.duration, right.duration),
+            turns: added(left.turns, right.turns)
+        )
+        return summed.isEmpty ? nil : summed
+    }
+
+    private static func added<T: AdditiveArithmetic>(_ left: T?, _ right: T?) -> T? {
+        guard let left else { return right }
+        guard let right else { return left }
+        return left + right
+    }
+
     private enum CodingKeys: String, CodingKey {
         case costUSD
         case durationMS

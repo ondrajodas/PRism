@@ -389,6 +389,13 @@ final class AppStore {
     /// nedostanou a nespouští tím `claude`.
     let asker: (any AskRunning)?
 
+    /// Slévání konfliktů při srovnání větve (#467). `nil` = **konflikty se neslévají** a `Rebase`
+    /// nad zkonfliktněnou větví zůstane zakázaný s důvodem, tedy tak, jak to bylo do #467.
+    ///
+    /// Nepovinné ze stejného důvodu jako `asker`: testy, které o slévání nestojí, ho nedostanou
+    /// a nespouští tím `claude`.
+    let conflicts: (any ConflictResolving)?
+
     /// Uložené rozhovory (#452). `nil` = neukládá se, tedy rozhovor zanikne se zavřením aplikace.
     let asks: AskStore?
 
@@ -510,6 +517,21 @@ final class AppStore {
     /// ochrana repa před eviction, zabití při zavírání aplikace (#264) a počet běhů, na který se
     /// ptá dialog při ukončení.
     var askTasks: [PRIdentifier: Task<Void, Never>] = [:]
+
+    /// Běžící srovnání větve podle PR (#467). Co v mapě není, neběží.
+    ///
+    /// **Existuje kvůli zrušení, ne kvůli počítání.** Do #467 byl rebase volání `gitu` v řádu
+    /// sekund a rušit ho nebylo co; se session, která běží minuty a stojí peníze, musí být kde
+    /// vzít `cancel()` — a stejně tak při zavírání aplikace (#264, #351), protože `claude -p`
+    /// přežije rodiče a platí tokeny dál.
+    var branchSyncTasks: [PRIdentifier: Task<Void, Never>] = [:]
+
+    /// Co session nad konflikty zrovna dělá — druhý řádek u hlášky v panelu (#467). Chybějící
+    /// záznam = zatím nic neřekla.
+    ///
+    /// **Vedle stavu, ne v něm**: mění se při každém tool cally, a přepisovat kvůli tomu
+    /// `branchSyncStates` by špinilo i to, co se nemění (pravidlo o hrubé vlastnosti, #472).
+    var branchSyncActivity: [PRIdentifier: String] = [:]
 
     /// Co session zrovna dělá — řádek u prstýnku na místě příští bubliny (#452). Chybějící
     /// záznam = zatím nic neřekla.
@@ -760,6 +782,7 @@ final class AppStore {
         translator: (any FindingTranslating)? = nil,
         intentText: (any IntentTextFetching)? = nil,
         asker: (any AskRunning)? = nil,
+        conflicts: (any ConflictResolving)? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         autoRuns: AutoRunLedger? = nil,
@@ -815,6 +838,7 @@ final class AppStore {
         self.translator = translator
         self.intentText = intentText
         self.asker = asker
+        self.conflicts = conflicts
         self.asks = asks
         self.askContexts = askContexts
         self.autoRuns = autoRuns
@@ -918,6 +942,15 @@ final class AppStore {
             // session (#351): `claude -p` běží minuty a jako sirotek po zabité aplikaci platí
             // tokeny dál, takže ho musí umět zabít další start.
             asker: ClaudeAskSession(
+                claude: toolPaths.claude,
+                gh: toolPaths.gh,
+                runner: SubprocessStreamer(sessions: .shared),
+                model: { box.value.global.model }
+            ),
+            // Slévání konfliktů (#467) — **jediná session, která smí měnit soubory**. Streamem
+            // a přes tentýž registr běžících session (#351) jako reviewer a rozhovor: `claude -p`
+            // běží minuty a jako sirotek po zabité aplikaci platí tokeny dál.
+            conflicts: ClaudeConflictResolver(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,
                 runner: SubprocessStreamer(sessions: .shared),
@@ -1720,6 +1753,9 @@ final class AppStore {
             // A od #452 i repa s běžící odpovědí v tabu `Zeptat se` — je to zase tatáž session
             // nad tímtéž stromem.
             .union(askTasks.keys.map(\.repo))
+            // Srovnání větve pracuje ve **vlastním** stromě v cache (#466), takže se ten klon
+            // nesmí uklidit pod rukama — a od #467 v něm navíc běží session, která do něj píše.
+            .union(branchSyncTasks.keys.map(\.repo))
     }
 
     func checkoutState(for repo: RepoID) -> CheckoutState {

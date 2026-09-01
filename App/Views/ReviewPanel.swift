@@ -85,6 +85,8 @@ struct ReviewPanel: View {
     var branchActions = BranchActions()
     /// Jak dopadlo poslední srovnání větve (#466). `nil` = nedělo se nic.
     var branchSync: BranchSyncState?
+    /// Co session nad konflikty zrovna dělá (#467). `nil` = neslévá se, nebo ještě nic neřekla.
+    var branchSyncActivity: String?
     /// Proti kterému kódu nálezy platí (#392). Kreslí se **jen v tabu `Commity`** — rozhoduje
     /// `Policy.findingsHeadNotice`, ne panel.
     var headNotice: Policy.FindingsHeadNotice = .none
@@ -162,6 +164,7 @@ struct ReviewPanel: View {
                             section: branch,
                             contentWidth: metadataContentWidth,
                             syncState: branchSync,
+                            syncActivity: branchSyncActivity,
                             // Tentýž stav jako blok labelů nad ním (#482) — a je to schválně jedna
                             // hodnota, ne dvě: dvě odesílání nad jedním PR naráz neběží, takže
                             // rozhoduje jedině to, **kde** se věta o neúspěchu kreslí

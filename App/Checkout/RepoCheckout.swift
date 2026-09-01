@@ -28,7 +28,43 @@ protocol RepoCheckout: Sendable {
     ///
     /// Základ se dotahuje pokaždé (`prepare`), protože rebase nad zastaralým `main`em by srovnal
     /// větev s něčím, co už není.
-    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome
+    ///
+    /// **`keepingConflict` rozhoduje, co se stane s rozdělaným rebasem** (#467). `false` je chování
+    /// do #466: konflikt se zahodí (`rebase --abort`) a v cache po něm nic nezůstane. `true`
+    /// znamená „nech ho stát“ — je to jediný stav, ve kterém může session konflikt slít, protože
+    /// zahozený rebase žádné značky v souborech nemá. Není to volba pohodlí: zahodit rebase, na
+    /// kterém má hned pracovat session, a pak ho spustit znovu, by znamenalo dvakrát tahat základ
+    /// a dvakrát přehrávat commity.
+    func rebase(
+        _ pr: PRIdentifier,
+        at headSha: String,
+        onto base: String,
+        keepingConflict: Bool
+    ) async throws -> RebaseOutcome
+
+    /// Zapíše do indexu soubory, které session slila, a vrátí **diff toho, co z nich vzniklo**
+    /// (#467).
+    ///
+    /// **Diff je doklad z `gitu`, ne popis od session** (zadání #467) — proto ho vydává tenhle
+    /// modul a ne runner. Bere se před zápisem do indexu (`git diff HEAD -- <soubory>`), takže
+    /// obsahuje **jen kolidující soubory**, ne zbytek přehrávaného commitu.
+    ///
+    /// **Soubor, ve kterém zůstaly konfliktní značky, se do indexu nezapíše** a vrátí se
+    /// v `unresolved`. Je to jediná kontrola, která nestojí na tvrzení modelu: zapsat značky do
+    /// commitu je ta nejhorší podoba „uhádaného slití“, protože projde a rozbije build.
+    func stageResolution(in worktree: URL, paths: [String]) async throws -> ConflictStaging
+
+    /// Dokončí přerušený rebase (`git rebase --continue`) a řekne, jak to dopadlo (#467).
+    ///
+    /// **Commituje aplikace, ne session** (zadání #467) — dvě věci, které commitují, se rozejdou.
+    /// Návratová hodnota je tatáž jako u `rebase`, protože dopadnout to může stejně: doběhne,
+    /// nebo se zastaví na dalším kolizním commitu.
+    func continueRebase(
+        _ pr: PRIdentifier,
+        at headSha: String,
+        onto base: String,
+        keepingConflict: Bool
+    ) async throws -> RebaseOutcome
 
     /// Zahodí, co ve stromě pro srovnání větve leží — **rozdělaný rebase i přerovnanou větev, která
     /// neodešla** (#466). Chybějící strom není chyba: na remote se nesáhlo, takže není co vracet.

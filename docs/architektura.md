@@ -3072,7 +3072,7 @@ Vlastní pracovní kopie aplikace. Tvrdá podmínka: **nikdy nesahat na uživate
 
 | Typ | Co dělá |
 |---|---|
-| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest`, `trackedPullRequests` a od #466 `rebase`, `discardSync`, `syncWorktreeState`. Vše idempotentní. **Bez zápisu do remote** — pushuje jedině `BranchPushing` |
+| `RepoCheckout` | Protokol: `prepare` (bare klon), `worktree`, `trackedFiles`, `removeWorktree`, `forgetPullRequest`, `trackedPullRequests`, od #466 `rebase`, `discardSync`, `syncWorktreeState` a od #467 `stageResolution` (zápis slitých souborů do indexu + diff) a `continueRebase`. Vše idempotentní. **Bez zápisu do remote** — pushuje jedině `BranchPushing` |
 | `GitRepoCheckout` | Implementace nad `git`: první volání klonuje, další fetchuje |
 | `CacheLayout` | Kde co leží — klony, stromy **i uložené nálezy**. `root` je injektovatelný, aby testy nesáhly do skutečné cache, a u běžící instance se odvozuje z `CFBundleName` (#228) |
 | `CheckoutCoordinator` | Aktor: souběžná volání nad stejným klíčem se spojí do jedné práce |
@@ -9907,6 +9907,108 @@ značku. `RebasedBranch.replayed` je od té doby **vlastní číslo**, ne `arriv
 **Původ řádku vede po pořadí** (`Policy.pushedCommitList` → `PushedCommitRow`), ne druhým dotazem do
 `gitu`: po rebasu jsou commity z base dole a přehrané nad nimi, takže prvních `fromBase` řádků je
 z base. Značka je **na řádku**, ne skupinový nadpis — strop umí prořízt blok z base v půlce.
+
+## Slévání konfliktů — čtvrtá session (#467)
+
+**První session v téhle aplikaci, která smí měnit soubory.** Mění to **tvrdou podmínku č. 2**, ne
+č. 1: do remote se pořád píše jedině přes `BranchPushing`, s bránou, dvěma guardy a potvrzením —
+a session na to nesahá. Zdůvodnění a zamítnuté varianty jsou v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--session-která-smí-psát-467),
+naměřené chování `claude` v [`docs/claude-cli.md`](claude-cli.md#slévání-konfliktů-467--čtvrtá-session-a-první-která-píše).
+
+| Typ | Co dělá |
+|---|---|
+| `ConflictCommand` | Sada nástrojů, timeout, argumenty a rozbor účtu. Čisté funkce |
+| `ConflictResolving` | Protokol s jednou metodou `resolve`. **Nemá čím commitnout ani odeslat** |
+| `ClaudeConflictResolver` | Implementace nad `claude -p` se `stream-json`, přes `SubprocessStreamer(sessions: .shared)` — tedy se značkou pro úklid sirotků (#351) |
+| `ConflictResolution` | Co se stalo: **účet session** (po souborech), **diff z `gitu`**, kola, útrata a `caveats` |
+| `AppStore+ConflictSession` | Kolo za kolem: session slije → aplikace zapíše do indexu → dokončí rebase |
+
+### Kdo co dělá, a proč se to nesmí slít
+
+**Session upraví soubory. Aplikace commituje.** `git add` a `git rebase --continue` dělá
+`RepoCheckout`; session nemá `Bash`, takže si `git` spustit nemůže. Dvě věci, které commitují, by se
+rozešly — a rozešly by se potichu, protože výsledek by vypadal stejně.
+
+**Čtyři meze, každá kontrolovatelná:**
+
+1. **Rozsah zápisu je ten strom, ve kterém rebase uvázl** — `Write(//<strom>/**)`,
+   `Edit(//<strom>/**)`. Je to **změřená brána**, ne prompt: holé `Write` píše kamkoli. Že strom
+   leží v cache, ověřuje `CacheFile.refusal`, tedy **tatáž kontrola jako u pushe**.
+2. **`Bash` v sadě není vůbec.** Chybějící `git` nahrazuje `merge.conflictStyle=zdiff3`, po kterém
+   je ve značce i **základ**.
+3. **`gh` a `git push` v zákazech** — tatáž konstanta `ClaudeCommand.disallowedTools`.
+4. **Zápis mimo strom se čte ze streamu** (`ConflictCommand.writesOutside`) a výsledek se pak
+   **nepřijme**. Je to druhá vrstva pro případ, že se ta brána v `claude` někdy změní; počítají se
+   i **odmítnuté** pokusy, protože otázka není „povedlo se to“, ale „mířila session mimo strom“.
+
+### Účet session a doklad z `gitu` se nesmí slít
+
+Návrh (sekce 36) kreslí v potvrzení dvě věci vedle sebe a nadpisky je rozlišují schválně:
+
+- ***Co s tím session udělala*** je **tvrzení modelu** (`vzala obojí` / `ruční slití` /
+  `beze změny`). Rozsah a pořadí výpisu přitom drží **`git`**, ne odpověď: prochází se kolidující
+  soubory a účet se k nim jen přiřazuje (`Policy.resolvedFiles`). Soubor, o kterém session mlčí,
+  dostane `beze změny`; soubor, ve kterém `git` **pořád vidí značky**, dostane `nevyřešeno` —
+  **bez ohledu na to, co o něm session tvrdí**.
+- **Diff** je `git diff HEAD -- <kolidující soubory>` v rozdělaném rebase, tedy **doklad**. Bere se
+  **před** `git add`: `--cached` by po zápisu obsahoval celý přehrávaný commit (změřeno — přibyl
+  v něm soubor, který nekolidoval).
+
+**Glyf u řádku odpovídá na „sáhla na to session“, ne na „dá se to commitnout“** (`Action.isTouched`
+proti `isResolved`). Je to rozdíl z renderu sondy: `beze změny` je vyřešené, ale `✓` u něj tvrdilo,
+že za to slití někdo ručí — návrh tam kreslí `—`.
+
+### Kola, strop a co se stane, když session nestačí
+
+Rebase se zastaví u **každého** kolizního commitu, takže kol je tolik, kolik je kolizních commitů.
+Strop je `Policy.maxConflictRounds` (**tři**) a je proti **účtu**, ne proti zacyklení: každé kolo je
+vlastní session, tedy vlastní útrata. Do `Dneska stálo` se zapisuje **každé kolo zvlášť**
+(`SpendLedger.record`), u výsledku se ukazuje **součet** (`RunUsage.summed`).
+
+Tři konce, ve kterých se výsledek **nepřijme** — a ve všech třech **zůstane rozdělaný rebase**,
+takže panel nabídne `Zahodit rebase` i `Otevřít v terminálu`:
+
+| Konec | Co se nestane |
+|---|---|
+| session psala mimo strom | `git add` ani `--continue` neproběhnou |
+| v souboru zůstaly značky | ten soubor se nezapíše, rebase se nedokončí |
+| vyčerpala se kola | čtvrté kolo se nespustí |
+
+**Zrušení má vlastní stav, a je to rozdíl proti #466.** Tam byl rebase volání `gitu` a po zrušení
+v cache nic nezůstalo; session v souborech nechá rozdělanou práci, takže `failed(.interrupted)` by
+nenabídlo tlačítka na úklid. Stav je proto `unresolved(files:detail:)` — vlastní případ vedle
+`unfinished`, protože „na tohle nestačím“ je jiná věta než „v kopii repa něco leží“: u prvního se
+za pokus **zaplatilo** a je z něj co říct.
+
+### Terminál jako přiznaná mez
+
+`Otevřít v terminálu` otevře zásuvku (#459) **v tom stromě, kde rebase uvázl** — vlastní role
+relace (`TerminalSlot.Role.rebase`), ne `shell`, protože ten startuje ve stromě posledního review.
+Jedna role se dvěma různými adresáři by znamenala lhavou popisku v hlavičce: `TerminalHost`
+existující ploše adresář **nepřepíše**.
+
+**Aplikace do toho shellu nic nepíše.** `▶` (jediná řádka, kterou umí poslat) míří na
+`claude --resume` dráhy review, ne sem. Plnou moc má odsud **člověk** — tak jako u zbytku zásuvky.
+
+### Co se v okně mění
+
+- **Konflikt přestal být překážkou `Rebase`** — ale jedině tehdy, když ho **má kdo slít**
+  (`resolvesConflicts`, tedy „aplikace našla `claude`“). Bez něj zůstává věta z #466, jen mluví
+  o chybějícím nástroji místo o tom, že to neumíme.
+- **Nápověda u `Rebase` říká, že slévání stojí peníze** — kliknutí umí spustit až tři session, a to
+  je informace **před** kliknutím, ne po něm.
+- **Běžící slévání má v panelu vlastní stav** (`resolving(round:files:)`) s kolem, počtem souborů
+  a **druhým řádkem o tom, co session dělá právě teď**; desetiminutové ticho je k nerozeznání od
+  zaseknutého okna. Vedle věty stojí `Zrušit` — jedna odpověď stojí desetiny dolaru a běží minuty.
+- **Potvrzení je jedno pro obě cesty** (`BranchPushSheet`), jen s obsahem navíc. **Diff jde na
+  konec, ne pod účet session, a je to odchylka od zákresu z měření**: zákres nemá výpis `Co odejde`
+  ani seznam commitů, kdežto sheet je jeden — a s diffem uprostřed spadla na podlaze sheetu
+  (460 × 620) pod hranu **výstraha o lease i celý výpis `Co odejde`**. Na konci je diff doklad,
+  ke kterému se doroluje, a nad hranou zůstane celý payload.
+- **`Terminál` v patce, ne `Otevřít v terminálu`**, a taky z měření: čtvrté tlačítko se na podlaze
+  sheetu nevejde (v renderu z popisky zbylo `Otevřít v termi…`). Zamítnuto zahodit `Zrušit`, jak to
+  kreslí zákres — nese `⎋`, tedy jedinou klávesovou únikovou cestu z potvrzení nevratné akce.
 
 ## Vestavěný terminál (#459)
 

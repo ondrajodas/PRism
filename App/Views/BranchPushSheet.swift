@@ -22,6 +22,10 @@ struct BranchPushSheet: View {
     let close: () -> Void
     /// Zahodit, co leží v cache. Zavře sheet — dál už není co potvrzovat.
     let discard: () -> Void
+    /// Otevřít zásuvku s terminálem v té kopii repa, ze které se pushuje (#467). Kreslí se
+    /// **jedině tam, kde konflikty slévala session** — nad bezkonfliktním rebasem není v tom
+    /// stromě co dohledávat a bylo by to čtvrté tlačítko v patce bez otázky, na kterou odpovídá.
+    var openTerminal: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -57,7 +61,11 @@ struct BranchPushSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Force push?")
+            // **Nadpis mluví o konfliktech, když nějaké byly** (#467, návrh sekce 36: *Srovnáno
+            // s `main` — 2 konflikty vyřešeny*). Je to první věta, kterou člověk přečte, a nad
+            // výsledkem session je otázka jiná než u bezkonfliktní cesty: ne „pushnout?“, ale
+            // „co to udělalo?“. Skládá ji `Policy`, ne sheet.
+            Text(verbatim: title)
                 .font(.headline)
             // `verbatim` a ruční skládání: `Text("…#\(number)")` by číslo PR prohnalo locale
             // a z #21663 udělalo „#21 663“.
@@ -69,7 +77,7 @@ struct BranchPushSheet: View {
             // protože hlavička v sheetu **zůstává ve všech stavech**. U `timedOut` by navíc
             // tvrdila jistotu, kterou nemáme (`aftermath` u něj schválně říká „nevím, jestli push
             // doběhl“). Popis kroku platí v každém stavu; co se stalo s remote, říká patka.
-            Text("Rebase je hotový v kopii repa. Force push je druhý krok.")
+            Text(verbatim: subtitle)
                 .font(.callout)
                 .foregroundStyle(Palette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -78,10 +86,34 @@ struct BranchPushSheet: View {
         .padding(16)
     }
 
+    /// Účet session, pokud slévala. `nil` = konflikty nebyly, nebo se mezistav našel v cache po
+    /// restartu aplikace a účet se z něj zrekonstruovat nedá (viz `ConflictResolution`).
+    private var resolution: ConflictResolution? { submission.resolution }
+
+    private var title: String {
+        guard let resolution else { return "Force push?" }
+        return Policy.conflictSheetTitle(
+            base: submission.base,
+            resolved: resolution.files.count { $0.action.isResolved }
+        )
+    }
+
+    /// Věta pod slugem. **U konfliktní cesty mluví o konfliktech**, protože to je to nové: že
+    /// rebase doběhl, je vidět za nadpisem.
+    private var subtitle: String {
+        resolution == nil
+            ? "Rebase je hotový v kopii repa. Force push je druhý krok."
+            : "Konflikty jsou vyřešené v kopii repa. Force push je druhý krok."
+    }
+
     // MARK: - Co odejde
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // **Účet session jde nad výpis `Co odejde`** (návrh sekce 36): u konfliktní cesty je
+            // to ta otázka, kvůli které se sheet čte, kdežto větev a lease jsou tam stejné jako bez
+            // konfliktu.
+            if let resolution { resolutionList(resolution) }
             VStack(alignment: .leading, spacing: 10) {
                 Text("Co odejde")
                     .font(.caption)
@@ -106,8 +138,159 @@ struct BranchPushSheet: View {
             }
             commitList
             leaseWarning
+            // **Diff jde na konec, ne mezi účet a `Co odejde`, a je to odchylka od zákresu
+            // z měření.** Návrh (sekce 36) ho kreslí hned pod účtem session — jenže ten zákres
+            // nemá výpis `Co odejde` ani seznam commitů, kdežto tady je sheet **jeden** pro obě
+            // cesty. Vyrendrováno na podlaze sheetu (460 × 620, `idealWidth` u sheetu SwiftUI
+            // zahodí): se čtyřicetiřádkovým diffem uprostřed spadne pod hranu **výstraha o lease
+            // i celý výpis `Co odejde`**, tedy zrovna to, co má být u nevratné akce přečtené —
+            // a je to tatáž mez, kvůli které má seznam commitů strop osm (#466).
+            //
+            // Na konci je diff **doklad, ke kterému se doroluje**, a nad hranou zůstane celý
+            // payload i výstraha. Cena je, že se od zákresu liší pořadí bloků; obsah ne.
+            if let resolution { diffPreview(resolution) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Co s tím session udělala (#467)
+
+    /// Výpis souborů a toho, co s nimi session udělala — **účet session, ne měření**.
+    ///
+    /// Rozsah a pořadí drží `git` (co kolidovalo), popisky session; skládá to
+    /// `Policy.resolvedFiles`, ne tenhle výpis. Nadpisek je z návrhu a je **podmínka**, ne
+    /// dekorace: bez něj by se výpis čtl jako „co se stalo“, tedy jako doklad — a dokladem je až
+    /// diff pod ním.
+    ///
+    /// **Glyf říká, jestli na ten soubor session sáhla** (`Action.isTouched`), ne jestli se dá
+    /// commitnout. Je to rozdíl z renderu sondy: `beze změny` je vyřešené, ale `✓` u něj tvrdilo, že
+    /// za to slití někdo ručí — návrh tam kreslí `—`. Nerozřešený soubor se do sheetu dostat nemá
+    /// (nerozřešený konflikt sheet vůbec neotevře), ale kreslí se schválně: kdyby k tomu přece
+    /// došlo, nesmí ve výpisu vypadat jako vyřešený.
+    private func resolutionList(_ resolution: ConflictResolution) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Co s tím session udělala")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(resolution.files) { file in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // Ikona je jen vizuální — čtečka by ji přečetla jako jméno symbolu před
+                        // popiskem, který totéž říká slovy (nález Copilota na #465).
+                        Image(systemName: Self.glyph(of: file.action))
+                            .imageScale(.small)
+                            .foregroundStyle(Self.tint(of: file.action))
+                            .accessibilityHidden(true)
+                        Text(verbatim: file.path)
+                            .font(.system(.callout, design: .monospaced))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Text(verbatim: file.action.czechLabel)
+                            .font(.caption)
+                            .foregroundStyle(Self.tint(of: file.action))
+                            .fixedSize()
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(file.path) — \(file.action.czechLabel)")
+                }
+            }
+            // **Čím si session není jistá** — vlastní řádek, ne popisek u souboru: je to věta
+            // o celém slití a zadání #467 si ji žádá výslovně.
+            if let caveats = resolution.caveats {
+                Text(verbatim: caveats)
+                    .font(.caption)
+                    .foregroundStyle(Palette.stale)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // **Kolik to stálo, u výsledku** (zadání #467). Do `Dneska stálo` se to zapisuje samo;
+            // tady je odpověď na „co jsem právě zaplatil“, a ta patří k tomu, co za to vzniklo.
+            if let line = RunUsageText.conflictSpent(resolution.usage, rounds: resolution.rounds) {
+                Text(verbatim: line)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// **Barva ze škály se bere z palety, nikdy ze systému** (#432) — a `unchanged` **není** ze
+    /// škály: je to „nemám co říct“, tedy tlumený tón, ne zelená ani výstražná.
+    private static func tint(of action: ResolvedConflictFile.Action) -> Color {
+        switch action {
+        case .tookBoth, .manual: Palette.ok
+        case .unchanged: Palette.ink3
+        case .unresolved: Palette.crit
+        }
+    }
+
+    private static func glyph(of action: ResolvedConflictFile.Action) -> String {
+        switch action {
+        case .tookBoth, .manual: "checkmark"
+        case .unchanged: "minus"
+        case .unresolved: "exclamationmark.triangle"
+        }
+    }
+
+    /// Diff toho, co vzniklo — **kód, ne popis** (zadání #467, návrh sekce 36).
+    ///
+    /// Je to text od `gitu`, takže jediné, co se tady rozhoduje, je obarvení podle prvního znaku
+    /// a **strop**. Ten je podmínka: pod diffem stojí výstraha o lease a neomezený diff by ji
+    /// odrolil pod hranu. **Vnořený scroll je zamítnutý** ze stejného důvodu jako u výpisu
+    /// commitů (#466).
+    @ViewBuilder private func diffPreview(_ resolution: ConflictResolution) -> some View {
+        let lines = Policy.conflictDiffLines(resolution.diff)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Co z toho vzniklo")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if lines.shown.isEmpty {
+                // **Prázdno se neschovává, řekne se.** Prázdné místo pod nadpiskem by se čtlo
+                // jako „nic se nezměnilo“, což u slití konfliktu tvrdí víc, než data unesou:
+                // session mohla vzít jednu stranu tak, jak byla — a taky se diff nemusel přečíst.
+                Text("Diff se nepodařilo přečíst, nebo session soubory nezměnila.")
+                    .font(.caption)
+                    .foregroundStyle(Palette.stale)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(lines.shown) { line in
+                        Text(verbatim: line.text)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Self.color(of: line.kind))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Self.background(of: line.kind))
+                    }
+                }
+                .padding(.vertical, 4)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.lineSoft)
+                }
+                if lines.hidden > 0 {
+                    Text(verbatim: Policy.hiddenDiffLines(lines.hidden))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// **Barva ze škály se bere z palety, nikdy ze systému** (#432).
+    private static func color(of kind: DiffPreviewLine.Kind) -> Color {
+        switch kind {
+        case .header, .hunk: Palette.ink3
+        case .added: Palette.ok
+        case .removed: Palette.crit
+        case .context: Palette.ink2
+        }
+    }
+
+    private static func background(of kind: DiffPreviewLine.Kind) -> Color {
+        switch kind {
+        case .added: Palette.ok.opacity(0.09)
+        case .removed: Palette.crit.opacity(0.09)
+        case .header, .hunk, .context: .clear
+        }
     }
 
     /// Výstraha o pojistce. **Sazba `.warnbox` z návrhu**, tatáž jako v panelu — je to tentýž druh
@@ -283,6 +466,27 @@ struct BranchPushSheet: View {
                 close()
             }
             .disabled(submission.state == .pushing)
+            // **Terminál jedině nad výsledkem session** (#467, návrh sekce 36): tam je co
+            // dohlédnout — celý diff, testy, historie. Nad bezkonfliktním rebasem by to bylo
+            // tlačítko navíc bez otázky, na kterou odpovídá.
+            if let openTerminal {
+                // **`Terminál`, ne `Otevřít v terminálu`, a je to odchylka od zákresu z měření.**
+                // Návrh (sekce 36) kreslí v patce konfliktního potvrzení tři tlačítka — `Zahodit
+                // rebase`, `Otevřít v terminálu` a `Force push` — a `Zrušit` v ní **nemá**. Čtvrté
+                // tlačítko se na podlaze sheetu (460 b, `idealWidth` u sheetu SwiftUI zahodí)
+                // nevejde: v renderu sondy se z popisky stalo `Otevřít v termi…`.
+                //
+                // Zamítnuto **zahodit `Zrušit`**, jak to kreslí návrh: nese `keyboardShortcut
+                // (.cancelAction)`, tedy `⎋` — bez něj by se potvrzení nevratné akce nedalo zavřít
+                // klávesou. Krátký popisek je menší ztráta než zmizelá úniková cesta, a co za tím
+                // kliknutím je, říká nápověda pod kurzorem.
+                Button("Terminál") {
+                    openTerminal()
+                    close()
+                }
+                .disabled(submission.state == .pushing)
+                .help("Otevře zásuvku se shellem v té kopii repa, ze které se pushuje.")
+            }
             Button("Zrušit", role: .cancel, action: close)
                 .keyboardShortcut(.cancelAction)
                 .disabled(submission.state == .pushing)

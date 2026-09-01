@@ -27,6 +27,9 @@ extension AppStore {
             checks: checks[pr],
             blockingFindings: blockingFindingCount(for: pr),
             sync: branchSyncStates[pr],
+            // Konflikt je od #467 překážka jedině tehdy, když ho **nemá kdo slít** — tedy když
+            // aplikace nenašla `claude`.
+            resolvesConflicts: conflicts != nil,
             // Stav odesílání metadat (#482): `Připravit k review` jde touž branou jako labely,
             // takže se druhé odeslání nad jedním PR nenabízí.
             action: metadataActionState(for: pr)

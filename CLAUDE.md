@@ -453,9 +453,13 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      v [záznamu
      rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--zápis-do-remote-466).
 
-   **Konflikty tohle nezahrnuje** — nedokončený rebase se **zahodí** a řekne se to; když se zahodit
-   nepovede, zůstane v cache, je to vidět v panelu a jde zahodit tlačítkem. Session, která smí
-   psát, je #467 a je to **další** vědomá změna, ne tahle.
+   **Konflikty do #467 tohle nezahrnovalo** a stálo tady, že se nedokončený rebase **zahodí**. Od
+   #467 je slévá **session, která smí měnit soubory** — je to změna **tvrdé podmínky č. 2**, ne
+   téhle: do remote se pořád píše jedině přes `BranchPushing`, s bránou, dvěma guardy
+   a potvrzením, a **session na to nesahá** (`git push` má dál v zákazu). Co se mění je, že
+   `Rebase` nad konfliktní větví **jde** a že rebase zůstane v cache stát, dokud ho session slévá.
+   Nerozřešený konflikt se **přiznává**: rebase zůstane rozdělaný, je to vidět v panelu a nabídne
+   se zahodit i **terminál**.
 
    Co se **nezměnilo**: `ReviewVerdict` je pořád jen návrh a sám nic neodesílá (od #114 se jím
    **předvyplňuje** verdikt v panelu, ale odejít umí jedině touž cestou). „Výslovný pokyn
@@ -548,6 +552,44 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    (nálezy, konverzace, checky) jde do promptu **cestou k souboru** vedle pracovního stromu, ne jako
    nástroj — precedens #120; diff si session přečte `git diff <base>...HEAD`
    ([rozbor](docs/architektura.md#rozhovor-nad-pr--tab-zeptat-se-452)).
+
+   **Od #467 je čtvrtá session, a ta smí měnit soubory. Tím se tahle podmínka mění, ne obchází.**
+   Do #467 tady stálo, že `Write` ani `Edit` nemá **žádná** session a že je to jejich pointa;
+   slévání konfliktů při srovnání větve je má. Drží ji **čtyři meze** a každá je kontrolovatelná:
+
+   - **`Write` a `Edit` jen ve svém stromě v cache, a je to změřená brána, ne prompt.** Sada je
+     `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` — **s vypsaným rozsahem**, protože holé
+     `Write` píše **kamkoli**, a `cwd` naopak povolený implicitně **není** (změřeno obojí, i `..`
+     a symlink ven — [čísla](docs/claude-cli.md#write-a-edit-jen-ve-svém-stromě-467)). Že strom leží
+     v cache, ověřuje **tatáž kontrola jako jinde v repu** (`CacheFile.refusal`, podmínka č. 3).
+   - **`Bash` v té sadě není vůbec** — jako první session v téhle aplikaci. Session **necommituje**
+     (to dělá aplikace: `git add` a `git rebase --continue`), a bez `Bash`u je to **vlastnost
+     sady**, ne délka seznamu zákazů: `Bash(git commit:*)` by se dalo obejít `git -C <strom>
+     commit`. Chybějící `git` nahrazuje `merge.conflictStyle=zdiff3` u rebase — ve značce je pak
+     i **základ**.
+   - **Žádné `gh` a `git push` dál v zákazu.** `--disallowedTools` je **tatáž konstanta**
+     `ClaudeCommand.disallowedTools` jako u ostatních tří.
+   - **Druhá vrstva: co session zkusila zapsat mimo strom, se čte ze streamu** — a když se něco
+     najde, výsledek se **nepřijme** (`git add` ani `--continue` neproběhnou) a řekne se to.
+     I odmítnutý pokus: otázka není „povedlo se to“, ale „mířila session mimo strom“.
+
+   **Sada je vyjmenovaná a test ji tvrdí literálem**, jako u #345 a #452 — a od #467 jsou **všechny
+   čtyři na jednom místě** (`SessionToolSetsTests`): rozdíly mezi nimi se ze čtyř souborů nedají
+   přečíst. `SingleWayOutTests` k tomu hlídá, že `ConflictResolving` znají **tři soubory**, volá ho
+   **jedno místo** a rozsah zápisu skládá jedině `ConflictCommand`. **Sady ostatních session se
+   nezměnily ani o položku** a `git push` nemá **žádná**. Rozbor je
+   v [`docs/architektura.md`](docs/architektura.md#slévání-konfliktů--čtvrtá-session-467), zdůvodnění
+   v [záznamu
+   rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--session-která-smí-psát-467).
+
+   ```bash
+   # Výčet k posouzení: pět míst, z toho čtyři sady a jedna prázdná (překlad nálezů).
+   grep -rn 'allowedTools' App/Review | grep -vE ':[0-9]+: *///?'
+   # Pozor: grep na `Write(` **vyjde prázdný** — rozsah se skládá interpolací, takže ten řetězec
+   # v kódu nestojí. Kdo chce ověřit, že je scoped, musí se zeptat funkce (`SessionToolSetsTests`).
+   grep -rln 'ConflictResolving' App                                # tři soubory
+   grep -rn 'writingTools' App | grep -vE ':[0-9]+: *///?'          # jen ConflictCommand
+   ```
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
@@ -576,8 +618,8 @@ aplikace — tamtéž.
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff — celý, nebo mezi dvěma commity (#284) —, login přihlášeného účtu (#330), labely s vyžádanými reviewery včetně týmů (#392), od #420 **hlavy víc PR jedním dotazem** a od #465 **slévatelnost větve** (líné pole, ptá se opakovaně). **Pořád bez zápisu** | `gh` CLI |
-| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, od #466 **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) a zahození rozdělaného rebase. **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326). Od #150 dvě podoby běhu — review a kontrola nálezů z minula. Vedle nich tři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345) a **rozhovor nad PR** (#452, vlastní užší sada nástrojů a `--resume`). Od #327 umí transcript session i **přepsat k přečtení** | `claude` CLI |
+| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, od #466 **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) a zahození rozdělaného rebase, od #467 **zápis slitých souborů do indexu a dokončení rebase** (`git add`, `rebase --continue` — commituje aplikace, ne session). **Pořád bez zápisu do remote** | `git` |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje (#326). Od #150 dvě podoby běhu — review a kontrola nálezů z minula. Vedle nich čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452, vlastní užší sada a `--resume`) a od #467 **slévání konfliktů** — **jediná, která smí měnit soubory**, se scoped `Write`/`Edit` a **bez `Bash`e**. Od #327 umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu i zadání pro agenta, obsah dashboardu a dění, geometrie, na kterou se ptá kresba, a **desítky dalších**. Úplný katalog s důvody je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej tam podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |

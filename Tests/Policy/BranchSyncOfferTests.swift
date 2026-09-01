@@ -55,14 +55,16 @@ struct BranchSyncOfferTests {
         editing: Policy.MetadataEditing = .allowed,
         detail: PullRequest?,
         status: BranchStatusState?,
-        sync: BranchSyncState? = nil
+        sync: BranchSyncState? = nil,
+        resolvesConflicts: Bool = false
     ) -> Policy.SyncOffer {
         Policy.branchSyncOffer(
             editing: editing,
             plan: Policy.branchSyncPlan(of: detail, status: status),
             detail: detail,
             status: status,
-            sync: sync
+            sync: sync,
+            resolvesConflicts: resolvesConflicts
         )
     }
 
@@ -159,14 +161,80 @@ struct BranchSyncOfferTests {
         #expect(offer.obstacles == [.upToDate(base: "main")])
     }
 
-    /// Konflikt řeší #467. Do té doby se to **přiznává**, ne zkouší: rebase by skončil konfliktem
-    /// a rozdělanou prací v cache.
-    @Test("Konflikt srovnání zastaví")
-    func refusesOnConflict() {
+    /// **Bez `claude` se konflikt přiznává, ne zkouší** — je to chování do #467: rebase by skončil
+    /// konfliktem a rozdělanou prací v cache, kterou by nemělo kdo slít.
+    @Test("Konflikt srovnání zastaví, když ho nemá kdo slít")
+    func refusesOnConflictWithoutResolver() {
         let offer = offer(detail: detail(), status: status(.conflicting, .dirty))
 
         #expect(offer.obstacles.contains(.conflicting(base: "main")))
         #expect(offer.isAllowed == false)
+    }
+
+    /// **Druhý směr, a je to celá pointa #467**: se session, která smí psát, konflikt překážka
+    /// není. Bez tohohle tvrzení by se `resolvesConflicts` dalo zapomenout předat a `Rebase` by
+    /// nad konfliktní větví zůstal zašedlý — tedy zrovna tam, kde má #467 fungovat.
+    @Test("Konflikt srovnání nezastaví, když ho slije session")
+    func allowsConflictWithResolver() {
+        let allowed = offer(
+            detail: detail(),
+            status: status(.conflicting, .dirty),
+            resolvesConflicts: true
+        )
+
+        #expect(allowed == .allowed)
+        #expect(!allowed.obstacles.contains(.conflicting(base: "main")))
+    }
+
+    /// **Ostatní překážky slévání neodklízí.** Konflikt je jediné, co `resolvesConflicts` mění —
+    /// vypnutá brána, zavřený PR ani rozdělaný rebase s ním nemají nic společného, a kdyby se ta
+    /// podmínka napsala o řádek výš, spolkla by je taky.
+    @Test("Slévání konfliktů neodklidí jiné překážky")
+    func resolverDoesNotClearOtherObstacles() {
+        let unfinished = offer(
+            detail: detail(),
+            status: status(.conflicting, .dirty),
+            sync: .unfinished(files: ["a.php"]),
+            resolvesConflicts: true
+        )
+        #expect(unfinished.obstacles == [.unfinishedRebase])
+
+        let gateOff = offer(
+            editing: .blocked("Odesílání je vypnuté."),
+            detail: detail(),
+            status: status(.conflicting, .dirty),
+            resolvesConflicts: true
+        )
+        #expect(gateOff.obstacles == [.notAllowed("Odesílání je vypnuté.")])
+    }
+
+    /// **Věta u nesplněné překážky mluví o `claude`, ne o terminálu jako do #466.** Text v UI nesmí
+    /// tvrdit víc, než data unesou: „konflikty odsud vyřešit neumím“ přestalo být pravda.
+    @Test("Věta o konfliktu říká, že chybí claude")
+    func conflictSentenceNamesTheMissingTool() {
+        let sentence = Policy.SyncObstacle.conflicting(base: "main").sentence
+
+        #expect(sentence.contains("nemá kdo"))
+        #expect(sentence.contains("claude"))
+    }
+
+    /// **Nápověda u `Rebase` musí říct, že slévání stojí peníze** — a jedině tam, kde hrozí.
+    /// Kliknutí, které umí spustit až tři session, je informace **před** kliknutím, ne po něm.
+    @Test("Nápověda mluví o ceně slévání jen tam, kde se slévá")
+    func helpMentionsCostOnlyWithResolver() {
+        let plan = BranchSyncPlan(
+            pullRequest: PRIdentifier(repo: RepoID(owner: "o", name: "r"), number: 1),
+            branch: "feature",
+            base: "main",
+            expectedRemoteSha: "abc",
+            replaying: 2,
+            behind: 4
+        )
+
+        #expect(!Policy.branchSyncHelp(for: plan).contains("peníze"))
+        #expect(Policy.branchSyncHelp(for: plan, resolvesConflicts: true).contains("peníze"))
+        // Obojí pořád říká to podstatné: do remote se nesáhne.
+        #expect(Policy.branchSyncHelp(for: plan, resolvesConflicts: true).contains("Do remote se nesáhne"))
     }
 
     /// Bez odpovědi na „o kolik je pozadu“ se **netvrdí nic**: `mergeStateStatus` na to

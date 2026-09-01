@@ -4804,3 +4804,75 @@ nasazuje `flags` z argumentu. Ta druhá věc je redundantní jedině tehdy, kdy�
 věří — a to se dokázat nedá (bez držené klávesy vydají oba světy prázdné `flags`). Zápis do `flags`
 je proti tomu vidět ve zdrojáku, takže se dá **uhlídat stráží**; a stejná úvaha stojí za tím, že
 záruka je nad zdrojáky, ne nad během (jako #367, #411, #462).
+
+### Záznam rozhodnutí — session, která smí psát (#467)
+
+**Rozhodnutí:** konflikty při srovnání větve slévá **headless `claude` session s `Write` a `Edit`**,
+omezenými **scoped povolením** na ten strom v cache, ve kterém rebase uvázl. **Commituje aplikace**
+(`git add`, `git rebase --continue`), ne session; do remote se dál píše jedině přes `BranchPushing`
+a jedině z potvrzení. Tvrdá podmínka **č. 2** se tím mění, č. 1 ne.
+
+**Proč vůbec:** bez konfliktu je `Rebase` (#466) nudný. Ten druhý případ — a to je zrovna ten, kvůli
+kterému se člověk od hotového review zvedá — do #467 skončil větou *„Konflikty odsud zatím vyřešit
+neumím — otevři terminál.“*, tedy návodem, jak z okna odejít.
+
+**Čtyři meze, a proč zrovna tyhle:**
+
+- **Scoped `Write(//<strom>/**)`, ne prompt.** Změřeno, že holé `Write` v `--allowedTools` cestu
+  neomezuje **vůbec** — session přepsala soubor v sousední složce, o které v povolení nestálo nic.
+  Prompt je tedy pojistka, ne brána, a doměřit se musel i druhý směr: se rozsahem mířícím jinam se
+  zápis **do `cwd`** odmítl, takže scoped pravidlo doopravdy **povoluje**, ne jen zakazuje. `..` se
+  normalizuje před kontrolou a symlink ze stromu ven se odmítne
+  ([čísla](../../claude-cli.md#write-a-edit-jen-ve-svém-stromě-467)).
+- **Žádný `Bash`, a je to ta nejdůležitější z těch čtyř.** Session nesmí commitovat; kdyby měla
+  `Bash(git:*)` jako reviewer, držel by to jedině **výčet zákazů** — tedy hádání, co všechno se dá
+  napsat (`git -C <strom> commit` na vzor `Bash(git commit:*)` nezačíná). Bez `Bash`e je
+  „session necommituje“ **vlastnost sady**. Cenou je, že session neuvidí `git show :1:soubor`; platí
+  se `merge.conflictStyle=zdiff3`, po kterém je základ ve značce.
+- **Zákazy jsou tatáž konstanta** jako u ostatních třech session. Druhá sada by byla druhé místo,
+  kde se dá tvrdá podmínka č. 2 porušit.
+- **Druhá vrstva čte, kam session zkusila psát** — a když se něco najde mimo strom, výsledek se
+  **nepřijme**. Kdyby se ta brána v `claude` někdy změnila, nesmí se to poznat až z commitu.
+
+**Zamítnuté varianty:**
+
+- **Vlastní nástroj na hlášení výsledku** (jako `ReportFindings` u revieweera). Zamítnuto: u session,
+  která už smí psát, se výčet nemá rozšiřovat o nic navíc. Účet přijde jako **JSON v posledním
+  sdělení** — tatáž cesta jako u kontroly nálezů (#150) a rozhovoru (#452).
+- **`--resume` mezi koly.** Zamítnuto: každé kolo je jiný commit a jiný konflikt, takže by navázaný
+  kontext mluvil o souborech, které se mezitím commitly — a platilo by se za jeho přenášení.
+- **Nechat session dokončit rebase.** Zamítnuto celým tvarem rozhodnutí: dvě věci, které commitují,
+  se rozejdou, a rozejdou se potichu.
+- **Rozhodovat podle toho, co session tvrdí.** Zamítnuto: o tom, jestli se pokračuje, rozhoduje
+  **`git`** (zůstaly v souborech značky?). Účet je popis, ne měření — a soubor se značkami dostane
+  `nevyřešeno`, i kdyby o něm session tvrdila „ruční slití“.
+- **Neomezený počet kol.** Zamítnuto: každé kolo je vlastní session, tedy vlastní útrata. Strop je
+  **tři** a je proti účtu, ne proti zacyklení.
+
+**Co se udělalo jinak, než kreslí zákres (sekce 36), a proč:**
+
+- **Diff je v potvrzení až za výstrahou o lease, ne pod účtem session.** Zákres nemá výpis
+  `Co odejde` ani seznam commitů, kdežto sheet je **jeden pro obě cesty**. Vyrendrováno na podlaze
+  sheetu (460 × 620): s diffem uprostřed spadne pod hranu výstraha o lease **i celý** výpis
+  `Co odejde` — tedy zrovna to, co má být u nevratné akce přečtené. Na konci je diff doklad,
+  ke kterému se doroluje.
+- **V patce stojí `Terminál`, ne `Otevřít v terminálu`.** Zákres má v konfliktní patce tři tlačítka
+  a `Zrušit` v ní nemá; čtvrté se na podlaze nevejde (v renderu z popisky zbylo
+  `Otevřít v termi…`). Zahodit `Zrušit` bylo zamítnuto: nese `⎋`, tedy jedinou klávesovou únikovou
+  cestu z potvrzení nevratné akce. V **panelu** zůstává popiska plná — má vlastní řádek.
+- **`beze změny` dostalo `—`, ne `✓`.** Vzniklo z renderu: glyf odpovídá na „sáhla na to session“,
+  ne na „dá se to commitnout“, a `✓` u nedotčeného souboru tvrdilo, že za to slití někdo ručí.
+- **Zrušené slévání má vlastní stav.** `failed(.interrupted)` z #466 by nenabídlo tlačítka na úklid,
+  přitom v cache leží rozdělaná práce.
+
+**Změřeno naostro** (scratch repo, konflikt se správnou odpovědí „vezmi obojí“): session zachovala
+oba záměry, nezůstala žádná značka, kroky byly `Read`/`Glob`/`Edit` **uvnitř** stromu, účet přišel
+v tom tvaru, který `ConflictCommand.parse` čte, a `caveats` nesly informaci, kterou by aplikace sama
+nezjistila (*„$retries zůstává nepoužitá“*). **$0,355, 4 kola modelu, 23 s**, žádné odmítnutí.
+
+**Zapsaná mezera, ke které se dá vrátit:** **celá cesta z okna** — tedy klik na `Rebase` nad
+skutečným konfliktním PR — se **neměřila mnou**. Brána odesílání je ve slotu vypnutá (`slot-config.sh`)
+a zapnout si ji kvůli měření by znamenalo přepsat konfiguraci, aby vyšel stav, který potřebuju.
+Ověřené je obojí do sebe: session naostro nad skutečným konfliktem (výš) a celý řetěz
+`git add` → `rebase --continue` proti skutečnému `gitu` (`RealConflictStagingTests`). Co zbývá, je
+klik.
