@@ -973,6 +973,23 @@ Zásady, které platí všude:
       grep -vE ':[0-9]+: *//' | grep -v ProcessPreferencesTests
   grep -rn 'maximumAdvancement\|defaultLineHeight\|boundingRectForFont' App | grep -vE ':[0-9]+: *//'
   ```
+- **Událost skládaná pro test nesmí dědit živý stav procesu** (#490) — **čtvrtá podoba** téhož
+  kořene jako tři odstavce výš. `CGEvent(scrollWheelEvent2Source: nil, …)` znamená kombinovaný stav
+  sezení, takže vyrobené kolečko nese **modifikátory, které měl člověk zrovna zmáčknuté**: `Control`
+  přebarví hlášené tlačítko z 64 na 80, `Shift` nechá AppKit **překlopit osu** (`deltaY` = 0), takže
+  se výřezem nepohne a nehlásí se nic. Padaly na tom dvě suity a v zadání to byly dvě vady.
+  `CGEvent` se proto skládá **jedině v `Tests/Support/WheelEvent.swift`** — privátní stav zdroje
+  **a** `flags` z argumentu —, hlídá to `WheelEventTests` a **`waitUntil` ani `.disabled` to
+  neřeší** (není na co čekat; čas 43–45 s je čekání na hlavní vlákno v paralelním běhu, ne práce).
+  Explicitní továrny AppKitu (`NSEvent.keyEvent(with:…)`) v zákazu nejsou — modifikátory berou
+  z argumentu ([měření a tabulka
+  modifikátorů](docs/testovani.md#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490)).
+
+  ```bash
+  # `--exclude` odečítá dva soubory (helper a stráž nad ním) **cestou**, ne obsahem řádku:
+  # `grep -v WheelEvent` by minul volání na řádce, kde to jméno stojí taky.
+  grep -rn --exclude='WheelEvent*.swift' 'CGEvent(' Tests | grep -vE ':[0-9]+: *//'
+  ```
 - **Okno se v testu ukazuje bez animace** (#462). `orderFront` na okně s výchozí
   `animationBehavior` spustí `NSAnimation` v **threaded** režimu, tedy `-[NSAnimation _runBlocking]`
   na **vlákně z globálního dispatch poolu**, které si drží po celou dobu animace. Rozhoduje ukázání

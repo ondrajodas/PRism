@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import SwiftTerm
 import Testing
 
@@ -213,18 +212,13 @@ struct TerminalWheelTests {
     }
 
     /// Klasické kolečko (ne trackpad): `deltaY` v řádcích. Kladné je nahoru.
+    ///
+    /// **Skládá to `WheelEvent`, a je to podmínka, ne úklid** (#490). Do té doby se tady událost
+    /// skládala z `nil` zdroje, takže si brala **živý stav klávesnice**: držený `Control` udělal
+    /// z tlačítka 64 tlačítko 80 a suita padala podle toho, co se dělo u stroje — třikrát v jednom
+    /// plném běhu, samostatně zeleno. Čísla jsou u `WheelEvent`.
     private static func wheel(lines: Int32) throws -> NSEvent {
-        let source = try #require(
-            CGEvent(
-                scrollWheelEvent2Source: nil,
-                units: .line,
-                wheelCount: 1,
-                wheel1: lines,
-                wheel2: 0,
-                wheel3: 0
-            )
-        )
-        return try #require(NSEvent(cgEvent: source))
+        try WheelEvent.line(lines: lines)
     }
 }
 

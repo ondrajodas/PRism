@@ -115,18 +115,14 @@ struct TerminalScrollProbe {
     }
 
     /// Klasické kolečko (ne trackpad): `scrollingDeltaY` v řádcích.
+    ///
+    /// **Skládá to `WheelEvent`** (#490). Tady byla ta příčina, kvůli které sonda padala jednou ze
+    /// tří plných běhů: událost z `nil` zdroje přebrala **živý stav klávesnice**, a se `Shift`em
+    /// překlopí AppKit osu — `deltaY` je nula, knihovní `scrollWheel` skončí na prvním `if`
+    /// a v hlášce z toho je „kolečko výřezem nehnulo“. Se zátěží to nesouvisí, čísla jsou
+    /// u `WheelEvent`.
     private static func wheel(lines: Int32) throws -> NSEvent {
-        let source = try #require(
-            CGEvent(
-                scrollWheelEvent2Source: nil,
-                units: .line,
-                wheelCount: 1,
-                wheel1: lines,
-                wheel2: 0,
-                wheel3: 0
-            )
-        )
-        return try #require(NSEvent(cgEvent: source))
+        try WheelEvent.line(lines: lines)
     }
 }
 
