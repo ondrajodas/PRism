@@ -558,12 +558,10 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    slévání konfliktů při srovnání větve je má. Drží ji **čtyři meze** a každá je kontrolovatelná:
 
    - **`Write` a `Edit` jen ve svém stromě v cache, a je to změřená brána, ne prompt.** Sada je
-     `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` — **s vypsaným rozsahem**. Změřeno
-     obojí: holé `Write` píše **kamkoli** (session přepsala soubor v sousední složce), kdežto
-     scoped pravidlo povoluje právě ten podstrom a `cwd` **není** povolený implicitně; `..` se
-     normalizuje před kontrolou a odkaz ze stromu ven se odmítne
-     ([čísla](docs/claude-cli.md#write-a-edit-jen-ve-svém-stromě-467)). Že strom leží v cache,
-     ověřuje **tatáž kontrola jako jinde v repu** (`CacheFile.refusal`, tvrdá podmínka č. 3).
+     `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` — **s vypsaným rozsahem**, protože holé
+     `Write` píše **kamkoli**, a `cwd` naopak povolený implicitně **není** (změřeno obojí, i `..`
+     a symlink ven — [čísla](docs/claude-cli.md#write-a-edit-jen-ve-svém-stromě-467)). Že strom leží
+     v cache, ověřuje **tatáž kontrola jako jinde v repu** (`CacheFile.refusal`, podmínka č. 3).
    - **`Bash` v té sadě není vůbec** — jako první session v téhle aplikaci. Session **necommituje**
      (to dělá aplikace: `git add` a `git rebase --continue`), a bez `Bash`u je to **vlastnost
      sady**, ne délka seznamu zákazů: `Bash(git commit:*)` by se dalo obejít `git -C <strom>
@@ -573,7 +571,7 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
      `ClaudeCommand.disallowedTools` jako u ostatních tří.
    - **Druhá vrstva: co session zkusila zapsat mimo strom, se čte ze streamu** — a když se něco
      najde, výsledek se **nepřijme** (`git add` ani `--continue` neproběhnou) a řekne se to.
-     Odmítnutý pokus se počítá taky: otázka není „povedlo se to“, ale „mířila session mimo strom“.
+     I odmítnutý pokus: otázka není „povedlo se to“, ale „mířila session mimo strom“.
 
    **Sada je vyjmenovaná a test ji tvrdí literálem**, jako u #345 a #452 — a od #467 jsou **všechny
    čtyři na jednom místě** (`SessionToolSetsTests`): rozdíly mezi nimi se ze čtyř souborů nedají
