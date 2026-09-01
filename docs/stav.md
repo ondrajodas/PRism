@@ -6171,7 +6171,7 @@ brána odesílání je ve slotu vypnutá a zapnout si ji kvůli měření by zna
 aby vyšel potřebný stav. Ověřené je obojí do sebe: session naostro nad skutečným konfliktem a celý
 řetěz `git add` → `rebase --continue` proti skutečnému `gitu`.
 
-**`CLAUDE.md` rozdělený potřetí (issue #496)** — z **99 525 B** na **81 430 B** (−18 %).
+**`CLAUDE.md` rozdělený potřetí (issue #496)** — z **99 525 B** na **82 340 B** (−18 %).
 Spouštěčem byla hranice, kterou si pravidlo v souboru samo stanovilo (100 kB): byl **475 bajtů**
 pod ní, takže kterékoli další issue by ji přidáním jednoho odstavce překročilo — a nad tou
 hranicí review na PR **vůbec nedoběhne**, protože Copilot si `CLAUDE.md` bere jako custom
@@ -6193,8 +6193,20 @@ a tučných vět (145 → 140 položek) se porovnal položku po položce a každ
 z `CLAUDE.md` do `docs/`, všechny platné; jeden byl **rozbitý už předtím**
 (`#tři-zlevnění…` proti přejmenované sekci *Čtyři zlevnění*) a #496 ho spravilo.
 
+**Copilot našel dvě reálné nekonzistence a obě se opravily.** Vážnější byla **stráž, která
+tvrdila něco jiného než test, který ji hlídá**: `grep ReviewPublishing App/` vypisoval
+**dvaadvacet** souborů, ne sedm (a `grep BranchPushing App/` devět, ne tři), protože se na ta
+jména odkazuje i z `///` komentářů — kdežto `SingleWayOutTests` srovnává **kód po odečtení
+komentářových řádků**. Věta *„(proto ho ten grep nevypíše)“* u `AppStore` byla přímo
+**nepravdivá**. Nasadil se **filtr, který ostatní grepy v tomhle souboru mají už dlouho**
+(`| grep -vE ':[0-9]+: *///?'`), a to na **všechny tři** výčty téhle třídy včetně
+`ConflictResolving`, kde dnes vychází stejně, ale komentář jinde by ho potichu rozbil; invarianta
+se nezměnila. Druhý nález bylo **číslování modulů, které si odporovalo s tabulkou** — ordinály
+odešly a moduly se jmenují. Rozbor je v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496).
+
 **Cíl „~66 kB jako u #447“ se nesplnil a je změřené proč** (rozpad v záznamu rozhodnutí): próza
-pravidel spadla o 23 % na **~450 B na pravidlo**, tedy přesně na hodnotu, kterou #447 popsalo jako
+pravidel spadla o 22 % na **~450 B na pravidlo**, tedy přesně na hodnotu, kterou #447 popsalo jako
 nestlačitelnou. Rozdíl proti 66,5 kB dělá **počet pravidel a odkazů** (URL v odkazech samy
 přibyly — pravidlo, ze kterého se stěhuje vysvětlení, si odkaz musí nechat), ne rozvláčnost.
 Cesta pod 70 kB vede jedině přes **mazání pravidel**, což je vlastní issue.

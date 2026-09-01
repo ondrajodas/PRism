@@ -3352,7 +3352,7 @@ kterékoli z tehdy otevřených issues by ji přidáním jednoho odstavce překr
 změn rozhodnutí, kterých za M10–M13 přibylo hodně (vestavěný terminál, zápis do remote, session,
 která smí psát, ready for review).
 
-Skončilo to na **81 430 B**, tedy −18 %. Sedm sekcí se přepsalo (`Tvrdé podmínky`, `Konvence`
+Skončilo to na **82 340 B**, tedy −18 %. Sedm sekcí se přepsalo (`Tvrdé podmínky`, `Konvence`
 i podsekce o kresbě, `Pracovní postup`, `Testování`, `Architektura`, `Prostředí`, `Návrh`),
 každý přesunutý odstavec nechal v `CLAUDE.md` odkaz a **nezmizelo ani jedno pravidlo**: všech
 27 grepů dalo po přepsání **týž výstup**, doslovný text grepů je byte za byte stejný a inventář
@@ -3363,19 +3363,42 @@ v popisu PR — obvykle se dvě odrážky slily do jedné, obsah zůstal).
 
 | | před #496 | po #496 |
 |---|---|---|
-| bloky s grepy | 4 627 B | 4 595 B |
+| bloky s grepy | 4 627 B | 4 978 B |
 | tabulky | 6 352 B | 6 623 B |
 | URL v odkazech | 5 733 B | **6 323 B** |
-| próza pravidel | 82 813 B | **63 889 B** |
+| próza pravidel | 82 813 B | **64 416 B** |
 
-Próza spadla o **23 %** a na **140 položek inventáře** (nadpisy, odrážky, věty pravidel) vychází
+Próza spadla o **22 %** a na **140 položek inventáře** (nadpisy, odrážky, věty pravidel) vychází
 **~450 B na pravidlo** — přesně ta hodnota, kterou #447 popsalo jako nestlačitelnou (jedno pravidlo
 = věta imperativu, jméno místa, kde se rozhoduje, a odkaz na měření). Rozdíl proti 66,5 kB tedy
 nedělá rozvláčnost, ale **počet pravidel a odkazů**: URL v odkazech samy o sobě přibyly, protože
 pravidlo, ze kterého se stěhuje vysvětlení, si odkaz **musí** nechat. Cesta pod 70 kB proto vede
 dál jedině přes **mazání pravidel** — vlastní issue, pravidlo po pravidle. Kontrolní číslo
-v `CLAUDE.md` zůstává **hranice 100 kB**; 81 kB od ní nechává ~19 kB na přirozený růst, tedy
+v `CLAUDE.md` zůstává **hranice 100 kB**; 82 kB od ní nechává ~18 kB na přirozený růst, tedy
 přibližně jednu takovou dávku, jaká proběhla mezi #447 a #496.
+
+**Copilot našel v tom přeskládání dvě reálné nekonzistence a obě se opravily** — a jedna z nich
+byla **stráž, která tvrdila něco jiného než test, který ji hlídá**:
+
+- **`grep ReviewPublishing App/` vypisoval dvaadvacet souborů, ne sedm** — a `grep BranchPushing
+  App/` devět, ne tři. `ReviewPublishing` je totiž jméno, na které se v repu odkazuje i z `///`
+  komentářů (`GitHubGateway`, `AppStore+*`, `CommitDiffView`, `LabelPickerView`, dokonce
+  `BranchPushing` a `MetadataRequest`), zatímco `SingleWayOutTests` srovnává **kód po odečtení
+  komentářových řádků** (`swiftFiles()` filtruje `hasPrefix("//")`). Grep v `CLAUDE.md` tedy
+  **nedokazoval to, co říkal**: kdo ho pustil, viděl `AppStore+Submission.swift` v seznamu a musel
+  z toho usoudit, že je podmínka porušená — přitom to jméno tam stojí jedině ve komentáři, který
+  o té podmínce píše. Věta „(proto ho ten grep nevypíše)“ u bodu 3 byla přímo **nepravdivá**.
+  Oprava je **filtr, který ostatní grepy v tomhle souboru mají už dávno**
+  (`| grep -vE ':[0-9]+: *///?'`), nasazený na **všechny tři** výčty téhle třídy — tedy i na
+  `ConflictResolving`, kde dnes vychází stejně, ale komentář jinde by ho potichu rozbil.
+  Invarianta se **nezměnila** (sedm souborů a pět volajících, tři soubory a jedna metoda), jen
+  příkaz konečně vydá to, co je u něj napsané. Je to přesně vzor *„kontrola, která jinde v repu
+  je, a tady chybí“* z tabulky vlastní revize.
+- **Číslování modulů si odporovalo s tabulkou.** Text nad tabulkou psal o „osmém“, „devátém“
+  a „desátém“ modulu chronologicky podle issue (#67, #459, #466), kdežto tabulka řadí
+  `BranchPushing` **před** `TerminalHost` (stejně jako `docs/architektura.md`). Kdo počítal řádky,
+  dostal jiná čísla. Ordinály **odešly** a moduly se jmenují — je to navíc přesně ten druh
+  historického artefaktu, který tohle issue z `CLAUDE.md` odklízí.
 
 **Dva vedlejší nálezy, oba zapsané jako mezera, ne opravené:**
 

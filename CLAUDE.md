@@ -43,7 +43,7 @@ to, co je potřeba znát dřív, než se něco napíše; **podrobnost, měření
 `docs/`**. Kontroluj to **měřením, ne odhadem** — nad ~100 kB je čas rozdělovat znovu:
 
 ```bash
-wc -c < CLAUDE.md    # po #496 ~81 kB; nad ~100 kB je čas rozdělovat znovu
+wc -c < CLAUDE.md    # po #496 ~82 kB; nad ~100 kB je čas rozdělovat znovu
 ```
 
 Co se stalo při 315 kB, jak se pád pozná z logu akce, proč nerozhodovala velikost diffu, proč se
@@ -247,13 +247,23 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
-   2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají to být
-      **sedm souborů a pět volajících**: protokol, `GhReviewPublisher` (implementace),
-      `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna),
-      `CommentSubmission` (komentář pod PR), `MetadataSubmission` (labely, vyžádání reviewera,
-      založení labelu a přepnutí draftu na *ready for review*) a `MergeSubmission` (merge).
-      Všechny leží v `App/Publish/`; volající **mimo** tu složku by znamenal, že cesta ven vede
-      odjinud než z jednoho místa.
+   2. **Grep vyjmenuje všechna místa, odkud to jde.** Mají to být **sedm souborů a pět
+      volajících**: protokol, `GhReviewPublisher` (implementace), `ReviewSubmission.send()`
+      (review), `ThreadSubmission` (odpověď a vyřešení vlákna), `CommentSubmission` (komentář pod
+      PR), `MetadataSubmission` (labely, vyžádání reviewera, založení labelu a přepnutí draftu na
+      *ready for review*) a `MergeSubmission` (merge). Všechny leží v `App/Publish/`; volající
+      **mimo** tu složku by znamenal, že cesta ven vede odjinud než z jednoho místa.
+
+      **Komentáře se musí odečíst, jinak ten grep tvrdí něco jiného, než co hlídá test** (#496):
+      `ReviewPublishing` je jméno, na které se v repu odkazuje z **dvaadvaceti** souborů, protože
+      se o téhle podmínce píše i v `///` komentářích u `GitHubGateway`, `AppStore` nebo views.
+      `SingleWayOutTests` proto srovnává **kód bez komentářových řádků** a grep musí dělat totéž
+      — až s tím filtrem vydá těch sedm, respektive tři:
+
+      ```bash
+      grep -rn 'ReviewPublishing' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u
+      grep -rn 'BranchPushing' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u
+      ```
 
       Protokol má **devět vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
       `setLabels`, `requestReviewers`, `createLabel`, `merge`, `markReadyForReview`. **Každá si
@@ -270,7 +280,8 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
       s důvodem **napsaným v panelu** patří jedině tam, kde se stav **mění** (vypnutá brána,
       červený check, větev pozadu).
    3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká s ní.
-      `AppStore` si kvůli odesílání drží **jen cestu ke `gh`** (proto ho ten grep nevypíše)
+      `AppStore` si kvůli odesílání drží **jen cestu ke `gh`** (proto ho ten grep z bodu 2
+      nevypíše — v `AppStore+Submission.swift` stojí to jméno jedině v komentáři)
       a u vláken, komentářů a labelů **stav**, ne cestu ven. **Merge stav ve store nemá vůbec**
       — sheet ho drží celý (`MergeSubmission` v `@State` okna).
    4. **Odeslání review si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád
@@ -324,7 +335,7 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    `gh pr merge` i `git push` a žádná stráž na to nedosáhne. **Padá tedy jen to, že se ta záruka
    dá dokázat testem**; zbytek platí:
 
-   - aplikace **sama** nic neodesílá — `grep ReviewPublishing App/` vypisuje **týž seznam**,
+   - aplikace **sama** nic neodesílá — grep z bodu 2 vypisuje **týž seznam sedmi souborů**,
      `SingleWayOutTests` prochází **beze změny**, `TerminalHosting` nemá zápisovou metodu a nezná
      `gh` a `TerminalOpening` (#453) se drží **bez volajícího, jako záloha**;
    - **musí to být vidět na obrazovce, ne jen tady**: v hlavičce zásuvky stojí kapsle
@@ -354,8 +365,8 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    bránu a s potvrzením, takže se o něm dá tvrdit test.
 
    **Zápis do remote (#466) je druhý protokol, ne další metoda toho prvního.** `BranchPushing` má
-   **jedinou metodu `push`** a přetlačí jedině větev **vlastního** PR. `grep BranchPushing App/`
-   má vypsat **tři soubory**: protokol, `GitBranchPush` (implementace) a `BranchPushSubmission`
+   **jedinou metodu `push`** a přetlačí jedině větev **vlastního** PR. Grep z bodu 2 má u něj
+   vypsat **tři soubory**: protokol, `GitBranchPush` (implementace) a `BranchPushSubmission`
    (jediný volající, s potvrzovacím sheetem), všechny v `App/Publish/`. **Zakázané je** `commit`,
    `deleteBranch`, `pushTag`, `createBranch` — a **push do základní větve** (cílem je vždycky
    `plan.branch`). Brána je **tatáž** (`PublishScope`, `allowsPublishing`), ne druhý přepínač,
@@ -456,7 +467,9 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    grep -rn 'allowedTools' App/Review | grep -vE ':[0-9]+: *///?'
    # Pozor: grep na `Write(` **vyjde prázdný** — rozsah se skládá interpolací, takže ten řetězec
    # v kódu nestojí. Kdo chce ověřit, že je scoped, musí se zeptat funkce (`SessionToolSetsTests`).
-   grep -rln 'ConflictResolving' App                                # tři soubory
+   # Komentáře se odečítají u všech tří výčtů, viz podmínka č. 1 bod 2 — test hlídá kód, ne text.
+   grep -rn 'ConflictResolving' App | grep -vE ':[0-9]+: *///?' |
+       cut -d: -f1 | sort -u                                        # tři soubory
    grep -rn 'writingTools' App | grep -vE ':[0-9]+: *///?'          # jen ConflictCommand
    ```
 
@@ -500,10 +513,10 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
 ## Architektura
 
 Deset modulů. Pět, které sahají do vnějšího světa, je za protokolem, aby byly v testech
-nahraditelné fake implementací. Osmý (`ReviewPublisher`, #67) je jediný, který **zapisuje na
-GitHub API**, a desátý (`BranchPushing`, #466) jediný, který **zapisuje do remote** — viz tvrdá
-podmínka č. 1. Devátý (`TerminalHost`, #459) je jediný, ve kterém **plnou moc má člověk**, ne
-aplikace — tamtéž.
+nahraditelné fake implementací. **`ReviewPublisher`** (#67) je jediný, který **zapisuje na GitHub
+API**, a **`BranchPushing`** (#466) jediný, který **zapisuje do remote** — viz tvrdá podmínka
+č. 1. **`TerminalHost`** (#459) je jediný, ve kterém **plnou moc má člověk**, ne aplikace —
+tamtéž.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
