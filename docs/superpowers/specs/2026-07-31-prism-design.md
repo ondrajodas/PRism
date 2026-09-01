@@ -3355,7 +3355,7 @@ která smí psát, ready for review).
 Skončilo to na **81 430 B**, tedy −18 %. Sedm sekcí se přepsalo (`Tvrdé podmínky`, `Konvence`
 i podsekce o kresbě, `Pracovní postup`, `Testování`, `Architektura`, `Prostředí`, `Návrh`),
 každý přesunutý odstavec nechal v `CLAUDE.md` odkaz a **nezmizelo ani jedno pravidlo**: všech
-28 grepů dalo po přepsání **týž výstup**, doslovný text grepů je byte za byte stejný a inventář
+27 grepů dalo po přepsání **týž výstup**, doslovný text grepů je byte za byte stejný a inventář
 nadpisů, odrážek a tučných vět se porovnal položku po položce (co ubylo jako odrážka, je popsané
 v popisu PR — obvykle se dvě odrážky slily do jedné, obsah zůstal).
 

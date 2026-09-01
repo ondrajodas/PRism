@@ -6186,7 +6186,7 @@ Cílové soubory už ty rozbory měly, takže se do `docs/` skoro nic nepřidáv
 a [záznam o tomhle
 rozdělení](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496).
 
-**Že nezmizelo pravidlo, je doložené, ne tvrzené.** Všech **28 grepů** z `CLAUDE.md` běželo před
+**Že nezmizelo pravidlo, je doložené, ne tvrzené.** Všech **27 grepů** z `CLAUDE.md` běželo před
 i po a dalo **týž výstup**; doslovný text grepů je byte za byte stejný; inventář nadpisů, odrážek
 a tučných vět (145 → 140 položek) se porovnal položku po položce a každý úbytek je vysvětlený
 (obvykle se dvě odrážky slily do jedné). **Odkazy se od #496 ověřují skriptem nad slugy** — 89 odkazů

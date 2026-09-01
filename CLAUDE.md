@@ -853,8 +853,8 @@ Zásady, které platí všude:
     `UnanimatedWindowTests` ([rozbor i jak se zaseknutý běh pozná od `Early unexpected
     exit`](docs/testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)).
 
-  Pět grepů. Čtyři **musí vyjít prázdné** (guard soubory se odečítají — hledané řetězce v nich
-  stojí jako literály), pátý v `App/` **musí vypsat jen `FontMetric.swift`**:
+  Šest grepů. Pět **musí vyjít prázdných** (guard soubory se odečítají — hledané řetězce v nich
+  stojí jako literály), šestý v `App/` **musí vypsat jen `FontMetric.swift`**:
 
   ```bash
   grep -rn 'NSApp.appearance\|NSApplication.shared.appearance' Tests |
