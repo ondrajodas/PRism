@@ -135,7 +135,7 @@ enum Palette {
     /// je naopak to, co aplikace zrovna dělá, a zhasne, jak se pruh zavře — tedy přesně role, kterou
     /// v tomhle okně nese akcent.
     ///
-    /// Změřeno (`SearchHitTokenTests`), protože kontrast nad wash vrstvou je zrovna to, co #277
+    /// Změřeno (`DiffPaletteTests`), protože kontrast nad wash vrstvou je zrovna to, co #277
     /// jednou pokazilo: `searchHit` je od plochy vzdálený ΔE **11,9** (světlá) a **11,1** (tmavá),
     /// od `searchHitCurrent` **11,0** a **10,9** — tedy na první pohled jiná plocha v obou směrech.
     /// Řetězec IntelliJ Light má na nich **4,20** a **3,10** (dnešní `diffAddedWord` 4,01), řetězec
