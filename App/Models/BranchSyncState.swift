@@ -13,6 +13,13 @@ import Foundation
 enum BranchSyncState: Equatable, Sendable {
     /// Dotahuje se základ a přehrávají commity.
     case rebasing
+    /// **Session slévá konflikty** (#467) — `round` je kolikáté kolo, `files` na čem uvázl rebase.
+    ///
+    /// Vlastní stav, ne `rebasing`: platí se za něj penězi a běží minuty, takže musí být poznat,
+    /// **co** se zdrží a **kolikáté** kolo to je. Co session dělá právě teď, drží `AppStore` vedle
+    /// (`branchSyncActivity`) — mění se při každém tool cally a přepisovat kvůli tomu celý stav by
+    /// znamenalo špinit i to, co se nemění.
+    case resolving(round: Int, files: [String])
     /// **Přerovnáno, nepřetlačeno** — commity leží srovnané v kopii repa a do remote se nesáhlo.
     ///
     /// Vlastní stav, protože je to **normální mezistav, ne porucha**: první krok akce doběhl a na
@@ -38,19 +45,55 @@ enum BranchSyncState: Equatable, Sendable {
     /// tehdy uvázlo. Mlčet o něm je horší: příští rebase v tom stromě by skončil hláškou, které
     /// by nikdo nerozuměl.
     case unfinished(files: [String])
+    /// **Session konflikty nerozřešila** (#467) a rebase **zůstal rozdělaný**.
+    ///
+    /// Vlastní případ vedle `unfinished`, ne příznak u něj: „na tohle nestačím“ je jiná věta než
+    /// „v kopii repa něco leží“ — u prvního se za pokus **zaplatilo** a je z něj co říct
+    /// (`detail`), u druhého se jen našel strom v cache. Slít je do jednoho stavu by znamenalo, že
+    /// zaplacený pokus vypadá stejně jako nález při otevření PR.
+    ///
+    /// `detail` je věta od session (čím si není jistá, nebo proč to nešlo), případně důvod, proč se
+    /// její výsledek nepřijal. `nil` = neřekla nic.
+    case unresolved(files: [String], detail: String?)
     case failed(BranchSyncError)
 
     var isBusy: Bool {
         switch self {
-        case .rebasing, .pushing, .discarding: true
-        case .rebased, .pushed, .alreadyInSync, .conflicted, .unfinished, .failed: false
+        case .rebasing, .resolving, .pushing, .discarding: true
+        case .rebased, .pushed, .alreadyInSync, .conflicted, .unfinished, .unresolved, .failed:
+            false
         }
     }
 
-    /// Leží v cache rozdělaný rebase? Na tom stojí tlačítko `Zahodit rebase`.
-    var hasUnfinishedRebase: Bool {
-        if case .unfinished = self { true } else { false }
+    /// Běží nad tím `claude` session? Na tom stojí tlačítko `Zrušit` u hlášky (#467).
+    ///
+    /// **Vlastní otázka, ne `isBusy`.** Zrušit se dá jedině to, co má co zabít: rebase i zahazování
+    /// jsou volání `gitu` v řádu sekund, kdežto slévání je session, která běží minuty a stojí
+    /// peníze — a „rozmyslel jsem si to“ u ní nesmí znamenat čekat na konec (tatáž úvaha jako
+    /// u `cancelAsk`, #452).
+    var isResolving: Bool {
+        if case .resolving = self { true } else { false }
     }
+
+    /// Leží v cache rozdělaný rebase? Na tom stojí tlačítko `Zahodit rebase`.
+    ///
+    /// **Obojí, `unfinished` i `unresolved`** (#467): jsou to dvě různé věty o jednom a tomtéž
+    /// stavu kopie repa, takže se z nich musí dát zahodit stejně. Kdyby to platilo jen o prvním,
+    /// zůstal by po nerozřešené session rozdělaný rebase, který panel nenabídne uklidit — tedy
+    /// zrovna ten tichý stav v cache, kterému se celá tahle akce vyhýbá.
+    var hasUnfinishedRebase: Bool {
+        switch self {
+        case .unfinished, .unresolved: true
+        default: false
+        }
+    }
+
+    /// Má se u hlášky nabídnout terminál? (#467, návrh sekce 36)
+    ///
+    /// Jedině tam, kde v kopii repa leží **rozdělaný rebase** — tam je kontext připravený a člověk
+    /// v něm má plnou moc (#459). U zahozeného konfliktu (`conflicted`) v cache nic není, takže by
+    /// terminál otevřel strom na hlavě PR a nebylo by v něm co dokončovat.
+    var offersTerminal: Bool { hasUnfinishedRebase }
 
     /// Přerovnaná větev, která čeká na přetlačení. `nil` = nečeká nic.
     ///
@@ -69,6 +112,8 @@ enum BranchSyncState: Equatable, Sendable {
     var sentence: String {
         switch self {
         case .rebasing: "Přehrávám commity nad základem."
+        case .resolving(let round, let files):
+            Policy.conflictActivity(round: round, files: files)
         case .rebased(let branch):
             "Rebase hotový v kopii repa — \(Plural.czech(branch.replayed, one: "commit přehraný", few: "commity přehrané", many: "commitů přehraných")). "
                 + "Do remote se zatím nesáhlo."
@@ -85,6 +130,12 @@ enum BranchSyncState: Equatable, Sendable {
                 ? "V kopii repa leží rozdělaný rebase. Zahoď ho, nebo ho dokonči v terminálu."
                 : "Rebase narazil na konflikt (\(Self.list(files))) a zůstal rozdělaný v kopii repa. "
                     + "Zahoď ho, nebo ho dokonči v terminálu."
+        case .unresolved(let files, let detail):
+            // **Podmět dřív než seznam souborů.** Se seznamem vpředu se věta při třech jménech
+            // rozpadla („Konflikt v a, b, c session nerozřešila…“, vidět v renderu sondy) — je
+            // to cizí text neznámé délky, takže nesmí stát mezi podmětem a přísudkem.
+            "Session konflikt nerozřešila (\(Self.list(files)))\(detail.map { " — \($0)" } ?? ""). "
+                + "Rebase zůstal rozdělaný v kopii repa: zahoď ho, nebo ho dokonči v terminálu."
         case .failed(let error): error.sentence
         }
     }

@@ -265,6 +265,76 @@ struct SingleWayOutTests {
         #expect(!withoutLeases.contains("--force"), "holé --force v cestě do remote")
     }
 
+    // MARK: - Session, která smí psát (#467)
+
+    /// **`ConflictResolving` zná tři soubory**: protokol, implementace a `AppStore`, který si ji
+    /// drží. Volá ji **jedno místo** (`AppStore+ConflictSession`).
+    ///
+    /// Je to tatáž konstrukce jako u `ReviewPublishing` a `BranchPushing`, jen o jiné hranici: tady
+    /// nejde o to, co odejde ven, ale o to, **kolik míst umí spustit session, která píše do
+    /// souborů**. Roste-li ten výčet, roste to, co aplikace umí měnit bez dohledu.
+    @Test("ConflictResolving zná tři soubory a volá ji jedno místo")
+    func namesEverySessionThatWrites() throws {
+        let files = try swiftFiles()
+        let naming = files.filter { $0.code.contains("ConflictResolving") }.map(\.path).sorted()
+
+        #expect(naming == [
+            "Review/ClaudeConflictResolver.swift",
+            "Review/ConflictResolving.swift",
+            "Store/AppStore.swift",
+        ])
+
+        let calling = files.filter { $0.code.contains(".resolve(") }.map(\.path).sorted()
+        #expect(calling == ["Store/AppStore+ConflictSession.swift"])
+    }
+
+    /// **Session, která smí psát, nemá čím odeslat ani commitnout.**
+    ///
+    /// Pět tvrzení nad jejími soubory, a každé kryje jinou cestu: publisher, cesta do remote, `gh`,
+    /// `push` a `commit`. Kdyby se kterákoli z nich objevila, byla by to session, která si výsledek
+    /// pošle sama — a celé rozdělení „session upraví soubory, aplikace commituje a pushuje“ by
+    /// přestalo platit.
+    @Test("Session pro konflikty neumí odeslat ani commitnout")
+    func theWritingSessionCannotSendAnything() throws {
+        let files = try swiftFiles().filter {
+            ["Review/ConflictCommand.swift", "Review/ConflictResolving.swift",
+             "Review/ClaudeConflictResolver.swift"].contains($0.path)
+        }
+
+        #expect(files.count == 3)
+        for file in files {
+            #expect(!file.code.contains("ReviewPublishing"), "\(file.path) zná cestu na API")
+            #expect(!file.code.contains("BranchPushing"), "\(file.path) zná cestu do remote")
+            #expect(!file.code.contains("\"push\""), "\(file.path) skládá push")
+            #expect(!file.code.contains("\"commit\""), "\(file.path) skládá commit")
+        }
+    }
+
+    /// **Rozsah zápisu se skládá na jednom místě.**
+    ///
+    /// Scoped `Write(//…)` je ta brána, na které celé #467 stojí (změřeno — holé `Write` píše
+    /// kamkoli, `docs/claude-cli.md`). Druhé místo, které si ten argument složí samo, by znamenalo
+    /// druhou odpověď na otázku „kam smí session psát“ — a ta by se s první rozešla potichu.
+    ///
+    /// **Hledá se `writingTools`, ne `"Write(//"`**, a je to poučení z prvního pokusu: ten řetězec
+    /// v kódu **nestojí** (skládá se interpolací), takže by grep vyšel prázdný, aniž by cokoli
+    /// tvrdil. Zapsané rozhodnutí „tyhle nástroje píšou“ je naopak literál a je jen jedno.
+    ///
+    /// Druhá půlka je tvrzení o **výsledku**: složená sada nese rozsah u obou zápisových nástrojů
+    /// a nikde holé jméno. To se ze zdrojáku vyčíst nedá, takže se ptá funkce.
+    @Test("Rozsah zápisu skládá jen ConflictCommand")
+    func onlyOnePlaceScopesTheWrites() throws {
+        let deciding = try swiftFiles().filter { $0.code.contains("writingTools") }.map(\.path).sorted()
+
+        #expect(deciding == ["Review/ConflictCommand.swift"])
+
+        let allowed = ConflictCommand.allowedTools(in: URL(filePath: "/cache/PRism/x-sync"))
+        #expect(allowed.contains("Write(///cache/PRism/x-sync/**)"))
+        #expect(allowed.contains("Edit(///cache/PRism/x-sync/**)"))
+        #expect(!allowed.split(separator: ",").contains("Write"))
+        #expect(!allowed.split(separator: ",").contains("Edit"))
+    }
+
     /// **Reviewer má `git push` dál v zákazu** (tvrdá podmínka č. 2).
     ///
     /// Že umí pushnout **aplikace**, není důvod to povolit session — pushuje se přes protokol,

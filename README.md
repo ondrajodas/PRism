@@ -973,12 +973,12 @@ otevření vlastního PR**, takže se o ní okno dozví i po restartu. A **druh�
 nenabízí**, protože přehrát commity znovu nad výsledkem, který neodešel, by tu práci zahodilo
 potichu.
 
-**Konflikt je stav, ne chyba.** Nedokončený rebase se **zahodí** a v panelu je napsané, na kterých
-souborech uvázl (nejvýš tři jména) a že se má vyřešit v terminálu. Když se zahodit nepovede, **leží
-rozdělaný v kopii repa** a je to napsané taky — s tlačítkem **`Zahodit rebase`**, protože tichý
-rozdělaný stav v cache je horší než chyba: příští akce nad tím pull requestem by se nad ním
-zachovala divně. Hledá se přitom **při každém otevření vlastního PR**, ne jen po neúspěšném pokusu —
-aplikaci zabitou uprostřed rebase nemá kde nic zapsat.
+**Konflikt je stav, ne chyba** — a od #467 ho **slije session** (viz níž). Zůstává to pravda i tam,
+kde se slévat nemá čím: bez `claude` se rebase **zahodí** a v panelu je napsané, na kterých souborech
+uvázl (nejvýš tři jména). Rozdělaný rebase v kopii repa je napsaný taky — s tlačítkem **`Zahodit
+rebase`**, protože tichý rozdělaný stav v cache je horší než chyba: příští akce nad tím pull
+requestem by se nad ním zachovala divně. Hledá se přitom **při každém otevření vlastního PR**, ne jen
+po neúspěšném pokusu — aplikaci zabitou uprostřed rebase nemá kde nic zapsat.
 
 **Lease čeká na tu hlavu, ze které se rebasovalo** — ne na tu, kterou má PR v okamžiku potvrzení.
 Mezi rebasem a potvrzením se hlava může pohnout (push z jiného stroje, z terminálu, z GitHubu)
@@ -992,6 +992,50 @@ jako po pushi z terminálu.
 **Rebase běží ve vlastním pracovním stromě**, ne v tom, ve kterém běželo review — ten drží kód,
 proti kterému nálezy platí a ve kterém stojí terminál v zásuvce. Nikdy se nesahá na klony mimo cache
 aplikace.
+
+### Konflikty slije session — a výsledek se ukáže dřív, než se cokoli přetlačí (#467)
+
+Bez konfliktu je `Rebase` nudný. Ten druhý případ do #467 skončil zašedlým tlačítkem a větou
+*„Konflikty odsud zatím vyřešit neumím“* — tedy návodem, jak z okna odejít. Od #467 na něj aplikace
+pustí **headless session Claude Code, která smí měnit soubory** — jedinou svého druhu v celé
+aplikaci.
+
+**Session upraví soubory. Commituje aplikace.** `git add` a `git rebase --continue` dělá aplikace;
+session nemá `Bash`, takže si `git` spustit nemůže. Dvě věci, které commitují, by se rozešly.
+
+**Co ji drží** (a je toho víc než prompt — ten je pojistka, ne brána):
+
+- **`Write` a `Edit` jen v tom stromě v kopii repa, kde rebase uvázl.** Změřeno, že holé povolení
+  `Write` píše **kamkoli**; posílá se proto **s vypsaným rozsahem**, a že strom leží v cache
+  aplikace, ověřuje tatáž kontrola jako u pushe.
+- **Žádný `Bash`** — první session tady, která ho nemá. Chybějící `git` nahrazuje `zdiff3`, po kterém
+  je v konfliktní značce vidět i **základ**, ne jen obě strany.
+- **Žádné `gh`, `git push` dál v zákazu.** Pushuje aplikace, přes protokol, s bránou a s potvrzením.
+- **Když by session psala mimo strom, výsledek se nepřijme** — `git add` ani `--continue` neproběhnou
+  a v panelu je napsané proč.
+
+**Výsledek se ukazuje dřív, než se cokoli přetlačí**, a je to **tentýž sheet** jako u bezkonfliktní
+cesty, jen s obsahem navíc:
+
+- **`Co s tím session udělala`** — které soubory kolidovaly a co s nimi udělala (`vzala obojí`,
+  `ruční slití`, `beze změny`). Rozsah a pořadí výpisu drží **`git`**: soubor, o kterém session mlčí,
+  dostane `beze změny`, a soubor, ve kterém `git` pořád vidí značky, dostane `nevyřešeno` **bez
+  ohledu na to, co o něm session tvrdí**.
+- **Čím si session není jistá** — vlastní řádek, protože je to nejcennější věta z celého výsledku.
+- **Kolik to stálo.** Do `Dneska stálo` se to počítá jako každá jiná session.
+- **`Co z toho vzniklo`** — **diff, ne popis**. Je za výstrahou o lease schválně: uprostřed sheetu
+  by celý payload i tu výstrahu odrolil pod hranu.
+- V patce **`Terminál`** a `Zahodit rebase`. **Bez kliknutí na `Force push` se nepushuje nic.**
+
+**Co nerozřeší, nechá být.** Nedokončený rebase zůstane v kopii repa, panel řekne, čím to bylo,
+a nabídne **`Otevřít v terminálu`** — zásuvka se otevře **v tom stromě, kde to uvázlo**, takže je
+kontext připravený a plnou moc má člověk. Platí to i pro `Zrušit` uprostřed slévání: co už session
+slila, zůstane a jde to zahodit tlačítkem. **Uhádané slití, které projde testy a rozbije se
+v provozu, je horší výsledek než přiznané „na tohle nestačím“.**
+
+**Kol je nejvýš tři.** Rebase se zastaví u každého kolizního commitu a každé kolo je vlastní session,
+tedy vlastní útrata; u čtvrtého je poctivější nabídnout terminál než platit dál. Během slévání je
+v panelu vidět kolo, počet souborů a **co session dělá právě teď**.
 
 Segmenty jsou od #242 **dva**: `Průběh` se odstěhoval do vlastní záložky PR, protože se u kódu
 nečte a u spadlé session se do 300 bodů nevešel ani důvod, ani konec logu. Nálezy v panelu

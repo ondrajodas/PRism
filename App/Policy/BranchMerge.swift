@@ -157,6 +157,10 @@ extension Policy {
         /// Třetí akce sekce — `Připravit k review` (#482). **`absent` všude, kde PR není draft**,
         /// takže se nekreslí ani zašedle; do řady s ostatními dvěma nepatří, viz `PanelBranchView`.
         let ready: ReadyOffer
+        /// Slije aplikace konflikt sama? (#467) Nese to sekce, protože na tom stojí **nápověda**
+        /// u `Rebase` — věta o tom, že to stojí peníze, patří tam, kde se kliká, a view se nemá
+        /// ptát store na druhou věc.
+        let resolvesConflicts: Bool
     }
 
     /// Celá sekce z toho, co o PR víme.
@@ -171,6 +175,10 @@ extension Policy {
         checks: [PullRequestCheck]?,
         blockingFindings: Int,
         sync: BranchSyncState? = nil,
+        /// **Umí aplikace slít konflikt?** (#467) Prochází dál do `branchSyncOffer` a rozhoduje,
+        /// jestli je konflikt překážka. Výchozí `false` proto, že testy sekce, které o slévání
+        /// nejdou, o něm nemají muset vědět — a přísnější odpověď je ta správná výchozí.
+        resolvesConflicts: Bool = false,
         // Stav odesílání metadat (#482) — přepnutí z draftu jde touž branou jako labely, takže
         // se druhé odeslání nemá nabízet. Výchozí `nil` proto, že testy sekce, které o tuhle
         // akci nejdou, o ní nemají muset vědět.
@@ -196,11 +204,13 @@ extension Policy {
                 plan: syncPlan,
                 detail: detail,
                 status: status,
-                sync: sync
+                sync: sync,
+                resolvesConflicts: resolvesConflicts
             ),
             syncPlan: syncPlan,
             primary: primaryBranchAction(merge: merge),
-            ready: readyForReviewOffer(editing: editing, state: detail?.state, action: action)
+            ready: readyForReviewOffer(editing: editing, state: detail?.state, action: action),
+            resolvesConflicts: resolvesConflicts
         )
     }
 

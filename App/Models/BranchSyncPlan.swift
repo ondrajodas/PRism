@@ -53,7 +53,28 @@ enum RebaseOutcome: Equatable, Sendable {
     case rebased(RebasedBranch)
     /// Commity se přehrát nedaly. `aborted` říká, jestli se povedlo strom vrátit tam, kde byl —
     /// když ne, **leží v cache rozdělaný rebase** a musí to být vidět v okně.
-    case conflicted(files: [String], aborted: Bool)
+    ///
+    /// **`worktree` je v tom stavu od #467**, a je to o něco víc než pohodlí: v nezahozeném rebase
+    /// pracuje session, takže musí být odkud vzít cestu — a odvodit si ji z `CacheLayout` na straně
+    /// volajícího by znamenalo druhé místo, které ví, kde ten strom leží. `nil` u zahozeného
+    /// konfliktu není, protože strom existuje i po `--abort`; `nil` je jedině tam, kde se cesta
+    /// nedozvěděla (starý fake v testu).
+    case conflicted(files: [String], aborted: Bool, worktree: URL? = nil)
+}
+
+/// Co vzniklo ze slití konfliktů, když se výsledek zapisoval do indexu (#467).
+struct ConflictStaging: Equatable, Sendable {
+    /// `git diff HEAD -- <kolidující soubory>` **před** zápisem do indexu. Prázdný znamená
+    /// „session soubory nezměnila“ — což je legitimní výsledek (vzala jednu stranu tak, jak byla),
+    /// ale okno o něm nesmí mlčet.
+    var diff: String
+    /// Soubory, ve kterých zůstaly konfliktní značky. **Do indexu se nezapsaly.**
+    var unresolved: [String]
+
+    init(diff: String = "", unresolved: [String] = []) {
+        self.diff = diff
+        self.unresolved = unresolved
+    }
 }
 
 /// Výsledek přehrání commitů (#466).
@@ -96,8 +117,40 @@ struct RebasedBranch: Hashable, Sendable {
     /// Panel mluví dál o přehraných commitech, potvrzení vypisuje obojí pojmenované.
     let replayed: Int
 
+    /// Co s konflikty udělala session (#467). `nil` = **žádné nebyly, nebo se to nedá vědět**.
+    ///
+    /// Dvě různé cesty k `nil` a obě jsou v pořádku: bezkonfliktní rebase konflikty nemá, a rebase
+    /// **najdený v cache po restartu aplikace** o nich vědět nemůže — účet session se z pracovního
+    /// stromu nezrekonstruuje a vymyslet se nesmí (viz `ConflictResolution`). Pushuje se v obou
+    /// případech to samé, protože hlava i `rebasedFrom` v cache jsou.
+    var resolution: ConflictResolution?
+
+    init(
+        worktree: URL,
+        headSha: String,
+        rebasedFrom: String,
+        arriving: [RebasedCommit],
+        replayed: Int,
+        resolution: ConflictResolution? = nil
+    ) {
+        self.worktree = worktree
+        self.headSha = headSha
+        self.rebasedFrom = rebasedFrom
+        self.arriving = arriving
+        self.replayed = replayed
+        self.resolution = resolution
+    }
+
     /// Kolik commitů z base se pod ně dostalo — dopočítané, aby nešlo tvrdit dvě různá čísla.
     var fromBase: Int { max(0, arriving.count - replayed) }
+
+    /// Tentýž výsledek s připsaným účtem session. **Vzniká ve store, ne v `RepoCheckoutu`**:
+    /// checkout o session nic neví a vědět nemá (je to lokální modul nad `gitem`).
+    func reporting(_ resolution: ConflictResolution?) -> RebasedBranch {
+        var copy = self
+        copy.resolution = resolution
+        return copy
+    }
 }
 
 /// Jeden přehraný commit — to, co se vypisuje v potvrzení force pushe (#466, z proklikání).

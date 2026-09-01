@@ -57,6 +57,47 @@ extension AppStore {
 
     // MARK: - První krok: rebase v cache
 
+    /// Spustí srovnání a **počká na něj** — ale ve vlastním tasku, aby šlo zrušit (#467).
+    ///
+    /// **Dva důvody, proč se to nedělá prostým `await` v akci tlačítka.** Za prvé slévání
+    /// konfliktů je `claude` session, která běží minuty a stojí peníze, takže musí být kde vzít
+    /// `cancel()` — jak pro tlačítko `Zrušit`, tak pro zavírání aplikace (#264, #351). Za druhé
+    /// běh drží repo proti eviction (`busyRepositories`), a to se pozná jedině ze zapsaného tasku.
+    ///
+    /// **Čekání zůstává**, takže se volající ani testy nemusí měnit: `await task.value` skončí
+    /// i u zrušeného tasku, jen dřív.
+    func syncBranch(_ pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        // Během zavírání se nic nespouští (#264) — tatáž brána jako u review, kontroly nálezů
+        // a rozhovoru. A druhé srovnání téhož PR taky ne: pracovaly by v jednom stromě.
+        guard !isTerminating, branchSyncTasks[id] == nil else { return }
+        // `Task<Void, Never>`, tedy bez `?` z `self?` — jinak by z uzávěru vypadlo `()?`.
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await performSync(pullRequest)
+        }
+        branchSyncTasks[id] = task
+        await task.value
+        branchSyncTasks[id] = nil
+        branchSyncActivity[id] = nil
+    }
+
+    /// Zrušení uživatelem — **zabije session, která slévá konflikty**.
+    ///
+    /// Rozdělaný rebase v cache **zůstane**: session ho tam nechala rozpracovaný a zahodit ho za
+    /// člověka by znamenalo zahodit i to, co už slila. Panel to řekne (`unfinished`) a nabídne
+    /// `Zahodit rebase` i terminál — tatáž volba jako u nerozřešeného konfliktu.
+    ///
+    /// **Zkratku `⌘.` si to nebere**, ze stejného důvodu jako `cancelAsk` (#452): jedna klávesa
+    /// nesmí podle stavu zastavit jednou review a jindy něco jiného. Je to pojmenované tlačítko
+    /// u té hlášky, ke které patří.
+    func cancelBranchSync(for pr: PRIdentifier) {
+        branchSyncTasks[pr]?.cancel()
+    }
+
+    /// Co session nad konflikty zrovna dělá. Prázdné, dokud neřekla nic.
+    func branchSyncActivityLine(for pr: PRIdentifier) -> String? { branchSyncActivity[pr] }
+
     /// Přehraje commity nad základem — **a nic nepřetlačí**.
     ///
     /// **Kontrola nabídky je tady podruhé** (poprvé ji dělá tlačítko, které je jinak zakázané):
@@ -66,7 +107,7 @@ extension AppStore {
     /// **Když se hlava nezmění, nekončí to mezistavem.** Rebase nad základem, nad kterým už větev
     /// je, vydá tutéž hlavu — a nabídnout k přetlačení něco, co se nezměnilo, by znamenalo sáhnout
     /// na cizí server pro nic. Proto vlastní stav, ne `rebased` s nulou.
-    func syncBranch(_ pullRequest: PullRequestSummary) async {
+    private func performSync(_ pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
         guard let checkout, let plan = branchSyncPlan(for: id) else {
             // Sem se z povoleného tlačítka nedá dojít — `git`, `gh` i pracovní kopii skládá tentýž
@@ -81,11 +122,28 @@ extension AppStore {
 
         branchSyncStates[id] = .rebasing
         do {
-            let outcome = try await checkout.rebase(id, at: plan.expectedRemoteSha, onto: plan.base)
+            // **Konflikt se nechává stát, když ho má kdo slít** (#467). Bez resolveru je chování
+            // to z #466: rebase se zahodí a v cache po něm nic nezůstane.
+            let replayed = try await checkout.rebase(
+                id,
+                at: plan.expectedRemoteSha,
+                onto: plan.base,
+                keepingConflict: conflicts != nil
+            )
+            // **Slévání konfliktů** (#467) — `reported` znamená „stav je nastavený, nepřepisuj ho“:
+            // co session řekla a proč se její výsledek nepřijal, se ví jedině tam.
+            guard case .finished(let outcome) = try await resolveConflicts(
+                in: replayed,
+                of: pullRequest,
+                plan: plan,
+                using: checkout
+            ) else { return }
             switch outcome {
-            case .conflicted(let files, let aborted):
+            case .conflicted(let files, let aborted, _):
                 // Zahozený rebase a rozdělaný rebase jsou **dva různé stavy**: z prvního plyne
-                // „vyřeš to jinde“, z druhého „napřed to ukliď“.
+                // „vyřeš to jinde“, z druhého „napřed to ukliď“. Stav po **nerozřešené session**
+                // je třetí a nastavuje ho `resolveConflicts` — sem se dojde jedině tehdy, když
+                // se o slévání vůbec nepokusilo.
                 branchSyncStates[id] = aborted ? .conflicted(files: files) : .unfinished(files: files)
             case .rebased(let rebased):
                 guard rebased.headSha != plan.expectedRemoteSha else {
@@ -172,6 +230,11 @@ extension AppStore {
             ),
             arriving: rebased.arriving,
             replayed: rebased.replayed,
+            base: syncPlan.base,
+            // Účet session (#467) — **ze snímku, který leží ve stavu**, ne z živého dotazu. Po
+            // restartu aplikace je `nil` a sheet o konfliktech mlčí: účet se z pracovního stromu
+            // zrekonstruovat nedá a vymyslet se nesmí.
+            resolution: rebased.resolution,
             git: git,
             gh: gh,
             layout: cacheLayout,

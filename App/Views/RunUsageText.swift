@@ -19,6 +19,24 @@ enum RunUsageText {
         value.formatted(.currency(code: "USD").presentation(.narrow).precision(.fractionLength(2)))
     }
 
+    /// Kolik stálo slévání konfliktů, k výsledku v potvrzení (#467). `nil` = **session cenu
+    /// nenahlásila**.
+    ///
+    /// **Tady, ne v `Policy`**, a je to tatáž úvaha jako u `cost` o řádek výš: peníze se formátují
+    /// přes locale, takže text s částkou se v `Policy` nedá testovat. `Policy` by k tomu navíc
+    /// nepřidala žádné rozhodnutí — je to sazba, ne pravidlo.
+    ///
+    /// **`nil` není nula.** Zabitá session peníze stála taky, jen o nich nevíme — a `0,00 $` u ní
+    /// by byla nepravda o účtu (tatáž úvaha jako u `spent` níž a u `DailySpend.unknown`).
+    ///
+    /// Kola se říkají **jedině tehdy, když bylo víc než jedno**: „1 kolo“ je informace, kterou si
+    /// nikdo neklade, kdežto tři kola vysvětlují, proč je částka trojnásobná.
+    static func conflictSpent(_ usage: RunUsage?, rounds: Int) -> String? {
+        guard let value = usage?.cost else { return nil }
+        guard rounds > 1 else { return "Slévání stálo \(cost(value))." }
+        return "Slévání stálo \(cost(value)) ve \(Plural.czech(rounds, one: "kole", few: "kolech", many: "kolech"))."
+    }
+
     /// Útrata za den — cena a před ní `≥`, když se do součtu nepodařilo započítat všechno.
     ///
     /// Je to **dolní odhad**: zabitý běh peníze stál taky, jen jeho cenu nikdo nenahlásil.

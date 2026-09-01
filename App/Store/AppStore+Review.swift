@@ -81,9 +81,15 @@ extension AppStore {
         for recheck in recheckTasks.values { recheck.task.cancel() }
         // Rozhovor (#452) taky — je to `claude -p` jako každá jiná session tady.
         for ask in askTasks.values { ask.cancel() }
+        // A slévání konfliktů (#467). Je to `claude -p` jako ostatní, jen navíc **píše do
+        // souborů** — takže po zabité aplikaci nejen platí tokeny, ale pořád i mění pracovní strom
+        // v cache. Rozdělaný rebase v něm je stav, o kterém okno mluví (`unresolved`), takže se tím
+        // nic tichého nenechává.
+        for sync in branchSyncTasks.values { sync.cancel() }
 
         var remaining = Self.terminationChecks
-        while !reviewTasks.isEmpty || !recheckTasks.isEmpty || !askTasks.isEmpty, remaining > 0 {
+        while !reviewTasks.isEmpty || !recheckTasks.isEmpty || !askTasks.isEmpty
+            || !branchSyncTasks.isEmpty, remaining > 0 {
             remaining -= 1
             // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake
             // hodiny čekání přeskočí, a test, který má tvrdit, že po zavření nic neběží, by

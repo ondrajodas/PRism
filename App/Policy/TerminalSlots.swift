@@ -19,6 +19,14 @@ struct TerminalSlot: Hashable, Sendable, Identifiable {
         case shell
         /// `claude --resume` dráhy toho skillu (`▶`).
         case session(String)
+        /// Shell v tom stromě, kde **uvázl rebase** (#467) — `Otevřít v terminálu` u konfliktu.
+        ///
+        /// **Vlastní role, ne `shell`**, a rozhoduje o tom **adresář**: `shell` startuje ve stromě
+        /// posledního review (nebo v bare klonu), kdežto tady je celý smysl v tom, že se člověk
+        /// dostane do **rozdělaného rebase**. Jedna role se dvěma různými adresáři by znamenala, že
+        /// se nedá poznat, kde relace doopravdy stojí — a `TerminalHost` existující ploše adresář
+        /// nepřepíše, takže by popiska v hlavičce lhala.
+        case rebase
     }
 
     let pullRequest: PRIdentifier
@@ -129,6 +137,8 @@ extension Policy {
         switch role {
         case .shell: "shell"
         case .session(let skill): skill
+        // Gitové jméno, jako u akce v panelu (#466) — `rebase` a `force push` se nepřekládají.
+        case .rebase: "rebase"
         }
     }
 

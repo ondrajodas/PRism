@@ -28,7 +28,12 @@ extension Policy {
         case statusFailed(String)
         /// Větev je nad základem — není co přehrávat.
         case upToDate(base: String)
-        /// Větve jdou proti sobě; rebase by skončil konfliktem.
+        /// Větve jdou proti sobě a **konflikt nemá kdo slít** — aplikace nenašla `claude` (#467).
+        ///
+        /// Do #467 to byla překážka **vždycky** a věta u ní posílala do terminálu. Od #467 slévá
+        /// konflikty session, takže zůstává jen pro případ, kdy ji není z čeho spustit: zakázat
+        /// rebase nad konfliktem, který umíme vyřešit, by bylo zakázat zrovna to, kvůli čemu #467
+        /// je.
         case conflicting(base: String)
         /// Právě běží rebase nebo push.
         case running
@@ -52,8 +57,8 @@ extension Policy {
             case .statusFailed(let reason): "Stav větve se nepodařilo zjistit. \(reason)"
             case .upToDate(let base): "Větev je nad \(base) — není co přehrávat."
             case .conflicting(let base):
-                "Větev je v konfliktu s \(base). Konflikty odsud zatím vyřešit neumím — "
-                    + "otevři terminál."
+                "Větev je v konfliktu s \(base) a slévat ho nemá kdo — aplikace nenašla `claude`. "
+                    + "Otevři terminál."
             case .running: "Právě se to srovnává."
             case .unfinishedRebase: "V kopii repa leží rozdělaný rebase. Napřed ho zahoď."
             case .rebasedNotPushed:
@@ -108,7 +113,11 @@ extension Policy {
         plan: BranchSyncPlan?,
         detail: PullRequest?,
         status: BranchStatusState?,
-        sync: BranchSyncState?
+        sync: BranchSyncState?,
+        /// **Umí aplikace konflikt slít?** (#467) `false` = nenašla `claude`, a pak je konflikt
+        /// překážka jako do #466. Výchozí hodnota je `false` schválně: kdo se ptá bez toho, aby
+        /// řekl, že resolver má, dostane tu přísnější odpověď.
+        resolvesConflicts: Bool = false
     ) -> SyncOffer {
         guard editing.isVisible else { return .absent }
 
@@ -150,7 +159,10 @@ extension Policy {
         case .none, .loading: obstacles.append(.statusLoading)
         case .failed(let reason): obstacles.append(.statusFailed(reason))
         case .loaded(let status, _):
-            if status.mergeability == .conflicting || status.mergeState == .dirty {
+            // **Konflikt překážka není, když ho má kdo slít** (#467) — je to celá pointa toho
+            // issue. Bez resolveru zůstává, protože pak z něj plyne totéž co v #466: jde se do
+            // terminálu.
+            if !resolvesConflicts, status.mergeability == .conflicting || status.mergeState == .dirty {
                 obstacles.append(.conflicting(base: plan?.base ?? "základem"))
             }
         }
@@ -215,9 +227,15 @@ extension Policy {
     /// **Mluví jen o prvním kroku, a je to celá pointa rozdělení akce**: tlačítko přehraje commity
     /// v kopii repa a **do remote nesáhne**. Věta o lease se odsud přestěhovala do potvrzení, kde
     /// patří — pod kurzorem by ji člověk čekal až u toho kliknutí, které doopravdy pushuje.
-    static func branchSyncHelp(for plan: BranchSyncPlan) -> String {
+    static func branchSyncHelp(for plan: BranchSyncPlan, resolvesConflicts: Bool = false) -> String {
         let replaying = Plural.czech(plan.replaying, one: "commit", few: "commity", many: "commitů")
-        return "Přehraje \(replaying) nad \(plan.base) v kopii repa. "
+        // **Že konflikty stojí peníze, musí být v nápovědě** (#467): kliknutí na `Rebase` může
+        // spustit až tři session, a to je informace, kterou má člověk mít **před** kliknutím, ne
+        // po něm. Věta se říká jedině tam, kde slévání doopravdy hrozí.
+        let conflicts = resolvesConflicts
+            ? " Konflikty slije session — to stojí peníze."
+            : ""
+        return "Přehraje \(replaying) nad \(plan.base) v kopii repa.\(conflicts) "
             + "Do remote se nesáhne — force push se potvrzuje zvlášť."
     }
 

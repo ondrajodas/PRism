@@ -51,4 +51,20 @@ struct RunUsageTextTests {
     func stopwatchNeverGoesNegative() {
         #expect(RunUsageText.elapsed(.seconds(-5)) == "0:00")
     }
+
+    /// **`nil` cena se nekreslí vůbec** (#467). Zabitá session peníze stála taky, jen o nich
+    /// nevíme — a `0,00 $` u ní by byla nepravda o účtu.
+    @Test("Cena slévání se říká jen když ji session nahlásila")
+    func conflictSpentOnlyWithAKnownCost() {
+        #expect(RunUsageText.conflictSpent(nil, rounds: 1) == nil)
+        #expect(RunUsageText.conflictSpent(RunUsage(turns: 4), rounds: 1) == nil)
+
+        let one = RunUsageText.conflictSpent(RunUsage(cost: 0.42), rounds: 1)
+        #expect(one?.hasPrefix("Slévání stálo") == true)
+        // **Kola jedině nad jedním**: „1 kolo“ je informace, kterou si nikdo neklade.
+        #expect(one?.contains("kole") == false)
+        #expect(RunUsageText.conflictSpent(RunUsage(cost: 1.2), rounds: 3)?.contains("ve 3 kolech") == true)
+        // Částka jde přes tutéž sazbu jako všude jinde — `$`, ne `US$` (locale by dalo `US$`).
+        #expect(one?.contains(RunUsageText.cost(0.42)) == true)
+    }
 }

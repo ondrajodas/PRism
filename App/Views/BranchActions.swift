@@ -30,4 +30,12 @@ struct BranchActions: Sendable {
     var markReady: @MainActor () -> Void = {}
     /// Zapomenout větu o tom, že se přepnutí nepovedlo.
     var clearReadyFailure: @MainActor () -> Void = {}
+    /// Zabít session, která slévá konflikty (#467). Rozdělaný rebase v cache **zůstane** — zahodit
+    /// ho za člověka by znamenalo zahodit i to, co už session slila.
+    var cancelSync: @MainActor () -> Void = {}
+    /// Otevřít zásuvku s terminálem **v tom stromě, kde rebase uvázl** (#467, návrh sekce 36).
+    ///
+    /// Je to ta půlka „co nerozřeší, nechá být“: v rozdělaném rebase má člověk plnou moc a kontext
+    /// připravený, takže se nabízí místo hádání.
+    var openTerminal: @MainActor () -> Void = {}
 }

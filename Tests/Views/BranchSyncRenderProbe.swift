@@ -51,12 +51,38 @@ struct BranchSyncRenderProbe {
         ("10-lease-odmitnut", Scene(behind: 4, checkFailed: false, sync: .failed(.leaseRejected))),
         ("11-cizi-vetev", Scene(behind: 4, checkFailed: false, sync: .failed(.notMine(author: "odinuv")))),
         ("12-fork", Scene(behind: 4, checkFailed: false, sync: nil, crossRepository: true)),
+        // #467 — slévání konfliktů. **Tři scény, protože jsou to tři různá rozvržení**: běžící
+        // session má druhý řádek s krokem a jedno tlačítko, nerozřešený konflikt má dvě tlačítka
+        // na vlastním řádku, a dlouhá věta od session je ta, na které se pozná, jestli se panel
+        // rozsype.
+        ("13-slevam", Scene(
+            behind: 1,
+            checkFailed: false,
+            sync: .resolving(round: 2, files: ["conflict-probe-467.md", "src/Vault/SecretClient.php"]),
+            activity: "upravuje src/Vault/SecretClient.php"
+        )),
+        ("14-nerozreseno", Scene(
+            behind: 1,
+            checkFailed: false,
+            sync: .unresolved(files: ["composer.lock"], detail: "lockfile se musí vygenerovat znovu")
+        )),
+        ("15-nerozreseno-dlouha-veta", Scene(
+            behind: 1,
+            checkFailed: false,
+            sync: .unresolved(
+                files: ["composer.lock", "src/Vault/SecretClient.php", "tests/VaultTest.php"],
+                detail: "dvě nekompatibilní refaktorizace téže třídy, nedá se z kódu rozhodnout, "
+                    + "která má přednost"
+            )
+        )),
     ]
 
     private struct Scene {
         let behind: Int
         let checkFailed: Bool
         let sync: BranchSyncState?
+        /// Co session zrovna dělá (#467) — druhý řádek u hlášky.
+        var activity: String?
         var editing: Policy.MetadataEditing = .allowed
         var crossRepository: Bool? = false
     }
@@ -74,14 +100,17 @@ struct BranchSyncRenderProbe {
                 status: Self.status(behind: scene.behind),
                 checks: Self.checks(failed: scene.checkFailed),
                 blockingFindings: 0,
-                sync: scene.sync
+                sync: scene.sync,
+                // #467: nad konfliktní větví je akce povolená jedině tehdy, když ji má kdo slít.
+                resolvesConflicts: true
             )
         )
 
         let content = PanelBranchView(
             section: section,
             contentWidth: Self.contentWidth,
-            syncState: scene.sync
+            syncState: scene.sync,
+            syncActivity: scene.activity
         )
         .availableWidth(Self.contentWidth)
         .background(Palette.chrome)

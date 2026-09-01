@@ -542,6 +542,10 @@ struct PullRequestDetailView: View {
             branch: store.branchSection(for: pullRequest.id),
             branchActions: branchActions,
             branchSync: store.branchSyncState(for: pullRequest.id),
+            // Co session nad konflikty zrovna dělá (#467) — **vlastní hodnota, ne součást stavu**:
+            // mění se při každém kroku session, kdežto stav zůstává (pravidlo o hrubé vlastnosti,
+            // #472).
+            branchSyncActivity: store.branchSyncActivityLine(for: pullRequest.id),
             // Proti kterému kódu nálezy platí (#392). Rozhoduje `Policy` — panel z toho jen sází
             // větu, takže se okno neptá dvakrát jinak.
             headNotice: headNotice,
@@ -593,7 +597,12 @@ struct PullRequestDetailView: View {
             // `Připravit k review` (#482) **odesílá rovnou** — potvrzení nemá, protože payload je
             // jeden bit. Kontrolu, jestli to jde, dělá store tou samou funkcí, která akci nabízí.
             markReady: { Task { await store.markReadyForReview(on: summary) } },
-            clearReadyFailure: { store.clearMetadataFailure(for: id) }
+            clearReadyFailure: { store.clearMetadataFailure(for: id) },
+            // `Zrušit` zabije session, která slévá konflikty (#467). Rozdělaný rebase v cache
+            // **zůstane** — panel to řekne a nabídne zahodit i terminál.
+            cancelSync: { store.cancelBranchSync(for: id) },
+            // `Otevřít v terminálu` — zásuvka v tom stromě, kde rebase uvázl (#467).
+            openTerminal: { Task { await store.openConflictTerminal(for: id) } }
         )
     }
 

@@ -36,6 +36,19 @@ final class BranchPushSubmission: Identifiable {
     /// seznamu (změřeno 1 proti 2) — a v potvrzení se obojí jmenuje.
     let replayed: Int
 
+    /// Co s konflikty udělala session (#467). `nil` = **žádné nebyly, nebo se to nedá vědět**
+    /// (mezistav nalezený v cache po restartu aplikace).
+    ///
+    /// **Součást snímku, ne živý stav.** Co je v potvrzení vidět, to platí k tomu, co odejde —
+    /// stejně jako počty commitů a lease.
+    let resolution: ConflictResolution?
+
+    /// Základní větev, do nadpisu potvrzení (#467: *Srovnáno s `main` — 2 konflikty vyřešeny*).
+    ///
+    /// **Není v `BranchPushPlan`**, a schválně: plán je payload pushe a cílem je vždycky
+    /// `plan.branch`, ne základ. Základ je tady jen text do nadpisu.
+    let base: String
+
     /// Kolik se pod ně dostalo z base. Dopočítané, ať nejde tvrdit dvě různá čísla.
     var fromBase: Int { max(0, arriving.count - replayed) }
 
@@ -65,6 +78,8 @@ final class BranchPushSubmission: Identifiable {
         plan: BranchPushPlan,
         arriving: [RebasedCommit],
         replayed: Int,
+        base: String = "",
+        resolution: ConflictResolution? = nil,
         pusher: @escaping @MainActor () -> any BranchPushing,
         afterSuccess: @escaping @MainActor (String) async -> Void
     ) {
@@ -72,6 +87,8 @@ final class BranchPushSubmission: Identifiable {
         self.plan = plan
         self.arriving = arriving
         self.replayed = replayed
+        self.base = base
+        self.resolution = resolution
         self.pusher = pusher
         self.afterSuccess = afterSuccess
         state = .ready
@@ -84,6 +101,8 @@ final class BranchPushSubmission: Identifiable {
         plan: BranchPushPlan,
         arriving: [RebasedCommit],
         replayed: Int,
+        base: String = "",
+        resolution: ConflictResolution? = nil,
         git: URL,
         gh: URL,
         layout: CacheLayout,
@@ -97,6 +116,8 @@ final class BranchPushSubmission: Identifiable {
             plan: plan,
             arriving: arriving,
             replayed: replayed,
+            base: base,
+            resolution: resolution,
             // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako plán.
             pusher: {
                 GitBranchPush(

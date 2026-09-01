@@ -144,6 +144,38 @@ extension AppStore {
         terminalFailure = Policy.resumeNotice(outcome, in: Policy.terminalSlotTitle(slot.role))
     }
 
+    /// `Otevřít v terminálu` u rozdělaného rebase (#467) — zásuvka **v tom stromě, kde uvázl**.
+    ///
+    /// **Nic nespouští, jen otevře shell.** Je to ta půlka „co nerozřeší, nechá být“: v rozdělaném
+    /// rebase má člověk plnou moc (#459) a kontext připravený — `git status` mu řekne, na čem to
+    /// stojí, a `git rebase --continue` to dokončí. Aplikace do toho shellu **nepíše nic**: `▶`
+    /// (jediná řádka, kterou umí poslat) míří na `claude --resume` dráhy review, ne sem.
+    ///
+    /// **Vlastní role, ne `shell`** — adresář je jiný a `TerminalHost` existující ploše adresář
+    /// nepřepíše, takže by jedna role se dvěma adresáři znamenala lhavou popisku v hlavičce.
+    ///
+    /// **Cesta se ověřuje existencí složky, ne stavem v panelu.** Strom mohl zmizet (zahodilo se to
+    /// z druhého okna, sebral ho úklid) a shell ve smazané složce je horší než hláška.
+    func openConflictTerminal(for pr: PRIdentifier) async {
+        guard terminals != nil else { return }
+        let slot = TerminalSlot(pullRequest: pr, role: .rebase)
+        isTerminalOpen = true
+        let directory = await existingDirectory(cacheLayout.syncWorktree(for: pr))
+        guard let directory else {
+            terminalFailure = "Kopie repa, ve které rebase uvázl, už v cache není."
+            return
+        }
+        // **Důvěra ke složce dřív, než se relace zobrazí** (#460, #479): strom pro srovnání je git
+        // pracovní strom, kam se důvěra z předka nedědí — takže by se `claude` napsaný v tom shellu
+        // rukou zeptal, jestli té složce věřit.
+        await registerWorkspaceTrust(for: directory)
+        guard admit(slot, showing: true) else {
+            terminalFailure = Policy.slotsFullNotice(Policy.terminalSlotTitle(slot.role))
+            return
+        }
+        terminalDirectories[slot] = directory
+    }
+
     /// Zapíše relaci do seznamu, uklidí po vytlačené a případně na ni přepne.
     ///
     /// `false` = **nevznikla**, protože strop je plný a všechny relace běží. Vytlačuje se jedině

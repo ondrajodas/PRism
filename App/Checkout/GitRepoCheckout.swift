@@ -90,7 +90,12 @@ struct GitRepoCheckout: RepoCheckout {
 
     // MARK: - Srovnání větve (#466)
 
-    func rebase(_ pr: PRIdentifier, at headSha: String, onto base: String) async throws -> RebaseOutcome {
+    func rebase(
+        _ pr: PRIdentifier,
+        at headSha: String,
+        onto base: String,
+        keepingConflict: Bool
+    ) async throws -> RebaseOutcome {
         let path = layout.syncWorktree(for: pr)
         return try await coordinator.run(key: Self.worktreeKey(path), kind: "rebase") {
             // **Základ se dotahuje pokaždé**, i když se strom dá použít znovu: rebase nad
@@ -99,14 +104,80 @@ struct GitRepoCheckout: RepoCheckout {
             let clone = try await prepare(pr.repo)
 
             // Rozdělaný rebase z minula se **nepřepisuje**: je to rozdělaná práce, o které má
-            // rozhodnout člověk (zahodit tlačítkem, nebo dokončit v terminálu).
+            // rozhodnout člověk (zahodit tlačítkem, dokončit v terminálu) — a session ji od #467
+            // dostane až tehdy, když ji vyrobil **tenhle** pokus. Rozdělaný z minula nemusí být
+            // z rebase, o kterém teď rozhodujeme (jiná hlava, jiný základ), takže se nad ním
+            // neplatí za slévání.
             if await hasRebaseInProgress(at: path) {
-                return .conflicted(files: await conflictingFiles(at: path), aborted: false)
+                return .conflicted(
+                    files: await conflictingFiles(at: path),
+                    aborted: false,
+                    worktree: path
+                )
             }
 
             let worktree = try await preparedSyncWorktree(for: pr, at: headSha, in: clone, at: path)
-            return try await replay(in: worktree, from: headSha, onto: "refs/heads/\(base)")
+            return try await replay(
+                in: worktree,
+                from: headSha,
+                onto: "refs/heads/\(base)",
+                keepingConflict: keepingConflict
+            )
         }
+    }
+
+    /// Zapíše slité soubory do indexu a vrátí diff toho, co z nich vzniklo (#467).
+    ///
+    /// **Diff se bere před `git add`**, a je to podstatné: `git diff --cached HEAD` by po zápisu
+    /// obsahoval **celý** přehrávaný commit (změřeno — přibyl v něm soubor, který vůbec
+    /// nekolidoval), kdežto `git diff HEAD -- <soubory>` mluví jen o kolizi. Změřeno taky, že
+    /// `git diff HEAD` nad **nesloučenou** cestou vydá obyčejný dvoustranný diff, ne kombinovaný;
+    /// bez toho by se výpis v potvrzení nedal číst jako diff.
+    ///
+    /// **Soubor se značkami se nezapisuje.** `git add` by je zanesl do commitu a rebase by
+    /// **prošel** — tedy ta nejdražší podoba uhádaného slití, protože se pozná až buildem.
+    func stageResolution(in worktree: URL, paths: [String]) async throws -> ConflictStaging {
+        guard !paths.isEmpty else { return ConflictStaging() }
+        let path = worktree.path(percentEncoded: false)
+        let unresolved = paths.filter { hasConflictMarkers(in: worktree.appending(path: $0)) }
+        let clean = paths.filter { !unresolved.contains($0) }
+        guard !clean.isEmpty else { return ConflictStaging(unresolved: unresolved) }
+
+        let diff = try await run(["-C", path, "diff", "HEAD", "--"] + clean)
+        try await run(["-C", path, "add", "--"] + clean)
+        return ConflictStaging(diff: diff, unresolved: unresolved)
+    }
+
+    func continueRebase(
+        _ pr: PRIdentifier,
+        at headSha: String,
+        onto base: String,
+        keepingConflict: Bool
+    ) async throws -> RebaseOutcome {
+        let path = layout.syncWorktree(for: pr)
+        return try await coordinator.run(key: Self.worktreeKey(path), kind: "rebase-continue") {
+            try await self.replay(
+                in: path,
+                from: headSha,
+                onto: "refs/heads/\(base)",
+                keepingConflict: keepingConflict,
+                continuing: true
+            )
+        }
+    }
+
+    /// Zůstaly v souboru konfliktní značky?
+    ///
+    /// **Hledá se `<<<<<<<` a `>>>>>>>` na začátku řádku, ne `=======`.** Sedm rovnítek je
+    /// v Markdownu podtržení nadpisu a v generovaných souborech oddělovač, takže by na nich test
+    /// odmítal slití, které je v pořádku. Horní a dolní značku naopak `git` napíše vždycky
+    /// a v běžném textu se nevyskytují.
+    ///
+    /// **Nepřečtený soubor se počítá za nevyřešený.** Je to jediná bezpečná odpověď: `git add`
+    /// nad souborem, u kterého nevíme, co v něm je, by značky do commitu zanesl potichu.
+    private func hasConflictMarkers(in file: URL) -> Bool {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return true }
+        return TextLines.all(text).contains { $0.hasPrefix("<<<<<<<") || $0.hasPrefix(">>>>>>>") }
     }
 
     /// **Maže celý strom, ne `rebase --abort`.** Od #466 se zahazují dvě různé věci — rozdělaný
@@ -168,15 +239,24 @@ struct GitRepoCheckout: RepoCheckout {
     private func replay(
         in worktree: URL,
         from headSha: String,
-        onto base: String
+        onto base: String,
+        keepingConflict: Bool,
+        continuing: Bool = false
     ) async throws -> RebaseOutcome {
         let path = worktree.path(percentEncoded: false)
         do {
-            // `GIT_EDITOR=true` je pojistka, ne nutnost: neinteraktivní rebase editor nespouští,
-            // ale konfigurace uživatele (`rebase.autosquash`, aliasy) ho vyvolat umí — a podproces
-            // bez terminálu by na něm visel až do timeoutu.
+            // `GIT_EDITOR=true` je pojistka u `rebase <base>` a **nutnost u `--continue`**:
+            // dokončení kolizního commitu editor zprávy spouští vždycky, takže by podproces bez
+            // terminálu visel do timeoutu (změřeno na scratch repu).
+            //
+            // **`merge.conflictStyle=zdiff3` je tu kvůli session** (#467): značka pak nese vedle
+            // obou stran i **základ**, takže se dá poznat, co která strana změnila — a to je přesně
+            // to, co by si session jinak tahala `gitem`, který v její sadě nástrojů není. Předává
+            // se `-c`, tedy pro jedno volání, ne zápisem do konfigurace: cizí konfigurace se
+            // nepřepisuje ani ve vlastní cache.
             try await run(
-                ["-C", path, "rebase", base],
+                ["-C", path, "-c", "merge.conflictStyle=zdiff3", "rebase"]
+                    + (continuing ? ["--continue"] : [base]),
                 environment: environment.merging(["GIT_EDITOR": "true"]) { _, new in new }
             )
         } catch is CancellationError {
@@ -184,8 +264,13 @@ struct GitRepoCheckout: RepoCheckout {
         } catch {
             guard await hasRebaseInProgress(at: worktree) else { throw error }
             let files = await conflictingFiles(at: worktree)
-            let aborted = try await succeeds(["-C", path, "rebase", "--abort"])
-            return .conflicted(files: files, aborted: aborted)
+            // **Zahodit, nebo nechat stát** — rozhoduje volající, ne tenhle řádek. Session umí
+            // pracovat jedině nad rebasem, který stojí: v zahozeném žádné značky nejsou.
+            var aborted = false
+            if !keepingConflict {
+                aborted = try await succeeds(["-C", path, "rebase", "--abort"])
+            }
+            return .conflicted(files: files, aborted: aborted, worktree: worktree)
         }
 
         let head = try await run(["-C", path, "rev-parse", "HEAD"])

@@ -37,6 +37,9 @@ struct PanelBranchView: View {
     let contentWidth: Double
     /// Co se právě děje se srovnáním větve (#466). `nil` = nic se nedělo.
     var syncState: BranchSyncState?
+    /// Co session nad konflikty zrovna dělá (#467) — **druhý řádek**, ne součást věty o stavu:
+    /// mění se při každém kroku session, kdežto stav zůstává.
+    var syncActivity: String?
     /// Co se právě děje s metadaty PR (#482). Sekci zajímá **jediný** z jeho případů —
     /// `readyFailed`, tedy věta pod tlačítkem `Připravit k review`; ostatní kreslí blok labelů.
     /// Rozhoduje o tom `MetadataActionState.noticePlace`, ne tenhle panel.
@@ -334,7 +337,7 @@ struct PanelBranchView: View {
         guard section.sync.isAllowed, let plan = section.syncPlan else {
             return section.sync.obstacles.map(\.sentence).joined(separator: " ")
         }
-        return Policy.branchSyncHelp(for: plan)
+        return Policy.branchSyncHelp(for: plan, resolvesConflicts: section.resolvesConflicts)
     }
 
     /// Jak dopadlo srovnání větve — **věta v panelu, ne jen v logu**. Drží se, dokud ji člověk
@@ -369,7 +372,11 @@ struct PanelBranchView: View {
                 // je to řádek navíc v panelu, který má 300 bodů.
                 if Self.noticeActions(state) == .one { singleNoticeButton(state) }
             }
-            if Self.noticeActions(state) == .two { pairedNoticeButtons }
+            // **Co session dělá právě teď — druhý řádek, a jedině dokud slévá.** Bez něj je
+            // desetiminutová session k nerozeznání od zaseknutého okna; a po doběhnutí by řádek
+            // o naposled hlášeném kroku zůstal viset nad hotovým výsledkem.
+            if state.isResolving, let syncActivity { activityRow(syncActivity) }
+            if Self.noticeActions(state) == .two { pairedNoticeButtons(state) }
         }
         // **Velikost vypsaná, ne `.caption`.** Celá sekce sází explicitními body (12 popis, 11
         // odpověď) a `.caption` je proti tomu systémová hodnota, která se s nimi rozejde při první
@@ -388,16 +395,23 @@ struct PanelBranchView: View {
 
     private static func noticeActions(_ state: BranchSyncState) -> NoticeActions {
         if state.rebasedBranch != nil { return .two }
-        if state.hasUnfinishedRebase { return .one }
+        // **Rozdělaný rebase má od #467 dvě akce, ne jednu** (návrh sekce 36): `Otevřít
+        // v terminálu` k tomu, co tam už bylo. Vlastní řádek na ně je změřený u #466 — dvě
+        // tlačítka vedle věty jí nechají ~50 bodů, tedy slovo na řádek.
+        if state.hasUnfinishedRebase { return .two }
+        // **Běžící slévání má `Zrušit`**, na rozdíl od rebase a zahazování: je to session, která
+        // běží minuty a stojí peníze, takže „rozmyslel jsem si to“ nesmí znamenat čekat na konec.
+        if state.isResolving { return .one }
         return state.isBusy ? .none : .one
     }
 
-    /// Jedno tlačítko u věty: `Zahodit rebase` u rozdělané práce, jinak `Zavřít` u hlášky.
+    /// Jedno tlačítko u věty: `Zrušit` u běžícího slévání, jinak `Zavřít` u hlášky.
     @ViewBuilder private func singleNoticeButton(_ state: BranchSyncState) -> some View {
-        if state.hasUnfinishedRebase {
-            Button(Self.discardTitle, action: actions.discardSync)
+        if state.isResolving {
+            Button(Self.cancelTitle, action: actions.cancelSync)
                 .buttonStyle(.mini)
                 .fixedSize()
+                .help(Self.cancelHelp)
         } else {
             Button("Zavřít", action: actions.clearSync)
                 .buttonStyle(.mini)
@@ -405,15 +419,36 @@ struct PanelBranchView: View {
         }
     }
 
-    /// Dvojice u přerovnané větve, která neodešla — **na vlastním řádku**.
+    /// Co session zrovna dělá. **Odsazené pod věty**, aby se nečetlo jako druhá věta o stavu.
+    private func activityRow(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: Self.noticeFontSize - 0.5))
+            .foregroundStyle(Palette.ink3)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .help(text)
+            .padding(.leading, 20)
+    }
+
+    /// Dvojice na vlastním řádku — **u přerovnané větve i u rozdělaného rebase** (#467).
     ///
     /// `Force push…` má tři tečky, protože **otevírá potvrzení**; je to tatáž konvence jako
     /// u `Mergnout…` a ze stejného důvodu: co je za tím kliknutím nevratné, se potvrzuje.
-    private var pairedNoticeButtons: some View {
+    ///
+    /// U rozdělaného rebase je hlavní akce `Otevřít v terminálu` (návrh sekce 36): je to ten další
+    /// krok, kterým se s tím dá něco udělat — zahodit znamená vzdát to.
+    @ViewBuilder private func pairedNoticeButtons(_ state: BranchSyncState) -> some View {
         HStack(spacing: Self.actionSpacing) {
-            Button(Self.pushTitle, action: actions.push)
-                .buttonStyle(.miniPrimary)
-                .fixedSize()
+            if state.offersTerminal {
+                Button(Self.terminalTitle, action: actions.openTerminal)
+                    .buttonStyle(.miniPrimary)
+                    .fixedSize()
+                    .help(Self.terminalHelp)
+            } else {
+                Button(Self.pushTitle, action: actions.push)
+                    .buttonStyle(.miniPrimary)
+                    .fixedSize()
+            }
             Button(Self.discardTitle, action: actions.discardSync)
                 .buttonStyle(.mini)
                 .fixedSize()
@@ -423,29 +458,35 @@ struct PanelBranchView: View {
 
     private static let pushTitle = "Force push…"
     private static let discardTitle = "Zahodit rebase"
+    private static let terminalTitle = "Otevřít v terminálu"
+    private static let terminalHelp =
+        "Otevře zásuvku se shellem v té kopii repa, kde rebase uvázl. Tam máš plná práva."
+    private static let cancelTitle = "Zrušit"
+    private static let cancelHelp =
+        "Zabije session. Co už slila, zůstane v kopii repa — zahodit se to dá tlačítkem."
 
     private static let noticeFontSize = 12.0
 
     /// **Ikona ze stavu, ne z barvy** — a `checkmark` jedině u toho, co doopravdy doběhlo.
     private static func noticeIcon(_ state: BranchSyncState) -> String {
         switch state {
-        case .rebasing, .pushing, .discarding: "arrow.triangle.2.circlepath"
+        case .rebasing, .resolving, .pushing, .discarding: "arrow.triangle.2.circlepath"
         // **Ne `checkmark`.** První krok doběhl, ale akce hotová není — do remote se nesáhlo,
         // a zaškrtnutí by tvrdilo, že je uklizeno.
         case .rebased: "arrow.up.circle"
         case .pushed, .alreadyInSync: "checkmark.circle"
-        case .conflicted, .unfinished, .failed: "exclamationmark.triangle"
+        case .conflicted, .unfinished, .unresolved, .failed: "exclamationmark.triangle"
         }
     }
 
     /// **Barva ze škály se bere z palety, nikdy ze systému** (#432).
     private static func noticeTint(_ state: BranchSyncState) -> Color {
         switch state {
-        case .rebasing, .pushing, .discarding: Palette.ink3
+        case .rebasing, .resolving, .pushing, .discarding: Palette.ink3
         case .pushed, .alreadyInSync: Palette.ok
         // Mezistav není ani hotovo, ani porucha — **čeká na rozhodnutí**, a to je tentýž tón jako
         // u rozdělaného rebase.
-        case .rebased, .unfinished: Palette.stale
+        case .rebased, .unfinished, .unresolved: Palette.stale
         case .conflicted, .failed: Palette.crit
         }
     }

@@ -6113,3 +6113,61 @@ zůstala nedotčená.
 **Cestou se otevřela jedna mezera, a je zvlášť**: `CommitPanelRoomTests` spadly v jednom z pěti
 běhů na `šířka znaku: 0`, tedy #407 — `FontMetric` volajícímu tu nulu **vydá** (hlášku o zlomek
 sekundy později složí už z 8,036). S #490 to nesouvisí a nepatří to do jednoho PR.
+
+## #467 — konflikty při srovnání větve vyřeší session (M13)
+
+**Čtvrtá session v téhle aplikaci, a první, která smí měnit soubory.** Do #467 skončil `Rebase`
+(#466) nad konfliktní větví zašedlým tlačítkem a větou *„Konflikty odsud zatím vyřešit neumím —
+otevři terminál.“*, tedy návodem, jak z okna odejít. Od #467 je slévá headless session se `Write`
+a `Edit`; **commituje aplikace** (`git add`, `git rebase --continue`), do remote se pořád píše jedině
+přes `BranchPushing` a jedině z potvrzení.
+
+**Tvrdá podmínka č. 2 se tím mění, č. 1 ne** — a drží ji čtyři meze, každá kontrolovatelná: scoped
+`Write(//<strom>/**)` na ten strom v cache, ve kterém rebase uvázl; **žádný `Bash`** (první taková
+session tady); `gh` a `git push` v zákazech z téže konstanty jako jinde; a druhá vrstva, která čte ze
+streamu, **kam session zkusila psát** — při zápisu mimo strom se výsledek nepřijme vůbec.
+
+**Že je to brána a ne prompt, je změřené, a měřilo se to obojí.** Holé `Write` v `--allowedTools`
+píše **kamkoli** (session přepsala soubor v sousední složce); scoped pravidlo povoluje právě ten
+podstrom a `cwd` **implicitně zapisovatelný není**. `..` se normalizuje před kontrolou, symlink ze
+stromu ven se odmítne. Čísla jsou v [`docs/claude-cli.md`](claude-cli.md#slévání-konfliktů-467--čtvrtá-session-a-první-která-píše).
+
+**Naostro to udělalo to, co mělo.** Na scratch repu s konfliktem, jehož správná odpověď je „vezmi
+obojí“ (`master` vzal timeout z konfigurace, přehrávaný commit pod něj přidal `$retries`), session
+zachovala oba záměry, nezůstala žádná značka, sáhla jedině do svého stromu a účet přišel v tom tvaru,
+který `ConflictCommand.parse` čte. **$0,355, 4 kola modelu, 23 s.** `caveats` k tomu nesly informaci,
+kterou by aplikace sama nezjistila — *„$retries zůstává v metodě nepoužitá“*.
+
+**Účet session a doklad z `gitu` se nesmí slít, a proto jsou v potvrzení vedle sebe.** *Co s tím
+session udělala* je tvrzení modelu, ale **rozsah a pořadí výpisu drží `git`**: soubor, o kterém
+session mlčí, dostane `beze změny`, a soubor, ve kterém `git` pořád vidí značky, dostane
+`nevyřešeno` **bez ohledu na to, co o něm session tvrdí**. *Co z toho vzniklo* je `git diff HEAD --
+<kolidující soubory>`, tedy kód, ne popis — brané **před** `git add`, protože `--cached` by po zápisu
+obsahoval celý přehrávaný commit (změřeno).
+
+**Co nerozřeší, přiznává se.** Tři konce nechají rozdělaný rebase v cache a nabídnou `Zahodit rebase`
+i `Otevřít v terminálu` (#459, vlastní role relace v tom stromě, kde to uvázlo): zápis mimo strom,
+zbylé značky, vyčerpaná kola (strop **tři**, proti účtu). **Zrušení má vlastní stav** — `.interrupted`
+z #466 by nenabídlo tlačítka na úklid, přitom v kopii repa leží rozdělaná práce.
+
+Testů **4660**, všechny zelené — z toho **68 nových** v pěti suitách a šest nových scén ve dvou
+sondách. Nejcennější je negativní půlka: nula `git add` i nula `--continue` po zápisu mimo strom
+a nad zbylými značkami, nula čtvrtých kol, nula spuštění session nad stromem mimo cache a nula
+`push` v celé sadě. **Sady povolení všech čtyř session jsou od #467 na jednom místě**
+(`SessionToolSetsTests`) a tvrdí se **literálem**: čtyři sady jsou čtyři místa, kde se dá tvrdá
+podmínka č. 2 porušit, a rozdíly mezi nimi se ze čtyř souborů nedají přečíst. **Regrese se ověřila
+vložením regrese** — bez kontroly značek spadly dva testy, bez `zdiff3` jeden.
+
+**Dvě odchylky od zákresu, obě z renderu** a obě v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--session-která-smí-psát-467):
+diff je v potvrzení **až za výstrahou o lease** (s diffem uprostřed spadla na podlaze sheetu pod
+hranu výstraha **i celý** výpis `Co odejde`) a v patce stojí `Terminál`, ne `Otevřít v terminálu`
+(čtvrté tlačítko se do 460 bodů nevejde; zahodit `Zrušit`, jak to kreslí zákres, bylo zamítnuto —
+nese `⎋`). K tomu jedna oprava z renderu: `beze změny` má `—`, ne `✓`, protože glyf odpovídá na
+„sáhla na to session“, ne na „dá se to commitnout“.
+
+**Zapsaná mezera:** klik na `Rebase` nad skutečným konfliktním PR z okna **neměřil autor změny** —
+brána odesílání je ve slotu vypnutá a zapnout si ji kvůli měření by znamenalo přepsat konfiguraci,
+aby vyšel potřebný stav. Ověřené je obojí do sebe: session naostro nad skutečným konfliktem a celý
+řetěz `git add` → `rebase --continue` proti skutečnému `gitu`.
+
