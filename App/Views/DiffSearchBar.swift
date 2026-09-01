@@ -59,12 +59,18 @@ struct DiffSearchBar: View {
             .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.line) }
             .focused($isFocused)
             // `↵` = další výskyt, `⇧↵` = předchozí. Na **poli**, ne jako zkratka okna: fokus je
-            // v něm, takže by ho okno nedostalo — a `⌘↵` v tomhle okně otevírá potvrzení odeslání
-            // review, takže se `↵` s ničím nesráží. Jeden handler na obojí, protože
+            // v něm, takže by ho okno nedostalo. Jeden handler na obojí, protože
             // `onKeyPress(_:modifiers:)` bere `modifiers` jako množinu, ve které stisk **smí**
             // ležet, ne jako množinu, která musí sednout přesně (nález z #413).
+            //
+            // **Klávesa s `⌘`, `⌃` nebo `⌥` se propustí dál** (nález z revize #152): `onKeyPress`
+            // dostane `↵` **se všemi modifikátory**, takže bezpodmínečné `.handled` by spolklo
+            // i `⌘↵` a `⌃↵` — a ty v tomhle okně otevírají **potvrzení odeslání review** (#151).
+            // Rozhoduje `Policy.searchStepKey`, tedy tatáž třída jako `claimsReturnShortcut`.
             .onKeyPress(keys: [.return]) { press in
-                step(press.modifiers.contains(.shift) ? .backward : .forward)
+                guard let direction = Policy.searchStepKey(modifiers: ShortcutModifiers(press.modifiers))
+                else { return .ignored }
+                step(direction)
                 return .handled
             }
             // Fokus **o průchod později** (#184): přiřazení ve stejném průchodu, ve kterém pole

@@ -100,9 +100,32 @@ struct DiffSearchNavigationTests {
     /// Stará pozice po přeskládání seznamu **nesmí ukazovat na cizí výskyt** — pruh pak řekne
     /// jen počet, jako před prvním skokem.
     @Test("Pozice mimo seznam se zapomíná")
-    func staleePositionIsDropped() {
+    func stalePositionIsDropped() {
         let query = DiffSearchQuery(text: "x")
         #expect(Policy.searchReport(query: query, total: 3, current: 7) == .hits(position: nil, total: 3))
+    }
+
+    // MARK: - `↵` v poli
+
+    /// **Nález z revize #152.** `onKeyPress(keys:)` dostane klávesu se **všemi** modifikátory, takže
+    /// bezpodmínečné `.handled` by v poli spolklo i `⌘↵` a `⌃↵` — a ty v tomhle okně otevírají
+    /// potvrzení odeslání review (#151, #441). Tvrdí se to výčtem, protože je to tvrzení o kolizi
+    /// zkratek, ne o hledání.
+    @Test("Čisté ↵ skáče, ⇧↵ zpátky, cokoli s ⌘/⌃/⌥ se propustí")
+    func returnKeyYieldsToWindowShortcuts() {
+        #expect(Policy.searchStepKey(modifiers: []) == .forward)
+        #expect(Policy.searchStepKey(modifiers: .shift) == .backward)
+
+        for modifiers: ShortcutModifiers in [
+            .command, .control, .option,
+            [.command, .shift], [.control, .shift], [.option, .shift],
+            [.command, .option],
+        ] {
+            #expect(
+                Policy.searchStepKey(modifiers: modifiers) == nil,
+                "\(modifiers.glyphs)↵ si pruh nesmí vzít"
+            )
+        }
     }
 
     // MARK: - Věty o rozsahu

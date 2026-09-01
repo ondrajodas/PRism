@@ -32,6 +32,20 @@ extension Policy {
         }
     }
 
+    /// Co udělá `↵` v poli hledání — a kdy se **propustí dál** (#152, nález z revize).
+    ///
+    /// Čisté `↵` skočí na další výskyt, `⇧↵` na předchozí. **Cokoli s `⌘`, `⌃` nebo `⌥` se
+    /// propustí** (`nil`): `⌘↵` i `⌃↵` má v tomhle okně **otevření potvrzení odeslání review**
+    /// (#151, #441), a spolknout je znamená rozbít tu zkratku na celou dobu, kdy je fokus v poli.
+    /// `onKeyPress(keys:)` totiž dostane klávesu **se všemi modifikátory**, ne jen bez nich.
+    ///
+    /// Funkce nad hodnotou, ne `if` ve view: je to tvrzení o **kolizi zkratek**, tedy tatáž třída
+    /// jako `claimsReturnShortcut` a `canCloseCommit` — a dá se projít testem.
+    static func searchStepKey(modifiers: ShortcutModifiers) -> NavigationStep? {
+        guard modifiers.subtracting(.shift).isEmpty else { return nil }
+        return modifiers.contains(.shift) ? .backward : .forward
+    }
+
     /// Co je v pruhu napsané u počtu — `4` + ` z 17 výskytů`, nebo `17` + ` výskytů` před prvním
     /// skokem.
     ///

@@ -32,6 +32,20 @@ extension WindowShortcut.Key {
 }
 
 extension ShortcutModifiers {
+    /// Modifikátory stisknuté klávesy do jazyka katalogu (#152).
+    ///
+    /// **Tady, ne u volajícího**: tenhle soubor je jediné místo, které mluví oběma jazyky, a druhý
+    /// překlad by se s tímhle rozešel. Potřebuje to pole hledání, které se rozhoduje, jestli si `↵`
+    /// vezme, nebo ho propustí okenní zkratce (`Policy.searchStepKey`).
+    init(_ modifiers: EventModifiers) {
+        var result: ShortcutModifiers = []
+        if modifiers.contains(.command) { result.insert(.command) }
+        if modifiers.contains(.control) { result.insert(.control) }
+        if modifiers.contains(.option) { result.insert(.option) }
+        if modifiers.contains(.shift) { result.insert(.shift) }
+        self = result
+    }
+
     var eventModifiers: EventModifiers {
         var modifiers: EventModifiers = []
         if contains(.control) { modifiers.insert(.control) }

@@ -36,7 +36,7 @@ struct DiffSearchRenderProbe {
             try render(bar(.hits), to: "01-vyskyty-\(suffix).png", dark: dark, height: 34)
             try render(bar(.empty), to: "02-nic-\(suffix).png", dark: dark, height: 34)
             try render(bar(.idle), to: "03-prazdne-pole-\(suffix).png", dark: dark, height: 34)
-            try render(codeBlock(current: 1), to: "04-kod-\(suffix).png", dark: dark, height: 150)
+            try render(codeBlock(current: 1, dark: dark), to: "04-kod-\(suffix).png", dark: dark, height: 150)
             try render(header(), to: "05-hlavicka-\(suffix).png", dark: dark, height: 40)
         }
         print("Hledání v diffu vyrenderované do \(Self.output.path)")
@@ -75,13 +75,17 @@ struct DiffSearchRenderProbe {
 
     /// Blok kódu s výskyty — včetně toho, který leží **uvnitř** změněného slova, protože právě na
     /// něm se pozná, že hledání vyhrává nad word-level vrstvou.
-    private func codeBlock(current: Int) -> some View {
+    ///
+    /// **Režim se předává, nezadrátovává** (nález z revize #152): `DiffCodeBlockView` z něj bere
+    /// paletu syntaxe, takže se zadrátovaným `.light` by tmavý render kreslil světlou syntaxi —
+    /// tedy obrázek, ze kterého se o tmavém motivu nedá nic tvrdit.
+    private func codeBlock(current: Int, dark: Bool) -> some View {
         let lines = Self.codeLines
         let hit = DiffSearchHit(path: Self.path, line: lines[current], occurrence: 0)
         return DiffCodeBlockView(
             block: DiffBlock(lines: lines),
             language: Language(path: Self.path),
-            colorScheme: .light,
+            colorScheme: dark ? .dark : .light,
             search: DiffSearchHighlight(
                 query: DiffSearchQuery(text: "FLUSH_TIMEOUT"),
                 current: hit
