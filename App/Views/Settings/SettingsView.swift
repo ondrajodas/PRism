@@ -149,7 +149,7 @@ struct SettingsView: View {
     /// nečte jen konfiguraci, ale i to, co dorazilo z pollingu.
     @ViewBuilder private var page: some View {
         switch section {
-        case .sources: SourcesSettingsView(settings: settings)
+        case .sources: SourcesSettingsView(settings: settings, viewer: store.viewer)
         case .review: ReviewSettingsView(settings: settings)
         case .diff: DiffSettingsView(settings: settings)
         case .publishing: PublishingSettingsView(settings: settings)

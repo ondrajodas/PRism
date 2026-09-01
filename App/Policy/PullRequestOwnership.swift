@@ -90,10 +90,59 @@ extension Policy {
         return value.isEmpty ? nil : String(value)
     }
 
+    /// Přihlášený účet, jak se ukáže nad seznamem vlastních loginů v nastavení (#389).
+    ///
+    /// Existuje kvůli tomu, aby prázdný seznam v okně neznamenal „nevím, kdo jsem“: loginy
+    /// z konfigurace jsou ty **navíc**, kdežto ten hlavní se bere z `gh api user` a napsat se nedá.
+    /// Bez řádku nad polem by se prázdno (běžný stav) nedalo odlišit od nenačteného viewera (stav,
+    /// ve kterém je **každý** PR cizí) — a to je tentýž rozdíl, který dole hlídá `ownership(of:)`.
+    static func viewerAccount(login: String?) -> ViewerAccount {
+        guard let login = normalizedLogin(login) else { return .unknown }
+        return .known(login: login)
+    }
+
     /// Login v porovnatelném tvaru. `nil` = nic, co by se dalo s někým porovnat.
     private static func normalizedLogin(_ login: String?) -> String? {
         guard let trimmed = login?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty else { return nil }
         return trimmed.lowercased()
+    }
+}
+
+/// Přihlášený účet v nastavení (#389) — `gh` ho zjistí sám, napsat se nedá.
+///
+/// Vlastní typ, ne `String?`, ze stejného důvodu jako `ReviewTimeout.Problem`: u nenačteného
+/// viewera se musí říct **co to znamená**, ne jen že tam nic není. „Nevím, kdo jsem“ totiž není
+/// kosmetika — v tom stavu spadne každý pull request do cizí fronty.
+enum ViewerAccount: Hashable, Sendable {
+    /// `gh api user` odpověděl. Login je v porovnatelném tvaru, tedy tom, ve kterém se pak
+    /// rozřazuje.
+    case known(login: String)
+    /// Login ještě není. Při startu je to normální okamžik, po chybě `gh` stav, který vysvětluje,
+    /// proč je fronta plná a vlastní PR nikde.
+    case unknown
+
+    /// Co stojí v řádku vpravo.
+    ///
+    /// **`nezjištěno`, ne `zjišťuje se`**: dotaz na login jde **jednou při startu** a neopakuje se
+    /// (`AppStore.loadViewer`), takže po selhání `gh` se ten stav sám nezmění. „Zjišťuje se“ by
+    /// slibovalo práci, která neběží — a čekalo by se na ni marně.
+    var label: String {
+        switch self {
+        case .known(let login): login
+        case .unknown: "nezjištěno"
+        }
+    }
+
+    /// Co je na tom stavu potřeba dovysvětlit. `nil` = nic, účet je znám.
+    ///
+    /// Nese **obojí**: co to znamená (všechno cizí) a proč to samo nepřejde (ptá se jen při
+    /// startu, takže pomůže restart, ne čekání).
+    var note: String? {
+        switch self {
+        case .known: nil
+        case .unknown:
+            "Login se zjišťuje jen při startu. Dokud není, počítá se každý pull request jako cizí."
+        }
     }
 }

@@ -26,8 +26,13 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// tím, že PR agenta spadne do cizí fronty.
     ///
     /// **Globálně, ne per repo**, jako prompt nebo vzhled: kdo jsem já, z repozitáře neplyne.
-    /// **V okně nastavení pole není** — je to jednorázová věc pro toho, kdo si pouští agenta pod
-    /// vlastním účtem, a nová sekce nastavení by znamenala změnu vzhledu, tedy mockup a schválení.
+    ///
+    /// **Od #389 je pole i v okně** — na stránce `Zdroje PR`, v sekci `Moje loginy`, protože je to
+    /// otázka identity, tedy tatáž, na kterou odpovídají zdroje. Do #389 se dalo napsat jedině do
+    /// souboru a rozřazení fronty tak bylo bez editoru textu nedostupné. Nad seznamem stojí
+    /// **přihlášený účet ke čtení** (`Policy.viewerAccount(login:)`): bez něj by prázdný seznam
+    /// (běžný stav) vypadal stejně jako nenačtený viewer, a to je stav, ve kterém je **každý** PR
+    /// cizí.
     var ownLogins: [String]
     /// Sada, která platí, dokud ji nepřebije jazyk nebo repo. Je to ta „hvězdička“
     /// z rozpisu v #24 — druhý zápis téhož by byla past pro toho, kdo soubor čte.
@@ -111,9 +116,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// rozhodlo jednou (tahá se vždycky, i v automatu) a knoflík, který si nikdo nenastaví, je
     /// jen řádek v okně.
     ///
-    /// **V okně nastavení pole není**, jako `ownLogins`: je to jednorázová věc pro toho, kdo má
-    /// tracker za MCP serverem, a nová sekce nastavení znamená změnu vzhledu, tedy mockup
-    /// a schválení.
+    /// **Od #389 je pole i v okně** — na stránce `Review a skilly`, v sekci `Text issue z trackeru`,
+    /// hned pod promptem: je to materiál zadání, tedy tatáž otázka jako prompt. Do #389 se dalo
+    /// napsat jedině do souboru, takže celé #345 bylo bez editoru textu nedostupné. Že prázdno
+    /// znamená `netahat` a že jméno bez prefixu `mcp__` session nezavolá, říká **věta pod polem**
+    /// (`Policy.issueTextToolNote(for:)`) — jinak by se prázdno čtlo jako porucha.
     ///
     /// **Globálně, ne per repo**: který nástroj čte issues, z repozitáře neplyne.
     var issueTextTool: String?

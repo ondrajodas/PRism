@@ -3070,6 +3070,30 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   oprávnění, selhání systému ani událost vypnutá v nastavení čas posunout nesmí — jinak by
   stavový řádek tvrdil, že notifikace fungují, zrovna když nefungují. Plus že pozdější selhání
   poslední úspěch nesmaže a že se před prvním doručením nemá co ukazovat.
+- **Dvě pole z okna, která se dřív daly nastavit jen v souboru (#389)** — a je to tři sady, protože
+  otázky jsou tři. `IssueTextToolNoteTests` je čistá `Policy` výčtem: tři stavy věty pod polem
+  (`netahá se` / `tahá se` / varování u jména bez prefixu `mcp__`), **tři různé texty** (jedna věta
+  se závorkou by z okna nedala poznat, který stav platí) a jedno tvrzení, které je z nich
+  nejcennější — **věta pod polem se rozhoduje týmž měřítkem jako cesta do běhu**
+  (`Policy.issueTextTool(from:)`), takže nemůže nastat pole s „tahá se“ a review, ve kterém se
+  netahá. `ViewerAccount` je ve `PullRequestOwnershipTests` u zbytku identity.
+
+  `SettingsFieldEffectTests` jde tou **skutečnou cestou** — `SettingsModel` (to, co drží formulář)
+  → `AppStore.updateConfiguration` → review —, ne přímým zápisem do `Configuration`. **Nejcennější
+  test celé sady tvrdí, že se něco nestalo**: po vymazání pole v okně se dotažení textu
+  **nepustí** (`fetcher.calls.isEmpty`) a na ose stojí `toolNotConfigured`, tedy `netahalo se`,
+  ne `nepovedlo se`. Ověřeno **vložením regrese**: s `configuration.global.issueTextTool ?? ""`
+  místo té stráže padnou dva testy a je z nich vidět, že session dostala prázdné jméno. Vedle toho
+  protějšek s vyplněným polem (bez něj by první test prošel i nad kódem, který pole do konfigurace
+  nepropisuje vůbec) a druhé pole: login přidaný v okně **přehodí PR z fronty do vlastních bez
+  dalšího tiku pollingu**.
+
+  `SettingsFieldsRenderTests` zavírá mezeru, kterou ty dvě sady nechávají: prošly by i nad
+  stránkou, na které to pole vůbec **není nakreslené**. Tvrdí se to **rozdílem bitmap** dvou
+  renderů téže stránky (`NSHostingView` v okně bez animace, `Form` je `ScrollView` a offscreen se
+  nerasterizuje) — accessibility tree se v takovém okně nenaplní, takže „je to vidět“ se dá tvrdit
+  jedině z pixelů. Tvrzení je slabší (neříká **co** se změnilo), ale nenapojené pole chytá stejně
+  dobře: ověřeno regresí, s `EmptyView()` místo `IssueTextToolField` padnou dva ze čtyř testů.
 - **`SettingsModel`** — odložený zápis přes `FakeTimeSource` (tedy v nulovém reálném čase):
   že se rychlé změny slijí do jednoho zápisu, že `flush()` uloží bez čekání, že změna
   zvenčí formulář srovná, ale vlastní uložení ne, a že je selhání zápisu vidět. Na testech

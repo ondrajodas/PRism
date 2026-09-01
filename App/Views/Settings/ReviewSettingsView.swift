@@ -84,6 +84,19 @@ struct ReviewSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // Pod promptem, ne mezi sady skillů a ne na vlastní stránku (#389): text issue je
+            // **materiál zadání**, tedy tatáž otázka jako prompt o řádek výš — co reviewer dostane,
+            // než začne číst diff. Blokující kategorie pod tím mluví už o výsledku.
+            Section {
+                IssueTextToolField(tool: $settings.draft.global.issueTextTool)
+            } header: {
+                Text("Text issue z trackeru")
+            } footer: {
+                Text("Jméno není kontrakt, ale fakt o tomhle stroji: závisí na tom, jak si člověk MCP server pojmenoval, takže pevný seznam ani výchozí hodnota tady být nemůže — servery vypíše `claude mcp list`. Prázdné pole znamená **netahat**, ne „nezadáno“: session, která nemá co zavolat, stojí boot a nevrátí nic. U PR s odkazem na issue pak zůstane odznak `zadání není celé` s důvodem `nástroj není nastavený`.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 StringListEditor(
                     items: $settings.draft.global.blockingCategories,
