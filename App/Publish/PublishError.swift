@@ -192,6 +192,12 @@ extension PublishError {
             self = .branchMoved(text)
         // 405 u merge: `Pull Request is not mergeable`. **Před** obecným 403/422 níž není potřeba
         // nic řadit — je to jediná hláška, která tenhle text nese.
+        //
+        // **`405` má i druhou podobu, a ta sem schválně nespadá** (změřeno u #482 na
+        // `prism-review-sandbox#11`): merge nad draftem vrací `Pull Request is still a draft`.
+        // Rozšířit na ni tenhle případ by znamenalo větev bez volajícího — merge se nad draftem
+        // **neposílá** (`Policy.mergeOffer` vydá `draftPullRequest`) —, takže propadne do
+        // `unknown` s celým textem. Neurčitá pravda je lepší než případ, který nikdo nevyvolá.
         case text.contains("not mergeable"):
             self = .notMergeable(text)
         case text.contains("Can not approve your own"),

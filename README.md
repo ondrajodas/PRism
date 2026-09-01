@@ -13,10 +13,12 @@ názoru.
 
 > **Na GitHub vede jediná cesta a otevírá ji jen člověk.** Aplikace umí odeslat review,
 > odpovědět do vlákna, napsat komentář pod PR a na **vlastním** PR nastavit labely, vyžádat
-> review a založit label, který repozitář ještě nezná, ale výhradně přes jeden modul a jen na
+> review, založit label, který repozitář ještě nezná, mergnout ho a **přepnout ho z draftu na
+> Ready for review**, ale výhradně přes jeden modul a jen na
 > výslovný pokyn — review navíc proti commitu,
-> který jsi opravdu viděl. Co tudy **nejde**: approve mimo review, merge, zavření PR, milník
-> a **smazání labelu**. Nic se neodesílá samo — ani návrh verdiktu, ani reviewer.
+> který jsi opravdu viděl. Co tudy **nejde**: approve mimo review, zavření PR, milník,
+> **smazání labelu** a **návrat do draftu**. Nic se neodesílá samo — ani návrh verdiktu, ani
+> reviewer.
 >
 > **A jedině tam, kde se to povolilo.** Odesílání je ve výchozím stavu vypnuté — zapíná se
 > v nastavení, globálně nebo u jednoho repa. Dokud si o to někdo výslovně neřekne, neodejde
@@ -864,7 +866,8 @@ a komentáře; s vypnutým odesíláním jsou akce zakázané s důvodem, což j
 říkají, **kam se to slévá** (`issue-465-… → main`, a jestli je větev srovnaná, **o kolik commitů je
 vzadu**, nebo v konfliktu) a **co je na tom hotové** (`3 commity · 6 checků` / `zeleno`). Pod nimi
 jsou **dvě akce**: `Mergnout…` — se třemi tečkami, protože otevírá potvrzení; merge je nevratný
-a týká se `main`u, ne jen pull requestu — a od #466 `Rebase`.
+a týká se `main`u, ne jen pull requestu — a od #466 `Rebase`. **U vlastního draftu je nad nimi ještě
+třetí**, `Připravit k review` (#482, viz níž).
 
 **Obě akce jsou v panelu vždycky, mění se jen to, která z nich je zvýrazněná**: `Mergnout…` když je
 zeleno, jinak `Rebase`. Srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat
@@ -903,6 +906,31 @@ check naopak nebrání.
 **Slévatelnost se u GitHubu počítá až na vyžádání**, takže se na ni aplikace ptá opakovaně (tři
 pokusy) — bez toho by tlačítko u čerstvého PR svítilo zašedle podle náhody. A ptá se **jen na
 vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „nevím“ navždycky.
+
+### `Připravit k review` — jediná překážka mergnutí, kterou aplikace odklidí jedním kliknutím (#482)
+
+Sekce `Větev` vypisuje, proč se nedá mergnout. Většina těch důvodů je práce — jeden z nich byl ale
+**jedno kliknutí kdesi jinde**, a aplikace to o sobě sama psala: u rozpracovaného PR stálo v panelu
+*„Označ ho na GitHubu jako připravený.“* Od #482 je z té půlky věty tlačítko a věta se zkrátila.
+
+**Kreslí se jedině u vlastního draftu, a to přes celou šířku panelu** — nad řadou `Mergnout…` /
+`Rebase`, protože se do ní nevejde: tři tlačítka vedle sebe potřebují 273–274 bodů, což je celá
+šířka obsahu panelu (274 b) a o ~60 bodů víc, než na kolik panel má, když se stáhne na svou podlahu
+(214 b). Nad otevřeným, zavřeným ani mergnutým PR není v sekci o řádek víc; není tam co přepínat.
+
+**Odesílá se hned, bez potvrzení, ale s větou pod tlačítkem.** Potvrzovací okno je v aplikaci tam,
+kde je **co číst** (tělo review, plán merge); tady je payload jeden bit. Nevratná část na tom ale
+je — GitHub při přepnutí **vyžádá review od vlastníků kódu** a to se odebráním nevezme zpět —, takže
+pod tlačítkem stojí *„Kdo je v `CODEOWNERS`, dostane vyžádání review. Zpátky do draftu se chodí na
+GitHub.“* a tlačítko **není výchozí akce**: `Enter` z draftu nic nepřepne.
+
+**Zpátky do draftu odsud nejde a nepůjde.** Tlačítko, které by viselo u každého vlastního PR kvůli
+akci jednou za pololetí, je mrtvá váha; na GitHubu je to jeden klik.
+
+**Po úspěchu se stav PR načte znovu**: tlačítko i výstraha o rozpracovanosti zmizí a `Mergnout…` se
+rozsvítí, když nic jiného nepřekáží. **Záložka zůstává otevřená** — na rozdíl od merge, kde ji
+zavírá tentýž klik: tady se PR teprve předává ostatním. Když volání spadne, je pod tlačítkem věta
+proč a `Zavřít`; stav se v tom případě znovu nenačítá, takže se to dá zkusit hned znovu.
 
 ### `Rebase` a `Force push` — jediné místo, odkud aplikace zapisuje do remote (#466)
 

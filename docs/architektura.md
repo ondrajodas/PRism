@@ -8540,6 +8540,38 @@ Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.
   nese ho řádek stavu (`head → base`, `BranchMerge.swift`) a nápověda pod kurzorem
   (`Policy.branchSyncHelp`), a je na to test.
 
+**Třetí akce sekce od #482: `Připravit k review`** (`Policy.readyForReviewOffer`, návrh sekce 37).
+Tvarem je to totéž co `MergeOffer` a `SyncOffer` — `absent` / `blocked([důvody])` / `allowed` —,
+ale liší se ve dvou věcech, a obě jsou rozhodnutí:
+
+- **`absent` nad každým stavem PR kromě draftu**, ne jen na cizím PR. Je to jediná akce sekce, která
+  má smysl v jednom jediném stavu: nad otevřeným, zavřeným i mergnutým **není co přepínat**, takže
+  zašedlé tlačítko s větou „PR není rozpracovaný“ by jen zabíralo řádek. `nil` stav (nenačtený
+  detail) je taky `absent` — tlačítko, které se objeví a hned zmizí, je horší než tlačítko
+  o průchod později.
+- **`Policy.readyWarnings(_:)` vydá vždycky prázdno, a je to zapsaná odpověď.** Tatáž konstrukce
+  jako `syncWarnings`, a ze stejného důvodu vyčerpávající `switch`: `notAllowed` je v panelu
+  napsaná už jednou (výstrahou mergnutí, protože vypnutá brána brání obojímu) a `running` je stav
+  na zlomek sekundy, který se odklidí sám. Sčítá se to přesto do `warnings` — jinak by nová
+  překážka, která si větu **žádá**, skončila jen v nápovědě pod kurzorem.
+
+**V panelu to kreslí `PanelBranchView.readySection`: tlačítko přes celou šířku, pod ním věta
+o `CODEOWNERS`, a když poslední pokus spadl, místo té věty chyba se `Zavřít`.** Dvě věci na tom
+nejsou zjevné:
+
+- **Plnou plochu nedělá `frame(width:)`, ale `maxWidth: .infinity` uvnitř něj.** `borderedProminent`
+  si plochu k popisku sám nedotáhne — bez toho z něj bylo tlačítko na **129 bodů vystředěné
+  v prázdném řádku** (změřeno renderem, `BranchSectionRenderProbe`). Zákaz z #220 mluví
+  o vyjednávání, a to tady žádné není: vnější rámec je konkrétní číslo, takže se nabídka nešíří ani
+  o úroveň dál.
+- **Věta o neúspěchu je jen `PublishError.userDescription`, a je to odchylka od zákresu.** Sekce 37
+  kreslí *„Přepnout na Ready for review se nepovedlo: `HTTP 403`. Pull request je pořád
+  rozpracovaný.“*; obě půlky jsou závadné a každá jinak. *„Pull request je pořád rozpracovaný“* je
+  tvrzení, které data neunesou u `timedOut` a `interrupted` — tam se právě neví, jestli přepnutí
+  prošlo, a obě chyby to říkají samy. A *„se nepovedlo“* říká `PublishError.unknown` **taky**
+  (*„Odeslání se nepovedlo: …“*), takže by to v panelu stálo dvakrát za sebou. Co se akce jmenuje,
+  nese tlačítko o dva body výš — tatáž úmluva jako u chyby labelů.
+
 ### Našeptávání emotikonů (#483)
 
 Píše se `:ta`, nabídne se 🎉 — a do textu se vloží **znak, ne shortcode**. Návrh, sekce 38. Je to
@@ -9420,9 +9452,91 @@ Co je na téhle metodě jiné než na sedmi před ní:
 - **Co v zákazu zůstává**: approve mimo review, **zavření PR**, **milník** a `deleteLabel`.
   `SingleWayOutTests` je hlídají jmenovitě dál — jen bez `merge`.
 
+### Ready for review (#482) — devátá metoda, a nejmenší z nich
+
+Vědomá změna tvrdé podmínky č. 1, ale **nejmenší, jaká v ní byla**: payload je **jeden bit**. Proč
+se to změnilo: sekce `Větev` vypisuje, proč se nedá mergnout, a většina těch důvodů je práce
+(spravit check, srovnat větev, dovyřídit nález) — jeden z nich je ale **jedno kliknutí kdesi
+jinde**, a aplikace to o sobě sama psala. `MergeObstacle.draftPullRequest` končilo větou *„Označ ho
+na GitHubu jako připravený.“*, tedy návodem, jak z okna odejít. Je to tatáž třída jako labely
+a reviewery (#392) nebo merge (#465): práce s **vlastní** frontou.
+
+Co je na téhle metodě jiné než na osmi před ní:
+
+- **Nevrací nic, a je jediná taková.** `gh pr ready` píše na **stdout prázdno** — potvrzení jde na
+  stderr jako věta pro člověka (`✓ … is marked as "ready for review"`). Návratová hodnota by tady
+  musela vzniknout **vymyšlením**, a to je zrovna ten druh tvrzení, kterému se tenhle repo vyhýbá.
+  Pravdu o novém stavu má pull request, takže si ji volající **načte znovu**.
+- **Není to `gh api`, a je to změřené rozhodnutí.** REST na tuhle věc endpoint **nemá**: `PATCH
+  /pulls/{n}` s `draft=false` vrátí `200` a přepnutí **tiše zahodí** (`"draft": true` v odpovědi na
+  ten samý dotaz) — tatáž past jako `POST /requested_reviewers` s Copilotem. GraphQL mutace
+  `markPullRequestReadyForReview` funguje, ale chce **node ID** pull requestu, které aplikace nemá
+  odkud vzít; `PullRequest` je `Codable` a persistovaný, takže by to bylo další volitelné pole
+  a s ním další „nevím“, které musí blokovat — a k tomu chyba `Could not resolve to a node with the
+  global id`, na které `PublishError.init(failure:)` vydá **`threadNotFound`**, tedy větu o vlákně.
+  Měření je v [`docs/github-cli.md`](github-cli.md); argumenty skládá `ReadyRequest` a `--repo`
+  v nich je **povinné**, protože aplikace podprocesu nenastavuje pracovní složku.
+- **Idempotentní ze strany GitHubu.** Nad PR, který draft není, skončí `gh pr ready` **nulou**
+  a jen napíše `! … is already "ready for review"` (změřeno). Dvojklik ani závod s prohlížečem tedy
+  nevyrobí chybu, kterou by bylo potřeba někde ukázat — a proto si publisher **neověřuje**, jestli
+  je PR doopravdy draft: vlastní kontrola by z nulového volání udělala chybu bez obsahu.
+- **Jednosměrná.** Metoda nemá parametr, kterým by se PR vrátil do draftu, a je to rozhodnutí:
+  obousměrná by měla **půlku bez volajícího**, a výčet, ve kterém stojí něco, co aplikace nedělá,
+  přestává být seznamem toho, co umí odejít ven. `convertPullRequestToDraft` je proto
+  v `SingleWayOutTests` mezi jmenovitě zakázanými; kdyby se ukázalo, že se zpátky chodí, je to
+  **desátá** metoda a vlastní rozhodnutí.
+- **Metoda v `MetadataSubmission`, ne šestý volající.** Opak #465. Rozhoduje, co to je za práci, ne
+  kde je na to tlačítko: je to vlastnost **vlastního** PR, jde to touž branou a **sdílí to tentýž
+  stav** (`MetadataActionState`) — a to sdílení je vlastnost, ne vedlejší efekt, protože dvě
+  odesílání nad jedním PR naráz se tím nepustí, ať se klikne kdekoli. Počet souborů v tvrdé
+  podmínce č. 1 proto zůstal **sedm**.
+- **Bez potvrzovacího sheetu, a je to úvaha o obsahu.** Sheet je v tomhle okně u review (#68)
+  a u merge (#465), a obojí má společné to, že payload je dlouhý a aplikace je jediné místo, kde se
+  dá celý přečíst. Jeden bit se nečte; sheet s jednořádkovým výpisem *Co se stane* se neptá na
+  obsah, ptá se „opravdu?“ — a přesně tenhle druh potvrzení repo u #73, #216 a #392 zamítlo ve
+  prospěch **jednoho pojmenovaného tlačítka**. Platí se za to dvěma věcmi: **větou pod tlačítkem**
+  (`Policy.readyForReviewNote` — vyžádání review od `CODEOWNERS` se odebráním nevezme zpět, tatáž
+  odpověď jako u `+ reviewer` v #392) a **žádnou výchozí akcí**, aby se to nedalo spustit
+  `Enterem` při průchodu klávesnicí. Hlídá to test nad zdrojákem `PanelBranchView.swift`, ne jen
+  komentář.
+- **Nová položka stavu, protože přibylo místo, kde se chyba kreslí.** `MetadataActionState` má od
+  #482 `markingReady` a `readyFailed`, a k tomu `noticePlace` místo `showsNotice: Bool`. Do #482
+  stačila dvouhodnotová odpověď „kreslí se věta?“, protože všechny akce se ovládaly z jednoho
+  bloku; teď má druhou půlku — **ve které sekci**. Pořád je to **jedna** odpověď na jednom místě:
+  dvě `if`ové kresby by uměly ukázat tutéž chybu dvakrát, nebo ani jednou.
+- **Po úspěchu se načte detail i slévatelnost, a v tom se to od merge liší.** U merge se
+  `branchStatuses` schválně **nechává být** (na mergnutém PR vrací `UNKNOWN` navždycky a
+  `Policy.mergeOffer` ho stejně přebije stavem PR). Tady je to naopak ta **jediná** hodnota, která
+  se přepnutím mění na užitečnou: draft má `mergeStateStatus` `DRAFT`, takže by po přepnutí zůstal
+  v panelu řádek `rozpracovaný` a `Mergnout…` by se nerozsvítilo, dokud se nezmění `updatedAt`.
+  Cache se u obojího zahazuje **ručně**, ze stejného důvodu jako u merge.
+- **Záložka zůstává otevřená** — taky opak #465. Tam ji zavírá tentýž klik, kterým člověk PR
+  dokončil; tady se PR teprve předává ostatním a zavřít okno by znamenalo zahodit kontext zrovna
+  ve chvíli, kdy se na něj bude odpovídat.
+- **Kreslí se jedině nad draftem** (`Policy.readyForReviewOffer`), ne zašedle nad ostatními stavy.
+  Je to jediná akce sekce, která má smysl jen v jednom stavu pull requestu: nad otevřeným,
+  zavřeným i mergnutým **není co přepínat**, takže by zašedlé tlačítko s větou „PR není
+  rozpracovaný“ zabíralo řádek v panelu, který má 300 bodů. Zašedlá s důvodem zůstává tam, kde se
+  stav **mění** — vypnutá brána a běžící odeslání.
+- **Do řady s `Mergnout…` a `Rebase` to nepatří, a je to změřené** (návrh sekce 37) — **ale
+  přeměřeno aplikací vycházejí jiná čísla než v zákresu a rozhoduje to jinde.** Zákres počítá `279
+  bodů z 278`, tedy o jediný bod ven, a bere odsazení panelu z CSS (11 na stranu). Aplikace ho má
+  **13**, takže `PanelMetadataView.contentWidth(inPanelOf:)` dává **274 b** ve výchozí šířce 300
+  a **214 b** na podlaze 240; a `TextWidth.miniButton` — tedy řez a odsazení, na kterých `.mini`
+  doopravdy kreslí — dává `Připravit k review` 114/117 b, `Mergnout…` 82/84 a `Rebase` 61/62 podle
+  zdůraznění, takže tři v řadě s dvěma mezerami po 7 jsou **273–274 b**.
+
+  Ve výchozí šířce to tedy sedne **přesně na hranu, s nulou až jedním bodem rezervy** — pro řadu, ve
+  které se popisky mohou změnit, je to totéž jako nevejít se. **Rozhoduje ale podlaha panelu**: tam
+  ta řada přetéká o **~60 bodů** a žádné zkrácení popisky to nespraví. Vlastní řádek přes celou
+  šířku (`.send` z návrhu) je proto jediné místo, kde se akce vejde **při každé šířce**. Čísla
+  v zákresu jsou o pár bodů vedle; **zákres se u #482 nepřekresloval**, protože závěr se nemění.
+- **Co v zákazu zůstává**: approve mimo review, **zavření PR**, **milník**, `deleteLabel`
+  a nově **návrat do draftu**.
+
 ## Zápis do remote — `BranchPushing` (#466)
 
-**Druhá cesta ven, a je to nová třída, ne devátá metoda `ReviewPublishing`.** Do #466 aplikace do
+**Druhá cesta ven, a je to nová třída, ne další metoda `ReviewPublishing`.** Do #466 aplikace do
 remote **nezapisovala vůbec**: `GitHubGateway` je read-only, `RepoCheckout` pracuje lokálně
 a `git push` je výslovně v `--disallowedTools` revieweera. Tvrdá podmínka č. 1 se tím mění a je to
 vědomé rozhodnutí, ne obejití — zdůvodnění a co se ruší je v [záznamu

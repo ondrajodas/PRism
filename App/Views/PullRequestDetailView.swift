@@ -589,7 +589,11 @@ struct PullRequestDetailView: View {
             sync: { Task { await store.syncBranch(summary) } },
             push: { branchPush = store.branchPushSubmission(for: summary) },
             discardSync: { Task { await store.discardSync(for: id) } },
-            clearSync: { store.clearBranchSync(for: id) }
+            clearSync: { store.clearBranchSync(for: id) },
+            // `Připravit k review` (#482) **odesílá rovnou** — potvrzení nemá, protože payload je
+            // jeden bit. Kontrolu, jestli to jde, dělá store tou samou funkcí, která akci nabízí.
+            markReady: { Task { await store.markReadyForReview(on: summary) } },
+            clearReadyFailure: { store.clearMetadataFailure(for: id) }
         )
     }
 

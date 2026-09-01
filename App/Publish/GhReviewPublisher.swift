@@ -231,6 +231,31 @@ struct GhReviewPublisher: ReviewPublishing {
         return merged
     }
 
+    // MARK: - Ready for review (#482)
+
+    /// Přepne vlastní draft na *ready for review*. **Devátá cesta ven a nejmenší z nich** —
+    /// zdůvodnění je u `ReviewPublishing`, volba příkazu u `ReadyRequest`.
+    ///
+    /// Pre-flight je stejně široký jako u labelů (scope a stav PR, ne `headSha`): přepnutí je
+    /// vlastnost pull requestu, ne tvrzení o commitu.
+    ///
+    /// **Že je PR doopravdy draft, se tady neověřuje**, a je to rozhodnutí: `Policy.readyForReviewOffer`
+    /// akci nad nedraftem nenabídne, a i kdyby se přes ni někdo dostal, GitHub odpoví **nulou**
+    /// (změřeno — `! … is already "ready for review"`). Vlastní kontrola by tedy z nulového volání
+    /// udělala chybu, kterou by nebylo co ukázat.
+    ///
+    /// **Odpověď se nedekóduje, protože žádná není** — `gh pr ready` píše na stdout prázdno. Úspěch
+    /// je nulový návratový kód a nový stav si volající načte znovu.
+    func markReadyForReview(on pullRequest: PRIdentifier) async throws {
+        guard scope.allows(pullRequest.repo) else {
+            throw PublishError.publishingNotAllowed(pullRequest.repo)
+        }
+
+        try await preflight(pullRequest, expecting: nil)
+
+        _ = try await call(ReadyRequest.arguments(for: pullRequest))
+    }
+
     // MARK: - Pre-flight
 
     /// Ověří, že se posílá na to, co jsme viděli. **Při neshodě se nevolá zápis.**

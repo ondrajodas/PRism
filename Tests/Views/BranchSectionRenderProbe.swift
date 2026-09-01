@@ -6,7 +6,7 @@ import Testing
 @testable import PRism
 
 /// Sonda, ne test (#465): vyrendruje **sekci `Větev`** ve všech podobách, které má zákres
-/// (sekce 36), a k tomu potvrzení merge.
+/// (sekce 36 a od #482 i sekce 37), a k tomu potvrzení merge.
 ///
 /// Proč sonda: „sedí to se sekcí 36?“ je otázka na obrázek. Co se **dá** tvrdit číslem, je
 /// v `BranchMergeTests` (výčet důvodů a texty řádků) a v `MergePublishingTests` (co odejde).
@@ -23,36 +23,63 @@ import Testing
 struct BranchSectionRenderProbe {
     /// Podoby sekce — přesně ty dvě, které kreslí zákres, a k nim ty, které v něm nejsou,
     /// ale v aplikaci nastanou (načítá se, vypnutá brána, blokující nález).
+    ///
+    /// **Co z téhle sondy vyčíst nejde: barvu `Připravit k review`** (#482). Plná plocha
+    /// `borderedProminent` se v **neaktivním** okně kreslí systémově šedá, ať je `tint` jakýkoli —
+    /// vyzkoušeno, `.tint(Palette.accent)` na scéně na tom nezmění nic, takže tady nestojí (byl by
+    /// to modifikátor, který nic nedělá). Odstín nasazuje `ContentView` celému okně a ověřuje se
+    /// **na běžící aplikaci**; sonda tvrdí rozvržení, ne barvu plochy.
     @Test("Vyrendrovat sekci Větev")
     func rendersTheBranchSection() throws {
-        let scenes: [(String, Policy.BranchSection?)] = [
-            ("vetev-zeleno", section()),
+        let scenes: [(String, Policy.BranchSection?, MetadataActionState?)] = [
+            ("vetev-zeleno", section(), nil),
             ("vetev-za-zakladem", section(
                 status: status(.mergeable, .behind),
                 checks: [check("test-php 8.3", .failed), check("lint", .passed)]
-            )),
-            ("vetev-zjistuje", section(status: nil)),
+            ), nil),
+            ("vetev-zjistuje", section(status: nil), nil),
             ("vetev-brana-vypnuta", section(
                 editing: .blocked(PublishError.publishingNotAllowed(Self.repo).userDescription)
-            )),
-            ("vetev-blokujici-nalez", section(blocking: 2)),
-            ("vetev-konflikt", section(status: status(.conflicting, .dirty))),
+            ), nil),
+            ("vetev-blokujici-nalez", section(blocking: 2), nil),
+            ("vetev-konflikt", section(status: status(.conflicting, .dirty)), nil),
+            // Sekce 37 (#482) — tři podoby, které zákres kreslí: draft s tlačítkem, draft
+            // s chybou pod ním a **draft s vypnutou branou**, kde je tlačítko zašedlé a důvod
+            // stojí ve výstraze nad ním.
+            ("vetev-draft", section(state: .draft, status: status(.mergeable, .draft)), nil),
+            (
+                "vetev-draft-chyba",
+                section(state: .draft, status: status(.mergeable, .draft)),
+                .readyFailed(.unknown("HTTP 403: Resource not accessible by integration"))
+            ),
+            (
+                "vetev-draft-brana-vypnuta",
+                section(
+                    editing: .blocked(PublishError.publishingNotAllowed(Self.repo).userDescription),
+                    state: .draft,
+                    status: status(.mergeable, .draft)
+                ),
+                nil
+            ),
         ]
 
-        for (name, section) in scenes {
+        for (name, section, action) in scenes {
             guard let section else { continue }
             let url = Self.outputDirectory.appending(path: "\(name).png")
             try Self.render(
                 AnyView(
                     PanelBranchView(
                         section: section,
-                        contentWidth: PanelMetadataView.contentWidth(inPanelOf: 300)
+                        contentWidth: PanelMetadataView.contentWidth(inPanelOf: 300),
+                        actionState: action
                     )
                     .frame(width: 300, alignment: .topLeading)
                     .background(Palette.chrome)
                 ),
                 width: 340,
-                height: 200,
+                // Draftové scény mají o tlačítko a o věty víc, takže 200 bodů by je uřízlo —
+                // a uříznutá sonda je zrovna to, kvůli čemu se na ni nedá spolehnout.
+                height: section.ready.isVisible ? 300 : 200,
                 to: url
             )
             print("SONDA \(url.path)")
@@ -110,6 +137,7 @@ struct BranchSectionRenderProbe {
     /// Scéna ze zákresu: `odinuv:chore/deps → main`, tři commity, šest checků.
     private func section(
         editing: Policy.MetadataEditing = .allowed,
+        state: PullRequestState = .open,
         status: BranchStatusState? = .loaded(
             BranchStatus(mergeability: .mergeable, mergeState: .clean),
             updatedAt: Date(timeIntervalSince1970: 100)
@@ -127,7 +155,11 @@ struct BranchSectionRenderProbe {
             baseRef: "main",
             url: URL(string: "https://github.com/\(Self.repo)/pull/85")!,
             updatedAt: Date(timeIntervalSince1970: 100),
-            state: .open
+            state: state,
+            // **Vyplněné schválně**: `nil` je „nevím, kde větev leží“, a `Policy.syncWarnings` na to
+            // přidá do výstrahy vlastní větu — sonda by pak fotila stav, do kterého se okno
+            // s načteným detailem nedostane.
+            isCrossRepository: false
         )
         let green = (0..<6).map { check("check-\($0)", .passed) }
         return Policy.branchSection(

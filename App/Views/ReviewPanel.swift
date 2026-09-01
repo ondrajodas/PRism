@@ -162,6 +162,11 @@ struct ReviewPanel: View {
                             section: branch,
                             contentWidth: metadataContentWidth,
                             syncState: branchSync,
+                            // Tentýž stav jako blok labelů nad ním (#482) — a je to schválně jedna
+                            // hodnota, ne dvě: dvě odesílání nad jedním PR naráz neběží, takže
+                            // rozhoduje jedině to, **kde** se věta o neúspěchu kreslí
+                            // (`MetadataActionState.noticePlace`).
+                            actionState: metadataActionState,
                             actions: branchActions
                         )
                     }

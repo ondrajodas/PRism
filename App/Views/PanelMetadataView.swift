@@ -63,7 +63,7 @@ struct PanelMetadataView: View {
                     if showsReviewers { reviewers }
                 }
                 if let reason = editing.reason { blocked(reason) }
-                if actionState?.showsNotice == true { notice }
+                if actionState?.noticePlace == .metadata { notice }
             }
             .padding(.horizontal, Self.insetHorizontal)
             .padding(.vertical, Self.insetVertical)
@@ -301,7 +301,10 @@ struct PanelMetadataView: View {
                     .foregroundStyle(Palette.ink2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        case .settingLabels, .requestingReviewer, .creatingLabel, nil:
+        // `readyFailed` sem **nepatří** (#482): kreslí ho sekce `Větev` pod tím tlačítkem, na které
+        // se klikalo. Vypsaný je proto, že vyčerpávající `switch` je to jediné, co u nového případu
+        // vynutí rozhodnutí při překladu — `default` by ho spolkl a chyba by v panelu zmizela.
+        case .settingLabels, .requestingReviewer, .creatingLabel, .markingReady, .readyFailed, nil:
             EmptyView()
         }
     }
@@ -349,7 +352,7 @@ struct PanelMetadataView: View {
     /// Je v bloku vůbec co nakreslit? `nil` stav (ještě se nenačetlo) nedá ani jednu sekci — a na
     /// cizím PR bez labelů a reviewerů taky ne.
     private var hasAnything: Bool {
-        state?.failure != nil || showsLabels || showsReviewers || actionState?.showsNotice == true
+        state?.failure != nil || showsLabels || showsReviewers || actionState?.noticePlace == .metadata
     }
 
     private func answerColor(_ answer: ReviewerAnswer) -> Color {

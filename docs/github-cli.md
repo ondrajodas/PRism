@@ -181,6 +181,84 @@ pushnutá a nakonec mergnutá:
   Věta v aplikaci proto nesmí `BLOCKED` překládat na „červený check“: znamená kterýkoli
   z „chybí schválení / běží povinný check / nemáš zápis“ a GitHub nedává, který.
 
-- **Co změřené není:** `405 Pull Request is not mergeable`. Vyrobit ho by chtělo PR v konfliktu
-  nebo draft, a převedení sondy na draft zakázala permission brána; text v aplikaci je proto
+- **`405` nad draftem změřený je od #482** (do té doby tady stálo, že převedení sondy na draft
+  zakázala permission brána). Zpráva ale **není** `Pull Request is not mergeable`, nýbrž `Pull
+  Request is still a draft` — podrobnosti a co z toho plyne pro `PublishError` jsou v sekci
+  *Ready for review* níž. `405` u PR **v konfliktu** změřený pořád není a text v aplikaci je u něj
   z dokumentace GitHubu.
+
+## Ready for review — co je změřené (#482)
+
+Aplikace přepíná vlastní draft na *ready for review* přes **`gh pr ready <n> --repo <repo>`**
+(devátá metoda `ReviewPublishing`). Změřeno na `ondrajodas/prism-review-sandbox#11`, což je draft
+PR založený pro tenhle účel a opakovaně přepnutý tam a zpátky; **PR zůstává draft**, takže se každé
+tvrzení níž dá přeměřit znovu — kolik kol to bylo, vypíše
+`gh api repos/ondrajodas/prism-review-sandbox/issues/11/timeline --jq '.[].event'`.
+
+**REST na tuhle věc endpoint nemá, a je to ta nejdůležitější půlka měření.** `PATCH
+/repos/{repo}/pulls/{n}` s `draft=false` vrátí **`200` a přepnutí tiše zahodí** — v odpovědi na ten
+samý dotaz stojí `"draft": true`:
+
+```bash
+gh api repos/ondrajodas/prism-review-sandbox/pulls/11 -X PATCH -F draft=false --jq .draft   # true
+```
+
+Je to **tatáž past** jako `POST /requested_reviewers` s Copilotem výš: úspěšné volání, po kterém se
+nestalo nic. Kdo bude tuhle cestu předělávat, musí ji ověřovat **zpětným čtením**, ne návratovým
+kódem.
+
+**Co `gh pr ready --repo` doopravdy dělá** (stdout je u všech případů prázdný, věta jde na stderr):
+
+| Situace | Kód | stderr |
+|---|---|---|
+| draft, z `/` i z git worktree | 0 | `✓ … is marked as "ready for review"` |
+| PR, který draft **není** | 0 | `! … is already "ready for review"` |
+| neexistující číslo PR | 1 | `GraphQL: Could not resolve to a PullRequest with the number of 9999.` |
+| neplatný token | 1 | `HTTP 401: Bad credentials` + `Try authenticating with:  gh auth login` |
+
+Tři věci z toho plynou:
+
+- **Není to `gh pr merge`.** S `--repo` funguje **i z pracovního stromu** a skončí nulou — do
+  lokálního repa nesahá vůbec. `--repo` je přitom povinné, ne úsporné: aplikace podprocesu
+  nenastavuje pracovní složku, takže bez něj si `gh` repozitář hádá z toho, kde zrovna stojí.
+- **Je to idempotentní.** Nad PR, který draft není, skončí nulou — dvojklik ani závod
+  s prohlížečem tedy nevyrobí chybu, kterou by bylo potřeba někde ukázat.
+- **Úspěch se nedá dekódovat, jen přečíst z návratového kódu.** Nový stav si proto aplikace
+  **načte znovu** (`AppStore.pullRequestBecameReady`), stejně jako po vlastním mergi.
+
+**GraphQL mutace `markPullRequestReadyForReview` funguje taky, a je zamítnutá.** Chce **node ID**
+pull requestu, které aplikace nemá odkud vzít (`PullRequest` je `Codable` a persistovaný, takže by
+to bylo další volitelné pole a s ním další „nevím“, které musí blokovat). Přitěžující okolnost je
+změřená: nad neplatným ID hlásí
+
+```
+Could not resolve to a node with the global id of 'PR_bogus'
+```
+
+a na tomhle textu vydá `PublishError.init(failure:)` **`threadNotFound`** — tedy věta o vlákně nad
+přepnutím draftu. Do draftu se PR vrací **opačnou** mutací (`convertPullRequestToDraft`); ta v
+aplikaci **není a nebude** (tvrdá podmínka č. 1), ale při měření je to ona, čím se sonda resetuje:
+
+```bash
+gh api graphql -F id=<node id> -f query='
+  mutation($id:ID!){convertPullRequestToDraft(input:{pullRequestId:$id}){pullRequest{isDraft}}}'
+```
+
+### Dvě věci, které tím měřením zavřely starší mezery
+
+- **`405` u merge nad draftem už změřený je** (u #465 to zakázala permission brána, viz sekce
+  výš). Zpráva ale **není** `Pull Request is not mergeable`, nýbrž:
+
+  ```json
+  {"message":"Pull Request is still a draft","status":"405"}
+  ```
+
+  Na tenhle text tedy `PublishError.notMergeable` **nesedí** a selhání by vyšlo jako `unknown`
+  („Odeslání se nepovedlo: …“). Neopravuje se to a je to rozhodnutí: aplikace merge nad draftem
+  **neposílá** (`Policy.mergeOffer` vydá `draftPullRequest`), takže by to byl případ bez volajícího
+  — a věta `unknown` je pravdivá, jen neurčitá.
+- **Vyžádání review od `CODEOWNERS` se potvrdit nepodařilo, a je to zapsaná mezera.** Změřeno je
+  jen to, že s `CODEOWNERS` `* @ondrajodas` na základové větvi a s autorem `ondrajodas`
+  se po přepnutí **žádný `review_requested` neobjeví** (timeline nese jen `ready_for_review`) —
+  GitHub o review nikdy nežádá autora. Že se **jiný** vlastník kódu vyžádá, chce druhý účet se
+  zápisem do sandboxu; věta pod tlačítkem v aplikaci je proto z dokumentace GitHubu, ne z měření.

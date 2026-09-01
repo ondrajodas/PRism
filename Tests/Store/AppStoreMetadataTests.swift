@@ -605,7 +605,7 @@ struct AppStoreMetadataTests {
         await store.createLabel(Self.newLabel, on: summary())
 
         #expect(try ghCalls() == 2)
-        #expect(store.metadataActionState(for: pr)?.showsNotice == true)
+        #expect(store.metadataActionState(for: pr)?.noticePlace == .metadata)
         guard case .createdNotAdded(let name, _) = store.metadataActionState(for: pr) else {
             Issue.record("čekal se mezistav, přišlo \(String(describing: store.metadataActionState(for: pr)))")
             return
