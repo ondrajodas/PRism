@@ -257,6 +257,22 @@ uživatel (pravidlo je v [`CLAUDE.md`](../CLAUDE.md)). Pořadí kroků:
 Co pod pravidlo **nespadá**: srovnávat aplikaci s tím, co v mockupu už nakreslené je. Tam se
 návrh nemění, takže není co schvalovat ani co překreslovat — issue se založí rovnou (#283).
 
+### Proč brána sedí u zakládání issue, ne až u prvního commitu
+
+Je to schválně, ne z opatrnosti: **issue je zadání, ne nápad.** Od chvíle, kdy je na GitHubu,
+popisuje cílový stav a podle něj se programuje — a subagent, který ho dostane do zadání, už
+o návrhu nediskutuje. Kreslit mockup až po něm proto znamená **dohánět návrhem to, co už je
+napsané slovy**, a slova o vzhledu nesou vždycky míň než obrázek: „přidej do panelu sekci
+s větví“ se dá nakreslit desítkou způsobů a devět z nich se pak přepisuje.
+
+Druhý důvod je cena. **Levná je změna vzhledu jedině dokud je to CSS v mockupu** — pak je to
+SwiftUI, testy nad geometrií, screenshot k proklikání a případně další kolo revize. Brána
+u zakládání issue je tedy jediné místo, kde ta oprava stojí minuty.
+
+Proto je to taky **jediná schvalovací brána v tomhle repu** — výjimka z pravidla *Rozhodování*
+v [`CLAUDE.md`](../CLAUDE.md), které jinak říká, že se návrhová rozhodnutí nepředkládají ke
+schválení. Schvaluje se **obrázek**, ne návrh implementace.
+
 Když se při implementaci ukáže, že to nakreslené nejde nebo je horší, platí obvyklé pravidlo
 z `CLAUDE.md` (*Rozhodování*): rozhodni, **zapiš do specifikace co se změnilo a proč** a napiš to
 do popisu PR. Odchylka od návrhu, která je v záznamu rozhodnutí, je v pořádku — potichu jiná
