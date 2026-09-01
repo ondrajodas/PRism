@@ -175,31 +175,25 @@ struct DiffView: View {
                 // bere i to, **kolikátý** ten řádek v bloku je: podíl výšky platí pro blok, takže
                 // bez toho míří skok na blok a řádek v něm leží, kde leží.
                 let spot = DiffRow.blockSpot(of: target, in: blockedRows(covering: target))
-                let metrics = measured(spot)
-                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: metrics))
-                // **Druhý průchod jedině tehdy, když se ten první počítal z odhadu** (#152).
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
+                // **Podruhé o průchod později** (#469), a od #152 s **přeměřenými** rozměry.
                 //
-                // Do #152 se skákalo dvakrát vždycky, kvůli #469: cíl mohl být do té chvíle jen
-                // rezervovanou výškou a po nasazení se jeho výška dorovnala. Jenže **druhý skok
-                // přerušil animaci toho prvního** a okno se místo skoku pohnulo o dva až čtyři body
-                // — to je ta „někdy se nescrolluje" z proklikání; změřeno, viz `docs/testovani.md`.
-                // Se změřenou plochou bloku se nemá co dorovnávat, takže druhý průchod odpadá;
-                // přijde jedině u bloku, který se ještě nikdy nekreslil, a tehdy je právě on tím,
-                // který cíl trefí — první počítal z odhadu.
+                // Ten první skok se totiž počítá z ploch, které bloky nahlásily **dosud** — a to
+                // může být měření z doby, kdy se blok rozvrhoval na jinou šířku, tedy s jiným
+                // zalomením. Změřeno: u souboru se zalomenými řádky přistál první skok 1 946 pt
+                // vedle a druhý přesně. Je to **zmírnění, ne záruka**: kolik průchodů to sedne,
+                // se řídit nedá, a čekat časovačem je zakázaná třída (#350).
                 //
-                // **Skok se proto nechává neanimovaný.** Animace, kterou tu do #152 měl, se buď
-                // nedoběhla (uťal ji ten druhý průchod), nebo doběhla a druhý průchod ji stejně
-                // přebil skokem — a to je horší než skočit rovnou. Je to změna proti #72 a je
-                // **vidět**, takže patří do popisu PR.
-                if metrics == nil {
-                    await Task.yield()
-                    // **Zrušený skok už nesrovnává nic** (nález z vlastní revize #152): `task(id:)`
-                    // starý průchod při změně cíle zruší, jenže `Task.yield()` z něj nevyskočí —
-                    // takže by ten starý dokončil posun na **svůj** cíl a nový by vzápětí
-                    // **vynuloval**.
-                    guard !Task.isCancelled else { return }
-                    proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
-                }
+                // **Skok se u toho nechává neanimovaný.** Animovaný první průchod tenhle druhý
+                // **utínal** a jeden skok z desítky pak skončil dva až třináct bodů od místa, kde
+                // začal — to je ta „někdy se nescrolluje" z proklikání (změřeno, viz
+                // `docs/testovani.md`). Je to změna proti #72 a je **vidět**.
+                await Task.yield()
+                // **Zrušený skok už nesrovnává nic** (nález z vlastní revize #152): `task(id:)`
+                // starý průchod při změně cíle zruší, jenže `Task.yield()` z něj nevyskočí — takže
+                // by ten starý dokončil posun na **svůj** cíl a nový by vzápětí **vynuloval**.
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
                 scrollTarget = nil
                 // Zpátky na výchozí druh cíle: příští skok může přijít z panelu nálezů, který
                 // `jumpTarget` nenastavuje.

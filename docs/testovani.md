@@ -1890,6 +1890,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   zalomenou scénu (cíl 1 651 až 3 637 pt nad výřezem); vypnuté vodorovné odhalení shodí split scénu
   (výskyt na x 2 708 proti výřezu 0–582,5).
 
+  **A jeden skok v tom měření nestačí, i když to tak vypadá.** Zkusilo se měřit po jednom (aby test
+  chytil i to, že první skok nedojel) a zalomená scéna spadla: první skok se počítá z ploch
+  nahlášených dosud a ty umí být z jiné šířky, takže přistál **1 946 pt** vedle. Druhý průchod uvnitř
+  `DiffView` to srovná — proto se měří **po něm**, tedy po spotřebovaném cíli.
+
   **Jedno kolo to byla sonda, a stálo to za to ji nenechat sondou.** Jeden skok z desítky nezabral
   vůbec — posun zůstal, kde byl, ačkoli byl cíl v seznamu, kotva seděla a scéna byla ustálená. Nespravilo
   to čekání na ustálenou scénu (počet nasazených bloků i výška obsahu pět kol beze změny), prokládání

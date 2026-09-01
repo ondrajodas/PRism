@@ -6339,8 +6339,8 @@ vodorovnou polohu si člověk nastavil sám. (2) **Svislé míjení mělo ješt�
 řádky (odhad výšky bloku 964 pt proti skutečným ~2 900, cíl skončil až **6 017 pt nad** výřezem —
 rozměry se od té doby berou **změřené** z `DiffRowFrames`) a **animace skoku**, kterou o průchod
 později uťal druhý posun (jeden skok z desítky se pohnul o dva až třináct bodů a zůstal stát). Skok
-proto **není animovaný** a druhý průchod přijde jedině u bloku, který se ještě nikdy nekreslil —
-změna proti #72.
+proto **není animovaný** (změna proti #72); druhý průchod zůstává, jen si rozměry **přeměří** —
+první skok se počítá z ploch nahlášených dosud, a ty umí být z jiné šířky.
 
 Testů **4775** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
 `DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`, `DiffSearchRevealTests`,

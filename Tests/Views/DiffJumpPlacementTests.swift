@@ -246,6 +246,19 @@ struct DiffJumpPlacementTests {
                 spot.isVisible ? "ano" : "NE"
             ))
         }
+
+        // A totéž pro **širokou** scénu ve split pohledu, protože právě tam se pozná to, co čísla
+        // říct neumí: jestli je zvýrazněný výskyt v okně doopravdy vidět.
+        let wide = try self.scene(material: Self.wideMaterial(), layout: .split)
+        defer { wide.window.orderOut(nil) }
+        await ready(wide)
+        let spot = try await jump(wide, to: 21)
+        Self.write(wide.hosting, to: URL(filePath: directory).appending(path: "skok-sirka-split.png"))
+        print(String(
+            format: "SONDA split, řádek 21: %.0f pt od hrany, výskyt %@",
+            spot.fromViewportTop,
+            Self.matchInColumn(wide, line: 21).map { $0.visible ? "vidět" : "MIMO" } ?? "nenalezen"
+        ))
     }
 
     private static func write(_ view: NSView, to url: URL) {
@@ -341,8 +354,9 @@ struct DiffJumpPlacementTests {
             previous = state
             return quiet >= 5
         }
-        // A ještě odmlka navíc: ustálená **geometrie** neznamená, že si `ScrollView` už zaregistroval
-        // `id` svých položek. Skok vypálený do toho okamžiku neudělá nic (viz doc suity).
+        // A ještě odmlka navíc: ustálená **geometrie** neznamená, že je hotové i to, co si SwiftUI
+        // vede o svých položkách. Je to jediné čekání tady, které nemá jev — proto krátké a proto
+        // se o něj žádné tvrzení neopírá.
         await settle()
     }
 
@@ -362,30 +376,26 @@ struct DiffJumpPlacementTests {
             "na řádku \(index) není výskyt",
             sourceLocation: sourceLocation
         )
-        // **Skáče se dvakrát na tentýž cíl**, a je to obcházená mez sondy, ne opatrnost: jeden skok
-        // z desítky **neudělá vůbec nic** (změřeno u #152 — posun zůstane, kde byl, i když je cíl
-        // v seznamu a kotva sedí). Druhý skok na už dosažený cíl je posun o nulu, takže měřená
-        // poloha zůstává poloha po skoku. **Co se tím zamlčí**, je zapsané v `docs/testovani.md`:
-        // jestli se ten výpadek děje i v lidském tempu, řekne jedině proklikání.
         // Aktuální výskyt do stavu hledání — z něj se počítá **vodorovné** odhalení (#152), které
-        // dělá blok sám. Bez toho by sonda měřila jen svislou osu.
+        // dělá blok sám. Bez toho by se měřila jen svislá osa.
         scene.search.hits = hits
         scene.search.current = hits.firstIndex(of: hit)
-        for _ in 0..<2 {
-            scene.target.anchor = DiffRow.anchor(in: scene.diff, hit: hit)
-            // Cíl si `DiffView` po druhém posunu spotřebuje (`scrollTarget = nil`) — a je to jediný
-            // jev, ze kterého se pozná, že skok doběhl celý, ne jen do prvního posunu.
-            await waitUntil("skok se spotřebuje", sourceLocation: sourceLocation) {
-                scene.target.anchor == nil
-            }
-            // **Nasazení bloku je vlastní jev** (#469): `NSTextView` má blok jen v pásu kolem
-            // výřezu, takže po skoku se cílový blok nasadí až o průchod později — a bez čekání by
-            // se měřilo „blok tu není“ i tehdy, když skok dopadl správně.
-            await waitUntil("blok s cílovým řádkem se nasadí", sourceLocation: sourceLocation) {
-                Self.textViews(in: scene.hosting).contains { $0.lines.contains(hit.line) }
-            }
-            await settled(scene, sourceLocation: sourceLocation)
+        // **Jeden skok, ne dva.** Dokud byl skok animovaný, jeden z desítky nedojel a scéna si
+        // musela pomáhat druhým pokusem na tentýž cíl; od chvíle, kdy animace není, je jeden skok
+        // tím, co se měří — a kdyby zase přestal dojíždět, tvrzení to **pozná**.
+        scene.target.anchor = DiffRow.anchor(in: scene.diff, hit: hit)
+        // Cíl si `DiffView` po skoku spotřebuje (`scrollTarget = nil`) — a je to jediný jev, ze
+        // kterého se pozná, že skok doběhl celý.
+        await waitUntil("skok se spotřebuje", sourceLocation: sourceLocation) {
+            scene.target.anchor == nil
         }
+        // **Nasazení bloku je vlastní jev** (#469): `NSTextView` má blok jen v pásu kolem výřezu,
+        // takže po skoku se cílový blok nasadí až o průchod později — a bez čekání by se měřilo
+        // „blok tu není“ i tehdy, když skok dopadl správně.
+        await waitUntil("blok s cílovým řádkem se nasadí", sourceLocation: sourceLocation) {
+            Self.textViews(in: scene.hosting).contains { $0.lines.contains(hit.line) }
+        }
+        await settled(scene, sourceLocation: sourceLocation)
 
         let scroller = try #require(Self.diffScroller(in: scene.hosting), sourceLocation: sourceLocation)
         let text = try #require(

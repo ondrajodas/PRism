@@ -1515,12 +1515,15 @@ a ani jedna nebyla to, co první kolo podezřívalo:
    **2 054 až 6 017 pt nad** výřezem — tedy o obrazovku až osm výš, což vypadá jako „skočilo to
    někam pryč“. Od té doby se rozměry berou **změřené** (`DiffRowFrames`, viz níž) a poloha sedí na
    dva body: 90 pt u všech zkoušených řádků.
-2. **Přerušená animace.** Skok byl animovaný a o průchod později přišel druhý, neanimovaný — ten
-   měl srovnat výšku bloku, která se mohla po nasazení změnit (#469). Jenže jeden skok z desítky
-   pak skončil **dva až třináct bodů** od místa, kde začal: druhý průchod animaci **uťal**. Se
-   změřenými rozměry se nemá co dorovnávat, takže druhý průchod odpadá — a **skok se nechává
-   neanimovaný**, protože animace, kterou stejně přebije okamžitý posun, je horší než skočit rovnou.
-   Je to změna proti #72.
+2. **Přerušená animace.** Skok byl animovaný a o průchod později přišel druhý, neanimovaný (#469).
+   Jeden skok z desítky pak skončil **dva až třináct bodů** od místa, kde začal: druhý průchod
+   animaci **uťal**. **Skok se proto nechává neanimovaný** — animace, kterou stejně přebije
+   okamžitý posun, je horší než skočit rovnou. Je to změna proti #72.
+
+   **Druhý průchod ale zůstává, a je pořád potřeba**: první skok se počítá z ploch, které bloky
+   nahlásily **dosud**, a to může být měření z doby, kdy se blok rozvrhoval na jinou šířku, tedy
+   s jiným zalomením. Změřeno: u zalomeného souboru přistál první skok **1 946 pt** vedle a druhý,
+   s přeměřenými rozměry, přesně. Se dvěma neanimovanými průchody se nemá co utínat.
 
 **Kde se ty rozměry berou:** z `DiffRowFrames`, tedy z krabice, do které bloky hlásí plochy řádků
 kvůli tažení rozsahu (#110, #252). Od #152 se do ní hlásí **každý řádek** (ne jen ten, na který se dá
