@@ -1481,14 +1481,36 @@ nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hove
 nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, **další „moje“ loginy** (`ownLogins`, #330 — jen v souboru, v okně nastavení pole není),
-**jméno MCP nástroje, kterým se čte text issue** (`issueTextTool`, #345 — taky jen v souboru),
-sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
+PR, **další „moje“ loginy** (`ownLogins`, #330), **jméno MCP nástroje, kterým se čte text issue**
+(`issueTextTool`, #345), sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
 review, jazyk nálezů, povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
 může přebít režim (`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly, kategorie
 i časový limit — a nic víc: prompt, pohled na diff, vzhled okna a notifikace jsou vlastnost
 člověka, ne repozitáře.
+
+**Celá globální konfigurace se dá nastavit z okna** (#389). Poslední dvě hodnoty, které se do té
+doby daly napsat jedině ručně do souboru, dostaly pole na stránkách, kam podle své otázky patří —
+a to je celé rozhodnutí, které za tím je: `issueTextTool` je věc **review** a `ownLogins` věc
+**identity**, takže společná sekce „ostatní“ by z okna udělala smetiště.
+
+- **`Text issue z trackeru`** na stránce `Review a skilly`, hned pod promptem — je to materiál
+  zadání, tedy tatáž otázka jako prompt. Pole je jedno, jméno nástroje se píše celé
+  (`mcp__<server>__<nástroj>`; servery vypíše `claude mcp list`) a **pevný seznam ani výchozí
+  hodnota tam být nemůže**: jméno závisí na tom, jak si člověk server pojmenoval, takže konstanta
+  by byla tvrzení o cizím stroji. Pod polem stojí **věta o tom, co z hodnoty plyne** — u prázdného
+  pole `Nevyplněno — text issue se netahá.`, u vyplněného `Tahá se — u PR s odkazem na issue běží
+  session navíc.` a u jména bez prefixu `mcp__` **varování** (ne zákaz: aplikace jméno neumí
+  ověřit, dokud session neběží). Prázdno je tedy **odpověď, ne nedodělek** — a přesně to je ten
+  stav, který by z prázdného pole nikdo nepoznal.
+- **`Moje loginy`** na stránce `Zdroje PR`, pod zdroji — tam se rozhoduje, čí PR je čí. Seznam se
+  edituje týmž editorem jako skilly a nad ním je **přihlášený účet ke čtení**: bere se z `gh api
+  user`, napsat se nedá, a bez toho řádku by prázdný seznam (běžný stav — kdo pushuje pod svým
+  `gh`, druhý login nemá) vypadal stejně jako **nenačtený** login, tedy stav, ve kterém je každý
+  PR cizí. Dokud se nenačte, stojí to u něj napsané.
+
+`appearance` v nastavení schválně **není** — přepíná se v railu (#278) a druhé místo by se s ním
+rozešlo.
 
 **Časový limit běhu se dá nastavit** (#320) na stránce `Review a skilly`, v sekci `Režim review`.
 Do té doby byl zadrátovaný v kódu (patnáct minut), takže dlouhé review skončilo `timeout`
@@ -1873,8 +1895,9 @@ zastaral hned další verzí.
    (`review-requested:@me`), a od #330 i **moje vlastní** (`author:@me is:open`). Repozitáře
    nejsou pevný seznam, může přijít cokoli. Čí PR to je, se pozná z **autora**, ne ze zdroje:
    login se zjistí jednou při startu (`gh api user`) a dokud nedorazí, je všechno cizí —
-   „nevím, kdo jsem“ nesmí znamenat „to je moje“. Do konfigurace se dají dopsat další „moje“
-   loginy (`ownLogins`) pro agenta, který pushuje pod vlastním účtem.
+   „nevím, kdo jsem“ nesmí znamenat „to je moje“. Další „moje“ loginy pro agenta, který pushuje
+   pod vlastním účtem (`ownLogins`), se od #389 zadávají v nastavení na stránce `Zdroje PR`
+   (a pořád i ručně v souboru).
 
    **Vlastní zdroj přibyl jen do výchozí konfigurace, uložená se nemigruje** — kdo `config.json`
    už má, nový zdroj v něm nenajde a musí si ho dopsat (aplikace mu do ručně editovaného souboru

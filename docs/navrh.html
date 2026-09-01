@@ -13719,10 +13719,15 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
       <div class="eyebrow">10 — Okno nastavení</div>
       <h2>Nastavení podle vzoru systémového</h2>
       <p class="muted">
-        Dneska jsou to tři taby nahoře a <em>Obecné</em> je z nich dlouhý formulář: zdroje,
-        režim, jazyk, pohled na diff, odesílání, tři editory seznamů, běh. Návrh mění tabulátor
-        za <strong>boční navigaci</strong> — stejně jako to od Ventury dělá systémové nastavení —
-        a dlouhou záložku rozpadne na kratší, které se dají najít podle jména. Nová je v ní jedna věc: <strong>prompt review</strong>, který byl do teď natvrdo v kódu, takže se dal změnit jedině commitem.
+        Do #177 to byly tři taby nahoře a <em>Obecné</em> byl z nich dlouhý formulář: zdroje,
+        režim, jazyk, pohled na diff, odesílání, tři editory seznamů, běh. Tabulátor je od #177
+        <strong>boční navigace</strong> — stejně jako to od Ventury dělá systémové nastavení —
+        a dlouhá záložka je rozpadlá na kratší, které se dají najít podle jména; <strong>prompt
+        review</strong> v ní je od #281. Nová jsou v tomhle zákresu <strong>dvě pole</strong>,
+        která se do teď nastavovala jen ručně v souboru: jméno MCP nástroje na
+        <strong>text issue</strong> (#345) a druhé <strong>„moje“ loginy</strong> (#330). Nejsou
+        to sousedi a nedostávají společnou sekci „ostatní“ — každé z nich odpovídá na jinou otázku,
+        takže leží na jiné stránce.
       </p>
     </div>
 
@@ -13738,19 +13743,18 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
 
         <div class="set-grid">
           <nav class="set-nav">
-            <div class="hd">Aplikace</div>
-            <div class="set-item"><span class="ico">⚙</span>Obecné</div>
-            <div class="set-item"><span class="ico">◫</span>Zdroje PR</div>
-            <div class="set-item on"><span class="ico">▸</span>Review a skilly</div>
+            <div class="hd">Co se hlídá</div>
+            <div class="set-item"><span class="ico">▽</span>Zdroje PR</div>
+            <div class="set-item on"><span class="ico">✦</span>Review a skilly</div>
+            <div class="set-item"><span class="ico">◫</span>Diff</div>
+            <div class="gap"></div>
+            <div class="hd">Co jde ven</div>
             <div class="set-item"><span class="ico">↥</span>Odesílání</div>
             <div class="set-item"><span class="ico">🔔</span>Notifikace</div>
             <div class="gap"></div>
-            <div class="hd">Repozitáře</div>
-            <div class="set-item"><span class="ico">▤</span>Přehled a výjimky</div>
-            <div class="gap"></div>
-            <div class="hd">Provoz</div>
-            <div class="set-item"><span class="ico">▤</span>Cache a úklid</div>
-            <div class="set-item"><span class="ico">◐</span>Zdraví služeb</div>
+            <div class="hd">Prostředí</div>
+            <div class="set-item"><span class="ico">▤</span>Repozitáře</div>
+            <div class="set-item"><span class="ico">◐</span>Běh</div>
           </nav>
 
           <div class="set-body">
@@ -13843,6 +13847,35 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
                 když si to někdo ze šablony smaže.
               </span>
             </div>
+
+            <!-- Text issue (#345, pole z #389) patří sem, ne do vlastní stránky ani do sekce
+                 „ostatní“: je to **materiál zadání pro reviewera**, tedy tatáž otázka jako prompt
+                 o kus výš — co reviewer dostane, než začne číst diff. Proto stojí hned pod
+                 promptem a nad blokujícími kategoriemi, které už mluví o výsledku. -->
+            <div class="set-sec">
+              <span class="t">Text issue z trackeru</span>
+              <div class="set-card">
+                <div class="set-block">
+                  <span class="tmpl-cap">Jméno MCP nástroje, kterým se čte text issue</span>
+                  <div class="tmpl">mcp__claude_ai_Linear__get_issue</div>
+                  <div class="tmpl-foot">
+                    <span class="tagchip">mcp__&lt;server&gt;__&lt;nástroj&gt;</span>
+                    <span class="sp"></span>
+                    <span style="font-size: 11px; color: var(--ink-3);">
+                      Tahá se — u PR s odkazem na issue běží session navíc
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <span class="note">
+                <strong>Jméno není kontrakt</strong>, ale fakt o tomhle stroji: závisí na tom, jak
+                si člověk MCP server pojmenoval, takže pevný seznam ani výchozí hodnota tady být
+                nemůže — server vypíše <code>claude mcp list</code> a jméno nástroje se skládá
+                podle vzoru pod polem. <strong>Prázdné pole znamená netahat</strong>, ne
+                „nezadáno“: session, která nemá co zavolat, stojí boot a nevrátí nic. Co se stane
+                místo toho, stojí <strong>pod polem</strong>, ne až v tabu <em>Průběh</em>.
+              </span>
+            </div>
           </div>
         </div>
 
@@ -13854,6 +13887,66 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <span class="sitem" style="color: var(--ok);">✓ Uloženo v 9:41:07</span>
           <span class="sitem">Otevřít soubor</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Druhé pole z #389. Vlastní stránka schválně: `ownLogins` neodpovídá na „co se pouští“,
+         ale na „čí PR to je“ — a to je tatáž otázka jako u zdrojů, ze kterých se seznam skládá.
+         Kreslí se i sekce `Zdroje` nad tím, protože bez ní není vidět, že loginy leží **pod**
+         zdroji, ne místo nich. -->
+    <div class="block">
+      <header>
+        <span>Stránka <strong>Zdroje PR</strong> — sem patří loginy, ne ke skillům</span>
+        <span class="more">▽ Zdroje PR</span>
+      </header>
+      <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 15px;">
+            <div class="set-sec">
+              <span class="t">Zdroje</span>
+              <div class="set-card">
+                <div class="set-block">
+                  <span class="tmpl-cap">Název a dotaz — obojí se dá psát</span>
+                  <div class="tmpl" style="font-family: var(--ui); font-size: 12px;">Čeká na mě</div>
+                  <div class="tmpl">review-requested:@me is:open</div>
+                </div>
+                <div class="set-block">
+                  <div class="tmpl" style="font-family: var(--ui); font-size: 12px;">Moje PR</div>
+                  <div class="tmpl">author:@me is:open</div>
+                </div>
+              </div>
+              <span class="note">
+                Search dotazy pro <code>gh search prs</code>. Výsledky se slévají a deduplikují.
+              </span>
+            </div>
+
+            <div class="set-sec">
+              <span class="t">Moje loginy</span>
+              <div class="set-card">
+                <div class="set-row">
+                  <span class="lbl">Přihlášený účet</span>
+                  <span class="val">
+                    <span class="mono">ondrajodas</span>
+                    <span class="tagchip">z gh</span>
+                  </span>
+                </div>
+                <div class="set-row">
+                  <span class="lbl">Další moje loginy</span>
+                  <span class="val">
+                    <span class="chipline">
+                      <span class="tagchip">github-actions[bot]</span>
+                      <span class="tagchip plus">+ přidat</span>
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <span class="note">
+                Rozhoduje to, <strong>čí PR je čí</strong>: co je moje, jde do vlastní fronty
+                a nabídne se u toho merge; ostatní čekají na review. Přihlášený účet se bere
+                z <code>gh api user</code> a <strong>nepíše se</strong> — vypisují se jen loginy,
+                které se od něj liší, typicky agent s vlastním účtem nebo bot.
+                <strong>Prázdný seznam je běžný stav</strong>, ne nedodělek: kdo pushuje pod svým
+                <code>gh</code>, druhý login nemá.
+              </span>
+            </div>
       </div>
     </div>
 
@@ -13905,6 +13998,34 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
         <span class="why">Tlačítko v tabu <em>Průběh</em> skládá příkaz z téže šablony. Dvě
         místa s vlastním textem by se rozešla první úpravou věty.</span>
       </div>
+      <div class="navcase">
+        <span class="cap">Prázdné jméno nástroje</span>
+        <div class="tmpl" style="color: var(--ink-3);">mcp__&lt;server&gt;__&lt;nástroj&gt;</div>
+        <span style="font-size: 11px; color: var(--ink-3);">
+          Nevyplněno — text issue se netahá
+        </span>
+        <span class="why">Prázdno je <strong>odpověď, ne nedodělek</strong>, takže se nekreslí
+        červeně a uložit jde. U PR s odkazem na issue zůstane odznak <code>zadání není celé</code>
+        s důvodem <em>nástroj není nastavený</em>; napsané je to i tady, aby se to nedalo splést
+        s rozbitým nastavením.</span>
+      </div>
+      <div class="navcase">
+        <span class="cap">Jméno, které nástroj nemůže být</span>
+        <div class="tmpl">get_issue</div>
+        <span style="font-size: 11px; color: var(--find);">
+          Nezačíná na <code>mcp__</code> — session takový nástroj nezavolá
+        </span>
+        <span class="why">Uložit to <strong>jde</strong>: jméno je fakt o cizím stroji a aplikace
+        nemá čím ho ověřit, dokud session neběží. Věta pod polem je proto <strong>varování, ne
+        zákaz</strong> — bez ní se chyba pozná až z odznaku u PR, tedy o jedno review později.</span>
+      </div>
+      <div class="navcase">
+        <span class="cap">Žádný druhý login</span>
+        <span class="chipline"><span class="tagchip plus">+ přidat</span></span>
+        <span class="why">Prázdný seznam nic nehlásí — většina lidí druhý účet nemá. Rozřazení pak
+        stojí jen na přihlášeném účtu, a ten je vidět <strong>nad</strong> polem: dokud se nenačte,
+        je všechno cizí, a to má být poznat odsud, ne až z prázdné vlastní fronty.</span>
+      </div>
     </div>
 
     <div class="notes">
@@ -13939,6 +14060,25 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <span>Šablona je pole, ale věta o <code>ReportFindings</code> se připojí vždycky.
           Smazat ji by review nerozbilo viditelně — jen by přestaly chodit nálezy a okno by
           hlásilo čisto.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">27</span>
+        <span class="body">
+          <b>Dvě pole, dvě stránky</b>
+          <span>Jméno nástroje na text issue je <strong>materiál zadání</strong>, takže leží pod
+          promptem u skillů. Loginy jsou <strong>identita</strong>, takže leží u zdrojů, kde se
+          rozhoduje, čí PR je čí. Společná sekce „ostatní“ by z okna udělala smetiště, ve kterém
+          se hledá podle toho, kdy co přibylo — a přesně to boční navigace z #177 rušila.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">28</span>
+        <span class="body">
+          <b>Prázdno znamená u každého pole něco jiného</b>
+          <span>U jména nástroje je prázdno <strong>rozhodnutí „netahat“</strong>, tedy stav, který
+          se musí umět napsat pod polem; u loginů je to <strong>běžný stav</strong>, o kterém není
+          co říkat. Nakreslit obojí stejně by z jednoho udělalo poruchu a z druhého nedodělek.</span>
         </span>
       </div>
     </div>
