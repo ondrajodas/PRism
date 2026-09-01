@@ -1432,7 +1432,10 @@ mezi dvěma soubory umí shodovat, takže by sytější podklad svítil na dvou 
 
 **Výskyty se skládají jen tehdy, když se něco změnilo** (#224): dotaz, kapsle `Aa`, rozbalení nebo
 sbalení kontextu, nový diff PR, dorazivší diff commitu a otevření pruhu. Nikdy z těla view.
-`refreshDiffSearch` navíc **nic nedělá, dokud se nehledá**, takže tik pollingu nad diffem nestojí nic.
+`refreshDiffSearch` navíc **nic nedělá, dokud se nehledá** — a **zavřený pruh se do toho počítá**
+(nález Copilota): dotaz si drží, ale zvýraznění jde z `drawnQuery` a kapsle v hlavičce chce `isOpen`,
+takže by se přepočítával celý diff pro výsledek, který se nemá kde nakreslit. Při otevření se skládá
+znovu, takže se nic neztratí. Tik pollingu nad diffem tím nestojí nic.
 
 **Psaní neskáče.** Po přepsání dotazu se pozice zapomíná a pruh ukazuje `17 výskytů`; na první výskyt
 se jde `⏎`, `⌘G` nebo šipkou. Skákat při každém písmenu by znamenalo diff, který se hýbe pod rukama.

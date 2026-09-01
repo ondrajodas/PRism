@@ -267,6 +267,35 @@ struct AppStoreDiffSearchTests {
         #expect(store.diffSearch(in: pr)?.hits.count == 2)
     }
 
+    /// **Zavřený pruh se nepřepočítává** (nález Copilota z #152). Dotaz si drží, ale výsledek by se
+    /// neměl kde nakreslit — a přepočet jde přes celý diff, takže by to byla práce zadarmo při
+    /// každém rozbalení kontextu i při každém novém diffu.
+    ///
+    /// Že se tím nic neztratí, tvrdí druhá půlka: **otevření pruh přeskládá**.
+    @Test("Zavřený pruh se nepřepočítává, otevření ano")
+    func aClosedBarDoesNotRecount() async throws {
+        let second = [
+            "diff --git a/\(path) b/\(path)",
+            "--- a/\(path)",
+            "+++ b/\(path)",
+            "@@ -96,2 +96,2 @@",
+            "-    private const FLUSH_TIMEOUT = 5;",
+            "+    private const FLUSH_TIMEOUT_MS = 5000;",
+        ].joined(separator: "\n")
+        let store = store(diffs: [.success(diffText), .success(second)])
+        await store.loadDiff(for: summary(pr))
+        store.openDiffSearch(in: pr)
+        store.setDiffSearchQuery("FLUSH_TIMEOUT", in: pr)
+        #expect(store.diffSearch(in: pr)?.hits.count == 3)
+
+        store.closeDiffSearch(in: pr)
+        await store.loadDiff(for: summary(pr, updatedAt: 200))
+        #expect(store.diffSearch(in: pr)?.hits.count == 3, "zavřený pruh přepočítal, ač se nekreslí")
+
+        store.openDiffSearch(in: pr)
+        #expect(store.diffSearch(in: pr)?.hits.count == 2, "otevření mělo výskyty přeskládat")
+    }
+
     // MARK: - Co se nesmí míchat
 
     @Test("Dva pull requesty mají vlastní pruh")

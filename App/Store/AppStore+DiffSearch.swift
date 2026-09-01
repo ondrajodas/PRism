@@ -96,8 +96,16 @@ extension AppStore {
     ///
     /// **Nic nedělá, dokud se nehledá**: zavřený pruh ani prázdné pole nemají co přepočítávat,
     /// takže tik pollingu nad diffem nic nestojí.
+    ///
+    /// **Zavřený pruh se počítá jako „nehledá se“, a je to podmínka, ne úspora** (nález Copilota
+    /// z #152): dotaz si zavřený pruh **drží** (druhé ⌘F pokračuje tam, kde první skončilo), takže
+    /// samotné `searchQuery.isActive` by nechalo přepočítávat celý diff při každém rozbalení
+    /// kontextu i při každém novém diffu — a výsledek by se **neměl kde nakreslit**: zvýrazňuje se
+    /// z `drawnQuery` (zavřený pruh nezvýrazňuje) a kapsle v hlavičce souboru chce `isOpen`.
+    /// Při otevření se výskyty skládají znovu (`openDiffSearch`), takže se tím nic neztratí.
     func refreshDiffSearch(in pr: PRIdentifier, commit: String? = nil) {
-        guard let state = diffSearch(in: pr, commit: commit), state.searchQuery.isActive else { return }
+        guard let state = diffSearch(in: pr, commit: commit), state.isOpen, state.searchQuery.isActive
+        else { return }
         recompute(state, in: pr, commit: commit)
     }
 

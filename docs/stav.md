@@ -6342,7 +6342,12 @@ později uťal druhý posun (jeden skok z desítky se pohnul o dva až třináct
 proto **není animovaný** (změna proti #72); druhý průchod zůstává, jen si rozměry **přeměří** —
 první skok se počítá z ploch nahlášených dosud, a ty umí být z jiné šířky.
 
-Testů **4775** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
+**Copilot k tomu našel ještě jednu věc a je opravená**: `refreshDiffSearch` přepočítával výskyty
+i se **zavřeným** pruhem (dotaz si drží), tedy celý diff při každém rozbalení kontextu a při každém
+novém diffu — a výsledek se přitom nemá kde nakreslit. Guard teď chce `isOpen`; při otevření se
+skládá znovu, takže se nic neztratí.
+
+Testů **4776** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
 `DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`, `DiffSearchRevealTests`,
 `DiffJumpPlacementTests` — poslední měří polohu po skoku v hostovaném okně), dvě měření barev
 v `DiffPaletteTests` a sonda `DiffSearchRenderProbe`. Co se v které z nich hlídá a proč,
