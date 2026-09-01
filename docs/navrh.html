@@ -37,6 +37,23 @@
   --del-bg:  #FFEBE9;
   --del-hi:  #FFC9C6;
 
+  /* Hledání v diffu (#152, sekce 39). `--hit-bg` je podklad **každého** výskytu, `--hit-hi`
+     toho, na kterém právě stojím — tedy tentýž vztah jako `--add-bg` a `--add-hi` o dva řádky
+     výš: druhá vrstva nad pozadím řádku, ne jiná barva písma.
+
+     **Vyčíslené, ne akcent s krytím**: výskyt leží střídavě na nezměněném, přidaném
+     i odebraném řádku, takže by se skrz krytí barva měnila podle podkladu (tentýž důvod jako
+     u `--crit-line` a `--add-bg`). Hodnoty jsou akcent nad `--panel`: 16 % / 34 % ve světlém,
+     15 % / 36 % v tmavém — dvě různá krytí schválně, jako u `--accent-weak`.
+
+     Změřeno (WCAG kontrast obarveného kódu nad tou plochou, ΔE2000 proti plochám, na kterých
+     leží): `--hit-bg` je od plochy vzdálený ΔE 11,9 / 11,1 a od `--hit-hi` ΔE 11,0 / 10,9, tedy
+     na první pohled jiná plocha v obou směrech. Řetězec IntelliJ Light má na `--hit-bg` 4,20
+     (dnešní `--add-hi` 4,01), na `--hit-hi` 3,10; Darcula 3,75 a 2,61 (dnešní tmavý `--add-hi`
+     2,17). Pod výsledkem hledání se tedy dá číst — to je celý důvod, proč není sytější. */
+  --hit-bg:  #E5E2FA;
+  --hit-hi:  #C7C0F4;
+
   --shadow-lg: 0 24px 60px -20px rgba(19, 23, 34, 0.28), 0 4px 14px -6px rgba(19, 23, 34, 0.14);
   --shadow-sm: 0 1px 2px rgba(19, 23, 34, 0.06), 0 4px 12px -8px rgba(19, 23, 34, 0.16);
 
@@ -75,6 +92,9 @@
     --del-bg:  #371210;
     --del-hi:  #712521;
 
+    --hit-bg:  #23243D;
+    --hit-hi:  #3D396D;
+
     --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.85), 0 4px 16px -8px rgba(0, 0, 0, 0.6);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 16px -10px rgba(0, 0, 0, 0.7);
   }
@@ -87,6 +107,7 @@
   --accent: #5B47E0;  --accent-2: #128FB0;  --accent-weak: rgba(91, 71, 224, 0.10);
   --ok: #1A7F37;  --find: #B4560A;  --crit: #CF222E;  --mint: #0C7E71;  --stale: #9A6700;
   --add-bg: #E3FBE8;  --add-hi: #ABEFC0;  --del-bg: #FFEBE9;  --del-hi: #FFC9C6;
+  --hit-bg: #E5E2FA;  --hit-hi: #C7C0F4;
   --shadow-lg: 0 24px 60px -20px rgba(19, 23, 34, 0.28), 0 4px 14px -6px rgba(19, 23, 34, 0.14);
   --shadow-sm: 0 1px 2px rgba(19, 23, 34, 0.06), 0 4px 12px -8px rgba(19, 23, 34, 0.16);
 }
@@ -99,6 +120,7 @@
   --ok: #3FB950;  --find: #E8944A;  --crit: #F85149;  --mint: #2DD4BF;  --stale: #D4A72C;
   --add-bg: #0F2C13;  --add-hi: #1D5625;
   --del-bg: #371210;  --del-hi: #712521;
+  --hit-bg: #23243D;  --hit-hi: #3D396D;
   --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.85), 0 4px 16px -8px rgba(0, 0, 0, 0.6);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 16px -10px rgba(0, 0, 0, 0.7);
 }
@@ -654,6 +676,9 @@ code {
 .pill.idle  { color: var(--ink-2); background: var(--panel-3); }
 .pill.stale { color: var(--stale); background: color-mix(in srgb, var(--stale) 16%, transparent); }
 .pill.mint  { color: var(--mint); background: color-mix(in srgb, var(--mint) 15%, transparent); }
+/* Kolik výskytů má soubor (#152). Akcent, ne `--find`: `--find` je **nález**, a odznak nálezu
+   visí v téže hlavičce o dva prvky vedle. Kapsle je vidět jen s otevřeným polem hledání. */
+.pill.hits  { color: var(--accent); background: var(--accent-weak); }
 
 /* spektrum reviewerů */
 .spectrum { display: flex; height: 5px; border-radius: 3px; overflow: hidden; width: 74px; flex: none; }
@@ -793,6 +818,12 @@ tr.hunk td { background: var(--panel-3); color: var(--ink-3); font-size: 10.5px;
 tr.flag td { background: color-mix(in srgb, var(--crit) 8%, var(--add-bg)); }
 mark.w { background: var(--add-hi); color: inherit; border-radius: 2px; padding: 0 1px; }
 tr.del mark.w { background: var(--del-hi); }
+/* Výsledek hledání (#152, sekce 39) — **třetí vrstva** nad obarvením syntaxe a nad word-level
+   zvýrazněním. Pořadí je rozhodnutí, ne náhoda: hledání vyhrává, protože je to jediná vrstva,
+   kterou si člověk zapnul sám a která zhasne, jak pole zavře. Barva písma zůstává ta ze syntaxe
+   — dvě sady barev na tomtéž textu se čtou jako kaše (tentýž důvod jako u `mark.w`). */
+mark.hit { background: var(--hit-bg); color: inherit; border-radius: 2px; padding: 0 1px; }
+mark.hit.on { background: var(--hit-hi); }
 
 /* barvy syntaxe */
 .k  { color: #A855F7; }
@@ -1482,7 +1513,9 @@ footer.end {
 .difftools .tool {
   font-size: 11.5px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 5px;
 }
-.difftools .kbd {
+/* `.findbar` je v selektoru schválně (#152): kapsle klávesy je tatáž věc v liště i v pruhu
+   hledání pod ní, a druhá kopie hodnot by se rozešla. */
+.difftools .kbd, .findbar .kbd {
   font-family: var(--mono); font-size: 10px; color: var(--ink-3);
   border: 1px solid var(--line); border-radius: 4px; padding: 0 5px;
 }
@@ -1497,13 +1530,15 @@ footer.end {
 .findnav .lbl { font-size: 11.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .findnav .lbl b { font-weight: 620; }
 .findnav .sep { width: 1px; height: 15px; background: var(--line); }
-.findnav .arrows { display: flex; gap: 1px; }
-.findnav .arrow {
+/* Šipky bere i pruh hledání (#152, sekce 39) — je to tentýž prvek pro tentýž pohyb (další,
+   předchozí), takže se kreslí jedním pravidlem. Šipka na kraji **zhasne, ne zmizí**. */
+.findnav .arrows, .findbar .arrows { display: flex; gap: 1px; }
+.findnav .arrow, .findbar .arrow {
   width: 21px; height: 20px; border-radius: 5px;
   display: grid; place-items: center; font-size: 12px; color: var(--ink-2);
 }
-.findnav .arrow.hot { background: var(--accent-weak); color: var(--accent); }
-.findnav .arrow.off { color: var(--ink-3); opacity: 0.35; }
+.findnav .arrow.hot, .findbar .arrow.hot { background: var(--accent-weak); color: var(--accent); }
+.findnav .arrow.off, .findbar .arrow.off { color: var(--ink-3); opacity: 0.35; }
 .findnav .only {
   font-size: 10.5px; color: var(--ink-2); padding: 1px 7px;
   border-radius: 20px; background: var(--panel-3);
@@ -2452,6 +2487,83 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
   background: var(--panel-3); padding: 2px 10px;
 }
+
+/* ---- sekce 39: hledání v diffu (⌘F) ---------------------------------------------
+   Pruh je **druhá řádka chromu pod lištou diffu**, ne pole v liště a ne překryv nad kódem.
+   Tři důvody, každý z nich rozhodnutí:
+
+   1. **V liště pro něj není místo.** Lišta se u #219 schválně zmenšila na tři věci a v užším
+      okně se nevešla ani tak; pole se počtem, šipkami a větou o rozsahu je širší než všechny
+      tři dohromady.
+   2. **Překryv by zakryl kód.** Nad diffem drží pravý horní kout ukotvená hlavička souboru
+      (`.fhead { position: sticky }`) — právě to, podle čeho se pozná, kde v PR jsem.
+   3. **Pruh existuje jen otevřený**, takže se za jeho výšku platí jedině při hledání a lišta
+      nad ním zůstává, jaká byla.
+
+   Přes **celou** šířku, tedy i nad stromem souborů: hledá se v celém diffu, ne v jednom
+   souboru, a strom je při hledání to druhé místo, kde se výsledek projeví (kapsle v hlavičce).
+   V okně to je druhý prvek téhož `VStack`u, který drží lištu — nad `HStack`em se stromem. */
+.findbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; background: var(--panel-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.findbar .sp { flex: 1; }
+.findbar .fb-ico { font-size: 12px; color: var(--ink-3); flex: none; }
+/* Pole je nakreslené **se zaostřením**, protože jinak se v okně neobjeví: ⌘F ho otevírá
+   a zaměřuje jedním hmatem. Prstýnek je `--accent-weak`, tedy tentýž, jakým se v tomhle
+   dokumentu kreslí zaostřená pole jinde. */
+.findbar .fb-fld {
+  display: flex; align-items: center; min-width: 220px;
+  padding: 3px 8px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--panel); box-shadow: 0 0 0 3px var(--accent-weak);
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+}
+.findbar .fb-fld .caret {
+  display: inline-block; width: 1px; height: 13px; background: var(--accent); margin-left: 1px;
+}
+.findbar .fb-fld .ph { color: var(--ink-3); }
+/* Počet je tabulární schválně — mezi `9 z 17` a `10 z 17` se nesmí uhnout šipky zpod myši
+   (tentýž požadavek jako u `.findnav .lbl`). */
+.findbar .fb-cnt { font-size: 11.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.findbar .fb-cnt b { font-weight: 620; }
+/* Rozsah hledání jako kapsle vedle počtu, ne věta v liště: je to údaj ke **číslu**, ne
+   samostatné sdělení. Celá věta je v nápovědě a v prázdném stavu, kde na ní záleží. */
+.findbar .fb-scope {
+  font-size: 10.5px; color: var(--ink-2); padding: 1px 7px;
+  border-radius: 20px; background: var(--panel-3); white-space: nowrap;
+}
+.findbar .sep { width: 1px; height: 15px; background: var(--line); flex: none; }
+/* Rozlišování velikosti je kapsle **uvnitř** pruhu, jako `jen blokující` v `.findnav`: platí
+   jen pro tohle hledání a nikde jinde v okně nic nepřepíná. */
+.findbar .fb-case {
+  font-size: 10.5px; color: var(--ink-2); padding: 1px 7px;
+  border-radius: 20px; background: var(--panel-3); font-family: var(--mono);
+}
+.findbar .fb-case.on {
+  background: var(--accent-weak); color: var(--accent); font-weight: 600;
+}
+/* Věta, kterou pruh říká o rozsahu. `--ink-3`: je to poznámka pod čarou, ne varování —
+   dokud se něco našlo. */
+.findbar .fb-say { font-size: 11.5px; color: var(--ink-3); }
+/* Prázdný stav. Okrová, ne červená: nic se nepokazilo, jen se nad nenačteným kódem nedá nic
+   tvrdit — tatáž kategorie jako zastarání (`--stale`), viz poznámka 127. */
+.findbar .fb-say.miss { color: var(--stale); }
+.findbar .fb-say.miss b { color: var(--stale); font-weight: 620; }
+.findbar .fb-x {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--ink-2); flex: none;
+}
+/* Popisek pod zákresem — tentýž tvar jako `.hscap` u sekcí 29 a 30. Mezera nad ním je z `.pane`
+   (flex column s `gap: 9px`), ne z vlastního `margin`u: obojí by se sečetlo. */
+.fbcap {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 8px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.fbcap b { color: var(--ink-2); font-weight: 600; letter-spacing: 0.04em; }
+.fbcap .warn { color: var(--stale); text-transform: none; letter-spacing: 0; font-size: 10.5px; }
+.fbstack { display: flex; flex-direction: column; gap: 20px; }
 
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
@@ -6993,6 +7105,293 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           mála, co z bloku vidět je, a popisoval by kód, který není čím přečíst. Tři je odhad,
           ne měření, a je to <b>jediné</b> číslo v téhle sekci, které měřením podložené není —
           proto je vypsané tady.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s39">
+    <div class="section-head">
+      <div class="eyebrow">39 — Změněné soubory · hledání (⌘F)</div>
+      <h2>Hledá se v tom, co jsme přečetli — a stojí to u počtu</h2>
+      <p class="muted">
+        U PR o padesáti souborech je dnes jediná navigace strom souborů: dá se jím skočit na
+        soubor, ne na slovo. Otázka „kde se to v tom PR bere“ tedy nemá v okně odpověď a končí
+        v prohlížeči. ⌘F otevře <b>pruh pod lištou diffu</b>: pole, počet výskytů, šipky mezi
+        nimi a zvýraznění nalezeného v kódu.
+      </p>
+      <p class="muted">
+        <b>Není to náhrada systémového hledání, protože žádné nad diffem není</b> — ale ne
+        z toho důvodu, který stál v zadání issue #152 (srpen 2026). Text v diffu <b>vybrat
+        jde</b>: od #157 kreslí kód <code>NSTextView</code> a výběr přes řádky umí. Naráží na
+        dvě jiné meze, a obě platí dál. Výběr <b>končí na hranici bloku</b>, tedy po
+        <b>60 řádcích</b> (<code>DiffBlock.maxLines</code>), takže přes soubory nesahá vůbec.
+        A blok, který není v pásu kolem výřezu, <b>žádné textové view nemá</b> (od #469
+        <code>Policy.mountBand</code>): nakreslený text je pořád jen zlomek diffu, jen už to
+        nedělá líný seznam, ale nasazování bloků. Hledat se proto musí <b>nad modelem</b>,
+        ne nad tím, co je na obrazovce.
+      </p>
+      <p class="muted">
+        Otevřená otázka ze zadání — <em>hledá se i v kódu mimo hunky?</em> — je rozhodnutá
+        <b>ne</b>, a rozsah se <b>říká</b>: kapsle <code>jen v diffu</code> stojí hned u počtu
+        a v prázdném stavu ji vystřídá celá věta. Hledá se v hunkách <b>a v rozbaleném
+        kontextu</b>, protože ten už je načtený a je to obyčejný obsah souboru. Zbytek souborů
+        se pro hledání <b>nedotahuje</b>: u padesátisouborového PR je to padesát volání
+        na GitHub kvůli jednomu slovu, a tvrdit „nic nenalezeno“ nad kódem, který jsme nečetli,
+        je věta, kterou data neunesou.
+      </p>
+    </div>
+
+    <div class="fbstack">
+      <div class="pane new">
+        <div class="tag"><i></i>Otevřený pruh — 4. z 17 výskytů</div>
+        <div class="frame flat">
+          <!-- lišta diffu tak, jak ji okno má dnes; nová je jen položka `⌕ Hledat` -->
+          <div class="difftools">
+            <div class="segbtn">
+              <span class="on"><span class="g">≡</span>Pod sebou</span>
+              <span><span class="g">‖</span>Vedle sebe</span>
+            </div>
+            <span class="findnav">
+              <span class="dot"></span>
+              <span class="lbl"><b>1</b> z 3 nálezů</span>
+              <span class="sep"></span>
+              <span class="arrows">
+                <span class="arrow off">↑</span>
+                <span class="arrow hot">↓</span>
+              </span>
+            </span>
+            <span class="sp"></span>
+            <span class="tool" style="color: var(--accent);">⌕ Hledat <span class="kbd">⌘F</span></span>
+            <span class="tool">⌄ Rozbalit vše</span>
+          </div>
+
+          <!-- nový pruh hledání -->
+          <div class="findbar">
+            <span class="fb-ico">⌕</span>
+            <span class="fb-fld">FLUSH_TIMEOUT<i class="caret"></i></span>
+            <span class="fb-cnt"><b>4</b> z 17</span>
+            <span class="fb-scope">jen v diffu</span>
+            <span class="sep"></span>
+            <span class="arrows">
+              <span class="arrow hot">↑</span>
+              <span class="arrow hot">↓</span>
+            </span>
+            <span class="kbd">⌘G</span>
+            <span class="fb-case on">Aa</span>
+            <span class="sp"></span>
+            <span class="fb-say">hunky a rozbalený kontext</span>
+            <span class="fb-x">✕ <span class="kbd">esc</span></span>
+          </div>
+
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="pill crit">1 blokuje</span>
+            <span class="pill hits">3 výskyty</span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ok);">+18</span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--crit);">−6</span>
+            <span style="color: var(--ink-3);">⌄</span>
+          </div>
+
+          <table class="diff">
+            <tr class="hunk"><td colspan="3">@@ -96,24 +96,28 @@ final class SecretClient</td></tr>
+            <tr>
+              <td class="ln">96</td><td class="sg"></td>
+              <td class="code">    <span class="k">private const</span> <mark class="hit">FLUSH_TIMEOUT</mark> = <span class="st">5</span>;</td>
+            </tr>
+            <tr>
+              <td class="ln">97</td><td class="sg"></td>
+              <td class="code"></td>
+            </tr>
+            <tr>
+              <td class="ln">98</td><td class="sg"></td>
+              <td class="code">    <span class="k">public function</span> <span class="fn">flush</span>(): <span class="k">void</span></td>
+            </tr>
+            <tr>
+              <td class="ln">99</td><td class="sg"></td>
+              <td class="code">    {</td>
+            </tr>
+            <tr class="del">
+              <td class="ln">103</td><td class="sg">−</td>
+              <td class="code">        <span class="vr">$this</span>-&gt;client-&gt;<span class="fn">put</span>($key, $value, [<span class="st">'timeout'</span> =&gt; <span class="k">self</span>::<mark class="hit">FLUSH_TIMEOUT</mark>]);</td>
+            </tr>
+            <tr class="add">
+              <td class="ln">103</td><td class="sg">+</td>
+              <td class="code">        $chunks = <span class="fn">array_chunk</span>(<span class="vr">$this</span>-&gt;pending, <span class="k">self</span>::FLUSH_BATCH, <span class="k">true</span>);</td>
+            </tr>
+            <tr class="add">
+              <td class="ln">105</td><td class="sg">+</td>
+              <td class="code">            <span class="vr">$this</span>-&gt;client-&gt;<mark class="w"><span class="fn">putMultiple</span>($chunk</mark>, [<span class="st">'timeout'</span> =&gt; <span class="k">self</span>::<mark class="w"><mark class="hit on">FLUSH_TIMEOUT</mark>_MS</mark>]);</td>
+            </tr>
+            <tr>
+              <td class="ln">106</td><td class="sg"></td>
+              <td class="code">        }</td>
+            </tr>
+          </table>
+        </div>
+        <div class="fbcap">
+          <b>Tři vrstvy nad jedním řádkem</b> — syntaxe, word-level rozdíl, hledání
+          <span class="warn">na řádku 105 leží výsledek uvnitř změněného slova: podklad hledání
+          vyhrává, barva písma zůstává ze syntaxe</span>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Nic — a co se u toho říká</div>
+        <div class="frame flat">
+          <div class="findbar">
+            <span class="fb-ico">⌕</span>
+            <span class="fb-fld">DEFAULT_BACKEND<i class="caret"></i></span>
+            <span class="fb-say miss"><b>v diffu nic</b> — mimo hunky se nehledá</span>
+            <span class="sep"></span>
+            <span class="arrows">
+              <span class="arrow off">↑</span>
+              <span class="arrow off">↓</span>
+            </span>
+            <span class="fb-case">Aa</span>
+            <span class="sp"></span>
+            <span class="fb-say">rozbal kontext (<span style="font-family: var(--mono);">⌄</span>) a započítá se</span>
+            <span class="fb-x">✕ <span class="kbd">esc</span></span>
+          </div>
+        </div>
+        <div class="fbcap">
+          <b>Ne „nic nenalezeno“</b> — to by tvrdilo něco o celém souboru
+          <span class="warn">pole nezčervená a nic nebliká: nic se nepokazilo, jen se nad
+          nenačteným kódem nedá nic tvrdit</span>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Sbalený soubor — výskyty se počítají</div>
+        <div class="frame flat">
+          <div class="fhead">
+            <span>▸</span>
+            <span class="path"><span>tests/</span><b>SecretClientTest.php</b></span>
+            <span class="pill hits">2 výskyty</span>
+            <span class="sp"></span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--ok);">+42</span>
+            <span style="font-family: var(--mono); font-size: 11px; color: var(--crit);">−1</span>
+            <span style="color: var(--ink-3);">⌄</span>
+          </div>
+        </div>
+        <div class="fbcap">
+          <b>Skok soubor rozbalí</b> — jako skok ze stromu
+          <span class="warn">sbalený soubor je načtený, jen zavřený: nepočítat ho by znamenalo,
+          že počet závisí na tom, co mám zrovna otevřené</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">123</span>
+        <span class="body">
+          <b>Co z odůvodnění issue #152 už neplatí</b>
+          <span>Zadání ze srpna 2026 tvrdí, že se text v diffu <b>nedá vybrat</b>, protože
+          <code>.textSelection(.enabled)</code> je nad ním vypnuté kvůli tisícům
+          <code>Text</code>ů v líném seznamu. Přeměřeno: <b>vybrat se dá</b> — kód v diffu kreslí
+          od #157 <code>NSTextView</code> s <code>isSelectable = true</code> a jediné
+          <code>.textSelection(.disabled)</code> v <code>App/</code> je nad úryvkem u vlákna
+          konverzace, ne nad diffem. Ze zadání tedy platí <b>závěr, ne důvod</b> — a i závěr
+          z jiné příčiny (poznámky 124 a dvě meze v úvodu sekce).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">124</span>
+        <span class="body">
+          <b>Hledá se nad modelem, ne nad nakresleným</b>
+          <span>Skládání výsledků je čistá funkce nad <code>Diff</code>em, tedy
+          <code>App/Diff/</code>. Ne proto, že je diff líný seznam — od #469 je pevný
+          <code>VStack</code> —, ale proto, že blok kódu mimo pás kolem výřezu nemá
+          <code>NSTextView</code> vůbec (<code>Policy.mountBand</code>,
+          <code>DiffBlockSlot</code>). Hledání nad vykresleným textem by tedy našlo
+          obrazovku a půl, a s odrolováním by se počet <b>měnil</b>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">125</span>
+        <span class="body">
+          <b>Rozsah je u počtu, ne v nápovědě</b>
+          <span>Kapsle <code>jen v diffu</code> stojí vedle <code>4 z 17</code>, protože je to
+          údaj k tomu číslu. Celá věta (<em>hledá se v hunkách a v rozbaleném kontextu; zbytek
+          souborů se nenačítá</em>) je v nápovědě a v pruhu z ní zbývá jen konec
+          — <code>hunky a rozbalený kontext</code>. V úzkém okně odchází první ta věta, kapsle
+          zůstává: bez ní by počet tvrdil víc, než ví.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">126</span>
+        <span class="body">
+          <b>Sbalený soubor se počítá, skok ho rozbalí</b>
+          <span>Sbalení je stav okna, ne stav dat — soubor je načtený a hledání ho vidí. Skok
+          na výskyt v něm ho proto <b>nejdřív rozbalí</b> a teprve pak nastaví cíl, přesně jako
+          skok ze stromu a jako skok na nález (<code>DiffRow.anchor</code>). Kolik výskytů
+          soubor má, říká kapsle v jeho hlavičce — jinak by u sbaleného souboru nebylo z čeho
+          poznat, že se v něm počítalo.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">127</span>
+        <span class="body">
+          <b>Prázdný stav neříká „nic nenalezeno“</b>
+          <span>Říká <b>v diffu nic — mimo hunky se nehledá</b>, a vedle toho, co se s tím dá
+          udělat (<em>rozbal kontext</em>). Barva je okrová <code>--stale</code>, ne červená:
+          nic se nepokazilo. Pole se přitom <b>neobarvuje</b> — zčervenalé pole je hláška
+          o vstupu, kdežto tady je vstup v pořádku a odpověď je „nevím o celém souboru“.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">128</span>
+        <span class="body">
+          <b>Tři vrstvy nad jedním řádkem — a kdo vyhrává</b>
+          <span>Nad pozadím řádku (<code>--add-bg</code>) leží word-level rozdíl
+          (<code>--add-hi</code>) a nad ním výsledek hledání (<code>--hit-bg</code>).
+          <b>Hledání vyhrává</b>, protože je to jediná z těch vrstev, kterou si člověk zapnul
+          sám a která zhasne, jak zavře pole. Barva písma zůstává vždycky ze syntaxe. Do
+          <code>SyntaxRunCache</code> zvýraznění <b>nesmí</b> (#153): cache je klíčovaná
+          <code>(text řádku, jazyk)</code>, a hledaný výraz do toho klíče nepatří.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">129</span>
+        <span class="body">
+          <b>Klávesy: ⌘F, ⌘G / ⌘⇧G, esc</b>
+          <span>⌘F otevře pruh a zaostří pole (podruhé vybere, co je v něm napsané);
+          <code>⌘G</code> a <code>⌘⇧G</code> jsou další a předchozí výskyt, tedy ta kombinace,
+          kterou má na hledání celý systém. <code>⌥↓</code> zůstává <b>nálezům</b> — dvě věci
+          pod jednou klávesou znamenají, že vyhraje ta zaregistrovaná později. <b>esc pruh
+          zavře</b> a zvýraznění zhasne; v tabu <em>Commity</em> tím pádem
+          <code>esc</code> <b>nezavře diff commitu</b>, dokud je pole otevřené — zkratka okna
+          se zakáže a klávesa propadne pruhu, tentýž vzorec jako u <code>⌘⏎</code> v tabu
+          <em>Zeptat se</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">130</span>
+        <span class="body">
+          <b>Co se do pruhu nedostalo</b>
+          <span><b>Regulární výrazy</b> ne: hledá se podřetězec, protože chybný regexp je stav,
+          který by pruh musel hlásit, a v kódu se hledá jméno. <b>Hledání v cestách</b> ne —
+          to je práce stromu, ne diffu. <b>Značka výskytu ve stromu</b> ne: glyf
+          <code>.mk</code> u souboru už nese nález a dva významy v jednom kolečku se nedají
+          rozlišit; místo toho je kapsle v hlavičce souboru. A <b>obrys</b> aktuálního výskytu
+          ne — v <code>NSAttributedString</code> by neměl čím vzniknout, takže by se návrh
+          nedal nakreslit 1 : 1; rozlišuje ho sytější podklad
+          (<code>--hit-hi</code>, ΔE 11,0 / 10,9 proti <code>--hit-bg</code>).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">131</span>
+        <span class="body">
+          <b>Cena: počet nad modelem, zvýraznění jen na nasazených blocích</b>
+          <span>Počet se skládá nad <code>Diff</code>em, tedy jednou za změnu dotazu, a
+          <b>pamatuje se</b> — přepočítávat ho při každém překreslení je zakázaná třída (#224).
+          Zvýraznění naopak vzniká <b>až v textu bloku</b>, jako třetí vrstva atributů, takže
+          se za něj platí jen u bloků, které jsou v pásu kolem výřezu. Dotaz proto patří do
+          klíče sazby (<code>DiffBlockStyle</code>): jinak by se po jeho změně sazba
+          <b>přeskočila</b> a v okně by zůstalo zvýraznění předchozího slova.</span>
         </span>
       </div>
     </div>

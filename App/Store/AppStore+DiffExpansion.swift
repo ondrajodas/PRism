@@ -42,6 +42,9 @@ extension AppStore {
             guard !expansion.revealed.ranges.isEmpty else { continue }
             expansions[key]?.revealed = RevealedLines()
         }
+        // Sbalený kontext z hledání **vypadne** (#152): řádky v okně nejsou, takže by je počet
+        // tvrdil o kódu, na který se nedá skočit.
+        refreshDiffSearch(in: pr, commit: commit)
     }
 
     /// Odkryje skryté řádky souboru. Obsah se dotáhne při prvním rozbalení a pak už se drží.
@@ -60,6 +63,9 @@ extension AppStore {
         guard state.content.isEmpty else {
             state.revealed.reveal(lines)
             expansions[key] = state
+            // Rozbalený kontext se do hledání **započítá** (#152) — právě to říká věta v pruhu,
+            // takže se počet musí přeskládat hned, jak řádky přibudou.
+            refreshDiffSearch(in: pr, commit: commit)
             return
         }
 
@@ -92,6 +98,9 @@ extension AppStore {
             }
             state.pending = []
             expansions[key] = state
+            // Tentýž důvod jako u druhého rozbalení výš — jen tady řádky přibyly až s dotaženým
+            // obsahem souboru.
+            refreshDiffSearch(in: key.pullRequest, commit: key.commit)
         } catch is CancellationError {
             // Zrušení není selhání: úsek zůstane skrytý a další kliknutí to zkusí znovu.
             expansions[key]?.isLoading = false

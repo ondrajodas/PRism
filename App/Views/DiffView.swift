@@ -65,6 +65,9 @@ struct DiffView: View {
     /// i v tabu, kde diff není.
     var panelExpanded: Binding<Bool>?
     var stepFinding: ((NavigationStep) -> Void)?
+    /// Hledání v diffu (#152). Stav drží store (musí přežít přepnutí tabu i složení panelu), tudy
+    /// jdou akce. **Prázdné znamená „tady se nehledá“** — tak to má náhled i sonda.
+    var search = DiffSearchActions()
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -75,6 +78,12 @@ struct DiffView: View {
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
     @State private var viewportHeight = 0.0
+    /// Co je cílem posledního skoku — z toho se počítá, kolik místa nad ním zůstane (#152).
+    ///
+    /// **Nastavuje se spolu s cílem a platí pro jeden skok**: `scrollTarget` je binding, do kterého
+    /// píše i panel nálezů, a ten o hledání nic neví. Kdo cíl nastaví odjinud, dostane tedy
+    /// `.bubble`, protože se hodnota po každém skoku vrací.
+    @State private var jumpTarget = DiffJumpTarget.bubble
     /// Pro který pohled už automatika sloupce složila (#188). Bez toho by se opakovala při
     /// každém vzniku view a přebíjela ruční `⌘1`/`⌘2`.
     @State private var appliedLayout: DiffLayout?
@@ -103,6 +112,17 @@ struct DiffView: View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 toolbar
+                // Pruh hledání (#152) — **druhá řádka chromu pod lištou**, přes celou šířku, tedy
+                // i nad stromem: hledá se v celém diffu, ne v jednom souboru. Existuje jen
+                // otevřený, takže lišta nad ním zůstává, jaká byla.
+                //
+                // Tělo diffu tím čte **jedinou** vlastnost hledání (`isOpen`), která se mění
+                // dvakrát za hledání; dotaz ani počet výskytů si odsud nebere nikdo (#472).
+                if let state = search.state, state.isOpen {
+                    DiffSearchBar(search: state, actions: search) { direction in
+                        step(search: direction)
+                    }
+                }
                 // Strom vlevo, diff vedle něj (#197). Do té doby byl strom jen v popoveru,
                 // takže u PR o padesáti souborech nešlo poznat, kde v něm člověk je, aniž by
                 // ho otevřel.
@@ -115,6 +135,12 @@ struct DiffView: View {
                 }
             }
             .background(alignment: .topLeading) { treeShortcut }
+            .background(alignment: .topLeading) { searchShortcut }
+            // Stav hledání **prostředím** (#152), ne parametrem: dotaz se mění při každém písmenu
+            // a čtou ho bloky kódu a hlavičky souborů, tedy listy hierarchie. Identita objektu se
+            // nemění, takže tělo diffu se tím nepřekresluje — sledují se jeho **vlastnosti**, každou
+            // čte někdo jiný (viz `DiffSearchState`). Tentýž vzorec jako u `DiffViewport`.
+            .environment(search.state)
             // **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě
             // strany, takže na 14" nezbude ani 100 znaků; pod sebou je zase rozbalí. Ruční
             // `⌘1`/`⌘2` to přebijí jednoduše tím, že platí až do **další** změny pohledu.
@@ -145,34 +171,96 @@ struct DiffView: View {
             .task(id: scrollTarget) {
                 guard let target = scrollTarget else { return }
                 // Cíl je **řádek**, ale v seznamu je od #157 blok, který nese `id` jen toho
-                // prvního — bez překladu `scrollTo` tiše nic neudělá.
-                let id = blockID(covering: target)
-                withAnimation { proxy.scrollTo(id, anchor: jumpAnchor) }
-                // **Podruhé o průchod později** (#469). Cíl mohl být do téhle chvíle jen
-                // rezervovanou výškou (`DiffBlockSlot`); jak se po skoku dostane do pásu, nasadí
-                // se a jeho výška se dorovná na skutečnou — a s ní se posune i to, co je pod ním.
-                // Druhý skok to srovná. Je to **zmírnění, ne záruka**: kolik průchodů to sedne,
+                // prvního — bez překladu `scrollTo` tiše nic neudělá. Od #152 se z téhož místa
+                // bere i to, **kolikátý** ten řádek v bloku je: podíl výšky platí pro blok, takže
+                // bez toho míří skok na blok a řádek v něm leží, kde leží.
+                let spot = DiffRow.blockSpot(of: target, in: blockedRows(covering: target))
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
+                // **Podruhé o průchod později** (#469), a od #152 s **přeměřenými** rozměry.
+                //
+                // Ten první skok se totiž počítá z ploch, které bloky nahlásily **dosud** — a to
+                // může být měření z doby, kdy se blok rozvrhoval na jinou šířku, tedy s jiným
+                // zalomením. Změřeno: u souboru se zalomenými řádky přistál první skok 1 946 pt
+                // vedle a druhý přesně. Je to **zmírnění, ne záruka**: kolik průchodů to sedne,
                 // se řídit nedá, a čekat časovačem je zakázaná třída (#350).
+                //
+                // **Skok se u toho nechává neanimovaný.** Animovaný první průchod tenhle druhý
+                // **utínal** a jeden skok z desítky pak skončil dva až třináct bodů od místa, kde
+                // začal — to je ta „někdy se nescrolluje" z proklikání (změřeno, viz
+                // `docs/testovani.md`). Je to změna proti #72 a je **vidět**.
                 await Task.yield()
-                proxy.scrollTo(id, anchor: jumpAnchor)
+                // **Zrušený skok už nesrovnává nic** (nález z vlastní revize #152): `task(id:)`
+                // starý průchod při změně cíle zruší, jenže `Task.yield()` z něj nevyskočí — takže
+                // by ten starý dokončil posun na **svůj** cíl a nový by vzápětí **vynuloval**.
+                guard !Task.isCancelled else { return }
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
                 scrollTarget = nil
+                // Zpátky na výchozí druh cíle: příští skok může přijít z panelu nálezů, který
+                // `jumpTarget` nenastavuje.
+                jumpTarget = .bubble
             }
         }
     }
 
-    /// Blok, který cílový řádek pokrývá — a když žádný, cíl sám.
+    /// Skok na další (nebo předchozí) výskyt hledání (#152).
+    ///
+    /// **Jde stejnou cestou jako skok na nález**: kotva se složí z `DiffRow` a nastaví se do
+    /// `scrollTarget`, který si pak sám přeloží řádek na blok (`blockID(covering:)`). Sbalený soubor
+    /// se **rozbalí dřív, než se cíl nastaví** — jinak by se ukázala jen jeho hlavička; tentýž
+    /// požadavek jako u skoku ze stromu.
+    ///
+    /// Kotva se skládá **tady, ne ve store**: pohled na diff (`layout`) a rozbalený kontext ví
+    /// jedině view, a ve split pohledu na tom identita řádku závisí.
+    private func step(search direction: NavigationStep) {
+        guard let hit = search.step(direction) else { return }
+        guard let file = diff.file(at: hit.path) else { return }
+        if folding.isFolded(file) { folding.toggle(file) }
+        let state = expansion.state(file)
+        // **Druh cíle se nastaví dřív než cíl sám**: `task(id:)` se spustí až po tomhle průchodu,
+        // takže si vezme obojí naráz.
+        jumpTarget = .searchHit
+        scrollTarget = DiffRow.anchor(
+            in: diff,
+            hit: hit,
+            layout: layout,
+            revealed: state.revealed,
+            content: state.content
+        )
+    }
+
+    /// `⌘F` otevře pruh a zaostří pole. Bydlí **mimo lištu** ze stejného důvodu jako `⌘1` o kus níž:
+    /// v liště je jen popisek `Hledat`, a ten otevírá kliknutím.
+    ///
+    /// Průhledné tlačítko, ne `.hidden()`: skryté view z hierarchie zmizí i se zkratkou.
+    /// `⌘G`/`⌘⇧G` tady **nejsou** — registruje je pruh, takže existují jedině tehdy, když je kam
+    /// skákat.
+    @ViewBuilder private var searchShortcut: some View {
+        // **Nad prázdným diffem se nenabízí, stejně jako popisek v liště**: pruh, ve kterém se
+        // nedá nic najít, je zkratka, po které se nic nestane — a ta je k nerozeznání od rozbité
+        // aplikace. Zakázané tlačítko klávesu nebere a propadne dál.
+        if let open = search.open, !diff.files.isEmpty {
+            Button("Hledat v diffu", action: open)
+                .windowShortcut(.findInDiff)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Řádky souboru, ve kterém cíl leží, **už slité do bloků** — z nich se pozná, na co `scrollTo`
+    /// míří a kolikátý řádek bloku to je (`DiffRow.blockSpot`). Prázdné, když ten soubor v diffu není.
     ///
     /// Skládá se **týmiž vstupy, jakými se ten soubor kreslí** (pohled, odkryté úseky, bubliny,
     /// vlákna, komentáře): kde se blok přeruší, na nich totiž závisí, a index poskládaný z jiných
     /// vstupů by ukazoval na blok, který v seznamu není. Počítá se jen při skoku, tedy jednou za
     /// kliknutí, a jen pro **jeden** soubor.
-    private func blockID(covering target: String) -> String {
+    private func blockedRows(covering target: String) -> [DiffRow] {
         // Porovnává se na **celé** `id`, ne na prefix: cesty se přejmenováním umí stát prefixem
         // jedna druhé (`src/A.php` a `src/A.php.bak`) a index by se pak skládal z cizího souboru.
         // Cíl je buď `file.id` sám (skok na hlavičku), nebo `file.id|<řádek>`.
         guard
             let file = diff.files.first(where: { target == $0.id || target.hasPrefix($0.id + "|") })
-        else { return target }
+        else { return [] }
         let state = expansion.state(file)
         let rows = DiffRow.rows(
             of: file,
@@ -183,28 +271,45 @@ struct DiffView: View {
             threads: threads,
             comments: comments
         )
-        let blocked = layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)
-        return DiffRow.blockIDs(in: blocked)[target] ?? target
+        return layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)
     }
 
-    /// Kam v okně skočí nález — **k vršku, ale s odstupem na pár řádků kontextu**.
+    /// Kam v okně skočí cíl — **k vršku, ale s odstupem na kontext**. Kolik toho odstupu je
+    /// a jak se z něj stane podíl výšky, rozhoduje `Policy` (`jumpOffset(of:viewport:)`
+    /// a `jumpAnchorY(of:viewport:row:rowHeight:)`); tady se to jen složí do `UnitPoint`u.
     ///
-    /// `scrollTo` umí jen podíl výšky, ne body, takže se z bodů podíl počítá: nad cílem má
-    /// zůstat ukotvená hlavička souboru (překrývá vršek) a pod ní ještě pár řádků, ať je vidět,
-    /// do čeho nález patří. Doprostřed to skákalo do #72 a půlka obrazovky nad nálezem byla
-    /// zbytečná; na vrch samotný zase cíl skončí pod hlavičkou.
+    /// **Podíl se počítá z polohy řádku v bloku, ne z výšky výřezu** (#152) — jinak se posouvá blok
+    /// a řádek v něm leží, kde leží. Čísla i zamítnutá varianta jsou u té funkce.
     ///
-    /// Strop `0.5` je pojistka pro nízké okno: v pruhu o výšce dvou řádků je „pět řádků nad“
-    /// nesplnitelné a střed je pak to nejlepší, co jde udělat. Dokud výška nedorazí, platí
-    /// taky střed — je to jediná hodnota, která nezávisí na tom, co ještě nevíme.
-    private var jumpAnchor: UnitPoint {
-        guard viewportHeight > 0 else { return .center }
-        return UnitPoint(x: 0, y: min(0.5, Self.contextAbove / viewportHeight))
+    /// Dokud výška výřezu nedorazí, platí střed — je to jediná hodnota, která nezávisí na tom, co
+    /// ještě nevíme.
+    private func jumpAnchor(of spot: DiffJumpSpot, metrics: DiffJumpMetrics?) -> UnitPoint {
+        let size = metrics ?? Policy.jumpMetrics(of: spot, rowHeight: DiffTextView.rowHeight)
+        guard let y = Policy.jumpAnchorY(of: jumpTarget, viewport: viewportHeight, metrics: size)
+        else { return .center }
+        return UnitPoint(x: 0, y: y)
     }
 
-    /// Ukotvená hlavička souboru (~30 pt) a tři řádky diffu (~22 pt na řádek). Vyladěné na
-    /// běžící aplikaci: se pěti řádky (140 pt) odskok působil zbytečně velký.
-    private static let contextAbove = 90.0
+    /// Rozměry cíle **z toho, co bloky doopravdy nakreslily** (#152). `nil` = ten blok se ještě nikdy
+    /// nekreslil, takže se rozměry dopočítají z výšky řádku.
+    ///
+    /// Bere se z `DiffRowFrames`, tedy z krabice, do které bloky hlásí plochy kvůli tažení rozsahu
+    /// — **žádné měření navíc**: plochy tam leží od prvního rozvržení, kdy se nasadí i bloky mimo pás
+    /// (#469). Jsou to plochy v souřadnicích obsahu, ale počítá se z nich jedině **rozdíl uvnitř
+    /// bloku** a jeho výška, takže na posunu obsahu nezáleží.
+    ///
+    /// Kdyby se od posledního hlášení změnila **šířka** okna, může být záznam nemounted bloku
+    /// zastaralý (jinak se zalamuje) a skok bude o ten rozdíl vedle — pořád ale blíž, než kam mířil
+    /// odhad z počtu řádků.
+    private func measured(_ spot: DiffJumpSpot) -> DiffJumpMetrics? {
+        guard let block = rowFrames.block(spot.id), block.height > 0 else { return nil }
+        // Ve split pohledu nese plocha řádku ještě stranu; svisle jsou obě zarovnané, takže
+        // rozhoduje ta, která se najde.
+        let keys = ["\(spot.id)l\(spot.above)"]
+            + [DiffSide.right, .left].map { "\(spot.id)l\(spot.above)|\($0.rawValue)" }
+        guard let row = keys.lazy.compactMap({ rowFrames.rect(of: $0) }).first else { return nil }
+        return DiffJumpMetrics(above: row.minY - block.minY, height: block.height)
+    }
 
     /// Každý **řádek** je vlastní buňka seznamu, ne každý hunk. Hunk jako celek se po změně šířky
     /// okna překresloval jen zčásti a v diffu zůstávala prázdná místa.
@@ -371,7 +476,11 @@ struct DiffView: View {
                 draggedCells: draggedCells,
                 dragEnd: dragged?.end,
                 rangeDrag: rangeDrag,
-                copy: copy
+                copy: copy,
+                // Cesta souboru, ne dotaz hledání (#152): dotaz si blok přečte z prostředí sám,
+                // takže se tělo diffu při psaní nepřekresluje. Odsud jde jen to, co se mění
+                // se **souborem**, tedy jednou za jeho vykreslení.
+                filePath: file.displayPath
             )
         }
     }
@@ -388,7 +497,11 @@ struct DiffView: View {
             folding: folding,
             collapseExpansion: expansion.collapse,
             missingThreads: missingThreads,
-            contentWidth: contentWidth
+            contentWidth: contentWidth,
+            // `nil`, když hledání nikdo nedodal (náhledy, sondy) — popisek se pak nekreslí, místo
+            // aby otevíral pruh, který nemá kde vzniknout.
+            openSearch: search.open,
+            isSearching: search.isOpen
         )
     }
 

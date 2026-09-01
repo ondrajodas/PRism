@@ -65,6 +65,11 @@ struct WindowShortcut: Equatable, Sendable {
         case fileTree
         case runAllReviews
         case openDraft
+        /// Hledání v diffu (#152). `findInDiff` platí, kdykoli je diff na obrazovce; skákání mezi
+        /// výskyty registruje **pruh sám**, takže existuje jedině otevřené.
+        case findInDiff
+        case nextSearchHit
+        case previousSearchHit
     }
 
     /// Klávesa. Speciální klávesy se vyjmenovávají, protože se znakem zapsat nejdou.
@@ -255,6 +260,29 @@ extension Policy {
                 title: "Dopsat rozdělané review",
                 primary: .init(key: .character("d"), modifiers: [.command, .shift])
             )
+        // `⌘F` a `⌘G`/`⌘⇧G` jsou zkratky, které má na hledání celý systém, takže se nevymýšlejí.
+        // `⌥↓` zůstává **nálezům** (#187): jedna klávesa na dvě věci znamená, že vyhraje ta
+        // zaregistrovaná později, a poznalo by se to jedině tím, že jedna z nich „nefunguje“.
+        //
+        // **`⎋` v katalogu není, a je to schválně.** Pruh zavírá pojmenované tlačítko `✕`, které
+        // existuje jedině s otevřeným pruhem — tentýž vzorec jako `⌘⏎` v composeru tabu
+        // `Zeptat se` (#452). Kdyby `⎋` byla v katalogu, srazila by se s `backFromCommit`; místo
+        // toho se zakazuje ta **okenní** zkratka (`Policy.canCloseCommit`).
+        case .findInDiff:
+            return WindowShortcut(
+                title: "Hledat v diffu",
+                primary: .init(key: .character("f"), modifiers: .command)
+            )
+        case .nextSearchHit:
+            return WindowShortcut(
+                title: "Další výskyt",
+                primary: .init(key: .character("g"), modifiers: .command)
+            )
+        case .previousSearchHit:
+            return WindowShortcut(
+                title: "Předchozí výskyt",
+                primary: .init(key: .character("g"), modifiers: [.command, .shift])
+            )
         }
     }
 
@@ -286,6 +314,7 @@ extension Policy {
             .nextFinding, .previousFinding, .reviewPanel, .backFromCommit,
             .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
             .fileTree, .runAllReviews, .openDraft,
+            .findInDiff, .nextSearchHit, .previousSearchHit,
         ]
 
     static let windowShortcuts: [WindowShortcut] = windowShortcutActions.map(windowShortcut)

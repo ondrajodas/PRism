@@ -90,9 +90,13 @@ final class DiffTextView: NSTextView {
     /// **Vodorovný inset je nula a zůstane nula** (#236): odsazení na gutter dělá
     /// `textContainerOrigin`, protože `textContainerInset` platí na obě strany. Svisle symetrický
     /// zůstává schválně — 2 pt nad prvním řádkem a pod posledním.
+    ///
+    /// Hodnota je **z `Policy.blockInset`**, protože z ní od #152 počítá výšku bloku i kotva skoku
+    /// (`Policy.jumpAnchorY`) — dvě konstanty pro tentýž inset by se rozešly a poznalo by se to
+    /// jako skok o pár bodů vedle.
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
-        textContainerInset = NSSize(width: 0, height: 2)
+        textContainerInset = NSSize(width: 0, height: Policy.blockInset / 2)
     }
 
     @available(*, unavailable)
@@ -140,7 +144,11 @@ final class DiffTextView: NSTextView {
             block.lines,
             words: words(),
             language: style.language,
-            palette: style.palette
+            palette: style.palette,
+            // Dotaz je součástí klíče (`DiffBlockStyle.search`), takže se sem dojde i tehdy, když se
+            // změnilo **jen** hledané slovo — a přesázet se v tu chvíli musí, jinak by v okně
+            // zůstalo zvýraznění toho předchozího.
+            search: style.search
         )
         lineRanges = composed.ranges
         textStorage?.setAttributedString(composed.text)
@@ -163,7 +171,8 @@ final class DiffTextView: NSTextView {
         _ lines: [DiffLine],
         words: WordDiff.Spans,
         language: Language?,
-        palette: SyntaxPalette
+        palette: SyntaxPalette,
+        search: DiffSearchHighlight = .none
     ) -> (text: NSAttributedString, ranges: [NSRange]) {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         // Šest převodů na blok místo jednoho na run (#275, od #393 i barva textu) — viz `SyntaxColors`.
@@ -179,6 +188,10 @@ final class DiffTextView: NSTextView {
         for (index, line) in lines.enumerated() {
             colorize(line, in: result, over: ranges[index], language: language, colors: colors)
             highlight(words[index] ?? [], of: line, in: result, from: ranges[index].location)
+            // **Hledání jde naposled, tedy nad word-level vrstvou** (#152), a to pořadí je
+            // rozhodnutí: je to jediná z těch vrstev, kterou si člověk zapnul sám a která zhasne,
+            // jak zavře pruh. Barva písma zůstává ze syntaxe, mění se jedině podklad.
+            highlightSearch(search, of: line, in: result, from: ranges[index].location)
         }
         return (result, ranges)
     }
@@ -258,6 +271,43 @@ final class DiffTextView: NSTextView {
         }
     }
 
+    /// Výsledek hledání jako **třetí vrstva nad** hotovým textem (#152).
+    ///
+    /// Tentýž tvar jako word-level vrstva nad tímhle řádkem, a ze stejného důvodu **nesmí do
+    /// `SyntaxRunCache`** (#153): zvýraznění závisí na dotazu, kdežto cache je klíčovaná
+    /// `(text řádku, jazyk)` — tentýž řádek by z ní při jiném dotazu vytáhl cizí zvýraznění.
+    ///
+    /// Kde dotaz na řádku sedí, rozhoduje **`DiffSearch.ranges`, tedy tatáž funkce, ze které se
+    /// počítá počet výskytů v pruhu**. Dvě kopie porovnávání by znamenaly, že pruh umí tvrdit `17`
+    /// a v textu svítí šestnáct podkladů.
+    private static func highlightSearch(
+        _ search: DiffSearchHighlight,
+        of line: DiffLine,
+        in result: NSMutableAttributedString,
+        from start: Int
+    ) {
+        guard let query = search.query, query.isActive else { return }
+        let spans = DiffSearch.ranges(in: line.text, query: query)
+        guard !spans.isEmpty else { return }
+        for (occurrence, span) in spans.enumerated() {
+            let range = NSRange(span, in: line.text)
+            let target = NSRange(location: start + range.location, length: range.length)
+            // Tatáž pojistka jako u word-level vrstvy: rozsah patří textu, ze kterého se počítal,
+            // takže mimo složený řetězec sáhnout nemá jak — a kdyby přece, je zvýraznění to jediné,
+            // o co se přijde.
+            guard NSMaxRange(target) <= result.length else { continue }
+            let color = search.isCurrent(line, occurrence: occurrence)
+                ? Self.currentSearchBackground
+                : Self.searchBackground
+            result.addAttribute(.backgroundColor, value: color, range: target)
+        }
+    }
+
+    /// Podklad výskytu a toho aktuálního. **`NSColor` z palety, jeden převod na proces** — tentýž
+    /// vzorec jako u word-level pozadí o pár řádků výš (#275: šest převodů na blok, ne jeden na run).
+    private static let searchBackground = NSColor(Palette.searchHit)
+    private static let currentSearchBackground = NSColor(Palette.searchHitCurrent)
+
     // MARK: - Geometrie řádků
 
     /// **Text začíná za gutterem** — o ten posun se stará původ kontejneru, ne inset (#236).
@@ -288,6 +338,39 @@ final class DiffTextView: NSTextView {
         // Prázdný řádek nemá glyfy, takže by vyšel nulově vysoký — vezme se výška písma.
         if rect.height == 0 { rect.size.height = FontMetric.shared.lineHeight(of: font ?? .systemFont(ofSize: 12)) }
         return rect
+    }
+
+    /// Vodorovný rozsah **jednoho výskytu hledání** na řádku, v souřadnicích view (#152).
+    ///
+    /// K čemu to je: ve sloupci dvojice se **nezalamuje**, takže výskyt na dlouhém řádku leží za
+    /// pravou hranou a `4 z 17` by tvrdilo, že stojím na něčem, co není vidět. Odsud se pozná, kam
+    /// ten sloupec posunout.
+    ///
+    /// **Kde výskyt na řádku je, rozhoduje `DiffSearch.ranges`** — tatáž funkce, ze které se počítá
+    /// číslo v pruhu i podklad v textu. Druhá kopie porovnávání by uměla posunout jinam, než kde
+    /// svítí.
+    ///
+    /// `nil` = ten řádek tady není, výskyt na něm není, nebo se ještě nesázelo.
+    func span(ofMatch occurrence: Int, inLine index: Int, query: DiffSearchQuery) -> ClosedRange<Double>? {
+        guard lineRanges.indices.contains(index), lines.indices.contains(index),
+              let layoutManager, let textContainer
+        else { return nil }
+        let matches = DiffSearch.ranges(in: lines[index].text, query: query)
+        guard matches.indices.contains(occurrence) else { return nil }
+
+        let text = lines[index].text
+        let match = matches[occurrence]
+        // UTF-16, protože v nich měří `NSAttributedString` — tatáž třída chyby jako u #275.
+        let start = text.utf16.distance(from: text.startIndex, to: match.lowerBound)
+        let length = text.utf16.distance(from: match.lowerBound, to: match.upperBound)
+        let line = lineRanges[index]
+        let range = NSRange(location: line.location + start, length: max(length, 1))
+        guard NSMaxRange(range) <= NSMaxRange(line) else { return nil }
+
+        let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        let origin = textContainerOrigin.x
+        return (rect.minX + origin)...(rect.maxX + origin)
     }
 
     /// Rámečky všech řádků. Volá se po layoutu, takže se dá poslat do SwiftUI.
@@ -716,7 +799,12 @@ final class DiffTextView: NSTextView {
     /// manageru view, a když ho view ještě nemělo, výška obalového rámce — tedy **dvě různá čísla
     /// pro jednu výšku řádku**, mezi kterými rozhodovalo to, jak daleko je view v sestavování.
     /// Jedno měřidlo tu volbu ruší; hodnota je ta z layout manageru, protože podle ní se sází.
-    var singleLineHeight: Double {
+    var singleLineHeight: Double { Self.rowHeight }
+
+    /// Totéž bez view — čte to **skok**, který potřebuje vědět, kde v bloku cílový řádek leží
+    /// (`Policy.jumpAnchorY`), a instanci bloku k ruce nemá. Jedno měřidlo pro jednu výšku (#407):
+    /// druhé číslo by znamenalo, že skok míří jinam, než kam se kreslí.
+    static var rowHeight: Double {
         FontMetric.shared.lineHeight(of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular))
     }
 

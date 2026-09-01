@@ -16,8 +16,12 @@ struct DiffPairBlockRowView: View {
     var rangeDrag = RangeDragActions()
     var blockID: String = ""
     var copy = DiffCopyActions()
+    /// Cesta souboru, ve kterém blok leží (#152) — viz `DiffBlockRowView.filePath`.
+    var filePath: String = ""
 
     @Environment(\.colorScheme) private var colorScheme
+    /// Hledání v tomhle diffu (#152) — prostředím, ze stejného důvodu jako u pohledu pod sebou.
+    @Environment(DiffSearchState.self) private var search: DiffSearchState?
     @State private var frames: [DiffBlockLineFrame] = []
     /// Řádek a strana pod myší — pilulka svítí jen tam.
     ///
@@ -41,6 +45,7 @@ struct DiffPairBlockRowView: View {
             block: block,
             language: language,
             colorScheme: colorScheme,
+            search: searchHighlight,
             leftRangeLines: rows(in: commentRangeCells, on: .left),
             rightRangeLines: rows(in: commentRangeCells, on: .right),
             leftDraggedLines: rows(in: draggedCells, on: .left),
@@ -86,6 +91,14 @@ struct DiffPairBlockRowView: View {
                 Button("Vybrat text z hunku…", systemImage: "text.cursor", action: selectText)
             }
         }
+    }
+
+    /// Co se v tomhle bloku zvýrazní jako výsledek hledání (#152) — viz `DiffBlockRowView`.
+    /// **Obě strany dostanou tentýž styl**: řádek se porovnává sám se sebou, takže odebraný výskyt
+    /// svítí vlevo a přidaný vpravo, aniž by o stranách musel styl vědět.
+    private var searchHighlight: DiffSearchHighlight {
+        guard let search else { return .none }
+        return Policy.searchHighlight(query: search.drawnQuery, current: search.currentHit, in: filePath)
     }
 
     /// Sloupce s čísly obou stran — plochy na tažení a nad nimi pilulka.
@@ -172,15 +185,16 @@ struct DiffPairBlockRowView: View {
         var rows: [DiffRowFrames.Entry] = []
         for side in [DiffSide.left, .right] {
             for frame in frames {
-                guard let anchor = anchor(of: frame, on: side) else { continue }
+                // **Každý řádek, i ten bez kotvy** (#152) — z ploch se počítá i skok; kotvu má jen
+                // ten, přes který se dá táhnout rozsah.
                 rows.append(DiffRowFrames.Entry(
                     id: id(of: frame, on: side),
                     rect: gutter.rect(of: frame, on: side).offsetBy(dx: origin.x, dy: origin.y),
-                    anchor: anchor
+                    anchor: anchor(of: frame, on: side)
                 ))
             }
         }
-        box.frames.note(rows, covering: placement.rect, of: box.subject)
+        box.frames.note(rows, covering: placement.rect, of: box.subject, block: blockID)
     }
 
     private func line(of frame: DiffBlockLineFrame, on side: DiffSide) -> DiffLine? {

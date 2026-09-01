@@ -673,6 +673,22 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi
 se dotáhne sám** — nález bez svého kódu se nedá posoudit. Skok kamkoli v diffu je **stromem souborů** vlevo.
 `Zobrazit jen diff` se schovalo do nabídky u `Rozbalit vše` (#219).
 
+**Hledat v diffu jde na ⌘F** (#152). Pod lištou se otevře pruh: pole, počet výskytů (`4 z 17`),
+šipky `⌘G` / `⌘⇧G` (v poli i `⏎` a `⇧⏎`), kapsle `Aa` na rozlišování velikosti a `✕` s `esc`. Skok
+míří **na řádek, ne na jeho okolí** — výskyt přistane ve třetině shora, a v pohledu vedle sebe se
+sloupec posune i **do šířky**, když výskyt leží za jeho pravou hranou (jedině tehdy: rozkoukanou
+vodorovnou polohu skok nepřerovnává). Sbalený soubor **sám rozbalí** a kolik výskytů který soubor
+má, stojí v jeho hlavičce; nalezené kusy
+svítí v kódu, ten aktuální sytěji. `esc` pruh zavře a zvýraznění zhasne — **dotaz si drží**, takže
+druhé ⌘F pokračuje tam, kde první skončilo. Hledá se i v diffu rozklikaného commitu, s vlastním
+pruhem.
+
+**Hledá se v hunkách a v rozbaleném kontextu, ne v celých souborech** — a je to napsané v pruhu
+(kapsle `jen v diffu` u počtu). Zbytek souborů se kvůli hledání nedotahuje: u PR o padesáti
+souborech je to padesát volání na GitHub kvůli jednomu slovu. Když se nic nenajde, pruh proto neříká
+„nic nenalezeno“, ale **`v diffu nic — mimo hunky se nehledá`** a vedle toho `rozbal kontext (⌄)
+a započítá se`. Rozbalený úsek se do počtu započítá hned.
+
 **Kód se vybírá myší jako v editoru** (#157) — tažením přes libovolně mnoho řádků, ⌘C. Vybírá se jen
 obsah, ne čísla řádků a ne znak změny, takže se do schránky nepřiplete diff. Kód proto kreslí
 `NSTextView`, ne SwiftUI text: ve SwiftUI je každý text vlastní selekce, takže by šlo vybrat jen
@@ -1700,11 +1716,13 @@ zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, kt
 | `⌃1`–`⌃5` | sekce railu: `Přehled`, `Fronta`, `Moje PR`, `Rozdělaná`, `Dění` |
 | `⌥↓` / `⌥↑` | další / předchozí nález, `⌥⇧↓` další blokující |
 | `⌘1` / `⌘2` | strom souborů u diffu / panel s mým review |
+| `⌘F` | hledat v diffu (podruhé vrátí fokus do pole) |
+| `⌘G` / `⌘⇧G` | další / předchozí výskyt; v poli i `⏎` / `⇧⏎` |
 | `⌘⏎` nebo `⌃⏎` | otevřít **potvrzení** odeslání review |
 | `⌘⇧P` | sestavit zadání pro agenta |
 | `⌘.` | zastavit běžící review na PR v okně |
 | `` ⌃` `` | zásuvka s terminálem (na české mapě i `⌃;`) |
-| `⎋` | zpět na seznam commitů |
+| `⎋` | zavřít pruh hledání, jinak zpět na seznam commitů |
 | `⌘⇧R` / `⌘⇧D` | z dashboardu: pustit review na vše, co neběželo / dopsat rozdělané |
 | `⌘,` | nastavení |
 

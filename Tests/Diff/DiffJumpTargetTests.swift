@@ -65,7 +65,7 @@ struct DiffJumpTargetTests {
             let anchor = try #require(DiffRow.anchor(in: diff, file: "Cart.php", line: line))
             let rows = DiffRow.rows(of: file, layout: layout)
             let blocked = layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)
-            let resolved = DiffRow.blockIDs(in: blocked)[anchor] ?? anchor
+            let resolved = DiffRow.blockSpot(of: anchor, in: blocked).id
 
             #expect(
                 visible.contains(resolved),
@@ -95,13 +95,13 @@ struct DiffJumpTargetTests {
         let file = try #require(diff.files.first)
         let visible = visibleIDs(file, layout: layout)
         let rows = DiffRow.rows(of: file, layout: layout)
-        let index = DiffRow.blockIDs(in: layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows))
+        let blocked = layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)
 
         for line in 25...27 {
             let anchor = try #require(DiffRow.anchor(in: diff, file: "Cart.php", line: line))
             #expect(anchor != file.id, "řádek \(line) má být v diffu, ne u hlavičky souboru")
             #expect(
-                visible.contains(index[anchor] ?? anchor),
+                visible.contains(DiffRow.blockSpot(of: anchor, in: blocked).id),
                 "řádek \(line) v pohledu \(layout) míří mimo seznam"
             )
         }
@@ -125,10 +125,14 @@ struct DiffJumpTargetTests {
         // jinak by přestal fungovat skok na soubor a na hlavičku.
         let file = try file()
         let rows = DiffRow.rows(of: file)
-        let index = DiffRow.blockIDs(in: DiffRow.blocked(rows))
+        let blocked = DiffRow.blocked(rows)
 
-        for row in DiffRow.blocked(rows) where !isBlock(row) {
-            #expect(index[row.id] == row.id)
+        for row in blocked where !isBlock(row) {
+            let spot = DiffRow.blockSpot(of: row.id, in: blocked)
+            #expect(spot.id == row.id)
+            // Řádek, který blok není, je sám sebou celý: jeden „řádek“ a nic nad sebou. Kdyby
+            // se to počítalo jinak, počítal by se podíl výšky z cizí výšky (#152).
+            #expect(spot == DiffJumpSpot(id: row.id))
         }
     }
 
@@ -140,10 +144,11 @@ struct DiffJumpTargetTests {
             guard case .line(let id, _) = row else { return nil }
             return id
         }
-        let index = DiffRow.blockIDs(in: DiffRow.blocked(rows))
+        let blocked = DiffRow.blocked(rows)
+        let ids = Set(blocked.map(\.id))
 
         // Ani jeden řádek se nesmí ztratit — právě ztracený řádek je ten, na který skok nejde.
-        for id in lineIDs { #expect(index[id] != nil) }
+        for id in lineIDs { #expect(ids.contains(DiffRow.blockSpot(of: id, in: blocked).id)) }
     }
 
     private func isBlock(_ row: DiffRow) -> Bool {

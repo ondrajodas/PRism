@@ -23,6 +23,9 @@ struct DiffPairBlockView: NSViewRepresentable {
     let block: DiffPairBlock
     var language: Language?
     let colorScheme: ColorScheme
+    /// Co se zvýrazní jako výsledek hledání (#152) — **jeden styl pro oba sloupce**, protože
+    /// každý z nich porovnává své vlastní řádky.
+    var search: DiffSearchHighlight = .none
     var leftRangeLines: Set<Int> = []
     var rightRangeLines: Set<Int> = []
     var leftDraggedLines: Set<Int> = []
@@ -67,6 +70,15 @@ struct DiffPairBlockView: NSViewRepresentable {
         context.coordinator.drawing = drawing
 
         container.show(block, style: style, gutter: DiffLineView.contentInset(for: .split))
+        // **Odhalit výskyt vodorovně** (#152, druhé kolo proklikání): ve sloupci dvojice se
+        // nezalamuje, takže výskyt na dlouhém řádku leží za pravou hranou a pruh by tvrdil `4 z 17`
+        // o něčem, co není vidět. Sedí to **za stráží** schválně — `updateNSView` chodí při každém
+        // přepočtu geometrie (#393), a posouvat sloupec pokaždé by přebíjelo to, co si člověk
+        // odroloval sám. Sem se dojde jedině tehdy, když se změnil styl, a aktuální výskyt je jeho
+        // součástí.
+        if let current = search.current, let query = search.query {
+            container.reveal(current, query: query)
+        }
 
         let frames = container.lineFrames()
         guard frames != context.coordinator.frames else { return }
@@ -75,7 +87,7 @@ struct DiffPairBlockView: NSViewRepresentable {
     }
 
     private var style: DiffBlockStyle {
-        DiffBlockStyle(language: language, colorScheme: colorScheme)
+        DiffBlockStyle(language: language, colorScheme: colorScheme, search: search)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: DiffPairBlockContainer, context: Context) -> CGSize? {
@@ -120,6 +132,33 @@ final class DiffPairBlockContainer: NSView, NSTextViewDelegate {
     /// právě o průchody, které za ni nedojdou, tady jde.
     func noteUpdate() {
         updates += 1
+    }
+
+    /// Sloupce i s jejich plochami — **jen pro test** (`DiffJumpPlacementTests`), který měří, jestli
+    /// je výskyt po skoku vidět i do šířky. Kreslení ani `updateNSView` odsud nic nečte.
+    var probeColumns: [(scroll: DiffPairScrollView, column: DiffTextView)] {
+        [(leftScroll, left), (rightScroll, right)]
+    }
+
+    /// Posune sloupec vodorovně tak, aby byl výskyt hledání vidět (#152).
+    ///
+    /// **Vybírá se sloupec podle řádku**, ne strana z modelu: tentýž `DiffLine` je u kontextové
+    /// dvojice v obou sloupcích a v obou má tutéž polohu, takže se posunou oba — a u přidaného či
+    /// odebraného řádku je jen v jednom z nich.
+    ///
+    /// Posouvá se **plocha sloupce**, ne text: `scrollToVisible` by prošel až k vnějšímu `ScrollView`u
+    /// a přebil svislý skok, který ho tam právě dostal.
+    func reveal(_ hit: DiffSearchHit, query: DiffSearchQuery) {
+        for (scroll, column) in [(leftScroll, left), (rightScroll, right)] {
+            guard let index = column.lines.firstIndex(of: hit.line),
+                  let span = column.span(ofMatch: hit.occurrence, inLine: index, query: query)
+            else { continue }
+            let visible = scroll.documentVisibleRect
+            let seen = Double(visible.minX)...Double(visible.maxX)
+            guard let x = Policy.horizontalReveal(match: span, visible: seen) else { continue }
+            scroll.contentView.scroll(to: NSPoint(x: x, y: scroll.contentView.bounds.origin.y))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
     }
 
     override init(frame frameRect: NSRect) {

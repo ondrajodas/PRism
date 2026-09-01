@@ -37,10 +37,10 @@ struct WindowShortcutsTests {
     /// Počet je **vyjmenovaný, ne „aspoň tolik“** — stejně jako u `SingleWayOutTests`. Nová zkratka
     /// v okně je rozhodnutí, ne přírůstek: má projít úvahou, jestli se s něčím nesrazí a jestli se
     /// nakreslí tam, kde se na ni přijde.
-    @Test("Katalog má právě jednadvacet akcí")
-    func catalogHasExactlyTwentyOneActions() {
-        #expect(Policy.windowShortcutActions.count == 21)
-        #expect(Policy.windowShortcuts.count == 21)
+    @Test("Katalog má právě čtyřiadvacet akcí")
+    func catalogHasExactlyTwentyFourActions() {
+        #expect(Policy.windowShortcutActions.count == 24)
+        #expect(Policy.windowShortcuts.count == 24)
     }
 
     /// Kombinace, které patří systému nebo scéně nastavení, si okno **nesmí vzít**. `⌘W` je zrovna
@@ -199,6 +199,9 @@ struct WindowShortcutsTests {
             (.fileTree, "⌘1"),
             (.runAllReviews, "⌘⇧R"),
             (.openDraft, "⌘⇧D"),
+            (.findInDiff, "⌘F"),
+            (.nextSearchHit, "⌘G"),
+            (.previousSearchHit, "⌘⇧G"),
         ]
 
         for (action, display) in expected {
@@ -312,6 +315,11 @@ struct WindowShortcutsTests {
             // Je to tentýž vzorec jako u palety o řádek výš — jen se místo překryvu rozhoduje
             // podle toho, který tab je na obrazovce.
             "Views/AskComposer.swift",
+            // Pruh hledání v diffu (#152): `⎋` na `✕`, tedy tentýž vzorec jako u composeru výš —
+            // pruh existuje jen otevřený a zkratka **okna**, která tu klávesu jinak má (`⎋` zavírá
+            // diff commitu), je nad ním zakázaná (`Policy.canCloseCommit`). `⌘G` a `⌘⇧G` jdou
+            // naopak z katalogu (`WindowShortcutButtons`), protože musí platit i s fokusem v poli.
+            "Views/DiffSearchBar.swift",
         ]
 
         let found = Set(try sources().filter { $0.code.contains("keyboardShortcut(") }.map(\.path))

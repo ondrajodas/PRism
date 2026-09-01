@@ -6267,3 +6267,88 @@ padnou dva ze čtyř testů).
 **Zapsaná mezera:** že se věta pod polem **přepne při psaní**, je ověřené jen renderem dvou
 hodnot — rozdíl bitmap tvrdí, že se stav kreslí, ne že se překreslí s úhozem; ta druhá věc jde
 ověřit jedině klikáním.
+
+## #152 — hledání v diffu (⌘F)
+
+**Nejstarší otevřené issue v repu** (srpen 2026), a půlka jeho odůvodnění při implementaci
+neplatila — přeměřilo se dřív, než se začalo psát, a rozdíl je zapsaný v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--rozsah-hledání-v-diffu-152).
+Zadání tvrdí, že se text v diffu nedá vybrat kvůli tisícům `Text`ů v líném seznamu: vybrat **jde**
+(od #157 kreslí kód `NSTextView` s `isSelectable = true`) a diff **není líný seznam** (od #469 pevný
+`VStack`). Závěr platí ze dvou jiných důvodů: výběr **končí na hranici bloku** (60 řádků) a nakreslený
+text je jen **pás kolem výřezu** (`Policy.mountBand`), takže by hledání nad ním měnilo počet
+s odrolováním.
+
+**Otevřenou otázku o rozsahu rozhodlo, že se rozsah dá říct.** Hledá se v hunkách **a v rozbaleném
+kontextu**; zbytek souborů se nedotahuje (u padesátisouborového PR je to padesát volání kvůli jednomu
+slovu). Nad nenačteným kódem proto pruh **netvrdí, že tam nic není**: kapsle `jen v diffu` stojí
+u počtu, prázdný výsledek je `v diffu nic — mimo hunky se nehledá` a vedle toho `rozbal kontext (⌄)
+a započítá se`. Rozbalený úsek se do počtu započítá hned, sbalený z něj vypadne.
+
+**Pruh je druhá řádka chromu pod lištou diffu**, ne pole v liště (ta se u #219 srazila na tři věci
+schválně) a ne překryv nad kódem (zakryl by ukotvenou hlavičku souboru). Existuje jen otevřený; v liště
+po něm zbyl jen popisek `⌕ Hledat ⌘F`, aby se hledání dalo najít myší. Zákres je **sekce 39**
+mockupu a byl odsouhlasený dřív, než se napsala první řádka kódu.
+
+**Dva nové tokeny se změřily před zákresem, ne po stížnosti** — obráceně než u #277. `--hit-bg`
+/ `--hit-hi` (`Palette.searchHit`, `searchHitCurrent`) jsou vyčíslený akcent nad plochou, protože
+výskyt leží střídavě na nezměněném, přidaném i odebraném řádku; od plochy ΔE 11,9 / 11,1, mezi sebou
+11,0 / 10,9, řetězec IntelliJ Light 4,20 a 3,10, Darcula 3,75 a 2,61 (dnešní tmavá word-level vrstva
+má 2,17). Sytější být nesmí: pod výsledkem hledání se musí dát číst.
+
+**Skok jde stejnou cestou jako skok na nález** (`DiffRow.anchor` → `scrollTarget` → `blockSpot`)
+a sbalený soubor se rozbalí **dřív, než se cíl nastaví**. Kotva se hledá nad hotovými řádky, ne
+z `newNumber`: výskyt může být na odebraném řádku a ve split pohledu nese dvojice `id` pravého —
+`scrollTo` na neexistující `id` by tiše neudělalo nic. Diff commitu proto dostal `scrollTarget`,
+který do #152 byl `.constant(nil)`.
+
+**Zvýraznění je třetí vrstva atributů** nad syntaxí a word-level rozdílem; **do `SyntaxRunCache`
+nesmí** (#153), protože závisí na dotazu. Hledání z těch tří vrstev **vyhrává** — je to jediná,
+kterou si člověk zapnul sám. Dotaz je proto v **klíči sazby** (`DiffBlockStyle.search`): bez toho by
+se po jeho změně přesázení přeskočilo a v okně by zůstalo svítit slovo z minula.
+
+**Stav je `@Observable` objekt ve store, ne struktura** (#472): dotaz se mění při každém písmenu,
+takže ve slovníku by probudil i tělo detailu PR. Vlastnosti jsou rozdělené podle toho, kdo je čte
+(`isOpen` × `query`/`hits` × `current` × `focusRequests`) a dovnitř diffu jdou **prostředím**, takže
+`DiffView` čte jedinou z nich a psaním do pole se tělo diffu nepřekresluje. Výskyty se skládají jen
+při změně (dotaz, `Aa`, rozbalení, nový diff, otevření pruhu) — nikdy z těla view.
+
+**Klávesy:** `⌘F` (v katalogu, registruje diff), `⌘G`/`⌘⇧G` (v katalogu, registruje **pruh** — jsou
+jen tam, kde je kam skákat), `⏎`/`⇧⏎` na poli a `⎋` na `✕`, tedy **mimo katalog**; místo toho se nad
+otevřeným pruhem zakazuje zkratka okna, která `⎋` jinak má (`Policy.canCloseCommit`, od #152
+s vyjmenovanými podmínkami místo `&&` ve view). Katalog má 24 akcí. **Že ty klávesy zaberou, ověřil
+člověk** — v harnessu to nejde (#184).
+
+**Z proklikání vyšla vada v tom, kam se skáče, a opravila se pro celou třídu skoků.** `scrollTo`
+umisťuje **cíl**, a cílem je od #157 blok o nejvýš šedesáti řádcích — podíl výšky se tedy uplatnil na
+blok a poloha řádku v něm do výpočtu nevstupovala. Změřeno: z dvou set řádků byly po skoku vidět
+první čtyři desítky, řádek 195 skončil 2 181 pt pod hranou výřezu. Podíl se od té doby dopočítá
+(`Policy.jumpAnchorY`, `DiffRow.blockSpot`) a poloha sedí na dva body; opravilo to i skok na **nález**
+a na můj komentář, kde ta chyba byla potichu od #157. Vyjmout cíl do vlastního bloku se zkusilo,
+změřilo a **zahodilo** (nové bloky nejsou v tom průchodu rozvržené). K tomu **vertikální umístění**:
+výskyt hledání přistane na **třetině shora**, nález zůstává 90 pt pod hranou (bublinu nese pod sebou)
+— a skáče se **vždycky**, i na výskyt, který je zrovna vidět, aby oko při `⏎ ⏎ ⏎` stálo na jednom
+místě. [Záznam
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--kam-skok-posadí-cílový-řádek-152).
+
+**Druhé kolo proklikání ukázalo dvě další věci a obě jsou opravené.** (1) **Skok vůbec neroloval do
+šířky**: ve split pohledu se nezalamuje, takže výskyt na dlouhém řádku ležel za pravou hranou sloupce
+(naměřeno x 2 708 proti výřezu 0–582) a pruh přitom hlásil `4 z 17`. Odhaluje ho teď **blok sám**
+(`DiffPairBlockView` → `DiffPairScrollView`), a jedině když vidět není (`Policy.horizontalReveal`) —
+vodorovnou polohu si člověk nastavil sám. (2) **Svislé míjení mělo ještě dvě příčiny**: zalomené
+řádky (odhad výšky bloku 964 pt proti skutečným ~2 900, cíl skončil až **6 017 pt nad** výřezem —
+rozměry se od té doby berou **změřené** z `DiffRowFrames`) a **animace skoku**, kterou o průchod
+později uťal druhý posun (jeden skok z desítky se pohnul o dva až třináct bodů a zůstal stát). Skok
+proto **není animovaný** (změna proti #72); druhý průchod zůstává, jen si rozměry **přeměří** —
+první skok se počítá z ploch nahlášených dosud, a ty umí být z jiné šířky.
+
+**Copilot k tomu našel ještě jednu věc a je opravená**: `refreshDiffSearch` přepočítával výskyty
+i se **zavřeným** pruhem (dotaz si drží), tedy celý diff při každém rozbalení kontextu a při každém
+novém diffu — a výsledek se přitom nemá kde nakreslit. Guard teď chce `isOpen`; při otevření se
+skládá znovu, takže se nic neztratí.
+
+Testů **4776** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
+`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`, `DiffSearchRevealTests`,
+`DiffJumpPlacementTests` — poslední měří polohu po skoku v hostovaném okně), dvě měření barev
+v `DiffPaletteTests` a sonda `DiffSearchRenderProbe`. Co se v které z nich hlídá a proč,
+je v [`docs/testovani.md`](testovani.md).

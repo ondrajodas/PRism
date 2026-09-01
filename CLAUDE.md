@@ -784,6 +784,14 @@ grep -rnE '\.(green|red|yellow|orange)([^A-Za-z0-9_]|$)' App | grep -vE ':[0-9]+
   **Fokus jde ověřit jedině na běžící aplikaci** (testovací host nedostane aktivaci), takže **do
   popisu PR patří, že tuhle věc ověří člověk**
   ([jak se měří](docs/testovani.md#jak-změřit-fokus-a-klávesy-184)).
+- **`scrollTo(id, anchor:)` umisťuje cíl, ne řádek v něm** (#152). Cílem je od #157 **blok** o nejvýš
+  šedesáti řádcích, takže se podíl výšky počítá z toho, kde v bloku cíl leží (`Policy.jumpAnchorY`,
+  `DiffJumpSpot` z `DiffRow.blockSpot`) — a **podíl mimo `0…1` je správná odpověď, ne chyba**.
+  **Rozměry se berou změřené** (`DiffRowFrames`), ne dopočítané z počtu řádků: v pohledu pod sebou se
+  **zalamuje**, takže odhad byl proti skutečnosti trojnásobně mimo. Ořezání podílu na rozsah
+  i vyjmutí cíle do vlastního bloku jsou **změřené a zamítnuté** varianty a **skok se neanimuje**
+  (animaci utnul druhý průchod). Kde cíl přistane, se měří **v souřadnicích okna**, ne z `id`, na
+  které se skočilo ([čísla](docs/architektura.md#kam-skok-posadí-cílový-řádek-152)).
 - **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236) — měření patří **do toho
   typu, který drží šířku kreslení**, protože dvě místa znamenají dvě pravdy o jedné šířce. Testuje
   se proti **layout manageru** a **přes pásmo šířek**, protože u jedné šířky test projde

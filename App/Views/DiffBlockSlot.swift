@@ -19,7 +19,7 @@ import SwiftUI
 ///
 /// **Odhad výšky by tu cenu ušetřil a je zamítnutý**: obsah pod prstem by měnil výšku pokaždé, když
 /// se blok poprvé nasadí, a skok na nález by mířil vedle. Přesná výška od začátku je to, co drží
-/// `⌥↓` i kotvy z `DiffRow.blockIDs`.
+/// `⌥↓` i kotvy z `DiffRow.blockSpot`.
 ///
 /// **Rámeček se čte v souřadnicích obsahu, ne výřezu**, a to je výkonová podmínka, ne libovůle:
 /// v souřadnicích obsahu se scrollováním **nemění**, takže se za to čtení při projíždění neplatí.

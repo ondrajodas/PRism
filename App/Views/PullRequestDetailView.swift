@@ -1003,11 +1003,18 @@ struct PullRequestDetailView: View {
         }
     }
 
+    /// **Rozhoduje `Policy`, ne `if` tady** (od #152): je to tvrzení o tom, komu v okně patří `⎋`,
+    /// a od #152 o tu klávesu soutěží i pruh hledání v diffu commitu. Vyjmenované podmínky na jednom
+    /// místě se dají projít testem, zdejší `&&` ne.
     private var canCloseCommit: Bool {
-        store.detailTab(for: pullRequest.id) == .commits
-            && store.openedCommit(in: pullRequest.id) != nil
-            && submission == nil
-            && !store.isPaletteOpen
+        let commit = store.openedCommit(in: pullRequest.id)
+        return Policy.canCloseCommit(
+            tab: store.detailTab(for: pullRequest.id),
+            hasOpenedCommit: commit != nil,
+            isSubmitting: submission != nil,
+            isPaletteOpen: store.isPaletteOpen,
+            isDiffSearchOpen: commit.flatMap { store.diffSearch(in: pullRequest.id, commit: $0) }?.isOpen ?? false
+        )
     }
 
     /// Drží se zrovna shift? Z toho se pozná `⌥⇧↓` (další **blokující** nález) od `⌥↓`.
@@ -1373,12 +1380,27 @@ struct PullRequestDetailView: View {
             expansion: commitExpansion(of: commit.sha),
             folding: commitFolding(of: commit.sha),
             layout: diffLayout,
+            search: commitSearch(of: commit.sha),
             back: { store.closeCommit(in: pullRequest.id) },
             showFiles: { store.setDetailTab(.filesChanged, for: pullRequest.id) },
             // Zopakování jde **touž cestou jako první otevření** (`openCommit`), ne přímo na
             // `loadCommitDiff`: jinak by tlačítko stáhlo diff, ale nechalo v okně starou chybu,
             // protože stav by se nikdy nevrátil na `loading`.
             retry: { store.openCommit(commit.sha, in: pullRequest.id) }
+        )
+    }
+
+    /// Hledání v diffu commitu (#152). **Vlastní klíč se sha**, takže se pruh nesdílí se
+    /// `Změněnými soubory` — proč, je u `DiffSearchKey`.
+    private func commitSearch(of sha: String) -> DiffSearchActions {
+        let id = pullRequest.id
+        return DiffSearchActions(
+            state: store.diffSearch(in: id, commit: sha),
+            open: { store.openDiffSearch(in: id, commit: sha) },
+            close: { store.closeDiffSearch(in: id, commit: sha) },
+            setQuery: { store.setDiffSearchQuery($0, in: id, commit: sha) },
+            setCaseSensitive: { store.setDiffSearchCaseSensitive($0, in: id, commit: sha) },
+            step: { store.stepDiffSearch($0, in: id, commit: sha) }
         )
     }
 
@@ -1710,7 +1732,22 @@ struct PullRequestDetailView: View {
             // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
             // panel je vidět i v tabu `Přehled`, kde lišta není.
             panelExpanded: panelExpanded,
-            stepFinding: { step($0) }
+            stepFinding: { step($0) },
+            search: searchActions
+        )
+    }
+
+    /// Hledání v diffu `Změněných souborů` (#152). Stav drží store, tudy jdou akce — tentýž vzorec
+    /// jako u rozbalování kontextu a sbalování souborů o kus výš.
+    private var searchActions: DiffSearchActions {
+        let id = pullRequest.id
+        return DiffSearchActions(
+            state: store.diffSearch(in: id),
+            open: { store.openDiffSearch(in: id) },
+            close: { store.closeDiffSearch(in: id) },
+            setQuery: { store.setDiffSearchQuery($0, in: id) },
+            setCaseSensitive: { store.setDiffSearchCaseSensitive($0, in: id) },
+            step: { store.stepDiffSearch($0, in: id) }
         )
     }
 

@@ -5018,3 +5018,127 @@ kterou by nikdo neschválil. Že takové jméno nikam nedosáhne, se pozná z ga
 překreslí s každým úhozem), je ověřené jen renderem dvou různých hodnot, ne psaním v běžícím okně.
 Rozdíl bitmap tvrdí, že se stav kreslí, ne že se překreslí; ta druhá věc jde ověřit jedině
 klikáním.
+
+### Záznam rozhodnutí — rozsah hledání v diffu (#152)
+
+**Rozhodnutí:** ⌘F hledá **jen v tom, co je načtené** — v hunkách a v **rozbaleném kontextu** (#47).
+Zbytek souborů se kvůli hledání **nedotahuje**, a ten rozsah se **říká na obrazovce**: kapsle
+`jen v diffu` u počtu, prázdný výsledek jako `v diffu nic — mimo hunky se nehledá` a celá věta
+v nápovědě pole.
+
+**Proč vůbec byla otázka:** zadání issue ji nechalo otevřenou a pojmenovalo tu past správně —
+hlásit „nic nenalezeno“ nad kódem, který jsme nečetli, je tvrzení, které data neunesou (řádek
+z tabulky v `CLAUDE.md`).
+
+**Proč se nedotahuje:** u PR o padesáti souborech je to **padesát volání na GitHub kvůli jednomu
+slovu**, a to při každém přepsání dotazu. Rozbalování kontextu už jednu cestu pro dotažení má
+(`reveal`), je ruční a je z ní vidět, co se načetlo — hledání by ji obešlo a načetlo by celý PR
+potichu.
+
+**Proč se rozbalený kontext naopak počítá:** je to obyčejný obsah souboru, který v okně **je**
+a dá se na něj skočit. Nepočítat ho by znamenalo, že hledání ignoruje řádky, na které se člověk
+kouká.
+
+**Zamítnuté varianty:**
+
+- **Hledat v celém souboru a nenačtené přiznat větou.** Zamítnuto kvůli té ceně výš. Zbývá z toho
+  to podstatné — ta věta.
+- **Dotahovat soubory líně, jak se prochází výskyty.** Zamítnuto: počet výskytů by se během
+  procházení **měnil**, takže `4 z 17` by přestalo být tvrzení.
+- **Nabídnout „prohledat i zbytek“ jako druhé tlačítko.** Zamítnuto pro první verzi: je to druhá
+  brána do téže operace a rozbalení kontextu (`⌄`) tu cestu už má. Zapsáno jako věc, ke které se dá
+  vrátit, kdyby si o ni proklikání řeklo.
+- **Nekreslit o rozsahu nic** (jako to dělá hledání v prohlížeči). Zamítnuto: prohlížeč má celý
+  dokument, kdežto tady je diff **výřez** — bez té věty by počet vypadal jako počet v souborech.
+
+**Co se u toho rozhodlo ještě, protože to ze zadání neplynulo:**
+
+- **Pruh je druhá řádka chromu pod lištou diffu**, ne pole v liště a ne překryv nad kódem. Lišta se
+  u #219 srazila na tři věci schválně a v užším okně se nevešla ani tak; překryv by zakryl ukotvenou
+  hlavičku souboru, tedy to, podle čeho se pozná, kde v PR jsem. Pruh proto **existuje jen otevřený**.
+- **Psaní neskáče.** Diff, který se hýbe pod rukama při každém písmenu, je horší než jeden hmat na
+  `⏎`. Pruh do prvního skoku píše `17 výskytů` — tentýž tvar jako u procházení nálezů, a ze stejného
+  důvodu ne `0 z 17`.
+- **Sbalený soubor se počítá a skok ho rozbalí.** Sbalení je stav okna, ne stav dat; kolik výskytů
+  v něm je, říká kapsle v jeho hlavičce. Bez ní by se v zavřeném souboru počítalo a nebylo by z čeho
+  to poznat.
+- **Hledání vyhrává nad word-level vrstvou.** Je to jediná vrstva, kterou si člověk zapnul sám
+  a která zhasne, jak zavře pruh — kdežto zelená a word-level rozdíl jsou vlastnosti diffu.
+- **Aktuální výskyt nese sytější podklad, ne obrys.** Obrys by v `NSAttributedString` neměl čím
+  vzniknout, takže by se návrh nedal nakreslit 1 : 1; místo něj je ΔE 11,0 / 10,9 proti tlumenému
+  podkladu, tedy „na první pohled jiná plocha“ v obou motivech.
+- **Dva nové tokeny (`--hit-bg`, `--hit-hi`) se změřily dřív, než se nakreslily.** Je to obráceně
+  než u #277, kde se hodnoty doháněly po stížnosti: kontrast obarveného kódu nad wash vrstvou je
+  přesně to, co #277 jednou pokazilo (řetězec 1,27), takže se čísla spočítala před zákresem
+  a schválila s ním. Naměřené hodnoty jsou u `Palette.searchHit` a hlídá je `DiffPaletteTests`.
+- **`⌘G` / `⌘⇧G`, ne `⌥↓`.** `⌥↓` patří nálezům (#187) a dvě věci na jedné klávese znamenají, že
+  vyhraje ta zaregistrovaná později (#151, #184). `⌘G` je zkratka, kterou má na hledání celý systém.
+- **`⎋` není v katalogu zkratek.** Je na `✕` v pruhu, tedy na tlačítku, které existuje jedině
+  otevřené — a zkratka **okna**, která tu klávesu jinak má (`⎋` zavírá diff commitu), se nad
+  otevřeným pruhem zakazuje (`Policy.canCloseCommit`). Je to tentýž vzorec jako `⌘⏎` v tabu
+  `Zeptat se` (#452); druhá položka v katalogu by byla kolize, kterou test hlásí jako vadu.
+
+**Co z odůvodnění issue #152 přeměřením padlo.** Zadání (srpen 2026) tvrdí, že se text v diffu nedá
+vybrat, protože `.textSelection(.enabled)` je nad ním vypnuté kvůli tisícům `Text`ů v líném seznamu.
+Ověřeno nad dnešním kódem: vybrat **jde** (od #157 kreslí kód `NSTextView` s `isSelectable = true`;
+jediné `.textSelection(.disabled)` v `App/` je nad úryvkem u vlákna) a diff **není líný seznam** (od
+#469 pevný `VStack`). Závěr — že systémové hledání nad diffem není a ⌘F je jediná cesta k otázce
+„kde se to v tom PR bere“ — platí dál, ale ze dvou jiných důvodů: výběr **končí na hranici bloku**
+(60 řádků, `DiffBlock.maxLines`), takže přes soubory nesahá, a nakreslený text je jen **pás kolem
+výřezu** (`Policy.mountBand`), takže by hledání nad ním měnilo počet s odrolováním.
+
+**Zapsaná mezera:** že `⌘F`, `⌘G` a `⎋` doopravdy zaberou, se v harnessu ověřit nedá (#184 —
+testovací host nedostane aktivaci). Katalog, kolize a to, komu `⎋` ustupuje, drží testy nad
+`Policy`; samotné klávesy zkouší člověk na běžící aplikaci.
+
+### Záznam rozhodnutí — kam skok posadí cílový řádek (#152)
+
+Z proklikání přišly dvě věci: *„okno by se mohlo focusovat i vertikálně a ne vždy se okno zaměří na
+řádek, kterého se to týká."* Druhá z nich je vada a **první podezření bylo špatné**: nešlo
+o nenasazený blok (#469) ani o počet průchodů (#184, #325). `scrollTo(id, anchor:)` umisťuje **cíl**,
+a cílem je od #157 blok o nejvýš šedesáti řádcích — podíl výšky se tedy uplatnil na výšku bloku
+a poloha řádku v něm do výpočtu nevstupovala vůbec. Změřeno nad hostovaným `DiffView`em (okno
+1 200 × 800, výřez 762 pt, hunk o dvou stech řádcích): vidět byly první čtyři desítky řádků, řádek 52
+skončil 889 pt pod hranou výřezu a řádek 195 dokonce 2 181 pt. Čísla i to, jak se to měřilo, jsou
+v [`docs/architektura.md`](../../architektura.md#kam-skok-posadí-cílový-řádek-152)
+a v [`docs/testovani.md`](../../testovani.md).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Podíl se dopočítá aritmeticky** z toho, kolik řádků bloku je nad cílem (`Policy.jumpAnchorY`) | Vyjmout cílový řádek do vlastního bloku (`blocked(_:breakingAt:)`), aby podíl platil přímo pro něj | Napsané a **změřené**: nové bloky vzniknou v témže průchodu, ve kterém se skáče, takže je `scrollTo` vidí nerozvržené a posun vyšel na geometrii **těch starých** (75, 1 039 a 2 003 pt — přesně hrany nerozdělených bloků). Aritmetika je na rozvržení nezávislá a nemění počet nasazených `NSTextView` (#469) |
+| **Podíl mimo `0…1` se vrací a `scrollTo` ho zvládne** | Ořezat na rozsah, protože `UnitPoint` „má“ být `0…1` | U bloku vyššího než výřez se cíl jinak umístit nedá. S ořezáním skončil řádek na kraji takového bloku 844 pt pod hranou a u podílu přesně `0` se okno **nepohnulo vůbec**; bez ořezání sedí poloha na dva body. Je na to test, takže návrat ořezání spadne v testech |
+| **Výška bloku se počítá z výšky řádku** (`DiffTextView.rowHeight`, z `FontMetric`) | Měřit skutečnou výšku nasazeného bloku | Přesnou výšku zná jedině **nasazený** blok (`DiffBlockSlot`) a ten se nasadí teprve po skoku — chtěli bychom ji tedy dřív, než existuje. Cena je zapsaná: v pohledu pod sebou zalomený řádek výšku podhodnotí a cíl přistane o ten přebytek níž, ale mez je **blok** (60 řádků), ne diff. Ve split pohledu se nezalamuje, takže je to přesné |
+| **Výskyt hledání přistane na třetinu shora, nález 90 pt pod hranou** (`Policy.jumpOffset`) | Jedna výška pro obojí | Nález si kontext nese v bublině **pod** řádkem, takže 90 pt (hlavička + tři řádky) je vyladěná hodnota z #72 a víc místa nad ním by bublinu vytlačilo. Výskyt hledání je jen místo v kódu a to, co je **nad** ním, je polovina odpovědi na „kde to je“. Není to nesourodost, ale rozdíl v tom, co ten cíl je |
+| **Skáče se vždycky, i na výskyt, který je zrovna vidět** | Přerovnat pohled jen tehdy, když cíl mimo výřez je | Procházení je `⏎ ⏎ ⏎`: když každý výskyt přistane ve stejné výšce, oko se nehýbe. Podmíněné chování znamená výskyt poskakující po obrazovce, tedy zrovna to hledání očima, kvůli kterému se skáče. Cena — text se posune i tehdy, když posun nutný nebyl — je slabší: kdo hledá, kouká na výskyt |
+
+**Oprava platí pro celou třídu, ne pro hledání.** Tou samou cestou jde skok na **nález**, na můj
+rozdělaný komentář i na soubor ze stromu (`DiffRow.anchor` → `scrollTarget`), takže se opravily
+všechny naráz — u nálezu byla chyba potichu od #157 a nikdo si jí nevšiml, protože nález na prvním
+řádku bloku dopadal správně.
+
+**Zapsaná mezera:** že se u výskytu použije **jiný odstup** než u nálezu, měření v okně neověří — cíl
+se do scény nastavuje bindingem (cestou panelu nálezů), kdežto `.searchHit` si `DiffView` nastavuje
+sám v `step(search:)` a spouští to tlačítko v pruhu. Obě hodnoty drží test nad čistou funkcí, přepnutí
+zkouší člověk.
+
+### Záznam rozhodnutí — druhé kolo proklikání: šířka, zalomení, animace (#152)
+
+Z proklikání opravené verze přišlo: *„pořád se špatně zaměřuje okno… vůbec nescrolluje do šířky, tak
+to není vidět a někdy se i špatně scrolluje na výšku."* Byly to **tři různé příčiny** a rozdělit je
+šlo jedině měřením — poloha po skoku se proto měří ve dvou osách zvlášť
+([čísla](../../testovani.md), [rozbor](../../architektura.md#kam-skok-posadí-cílový-řádek-152)).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Rozměry cíle se berou změřené** (`DiffRowFrames` — plochy řádků i bloku, které bloky hlásí kvůli tažení rozsahu) | Dopočítat výšku bloku z `počet řádků × výška řádku` (stav po prvním kole) | V pohledu pod sebou se **zalamuje**, takže blok o dlouhých řádcích je násobně vyšší: naměřeno 964 pt odhadu proti **~2 900** skutečným a cíl skončil **2 054 až 6 017 pt nad** výřezem. Se změřenou plochou 90 pt u všech. Měřit navíc se nemuselo nic — plochy tam leží od prvního rozvržení |
+| **Do krabice se hlásí každý řádek a k tomu plocha bloku** (kotva u řádku je od té doby volitelná) | Číst jen řádky, na které se dá komentovat (jak to bylo) | Bez plochy bloku se výška nedá zjistit a bez řádků mimo hunk by skok do rozbaleného kontextu spadl zpátky na odhad. Cena je jeden slovník navíc a pár položek na blok; **druhé čtení geometrie by bylo dražší** (#252) |
+| **Skok se neanimuje** | Nechat animaci z #72 | Druhý průchod (dorovnání po nasazení, #469) animaci **utnul**: jeden skok z desítky se pohnul o dva až třináct bodů a zůstal stát. Animace, kterou by stejně přebil okamžitý posun, je horší než skočit rovnou. **Je to vidět, takže to jde do popisu PR** |
+| **Druhý průchod zůstává, jen si rozměry přeměří** | Vypustit ho, když jsou rozměry změřené | Zkusilo se a **spadlo to na měření**: první skok se počítá z ploch nahlášených dosud, a ty umí být z doby, kdy se blok rozvrhoval na jinou šířku (tedy s jiným zalomením) — u zalomeného souboru přistál první skok **1 946 pt** vedle. Druhý průchod to srovná a bez animace nemá co utnout |
+| **Vodorovně se odhaluje jen to, co vidět není** (`Policy.horizontalReveal`, rezerva na obou stranách) | Vystředit výskyt vodorovně vždycky, jako se to dělá svisle | Vodorovná poloha je **rozkoukaná poloha v řádku**, kterou si člověk nastavil sám — přerovnat ji u výskytu, který je na obrazovce, je tentýž bezdůvodný poskok, jaký se u svislé osy zamítal. Svisle je to naopak: tam jde o **pořadí čtení**, takže se srovnává vždycky |
+| **Odhalení dělá blok, ne `DiffView`** | Řídit vodorovný posun odtamtud, odkud se skáče | Sloupce jsou dva (`DiffPairScrollView`) a který z nich se posune, se pozná až podle toho, ve kterém ten řádek je. Blok navíc už dostává aktuální výskyt ve stylu, takže se posouvá **jedině při jeho změně** (stráž z #393) a nepřebíjí to, co si člověk odroloval |
+| **Posouvá se plocha sloupce** | `scrollToVisible` na textovém view | Ten by prošel až k vnějšímu `ScrollView`u a přebil svislý skok, který nás tam právě dostal |
+| **V pohledu pod sebou se vodorovně nedělá nic** | Sjednotit chování obou pohledů | Tam se **zalamuje**, takže výskyt vodorovně utéct nemůže. Sjednocení by znamenalo psát kód pro stav, který nenastane |
+
+**Co se tím potvrdilo o prvním kole:** „jedna scéna z pěti se neodscrolluje“ **nebyla mez harnessu**,
+ale ta animace — tedy vada, kterou uživatel viděl v okně. Zapsat ji jako mezeru bylo správně jen
+v tom, že se to nezamlčelo; špatně v tom, že se to vydávalo za vlastnost měřidla.

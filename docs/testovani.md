@@ -1817,6 +1817,128 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   se počítá zvlášť** (jinak „1 z 1“ tvrdí hotovo nad PR se dvěma nálezy v panelu), **hotovo
   znamená projitá všechna místa**, ne konec seznamu, a **ztracené místo pod kurzorem shodí jen
   pozici** — po změně seznamu se nesmí ukázat „4 ze 3“.
+- **Hledání v diffu (#152)** — čtyři sady a dělí se podle toho, **co se v které dá pokazit
+  potichu**.
+
+  `DiffSearchTests` nad modelem, výčtem: porovnávání (nerozlišuje velikost, dokud se o to neřekne;
+  **diakritiku nesjednocuje** — `.literal`, protože v kódu se hledá jméno; prázdný dotaz nenajde
+  nic; výskyty se **nepřekrývají**, takže `aa` v `aaa` je jeden) a výskyty (v kontextu, v odebraném
+  i přidaném řádku, víc na řádku jako víc zastávek, pořadí = pořadí na obrazovce, napříč soubory
+  v pořadí diffu, počty klíčované `displayPath` — tedy i u **přejmenovaného** souboru).
+
+  **Dvě negativní tvrzení jsou to hlavní**: že se **nehledá mimo hunky**, dokud se kontext
+  nerozbalí (a po rozbalení že se ten řádek započítá), a že soubor bez hunků (binárka, přejmenování
+  beze změny) nenajde nic. Bez prvního z nich by přestal být rozsah tím, co pruh na obrazovce říká.
+
+  **Kotva se testuje invariantem, ne hodnotou** (tatáž konstrukce jako `DiffJumpTargetTests`): pro
+  **každý** výskyt musí být cíl po překladu v seznamu, a to v **obou pohledech**. Ve split pohledu
+  nese dvojice `id` pravého řádku, takže výskyt na odebraném řádku je zrovna ten případ, který se
+  rozbije potichu — `scrollTo` na neexistující `id` neudělá nic. K tomu dvě krajní: zmizelý řádek
+  skočí **aspoň na soubor** a výskyt v souboru mimo diff kotvu **nedostane**.
+
+  `DiffSearchNavigationTests` nad `Policy`: skok (bez výskytů není kam, první krok jde na kraj,
+  cyklí se dokola, **index mimo seznam se bere jako nikde**), počítadlo (**ne `0 z 17`**; druhý pád
+  za `z`), tři stavy (`idle` ≠ `empty` — prázdné pole netvrdí nic o datech) a **věty**: že prázdný
+  stav nikde neřekne „nic nenalezeno“, že nápověda říká **i tu druhou půlku** (co se nenačítá) a že
+  kapsle zůstává krátká. Ta tvrzení o textech jsou tam schválně — je to řádek z tabulky v
+  `CLAUDE.md` (text v UI nesmí tvrdit víc, než co data unesou), a zjednodušit tu větu je jednořádková
+  změna, kterou by jinak nikdo nezachytil.
+
+  `DiffSearchHighlightTests` nad **nakresleným textem**: že svítí všechny výskyty (i ten, který se
+  liší velikostí), že podklad sedí na znak **i za emoji** (UTF-16, tatáž třída chyby jako #275), že
+  aktuální výskyt má jinou barvu než ostatní, že **hledání vyhrává nad word-level vrstvou** a že na
+  prázdné straně dvojice nesvítí nic. A hlavně **dotaz v klíči sazby**: změna dotazu i změna
+  aktuálního výskytu blok **přesází** (`typesettings + 1`), nezměněný dotaz **ne** — bez toho prvního
+  by v okně zůstalo zvýraznění předchozího slova, bez toho druhého by se ztrácel rozdělaný výběr při
+  každém přejezdu myší.
+
+  `AppStoreDiffSearchTests` nad storem: že **čtení pruh nevyrábí** (zápis do observable slovníku
+  uprostřed skládání těla view), že druhé ⌘F jen vrátí fokus, že zavření **zhasne zvýraznění a dotaz
+  si nechá**, že psaní **neskáče**, že rozbalení kontextu přidá výskyt a sbalení ho odebere, že nový
+  diff přeskládá počet — a že se **nemíchá** stav dvou PR ani dvou diffů téhož PR (`commit` v klíči).
+  K tomu jedno tvrzení o ceně: **`refreshDiffSearch` bez dotazu neudělá nic**, takže tik pollingu nad
+  diffem nestojí nic.
+
+  Barvy měří `DiffPaletteTests` spolu s ostatními vrstvami diffu (ΔE proti ploše i proti sobě,
+  kontrast obarveného kódu nad oběma podklady) a **zkratky** `WindowShortcutsTests` — počet akcií
+  v katalogu, žádná kolize, kreslená kombinace a **stráž nad zdrojáky**, do které pruh přibyl
+  s důvodem (`⎋` na `✕`, mimo katalog).
+
+  **Kam skok posadí cílový řádek** hlídají dvě suity, protože jsou to dvě různá tvrzení.
+  `DiffJumpAnchorTests` nad čistou funkcí (`Policy.jumpOffset`, `Policy.jumpAnchorY`) — a to hlavní
+  z nich je **invariant, ne hodnota**: pro každou kombinaci délky bloku a polohy řádku v něm musí
+  z podílu vyjít cílový **řádek** v požadované výšce (`a × (výřez − výška bloku) + řádky nad cílem ×
+  výška řádku == offset`). K tomu tři krajnosti: že u bloku vyššího než výřez podíl **z rozsahu
+  `0…1` vyjde** (ořezání je zamítnutá varianta, viz níž), že cíl mimo blok se počítá jako
+  jednořádkový a že blok stejně vysoký jako výřez vydá nulu, **ne `inf`**.
+
+  `DiffJumpPlacementTests` nad **hostovaným `DiffView`em v okně mimo obrazovku**: kotva se skládá tou
+  samou cestou jako v aplikaci (`DiffSearch.hits` → `DiffRow.anchor(in:hit:)`), posun nechává na
+  `ScrollViewReader`u a měří se **poloha cílového řádku v souřadnicích okna** (`DiffTextView
+  .frame(ofLine:)` převedený do okna proti rámečku clip view). Odsud jsou všechna čísla u #152.
+  Čtyři scény, protože každá chytá něco jiného:
+
+  | Scéna | Před opravou | Po ní |
+  |---|---|---|
+  | krátké řádky, cíl hluboko v bloku | řádek 52 **889 pt** pod hranou, řádek 195 **2 181 pt** | 90 pt |
+  | **zalomené** řádky (pohled pod sebou) | **2 054 až 6 017 pt nad** výřezem | 90 pt |
+  | **široké** řádky ve split pohledu | výskyt na x **2 708**, sloupec ukazuje **0–582** | vidět |
+  | kraj dokumentu | — | tvrdí se jen viditelnost, odstup ne (`isFreeOfEdges`) |
+
+  **Ověřeno vložením regrese, třikrát:** podíl počítaný z výšky výřezu (stav před #152) shodí
+  `DiffJumpAnchorTests` i tuhle suitu; návrat k **dopočítané** výšce bloku místo změřené shodí
+  zalomenou scénu (cíl 1 651 až 3 637 pt nad výřezem); vypnuté vodorovné odhalení shodí split scénu
+  (výskyt na x 2 708 proti výřezu 0–582,5).
+
+  **A jeden skok v tom měření nestačí, i když to tak vypadá.** Zkusilo se měřit po jednom (aby test
+  chytil i to, že první skok nedojel) a zalomená scéna spadla: první skok se počítá z ploch
+  nahlášených dosud a ty umí být z jiné šířky, takže přistál **1 946 pt** vedle. Druhý průchod uvnitř
+  `DiffView` to srovná — proto se měří **po něm**, tedy po spotřebovaném cíli.
+
+  **Jedno kolo to byla sonda, a stálo to za to ji nenechat sondou.** Jeden skok z desítky nezabral
+  vůbec — posun zůstal, kde byl, ačkoli byl cíl v seznamu, kotva seděla a scéna byla ustálená. Nespravilo
+  to čekání na ustálenou scénu (počet nasazených bloků i výška obsahu pět kol beze změny), prokládání
+  cílů po blocích, druhý skok na tentýž cíl, vracení výřezu posunem clip view (**horší** — SwiftUI si
+  posun přerovná zpátky, tatáž mez jako u #325) ani třetí průchod v `DiffView`. Příčina se našla až
+  ablací: **animovaný posun, který o průchod později uťal ten druhý**. Bez animace je měření
+  deterministické (postupně 3 × 3, 4 × 4 a plný běh), takže suita **není sonda** a tvrzení o poloze
+  v okně nezůstává jen na čisté funkci.
+
+  **Pozor na to, co ta ablace v harnessu znamená.** V okně mimo obrazovku animace **neběží** (není
+  display link), takže `withAnimation { scrollTo }` sám o sobě posune okno o jednotky bodů a práci
+  odvede až ten druhý, neanimovaný průchod. Že animaci uťal, je tedy **výklad** — co je změřené, je
+  že s animací se jeden skok z desítky nedokončí a bez ní ani jeden.
+
+  **Tři věci, na kterých ta sonda visela, a všechny tři vypadaly zeleně:**
+
+  - **Čekat točením runloopu tady nejde.** `RunLoop.current.run(until:)` vyhladoví hlavní aktor,
+    takže `await Task.yield()` v `DiffView.task(id:)` **nikdy nedostane pokračování** — první verze
+    tím měřila **neodscrollované okno** u každého cíle (posun 0) a vypadala hodnověrně. Čeká se
+    proto odmlkami (`waitUntil`, #296) a jev je **spotřebovaný cíl** (`scrollTarget == nil`).
+  - **Observable vlastnost čtená v closure bindingu se do závislostí těla nezapíše.**
+    `Binding(get: { box.target }, …)` znamená, že se tělo po přepsání cíle **nepřeloží** a `task(id:)`
+    novou hodnotu neuvidí. Čte se proto **v těle** a do bindingu jde už jen zachycená hodnota.
+  - **„Nejvyšší `NSScrollView` v hierarchii“ je lišta, ne diff.** Její dokument má 46 pt, takže proti
+    ní vyjde „nescrollovalo se“ u každého cíle — tedy tatáž hodnota pro funguje i nefunguje (#478).
+    Bere se ten s **nejvyšším dokumentem**.
+
+  A k tomu **dvě věci, které se v té sondě daly změřit jedině nad kresbou**: že se plochy řádků hlásí
+  i za řádky, na které se nedá komentovat (jinak by se rozměry bloku neměly z čeho vzít), a že se
+  sloupec ve split pohledu **doopravdy posunul** (`seen.left > 0`) — bez toho druhého by tvrzení
+  „výskyt je vidět“ mohlo platit jen proto, že se náhodou vešel, a odhalení by šlo smazat, aniž by
+  to test poznal.
+
+  A dvě věci, na které se ve scéně čeká zvlášť, protože bez nich měření tvrdí něco jiného:
+  **nasazení cílového bloku** (#469 — `NSTextView` je jen v pásu kolem výřezu, takže po skoku dorazí
+  o průchod později) a **ustálení posunu** (skok je animovaný; číslo přečtené během animace závisí na
+  tom, kdy se test podíval). Před každým skokem se výřez vrací na začátek posunem clip view — jinak
+  by každý skok začínal tam, kde skončil ten předchozí.
+
+  **Co se v harnessu ověřit nedá:** že `⌘F`, `⌘G` a `⎋` doopravdy zaberou (#184 — testovací host
+  nedostane aktivaci), a že se u výskytu použije **jiný odstup** než u nálezu: cíl se do sondy
+  nastavuje bindingem, tedy cestou panelu nálezů, kdežto `.searchHit` si `DiffView` nastavuje sám
+  v `step(search:)` a spouští to tlačítko v pruhu. Zkouší to člověk; testy drží katalog, kolize, to,
+  komu `⎋` ustupuje, a **obě hodnoty odstupu** nad čistou funkcí.
 - **`Policy.changes` a `VisitLedger` (#173)** — „co přibylo od minule“ ve dvou vrstvách.
   `Policy` vyčerpávajícím výčtem: **bez značky se neukáže nic** (jinak by se u prvního otevření
   vypsala celá historie), položka v tutéž sekundu se nepočítá (ostré porovnání), událost bez

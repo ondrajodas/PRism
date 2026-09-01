@@ -225,6 +225,17 @@ final class AppStore {
     /// Rozbalený kontext **per soubor v PR**. Co v mapě není, nikdo nerozbaloval.
     var expansions: [FileExpansionKey: FileExpansion] = [:]
 
+    /// Hledání v diffu **per diff** (#152). Co v mapě není, v tom se nikdy nehledalo.
+    ///
+    /// Hodnotou je **objekt**, ne struktura, a je to výkonové rozhodnutí (#472): dotaz se mění při
+    /// každém písmenu, takže ve struktuře by to byl zápis do `diffSearches` — a ten probudí každého,
+    /// kdo tuhle mapu čte, tedy i tělo detailu PR. Takhle se mění vlastnost objektu, jehož identita
+    /// je stálá; podrobnosti u `DiffSearchState`.
+    ///
+    /// Žije tady, ne ve view, ze stejného důvodu jako sbalené soubory pod tímhle: pruh musí přežít
+    /// přepnutí tabu i složení panelu, po kterém se `DiffView` staví znovu.
+    var diffSearches: [DiffSearchKey: DiffSearchState] = [:]
+
     /// Sbalené soubory diffu. Co v množině **není**, je rozbalené — u PR o padesáti
     /// souborech je rozbaleno výchozí stav a sbalení je gesto, takže se pamatuje to druhé.
     ///
@@ -1927,6 +1938,9 @@ final class AppStore {
         // Sbalení je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
         // množina rostla donekonečna.
         foldedFiles = foldedFiles.filter { wantedPullRequests.contains($0.pullRequest) }
+        // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
+        // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
+        diffSearches = diffSearches.filter { wantedPullRequests.contains($0.key.pullRequest) }
         // Detail se drží jen pro to, co je v seznamu — je z něj `headSha` pro draft, a ten
         // se u PR mimo seznam nepíše. Rozdělané načítání přežije jako u diffu.
         //
