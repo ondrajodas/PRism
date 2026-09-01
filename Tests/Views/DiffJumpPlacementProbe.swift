@@ -4,12 +4,39 @@ import Testing
 
 @testable import PRism
 
-/// **Kde po skoku skončí cílový řádek** (#152, připomínka z proklikání).
+/// Zkoušené řádky — **každý ve vlastní scéně, jeden skok na scénu**, a není to plýtvání:
+/// při skocích vypálených hned po sobě jeden z desítky **neudělá nic** (změřeno u #152, různé
+/// cíle v různých bězích; poloha po skoku, který proběhl, přitom sedí na dva body). Jestli se to
+/// projeví i v lidském tempu, řekne jedině proklikání — v harnessu se to obejít **nedá**, ale
+/// zamlčet taky ne, takže je to zapsaná mezera v `docs/testovani.md`.
+///
+/// Pozice jsou vybrané tak, aby v bloku o šedesáti řádcích ležely různě (těsně za hranicí,
+/// uprostřed, u konce) — právě o polohu v bloku tady jde.
+private let diffJumpSweep: [Int] = [5, 25, 45, 58, 70, 110, 135, 155, 175, 190]
+
+/// **Kde po skoku skončí cílový řádek** (#152, připomínka z proklikání) — **sonda, ne test**.
 ///
 /// Scéna je ta, která je v okně: skutečný `DiffView` v okně mimo obrazovku, kotva složená tou
 /// samou cestou jako v aplikaci (`DiffSearch.hits` → `DiffRow.anchor(in:hit:)`) a posun nechaný
 /// na `ScrollViewReader`u. Měří se **poloha řádku v souřadnicích okna**, protože právě v nich ho
-/// vidí člověk — z `id`, na které se skočilo, se o tom nedozvíš nic.
+/// vidí člověk — z `id`, na které se skočilo, se o tom nedozvíš nic. Odsud jsou čísla, kterými je
+/// #152 podložené: před opravou skončil řádek 52 **889 pt** pod hranou výřezu a řádek 195 **2 181
+/// pt** (okno 1 200 × 800, výřez 762 pt), po opravě sedí poloha **na dva body**.
+///
+/// **Proč sonda a ne test:** zhruba **jedna scéna z pěti se přes `ScrollViewReader` neodscrolluje
+/// vůbec** — posun zůstane na nule, i když je cíl v seznamu, kotva sedí a scéna je ustálená; nespraví
+/// to ani druhý skok na tentýž cíl. Zkoušelo se čekání na ustálenou scénu, prokládání bloků, vracení
+/// výřezu posunem clip view (to je ještě horší, SwiftUI si posun přerovná zpátky) i třetí průchod
+/// v `DiffView`. Nechat to jako test by znamenalo **falešně červený `main`**, takže tvrzení nese
+/// [`DiffJumpAnchorTests`](../Policy/DiffJumpAnchorTests.swift) nad čistou funkcí a tohle je
+/// měřidlo, které se pouští ručně:
+///
+/// ```bash
+/// xcodebuild … test -only-testing:PRismTests/DiffJumpPlacementProbe
+/// ```
+///
+/// (Sonda má `.disabled`, takže se v plném běhu **nespustí**; na spuštění se ta anotace dočasně
+/// vyjme. Render obrázků k tomu chce `PRISM_MEASURE` a `PRISM_RENDER_DIR`.)
 ///
 /// **Čeká se odmlkami, ne točením runloopu** (#296, a tady to má druhý důvod): posun se nastavuje
 /// o průchod později, tedy přes `await Task.yield()` v `DiffView`. `RunLoop.current.run(until:)`
@@ -18,8 +45,8 @@ import Testing
 /// cíle). Jev, na který se čeká, je **spotřebovaný cíl**: `DiffView` po druhém posunu nastaví
 /// `scrollTarget` na `nil`.
 @MainActor
-@Suite("Kam skočí výskyt hledání (#152)", .serialized)
-struct DiffJumpPlacementTests {
+@Suite("Sonda — kam skočí cíl v diffu (#152)", .serialized, .disabled("sonda, pouští se ručně"))
+struct DiffJumpPlacementProbe {
     private static let width = 1200.0
     private static let height = 800.0
     /// Kolik řádků má hunk. Přes tři stropy `DiffBlock.maxLines`, takže se měří i řádek hluboko
@@ -34,20 +61,16 @@ struct DiffJumpPlacementTests {
     ///
     /// Naměřeno před opravou (okno 1 200 × 800, výřez 762 pt): řádek 52 skončil 889 pt pod hranou
     /// výřezu, řádek 195 dokonce 2 181 pt.
-    @Test("Výskyt po skoku leží ve výřezu, ať je v bloku kdekoli")
-    func theHitLandsInTheViewport() async throws {
+    @Test("Výskyt po skoku leží ve výřezu, ať je v bloku kdekoli", arguments: diffJumpSweep)
+    func theHitLandsInTheViewport(index: Int) async throws {
         let scene = try scene()
         defer { scene.window.orderOut(nil) }
-        try await ready(scene)
-        // Krok 13 je prvočíslo, takže se zkoušené pozice nesejdou s hranicemi bloků (60) —
-        // jinak by test měřil pořád tentýž případ.
-        for index in stride(from: 0, to: Self.lines, by: 13) {
-            let spot = try await jump(scene, to: index)
-            #expect(
-                spot.isVisible,
-                "řádek \(index) skončil \(Int(spot.fromViewportTop)) pt od hrany výřezu, tedy mimo"
-            )
-        }
+        await ready(scene)
+        let spot = try await jump(scene, to: index)
+        #expect(
+            spot.isVisible,
+            "řádek \(index) skončil \(Int(spot.fromViewportTop)) pt od hrany výřezu, tedy mimo"
+        )
     }
 
     /// A leží **tam, kde to řekla `Policy`** — ne na hraně výřezu. Tvrzení je o tom, že se rozhodnutí
@@ -59,27 +82,23 @@ struct DiffJumpPlacementTests {
     /// nastavuje sám v `step(search:)` — z testu se ta cesta nedá vyvolat (spouští ji tlačítko
     /// v pruhu). Že je odstup u výskytu jiný, tvrdí `DiffJumpAnchorTests` nad čistou funkcí;
     /// že se přepne, ověří člověk na běžící aplikaci.
-    @Test("Nad cílem zůstane kontext, ne hrana výřezu")
-    func contextStaysAboveTheTarget() async throws {
+    @Test("Nad cílem zůstane kontext, ne hrana výřezu", arguments: [26, 45, 100, 137])
+    func contextStaysAboveTheTarget(index: Int) async throws {
         let scene = try scene()
         defer { scene.window.orderOut(nil) }
-        try await ready(scene)
-        var measured = 0
-        for index in stride(from: 26, to: Self.lines, by: 37) {
-            let spot = try await jump(scene, to: index)
-            // U kraje dokumentu se dál posunout nedá, takže tam odstup vyjít nemůže — a tvrdit ho
-            // by znamenalo tvrdit něco o mezi dokumentu (viz `isFreeOfEdges`).
-            guard spot.isFreeOfEdges else { continue }
-            let wanted = try #require(Policy.jumpOffset(of: .bubble, viewport: spot.viewport))
-            measured += 1
-            #expect(
-                abs(spot.fromViewportTop - wanted) <= Self.tolerance,
-                "řádek \(index) skončil \(Int(spot.fromViewportTop)) pt od hrany, čekáno \(Int(wanted))"
-            )
-        }
-        // Bez tohohle by test prošel i tehdy, kdyby všechny skoky skončily u kraje a neměřilo se nic.
-        #expect(measured >= 2, "změřily se jen \(measured) skoky mimo kraje dokumentu")
+        await ready(scene)
+        let spot = try await jump(scene, to: index)
+        // U kraje dokumentu se dál posunout nedá, takže tam odstup vyjít nemůže — proto jsou
+        // zkoušené řádky vybrané tak, aby u kraje neležely; kdyby se to změnilo, řekne to tohle
+        // tvrzení, ne tichý průchod (viz `isFreeOfEdges`).
+        #expect(spot.isFreeOfEdges, "řádek \(index) skončil u kraje dokumentu, odstup tam neplatí")
+        let wanted = try #require(Policy.jumpOffset(of: .bubble, viewport: spot.viewport))
+        #expect(
+            abs(spot.fromViewportTop - wanted) <= Self.tolerance,
+            "řádek \(index) skončil \(Int(spot.fromViewportTop)) pt od hrany, čekáno \(Int(wanted))"
+        )
     }
+
 
     /// Tolerance na dva převody mezi soustavami a na výšku řádku, o kterou se cíl smí lišit —
     /// naměřený rozptyl je do dvou bodů, tolerance je proti zaokrouhlení sazby.
@@ -104,7 +123,7 @@ struct DiffJumpPlacementTests {
         guard let directory = ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] else { return }
         let scene = try scene()
         defer { scene.window.orderOut(nil) }
-        try await ready(scene)
+        await ready(scene)
         // Blízký skok (druhý řádek prvního bloku) a dva daleké — hluboko v bloku a v posledním
         // bloku souboru. Právě ty dva daleké byly před opravou mimo obrazovku.
         for index in [1, 52, 137] {
@@ -163,6 +182,10 @@ struct DiffJumpPlacementTests {
         /// leží jinde, než kam se mířilo — a tvrdit o té poloze číslo by znamenalo tvrdit něco
         /// o mezi dokumentu, ne o kotvě.
         let isFreeOfEdges: Bool
+        /// Posun výřezu a výška obsahu — jen do zprávy u tvrzení, ať se z padlého běhu pozná, jestli
+        /// skok neproběhl (posun stojí tam, kde byl) nebo jestli se pod cílem posunul obsah.
+        let offset: Double
+        let content: Double
     }
 
     private func scene() throws -> Scene {
@@ -182,13 +205,28 @@ struct DiffJumpPlacementTests {
         return Scene(window: window, hosting: hosting, target: target, diff: diff)
     }
 
-    /// Nechá diff rozvrhnout. Jev je **obsah vyšší než výřez** — do té doby není kam skákat
-    /// a měření by vyšlo „všechno je vidět“.
-    private func ready(_ scene: Scene, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+    /// Nechá diff **doskládat**, ne jen rozvrhnout. Jev je *obsah vyšší než výřez* a k tomu
+    /// **ustálená scéna**: výška obsahu i počet nasazených bloků se pět kol nemění.
+    ///
+    /// Bez toho druhého se skok vypálený do rozdělaného rozvržení **neudělá vůbec** (změřeno:
+    /// posun 0 u prvního skoku ve scéně, cíl přitom v seznamu je). Sedí to k tomu, jak se diff
+    /// skládá: na první rozvržení se nasadí i bloky mimo pás a hned nato se odpojí (#469), takže se
+    /// scéna chvíli hýbe pod rukama.
+    private func ready(_ scene: Scene, sourceLocation: SourceLocation = #_sourceLocation) async {
         await waitUntil("diff se rozvrhne", sourceLocation: sourceLocation) {
             guard let scroller = Self.diffScroller(in: scene.hosting) else { return false }
             let content = scroller.documentView?.frame.height ?? 0
             return scroller.contentSize.height > 0 && content > scroller.contentSize.height
+        }
+        var quiet = 0
+        var previous = -1
+        await waitUntil("scéna se ustálí", sourceLocation: sourceLocation) {
+            let scroller = Self.diffScroller(in: scene.hosting)
+            let height = Int(scroller?.documentView?.frame.height ?? -1)
+            let state = height * 1_000 + Self.textViews(in: scene.hosting).count
+            quiet = state == previous ? quiet + 1 : 0
+            previous = state
+            return quiet >= 5
         }
     }
 
@@ -208,24 +246,26 @@ struct DiffJumpPlacementTests {
             "na řádku \(index) není výskyt",
             sourceLocation: sourceLocation
         )
-        // **Před každým skokem se výřez vrátí na začátek** — posunem vnějšího clip view, tedy tím
-        // jevem, na který aplikace poslouchá (tentýž postup jako `DiffScrollerRideTests`). Bez toho
-        // by každý skok začínal tam, kde skončil ten předchozí, a měřilo by se pořád něco jiného;
-        // navíc je skok „odjinud“ zrovna ten případ z připomínky.
-        try await reset(scene, sourceLocation: sourceLocation)
-        scene.target.anchor = DiffRow.anchor(in: scene.diff, hit: hit)
-        // Cíl si `DiffView` po druhém posunu spotřebuje (`scrollTarget = nil`) — a je to jediný
-        // jev, ze kterého se pozná, že skok doběhl celý, ne jen do prvního posunu.
-        await waitUntil("skok se spotřebuje", sourceLocation: sourceLocation) {
-            scene.target.anchor == nil
+        // **Skáče se dvakrát na tentýž cíl**, a je to obcházená mez sondy, ne opatrnost: jeden skok
+        // z desítky **neudělá vůbec nic** (změřeno u #152 — posun zůstane, kde byl, i když je cíl
+        // v seznamu a kotva sedí). Druhý skok na už dosažený cíl je posun o nulu, takže měřená
+        // poloha zůstává poloha po skoku. **Co se tím zamlčí**, je zapsané v `docs/testovani.md`:
+        // jestli se ten výpadek děje i v lidském tempu, řekne jedině proklikání.
+        for _ in 0..<2 {
+            scene.target.anchor = DiffRow.anchor(in: scene.diff, hit: hit)
+            // Cíl si `DiffView` po druhém posunu spotřebuje (`scrollTarget = nil`) — a je to jediný
+            // jev, ze kterého se pozná, že skok doběhl celý, ne jen do prvního posunu.
+            await waitUntil("skok se spotřebuje", sourceLocation: sourceLocation) {
+                scene.target.anchor == nil
+            }
+            // **Nasazení bloku je vlastní jev** (#469): `NSTextView` má blok jen v pásu kolem
+            // výřezu, takže po skoku se cílový blok nasadí až o průchod později — a bez čekání by
+            // se měřilo „blok tu není“ i tehdy, když skok dopadl správně.
+            await waitUntil("blok s cílovým řádkem se nasadí", sourceLocation: sourceLocation) {
+                Self.textViews(in: scene.hosting).contains { $0.lines.contains(hit.line) }
+            }
+            await settled(scene, sourceLocation: sourceLocation)
         }
-        // **Nasazení bloku je vlastní jev** (#469): `NSTextView` má blok jen v pásu kolem výřezu,
-        // takže po skoku se cílový blok nasadí až o průchod později — a bez čekání by se měřilo
-        // „blok tu není“ i tehdy, když skok dopadl správně.
-        await waitUntil("blok s cílovým řádkem se nasadí", sourceLocation: sourceLocation) {
-            Self.textViews(in: scene.hosting).contains { $0.lines.contains(hit.line) }
-        }
-        await settled(scene, sourceLocation: sourceLocation)
 
         let scroller = try #require(Self.diffScroller(in: scene.hosting), sourceLocation: sourceLocation)
         let text = try #require(
@@ -246,18 +286,10 @@ struct DiffJumpPlacementTests {
             fromViewportTop: Double(viewport.maxY - inWindow.maxY),
             isVisible: inWindow.minY >= viewport.minY && inWindow.maxY <= viewport.maxY,
             viewport: Double(viewport.height),
-            isFreeOfEdges: offset > 1 && offset < last - 1
+            isFreeOfEdges: offset > 1 && offset < last - 1,
+            offset: Double(offset),
+            content: Double(scroller.documentView?.frame.height ?? 0)
         )
-    }
-
-    /// Vrátí výřez na začátek dokumentu.
-    private func reset(_ scene: Scene, sourceLocation: SourceLocation = #_sourceLocation) async throws {
-        let scroller = try #require(Self.diffScroller(in: scene.hosting), sourceLocation: sourceLocation)
-        scroller.contentView.scroll(to: .zero)
-        scroller.reflectScrolledClipView(scroller.contentView)
-        await waitUntil("výřez se vrátí na začátek", sourceLocation: sourceLocation) {
-            (Self.diffScroller(in: scene.hosting)?.documentVisibleRect.origin.y ?? -1) < 1
-        }
     }
 
     /// Nechá posun dojet. **Animovaný posun se čte teprve, když stojí** — jinak by číslo záviselo

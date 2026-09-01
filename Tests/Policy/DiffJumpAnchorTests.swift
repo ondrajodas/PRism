@@ -4,9 +4,10 @@ import Testing
 
 /// Kam se v diffu skáče a kolik místa nad cílem zůstane (#152) — čisté funkce, vyčerpávající výčet.
 ///
-/// Poloha v okně se tvrdí jinde (`DiffJumpPlacementTests` nad hostovaným `DiffView`em); tady jde
-/// o **vzorec**, protože ten je to, co u #152 chybělo: podíl výšky se počítal z výřezu a poloha
-/// řádku v bloku do něj nevstupovala vůbec.
+/// **Poloha v okně se tady netvrdí, a je to zapsaná mez:** měří ji sonda `DiffJumpPlacementProbe`
+/// nad hostovaným `DiffView`em, jenže jedna scéna z pěti se přes `ScrollViewReader` neodscrolluje
+/// vůbec — jako test by to dělalo falešně červený `main`. Tady jde o **vzorec**, protože ten je to,
+/// co u #152 chybělo: podíl výšky se počítal z výřezu a poloha řádku v bloku do něj nevstupovala.
 @Suite("Kam skočí cíl v diffu (#152)")
 struct DiffJumpAnchorTests {
     /// Výška výřezu, na které se to měřilo v okně (okno 800 pt minus lišta).

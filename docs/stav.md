@@ -6284,7 +6284,8 @@ výskyt hledání přistane na **třetině shora**, nález zůstává 90 pt pod 
 místě. [Záznam
 rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--kam-skok-posadí-cílový-řádek-152).
 
-Testů **4746** ve 464 suitách; nových je šest sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
-`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`,
-`DiffJumpPlacementTests`) a dvě měření barev v `DiffPaletteTests`. Co se v které z nich hlídá a proč,
+Testů **4746** ve 464 suitách; nových je pět sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
+`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`), dvě měření barev
+v `DiffPaletteTests` a dvě sondy (`DiffSearchRenderProbe`, `DiffJumpPlacementProbe` — poloha po skoku
+v okně se testem tvrdit nedá, viz zapsaná mezera). Co se v které z nich hlídá a proč,
 je v [`docs/testovani.md`](testovani.md).

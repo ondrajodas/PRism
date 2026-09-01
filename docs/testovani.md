@@ -1872,12 +1872,21 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `0…1` vyjde** (ořezání je zamítnutá varianta, viz níž), že cíl mimo blok se počítá jako
   jednořádkový a že blok stejně vysoký jako výřez vydá nulu, **ne `inf`**.
 
-  `DiffJumpPlacementTests` nad **hostovaným `DiffView`em v okně mimo obrazovku**: kotva se skládá tou
+  `DiffJumpPlacementProbe` nad **hostovaným `DiffView`em v okně mimo obrazovku**: kotva se skládá tou
   samou cestou jako v aplikaci (`DiffSearch.hits` → `DiffRow.anchor(in:hit:)`), posun nechává na
   `ScrollViewReader`u a měří se **poloha cílového řádku v souřadnicích okna** (`DiffTextView
-  .frame(ofLine:)` převedený do okna proti rámečku clip view). Tvrdí se, že řádek **je vidět**, ať je
-  v bloku kdekoli, a že nad ním zůstane odstup z `Policy`. Ověřeno vložením regrese: s podílem
-  počítaným z výšky výřezu (stav před #152) spadnou obě suity.
+  .frame(ofLine:)` převedený do okna proti rámečku clip view). Odsud jsou čísla u #152 — před
+  opravou 889 a 2 181 pt pod hranou výřezu, po ní poloha na dva body — a k tomu render okna po skoku.
+
+  **Je to sonda, ne test, a je to zapsaná mez.** Zhruba **jedna scéna z pěti se přes
+  `ScrollViewReader` neodscrolluje vůbec**: posun zůstane na nule, i když je cíl v seznamu, kotva
+  sedí a scéna je ustálená — a nespraví to ani druhý skok na tentýž cíl. Zkoušelo se čekání na
+  ustálenou scénu (počet nasazených bloků i výška obsahu pět kol beze změny), prokládání cílů po
+  blocích, vracení výřezu posunem clip view (**horší** — SwiftUI si posun přerovná zpátky, tatáž mez
+  jako u #325) i třetí průchod v `DiffView`. Jako test by to dělalo **falešně červený `main`**, takže
+  tvrzení nese `DiffJumpAnchorTests` nad čistou funkcí a sonda se pouští ručně (má `.disabled`).
+  **Ověřeno vložením regrese:** s podílem počítaným z výšky výřezu (stav před #152) spadne
+  `DiffJumpAnchorTests` i sonda.
 
   **Tři věci, na kterých ta sonda visela, a všechny tři vypadaly zeleně:**
 

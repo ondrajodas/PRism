@@ -1483,7 +1483,7 @@ nejsou zjevné:
   skoku. V pohledu vedle sebe je to přesné (nezalamuje se), v pohledu pod sebou zalomený řádek výšku
   podhodnotí a cíl přistane o ten přebytek níž — mez je tím **blok**, ne diff.
 - **U kraje dokumentu se posun ořeže sám** a cíl leží jinde, než kam se mířilo. Není to chyba, dál se
-  odscrollovat nedá — a tvrzení v testu se proto na krajích neuplatňuje (`isFreeOfEdges`).
+  odscrollovat nedá — sonda proto u krajů odstup neměří (`isFreeOfEdges`).
 
 **Zamítnutá varianta: vyjmout cílový řádek do vlastního bloku** (`blocked(_:breakingAt:)`), aby podíl
 platil přímo pro něj. Napsané, změřené, zahozené: nové bloky vzniknou v **témže průchodu**, ve kterém

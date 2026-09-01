@@ -5040,7 +5040,11 @@ rozdělaný komentář i na soubor ze stromu (`DiffRow.anchor` → `scrollTarget
 všechny naráz — u nálezu byla chyba potichu od #157 a nikdo si jí nevšiml, protože nález na prvním
 řádku bloku dopadal správně.
 
-**Zapsaná mezera:** že se u výskytu použije **jiný odstup** než u nálezu, sonda neověří — cíl se do ní
-nastavuje bindingem (cestou panelu nálezů), kdežto `.searchHit` si `DiffView` nastavuje sám
+**Dvě zapsané mezery.** (1) Že se u výskytu použije **jiný odstup** než u nálezu, sonda neověří — cíl
+se do ní nastavuje bindingem (cestou panelu nálezů), kdežto `.searchHit` si `DiffView` nastavuje sám
 v `step(search:)` a spouští to tlačítko v pruhu. Obě hodnoty drží test nad čistou funkcí, přepnutí
-zkouší člověk.
+zkouší člověk. (2) **Poloha v okně se netvrdí testem, jen sondou**: jedna scéna z pěti se přes
+`ScrollViewReader` neodscrolluje vůbec (posun zůstane na nule, ač je cíl v seznamu a scéna ustálená),
+takže by z toho byl falešně červený `main` — co všechno se proti tomu zkusilo, je
+v [`docs/testovani.md`](../../testovani.md). Jestli ten výpadek potká i člověka, řekne jedině
+proklikání; v harnessu se od „skok se povedl“ liší jen tím, že se okno nehnulo.
