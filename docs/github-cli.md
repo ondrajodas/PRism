@@ -67,7 +67,7 @@ a příčina je vidět **jen v logu akce**. Jsou na to dvě známé příčiny a
 jestli job vůbec běžel**:
 
 - **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
-  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447)).
+  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
 

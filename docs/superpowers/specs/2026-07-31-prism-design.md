@@ -3294,7 +3294,7 @@ zůstávají tam, kde byla, a **nezměnilo se ani jedno**; přestěhovaly se dů
 a naměřená čísla, tedy to, co je potřeba znát, až se bude pravidlo měnit — ne dřív, než se něco
 napíše. Důvod přesunu je zároveň první položkou níž.
 
-### `CLAUDE.md` se drží malý, a je to podmínka, ne estetika (#162, znovu #447)
+### `CLAUDE.md` se drží malý, a je to podmínka, ne estetika (#162, znovu #447, potřetí #496)
 
 **Copilot si `CLAUDE.md` bere jako custom instructions — a tím si sám ucpává kontext.** Když
 spadne, do review napíše jen „Copilot encountered an error and was unable to review this pull
@@ -3343,6 +3343,49 @@ to, aby se dalo přirozeně růst dál.
 **Kdyby přesto spadl:** nepřepisuj kvůli tomu zadání ani nedělej umělé PR navíc — dokumentace
 musí jít se změnou v jednom commitu. Zbývá vlastní revize, a ta je stejně podmínkou pushnutí;
 napiš do popisu PR, že Copilot nedoběhl a proč, ať je z PR vidět, že kontrola nechyběla omylem.
+
+**Třetí rozdělení (#496):** za tři měsíce narostl z 66,5 kB na **99 525 B**, tedy **475 bajtů**
+pod hranici. Spouštěčem byla znovu **ta hranice, ne spadlý Copilot** — a tentokrát to bylo o vlas:
+kterékoli z tehdy otevřených issues by ji přidáním jednoho odstavce překročilo. Objem nesly
+**dvě sekce, 56 % souboru**: `Tvrdé podmínky` 30 855 B a `Konvence` (včetně podsekce o kresbě)
+25 304 B. Obě narostly přesně tím, co pravidlo posílá do `docs/` — měřením, rozbory a historií
+změn rozhodnutí, kterých za M10–M13 přibylo hodně (vestavěný terminál, zápis do remote, session,
+která smí psát, ready for review).
+
+Skončilo to na **81 430 B**, tedy −18 %. Sedm sekcí se přepsalo (`Tvrdé podmínky`, `Konvence`
+i podsekce o kresbě, `Pracovní postup`, `Testování`, `Architektura`, `Prostředí`, `Návrh`),
+každý přesunutý odstavec nechal v `CLAUDE.md` odkaz a **nezmizelo ani jedno pravidlo**: všech
+28 grepů dalo po přepsání **týž výstup**, doslovný text grepů je byte za byte stejný a inventář
+nadpisů, odrážek a tučných vět se porovnal položku po položce (co ubylo jako odrážka, je popsané
+v popisu PR — obvykle se dvě odrážky slily do jedné, obsah zůstal).
+
+**Cíl „~66 kB jako u #447“ se nesplnil, a je změřené proč.** Rozpad souboru na části:
+
+| | před #496 | po #496 |
+|---|---|---|
+| bloky s grepy | 4 627 B | 4 595 B |
+| tabulky | 6 352 B | 6 623 B |
+| URL v odkazech | 5 733 B | **6 323 B** |
+| próza pravidel | 82 813 B | **63 889 B** |
+
+Próza spadla o **23 %** a na **140 položek inventáře** (nadpisy, odrážky, věty pravidel) vychází
+**~450 B na pravidlo** — přesně ta hodnota, kterou #447 popsalo jako nestlačitelnou (jedno pravidlo
+= věta imperativu, jméno místa, kde se rozhoduje, a odkaz na měření). Rozdíl proti 66,5 kB tedy
+nedělá rozvláčnost, ale **počet pravidel a odkazů**: URL v odkazech samy o sobě přibyly, protože
+pravidlo, ze kterého se stěhuje vysvětlení, si odkaz **musí** nechat. Cesta pod 70 kB proto vede
+dál jedině přes **mazání pravidel** — vlastní issue, pravidlo po pravidle. Kontrolní číslo
+v `CLAUDE.md` zůstává **hranice 100 kB**; 81 kB od ní nechává ~19 kB na přirozený růst, tedy
+přibližně jednu takovou dávku, jaká proběhla mezi #447 a #496.
+
+**Dva vedlejší nálezy, oba zapsané jako mezera, ne opravené:**
+
+- Odkaz `docs/testovani.md#tři-zlevnění-která-se-změřila-a-zahodila` byl **rozbitý** — sekce se
+  mezitím přejmenovala na *Čtyři zlevnění*. Kotvy se od #496 ověřují **skriptem nad slugy**, ne
+  okem; pozor na to, že GitHub mění **každou mezeru zvlášť** (em pomlčka v nadpisu tedy dává
+  dvě pomlčky v kotvě) a k opakovanému slugu přidává `-1`.
+- Grep na české prózy v shell skriptech (`grep -nP …`) na tomhle stroji **nejde spustit** —
+  systémový `grep` je `ugrep` bez `-P`. Pravidlo platí, jen se ten grep musí pustit jinak; #496
+  na text pravidla **nesahalo**, aby se změna pravidla nepromíchala s přeskládáním souboru.
 
 ### Release notes jsou záznam jedné změny, ne deník projektu (#125)
 

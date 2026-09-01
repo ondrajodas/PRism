@@ -4832,7 +4832,7 @@ dokumentace, teď zbyla po odstěhování všech vysvětlení jen tři nestlači
 tvrdých podmínek (9,7 kB), grepy před pushem a věty pravidel, kterých má repo proti stavu po
 873bc29 skoro dvojnásobek. Cesta k 40 kB proto vedla jedině přes **mazání pravidel**, ne přes
 stěhování vysvětlení; zdůvodnění je v [záznamu
-rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447).
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496).
 Kontrolní číslo v `CLAUDE.md` zůstává **hranice 100 kB**, ne cíl 40.
 
 **Že se nic neztratilo, je doložené dvěma průchody, ne dojmem**: všech **173 tučných začátků
@@ -6171,3 +6171,40 @@ brána odesílání je ve slotu vypnutá a zapnout si ji kvůli měření by zna
 aby vyšel potřebný stav. Ověřené je obojí do sebe: session naostro nad skutečným konfliktem a celý
 řetěz `git add` → `rebase --continue` proti skutečnému `gitu`.
 
+**`CLAUDE.md` rozdělený potřetí (issue #496)** — z **99 525 B** na **81 430 B** (−18 %).
+Spouštěčem byla hranice, kterou si pravidlo v souboru samo stanovilo (100 kB): byl **475 bajtů**
+pod ní, takže kterékoli další issue by ji přidáním jednoho odstavce překročilo — a nad tou
+hranicí review na PR **vůbec nedoběhne**, protože Copilot si `CLAUDE.md` bere jako custom
+instructions se stropem 110 tisíc tokenů.
+
+Objem nesly **dvě sekce, 56 % souboru** (`Tvrdé podmínky` 30,9 kB, `Konvence` 25,3 kB) a nesly ho
+přesně tím, co pravidlo posílá do `docs/`: měřením, rozbory a historií změn rozhodnutí. Přepsalo
+se sedm sekcí; zůstaly v nich **věty pravidel, výčty tvrdých podmínek a grepy**, odešly naměřená
+čísla, „do #X tady stálo“ a zdůvodnění — a u každého přesunutého odstavce zůstal **odkaz**.
+Cílové soubory už ty rozbory měly, takže se do `docs/` skoro nic nepřidávalo; nové je jen
+[*proč brána na návrh sedí u zakládání issue*](navrh.md#proč-brána-sedí-u-zakládání-issue-ne-až-u-prvního-commitu)
+a [záznam o tomhle
+rozdělení](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496).
+
+**Že nezmizelo pravidlo, je doložené, ne tvrzené.** Všech **28 grepů** z `CLAUDE.md` běželo před
+i po a dalo **týž výstup**; doslovný text grepů je byte za byte stejný; inventář nadpisů, odrážek
+a tučných vět (145 → 140 položek) se porovnal položku po položce a každý úbytek je vysvětlený
+(obvykle se dvě odrážky slily do jedné). **Odkazy se od #496 ověřují skriptem nad slugy** — 89 odkazů
+z `CLAUDE.md` do `docs/`, všechny platné; jeden byl **rozbitý už předtím**
+(`#tři-zlevnění…` proti přejmenované sekci *Čtyři zlevnění*) a #496 ho spravilo.
+
+**Cíl „~66 kB jako u #447“ se nesplnil a je změřené proč** (rozpad v záznamu rozhodnutí): próza
+pravidel spadla o 23 % na **~450 B na pravidlo**, tedy přesně na hodnotu, kterou #447 popsalo jako
+nestlačitelnou. Rozdíl proti 66,5 kB dělá **počet pravidel a odkazů** (URL v odkazech samy
+přibyly — pravidlo, ze kterého se stěhuje vysvětlení, si odkaz musí nechat), ne rozvláčnost.
+Cesta pod 70 kB vede jedině přes **mazání pravidel**, což je vlastní issue.
+
+**Na tomhle není co vidět** — aplikace se nemění, je to čistě dokumentace; testů **4667**
+ve 457 suitách, všechny zelené (kód se nedotkl ani řádkou). **Dvě zapsané mezery:** grep na české
+prózy v shell skriptech (`grep -nP …`) na tomhle stroji nejde spustit, protože systémový `grep` je
+`ugrep` bez `-P` — pravidlo platí, jen se ten grep musí pustit jinak, a #496 na jeho text
+**nesahalo**, aby se změna pravidla nemíchala s přeskládáním souboru. A dvě konkrétní fakta se
+odstěhovala hlouběji, než by leckdo hledal: `⌥↵` u zakládání labelu zůstalo, ale *„jde přes
+`gh pr ready --repo`, ne přes `gh api`“* je teď jen v
+[`docs/architektura.md`](architektura.md#ready-for-review-482--devátá-metoda-a-nejmenší-z-nich)
+a v [`docs/github-cli.md`](github-cli.md).
