@@ -2434,7 +2434,7 @@ Dvě rozhodnutí, která z rozpisu M8 nejsou vidět a stála za rozdělení na p
 | **„Dotáhlo se / nedotáhlo“ se rozhoduje podle `init.mcp_servers[].status`**, ne podle odpovědi modelu (#345) | Přečíst exit kód a text odpovědi — je to o dva řádky kratší a u chybějícího serveru to model sám napíše | Změřeno **tři** tvary selhání a **dva z nich vypadají jako úspěch**: chybějící (i nepřihlášený) server skončí `exit 0` a `result` se `subtype: "success"`, nepovolený nástroj taky. Kdo čte exit kód, uloží si do zadání větu „nemám povolení k použití nástroje…“ **jako by to bylo zadání** — a reviewer pak hlásí nálezy proti zadání, které nikdo nenapsal. Jediný strojově čitelný signál je stav serveru v `init` eventu; **rozhodovat podle prózy modelu je hádání**. Ověřeno vloženou regresí: s vypnutou kontrolou serveru padnou 4 testy nad skutečnými streamy |
 | Ta session jede **streamem** (`--output-format stream-json --verbose`), na rozdíl od bufferovaného překladu nálezů (#345) | Opsat `TranslationCommand`, tedy bufferovaně a bez `--verbose` | Je to **důsledek** řádku výš, ne volba: `init` event je v bufferovaném režimu vidět, ale `claude` bez `--verbose` `stream-json` v print režimu **odmítne**, a bez `stream-json` se `mcp_servers` nedozvíme vůbec. Cena je vlastní rozbor streamu (`IntentTextCommand.parse`) místo tří řádků nad `standardOutput` |
 | Povolení vyjmenovávají **`ToolSearch` a ten MCP nástroj**; `--allowedTools ""` z překladu se opsat nedá (#345) | Prázdná povolení jako u překladu; nebo jen ten MCP nástroj | Na tomhle stroji je v session **165 nástrojů**, takže CLI **odkládá schémata**: model musí napřed zavolat `ToolSearch` (`select:<nástroj>`) a teprve pak MCP nástroj — doloženo ve všech bězích průzkumu. Z toho plyne i `--max-turns`: **ne 1–2**, protože dotažení je ≥ 3 turny. Zvoleno **6**, aby se do stejného čísla vešlo jedno zaváhání; kola nic nestojí, cenu určuje boot session. Sada revieweera se tím **nemění** — je to jiná session — a `--disallowedTools` je u ní **tatáž konstanta**, aby druhá sada zákazů nevznikla |
-| **Jméno nástroje je v `config.json`, ne v konstantě**; chybějící hodnota znamená „netahat“ (#345) | Konstanta v kódu (`mcp__claude_ai_Linear__get_issue`), případně s fallbackem, ať to funguje po instalaci | Jméno závisí na tom, jak si **uživatel** pojmenoval MCP server, takže konstanta v kódu je tvrzení o cizím prostředí — a v `--allowedTools` by to bylo jméno, které není náš kontrakt. Prázdná hodnota se **nesmí** brát jako „zkus to a uvidíš“: session, která nemá co zavolat, stojí boot (~$0,2) a nevrátí nic. Je to proto **vlastní stav** (`.toolNotConfigured`), který je na ose vidět, protože reviewer dostal jen odkazy. Pole **není v okně nastavení** (jako `ownLogins`): je to jednorázová věc pro toho, kdo má tracker za MCP serverem, a nová sekce nastavení by znamenala mockup a schválení |
+| **Jméno nástroje je v `config.json`, ne v konstantě**; chybějící hodnota znamená „netahat“ (#345) | Konstanta v kódu (`mcp__claude_ai_Linear__get_issue`), případně s fallbackem, ať to funguje po instalaci | Jméno závisí na tom, jak si **uživatel** pojmenoval MCP server, takže konstanta v kódu je tvrzení o cizím prostředí — a v `--allowedTools` by to bylo jméno, které není náš kontrakt. Prázdná hodnota se **nesmí** brát jako „zkus to a uvidíš“: session, která nemá co zavolat, stojí boot (~$0,2) a nevrátí nic. Je to proto **vlastní stav** (`.toolNotConfigured`), který je na ose vidět, protože reviewer dostal jen odkazy. Pole **do #389 nebylo v okně nastavení** (jako `ownLogins`): nová sekce nastavení znamená mockup a schválení, takže se u #345 nedělala. Od #389 v okně **je** — viz *Záznam rozhodnutí — poslední dvě pole do okna (#389)* |
 | **Žádný přepínač „tahat / netahat“** a žádná výjimka pro automat (#345, rozhodnutí uživatele 2026-08-17) | Tahat jen u ručně spuštěného review; nebo u automatu vynutit `sonnet`, ať je to o třetinu levnější | Zadání vedle diffu je **důvod, proč ta funkce existuje**, a automat je zrovna ten režim, u kterého se člověk dívá až na hotový výsledek — tedy ten, kde se rozdíl mezi „review vidělo zadání“ a „nevidělo“ pozná nejpozději. Cena je změřená a přijatá: $0,18–0,31 a ~20 s na review, u automatu krát počet PR. Knoflík, který si nikdo nenastaví, je jen řádek v okně (tatáž úvaha jako u intervalu kontroly status pages) |
 | Odpověď se čte **podle řádkových značek**, ne jako JSON (#345) | JSON pole s `id` a `text`, jako u překladu nálezů | Hodnota je **cizí markdown libovolné délky** — jedno issue z průzkumu mělo 4 439 znaků, s uvozovkami, zpětnými apostrofy a odsazenými bloky. Překódovat ho na JSONový řetězec je krok, ve kterém model utne nebo zkazí escapování, a selhání by pak zahodilo **všechny** texty naráz; řádková značka se obsahem rozbít nedá a chybějící issue se pozná tím, že jeho značka nepřišla. Značku skládá **jedna funkce** (`IntentTextCommand.marked(_:)`) pro příklad v promptu i pro rozbor, takže se ty dvě strany nemají čím rozejít. Párování je **podle `id`**, ne podle pořadí — vynechané issue by jinak posunulo texty o jedno a přiřadilo je cizím issues |
 | Model se u té session **nevynucuje** (#345) | Poslat `--model` z konfigurace, ať je vidět, s čím se mluví | Tatáž úvaha jako u překladu nálezů: vlastní `--model` by byla třetí odpověď na otázku, se kterým modelem aplikace mluví, a o ceně už se rozhodlo (tahá se vždycky). `claude` si vybere sám |
@@ -2485,7 +2485,7 @@ a s jiným obsahem panelu (zadání pro agenta místo verdiktu, který GitHub na
 | Odpověď se **dekóduje jako JSON** (`GhUser`) | `gh api user --jq .login`, jak to měla tabulka v zadání — je to jeden argument místo typu | `--jq` na pole, které v odpovědi **není**, vypíše prázdný řádek s **nulovým** návratovým kódem — tedy prázdný login, a to je zrovna ta hodnota, která v aplikaci znamená „nevím, kdo jsem“ (všechno cizí). Typované dekódování z toho udělá `malformedOutput` s fází `Přihlášený účet`. Prázdný ani bílý login se navíc **nevrací** ani tehdy, když ho tak API pošle: gateway je poslední místo, kde se „nevím“ dá od loginu rozlišit, a jsou na to testy z obou stran |
 | **Prázdný viewer znamená „nevím“, ne „to jsem já“** | Brát nenačtený viewer optimisticky, ať se sekce vlastních PR naplní hned | Je to tatáž úvaha, kterou už drží `Conversation.isMine`, a je z ní nejcennější test celého issue: obrácené výchozí chování by při startu na okamžik přehodilo **celý seznam** do „moje“ a fronta cizích PR by zmizela. Rozbije se to potichu — nic nespadne, jen to vypadá, že se seznam ještě nenačetl. Vložená regrese (`mine.isEmpty → .mine`) shodí 11 testů |
 | `ownership` bere **množinu loginů**, ne jeden řetězec — a do konfigurace přibyl `ownLogins` | Vzít jen `viewer: String` a množinu dolepit, teprve až bude agent s vlastním účtem | Agent s vlastním účtem (`github-actions[bot]`, Copilot) pushuje pod sebou, takže by do `.mine` nespadl. Dneska to nevadí (agenti v tomhle repu pushují přes moje `gh` — ověřeno, autor je `ondrajodas`), ale dolepit druhý login potom znamená projít **všechna** místa, která se ptají „je to moje“. Konfigurace k tomu patří proto, aby ta množina měla odkud vzniknout — bez ní by byla vždycky jednoprvková a „množina“ by byl jen tvar podpisu |
-| `ownLogins` je **jen v souboru**, ne v okně nastavení | Přidat editor jako u zdrojů nebo skillů, ať se to dá nastavit bez editace JSONu | Nová sekce nastavení je **změna vzhledu**, tedy mockup a schválení dřív, než na to vznikne issue (pravidlo z `CLAUDE.md`) — a #330 je součástka bez UI. Je to navíc jednorázová věc pro toho, kdo si pouští agenta pod vlastním účtem, ne přepínač, se kterým se pracuje. Kdyby se ukázalo, že se to nastavuje často, patří to do mockupu a do vlastního issue |
+| `ownLogins` byl **jen v souboru**, ne v okně nastavení — do #389 | Přidat editor jako u zdrojů nebo skillů, ať se to dá nastavit bez editace JSONu | Nová sekce nastavení je **změna vzhledu**, tedy mockup a schválení dřív, než na to vznikne issue (pravidlo z `CLAUDE.md`) — a #330 je součástka bez UI. Je to navíc jednorázová věc pro toho, kdo si pouští agenta pod vlastním účtem, ne přepínač, se kterým se pracuje. Kdyby se ukázalo, že se to nastavuje často, patří to do mockupu a do vlastního issue. **Přesně to se stalo** (#389): nerozhodlo, jak často se to nastavuje, ale že je bez toho pole nedostupná celá funkce — viz záznam rozhodnutí níž |
 | Rozhoduje **autor PR**, ne zdroj, ze kterého přišel | Odvodit to od `Source` — je to o jedno porovnání méně a zdroj se stejně ví | Zdroj je search dotaz a jeden PR jich umí splňovat víc (`repo:foo/bar is:open` se překryje s obojím), takže rozřazení by záviselo na tom, jak si člověk dotazy poskládal. Ověřeno na živých datech, že autorské rozřazení sedí i na práci agentů. `PullRequestList.merged` se proto nemění — rozřazení se počítá **nad hotovým seznamem**, protože slučování je o deduplikaci |
 | `Source.mine` je **ve výchozích zdrojích**, ale **uložená konfigurace se nemigruje** | Buď zdroj do defaultů nedávat (a nechat si ho každý dopsat), nebo naopak při čtení konfigurace dopsat chybějící zdroj do souboru | Bez toho zdroje by sekce `Moje PR` (#331) neměla odkud brát data a každému, kdo si řádek nedopíše, by zůstala **navždycky prázdná** — proto je v defaultech, i když je to jediná výjimka z pravidla „výchozí hodnoty se nesmí rozejít s tím, jak aplikace běžela dřív“ (projeví se jen na prázdné cache). Migrace se zamítla ze dvou důvodů: dopsat uživateli do **ručně editovaného** souboru dotaz, o který neřekl, je zásah do jeho věci, a každý zdroj je dotaz navíc při **každém tiku**. Místo toho to pozná prázdný stav sekce (`Policy.tracksOwnPullRequests`), tedy text, ne zápis |
 | Chybějící zdroj se poznává z **tokenu `author:` v dotazu** | Podle jména zdroje (`Moje PR`), nebo podle rovnosti se `Source.mine` | Jméno je popisek pro člověka, takže přejmenovaný řádek by rozpoznání vypnul a stejně pojmenovaný cizí dotaz by ho zapnul. Rovnost s konstantou je jen o málo lepší: `author:@me is:open sort:updated` je pořád zdroj vlastních PR. Poznává se proto `author:@me` **a** `author:<některý z mých loginů>`; `-author:@me` (negace) ani `involves:@me` ne. Cena je, že vypsaný login se pozná až po načtení viewera — do té doby je množina prázdná |
@@ -4942,3 +4942,72 @@ a zapnout si ji kvůli měření by znamenalo přepsat konfiguraci, aby vyšel s
 Ověřené je obojí do sebe: session naostro nad skutečným konfliktem (výš) a celý řetěz
 `git add` → `rebase --continue` proti skutečnému `gitu` (`RealConflictStagingTests`). Co zbývá, je
 klik.
+
+
+### Záznam rozhodnutí — poslední dvě pole do okna (#389)
+
+**Rozhodnutí:** `issueTextTool` (#345) a `ownLogins` (#330) dostaly pole v okně nastavení — ale
+**každé na jiné stránce**: jméno nástroje na `Review a skilly` hned pod promptem, loginy na
+`Zdroje PR` pod zdroji. **Společná sekce „ostatní“ je zamítnutá.**
+
+**Proč vůbec:** u obou platilo, že se dají napsat jedině ručně do `config.json`, a u obou to
+znamenalo, že **funkce, která na nich stojí, je bez editoru textu nedostupná** — bez
+`issueTextTool` se text issue vůbec netahá (u každého PR s odkazem svítí `zadání není celé`)
+a bez `ownLogins` spadne PR agenta s vlastním účtem do cizí fronty. Zdůvodnění „je to jednorázová
+věc“ z #330 a #345 tím padá: jednorázová věc, kterou nemá kde nastavit nikdo bez znalosti tvaru
+JSONu, není nastavení, ale zadrátovaná hodnota s obtížnějším přístupem. Zbytek globální
+konfigurace v okně byl — ověřeno položku po položce.
+
+**Proč ne jedna sekce:** protože dělení podle **otázky, na kterou se odpovídá**, je to, co zavedlo
+#177 (do té doby nesla záložka `Obecné` osm sekcí a hledalo se v ní scrollováním). `issueTextTool`
+je **materiál zadání pro reviewera**, tedy tatáž otázka jako prompt o řádek výš; `ownLogins` je
+**identita**, tedy tatáž otázka jako zdroje, ze kterých se seznam skládá. Sekce, do které se sype,
+co se nehodí jinam, se za rok hledá podle toho, kdy co přibylo — a to je přesně to, čemu boční
+navigace měla zabránit.
+
+**Prázdno se u každého z nich kreslí jinak, a je to podstata zákresu:**
+
+| Pole | Co znamená prázdno | Jak se to kreslí |
+|---|---|---|
+| `issueTextTool` | **Rozhodnutí `netahat`.** Session, která nemá co zavolat, stojí boot (~$0,2) a nevrátí nic | Věta **pod polem** (`Nevyplněno — text issue se netahá.`). Ne šedý placeholder samotný — z prázdného pole se rozhodnutí nepozná od nedodělku |
+| `ownLogins` | **Běžný stav.** Kdo pushuje pod svým `gh`, druhý login nemá | Nic. Místo toho **řádek nad polem** s přihlášeným účtem — bez něj by prázdno vypadalo jako „nevím, kdo jsem“, a to je stav, ve kterém je **každý** PR cizí |
+
+**Jméno nástroje bez prefixu `mcp__` je varování, ne zákaz.** Uložit ho jde: jméno je fakt o cizím
+stroji (závisí na tom, jak si člověk pojmenoval MCP server), takže aplikace nemá čím ho ověřit,
+dokud session neběží. Pevný seznam z téhož důvodu nejde a **výchozí hodnota už vůbec** — konstanta
+v kódu by byla tvrzení o cizím prostředí. Zbývá tedy vzor v prázdném poli
+(`mcp__<server>__<nástroj>`, ne konkrétní jméno z tohohle stroje, které by vypadalo jako default
+k potvrzení) a věta pod polem.
+
+**Rozhoduje `Policy`, ne view** (`issueTextToolNote(for:)`, `issueTextToolEdit(typed:)`,
+`viewerAccount(login:)`). U té první věty na tom záleží víc než obvykle: musí se rozhodovat
+**tímtéž měřítkem**, jakým se hodnota vyhodnocuje na cestě do běhu — jinak by mohlo nastat pole,
+pod kterým stojí „tahá se“, a review, ve kterém se netahá. Proto `issueTextToolNote` volá
+`issueTextTool(from:)`, ne vlastní `isEmpty`.
+
+**Vymazané pole se ukládá jako chybějící klíč, ne jako `""`.** Pro chování je to jedno, pro toho,
+kdo soubor čte, ne: `"issueTextTool": ""` se čte jako „nastavený na nic“. Bílé znaky se naopak
+**nezahazují** — kdo napíše mezeru do prázdného pole, by ji jinak viděl zmizet pod rukou (pole se
+překresluje z uložené hodnoty); že se s takovou hodnotou netahá, řekne tatáž věta pod polem.
+
+**Zamítnuto: přepínač „tahat / netahat“.** Zůstává zamítnutý i po #389 a ze stejného důvodu jako
+u #345 — o ceně se rozhodlo jednou (tahá se vždycky, i v automatu) a knoflík, který si nikdo
+nenastaví, je jen řádek v okně. Prázdné pole ten stav umí vyjádřit samo.
+
+**Zamítnuto: nabídka dostupných MCP nástrojů.** Vypadalo by to jako pohodlí, ale znamená to nový
+zdroj pravdy (spustit `claude mcp list`, rozebrat výstup, řešit selhání) kvůli hodnotě, která se
+nastavuje jednou. Odkud jméno vzít, říká vysvětlivka pod polem.
+
+**Zákres předběhl implementaci a přeskládal navigaci** (souhlas 2026-09-01). Sekce 10 návrhu byla
+ještě pre-#177 — kreslila `Obecné`, `Přehled a výjimky`, `Cache a úklid` a `Zdraví služeb` —, takže
+v ní nebylo kam ta dvě pole umístit. Navigace je v ní od #389 doslova `SettingsSection` a lede
+sekce mluví o #177 a #281 v minulém čase; je to úklid podle pravidla „sekce, která je záznamem
+dneška, se překreslit musí“, ne rozšíření zadání.
+
+**Read-only řádek `Přihlášený účet` je nad rámec issue** a je to vědomé přidání: bez něj nemá
+prázdný seznam ukotvení. Odsouhlasený je se zákresem.
+
+**Zapsaná mezera:** že se **věta pod polem doopravdy přepne při psaní** (tedy že se `note`
+překreslí s každým úhozem), je ověřené jen renderem dvou různých hodnot, ne psaním v běžícím okně.
+Rozdíl bitmap tvrdí, že se stav kreslí, ne že se překreslí; ta druhá věc jde ověřit jedině
+klikáním.

@@ -1389,10 +1389,10 @@ Věci, které se u toho nemají rozbít:
   a mají autora `ondrajodas` (ověřeno na živých datech). Čte se **přísně jako `sources` a `skills`**
   — hodnota jiného typu položí čtení —, protože tiše podstrčené prázdno by z PR agenta udělalo cizí
   PR, tedy řádek ve frontě k review, o kterou nikdo nepožádal. **Globálně, ne per repo** (kdo jsem
-  já, z repozitáře neplyne) a **v okně nastavení pole není**: je to jednorázová věc pro toho, kdo si
-  pouští agenta pod vlastním účtem, a nová sekce nastavení by znamenala změnu vzhledu, tedy mockup
-  a schválení. Round-trip na disk to proto drží testem — soubor je jediná cesta, kterou se hodnota
-  do aplikace dostane.
+  já, z repozitáře neplyne). **Od #389 je pole i v okně** — na stránce `Zdroje PR`, v sekci
+  `Moje loginy`, protože loginy jsou otázka identity, tedy tatáž, na kterou odpovídají zdroje; do
+  #389 byl soubor jediná cesta, kterou se hodnota do aplikace dostala, a rozřazení fronty tak bylo
+  bez editoru textu nedostupné. Round-trip na disk drží testem dál.
 - **Hodnoty se čtou při použití**, ne při startu: limit souběhu při každém pokusu o slot,
   rozpočet při každém úklidu, skilly při spuštění review. Proto stačí načíst a nemusí se
   restartovat.
@@ -2359,6 +2359,8 @@ Kudy to teče:
 | `IntentMaterial` + `Policy.intentBrief` | Složení souboru. Nese `textGap` **a** `commentsUnavailable` zvlášť — nastat můžou oba |
 | `Policy.intentGap(text:commentsUnavailable:)` | Který příznak jde na osu, když nastanou oba |
 | `Policy.issueTextTool(from:)` | Jméno nástroje z konfigurace; prázdno = **netahat** |
+| `Policy.issueTextToolNote(for:)` + `IssueTextTool.Note` | Co stojí **pod polem** v nastavení (#389): `netahá se` / `tahá se` / **varování** u jména bez prefixu `mcp__`. Rozhoduje se tímtéž měřítkem jako řádek výš |
+| `Policy.issueTextToolEdit(typed:)` | Co se z napsaného textu uloží. Prázdné pole = **chybějící klíč**, ne `""`; bílé znaky zůstávají, jak je člověk napsal |
 
 Co se u toho nemá rozbít:
 
@@ -2375,6 +2377,18 @@ Co se u toho nemá rozbít:
   konstanta v kódu by byla tvrzení o cizím prostředí. **Chybějící hodnota znamená „netahat“**, ne
   prázdný pokus: session bez nástroje, který by zavolala, stojí boot (~$0,2) a nevrátí nic. Je to
   vlastní stav (`.toolNotConfigured`) a **na ose je vidět**, protože reviewer dostal jen odkazy.
+- **Od #389 se to jméno zadává v okně** (stránka `Review a skilly`, sekce `Text issue z trackeru`,
+  hned pod promptem — je to materiál zadání, tedy tatáž otázka jako prompt). Na podmínce č. 2 se tím
+  nemění nic: do `--allowedTools` jde pořád **hodnota z konfigurace**, jen se dá napsat i odjinud než
+  ze souboru. Tři věci na tom stojí:
+  - **prázdno se nesmí čtít jako porucha**, takže pod polem stojí věta, co z hodnoty plyne
+    (`Policy.issueTextToolNote(for:)`) — a rozhoduje ji **tatáž funkce**, která pak pouští session,
+    aby nemohlo nastat pole s „tahá se“ a review, ve kterém se netahá;
+  - **jméno bez prefixu `mcp__` je varování, ne zákaz**: aplikace ho neumí ověřit, dokud session
+    neběží, takže uložit ho jde a věta pod polem je jediné, co na to upozorní;
+  - **vymazané pole se ukládá jako chybějící klíč** (`Policy.issueTextToolEdit(typed:)`), ne jako
+    `""` — v souboru, který se edituje ručně, je rozdíl mezi „nic tu o nástroji není“ a „nastavený
+    na nic“.
 - **Rozhodovat podle prózy modelu je hádání a nesmí se to tak psát.** Pořadí, ve kterém `parse`
   hledá důvod, je pořadí **příčin**: server → odmítnutí → odpověď. Kdyby se napřed koukalo na text,
   uložila by se do zadání věta modelu („nemám povolení k použití nástroje…“) jako by to bylo zadání.
@@ -4851,10 +4865,11 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsView` | Boční navigace (#177), patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `SourcesSettingsView` | Zdroje PR (search dotazy) |
-| `ReviewSettingsView` | Výchozí režim, jazyk nálezů a **časový limit běhu** (#320), skilly, sady podle jazyka, **prompt review** (#281), blokující kategorie |
+| `SourcesSettingsView` | Zdroje PR (search dotazy) a **moje loginy** (#389) — seznam plus přihlášený účet ke čtení |
+| `ReviewSettingsView` | Výchozí režim, jazyk nálezů a **časový limit běhu** (#320), skilly, sady podle jazyka, **prompt review** (#281), **text issue z trackeru** (#389), blokující kategorie |
 | `ReviewPromptEditor` | Psaná šablona, legenda zástupných textů, `Obnovit výchozí`, náhled složeného promptu a zamčené jádro (#281) |
 | `ReviewTimeoutField` | Číslo v minutách a stížnost, když je hodnota v souboru mimo meze (#320). **Jedno view pro obě místa**, kde se limit nastavuje |
+| `IssueTextToolField` | Jméno MCP nástroje na text issue a **věta pod polem** (#389): `netahá se` / `tahá se` / varování u jména bez `mcp__`. Rozhoduje `Policy.issueTextToolNote(for:)`, ne view |
 | `DiffSettingsView` | **Pohled na diff** — nastavení člověka, ne repa, proto jen globálně |
 | `PublishingSettingsView` | **Odesílání na GitHub** — vlastní stránka, viz níž |
 | `RuntimeSettingsView` | Interval pollingu, rozpočet cache, souběžné session, denní limit, model |
@@ -4875,6 +4890,21 @@ Věci, které se u toho nemají rozbít:
   místo, kde se rozhoduje, jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1), a text
   je tam důležitější než přepínač. Do #177 to byly tři záložky, ze kterých `Obecné` nesla osm
   sekcí a hledalo se v ní scrollováním.
+- **Celá globální konfigurace je od #389 nastavitelná z okna** — a jediné rozhodnutí, které za tím
+  je, je **kam ta dvě pole patří**. `issueTextTool` je věc **review** (materiál zadání, takže leží
+  hned pod promptem na stránce `Review a skilly`), `ownLogins` je věc **identity** (takže leží pod
+  zdroji na stránce `Zdroje PR`, kde se rozhoduje, čí PR je čí). Společná sekce „ostatní“ je
+  zamítnutá: dělení podle otázky je to, co #177 zavedlo, a sekce, do které se sype, co se nehodí
+  jinam, se hledá podle toho, kdy co přibylo. Tři věci, na kterých to stojí:
+  - **Prázdno znamená u každého pole něco jiného, takže se nesmí kreslit stejně.** U jména nástroje
+    je to **rozhodnutí `netahat`** a věta pod polem to říká; u loginů je to **běžný stav**, o kterém
+    není co dodat. Kdyby se to obarvilo stejně, jedno by vypadalo jako porucha a druhé jako
+    nedodělek.
+  - **Nad seznamem loginů je přihlášený účet ke čtení** (`Policy.viewerAccount(login:)`). Bez něj by
+    prázdný seznam vypadal jako „nevím, kdo jsem“, a to je jiný stav: v něm je **každý** PR cizí, a
+    to je u nenačteného viewera napsané.
+  - **`appearance` v nastavení pořád není** (#278) — přepíná se v railu a druhé místo by se s ním
+    rozešlo. Že „celá konfigurace“ jde z okna, tuhle výjimku neruší.
 - **Neplatná šablona promptu se neuloží** (#281, `ReviewPromptEditor`). Je to jediné pole v okně,
   které si drží vlastní `@State` místo `Binding`u do konfigurace — a je to schválně: šablona bez
   `{{baseSha}}` by běhu sebrala to, proti čemu diffuje, takže se zapíše teprve platná hodnota
@@ -7058,6 +7088,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.effectiveVerdict(of:suggestion:)` | Který verdikt **platí** a odkud je — moje volba, jinak návrh (#114) |
 | `Policy.prefillableSuggestion(_:author:viewer:)`, `Policy.isOwn(author:viewer:)` | Smí se návrhem předvyplnit? Na vlastním PR ne. Samo porovnání dělá od #330 `ownership(ofAuthor:mine:)` — na „je to moje?“ nesmí být dvě odpovědi |
 | `Policy.ownLogins(viewer:configured:)`, `Policy.ownership(of:mine:)`, `Policy.ownership(ofAuthor:mine:)` | Čí je PR (#330) → `PullRequestOwnership`. **Množina loginů**, ne jeden řetězec (viewer + volitelný seznam z konfigurace), porovnání bez ohledu na velikost písmen, **prázdná množina znamená všechno cizí** |
+| `Policy.viewerAccount(login:)` → `ViewerAccount` | Přihlášený účet nad seznamem loginů v nastavení (#389). `unknown` **pojmenuje, co to znamená** („počítá se každý PR jako cizí“), aby prázdný seznam nešel splést s nenačteným viewerem |
 | `Policy.tracksOwnPullRequests(in:mine:)` | Je mezi zdroji ten, který vlastní PR přináší (#330)? Pozná `author:@me` i vypsaný login; `-author:` ani `involves:` ne |
 | `Policy.pullRequests(_:ownedBy:mine:)` | Seznam zúžený na jednu stranu (#331) — sekce `Moje PR` a její blok, od #332 i **fronta** (`.theirs`) a všechno, co o ní něco tvrdí. **Nesahá na pořadí**, jako `filtered(_:by:)`; a **nesmí na něm viset úklid ani nastavení** |
 | `Policy.ownListEmptyReason(poll:tracksOwnSource:knowsViewer:visible:hidden:)` | Proč je sekce `Moje PR` prázdná (#331) → `ListEmptyReason`. **Tři prázdna navíc** proti frontě: chybějící zdroj, nenačtený login, „nic vlastního otevřeného“. `poll(.noPullRequests)` odsud nevypadne nikdy |

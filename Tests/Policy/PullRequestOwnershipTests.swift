@@ -188,4 +188,45 @@ struct PullRequestOwnershipTests {
         configuration.global.sources = [Source(name: "Rozepsaný", query: " "), .mine]
         #expect(Policy.tracksOwnPullRequests(in: configuration.activeSources, mine: []))
     }
+
+    // MARK: - Přihlášený účet v nastavení (#389)
+
+    /// Řádek nad seznamem vlastních loginů. Existuje proto, aby se **prázdný seznam** (běžný stav)
+    /// nedal splést s **nenačteným viewerem** (stav, ve kterém je každý PR cizí) — je to tentýž
+    /// rozdíl, na kterém stojí první test v téhle sadě.
+    @Test("Nenačtený viewer se v nastavení pojmenuje, ne zamlčí")
+    func anUnknownViewerIsNamedInSettings() {
+        for login in [nil, "", "   ", "\n"] as [String?] {
+            #expect(Policy.viewerAccount(login: login) == .unknown, "\(String(describing: login))")
+        }
+        // A **řekne se, co to znamená**: „nic tu není“ by u tohohle stavu bylo tvrzení, které
+        // neunese, proč je fronta plná a vlastní PR nikde.
+        let note = ViewerAccount.unknown.note
+        #expect(note != nil)
+        #expect(note?.contains("cizí") == true)
+    }
+
+    /// Login se ukazuje v tom tvaru, ve kterém se pak porovnává — jinak by okno tvrdilo něco
+    /// jiného, než podle čeho se rozřazuje.
+    @Test("Známý účet se ukáže v porovnatelném tvaru a bez poznámky")
+    func aKnownAccountShowsItsLogin() {
+        #expect(Policy.viewerAccount(login: "OndraJodas") == .known(login: "ondrajodas"))
+        #expect(Policy.viewerAccount(login: " ondrajodas ") == .known(login: "ondrajodas"))
+        #expect(ViewerAccount.known(login: "ondrajodas").label == "ondrajodas")
+        #expect(ViewerAccount.known(login: "ondrajodas").note == nil)
+        // Tvar je týž, jaký vydá množina, podle které se rozřazuje.
+        #expect(Policy.ownLogins(viewer: "OndraJodas").contains("ondrajodas"))
+    }
+
+    /// Loginy z konfigurace jsou ty **navíc**, ne nahrazující — proto je řádek s účtem nad nimi
+    /// a proto je prázdný seznam v pořádku.
+    @Test("Prázdný seznam loginů rozřazení nemění")
+    func anEmptyListChangesNothing() {
+        let onlyViewer = Policy.ownLogins(viewer: "ondrajodas", configured: [])
+        #expect(onlyViewer == ["ondrajodas"])
+        #expect(Policy.ownership(ofAuthor: "ondrajodas", mine: onlyViewer) == .mine)
+        // A přidaný login viewera nevytlačí.
+        let both = Policy.ownLogins(viewer: "ondrajodas", configured: ["github-actions[bot]"])
+        #expect(both == ["ondrajodas", "github-actions[bot]"])
+    }
 }

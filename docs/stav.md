@@ -6220,3 +6220,50 @@ odstěhovala hlouběji, než by leckdo hledal: `⌥↵` u zakládání labelu z�
 `gh pr ready --repo`, ne přes `gh api`“* je teď jen v
 [`docs/architektura.md`](architektura.md#ready-for-review-482--devátá-metoda-a-nejmenší-z-nich)
 a v [`docs/github-cli.md`](github-cli.md).
+
+## #389 — `issueTextTool` a `ownLogins` se nastaví z okna, ne jen ze souboru
+
+**Poslední dvě hodnoty globální konfigurace, které se daly napsat jedině ručně do `config.json`,
+dostaly pole v okně** — a u obou to znamenalo, že funkce, která na nich stojí, byla bez editoru
+textu nedostupná: bez `issueTextTool` (#345) se text issue vůbec netahá a u každého PR s odkazem
+svítí `zadání není celé`, bez `ownLogins` (#330) spadne PR agenta s vlastním účtem do cizí fronty.
+Zbytek globální konfigurace v okně byl, ověřeno položku po položce; `appearance` v něm schválně
+není (přepíná se v railu, #278).
+
+**Celé rozhodnutí bylo, kam ta dvě pole patří — a nejsou to sousedi.** `issueTextTool` je
+**materiál zadání pro reviewera**, takže leží na stránce `Review a skilly` hned pod promptem
+(sekce `Text issue z trackeru`). `ownLogins` je **identita**, takže leží na stránce `Zdroje PR` pod
+zdroji (sekce `Moje loginy`). Společná sekce „ostatní“ je zamítnutá: dělení podle otázky je to, co
+zavedlo #177, a sekce, do které se sype, co se nehodí jinam, se hledá podle toho, kdy co přibylo.
+
+**Prázdno u každého z nich znamená něco jiného, takže se kreslí jinak.** U jména nástroje je to
+**rozhodnutí `netahat`** (session bez nástroje stojí boot a nevrátí nic), takže pod polem stojí
+věta — `Nevyplněno — text issue se netahá.` u prázdného, `Tahá se — u PR s odkazem na issue běží
+session navíc.` u vyplněného a **varování** u jména bez prefixu `mcp__`. To varování je varování,
+ne zákaz: jméno je fakt o cizím stroji, takže ho aplikace neumí ověřit, dokud session neběží.
+U loginů je prázdno **běžný stav**, o kterém není co dodat — místo věty je nad polem **přihlášený
+účet ke čtení** (z `gh api user`, napsat se nedá), protože bez něj by prázdný seznam vypadal jako
+„nevím, kdo jsem“, a to je stav, ve kterém je každý PR cizí.
+
+**Rozhoduje `Policy`, ne view**: `issueTextToolNote(for:)` (věta pod polem — a volá
+`issueTextTool(from:)`, tedy **tatáž funkce**, která pouští session, aby nemohlo nastat pole s „tahá
+se“ a review, ve kterém se netahá), `issueTextToolEdit(typed:)` (vymazané pole = **chybějící klíč**,
+ne `""`; bílé znaky zůstávají, jak je člověk napsal, jinak by mezera zmizela pod rukou)
+a `viewerAccount(login:)`. Tolerantní čtení `config.json` se nezměnilo ani o řádek — obě pole
+dekodér měl.
+
+**Zákres předběhl implementaci** (jediná schvalovací brána v repu) a přeskládal v sekci 10 návrhu
+**boční navigaci**, která byla ještě pre-#177 — jinak nebylo kam pole umístit. Odsouhlaseno včetně
+dvou věcí nad rámec issue: té navigace a read-only řádku `Přihlášený účet`.
+
+**Testy: 4688 ve 460 suitách**, tři nové sady. Nejcennější tvrdí, že se něco **nestalo** — po
+vymazání pole v okně se dotažení textu nepustí a na ose stojí `netahalo se`, ne `nepovedlo se`;
+ověřeno **vložením regrese** (se `?? ""` místo té stráže padnou dva testy a je z nich vidět, že
+session dostala prázdné jméno). Vedle toho protějšek s vyplněným polem — bez něj by první test
+prošel i nad kódem, který pole do konfigurace nepropisuje vůbec — a **rozdíl bitmap** dvou renderů
+stránky, který chytá pole nakreslené, ale nenapojené (regresí ověřeno: s `EmptyView()` místo pole
+padnou dva ze čtyř testů).
+
+**Zapsaná mezera:** že se věta pod polem **přepne při psaní**, je ověřené jen renderem dvou
+hodnot — rozdíl bitmap tvrdí, že se stav kreslí, ne že se překreslí s úhozem; ta druhá věc jde
+ověřit jedině klikáním.
