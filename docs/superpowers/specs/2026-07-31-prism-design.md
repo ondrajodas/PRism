@@ -5014,3 +5014,33 @@ výřezu** (`Policy.mountBand`), takže by hledání nad ním měnilo počet s o
 **Zapsaná mezera:** že `⌘F`, `⌘G` a `⎋` doopravdy zaberou, se v harnessu ověřit nedá (#184 —
 testovací host nedostane aktivaci). Katalog, kolize a to, komu `⎋` ustupuje, drží testy nad
 `Policy`; samotné klávesy zkouší člověk na běžící aplikaci.
+
+### Záznam rozhodnutí — kam skok posadí cílový řádek (#152)
+
+Z proklikání přišly dvě věci: *„okno by se mohlo focusovat i vertikálně a ne vždy se okno zaměří na
+řádek, kterého se to týká."* Druhá z nich je vada a **první podezření bylo špatné**: nešlo
+o nenasazený blok (#469) ani o počet průchodů (#184, #325). `scrollTo(id, anchor:)` umisťuje **cíl**,
+a cílem je od #157 blok o nejvýš šedesáti řádcích — podíl výšky se tedy uplatnil na výšku bloku
+a poloha řádku v něm do výpočtu nevstupovala vůbec. Změřeno nad hostovaným `DiffView`em (okno
+1 200 × 800, výřez 762 pt, hunk o dvou stech řádcích): vidět byly první čtyři desítky řádků, řádek 52
+skončil 889 pt pod hranou výřezu a řádek 195 dokonce 2 181 pt. Čísla i to, jak se to měřilo, jsou
+v [`docs/architektura.md`](../../architektura.md#kam-skok-posadí-cílový-řádek-152)
+a v [`docs/testovani.md`](../../testovani.md).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Podíl se dopočítá aritmeticky** z toho, kolik řádků bloku je nad cílem (`Policy.jumpAnchorY`) | Vyjmout cílový řádek do vlastního bloku (`blocked(_:breakingAt:)`), aby podíl platil přímo pro něj | Napsané a **změřené**: nové bloky vzniknou v témže průchodu, ve kterém se skáče, takže je `scrollTo` vidí nerozvržené a posun vyšel na geometrii **těch starých** (75, 1 039 a 2 003 pt — přesně hrany nerozdělených bloků). Aritmetika je na rozvržení nezávislá a nemění počet nasazených `NSTextView` (#469) |
+| **Podíl mimo `0…1` se vrací a `scrollTo` ho zvládne** | Ořezat na rozsah, protože `UnitPoint` „má“ být `0…1` | U bloku vyššího než výřez se cíl jinak umístit nedá. S ořezáním skončil řádek na kraji takového bloku 844 pt pod hranou a u podílu přesně `0` se okno **nepohnulo vůbec**; bez ořezání sedí poloha na dva body. Je na to test, takže návrat ořezání spadne v testech |
+| **Výška bloku se počítá z výšky řádku** (`DiffTextView.rowHeight`, z `FontMetric`) | Měřit skutečnou výšku nasazeného bloku | Přesnou výšku zná jedině **nasazený** blok (`DiffBlockSlot`) a ten se nasadí teprve po skoku — chtěli bychom ji tedy dřív, než existuje. Cena je zapsaná: v pohledu pod sebou zalomený řádek výšku podhodnotí a cíl přistane o ten přebytek níž, ale mez je **blok** (60 řádků), ne diff. Ve split pohledu se nezalamuje, takže je to přesné |
+| **Výskyt hledání přistane na třetinu shora, nález 90 pt pod hranou** (`Policy.jumpOffset`) | Jedna výška pro obojí | Nález si kontext nese v bublině **pod** řádkem, takže 90 pt (hlavička + tři řádky) je vyladěná hodnota z #72 a víc místa nad ním by bublinu vytlačilo. Výskyt hledání je jen místo v kódu a to, co je **nad** ním, je polovina odpovědi na „kde to je“. Není to nesourodost, ale rozdíl v tom, co ten cíl je |
+| **Skáče se vždycky, i na výskyt, který je zrovna vidět** | Přerovnat pohled jen tehdy, když cíl mimo výřez je | Procházení je `⏎ ⏎ ⏎`: když každý výskyt přistane ve stejné výšce, oko se nehýbe. Podmíněné chování znamená výskyt poskakující po obrazovce, tedy zrovna to hledání očima, kvůli kterému se skáče. Cena — text se posune i tehdy, když posun nutný nebyl — je slabší: kdo hledá, kouká na výskyt |
+
+**Oprava platí pro celou třídu, ne pro hledání.** Tou samou cestou jde skok na **nález**, na můj
+rozdělaný komentář i na soubor ze stromu (`DiffRow.anchor` → `scrollTarget`), takže se opravily
+všechny naráz — u nálezu byla chyba potichu od #157 a nikdo si jí nevšiml, protože nález na prvním
+řádku bloku dopadal správně.
+
+**Zapsaná mezera:** že se u výskytu použije **jiný odstup** než u nálezu, sonda neověří — cíl se do ní
+nastavuje bindingem (cestou panelu nálezů), kdežto `.searchHit` si `DiffView` nastavuje sám
+v `step(search:)` a spouští to tlačítko v pruhu. Obě hodnoty drží test nad čistou funkcí, přepnutí
+zkouší člověk.

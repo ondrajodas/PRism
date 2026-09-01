@@ -1864,8 +1864,45 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v katalogu, žádná kolize, kreslená kombinace a **stráž nad zdrojáky**, do které pruh přibyl
   s důvodem (`⎋` na `✕`, mimo katalog).
 
+  **Kam skok posadí cílový řádek** hlídají dvě suity, protože jsou to dvě různá tvrzení.
+  `DiffJumpAnchorTests` nad čistou funkcí (`Policy.jumpOffset`, `Policy.jumpAnchorY`) — a to hlavní
+  z nich je **invariant, ne hodnota**: pro každou kombinaci délky bloku a polohy řádku v něm musí
+  z podílu vyjít cílový **řádek** v požadované výšce (`a × (výřez − výška bloku) + řádky nad cílem ×
+  výška řádku == offset`). K tomu tři krajnosti: že u bloku vyššího než výřez podíl **z rozsahu
+  `0…1` vyjde** (ořezání je zamítnutá varianta, viz níž), že cíl mimo blok se počítá jako
+  jednořádkový a že blok stejně vysoký jako výřez vydá nulu, **ne `inf`**.
+
+  `DiffJumpPlacementTests` nad **hostovaným `DiffView`em v okně mimo obrazovku**: kotva se skládá tou
+  samou cestou jako v aplikaci (`DiffSearch.hits` → `DiffRow.anchor(in:hit:)`), posun nechává na
+  `ScrollViewReader`u a měří se **poloha cílového řádku v souřadnicích okna** (`DiffTextView
+  .frame(ofLine:)` převedený do okna proti rámečku clip view). Tvrdí se, že řádek **je vidět**, ať je
+  v bloku kdekoli, a že nad ním zůstane odstup z `Policy`. Ověřeno vložením regrese: s podílem
+  počítaným z výšky výřezu (stav před #152) spadnou obě suity.
+
+  **Tři věci, na kterých ta sonda visela, a všechny tři vypadaly zeleně:**
+
+  - **Čekat točením runloopu tady nejde.** `RunLoop.current.run(until:)` vyhladoví hlavní aktor,
+    takže `await Task.yield()` v `DiffView.task(id:)` **nikdy nedostane pokračování** — první verze
+    tím měřila **neodscrollované okno** u každého cíle (posun 0) a vypadala hodnověrně. Čeká se
+    proto odmlkami (`waitUntil`, #296) a jev je **spotřebovaný cíl** (`scrollTarget == nil`).
+  - **Observable vlastnost čtená v closure bindingu se do závislostí těla nezapíše.**
+    `Binding(get: { box.target }, …)` znamená, že se tělo po přepsání cíle **nepřeloží** a `task(id:)`
+    novou hodnotu neuvidí. Čte se proto **v těle** a do bindingu jde už jen zachycená hodnota.
+  - **„Nejvyšší `NSScrollView` v hierarchii“ je lišta, ne diff.** Její dokument má 46 pt, takže proti
+    ní vyjde „nescrollovalo se“ u každého cíle — tedy tatáž hodnota pro funguje i nefunguje (#478).
+    Bere se ten s **nejvyšším dokumentem**.
+
+  A dvě věci, na které se ve scéně čeká zvlášť, protože bez nich měření tvrdí něco jiného:
+  **nasazení cílového bloku** (#469 — `NSTextView` je jen v pásu kolem výřezu, takže po skoku dorazí
+  o průchod později) a **ustálení posunu** (skok je animovaný; číslo přečtené během animace závisí na
+  tom, kdy se test podíval). Před každým skokem se výřez vrací na začátek posunem clip view — jinak
+  by každý skok začínal tam, kde skončil ten předchozí.
+
   **Co se v harnessu ověřit nedá:** že `⌘F`, `⌘G` a `⎋` doopravdy zaberou (#184 — testovací host
-  nedostane aktivaci). Zkouší to člověk; testy drží katalog, kolize a to, komu `⎋` ustupuje.
+  nedostane aktivaci), a že se u výskytu použije **jiný odstup** než u nálezu: cíl se do sondy
+  nastavuje bindingem, tedy cestou panelu nálezů, kdežto `.searchHit` si `DiffView` nastavuje sám
+  v `step(search:)` a spouští to tlačítko v pruhu. Zkouší to člověk; testy drží katalog, kolize, to,
+  komu `⎋` ustupuje, a **obě hodnoty odstupu** nad čistou funkcí.
 - **`Policy.changes` a `VisitLedger` (#173)** — „co přibylo od minule“ ve dvou vrstvách.
   `Policy` vyčerpávajícím výčtem: **bez značky se neukáže nic** (jinak by se u prvního otevření
   vypsala celá historie), položka v tutéž sekundu se nepočítá (ostré porovnání), událost bez

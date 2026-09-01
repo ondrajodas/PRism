@@ -90,9 +90,13 @@ final class DiffTextView: NSTextView {
     /// **Vodorovný inset je nula a zůstane nula** (#236): odsazení na gutter dělá
     /// `textContainerOrigin`, protože `textContainerInset` platí na obě strany. Svisle symetrický
     /// zůstává schválně — 2 pt nad prvním řádkem a pod posledním.
+    ///
+    /// Hodnota je **z `Policy.blockInset`**, protože z ní od #152 počítá výšku bloku i kotva skoku
+    /// (`Policy.jumpAnchorY`) — dvě konstanty pro tentýž inset by se rozešly a poznalo by se to
+    /// jako skok o pár bodů vedle.
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
-        textContainerInset = NSSize(width: 0, height: 2)
+        textContainerInset = NSSize(width: 0, height: Policy.blockInset / 2)
     }
 
     @available(*, unavailable)
@@ -762,7 +766,12 @@ final class DiffTextView: NSTextView {
     /// manageru view, a když ho view ještě nemělo, výška obalového rámce — tedy **dvě různá čísla
     /// pro jednu výšku řádku**, mezi kterými rozhodovalo to, jak daleko je view v sestavování.
     /// Jedno měřidlo tu volbu ruší; hodnota je ta z layout manageru, protože podle ní se sází.
-    var singleLineHeight: Double {
+    var singleLineHeight: Double { Self.rowHeight }
+
+    /// Totéž bez view — čte to **skok**, který potřebuje vědět, kde v bloku cílový řádek leží
+    /// (`Policy.jumpAnchorY`), a instanci bloku k ruce nemá. Jedno měřidlo pro jednu výšku (#407):
+    /// druhé číslo by znamenalo, že skok míří jinam, než kam se kreslí.
+    static var rowHeight: Double {
         FontMetric.shared.lineHeight(of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular))
     }
 

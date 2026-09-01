@@ -787,7 +787,7 @@ místo je horší odpověď než blok navíc.
 
 **Odhad výšky je zamítnutá varianta.** Vypadá lákavě (řádky × výška řádku), ale platil by se tím,
 že by obsah pod prstem měnil výšku pokaždé, když se blok poprvé nasadí — a skok na nález by mířil
-vedle. Přesná výška od začátku je to, co drží `⌥↓` i kotvy z `DiffRow.blockIDs`.
+vedle. Přesná výška od začátku je to, co drží `⌥↓` i kotvy z `DiffRow.blockSpot`.
 
 **Zbytek chyby je změřený a je malý**: výška obsahu u 2000řádkového diffu vyšla 46 065 pt na vršku
 a 46 241 pt po projetí, tedy **0,4 % korekce**, která konverguje (blok změřený na provizorní šířce
@@ -1386,7 +1386,7 @@ Slít první dva by znamenalo, že prázdné pole tvrdí něco o datech.
 
 **Skok jde stejnou cestou jako skok na nález**, jak issue předepisuje: `DiffRow.anchor(in:hit:…)`
 složí kotvu, `DiffView` ji nastaví do `scrollTarget` a ten si ji sám přeloží na blok
-(`DiffRow.blockIDs`). Dvě věci na tom nejsou zjevné:
+(`DiffRow.blockSpot`). Dvě věci na tom nejsou zjevné:
 
 - **Kotva se hledá nad hotovými řádky, ne z `newNumber`.** Výskyt může být na odebraném řádku, který
   nové číslo nemá — a ve split pohledu nese dvojice `id` **pravého** řádku, takže `id` složené
@@ -1451,6 +1451,57 @@ později — a je to správné pořadí.
 **Fokus se nastavuje o průchod později** (#184), a věší se na **počítadlo žádostí**
 (`focusRequests`), ne na vznik view: druhé ⌘F nad otevřeným pruhem má fokus vrátit do pole, a to je
 změna hodnoty, ne nový view.
+
+#### Kam skok posadí cílový řádek (#152)
+
+Vyšlo to z proklikání: *„okno se ne vždy zaměří na řádek, kterého se to týká."* Nebylo to o nasazování
+bloků ani o počtu průchodů — **`scrollTo(id, anchor:)` umisťuje cíl, a cílem je od #157 blok**
+o nejvýš šedesáti řádcích (`DiffBlock.maxLines`, tedy až ~1 000 pt). Podíl výšky se uplatní na výšku
+**bloku**, takže řádek v jeho spodní části skončil pod dolní hranou výřezu. Změřeno nad hostovaným
+`DiffView`em v okně 1 200 × 800 (výřez 762 pt, jeden hunk o dvou stech řádcích):
+
+| Cílový řádek | Kde skončil (pod hranou výřezu) | Vidět |
+|---|---|---|
+| 0, 13, 26, 39 | 53–681 pt | ano |
+| 52 | 889 pt | **ne** |
+| 117 | 1 933 pt | **ne** |
+| 195 | 2 181 pt | **ne** |
+
+Vidět tedy byly první čtyři desítky řádků z dvou set — a čím dál byl výskyt v bloku, tím hůř.
+Odpovídá to i tomu, jak se to jevilo („někdy ano, někdy ne“): rozhodovalo, kolikátý řádek bloku to je.
+
+**Oprava je aritmetika, ne jiná struktura seznamu.** `Policy.jumpAnchorY(of:viewport:row:rowHeight:)`
+dopočítá podíl z toho, kolik řádků bloku je nad cílem (`DiffJumpSpot`, který od #152 vydává
+`DiffRow.blockSpot`); po opravě sedí poloha na dva body (`51 + 208 − 169 = 90`). Tři věci u toho
+nejsou zjevné:
+
+- **Podíl mimo `0…1` je správná odpověď a `scrollTo` ho zvládne.** U bloku vyššího než výřez se cíl
+  jinak umístit nedá. Ořezání na rozsah bylo změřeno a **zamítnuto**: řádek na kraji takového bloku
+  skončil 844 pt pod hranou a u podílu přesně `0` se okno **nepohnulo vůbec**.
+- **Výška bloku se počítá z výšky řádku** (`DiffTextView.rowHeight`, tedy z `FontMetric` — jedno
+  měřidlo, #407), ne měří. Přesnou výšku zná jedině **nasazený** blok, a ten se nasadí teprve po
+  skoku. V pohledu vedle sebe je to přesné (nezalamuje se), v pohledu pod sebou zalomený řádek výšku
+  podhodnotí a cíl přistane o ten přebytek níž — mez je tím **blok**, ne diff.
+- **U kraje dokumentu se posun ořeže sám** a cíl leží jinde, než kam se mířilo. Není to chyba, dál se
+  odscrollovat nedá — a tvrzení v testu se proto na krajích neuplatňuje (`isFreeOfEdges`).
+
+**Zamítnutá varianta: vyjmout cílový řádek do vlastního bloku** (`blocked(_:breakingAt:)`), aby podíl
+platil přímo pro něj. Napsané, změřené, zahozené: nové bloky vzniknou v **témže průchodu**, ve kterém
+se skáče, takže je `scrollTo` vidí nerozvržené a posun vyšel na geometrii **těch starých** (naměřeno
+75, 1 039 a 2 003 pt, tedy přesně hrany nerozdělených bloků). Aritmetika je proti tomu na rozvržení
+nezávislá — a nemění ani počet nasazených `NSTextView` (#469).
+
+**Výška, ve které cíl přistane, se u výskytu a u nálezu liší** (`Policy.jumpOffset(of:viewport:)`):
+nález si kontext nese v bublině **pod** řádkem, takže mu stačí ukotvená hlavička a tři řádky (90 pt,
+vyladěno na běžící aplikaci u #72); výskyt hledání je jen místo v kódu, a co je **nad** ním, je
+polovina odpovědi na „kde to vlastně je“ — dostane proto **třetinu shora**, se stropem na půlce
+výřezu. Který ze dvou případů platí, drží `DiffJumpTarget` v `@State` `DiffView`u: nastavuje se
+**spolu s cílem** a po skoku se vrací na `.bubble`, protože `scrollTarget` je binding, do kterého
+píše i panel nálezů.
+
+**Skáče se vždycky, i na výskyt, který je zrovna vidět.** Procházení výskytů je `⏎ ⏎ ⏎`: když každý
+přistane ve stejné výšce, oko se nehýbe. Přerovnávat pohled jen tehdy, když cíl mimo výřez je, by
+znamenalo výskyt poskakující po obrazovce, tedy zrovna to hledání očima, kvůli kterému se skáče.
 
 **Co z odůvodnění issue #152 neplatí.** Zadání tvrdí, že se text v diffu **nedá vybrat**, protože
 `.textSelection(.enabled)` je nad ním vypnuté kvůli tisícům `Text`ů v líném seznamu. Přeměřeno:
@@ -8101,10 +8152,13 @@ Nad nálezy platí navíc:
 - **Skok míří na řádek, ale v seznamu je blok** (#187, oprava chyby z #157). Souvislé řádky se
   před vykreslením slévají do bloku kvůli výběru textu a blok nese `id` **jen toho prvního** —
   `scrollTo` na řádek uprostřed úseku tedy tiše neudělá nic. Blok si proto pamatuje `id` všech
-  řádků, které do něj spadly, a `DiffView` si cíl přeloží (`DiffRow.blockIDs(in:)`) **týmiž
+  řádků, které do něj spadly, a `DiffView` si cíl přeloží (`DiffRow.blockSpot(of:in:)`) **týmiž
   vstupy, jakými ten soubor kreslí**: kde se blok přeruší, závisí na bublinách, vláknech,
   komentářích i odkrytých úsecích, takže index z jiných vstupů by ukazoval na blok, který
   v seznamu není.
+
+  **Od #152 z téhož místa vypadne i to, kolikátý ten řádek v bloku je** — samotné `id` bloku
+  nestačilo, viz [*Kam skok posadí cílový řádek*](#kam-skok-posadí-cílový-řádek-152).
 
   Byla to tichá chyba i pro skok z panelu, jen si jí nikdo nevšiml: nález na prvním řádku bloku
   (hned za hlavičkou hunku) fungoval. `DiffRow.anchor(in:comment:layout:)` má tutéž past

@@ -6249,7 +6249,7 @@ výskyt leží střídavě na nezměněném, přidaném i odebraném řádku; od
 11,0 / 10,9, řetězec IntelliJ Light 4,20 a 3,10, Darcula 3,75 a 2,61 (dnešní tmavá word-level vrstva
 má 2,17). Sytější být nesmí: pod výsledkem hledání se musí dát číst.
 
-**Skok jde stejnou cestou jako skok na nález** (`DiffRow.anchor` → `scrollTarget` → `blockIDs`)
+**Skok jde stejnou cestou jako skok na nález** (`DiffRow.anchor` → `scrollTarget` → `blockSpot`)
 a sbalený soubor se rozbalí **dřív, než se cíl nastaví**. Kotva se hledá nad hotovými řádky, ne
 z `newNumber`: výskyt může být na odebraném řádku a ve split pohledu nese dvojice `id` pravého —
 `scrollTo` na neexistující `id` by tiše neudělalo nic. Diff commitu proto dostal `scrollTarget`,
@@ -6272,6 +6272,19 @@ otevřeným pruhem zakazuje zkratka okna, která `⎋` jinak má (`Policy.canClo
 s vyjmenovanými podmínkami místo `&&` ve view). Katalog má 24 akcí. **Že ty klávesy zaberou, ověřil
 člověk** — v harnessu to nejde (#184).
 
-Testů **4733** ve 461 suitách; nové jsou čtyři sady (`DiffSearchTests`, `DiffSearchNavigationTests`,
-`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`) a dvě měření barev v `DiffPaletteTests`. Co se
-v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).
+**Z proklikání vyšla vada v tom, kam se skáče, a opravila se pro celou třídu skoků.** `scrollTo`
+umisťuje **cíl**, a cílem je od #157 blok o nejvýš šedesáti řádcích — podíl výšky se tedy uplatnil na
+blok a poloha řádku v něm do výpočtu nevstupovala. Změřeno: z dvou set řádků byly po skoku vidět
+první čtyři desítky, řádek 195 skončil 2 181 pt pod hranou výřezu. Podíl se od té doby dopočítá
+(`Policy.jumpAnchorY`, `DiffRow.blockSpot`) a poloha sedí na dva body; opravilo to i skok na **nález**
+a na můj komentář, kde ta chyba byla potichu od #157. Vyjmout cíl do vlastního bloku se zkusilo,
+změřilo a **zahodilo** (nové bloky nejsou v tom průchodu rozvržené). K tomu **vertikální umístění**:
+výskyt hledání přistane na **třetině shora**, nález zůstává 90 pt pod hranou (bublinu nese pod sebou)
+— a skáče se **vždycky**, i na výskyt, který je zrovna vidět, aby oko při `⏎ ⏎ ⏎` stálo na jednom
+místě. [Záznam
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--kam-skok-posadí-cílový-řádek-152).
+
+Testů **4746** ve 464 suitách; nových je šest sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
+`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`,
+`DiffJumpPlacementTests`) a dvě měření barev v `DiffPaletteTests`. Co se v které z nich hlídá a proč,
+je v [`docs/testovani.md`](testovani.md).

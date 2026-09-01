@@ -34,8 +34,9 @@ struct DiffBlock: Hashable, Sendable {
     ///
     /// Blok se v seznamu kreslí pod `id` toho **prvního**, takže na ostatní se skočit nedá —
     /// `scrollTo` na jejich `id` tiše neudělá nic. Tenhle seznam je to, čím se cíl skoku přeloží
-    /// na blok, který ho pokrývá (`DiffRow.blockIDs(in:)`). Bez něj mířil skok na nález uprostřed
-    /// úseku do prázdna, což bylo od #157 vidět jako „klik nedělá nic“.
+    /// na blok, který ho pokrývá (`DiffRow.blockSpot(of:in:)`) — a od #152 se z něj bere i to,
+    /// **kolikátý** ten řádek v bloku je. Bez něj mířil skok na nález uprostřed úseku do prázdna,
+    /// což bylo od #157 vidět jako „klik nedělá nic“.
     var ids: [String] = []
 }
 
@@ -130,27 +131,47 @@ extension DiffRow {
     }
 }
 
+/// Kam v seznamu míří skok — a **kde v tom cíli** cílový řádek leží (#152).
+///
+/// Do #152 to byl jen překlad `id` řádku na `id` bloku (`blockIDs`), protože `scrollTo` nic víc
+/// nepotřebovalo. Nestačí to ale: podíl výšky, kterým `scrollTo(anchor:)` cíl umisťuje, platí pro
+/// **celý blok**, takže bez polohy řádku v bloku skončil řádek až o tisíc bodů jinde, než kam se
+/// mířilo. Rozbor je u `Policy.jumpAnchorY(of:viewport:row:)`.
+struct DiffJumpSpot: Equatable, Sendable {
+    /// `id`, na které se dá `scrollTo` — blok, nebo řádek sám, když se do bloku neslil.
+    let id: String
+    /// Kolik řádků bloku je **nad** cílem.
+    var above = 0
+    /// Kolik řádků blok má. Jednička u cíle, který blok není (hlavička souboru, bublina, expander).
+    var rows = 1
+}
+
 extension DiffRow {
-    /// Překlad `id` řádku na `id` bloku, který ho pokrývá.
+    /// Kde v seznamu cíl skoku leží.
     ///
-    /// Skok na nález i na komentář míří na **řádek**, ale v seznamu je od #157 blok — a ten nese
-    /// `id` jen toho prvního. Bez překladu `scrollTo` tiše nic neudělá, což je ta nejhorší podoba
-    /// chyby: nic se nestane a není z čeho poznat proč.
+    /// Skok na nález, na komentář i na výskyt hledání míří na **řádek**, ale v seznamu je od #157
+    /// blok — a ten nese `id` jen toho prvního. Bez překladu `scrollTo` tiše nic neudělá, což je ta
+    /// nejhorší podoba chyby: nic se nestane a není z čeho poznat proč.
     ///
-    /// Řádky, které se do bloku neslily (hlavičky, bubliny, expandery), se mapují samy na sebe,
-    /// takže výsledek pokrývá **všechno**, na co se dá skočit.
-    static func blockIDs(in rows: [DiffRow]) -> [String: String] {
-        var index: [String: String] = [:]
+    /// Řádky, které se do bloku neslily (hlavičky, bubliny, expandery), jsou cílem samy, takže
+    /// funkce odpoví **na všechno**, na co se dá skočit — a na cíl, který v seznamu není (sbalený
+    /// soubor, zmizelý řádek), odpoví jím samotným: `scrollTo` pak neudělá nic, což je pořád lepší
+    /// než skočit někam jinam.
+    static func blockSpot(of target: String, in rows: [DiffRow]) -> DiffJumpSpot {
         for row in rows {
             switch row {
             case .block(let id, let block):
-                for lineID in block.ids { index[lineID] = id }
+                if let index = block.ids.firstIndex(of: target) {
+                    return DiffJumpSpot(id: id, above: index, rows: block.lines.count)
+                }
             case .pairBlock(let id, let block):
-                for lineID in block.ids { index[lineID] = id }
+                if let index = block.ids.firstIndex(of: target) {
+                    return DiffJumpSpot(id: id, above: index, rows: block.count)
+                }
             default:
-                index[row.id] = row.id
+                if row.id == target { return DiffJumpSpot(id: target) }
             }
         }
-        return index
+        return DiffJumpSpot(id: target)
     }
 }

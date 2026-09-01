@@ -214,11 +214,14 @@ struct DiffSearchTests {
         let rows = DiffRow.rows(of: file, layout: layout)
         let blocked = layout == .split ? DiffRow.blockedPairs(rows) : DiffRow.blocked(rows)
         let ids = Set(blocked.map(\.id))
-        let index = DiffRow.blockIDs(in: blocked)
 
         for hit in DiffSearch.hits(in: file, query: query("FLUSH_TIMEOUT")) {
             let anchor = try #require(DiffRow.anchor(in: diff, hit: hit, layout: layout))
-            #expect(ids.contains(index[anchor] ?? anchor), "kotva \(anchor) není v seznamu")
+            let spot = DiffRow.blockSpot(of: anchor, in: blocked)
+            #expect(ids.contains(spot.id), "kotva \(anchor) není v seznamu")
+            // A **kolikátý v bloku ten řádek je**, se taky musí trefit: podíl výšky se z toho
+            // počítá (#152), takže špatné číslo znamená skok o desítky řádků vedle.
+            #expect(spot.above < spot.rows, "kotva \(anchor) ukazuje za konec bloku")
         }
     }
 
