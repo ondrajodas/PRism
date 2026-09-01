@@ -50,7 +50,8 @@ struct SessionToolSetsTests {
     /// **4. Slévání konfliktů** (#467) — **jediná, která smí psát**, a přesto ta nejužší v jedné
     /// věci: **`Bash` v ní není vůbec**.
     ///
-    /// Tři tvrzení, každé o jiné mezi:
+    /// **Jeden literál, tři meze** — a všechny tři jsou v něm vidět naráz, proto se tvrdí celý
+    /// řetězec a ne jeho části:
     ///
     /// - `Write` a `Edit` **s vypsaným rozsahem**, ne holým jménem. Holé `Write` píše kamkoli
     ///   (změřeno, `docs/claude-cli.md`), takže by prompt byl jediná „brána“ — a prompt brána není.

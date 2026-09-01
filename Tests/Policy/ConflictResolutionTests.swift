@@ -135,6 +135,9 @@ struct ConflictResolutionTests {
         #expect(Policy.conflictSheetTitle(base: "main", resolved: 5) == "Srovnáno s main — 5 konfliktů vyřešeno")
         // Nula = nebylo co řešit, tak se o tom nemluví.
         #expect(Policy.conflictSheetTitle(base: "main", resolved: 0) == "Srovnáno s main")
+        // **Prázdný základ se nesází jako mezera** — nadpis potvrzení nevratné akce nemá o sobě
+        // říkat, že mu něco chybí.
+        #expect(Policy.conflictSheetTitle(base: "", resolved: 2) == "Srovnáno se základem — 2 konflikty vyřešeny")
     }
 
     /// **Kolo i počet souborů ve větě**, protože desetiminutové ticho nad „Slévám konflikty“ je

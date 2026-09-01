@@ -23,7 +23,7 @@ extension Policy {
     ///
     /// **Anglicky, jako všechny prompty v tomhle repu** — je to text pro model, ne pro okno.
     ///
-    /// Čtyři věci, které v něm být musí, a každá kryje jinou past:
+    /// **Pět věcí, které v něm být musí** — čtyři pasti a k nim tvar odpovědi:
     ///
     /// - **Kolidující soubory vypsané jmény.** Session nemá `Bash`, takže si `git diff
     ///   --diff-filter=U` spustit nemůže — výčet je jediná cesta, jak se dozví, kde konflikt je.
@@ -36,6 +36,9 @@ extension Policy {
     /// - **Že se má přiznat.** Uhádané slití, které projde testy a rozbije se v provozu, je horší
     ///   výsledek než `unresolved` — a platí to i tam, kde si session jistá je: `caveats` je pole
     ///   na to, čím si jistá není.
+    /// - **Tvar účtu.** Vlastní nástroj na hlášení výsledku session nedostala (u té, která už smí
+    ///   psát, se výčet nemá rozšiřovat), takže je JSON v posledním sdělení jediná cesta — a čte se
+    ///   defenzivně (`ConflictCommand.parse`).
     static func conflictPrompt(files: [String], base: String) -> String {
         let list = files.map { "- \($0)" }.joined(separator: "\n")
         var parts: [String] = []
@@ -156,9 +159,13 @@ extension Policy {
     /// Nadpis sheetu po doběhnutí session (návrh, sekce 36: *Srovnáno s `main` — 2 konflikty
     /// vyřešeny*).
     static func conflictSheetTitle(base: String, resolved: Int) -> String {
-        guard resolved > 0 else { return "Srovnáno s \(base)" }
+        // **Prázdný základ se nesází jako mezera.** Do #467 se sem dostane jedině ze snímku, který
+        // ho zná (plán bez jména základu se nesestaví), ale nadpis `Srovnáno s  — …` by byl text,
+        // který o sobě říká, že mu něco chybí — a je to nadpis potvrzení nevratné akce.
+        let with = base.isEmpty ? "se základem" : "s \(base)"
+        guard resolved > 0 else { return "Srovnáno \(with)" }
         let word = Plural.czech(resolved, one: "konflikt vyřešen", few: "konflikty vyřešeny", many: "konfliktů vyřešeno")
-        return "Srovnáno s \(base) — \(word)"
+        return "Srovnáno \(with) — \(word)"
     }
 
     /// Kolik řádků diffu se v potvrzení vypíše a kolik zbyde.

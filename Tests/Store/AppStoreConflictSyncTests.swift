@@ -208,6 +208,33 @@ struct AppStoreConflictSyncTests {
         #expect(withoutResolver.branchSyncState(for: pr) == .conflicted(files: ["a.md"]))
     }
 
+    /// **Zahozený konflikt se neslévá, i když je resolver po ruce** — a je to tvrzení o tom, že se
+    /// něco **nestane**. V zahozeném rebase nejsou v souborech žádné značky, takže by session
+    /// dostala zaplaceno za čtení nedotčeného stromu.
+    ///
+    /// Druhá polovina je konflikt **bez cesty ke stromu**: není kam poslat session, a vymyslet si
+    /// cestu nesmíme. Sem se dá dojít se starým výsledkem, který to pole ještě nenese.
+    @Test("Zahozený konflikt ani konflikt bez stromu se neslévá")
+    func doesNotResolveAnAbortedOrPathlessConflict() async throws {
+        let aborted = FakeConflictResolver()
+        let (first, _) = try await prepared(
+            resolver: aborted,
+            outcome: .success(.conflicted(files: ["a.md"], aborted: true, worktree: try syncWorktree()))
+        )
+        await first.syncBranch(summary())
+        #expect(aborted.rounds == 0)
+        #expect(first.branchSyncState(for: pr) == .conflicted(files: ["a.md"]))
+
+        let pathless = FakeConflictResolver()
+        let (second, _) = try await prepared(
+            resolver: pathless,
+            outcome: .success(.conflicted(files: ["a.md"], aborted: false, worktree: nil))
+        )
+        await second.syncBranch(summary())
+        #expect(pathless.rounds == 0)
+        #expect(second.branchSyncState(for: pr) == .unfinished(files: ["a.md"]))
+    }
+
     // MARK: - Doběhlá cesta
 
     /// Celý happy path: session slije, aplikace zapíše do indexu, dokončí rebase — a **výsledek

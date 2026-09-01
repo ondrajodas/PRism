@@ -290,10 +290,16 @@ struct SingleWayOutTests {
 
     /// **Session, která smí psát, nemá čím odeslat ani commitnout.**
     ///
-    /// Pět tvrzení nad jejími soubory, a každé kryje jinou cestu: publisher, cesta do remote, `gh`,
+    /// **Čtyři tvrzení** nad jejími soubory a každé kryje jinou cestu: publisher, cesta do remote,
     /// `push` a `commit`. Kdyby se kterákoli z nich objevila, byla by to session, která si výsledek
     /// pošle sama — a celé rozdělení „session upraví soubory, aplikace commituje a pushuje“ by
     /// přestalo platit.
+    ///
+    /// **Na `gh` se tady netvrdí nic, a je to schválně** (nález Copilota na první podobě tohohle
+    /// komentáře, který o pátém tvrzení mluvil): `ClaudeConflictResolver` **cestu ke `gh` zná** —
+    /// předává ji do `GIT_CONFIG_*` jako credential helper, protože strom stojí nad partial klonem
+    /// a čtení souboru umí sáhnout po chybějícím blobu. Že `gh` nemá **session**, se tvrdí tam, kde
+    /// to jde tvrdit doopravdy: nad **sadou povolení** (`SessionToolSetsTests`).
     @Test("Session pro konflikty neumí odeslat ani commitnout")
     func theWritingSessionCannotSendAnything() throws {
         let files = try swiftFiles().filter {
