@@ -27,7 +27,7 @@ struct BranchSectionRenderProbe {
     /// **Co z téhle sondy vyčíst nejde: barvu `Připravit k review`** (#482). Plná plocha
     /// `borderedProminent` se v **neaktivním** okně kreslí systémově šedá, ať je `tint` jakýkoli —
     /// vyzkoušeno, `.tint(Palette.accent)` na scéně na tom nezmění nic, takže tady nestojí (byl by
-    /// to modifikátor, který nic nedělá). Odstín nasazuje `ContentView` celému okně a ověřuje se
+    /// to modifikátor, který nic nedělá). Odstín nasazuje `ContentView` celému oknu a ověřuje se
     /// **na běžící aplikaci**; sonda tvrdí rozvržení, ne barvu plochy.
     @Test("Vyrendrovat sekci Větev")
     func rendersTheBranchSection() throws {

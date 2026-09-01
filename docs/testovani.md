@@ -931,7 +931,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     pod ním a draft s vypnutou branou. **Co z té sondy vyčíst nejde, je barva plochy**:
     `borderedProminent` se v **neaktivním** okně kreslí systémově šedý, ať je `tint` jakýkoli
     (vyzkoušeno — `.tint(Palette.accent)` na scéně nezměnil nic, takže tam schválně nestojí).
-    Odstín nasazuje `ContentView` celému okně a ověřuje se **na běžící aplikaci**. Rozvržení sonda
+    Odstín nasazuje `ContentView` celému oknu a ověřuje se **na běžící aplikaci**. Rozvržení sonda
     naopak našla: bez `maxWidth: .infinity` uvnitř pevného rámce bylo tlačítko **129 bodů
     vystředěných v prázdném řádku**.
 
