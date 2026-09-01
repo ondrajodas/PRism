@@ -5275,10 +5275,17 @@ vidět a hlídá ho stráž.
 `UnanimatedWindowTests`). Za běhu se to tvrdit nedá: událost složená z `nil` zdroje má prázdné
 `flags` ve chvíli, kdy nikdo nic nedrží — tedy skoro vždycky —, takže test „složená událost nemá
 modifikátory“ **zezelená nad rozbitou i opravenou verzí** a netvrdí nic (#478). Hlídají se proto tři
-věci: `CGEvent(` **jen** v helperu, helper **nesmí** obsahovat `Source: nil` a **musí** nasadit
+věci: `CGEvent(` **jen** v helperu, helper **nesmí** obsahovat `Source:nil` a **musí** nasadit
 `flags`. Zakázaný je celý konstruktor `CGEvent`u, ne jen ten scrollovací — `nil` zdroj znamená živý
 stav u každé varianty. Explicitní továrny AppKitu (`NSEvent.keyEvent(with:…)`) v zákazu nejsou:
 modifikátory berou z argumentu, takže nemají odkud dědit.
+
+**Hledá se v kódu bez jediné mezery** (`Source.condensed`), a je to nález Copilota na tomhle PR:
+ve Swiftu je mezera uvnitř volání volná, takže `CGEvent (…)`, `Source:nil` i zalomení za dvojtečkou
+jsou platný zápis téhož — a stráž nad surovým textem by je pustila, tedy **zezelenala by právě nad
+tou chybou, na kterou je**. Platí to na **každou** stráž nad zdrojáky, ne jen na tuhle; starší tři
+(`GlobalAppearanceTests`, `UnanimatedWindowTests`, `FontMetricTests`) porovnávají surový text a je to
+**otevřená mezera**, ne záměr — sesypat je do jednoho čtení zdrojáků je vlastní úklid.
 
 **„Naměřilo by to rozdíl, kdyby ta chyba byla?“** — u modifikátorů ano, a je to **trvalý test**, ne
 jen zápis v dokumentaci: `WheelEventTests` skládá kolečko s `Control`em a se `Shift`em a tvrdí, co

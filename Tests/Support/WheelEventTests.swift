@@ -33,13 +33,15 @@ struct WheelEventTests {
     /// varianty berou zdroj a **`nil` u každé z nich znamená živý stav sezení**, takže se ta cesta
     /// zavírá naráz. Explicitní továrny AppKitu (`NSEvent.keyEvent(with:…)`) v tom nejsou: ty si
     /// modifikátory berou z argumentu, takže nemají odkud dědit.
+    ///
+    /// **Bez mezery za jménem** — hledá se v `condensed`, takže `CGEvent (…)` neuteče.
     private static let forbidden = "CGEvent("
 
     @Test("Žádný test neskládá `CGEvent` mimo `WheelEvent`")
     func composesEventsOnlyThroughTheHelper() throws {
         var offenders: [String] = []
         for source in try Self.sources() where !Self.exempt.contains(source.path) {
-            if source.code.contains(Self.forbidden) { offenders.append(source.path) }
+            if source.condensed.contains(Self.forbidden) { offenders.append(source.path) }
         }
         #expect(
             offenders.isEmpty,
@@ -53,6 +55,11 @@ struct WheelEventTests {
 
     /// **Ani helper nesmí `nil` zdroj podstrčit.** Bez tohohle tvrzení by se pravidlo dalo splnit
     /// tím, že se rozbitá cesta přestěhuje do jediného povoleného souboru.
+    ///
+    /// **Hledá se v kódu bez mezer**, a je to nález Copilota na tomhle PR: `Source: nil` jako
+    /// substring jde obejít pouhým přeformátováním (`Source:nil`, nebo zalomení za dvojtečkou),
+    /// takže by stráž zezelenala nad tou chybou, na kterou je. Ve Swiftu je mezera uvnitř volání
+    /// volná, takže **jakákoli stráž nad zdrojákem musí porovnávat text bez ní**.
     @Test("Helper skládá událost z privátního zdroje a modifikátory nasazuje sám")
     func theHelperNeverPassesANilSource() throws {
         let sources = try Self.sources()
@@ -60,9 +67,14 @@ struct WheelEventTests {
             sources.first { $0.path == "Support/WheelEvent.swift" },
             "helper se nenašel"
         )
-        #expect(!helper.code.contains("Source: nil"), "helper podstrkuje `nil` zdroj")
-        #expect(helper.code.contains("stateID: .privateState"), "helper nebere privátní stav")
-        #expect(helper.code.contains("wheel.flags = modifiers"), "helper nenasazuje `flags`")
+        // **Do `Bool`u schválně**: `#expect` vypíše celý výraz, a to by u `condensed` byl celý
+        // slepený zdroják v hlášce. Rozhodnutí je v proměnné, důvod v textu.
+        let passesNilSource = helper.condensed.contains("Source:nil")
+        let takesPrivateState = helper.condensed.contains("stateID:.privateState")
+        let assignsFlags = helper.condensed.contains("wheel.flags=modifiers")
+        #expect(!passesNilSource, "helper podstrkuje `nil` zdroj")
+        #expect(takesPrivateState, "helper nebere privátní stav")
+        #expect(assignsFlags, "helper nenasazuje `flags` z argumentu")
     }
 
     /// Pojistka proti tomu, aby stráž zezelenala tím, že přestane číst nebo přestane hledat.
@@ -72,9 +84,13 @@ struct WheelEventTests {
         #expect(sources.count > 100, "Čekaly se stovky zdrojáků, přišlo \(sources.count).")
         let helper = try #require(sources.first { $0.path == "Support/WheelEvent.swift" })
         #expect(
-            helper.code.contains(Self.forbidden),
+            helper.condensed.contains(Self.forbidden),
             "V helperu nesedl hledaný vzor — stráž hledá něco, co v kódu není."
         )
+        // A že se doopravdy zahazují **mezery**, ne jen řádky s komentářem: helper má za dvojtečkou
+        // mezeru, takže bez toho zahození by `stateID:.privateState` nesedlo nikde.
+        let hasWhitespace = helper.condensed.contains(where: { $0.isWhitespace })
+        #expect(!hasWhitespace, "v `condensed` zůstaly mezery")
     }
 
     // MARK: - Kdyby ta klávesa doopravdy držela
@@ -144,6 +160,11 @@ struct WheelEventTests {
         /// Jen kód — řádky, které začínají `//`, jsou pryč. Bez toho by stráž zakazovala i to,
         /// aby se pravidlo v komentáři vysvětlilo.
         let code: String
+
+        /// Tentýž kód **bez jediné mezery a bez zalomení**. Nad tímhle se hledá, protože ve Swiftu
+        /// je mezera uvnitř volání volná: `CGEvent (…)` i `Source:\n    nil` jsou platný zápis
+        /// téhož, takže stráž nad surovým textem by je pustila (nález Copilota na #490).
+        var condensed: String { code.filter { !$0.isWhitespace } }
     }
 
     private static func sources() throws -> [Source] {

@@ -981,6 +981,9 @@ Zásady, které platí všude:
   `CGEvent` se proto skládá **jedině v `Tests/Support/WheelEvent.swift`** — privátní stav zdroje
   **a** `flags` z argumentu —, hlídá to `WheelEventTests` a **`waitUntil` ani `.disabled` to
   neřeší** (není na co čekat; čas 43–45 s je čekání na hlavní vlákno v paralelním běhu, ne práce).
+  **Stráž nad zdrojáky porovnává text bez mezer** — ve Swiftu je mezera uvnitř volání volná, takže
+  `CGEvent (…)` i `Source:nil` je platný zápis téhož a stráž nad surovým textem by je pustila
+  (nález Copilota; starší tři stráže to zatím nedělají a je to zapsaná mezera).
   Explicitní továrny AppKitu (`NSEvent.keyEvent(with:…)`) v zákazu nejsou — modifikátory berou
   z argumentu ([měření a tabulka
   modifikátorů](docs/testovani.md#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490)).
