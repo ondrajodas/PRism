@@ -104,7 +104,11 @@ struct IssueTextToolNoteTests {
     func thePlaceholderIsAPattern() {
         #expect(IssueTextTool.namePattern.hasPrefix(IssueTextTool.prefix))
         #expect(IssueTextTool.namePattern.contains("<server>"))
-        // Vzor sám by nastavením být nemohl: kdo ho opíše, dostane varování, ne tichý pokus.
+        // A **vzor opsaný do pole varování nedostane** (nález Copilota na tomhle PR — komentář tady
+        // dřív tvrdil opak). Je to vědomá mez toho varování, ne mezera v testu: hlídá se **jediná**
+        // vlastnost, kterou aplikace o cizím jménu ví, tedy prefix. Ostré závorky by musely mít
+        // vlastní větu — a druhý varovný stav v mockupu nakreslený není. Že takové jméno nikam
+        // nedosáhne, se pozná z gapu u PR (`serverUnavailable`), ne z pole.
         #expect(Policy.issueTextToolNote(for: IssueTextTool.namePattern) == .fetching)
     }
 }

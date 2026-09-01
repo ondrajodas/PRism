@@ -18,6 +18,11 @@ enum IssueTextTool {
     ///
     /// Konstanta, ne literál na dvou místech: čte ji varování pod polem i test, který ho hlídá.
     /// Jméno **za** prefixem kontrakt není — závisí na tom, jak si server pojmenoval uživatel.
+    ///
+    /// **Je to jediná vlastnost, kterou aplikace o cizím jménu ví**, takže varování pod polem hlídá
+    /// jenom ji: vzor opsaný do pole (`mcp__<server>__<nástroj>`) prefix má, tedy varování
+    /// nedostane. Vlastní věta na ostré závorky by byla druhý varovný stav, a ten v mockupu
+    /// nakreslený není; že takové jméno nikam nedosáhne, se pozná z gapu u PR.
     static let prefix = "mcp__"
 
     /// Nápověda v prázdném poli. Vzor, ne příklad z tohohle stroje: konkrétní

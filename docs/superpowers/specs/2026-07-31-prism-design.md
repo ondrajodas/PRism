@@ -5007,6 +5007,13 @@ dneška, se překreslit musí“, ne rozšíření zadání.
 **Read-only řádek `Přihlášený účet` je nad rámec issue** a je to vědomé přidání: bez něj nemá
 prázdný seznam ukotvení. Odsouhlasený je se zákresem.
 
+**Zapsaná mezera — varování hlídá jen prefix** (nález Copilota na PR #498, který ukázal, že to
+komentář v testu tvrdil obráceně): `mcp__<server>__<nástroj>` opsaný z nápovědy do pole prefix
+**má**, takže se u něj napíše `tahá se`. Vlastní věta na ostré závorky by byla **druhý varovný
+stav**, a ten v mockupu nakreslený není — jednu drženou vlastnost tedy nerozšiřuju o heuristiku,
+kterou by nikdo neschválil. Že takové jméno nikam nedosáhne, se pozná z gapu u PR
+(`serverUnavailable`).
+
 **Zapsaná mezera:** že se **věta pod polem doopravdy přepne při psaní** (tedy že se `note`
 překreslí s každým úhozem), je ověřené jen renderem dvou různých hodnot, ne psaním v běžícím okně.
 Rozdíl bitmap tvrdí, že se stav kreslí, ne že se překreslí; ta druhá věc jde ověřit jedině
