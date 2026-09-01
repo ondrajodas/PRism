@@ -98,7 +98,12 @@ extension Policy {
                 "Merge nepouštějí pravidla repozitáře — chybí schválení, běží povinný check, "
                     + "nebo do repozitáře nemáš zápis."
             case .draftPullRequest:
-                "Pull request je rozpracovaný. Označ ho na GitHubu jako připravený."
+                // **Druhá půlka věty u #482 zmizela** („Označ ho na GitHubu jako připravený.“)
+                // a je to změna textu, ne zkratka: pod výstrahou od té chvíle stojí tlačítko
+                // `Připravit k review`, takže návod, jak odejít z okna, by odváděl od akce, která
+                // je o řádek níž. Zbytek pravidla platí — u překážky, se kterou se **dá** něco
+                // udělat jinde, ten další krok ve větě zůstává (`Obnov okno`, `otevři terminál`).
+                "Pull request je rozpracovaný."
             case .notOpen(let state):
                 "Pull request není otevřený — je \(state.czechLabel)."
             case .failingChecks(let names):
@@ -149,6 +154,9 @@ extension Policy {
         let syncPlan: BranchSyncPlan?
         /// Která z akcí je hlavní. Z návrhu: `Mergnout…` když je zeleno, jinak `Rebase`.
         let primary: BranchAction
+        /// Třetí akce sekce — `Připravit k review` (#482). **`absent` všude, kde PR není draft**,
+        /// takže se nekreslí ani zašedle; do řady s ostatními dvěma nepatří, viz `PanelBranchView`.
+        let ready: ReadyOffer
     }
 
     /// Celá sekce z toho, co o PR víme.
@@ -162,7 +170,11 @@ extension Policy {
         status: BranchStatusState?,
         checks: [PullRequestCheck]?,
         blockingFindings: Int,
-        sync: BranchSyncState? = nil
+        sync: BranchSyncState? = nil,
+        // Stav odesílání metadat (#482) — přepnutí z draftu jde touž branou jako labely, takže
+        // se druhé odeslání nemá nabízet. Výchozí `nil` proto, že testy sekce, které o tuhle
+        // akci nejdou, o ní nemají muset vědět.
+        action: MetadataActionState? = nil
     ) -> BranchSection? {
         guard editing.isVisible else { return nil }
         let plan = mergePlan(of: detail, commits: commits)
@@ -187,7 +199,8 @@ extension Policy {
                 sync: sync
             ),
             syncPlan: syncPlan,
-            primary: primaryBranchAction(merge: merge)
+            primary: primaryBranchAction(merge: merge),
+            ready: readyForReviewOffer(editing: editing, state: detail?.state, action: action)
         )
     }
 

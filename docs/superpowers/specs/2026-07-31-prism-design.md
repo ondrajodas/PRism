@@ -4242,9 +4242,9 @@ review odchází do prohlížeče (tou první byl merge, #465). Bez konfliktu je
 rebase, push. Přesně takové věci má dělat okno — a je to práce s **vlastní** frontou, tedy tatáž
 třída jako labely (#392) a merge (#465).
 
-**Proč vlastní protokol, a ne devátá metoda `ReviewPublishing`.** Zvažovalo se obojí. `ReviewPublishing`
+**Proč vlastní protokol, a ne další metoda `ReviewPublishing`.** Zvažovalo se obojí. `ReviewPublishing`
 mluví přes `gh` s **GitHub API** a každá jeho metoda bere adresu, ze které se pozná repo. Push mluví
-přes `git` se **serverem** a bere pracovní strom na disku. Kdyby to byla devátá metoda, přestalo by
+přes `git` se **serverem** a bere pracovní strom na disku. Kdyby to byla metoda toho prvního protokolu, přestalo by
 se z toho výčtu dát přečíst, co odchází kudy — a přesně to je jediné, co tu podmínku drží
 kontrolovatelnou. Dva krátké výčty vedle sebe jsou čitelnější než jeden, ve kterém se míchají dva
 protokoly. **Cena:** druhý grep, druhá sada tvrzení v `SingleWayOutTests` a druhý řádek v tabulce
@@ -4687,3 +4687,86 @@ obsah přežívá jako přerovnaná kopie, mění se jedině sha.
 vypadalo jako ztráta práce — a je to lepší tvar než číslo, kdyby to jednou bylo potřeba. Neudělalo
 se to proto, že si to uživatel nevyžádal a výstraha už jednu větu o pojistce nese; druhá by ji
 zeslabila.
+
+### Záznam rozhodnutí — ready for review jako devátá metoda (#482)
+
+**Rozhodnutí:** přepnutí vlastního draftu na *ready for review* je **devátá metoda**
+`ReviewPublishing` (`markReadyForReview(on:)`), jednosměrná, **bez potvrzovacího sheetu**,
+volaná z `MetadataSubmission` a posílaná příkazem **`gh pr ready --repo`**. Tvrdá podmínka č. 1 se
+tím mění a je to zapsané u ní, ne schované sem.
+
+**Proč vůbec.** Sekce `Větev` vypisuje, proč se nedá mergnout. Většina těch důvodů je práce; jeden
+z nich byl **jedno kliknutí kdesi jinde**, a aplikace to o sobě sama psala —
+`MergeObstacle.draftPullRequest` končilo větou *„Označ ho na GitHubu jako připravený.“* Ta půlka
+věty byla návod, jak z okna odejít, a u #482 zmizela. Je to tatáž třída jako labely (#392) a merge
+(#465): práce s **vlastní** frontou.
+
+**Proč devátá metoda, a ne nová třída jako `BranchPushing` (#466).** Rozdíl proti #466 je v tom, čím
+se mluví: push mluví přes `git` se serverem a bere pracovní strom na disku, kdežto tohle mluví přes
+`gh` s **GitHub API** a bere adresu pull requestu. Do prvního výčtu to tedy patří — a **do
+`MetadataSubmission`, ne jako šestý volající**, protože rozhoduje, co to je za práci, ne kde je na
+to tlačítko: je to vlastnost vlastního PR, jde to touž branou a **sdílí to tentýž stav**
+(`MetadataActionState`). To sdílení je vlastnost, ne vedlejší efekt: dvě odesílání nad jedním PR se
+tím nepustí, ať se klikne kdekoli. Počet souborů v tvrdé podmínce zůstal **sedm**.
+
+**Proč `gh pr ready`, a ne `gh api` — a je to změřené, ne pohodlí.** Měřeno na
+`ondrajodas/prism-review-sandbox#11`; čísla a texty jsou v [`docs/github-cli.md`](../../github-cli.md).
+
+- **REST na tuhle akci endpoint nemá.** `PATCH /pulls/{n}` s `draft=false` vrátí **`200`
+  a přepnutí tiše zahodí** (`"draft": true` v odpovědi na ten samý dotaz). Je to tatáž past jako
+  `POST /requested_reviewers` s Copilotem, a v tomhle repu ta nejhorší možná — úspěšné volání, po
+  kterém se nestalo nic.
+- **GraphQL mutace `markPullRequestReadyForReview` je zamítnutá dvakrát.** Chce **node ID** pull
+  requestu, které aplikace nemá odkud vzít: `PullRequest` je `Codable` a persistovaný, takže by to
+  bylo další volitelné pole a s ním další „nevím“, které musí blokovat — a to všechno pro jednu
+  hodnotu použitou na jednom místě. A její chybový text (`Could not resolve to a node with the
+  global id`) **koliduje** s větví `threadNotFound` v `PublishError.init(failure:)`, takže by
+  selhání přepnutí draftu hlásilo větu o vlákně.
+- **Cena za to je jediná: `gh pr ready` nic nevrací** (stdout prázdný, potvrzení jde na stderr jako
+  věta pro člověka). Je to ale cena, kterou zadání platí samo: po úspěchu se **stav načte znovu**,
+  takže vymyšlená návratová hodnota by nikoho nezajímala. A `gh pr ready` **není `gh pr merge`**:
+  s `--repo` funguje i z pracovního stromu a do lokálního repa nesahá.
+
+**Proč jednosměrná.** Obousměrná metoda (parametr `Bool`, nebo druhá metoda
+`convertPullRequestToDraft`) by měla **půlku bez volajícího** — tlačítko „vrátit do draftu“ by
+viselo u každého vlastního PR kvůli akci jednou za pololetí. Výčet, ve kterém stojí něco, co
+aplikace nedělá, přestává být seznamem toho, co umí odejít ven. Návrat do draftu je proto
+v `SingleWayOutTests` mezi jmenovitě zakázanými; kdyby se ukázalo, že se zpátky chodí, bude to
+**desátá** metoda a vlastní rozhodnutí.
+
+**Proč bez sheetu, když je to nevratné.** Sheet se v tomhle okně řídí **obsahem, ne nevratností**:
+je u review (#68) a u merge (#465), a obojí má společné to, že payload je dlouhý a aplikace je
+jediné místo, kde se dá celý přečíst. Tady je payload **jeden bit**; sheet s jednořádkovým výpisem
+*Co se stane* se neptá na obsah, ptá se „opravdu?“ — a přesně tenhle druh potvrzení repo u #73,
+#216 a #392 zamítlo. Nevratná část na tom **je** (přepnutí vyžádá review od vlastníků kódu, a to se
+odebráním nevezme zpět), a odpovídá se na ni tak jako u `+ reviewer` v #392: **slovesem tam, kde se
+kliká**, plus větou pod tlačítkem, plus **žádnou výchozí akcí**.
+
+**Tři odchylky od zákresu (sekce 37), všechny zapsané:**
+
+- **Čísla, kterými zákres to místo obhajuje, vycházejí přeměřená jinak — a rozhoduje to jinde.**
+  Zákres počítá tři `.mini` v řadě na **279 bodů z 278** dostupných, tedy „o jediný bod ven“, a bere
+  odsazení panelu z CSS (11 na stranu). Aplikace ho má **13**, takže na obsah zbývá **274 b** ve
+  výchozí šířce 300 a **214 b** na podlaze 240; a `TextWidth.miniButton` dává těm třem tlačítkům
+  114/117 + 82/84 + 61/62 a dvě mezery po 7, tedy **273–274 b**. Ve výchozí šířce to tedy sedne
+  **přesně na hranu, s nulou až jedním bodem rezervy**, ne o bod mimo — což je u řady, jejíž popisky
+  se mohou změnit, totéž jako nevejít se, ale je to jiné tvrzení. **Nosný argument je proto podlaha
+  panelu**, kde ta řada přetéká o **~60 bodů** a zkrácení popisky to nespraví. Závěr zákresu
+  (vlastní řádek přes celou šířku) tím platí dál, takže se **mockup nepřekresloval**; kdyby se
+  jednou překresloval, tahle čísla do něj patří.
+- **Věta o neúspěchu je jen `PublishError.userDescription`.** Zákres kreslí *„Přepnout na Ready for
+  review se nepovedlo: `HTTP 403`. Pull request je pořád rozpracovaný.“* — obě půlky jsou závadné
+  a každá jinak. *„Pull request je pořád rozpracovaný“* je **tvrzení, které data neunesou**
+  u `timedOut` a `interrupted`: tam se právě neví, jestli přepnutí prošlo, a obě chyby to říkají
+  samy. A *„se nepovedlo“* říká `PublishError.unknown` **taky**, takže by to v panelu stálo dvakrát
+  za sebou. Co se akce jmenuje, nese tlačítko o dva body výš — tatáž úmluva jako u chyby labelů.
+- **Plnou plochu tlačítka dělá `maxWidth: .infinity` uvnitř pevného rámce**, ne rámec sám:
+  `borderedProminent` si plochu k popisku nedotáhne a bez toho z něj bylo tlačítko na **129 bodů
+  vystředěné v prázdném řádku** (změřeno renderem). Zákaz z #220 se tím neporušuje — mluví
+  o vyjednávání, a vnější rámec je konkrétní číslo.
+
+**Zapsaná mezera, ke které se dá vrátit:** že vyžádání review od `CODEOWNERS` doopravdy odejde, se
+**nezměřilo**. Ověřené je jen to, že s `CODEOWNERS` `* @ondrajodas` a autorem `ondrajodas` se žádný
+`review_requested` neobjeví — GitHub o review nikdy nežádá autora. Doměřit to chce **druhý účet se
+zápisem** do sandboxu; do té doby je věta pod tlačítkem z dokumentace GitHubu, a je pravdivá
+i v repu bez `CODEOWNERS` (když nikdo nesedí, nikdo se nevyžádá).

@@ -849,8 +849,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     byla pro tenhle účel založená, třikrát pushnutá a nakonec mergnutá. `409` (`Head branch was
     modified…`) je skutečné tělo z pokusu s cizí `sha`, `pr-merged.json` skutečná odpověď mergu. Text
     `405` (`Pull Request is not mergeable`) je proti tomu **z dokumentace, ne změřený**, a je u něj
-    napsáno proč: vyrobit ho by chtělo PR v konfliktu nebo draft, a převedení sondy na draft zakázala
-    permission brána. Je proto inline JSONem, aby se nepletl se skutečnými fixtures.
+    napsáno proč: vyrobit ho by chtělo PR v konfliktu. **Draftová varianta změřená od #482 je**, ale
+    zní jinak (`Pull Request is still a draft`) a `notMergeable` na ni **nesedí** — proč se to
+    neopravuje, je v [`docs/github-cli.md`](github-cli.md). Je proto inline JSONem, aby se nepletl se
+    skutečnými fixtures.
   - **`AppStoreMergeTests`** — tady se hlídá, **kdy se aplikace vůbec ptá**: na cizí PR a na mergnutý
     se na slévatelnost **neptá vůbec** (`branchStatusRequests.isEmpty`), druhý příchod na PR se neptá
     znovu a selhání se nezahodí do prázdna. K tomu nula spuštění `gh` bez brány, na cizím PR a nad
@@ -877,6 +879,66 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Co testy neověří:** že `PUT /pulls/{n}/merge` projde z běžící aplikace — brána je ve slotové
   konfiguraci vypnutá schválně, takže se akce v proklikávané instanci nenabídne, dokud si ji člověk
   nezapne. Ověřené je to **mimo aplikaci**, tímtéž voláním na sondě.
+- **Přepnutí vlastního draftu na *ready for review* (#482)** — **devátá cesta ven a nejmenší z nich**
+  (payload je jeden bit), takže se u ní hlídá totéž co u těch osmi, a k tomu dvě věci, které jinde
+  nejsou: **že se akce nad nedraftem nekreslí vůbec** a **že se nepoužije `gh api`**.
+  - **`ReadyForReviewTests`** — čistá funkce vyčerpávajícím výčtem stavů PR. Tvrzení je nad
+    **`isVisible`**, ne nad `isAllowed`, a v tom je celý rozdíl proti mergnutí: nad otevřeným,
+    zavřeným ani mergnutým PR nemá být ani zašedlé tlačítko. Dál: **cizí PR** a **nenačtený detail**
+    jsou `absent`, **vypnutá brána** je `blocked` s tou samou větou, na které skončí publisher,
+    a **běžící odeslání** je `blocked` u **všech čtyř** činných stavů `MetadataActionState` (labely,
+    reviewer, zakládání labelu i tohle samo — ochrana proti dvojkliku). Naopak **chyba z minula
+    nabídku nezavírá** u všech tří jejích podob: jinak by jediné selhání zamklo tlačítko do
+    restartu.
+
+    K tomu dvě tvrzení o **textech**, protože právě na nich stojí zdůvodnění celého issue:
+    `MergeObstacle.draftPullRequest` je doslova `Pull request je rozpracovaný.` a **neobsahuje
+    slovo `GitHub`** (druhá půlka věty byla návod, jak od tlačítka odejít), a
+    `Policy.readyForReviewNote` mluví o `CODEOWNERS` i o cestě zpátky.
+
+    A **stráž nad zdrojákem `PanelBranchView.swift`**: není v něm `keyboardShortcut` ani
+    `defaultAction`. Že `Enter` doopravdy nezabere, se v harnessu ověřit nedá (fokus ani klávesy
+    testovací host nedostane), takže se tvrdí to, co ověřit jde. **Druhá půlka toho tvrzení je
+    pozitivní schválně** (`code.contains("readyButton")`) — bez ní by prošel i test, který soubor
+    přečte špatně, a „nenašlo se to, protože se nehledalo“ je stráž, která nechytá nic. Ověřeno
+    **vloženou regresí**: s `.keyboardShortcut(.defaultAction)` na tlačítku spadla obě tvrzení.
+  - **`ReadyPublishingTests`** — bez povolení, s povolením **jiného** repa, na zavřeném a mergnutém
+    PR a po spadlém pre-flightu je **`runner.invocations.isEmpty`**. Dvě tvrzení jsou zvlášť pro
+    tuhle metodu: **argumenty doslova** (`["pr", "ready", "11", "--repo", "…"]`) a k tomu
+    `!arguments.contains("api")` — REST tuhle akci **neumí** (`PATCH` s `draft=false` vrátí `200`
+    a nic neudělá), takže „srovnání“ na `gh api` má spadnout tady; a **prázdný stdout není chyba**,
+    protože `gh pr ready` na něj nic nepíše. `headSha` se neověřuje, takže posunutá hlava přepnutí
+    **nezablokuje** — na rozdíl od merge.
+  - **`AppStoreReadyForReviewTests`** — nula spuštění `gh` na cizím PR, s vypnutou branou, nad
+    nedraftem (všechny tři stavy) a bez `gh`; dvojklik pošle **jedno** volání. A po úspěchu **tři
+    čtení detailu** (otevření PR, pre-flight publisheru, načtení znovu) a **dvě** čtení
+    slévatelnosti — to druhé je to, na čem stojí, že se z panelu ztratí i řádek `rozpracovaný`.
+
+    **Oba směry té cache se tvrdí, a druhý směr se dal napsat jedině trikem**: v testu selhání se
+    novější detail (`after: .open`) podstrčí **taky**, i když se nic nepřepnulo — bez toho by druhé
+    načtení vrátilo tentýž draft a tvrzení „stav se znovu nenačetl“ by prošlo i tehdy, kdyby se
+    načetl. Takhle je ta chyba **naměřitelná**: po zbytečném načtení by sekce ztratila tlačítko.
+    Podstrčit ho **dopředu** nejde, ze stejného důvodu jako u merge — pre-flight se ptá tou samou
+    gateway.
+
+    K tomu dvě tvrzení o **místě** chyby: `noticePlace == .branch` a `failure == nil`. To druhé je
+    to podstatné — `failure` je hodnota, kterou čte blok labelů, a chyba přepnutí se tam kreslit
+    nemá. A **záložka zůstává otevřená**, opak #465.
+  - **`SingleWayOutTests`** — **sedm souborů, pět volajících, devět metod** jmenovitě. Počet souborů
+    se **nezvedl**, a je to samo tvrzení: přibyla metoda, ne volající. Do zakázaných přibyl
+    **návrat do draftu** (`convertToDraft`, `markDraft`), protože metoda je jednosměrná schválně.
+  - **`BranchSectionRenderProbe`** (rozšířený) — tři nové scény: draft s tlačítkem, draft s chybou
+    pod ním a draft s vypnutou branou. **Co z té sondy vyčíst nejde, je barva plochy**:
+    `borderedProminent` se v **neaktivním** okně kreslí systémově šedý, ať je `tint` jakýkoli
+    (vyzkoušeno — `.tint(Palette.accent)` na scéně nezměnil nic, takže tam schválně nestojí).
+    Odstín nasazuje `ContentView` celému oknu a ověřuje se **na běžící aplikaci**. Rozvržení sonda
+    naopak našla: bez `maxWidth: .infinity` uvnitř pevného rámce bylo tlačítko **129 bodů
+    vystředěných v prázdném řádku**.
+
+  **Co testy neověří:** že vyžádání review od `CODEOWNERS` doopravdy odejde. Změřené je jen to, že
+  s `CODEOWNERS` `* @ondrajodas` a autorem `ondrajodas` se **žádný** `review_requested` neobjeví —
+  GitHub o review nikdy nežádá autora. Že se **jiný** vlastník kódu vyžádá, chce druhý účet se
+  zápisem do sandboxu; věta pod tlačítkem je proto z dokumentace GitHubu.
 - **Srovnání větve s `main` (#466)** — **druhá cesta ven a první zápis do remote**, takže se u ní
   hlídá jiná trojice než u těch osmi: **že se nepushlo**, **že guard nejde obejít** a **že rebase
   v cache dělá to, co si o něm myslíme**.

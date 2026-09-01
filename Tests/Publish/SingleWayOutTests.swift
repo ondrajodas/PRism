@@ -10,13 +10,14 @@ import Testing
 /// podmínky se porušení nepozná jinak než tím, že něco odešlo. Nejcennější test je ten, který
 /// tvrdí, že se něco **nestalo**.
 ///
-/// **Čísla v tvrzeních se u #392, #413 a #465 zvedla, tvrzení samotná ne** (u #392 z pěti souborů
-/// a čtyř metod, u #413 ze šesti metod na sedm, u #465 ze šesti souborů na sedm a ze sedmi metod
-/// na osm). Pravidlo se rozšířilo vědomě — labely a vyžádání
-/// reviewera na **vlastním** PR, pak založení labelu, pak merge; důvody jsou u `ReviewPublishing` —,
+/// **Čísla v tvrzeních se u #392, #413, #465 a #482 zvedla, tvrzení samotná ne** (u #392 z pěti
+/// souborů a čtyř metod, u #413 ze šesti metod na sedm, u #465 ze šesti souborů na sedm a ze sedmi
+/// metod na osm, u #482 z osmi metod na devět). Pravidlo se rozšířilo vědomě — labely a vyžádání
+/// reviewera na **vlastním** PR, pak založení labelu, pak merge, pak přepnutí draftu na *ready for
+/// review*; důvody jsou u `ReviewPublishing` —,
 /// takže se přepsal ten výčet, ne jeho podoba: pořád je to **jmenovitý**
 /// seznam souborů a **jmenovitý** seznam metod, ne rozsah ani „aspoň tolik“. Rozvolnit tvrzení na
-/// nerovnost by z testu udělalo dekoraci: přibyla by devátá cesta ven a nikdo by se o ní nedozvěděl.
+/// nerovnost by z testu udělalo dekoraci: přibyla by desátá cesta ven a nikdo by se o ní nedozvěděl.
 ///
 /// **Počet souborů se u #413 nezvedl, u #465 ano, a v obou případech je to samo tvrzení.** Založení
 /// labelu je sedmá **metoda**, ne pátý volající — přibylo do `MetadataSubmission`, protože je to
@@ -25,6 +26,12 @@ import Testing
 /// #392 liší: má **potvrzovací obrazovku a životnost** — objekt vzniká kliknutím, drží snímek toho,
 /// co se potvrzuje, a zaniká zavřením sheetu. Je to tvarem `ReviewSubmission`, ne
 /// `MetadataSubmission`.
+///
+/// **Počet souborů se u #482 nezvedl, a je to samo tvrzení.** Přepnutí z draftu je devátá
+/// **metoda**, ne šestý volající — přibylo do `MetadataSubmission`, protože je to z pohledu
+/// podmínky tatáž věc jako labely (metadata vlastního PR, tatáž brána, tentýž stav
+/// `MetadataActionState`). Že se kliká v jiné sekci panelu, na tom nic nemění: rozhoduje, co to je
+/// za práci, ne kde je na to tlačítko.
 ///
 /// **A `merge` z výčtu zakázaných zmizel, což je ta nejpodstatnější změna v tomhle souboru.** Do
 /// #465 tady stálo jmenovitě, že merge je porušení podmínky. Změnilo se to vědomě, ne obejitím:
@@ -107,11 +114,12 @@ struct SingleWayOutTests {
         #expect(using.allSatisfy { $0.hasPrefix("Publish/") })
     }
 
-    /// Protokol má **osm vyjmenovaných metod** (do #392 čtyři, do #413 šest, do #465 sedm). Approve
+    /// Protokol má **devět vyjmenovaných metod** (do #392 čtyři, do #413 šest, do #465 sedm, do
+    /// #482 osm). Approve
     /// mimo review, **zavření PR**, **milník** ani **smazání labelu** mezi ně nepatří — a kdyby
-    /// přibyla devátá, má o tom být řeč v review, ne až na GitHubu.
-    @Test("Protokol má osm metod")
-    func hasEightMethods() throws {
+    /// přibyla desátá, má o tom být řeč v review, ne až na GitHubu.
+    @Test("Protokol má devět metod")
+    func hasNineMethods() throws {
         guard let file = try swiftFiles().first(where: { $0.path == "Publish/ReviewPublishing.swift" }) else {
             Issue.record("soubor s protokolem se nenašel")
             return
@@ -120,10 +128,11 @@ struct SingleWayOutTests {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.hasPrefix("func ") }
 
-        #expect(methods.count == 8)
+        #expect(methods.count == 9)
         for name in [
             "func submit", "func reply", "func setResolved", "func comment",
             "func setLabels", "func requestReviewers", "func createLabel", "func merge",
+            "func markReadyForReview",
         ] {
             #expect(methods.contains { $0.hasPrefix(name) })
         }
@@ -139,8 +148,15 @@ struct SingleWayOutTests {
         // **`deleteLabel` je v tom výčtu od #413**, a je to ta jediná věc, kterou nová metoda
         // nesmí přitáhnout: založený label se dá **přidat i odebrat z PR**, ale smazat ho
         // z repozitáře se odsud nebude dát nikdy — zmizel by ze všech issues, na kterých leží.
+        //
+        // **`convertPullRequestToDraft` přibylo do zákazu u #482.** Devátá metoda je jednosměrná
+        // schválně: obousměrná by měla půlku bez volajícího, a výčet, ve kterém stojí něco, co
+        // aplikace nedělá, přestává být seznamem toho, co umí odejít ven. Kdyby se ukázalo, že se
+        // zpátky do draftu chodí, je to **desátá** metoda a vlastní rozhodnutí — ne parametr
+        // dopsaný k téhle.
         for forbidden in [
             "func close", "func approve", "func setMilestone", "func deleteLabel",
+            "func convertToDraft", "func markDraft",
         ] {
             #expect(!methods.contains { $0.hasPrefix(forbidden) }, "\(forbidden) je cesta ven, kterou podmínka nepřipouští")
         }

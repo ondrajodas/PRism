@@ -26,7 +26,10 @@ extension AppStore {
             status: branchStatusState(for: pr),
             checks: checks[pr],
             blockingFindings: blockingFindingCount(for: pr),
-            sync: branchSyncStates[pr]
+            sync: branchSyncStates[pr],
+            // Stav odesílání metadat (#482): `Připravit k review` jde touž branou jako labely,
+            // takže se druhé odeslání nad jedním PR nenabízí.
+            action: metadataActionState(for: pr)
         )
     }
 

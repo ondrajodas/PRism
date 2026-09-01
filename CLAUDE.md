@@ -251,37 +251,60 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
 1. **Jediná cesta ven** (od #67; do té doby tu stálo „nikdy nic neposílat na GitHub“).
    Aplikace **umí** odeslat review, od #73 se **ozvat do vlákna**, od #216 **napsat komentář
    pod PR**, od #392 **přeštítkovat svůj PR a vyžádat na něm review**, od #413 **založit
-   label, který repozitář ještě nezná** a od #465 **mergnout vlastní PR** — ale jedině přes
+   label, který repozitář ještě nezná**, od #465 **mergnout vlastní PR** a od #482 **přepnout
+   vlastní draft na *ready for review*** — ale jedině přes
    `ReviewPublishing`, jedině na výslovný pokyn člověka a jedině tam, kde se to **v nastavení
    povolilo**. **Od #466 k tomu umí přetlačit vlastní větev** (`git push`), a to je **druhý**
-   protokol, ne devátá metoda toho prvního — viz *Zápis do remote* níž. Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
+   protokol, ne **další** metoda toho prvního — viz *Zápis do remote* níž. (Do #482 tady stálo
+   „devátá metoda“; devátou je od #482 `markReadyForReview`, takže by to dneska četlo obráceně.)
+   Pravidlo se skládá z šesti věcí a každá z nich je kontrolovatelná:
 
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
    2. **`grep ReviewPublishing App/` vyjmenuje všechna místa, odkud to jde.** Mají to být
       **sedm souborů a pět volajících**: protokol, `GhReviewPublisher` (implementace),
       `ReviewSubmission.send()` (review), `ThreadSubmission` (odpověď a vyřešení vlákna),
-      `CommentSubmission` (komentář pod PR), `MetadataSubmission` (labely a vyžádání
-      reviewera) a `MergeSubmission` (merge). Všechny leží v `App/Publish/` — volající
+      `CommentSubmission` (komentář pod PR), `MetadataSubmission` (labely, vyžádání
+      reviewera, založení labelu a od #482 přepnutí draftu na *ready for review*)
+      a `MergeSubmission` (merge). Všechny leží v `App/Publish/` — volající
       **mimo** tu složku by znamenal, že cesta ven vede odjinud než z jednoho místa.
 
-      Protokol má **osm vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
-      `setLabels`, `requestReviewers`, `createLabel`, `merge`. Do #73 měl jednu a stálo tu, že
+      Protokol má **devět vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
+      `setLabels`, `requestReviewers`, `createLabel`, `merge`, `markReadyForReview`. Do #73 měl
+      jednu a stálo tu, že
       cokoli dalšího by byla druhá cesta ven; do #216 tři, do #392 čtyři, do #413 šest, do
-      #465 sedm. Výčet je krátký, vyjmenovaný na jednom místě a **každá metoda si sama ověří
+      #465 sedm, do #482 osm. Výčet je krátký, vyjmenovaný na jednom místě a **každá metoda si
+      sama ověří
       bránu z bodu 6** — proto všechny berou adresu, ze které se pozná repo.
 
-      **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**
-      a **`deleteLabel`** — smazaný label zmizí ze **všech** issues a PR, na kterých leží,
-      a aplikace tu ztrátu neumí ani ukázat; mazat i přebarvovat se chodí na GitHub.
+      **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**,
+      **`deleteLabel`** — smazaný label zmizí ze **všech** issues a PR, na kterých leží,
+      a aplikace tu ztrátu neumí ani ukázat; mazat i přebarvovat se chodí na GitHub — a od
+      #482 **návrat do draftu** (`convertPullRequestToDraft`), protože devátá metoda je
+      jednosměrná schválně.
       **`merge` z toho zákazu u #465 vypadl** a je to vědomá změna pravidla, ne díra: mergnout
       vlastní PR, když je zeleno, je poslední věc, kvůli které se od hotového review odskakuje
       do prohlížeče, a je to tatáž třída jako labely — práce s **vlastní** frontou. Platí se za
       to dvěma věcmi navíc, které ostatní metody nemají: **potvrzením s úplným výpisem** (jako
       u review, #68) a **hlavou v payloadu** (`sha`), na kterou GitHub odpoví `409`, když se
       větev mezitím pohnula.
-      **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests` — sedm souborů, osm
-      metod, jmenovitě i ty čtyři zakázané, a že soubory zadání pro agenta nezná publisher,
+      **Přepnutí vlastního draftu na *ready for review* přibylo u #482 jako devátá metoda**, a je
+      to tatáž třída jako labely: práce s **vlastní** frontou, kterou člověk dělá zrovna ve chvíli,
+      kdy se v okně kouká na svůj PR — aplikace si o té překážce dokonce sama psala
+      (`MergeObstacle.draftPullRequest` končilo větou *„Označ ho na GitHubu jako připravený.“*,
+      tedy návodem, jak z okna odejít; **ta půlka věty u #482 zmizela**). Platí se za to **jednou
+      větou v panelu** (`Policy.readyForReviewNote`: vyžádá se review od `CODEOWNERS`, a to se
+      nevezme zpět) a tím, že **tlačítko nemá výchozí akci**; **potvrzení nedostala**, protože
+      payload je jeden bit a sheet s jednořádkovým výpisem se neptá na obsah, ale „opravdu?“.
+      **Počet souborů se nezvedl** — jde přes `MetadataSubmission`. **Metoda je jednosměrná**:
+      `convertPullRequestToDraft` je v zákazu, protože obousměrná metoda by měla půlku bez
+      volajícího. **Jde přes `gh pr ready --repo`, ne přes `gh api`**, a je to změřené, ne
+      pohodlí: REST na to endpoint nemá a `PATCH /pulls/{n}` s `draft=false` vrátí `200`
+      a přepnutí **tiše zahodí** (`ReadyRequest`, [`docs/github-cli.md`](docs/github-cli.md)).
+
+      **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests` — sedm souborů, devět
+      metod, jmenovitě i to zakázané z odstavce výš — **šest jmen** pro těch pět věcí, protože
+      návrat do draftu se dá pojmenovat dvěma způsoby —, a že soubory zadání pro agenta nezná publisher,
       payload, API ani podproces). **Měnit se smí jedině na vlastním PR**
       (`Policy.metadataEditing`, u merge `Policy.mergeOffer`); na cizím se akce **nekreslí
       vůbec**, ne zašedle — zašedlá
@@ -374,7 +397,7 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    a s potvrzením, takže se o něm dá tvrdit test. A že to jde ze zásuvky, je moc **člověka**, ne
    aplikace.
 
-   **Od #466 aplikace zapisuje i do remote (`git push`), a je to nová třída, ne devátá metoda.** Do
+   **Od #466 aplikace zapisuje i do remote (`git push`), a je to nová třída, ne další metoda toho prvního protokolu.** Do
    #466 tady stálo, že merge není argument pro to, aby aplikace umí pushnout sama; teď to umí —
    vlastní cestou, s vlastním protokolem a se dvěma guardy. Proč: srovnat vlastní větev, když ujel
    `main`, je druhá věc, kvůli které se od hotového review odchází do prohlížeče (tou první byl
@@ -438,9 +461,10 @@ Tohle nejsou zjednodušení první verze. Než něco z toho porušíš, zastav s
    **předvyplňuje** verdikt v panelu, ale odejít umí jedině touž cestou). „Výslovný pokyn
    člověka“ vypadá takhle: **potvrzovací sheet u review a u merge** (dvě kliknutí, celý payload
    vidět — #68, #465; u merge je v něm navíc napsané, co v tom výpisu **není**, protože tělo
-   squash commitu skládá GitHub ze slévaných commitů); **odpověď do vlákna, komentář pod PR ani
-   label se nepotvrzují** (#73, #216,
-   #392 — jedno pojmenované tlačítko); **u vyžádání reviewera je potvrzení v nadpisu nabídky**
+   squash commitu skládá GitHub ze slévaných commitů); **odpověď do vlákna, komentář pod PR, label ani
+   přepnutí draftu na *ready for review* se nepotvrzují** (#73, #216,
+   #392, #482 — jedno pojmenované tlačítko, a u #482 k tomu **věta pod ním** o tom, co se nevezme
+   zpět, plus **žádná výchozí akce**); **u vyžádání reviewera je potvrzení v nadpisu nabídky**
    (`Vyžádat review od`), protože request se odebráním nedá vzít zpět; **založení labelu
    potvrzení má** (#413) na **druhé obrazovce téhož popoveru, ne v sheetu**, a **bez výchozí
    akce**. **Uzavřený je `seznam`** — hledání **filtruje, nezakládá**; zakládání je **akce pod
@@ -558,7 +582,7 @@ aplikace — tamtéž.
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu i zadání pro agenta, obsah dashboardu a dění, geometrie, na kterou se ptá kresba, a **desítky dalších**. Úplný katalog s důvody je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej tam podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
-| `ReviewPublisher` | **Jediná cesta na GitHub API**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři** a od #465 **mergnout vlastní PR** | `gh` CLI |
+| `ReviewPublisher` | **Jediná cesta na GitHub API**: odeslat review, odpovědět do vlákna, přepnout jeho vyřešení, napsat komentář pod PR, od #392 nastavit labely a vyžádat review na **vlastním** PR, od #413 **založit label v repozitáři**, od #465 **mergnout vlastní PR** a od #482 **přepnout vlastní draft na *ready for review*** | `gh` CLI |
 | `BranchPushing` | **Jediná cesta do remote** (#466): přetlačit větev **vlastního** PR přes `--force-with-lease`, **jedině z potvrzení**. Jedna metoda, dva guardy, tatáž brána. Rebase v tom **není** — ten je lokální práce `RepoCheckoutu` | `git` |
 | `TerminalHost` | Vestavěný terminál (#459) — od #460 **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Umí do relace napsat **jednu řádku** (`▶`), a jen tehdy, když v ní nic neběží; od #478 **předá kolečko** aplikaci, která si o hlášení myši řekla. Na GitHub nesahá a `gh` nezná; plnou moc v něm má **člověk** | login shell přes pty |
 

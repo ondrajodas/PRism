@@ -25,4 +25,9 @@ struct BranchActions: Sendable {
     var discardSync: @MainActor () -> Void = {}
     /// Zapomenout hlášku o tom, jak dopadlo poslední srovnání.
     var clearSync: @MainActor () -> Void = {}
+    /// Přepnout vlastní draft na *ready for review* (#482). **Odesílá to rovnou** — potvrzení
+    /// nemá, protože payload je jeden bit; zdůvodnění je u `PanelBranchView.readyButton`.
+    var markReady: @MainActor () -> Void = {}
+    /// Zapomenout větu o tom, že se přepnutí nepovedlo.
+    var clearReadyFailure: @MainActor () -> Void = {}
 }

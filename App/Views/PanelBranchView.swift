@@ -4,8 +4,28 @@ import SwiftUI
 /// (sekce 36).
 ///
 /// Nese **stav** (kam se to slévá, jestli je větev srovnaná a o kolik je pozadu, jak dopadly
-/// checky) a k němu **obě akce, které z toho stavu plynou** — `Mergnout…` (#465) a `Srovnat
-/// s main` (#466). Obě jsou vidět vždycky; mění se jen to, která z nich je hlavní.
+/// checky) a k němu **akce, které z toho stavu plynou** — `Mergnout…` (#465) a `Rebase` (#466)
+/// v jedné řadě, obě vidět vždycky (mění se jen to, která z nich je hlavní), a nad nimi
+/// `Připravit k review` (#482) **přes celou šířku**.
+///
+/// **Třetí akce do té řady nepatří, a je to změřené** (návrh sekce 37). Zákres tam počítá **279
+/// bodů z 278**, tedy o jediný bod ven; **přeměřeno aplikací vychází o pár bodů jinak a rozhoduje
+/// to jinde**, ne v zákresu:
+///
+/// - `TextWidth.miniButton` (tedy řez a odsazení, na kterých `.mini` doopravdy kreslí) dává
+///   `Připravit k review` 114/117 b, `Mergnout…` 82/84 a `Rebase` 61/62 podle zdůraznění, takže tři
+///   v řadě s dvěma mezerami po 7 jsou **273–274 b**.
+/// - Panel má na obsah `contentWidth(inPanelOf:)`, tedy **274 b** ve výchozí šířce 300 (odsazení je
+///   13 na stranu, ne 11 jako v CSS zákresu) a **214 b** na podlaze 240.
+///
+/// Ve výchozí šířce to tedy sedne **přesně na hranu — nula až jeden bod rezervy**, což je pro řadu,
+/// ve které se popisky mohou změnit, totéž jako nevejít se. **Na podlaze panelu to přetéká o ~60
+/// bodů**, a tam žádné zkrácení popisky nepomůže. Vlastní řádek přes celou šířku je proto jediné
+/// místo, kde se akce vejde **při každé šířce** — a shodou okolností i to správné místo: sedí
+/// u důvodu, který odklízí.
+///
+/// **Kreslí se jedině nad draftem** (`Policy.ReadyOffer.absent` všude jinde), takže nad otevřeným,
+/// zavřeným ani mergnutým PR není v sekci o řádek víc.
 ///
 /// **Nekreslí se na cizím PR** — rozhoduje o tom `Policy.branchSection`, které vrátí `nil`.
 /// Mergnout cizí frontu se odsud nedělá nikdy, takže tam není ani nadpis, natož zašedlé tlačítko;
@@ -17,6 +37,10 @@ struct PanelBranchView: View {
     let contentWidth: Double
     /// Co se právě děje se srovnáním větve (#466). `nil` = nic se nedělo.
     var syncState: BranchSyncState?
+    /// Co se právě děje s metadaty PR (#482). Sekci zajímá **jediný** z jeho případů —
+    /// `readyFailed`, tedy věta pod tlačítkem `Připravit k review`; ostatní kreslí blok labelů.
+    /// Rozhoduje o tom `MetadataActionState.noticePlace`, ne tenhle panel.
+    var actionState: MetadataActionState?
     var actions = BranchActions()
 
     /// Odsazení bloku bere **z toho typu, který kreslí sekci nad ním**: dvě konstanty by
@@ -40,6 +64,12 @@ struct PanelBranchView: View {
                     }
                 }
                 if !warnings.isEmpty { warning }
+                // **Nad řadou akcí, pod výstrahou** (návrh sekce 37): sedí u toho důvodu, který
+                // odklízí. Do řady s `Mergnout…` a `Rebase` nepatří — tři tlačítka `.mini` vedle
+                // sebe potřebují 273–274 bodů, což je celá šířka obsahu panelu (274 b) a o ~60
+                // bodů víc, než na kolik má panel na podlaze (214 b). Čísla a jak se měřila jsou
+                // u typu výš.
+                if section.ready.isVisible { readySection }
                 actionRow
                 if let syncState { syncNotice(syncState) }
             }
@@ -122,6 +152,126 @@ struct PanelBranchView: View {
             RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.stale.opacity(0.4))
         }
     }
+
+    // MARK: - Připravit k review (#482)
+
+    /// Tlačítko, věta pod ním a případná chyba — **jeden blok**, protože všechny tři patří k tomu
+    /// samému kliknutí.
+    private var readySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            readyButton
+            if let failure = actionState?.readyFailure {
+                readyFailureRow(failure)
+            } else {
+                // **Věta se schová jen tehdy, když je pod tlačítkem chyba**, ne když se odesílá:
+                // dvě věty pod sebou v panelu o 300 bodech se čtou jako dva odstavce a ta chybová
+                // je ta, kvůli které se tam kouká. Jinak tam je pořád — je součástí rozhodnutí
+                // nepotvrzovat sheetem, ne nápovědou k prvnímu kliknutí.
+                readyNote
+            }
+        }
+    }
+
+    /// `Připravit k review` — **přes celou šířku panelu a bez tří teček**, protože nic neotevírá:
+    /// odešle to rovnou.
+    ///
+    /// **Bez potvrzovacího sheetu, a je to úvaha o obsahu, ne o počtu kliknutí.** Sheet je v tomhle
+    /// okně u odeslání review (#68) a u mergnutí (#465), a obojí má společné to, že **payload je
+    /// dlouhý a aplikace je jediné místo, kde se dá celý přečíst**. Tady je payload **jeden bit**;
+    /// sheet, jehož výpis *Co se stane* má jediný řádek, se neptá na obsah, ptá se „opravdu?“ —
+    /// a přesně tenhle druh potvrzení repo u labelů, odpovědi do vlákna a komentáře pod PR (#73,
+    /// #216, #392) zamítlo ve prospěch **jednoho pojmenovaného tlačítka**.
+    ///
+    /// **Nevratná část na tom ale je** — přepnutí vyžádá review od vlastníků kódu, tedy odešle
+    /// upozornění, které se odebráním nevezme zpět. Odpovídá se na ni tak jako u `+ reviewer`
+    /// v #392: slovesem tam, kde se kliká, plus větou pod tlačítkem (`readyNote`).
+    ///
+    /// **Výchozí akci nemá, a to je podmínka, ne detail**: `keyboardShortcut` tady schválně není
+    /// (ani `.defaultAction`), takže se akce nedá spustit `Enterem` při průchodu klávesnicí —
+    /// tatáž mez jako u potvrzení merge (#465) a u založení labelu (#413). Hlídá to test nad
+    /// zdrojákem, ne jen tenhle komentář.
+    ///
+    /// Šířka je **předaná, ne vyjednaná** (pravidlo #220): vnější rámec je `contentWidth`, tedy
+    /// konkrétní číslo. Pružný rámec je až **uvnitř** něj a jen na popisku — viz komentář u něj.
+    private var readyButton: some View {
+        Button(action: actions.markReady) {
+            // **`maxWidth: .infinity` uvnitř pevného rámce, ne místo něj.** Návrh má `.send` jako
+            // plnou plochu přes celou šířku, a `borderedProminent` sám plochu k popisku
+            // nedotáhne — bez tohohle by z něj bylo tlačítko na 129 bodů vystředěné v prázdném
+            // řádku (změřeno renderem). Zákaz z #220 mluví o **vyjednávání**, a to tady žádné
+            // není: `frame(width:)` o řádek níž je konkrétní číslo, takže se nabídka nešíří ani
+            // o úroveň dál.
+            Text(verbatim: Self.readyTitle).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        // Velikost z návrhu (`.send { font-size: 12.5px }`) — tatáž jako u `Odeslat komentář`,
+        // což je v návrhu tentýž tvar.
+        .font(.system(size: Self.readyFontSize))
+        .frame(width: contentWidth)
+        .disabled(!section.ready.isAllowed)
+        .help(readyHelp)
+    }
+
+    /// Věta pod tlačítkem. **Není to dekorace** — text drží `Policy`, protože je součástí
+    /// rozhodnutí nepotvrzovat sheetem.
+    private var readyNote: some View {
+        Text(verbatim: Policy.readyForReviewNote)
+            .font(.system(size: Self.readyNoteFontSize))
+            .foregroundStyle(Palette.ink2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Proč přepnutí nedopadlo — **větou v panelu, ne zmizelým kliknutím**, a pod tím tlačítkem,
+    /// na které se klikalo.
+    ///
+    /// Drží se, dokud ji člověk nezavře: chyba, která zmizí sama, je chyba, kterou nikdo nepřečte.
+    /// Tvar je tentýž jako u chyby labelů (`PanelMetadataView.noticeRow`) — ikona, věta, `Zavřít`
+    /// s `fixedSize`, protože ustupovat má text, ne akce.
+    ///
+    /// **Věta je jen ta z chyby, a je to odchylka od zákresu** (sekce 37 kreslí *„Přepnout na Ready
+    /// for review se nepovedlo: `HTTP 403`. Pull request je pořád rozpracovaný.“*). Obě půlky té
+    /// věty jsou totiž závadné a každá jinak:
+    ///
+    /// - *„Pull request je pořád rozpracovaný“* je **tvrzení, které data neunesou** u `timedOut`
+    ///   a `interrupted` — tam se právě neví, jestli přepnutí prošlo, a obě chyby to říkají samy
+    ///   (*„Zkontroluj na GitHubu, jestli přesto neprošlo.“*).
+    /// - *„se nepovedlo“* říká `PublishError.unknown` **taky** (*„Odeslání se nepovedlo: …“*),
+    ///   takže by v panelu stálo dvakrát za sebou.
+    ///
+    /// Co se akce jmenuje, nese **tlačítko o dva body výš** — je to tatáž úmluva jako u chyby
+    /// labelů, která taky kreslí `userDescription` samotný.
+    private func readyFailureRow(_ failure: PublishError) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(Palette.crit)
+                // Ikona je jen vizuální — bez tohohle ji čtečka přečte jako jméno symbolu před
+                // větou, která to samé říká slovy (nález Copilota na #465).
+                .accessibilityHidden(true)
+            Text(verbatim: failure.userDescription)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("Zavřít", action: actions.clearReadyFailure)
+                .buttonStyle(.mini)
+                .fixedSize()
+        }
+        .font(.system(size: Self.readyNoteFontSize))
+    }
+
+    /// Nápověda pod kurzorem. U zakázaného tlačítka **tytéž věty jako v panelu**; u povoleného to,
+    /// co se stane — a schválně jinými slovy než věta pod tlačítkem, aby nápověda nebyla její kopie.
+    private var readyHelp: String {
+        guard section.ready.isAllowed else {
+            return section.ready.obstacles.map(\.sentence).joined(separator: " ")
+        }
+        return "Odešle se hned, bez potvrzení. Pull request přestane být rozpracovaný."
+    }
+
+    private static let readyTitle = "Připravit k review"
+    /// `.send { font-size: 12.5px }` z návrhu.
+    private static let readyFontSize = 12.5
+    /// Věta pod tlačítkem a chyba — `font-size: 11.5px` z návrhu.
+    private static let readyNoteFontSize = 11.5
 
     /// Řada akcí. **Obě tlačítka jsou vidět vždycky** (návrh, sekce 36) — mění se jen to, které
     /// z nich je hlavní: srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat akci
@@ -308,7 +458,14 @@ struct PanelBranchView: View {
     /// Věty do výstrahy — **z obou akcí**. Co z překážek srovnání si vlastní větu žádá, rozhoduje
     /// `Policy.syncWarnings`; ostatní jsou v panelu napsané jinde.
     private var warnings: [String] {
-        obstacles.map(\.sentence) + Policy.syncWarnings(section.sync).map(\.sentence)
+        obstacles.map(\.sentence)
+            + Policy.syncWarnings(section.sync).map(\.sentence)
+            // **Dnes prázdné, a je to zapsaná odpověď** (#482): oba důvody, proč `Připravit
+            // k review` nejde, jsou v panelu buď napsané už jednou (vypnutá brána nese tutéž větu
+            // jako `MergeObstacle.notAllowed`), nebo se odklidí samy (běžící odeslání). Sečítá se
+            // to přesto — jinak by nová překážka, která si větu **žádá**, skončila jen v nápovědě
+            // pod kurzorem a nikdo by si toho nevšiml.
+            + Policy.readyWarnings(section.ready).map(\.sentence)
     }
 
     /// Nápověda pod kurzorem u zakázaného tlačítka — **tytéž věty jako v panelu**, na jednom

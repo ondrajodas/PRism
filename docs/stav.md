@@ -5668,7 +5668,6 @@ regrese, dvakrát**: bez lomítka v porovnání zmizí sousední slot (padnou dv
 **Zbylé záznamy po slotech `a`, `b` a `c`** uklidí nejbližší běh skriptu v tom kterém slotu, nebo se
 smažou ručně; tenhle PR do konfigurace na stroji nesáhl.
 
-<<<<<<< HEAD
 ## #466 — srovnat vlastní větev s `main`, a první zápis do remote
 
 Druhá věc, kvůli které se od hotového review chodilo do prohlížeče: větev je pozadu za `main`em
@@ -5679,7 +5678,7 @@ výsledku přes `--force-with-lease`.
 **Tvrdá podmínka č. 1 se tím mění, a je to nová třída, ne rozšíření výčtu.** Do #466 aplikace do
 remote **nezapisovala vůbec**: `GitHubGateway` je read-only, `RepoCheckout` pracuje lokálně
 a `git push` je výslovně v `--disallowedTools` revieweera. Přibyl proto **druhý protokol**,
-`BranchPushing`, s **jedinou** metodou `push` a třemi soubory v `App/Publish/` — a ne devátá metoda
+`BranchPushing`, s **jedinou** metodou `push` a třemi soubory v `App/Publish/` — a ne další metoda
 `ReviewPublishing`, protože ten mluví přes `gh` s GitHub API, kdežto tohle přes `git` se serverem.
 Slít je do jednoho by znamenalo, že se z výčtu přestane dát přečíst, co odchází kudy.
 
@@ -5882,7 +5881,7 @@ chybějící pole je „nevím“, ne „ne“.
 o tom, jak srovnání dopadlo, a potvrzovací sheet přetlačení. **Mockup (sekce 36) je překreslený
 a publikovaný** ve stejném commitu: přibyl mezistav v panelu, potvrzení a dvě poznámky o tom, proč
 se dělí podle vratnosti.
-=======
+
 ## #421 — tělo `DiffView`u se při tichém tiku pollingu pořád špiní (změřeno, nezavřeno)
 
 Zadání #421 bylo z jiného soudku než ostatní: nejdřív **zjistit, jestli ta vada ještě je**, protože
@@ -5951,9 +5950,6 @@ vydal nulu, tedy „nezašpinilo se“ nad tím, co se právě zašpinilo). Je t
 
 **Na obrazovce není co vidět**: aplikace se nezměnila, přibyly jen sondy, jedno tvrzení
 a dokumentace.
-<<<<<<< HEAD
->>>>>>> origin/main
-=======
 
 ## #483 — Emotikony s našeptáváním shortcodů ve třech polích, která posílají text ven
 
@@ -6015,4 +6011,75 @@ vloženou regresí**.
 
 **Co ověřuje jedině člověk**: že klávesy zaberou (#184). `↑↓`, `↵`, ustupující `esc` a `⌘⏎`
 s otevřenou nabídkou testovací host neunese — aktivaci nedostane.
->>>>>>> origin/main
+
+## #482 — přepnout vlastní PR z draftu na *Ready for review*
+
+Sekce `Větev` (#465) vypisuje, proč se nedá mergnout. Většina těch důvodů je práce: spravit červený
+check, srovnat větev (#466), dovyřídit blokující nález. Jeden z nich byl ale **jedno kliknutí kdesi
+jinde** — a aplikace to o sobě sama psala: `MergeObstacle.draftPullRequest` končilo větou *„Označ ho
+na GitHubu jako připravený.“* Ta půlka věty byla návod, jak z okna odejít, a od #482 je z ní
+tlačítko. Návrh, sekce 37.
+
+**Tvrdá podmínka č. 1 se tím mění: přibyla devátá metoda `ReviewPublishing`**
+(`markReadyForReview(on:)`). Je to tatáž třída jako labely a vyžádání reviewera (#392) nebo merge
+(#465) — práce s **vlastní** frontou —, takže **nová třída jako `BranchPushing` z toho nevznikla**:
+mluví se přes `gh` s GitHub API, ne přes `git` se serverem. **Počet souborů zůstal sedm**, protože
+metoda přibyla do `MetadataSubmission`: rozhoduje, co to je za práci, ne kde je na to tlačítko —
+a stav (`MetadataActionState`) se sdílí schválně, takže dvě odesílání nad jedním PR naráz neběží, ať
+se klikne kdekoli. **Metoda je jednosměrná** a `convertPullRequestToDraft` je jmenovitě zakázaný:
+obousměrná by měla půlku bez volajícího.
+
+**Posílá se `gh pr ready --repo`, a je to jediná cesta ven, která nejde přes `gh api`.** Vybráno
+měřením na `ondrajodas/prism-review-sandbox#11`, ne pohodlím, a obě zamítnuté varianty jsou
+zapsané: **REST na tuhle věc endpoint nemá** (`PATCH /pulls/{n}` s `draft=false` vrátí `200`
+a přepnutí **tiše zahodí** — tatáž past jako `POST /requested_reviewers` s Copilotem), a **GraphQL
+mutace chce node ID**, které aplikace nemá odkud vzít; k tomu její chybový text koliduje s větví
+`threadNotFound` v `PublishError`. Změřená je i idempotence: nad PR, který draft **není**, skončí
+`gh pr ready` nulou (`! … is already "ready for review"`), takže dvojklik ani závod s prohlížečem
+nevyrobí chybu, kterou by bylo potřeba někde ukazovat. Čísla a texty jsou
+v [`docs/github-cli.md`](github-cli.md).
+
+**Bez potvrzovacího sheetu, a je to úvaha o obsahu.** Sheet je u review (#68) a u merge (#465),
+protože tam je payload dlouhý a okno je jediné místo, kde se dá přečíst celý. Tady je payload
+**jeden bit**. Nevratná část na tom ale je — přepnutí vyžádá review od vlastníků kódu —, takže se
+platí tím, čím #392 u `+ reviewer`: **sloveso tam, kde se kliká**, **věta pod tlačítkem**
+o `CODEOWNERS` a o tom, že zpátky do draftu se chodí na GitHub, a **žádná výchozí akce** (hlídá to
+stráž nad zdrojákem, ověřená vloženou regresí).
+
+**Na obrazovce vidět je** — nad řadou `Mergnout…` / `Rebase` přibylo u vlastního draftu tlačítko
+`Připravit k review` **přes celou šířku panelu**, pod ním ta věta, a když volání spadne, místo věty
+chyba se `Zavřít`. Do řady s ostatními dvěma to nepatří **a je to změřené** — a **přeměřeno
+aplikací to vychází jinak než v zákresu**: ne „279 z 278, o jediný bod“, ale **273–274 bodů na 274,
+tedy přesně na hranu**, a rozhoduje o tom **podlaha panelu**, kde ta řada přetéká o ~60 bodů (214 b
+na obsah). Čísla v zákresu jsou z CSS odsazení 11, aplikace má 13; závěr se nemění, takže se mockup
+nepřekresloval. **Kreslí se jedině nad draftem** — nad otevřeným, zavřeným ani mergnutým PR není
+v sekci o řádek víc, protože tam není co přepínat.
+
+**Po úspěchu se načte detail i slévatelnost**, a v tom se to od merge liší: tam se `branchStatuses`
+schválně nechává být (mergnutý PR vrací `UNKNOWN` navždycky), kdežto tady je to ta jediná hodnota,
+která se přepnutím mění na užitečnou — draft má `mergeStateStatus` `DRAFT`, takže by po přepnutí
+zůstal v panelu řádek `rozpracovaný`. **Záložka naopak zůstává otevřená**, taky opak #465: tam ji
+zavírá tentýž klik, kterým člověk PR dokončil, kdežto tady se PR teprve předává ostatním.
+
+Testů **4592**, všechny zelené — z toho **33 nových** ve třech suitách a tři nové scény v sondě
+sekce `Větev`. Cenná je na nich negativní půlka: nula spuštění `gh` na cizím PR, s vypnutou branou,
+nad všemi třemi nedraftovými stavy a bez `gh`; dvojklik jako jedno volání; `!arguments.contains("api")`;
+a stráž, že v `PanelBranchView.swift` není `keyboardShortcut`. U cache se tvrdí **oba směry** — a ten
+druhý se dal napsat jedině trikem: v testu selhání se novější detail podstrčí **taky**, jinak by
+tvrzení „stav se znovu nenačetl“ prošlo i tehdy, kdyby se načetl.
+
+**Dvě odchylky od zákresu**, obě v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--ready-for-review-jako-devátá-metoda-482):
+věta o neúspěchu je jen `PublishError.userDescription` (zákresová *„Pull request je pořád
+rozpracovaný“* je tvrzení, které data neunesou u `timedOut` a `interrupted`, a *„se nepovedlo“* říká
+`unknown` taky), a plnou plochu tlačítka dělá `maxWidth: .infinity` **uvnitř** pevného rámce —
+`borderedProminent` si plochu k popisku sám nedotáhne a bez toho z něj bylo tlačítko na 129 bodů
+vystředěné v prázdném řádku (našel render, ne review).
+
+**Cestou se zavřely dvě starší mezery a jedna se otevřela.** Zavřely: `405` u merge **nad draftem**
+je změřený (u #465 to zakázala permission brána) a zní `Pull Request is still a draft`, takže
+`notMergeable` na něj **nesedí** — neopravuje se to, protože merge se nad draftem neposílá.
+A `docs/stav.md` měl od #487 v sobě **committnuté konfliktní značky** (`<<<<<<< HEAD`,
+`>>>>>>> origin/main`), které rozdělovaly záznamy #466, #421 a #483; jsou pryč a **žádný text se
+neztratil** — všechny tři strany byly přírůstkové. Otevřela: že se vyžádání review od `CODEOWNERS`
+doopravdy pošle, ověřené **není** — chce to druhý účet se zápisem do sandboxu.

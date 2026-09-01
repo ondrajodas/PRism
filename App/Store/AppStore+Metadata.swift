@@ -276,6 +276,71 @@ extension AppStore {
         }
     }
 
+    /// Přepne vlastní draft na *ready for review* (#482) a **načte stav PR znovu**.
+    ///
+    /// **Bez potvrzovacího sheetu**, na rozdíl od review (#68) a merge (#465): payload je jeden bit,
+    /// takže sheet, jehož výpis *Co se stane* má jediný řádek, se neptá na obsah — ptá se „opravdu?“.
+    /// Nevratná část na tom **je** (vyžádání review od `CODEOWNERS`), a odpovídá se na ni tak jako
+    /// u `+ reviewer` v #392: **slovesem tam, kde se kliká**, a větou pod tlačítkem
+    /// (`Policy.readyForReviewNote`).
+    ///
+    /// **Kontrola je i tady, ne jen ve view** — tou samou funkcí, která akci nabízí: `readyForReviewOffer`
+    /// zná stav PR i bránu, a jediná kontrola ve view je kontrola, kterou příští obrazovka obejde.
+    ///
+    /// **Stav se po úspěchu načte znovu**, tatáž cesta jako po vlastním mergi
+    /// (`pullRequestWasMerged`): odpověď `gh pr ready` je prázdná, takže jediné, z čeho se dá nový
+    /// stav vzít, je pull request sám — a bez toho by v panelu zůstala výstraha o rozpracovanosti
+    /// nad PR, který už draft není. Záložka se u toho ale **nezavírá**: přepnutím na *ready* práce
+    /// na PR nekončí, začíná.
+    func markReadyForReview(on pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        guard Policy.readyForReviewOffer(
+            editing: metadataEditing(for: id),
+            state: detail(of: id)?.state,
+            action: metadataActionStates[id]
+        ).isAllowed else { return }
+        guard let submission = metadataSubmission(for: id) else { return }
+        metadataActionStates[id] = .markingReady
+
+        do {
+            try await submission.markReadyForReview()
+            metadataActionStates[id] = nil
+            await pullRequestBecameReady(pullRequest)
+        } catch let error as PublishError {
+            metadataActionStates[id] = .readyFailed(error)
+        } catch {
+            metadataActionStates[id] = .readyFailed(.unknown(error.localizedDescription))
+        }
+    }
+
+    /// Úklid po přepnutí na *ready for review*: **jen nové načtení detailu** (#482).
+    ///
+    /// Cache se zahazuje **ručně**, ze stejného důvodu jako u merge: detail jde podle `updatedAt`
+    /// shrnutí, a to se v našem seznamu přepnutím draftu nemusí posunout dřív než při dalším tiku —
+    /// takže bez toho zápisu by panel dál tvrdil, že je PR rozpracovaný.
+    ///
+    /// **Slévatelnost se zahazuje taky, a v tom se to od merge liší.** Na mergnutém PR se nová
+    /// odpověď nemá kde vzít (`mergeable` vrací `UNKNOWN` navždycky) a `Policy.mergeOffer` ji
+    /// stejně přebije stavem PR, takže tam se stará hodnota nechává být. Tady je to naopak ta
+    /// **jediná** hodnota, která se přepnutím mění na užitečnou: draft má `mergeStateStatus`
+    /// `DRAFT`, takže by po přepnutí zůstal v panelu řádek `rozpracovaný` a `Mergnout…` by se
+    /// nerozsvítilo, dokud se nezmění `updatedAt`.
+    ///
+    /// **Záložka zůstává otevřená** — opak merge (#465). Tam ji zavírá tentýž klik, kterým člověk
+    /// PR dokončil; tady se PR teprve předává ostatním a zavřít okno by znamenalo zahodit kontext
+    /// zrovna ve chvíli, kdy se na něj bude odpovídat.
+    ///
+    /// **Volá se jedině `loadDetail`, ne k tomu i `loadBranchStatus`.** Ten si `loadDetail` na konci
+    /// zavolá sám (a jen na vlastním PR, což je tady vždycky splněné), takže druhé volání by na
+    /// stráži `hasCurrentBranchStatus` skončilo bez efektu — a stav zahozený o dva řádky výš je
+    /// zrovna to, co mu dovolí se doopravdy zeptat.
+    private func pullRequestBecameReady(_ pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        detailStates[id] = nil
+        branchStatuses[id] = nil
+        await loadDetail(for: pullRequest)
+    }
+
     /// Zapomene chybu odesílání — po přečtení, ne sama. Chyba, která zmizí sama, je chyba, kterou
     /// nikdo nepřečte.
     func clearMetadataFailure(for pr: PRIdentifier) {

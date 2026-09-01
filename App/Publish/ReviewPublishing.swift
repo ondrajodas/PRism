@@ -10,11 +10,12 @@ import Foundation
 /// a `MergeSubmission`. Roste-li
 /// ten výčet, roste to, co aplikace umí odeslat, a to musí být vidět z jednoho grepu.
 ///
-/// Metody jsou **vyjmenované a je jich osm** (do #73 jedna, do #216 tři, do #392 čtyři, do #413
-/// šest, do #465 sedm). Každá
+/// Metody jsou **vyjmenované a je jich devět** (do #73 jedna, do #216 tři, do #392 čtyři, do #413
+/// šest, do #465 sedm, do #482 osm). Každá
 /// odpovídá jedné věci, kterou člověk v okně udělá — odeslat review, odpovědět do vlákna,
 /// přepnout jeho vyřešení, napsat komentář pod PR, přeštítkovat svůj PR, vyžádat na něm review,
-/// založit label, který repozitář ještě nezná, mergnout vlastní PR.
+/// založit label, který repozitář ještě nezná, mergnout vlastní PR, přepnout vlastní draft na
+/// *ready for review*.
 /// Co tady být **nesmí**: approve mimo review, **zavření PR**, **milník** a **smazání
 /// labelu**. Roste-li
 /// tenhle výčet, roste to, co aplikace umí odeslat, a to má být vidět v jednom souboru.
@@ -54,6 +55,25 @@ import Foundation
 /// requestu —, a platí se to dvěma věcmi navíc, které ostatní metody nemají: **potvrzením s úplným
 /// výpisem** toho, co se stane (jako u review, #68), a **hlavou v payloadu** (`sha`), na kterou
 /// GitHub odpoví `409`, když se větev mezitím pohnula.
+///
+/// **Přepnutí z draftu přibylo u #482** — devátá metoda, a je to nejmenší z devíti: payload je
+/// **jeden bit**. Rozšířilo se to z téhož důvodu jako #73, #216, #392, #413 a #465, a je to tatáž
+/// třída jako labely — práce s **vlastní** frontou, kterou člověk dělá zrovna ve chvíli, kdy se
+/// v tomhle okně kouká na svůj pull request. Aplikace si o té překážce dokonce sama psala
+/// (`MergeObstacle.draftPullRequest` končilo větou *„Označ ho na GitHubu jako připravený.“*), tedy
+/// návod, jak z okna odejít.
+///
+/// **Jednosměrná schválně.** Metoda nemá parametr, kterým by se PR vrátil do draftu, a je to
+/// rozhodnutí, ne opomenutí: obousměrná metoda by měla polovinu **bez volajícího**, a výčet, ve
+/// kterém stojí něco, co aplikace nedělá, přestává být seznamem toho, co umí odejít ven. Kdyby se
+/// ukázalo, že se zpátky do draftu chodí, bude to **desátá** metoda a vlastní rozhodnutí.
+///
+/// Co se **nezměnilo**: brána je tatáž (`PublishScope`), výčet je krátký a na jednom místě,
+/// `GitHubGateway` zápis dál nemá, počet souborů zůstal **sedm** (přibyla metoda, ne volající — jde
+/// přes `MetadataSubmission`, protože je to tatáž věc: metadata vlastního PR, tatáž brána, tentýž
+/// stav) a v zákazu zůstává approve mimo review, **zavření PR**, **milník** a **smazání labelu**.
+/// **Potvrzení nedostala** — payload jeden bit se nečte, takže sheet by se neptal na obsah, ale
+/// „opravdu?“; zdůvodnění je u `PanelBranchView`.
 ///
 /// **`deleteLabel` se nepřidá.** Není to opomenutí, je to hranice. Smazání labelu je jediná akce
 /// v tomhle okně, po které nezůstane co opravit: label zmizí ze **všech** issues a PR, na kterých
@@ -168,4 +188,23 @@ protocol ReviewPublishing: Sendable {
     /// **Metodu si volající nevybírá.** Squash je jediná, kterou aplikace posílá, a je v jedné
     /// konstantě (`MergeRequest.method`) — proto ji plán nenese jako pole.
     func merge(_ plan: MergePlan) async throws -> MergedPullRequest
+
+    /// Přepne vlastní draft na *ready for review* (#482).
+    ///
+    /// **Nic nevrací, a je to jediná z devíti metod, která nic nevrací.** Není to nedodělek: `gh pr
+    /// ready` píše na **stdout prázdno** (potvrzení jde na stderr jako věta pro člověka, změřeno
+    /// na `prism-review-sandbox#11`), takže by tady návratová hodnota musela vzniknout **vymyšlením**
+    /// — a to je zrovna ten druh tvrzení, kterému se tenhle repo vyhýbá. Pravdu o novém stavu má
+    /// pull request, takže si ji volající **načte znovu** (`AppStore.pullRequestBecameReady`),
+    /// stejně jako po vlastním mergi.
+    ///
+    /// **Jednosměrná** — do draftu se odsud nevrací, viz úvod souboru.
+    ///
+    /// Pre-flight je **stejně široký jako u labelů**: scope a stav PR, ne `headSha`. Přepnutí se
+    /// váže na pull request, ne na commit — je to jeho vlastnost, ne tvrzení o kódu.
+    ///
+    /// **Idempotentní ze strany GitHubu, a je to změřené**: nad PR, který draft **není**, skončí
+    /// `gh pr ready` **nulou** a jen napíše `! … is already "ready for review"`. Dvojklik ani závod
+    /// s prohlížečem tedy nevyrobí chybu, kterou by bylo potřeba někde ukázat.
+    func markReadyForReview(on pullRequest: PRIdentifier) async throws
 }

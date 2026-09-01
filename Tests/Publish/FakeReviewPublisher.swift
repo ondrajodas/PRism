@@ -20,6 +20,9 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     private var reviewersOutcome: Result<RequestedReview, any Error>?
     private var newLabelOutcome: Result<PullRequestLabel, any Error>?
     private var mergeOutcome: Result<MergedPullRequest, any Error>?
+    /// Jak dopadne přepnutí z draftu (#482). `Result<Void, …>`, protože metoda **nic nevrací** —
+    /// úspěch je u ní jediná informace.
+    private var readyOutcome: Result<Void, any Error>?
     /// Drží odeslání „rozběhnuté“, dokud se nepustí. Bez toho se nedá otestovat, co se stane
     /// **během** odesílání — a právě tam bydlí zákaz druhého odeslání. Stejný důvod, kvůli
     /// kterému `FakeReviewRunner` umí pozdržet běh.
@@ -51,6 +54,10 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
         /// mergem tvrdí hlavně to, že se **nemergovalo** — a to se pozná jedině z jednoho seznamu
         /// všeho, co publisher dostal.
         case merge(MergePlan)
+        /// Přepnutí z draftu na *ready for review* (#482). Ve stejném výčtu jako ostatní, a je to
+        /// u něj to nejcennější: testy nad ním tvrdí hlavně to, že se **nepřepnulo** — a to se pozná
+        /// jedině z jednoho seznamu všeho, co publisher dostal.
+        case ready(PRIdentifier)
     }
 
     convenience init(reply outcome: Result<ThreadComment, any Error>) {
@@ -86,6 +93,11 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
     convenience init(merge outcome: Result<MergedPullRequest, any Error>) {
         self.init([])
         lock.withLock { mergeOutcome = outcome }
+    }
+
+    convenience init(ready outcome: Result<Void, any Error>) {
+        self.init([])
+        lock.withLock { readyOutcome = outcome }
     }
 
     var threadActions: [ThreadCall] { lock.withLock { threadCalls } }
@@ -182,6 +194,20 @@ final class FakeReviewPublisher: ReviewPublishing, @unchecked Sendable {
             throw PublishError.unknown("Fake publisher nemá co vrátit na nový label.")
         }
         return try outcome.get()
+    }
+
+    // MARK: - Ready for review (#482)
+
+    /// **Nezkonfigurovaný výsledek hodí chybu, ne úspěch**, i když metoda nic nevrací: fake, který
+    /// mlčky uspěje, by zezelenil testy, které o téhle cestě ven nevědí — a u jediné cesty ven je
+    /// „nikdo to nenastavil“ ta nejhorší chvíle na tichý úspěch.
+    func markReadyForReview(on pullRequest: PRIdentifier) async throws {
+        lock.withLock { threadCalls.append(.ready(pullRequest)) }
+        if let gate = lock.withLock({ gate }) { await gate() }
+        guard let outcome = lock.withLock({ readyOutcome }) else {
+            throw PublishError.unknown("Fake publisher nemá co vrátit na ready for review.")
+        }
+        try outcome.get()
     }
 
     // MARK: - Merge (#465)
