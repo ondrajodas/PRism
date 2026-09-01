@@ -1817,6 +1817,55 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   se počítá zvlášť** (jinak „1 z 1“ tvrdí hotovo nad PR se dvěma nálezy v panelu), **hotovo
   znamená projitá všechna místa**, ne konec seznamu, a **ztracené místo pod kurzorem shodí jen
   pozici** — po změně seznamu se nesmí ukázat „4 ze 3“.
+- **Hledání v diffu (#152)** — čtyři sady a dělí se podle toho, **co se v které dá pokazit
+  potichu**.
+
+  `DiffSearchTests` nad modelem, výčtem: porovnávání (nerozlišuje velikost, dokud se o to neřekne;
+  **diakritiku nesjednocuje** — `.literal`, protože v kódu se hledá jméno; prázdný dotaz nenajde
+  nic; výskyty se **nepřekrývají**, takže `aa` v `aaa` je jeden) a výskyty (v kontextu, v odebraném
+  i přidaném řádku, víc na řádku jako víc zastávek, pořadí = pořadí na obrazovce, napříč soubory
+  v pořadí diffu, počty klíčované `displayPath` — tedy i u **přejmenovaného** souboru).
+
+  **Dvě negativní tvrzení jsou to hlavní**: že se **nehledá mimo hunky**, dokud se kontext
+  nerozbalí (a po rozbalení že se ten řádek započítá), a že soubor bez hunků (binárka, přejmenování
+  beze změny) nenajde nic. Bez prvního z nich by přestal být rozsah tím, co pruh na obrazovce říká.
+
+  **Kotva se testuje invariantem, ne hodnotou** (tatáž konstrukce jako `DiffJumpTargetTests`): pro
+  **každý** výskyt musí být cíl po překladu v seznamu, a to v **obou pohledech**. Ve split pohledu
+  nese dvojice `id` pravého řádku, takže výskyt na odebraném řádku je zrovna ten případ, který se
+  rozbije potichu — `scrollTo` na neexistující `id` neudělá nic. K tomu dvě krajní: zmizelý řádek
+  skočí **aspoň na soubor** a výskyt v souboru mimo diff kotvu **nedostane**.
+
+  `DiffSearchNavigationTests` nad `Policy`: skok (bez výskytů není kam, první krok jde na kraj,
+  cyklí se dokola, **index mimo seznam se bere jako nikde**), počítadlo (**ne `0 z 17`**; druhý pád
+  za `z`), tři stavy (`idle` ≠ `empty` — prázdné pole netvrdí nic o datech) a **věty**: že prázdný
+  stav nikde neřekne „nic nenalezeno“, že nápověda říká **i tu druhou půlku** (co se nenačítá) a že
+  kapsle zůstává krátká. Ta tvrzení o textech jsou tam schválně — je to řádek z tabulky v
+  `CLAUDE.md` (text v UI nesmí tvrdit víc, než co data unesou), a zjednodušit tu větu je jednořádková
+  změna, kterou by jinak nikdo nezachytil.
+
+  `DiffSearchHighlightTests` nad **nakresleným textem**: že svítí všechny výskyty (i ten, který se
+  liší velikostí), že podklad sedí na znak **i za emoji** (UTF-16, tatáž třída chyby jako #275), že
+  aktuální výskyt má jinou barvu než ostatní, že **hledání vyhrává nad word-level vrstvou** a že na
+  prázdné straně dvojice nesvítí nic. A hlavně **dotaz v klíči sazby**: změna dotazu i změna
+  aktuálního výskytu blok **přesází** (`typesettings + 1`), nezměněný dotaz **ne** — bez toho prvního
+  by v okně zůstalo zvýraznění předchozího slova, bez toho druhého by se ztrácel rozdělaný výběr při
+  každém přejezdu myší.
+
+  `AppStoreDiffSearchTests` nad storem: že **čtení pruh nevyrábí** (zápis do observable slovníku
+  uprostřed skládání těla view), že druhé ⌘F jen vrátí fokus, že zavření **zhasne zvýraznění a dotaz
+  si nechá**, že psaní **neskáče**, že rozbalení kontextu přidá výskyt a sbalení ho odebere, že nový
+  diff přeskládá počet — a že se **nemíchá** stav dvou PR ani dvou diffů téhož PR (`commit` v klíči).
+  K tomu jedno tvrzení o ceně: **`refreshDiffSearch` bez dotazu neudělá nic**, takže tik pollingu nad
+  diffem nestojí nic.
+
+  Barvy měří `DiffPaletteTests` spolu s ostatními vrstvami diffu (ΔE proti ploše i proti sobě,
+  kontrast obarveného kódu nad oběma podklady) a **zkratky** `WindowShortcutsTests` — počet akcií
+  v katalogu, žádná kolize, kreslená kombinace a **stráž nad zdrojáky**, do které pruh přibyl
+  s důvodem (`⎋` na `✕`, mimo katalog).
+
+  **Co se v harnessu ověřit nedá:** že `⌘F`, `⌘G` a `⎋` doopravdy zaberou (#184 — testovací host
+  nedostane aktivaci). Zkouší to člověk; testy drží katalog, kolize a to, komu `⎋` ustupuje.
 - **`Policy.changes` a `VisitLedger` (#173)** — „co přibylo od minule“ ve dvou vrstvách.
   `Policy` vyčerpávajícím výčtem: **bez značky se neukáže nic** (jinak by se u prvního otevření
   vypsala celá historie), položka v tutéž sekundu se nepočítá (ostré porovnání), událost bez

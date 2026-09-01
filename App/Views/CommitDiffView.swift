@@ -43,9 +43,18 @@ struct CommitDiffView: View {
     let expansion: DiffExpansionActions
     let folding: DiffFoldingActions
     @Binding var layout: DiffLayout
+    /// Hledání v tomhle diffu (#152) — vlastní stav, ne ten od `Změněných souborů`: je to jiný
+    /// obsah na týchž souřadnicích, takže sdílený počet výskytů by mluvil o jiném diffu.
+    /// Skládá ho volající, protože klíč (a s ním sha) zná store.
+    var search = DiffSearchActions()
     let back: () -> Void
     let showFiles: () -> Void
     let retry: () -> Void
+
+    /// Kam odscrollovat (#152). `@State`, protože jediné, co v tomhle tabu skáče, je hledání —
+    /// a to je stav obrazovky, ne PR. Po skoku se vrací na `nil`, aby šlo na totéž místo skočit
+    /// i podruhé (tak to má `DiffView`).
+    @State private var scrollTarget: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -123,12 +132,15 @@ struct CommitDiffView: View {
             // krabice ploch pro tažení musí poznat, že se kreslí něco jiného (#274). Sha stačí —
             // je jednoznačná napříč repozitáři a tab žádnou identitu PR **nemá schválně**.
             subject: commit.sha,
-            // Skáče se jedině v diffu PR (z nálezu, z palety, z anotace CI) a sem žádná z těch
-            // cest nevede — kotvy míří na řádky dnešní hlavy, ne tohohle commitu.
-            scrollTarget: .constant(nil),
+            // **Od #152 se tady skáče, a je to jediná cesta, která sem vede**: na výskyt hledání
+            // v tomhle diffu. Kotvy z nálezů, z palety ani z anotace CI sem pořád nemíří — ty
+            // ukazují na řádky dnešní hlavy, ne tohohle commitu —, takže cíl nastavuje jedině pruh
+            // hledání. Do #152 tu stálo `.constant(nil)`; s ním by šipky v pruhu nic nedělaly.
+            scrollTarget: $scrollTarget,
             expansion: expansion,
             folding: folding,
-            layout: $layout
+            layout: $layout,
+            search: search
         )
     }
 }

@@ -120,6 +120,30 @@ enum Palette {
     static let diffAddedWord = Color(light: 0xABEFC0, dark: 0x1D5625)
     static let diffRemovedWord = Color(light: 0xFFC9C6, dark: 0x712521)
 
+    /// Výsledek hledání v diffu (#152) — `--hit-bg` a `--hit-hi` z návrhu (sekce 39).
+    ///
+    /// **Třetí vrstva nad pozadím řádku**, tedy tentýž vztah jako `diffAdded` a `diffAddedWord`
+    /// výš: `searchHit` má **každý** výskyt, `searchHitCurrent` ten, na kterém člověk stojí.
+    /// Barva písma zůstává ze syntaxe — dvě sady barev na tomtéž textu se čtou jako kaše.
+    ///
+    /// **Ne `accent.opacity(…)`**, a je to tentýž důvod jako u `critLine` a `diffAdded`: výskyt leží
+    /// střídavě na nezměněném, přidaném i odebraném řádku, takže by se skrz krytí barva měnila podle
+    /// podkladu. Hodnoty jsou proto vyčíslený akcent nad `surface` — 16 % / 34 % ve světlém, 15 %
+    /// / 36 % v tmavém. Dvě různá krytí schválně, jako u `accentWeak`.
+    ///
+    /// **Akcent, ne `find`.** `find` je barva **nálezu** a bublina nálezu visí v témž diffu; hledání
+    /// je naopak to, co aplikace zrovna dělá, a zhasne, jak se pruh zavře — tedy přesně role, kterou
+    /// v tomhle okně nese akcent.
+    ///
+    /// Změřeno (`SearchHitTokenTests`), protože kontrast nad wash vrstvou je zrovna to, co #277
+    /// jednou pokazilo: `searchHit` je od plochy vzdálený ΔE **11,9** (světlá) a **11,1** (tmavá),
+    /// od `searchHitCurrent` **11,0** a **10,9** — tedy na první pohled jiná plocha v obou směrech.
+    /// Řetězec IntelliJ Light má na nich **4,20** a **3,10** (dnešní `diffAddedWord` 4,01), řetězec
+    /// Darculy **3,75** a **2,61** (dnešní tmavý `diffAddedWord` 2,17). Sytější být nesmí: pod
+    /// výsledkem hledání se musí dát číst, jinak zhasne zrovna to slovo, kvůli kterému se hledalo.
+    static let searchHit = Color(light: 0xE5E2FA, dark: 0x23243D)
+    static let searchHitCurrent = Color(light: 0xC7C0F4, dark: 0x3D396D)
+
     /// Šrafa prázdného protějšku dvojice v pohledu vedle sebe (#277) — tam, kde na téhle straně
     /// řádek **není**.
     ///

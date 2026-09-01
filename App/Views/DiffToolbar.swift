@@ -36,6 +36,11 @@ struct DiffToolbar: View {
     let missingThreads: Int
     /// Šířka, kterou má diff k dispozici. Z ní se počítá, kolik znaků se vejde na stranu (#188).
     let contentWidth: Double
+    /// Hledání v diffu (#152). Popisek `Hledat ⌘F` je jediné, co v liště přibylo — pole samotné
+    /// je v pruhu pod ní. `nil` = v tomhle diffu se nehledá, takže se nekreslí ani popisek.
+    var openSearch: (() -> Void)?
+    /// Je pruh hledání otevřený? Popisek pak svítí akcentem, aby bylo poznat, odkud se pruh vzal.
+    var isSearching = false
 
     var body: some View {
         HStack(spacing: 9) {
@@ -51,6 +56,7 @@ struct DiffToolbar: View {
             }
             Spacer(minLength: 9)
             warnings
+            searchButton
             foldMenu
         }
         .padding(.horizontal, 14)
@@ -60,6 +66,39 @@ struct DiffToolbar: View {
         // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
         // takže se vykreslí svisle — tatáž past jako u hlaviček souborů a záložek PR.
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
+    }
+
+    // MARK: - Hledání
+
+    /// `⌕ Hledat ⌘F` (#152) — **popisek s kapslí klávesy, ne pole**: pole je v pruhu pod lištou,
+    /// protože se počtem, šipkami a rozsahem je širší než všechny tři věci v liště dohromady
+    /// (a lišta se u #219 schválně srazila právě proto, že se v užším okně nevešla).
+    ///
+    /// Existuje, aby se hledání dalo najít **myší**. Zkratku kreslí `Policy`, ne literál vedle
+    /// klávesy (#441).
+    @ViewBuilder private var searchButton: some View {
+        if let openSearch, !diff.files.isEmpty {
+            Button(action: openSearch) {
+                HStack(spacing: 5) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                    Text(verbatim: "Hledat")
+                        .font(.system(size: 11.5))
+                    Text(verbatim: Policy.windowShortcut(.findInDiff).display)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Palette.ink3)
+                        .padding(.horizontal, 5)
+                        .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line) }
+                }
+                .foregroundStyle(isSearching ? Palette.accent : Palette.ink2)
+                .lineLimit(1)
+                .fixedSize()
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .help(Policy.shortcutHelp("Hledat v diffu", .findInDiff))
+            .accessibilityLabel("Hledat v diffu")
+        }
     }
 
     // MARK: - Sbalení a co zbylo

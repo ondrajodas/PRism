@@ -4942,3 +4942,75 @@ a zapnout si ji kvůli měření by znamenalo přepsat konfiguraci, aby vyšel s
 Ověřené je obojí do sebe: session naostro nad skutečným konfliktem (výš) a celý řetěz
 `git add` → `rebase --continue` proti skutečnému `gitu` (`RealConflictStagingTests`). Co zbývá, je
 klik.
+
+### Záznam rozhodnutí — rozsah hledání v diffu (#152)
+
+**Rozhodnutí:** ⌘F hledá **jen v tom, co je načtené** — v hunkách a v **rozbaleném kontextu** (#47).
+Zbytek souborů se kvůli hledání **nedotahuje**, a ten rozsah se **říká na obrazovce**: kapsle
+`jen v diffu` u počtu, prázdný výsledek jako `v diffu nic — mimo hunky se nehledá` a celá věta
+v nápovědě pole.
+
+**Proč vůbec byla otázka:** zadání issue ji nechalo otevřenou a pojmenovalo tu past správně —
+hlásit „nic nenalezeno“ nad kódem, který jsme nečetli, je tvrzení, které data neunesou (řádek
+z tabulky v `CLAUDE.md`).
+
+**Proč se nedotahuje:** u PR o padesáti souborech je to **padesát volání na GitHub kvůli jednomu
+slovu**, a to při každém přepsání dotazu. Rozbalování kontextu už jednu cestu pro dotažení má
+(`reveal`), je ruční a je z ní vidět, co se načetlo — hledání by ji obešlo a načetlo by celý PR
+potichu.
+
+**Proč se rozbalený kontext naopak počítá:** je to obyčejný obsah souboru, který v okně **je**
+a dá se na něj skočit. Nepočítat ho by znamenalo, že hledání ignoruje řádky, na které se člověk
+kouká.
+
+**Zamítnuté varianty:**
+
+- **Hledat v celém souboru a nenačtené přiznat větou.** Zamítnuto kvůli té ceně výš. Zbývá z toho
+  to podstatné — ta věta.
+- **Dotahovat soubory líně, jak se prochází výskyty.** Zamítnuto: počet výskytů by se během
+  procházení **měnil**, takže `4 z 17` by přestalo být tvrzení.
+- **Nabídnout „prohledat i zbytek“ jako druhé tlačítko.** Zamítnuto pro první verzi: je to druhá
+  brána do téže operace a rozbalení kontextu (`⌄`) tu cestu už má. Zapsáno jako věc, ke které se dá
+  vrátit, kdyby si o ni proklikání řeklo.
+- **Nekreslit o rozsahu nic** (jako to dělá hledání v prohlížeči). Zamítnuto: prohlížeč má celý
+  dokument, kdežto tady je diff **výřez** — bez té věty by počet vypadal jako počet v souborech.
+
+**Co se u toho rozhodlo ještě, protože to ze zadání neplynulo:**
+
+- **Pruh je druhá řádka chromu pod lištou diffu**, ne pole v liště a ne překryv nad kódem. Lišta se
+  u #219 srazila na tři věci schválně a v užším okně se nevešla ani tak; překryv by zakryl ukotvenou
+  hlavičku souboru, tedy to, podle čeho se pozná, kde v PR jsem. Pruh proto **existuje jen otevřený**.
+- **Psaní neskáče.** Diff, který se hýbe pod rukama při každém písmenu, je horší než jeden hmat na
+  `⏎`. Pruh do prvního skoku píše `17 výskytů` — tentýž tvar jako u procházení nálezů, a ze stejného
+  důvodu ne `0 z 17`.
+- **Sbalený soubor se počítá a skok ho rozbalí.** Sbalení je stav okna, ne stav dat; kolik výskytů
+  v něm je, říká kapsle v jeho hlavičce. Bez ní by se v zavřeném souboru počítalo a nebylo by z čeho
+  to poznat.
+- **Hledání vyhrává nad word-level vrstvou.** Je to jediná vrstva, kterou si člověk zapnul sám
+  a která zhasne, jak zavře pruh — kdežto zelená a word-level rozdíl jsou vlastnosti diffu.
+- **Aktuální výskyt nese sytější podklad, ne obrys.** Obrys by v `NSAttributedString` neměl čím
+  vzniknout, takže by se návrh nedal nakreslit 1 : 1; místo něj je ΔE 11,0 / 10,9 proti tlumenému
+  podkladu, tedy „na první pohled jiná plocha“ v obou motivech.
+- **Dva nové tokeny (`--hit-bg`, `--hit-hi`) se změřily dřív, než se nakreslily.** Je to obráceně
+  než u #277, kde se hodnoty doháněly po stížnosti: kontrast obarveného kódu nad wash vrstvou je
+  přesně to, co #277 jednou pokazilo (řetězec 1,27), takže se čísla spočítala před zákresem
+  a schválila s ním. Naměřené hodnoty jsou u `Palette.searchHit` a hlídá je `DiffPaletteTests`.
+- **`⌘G` / `⌘⇧G`, ne `⌥↓`.** `⌥↓` patří nálezům (#187) a dvě věci na jedné klávese znamenají, že
+  vyhraje ta zaregistrovaná později (#151, #184). `⌘G` je zkratka, kterou má na hledání celý systém.
+- **`⎋` není v katalogu zkratek.** Je na `✕` v pruhu, tedy na tlačítku, které existuje jedině
+  otevřené — a zkratka **okna**, která tu klávesu jinak má (`⎋` zavírá diff commitu), se nad
+  otevřeným pruhem zakazuje (`Policy.canCloseCommit`). Je to tentýž vzorec jako `⌘⏎` v tabu
+  `Zeptat se` (#452); druhá položka v katalogu by byla kolize, kterou test hlásí jako vadu.
+
+**Co z odůvodnění issue #152 přeměřením padlo.** Zadání (srpen 2026) tvrdí, že se text v diffu nedá
+vybrat, protože `.textSelection(.enabled)` je nad ním vypnuté kvůli tisícům `Text`ů v líném seznamu.
+Ověřeno nad dnešním kódem: vybrat **jde** (od #157 kreslí kód `NSTextView` s `isSelectable = true`;
+jediné `.textSelection(.disabled)` v `App/` je nad úryvkem u vlákna) a diff **není líný seznam** (od
+#469 pevný `VStack`). Závěr — že systémové hledání nad diffem není a ⌘F je jediná cesta k otázce
+„kde se to v tom PR bere“ — platí dál, ale ze dvou jiných důvodů: výběr **končí na hranici bloku**
+(60 řádků, `DiffBlock.maxLines`), takže přes soubory nesahá, a nakreslený text je jen **pás kolem
+výřezu** (`Policy.mountBand`), takže by hledání nad ním měnilo počet s odrolováním.
+
+**Zapsaná mezera:** že `⌘F`, `⌘G` a `⎋` doopravdy zaberou, se v harnessu ověřit nedá (#184 —
+testovací host nedostane aktivaci). Katalog, kolize a to, komu `⎋` ustupuje, drží testy nad
+`Policy`; samotné klávesy zkouší člověk na běžící aplikaci.

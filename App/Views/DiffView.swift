@@ -65,6 +65,9 @@ struct DiffView: View {
     /// i v tabu, kde diff není.
     var panelExpanded: Binding<Bool>?
     var stepFinding: ((NavigationStep) -> Void)?
+    /// Hledání v diffu (#152). Stav drží store (musí přežít přepnutí tabu i složení panelu), tudy
+    /// jdou akce. **Prázdné znamená „tady se nehledá“** — tak to má náhled i sonda.
+    var search = DiffSearchActions()
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -103,6 +106,17 @@ struct DiffView: View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 toolbar
+                // Pruh hledání (#152) — **druhá řádka chromu pod lištou**, přes celou šířku, tedy
+                // i nad stromem: hledá se v celém diffu, ne v jednom souboru. Existuje jen
+                // otevřený, takže lišta nad ním zůstává, jaká byla.
+                //
+                // Tělo diffu tím čte **jedinou** vlastnost hledání (`isOpen`), která se mění
+                // dvakrát za hledání; dotaz ani počet výskytů si odsud nebere nikdo (#472).
+                if let state = search.state, state.isOpen {
+                    DiffSearchBar(search: state, actions: search) { direction in
+                        step(search: direction)
+                    }
+                }
                 // Strom vlevo, diff vedle něj (#197). Do té doby byl strom jen v popoveru,
                 // takže u PR o padesáti souborech nešlo poznat, kde v něm člověk je, aniž by
                 // ho otevřel.
@@ -115,6 +129,12 @@ struct DiffView: View {
                 }
             }
             .background(alignment: .topLeading) { treeShortcut }
+            .background(alignment: .topLeading) { searchShortcut }
+            // Stav hledání **prostředím** (#152), ne parametrem: dotaz se mění při každém písmenu
+            // a čtou ho bloky kódu a hlavičky souborů, tedy listy hierarchie. Identita objektu se
+            // nemění, takže tělo diffu se tím nepřekresluje — sledují se jeho **vlastnosti**, každou
+            // čte někdo jiný (viz `DiffSearchState`). Tentýž vzorec jako u `DiffViewport`.
+            .environment(search.state)
             // **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě
             // strany, takže na 14" nezbude ani 100 znaků; pod sebou je zase rozbalí. Ruční
             // `⌘1`/`⌘2` to přebijí jednoduše tím, že platí až do **další** změny pohledu.
@@ -157,6 +177,48 @@ struct DiffView: View {
                 proxy.scrollTo(id, anchor: jumpAnchor)
                 scrollTarget = nil
             }
+        }
+    }
+
+    /// Skok na další (nebo předchozí) výskyt hledání (#152).
+    ///
+    /// **Jde stejnou cestou jako skok na nález**: kotva se složí z `DiffRow` a nastaví se do
+    /// `scrollTarget`, který si pak sám přeloží řádek na blok (`blockID(covering:)`). Sbalený soubor
+    /// se **rozbalí dřív, než se cíl nastaví** — jinak by se ukázala jen jeho hlavička; tentýž
+    /// požadavek jako u skoku ze stromu.
+    ///
+    /// Kotva se skládá **tady, ne ve store**: pohled na diff (`layout`) a rozbalený kontext ví
+    /// jedině view, a ve split pohledu na tom identita řádku závisí.
+    private func step(search direction: NavigationStep) {
+        guard let hit = search.step(direction) else { return }
+        guard let file = diff.file(at: hit.path) else { return }
+        if folding.isFolded(file) { folding.toggle(file) }
+        let state = expansion.state(file)
+        scrollTarget = DiffRow.anchor(
+            in: diff,
+            hit: hit,
+            layout: layout,
+            revealed: state.revealed,
+            content: state.content
+        )
+    }
+
+    /// `⌘F` otevře pruh a zaostří pole. Bydlí **mimo lištu** ze stejného důvodu jako `⌘1` o kus níž:
+    /// v liště je jen popisek `Hledat`, a ten otevírá kliknutím.
+    ///
+    /// Průhledné tlačítko, ne `.hidden()`: skryté view z hierarchie zmizí i se zkratkou.
+    /// `⌘G`/`⌘⇧G` tady **nejsou** — registruje je pruh, takže existují jedině tehdy, když je kam
+    /// skákat.
+    @ViewBuilder private var searchShortcut: some View {
+        // **Nad prázdným diffem se nenabízí, stejně jako popisek v liště**: pruh, ve kterém se
+        // nedá nic najít, je zkratka, po které se nic nestane — a ta je k nerozeznání od rozbité
+        // aplikace. Zakázané tlačítko klávesu nebere a propadne dál.
+        if let open = search.open, !diff.files.isEmpty {
+            Button("Hledat v diffu", action: open)
+                .windowShortcut(.findInDiff)
+                .opacity(0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 
@@ -371,7 +433,11 @@ struct DiffView: View {
                 draggedCells: draggedCells,
                 dragEnd: dragged?.end,
                 rangeDrag: rangeDrag,
-                copy: copy
+                copy: copy,
+                // Cesta souboru, ne dotaz hledání (#152): dotaz si blok přečte z prostředí sám,
+                // takže se tělo diffu při psaní nepřekresluje. Odsud jde jen to, co se mění
+                // se **souborem**, tedy jednou za jeho vykreslení.
+                filePath: file.displayPath
             )
         }
     }
@@ -388,7 +454,11 @@ struct DiffView: View {
             folding: folding,
             collapseExpansion: expansion.collapse,
             missingThreads: missingThreads,
-            contentWidth: contentWidth
+            contentWidth: contentWidth,
+            // `nil`, když hledání nikdo nedodal (náhledy, sondy) — popisek se pak nekreslí, místo
+            // aby otevíral pruh, který nemá kde vzniknout.
+            openSearch: search.open,
+            isSearching: search.isOpen
         )
     }
 

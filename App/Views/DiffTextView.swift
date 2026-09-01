@@ -140,7 +140,11 @@ final class DiffTextView: NSTextView {
             block.lines,
             words: words(),
             language: style.language,
-            palette: style.palette
+            palette: style.palette,
+            // Dotaz je součástí klíče (`DiffBlockStyle.search`), takže se sem dojde i tehdy, když se
+            // změnilo **jen** hledané slovo — a přesázet se v tu chvíli musí, jinak by v okně
+            // zůstalo zvýraznění toho předchozího.
+            search: style.search
         )
         lineRanges = composed.ranges
         textStorage?.setAttributedString(composed.text)
@@ -163,7 +167,8 @@ final class DiffTextView: NSTextView {
         _ lines: [DiffLine],
         words: WordDiff.Spans,
         language: Language?,
-        palette: SyntaxPalette
+        palette: SyntaxPalette,
+        search: DiffSearchHighlight = .none
     ) -> (text: NSAttributedString, ranges: [NSRange]) {
         let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         // Šest převodů na blok místo jednoho na run (#275, od #393 i barva textu) — viz `SyntaxColors`.
@@ -179,6 +184,10 @@ final class DiffTextView: NSTextView {
         for (index, line) in lines.enumerated() {
             colorize(line, in: result, over: ranges[index], language: language, colors: colors)
             highlight(words[index] ?? [], of: line, in: result, from: ranges[index].location)
+            // **Hledání jde naposled, tedy nad word-level vrstvou** (#152), a to pořadí je
+            // rozhodnutí: je to jediná z těch vrstev, kterou si člověk zapnul sám a která zhasne,
+            // jak zavře pruh. Barva písma zůstává ze syntaxe, mění se jedině podklad.
+            highlightSearch(search, of: line, in: result, from: ranges[index].location)
         }
         return (result, ranges)
     }
@@ -257,6 +266,43 @@ final class DiffTextView: NSTextView {
             result.addAttribute(.backgroundColor, value: color, range: target)
         }
     }
+
+    /// Výsledek hledání jako **třetí vrstva nad** hotovým textem (#152).
+    ///
+    /// Tentýž tvar jako word-level vrstva nad tímhle řádkem, a ze stejného důvodu **nesmí do
+    /// `SyntaxRunCache`** (#153): zvýraznění závisí na dotazu, kdežto cache je klíčovaná
+    /// `(text řádku, jazyk)` — tentýž řádek by z ní při jiném dotazu vytáhl cizí zvýraznění.
+    ///
+    /// Kde dotaz na řádku sedí, rozhoduje **`DiffSearch.ranges`, tedy tatáž funkce, ze které se
+    /// počítá počet výskytů v pruhu**. Dvě kopie porovnávání by znamenaly, že pruh umí tvrdit `17`
+    /// a v textu svítí šestnáct podkladů.
+    private static func highlightSearch(
+        _ search: DiffSearchHighlight,
+        of line: DiffLine,
+        in result: NSMutableAttributedString,
+        from start: Int
+    ) {
+        guard let query = search.query, query.isActive else { return }
+        let spans = DiffSearch.ranges(in: line.text, query: query)
+        guard !spans.isEmpty else { return }
+        for (occurrence, span) in spans.enumerated() {
+            let range = NSRange(span, in: line.text)
+            let target = NSRange(location: start + range.location, length: range.length)
+            // Tatáž pojistka jako u word-level vrstvy: rozsah patří textu, ze kterého se počítal,
+            // takže mimo složený řetězec sáhnout nemá jak — a kdyby přece, je zvýraznění to jediné,
+            // o co se přijde.
+            guard NSMaxRange(target) <= result.length else { continue }
+            let color = search.isCurrent(line, occurrence: occurrence)
+                ? Self.currentSearchBackground
+                : Self.searchBackground
+            result.addAttribute(.backgroundColor, value: color, range: target)
+        }
+    }
+
+    /// Podklad výskytu a toho aktuálního. **`NSColor` z palety, jeden převod na proces** — tentýž
+    /// vzorec jako u word-level pozadí o pár řádků výš (#275: šest převodů na blok, ne jeden na run).
+    private static let searchBackground = NSColor(Palette.searchHit)
+    private static let currentSearchBackground = NSColor(Palette.searchHitCurrent)
 
     // MARK: - Geometrie řádků
 

@@ -120,6 +120,8 @@ struct DiffPaletteTests {
         let stripe: Measured
         let addedSign: Measured, removedSign: Measured
         let critLine: Measured
+        /// Výsledek hledání a ten aktuální (#152) — třetí vrstva nad pozadím řádku.
+        let searchHit: Measured, searchHitCurrent: Measured
         let syntax: (string: Measured, keyword: Measured, comment: Measured)
         let ink: Measured
 
@@ -130,6 +132,7 @@ struct DiffPaletteTests {
                 ("přidaný řádek", added), ("odebraný řádek", removed),
                 ("word-level přidaný", addedWord), ("word-level odebraný", removedWord),
                 ("šrafa prázdného protějšku", stripe),
+                ("výskyt hledání", searchHit), ("aktuální výskyt hledání", searchHitCurrent),
                 ("znak +", addedSign), ("znak −", removedSign),
                 ("obrys bubliny", critLine),
                 ("řetězec", syntax.string), ("klíčové slovo", syntax.keyword), ("komentář", syntax.comment),
@@ -159,6 +162,8 @@ struct DiffPaletteTests {
                 addedSign: Measured(DiffLineView.signColor(of: .added)),
                 removedSign: Measured(DiffLineView.signColor(of: .removed)),
                 critLine: Measured(Palette.critLine),
+                searchHit: Measured(Palette.searchHit),
+                searchHitCurrent: Measured(Palette.searchHitCurrent),
                 syntax: (Measured(palette.string), Measured(palette.keyword), Measured(palette.comment)),
                 ink: Measured(Palette.ink)
             )
@@ -188,6 +193,8 @@ struct DiffPaletteTests {
                 ("přidaný řádek", scheme.added), ("odebraný řádek", scheme.removed),
                 ("word-level přidaný", scheme.addedWord), ("word-level odebraný", scheme.removedWord),
                 ("šrafa prázdného protějšku", scheme.stripe),
+                ("výskyt hledání", scheme.searchHit),
+                ("aktuální výskyt hledání", scheme.searchHitCurrent),
             ] {
                 #expect(color.alpha == 1, "\(scheme.name) režim: \(label) má krytí \(color.alpha) místo jedničky.")
             }
@@ -250,6 +257,49 @@ struct DiffPaletteTests {
                 #expect(distance >= 11, "\(scheme.name), \(label): word-level je od řádku jen ΔE \(distance).")
                 let readable = contrast(scheme.syntax.string, word)
                 #expect(readable >= 2.1, "\(scheme.name), \(label): řetězec na word-level má kontrast \(readable).")
+            }
+        }
+    }
+
+    /// Výsledek hledání (#152) je **třetí vrstva** nad pozadím řádku, takže platí tytéž dvě míry
+    /// jako u word-level vrstvy: odlišit se musí jako plocha (ΔE) a text pod ní se musí dát číst
+    /// (WCAG). Hodnoty jsou spočítané dopředu a **schválené s návrhem** (sekce 39), takže se tady
+    /// hlídají, ne dolaďují.
+    ///
+    /// Prahy jsou dnešní hodnoty bez zaokrouhlení nahoru: od plochy ΔE 10,5 (vychází 11,9 světlá,
+    /// 11,1 tmavá), mezi sebou ΔE 10,5 (11,0 a 10,9), řetězec na tlumeném podkladu 3,7 (4,20 a 3,75)
+    /// a na aktuálním 2,5 (3,10 a 2,61 — dnešní tmavá word-level vrstva má 2,17, takže je to nad ní).
+    @Test("Výsledek hledání je jiná plocha a text pod ním se dá číst")
+    func searchHitStandsOutAndStaysReadable() throws {
+        for scheme in try schemes() {
+            let fromSurface = deltaE(scheme.searchHit, scheme.surface)
+            #expect(fromSurface >= 10.5, "\(scheme.name): výskyt je od plochy jen ΔE \(fromSurface).")
+
+            let between = deltaE(scheme.searchHit, scheme.searchHitCurrent)
+            #expect(between >= 10.5, "\(scheme.name): aktuální výskyt je od ostatních jen ΔE \(between).")
+
+            for (label, layer, threshold) in [
+                ("výskyt", scheme.searchHit, 3.7),
+                ("aktuální výskyt", scheme.searchHitCurrent, 2.5),
+            ] {
+                let string = contrast(scheme.syntax.string, layer)
+                #expect(string >= threshold, "\(scheme.name): řetězec na \(label) má kontrast \(string).")
+                let ink = contrast(scheme.ink, layer)
+                #expect(ink >= 7, "\(scheme.name): obyčejný text na \(label) má kontrast \(ink).")
+            }
+        }
+    }
+
+    /// Podklad hledání leží i nad **změněným** řádkem, tedy nad zelenou a červenou — a i tam se musí
+    /// poznat, jinak by výskyt uvnitř změny zmizel. Práh ΔE 9 (vychází 11,8 až 34,9).
+    @Test("Výskyt se pozná i nad přidaným a odebraným řádkem")
+    func searchHitStandsOutOverChangedLines() throws {
+        for scheme in try schemes() {
+            for (label, line) in [("přidaným", scheme.added), ("odebraným", scheme.removed)] {
+                for (name, layer) in [("výskyt", scheme.searchHit), ("aktuální", scheme.searchHitCurrent)] {
+                    let distance = deltaE(layer, line)
+                    #expect(distance >= 9, "\(scheme.name): \(name) nad \(label) řádkem je jen ΔE \(distance).")
+                }
             }
         }
     }

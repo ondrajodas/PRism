@@ -13,6 +13,11 @@ struct DiffFileHeaderView: View {
     let blockingCategories: Set<String>
     let toggle: () -> Void
 
+    /// Hledání v tomhle diffu (#152) — **prostředím, ne parametrem**: počet výskytů se mění při
+    /// každém písmenu, takže předávat ho argumentem by znamenalo přeložit při každém znaku tělo
+    /// celého diffu. Takhle se překreslí jen hlavičky. `nil` = v tomhle diffu se nehledá.
+    @Environment(DiffSearchState.self) private var search: DiffSearchState?
+
     var body: some View {
         Button(action: toggle) {
             content
@@ -39,6 +44,7 @@ struct DiffFileHeaderView: View {
                     .lineLimit(1)
                     .truncationMode(.head)
             }
+            searchPill
             Spacer(minLength: 9)
             findingsPill
             DiffCounts.text(additions: file.additions, deletions: file.deletions)
@@ -57,6 +63,22 @@ struct DiffFileHeaderView: View {
         // diffu, ztrácely se; po sbalení všech souborů (#59) se poskládaly do jedné čáry.
         .overlay(alignment: .bottom) {
             Rectangle().fill(Palette.lineSoft).frame(height: 1)
+        }
+    }
+
+    /// Kolik výskytů hledání soubor má (#152) — kapsle vlevo u cesty, jak ji má návrh (sekce 39).
+    ///
+    /// **Akcentová, ne v barvě nálezu**: `find` znamená nález a odznak nálezu visí v téže hlavičce
+    /// o dva prvky vedle. Kreslí se jedině s **otevřeným** pruhem: zavřené hledání o souboru nic
+    /// netvrdí, protože zvýraznění v něm zhaslo.
+    ///
+    /// U **sbaleného** souboru je to nutnost — hledání se v něm počítá (sbalení je stav okna, ne
+    /// stav dat), takže bez kapsle by nebylo z čeho poznat, že v něm něco je. U rozbaleného je to
+    /// zkratka „ve kterém souboru to je“, tatáž úvaha jako u kapsle s nálezy.
+    @ViewBuilder private var searchPill: some View {
+        if let search, search.isOpen,
+           let text = Policy.fileSearchLabel(search.counts[file.displayPath] ?? 0) {
+            pill(text, color: Palette.accent)
         }
     }
 

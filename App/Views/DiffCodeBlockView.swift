@@ -15,6 +15,9 @@ struct DiffCodeBlockView: NSViewRepresentable {
     let block: DiffBlock
     var language: Language?
     let colorScheme: ColorScheme
+    /// Co se v bloku zvýrazní jako výsledek hledání (#152). **Součást klíče sazby**, ne kresba nad
+    /// textem — je to atribut v tom vysázeném řetězci, viz `DiffBlockStyle.search`.
+    var search: DiffSearchHighlight = .none
     /// Řádky (podle pořadí v bloku), které leží v rozsahu některého mého komentáře.
     var commentRangeLines: Set<Int> = []
     /// Totéž pro rozsah, který se právě táhne.
@@ -82,7 +85,7 @@ struct DiffCodeBlockView: NSViewRepresentable {
     }
 
     private var style: DiffBlockStyle {
-        DiffBlockStyle(language: language, colorScheme: colorScheme)
+        DiffBlockStyle(language: language, colorScheme: colorScheme, search: search)
     }
 
     /// Výška bloku — SwiftUI ji z `NSTextView` sám nezjistí, protože ten si ji uvnitř `LazyVStack`

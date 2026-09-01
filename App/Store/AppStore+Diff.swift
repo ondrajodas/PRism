@@ -21,6 +21,9 @@ extension AppStore {
             let text = try await gateway.fetchDiff(id: id)
             diffStates[id] = .loaded(DiffParser.parse(text), updatedAt: pullRequest.updatedAt)
             revealFindingsOutsideTheDiff(for: id)
+            // Nový diff = jiné řádky, takže výskyty hledání platí pro kód, který v okně už není
+            // (#152). Bez tohohle by pruh ukazoval počet z minula a skok mířil do prázdna.
+            refreshDiffSearches(in: id)
         } catch is CancellationError {
             // Přepnutí na jiné PR načítání zruší. Nechat tam `.loading` by znamenalo
             // spinner, který se nikdy nedotočí. Maže se **jen** rozdělaný stav: mezitím

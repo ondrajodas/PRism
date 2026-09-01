@@ -83,5 +83,8 @@ extension AppStore {
     private func store(_ content: CommitDiff.Content, of sha: String, in pr: PRIdentifier) {
         guard commitDiffs[pr]?.sha == sha else { return }
         commitDiffs[pr]?.content = content
+        // Přeskládat výskyty hledání (#152): pruh v tomhle diffu mohl zůstat otevřený z minula,
+        // a než diff dorazil, neměl v čem hledat.
+        refreshDiffSearch(in: pr, commit: sha)
     }
 }

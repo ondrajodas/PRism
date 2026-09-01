@@ -42,6 +42,9 @@ struct DiffRowView: View {
     var rangeDrag = RangeDragActions()
     /// Kopírování kódu do schránky (#157) — pravým kliknutím, takže **komentář nezakládá**.
     var copy = DiffCopyActions()
+    /// Cesta souboru, do kterého řádek patří (#152). Bloky z ní poznají, jestli jim patří
+    /// **aktuální** výskyt hledání; jinak se nikde nekreslí.
+    var filePath: String = ""
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
@@ -62,7 +65,8 @@ struct DiffRowView: View {
                 dragEnd: dragEnd,
                 rangeDrag: rangeDrag,
                 blockID: id,
-                copy: copy
+                copy: copy,
+                filePath: filePath
             )
         case .pairBlock(let id, let pair):
             pairBlock(id, pair)
@@ -145,7 +149,8 @@ struct DiffRowView: View {
             dragEnd: dragEnd,
             rangeDrag: rangeDrag,
             blockID: id,
-            copy: copy
+            copy: copy,
+            filePath: filePath
         )
     }
 

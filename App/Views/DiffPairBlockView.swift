@@ -23,6 +23,9 @@ struct DiffPairBlockView: NSViewRepresentable {
     let block: DiffPairBlock
     var language: Language?
     let colorScheme: ColorScheme
+    /// Co se zvýrazní jako výsledek hledání (#152) — **jeden styl pro oba sloupce**, protože
+    /// každý z nich porovnává své vlastní řádky.
+    var search: DiffSearchHighlight = .none
     var leftRangeLines: Set<Int> = []
     var rightRangeLines: Set<Int> = []
     var leftDraggedLines: Set<Int> = []
@@ -75,7 +78,7 @@ struct DiffPairBlockView: NSViewRepresentable {
     }
 
     private var style: DiffBlockStyle {
-        DiffBlockStyle(language: language, colorScheme: colorScheme)
+        DiffBlockStyle(language: language, colorScheme: colorScheme, search: search)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: DiffPairBlockContainer, context: Context) -> CGSize? {

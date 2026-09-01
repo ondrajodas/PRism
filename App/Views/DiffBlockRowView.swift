@@ -21,8 +21,16 @@ struct DiffBlockRowView: View {
     var blockID: String = ""
     /// Kopírování z kontextového menu (#157).
     var copy = DiffCopyActions()
+    /// Cesta souboru, ve kterém blok leží (#152). Z ní se pozná, jestli tomuhle bloku patří
+    /// **aktuální** výskyt hledání — `DiffLine` se totiž mezi dvěma soubory umí shodovat.
+    var filePath: String = ""
 
     @Environment(\.colorScheme) private var colorScheme
+    /// Hledání v tomhle diffu (#152). **Prostředím, ne parametrem, a je to výkonové rozhodnutí:**
+    /// dotaz se mění při každém písmenu, takže kdyby ho `DiffView` předával argumentem, přeložilo by
+    /// se při každém znaku celé jeho tělo. Takhle se čte až tady, tedy v bloku — a `DiffView` sám na
+    /// dotaz nesahá (viz `DiffSearchState`).
+    @Environment(DiffSearchState.self) private var search: DiffSearchState?
     /// Rámečky řádků, které ohlásilo textové view. `@State`, protože se z nich staví overlay.
     @State private var frames: [DiffBlockLineFrame] = []
     /// Řádek pod myší — jen jeho pilulka je vidět, jako dosud u `DiffLineView`.
@@ -41,6 +49,7 @@ struct DiffBlockRowView: View {
             block: block,
             language: language,
             colorScheme: colorScheme,
+            search: searchHighlight,
             commentRangeLines: rows(in: commentRangeCells),
             draggedLines: rows(in: draggedCells),
             noteFrames: { frames = $0; noteRows() }
@@ -86,6 +95,15 @@ struct DiffBlockRowView: View {
                 Button("Vybrat text z hunku…", systemImage: "text.cursor", action: selectText)
             }
         }
+    }
+
+    /// Co se v tomhle bloku zvýrazní jako výsledek hledání (#152).
+    ///
+    /// Rozhoduje `Policy`, ne tenhle view: **zavřený pruh nezvýrazňuje nic** (`drawnQuery`)
+    /// a aktuální výskyt se propouští jedině do svého souboru.
+    private var searchHighlight: DiffSearchHighlight {
+        guard let search else { return .none }
+        return Policy.searchHighlight(query: search.drawnQuery, current: search.currentHit, in: filePath)
     }
 
     /// Sloupec s čísly: plocha na tažení rozsahu a v ní pilulka na komentář.

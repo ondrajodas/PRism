@@ -1351,6 +1351,121 @@ se z většiny pravidly vláken, protože jsou to taky komentáře ke kotvě:
   pohledu stát vedle sebe, a jeho identitu proto dává **místo**, ne komentář.
 - **Přepínač `Nálezy` je neschovává**, o důvod víc než u vláken: tenhle text se odešle.
 
+### Hledání v diffu — ⌘F (#152)
+
+Pole, počet výskytů, skákání mezi nimi a zvýraznění nalezeného. Nejstarší otevřené issue v repu
+(srpen 2026), takže **půlka jeho odůvodnění při implementaci nesedí** a je to zapsané níž.
+
+**Kde to bydlí.** `App/Diff/DiffSearch.swift` je celá doména: `DiffSearchQuery` (text + rozlišování
+velikosti), `DiffSearchHit` (cesta souboru, **řádek** a pořadí výskytu na něm),
+`DiffSearchHighlight` (co se v bloku kreslí) a tři čisté funkce — `ranges(in:query:)`,
+`hits(in:query:…)`, `counts(of:)`. Rozhodování o pohybu a o větách je v `Policy`
+(`DiffSearchNavigation.swift`), stav drží `AppStore` (`AppStore+DiffSearch.swift`) a kreslí to
+`DiffSearchBar` + třetí vrstva atributů v `DiffTextView`.
+
+**Hledá se nad modelem, ne nad nakresleným** — a od #469 to má jiný důvod než v zadání issue. Diff
+už není líný seznam (je to pevný `VStack`), ale blok kódu mimo pás kolem výřezu **nemá `NSTextView`
+vůbec** (`Policy.mountBand`, `DiffBlockSlot`). Nad vykresleným textem by tedy hledání našlo obrazovku
+a půl a **počet výskytů by se měnil s odrolováním**.
+
+**Rozsah je to, co je načtené: hunky a rozbalený kontext** (#47). Zbytek souborů se kvůli hledání
+nedotahuje — u PR o padesáti souborech je to padesát volání na GitHub kvůli jednomu slovu.
+Rozhodnutí i s alternativami je v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--rozsah-hledání-v-diffu-152);
+podstatné je, že se ten rozsah **říká na obrazovce**, ne jen v dokumentaci:
+
+- kapsle `jen v diffu` stojí **u počtu** (`Policy.searchScopeNote`), protože je to údaj k tomu
+  číslu — bez ní by „17“ vypadalo jako počet výskytů v souborech;
+- prázdný výsledek je **`v diffu nic — mimo hunky se nehledá`** (`Policy.searchEmptyNote`), nikdy
+  „nic nenalezeno“, a vedle toho stojí, co se s tím dá udělat (`rozbal kontext (⌄) a započítá se`);
+- celá věta je v nápovědě (`Policy.searchScopeHelp`) a **říká i tu druhou půlku** — že se zbytek
+  souborů nenačítá.
+
+**Tři stavy, ne dva** (`DiffSearchReport`): `idle` (prázdné pole, nehledá se), `hits` a `empty`.
+Slít první dva by znamenalo, že prázdné pole tvrdí něco o datech.
+
+**Skok jde stejnou cestou jako skok na nález**, jak issue předepisuje: `DiffRow.anchor(in:hit:…)`
+složí kotvu, `DiffView` ji nastaví do `scrollTarget` a ten si ji sám přeloží na blok
+(`DiffRow.blockIDs`). Dvě věci na tom nejsou zjevné:
+
+- **Kotva se hledá nad hotovými řádky, ne z `newNumber`.** Výskyt může být na odebraném řádku, který
+  nové číslo nemá — a ve split pohledu nese dvojice `id` **pravého** řádku, takže `id` složené
+  odjinud by v seznamu nebylo a `scrollTo` by tiše neudělalo nic. Je to tentýž důvod, proč má vlastní
+  funkci i kotva mého rozdělaného komentáře.
+- **Sbalený soubor se rozbalí dřív, než se cíl nastaví.** Sbalení je stav okna, ne stav dat, takže
+  se výskyty v něm **počítají**; kolik jich je, říká kapsle v jeho hlavičce.
+
+**Zvýraznění je třetí vrstva atributů, ne kresba nad textem.** Nad pozadím řádku leží word-level
+rozdíl a nad ním hledání (`DiffTextView.highlightSearch`) — **do `SyntaxRunCache` nesmí** (#153),
+protože závisí na dotazu, a ten v jejím klíči `(text řádku, jazyk)` není. Pořadí vrstev je
+rozhodnutí: **hledání vyhrává**, protože je to jediná vrstva, kterou si člověk zapnul sám a která
+zhasne, jak zavře pruh. Barva písma zůstává ze syntaxe; rozlišení aktuálního výskytu nese **sytější
+podklad, ne obrys** — obrys by v `NSAttributedString` neměl čím vzniknout, takže by se návrh nedal
+nakreslit 1 : 1. Kde dotaz na řádku sedí, rozhoduje **`DiffSearch.ranges`, tedy tatáž funkce, ze
+které se počítá počet v pruhu**; dvě kopie porovnávání by uměly tvrdit `17` a rozsvítit šestnáct.
+
+**Dotaz je v klíči sazby** (`DiffBlockStyle.search`), a to je podmínka správnosti: `DiffTextView.show`
+se z nezměněného obsahu vrátí hned (jinak by přesázení rušilo rozdělaný výběr při každém přejezdu
+myší), takže bez dotazu v klíči by se po jeho změně sazba **přeskočila** a v okně by zůstalo
+zvýraznění předchozího slova — potichu, protože řádky ani jazyk se nezměnily. Tvrdí to
+`DiffSearchHighlightTests`.
+
+**Stav je objekt, ne struktura ve store, a je to výkonové rozhodnutí** (#472). `@Observable` sleduje
+po vlastnostech, takže kdyby dotaz ležel ve slovníku `AppStore.diffSearches` jako hodnota, probudilo
+by každé písmeno všechny čtenáře toho slovníku — tedy i tělo detailu PR (89 ms na průchod před #472).
+`DiffSearchState` je proto třída se **stálou identitou** a vlastnosti jsou rozdělené podle toho, kdo
+je čte a jak často:
+
+| Vlastnost | Mění se | Čte |
+|---|---|---|
+| `isOpen` | dvakrát za hledání | tělo diffu (kreslí pruh) a lišta |
+| `query`, `hits`, `counts` | při každém písmenu | bloky kódu (zvýrazňují), pruh, hlavičky souborů |
+| `current` | při každém skoku | bloky (sytější podklad) a pruh (`4 z 17`) |
+| `focusRequests` | při každém ⌘F | jen pole v pruhu |
+
+Podle toho jde i cesta dovnitř: **stav se podává prostředím** (`.environment(search.state)`), ne
+parametrem. `DiffView` sám čte **jedinou** vlastnost — `isOpen` —, takže se psaním do pole tělo diffu
+nepřekresluje; dotaz si přečtou až listy (`DiffBlockRowView`, `DiffPairBlockRowView`,
+`DiffFileHeaderView`). Cesta souboru se naopak předává **parametrem** (`filePath`), protože se mění
+se souborem, ne s dotazem — a aktuální výskyt se bez ní nedá omezit na svůj soubor (`DiffLine` se
+mezi dvěma soubory umí shodovat, takže by sytější podklad svítil na dvou místech naráz).
+
+**Výskyty se skládají jen tehdy, když se něco změnilo** (#224): dotaz, kapsle `Aa`, rozbalení nebo
+sbalení kontextu, nový diff PR, dorazivší diff commitu a otevření pruhu. Nikdy z těla view.
+`refreshDiffSearch` navíc **nic nedělá, dokud se nehledá**, takže tik pollingu nad diffem nestojí nic.
+
+**Psaní neskáče.** Po přepsání dotazu se pozice zapomíná a pruh ukazuje `17 výskytů`; na první výskyt
+se jde `⏎`, `⌘G` nebo šipkou. Skákat při každém písmenu by znamenalo diff, který se hýbe pod rukama.
+Stará pozice se po přeskládání **uřízne, ne posune** — je poctivější stát nikde než někde jinde, než
+kde jsem byl.
+
+**Klávesy.** `⌘F` (otevřít a zaostřit; podruhé jen zaostřit) je v katalogu a registruje ji `DiffView`,
+takže platí, kdykoli je diff na obrazovce. `⌘G`/`⌘⇧G` jsou v katalogu taky, ale registruje je
+**pruh** — existují jedině tehdy, když je kam skákat. `⏎`/`⇧⏎` jsou na **poli** (fokus je v něm,
+takže by je okno nedostalo). `⎋` je na `✕` v pruhu, tedy mimo katalog: je to tentýž vzorec jako
+`⌘⏎` v composeru tabu `Zeptat se` (#452) — kdyby byla v katalogu, srazila by se s `backFromCommit`,
+takže se místo toho **zakazuje ta okenní** (`Policy.canCloseCommit`, od #152 s vyjmenovanými
+podmínkami místo `&&` ve view). Nad otevřenou paletou ⌘K vyhraje paleta, protože se registruje
+později — a je to správné pořadí.
+
+**Fokus se nastavuje o průchod později** (#184), a věší se na **počítadlo žádostí**
+(`focusRequests`), ne na vznik view: druhé ⌘F nad otevřeným pruhem má fokus vrátit do pole, a to je
+změna hodnoty, ne nový view.
+
+**Co z odůvodnění issue #152 neplatí.** Zadání tvrdí, že se text v diffu **nedá vybrat**, protože
+`.textSelection(.enabled)` je nad ním vypnuté kvůli tisícům `Text`ů v líném seznamu. Přeměřeno:
+vybrat **jde** — kód kreslí od #157 `NSTextView` s `isSelectable = true` a jediné
+`.textSelection(.disabled)` v `App/` je nad úryvkem u vlákna konverzace. Platí jen **závěr** (systémové
+hledání nad diffem není), a to z jiných dvou důvodů: výběr **končí na hranici bloku**, tedy po
+60 řádcích (`DiffBlock.maxLines`), takže přes soubory nesahá vůbec, a nakreslený text je pořád jen
+pás kolem výřezu.
+
+**Co se do pruhu nedostalo** (a je to rozhodnuté, ne opomenuté): regulární výrazy (chybný regexp je
+stav, který by pruh musel hlásit, a v kódu se hledá jméno), hledání v cestách souborů (to je práce
+stromu), značka výskytu ve stromu (glyf `.mk` u souboru už nese nález a dva významy v jednom kolečku
+se nedají rozlišit — místo toho je kapsle v hlavičce) a hledání v bublinách nálezů a vláken (pruh
+mluví o kódu; nálezy mají vlastní tab a paletu ⌘K).
+
 ## `Config` (`App/Config/`)
 
 Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé

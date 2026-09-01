@@ -6220,3 +6220,58 @@ odstěhovala hlouběji, než by leckdo hledal: `⌥↵` u zakládání labelu z�
 `gh pr ready --repo`, ne přes `gh api`“* je teď jen v
 [`docs/architektura.md`](architektura.md#ready-for-review-482--devátá-metoda-a-nejmenší-z-nich)
 a v [`docs/github-cli.md`](github-cli.md).
+
+## #152 — hledání v diffu (⌘F)
+
+**Nejstarší otevřené issue v repu** (srpen 2026), a půlka jeho odůvodnění při implementaci
+neplatila — přeměřilo se dřív, než se začalo psát, a rozdíl je zapsaný v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--rozsah-hledání-v-diffu-152).
+Zadání tvrdí, že se text v diffu nedá vybrat kvůli tisícům `Text`ů v líném seznamu: vybrat **jde**
+(od #157 kreslí kód `NSTextView` s `isSelectable = true`) a diff **není líný seznam** (od #469 pevný
+`VStack`). Závěr platí ze dvou jiných důvodů: výběr **končí na hranici bloku** (60 řádků) a nakreslený
+text je jen **pás kolem výřezu** (`Policy.mountBand`), takže by hledání nad ním měnilo počet
+s odrolováním.
+
+**Otevřenou otázku o rozsahu rozhodlo, že se rozsah dá říct.** Hledá se v hunkách **a v rozbaleném
+kontextu**; zbytek souborů se nedotahuje (u padesátisouborového PR je to padesát volání kvůli jednomu
+slovu). Nad nenačteným kódem proto pruh **netvrdí, že tam nic není**: kapsle `jen v diffu` stojí
+u počtu, prázdný výsledek je `v diffu nic — mimo hunky se nehledá` a vedle toho `rozbal kontext (⌄)
+a započítá se`. Rozbalený úsek se do počtu započítá hned, sbalený z něj vypadne.
+
+**Pruh je druhá řádka chromu pod lištou diffu**, ne pole v liště (ta se u #219 srazila na tři věci
+schválně) a ne překryv nad kódem (zakryl by ukotvenou hlavičku souboru). Existuje jen otevřený; v liště
+po něm zbyl jen popisek `⌕ Hledat ⌘F`, aby se hledání dalo najít myší. Zákres je **sekce 39**
+mockupu a byl odsouhlasený dřív, než se napsala první řádka kódu.
+
+**Dva nové tokeny se změřily před zákresem, ne po stížnosti** — obráceně než u #277. `--hit-bg`
+/ `--hit-hi` (`Palette.searchHit`, `searchHitCurrent`) jsou vyčíslený akcent nad plochou, protože
+výskyt leží střídavě na nezměněném, přidaném i odebraném řádku; od plochy ΔE 11,9 / 11,1, mezi sebou
+11,0 / 10,9, řetězec IntelliJ Light 4,20 a 3,10, Darcula 3,75 a 2,61 (dnešní tmavá word-level vrstva
+má 2,17). Sytější být nesmí: pod výsledkem hledání se musí dát číst.
+
+**Skok jde stejnou cestou jako skok na nález** (`DiffRow.anchor` → `scrollTarget` → `blockIDs`)
+a sbalený soubor se rozbalí **dřív, než se cíl nastaví**. Kotva se hledá nad hotovými řádky, ne
+z `newNumber`: výskyt může být na odebraném řádku a ve split pohledu nese dvojice `id` pravého —
+`scrollTo` na neexistující `id` by tiše neudělalo nic. Diff commitu proto dostal `scrollTarget`,
+který do #152 byl `.constant(nil)`.
+
+**Zvýraznění je třetí vrstva atributů** nad syntaxí a word-level rozdílem; **do `SyntaxRunCache`
+nesmí** (#153), protože závisí na dotazu. Hledání z těch tří vrstev **vyhrává** — je to jediná,
+kterou si člověk zapnul sám. Dotaz je proto v **klíči sazby** (`DiffBlockStyle.search`): bez toho by
+se po jeho změně přesázení přeskočilo a v okně by zůstalo svítit slovo z minula.
+
+**Stav je `@Observable` objekt ve store, ne struktura** (#472): dotaz se mění při každém písmenu,
+takže ve slovníku by probudil i tělo detailu PR. Vlastnosti jsou rozdělené podle toho, kdo je čte
+(`isOpen` × `query`/`hits` × `current` × `focusRequests`) a dovnitř diffu jdou **prostředím**, takže
+`DiffView` čte jedinou z nich a psaním do pole se tělo diffu nepřekresluje. Výskyty se skládají jen
+při změně (dotaz, `Aa`, rozbalení, nový diff, otevření pruhu) — nikdy z těla view.
+
+**Klávesy:** `⌘F` (v katalogu, registruje diff), `⌘G`/`⌘⇧G` (v katalogu, registruje **pruh** — jsou
+jen tam, kde je kam skákat), `⏎`/`⇧⏎` na poli a `⎋` na `✕`, tedy **mimo katalog**; místo toho se nad
+otevřeným pruhem zakazuje zkratka okna, která `⎋` jinak má (`Policy.canCloseCommit`, od #152
+s vyjmenovanými podmínkami místo `&&` ve view). Katalog má 24 akcí. **Že ty klávesy zaberou, ověřil
+člověk** — v harnessu to nejde (#184).
+
+Testů **4733** ve 461 suitách; nové jsou čtyři sady (`DiffSearchTests`, `DiffSearchNavigationTests`,
+`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`) a dvě měření barev v `DiffPaletteTests`. Co se
+v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).

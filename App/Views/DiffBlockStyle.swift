@@ -17,6 +17,17 @@ struct DiffBlockStyle: Equatable {
     /// režimu zneplatňovat nemusí, viz `App/Syntax/`.)
     let colorScheme: ColorScheme
 
+    /// Co se v bloku zvýrazní jako výsledek hledání (#152).
+    ///
+    /// **V klíči být musí**, a je to tentýž požadavek jako u barevného režimu o řádek výš: zvýraznění
+    /// je v tom vysázeném textu zapečené, takže bez dotazu v klíči by se po jeho změně sazba
+    /// **přeskočila** a v okně by zůstalo zvýraznění předchozího slova — a potichu, protože řádky
+    /// ani jazyk se nezměnily.
+    ///
+    /// **Výchozí `.none`, ne bez hodnoty**: pruh hledání je věc jednoho diffu, kdežto blok se kreslí
+    /// i tam, kde žádné hledání není (úryvek u vlákna, náhledy, sondy).
+    var search: DiffSearchHighlight = .none
+
     /// Paleta, kterou se text obarví. Bere se **odsud, ne od volajícího** (#393): jako parametr
     /// vedle režimu by to byly dvě hodnoty o jedné věci, a stráž nad tím klíčem by se dala obejít
     /// paletou, která k němu nepatří — přeskočená sazba by pak nechala v okně barvy z minula.
