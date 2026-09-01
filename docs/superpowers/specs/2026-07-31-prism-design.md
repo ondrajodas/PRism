@@ -4770,3 +4770,37 @@ kliká**, plus větou pod tlačítkem, plus **žádnou výchozí akcí**.
 `review_requested` neobjeví — GitHub o review nikdy nežádá autora. Doměřit to chce **druhý účet se
 zápisem** do sandboxu; do té doby je věta pod tlačítkem z dokumentace GitHubu, a je pravdivá
 i v repu bez `CODEOWNERS` (když nikdo nesedí, nikdo se nevyžádá).
+
+### Záznam rozhodnutí — flaky sonda se neuspává, opravuje se jí vstup (#490)
+
+**Zadání nabídlo u `TerminalScrollProbe` dvě léčby a ani jedna se nepoužila.** Nabízené bylo čekání
+na jev přes `waitUntil`, nebo `.disabled` jako u ostatních sond v repu; zvednutí timeoutu bylo
+v zadání výslovně zakázané (#296). Rozhodnuto: **oprava vstupu**, sonda zůstává v běžném běhu
+a beze změny chování.
+
+**Proč**: sonda si skládala kolečko z `CGEvent(scrollWheelEvent2Source: nil, …)`, tedy ze **živého
+stavu klávesnice** — a se `Shift`em překlopí AppKit osu (`deltaY` = 0), takže výřezem nepohne. Byla
+to tatáž příčina jako u `TerminalWheelTests`, kde ji zadání pojmenovalo správně (`Control`, tlačítko
+64 → 80). Obě „vady“ tedy měly jednu příčinu a jednu opravu.
+
+**Zamítnuté varianty a proč** (obojí zamítnuto měřením, ne názorem):
+
+- **`waitUntil`** — v té sondě není nic asynchronního: `ProbeScrollHost.run` vrací `.noShell`
+  (žádný shell se nespouští) a `TerminalView.feed(text:)` je synchronní parse. Čekání by tedy
+  ověřovalo podmínku, která je splněná už při prvním čtení, a **rozdíl mezi rozbitým a opraveným
+  stavem by nenaměřilo** (#478) — jen by pád oddálilo.
+- **`.disabled`** — zahodilo by tři měření, která platí a mají svůj důvod (kdo dostane kolečko,
+  má emulátor čím rolovat, co dělá alternativní buffer), kvůli příčině, která je v jednom helperu.
+  Vypnutá sonda navíc přestane hlásit i to, co hlásit má.
+
+**Věta o zátěži, která se v zadání ukázala jako nepravdivá, je taky rozhodnutí**: čas suity
+(43–45 s v plném běhu proti 0,044 s samostatně) je pravda, ale s pádem nesouvisí. Po opravě vydá
+plný běh **49–52 s i pro novou suitu**, která nedělá skoro nic — je to čekání na hlavní vlákno
+v paralelním běhu, ne práce. A nic v té sondě nemá lhůtu, takže ji dlouhý čas sám shodit nemůže.
+Obecně: **odpověď na „flaky test“ je najít, co v něm není funkcí testu**, ne prodloužit strop.
+
+**Zdroj i `flags` naráz, ne jen jedno z nich.** Helper skládá událost z `privateState` **a** navíc
+nasazuje `flags` z argumentu. Ta druhá věc je redundantní jedině tehdy, když se privátnímu stavu
+věří — a to se dokázat nedá (bez držené klávesy vydají oba světy prázdné `flags`). Zápis do `flags`
+je proti tomu vidět ve zdrojáku, takže se dá **uhlídat stráží**; a stejná úvaha stojí za tím, že
+záruka je nad zdrojáky, ne nad během (jako #367, #411, #462).

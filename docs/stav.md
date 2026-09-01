@@ -6083,3 +6083,33 @@ A `docs/stav.md` měl od #487 v sobě **committnuté konfliktní značky** (`<<<
 `>>>>>>> origin/main`), které rozdělovaly záznamy #466, #421 a #483; jsou pryč a **žádný text se
 neztratil** — všechny tři strany byly přírůstkové. Otevřela: že se vyžádání review od `CODEOWNERS`
 doopravdy pošle, ověřené **není** — chce to druhý účet se zápisem do sandboxu.
+
+
+## #490 — dvě terminálové sondy padaly podle klávesnice, ne podle zátěže
+
+Zadání mluvilo o dvou vadách jedné třídy: `TerminalWheelTests` (třikrát v jednom plném běhu)
+a `TerminalScrollProbe` (jednou ze tří). **Byla to jedna příčina** — obě suity si skládaly kolečko
+přes `CGEvent(scrollWheelEvent2Source: nil, …)`, což znamená kombinovaný stav sezení, tedy **živou
+klávesnici**. Rozbor i tabulka modifikátorů je v [`docs/testovani.md`](testovani.md#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490).
+
+Skládá se to od #490 na jednom místě (`Tests/Support/WheelEvent.swift`), oběma směry naráz —
+`privateState` **a** `flags` z argumentu — a hlídá to stráž nad zdrojáky (`WheelEventTests`), protože
+za běhu se to tvrdit nedá: bez držené klávesy vydá rozbitá i opravená cesta prázdné `flags`. Je to
+**čtvrtá podoba** téhož kořene po #367, #411 a #407.
+
+**Proti zadání se dvě věci rozhodly jinak, a obojí je změřené.** Zaprvé u scroll sondy se
+nepoužilo ani `waitUntil`, ani `.disabled`: v té sondě není nic asynchronního (`ProbeScrollHost`
+žádný shell nespouští a `feed(text:)` je synchronní), takže není na co čekat, a `Shift` v ní byl
+tatáž příčina jako `Control` u té druhé. Zadruhé **čas 43–45 s se zátěží nesouvisí s pádem**: po
+opravě vydá plný běh 49–52 s **i pro novou suitu**, která nedělá skoro nic — je to čekání na hlavní
+vlákno v paralelním běhu, a nic v té sondě nemá lhůtu.
+
+Testů **4597**, pět plných běhů po sobě s oběma suitami zelenými (souběžně běžel druhý slot).
+Nových je 5 tvrzení: tři stráže nad zdrojáky a dvě měření toho, **co by zděděná klávesa udělala**
+(`Control` → tlačítko 80, `Shift` → překlopená osa, nehybný výřez, nic neodešlo). Obě vložené
+regrese stráž chytá. **Na tomhle není co vidět** — mění se jen testy a jejich helper, aplikace
+zůstala nedotčená.
+
+**Cestou se otevřela jedna mezera, a je zvlášť**: `CommitPanelRoomTests` spadly v jednom z pěti
+běhů na `šířka znaku: 0`, tedy #407 — `FontMetric` volajícímu tu nulu **vydá** (hlášku o zlomek
+sekundy později složí už z 8,036). S #490 to nesouvisí a nepatří to do jednoho PR.

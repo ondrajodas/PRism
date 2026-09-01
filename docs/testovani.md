@@ -5226,6 +5226,93 @@ a `AppStoreCommentTests` skončily na `PublishError.timedOut` po 65 s, tedy na s
 load 19. Všech sedm dotčených sad **projde izolovaně za 9,4 s**, což je ten způsob, jak se to od
 skutečného nálezu pozná.
 
+### Událost skládaná pro test nesmí dědit živý stav procesu (#490)
+
+**Čtvrtá podoba téhož kořene** — po globálním `NSApp.appearance` (#367), `UserDefaults` sdílených
+napříč procesy (#411) a metrice písma pod zátěží (#407): test tvrdí něco o **prostředí**, místo
+o kódu, a `main` je proto červený podle toho, co se dělo u stroje.
+
+Tady je tím prostředím **klávesnice**. `CGEvent(scrollWheelEvent2Source: nil, …)` znamená
+„kombinovaný stav sezení“, takže vyrobené kolečko nese **modifikátory, které měl člověk v tu
+sekundu doopravdy zmáčknuté**. Vstup testu tím přestává být funkcí toho, co test nastavil.
+
+**Změřeno** (`WheelFlagsScratch`, dočasná sonda; ploška 800×300 = 21 řádků, 400 nakrmených řádků,
+kolečko o 3 řádky nahoru; modifikátor se nasadil na složenou událost, protože to je táž hodnota
+v tomtéž poli, jakou tam nasadí systém):
+
+| zděděný modifikátor | `deltaY` | `yDisp` po knihovním `scrollWheel` | hlášení myši |
+|---|---|---|---|
+| žádný | 3,0 | 380 → 377 | `ESC[<64;` |
+| `control` | 3,0 | 380 → 377 | **`ESC[<80;`** |
+| `shift` | **0,0** (delta přeskočí na `deltaX` = 3,0) | **380 → 380** | **nic** |
+| `option` | 3,0 | 380 → 377 | **`ESC[<72;`** |
+| `command`, `capslock`, `fn` | 3,0 | 380 → 377 | `ESC[<64;` |
+
+**Z jedné příčiny padaly dvě suity a v zadání byly vedené jako dvě vady.** `Control` přebarví
+tlačítko z 64 na 80, takže shodí `TerminalWheelTests`; `Shift` je horší, protože osu překlopí
+**AppKit** — `deltaY` je nula, knihovní `scrollWheel` skončí na prvním `if` a `Policy`
+nedostane, co by hlásila. Shodí tedy **obojí**, a v `TerminalScrollProbe` to vypadá na „kolečko
+výřezem nehnulo“.
+
+**Se zátěží to nesouviselo, a to je na tom to poučné.** V zadání stálo, že sonda padla na tom, že
+„shell ještě nenasypal dost výstupu na rolování“ — v té sondě ale **žádný shell není**
+(`ProbeScrollHost.run` vrací `.noShell`) a `feed(text:)` je synchronní. Dlouhý čas u suity je pravda
+(43–45 s v plném běhu proti 0,044 s samostatně), jenže je to **čekání na hlavní vlákno v paralelním
+běhu, ne práce**: po opravě vydá plný běh 49–52 s **i pro novou suitu**, která nedělá skoro nic.
+A nic v té sondě nemá lhůtu, takže ji dlouhý čas sám shodit nemůže.
+
+**Proto se ani `waitUntil`, ani `.disabled` nepoužilo**, přestože obojí zadání nabízelo. Není na co
+čekat (nic tam není asynchronní) a vypnout sondu by znamenalo zahodit tři měření, která platí, kvůli
+příčině, která je jinde. Ze dvou nabídnutých léčeb se tak stala jedna oprava vstupu; **odpověď na
+„flaky test“ je najít, co v něm není funkcí testu**, ne prodloužit strop.
+
+**Skládá se to na jednom místě** (`Tests/Support/WheelEvent.swift`) a oběma směry naráz: zdroj je
+`privateState` (vlastní stav, ne stav sezení) **a** `flags` se nasadí na hodnotu z argumentu. Ta
+druhá věc je tam schválně — na privátní stav se dá jenom **věřit**, kdežto zápis do `flags` je
+vidět a hlídá ho stráž.
+
+**Stráž je nad zdrojáky, a musí být** (`WheelEventTests`, tatáž konstrukce jako
+`UnanimatedWindowTests`). Za běhu se to tvrdit nedá: událost složená z `nil` zdroje má prázdné
+`flags` ve chvíli, kdy nikdo nic nedrží — tedy skoro vždycky —, takže test „složená událost nemá
+modifikátory“ **zezelená nad rozbitou i opravenou verzí** a netvrdí nic (#478). Hlídají se proto tři
+věci: `CGEvent(` **jen** v helperu, helper **nesmí** obsahovat `Source:nil` a **musí** nasadit
+`flags`. Zakázaný je celý konstruktor `CGEvent`u, ne jen ten scrollovací — `nil` zdroj znamená živý
+stav u každé varianty. Explicitní továrny AppKitu (`NSEvent.keyEvent(with:…)`) v zákazu nejsou:
+modifikátory berou z argumentu, takže nemají odkud dědit.
+
+**Hledá se v kódu bez jediné mezery** (`Source.condensed`), a je to nález Copilota na tomhle PR:
+ve Swiftu je mezera uvnitř volání volná, takže `CGEvent (…)`, `Source:nil` i zalomení za dvojtečkou
+jsou platný zápis téhož — a stráž nad surovým textem by je pustila, tedy **zezelenala by právě nad
+tou chybou, na kterou je**. Platí to na **každou** stráž nad zdrojáky, ne jen na tuhle; starší tři
+(`GlobalAppearanceTests`, `UnanimatedWindowTests`, `FontMetricTests`) porovnávají surový text a je to
+**otevřená mezera**, ne záměr — sesypat je do jednoho čtení zdrojáků je vlastní úklid.
+
+**„Naměřilo by to rozdíl, kdyby ta chyba byla?“** — u modifikátorů ano, a je to **trvalý test**, ne
+jen zápis v dokumentaci: `WheelEventTests` skládá kolečko s `Control`em a se `Shift`em a tvrdí, co
+z toho vyleze (80, respektive nic a nehybný výřez). To je celý ten rozdíl mezi zeleným a červeným
+`main`em, změřený, ne odvozený.
+
+**Co změřit nešlo, a je to zapsaná mezera**: samotné dědění, tedy že událost z `nil` zdroje sebere
+**skutečnou** drženou klávesu. Vyžadovalo by to držet modifikátor po dobu běhu; syntetická klávesa
+potřebuje event tap s povolením Accessibility (to se neobchází) a nechat globálně „zmáčknutý“
+Control na cizím stroji je horší než ta mezera. Změřená je proto **cena** téhož stavu: modifikátor
+nasazený do `flags` je táž hodnota v tomtéž poli, jakou by tam zapsal systém, takže se z tabulky výš
+čte, co by zděděná klávesa udělala.
+
+**Ověřeno vložením regrese** (obojí zvlášť, nad kopií):
+
+1. **surové `CGEvent(scrollWheelEvent2Source: nil, …)` zpátky do `TerminalScrollProbe`** → padne
+   `Žádný test neskládá CGEvent mimo WheelEvent`, jmenovitě na tom souboru;
+2. **`nil` zdroj a zahozený zápis `flags` uvnitř helperu** → padne `Helper skládá událost
+   z privátního zdroje…` **a k tomu obě měření** (`Control` vydá 64 místo 80, `Shift` nepřeklopí
+   osu), protože bez toho zápisu helper nedodrží ani to, co si test výslovně vyžádal.
+
+**Za jakých podmínek se měřilo**: pět plných běhů po sobě (4 597 testů, 64–66 s), na stroji
+o 15 jádrech s load 6,8–9,6 a **s druhým slotem na sousedním issue**; `xcodebuild` souběžně neběžel
+ani v jednom z pěti. Všech pět má obě suity zelené. Červený byl jeden běh z pěti, a **na jiné
+třídě**: `CommitPanelRoomTests` na `šířka znaku: 0` (#407 — `FontMetric` volajícímu tu nulu
+**vydá**, hlášku k tomu složí o zlomek sekundy později už z 8,036). S #490 to nesouvisí a je to
+zvlášť.
 
 ## Jak si zkontrolovat, jak view vypadá
 
@@ -7244,6 +7331,11 @@ Vznikla na hlášení „nejde mi scrollovat v tom terminálu“ a **měří tř
 jinou opravu**: kdo dostane kolečko (`hitTest` nad zásuvkou), jestli má emulátor čím rolovat
 (scrollback a `yDisp` po kolečku) a co dělá kolečko **nad alternativním bufferem**.
 
+**Od #490 skládá kolečko `WheelEvent`, a byla to oprava, ne úklid**: sonda padala jednou ze tří
+plných běhů, protože si událost brala **živý stav klávesnice** — se `Shift`em překlopí AppKit osu
+a `yDisp` se nepohne. Zátěž v tom nebyla, viz [*Událost skládaná pro test nesmí dědit živý stav
+procesu*](#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490).
+
 Dvě věci, které z ní plynou a bez ní by se hádaly:
 
 - **Hit test se musí měřit v okně** (`orderFrontUnanimated()`, #462). Bez okna vrátí `hitTest`
@@ -7269,6 +7361,12 @@ Dvě věci, které z ní plynou a bez ní by se hádaly:
 
 `TerminalWheelTests` (plocha) a `TerminalWheelPolicyTests` (rozhodnutí). Obojí běží **v běžném
 běhu**, žádné `PRISM_MEASURE`: nespouští se shell, jen se krmí emulátor.
+
+**Kolečko sem skládá `WheelEvent` (#490).** Do té doby si ho suita skládala sama z `nil` zdroje, tedy
+ze **živého stavu klávesnice** — držený `Control` udělal z tlačítka 64 tlačítko 80 a tvrzení padlo
+třikrát v jednom plném běhu, přestože samostatně bylo zeleno. Rozbor je
+v [*Událost skládaná pro test nesmí dědit živý stav
+procesu*](#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490).
 
 Dvě věci to obchází, a stojí za to je znát, protože se hodí i jinde:
 

@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
 
-/// Gesto kolečkem nad `NSScrollView` — **jediné místo, kde se v testech skládá `scrollWheel`**
-/// (#361).
+/// Gesto kolečkem nad `NSScrollView` — **jediné místo, kde se v testech skládá gesto** (#361).
+/// Samotnou událost skládá `WheelEvent` (#490); tady se k ní dopisuje fáze, setrvačnost a poloha.
 ///
 /// Proč to musí být skutečná událost a ne `contentView.scroll(to:)`: programový posun je pro
 /// `NSScrollView` obyčejná změna počátku, takže **neproběhne živé scrollování**. Nepošle se
@@ -76,16 +76,10 @@ enum WheelGesture {
         in window: NSWindow,
         at point: NSPoint
     ) -> NSEvent? {
-        guard let source = CGEventSource(stateID: .privateState),
-              let wheel = CGEvent(
-                  scrollWheelEvent2Source: source,
-                  units: .pixel,
-                  wheelCount: 1,
-                  wheel1: Int32(delta),
-                  wheel2: 0,
-                  wheel3: 0
-              )
-        else { return nil }
+        // **Skládá to `WheelEvent`, ne tenhle soubor** (#490): událost složená s `nil` zdrojem
+        // přebere modifikátory ze živé klávesnice a v gestu by z toho byl osový překlop pod
+        // `Shift`em. Jedno místo na složení je tam i proto, aby se to dalo uhlídat grepem.
+        guard let wheel = WheelEvent.composed(units: .pixel, wheel1: Int32(delta)) else { return nil }
         // Trackpad hlásí **přesné delty a fázi**; bez obojího to `NSScrollView` vezme jako
         // klasické kolečko myši a živé scrollování nezačne.
         wheel.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
