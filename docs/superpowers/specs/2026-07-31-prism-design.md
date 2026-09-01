@@ -5116,11 +5116,28 @@ rozdělaný komentář i na soubor ze stromu (`DiffRow.anchor` → `scrollTarget
 všechny naráz — u nálezu byla chyba potichu od #157 a nikdo si jí nevšiml, protože nález na prvním
 řádku bloku dopadal správně.
 
-**Dvě zapsané mezery.** (1) Že se u výskytu použije **jiný odstup** než u nálezu, sonda neověří — cíl
-se do ní nastavuje bindingem (cestou panelu nálezů), kdežto `.searchHit` si `DiffView` nastavuje sám
-v `step(search:)` a spouští to tlačítko v pruhu. Obě hodnoty drží test nad čistou funkcí, přepnutí
-zkouší člověk. (2) **Poloha v okně se netvrdí testem, jen sondou**: jedna scéna z pěti se přes
-`ScrollViewReader` neodscrolluje vůbec (posun zůstane na nule, ač je cíl v seznamu a scéna ustálená),
-takže by z toho byl falešně červený `main` — co všechno se proti tomu zkusilo, je
-v [`docs/testovani.md`](../../testovani.md). Jestli ten výpadek potká i člověka, řekne jedině
-proklikání; v harnessu se od „skok se povedl“ liší jen tím, že se okno nehnulo.
+**Zapsaná mezera:** že se u výskytu použije **jiný odstup** než u nálezu, měření v okně neověří — cíl
+se do scény nastavuje bindingem (cestou panelu nálezů), kdežto `.searchHit` si `DiffView` nastavuje
+sám v `step(search:)` a spouští to tlačítko v pruhu. Obě hodnoty drží test nad čistou funkcí, přepnutí
+zkouší člověk.
+
+### Záznam rozhodnutí — druhé kolo proklikání: šířka, zalomení, animace (#152)
+
+Z proklikání opravené verze přišlo: *„pořád se špatně zaměřuje okno… vůbec nescrolluje do šířky, tak
+to není vidět a někdy se i špatně scrolluje na výšku."* Byly to **tři různé příčiny** a rozdělit je
+šlo jedině měřením — poloha po skoku se proto měří ve dvou osách zvlášť
+([čísla](../../testovani.md), [rozbor](../../architektura.md#kam-skok-posadí-cílový-řádek-152)).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Rozměry cíle se berou změřené** (`DiffRowFrames` — plochy řádků i bloku, které bloky hlásí kvůli tažení rozsahu) | Dopočítat výšku bloku z `počet řádků × výška řádku` (stav po prvním kole) | V pohledu pod sebou se **zalamuje**, takže blok o dlouhých řádcích je násobně vyšší: naměřeno 964 pt odhadu proti **~2 900** skutečným a cíl skončil **2 054 až 6 017 pt nad** výřezem. Se změřenou plochou 90 pt u všech. Měřit navíc se nemuselo nic — plochy tam leží od prvního rozvržení |
+| **Do krabice se hlásí každý řádek a k tomu plocha bloku** (kotva u řádku je od té doby volitelná) | Číst jen řádky, na které se dá komentovat (jak to bylo) | Bez plochy bloku se výška nedá zjistit a bez řádků mimo hunk by skok do rozbaleného kontextu spadl zpátky na odhad. Cena je jeden slovník navíc a pár položek na blok; **druhé čtení geometrie by bylo dražší** (#252) |
+| **Skok se neanimuje** | Nechat animaci z #72 | Druhý průchod (dorovnání výšky po nasazení, #469) animaci **utnul**: jeden skok z desítky se pohnul o dva až třináct bodů a zůstal stát. Se změřenými rozměry se nemá co dorovnávat, takže druhý průchod odpadá — a animace, kterou by stejně přebil okamžitý posun, je horší než skočit rovnou. **Je to vidět, takže to jde do popisu PR** |
+| **Vodorovně se odhaluje jen to, co vidět není** (`Policy.horizontalReveal`, rezerva na obou stranách) | Vystředit výskyt vodorovně vždycky, jako se to dělá svisle | Vodorovná poloha je **rozkoukaná poloha v řádku**, kterou si člověk nastavil sám — přerovnat ji u výskytu, který je na obrazovce, je tentýž bezdůvodný poskok, jaký se u svislé osy zamítal. Svisle je to naopak: tam jde o **pořadí čtení**, takže se srovnává vždycky |
+| **Odhalení dělá blok, ne `DiffView`** | Řídit vodorovný posun odtamtud, odkud se skáče | Sloupce jsou dva (`DiffPairScrollView`) a který z nich se posune, se pozná až podle toho, ve kterém ten řádek je. Blok navíc už dostává aktuální výskyt ve stylu, takže se posouvá **jedině při jeho změně** (stráž z #393) a nepřebíjí to, co si člověk odroloval |
+| **Posouvá se plocha sloupce** | `scrollToVisible` na textovém view | Ten by prošel až k vnějšímu `ScrollView`u a přebil svislý skok, který nás tam právě dostal |
+| **V pohledu pod sebou se vodorovně nedělá nic** | Sjednotit chování obou pohledů | Tam se **zalamuje**, takže výskyt vodorovně utéct nemůže. Sjednocení by znamenalo psát kód pro stav, který nenastane |
+
+**Co se tím potvrdilo o prvním kole:** „jedna scéna z pěti se neodscrolluje“ **nebyla mez harnessu**,
+ale ta animace — tedy vada, kterou uživatel viděl v okně. Zapsat ji jako mezeru bylo správně jen
+v tom, že se to nezamlčelo; špatně v tom, že se to vydávalo za vlastnost měřidla.

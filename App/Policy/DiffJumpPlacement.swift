@@ -1,5 +1,17 @@
 import Foundation
 
+/// Rozměry cíle skoku, ze kterých se počítá podíl výšky pro `scrollTo(anchor:)` (#152).
+///
+/// **Dvě čísla, a obě v bodech** — ne počet řádků: jedině tak se dá tatáž funkce nakrmit **změřenou**
+/// plochou bloku (`DiffRowFrames`, platí i pro zalomené řádky) i dopočítanou z výšky řádku
+/// (`Policy.jumpMetrics`), když se blok ještě nikdy nekreslil.
+struct DiffJumpMetrics: Equatable, Sendable {
+    /// Kolik bodů bloku je **nad** cílovým řádkem.
+    let above: Double
+    /// Výška celého bloku.
+    let height: Double
+}
+
 /// Co je cílem skoku v diffu (#152). Rozhoduje o tom, **kolik místa nad cílem zůstane**.
 ///
 /// Dva případy, ne jeden, a je to rozdíl v tom, co ten cíl je — ne v tom, odkud se na něj kliklo.
@@ -70,11 +82,11 @@ extension Policy {
     ///   ta jediná správná. **Ověřeno měřením, ne dokumentací** (#152): s ořezáním na `0…1` skončil
     ///   řádek na kraji bloku vyššího než výřez mimo obrazovku (844 pt pod hranou) a u podílu přesně
     ///   `0` se okno **nepohnulo vůbec**; bez ořezání sedí posun na dva body (`51 + 208 − 169 = 90`).
-    /// - **Výška bloku se počítá z výšky řádku, ne měří.** V pohledu vedle sebe se nezalamuje, takže
-    ///   je to přesné; v pohledu pod sebou zalomený řádek výšku podhodnotí a cíl přistane o ten
-    ///   přebytek níž. Mez je tím **blok** (nejvýš šedesát řádků), ne diff — a to je celý rozdíl
-    ///   proti stavu, kdy se poloha řádku v bloku nepočítala vůbec. Měřit ji nejde: přesnou výšku
-    ///   zná jedině nasazený blok (`DiffBlockSlot`) a ten se nasadí teprve po skoku.
+    /// - **Rozměry se přednostně berou změřené** (`DiffRowFrames` — plochu bloku i řádku hlásí bloky
+    ///   při kreslení), a dopočítaná varianta z výšky řádku je jen záloha pro blok, který se ještě
+    ///   nikdy nekreslil. Není to detail: v pohledu pod sebou se **zalamuje**, takže u souboru
+    ///   s dlouhými řádky vyšel odhad 964 pt proti skutečným ~2 900 — a cíl skončil **6 017 pt nad**
+    ///   výřezem. Ve split pohledu se nezalamuje, tam odhad sedí.
     /// - **U kraje dokumentu se posun ořeže sám** (nahoře i dole) a cíl pak leží jinde, než kam se
     ///   mířilo. Není to chyba — dál se odscrollovat nedá.
     ///
@@ -86,20 +98,72 @@ extension Policy {
     static func jumpAnchorY(
         of target: DiffJumpTarget,
         viewport: Double,
-        row: DiffJumpSpot,
-        rowHeight: Double
+        metrics: DiffJumpMetrics
     ) -> Double? {
         guard let offset = jumpOffset(of: target, viewport: viewport) else { return nil }
-        let block = Double(max(row.rows, 1)) * rowHeight + blockInset
-        let above = Double(max(row.above, 0)) * rowHeight
-        let slack = viewport - block
+        let slack = viewport - metrics.height
         // Blok přesně tak vysoký jako výřez: podíl výšky s ním nehýbe (`a × 0`), takže není co
         // počítat a řádek přistane tam, kde v bloku je. Nula je pak jediná poctivá odpověď.
         guard abs(slack) > 0.5 else { return 0 }
-        return (offset - above) / slack
+        return (offset - metrics.above) / slack
+    }
+
+    /// Rozměry cíle **dopočítané z výšky řádku** — použijí se tam, kde změřené nejsou (blok se ještě
+    /// nikdy nekreslil).
+    ///
+    /// **Je to odhad a v pohledu pod sebou umí být hodně vedle**: tam se zalamuje, takže řádek
+    /// o dvou stech znacích je vysoký tři řádky sazby. Změřeno u #152 — u souboru s dlouhými řádky
+    /// vyšel odhad bloku 964 pt proti skutečným ~2 900 a cíl skončil až **6 017 pt nad** výřezem,
+    /// tedy dávno mimo obrazovku. Proto se **přednostně bere změřená plocha** (`DiffRowFrames`)
+    /// a tohle je jen záloha pro první skok do bloku, který se ještě nekreslil.
+    static func jumpMetrics(of row: DiffJumpSpot, rowHeight: Double) -> DiffJumpMetrics {
+        DiffJumpMetrics(
+            above: Double(max(row.above, 0)) * rowHeight,
+            height: Double(max(row.rows, 1)) * rowHeight + blockInset
+        )
     }
 
     /// Svislý inset bloku kódu — `DiffTextView` ho má na obou stranách, takže se do výšky započítá
     /// dvakrát. Vlastní konstanta, protože `Policy` je bez I/O a na `NSFont` nesahá.
     static let blockInset = 4.0
+}
+
+extension Policy {
+    /// Kam posunout sloupec **vodorovně**, aby byl výskyt hledání vidět (#152, druhé kolo
+    /// proklikání). `nil` = je vidět, nehýbat.
+    ///
+    /// **Posouvá se jedině to, co vidět není, a je to rozhodnutí, ne opatrnost.** Vodorovná poloha
+    /// je něco, co si člověk nastavil sám (odrolovaný sloupec zůstává odrolovaný, dokud s ním
+    /// nehne), takže ji přerovnat u výskytu, který je na obrazovce, je tentýž bezdůvodný poskok,
+    /// jaký se u svislé osy zamítal — jen s tím rozdílem, že svisle jde o **pořadí čtení** (výskyt
+    /// se má číst pořád ve stejné výšce), kdežto vodorovně o **rozkoukanou polohu v řádku**.
+    ///
+    /// **Rezerva je dvakrát**: nalevo, aby výskyt neseděl přesně na hraně a bylo vidět, že před ním
+    /// něco je, a napravo z téhož důvodu. Když je výskyt delší než výřez, vyhrává jeho **začátek** —
+    /// číst se začíná zleva.
+    ///
+    /// Vrací se **posun plochy** (levá hrana výřezu v souřadnicích dokumentu), ne poloha výskytu:
+    /// to je hodnota, kterou bere `NSClipView.scroll(to:)`, takže se po cestě nemá co přepočítat.
+    static func horizontalReveal(
+        match: ClosedRange<Double>,
+        visible: ClosedRange<Double>,
+        margin: Double = searchRevealMargin
+    ) -> Double? {
+        let width = visible.upperBound - visible.lowerBound
+        guard width > 0 else { return nil }
+        // Vejde se celý i s rezervou? Pak se nehýbe.
+        if match.lowerBound >= visible.lowerBound + margin, match.upperBound <= visible.upperBound - margin {
+            return nil
+        }
+        // Delší než výřez, nebo začíná nalevo od něj: zarovná se jeho začátek.
+        if match.upperBound - match.lowerBound > width - 2 * margin || match.lowerBound < visible.lowerBound + margin {
+            return max(match.lowerBound - margin, 0)
+        }
+        // Přetéká doprava: doskočí se tak, aby byl i s rezervou u pravé hrany.
+        return max(match.upperBound + margin - width, 0)
+    }
+
+    /// Kolik místa zůstane před výskytem a za ním, když se sloupec posune. Zhruba dva znaky
+    /// monospace písma — dost na to, aby bylo vidět, že výskyt na hraně nekončí.
+    static let searchRevealMargin = 24.0
 }

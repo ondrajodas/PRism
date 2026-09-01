@@ -176,20 +176,23 @@ struct DiffBlockRowView: View {
         return (frame, action)
     }
 
-    /// Zapíše plochy řádků do krabice pro tažení — **naráz za celý blok** (#252).
+    /// Zapíše plochy řádků do krabice — **naráz za celý blok** (#252).
+    ///
+    /// **Hlásí se každý řádek, ne jen ten, na který se dá komentovat** (#152): z těchže ploch se
+    /// počítá, kam skok posadí cílový řádek, a ten může být i v rozbaleném kontextu. Kotvu dostane
+    /// jen řádek, přes který se dá táhnout rozsah.
     private func noteRows() {
         guard let box = rangeDrag.box else { return }
         let gutter = geometry
         let origin = placement.rect.origin
-        let rows = frames.compactMap { frame -> DiffRowFrames.Entry? in
-            guard let anchor = anchor(of: frame) else { return nil }
-            return DiffRowFrames.Entry(
+        let rows = frames.map { frame in
+            DiffRowFrames.Entry(
                 id: id(of: frame),
                 rect: gutter.rect(of: frame, on: nil).offsetBy(dx: origin.x, dy: origin.y),
-                anchor: anchor
+                anchor: anchor(of: frame)
             )
         }
-        box.frames.note(rows, covering: placement.rect, of: box.subject)
+        box.frames.note(rows, covering: placement.rect, of: box.subject, block: blockID)
     }
 
     private func anchor(of frame: DiffBlockLineFrame) -> DraftAnchor? {

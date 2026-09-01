@@ -175,19 +175,31 @@ struct DiffView: View {
                 // bere i to, **kolikátý** ten řádek v bloku je: podíl výšky platí pro blok, takže
                 // bez toho míří skok na blok a řádek v něm leží, kde leží.
                 let spot = DiffRow.blockSpot(of: target, in: blockedRows(covering: target))
-                let anchor = jumpAnchor(of: spot)
-                withAnimation { proxy.scrollTo(spot.id, anchor: anchor) }
-                // **Podruhé o průchod později** (#469). Cíl mohl být do téhle chvíle jen
-                // rezervovanou výškou (`DiffBlockSlot`); jak se po skoku dostane do pásu, nasadí
-                // se a jeho výška se dorovná na skutečnou — a s ní se posune i to, co je pod ním.
-                // Druhý skok to srovná. Je to **zmírnění, ne záruka**: kolik průchodů to sedne,
-                // se řídit nedá, a čekat časovačem je zakázaná třída (#350).
-                await Task.yield()
-                // **Zrušený skok už nesrovnává nic** (nález z vlastní revize #152): `task(id:)`
-                // starý průchod při změně cíle zruší, jenže `Task.yield()` z něj nevyskočí — takže
-                // by ten starý dokončil posun na **svůj** cíl a nový by vzápětí **vynuloval**.
-                guard !Task.isCancelled else { return }
-                proxy.scrollTo(spot.id, anchor: anchor)
+                let metrics = measured(spot)
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: metrics))
+                // **Druhý průchod jedině tehdy, když se ten první počítal z odhadu** (#152).
+                //
+                // Do #152 se skákalo dvakrát vždycky, kvůli #469: cíl mohl být do té chvíle jen
+                // rezervovanou výškou a po nasazení se jeho výška dorovnala. Jenže **druhý skok
+                // přerušil animaci toho prvního** a okno se místo skoku pohnulo o dva až čtyři body
+                // — to je ta „někdy se nescrolluje" z proklikání; změřeno, viz `docs/testovani.md`.
+                // Se změřenou plochou bloku se nemá co dorovnávat, takže druhý průchod odpadá;
+                // přijde jedině u bloku, který se ještě nikdy nekreslil, a tehdy je právě on tím,
+                // který cíl trefí — první počítal z odhadu.
+                //
+                // **Skok se proto nechává neanimovaný.** Animace, kterou tu do #152 měl, se buď
+                // nedoběhla (uťal ji ten druhý průchod), nebo doběhla a druhý průchod ji stejně
+                // přebil skokem — a to je horší než skočit rovnou. Je to změna proti #72 a je
+                // **vidět**, takže patří do popisu PR.
+                if metrics == nil {
+                    await Task.yield()
+                    // **Zrušený skok už nesrovnává nic** (nález z vlastní revize #152): `task(id:)`
+                    // starý průchod při změně cíle zruší, jenže `Task.yield()` z něj nevyskočí —
+                    // takže by ten starý dokončil posun na **svůj** cíl a nový by vzápětí
+                    // **vynuloval**.
+                    guard !Task.isCancelled else { return }
+                    proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
+                }
                 scrollTarget = nil
                 // Zpátky na výchozí druh cíle: příští skok může přijít z panelu nálezů, který
                 // `jumpTarget` nenastavuje.
@@ -277,16 +289,32 @@ struct DiffView: View {
     ///
     /// Dokud výška výřezu nedorazí, platí střed — je to jediná hodnota, která nezávisí na tom, co
     /// ještě nevíme.
-    private func jumpAnchor(of spot: DiffJumpSpot) -> UnitPoint {
-        guard
-            let y = Policy.jumpAnchorY(
-                of: jumpTarget,
-                viewport: viewportHeight,
-                row: spot,
-                rowHeight: DiffTextView.rowHeight
-            )
+    private func jumpAnchor(of spot: DiffJumpSpot, metrics: DiffJumpMetrics?) -> UnitPoint {
+        let size = metrics ?? Policy.jumpMetrics(of: spot, rowHeight: DiffTextView.rowHeight)
+        guard let y = Policy.jumpAnchorY(of: jumpTarget, viewport: viewportHeight, metrics: size)
         else { return .center }
         return UnitPoint(x: 0, y: y)
+    }
+
+    /// Rozměry cíle **z toho, co bloky doopravdy nakreslily** (#152). `nil` = ten blok se ještě nikdy
+    /// nekreslil, takže se rozměry dopočítají z výšky řádku.
+    ///
+    /// Bere se z `DiffRowFrames`, tedy z krabice, do které bloky hlásí plochy kvůli tažení rozsahu
+    /// — **žádné měření navíc**: plochy tam leží od prvního rozvržení, kdy se nasadí i bloky mimo pás
+    /// (#469). Jsou to plochy v souřadnicích obsahu, ale počítá se z nich jedině **rozdíl uvnitř
+    /// bloku** a jeho výška, takže na posunu obsahu nezáleží.
+    ///
+    /// Kdyby se od posledního hlášení změnila **šířka** okna, může být záznam nemounted bloku
+    /// zastaralý (jinak se zalamuje) a skok bude o ten rozdíl vedle — pořád ale blíž, než kam mířil
+    /// odhad z počtu řádků.
+    private func measured(_ spot: DiffJumpSpot) -> DiffJumpMetrics? {
+        guard let block = rowFrames.block(spot.id), block.height > 0 else { return nil }
+        // Ve split pohledu nese plocha řádku ještě stranu; svisle jsou obě zarovnané, takže
+        // rozhoduje ta, která se najde.
+        let keys = ["\(spot.id)l\(spot.above)"]
+            + [DiffSide.right, .left].map { "\(spot.id)l\(spot.above)|\($0.rawValue)" }
+        guard let row = keys.lazy.compactMap({ rowFrames.rect(of: $0) }).first else { return nil }
+        return DiffJumpMetrics(above: row.minY - block.minY, height: block.height)
     }
 
     /// Každý **řádek** je vlastní buňka seznamu, ne každý hunk. Hunk jako celek se po změně šířky

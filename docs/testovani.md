@@ -1872,21 +1872,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `0…1` vyjde** (ořezání je zamítnutá varianta, viz níž), že cíl mimo blok se počítá jako
   jednořádkový a že blok stejně vysoký jako výřez vydá nulu, **ne `inf`**.
 
-  `DiffJumpPlacementProbe` nad **hostovaným `DiffView`em v okně mimo obrazovku**: kotva se skládá tou
+  `DiffJumpPlacementTests` nad **hostovaným `DiffView`em v okně mimo obrazovku**: kotva se skládá tou
   samou cestou jako v aplikaci (`DiffSearch.hits` → `DiffRow.anchor(in:hit:)`), posun nechává na
   `ScrollViewReader`u a měří se **poloha cílového řádku v souřadnicích okna** (`DiffTextView
-  .frame(ofLine:)` převedený do okna proti rámečku clip view). Odsud jsou čísla u #152 — před
-  opravou 889 a 2 181 pt pod hranou výřezu, po ní poloha na dva body — a k tomu render okna po skoku.
+  .frame(ofLine:)` převedený do okna proti rámečku clip view). Odsud jsou všechna čísla u #152.
+  Čtyři scény, protože každá chytá něco jiného:
 
-  **Je to sonda, ne test, a je to zapsaná mez.** Zhruba **jedna scéna z pěti se přes
-  `ScrollViewReader` neodscrolluje vůbec**: posun zůstane na nule, i když je cíl v seznamu, kotva
-  sedí a scéna je ustálená — a nespraví to ani druhý skok na tentýž cíl. Zkoušelo se čekání na
-  ustálenou scénu (počet nasazených bloků i výška obsahu pět kol beze změny), prokládání cílů po
-  blocích, vracení výřezu posunem clip view (**horší** — SwiftUI si posun přerovná zpátky, tatáž mez
-  jako u #325) i třetí průchod v `DiffView`. Jako test by to dělalo **falešně červený `main`**, takže
-  tvrzení nese `DiffJumpAnchorTests` nad čistou funkcí a sonda se pouští ručně (má `.disabled`).
-  **Ověřeno vložením regrese:** s podílem počítaným z výšky výřezu (stav před #152) spadne
-  `DiffJumpAnchorTests` i sonda.
+  | Scéna | Před opravou | Po ní |
+  |---|---|---|
+  | krátké řádky, cíl hluboko v bloku | řádek 52 **889 pt** pod hranou, řádek 195 **2 181 pt** | 90 pt |
+  | **zalomené** řádky (pohled pod sebou) | **2 054 až 6 017 pt nad** výřezem | 90 pt |
+  | **široké** řádky ve split pohledu | výskyt na x **2 708**, sloupec ukazuje **0–582** | vidět |
+  | kraj dokumentu | — | tvrdí se jen viditelnost, odstup ne (`isFreeOfEdges`) |
+
+  **Ověřeno vložením regrese, třikrát:** podíl počítaný z výšky výřezu (stav před #152) shodí
+  `DiffJumpAnchorTests` i tuhle suitu; návrat k **dopočítané** výšce bloku místo změřené shodí
+  zalomenou scénu (cíl 1 651 až 3 637 pt nad výřezem); vypnuté vodorovné odhalení shodí split scénu
+  (výskyt na x 2 708 proti výřezu 0–582,5).
+
+  **Jedno kolo to byla sonda, a stálo to za to ji nenechat sondou.** Jeden skok z desítky nezabral
+  vůbec — posun zůstal, kde byl, ačkoli byl cíl v seznamu, kotva seděla a scéna byla ustálená. Nespravilo
+  to čekání na ustálenou scénu (počet nasazených bloků i výška obsahu pět kol beze změny), prokládání
+  cílů po blocích, druhý skok na tentýž cíl, vracení výřezu posunem clip view (**horší** — SwiftUI si
+  posun přerovná zpátky, tatáž mez jako u #325) ani třetí průchod v `DiffView`. Příčina se našla až
+  ablací: **animovaný posun, který o průchod později uťal ten druhý**. Bez animace je měření
+  deterministické (postupně 3 × 3, 4 × 4 a plný běh), takže suita **není sonda** a tvrzení o poloze
+  v okně nezůstává jen na čisté funkci.
+
+  **Pozor na to, co ta ablace v harnessu znamená.** V okně mimo obrazovku animace **neběží** (není
+  display link), takže `withAnimation { scrollTo }` sám o sobě posune okno o jednotky bodů a práci
+  odvede až ten druhý, neanimovaný průchod. Že animaci uťal, je tedy **výklad** — co je změřené, je
+  že s animací se jeden skok z desítky nedokončí a bez ní ani jeden.
 
   **Tři věci, na kterých ta sonda visela, a všechny tři vypadaly zeleně:**
 
@@ -1900,6 +1916,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **„Nejvyšší `NSScrollView` v hierarchii“ je lišta, ne diff.** Její dokument má 46 pt, takže proti
     ní vyjde „nescrollovalo se“ u každého cíle — tedy tatáž hodnota pro funguje i nefunguje (#478).
     Bere se ten s **nejvyšším dokumentem**.
+
+  A k tomu **dvě věci, které se v té sondě daly změřit jedině nad kresbou**: že se plochy řádků hlásí
+  i za řádky, na které se nedá komentovat (jinak by se rozměry bloku neměly z čeho vzít), a že se
+  sloupec ve split pohledu **doopravdy posunul** (`seen.left > 0`) — bez toho druhého by tvrzení
+  „výskyt je vidět“ mohlo platit jen proto, že se náhodou vešel, a odhalení by šlo smazat, aniž by
+  to test poznal.
 
   A dvě věci, na které se ve scéně čeká zvlášť, protože bez nich měření tvrdí něco jiného:
   **nasazení cílového bloku** (#469 — `NSTextView` je jen v pásu kolem výřezu, takže po skoku dorazí

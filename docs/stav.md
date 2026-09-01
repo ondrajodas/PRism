@@ -6331,8 +6331,19 @@ výskyt hledání přistane na **třetině shora**, nález zůstává 90 pt pod 
 místě. [Záznam
 rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--kam-skok-posadí-cílový-řádek-152).
 
-Testů **4746** ve 464 suitách; nových je pět sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
-`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`), dvě měření barev
-v `DiffPaletteTests` a dvě sondy (`DiffSearchRenderProbe`, `DiffJumpPlacementProbe` — poloha po skoku
-v okně se testem tvrdit nedá, viz zapsaná mezera). Co se v které z nich hlídá a proč,
+**Druhé kolo proklikání ukázalo dvě další věci a obě jsou opravené.** (1) **Skok vůbec neroloval do
+šířky**: ve split pohledu se nezalamuje, takže výskyt na dlouhém řádku ležel za pravou hranou sloupce
+(naměřeno x 2 708 proti výřezu 0–582) a pruh přitom hlásil `4 z 17`. Odhaluje ho teď **blok sám**
+(`DiffPairBlockView` → `DiffPairScrollView`), a jedině když vidět není (`Policy.horizontalReveal`) —
+vodorovnou polohu si člověk nastavil sám. (2) **Svislé míjení mělo ještě dvě příčiny**: zalomené
+řádky (odhad výšky bloku 964 pt proti skutečným ~2 900, cíl skončil až **6 017 pt nad** výřezem —
+rozměry se od té doby berou **změřené** z `DiffRowFrames`) a **animace skoku**, kterou o průchod
+později uťal druhý posun (jeden skok z desítky se pohnul o dva až třináct bodů a zůstal stát). Skok
+proto **není animovaný** a druhý průchod přijde jedině u bloku, který se ještě nikdy nekreslil —
+změna proti #72.
+
+Testů **4775** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSearchNavigationTests`,
+`DiffSearchHighlightTests`, `AppStoreDiffSearchTests`, `DiffJumpAnchorTests`, `DiffSearchRevealTests`,
+`DiffJumpPlacementTests` — poslední měří polohu po skoku v hostovaném okně), dvě měření barev
+v `DiffPaletteTests` a sonda `DiffSearchRenderProbe`. Co se v které z nich hlídá a proč,
 je v [`docs/testovani.md`](testovani.md).

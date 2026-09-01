@@ -340,6 +340,39 @@ final class DiffTextView: NSTextView {
         return rect
     }
 
+    /// Vodorovný rozsah **jednoho výskytu hledání** na řádku, v souřadnicích view (#152).
+    ///
+    /// K čemu to je: ve sloupci dvojice se **nezalamuje**, takže výskyt na dlouhém řádku leží za
+    /// pravou hranou a `4 z 17` by tvrdilo, že stojím na něčem, co není vidět. Odsud se pozná, kam
+    /// ten sloupec posunout.
+    ///
+    /// **Kde výskyt na řádku je, rozhoduje `DiffSearch.ranges`** — tatáž funkce, ze které se počítá
+    /// číslo v pruhu i podklad v textu. Druhá kopie porovnávání by uměla posunout jinam, než kde
+    /// svítí.
+    ///
+    /// `nil` = ten řádek tady není, výskyt na něm není, nebo se ještě nesázelo.
+    func span(ofMatch occurrence: Int, inLine index: Int, query: DiffSearchQuery) -> ClosedRange<Double>? {
+        guard lineRanges.indices.contains(index), lines.indices.contains(index),
+              let layoutManager, let textContainer
+        else { return nil }
+        let matches = DiffSearch.ranges(in: lines[index].text, query: query)
+        guard matches.indices.contains(occurrence) else { return nil }
+
+        let text = lines[index].text
+        let match = matches[occurrence]
+        // UTF-16, protože v nich měří `NSAttributedString` — tatáž třída chyby jako u #275.
+        let start = text.utf16.distance(from: text.startIndex, to: match.lowerBound)
+        let length = text.utf16.distance(from: match.lowerBound, to: match.upperBound)
+        let line = lineRanges[index]
+        let range = NSRange(location: line.location + start, length: max(length, 1))
+        guard NSMaxRange(range) <= NSMaxRange(line) else { return nil }
+
+        let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        let origin = textContainerOrigin.x
+        return (rect.minX + origin)...(rect.maxX + origin)
+    }
+
     /// Rámečky všech řádků. Volá se po layoutu, takže se dá poslat do SwiftUI.
     ///
     /// **Jedním průchodem přes fragmenty, ne dotazem na každý řádek** (#476). Do #476 se pro každý

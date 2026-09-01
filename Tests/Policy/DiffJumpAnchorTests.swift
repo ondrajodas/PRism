@@ -4,10 +4,9 @@ import Testing
 
 /// Kam se v diffu skáče a kolik místa nad cílem zůstane (#152) — čisté funkce, vyčerpávající výčet.
 ///
-/// **Poloha v okně se tady netvrdí, a je to zapsaná mez:** měří ji sonda `DiffJumpPlacementProbe`
-/// nad hostovaným `DiffView`em, jenže jedna scéna z pěti se přes `ScrollViewReader` neodscrolluje
-/// vůbec — jako test by to dělalo falešně červený `main`. Tady jde o **vzorec**, protože ten je to,
-/// co u #152 chybělo: podíl výšky se počítal z výřezu a poloha řádku v bloku do něj nevstupovala.
+/// **Poloha v okně se tvrdí jinde** (`DiffJumpPlacementTests` nad hostovaným `DiffView`em); tady jde
+/// o **vzorec**, protože ten je to, co u #152 chybělo: podíl výšky se počítal z výřezu a poloha
+/// řádku v bloku do něj nevstupovala vůbec.
 @Suite("Kam skočí cíl v diffu (#152)")
 struct DiffJumpAnchorTests {
     /// Výška výřezu, na které se to měřilo v okně (okno 800 pt minus lišta).
@@ -22,7 +21,11 @@ struct DiffJumpAnchorTests {
     func withoutAViewportThereIsNoOffset() {
         #expect(Policy.jumpOffset(of: .bubble, viewport: 0) == nil)
         #expect(Policy.jumpOffset(of: .searchHit, viewport: 0) == nil)
-        #expect(Policy.jumpAnchorY(of: .searchHit, viewport: 0, row: DiffJumpSpot(id: "x"), rowHeight: 16) == nil)
+        #expect(Policy.jumpAnchorY(
+            of: .searchHit,
+            viewport: 0,
+            metrics: Policy.jumpMetrics(of: DiffJumpSpot(id: "x"), rowHeight: 16)
+        ) == nil)
     }
 
     /// **Výskyt hledání chce víc místa nad sebou než nález** — nález si kontext nese v bublině pod
@@ -72,8 +75,7 @@ struct DiffJumpAnchorTests {
                 let y = try #require(Policy.jumpAnchorY(
                     of: .searchHit,
                     viewport: Self.viewport,
-                    row: spot,
-                    rowHeight: Self.rowHeight
+                    metrics: Policy.jumpMetrics(of: spot, rowHeight: Self.rowHeight)
                 ))
                 let wanted = try #require(Policy.jumpOffset(of: .searchHit, viewport: Self.viewport))
                 let block = Double(rows) * Self.rowHeight + Policy.blockInset
@@ -95,8 +97,7 @@ struct DiffJumpAnchorTests {
         let y = try #require(Policy.jumpAnchorY(
             of: .searchHit,
             viewport: Self.viewport,
-            row: tall,
-            rowHeight: Self.rowHeight
+            metrics: Policy.jumpMetrics(of: tall, rowHeight: Self.rowHeight)
         ))
         // Blok je vyšší než výřez (964 > 762) a cíl je jeho první řádek, takže horní hrana bloku
         // musí skončit **pod** hranou výřezu — a to je záporný podíl.
@@ -110,14 +111,12 @@ struct DiffJumpAnchorTests {
         let alone = try #require(Policy.jumpAnchorY(
             of: .bubble,
             viewport: Self.viewport,
-            row: DiffJumpSpot(id: "x"),
-            rowHeight: Self.rowHeight
+            metrics: Policy.jumpMetrics(of: DiffJumpSpot(id: "x"), rowHeight: Self.rowHeight)
         ))
         let explicit = try #require(Policy.jumpAnchorY(
             of: .bubble,
             viewport: Self.viewport,
-            row: DiffJumpSpot(id: "x", above: 0, rows: 1),
-            rowHeight: Self.rowHeight
+            metrics: Policy.jumpMetrics(of: DiffJumpSpot(id: "x", above: 0, rows: 1), rowHeight: Self.rowHeight)
         ))
         #expect(alone == explicit)
         #expect(alone > 0 && alone < 1, "u malého cíle má podíl zůstat v rozsahu")
@@ -133,10 +132,72 @@ struct DiffJumpAnchorTests {
         let y = try #require(Policy.jumpAnchorY(
             of: .bubble,
             viewport: viewport,
-            row: DiffJumpSpot(id: "x", above: 3, rows: rows),
-            rowHeight: height
+            metrics: Policy.jumpMetrics(of: DiffJumpSpot(id: "x", above: 3, rows: rows), rowHeight: height)
         ))
         #expect(y == 0)
         #expect(y.isFinite)
+    }
+}
+
+/// Vodorovné odhalení výskytu (#152, druhé kolo proklikání) — čisté funkce, vyčerpávající výčet.
+///
+/// Ve split pohledu se **nezalamuje**, takže výskyt na dlouhém řádku leží za pravou hranou sloupce
+/// a pruh přitom hlásí `4 z 17`. Tady se tvrdí **kdy** se posouvá a **kam**; že se ten posun
+/// v okně doopravdy provede, měří `DiffJumpPlacementTests`.
+@Suite("Odhalení výskytu do šířky (#152)")
+struct DiffSearchRevealTests {
+    private static let visible = 100.0...600.0
+    private static let margin = Policy.searchRevealMargin
+
+    /// **Nejcennější tvrzení je to negativní**: výskyt, který je vidět, sloupcem nehýbe. Vodorovnou
+    /// polohu si člověk nastavil sám a přerovnat ji bez důvodu je tentýž poskok, jaký se u svislé
+    /// osy zamítal.
+    @Test("Výskyt, který je vidět i s rezervou, sloupcem nehýbe")
+    func aVisibleMatchDoesNotMoveTheColumn() {
+        #expect(Policy.horizontalReveal(match: 300...340, visible: Self.visible) == nil)
+        // Přesně na hranici rezervy: pořád se nehýbe.
+        #expect(Policy.horizontalReveal(
+            match: (100 + Self.margin)...(600 - Self.margin),
+            visible: Self.visible
+        ) == nil)
+    }
+
+    /// Na hraně výřezu se **posune**, i když je technicky „vidět": bez rezervy není poznat, že
+    /// výskyt pokračuje dál.
+    @Test("Výskyt na hraně se posune, aby kolem sebe měl místo")
+    func aMatchOnTheEdgeGetsMargin() throws {
+        let left = try #require(Policy.horizontalReveal(match: 105...140, visible: Self.visible))
+        #expect(left == 105 - Self.margin)
+        let right = try #require(Policy.horizontalReveal(match: 560...595, visible: Self.visible))
+        // Posun je levá hrana výřezu, takže se výskyt i s rezervou vejde do jeho pravé části.
+        #expect(right == 595 + Self.margin - 500)
+    }
+
+    @Test("Výskyt vlevo od výřezu se přitáhne na začátek")
+    func aMatchToTheLeftIsPulledBack() throws {
+        let x = try #require(Policy.horizontalReveal(match: 40...80, visible: Self.visible))
+        #expect(x == 40 - Self.margin)
+    }
+
+    /// **Posun nikdy nejde za začátek dokumentu**: výskyt na prvním znaku by jinak vyžadoval
+    /// zápornou hodnotu a plocha by ji stejně ořízla — jen by se o tom nedalo psát test.
+    @Test("Posun se nedostane před začátek řádku")
+    func theOffsetNeverGoesBeforeTheStart() throws {
+        let x = try #require(Policy.horizontalReveal(match: 0...30, visible: 200...700))
+        #expect(x == 0)
+    }
+
+    /// Výskyt delší než výřez: vyhrává jeho **začátek**, protože se čte zleva.
+    @Test("U výskytu delšího než výřez vyhrává jeho začátek")
+    func aMatchWiderThanTheViewportShowsItsStart() throws {
+        let x = try #require(Policy.horizontalReveal(match: 800...1600, visible: Self.visible))
+        #expect(x == 800 - Self.margin)
+    }
+
+    /// Nulová šířka výřezu (sloupec se ještě nerozvrhl) — **není co odhalovat**, a hlavně se nesmí
+    /// vydat nesmyslný posun.
+    @Test("Bez rozvrženého sloupce se neposouvá")
+    func withoutALaidOutColumnNothingMoves() {
+        #expect(Policy.horizontalReveal(match: 100...200, visible: 0...0) == nil)
     }
 }

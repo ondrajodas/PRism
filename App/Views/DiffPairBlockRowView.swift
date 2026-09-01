@@ -185,15 +185,16 @@ struct DiffPairBlockRowView: View {
         var rows: [DiffRowFrames.Entry] = []
         for side in [DiffSide.left, .right] {
             for frame in frames {
-                guard let anchor = anchor(of: frame, on: side) else { continue }
+                // **Každý řádek, i ten bez kotvy** (#152) — z ploch se počítá i skok; kotvu má jen
+                // ten, přes který se dá táhnout rozsah.
                 rows.append(DiffRowFrames.Entry(
                     id: id(of: frame, on: side),
                     rect: gutter.rect(of: frame, on: side).offsetBy(dx: origin.x, dy: origin.y),
-                    anchor: anchor
+                    anchor: anchor(of: frame, on: side)
                 ))
             }
         }
-        box.frames.note(rows, covering: placement.rect, of: box.subject)
+        box.frames.note(rows, covering: placement.rect, of: box.subject, block: blockID)
     }
 
     private func line(of frame: DiffBlockLineFrame, on side: DiffSide) -> DiffLine? {

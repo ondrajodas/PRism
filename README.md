@@ -675,7 +675,10 @@ se dotáhne sám** — nález bez svého kódu se nedá posoudit. Skok kamkoli v
 
 **Hledat v diffu jde na ⌘F** (#152). Pod lištou se otevře pruh: pole, počet výskytů (`4 z 17`),
 šipky `⌘G` / `⌘⇧G` (v poli i `⏎` a `⇧⏎`), kapsle `Aa` na rozlišování velikosti a `✕` s `esc`. Skok
-sbalený soubor **sám rozbalí** a kolik výskytů který soubor má, stojí v jeho hlavičce; nalezené kusy
+míří **na řádek, ne na jeho okolí** — výskyt přistane ve třetině shora, a v pohledu vedle sebe se
+sloupec posune i **do šířky**, když výskyt leží za jeho pravou hranou (jedině tehdy: rozkoukanou
+vodorovnou polohu skok nepřerovnává). Sbalený soubor **sám rozbalí** a kolik výskytů který soubor
+má, stojí v jeho hlavičce; nalezené kusy
 svítí v kódu, ten aktuální sytěji. `esc` pruh zavře a zvýraznění zhasne — **dotaz si drží**, takže
 druhé ⌘F pokračuje tam, kde první skončilo. Hledá se i v diffu rozklikaného commitu, s vlastním
 pruhem.

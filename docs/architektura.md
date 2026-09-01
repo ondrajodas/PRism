@@ -1503,6 +1503,54 @@ píše i panel nálezů.
 přistane ve stejné výšce, oko se nehýbe. Přerovnávat pohled jen tehdy, když cíl mimo výřez je, by
 znamenalo výskyt poskakující po obrazovce, tedy zrovna to hledání očima, kvůli kterému se skáče.
 
+##### Druhé kolo: rozměry se měří, ne odhadují — a skok už není animovaný
+
+Po prvním kole proklikání zbylo *„někdy se i špatně scrolluje na výšku"*. Byly to **dvě různé věci**
+a ani jedna nebyla to, co první kolo podezřívalo:
+
+1. **Zalomené řádky.** V pohledu pod sebou se zalamuje (`DiffTextView.wrappingBlock`), takže blok
+   o šedesáti **dlouhých** řádcích je násobně vyšší, než kolik má řádků — a dokud se výška
+   dopočítávala z `rows × výška řádku`, byl podíl počítaný z čísla, které neplatí. Naměřeno
+   (okno 1 200 × 800, řádky ~380 znaků): odhad **964 pt** proti skutečným **~2 900**, a cíl skončil
+   **2 054 až 6 017 pt nad** výřezem — tedy o obrazovku až osm výš, což vypadá jako „skočilo to
+   někam pryč“. Od té doby se rozměry berou **změřené** (`DiffRowFrames`, viz níž) a poloha sedí na
+   dva body: 90 pt u všech zkoušených řádků.
+2. **Přerušená animace.** Skok byl animovaný a o průchod později přišel druhý, neanimovaný — ten
+   měl srovnat výšku bloku, která se mohla po nasazení změnit (#469). Jenže jeden skok z desítky
+   pak skončil **dva až třináct bodů** od místa, kde začal: druhý průchod animaci **uťal**. Se
+   změřenými rozměry se nemá co dorovnávat, takže druhý průchod odpadá — a **skok se nechává
+   neanimovaný**, protože animace, kterou stejně přebije okamžitý posun, je horší než skočit rovnou.
+   Je to změna proti #72.
+
+**Kde se ty rozměry berou:** z `DiffRowFrames`, tedy z krabice, do které bloky hlásí plochy řádků
+kvůli tažení rozsahu (#110, #252). Od #152 se do ní hlásí **každý řádek** (ne jen ten, na který se dá
+komentovat — kotva je proto volitelná) a k tomu **plocha celého bloku**, kterou zápis dostával jako
+`covering` a zahazoval. **Žádné měření navíc**: plochy tam leží od prvního rozvržení, kdy se nasadí
+i bloky mimo pás. Počítá se z nich jedině **rozdíl uvnitř bloku** a jeho výška, takže na posunu
+obsahu nezáleží — a plocha bloku i jeho řádků pochází vždycky z **téhož** hlášení.
+
+##### Výskyt se odhaluje i do šířky (split)
+
+Druhý nález z proklikání: *„vůbec nescrolluje do šířky, tak to není vidět."* Ve **split** pohledu se
+nezalamuje (sloupce musí zůstat zarovnané, #157), takže výskyt na dlouhém řádku leží za pravou hranou
+sloupce — a pruh přitom hlásí `4 z 17`, tedy tvrdí, že stojím na něčem, co není vidět. Naměřeno:
+výskyt na x **2 708** proti výřezu sloupce **0–582**.
+
+- **Dělá to blok, ne `DiffView`**, a reaguje na **změnu aktuálního výskytu**: `DiffPairBlockView`
+  ho má ve stylu (`DiffBlockStyle.search`), takže se sem dojde jedině za stráží z #393 — posouvat
+  sloupec při každém přepočtu geometrie by přebíjelo to, co si člověk odroloval sám.
+- **Posouvá se plocha sloupce** (`DiffPairScrollView`), ne text: `scrollToVisible` by prošel až
+  k vnějšímu `ScrollView`u a přebil svislý skok, který nás tam právě dostal. Pruhu z #422 a #428 se
+  to nedotýká — mění se posun obsahu, ne rámec scrolleru.
+- **Kdy se posouvá, rozhoduje `Policy.horizontalReveal`**: jedině když výskyt není vidět i s rezervou.
+  Vodorovná poloha je něco, co si člověk nastavil sám, takže ji přerovnat u výskytu, který na
+  obrazovce je, je tentýž bezdůvodný poskok, jaký se u svislé osy zamítal. Výskyt delší než výřez
+  ukáže **začátek** — čte se zleva.
+- **Kde výskyt na řádku leží, počítá `DiffTextView.span(ofMatch:inLine:query:)`** z `DiffSearch
+  .ranges`, tedy z **téže** funkce, ze které se počítá číslo v pruhu i podklad v textu.
+- **V pohledu pod sebou se nedělá nic, a je to správně**: tam se zalamuje, takže výskyt vodorovně
+  utéct nemůže.
+
 **Co z odůvodnění issue #152 neplatí.** Zadání tvrdí, že se text v diffu **nedá vybrat**, protože
 `.textSelection(.enabled)` je nad ním vypnuté kvůli tisícům `Text`ů v líném seznamu. Přeměřeno:
 vybrat **jde** — kód kreslí od #157 `NSTextView` s `isSelectable = true` a jediné
