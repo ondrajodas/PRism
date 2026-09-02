@@ -5168,7 +5168,7 @@ zdroje nesmí zdědit**.
 **Přenos zákresu T9 do `docs/navrh.html`** byl první krok issue a rozhodly se u něj dvě věci.
 Palety se kreslí **jako další obrazovky v sekci 09** (precedens sekce 20: obrazovky, které
 odpovídají na navazující otázky nad týmž místem, patří k sobě), takže dnešní hledání zůstává
-záznamem dneška. Naopak pilulka v hlavičce dostala **vlastní sekci 40 s výřezem** — tentýž vztah,
+záznamem dneška. Naopak pilulka v hlavičce dostala **vlastní sekci 41 s výřezem** — tentýž vztah,
 jaký má 24 k 02: novější kresba se do záznamu dneška nepřekresluje. Organizace (#532) jsou v sekci
 10 taky jako **výřez**, ne překreslené okno nastavení.
 

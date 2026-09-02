@@ -18,7 +18,7 @@ struct PullRequestHeaderView: View {
     /// má návrh (sekce 22) — a je to jediné místo v hlavičce, které tu informaci nese.
     var ownership: PullRequestOwnership = .theirs
     /// Odkud se záložka vzala (#531). Mimo zdroje za stavem stojí pilulka `mimo zdroje ·
-    /// jen ke čtení`, jak ji má návrh (sekce 40) — u PR ze zdrojů se nekreslí nic.
+    /// jen ke čtení`, jak ji má návrh (sekce 41) — u PR ze zdrojů se nekreslí nic.
     var origin: PullRequestOrigin = .sources
 
     var body: some View {

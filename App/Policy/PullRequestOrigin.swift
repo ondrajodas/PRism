@@ -50,7 +50,7 @@ extension Policy {
         sources.contains(pullRequest) ? .sources : .outsideSources
     }
 
-    /// Text pilulky v hlavičce (`.pill.idle` ze sekce 40 návrhu). `nil` = nekreslí se nic.
+    /// Text pilulky v hlavičce (`.pill.idle` ze sekce 41 návrhu). `nil` = nekreslí se nic.
     ///
     /// **U PR ze zdrojů se nekreslí nic**, ne pilulka „ze zdrojů“: hlavička by nesla údaj, který
     /// platí u devadesáti devíti procent záložek, tedy šum. Je to tatáž úvaha, jakou má vedle

@@ -59,7 +59,7 @@ v panelu**, ne celý panel znovu. Ve stejném vztahu stojí **38 k 04**: 04 je z
 *Konverzace* i s composerem, 38 kreslí **jen ten composer s nabídkou emotikonů**, protože se
 nemění nic jiného. A **37 vedle 36** je jiný případ — nejsou to dvě podoby jedné obrazovky, ale
 dvě akce v téže sekci panelu (*Větev*), takže spolu leží na stránce *Panel u vlastního PR* a ani
-jedna z nich zatím není záznamem dneška. A **40 vedle 02** je zase případ jako 24: kreslí
+jedna z nich zatím není záznamem dneška. A **41 vedle 02** je zase případ jako 24: kreslí
 **jediný výřez hlavičky** s pilulkou `mimo zdroje` a dva stavy záložky, o které se ví jen adresa
 (#531) — celá hlavička ani celé okno se nepřekresluje.
 

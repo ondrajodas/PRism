@@ -6276,7 +6276,7 @@ o úroveň níž na otevřené PR toho repa a druhý `↵` otevře **záložku k
 a URL schéma `prism://` jsou zkratka téže cesty. Rozvrh je v popisu milníku: **#531** (otevřít
 PR mimo zdroje — základ, sám) souběžně s **#532** (organizace v nastavení a cache seznamu
 repozitářů, jiné soubory), pak **#533** (paleta: skupina `Repozitáře` a druhá úroveň), která
-staví na obojím. Nakreslené je to v **sekcích 09, 10 a 40** návrhu.
+staví na obojím. Nakreslené je to v **sekcích 09, 10 a 41** návrhu.
 
 **Tvrdé podmínky se nemění ani o položku**: celá cesta je čtení, `GitHubGateway` zůstává bez
 zápisových metod. Mění se `forget(whatIsNotIn:)`, tedy úklid po tiku — viz níž.
@@ -6290,7 +6290,7 @@ protože frontu definují zdroje. Hlavička to říká pilulkou `mimo zdroje · 
 
 **První krok issue byl přenos zákresu T9 z decku do `docs/navrh.html`** (sekce **09** dostala dvě
 nové obrazovky — vložený odkaz a dvě úrovně nad repem —, sekce **10** výřez s organizacemi a nová
-sekce **40** výřez hlavičky s pilulkou a se dvěma stavy záložky, o které se ví jen adresa).
+sekce **41** výřez hlavičky s pilulkou a se dvěma stavy záložky, o které se ví jen adresa).
 Sekcí je tím **40**; číslo v [`docs/navrh.md`](navrh.md) přitom stálo 38 proti skutečným 39, takže
 se rovnalo i to.
 
