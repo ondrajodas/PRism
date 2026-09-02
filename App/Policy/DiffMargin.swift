@@ -59,6 +59,11 @@ struct DiffMarginSource: Sendable {
 struct DiffSideColumns: Hashable, Sendable {
     let tree: Bool
     let panel: Bool
+    /// Kreslí se okraj s kartami? **Není to totéž jako „karty existují“** (#503, oprava
+    /// z proklikání): karty mohou být, a okraj se přesto nevejde — pak se nekreslí, protože
+    /// třistabodová kolona, na kterou není místo, si ho vezme obsahu a schová ho pod proužek
+    /// panelu.
+    let margin: Bool
 }
 
 extension Policy {
@@ -151,9 +156,90 @@ extension Policy {
     /// složený je proužek s počtem nálezů a značkou rozdělaného review, a `⌘2` ho vrátí až do
     /// další změny pohledu, přesně jako u #188. Je to **mezistav**: seznam nálezů v panelu ruší
     /// #504, a tím tahle podmínka odpadne.
-    static func diffSideColumns(layout: DiffLayout, hasMargin: Bool) -> DiffSideColumns {
+    /// **Šířka je vstup, ne dodatečná kontrola** (#220, oprava z proklikání #503). Do téhle
+    /// opravy o kolonách rozhodoval jen pohled, takže se v úzkém okně sešly strom (210), kód
+    /// a okraj (300) v jednom `HStack`u, jehož pružné dítě je uprostřed — a když se pevné části
+    /// nevejdou, `HStack` **přesype rozdíl doprava**, tedy pod složený proužek panelu. Naměřeno
+    /// v okně 700 (podlaha `RootView`u): přetečení **35 bodů** s okrajem a **16** bez něj,
+    /// v obou pohledech; u hlavičky souboru se to projeví ukousnutým `+347 −0`.
+    ///
+    /// Rozhoduje se proto **odečítáním**, ne dohadováním, a v pořadí podle toho, co je jak drahé
+    /// zahodit:
+    ///
+    /// 1. **Kód nikdy** — je to důvod, proč je okno otevřené.
+    /// 2. **Strom jde první**, protože je nejlevnější: `⌘1` ho vrátí a v liště je pořád popover
+    ///    se stejným seznamem, takže se tím nic nedozvíme méně.
+    /// 3. **Okraj až potom, a nikdy tak, aby nález zůstal bez domova.** Zahodit okraj znamená
+    ///    schovat nález, takže se s ním zároveň **rozloží panel**, který ho převezme
+    ///    (`panel` níž). Ve `Vedle sebe` se proto okraj drží, i když na kód zbývá pod podlahu —
+    ///    úzká kolona kódu je menší škoda než nález, který na obrazovce není; zahodí se teprve
+    ///    tehdy, když se ta kolona nevejde **fyzicky**.
+    ///
+    /// **Zahození okraje rozloží panel, a přesto to nekmitá** — což je ta neintuitivní část.
+    /// `available` je šířka **po** odečtení panelu (měří ji detail PR), takže rozhodnutí mění svůj
+    /// vlastní vstup a `task(id: columns)` v `DiffView` má stráž jen proti **témuž** výsledku, ne
+    /// proti kmitání A→B→A. Bezpečné je to proto, že ta zpětná vazba je **monotónní**: rozložením
+    /// panelu se `available` jedině **zmenší**, a menší `available` okraj drží zahozený. Cyklus by
+    /// vznikl jedině tehdy, kdyby zahození okraje šířku zvětšilo — a to se stát nemůže, protože
+    /// složený proužek je vždycky užší než rozložený panel.
+    ///
+    /// - Parameter available: šířka, kterou dostal **diff**, tedy okno bez railu a bez panelu.
+    ///   `nil` znamená „nikdo ji nezměřil“ a chová se jako dřív (rozhoduje jen pohled) — bez toho
+    ///   by se kolony složily každému, kdo `DiffView` hostuje mimo okno.
+    static func diffSideColumns(
+        layout: DiffLayout,
+        hasMargin: Bool,
+        available: Double? = nil
+    ) -> DiffSideColumns {
         let wide = layout != .split
-        return DiffSideColumns(tree: wide, panel: wide && !hasMargin)
+        guard let available else {
+            return DiffSideColumns(tree: wide, panel: wide && !hasMargin, margin: hasMargin)
+        }
+        let floor = minimumCodeWidth(layout: layout)
+        var tree = wide
+        var margin = hasMargin
+        func codeWidth() -> Double {
+            available - treeColumnWidth(expanded: tree) - marginColumnWidth(shown: margin)
+        }
+        if codeWidth() < floor { tree = false }
+        // **Pod sebou** stačí, že se kód dostal pod podlahu — panel okraj převezme a je v něm
+        // na nález víc místa než v úzké koloně vedle kódu.
+        if wide, codeWidth() < floor { margin = false }
+        // **Vedle sebe** se okraj drží, dokud se vejde fyzicky: hlídá se, že po něm zbyde na kód
+        // aspoň něco, ne že zbyde podlaha.
+        if codeWidth() <= 0 { margin = false }
+        return DiffSideColumns(
+            tree: tree,
+            // **Karty rozhodují víc než pohled**: když se okraj nekreslí a nálezy jsou, panel je
+            // jejich jediný domov a musí být rozložený — i ve `Vedle sebe`, kde by ho #188 jinak
+            // složilo. Bez karet platí #188 beze změny.
+            panel: hasMargin ? !margin : wide,
+            margin: margin
+        )
+    }
+
+    /// Kolik musí zbýt na kód, aby to k něčemu bylo.
+    ///
+    /// **Je to změřená mez, ne kulaté číslo.** Hlavička souboru nese `nový`, `2 blokují`,
+    /// `+347 −0` a `Prošlo` na jedné řádce; v okně 820 (kolona kódu 396) se vejde celá, v okně
+    /// 700 (kolona 276, respektive 169 s rozloženým stromem) se **ukousne** — a přesně tím se
+    /// vada z proklikání poznala. Podlaha je proto nad tím horním koncem naměřeného rozpětí.
+    ///
+    /// **Vedle sebe je dvojnásobná**, protože se šířka dělí na dvě strany: to je tatáž úvaha,
+    /// jakou má #188 pro složení sloupců, jen vyjádřená číslem místo příznaku.
+    static func minimumCodeWidth(layout: DiffLayout) -> Double {
+        layout == .split ? 2 * 180 : 360
+    }
+
+    /// Šířka sloupce se stromem — rozložený z návrhu (`210px`), složený jako pruh s ikonou.
+    /// Konstanty jsou tady schválně: rozhoduje se podle nich, takže view je čte odsud, ne naopak.
+    static func treeColumnWidth(expanded: Bool) -> Double {
+        expanded ? 210 : 34
+    }
+
+    /// Šířka okraje s kartami z návrhu (`300px`), nebo nula, když se nekreslí.
+    static func marginColumnWidth(shown: Bool) -> Double {
+        shown ? 300 : 0
     }
 
     /// Barva hrany karty a pruhu u řádku. Odmítnutá skupina ztichne, blokující křičí — **tatáž

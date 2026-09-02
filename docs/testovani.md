@@ -7367,6 +7367,63 @@ TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_SHARP_DIFFS=<složka> \
 
 a pozná se to podle toho, že u každé varianty stojí `dojelo na …` s nenulovou hodnotou.
 
+### Zalézal obsah diffu pod boční proužky? (#503)
+
+Vada z proklikání: v tabu `Změněné soubory` zalézal obsah pod složený proužek panelu vpravo —
+u hlavičky souboru bylo **ukousnuté `+347 −0`**. Hypotézy byly dvě a **poznají se jedním měřením**:
+buď se proužek kreslí přes obsah (pak by součet šířek souhlasil), nebo si obsah bere šířku, která
+mu nepatří (pak součet přeteče). Měří to `DiffColumnFitProbe` (ručně) nad **skutečným
+`ContentView`em** v okně: scroller diffu je `NSScrollView`, tedy jediná kolona, jejíž rámec se
+v hostovaném okně dá doopravdy přečíst (accessibility tree se v něm nenaplní).
+
+Mřížka je **pásmo šířek × pohled × okraj × co si člověk přebil ručně** (`⌘1` / `⌘2`), tedy 64
+případů. Ruční stav se nasazuje **až po usazení scény**: `task(id: columns)` v `DiffView` při vzniku
+strom i panel srovná podle `Policy`, takže hodnota nastavená dřív se přepíše.
+
+| Okno | pohled a stav | před opravou | po opravě |
+|---|---|---|---|
+| 700 | vedle sebe, okraj, rozložený strom | **přetečení 35 pt** | 0 |
+| 700 | pod sebou, okraj | **35 pt** | 0 |
+| 700 | pod sebou, bez nálezů, rozložený panel | **16 pt** | 0 |
+| 820 a víc | cokoli | 0 | 0 |
+
+**Přeteklo to, takže to bylo rozvržení, ne kresba navíc** — a hypotéza o `overlay`i (#483) tím
+padla. Příčina: `Policy.diffSideColumns` rozhodovala jen podle pohledu, takže se strom (210), kód
+a okraj (300) sešly v jednom `HStack`u; pevné části se nevešly a `HStack` rozdíl **přesypal
+doprava**, pod proužek. `DiffView` přitom svou šířku **vůbec nečetl** — je to tatáž třída jako #220,
+jen o kolonu vedle.
+
+Tři věci, které z toho měření vypadly a bez kterých by z něj vyšel nesmysl:
+
+- **Okno pod 700 nemá smysl zkoušet, a je to zaplacená slepá ulička.** První mřížka začínala na 509
+  a hlásila přetečení 153 pt ve **všech** variantách. Není to vada aplikace: `RootView` má
+  `frame(minWidth: 700)` a `PRismApp` `windowResizability(.contentMinSize)`, takže obsah se pod svým
+  minimem rozvrhne na 700 a přeteče o rozdíl. Užší okno v aplikaci nevznikne.
+- **Očekávání se musí skládat z `Policy`, ne z vlastních konstant.** První podoba sondy si pravý
+  chrom počítala sama (300 + 38) a hlásila „přetečení −306“ tam, kde okno sedělo na bod — měřila
+  rozdíl dvou názorů místo vady. Panel se navíc dá **táhnout**, takže se bere jeho **podlaha** (246):
+  kdyby obsah sahal dál než k ní, panel by se musel zmáčknout pod svoje minimum.
+- **Levý bok byl v pořádku, i když se mluvilo o „bocích“ množně.** Levá hrana scrolleru stála ve
+  všech 64 případech na hraně railu (86 se složeným stromem, 262 s rozloženým), nikdy pod ním —
+  a plyne to z tvaru: rail je v `HStack`u **před** pružným dítětem, takže mu `HStack` ubírá šířku
+  jako první. Přesypat se dá jedině to, co je **za** ním.
+
+**Podlaha kolony kódu je bracketovaná měřením, ne kulaté číslo** (`Policy.minimumCodeWidth`): 360
+pod sebou a dvojnásobek vedle sebe, protože se šířka dělí na dvě strany. Hlavička souboru nese
+`nový`, `2 blokují`, `+347 −0` a `Prošlo` na jedné řádce — při koloně 396 (okno 820) se vejde celá,
+při 276 a 169 (okno 700) se **ukousne**, a přesně tím se vada poznala.
+
+**Zbylá mez, a je vědomá:** v okně na podlaze (700) se lišta diffu pořád **ořezává uvnitř své
+kolony** (`Sbalit vše` se nevejde celé). Není to přetečení — proužek i okraj jsou vidět celé
+a součet je na bod —, je to úzké okno bez zvláštního rozvržení; patří to k #505 (*okraj v úzkém
+okně*) spolu se značkou místo karty.
+
+**Tvrdí to test, ne jen sonda** (`DiffColumnFitTests`): pevné kolony se vejdou přes celé pásmo
+šířek v obou pohledech, nález **nikdy nezůstane bez domova** (buď okraj, nebo rozložený panel),
+strom ustupuje první a šířky se čtou z `Policy`, ne ze dvou konstant ve views. **Ověřeno vložením
+regrese**: když se rozhodnutí o šířce vypne (`if false` na všech třech místech), spadne *Pevné
+kolony se vejdou vždycky* na sedmi kombinacích šířky a pohledu.
+
 ### Kde blok hlásí svůj řádek (#503)
 
 `DiffMarginPlacementTests` — čtyři způsoby, jak se to dá rozbít potichu, a všechny čtyři měřené

@@ -56,7 +56,11 @@ struct DiffMarginView: View {
 
     /// Šířka z návrhu (`grid-template-columns: 210px 1fr 300px`) — tatáž jako panel, který okraj
     /// v tomhle tabu zastupuje, takže se počet znaků na stranu nemění.
-    static let width = 300.0
+    ///
+    /// **Čte se z `Policy`**, protože podle téhož čísla se rozhoduje, jestli se kolona do okna
+    /// vejde (`Policy.diffSideColumns`). Dvě pravdy o jedné šířce znamenají, že se rozhodnutí
+    /// a kresba rozejdou — a přesně tím vznikla vada z proklikání #503.
+    static let width = Policy.marginColumnWidth(shown: true)
     /// Mezera mezi odstrčenými kartami (návrh: `margin-top: 8px`).
     private static let gap = 8.0
     /// Odsazení karty od hran okraje (návrh: `.mgn { padding: 0 10px }`).

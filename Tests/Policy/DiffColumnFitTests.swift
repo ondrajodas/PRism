@@ -1,0 +1,104 @@
+import Testing
+
+@testable import PRism
+
+/// **Vejdou se pevné kolony diffu do šířky, kterou dostal?** (#503, oprava z proklikání)
+///
+/// Vada, kvůli které to vzniklo: `Policy.diffSideColumns` rozhodovala jen podle pohledu, takže se
+/// v úzkém okně sešly strom (210), kód a okraj (300) v jednom `HStack`u — a `HStack` rozdíl, který
+/// se nevejde, **přesype doprava**, tedy pod složený proužek panelu. Naměřeno v okně 700 (podlaha
+/// `RootView`u): 35 bodů s okrajem, 16 bez něj, v obou pohledech.
+///
+/// Testuje se **přes pásmo šířek**, ne u jedné (#236): u širokého okna vada není a test by prošel.
+/// Pásmo začíná na podlaze okna a jde po skutečných velikostech, ve kterých se aplikace používá.
+@Suite("Kolony diffu se vejdou do okna (#503)")
+struct DiffColumnFitTests {
+    /// Šířky **diffu**, ne okna: okno bez railu (56) a bez panelu (38 složený / 246 a víc
+    /// rozložený). Podlaha okna je 700, takže nejužší diff je řádově 400 — a pod to se jde
+    /// schválně, aby se pásmo nespoléhalo na to, že rail a panel mají navždycky dnešní šířku.
+    static let widths: [Double] = [200, 300, 360, 406, 500, 606, 726, 1006, 1306, 1606]
+
+    @Test("Pevné kolony se vejdou vždycky", arguments: widths, [DiffLayout.unified, .split])
+    func fixedColumnsFit(width: Double, layout: DiffLayout) {
+        for hasMargin in [true, false] {
+            let columns = Policy.diffSideColumns(layout: layout, hasMargin: hasMargin, available: width)
+            let fixed = Policy.treeColumnWidth(expanded: columns.tree)
+                + Policy.marginColumnWidth(shown: columns.margin)
+            // **Tvrzení je „nepřeteče“, ne „zbyde podlaha“**: v pohledu vedle sebe se okraj
+            // nezahazuje ani tehdy, když na kód zbývá málo (nález bez domova je horší), takže
+            // podlahu slíbit nejde. Přetečení slíbit jde — a přesně to se rozbilo.
+            #expect(
+                fixed <= width,
+                """
+                Pevné kolony přetekly: šířka \(width), \(layout), okraj \(hasMargin) → \
+                strom \(columns.tree) + okraj \(columns.margin) = \(fixed)
+                """
+            )
+        }
+    }
+
+    @Test("Nález nikdy nezůstane bez domova", arguments: widths, [DiffLayout.unified, .split])
+    func findingsAlwaysHaveAHome(width: Double, layout: DiffLayout) {
+        let columns = Policy.diffSideColumns(layout: layout, hasMargin: true, available: width)
+        // Karty existují. Když se okraj nekreslí, **musí** být rozložený panel — jinak by nález
+        // z obrazovky zmizel a nikdo by se o něm nedozvěděl. Je to tvrzení o tom, že se něco
+        // **nestalo**, a přesně takové se rozbíjejí potichu.
+        #expect(
+            columns.margin || columns.panel,
+            "Šířka \(width), \(layout): okraj se nekreslí a panel je složený — nález je nikde"
+        )
+    }
+
+    /// **Ve `Vedle sebe` se okraj drží i pod podlahou kódu** — panel je v tom pohledu složený
+    /// (#188), takže by zahozený okraj znamenal nález, který na obrazovce není. Zahodí se teprve
+    /// tehdy, když se **fyzicky** nevejde, a to je pod šířku samotné kolony; takový diff
+    /// v aplikaci nevznikne (podlaha okna 700 dává diffu ~606).
+    @Test("Vedle sebe se okraj drží, dokud se vejde fyzicky")
+    func splitKeepsTheMargin() {
+        for width in Self.widths where width > Policy.marginColumnWidth(shown: true) {
+            let columns = Policy.diffSideColumns(layout: .split, hasMargin: true, available: width)
+            #expect(columns.margin, "Šířka \(width): ve Vedle sebe okraj zmizel")
+            // A strom se v něm složí, protože ten dům pro nález není.
+            #expect(!columns.tree)
+        }
+        // Pod šířkou kolony okraj padá — a panel ho **musí** převzít, i když je to split.
+        let tiny = Policy.diffSideColumns(layout: .split, hasMargin: true, available: 200)
+        #expect(!tiny.margin)
+        #expect(tiny.panel, "Okraj padl a panel zůstal složený — nález je nikde")
+    }
+
+    @Test("Strom jde první, okraj až po něm")
+    func theTreeGoesFirst() {
+        // Šířka, na které se pod sebou vejde okraj i kód, ale ne k tomu strom:
+        // 360 (podlaha kódu) + 300 (okraj) = 660, strom by chtěl dalších 210.
+        let tight = Policy.diffSideColumns(layout: .unified, hasMargin: true, available: 700)
+        #expect(!tight.tree)
+        #expect(tight.margin)
+        // A šířka, na které se nevejde ani okraj: panel ho převezme.
+        let tiny = Policy.diffSideColumns(layout: .unified, hasMargin: true, available: 500)
+        #expect(!tiny.tree)
+        #expect(!tiny.margin)
+        #expect(tiny.panel)
+    }
+
+    @Test("Bez změřené šířky se rozhoduje jako dřív")
+    func withoutAWidthNothingCollapses() {
+        // `nil` je „nikdo ji nezměřil“ — `DiffView` hostovaný mimo okno by jinak přišel o kolony.
+        let unified = Policy.diffSideColumns(layout: .unified, hasMargin: true, available: nil)
+        #expect(unified.tree)
+        #expect(unified.margin)
+        #expect(!unified.panel)
+        let split = Policy.diffSideColumns(layout: .split, hasMargin: false, available: nil)
+        #expect(!split.tree)
+        #expect(!split.panel)
+        #expect(!split.margin)
+    }
+
+    @Test("Šířky kolon má na starost Policy, ne dvě konstanty ve views")
+    func widthsComeFromPolicy() {
+        // Rozhodnutí i kresba musí čísla brát z jednoho místa — dvě pravdy o jedné šířce se
+        // rozejdou při první úpravě a přesně tím vada vznikla.
+        #expect(DiffView.treeWidth == Policy.treeColumnWidth(expanded: true))
+        #expect(DiffMarginView.width == Policy.marginColumnWidth(shown: true))
+    }
+}

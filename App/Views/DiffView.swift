@@ -85,6 +85,10 @@ struct DiffView: View {
     /// klíčem by okraj neviděl nikdo, kdo si ten přepínač kdy vypnul a zapnul.
     ///
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
+    /// Šířka, kterou diff dostal — okno bez railu a bez panelu vpravo (#220). Rozhoduje se z ní
+    /// o kolonách: bez ní se strom a okraj skládají jen podle pohledu a v úzkém okně přetečou
+    /// pod proužek panelu (změřeno u opravy #503, 35 bodů v okně 700).
+    @Environment(\.availableWidth) private var slotWidth
     @AppStorage("showInlineFindingBubbles") private var showBubbles = false
     /// Rozložený strom v levém sloupci (#197). Předvolba pohledu napříč PR, takže `UserDefaults`
     /// — a ne stav ve store, ze stejného důvodu jako u bublin.
@@ -133,7 +137,11 @@ struct DiffView: View {
         let cards = marginCards
         // Rozhodnutí o postranních sloupcích se skládá **jednou** a slouží dvakrát: je to identita
         // `task`u níž **i** hodnota, kterou uplatní. Dvě složení jedné odpovědi jsou dvě odpovědi.
-        let columns = Policy.diffSideColumns(layout: layout, hasMargin: !cards.isEmpty)
+        let columns = Policy.diffSideColumns(
+            layout: layout,
+            hasMargin: !cards.isEmpty,
+            available: slotWidth.map(Double.init)
+        )
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 toolbar
@@ -160,7 +168,7 @@ struct DiffView: View {
                     // Okraj s kartami nálezů (#503) — třetí kolona z návrhu
                     // (`210px 1fr 300px`), a **jen když je co do ní postavit**: okraj bez karet
                     // je ubraná šířka bez informace.
-                    margin(cards: cards)
+                    margin(cards: columns.margin ? cards : [])
                 }
             }
             .background(alignment: .topLeading) { treeShortcut }
@@ -768,8 +776,10 @@ struct DiffView: View {
         withAnimation { proxy.scrollTo(file.id, anchor: .top) }
     }
 
-    static let treeWidth = 210.0
-    private static let collapsedTreeWidth = 34.0
+    /// **Čte se z `Policy`**, protože podle týchž čísel se rozhoduje, jestli se kolona vejde
+    /// (`Policy.diffSideColumns`) — dvě pravdy o jedné šířce by se rozešly při první úpravě.
+    static let treeWidth = Policy.treeColumnWidth(expanded: true)
+    private static let collapsedTreeWidth = Policy.treeColumnWidth(expanded: false)
 
     /// Které soubory nesou nález (#197). Počítá `Policy`, ať strom a panel neříkají o téže věci
     /// každý něco jiného.

@@ -6751,8 +6751,20 @@ diff začne kreslit. Na rozdíl od logů z CI, které mez mají a **pojmenovanou
 (`Policy.logAvailability` → `.tooLarge`), diff žádný takový stav nemá; v okně je z toho obyčejná
 chyba. Opravit to sem nepatří (je to jiná vrstva než okraj), ale zapsané to být musí.
 
-Testů **4993** ve 486 suitách; nových je **pět** sad (`DiffMarginTests` nad
+**Oprava z proklikání: obsah diffu zalézal pod boční proužky.** `Policy.diffSideColumns`
+rozhodovala jen podle pohledu, takže se v úzkém okně sešly strom (210), kód a okraj (300) v jednom
+`HStack`u — a `HStack` rozdíl, který se nevejde, přesype doprava, tedy pod složený proužek panelu.
+Naměřeno v okně 700 (podlaha `RootView`u): **35 bodů** s okrajem, **16** bez něj, v obou pohledech;
+na obrazovce ukousnuté `+347 −0` v hlavičce souboru. Od téhle opravy je **šířka vstupem** rozhodnutí
+a kolony se **odečítají**: kód nikdy neustoupí, strom jde první (`⌘1` ho vrátí), okraj až potom —
+a **nikdy tak, aby nález zůstal bez domova**, takže se s ním rozloží panel, který karty převezme.
+Zpětná vazba přes panel je monotónní, proto se to ustálí na první průchod. Přes celou mřížku
+(pásmo šířek × pohled × okraj × ruční `⌘1`/`⌘2`, 64 případů) je přetečení **0**; před opravou až 35.
+Zbylá mez je vědomá: v okně na podlaze se lišta diffu ořezává uvnitř své kolony, což patří k #505.
+
+Testů **5000** ve 488 suitách; nových je **sedm** sad (`DiffMarginTests` nad
 `Policy`, `DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
-a dvě ruční měření — `DiffMarginWheelProbe` nad vyrobenou scénou a `DiffMarginSharpProbe`
-nad skutečnými diffy). Co se v nich hlídá a jak se měřilo, je
+`DiffColumnFitTests` nad šířkami kolon a tři ruční měření — `DiffMarginWheelProbe` nad vyrobenou
+scénou, `DiffMarginSharpProbe` nad skutečnými diffy a `DiffColumnFitProbe` nad rámci kolon v okně).
+Co se v nich hlídá a jak se měřilo, je
 v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).

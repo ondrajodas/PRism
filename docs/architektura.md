@@ -1736,6 +1736,33 @@ v okraji nesmí chovat jinak než pod řádkem); značka se musí hledat podle *
 (kotva nálezu, `DiffRow.withBubbles`); a `viewport.top` nesmí přitéct do těla okraje — čtenáři
 i zapisovatelé jsou vyjmenovaní v `DiffMarginScrollReadTests`.
 
+**O kolonách rozhoduje šířka, ne jen pohled** (oprava z proklikání). `Policy.diffSideColumns`
+dostává `available` — šířku, kterou diff dostal, tedy okno bez railu a bez panelu — a **odečítá**,
+místo aby se dohadovala. Bez toho se v úzkém okně sešly strom (210), kód a okraj (300) v jednom
+`HStack`u, jehož pružné dítě je uprostřed; `HStack` rozdíl, který se nevejde, **přesype doprava**,
+tedy pod složený proužek panelu. Naměřeno v okně 700 (podlaha `RootView`u): **35 bodů** přetečení
+s okrajem, **16** bez něj, v obou pohledech — na obrazovce ukousnuté `+347 −0` v hlavičce souboru.
+
+Pořadí ustupování je podle toho, co je jak drahé zahodit: **kód nikdy**, pak **strom** (`⌘1` ho
+vrátí a v liště je pořád popover s týmž seznamem), a **okraj až potom, a nikdy tak, aby nález
+zůstal bez domova** — se zahozeným okrajem se **rozloží panel**, který karty převezme, a to
+i v pohledu vedle sebe, kde by ho #188 jinak složilo. Ve `Vedle sebe` se proto okraj drží, i když
+na kód zbývá pod podlahu; padne teprve tehdy, když se nevejde fyzicky.
+
+**Zahození okraje mění svůj vlastní vstup, a přesto to nekmitá** — to je ta neintuitivní část.
+`available` je šířka **po** odečtení panelu, takže rozložením panelu se zmenší; a menší `available`
+okraj drží zahozený. Zpětná vazba je **monotónní**, takže se ustálí na první průchod. Kmitalo by to
+jedině tehdy, kdyby zahození okraje šířku **zvětšilo** — a to nemůže, protože složený proužek je
+vždycky užší než rozložený panel. Stráž `appliedColumns != columns` v `task(id:)` hlídá jen **týž**
+výsledek, na A→B→A by nestačila.
+
+**Šířky kolon bydlí v `Policy`, ne ve views** (`treeColumnWidth`, `marginColumnWidth`): podle týchž
+čísel se rozhoduje, jestli se kolona vejde, takže `DiffView.treeWidth` i `DiffMarginView.width` je
+odsud čtou. Dvě pravdy o jedné šířce se rozejdou při první úpravě — a přesně tím ta vada vznikla.
+Hlídá to `DiffColumnFitTests` (pásmo šířek × pohled × okraj) a k tomu tvrzení, že **nález nikdy
+nezůstane bez domova**; jak se to měřilo v okně, je
+v [`docs/testovani.md`](testovani.md#zalézal-obsah-diffu-pod-boční-proužky-503).
+
 **Kdo krabici výřezu drží, se pozná gestem `přepnutí na Změněné soubory`, ne projížděním.** U #503
 je `DiffViewport` `@State` **uvnitř** `DiffView` a zná ho šest souborů, všechny pod diffem — nad
 diffem ji nikdo nedrží ani nečte, takže se zápis při scrollování nemá kam rozlézt:
