@@ -272,7 +272,9 @@ struct ContentView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .help(Policy.shortcutHelp("Najít nález, soubor, pull request nebo akci", .palette))
+        // Věta je tatáž jako výzva v poli palety (#533) — bere se z `Policy`, protože dvě kopie
+        // by se rozešly zrovna v tom slově, které se do výčtu přidalo.
+        .help(Policy.shortcutHelp(Policy.palettePrompt(at: .top), .palette))
         .accessibilityLabel("Najít")
     }
 
@@ -289,9 +291,10 @@ struct ContentView: View {
                 Color.black.opacity(0.28)
                     .onTapGesture { store.closePalette() }
                 CommandPaletteView(
-                    items: store.paletteItems,
-                    link: store.paletteLink(for:),
+                    sections: store.paletteSections(for:),
+                    stage: store.paletteStage,
                     run: choose(_:),
+                    back: store.leavePaletteRepository,
                     close: store.closePalette
                 )
                 // Pod hlavičkou okna (40 bodů), ne uprostřed: karta roste dolů, takže od horní
@@ -304,11 +307,12 @@ struct ContentView: View {
 
     /// Vykonání řádku palety.
     ///
-    /// Paleta se zavírá **vždycky**, i u akce, po které okno zůstane, jak bylo: ⌘K je jeden hmat
-    /// a otevřená karta nad hotovou akcí by ho zdvojila. Nastavení otevírá okno, a to umí jedině
-    /// view — proto ten efekt ze store chodí až sem.
+    /// Paleta se zavírá **skoro vždycky**, i u akce, po které okno zůstane, jak bylo: ⌘K je jeden
+    /// hmat a otevřená karta nad hotovou akcí by ho zdvojila. Jedinou výjimkou je vstup do repa
+    /// (#533) — tam je karta půlka hmatu, ne jeho konec —, a rozhoduje o tom `Policy`, ne `if`
+    /// tady. Nastavení otevírá okno, a to umí jedině view — proto ten efekt ze store chodí až sem.
     private func choose(_ item: CommandPalette.Item) {
-        store.closePalette()
+        if Policy.paletteClosesAfter(item.target) { store.closePalette() }
         switch store.reveal(item.target) {
         case .openSettings: openSettings()
         case nil: break

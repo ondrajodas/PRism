@@ -2,10 +2,14 @@ import Foundation
 
 /// Command palette ⌘K (#184): co se v ní dá najít a co se stane po `↵`.
 ///
-/// **Nic se odsud nestahuje.** Katalog se skládá z toho, co store **už má v paměti** — nálezy
-/// z uložených záznamů, soubory z načteného diffu, pull requesty z posledního tiku. Žádný nový
-/// dotaz na GitHub, jak říká zadání issue; je na to test, který po vykonání každého cíle
-/// kontroluje, že gateway nedostala ani jedno volání navíc.
+/// **Psaní v poli nestahuje nic.** Katalog se skládá z toho, co store **už má** — nálezy
+/// z uložených záznamů, soubory z načteného diffu, pull requesty z posledního tiku a repozitáře
+/// ze snímků, které leží v cache na disku (#533). Je na to test, který po vykonání každého cíle
+/// i po každém úhozu kontroluje, že gateway nedostala ani jedno volání navíc.
+///
+/// **Jedna výjimka, a je za výslovné `↵`** (#533): vstup do repa dotáhne jeho **otevřené** pull
+/// requesty (`enterPaletteRepository(_:)`). Je to jediné volání, které paleta pouští, je to
+/// čtení (`GitHubGateway` zápisové metody nemá) a nespouští ho psaní ani otevření palety.
 ///
 /// **A nic odsud neodchází.** Ve `CommandPalette.Action` není nic, co by sahalo na jedinou cestu
 /// ven (`App/Publish/`, tvrdá podmínka č. 1) — paleta přepíná pohled, otevírá záložky a pouští
@@ -16,11 +20,94 @@ extension AppStore {
 
     func openPalette() { isPaletteOpen = true }
 
-    func closePalette() { isPaletteOpen = false }
+    /// Zavře paletu **a vrátí ji do první úrovně** (#533).
+    ///
+    /// Úroveň zaniká se zavřením ze stejného důvodu jako dotaz a kurzor: ⌘K je „začínám hledat“,
+    /// takže se nikdo nemá vracet do repa, do kterého vešel před minutou a zapomněl na něj. Dotažený
+    /// seznam se zahazuje s ní — kdyby zůstal, ukazoval by po ⌘K PR, o které se nikdo neptal.
+    func closePalette() {
+        isPaletteOpen = false
+        leavePaletteRepository()
+    }
 
     /// Přepnutí pro ⌘K: druhé zmáčknutí paletu zavře, protože stejná klávesa má vrátit okno
     /// tam, kde bylo.
-    func togglePalette() { isPaletteOpen.toggle() }
+    func togglePalette() {
+        if isPaletteOpen {
+            closePalette()
+        } else {
+            openPalette()
+        }
+    }
+
+    // MARK: - Úrovně (#533)
+
+    /// Vejde do repa — druhá úroveň palety, tedy jeho **otevřené** pull requesty.
+    ///
+    /// Seznam se dotahuje **při vstupu**, ne při psaní (návrh pozn. 60): je to jediné volání, které
+    /// paleta pouští, a je za výslovné `↵`. Záložka se odsud neotvírá — na to je `↵` v druhé
+    /// úrovni.
+    ///
+    /// **Stav `.loading` se nasazuje hned**, ne až v tasku: mezi klikem a prvním `await` by karta
+    /// jinak nakreslila prázdnou úroveň, tedy „repo nemá otevřené PR“ nad repem, kterého se nikdo
+    /// nezeptal. Je to tatáž úvaha jako u záložky mimo zdroje (#531).
+    func enterPaletteRepository(_ repo: RepoID) {
+        // **Druhé `↵` na tomtéž repu se neptá znovu** — je to tatáž ochrana, kterou u #531 našel
+        // Copilot na dvou `↵` nad řádkem `Odkaz`: dva pokusy o totéž by byly dva podprocesy `gh`
+        // a dva zápisy do jednoho stavu. Že už paleta v tom repu stojí, znamená „tahá se, nebo se
+        // dotáhlo“, a ani jedno není důvod se ptát podruhé; odchod z úrovně (`esc`, `⌫`) stav
+        // zahodí, takže nový vstup se zeptá.
+        guard paletteLevel != .repository(repo) else { return }
+        paletteLevel = .repository(repo)
+        paletteRepository = .loading
+        Task { await loadPaletteRepository(repo) }
+    }
+
+    /// O úroveň zpět — `esc` a `⌫` na prázdném poli.
+    ///
+    /// **Zahodí i dotažený seznam.** Zpátky do téhož repa se vchází novým `↵`, a to se zeptá znovu:
+    /// mezitím mohl přijít nový PR a starý seznam by o něm mlčel. Stojí to jedno volání za vstup,
+    /// tedy přesně tolik, kolik za něj platil první vstup.
+    func leavePaletteRepository() {
+        paletteLevel = .top
+        paletteRepository = nil
+    }
+
+    /// Dotáhne otevřené PR repa. Volá se **jedině** z `enterPaletteRepository(_:)`.
+    ///
+    /// **Odpověď se zahodí, když už paleta v tom repu nestojí** — mezi dotazem a odpovědí je
+    /// sekunda, ve které se dá zmáčknout `esc` nebo vejít do jiného repa; zápis by pak nakreslil
+    /// cizí seznam pod chipem, který mluví o něčem jiném. Je to tatáž ochrana jako u zavřené
+    /// záložky v `loadExternalDetail(of:)` (#531).
+    private func loadPaletteRepository(_ repo: RepoID) async {
+        let outcome: CommandPalette.RepositoryPullRequests
+        do {
+            outcome = .loaded(try await gateway.pullRequests(in: repo))
+        } catch is CancellationError {
+            outcome = .failed("Dotažení se zrušilo.")
+        } catch let error as GitHubError {
+            outcome = .failed(error.userDescription)
+        } catch {
+            outcome = .failed(error.localizedDescription)
+        }
+        // **Jeden guard na všechny cesty**, ne po jednom v každé větvi: na nové cestě ven se dá
+        // zapomenout, a chybějící kontrola se pozná jedině tím, že se v kartě objeví cizí seznam.
+        guard paletteLevel == .repository(repo) else { return }
+        paletteRepository = outcome
+    }
+
+    /// Přečte z cache seznamy repozitářů organizací z nastavení (#533).
+    ///
+    /// **Jen disk.** `RepositoryCatalog.load(organizations:)` se na GitHub neptá — dotahuje
+    /// `refresh` a `refreshStale`, a ty pouští jedině okno nastavení. Volá se při startu
+    /// (`keepFresh()`) a po změně konfigurace, protože dopsaná organizace může mít snímek v cache
+    /// z předchozího spuštění.
+    func loadRepositoryCatalog() async {
+        guard let repositoryCatalog else { return }
+        await repositoryCatalog.load(
+            organizations: configuration.global.searchOrganizations
+        )
+    }
 
     // MARK: - Katalog
 
@@ -31,6 +118,10 @@ extension AppStore {
     /// kdežto paleta je způsob, jak něco **najít** — a hledání, ze kterého vypadne PR schované
     /// filtrem, je k nepotřebě právě tehdy, když je filtr zapnutý. Nic se tím neriskuje, protože
     /// paleta jen čte; úklid cache visí na `pullRequests` dál a ten se odsud nespouští.
+    ///
+    /// **Repozitáře tady nejsou, a je to schválně** (#533): jejich řádky se skládají **až pro
+    /// dotaz**, protože katalog má nad velkou organizací přes tisíc položek a podtitulek každého
+    /// z nich stojí formátování času. Přidává je `paletteSections(for:)`, kde je dotaz po ruce.
     var paletteItems: [CommandPalette.Item] {
         let open = activeTab.pullRequest
         return paletteFindings(open: open)
@@ -232,8 +323,74 @@ extension AppStore {
     ///
     /// **Pořád se nic nestahuje.** Řádek se skládá z identifikátoru, ne z dotazu na GitHub — co
     /// je to za PR, se zjistí až po `↵`, když se otevře záložka.
+    /// Výsledky pro dotaz — **podle úrovně, ve které paleta stojí** (#533).
+    ///
+    /// Je to jediné místo, kde se to skládá: do #533 to view počítalo ještě jednou samo
+    /// (`Policy.paletteResults` nad předanými položkami), takže na jednu otázku byly dvě odpovědi
+    /// a druhá úroveň by musela vzniknout v obou.
     func paletteSections(for query: String) -> [CommandPalette.Section] {
-        Policy.paletteResults(of: paletteItems, query: query, link: paletteLink(for: query))
+        switch paletteLevel {
+        case .top:
+            return Policy.paletteResults(
+                of: paletteItems + paletteRepositoryRows(for: query),
+                query: query,
+                link: paletteLink(for: query),
+                organizations: paletteSearchedOrganizations
+            )
+        case .repository:
+            return paletteRepositorySections(for: query)
+        }
+    }
+
+    /// Jak paleta vypadá okolo výsledků — chip, výzva, patka, věta o dotahování.
+    var paletteStage: CommandPalette.Stage {
+        Policy.paletteStage(level: paletteLevel, repository: paletteRepository)
+    }
+
+    // MARK: - Repozitáře v paletě (#533)
+
+    /// Řádky skupiny `Repozitáře` pro dotaz — **z cache, bez jediného dotazu na GitHub**.
+    ///
+    /// Snímky se berou v pořadí organizací z nastavení, takže při stejné váze shody rozhoduje
+    /// pořadí, které si člověk poskládal sám (a pak pravidla z `Policy.paletteRepositories`).
+    private func paletteRepositoryRows(for query: String) -> [CommandPalette.Item] {
+        guard let repositoryCatalog else { return [] }
+        // **Líně**, ne do mezipole: snímek `keboola` má přes tisíc rep a tohle se počítá při
+        // každém úhozu — `Policy.paletteRepositories` sekvencí projde jednou a zahodí, co nesedí.
+        let repositories = paletteSearchedOrganizations
+            .lazy
+            .compactMap { repositoryCatalog.snapshots[$0] }
+            .flatMap(\.repositories)
+        return Policy.paletteRepositories(repositories, query: query, now: time.now)
+    }
+
+    /// Organizace, ve kterých se doopravdy hledalo — ty z nastavení, které **mají snímek**.
+    ///
+    /// **Ne celý seznam z konfigurace**, a je to tvrzení, ne detail: nadpis skupiny ta jména
+    /// vypisuje, takže organizace bez snímku by v něm slibovala, že se v ní hledalo — a přitom
+    /// se ještě nikdy nedotáhla (nebo se nepovedla, což je vidět v nastavení).
+    private var paletteSearchedOrganizations: [String] {
+        guard let repositoryCatalog else { return [] }
+        return Policy.searchOrganizations(in: configuration)
+            .filter { repositoryCatalog.snapshots[$0] != nil }
+    }
+
+    /// Výsledky druhé úrovně. Prázdno, dokud seznam nedorazil — věta o dotahování je ve `Stage`.
+    private func paletteRepositorySections(for query: String) -> [CommandPalette.Section] {
+        guard case .loaded(let pullRequests) = paletteRepository else { return [] }
+        let items = Policy.paletteRepositoryPullRequests(
+            pullRequests,
+            mine: ownLogins,
+            // **Fronta jsou zdroje, ne otevřené záložky** (#4): odznak `ve frontě` má znamenat
+            // „čeká to na mě“, kdežto `externalPullRequests` je „tohle jsem si otevřel ke čtení“.
+            sources: Set(self.pullRequests.map(\.id)),
+            now: time.now
+        )
+        return Policy.paletteRepositoryResults(
+            of: items,
+            query: query,
+            total: pullRequests.count
+        )
     }
 
     /// Řádek skupiny `Odkaz` pro dotaz. `nil` = v poli není adresa pull requestu.
@@ -263,6 +420,10 @@ extension AppStore {
             // `Odkaz`, tedy PR, o kterém store nemusí vědět nic. U PR ze seznamu je to totéž
             // volání jako dřív a nikdo se nikoho na nic neptá.
             openPullRequest(pr)
+        // Vstup do repa (#533) — **jediný cíl, po kterém paleta zůstává otevřená**; rozhoduje
+        // o tom `Policy.paletteClosesAfter(_:)` u volajícího, ne tenhle `switch`.
+        case .repository(let repo):
+            enterPaletteRepository(repo)
         case .file(let pr, let path):
             openTab(pr, in: .filesChanged)
             paletteJump = CommandPalette.Jump(pullRequest: pr, file: path, line: nil, kind: .file)

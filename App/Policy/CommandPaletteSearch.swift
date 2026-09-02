@@ -31,10 +31,15 @@ extension Policy {
     ///   **Prochází mimo hledání**, ne katalogem: není to nález mezi tím, co store drží v paměti,
     ///   ale odpověď na to, co je v poli napsané — a hledat adresu v titulcích a podtitulcích by
     ///   znamenalo, že se vložený odkaz najde jedině tehdy, když se náhodou potká s nějakým textem.
+    /// - Parameter organizations: jména organizací, ve kterých se hledala repa (#533). Dopíšou se
+    ///   do nadpisu skupiny `Repozitáře`, takže se z okna pozná, **kde** se hledalo — a je to
+    ///   parametr, ne dopočet z řádků: ze dvou nalezených rep téže organizace by vyšel nadpis
+    ///   tvrdící, že se v druhé nehledalo.
     static func paletteResults(
         of items: [CommandPalette.Item],
         query: String,
         link: CommandPalette.Item? = nil,
+        organizations: [String] = [],
         limit: Int = paletteGroupLimit
     ) -> [CommandPalette.Section] {
         let tokens = paletteTokens(in: query)
@@ -54,19 +59,93 @@ extension Policy {
             )
         }
 
-        let found = CommandPalette.Group.allCases.compactMap { group in
+        let found = CommandPalette.Group.allCases.compactMap { group -> CommandPalette.Section? in
             let hits = ranked
                 .filter { $0.hit.item.group == group }
                 .sorted { ($0.rank, $0.order) < ($1.rank, $1.order) }
                 .prefix(limit)
                 .map(\.hit)
-            return hits.isEmpty ? nil : CommandPalette.Section(group: group, hits: Array(hits))
+            guard !hits.isEmpty else { return nil }
+            return CommandPalette.Section(
+                group: group,
+                hits: Array(hits),
+                detail: group == .repositories && !organizations.isEmpty
+                    ? organizations.joined(separator: ", ")
+                    : nil
+            )
         }
         // Odkaz je **první**, protože `Group.link` je první případ výčtu — pořadí skupin je tam
         // a tady se jen dodržuje. Bez zvýraznění: shoda je celý dotaz, takže by se podtrhla
         // adresa, kterou řádek ani nekreslí.
         guard let link else { return found }
         return [CommandPalette.Section(group: .link, hits: [CommandPalette.Hit(item: link)])] + found
+    }
+
+    /// Výsledky **druhé úrovně** (#533) — otevřené PR jednoho repa, po filtru.
+    ///
+    /// **Filtr, ne hledání s vážením**, a je to rozdíl proti `paletteResults`: nadpis skupiny
+    /// tvrdí `řazeno podle poslední změny`, takže by řazení podle váhy shody z toho tvrzení
+    /// udělalo lež — jakmile by se do pole napsalo písmeno, poskočil by nahoru PR, jehož titulek
+    /// tím písmenem začíná. Pořadí proto zůstává, jak přišlo (`paletteRepositoryPullRequests` ho
+    /// složilo podle razítka), a dotaz jedině **ubírá řádky**.
+    ///
+    /// **A není tu strop na skupinu**, ze stejného důvodu: šest je strop pro skupinu **mezi
+    /// jinými**, kdežto tady je ta skupina obsah celé úrovně. Seznam se scrolluje; mez je
+    /// `--limit` u `gh pr list`.
+    ///
+    /// Zvýrazňování shody se dělí s první úrovní (`paletteMatch`), takže se v druhé úrovni
+    /// podtrhává na týchž místech jako v první — jinak by shoda v autorovi vypadala jako výsledek,
+    /// u kterého není poznat, proč vyšel.
+    ///
+    /// - Parameter total: kolik otevřených PR se dotáhlo. Píše se do nadpisu **celý počet**, ne
+    ///   počet řádků po filtru: je to odpověď na „kolik jich v repu je“, a ta se dopsaným
+    ///   písmenem nemění.
+    static func paletteRepositoryResults(
+        of items: [CommandPalette.Item],
+        query: String,
+        total: Int
+    ) -> [CommandPalette.Section] {
+        let tokens = paletteTokens(in: query)
+        let hits = items.compactMap { item -> CommandPalette.Hit? in
+            guard let match = paletteMatch(item, tokens: tokens) else { return nil }
+            return CommandPalette.Hit(
+                item: item,
+                titleHighlight: match.title,
+                subtitleHighlight: match.subtitle
+            )
+        }
+        guard !hits.isEmpty else { return [] }
+        return [
+            CommandPalette.Section(
+                group: .repositoryPullRequests,
+                hits: hits,
+                detail: paletteRepositoryDetail(total: total)
+            ),
+        ]
+    }
+
+    /// Kolik otevřených PR repa se vypíše nejvýš (#533) — `--limit` u `gh pr list`.
+    ///
+    /// **Je to `Policy`, ne konstanta v gateway**, ze stejného důvodu jako `commitListCap`: podle
+    /// ní se pozná, že seznam **není celý**, a nadpis to musí umět říct. Dvě čísla na dvou místech
+    /// by znamenala, že se strop dosáhne jinde, než kde se o něm píše.
+    ///
+    /// Sto, tedy tolik jako `searchLimit` u vyhledávání PR: sto otevřených PR v jednom repu je
+    /// řádově víc, než v kolika se dá vybírat očima, a stránkování by byl kód navíc bez užitku.
+    static let paletteRepositoryPullRequestCap = 100
+
+    /// `7 · řazeno podle poslední změny`, jak to má návrh.
+    ///
+    /// **Nad jedním PR se o řazení nepíše**: věta o pořadí nad jedním řádkem je informace bez
+    /// obsahu, a nadpis palety je jeden řádek, na kterém se za místo platí.
+    ///
+    /// **Na stropu to řekne** (`prvních 100`), a je to tatáž úvaha jako u 250 commitů: `100`
+    /// samo by tvrdilo, že jich v repu tolik **je**, kdežto je jich tolik **vidět** — a filtr
+    /// v druhé úrovni prochází jen to, co dorazilo, takže na tom v takovém repu záleží.
+    private static func paletteRepositoryDetail(total: Int) -> String {
+        let sorted = "řazeno podle poslední změny"
+        if total >= paletteRepositoryPullRequestCap { return "prvních \(total) · \(sorted)" }
+        return total > 1 ? "\(total) · \(sorted)" : "\(total)"
     }
 
     /// Dotaz rozsekaný na slova. Prázdné pole znamená „ber všechno“.

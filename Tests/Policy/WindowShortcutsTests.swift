@@ -348,10 +348,14 @@ struct WindowShortcutsTests {
             "Policy/WindowShortcuts.swift",
             // `⌘,` registruje scéna `Settings`, ne okno, takže v katalogu kolizí nemá co dělat.
             "Policy/CommandPaletteSearch.swift",
+            // Patka palety (#533) — `⌘↵ otevřít na GitHubu`. Kreslí se literálem ze stejného
+            // důvodu jako `⌘,` o řádek výš: paleta je překryv, který existuje jen otevřený,
+            // takže si tu klávesu registruje sama (`CommandPaletteView`) a v katalogu okna nemá
+            // co dělat. **Do #533 stál ten literál ve view**; přestěhoval se sem, protože se
+            // patka mění podle úrovně, a co říká patka, je rozhodnutí, ne kresba.
+            "Policy/CommandPaletteLevel.swift",
             "Publish/PublishError.swift",
             "Views/ContentView.swift",
-            // Paleta ⌘K je překryv, který existuje jen otevřený — `⌘↵` je její vlastní klávesa.
-            "Views/CommandPaletteView.swift",
             // `⌥↵` u zakládání labelu (#413) sedí na **poli** v popoveru, ne na okně.
             "Views/LabelPickerView.swift",
             // `⌘⏎` u composeru v tabu `Zeptat se` (#452) — kapsle vedle tlačítka, které tu

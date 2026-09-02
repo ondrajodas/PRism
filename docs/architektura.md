@@ -4914,6 +4914,112 @@ potkala s nějakým titulkem.
 - **Značka je `Mark.link`, ne `Mark.pullRequest(_:)`.** O stavu toho PR se v tu chvíli neví nic,
   takže by se musel vymyslet — a `otevřený` u zavřeného PR je lež na tom nejtišším možném místě.
 
+### Druhá úroveň palety — repozitáře a jejich PR (#533)
+
+Poslední kámen M18: **napsat jméno repa, vybrat, vidět jeho otevřené PR, otevřít.** Cesta, která
+nepotřebuje odkaz odjinud. Stojí na #531 (otevření mimo zdroje) a #532 (katalog rep v cache) a sama
+přidává **jednu čtecí metodu gateway, jednu úroveň palety a dvě skupiny řádků**.
+
+| Kde | Co |
+|---|---|
+| `CommandPalette.Level` (`.top` / `.repository(RepoID)`) | ve které úrovni paleta stojí; ve **storu**, ne v `@State` karty |
+| `AppStore.paletteLevel`, `AppStore.paletteRepository` | úroveň a stav dotažení (`loading` / `loaded` / `failed`) — **dvě vlastnosti, ne jedna** |
+| `AppStore.enterPaletteRepository(_:)`, `leavePaletteRepository()`, `loadPaletteRepository(_:)` | vstup, odchod, dotažení |
+| `GitHubGateway.pullRequests(in repo:)` | **pětadvacátá čtecí metoda**; `gh pr list --state open` |
+| `Policy.paletteRepositories(_:query:limit:now:)` | řádky skupiny `Repozitáře` — **filtr dřív než sazba**, řazení podle počtu otevřených PR |
+| `Policy.paletteRepositoryPullRequests(_:mine:sources:now:)` | řádky druhé úrovně — řazení podle poslední změny, odznaky |
+| `Policy.paletteRepositoryResults(of:query:total:)` | druhá úroveň jako **filtr**, ne hledání s vážením |
+| `Policy.paletteStage(level:repository:)`, `paletteEmpty(at:query:)`, `paletteClosesAfter(_:)`, `paletteBackspaceGoesBack(level:query:)` | chip, výzva, patka, prázdný stav a klávesy, které mění úroveň |
+| `Policy.momentAgo(_:now:)` (`App/Policy/MomentAgo.swift`) | `naposledy před hodinou` uvnitř podtitulku |
+
+Co se u ní nemá rozbít:
+
+- **Dvě úrovně, ne dvě palety.** `↵` na repu nechá kartu, pole i klávesy na místě a změní jedině
+  to, v čem se hledá. Proto je úroveň **stav palety** (a jediný cíl, po kterém `ContentView`
+  paletu **nezavře** — rozhoduje `Policy.paletteClosesAfter(_:)`), a proto v poli zůstane **chip
+  s repem**: z obrazovky musí být vidět, kde člověk je.
+- **Úroveň je ve storu, dotaz a kurzor zůstávají v `@State`.** Druhá úroveň si nechává dotažený
+  seznam PR, a ten by se s každým překreslením karty tahal znovu. Naopak **změna úrovně pole
+  vyprázdní** (`onChange(of: stage.level)`), a to je podmínka, ne úklid: do repa se vchází tím, že
+  se napíše jeho jméno, takže by `vault` zůstalo ve filtru jeho pull requestů a druhá úroveň by se
+  otevřela jako „nic nesedí“.
+- **Zavření palety úroveň vrací na `top`** a zahazuje seznam — ⌘K je „začínám hledat“, takže se
+  nikdo nemá vracet do repa, do kterého vešel před minutou a zapomněl na něj.
+- **Psaní nedotahuje nic, a je to jediná vlastnost, na které celá věc stojí.** V první úrovni se
+  hledá v katalogu z cache na disku (`RepositoryCatalog`, #532), v druhé se filtruje dotažený
+  seznam. Jediné volání pouští **vstup do repa**, tedy výslovné `↵`. Je na to test, který počítá
+  volání gateway po každém úhozu v obou úrovních
+  ([`docs/testovani.md`](testovani.md#druhá-úroveň-palety-533)).
+- **Katalog rep se přestěhoval z okna nastavení do `AppStore`** (`repositoryCatalog`, nepovinný
+  jako `reviews` nebo `asker`). Čtou ho dvě obrazovky, takže dvě instance by znamenaly dvě cache
+  téhož seznamu; `nil` znamená **skupina `Repozitáře` v paletě není a sekce `Organizace
+  k prohledávání` se nekreslí**. Store z něj **sám nic nedotahuje**: při startu přečte, co leží
+  v cache (`loadRepositoryCatalog()`, jenom disk), a dotažení ze sítě zůstává tam, kde bylo —
+  stránka `Zdroje PR`, dopsaná organizace, tlačítko `Obnovit`. Výpis rep `keboola` stojí 46,8 s,
+  takže na tik ani na úhoz nesmí.
+- **Řádky repozitářů se filtrují dřív, než se skládají.** Organizace `keboola` má přes tisíc rep
+  a katalog se prochází při **každém úhozu**; složit pro všechna repa podtitulek (množné číslo plus
+  relativní čas) by znamenalo tisíc formátování na stisk klávesy. Filtruje se `pickerRank`em nad
+  **tímtéž textem**, jaký bude v titulku (`owner/name`), takže druhý průchod v `paletteResults`
+  vydá totéž pořadí a strop neuřízne řádek, který by se pak vytáhl nahoru.
+- **Repa se řadí podle počtu otevřených PR**, pak podle posledního pushe, pak podle jména. Je to
+  nabídka **kam jít**, takže nahoru patří repo, ve kterém je co číst; repo bez otevřených PR je ten
+  řádek, po kterém druhá úroveň zůstane prázdná. Zákres to tak kreslí (`vault` 7, `vault-cli` 2,
+  `php-vault-client` 0). Dvě kritéria navíc jsou proto, aby pořadí nezáviselo na tom, jak `gh`
+  seznam vydal.
+- **Nula je slovo (`bez otevřených PR`), chybějící push se vynechá celý.** `0 otevřených PR` se
+  v řádku čte jako počet, který se nepodařilo spočítat, a `naposledy nikdy` by tvrdilo víc, než co
+  data unesou (prázdné repo `pushedAt` nemá).
+- **Řazení PR podle poslední změny musí být v `Policy`, protože `gh pr list` ho nedělá.** Změřeno
+  na `cli/cli`: `#14282` s razítkem 28. 8. stálo v odpovědi **nad** `#14259` s 31. 8., tedy pořadí
+  podle čísla. Nadpis skupiny přitom tvrdí `řazeno podle poslední změny` — kdo se spolehne na
+  odpověď, dostane seznam, o kterém ten nadpis lže. Fixture je skutečný výstup, ve kterém se to
+  pozná (`gh/pr-list-open.json`).
+- **Druhá úroveň je filtr, ne hledání s vážením** (`paletteRepositoryResults`) — a je to ta samá
+  úvaha z druhé strany: řazení podle váhy shody by po prvním písmenu vytáhlo nahoru PR, jehož
+  titulek jím začíná, a nadpis by přestal platit. **Strop na skupinu tam taky není**: šest je strop
+  pro skupinu **mezi jinými**, kdežto tady je ta skupina obsah celé úrovně. Mez je `--limit`
+  u `gh pr list` (sto) a přes ni se scrolluje.
+- **Odznaky `ve frontě` a `moje` se skládají z toho, co store už má** — bez dalšího dotazu.
+  `moje` má **přednost**, a není to volba mezi dvěma pravdami: fronta je od #332 množina **cizích**
+  PR, takže `ve frontě` u vlastního PR by tvrdilo, že se na něj čeká review ode mě. PR, o kterém
+  store neví nic, odznak nedostane — a to je ta většina, protože druhá úroveň chodí do rep, která
+  ve zdrojích nejsou.
+- **Patka se mění podle úrovně, ne podle vybraného řádku.** Klávesy jsou vlastnost karty; kdyby
+  text patky závisel na tom, co je pod kurzorem, musel by se do něj dívat každý řádek a patka by se
+  měnila při každé šipce (návrh to říká u sekce `s09link`). Proto zůstává `↵ otevřít` i v první
+  úrovni, kde je pod kurzorem repozitář — zákres kreslí v úzkém výřezu `↵ do repa`, ale že se vchází
+  do repa, říká **řádek**, ne patka.
+- **`esc` vrací o úroveň, dokud je kam**, a je to **jedno** tlačítko se `.cancelAction`, ne dvě:
+  dvě se stejnou kombinací znamenají, že vyhraje to zaregistrované později (#441). **`⌫` vrací
+  jedině na prázdném poli**, a to je podmínka, ne pohodlí — zkratka platí pro celé okno, takže nad
+  napsaným dotazem by přebila mazání znaků a psát by v paletě přestalo jít. Tlačítko se proto vůbec
+  nesmí objevit, dokud je v poli text (`Policy.paletteBackspaceGoesBack(level:query:)`).
+- **Prázdný stav rozlišuje „nezeptal jsem se“ od „nenašlo se“.** Repo bez otevřených PR není
+  prázdný **výsledek**, ale prázdné **repo** — a `Na „“ nic nesedí` nad prázdným polem je věta
+  o hledání, které nikdo nezačal. Rozhoduje `Policy.paletteEmpty(at:query:)` a druhá věta (kde se
+  hledalo) u toho stavu **chybí schválně**.
+- **Relativní čas se skládá v `Policy`, ne `Text(date, format:)` ve view**, a je to výjimka proti
+  zbytku okna. Podtitulek řádku je **jeden řetězec** (hledá se v něm a zvýrazňuje se v něm shoda)
+  a návrh do něj píše `naposledy před hodinou`, tedy slovo, čas a nic mezi tím; rozdělit tu větu
+  mezi `Policy` a kresbu by znamenalo, že polovinu podtitulku skládá view. Referenční okamžik je
+  **parametr** (`Policy.momentAgo(_:now:)`), protože `Date.RelativeFormatStyle` ho vzít neumí —
+  proto se sem bere `RelativeDateTimeFormatter` s vypsaným nastavením (`.named`, `.full`), které je
+  s `Text(_:format: .relative(presentation: .named))` srovnané.
+- **`CommandPaletteView` dostává výsledky uzávěrem, ne katalog.** Do #533 si je počítalo samo
+  (`Policy.paletteResults` nad předanými položkami) **a zároveň** existoval
+  `AppStore.paletteSections(for:)`, který volaly jen testy — tedy dvě odpovědi na jednu otázku.
+  Druhá úroveň by musela vzniknout v obou, takže se to svedlo do storu.
+- **Nadpis skupiny nese dopisek** (`Section.detail`): `Repozitáře · keboola, ondrajodas`
+  a `Otevřené pull requesty · 7 · řazeno podle poslední změny`. Skládá ho `Policy`, protože je to
+  tvrzení o tom, kde se hledalo a jak je to seřazené. **Organizace bez snímku se nevypisuje** —
+  slibovala by, že se v ní hledalo, a přitom se ještě nikdy nedotáhla. A **počet je celý**, ne po
+  filtru: je to odpověď na „kolik jich v repu je“, a ta se dopsaným písmenem nemění.
+- **Odpověď na repo, ve kterém paleta už nestojí, se zahodí.** Mezi dotazem a odpovědí je sekunda,
+  ve které se dá zmáčknout `esc` nebo vejít do jiného repa — zápis by nakreslil cizí seznam pod
+  chipem, který mluví o něčem jiném. Je to tatáž ochrana jako u zavřené záložky
+  v `loadExternalDetail(of:)` (#531).
+
 ## Otevřít PR mimo zdroje (#531)
 
 Zdroje (#4) definují **frontu**: co se hledá, na to se čeká, to je na kartách, v odznaku a

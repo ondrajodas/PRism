@@ -67,6 +67,74 @@ struct AppStorePaletteTests {
         store.paletteItems.filter { $0.group == group }
     }
 
+    /// Řádky, které pro dotaz vyjdou z dané skupiny — **přes `paletteSections(for:)`**, tedy tou
+    /// cestou, kterou jde okno. Repozitáře se v `paletteItems` nevyskytují (skládají se až pro
+    /// dotaz), takže by je pomocník výš nenašel.
+    private func rows(
+        of store: AppStore,
+        group: CommandPalette.Group,
+        query: String
+    ) -> [CommandPalette.Item] {
+        store.paletteSections(for: query)
+            .first { $0.group == group }?
+            .hits
+            .map(\.item) ?? []
+    }
+
+    /// Store s katalogem repozitářů v cache v dočasné složce (#533).
+    ///
+    /// Katalog se **dotáhne** (`refreshStale`), aby v cache něco leželo, a pak se do storu podá
+    /// tentýž objekt — okno by se k němu dostalo přes `store.repositoryCatalog`. Počty volání
+    /// se čtou z gateway až **po** té přípravě, takže se do tvrzení o „paleta se nikoho neptá“
+    /// nezaplete.
+    private func withCatalog(
+        _ list: [PullRequestSummary],
+        organizations: [String],
+        repositories: [String: OrganizationRepositories],
+        failing: [String: any Error] = [:],
+        ownLogins: [String] = [],
+        viewer: String? = nil
+    ) async throws -> (AppStore, FakeGitHubGateway) {
+        let gateway = FakeGitHubGateway(always: .success(list))
+        gateway.viewer = viewer
+        gateway.organizationRepositories = repositories
+        gateway.organizationFailures = failing
+        let workspace = try TemporaryDirectory()
+        let time = FakeTimeSource(stopAfter: 1)
+        let catalog = RepositoryCatalog(
+            gateway: gateway,
+            store: RepositoryCatalogStore(layout: CacheLayout(root: workspace.url)),
+            time: time
+        )
+        var config = configuration
+        config.global.searchOrganizations = organizations
+        config.global.ownLogins = ownLogins
+        let store = AppStore(
+            gateway: gateway,
+            configuration: config,
+            time: time,
+            repositoryCatalog: catalog
+        )
+        await store.keepFresh()
+        await catalog.refreshStale(organizations: organizations)
+        return (store, gateway)
+    }
+
+    private func listing(_ organization: String, _ repositories: [(String, Int)])
+        -> OrganizationRepositories
+    {
+        OrganizationRepositories(
+            repositories: repositories.map { name, open in
+                OrganizationRepository(
+                    repo: RepoID(owner: organization, name: name),
+                    openPullRequests: open,
+                    lastPushedAt: nil
+                )
+            },
+            hitLimit: false
+        )
+    }
+
     // MARK: - Otevření
 
     @Test("⌘K paletu otevře a druhé zmáčknutí zavře")
@@ -378,6 +446,177 @@ struct AppStorePaletteTests {
         #expect(store.paletteJump == nil)
     }
 
+    // MARK: - Repozitáře a druhá úroveň (#533)
+
+    @Test("Skupina Repozitáře se skládá z cache, nadpis vypisuje organizace se snímkem")
+    func repositoriesComeFromTheCache() async throws {
+        let (store, _) = try await withCatalog(
+            [],
+            organizations: ["keboola", "ondrajodas"],
+            repositories: [
+                "keboola": listing("keboola", [("vault", 7), ("vault-cli", 2)]),
+                "ondrajodas": listing("ondrajodas", [("PRism", 3)]),
+            ]
+        )
+
+        let section = try #require(
+            store.paletteSections(for: "vault").first { $0.group == .repositories }
+        )
+        #expect(section.hits.map(\.item.title) == ["keboola/vault", "keboola/vault-cli"])
+        // Nadpis mluví o tom, **kde se hledalo** — obě organizace mají snímek.
+        #expect(section.detail == "keboola, ondrajodas")
+    }
+
+    /// **Organizace bez snímku se v nadpisu nevypisuje**: slibovala by, že se v ní hledalo,
+    /// a přitom se ještě nikdy nedotáhla.
+    ///
+    /// Nedostupnost se dělá **selháním, ne prázdným výpisem** — a to je samo o sobě tvrzení:
+    /// organizace, která vrátila prázdný seznam, **snímek má** a do nadpisu patří, protože se
+    /// v ní doopravdy hledalo. Ty dva stavy se od #532 nesmí slít.
+    @Test("Organizace bez snímku se do nadpisu nedostane")
+    func organizationsWithoutASnapshotAreNotClaimed() async throws {
+        let (store, _) = try await withCatalog(
+            [],
+            organizations: ["keboola", "nedostupna"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])],
+            failing: ["nedostupna": GitHubError.notFound("neexistuje")]
+        )
+
+        let section = try #require(
+            store.paletteSections(for: "vault").first { $0.group == .repositories }
+        )
+        #expect(section.detail == "keboola")
+    }
+
+    @Test("↵ na repu nechá v poli chip, dotáhne PR a nezavře paletu")
+    func enteringARepositoryOpensTheSecondLevel() async throws {
+        let (store, gateway) = try await withCatalog(
+            [],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])]
+        )
+        gateway.repositoryPullRequests = [
+            vault.repo: [summary(vault, title: "secret TTL", updatedAt: 300)],
+        ]
+        store.openPalette()
+
+        store.reveal(.repository(vault.repo))
+
+        #expect(store.paletteLevel == .repository(vault.repo))
+        // Paletu zavírá volající podle `Policy.paletteClosesAfter(_:)`, ne `reveal` — a ten cíl
+        // ji nechává otevřenou.
+        #expect(store.isPaletteOpen)
+        #expect(store.paletteStage.chip == "keboola/vault")
+        // Než odpověď dorazí, je v kartě věta o dotahování, ne prázdno.
+        #expect(store.paletteRepository == .loading)
+
+        await waitUntil("seznam PR repa dorazí") { store.paletteRepository != .loading }
+        #expect(gateway.repositoryPullRequestRequests == [vault.repo])
+        let rows = rows(of: store, group: .repositoryPullRequests, query: "")
+        #expect(rows.map(\.title) == ["#85 · secret TTL"])
+    }
+
+    @Test("Odznaky ve druhé úrovni se skládají z toho, co store už má")
+    func badgesComeFromWhatTheStoreKnows() async throws {
+        let queued = summary(vault, title: "cizí", author: "odinuv", updatedAt: 300)
+        let mine = PRIdentifier("keboola/vault#84")!
+        let (store, gateway) = try await withCatalog(
+            [queued],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])],
+            ownLogins: ["ondrajodas"],
+            viewer: "ondrajodas"
+        )
+        gateway.repositoryPullRequests = [
+            vault.repo: [
+                queued,
+                summary(mine, title: "moje", author: "ondrajodas", updatedAt: 200),
+                summary(PRIdentifier("keboola/vault#88")!, title: "cizí bez fronty", updatedAt: 100),
+            ],
+        ]
+        store.reveal(.repository(vault.repo))
+        await waitUntil("seznam PR repa dorazí") { store.paletteRepository != .loading }
+
+        let rows = rows(of: store, group: .repositoryPullRequests, query: "")
+
+        #expect(rows.map(\.badge) == [.inQueue, .mine, nil])
+    }
+
+    @Test("esc a ⌫ vrací o úroveň a dotažený seznam se zahodí")
+    func leavingTheSecondLevelDropsTheList() async throws {
+        let (store, gateway) = try await withCatalog(
+            [],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])]
+        )
+        gateway.repositoryPullRequests = [vault.repo: [summary(vault, updatedAt: 300)]]
+        store.openPalette()
+        store.reveal(.repository(vault.repo))
+        await waitUntil("seznam PR repa dorazí") { store.paletteRepository != .loading }
+
+        store.leavePaletteRepository()
+
+        #expect(store.paletteLevel == .top)
+        #expect(store.paletteRepository == nil)
+        // Paleta zůstává otevřená — `esc` v druhé úrovni **nezavírá**.
+        #expect(store.isPaletteOpen)
+    }
+
+    @Test("Zavření palety ji vrátí do první úrovně")
+    func closingThePaletteResetsTheLevel() async throws {
+        let (store, gateway) = try await withCatalog(
+            [],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])]
+        )
+        gateway.repositoryPullRequests = [vault.repo: [summary(vault, updatedAt: 300)]]
+        store.openPalette()
+        store.reveal(.repository(vault.repo))
+        await waitUntil("seznam PR repa dorazí") { store.paletteRepository != .loading }
+
+        store.closePalette()
+
+        #expect(!store.isPaletteOpen)
+        #expect(store.paletteLevel == .top)
+        #expect(store.paletteRepository == nil)
+    }
+
+    @Test("Selhání dotažení se přizná větou z gh")
+    func aFailedListingIsReported() async throws {
+        let (store, gateway) = try await withCatalog(
+            [],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])]
+        )
+        gateway.repositoryPullRequestFailures = [vault.repo: GitHubError.notAuthenticated]
+
+        store.reveal(.repository(vault.repo))
+        await waitUntil("seznam PR repa dorazí") { store.paletteRepository != .loading }
+
+        #expect(store.paletteStage.notice == .failed(GitHubError.notAuthenticated.userDescription))
+        // Prázdno by vypadalo jako repo bez otevřených PR, což je jiný stav.
+        #expect(store.paletteSections(for: "").isEmpty)
+    }
+
+    /// Odpověď na repo, ve kterém paleta už nestojí, se **zahodí** — mezi dotazem a odpovědí se dá
+    /// zmáčknout `esc`, a zápis by nakreslil cizí seznam pod chipem, který mluví o něčem jiném.
+    @Test("Odpověď na opuštěné repo se do stavu nezapíše")
+    func theAnswerForAbandonedRepositoryIsDropped() async throws {
+        let (store, gateway) = try await withCatalog(
+            [],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7)])]
+        )
+        gateway.repositoryPullRequests = [vault.repo: [summary(vault, updatedAt: 300)]]
+
+        store.reveal(.repository(vault.repo))
+        store.leavePaletteRepository()
+        await settle()
+
+        #expect(store.paletteLevel == .top)
+        #expect(store.paletteRepository == nil)
+    }
+
     // MARK: - Co se nestalo
 
     @Test("Hledání ani vykonání se nikoho neptá na GitHub")
@@ -407,6 +646,74 @@ struct AppStorePaletteTests {
         #expect(gateway.diffRequests.count == diffs)
         #expect(gateway.detailRequests.count == details)
         #expect(gateway.conversationRequests.count == conversations)
+    }
+
+    /// **Tohle je ten test, kvůli kterému má druhá úroveň jediné volání** (#533): jinak by
+    /// z každého úhozu v repu s tisícem PR byl podproces `gh` — a z otevření palety výpis
+    /// organizace, který stojí 46,8 s.
+    @Test("Paleta nad repem nepustila nic než dotažení seznamu")
+    func theSecondLevelAsksOnceAndNothingElse() async throws {
+        let (store, gateway) = try await withCatalog(
+            [],
+            organizations: ["keboola"],
+            repositories: ["keboola": listing("keboola", [("vault", 7), ("vault-cli", 2)])]
+        )
+        gateway.repositoryPullRequests = [vault.repo: [summary(vault, updatedAt: 300)]]
+        let searches = gateway.searchCount
+        let details = gateway.detailRequests.count
+        let repositories = gateway.repositoryRequests.count
+        store.openPalette()
+
+        // Psaní v **první** úrovni: katalog rep se prochází z cache, nedotahuje se.
+        for prefix in ["v", "va", "vau", "vaul", "vault"] {
+            _ = store.paletteSections(for: prefix)
+        }
+        #expect(gateway.repositoryRequests.count == repositories)
+        #expect(gateway.repositoryPullRequestRequests.isEmpty)
+
+        // Vstup do repa: **jedno** volání, a to čtecí.
+        store.reveal(.repository(vault.repo))
+        await waitUntil("seznam PR repa dorazí") { store.paletteRepository != .loading }
+        #expect(gateway.repositoryPullRequestRequests == [vault.repo])
+
+        // Psaní ve **druhé** úrovni: filtruje se dotažený seznam, nic dalšího se neptá.
+        for prefix in ["s", "se", "sec", "secr"] {
+            _ = store.paletteSections(for: prefix)
+        }
+
+        #expect(gateway.repositoryPullRequestRequests == [vault.repo])
+        #expect(gateway.repositoryRequests.count == repositories)
+        #expect(gateway.searchCount == searches)
+        #expect(gateway.detailRequests.count == details)
+    }
+
+    /// Otevření palety samo o sobě **nesmí** dotáhnout katalog rep: je to nejdražší čtení
+    /// v aplikaci (46,8 s nad `keboola`) a spouští ho jedině okno nastavení.
+    @Test("Start ani otevření palety katalog rep nedotahuje, jen čte disk")
+    func startingUpOnlyReadsTheCatalogFromDisk() async throws {
+        let gateway = FakeGitHubGateway(always: .success([]))
+        gateway.organizationRepositories = ["keboola": listing("keboola", [("vault", 7)])]
+        let workspace = try TemporaryDirectory()
+        var config = configuration
+        config.global.searchOrganizations = ["keboola"]
+        let store = AppStore(
+            gateway: gateway,
+            configuration: config,
+            time: FakeTimeSource(stopAfter: 1),
+            repositoryCatalog: RepositoryCatalog(
+                gateway: gateway,
+                store: RepositoryCatalogStore(layout: CacheLayout(root: workspace.url)),
+                time: FakeTimeSource(stopAfter: 1)
+            )
+        )
+
+        await store.keepFresh()
+        store.openPalette()
+        _ = store.paletteSections(for: "vault")
+
+        #expect(gateway.repositoryRequests.isEmpty)
+        // Cache je prázdná, takže skupina `Repozitáře` prostě není — a to je správná odpověď.
+        #expect(store.paletteSections(for: "vault").allSatisfy { $0.group != .repositories })
     }
 
     @Test("Katalog má jednoznačná id")

@@ -1,27 +1,35 @@
 import SwiftUI
 
-/// Command palette ⌘K (#184) — jedno pole nad nálezy, soubory otevřeného PR, pull requesty
-/// a akcemi.
+/// Command palette ⌘K (#184) — jedno pole nad nálezy, soubory otevřeného PR, pull requesty,
+/// repozitáři a akcemi.
 ///
-/// **Nerozhoduje nic o výsledcích**: co na dotaz sedne, v jakém pořadí to je a kolik se toho
-/// ukáže, spočítá `Policy.paletteResults` nad katalogem z `AppStore.paletteItems`. Tady zůstává
-/// pole, kurzor a klávesy.
+/// **Nerozhoduje nic o výsledcích ani o úrovni**: co na dotaz sedne, v jakém pořadí to je a kolik
+/// se toho ukáže, složí `AppStore.paletteSections(for:)` nad `Policy`; co říká patka, výzva pole
+/// a věta prázdného stavu, přijde hotové v `CommandPalette.Stage` (#533). Tady zůstává pole,
+/// kurzor a klávesy.
 ///
 /// **Dotaz i kurzor jsou `@State`, ne stav ve storu**, a je to schválně: mají zaniknout se
 /// zavřením palety. Paleta je „začínám hledat“, ne „vracím se k rozdělané práci“, takže text
 /// z minula by po ⌘K vypadal jako výsledky k něčemu, na co se nikdo neptal — a `CommandPaletteView`
 /// vzniká až s otevřenou paletou, takže se pokaždé začíná naprázdno. Ověřeno na běžící aplikaci
 /// dvěma otevřeními za sebou: podruhé je pole prázdné a fokus je v něm zase.
+///
+/// **Úroveň je proti tomu ve storu** (#533): druhá úroveň si drží dotažený seznam PR, který by se
+/// s každým překreslením karty tahal znovu.
 struct CommandPaletteView: View {
-    /// Co je k prohledání. Skládá se z paměti store, žádný dotaz na GitHub.
-    let items: [CommandPalette.Item]
-    /// Řádek skupiny `Odkaz` pro to, co je v poli napsané (#531). `nil` = tohle není adresa PR.
+    /// Výsledky pro to, co je v poli napsané.
     ///
-    /// **Uzávěr, ne hotová položka**: závisí na dotazu, a ten je `@State` tady uvnitř. Rozhoduje
-    /// se v něm `Policy` a store (`AppStore.paletteLink(for:)`) — tohle view jen předá text.
-    var link: (String) -> CommandPalette.Item? = { _ in nil }
-    /// Vykonání řádku. Paletu zavírá **volající** — ví, jestli po vykonání zůstává okno na místě.
+    /// **Uzávěr, ne hotové sekce**: závisí to na dotazu, a ten je `@State` tady uvnitř. Skládá je
+    /// store (`AppStore.paletteSections(for:)`), protože jedině on ví, ve které úrovni paleta
+    /// stojí a co v ní je k prohledání — tohle view jen předá text.
+    let sections: (String) -> [CommandPalette.Section]
+    /// Chip, výzva, patka, věta prázdného stavu a případný puntík načítání.
+    let stage: CommandPalette.Stage
+    /// Vykonání řádku. Paletu zavírá **volající** — ví, jestli po vykonání zůstává okno na místě
+    /// (u vstupu do repa zůstává, viz `Policy.paletteClosesAfter(_:)`).
     let run: (CommandPalette.Item) -> Void
+    /// O úroveň zpět — `esc` a `⌫` na prázdném poli. V první úrovni se nevolá.
+    var back: () -> Void = {}
     let close: () -> Void
 
     @State private var query = ""
@@ -38,8 +46,8 @@ struct CommandPaletteView: View {
     /// Šířka karty z návrhu (`width: min(560px, 100%)`). Nejmenší okno má 700, takže se vejde
     /// vždycky — a protože je **známá**, předá se dolů a řádky si ji nemusí vyjednávat (#220).
     static let width = 560.0
-    /// Strop seznamu. Nad ním se scrolluje; **pět** skupin po šesti řádcích (#336) se do okna
-    /// nevejde a paleta nemá zaclonit celé okno.
+    /// Strop seznamu. Nad ním se scrolluje; **šest** skupin po šesti řádcích (#336, #533) se do
+    /// okna nevejde a paleta nemá zaclonit celé okno.
     ///
     /// **S druhou skupinou PR se hodnota nezvedla** a je to úvaha o stropu skupiny, ne o kartě:
     /// vejít se všechno nemohlo ani ve čtyřech skupinách (šest nálezů a šest souborů samo o sobě
@@ -51,12 +59,14 @@ struct CommandPaletteView: View {
     var body: some View {
         // **Jednou za překreslení, ne na řádek.** Hledání je průchod celým katalogem, takže
         // dotaz z každé buňky by z jednoho stisku klávesy udělal desítky průchodů.
-        let sections = Policy.paletteResults(of: items, query: query, link: link(query))
+        let sections = sections(query)
         let selected = selected(in: sections)
         return VStack(spacing: 0) {
             field { open(selected) }
             Rectangle().fill(Palette.lineSoft).frame(height: 1)
-            if sections.isEmpty {
+            if let notice = stage.notice {
+                self.notice(notice)
+            } else if sections.isEmpty {
                 nothingFound
             } else {
                 list(sections, selected: selected)
@@ -89,6 +99,14 @@ struct CommandPaletteView: View {
         // Po změně dotazu se začíná nahoře. Kurzor uprostřed nových výsledků by znamenal, že
         // `↵` otevře něco, na co se nikdo nedíval.
         .onChange(of: query) { cursor = 0 }
+        // **Změna úrovně vyprázdní pole** (#533), a je to podmínka, ne úklid: do repa se vchází
+        // tím, že se napíše jeho jméno, takže by `vault` zůstalo ve filtru jeho pull requestů
+        // a druhá úroveň by se otevřela jako „nic nesedí“. Platí to i na cestu zpět — `⌫` chip
+        // odebere a pole má být připravené na nové hledání.
+        .onChange(of: stage.level) {
+            query = ""
+            cursor = 0
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Paleta příkazů")
     }
@@ -100,10 +118,13 @@ struct CommandPaletteView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.ink3)
+            if let chip = stage.chip {
+                repositoryChip(chip)
+            }
             TextField(
                 "",
                 text: $query,
-                prompt: Text("Najít nález, soubor, pull request nebo akci")
+                prompt: Text(verbatim: stage.prompt)
                     .foregroundStyle(Palette.ink3)
             )
             .textFieldStyle(.plain)
@@ -115,6 +136,21 @@ struct CommandPaletteView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+    }
+
+    /// Chip s repem, ve kterém paleta stojí (#533) — `keboola/vault ›`.
+    ///
+    /// **V poli, ne v nadpisu karty** (návrh pozn. 60): je pořád vidět, kde jsem, a `⌫` na
+    /// prázdném poli ho odebere, takže se chová jako token v poli, ne jako titulek obrazovky.
+    ///
+    /// `›` sází view, ne `Policy`: je to ukazatel „a v něm“, tedy kresba mezi chipem a textem —
+    /// v `Stage` by z něj byla součást jména repa.
+    private func repositoryChip(_ repo: String) -> some View {
+        Text(verbatim: "\(repo) ›")
+            .designPill(tint: Palette.accent, background: Palette.accentWeak)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel("V repozitáři \(repo)")
     }
 
     // MARK: - Výsledky
@@ -143,7 +179,13 @@ struct CommandPaletteView: View {
         _ section: CommandPalette.Section,
         selected: CommandPalette.Hit?
     ) -> some View {
-        Text(verbatim: section.group.title.uppercased())
+        // **Nadpis se nezvětšuje o `detail`** (#533): dopisek za tečkou je tvrzení o tom, kde se
+        // hledalo a jak je to seřazené, takže patří do téhož řádku a téhož řezu — nový prvek
+        // vedle by z něj udělal druhý nadpis. `uppercased()` platí na obojí, jinak by dopisek
+        // vypadal jako text obsahu.
+        Text(verbatim: [section.group.title, section.detail].compactMap { $0 }
+            .joined(separator: " · ")
+            .uppercased())
             .font(.system(size: 9.5, design: .monospaced))
             .tracking(1)
             .foregroundStyle(Palette.ink3)
@@ -163,16 +205,54 @@ struct CommandPaletteView: View {
     /// Proč není nic vidět — větou, ne prázdnou kartou.
     ///
     /// Je v ní napsané i to, **kde** se hledalo: paleta nechodí na GitHub, takže „nic nesedí“
-    /// neznamená, že takový pull request neexistuje.
+    /// neznamená, že takový pull request neexistuje. Obojí skládá `Policy`, protože to závisí na
+    /// úrovni **i** na tom, jestli se vůbec na něco ptalo (#533) — repo bez otevřených PR není
+    /// prázdný výsledek, ale prázdné repo.
     private var nothingFound: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: "Na „\(query)“ nic nesedí.")
+        let empty = Policy.paletteEmpty(at: stage.level, query: query)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(verbatim: empty.headline)
                 .font(.system(size: 12.5))
                 .foregroundStyle(Palette.ink2)
-            Text("Hledá se v nálezech, souborech otevřeného PR, pull requestech a akcích — jen v tom, co je načtené.")
-                .font(.system(size: 11.5))
-                .foregroundStyle(Palette.ink3)
                 .fixedSize(horizontal: false, vertical: true)
+            if let note = empty.note {
+                Text(verbatim: note)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .filling()
+    }
+
+    /// Věta o tom, že se seznam PR repa tahá nebo že se nepovedl (#533).
+    ///
+    /// **Místo výsledků, ne nad nimi**: dokud odpověď nedorazila, žádné řádky nejsou — a prázdná
+    /// karta bez věty by vypadala jako repo bez otevřených PR.
+    ///
+    /// Puntík je `ProgressView`, který je na macOS AppKitový, takže se na něj nevztahuje zákaz
+    /// nekonečných animací ve SwiftUI (#350).
+    @ViewBuilder private func notice(_ notice: CommandPalette.Notice) -> some View {
+        HStack(spacing: 8) {
+            switch notice {
+            case .loading(let text):
+                ProgressView()
+                    .controlSize(.small)
+                Text(verbatim: text)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Palette.ink2)
+            case .failed(let text):
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Palette.crit)
+                Text(verbatim: text)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -181,10 +261,9 @@ struct CommandPaletteView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
-            hint("↑↓", "pohyb")
-            hint("↵", "otevřít")
-            hint("⌘↵", "otevřít na GitHubu")
-            hint("esc", "zavřít")
+            ForEach(stage.hints) { item in
+                hint(item.key, item.what)
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -224,8 +303,23 @@ struct CommandPaletteView: View {
             .keyboardShortcut(.upArrow, modifiers: [])
         Button("Otevřít na GitHubu") { openOnGitHub(selected) }
             .keyboardShortcut(.return, modifiers: .command)
-        Button("Zavřít paletu", action: close)
-            .keyboardShortcut(.cancelAction)
+        // `esc` **vrací o úroveň**, dokud je kam (#533) — zavírá teprve z první. Dvě tlačítka
+        // se stejnou klávesou by znamenala, že vyhraje to zaregistrované později (#441), takže
+        // je to jedno tlačítko a rozhoduje `Stage.goesBack`.
+        if stage.goesBack {
+            Button("O úroveň zpět", action: back)
+                .keyboardShortcut(.cancelAction)
+        } else {
+            Button("Zavřít paletu", action: close)
+                .keyboardShortcut(.cancelAction)
+        }
+        // `⌫` **jen na prázdném poli**: zkratka platí pro celé okno, takže nad napsaným dotazem
+        // by přebila mazání znaků a psát by v paletě přestalo jít. Rozhoduje `Policy`, tlačítko
+        // do hierarchie vůbec nevstoupí — viz `Policy.paletteBackspaceGoesBack(level:query:)`.
+        if Policy.paletteBackspaceGoesBack(level: stage.level, query: query) {
+            Button("O úroveň zpět", action: back)
+                .keyboardShortcut(.delete, modifiers: [])
+        }
     }
 
     /// Kurzor **cyklí**: šipka dolů na posledním řádku skočí na první. V seznamu, který se vejde

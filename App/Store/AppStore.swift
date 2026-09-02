@@ -326,6 +326,26 @@ final class AppStore {
     /// k něčemu, na co se nikdo neptal.
     var isPaletteOpen = false
 
+    /// Ve které úrovni paleta stojí (#533).
+    ///
+    /// **Ve store, ne v `@State` karty**, na rozdíl od dotazu a kurzoru: druhá úroveň si nechává
+    /// dotažený seznam PR (`paletteRepository`), takže by se s každým překreslením karty tahal
+    /// znovu. Zapisuje se jedině `enterPaletteRepository(_:)` a `leavePaletteRepository()`;
+    /// zavření palety úroveň **vrací na `top`**.
+    ///
+    /// **Vlastní vlastnost vedle `paletteRepository`, ne jeden stav** — `@Observable` sleduje po
+    /// vlastnostech (#469, #472) a ty dvě věci se mění jinak často: úroveň při vstupu a odchodu,
+    /// seznam ještě jednou, když dorazí odpověď.
+    var paletteLevel: CommandPalette.Level = .top
+
+    /// Otevřené PR repa, do kterého paleta vstoupila (#533). `nil` = paleta je v první úrovni.
+    ///
+    /// Zapisuje se ze stejných tří míst jako `paletteLevel` a k tomu z odpovědi
+    /// (`loadPaletteRepository(_:)`). **Bez `private(set)`, jako `isPaletteOpen`**: `private` je
+    /// ve Swiftu vázané na soubor, takže by setter nebyl vidět z `AppStore+Palette.swift` — a stav
+    /// se v tomhle storu drží zvlášť od metod schválně (#154).
+    var paletteRepository: CommandPalette.RepositoryPullRequests?
+
     /// Kam se má odscrollovat po skoku z palety (#184). `nil` = nikam.
     ///
     /// Rozhodnutí padá v paletě nad celým oknem, ale odscrollovat umí jedině detail PR (má kotvy
@@ -455,6 +475,19 @@ final class AppStore {
     /// Uložené značky `Prošlo` (#500). `nil` = neukládají se, tedy zaškrtnutí zanikne se
     /// zavřením aplikace — v okně se přitom chová stejně, protože stav drží `readMarks`.
     let readMarkStore: ReadMarkStore?
+
+    /// Seznamy repozitářů organizací (#532). `nil` = **skupina `Repozitáře` v paletě není** a okno
+    /// nastavení o katalogu nic nepíše; tak jsou na tom testy, které o katalog nestojí.
+    ///
+    /// **Přestěhoval se sem z `@State` okna nastavení** (#533), protože ho od téhle změny čtou dvě
+    /// obrazovky: paleta ⌘K v hlavním okně a stránka `Zdroje PR`. Typ se kvůli tomu neměnil —
+    /// pravda leží v cache na disku, tohle je jen místo, odkud ji obě okna vidí.
+    ///
+    /// **Store z něj sám nic nedotahuje.** Při startu se přečte, co leží v cache
+    /// (`loadRepositoryCatalog()`, jenom disk); dotažení ze sítě spouští jedině okno nastavení
+    /// (otevření stránky, dopsání organizace, tlačítko `Obnovit`) — výpis rep organizace `keboola`
+    /// stojí 46,8 s, takže se na tik ani na úhoz pouštět nesmí a je na to test.
+    let repositoryCatalog: RepositoryCatalog?
 
     private let configStore: ConfigStore?
 
@@ -839,6 +872,7 @@ final class AppStore {
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
+        repositoryCatalog: RepositoryCatalog? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
@@ -896,6 +930,7 @@ final class AppStore {
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
+        self.repositoryCatalog = repositoryCatalog
         self.autoRuns = autoRuns
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
@@ -976,8 +1011,12 @@ final class AppStore {
         // Konfigurace se načte hned v `keepFresh()`; do té doby platí výchozí hodnoty,
         // takže se nikde nečeká na disk.
         let box = ConfigurationBox(.standard)
+        // Gateway se drží v proměnné schválně: **týž objekt** dostane store i katalog repozitářů
+        // (#533). Dvě instance by znamenaly dvě cesty k `gh` a test, který počítá volání, by
+        // o jedné z nich nevěděl.
+        let gateway = GhGateway(gh: toolPaths.gh, runner: runner)
         self.init(
-            gateway: GhGateway(gh: toolPaths.gh, runner: runner),
+            gateway: gateway,
             configStore: ConfigStore(),
             eviction: CacheEviction(
                 budget: { box.value.global.cacheBudgetMegabytes * 1024 * 1024 },
@@ -1023,6 +1062,12 @@ final class AppStore {
             askContexts: AskContextStore(),
             // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
             readMarkStore: ReadMarkStore(),
+            // Katalog repozitářů (#532, do storu od #533). Živý jedině tady — testy ho nedostanou,
+            // takže nesahají do cache a nespouštějí `gh repo list`.
+            repositoryCatalog: RepositoryCatalog(
+                gateway: gateway,
+                store: RepositoryCatalogStore()
+            ),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
@@ -1620,6 +1665,11 @@ final class AppStore {
         // nebylo nic.
         await loadStoredActivity()
         await loadDailySpend()
+        // Katalog repozitářů (#533) — **jen disk, žádný dotaz na GitHub**. Bez tohohle by skupina
+        // `Repozitáře` v paletě byla prázdná, dokud by někdo neotevřel nastavení, protože právě
+        // tam se katalog do #533 načítal. Dotažení ze sítě zůstává tam, kde bylo: stránka
+        // `Zdroje PR`, dopsaná organizace, tlačítko `Obnovit`.
+        await loadRepositoryCatalog()
         // Všechno běží, dokud žije okno; zrušení tasku ukončí skupinu i se všemi smyčkami.
         await withTaskGroup(of: Void.self) { group in
             // Login se dotahuje **souběžně s pollingem, ne před ním** (#330): `gh api user` stojí
