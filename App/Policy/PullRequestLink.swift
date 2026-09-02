@@ -119,6 +119,11 @@ extension Policy {
     /// (`PullRequestSummary.url`), ale řádek palety musí umět `⌘↵` dřív, než se cokoli dotáhne.
     /// Tvar je `owner/repo/pull/číslo`, tedy přesně to, co `linkedPullRequest(in:)` rozebírá zpátky
     /// — a je na to test, aby se ty dvě funkce nerozešly.
+    ///
+    /// **Rozbalení je invariant, ne optimismus** — tatáž úvaha jako u `precondition` v
+    /// `RepoID.init(owner:name:)`. Identifikátory v aplikaci mají dva zdroje a oba jsou zúžené na
+    /// jména, která GitHub dovolí: odpovědi `gh` a `linkedPullRequest(in:)` s vlastní kontrolou
+    /// (`isLinkName`). Zbytek adresy je statický, takže `URL(string:)` nemá na čem selhat.
     static func githubURL(of pullRequest: PRIdentifier) -> URL {
         URL(string: "https://github.com/\(pullRequest.repo)/pull/\(pullRequest.number)")!
     }
