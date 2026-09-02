@@ -15,7 +15,9 @@ import Testing
 /// `NSHostingView`, ne `ImageRenderer` — tatáž cesta jako u ostatních sond, viz
 /// `docs/testovani.md`.
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes
+/// `TEST_RUNNER_PRISM_RENDER_DIR` — `xcodebuild` předá do testovacího procesu jen proměnné s tím
+/// prefixem, takže bez něj se sonda tiše přeskočí.
 @MainActor
 @Suite(
     "Sonda značky Prošlo (#500)",
