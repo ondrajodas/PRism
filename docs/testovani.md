@@ -2511,7 +2511,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     nález přebíjející obyčejný **v obou pořadích**, nález pod **starou** cestou přejmenovaného
     souboru, odmítnutý nález, který značku nedá (#113), tlumení jen u `read` (ne u `changed`),
     podíl vlákna z pořadí řádku v diffu a **vyčerpávající výčet popisku** včetně toho, že se
-    `0 nálezů` nikde nenapíše.
+    `0 nálezů` nikde nenapíše. Dvě tvrzení jsou z **opravy po Copilotovi** (PR #539): vlákno mimo
+    jediný řádek souboru a vlákno u binárky čárku **nedostanou** — první podoba vracela
+    v degenerovaném případě `0,5` každému vláknu, tedy bez kontroly `matches`, a test „vlákno mimo
+    hunky“ to nechytal, protože běžel nad desetiřádkovým hunkem.
   - **Kresba** (`PullRequestMapDrawingTests`) — **z bitmapy, ne z tokenů** (#432): nakreslené
     podíly segmentů proti spočítaným, každý segment ve své barvě, tlumený blokující, který se
     nesmí splést s neutrálem, `změněno od prošlého`, které tlumené **není**, kontrast akcentu

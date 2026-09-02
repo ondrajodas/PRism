@@ -301,6 +301,32 @@ struct PullRequestMapTests {
         #expect(map.segments[0].threads == [0.5])
     }
 
+    /// **Oprava po Copilotovi na PR #539, a je to tvrzení o tom, že se něco NEstalo.** První
+    /// podoba `threadSpots` vracela `0,5` pro každé vlákno, jakmile měl soubor nejvýš jeden řádek
+    /// — tedy **bez** kontroly `matches`. Pás by pak tvrdil diskuzi v souboru, ve kterém pro ni
+    /// není řádek. Test výš (`Vlákno mimo hunky čárku nedostane`) to nechytal: běžel nad
+    /// desetiřádkovým hunkem, tedy tou větví, kde se `matches` volalo.
+    @Test("Vlákno mimo jediný řádek souboru čárku nedostane")
+    func aThreadOffTheOnlyLineGetsNoTick() {
+        let files = [FileDiff(oldPath: "src/A.php", newPath: "src/A.php", change: .modified,
+                              isBinary: false, hunks: [spanningHunk(rows: 1)], blobs: "aaa..bbb")]
+        let map = Policy.pullRequestMap(files: files, threads: [thread(path: "src/A.php", line: 42)])
+
+        #expect(map.segments[0].threads.isEmpty)
+        #expect(map.summary == "1 soubor")
+    }
+
+    /// A binárka nemá řádky vůbec, takže se u ní nekreslí nic — ani `0,5`.
+    @Test("Binárka čárku vlákna nedostane")
+    func aBinaryFileGetsNoTick() {
+        let files = [FileDiff(oldPath: "obr.png", newPath: "obr.png", change: .modified,
+                              isBinary: true, hunks: [], blobs: "aaa..bbb")]
+        let map = Policy.pullRequestMap(files: files, threads: [thread(path: "obr.png", line: 1)])
+
+        #expect(map.segments[0].threads.isEmpty)
+        #expect(map.summary == "1 soubor")
+    }
+
     // MARK: - Popisek a nápověda
 
     /// Popisek se skládá z toho, co má co říct. Vyčerpávající výčet nul a jedniček — právě tady

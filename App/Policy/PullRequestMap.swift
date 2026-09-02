@@ -131,8 +131,12 @@ extension Policy {
     /// kterého se v diffu zavěšují bubliny. Kdyby se to tady rozhodovalo znovu (podle `line`
     /// a nové strany), sedla by čárka u vlákna na smazaném řádku někam jinam než bublina.
     ///
-    /// Soubor o jednom řádku dostane `0,5` — u nulového rozsahu je každý podíl týž bod
-    /// a střed se čte lépe než hrana.
+    /// Soubor o **jednom** řádku dostane `0,5` — každý podíl je v něm týž bod a střed se čte lépe
+    /// než hrana. **Pravidlo `matches` ale platí i tam**, a je to oprava po Copilotovi na PR #539:
+    /// první podoba vracela `0,5` pro každé vlákno, jakmile měl soubor nejvýš jeden řádek, tedy
+    /// **bez** kontroly, jestli se to vlákno na něj vůbec kotví. Pás by pak tvrdil diskuzi
+    /// v souboru, ve kterém pro ni není řádek — a `anchoredThreads` to sice v okně nepustí, ale
+    /// `Policy` je čistá funkce a odpovídá na to, co dostane. Bez řádků (binárka) se nekreslí nic.
     private static func threadSpots(of file: FileDiff, threads: [ReviewThread]) -> [Double] {
         let candidates = threads.filter { $0.path == file.newPath || $0.path == file.oldPath }
         guard !candidates.isEmpty else { return [] }
@@ -140,18 +144,24 @@ extension Policy {
         // tělem detailu alokovalo celé pole. Hunky se prochází na místě a hledání skončí na
         // prvním sedícím řádku.
         let total = file.hunks.reduce(0) { $0 + $1.lines.count }
-        guard total > 1 else { return candidates.map { _ in 0.5 } }
-        let span = Double(total - 1)
+        guard total > 0 else { return [] }
         return candidates.compactMap { thread in
-            var index = 0
-            for hunk in file.hunks {
-                for line in hunk.lines {
-                    if matches(thread, line) { return Double(index) / span }
-                    index += 1
-                }
-            }
-            return nil
+            guard let index = lineIndex(of: thread, in: file) else { return nil }
+            return total > 1 ? Double(index) / Double(total - 1) : 0.5
         }
+    }
+
+    /// Pořadí řádku, na který se vlákno kotví, mezi všemi řádky hunků toho souboru.
+    /// `nil` = takový řádek v diffu není.
+    private static func lineIndex(of thread: ReviewThread, in file: FileDiff) -> Int? {
+        var index = 0
+        for hunk in file.hunks {
+            for line in hunk.lines {
+                if matches(thread, line) { return index }
+                index += 1
+            }
+        }
+        return nil
     }
 
     /// Popisek vpravo od pásu: `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna`.
