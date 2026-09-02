@@ -23,6 +23,9 @@ extension AppStore {
     func setDetailTab(_ tab: PullRequestTab, for pr: PRIdentifier) {
         // Výchozí volba se z mapy maže, ať v ní nezůstávají klíče bez informace.
         detailTabs[pr] = tab == .standard ? nil : tab
+        // Volba tabu je změna záložky, takže se zapisuje do snímku (#527) — jinak by se po
+        // restartu obnovila záložka na tabu, ze kterého člověk odešel.
+        persistOpenTabs()
     }
 
     /// Co je v tabu `Kontroly` k vidění (#306).

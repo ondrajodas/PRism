@@ -20,18 +20,23 @@ final class AppStore {
     /// doby se seznam záložek skládal jen z živých dat a dokumentace tvrdila opak.
     var openTabSnapshots: [PRIdentifier: PullRequestSummary] = [:]
 
-    /// Záložky otevřené **mimo zdroje** (#531) — odkazem v ⌘K, `prism://` nebo z paletou nabídnutého
-    /// repa. PR z nich ve zdrojích není, takže o něm seznam z pollingu neví nic.
+    /// Záložky, o kterých seznam z pollingu **neví nic** — a proč (#531, druhý důvod od #527).
     ///
-    /// **Jen množina identifikátorů, žádná druhá kopie dat.** Shrnutí se skládá z dotaženého
+    /// Dva důvody: `link` je záložka otevřená odkazem v ⌘K, `prism://` nebo z paletou nabídnutého
+    /// repa (#531); `restored` je záložka, která se vrátila z `tabs.json` po restartu (#527).
+    /// Rozdíl mezi nimi je **jediný** — pilulka `mimo zdroje` v hlavičce; ve všem ostatním se
+    /// chovají stejně, viz `TabAdoption`.
+    ///
+    /// **Jen identifikátory a důvod, žádná druhá kopie dat.** Shrnutí se skládá z dotaženého
     /// detailu (`summary(for:)`), takže tady nemá co ležet — dvě kopie téhož PR by se uměly
-    /// rozejít v okamžiku, kdy autor změní titulek. Množina je tím pádem odpověď na jedinou
+    /// rozejít v okamžiku, kdy autor změní titulek. Mapa je tím pádem odpověď na jedinou
     /// otázku: **odkud se ta záložka vzala**, a to je přesně to, co potřebuje pilulka v hlavičce
-    /// (`Policy.origin(of:adopted:sources:)`) i úklid po tiku (`forget(whatIsNotIn:)`).
+    /// (`Policy.origin(of:adopted:sources:)`), obsah záložky
+    /// (`Policy.tabContent(summary:detail:adoption:)`) i úklid po tiku (`forget(whatIsNotIn:)`).
     ///
     /// **Frontu to nerozšiřuje** (#4): `pullRequests` zůstává tím, co přišlo ze zdrojů, takže se
     /// karty, odznak, souhrn ani automat nemají kde dozvědět, že tahle záložka existuje.
-    var externalPullRequests: Set<PRIdentifier> = []
+    var adoptedTabs: [PRIdentifier: TabAdoption] = [:]
 
     /// Otevřená review jako záložky (#180), v pořadí, ve kterém se otevřela.
     ///
@@ -42,6 +47,34 @@ final class AppStore {
 
     /// Která záložka je vidět.
     var activeTab: WindowTab = .home
+
+    /// Běží právě obnovení záložek (#527)? Po tu dobu se **nezapisuje snímek**.
+    ///
+    /// Obnovení nasazuje taby jednu po druhé přes `setDetailTab(_:for:)`, a ta si zápis vyžádá —
+    /// takže by se během obnovení uložilo tolik snímků, kolik je záložek, a každý z nich by
+    /// popisoval **rozdělaný** pruh. Zapíše se jeden, na konci.
+    /// `private` to být nemůže — čte i nastavuje to `AppStore+Tabs.swift`.
+    @ObservationIgnored var isRestoringTabs = false
+
+    /// Kotva scrollu, kterou má obnovená záložka doposadit (#527). Co v mapě není, se doposadit
+    /// nemá — a **spotřebováním se odsud maže**, takže se to stane jednou.
+    ///
+    /// Ve store, ne ve view: plní ji obnovení při startu, čte ji tab `Změněné soubory`, a ten
+    /// mezi tím nemusí ani jednou vzniknout (obnovená záložka může být na `Přehledu`). Kotva
+    /// proto počká, dokud se do diffu doopravdy nepřijde.
+    /// Zapisuje do ní **obnovení** (`restoreOpenTabs()`) a vyzvedává **diff**
+    /// (`takePendingScrollAnchor(for:)`), který ji tím spotřebuje; `private(set)` to být nemůže,
+    /// protože obojí leží v `AppStore+Tabs.swift`.
+    var pendingScrollAnchors: [PRIdentifier: DiffScrollAnchor] = [:]
+
+    /// Kde stojí výřez diffu u otevřených záložek (#527) — z toho se skládá `tabs.json`.
+    ///
+    /// **Není to sledovaná vlastnost**, a je to podmínka, ne úspora: hlásí se sem při
+    /// scrollování (`DiffAnchorReporter`), takže sledovaná by znamenala přeložení všeho, co ze
+    /// store čte, při každém posunu výřezu — tedy přesně ta třída problému, kvůli které #469
+    /// rozdělilo `DiffViewport` na dvě vlastnosti. Nikdo z okna to nečte; čte to zápis snímku.
+    /// Zapisuje se do ní jedině `noteDiffScrollAnchor(_:for:)` a čte ji `openTabsSnapshot`.
+    @ObservationIgnored var diffScrollAnchors: [PRIdentifier: DiffScrollAnchor] = [:]
 
     /// Co je vidět v domácí záložce. Startuje se na **přehledu** (#181) — je to obrazovka,
     /// která odpovídá na „co dneska hoří“, a to je první otázka po spuštění.
@@ -476,6 +509,11 @@ final class AppStore {
     /// zavřením aplikace — v okně se přitom chová stejně, protože stav drží `readMarks`.
     let readMarkStore: ReadMarkStore?
 
+    /// Snímek otevřených záložek (#527). `nil` = **záložky restart nepřežijí**, tedy stav před
+    /// #527; tak jsou na tom testy, které o obnovení nestojí, a proto se u nich ani nesahá do
+    /// cache.
+    let openTabsStore: OpenTabsStore?
+
     /// Seznamy repozitářů organizací (#532). `nil` = **skupina `Repozitáře` v paletě není** a okno
     /// nastavení o katalogu nic nepíše; tak jsou na tom testy, které o katalog nestojí.
     ///
@@ -872,6 +910,7 @@ final class AppStore {
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
+        openTabsStore: OpenTabsStore? = nil,
         repositoryCatalog: RepositoryCatalog? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
@@ -930,6 +969,7 @@ final class AppStore {
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
+        self.openTabsStore = openTabsStore
         self.repositoryCatalog = repositoryCatalog
         self.autoRuns = autoRuns
         self.spend = spend
@@ -1062,6 +1102,10 @@ final class AppStore {
             askContexts: AskContextStore(),
             // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
             readMarkStore: ReadMarkStore(),
+            // Snímek otevřených záložek (#527) — jeden malý JSON v kořeni cache slotu, čte se
+            // jednou při startu a zapisuje při změně záložky. Živý jedině tady; testy ho
+            // nedostanou, takže do cache nesahají.
+            openTabsStore: OpenTabsStore(),
             // Katalog repozitářů (#532, do storu od #533). Živý jedině tady — testy ho nedostanou,
             // takže nesahají do cache a nespouštějí `gh repo list`.
             repositoryCatalog: RepositoryCatalog(
@@ -1229,6 +1273,7 @@ final class AppStore {
     func show(_ section: RailSection) {
         railSection = section
         activeTab = .home
+        defer { persistOpenTabs() }
         // Odchod ze sekce `Dění` posouvá značku poslední návštěvy (#414). Musí to být **za**
         // přepnutím: rozhoduje se z toho, co je na obrazovce teď, ne z toho, co se chystá.
         syncActivityVisit()
@@ -1281,6 +1326,7 @@ final class AppStore {
         // Otevření záložky je odchod z domácí záložky, takže i ze sekce `Dění` — a odchod posouvá
         // značku poslední návštěvy (#414).
         syncActivityVisit()
+        persistOpenTabs()
     }
 
     /// Zavře záložku. **Nic se tím nezahazuje** — draft, nálezy i běžící review zůstávají, protože
@@ -1297,19 +1343,27 @@ final class AppStore {
         guard let index = openTabs.firstIndex(of: pullRequest) else { return }
         openTabs.remove(at: index)
         openTabSnapshots[pullRequest] = nil
-        // Záložka mimo zdroje (#531) je to **jediné**, co takový PR ve store drží — po zavření se
-        // o něm nemá kde nic nakreslit, takže by značka zůstala ležet jako stav, který nikdo
-        // nečte, a příští tik by kvůli ní držel detail, diff a konverzaci PR, na který se nikdo
-        // nedívá. Zahodit ji **smí jedině zavření záložky**: tik, ve kterém PR v seznamu není, je
-        // u téhle záložky normální stav, ne důvod ji vyprázdnit.
-        externalPullRequests.remove(pullRequest)
+        // Kotva scrollu odchází se záložkou (#527) — je to stav otevřené záložky, ne PR. Držet ji
+        // dál by znamenalo mapu, která roste s tím, kolik PR se za den zavřelo, a nikdo ji nečte.
+        diffScrollAnchors[pullRequest] = nil
+        pendingScrollAnchors[pullRequest] = nil
+        // Značka přijaté záložky (#531, od #527 i `restored`) je to **jediné**, co takový PR ve
+        // store drží — po zavření se o něm nemá kde nic nakreslit, takže by zůstala ležet jako
+        // stav, který nikdo nečte, a příští tik by kvůli ní držel detail, diff a konverzaci PR,
+        // na který se nikdo nedívá. Zahodit ji **smí jedině zavření záložky**: tik, ve kterém PR
+        // v seznamu není, je u téhle záložky normální stav, ne důvod ji vyprázdnit.
+        adoptedTabs[pullRequest] = nil
         stopTerminal(for: pullRequest)
 
-        guard activeTab == .pullRequest(pullRequest) else { return }
+        guard activeTab == .pullRequest(pullRequest) else {
+            persistOpenTabs()
+            return
+        }
         let neighbour = openTabs.indices.contains(index) ? openTabs[index] : openTabs.last
         activeTab = neighbour.map(WindowTab.pullRequest) ?? .home
         selection = neighbour
         syncActivityVisit()
+        persistOpenTabs()
     }
 
     /// Přepne na sousední záložku v pruhu (#245) — `⌃Tab` dopředu, `⌃⇧Tab` zpátky.
@@ -1325,6 +1379,7 @@ final class AppStore {
         guard let next = Policy.tab(step, after: activeTab, open: openTabs) else { return }
         activeTab = next
         syncActivityVisit()
+        persistOpenTabs()
     }
 
     /// Shrnutí otevřených záložek. PR, který ze seznamu vypadl, si záložku drží — proto se
@@ -1334,29 +1389,31 @@ final class AppStore {
         // z pollingu vypadlo. `compactMap` sem nepatří: záložka bez shrnutí by z pruhu zmizela
         // i s křížkem, kterým se zavírá.
         //
-        // Třetí možnost je záložka **mimo zdroje**, jejíž detail se teprve dotahuje (#531): o té
-        // se ví jenom adresa, a to je zrovna tolik, kolik pruh potřebuje (`repo#číslo`). Bez ní
-        // by v pruhu sekundu chyběla záložka, na kterou `activeTab` ukazuje — tedy okno bez
-        // jediné zvýrazněné záložky nad obrazovkou, která se načítá.
+        // Třetí možnost je **přijatá** záložka, jejíž detail se teprve dotahuje — otevřená
+        // odkazem (#531), nebo obnovená po restartu (#527): o té se ví jenom adresa, a to je
+        // zrovna tolik, kolik pruh potřebuje (`repo#číslo`). Bez ní by v pruhu chyběla záložka,
+        // na kterou `activeTab` ukazuje — tedy okno bez jediné zvýrazněné záložky nad obrazovkou,
+        // která se načítá. U obnovených záložek je to celý první okamžik po startu, ne sekunda.
         openTabs.compactMap { pr in
             summary(for: pr)
                 ?? openTabSnapshots[pr]
-                ?? (externalPullRequests.contains(pr) ? Policy.pendingSummary(for: pr) : nil)
+                ?? (adoptedTabs[pr] != nil ? Policy.pendingSummary(for: pr) : nil)
         }
     }
 
     /// Shrnutí PR podle identifikátoru. `nil` = o tomhle PR nevíme nic ani z posledního tiku.
     ///
-    /// **U záložky mimo zdroje se skládá z dotaženého detailu** (#531): v seznamu takový PR není
-    /// a nikdy nebude, takže by bez tohohle zůstala záložka prázdná i po úspěšném načtení. Živá
-    /// data mají přednost — jakmile PR do zdrojů přijde (někdo si vyžádá moje review), je to
-    /// obyčejný řádek fronty a shrnutí se bere odtamtud.
+    /// **U přijaté záložky se skládá z dotaženého detailu** (#531, od #527 i u obnovené): PR
+    /// otevřený odkazem v seznamu není a nikdy nebude, obnovený tam být může a před prvním tikem
+    /// se to neví — bez tohohle by v obou případech zůstala záložka prázdná i po úspěšném
+    /// načtení. Živá data mají přednost, takže jakmile PR do zdrojů přijde (nebo dorazí první
+    /// tik), je to obyčejný řádek fronty a shrnutí se bere odtamtud.
     ///
     /// **Fronty se to netýká.** Tahle metoda odpovídá na „co víme o tomhle jednom PR“; seznam,
     /// karty, odznak i automat čtou `pullRequests`, a ty zůstávají tím, co přišlo ze zdrojů.
     func summary(for pullRequest: PRIdentifier) -> PullRequestSummary? {
         if let listed = pullRequests.first(where: { $0.id == pullRequest }) { return listed }
-        guard externalPullRequests.contains(pullRequest),
+        guard adoptedTabs[pullRequest] != nil,
               case .loaded(let detail, _) = detailStates[pullRequest]
         else { return nil }
         return PullRequestSummary(detail)
@@ -1649,6 +1706,11 @@ final class AppStore {
 
     /// Drží seznam aktuální, dokud okno žije. Zrušení tasku smyčku ukončí.
     func keepFresh() async {
+        // **Záložky jako první, před vším ostatním** (#527). Snímek se čte z disku, takže na
+        // konfiguraci ani na síti nestojí — a musí být hotový **před prvním tikem**: úklid po
+        // tiku zahazuje stav PR, které nejsou v seznamu, a obnovená záložka se mezi chtěné
+        // dostane jedině tou značkou, kterou tohle nasadí (`adoptedTabs`).
+        await restoreOpenTabs()
         await reloadConfiguration()
         // **Před** načtením záznamů: dotažené nálezy se mají objevit hned po startu, ne až
         // po dalším review. Kdyby se dotahovalo potom, `reviewRecords` by je neobsahovaly.
@@ -2050,8 +2112,10 @@ final class AppStore {
     /// Zahodí stav rep, o která už není zájem. Bez toho by mapa rostla donekonečna a PR,
     /// které se po týdnu vrátí do seznamu, by přivítala chyba z minula.
     private func forget(whatIsNotIn summaries: [PullRequestSummary]) {
-        // **Záložka mimo zdroje se počítá mezi chtěné** (#531), i když v seznamu není a nikdy
-        // nebude. Bez toho by ji první tik vyprázdnil: detail, diff, konverzace, checky i commity
+        // **Přijatá záložka se počítá mezi chtěné** (#531, od #527 i obnovená), i když v seznamu
+        // není. U obnovené je to o důvod naléhavější: obnovení běží **před** prvním tikem, takže
+        // by ji ten tik vyprázdnil hned, ještě než by se člověk stihl podívat.
+        // Bez toho by ji první tik vyprázdnil: detail, diff, konverzace, checky i commity
         // by z map zmizely a v otevřené záložce by zbyla obrazovka „pull request zmizel ze
         // seznamu“ — tedy porucha hlášená nad stavem, který je u téhle záložky normální.
         // Zahazuje se **zavřením záložky**, ne tikem; do té doby je to otevřená práce jako každá
@@ -2061,7 +2125,7 @@ final class AppStore {
         // **„V seznamu“ v komentářích níž tedy znamená „v `wantedPullRequests`“** (nález Copilota
         // na #535): hranice je od #531 o tu jednu záložku širší než tik, a rozepisovat to
         // u každého filtru zvlášť by znamenalo dvacet míst, ve kterých se dá zapomenout jedno.
-        let wantedPullRequests = Set(summaries.map(\.id)).union(externalPullRequests)
+        let wantedPullRequests = Set(summaries.map(\.id)).union(adoptedTabs.keys)
         let wanted = Set(wantedPullRequests.map(\.repo))
         checkoutStates = checkoutStates.filter { wanted.contains($0.key) || $0.value == .preparing }
 

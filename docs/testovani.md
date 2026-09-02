@@ -2793,11 +2793,17 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   na **jinou otázku** a u neznámého PR vychází obráceně — chytila to až první zelená sada, ne
   review: s jednou funkcí tvrdil řádek `Odkaz` u cizího repa `je ve tvých zdrojích`.
 
-  `tabContent(summary:detail:origin:)` má případ na každý ze čtyř stavů, a to podstatné je, že se
+  `tabContent(summary:detail:adoption:)` má případ na každý ze čtyř stavů, a to podstatné je, že se
   **`loading` a `gone` nesmí slít**: nad rozdělaným načítáním u PR ze zdrojů vychází `gone` (tam je
   shrnutí ze seznamu, takže nenačtený detail znamená jen chybějící větve v hlavičce), kdežto
-  u záložky mimo zdroje `loading`. A `pendingSummary(for:)` se kontroluje na to, že **nic netvrdí**:
+  u přijaté záložky `loading`. A `pendingSummary(for:)` se kontroluje na to, že **nic netvrdí**:
   titulek `Načítá se…`, prázdný autor, `distantPast`.
+
+  **Od #527 jde `tabContent` přes oba důvody přijetí** (parametrizovaně, `link` i `restored`),
+  protože rozhoduje **přijetí, ne `origin`** — a `origin` naopak dostal dvě tvrzení o tom, že
+  obnovená záložka pilulku **nedostane**, ani když v seznamu není. Ty dvě věty spolu drží ten
+  nejtišší případ celého #527: obnovená záložka nad mergnutým PR. S `origin`em by u ní vyšlo
+  `gone`, tedy věta „pull request zmizel“ nad obrazovkou, kterou si aplikace zrovna sama načítá.
 - **`AppStore` — PR mimo zdroje (#531)** — `AppStoreExternalTabTests` proti fake gateway. Půlka
   sady tvrdí, že se něco **nestalo**, protože přesně to se rozbije potichu: PR otevřený odkazem
   není v `pullRequests`, `visiblePullRequests`, `queuePullRequests`, nezvedne odznak fronty,
@@ -2815,6 +2821,50 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   zdrojů se podtitulek liší, běžné hledání ani prázdný dotaz ji nedostanou vůbec a **psaní odkazu
   se nikoho neptá** (gateway nedostane volání ani po třech úhozech) — pravidlo palety od #184 tedy
   platí dál.
+- **`Policy` — značka záložky (#527)** — `WindowTabMarkTests`. Nejcennější jsou tvrzení
+  o **pořadí pater**, protože v okně je vidět jen jedna značka a ta špatná vypadá stejně platně
+  jako správná: běh přebíjí všechno, **načítání přebíjí rozdělané review i mergnutý PR** (bez toho
+  by obnovená záložka chvíli kreslila stav review z minula), draft přebíjí stav, a `merged`
+  s `closed` přebíjejí review — kdežto `open` a `draft` ne. K tomu jeden test, který projde
+  **všechny kombinace** vstupů a čeká právě jednu značku, takže šesté patro se nedá přidat
+  potichu; a jeden na to, že **neznámý stav PR** (obnovená záložka, o které se ještě nic neví)
+  vychází jako review, ne jako fialová.
+- **`Policy` — kotva scrollu (#527)** — `DiffScrollAnchorTests`, výčtem. Nejcennější tvrzení je,
+  že se **nikdy nevrátí řádek nad horní hranou**: kotva má ukazovat na kód, který byl vidět,
+  a řádek nad hranou by po restartu posadil výřez o kus výš — tedy chyba k nerozeznání od
+  zaokrouhlení. Dál: hranu protínající řádek vyhrává, díra mezi bloky (hlavičky, expandery,
+  bubliny číslo nenesou) se řeší **prvním řádkem pod** hranou, pořadí ve vstupu nerozhoduje
+  (krabice ploch je slovník) a **soubor bez řádku je platná odpověď**, ne chyba. U složené funkce
+  k tomu, že se řádek **nebere z cizího souboru** a že nezměřené rozsahy nedají kotvu žádnou —
+  `DiffFileExtents.ordered(of:)` vrací prázdno, dokud chybí jediný rozsah.
+- **`OpenTabsStore` — `tabs.json` (#527)** — proti **skutečné** dočasné složce, protože obsah
+  disku je to, co po restartu rozhoduje. Kromě roundtripu tři tvrzení o tom, že se **nic
+  nehlásí**: chybějící i rozbitý soubor znamenají prázdný snímek (nejhorší následek je jedno
+  spuštění bez záložek, tedy stav před #527) a **přejmenovaný případ `PullRequestTab`** vezme
+  s sebou celý snímek, protože `?? .standard` u jednoho tabu by se tvářil jako volba člověka.
+  K tomu hranice cache — **symlink na místě snímku se nečte ani nepřepíše** (ověřuje se, že cíl
+  mimo cache zůstal nedotčený, ne jen že `load` vrátil prázdno) —, že se prázdný snímek **maže**
+  a že dva sloty mají každý svůj soubor. Druhá půlka `CacheFile.refusal` (`outsideCache`) je
+  u tohohle souboru **nedosažitelná** (cesta je vždycky `root/tabs.json`) a je to u toho testu
+  napsané: kontrola zůstává celá, protože hranice cache má v repu jedno místo.
+- **`AppStore` — obnovení záložek (#527)** — `AppStoreTabRestoreTests` proti fake gateway
+  a skutečnému `OpenTabsStore`. **Nejcennější polovina tvrdí, že se něco nestalo**: obnovení
+  nepustí review ani session a nepřipraví pracovní kopii. Scéna je postavená tak, aby to nemohlo
+  projít omylem — **prázdné zdroje a zapnutý automat**, tedy stav, ve kterém je otevřená záložka
+  to jediné, co by se dalo spustit. **Ověřeno vložením regrese**: `startReview` v obnovení shodí
+  tři tvrzení (požadavky revieweera, fáze běhu, počet dotazů na detail).
+
+  Druhá regrese je o značce přijetí: bez `adoptedTabs[…] = .restored` vyjde `tabContent` jako
+  `gone`, pruh nakreslí puntík stavu review a záložka **zmizí z `openTabSummaries` úplně** — tři
+  tvrzení jednoho testu naráz. To je zároveň důkaz, že se ta věta („obnovení musí být před prvním
+  tikem a se značkou“) doopravdy hlídá.
+
+  Dál: **mergnutý PR se vrátí s fialovým puntíkem a tik ho nezavře** (pravidlo z #67), první tik
+  obnovenou záložku nevyprázdní, pilulka `mimo zdroje` restart přežije a obnovená ji nedostane,
+  aktivní záložka mimo pruh se ignoruje (ručně editovaný snímek), a kotva scrollu se **vyzvedne
+  jen jednou**. Na zápisové straně: každá změna záložky (otevření, přepnutí, zavření, změna tabu,
+  odchod domů) se objeví v souboru, hlášení kotvy na disk **nesahá**, `nil` kotvu **nemaže**
+  a zavřená záložka kotvu nedrží.
 - **`AppStore` — rozdělané review** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
   složkou: on rozhoduje, co je po restartu, takže fake by ověřoval sám sebe. Pokrývá cestu
   od kliknutí po disk (komentář, verdikt, tělo, převzetí nálezu do těla i na řádek), a hlavně

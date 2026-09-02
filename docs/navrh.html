@@ -309,6 +309,15 @@ code {
 }
 @keyframes rot { to { transform: rotate(360deg); } }
 
+/* Obnovená záložka, jejíž detail ještě nedorazil (sekce 44). Vlastní třída, ne `.dot` ani
+   `.spin`: plný puntík by tvrdil stav review, který se nemá odkud vzít, a prstýnek znamená
+   v okně „běží review“ — po startu přitom neběží nic. Dutý a nehybný schválně. */
+.tdot-load {
+  width: 8px; height: 8px; flex: none; border-radius: 50%;
+  border: 1.5px solid var(--ink-3);
+  background: transparent;
+}
+
 .toolbtns { display: flex; align-items: center; gap: 3px; margin-left: auto; }
 .tbtn {
   display: grid; place-items: center;
@@ -14989,6 +14998,127 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <b>Chyba nese syrový text</b>
           <span>U selhaného klonu je hláška od <code>gitu</code> to jediné, z čeho se pozná,
           co dělat dál. Zabalit ji do vlastní věty znamená ji zahodit.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s44">
+    <div class="section-head">
+      <div class="eyebrow">44 — Start · obnovené záložky</div>
+      <h2>Záložky přežijí restart — a restart je po každém mergi</h2>
+      <p class="muted">
+        <b>Dneska</b> se otevřené záložky nikam nezapisují; na disku jsou jen běžící session
+        (<code>sessions.json</code>). Aplikace se přitom podle pravidel repa restartuje
+        <code>run.sh</code> po každém mergi, takže <b>každý merge zavře všechno rozečtené</b>
+        a scroll v diffu se ztratí.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: do cache slotu se při každé změně záložky zapíše <code>tabs.json</code> —
+        identita PR, aktivní záložka, tab v ní a kotva scrollu jako <b>soubor a řádek</b>. Po
+        startu se to vrátí, <b>než proběhne první tik</b>: aktivní je ta záložka, která byla
+        aktivní, a každá má <b>puntík načítání</b>, dokud nedorazí detail. PR, který mezitím
+        z fronty zmizel, se vrátí taky — dočíst ho jde a <b>zavírá ho člověk</b>, ne tik
+        pollingu (pravidlo z #67 se nemění).
+      </p>
+      <p class="muted">
+        <b>Výřez hlavičky, ne celé okno.</b> Mění se jedna značka v pruhu záložek, takže se
+        <a class="jump" href="#s02">sekce 02 (dnešní Přehled)</a> nepřekresluje — zůstává tím,
+        proti čemu se dá aplikace srovnat, a puntík načítání v ní stát nemá: je vidět jen
+        pár sekund po startu, ne v klidném stavu. Je to tentýž vztah jako u
+        <a class="jump" href="#s41">sekce 41</a>.
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="pane">
+        <div class="tag"><i></i>Před ukončením · tři záložky, aktivní connection#21663 v tabu Změněné soubory</div>
+        <div class="frame flat">
+          <div class="titlebar">
+            <div class="lights"><i></i><i></i><i></i></div>
+            <div class="tabstrip">
+              <div class="tab home"><span>⌂</span><span class="label">Přehled</span></div>
+              <div class="tab"><span class="dot" style="background: var(--crit);"></span><span class="label repo">vault#85</span><span class="x">×</span></div>
+              <div class="tab active"><span class="dot" style="background: var(--find);"></span><span class="label repo">connection#21663</span><span class="x">×</span></div>
+              <div class="tab"><span class="dot" style="background: var(--accent);"></span><span class="label repo">PRism#171</span><span class="x">×</span></div>
+              <div class="tab-add">+</div>
+            </div>
+            <div class="toolbtns"><div class="tbtn key"><span>⌘K</span></div><div class="tbtn">✦</div><div class="tbtn">⟳</div><div class="tbtn">⚙</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Po startu · tytéž záložky, detail se teprve dotahuje; PRism#171 se mezitím mergnul</div>
+        <div class="frame flat">
+          <div class="titlebar">
+            <div class="lights"><i></i><i></i><i></i></div>
+            <div class="tabstrip">
+              <div class="tab home"><span>⌂</span><span class="label">Přehled</span></div>
+              <div class="tab"><span class="tdot-load"></span><span class="label repo">vault#85</span><span class="x">×</span></div>
+              <div class="tab active"><span class="tdot-load"></span><span class="label repo">connection#21663</span><span class="x">×</span></div>
+              <div class="tab"><span class="dot" style="background: #A371F7;"></span><span class="label repo">PRism#171</span><span class="x">×</span></div>
+              <div class="tab-add">+</div>
+            </div>
+            <div class="toolbtns"><div class="tbtn key"><span>⌘K</span></div><div class="tbtn">✦</div><div class="tbtn">⟳</div><div class="tbtn">⚙</div></div>
+          </div>
+          <div class="statusbar" style="border-top: 1px solid var(--line-soft);">
+            <span class="sitem plain">Obnoveny 3 záložky · detail se načítá</span>
+            <span class="sp"></span>
+            <span class="sitem">— PR</span>
+            <span class="sitem"><span class="d" style="background: var(--ok);"></span>GitHub</span>
+            <span class="sitem"><span class="d" style="background: var(--ok);"></span>Claude</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">144</span>
+        <span class="body">
+          <b>Co se ukládá a kam</b>
+          <span>Do cache slotu (<code>tabs.json</code>): identita PR, aktivní záložka, tab v ní
+          a kotva scrollu jako <b>soubor a řádek</b>. Ne rámečky ani offsety — ty po restartu
+          neplatí, protože se diff zalamuje podle šířky okna. Slot má vlastní cache, takže si
+          paralelní okna záložky nepřepisují. Zapisuje se při změně záložky <b>a při ukončení</b>
+          (jinak by se ztratil scroll, kterým člověk skončil), čte se <b>jednou</b> při startu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">145</span>
+        <span class="body">
+          <b>Puntík načítání je nový stav záložky — a vlastní třída</b>
+          <span>Do #180 měla záložka <code>.dot</code> se stavem review, nebo <code>.spin</code>,
+          když review běží. „Obnovená, detail ještě není“ je <b>třetí věc</b>: prstýnek
+          <code>.spin</code> pro ni nestačí, protože v okně znamená <em>běží review</em> — a po
+          startu neběží nic, takže by o sobě záložka tvrdila víc, než co data unesou. Proto
+          <b><code>.tdot-load</code></b>: <b>dutý kroužek</b> v <code>--ink-3</code>, tichý
+          a <b>nehybný</b>. Dutý, protože puntík se ještě nemá čím vybarvit; tichý, protože
+          „nemám co říct“ je v paletě šedá.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">146</span>
+        <span class="body">
+          <b>Nic se nespouští</b>
+          <span>Obnovení nepustí review ani session — <b>dotáhne jediné, a to čtením</b>
+          (<code>gh pr view</code>). Mergnutý PR se vrátí s fialovým puntíkem, tedy se stavem
+          <em>pull requestu</em>, ne review: u mergnutého a zavřeného je „jak to dopadlo“
+          důležitější než „co našel reviewer“. Zavírá ho člověk. Fialová je <b>systémová</b>
+          (<code>.purple</code>) a token v paletě nemá — je to tatáž zapsaná mezera jako
+          <code>.blue</code> u přejmenovaného souboru (#432), proto je tady hexem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">147</span>
+        <span class="body">
+          <b>Kotva se posadí tou samou cestou, jakou skáče paleta</b>
+          <span>Soubor a řádek jdou do <code>DiffRow.anchor</code> a odtud do
+          <code>scrollTo</code> s podílem výšky (#152), <b>o průchod později</b> a s přeměřenými
+          rozměry (#325). Sedne to tedy stejně dobře — a stejně nedokonale — jako skok na nález.
+          Když soubor v diffu není (mezitím přišel commit), <b>nestane se nic</b>: skákat naslepo
+          je horší než nehnout se.</span>
         </span>
       </div>
     </div>

@@ -23,17 +23,22 @@ extension Policy {
     /// PR, který ze zdrojů vypadl, se z otevřené záložky nedá dočíst jinak než jako `mimo zdroje`.
     ///
     /// - Parameters:
-    ///   - adopted: záložky otevřené mimo zdroje (`AppStore.externalPullRequests`). Bez nich by
+    ///   - adopted: přijaté záložky a **proč** (`AppStore.adoptedTabs`). Bez nich by
     ///     se pilulka objevila u **každého** PR, který zrovna vypadl z tiku — a to je stav, který
     ///     má okno hlásit větou „pull request zmizel ze seznamu“, ne pilulkou.
+    ///
+    ///     **Pilulku dostane jedině `link`** (#527): obnovená záložka běží před prvním tikem, kdy
+    ///     je `sources` prázdné, takže by `mimo zdroje` bliklo u všech — a u těch, které z fronty
+    ///     doopravdy vypadly, by tvrdilo „otevřel jsi ho odkazem“, což není pravda. Viz
+    ///     `TabAdoption.restored`.
     ///   - sources: identifikátory z posledního tiku (`AppStore.pullRequests`).
     static func origin(
         of pullRequest: PRIdentifier,
-        adopted: Set<PRIdentifier>,
+        adopted: [PRIdentifier: TabAdoption],
         sources: Set<PRIdentifier>
     ) -> PullRequestOrigin {
         if sources.contains(pullRequest) { return .sources }
-        return adopted.contains(pullRequest) ? .outsideSources : .sources
+        return adopted[pullRequest] == .link ? .outsideSources : .sources
     }
 
     /// Odkud je pull request, o kterém se ví **jenom adresa** — tedy na řádku `Odkaz` v paletě.
