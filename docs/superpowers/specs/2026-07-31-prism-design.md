@@ -5303,6 +5303,62 @@ nepřišlo, patří ta dvě pole z `--json` pryč — a co se tím ušetří, je
 nastavení po delší době a chvíli tam stojí `Obnovuje se…`. Do #533 to nikomu nevadí, protože seznam
 zatím nikdo jiný nečte; jak ho paleta dostane, patří k němu i rozhodnutí, kdo obnovu spouští.
 
+### Záznam rozhodnutí — druhá úroveň palety (#533)
+
+Poslední kámen M18. Rozhodnutí, která u toho padla, a co se u nich zamítlo:
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Úroveň je stav palety ve storu** (`CommandPalette.Level`, `AppStore.paletteLevel`) | `@State` v `CommandPaletteView`, jako dotaz a kurzor | Druhá úroveň si nechává **dotažený seznam PR**, a ten by se s každým překreslením karty tahal znovu. Dotaz a kurzor ve `@State` **zůstávají** — mají zaniknout se zavřením palety, kdežto seznam se má zahodit **hned při odchodu z úrovně** |
+| **Změna úrovně vyprázdní pole** | Nechat v poli, co tam bylo | Do repa se vchází tím, že se napíše jeho jméno, takže by `vault` zůstalo ve filtru jeho pull requestů a druhá úroveň by se otevřela jako „nic nesedí“ — tedy prázdno na místě, kde je sedm PR |
+| **Katalog rep se přestěhoval do `AppStore`** (nepovinné pole, `nil` = skupina není) | Nechat ho v `@State` okna nastavení a paletě podat kopii | Čtou ho **dvě obrazovky**; dvě instance = dvě cache téhož seznamu, a která z nich je pravda, by rozhodovalo pořadí otevření okna. #532 to takhle předpovědělo a nechalo na tomhle issue — **typ se u toho nemusel měnit, protože pravda leží v cache** |
+| **Store katalog jen čte z disku, dotažení zůstalo v nastavení** | Obnova při otevření palety (`refreshStale`) | Tím se odpovídá na otevřenou otázku z #532. Výpis rep `keboola` stojí **46,8 s**, takže ⌘K nesmí být operace, po které se tři čtvrtě minuty nic nedělá. **Cena je zapsaná**: kdo otevře paletu s týden starou cache, dostane starý seznam — a dorovná to otevřením nastavení, které obnovu spouští |
+| **Řádky rep se filtrují dřív, než se skládají** | Postavit řádky pro celý katalog a nechat filtrovat `paletteResults` | `keboola` má přes tisíc rep a katalog se prochází **při každém úhozu**; podtitulek každého řádku stojí skloňování a formátování času. Filtruje se `pickerRank`em nad **tímtéž textem**, jaký bude v titulku, takže druhý průchod vydá totéž pořadí a strop neuřízne řádek, který by se pak vytáhl nahoru |
+| **Repa se řadí podle počtu otevřených PR** (pak push, pak jméno) | Abecedně; podle posledního pushe; podle váhy shody | Je to nabídka **kam jít**, takže nahoru patří repo, ve kterém je co číst — a repo bez otevřených PR je ten řádek, po kterém druhá úroveň zůstane prázdná. Zákres to tak kreslí (7, 2, 0). Dvě kritéria navíc jsou proto, aby pořadí nezáviselo na tom, jak `gh` seznam vydal |
+| **Druhá úroveň je filtr, ne hledání s vážením** | Prohnat ji `paletteResults` | Nadpis tvrdí `řazeno podle poslední změny`; po prvním písmenu by řazení podle váhy vytáhlo nahoru PR, jehož titulek jím začíná, a nadpis by přestal platit. Je to ta třída textu, který tvrdí víc, než co data unesou |
+| **V druhé úrovni není strop na skupinu** | `paletteGroupLimit` i tady | Šest je strop pro skupinu **mezi jinými** — chrání ostatní skupiny. Tady je ta skupina **obsah celé úrovně**, takže by strop uřízl PR, na které se člověk přišel podívat. Mez je `--limit` u `gh pr list` (sto) a přes ni se scrolluje |
+| **Řazení PR je v `Policy`, ne v `gh`** | `gh pr list --search "sort:updated-desc"` | Změřeno, že `gh pr list` řadí **podle čísla**: `#14282` (28. 8.) stálo nad `#14259` (31. 8.). Řadit dotazem by znamenalo tvrzení v nadpisu opřené o cizí chování, které se nedá otestovat výčtem — a fixture je ten skutečný výstup i s touhle dvojicí |
+| **Odznak `moje` má přednost před `ve frontě`** | Kreslit oba; `ve frontě` první | Fronta je od #332 množina **cizích** PR, takže `ve frontě` u vlastního PR by tvrdilo, že se na něj čeká review ode mě. Nejsou to dvě pravdy, ze kterých se vybírá — jedna z nich je nepravdivá |
+| **Relativní čas skládá `Policy` jako řetězec** (`momentAgo(_:now:)`) | `Text(date, format: .relative(presentation: .named))` ve view, jako všude jinde v okně | Podtitulek je **jeden řetězec** — hledá se v něm a zvýrazňuje se v něm shoda — a návrh do něj píše `naposledy před hodinou`, tedy slovo, čas a nic mezi tím. Rozdělit tu větu mezi `Policy` a kresbu by znamenalo, že polovinu podtitulku skládá view. Referenční okamžik musí být **parametr** (jinak se to netestuje), a to `Date.RelativeFormatStyle` neumí — proto `RelativeDateTimeFormatter` s vypsaným `.named`/`.full`, srovnaným s tím, co kreslí zbytek okna |
+| **`esc` je jedno tlačítko, které buď zavírá, nebo vrací** | Dvě tlačítka se `.cancelAction` a `if` u obou | Dvě tlačítka se stejnou kombinací znamenají, že vyhraje to zaregistrované později (#151, #184, #441) — a která z nich to je, se pozná jedině tím, že jedna „nefunguje“ |
+| **`⌫` má tlačítko jedině na prázdném poli** | Jedno tlačítko a podmínka v akci | Zkratka platí pro **celé okno**, takže nad napsaným dotazem by přebila mazání znaků a v paletě by přestalo jít psát. Podmínka v akci by tomu nezabránila — tlačítko se nesmí objevit vůbec |
+| **Patka se mění podle úrovně, ne podle vybraného řádku** | `↵ do repa` nad řádkem repozitáře, jak to kreslí úzký výřez zákresu | Klávesy jsou vlastnost karty; kdyby text patky závisel na tom, co je pod kurzorem, musel by se do něj dívat každý řádek a patka by se měnila při každé šipce. **Návrh to sám říká** u sekce `s09link`, kde se táž otázka řešila u skupiny `Odkaz` |
+| **Prázdný stav rozlišuje „nezeptal jsem se“** (`Policy.paletteEmpty(at:query:)`) | Jedna věta `Na „<dotaz>“ nic nesedí` a poznámka ze `Stage` | Vlastní revize diffu: repo bez otevřených PR by vydalo `Na „“ nic nesedí.`, tedy věta o hledání, které nikdo nezačal. Druhá věta (kde se hledalo) u toho stavu **chybí schválně** — odpovídala by na nepoloženou otázku |
+| **Výsledky dostává view uzávěrem ze storu** | Nechat ve view `Policy.paletteResults` nad předaným katalogem | Do #533 to view počítalo samo **a zároveň** existoval `AppStore.paletteSections(for:)`, který volaly jen testy — dvě odpovědi na jednu otázku. Druhá úroveň by musela vzniknout v obou |
+| **Nadpis nese dopisek** (`Section.detail`) a **organizace bez snímku se nevypisuje** | Vypsat celý `searchOrganizations`; dopočítat organizace z nalezených řádků | Nadpis je tvrzení o tom, **kde se hledalo**. Organizace bez snímku by slibovala, že se v ní hledalo, a přitom se ještě nikdy nedotáhla; dopočet z řádků by naopak u dvou rep téže organizace tvrdil, že se v druhé nehledalo |
+| **Odznaky v metrice `DesignPill`** (10,5) | `9.5px` z inline stylu zákresu | Kapsle stavu má v tomhle okně **jedno místo** (#348) a osmá kopie metriky kvůli jednomu bodu je zrovna to, čemu se ta jednota vyhýbá. Inline `9.5px` v decku je zúžení kvůli šířce úzkého výřezu, ne rozhodnutí o sazbě |
+| **`⌘↵ otevřít na GitHubu` se kreslí literálem v `Policy`** | Nechat celou patku ve view | Zapsaná výjimka ze stráže #441, tatáž jako u `⌘,` v `CommandPaletteSearch.swift`: paleta je překryv, který existuje jen otevřený, takže si tu klávesu registruje sama a v katalogu okna nemá co dělat. **Do #533 stál literál ve view vedle registrace**; přestěhoval se, protože se patka mění podle úrovně — a to je rozhodnutí, ne kresba. Cena je zapsaná: kdo tu klávesu ve view změní, musí změnit i ten řádek |
+| **Značka repozitáře je `cube`** | `folder`; `book.closed` (ikona repa na GitHubu) | `folder` v tomhle okně nic neznamená a `book.closed` by se potkalo s `doc.text` u souborů. Krychle je věc, do které se vchází — a to je přesně to, co ten řádek dělá |
+
+**Tvrdá podmínka č. 1 se nemění ani o položku.** `pullRequests(in repo:)` je **pětadvacátá čtecí**
+metoda gateway, `SingleWayOutTests` prochází beze změny a grep na `ReviewPublishing`
+i `BranchPushing` vypisuje týž seznam souborů. V paletě dál **nic neodesílá** — `CommandPalette.Action`
+se nerozšířila a nový cíl `Target.repository` jen přepíná úroveň.
+
+**Tím se zavírá i mezera zapsaná u #532**: `openPullRequests` a `lastPushedAt` se od #533 **kreslí**
+(`7 otevřených PR · naposledy před hodinou`), takže „stav, který se drží, ale nikdo ho nečte“
+přestal být splacený dopředu a je splacený.
+
+**Zákres se v tomhle PR opravil, a je to výjimka z pravidla „návrh se schvaluje dřív, než vznikne
+issue“** — protože se neschvaluje nic nového. Sekce `s09repo` si ve dvou věcech **odporovala sama**:
+pořadí řádků v druhé úrovni mělo `#91 · před 2 h` nad `#85 · před hodinou`, ačkoli nadpis nad tím
+tvrdí řazení podle poslední změny, a patka úzkého výřezu měla `↑↓ vybrat` proti `↑↓ pohyb` v hlavní
+kresbě palety. Rozhodl to uživatel při proklikání („oprav to hned v tomhle PR“); srovnat se šlo
+jedině s tím, co drží pohromadě se zbytkem palety, takže **kresba se přerovnala podle svého vlastního
+nadpisu** (a kapsle `↵ otevřít` šla s kurzorem na první řádek, jak to dělá aplikace) a patka se
+sjednotila na `pohyb`. Poznámka 60 to od téhle změny **říká slovy**, aby kresba neměla jak nadpisu
+odporovat znovu.
+
+**Našlo to srovnání renderu s kresbou, ne čtení**, a to je na tom to poučení: aplikace řadila správně
+od začátku (řadí `Policy`, tvrdí to test výčtem), takže z kódu ani z textu zákresu nešlo poznat nic —
+vylezlo to teprve tím, že vedle sebe stály dva obrázky a v jednom byl první řádek jiný. Je to tentýž
+druh nálezu jako čtyři odchylky u #532, jen obráceně: tam měla chybu implementace, tady kresba.
+
+**Dvě věci, které se v harnessu ověřit nedají**, a obojí zkouší člověk: že `⌫` na prázdném poli
+vrátí o úroveň a nad napsaným dotazem maže znaky, a že `esc` v druhé úrovni paletu nezavře.
+Klávesa v testovacím hostu nezabere (viz [`docs/testovani.md`](../../testovani.md#jak-změřit-fokus-a-klávesy-184)),
+takže `Policy` tvrdí **rozhodnutí** a zabrání klávesy je na proklikání.
+
 ### Záznam rozhodnutí — nálezy v okraji (#503)
 
 Otevírá dvě zapsaná rozhodnutí. **#185** (blokující nález je rozbalený rovnou pod svým řádkem)

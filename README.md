@@ -1804,11 +1804,12 @@ a paleta je zároveň jediné místo, kde se nemusí pamatovat, kde co v okně b
 **⌘K** (druhé zmáčknutí zavře) nebo kapslí `⌘K` v hlavičce okna; ta tam je proto, že jinak by
 o paletě věděl jen ten, kdo si přečetl release notes.
 
-Výsledky jsou v **šesti skupinách a jejich pořadí je pevné**: `Odkaz`, **Nálezy**, soubory
-otevřeného PR, `Pull requesty k review`, `Moje PR`, akce. Nálezy jsou první schválně — je to jediná věc, kterou
+Výsledky jsou v **sedmi skupinách a jejich pořadí je pevné**: `Odkaz`, **Nálezy**, soubory
+otevřeného PR, `Pull requesty k review`, `Moje PR`, akce, `Repozitáře`. Nálezy jsou první schválně — je to jediná věc, kterou
 tahle aplikace má a prohlížeč ne, takže pořadí skupin je tvrzení o tom, k čemu je okno. Z každé
 skupiny je vidět **nejvýš šest** řádků; strop je na skupinu, protože jinak by dvacet nálezů
-vytlačilo všechno ostatní.
+vytlačilo všechno ostatní. `Repozitáře` jsou naopak **poslední** (#533): je to nabídka, kam jít,
+ne odpověď na to, co je v okně.
 
 **Vlastní PR mají vlastní skupinu, ne odznak v cizí** (#336), a je to důsledek toho stropu: ve
 společné skupině by při dvaceti cizích PR to moje nemuselo vyjít vůbec. Rozřazuje se podle **autora**
@@ -1878,6 +1879,35 @@ nezavře.
 Dokud se detail dotahuje, stojí v záložce `Načítám pull request`; když se to nepovede (překlep
 v adrese, repo, na které nevidím), zůstane v ní **odpověď `gh`** a dvě tlačítka — `Zkusit znovu`
 a `Zavřít záložku`.
+
+#### Repozitáře a druhá úroveň — cesta k PR bez odkazu (#533)
+
+**Odkaz musí člověk napřed někde vzít.** Když vím jen to, že *„v vaultu leží PR o TTL“*, najdu ho
+odsud: napíšu `vault`, paleta hledá v **repozitářích organizací z nastavení**
+(Nastavení › Zdroje PR › Organizace k prohledávání) a nabídne skupinu `Repozitáře` —
+`keboola/vault · 7 otevřených PR · naposledy před hodinou`. Nadpis skupiny vypisuje organizace,
+ve kterých se hledalo; ta, která se ještě nedotáhla, v něm **není**.
+
+**Řádky jsou řazené podle počtu otevřených PR**, pak podle posledního pushe, pak podle jména: je to
+nabídka **kam jít**, takže nahoru patří repo, ve kterém je co číst. Repo bez otevřených PR to má
+napsané slovem (`bez otevřených PR`), ne nulou. Hledá se v `owner/repo` — `keboola` najde všechna
+repa organizace, `vault` i `keboola/vault` to jedno.
+
+**`↵` na repu přepne paletu o úroveň níž.** V poli zůstane **chip s repem** (`keboola/vault ›`),
+pod ním se dotáhnou jeho **otevřené** pull requesty — `#91 · feat: configurable secret TTL`,
+`odinuv · před 2 hodinami` — a nadpis říká, kolik jich je a jak jsou řazené. Psaní odsud
+**filtruje** podle titulku, čísla a autora; `↵` otevře **záložku ke čtení**, tedy touž cestou jako
+vložený odkaz. Že je PR ve frontě nebo že je můj, se pozná z odznaku (`ve frontě`, `moje`) — skládá
+se z toho, co aplikace už ví, ne z dalšího dotazu.
+
+**`esc` a `⌫` na prázdném poli vrací o úroveň**, ne zavírá; patka to říká (`esc o úroveň zpět`).
+Zavřením palety se úroveň vrací nahoru — ⌘K je „začínám hledat“, takže se nikdo nemá vracet do
+repa, do kterého vešel před minutou.
+
+**Psaní nedotahuje nic.** Repozitáře se hledají v **cache na disku** (dotahuje se jednou denně
+z nastavení; výpis rep velké organizace je věc desítek sekund), pull requesty repa se dotáhnou
+**jednou, při vstupu do repa**. Když v cache ještě nic není, skupina `Repozitáře` se nekreslí —
+dotáhne se otevřením stránky `Zdroje PR` v nastavení.
 
 ### Odeslání review
 

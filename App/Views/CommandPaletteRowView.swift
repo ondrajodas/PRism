@@ -41,6 +41,9 @@ struct CommandPaletteRowView: View {
                         // 254. Zkracovat by se začal až nad ~80 znaky; do té doby ustupuje titulek.
                         .layoutPriority(1)
                 }
+                if let badge = hit.item.badge {
+                    badgeCap(badge)
+                }
                 Spacer(minLength: 8)
                 if let shortcut = hit.item.shortcut {
                     keyCap(shortcut)
@@ -72,6 +75,31 @@ struct CommandPaletteRowView: View {
             + Text(verbatim: String(text[range.upperBound...]))
     }
 
+    /// Odznak `ve frontě` / `moje` (#533) — kapsle za podtitulkem.
+    ///
+    /// **Sází se `designPill`em, ne vlastní metrikou** (#348): kapsle stavu má v tomhle okně jeden
+    /// řez a jedno odsazení. Zákres má v úzkém výřezu `9.5px`, což je zúžení kvůli šířce kresby —
+    /// osmá kopie metriky kvůli jednomu bodu je zrovna to, čemu se `DesignPill` vyhýbá.
+    ///
+    /// Barvy jsou tytéž jako všude jinde v okně: `crit` je „čeká to na mě“ (jako odznak fronty),
+    /// `mint` „je to moje“ (jako pero rozdělaného review v řádku seznamu).
+    private func badgeCap(_ badge: CommandPalette.Badge) -> some View {
+        let tint = badgeTint(badge)
+        return Text(verbatim: badge.czechLabel)
+            .designPill(tint: tint, background: tint.opacity(0.15))
+            // Odznak je krátký a strukturovaný, takže se **nezalamuje** ani neustupuje: kdyby se
+            // zkrátil, zbyla by z `ve frontě` kapsle, která netvrdí nic.
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private func badgeTint(_ badge: CommandPalette.Badge) -> Color {
+        switch badge {
+        case .inQueue: Palette.crit
+        case .mine: Palette.mint
+        }
+    }
+
     /// Popiska klávesy (`.kbd`) — obtažený rámeček, ne plná plocha: je to informace, ne tlačítko.
     private func keyCap(_ shortcut: String) -> some View {
         Text(verbatim: shortcut)
@@ -98,6 +126,10 @@ struct CommandPaletteRowView: View {
         // Řetěz, ne šipka: řádek vznikl z **odkazu** ve schránce (#531), a šipka „ven“ patří
         // v tomhle okně tomu, co odchází na GitHub.
         case .link: "link"
+        // **Krabice, ne složka ani knížka**: `folder` v tomhle okně nic neznamená a `book.closed`
+        // (ikona repa na GitHubu) by se v paletě potkala s `doc.text` u souborů. Krychle je věc,
+        // do které se vchází — a to je přesně to, co ten řádek dělá.
+        case .repository: "cube"
         case .action(let symbol): symbol
         }
     }
@@ -119,13 +151,17 @@ struct CommandPaletteRowView: View {
         // Akcent u odkazu: je to jediný řádek palety, který **není** nález v katalogu, ale
         // odpověď na to, co je v poli napsané — a akcent je v tomhle okně barva akce.
         case .link: Palette.accent
-        case .file, .action: Palette.ink3
+        // Repozitář je **místo, kam jde vejít**, ne stav ani akce — tedy tichá značka jako
+        // u souboru. Akcent má v paletě odkaz, protože ten je odpověď na napsanou adresu.
+        case .file, .action, .repository: Palette.ink3
         }
     }
 
     /// VoiceOver čte řádek jako jednu věc — bez podtitulku by z `SecretClient.php` nebylo
     /// poznat, ke kterému pull requestu patří.
     private var accessibilityLabel: String {
-        [hit.item.title, hit.item.subtitle].compactMap { $0 }.joined(separator: ", ")
+        [hit.item.title, hit.item.subtitle, hit.item.badge?.czechLabel]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 }

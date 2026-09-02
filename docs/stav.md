@@ -6606,6 +6606,91 @@ Testů **4907** ve 479 suitách; nové jsou tři sady (`RepositoryCatalogPolicyT
 a `SettingsFieldsRenderTests` (osm scén, dvě šířky) a fixture `gh/repo-list.json` (skutečný výstup nad veřejným `cli`).
 Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).
 
+## #533 — paleta ⌘K: skupina Repozitáře a druhá úroveň s PR repa (M18)
+
+**Poslední kámen M18**, a tím je cesta k libovolnému pull requestu hotová: napíšu `vault`, paleta
+najde repo v organizacích z nastavení, `↵` ji přepne **o úroveň níž** na otevřené PR toho repa
+a druhý `↵` otevře **záložku ke čtení** (#531). Odkaz už není potřeba mít odkud vzít.
+
+**Přibyla jedna čtecí metoda gateway, jedna úroveň palety a dvě skupiny řádků.**
+`GitHubGateway.pullRequests(in repo:)` je **pětadvacátá** čtecí metoda (`gh pr list --state open`);
+tvrdá podmínka č. 1 se **nemění ani o položku** a `SingleWayOutTests` prochází beze změny.
+
+**Psaní nedotahuje nic, a je to jediná vlastnost, na které to celé stojí.** V první úrovni se hledá
+v katalogu z cache na disku (#532), ve druhé se filtruje dotažený seznam; jediné volání pouští
+**vstup do repa**, tedy výslovné `↵`. Je na to test, který počítá volání gateway po pěti úhozech
+v první úrovni, po vstupu a po čtyřech úhozech ve druhé — a **ověřený vložením regrese**: s
+`refresh` uvnitř skládání řádků padne.
+
+**Katalog rep se přestěhoval z okna nastavení do `AppStore`**, což #532 předpovědělo a nechalo na
+tomhle issue. Čtou ho dvě obrazovky (paleta a stránka `Zdroje PR`), takže dvě instance by znamenaly
+dvě cache téhož seznamu; typ se kvůli tomu neměnil, protože pravda leží v cache. **Store z něj sám
+nic nedotahuje**: při startu přečte, co v cache leží (jenom disk), a dotažení ze sítě zůstalo tam,
+kde bylo — otevření stránky, dopsaná organizace, tlačítko `Obnovit`. Výpis rep `keboola` stojí
+46,8 s, takže na tik ani na úhoz nesmí.
+
+**Čtyři rozhodnutí, která ze zadání neplynula:**
+
+1. **Řazení rep podle počtu otevřených PR** (pak podle posledního pushe, pak jména). Je to nabídka
+   **kam jít**, takže nahoru patří repo, ve kterém je co číst; zákres to tak kreslí (`vault` 7,
+   `vault-cli` 2, `php-vault-client` 0). Dvě kritéria navíc jsou proto, aby pořadí nezáviselo na
+   tom, jak `gh` seznam vydal.
+2. **Druhá úroveň je filtr, ne hledání s vážením.** Nadpis tvrdí `řazeno podle poslední změny`,
+   takže by řazení podle váhy shody po prvním písmenu z toho tvrzení udělalo lež. **Strop šesti
+   řádků tam taky není** — šest je strop pro skupinu **mezi jinými**, kdežto tady je ta skupina
+   obsah celé úrovně.
+3. **Řadit se muselo v `Policy`, protože `gh pr list` neřadí podle poslední změny.** Změřeno na
+   `cli/cli`: `#14282` s razítkem 28. 8. stálo v odpovědi **nad** `#14259` s 31. 8. Fixture je ten
+   skutečný výstup i s touhle dvojicí, takže se to na vymyšleném JSONu nedá omylem „opravit“.
+4. **Relativní čas se skládá v `Policy`, ne `Text(date, format:)` ve view** — a je to výjimka proti
+   zbytku okna. Podtitulek je **jeden řetězec** (hledá se v něm a zvýrazňuje se v něm shoda)
+   a návrh do něj píše `naposledy před hodinou`, tedy slovo, čas a nic mezi tím; rozdělit tu větu
+   mezi `Policy` a kresbu by znamenalo, že polovinu podtitulku skládá view. Referenční okamžik je
+   proto parametr (`Policy.momentAgo(_:now:)`) — `Date.RelativeFormatStyle` ho vzít neumí.
+
+**Čtyři odchylky od zákresu, všechny s důvodem.** (1) **Patka zůstává v první úrovni `↵ otevřít`**,
+i když úzký výřez v zákresu kreslí `↵ do repa`: patka se mění podle **úrovně**, ne podle vybraného
+řádku, a návrh to sám říká u sekce `s09link`. (2) **Odznaky `ve frontě` / `moje` jsou v metrice
+`DesignPill`** (10,5), ne v `9.5px` z inline stylu zákresu — kapsle stavu má v tomhle okně jedno
+místo (#348) a osmá kopie metriky kvůli jednomu bodu je zrovna to, čemu se to místo vyhýbá.
+(3) **Relativní čas má v obou skupinách týž tvar** (`před 2 hodinami`), kdežto zákres míchá plný
+u repa a zkrácený u PR; dva tvary v jedné kartě jsou horší než jeden. (4) **Stáří posledního pushe
+je na každém řádku repa**, kdežto zákres ho kreslí jen u prvního — mizející údaj u druhého řádku
+není chování, které by šlo vysvětlit, takže je to zúžení kresby, ne rozhodnutí. Odchylka č. 1
+zůstává i po opravě zákresu níž: patka první úrovně v něm má `↵ do repa`, protože ten výřez kreslí
+kurzor na řádku repozitáře — a právě to je ten údaj, který se podle úrovně měnit nemá.
+
+**A zákres si ve dvou věcech odporoval sám** — obojí se **opravilo v tomhle PR**, protože je to
+rozpor uvnitř už odsouhlaseného zákresu, ne nový návrh (rozhodl uživatel při proklikání). Pořadí
+v druhé úrovni mělo `#91 · před 2 h` **nad** `#85 · před hodinou`, ačkoli nadpis nad tím tvrdí
+řazení podle poslední změny; teď je kresba přerovnaná od naposledy změněného a kapsle `↵ otevřít`
+jde s kurzorem na první řádek, jak to dělá aplikace. A patka úzkého výřezu měla `↑↓ vybrat`, kdežto
+hlavní kresba palety `↑↓ pohyb`; sjednoceno na `pohyb` v obou výřezech. Poznámka 60 u sekce to od
+téhle změny **říká**, aby kresba neměla jak nadpisu odporovat znovu.
+
+**Ten rozpor našlo srovnání renderu s kresbou, ne čtení.** Aplikace řadila správně od začátku (řadí
+`Policy` a tvrdí to test výčtem), takže z kódu ani z textu zákresu se nedalo poznat nic — vylezlo to
+teprve tím, že vedle sebe stály dva obrázky a v jednom byl první řádek jiný.
+
+**Prázdný stav rozlišuje „nezeptal jsem se“ od „nenašlo se“**, což byla oprava z vlastní revize:
+repo bez otevřených PR není prázdný **výsledek**, ale prázdné **repo**, a `Na „“ nic nesedí` nad
+prázdným polem je věta o hledání, které nikdo nezačal. Rozhoduje `Policy.paletteEmpty(at:query:)`.
+
+**A `CommandPaletteView` dostává výsledky uzávěrem, ne katalog.** Do #533 si je počítalo samo
+**a zároveň** existoval `AppStore.paletteSections(for:)`, který volaly jen testy — tedy dvě
+odpovědi na jednu otázku. Druhá úroveň by musela vzniknout v obou, takže se to svedlo do storu.
+
+**Zapsaná mezera:** že `⌫` na prázdném poli vrací o úroveň a nad napsaným dotazem maže znaky, se
+v harnessu ověřit nedá (klávesa v testovacím hostu nezabere). `Policy` tvrdí rozhodnutí
+(`paletteBackspaceGoesBack(level:query:)`) a to, že se tlačítko se zkratkou doopravdy neobjeví,
+zkouší člověk.
+
+Testů **4958** ve 481 suitách; nové jsou dvě sady (`CommandPaletteLevelTests`,
+`GhRepoPullRequestListTests`), rozšířené `CommandPaletteTests`, `AppStorePaletteTests`
+a `CommandPaletteRenderProbe` (tři nové scény) a fixture `gh/pr-list-open.json` (skutečný výstup nad
+veřejným `cli/cli`). Co se v které z nich hlídá a proč, je v
+[`docs/testovani.md`](testovani.md#druhá-úroveň-palety-533).
+
 ## #503 — nálezy stojí v okraji vedle svých řádků (M14)
 
 První a největší kus směru B z decku *Směry pro PRism*: pravý sloupec v tabu `Změněné soubory` se
