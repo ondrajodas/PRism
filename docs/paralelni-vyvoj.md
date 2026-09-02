@@ -93,6 +93,7 @@ zadání.
 | `Policy/` — změna chování čisté funkce | Souběžně **ne** s ničím, co na té funkci stojí. Konflikt je sémantický: obě větve projdou testy samostatně a rozbijí se až po sloučení |
 | `Configuration.swift` — nové nastavení | Souběžně klidně; konflikt je mechanický (dva řádky vedle sebe) |
 | Nový soubor, nový modul, nová obrazovka | Souběžně bez omezení. Buildable folders znamenají, že `project.pbxproj` konfliktovat nebude |
+| `docs/navrh.html` — zákres do mockupu | Souběžně ano, ale **jen s přiděleným číslem sekce** (viz níž). Bez něj je konflikt **sémantický, ne mechanický**: dva bloky na různých místech souboru se slijí čistě, git nenahlásí nic a projeví se to až po mergi |
 | Jen dokumentace | Souběžně bez omezení |
 
 **`docs/stav.md` konfliktuje skoro vždycky** a není to důvod nedělat věci souběžně — je to
@@ -100,6 +101,51 @@ mechanický konflikt dvou odstavců. Počítej s ním při mergování, ne při 
 
 Když si nejsi jistý, jestli se dvě issues potkají, **je to důvod je udělat za sebou.** Cena
 sériového běhu je čas; cena sémantického konfliktu je pád, který se pozná až po mergi.
+
+### Číslo sekce v mockupu přiděluje orchestrátor
+
+**Číslo sekce v `docs/navrh.html` patří do zadání, stejně jako slot** — nepočítá si ho subagent
+jako „další volné číslo proti `main`u“. Dvě zadání psaná zkopírováním jednoho jsou přesně ta
+cesta, jak dva agenti dojdou k témuž číslu; je to tentýž důvod, proč je slot v §2 zástupný znak
+a ne hotové `a`.
+
+Pravidlo „další volné číslo, kontrolované proti `mainu` v den publikování“ z
+[`navrh.md`](navrh.md#jak-se-aktualizuje) tomu **nezabránilo, a nemohlo**: obě větve se proti
+`mainu` porovnaly správně a obě dostaly tutéž odpověď. Kontrola proti mainu řeší větev, která
+leží týden; dvě větve vzniklé v jedné vlně neřeší vůbec.
+
+Stalo se to dvakrát. U **#401 a #410** si obě vzaly `26`. U **#500** (PR #536) a **#531**
+(PR #535) obě `s40` — a to už bylo poté, co #410 tu kontrolu proti mainu zapsalo. Vyřešilo se
+přečíslováním #531 na `s41` a orchestrátor od té doby čísla **přiděluje v zadání**: #501 dostalo
+`s42`, #503 `s43`, #527 `s44`.
+
+**Git na to neupozorní.** Jsou to dva bloky na různých místech souboru, takže se slijí čistě
+a v repu zbudou dvě sekce s týmž `id`. `#s40` pak vede vždycky na tu první, tedy odkaz z druhého
+PR i z jeho issue míří na cizí obrazovku. Najde to grep na duplicitní kotvy, který patří
+k porovnání s publikovanou kopií ([`navrh.md`, *Kde návrh je*](navrh.md#kde-návrh-je)).
+
+**Publikovaná kopie je druhá polovina problému, a proto se publikuje dvakrát.** Publikování není
+merge: nahraje se celý dokument a to předchozí z něj zmizí (#410, [`navrh.md`, *Jak se
+aktualizuje*](navrh.md#jak-se-aktualizuje)). V dávce z toho plynou dva kroky a **ten druhý je
+povinný**:
+
+1. **Kdo potřebuje funkční kotvu do pauzy na proklikání, publikuje ze své větve** — s vtaženým
+   `mainem`, jinak odkaz zahodí, co se mezitím mergnulo.
+2. **Kdo merguje, publikuje znovu ze slitého stavu.** Ne „ten poslední“ — kdo je poslední, se
+   v okamžiku publikování neví, protože **pořadí mergů se neurčuje předem** (§5). Publikování
+   **v pořadí mergů** to ale řeší samo: každé další jde ze stavu, který obsahuje i to předchozí,
+   takže poslední merge srovná i to, co smetl ten před ním. Bez té druhé věty zůstane na odkazu
+   půlka — sekce toho, kdo publikoval dřív, na ní nikdy vidět nebude.
+
+Že to druhé publikování povinné je, stálo taky dvě opravy: agent od #501 publikoval ze své větve
+a **smetl tím sekci `s43`** z branche #503, agent od #533 publikoval a smetl `s42`. Rada
+„naposled publikuje ten, který se má ukazovat“ z `navrh.md` na to v dávce nedosáhne — je to plán,
+a plán o pořadí mergů v dávce neexistuje.
+
+**Ověřuje se to postupem z [`navrh.md`](navrh.md#kde-návrh-je)** — `action: "read"`, odříznout
+obálku, `diff` proti repu — a je to jedna minuta, která chytá obě poloviny naráz: chybějící sekci
+i duplicitní kotvu. Postup dopsal do `navrh.md` agent od #500 a agent od #533 ho použil
+s výsledkem „souhlasí znak po znaku“.
 
 ### Rozvrh se zapisuje do milníku, ne jen do kontextu
 
@@ -203,6 +249,9 @@ a v zadání tohle:
   spouštět (#262) — nikdy ne vlastní `jq` filtr v zadání. Filtr v zadání je druhá kopie očisty
   a rozešel se s tou ve skriptu; co to stálo, je v §2,
 - **číslo issue** a pokyn, ať si ho přečte přes `gh api` (`gh issue view` v tomhle repu padá),
+- **číslo sekce v mockupu**, když issue kreslí do `docs/navrh.html` — dosazené v zadání, ne
+  „další volné“ (§1). A s ním pokyn, že **po mergi publikuje znovu ze slitého stavu**,
+  protože publikování není merge a to druhé publikování je povinný krok, ne úklid,
 - pokyn, že platí `CLAUDE.md` — včetně dokumentace ve stejném commitu a vlastní revize diffu
   před pushem,
 - **pauzu na proklikání před mergem** i s tím, co má v hlášení stát (§4). Patří to do zadání ze
@@ -328,6 +377,11 @@ v platnosti. Pauza počet takových issues zmenšuje, nenuluje ho.
 **Merguje si každý subagent sám**, jakmile je jeho PR zelený, Copilot vyřízený (#247) a člověk
 změnu proklikal (#256, §4) — čeká se tedy na práci a na jedno slovo, ne na frontu. Pořadí se
 **neurčuje předem**: kdo je dřív hotov, jde dřív.
+
+**Kdo mergne zákres do `docs/navrh.html`, publikuje ho po mergi znovu ze slitého stavu** — je to
+krok mergování, ne úklid po něm, a nesmí ho vynechat ani ten, kdo si myslí, že poslední nebude
+(právě proto, že pořadí předem nikdo neurčil). Proč a jak se to ověří, je
+v [§1](#číslo-sekce-v-mockupu-přiděluje-orchestrátor).
 
 Co z toho plyne pro toho, kdo přijde druhý: **main se do větve nezvedá preventivně**, jen když to
 GitHub hlásí jako konflikt nebo když větev na mergnuté změně stojí. Rebase ne — main je squashnutý,
