@@ -8216,6 +8216,10 @@ time gh repo list keboola --limit 1000 --json name,pushedAt > /tmp/b.json
 #  →  9,5 s ·        1000 položek
 ```
 
+Druhý datový bod, ať je vidět, že to roste s počtem rep a ne s něčím jiným: `ondrajodas` má **6
+repozitářů** a týž příkaz nad ním stojí **1,0 s**. Malá organizace je proto to, čím se dá v okně
+zkontrolovat dotažený stav, aniž by se čekalo tři čtvrtě minuty.
+
 Tři věci, které z toho vypadly:
 
 - **Počet otevřených PR je pětinásobek ceny.** Zůstává tam, protože je v zákresu (řádek palety říká
