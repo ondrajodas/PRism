@@ -6661,7 +6661,7 @@ a nápověda jako nativní tooltip místo kreslené bubliny.
 tam přišel — to je pravidlo o záznamu dneška (#299), ne překreslování. Jediné místo, kde `.diffstat`
 zůstal, je záznam měření stupňů pruhu v sekci 19: je to záznam z #316, ne dnešní obrazovka.
 
-Testů **4890** ve 478 suitách; nové jsou dvě sady — `PullRequestMapTests` (29 tvrzení nad čistou
+Testů **4938** ve 481 suitách (proti 4907 ve 479 na `main`u po #532); nové jsou dvě sady — `PullRequestMapTests` (29 tvrzení nad čistou
 funkcí) a `PullRequestMapDrawingTests` (9 nad bitmapou) — a sonda `PullRequestMapRenderProbe`
 (obrázek přes pásmo šířek 347/647/1047/1347 v obou režimech). Odešla `DiffstatBlocksTests` s funkcí,
 kterou hlídala, a dvě tvrzení o pilulce v `TabStripWidthTests` vyměnila **stráž nad zdrojákem**:
