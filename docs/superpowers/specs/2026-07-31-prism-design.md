@@ -5142,3 +5142,71 @@ to není vidět a někdy se i špatně scrolluje na výšku."* Byly to **tři r�
 **Co se tím potvrdilo o prvním kole:** „jedna scéna z pěti se neodscrolluje“ **nebyla mez harnessu**,
 ale ta animace — tedy vada, kterou uživatel viděl v okně. Zapsat ji jako mezeru bylo správně jen
 v tom, že se to nezamlčelo; špatně v tom, že se to vydávalo za vlastnost měřidla.
+
+### Záznam rozhodnutí — značka `Prošlo` u souboru (#500)
+
+**Rozhodnutí:** zaškrtávátko `Prošlo` v hlavičce souboru, značka se ukládá **k pull requestu**
+a nese **otisk obsahu** z `index` řádky diffu (celou dvojici `<základ>..<hlava>`). Stavy jsou
+tři — `unread`, `read`, `changed` — a **sbalení souboru se z nich odvozuje**, místo aby ho
+zaškrtnutí zapisovalo.
+
+**Proč otisk, a ne `headSha`:** kdyby byla značka klíčovaná hlavou PR jako nálezy (tvrdá
+podmínka č. 5), zmizela by při každém pushi — tedy právě ve chvíli, kdy se člověk do diffu
+vrací, a u PR, kde se pushuje často, by nedržela nikdy. Podmínka č. 5 mluví o **nálezech**,
+tedy o tvrzení proti kódu; značka je tvrzení o **mém čtení**, a to pushem do jiného souboru
+nezastará. Duch té podmínky se tím ale neobchází: `changed` je právě to, aby značka nikdy
+netvrdila „prošlo“ nad kódem, který už není.
+
+**Proč celá dvojice, a ne jen hlava:** značka říká „přečetl jsem **diff** tohohle souboru“.
+Ten se změní i tehdy, když se posune **základ** — po rebase nad novým `main`em, který týž
+soubor taky sáhl, může hlava zůstat a diff se přesto přepíše. Otisk jedné strany by takovou
+změnu neviděl. Cena je nulová: `index` řádka nese obojí a parsuje se jednou.
+
+**Proč se otisk bere z diffu, a ne z API:** `gh api …/pulls/{n}/files` per-file `sha` má, ale
+byl by to **další dotaz** u operace, která se dělá při každém otevření PR — a `index` řádka
+v diffu, který se stahuje tak jako tak, nese totéž. `GitHubGateway` tím zůstává bez nové
+metody. Do #500 byl `index ` na seznamu ignorovaných řádků `DiffParser`u, takže se z něj nic
+nečetlo; čtení otisku nesmí přidat `unrecognizedLines`, a je to otestované.
+
+**Proč `nil == nil` znamená `read`:** otisk chybí jedině u přejmenování se `similarity index
+100%` — soubor se přesunul a obsah se nezměnil, takže nemá ani hunky. Kdyby se dvakrát „nevím“
+počítalo jako změna, značka by po zaškrtnutí okamžitě zhasla na `změněno od prošlého` a nešla
+by udržet ani na vteřinu. Je to jediné místo, kde se od pravidla „co data neunesou, se netvrdí“
+ustupuje — a ustupuje se **na tu stranu, která nic nezakrývá**: přejmenovaný soubor beze změny
+obsahu žádné nové řádky nemá.
+
+**Proč se sbalení odvozuje, místo aby ho zaškrtnutí zapsalo:** zapsané sbalení je stav okna
+a `AppStore` ho po restartu nemá odkud vzít — na disku by ležela značka a diff by se otevřel
+dokořán, tedy přesně ta úspora, kvůli které značka existuje, by po prvním restartu zmizela.
+Odvozením se navíc **zdarma** získá to, že se `changed` rozbalí sám: po druhém commitu zbude
+otevřené jen to, co se změnilo. `AppStore.fileFolding` se proto z množiny sbalených stal
+**mapou odchylek** (`true`/`false`/chybí), a `Rozbalit vše` odchylky nemaže, ale přepisuje na
+`false` — je to výslovný pokyn o tom, co je vidět, ne o tom, co je přečtené.
+
+**Zamítnuté varianty:**
+
+- **Dva stavy místo tří** (prošlo / neprošlo, po změně značku smazat). Zamítnuto: „četl jsem
+  starou verzi“ je jiná informace než „nečetl jsem“ — bez prostředního stavu se po pushi
+  nepozná, co je nové a co jen zapomenuté.
+- **Otisk = jen hlava souboru.** Zamítnuto výš; drží se, protože je zdarma.
+- **Prefixové porovnání zkrácených sha** (`abc` == `abcdef`). Zamítnuto: git zkracuje podle
+  velikosti repa a v rámci jednoho repa je délka stabilní, takže by ta tolerance kryla stav,
+  který nenastává, a zároveň by z rovnosti udělala „skoro rovnost“. Kdyby se zkrácení přesto
+  prodloužilo, značka spadne na `changed` — tedy na bezpečnou stranu a jedním klikem zpátky.
+- **Nový dotaz na `pulls/{n}/files`.** Zamítnuto: volání navíc za údaj, který už v odpovědi je.
+- **Zaškrtávátko i v diffu commitu a v rozsahovém diffu.** Zamítnuto: jejich `index` řádky
+  mluví o rozsahu mezi dvěma commity, ne o hlavě PR, takže by se otisk se značkou nepotkal
+  a každý zaškrtnutý soubor by hned hlásil `změněno od prošlého`. Zaškrtávátko se tam nekreslí
+  **vůbec**, ne zašedle — zašedlé tvrdí „tady se to dělá, jen teď ne“.
+- **`⌥V` na zaškrtávátku v každé hlavičce.** Zamítnuto: padesát tlačítek s touž kombinací je
+  přesně ten stav, kdy vyhraje to zaregistrované později a ostatní „nefungují“ (#151, #184).
+  Zkratka visí na jednom průhledném tlačítku a míří na soubor pod **ukotvenou** hlavičkou —
+  tedy na to, na co se člověk dívá.
+- **✓ ve stromu místo puntíku nálezu.** Zamítnuto: „je tu co spravit“ a „četl jsem to“ jsou
+  dvě různé otázky, a schovat jednu za druhou by znamenalo, že se počet v hlavičce
+  (`7 souborů · 3 prošlé`) rozejde s tím, co je v seznamu vidět. Zákres obojí zároveň nekreslí,
+  protože v něm ta kombinace nenastala — je to doplnění zákresu, ne odchylka od něj.
+
+**Co se od zákresu odchýlilo:** nic v kresbě; přidalo se to, na co zákres neodpovídal (✓ vedle
+puntíku nálezu ve stromu, chování v diffu commitu a v rozsahovém diffu). Obojí je zapsané
+v poznámkách sekce 40 `docs/navrh.html`.

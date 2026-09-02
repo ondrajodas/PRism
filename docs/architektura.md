@@ -279,7 +279,7 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 |---|---|
 | `DiffParser` | Unified diff → `Diff`. **Nikdy nevyhodí výjimku** |
 | `Diff` | Soubory + `unrecognizedLines`; součty `additions`/`deletions` |
-| `FileDiff` | Cesty, druh změny (`added`/`deleted`/`modified`/`renamed`), `isBinary`, hunky |
+| `FileDiff` | Cesty, druh změny (`added`/`deleted`/`modified`/`renamed`), `isBinary`, hunky a od #500 **otisk obsahu** (`blobs` — sha z `index` řádky, `nil` u přejmenování beze změny obsahu) |
 | `DiffHunk` | Rozsahy, nadpis sekce za druhým `@@`, řádky |
 | `DiffLine` | Druh (`context`/`added`/`removed`/`meta`), stará a nová čísla, text |
 | `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů a **dvojic** pro pohled vedle sebe, + `anchor(in:file:line:)` pro skok z nálezu |
@@ -289,7 +289,7 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `FileTreeNode` | Soubory diffu jako strom pro navigaci; slévá složky s jediným potomkem |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
-| `FileExpansion`, `FileExpansionKey` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba. Klíč je `(PR, cesta, commit)` — `commit: nil` je hlava PR, jinak konkrétní commit (#317). **Ze které verze souboru obsah je, říká klíč, ne hodnota**: týž soubor má v `Změněných souborech` a v diffu commitu jiná čísla řádků, takže sdílený záznam by u staršího commitu odkryl řádky z dnešní hlavy. Tentýž klíč drží **sbalené soubory** (`AppStore.foldedFiles`), takže se ani sbalení mezi těmi dvěma diffy nesdílí |
+| `FileExpansion`, `FileExpansionKey` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba. Klíč je `(PR, cesta, commit)` — `commit: nil` je hlava PR, jinak konkrétní commit (#317). **Ze které verze souboru obsah je, říká klíč, ne hodnota**: týž soubor má v `Změněných souborech` a v diffu commitu jiná čísla řádků, takže sdílený záznam by u staršího commitu odkryl řádky z dnešní hlavy. Tentýž klíč drží **odchylky sbalení** (`AppStore.fileFolding`, do #500 množina `foldedFiles`), takže se ani sbalení mezi těmi dvěma diffy nesdílí |
 
 Věci, které se u toho nemají rozbít:
 
@@ -1570,6 +1570,92 @@ stav, který by pruh musel hlásit, a v kódu se hledá jméno), hledání v ces
 stromu), značka výskytu ve stromu (glyf `.mk` u souboru už nese nález a dva významy v jednom kolečku
 se nedají rozlišit — místo toho je kapsle v hlavičce) a hledání v bublinách nálezů a vláken (pruh
 mluví o kódu; nálezy mají vlastní tab a paletu ⌘K).
+
+### Značka `Prošlo` u souboru (#500)
+
+Zaškrtávátko v hlavičce každého souboru, ✓ ve stromu, počet a proužek podílu v jeho hlavičce.
+Zákres je v [`docs/navrh.html`, sekce 40](navrh.html) (stránka *Změněné soubory*).
+
+**Kde to bydlí.** `App/Models/ReadMark.swift` (`ReadMark`, `ReadMarks`),
+`App/Policy/FileReviewStates.swift` (`FileReviewState` a všechna rozhodnutí),
+`App/Store/ReadMarkStore.swift` (persistence) a `App/Store/AppStore+ReadMarks.swift` (stav
+a akce). Kreslí to `DiffFileReadToggle`, `FileTreeView` (glyf), `DiffView` (hlavička stromu
+a proužek) a `DiffReadShortcut` (`⌥V`); tudy jdou akce jako `DiffReadActions`.
+
+**Otisk se bere z diffu, který už je načtený.** `FileDiff.blobs` je sha z řádky
+`index <základ>..<hlava>` **doslova tak, jak ji poslal git**, jen bez módu. Do #500 byl
+`index ` na seznamu ignorovaných řádků `DiffParser`u, takže značka **nestojí ani jedno volání
+navíc** — a `GitHubGateway` kvůli ní nedostal metodu.
+
+**Je to celá dvojice, ne jen hlava**, a je to rozhodnutí: značka říká „přečetl jsem **diff**
+tohohle souboru“, a ten se změní i tehdy, když se posune **základ** — typicky po rebase nad
+novým `main`em, který týž soubor taky sáhl. Otisk jedné strany by takovou změnu neviděl.
+
+**`nil` je hodnota, ne chybějící údaj.** Přejmenování se `similarity index 100%` `index` řádku
+**nemá** (a nemá ani hunky), takže se porovnává **na rovnost včetně `nil`u**: dvakrát „nevím“
+nad souborem, který se jen přesunul, je pořád tentýž soubor. Kdyby to byla změna, značka by po
+zaškrtnutí okamžitě zhasla na `změněno od prošlého` a nešla by udržet ani na vteřinu. Že
+přejmenování beze změny obsahu otisk doopravdy nemá, drží `DiffParserTests` nad skutečným
+diffem (`gh/pr-diff-rename.diff`).
+
+**Mód se odřezává.** `chmod +x` bez změny řádku je práva souboru, ne jeho obsah.
+
+**Rozhoduje `Policy.fileReviewState(mark:blobs:)` — jedna rovnost, tři vstupy.** Záznam, otisk
+tehdy a otisk dnes; bez záznamu je odpověď `unread` bez ohledu na cokoli dalšího. Tři stavy,
+ne dva: **„četl jsem starou verzi“ je jiná informace než „nečetl jsem“** — bez prostředního
+stavu by po každém pushi zmizelo všechno přečtené a diff by o tom, kde jsem skončil, věděl
+zase tolik co dřív. Do počtu `3 prošlé` se počítá **jen `read`**; `changed` je pobídka, ne
+hotová práce.
+
+**Sbalení se odvozuje ze značky, nezapisuje se** (`Policy.isFileFolded(state:override:)`).
+`AppStore.fileFolding` je od #500 **mapa odchylek** (`true` sbaleno rukou, `false` rozbaleno
+rukou), ne množina sbalených: prošlý soubor má být sbalený i po restartu, kdy jsou na disku
+značky a v okně žádný stav. Tři důsledky, a všechny jsou vidět:
+
+- **`changed` se rozbalí sám** — přesně to je ta úspora, kvůli které značka existuje: po
+  druhém commitu zbude otevřené jen to, co se změnilo.
+- **`Rozbalit vše` rozbalí i prošlé a značku nechá.** Je to výslovný pokyn o tom, co je
+  vidět, ne o tom, co je přečtené — proto `unfoldAll` odchylky **přepisuje na `false`** u všeho,
+  co značku má (cesty bere ze značek, protože seznam souborů nedostává).
+- **`unfold(_:in:)` zapisuje výslovné rozbaleno**, ne smazání odchylky: u prošlého souboru je
+  odvozený stav „sbaleno“, takže smazaná odchylka by ho nechala zavřený a skok z palety nebo
+  z nálezu by skončil na jeho hlavičce.
+
+**Stav se drží odvozený, a je vypsané, co ho vyprazdňuje** (#224). `AppStore.readStates` je
+mapa `displayPath → FileReviewState` na PR a plní ji **jedno místo**,
+`refreshReadStates(for:)`; volá se ze tří — po načtení diffu, po načtení značek z disku a po
+zaškrtnutí. Bez načteného diffu se mapa **maže**, ne nechává: stará by nesla stavy odvozené
+z otisků, které v okně nejsou. Kdyby se stav skládal při každém dotazu, byl by z `isFolded`
+kvadratický průchod `Diff.file(at:)` — jednou na soubor a překreslení.
+
+**Ukládá se k PR, ne k `headSha`** — `read-marks/<owner>/<repo>/<pr>.json`, mimo dosah
+eviction, čte se **při otevření PR** (jako rozhovor, #452, a na rozdíl od draftů: značky
+v seznamu nic nemají). Hranici cache drží `CacheFile`, tedy tatáž kontrola jako u `AskStore`
+a `ReviewDraftStore`; nečitelný soubor **vyhodí chybu**, protože tichá nula znamená v okně
+nezaškrtnutý diff, tedy tvrzení „tohle jsi nečetl“ nad souborem, který na disku je.
+
+**Ve stromu stojí ✓ vedle puntíku nálezu, ne místo něj.** Zákres obojí zároveň nekreslí, ale
+stát se to může: „je tu co spravit“ a „četl jsem to“ jsou dvě různé otázky, a schovat jednu za
+druhou by znamenalo, že se počet v hlavičce (`7 souborů · 3 prošlé`) rozejde s tím, co je
+v seznamu vidět. Tlumené je **jméno prošlého souboru** (`Palette.ink3`); `changed` tlumený
+není — je to práce, která se vrátila.
+
+**`⌥V` platí na soubor pod ukotvenou hlavičkou** a visí na **jednom** průhledném tlačítku
+(`DiffReadShortcut`). Padesát tlačítek s touž kombinací je přesně ten stav, kdy vyhraje to
+zaregistrované později a ostatní „nefungují“ (#151, #184). To view čte `DiffViewport.top`, tedy
+hodnotu, která se mění při každém otočení kolečka — proto je **vlastní**, ze stejného důvodu
+jako `DiffPinnedHeader` (#469). Bez ukotveného souboru je tlačítko **zakázané**, takže klávesa
+propadne dál.
+
+**Kde značka není: v diffu commitu (#317) a v rozsahovém diffu (#284).** Jejich `index` řádky
+mluví o rozsahu mezi dvěma commity, ne o hlavě PR, takže by se otisk se značkou nepotkal
+a každý zaškrtnutý soubor by hned hlásil `změněno od prošlého`. Zaškrtávátko se tam **nekreslí
+vůbec**, ne zašedle, a rozhoduje o tom `read: nil` v jednom volání (`DiffReadActions`).
+
+**Co se u toho nemá rozbít:** `isFolded` musí zůstat funkcí značky **i** odchylky (regrese se
+pozná tím, že zaškrtnutý soubor se nesbalí, nebo že ho `Rozbalit vše` neotevře);
+`readFileCount` nesmí počítat `changed`; a otisk musí zůstat **celou** dvojicí — kdo z něj
+vezme jen hlavu, přestane vidět rebase, který změnil základ.
 
 ## `Config` (`App/Config/`)
 
@@ -3506,6 +3592,11 @@ Vedle něj stojí **`ReviewDraftStore`** (#65) — rozdělaná review, jeden sou
 | `ReviewDraftStore` | Aktor: `save`, `load(for:)`, `load()`, `delete`. Atomický zápis |
 | `ReviewDraftStoreError` | Jediná vlastní chyba: v souboru jednoho PR leží draft jiného |
 
+A od #500 **`ReadMarkStore`** — značky `Prošlo` u souborů, jeden soubor na PR pod
+`read-marks/<owner>/<repo>/<pr>.json`. Tvar je tentýž jako u draftu a rozhovoru (aktor,
+atomický zápis, prázdné se maže, hranice cache z `CacheFile`); rozbor je u [značky
+`Prošlo`](#značka-prošlo-u-souboru-500).
+
 - **Draft bydlí lokálně, ne jako serverové pending review.** Pending review na GitHubu jsou
   **už odeslaná data**: jsou vidět v API, blokují další review (#62: 422 `User can only have
   one pending review`) a každá úprava komentáře by byla volání API. Tím by padla zásada, že
@@ -4228,7 +4319,8 @@ Co katalog drží a co se u něj nemá rozbít:
   vloženou regresí. `⌃` a `⇧` se v té druhé stráži nehledají: `⌃` je v `AgentPromptPickList`
   šipka rozbalení a `⇧` stojí v próze o `⇧ kliku` v diffu.
 
-Co v okně je (dvacet akcí):
+Co v okně je (od #500 pětadvacet akcí; tabulka níž vypisuje ty, u kterých je co dodat —
+`⌘F`, `⌘G`/`⌘⇧G` (#152) a `` ⌃` `` (#459) jsou popsané u svých sekcí):
 
 | Zkratka | Akce | Kde je zakázaná |
 |---|---|---|
@@ -4245,6 +4337,7 @@ Co v okně je (dvacet akcí):
 | `⌘⇧P` | zadání pro agenta (#333) | cizí PR, prázdné zadání, otevřený sheet, otevřená paleta |
 | `⌘.` | zastavit běžící review | když na tom PR nic neběží |
 | `⌘⇧R` / `⌘⇧D` | dashboard: pustit vše, dopsat rozdělané (#181) | — |
+| `⌥V` | značka `Prošlo` u souboru pod ukotvenou hlavičkou (#500) | dokud se rozsahy souborů nezměří (nemá na co mířit) |
 
 **`⌃W`, ne `⌘W`**, a sekce railu na `Control`u: `⌘W` patří systému (zavře okno) a `⌘1`/`⌘2` jsou
 uvnitř PR strom a panel. Zavírá se **aktivní záložka**, ne vybraný řádek v seznamu — `selection`
@@ -5454,12 +5547,16 @@ Pohled na diff (#98) drží `AppStore` v `diffLayoutOverride`:
   hodnotou: kdo si pohled otočil sám, má ho podržet i po změně v nastavení. Bez odchylky se
   změna v nastavení projeví **bez restartu**, protože se čte při každém vykreslení.
 
-Sbalení celých souborů (`foldedFiles`) je **jiná věc než rozbalení kontextu**, i když se
+Sbalení celých souborů (`fileFolding`) je **jiná věc než rozbalení kontextu**, i když se
 česky obojímu říká „sbalit“ — proto `DiffFoldingActions` vedle `DiffExpansionActions`:
 
-- **Sbalené je to, co je v množině**, ne naopak. U PR o padesáti souborech je rozbaleno
-  výchozí stav a sbalení je gesto, takže se pamatuje to druhé — prázdná množina znamená
-  „nikdo nic nesbalil“ a nemusí se plnit při načtení diffu.
+- **Sbalení se od #500 odvozuje ze značky `Prošlo` a `fileFolding` je jen odchylka od
+  odvozeného** (`true` sbaleno rukou, `false` rozbaleno rukou, chybějící klíč = platí značka).
+  Do #500 to byla **množina sbalených** a výchozí stav bylo „rozbaleno“ — u PR o padesáti
+  souborech je rozbaleno správný výchozí stav a sbalení je gesto, takže se pamatovalo to druhé.
+  Značka to změnila: prošlý soubor má být sbalený i po restartu, kdy je na disku značka a v okně
+  žádný stav. Rozhoduje `Policy.isFileFolded(state:override:)`, podrobnosti jsou u [značky
+  `Prošlo`](#značka-prošlo-u-souboru-500).
 - **Stav drží store, ne view.** `PullRequestDetailView` si SwiftUI mezi PR ponechá (stejná
   pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý — stejná
   past jako u příznaku „připravuji“.
@@ -7395,6 +7492,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.facts(commits:newCommits:files:filesWithFindings:headSha:findingsHeadSha:)` | Dlaždice s fakty o PR (#198); dlaždice, o které se nedá nic říct, se vynechá |
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
+| `Policy.fileReviewState(mark:blobs:)`, `Policy.fileReviewStates(of:marks:)` | Stav značky `Prošlo` ze tří vstupů (#500) — jedna rovnost otisků, `nil == nil` je `read`. Mapa vrací **jen soubory se značkou** |
+| `Policy.readFileCount(in:)`, `Policy.readFileShare(read:of:)`, `Policy.fileTreeSummary(files:read:)` | Počet prošlých, podíl pro proužek (`nil` = nekreslí se) a popisek hlavičky stromu (#500) — druhá polovina se připojí, teprve když má co říct |
+| `Policy.isFileFolded(state:override:)` | Je soubor sbalený (#500) — **odvozeno ze značky**, odchylka z okna přebíjí v obou směrech |
+| `Policy.readToggleTitle(of:)`, `Policy.changedSinceReadLabel(of:)`, `Policy.readToggleHelp(of:)` | Co je u zaškrtávátka napsané (#500) — `Prošlo znovu` u změněného, kapsle `změněno od prošlého` jedině u něj, nápověda s klávesou z katalogu |
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě. Gutter odečítá **jednou** — což od #236 odpovídá i tomu, kde se kód opravdu zalomí; do té doby byl ukazatel v pohledu pod sebou o 17 znaků optimističtější než skutečnost |
 | `Policy.navigation(over:cursor:)`, `Policy.step(_:over:cursor:)`, `Policy.navigablePlaces(in:)` | Procházení nálezů šipkami (#187) — stav lišty, kam skočit a po kterých místech |
 | `Policy.changes(in:since:)`, `VisitChanges.count` | Co na PR přibylo od poslední návštěvy (#173) — commity, force-push, cizí review a komentáře (`VisitChanges`); počet sečte **všech pět kategorií**, protože ho nese odznak u záložky `Přehled` (#218) a musí slíbit totéž, co blok uvnitř vypíše |

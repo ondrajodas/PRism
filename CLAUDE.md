@@ -504,6 +504,15 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    k `headSha`**, protože rozhovor není nález. Podmínka mluví o nálezech, tedy o tvrzení proti
    kódu.
 
+   **Značka `Prošlo` u souboru (#500) je ta podmínka nad souborem, ne výjimka z ní.** Ukládá se
+   **k PR** (jako rozhovor), ale nese **otisk obsahu** — sha z `index` řádky diffu, celou dvojici
+   `<základ>..<hlava>`. Commit, který soubor nemění, ji nechá; commit, který ho mění, ji přepne na
+   `změněno od prošlého`, takže nikdy netvrdí „prošlo“ nad kódem, který už není. Tři stavy, ne dva
+   — „četl jsem starou verzi“ je jiná informace než „nečetl jsem“ —, rozhoduje o nich
+   `Policy.fileReviewState(mark:blobs:)` a **`nil == nil` je `prošlo`**, protože otisk chybí jedině
+   u přejmenování beze změny obsahu. Sbalení se z toho **odvozuje**
+   ([proč](docs/architektura.md#značka-prošlo-u-souboru-500)).
+
    **Kontrola nálezů (#150) na tom stojí, ne obchází to**: nese `againstHeadSha` — hlavu, proti
    které běžela —, a jak se hlava posune, `Policy.recheck(of:head:)` odznaky nevydá. „Vyřešeno“
    přitom nikdy nález nesundá, to smí jedině odmítnutí (#113) — a od odmítnutí se musí poznat

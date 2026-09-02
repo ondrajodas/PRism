@@ -236,12 +236,37 @@ final class AppStore {
     /// přepnutí tabu i složení panelu, po kterém se `DiffView` staví znovu.
     var diffSearches: [DiffSearchKey: DiffSearchState] = [:]
 
-    /// Sbalené soubory diffu. Co v množině **není**, je rozbalené — u PR o padesáti
-    /// souborech je rozbaleno výchozí stav a sbalení je gesto, takže se pamatuje to druhé.
+    /// Co si člověk o sbalení souboru **řekl sám**: `true` = sbaleno rukou, `false` = rozbaleno
+    /// rukou (typicky `Rozbalit vše`). Klíč, který v mapě **není**, se řídí značkou `Prošlo`
+    /// (#500) — rozhoduje `Policy.isFileFolded(state:override:)`.
+    ///
+    /// **Do #500 to byla množina sbalených** a výchozí stav bylo „rozbaleno“. Značka to změnila:
+    /// prošlý soubor se má sbalit i po restartu, kdy je na disku značka a v okně žádný stav —
+    /// takže se sbalení **odvozuje** a tahle mapa je jen odchylka od odvozeného.
     ///
     /// Žije tady, ne ve view: `PullRequestDetailView` si SwiftUI mezi PR ponechá (stejná
-    /// pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý.
-    var foldedFiles: Set<FileExpansionKey> = []
+    /// pozice ve stromu), takže by odchylka přetekla z jednoho pull requestu na druhý.
+    var fileFolding: [FileExpansionKey: Bool] = [:]
+
+    /// Značky `Prošlo` (#500), načtené z disku při otevření PR. Chybějící klíč = z disku se
+    /// ještě nečetlo, a to se od „nic zaškrtnutého“ liší jen tím, že se čtení má ještě spustit.
+    var readMarks: [PRIdentifier: ReadMarks] = [:]
+
+    /// Stav značky u každého souboru **načteného** diffu (#500) — odvozená mapa, ze které čte
+    /// strom, hlavička souboru i sbalování.
+    ///
+    /// **Cache, a tady je vypsané, co ji vyprazdňuje** (#224): přepočítá ji `refreshReadStates(for:)`
+    /// a volá se ze tří míst — po načtení diffu, po načtení značek z disku a po zaškrtnutí. Bez ní
+    /// by se stav skládal při každém dotazu `isFolded`, tedy jednou na soubor a překreslení, a to
+    /// je nad padesátisouborovým diffem kvadratické hledání v `Diff.file(at:)`.
+    ///
+    /// Klíčem je `displayPath` uvnitř PR; velikost drží počet **značek**, ne počet souborů —
+    /// `Policy.fileReviewStates` vrací jen to, co značku má.
+    var readStates: [PRIdentifier: [String: FileReviewState]] = [:]
+
+    /// Proč se značky nepodařilo přečíst nebo uložit. Musí být vidět: tichá nula by v okně
+    /// vypadala jako nezaškrtnutý diff.
+    var readMarkFailure: String?
 
     /// Odchylka od pohledu na diff, který je v nastavení. `nil` = ber ho z konfigurace.
     ///
@@ -413,6 +438,10 @@ final class AppStore {
     /// Materiál pro rozhovor vedle pracovního stromu (#452). `nil` = neukládá se a session
     /// dostane prompt bez odkazu na soubor, tedy bez nálezů, konverzace a checků.
     let askContexts: AskContextStore?
+
+    /// Uložené značky `Prošlo` (#500). `nil` = neukládají se, tedy zaškrtnutí zanikne se
+    /// zavřením aplikace — v okně se přitom chová stejně, protože stav drží `readMarks`.
+    let readMarkStore: ReadMarkStore?
 
     private let configStore: ConfigStore?
 
@@ -796,6 +825,7 @@ final class AppStore {
         conflicts: (any ConflictResolving)? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
+        readMarkStore: ReadMarkStore? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
@@ -852,6 +882,7 @@ final class AppStore {
         self.conflicts = conflicts
         self.asks = asks
         self.askContexts = askContexts
+        self.readMarkStore = readMarkStore
         self.autoRuns = autoRuns
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
@@ -969,6 +1000,8 @@ final class AppStore {
             ),
             asks: AskStore(),
             askContexts: AskContextStore(),
+            // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
+            readMarkStore: ReadMarkStore(),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
@@ -1936,8 +1969,14 @@ final class AppStore {
             wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
         }
         // Sbalení je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
-        // množina rostla donekonečna.
-        foldedFiles = foldedFiles.filter { wantedPullRequests.contains($0.pullRequest) }
+        // mapa rostla donekonečna.
+        fileFolding = fileFolding.filter { wantedPullRequests.contains($0.key.pullRequest) }
+        // Značky `Prošlo` (#500) se z paměti pouštějí spolu s odvozenými stavy — **na disku
+        // zůstávají**, jako rozdělané review: PR, který ze seznamu vypadl, se umí vrátit
+        // (znovuotevření) a projít padesát souborů znovu je ztráta odvedené práce. Uklízí se
+        // **spolu**, jinak by po vypadlém PR zbyly stavy odvozené z mapy, která už není.
+        readMarks = readMarks.filter { wantedPullRequests.contains($0.key) }
+        readStates = readStates.filter { wantedPullRequests.contains($0.key) }
         // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         diffSearches = diffSearches.filter { wantedPullRequests.contains($0.key.pullRequest) }

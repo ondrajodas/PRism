@@ -2,7 +2,7 @@ import Foundation
 
 /// Diff v `AppStore`: načtení, pohled a sbalování souborů.
 ///
-/// Stav (`diffStates`, `diffLayoutOverride`, `foldedFiles`) zůstává v `AppStore.swift` — dělí
+/// Stav (`diffStates`, `diffLayoutOverride`, `fileFolding`) zůstává v `AppStore.swift` — dělí
 /// se metody, ne data.
 extension AppStore {
     func diffState(for pr: PRIdentifier) -> DiffState? { diffStates[pr] }
@@ -21,6 +21,9 @@ extension AppStore {
             let text = try await gateway.fetchDiff(id: id)
             diffStates[id] = .loaded(DiffParser.parse(text), updatedAt: pullRequest.updatedAt)
             revealFindingsOutsideTheDiff(for: id)
+            // Nový diff = jiné otisky souborů, takže se stav značek `Prošlo` (#500) musí složit
+            // znovu — tohle je ta chvíle, kdy se ze značky stane `změněno od prošlého`.
+            refreshReadStates(for: id)
             // Nový diff = jiné řádky, takže výskyty hledání platí pro kód, který v okně už není
             // (#152). Bez tohohle by pruh ukazoval počet z minula a skok mířil do prázdna.
             refreshDiffSearches(in: id)
@@ -65,17 +68,23 @@ extension AppStore {
     /// obrazovky a sbalit si `Foo.php` při čtení commitu neznamená, že ho nechci vidět v review.
     /// Rozhoduje o tom `FileExpansionKey`, tedy tentýž klíč jako u rozbaleného kontextu — jedna
     /// hranice pro obojí, ať se nedá zapomenout jen v jednom z nich.
+    ///
+    /// **Od #500 se odvozuje ze značky `Prošlo`**, dokud si člověk neřekne jinak: prošlý soubor
+    /// je sbalený, změněný od prošlého se sám rozbalí. Rozhoduje `Policy.isFileFolded`, tady se
+    /// jen dohledá odchylka a stav. V diffu commitu značky nejsou, takže tam platí odchylka nebo
+    /// „rozbaleno“.
     func isFolded(_ path: String, in pr: PRIdentifier, commit: String? = nil) -> Bool {
-        foldedFiles.contains(FileExpansionKey(pullRequest: pr, path: path, commit: commit))
+        Policy.isFileFolded(
+            state: commit == nil ? readState(of: path, in: pr) : .unread,
+            override: fileFolding[FileExpansionKey(pullRequest: pr, path: path, commit: commit)]
+        )
     }
 
+    /// Klik na hlavičku souboru. Zapisuje se **odchylka od odvozeného**, ne absolutní stav —
+    /// jinak by se sbalený prošlý soubor rozbalil a značka by se s ním rozešla.
     func toggleFolded(_ path: String, in pr: PRIdentifier, commit: String? = nil) {
         let key = FileExpansionKey(pullRequest: pr, path: path, commit: commit)
-        if foldedFiles.contains(key) {
-            foldedFiles.remove(key)
-        } else {
-            foldedFiles.insert(key)
-        }
+        fileFolding[key] = !isFolded(path, in: pr, commit: commit)
     }
 
     /// Rozbalí soubor, ať se dá skočit dovnitř. Skok na sbalený soubor by jinak skončil
@@ -84,23 +93,36 @@ extension AppStore {
     /// Bez `commit`u schválně: skáče se jedině v diffu PR (z nálezu, z palety, z anotace CI),
     /// takže parametr, který by tady nikdo nevyplnil jinak než `nil`, by byl jen další místo,
     /// kde se dá splést.
+    /// **Zapíše výslovné rozbaleno**, ne jen smazání odchylky (#500): u prošlého souboru je
+    /// odvozený stav „sbaleno“, takže smazaná odchylka by ho nechala zavřený a skok by skončil
+    /// na jeho hlavičce.
     func unfold(_ path: String, in pr: PRIdentifier) {
-        foldedFiles.remove(FileExpansionKey(pullRequest: pr, path: path))
+        fileFolding[FileExpansionKey(pullRequest: pr, path: path)] = false
     }
 
     /// Sbalí vyjmenované soubory. Cesty dodává volající, protože co je v diffu, store neví.
     func foldAll(_ paths: [String], in pr: PRIdentifier, commit: String? = nil) {
-        foldedFiles.formUnion(paths.map {
-            FileExpansionKey(pullRequest: pr, path: $0, commit: commit)
-        })
+        for path in paths {
+            fileFolding[FileExpansionKey(pullRequest: pr, path: path, commit: commit)] = true
+        }
     }
 
-    /// Rozbalí všechno v tomhle diffu. Cesty netřeba — rozbalené je to, co v množině není.
+    /// Rozbalí všechno v tomhle diffu — **včetně prošlých souborů** (#500), protože `Rozbalit vše`
+    /// je výslovný pokyn a značka je jen výchozí odpověď.
+    ///
+    /// Odchylky se proto nemažou, ale **přepisují na `false`** u všeho, co značku má; u zbytku
+    /// stačí smazat, protože bez značky je odvozený stav „rozbaleno“. Cesty se berou ze značek,
+    /// ne z diffu: `unfoldAll` seznam souborů nedostává a značka na soubor, který v diffu není,
+    /// nikoho nezajímá.
     ///
     /// Sahá **jen na tohle PR a jen na tenhle diff**: sbalení v jiném je cizí stav a smazat ho
     /// při „rozbalit vše“ by znamenalo, že se tlačítko v jednom okně projeví jinde.
     func unfoldAll(in pr: PRIdentifier, commit: String? = nil) {
-        foldedFiles = foldedFiles.filter { $0.pullRequest != pr || $0.commit != commit }
+        fileFolding = fileFolding.filter { $0.key.pullRequest != pr || $0.key.commit != commit }
+        guard commit == nil, let marks = readMarks[pr] else { return }
+        for path in marks.marks.keys {
+            fileFolding[FileExpansionKey(pullRequest: pr, path: path)] = false
+        }
     }
 
     func loadedDiff(for pr: PRIdentifier) -> Diff? {
