@@ -117,6 +117,65 @@ struct DiffParserTests {
         #expect(!file.isBinary)
     }
 
+    // MARK: - Otisk obsahu (#500)
+
+    /// Otisk je **celá dvojice sha z `index` řádky**, bez módu: na něm stojí značka `Prošlo`
+    /// a mód (`chmod +x`) není obsah.
+    @Test("Otisk obsahu se přečte z index řádky bez módu")
+    func readsBlobsFromIndexLine() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-ordinary.diff"))
+
+        let file = try #require(diff.files.first { $0.displayPath == "CLAUDE.md" })
+        #expect(file.blobs == "b01c2e9..3b6bc60")
+    }
+
+    /// U smazaného souboru je nová strana samá nula — je to **pravda o souboru**, ne chybějící
+    /// údaj, takže se nechává, jak přišla.
+    @Test("Smazaný soubor má v otisku nulovou hlavu")
+    func deletedFileKeepsZeroHead() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-deleted.diff"))
+
+        #expect(diff.files.first?.blobs == "e2e4ea5e58a..00000000000")
+    }
+
+    /// **Přejmenování se `similarity index 100%` `index` řádku nemá vůbec.** `nil` je tedy platná
+    /// hodnota a `Policy` s ní počítá — porovnává se na rovnost včetně `nil`u.
+    @Test("Přejmenování beze změny obsahu otisk nemá")
+    func renameWithoutContentChangeHasNoBlobs() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-rename.diff"))
+
+        let file = try #require(diff.files.first { $0.oldPath == "pr-review.entitlements" })
+        #expect(file.blobs == nil)
+    }
+
+    /// Otisk se čte i u binárky — hunky nemá, ale `index` řádku ano, takže se dá zaškrtnout
+    /// a značka na ní drží stejně jako jinde.
+    @Test("Binárka otisk má, i když nemá hunky")
+    func binaryFilesCarryBlobs() throws {
+        let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-binary.diff"))
+
+        let image = try #require(diff.files.first { $0.isBinary })
+        #expect(image.blobs == "00000000000..351859b0fc8")
+    }
+
+    /// **Čtení otisku nesmí přidat ztrátu**: `index ` byl do #500 na seznamu ignorovaných řádků,
+    /// takže tvar, kterému nerozumíme, znamená `nil`, ne nerozpoznaný řádek.
+    @Test("Index bez dvojice sha není ztracený řádek, jen chybějící otisk")
+    func oddIndexLineIsNotALoss() {
+        let diff = DiffParser.parse("""
+        diff --git a/a.txt b/a.txt
+        index podivnost
+        --- a/a.txt
+        +++ b/a.txt
+        @@ -1 +1 @@
+        -a
+        +b
+        """)
+
+        #expect(diff.unrecognizedLines == 0)
+        #expect(diff.files.first?.blobs == nil)
+    }
+
     @Test("Binární soubor se pozná a nemá hunky")
     func readsBinaryFiles() throws {
         let diff = DiffParser.parse(try Fixture.text("gh/pr-diff-binary.diff"))

@@ -236,7 +236,7 @@ struct PollObservationTests {
         await store.refresh()
         // **Mapy musí být neprázdné**, jinak by test procházel nad ničím: `filter` nad prázdnou
         // mapou nic neubere ani s vadou. Tentýž důvod jako u `quietTickDoesNotWakeTheDiffReader`.
-        store.foldedFiles.insert(FileExpansionKey(pullRequest: pr, path: path, commit: nil))
+        store.fileFolding[FileExpansionKey(pullRequest: pr, path: path, commit: nil)] = true
         store.diffStates[pr] = .failed("nezáleží na tom, co v tom stavu je")
 
         let reads: [(name: String, read: @MainActor () -> Void)] = [
@@ -263,7 +263,7 @@ struct PollObservationTests {
         // vlastnostmi: skutečná změna těch dvou map ty dva čtenáře probudit **musí**.
         let folding = Watcher()
         folding.watch { _ = store.isFolded(path, in: pr) }
-        store.foldedFiles.removeAll()
+        store.fileFolding.removeAll()
         #expect(folding.woken)
 
         let diff = Watcher()

@@ -68,6 +68,13 @@ struct AppNoticesView: View {
                 if let failure = store.askFailure {
                     notice(failure, icon: "exclamationmark.triangle")
                 }
+                // Značky `Prošlo` (#500): neuložená značka se po restartu **ztratí**, a to se
+                // pozná jedině tím, že se padesátisouborový diff prochází znovu. Nepřečtený
+                // soubor je horší ještě o krok — v okně vypadá jako nezaškrtnutý diff, tedy
+                // jako tvrzení „tohle jsi nečetl“ nad prací, která na disku je.
+                if let failure = store.readMarkFailure {
+                    notice(failure, icon: "exclamationmark.triangle")
+                }
                 // Neuložený vzhled okna (#278) taky ne: zápis selhal, takže se režim
                 // **nepřepnul** — a klik do railu, po kterém se nic nestane, vypadá jako rozbitá
                 // aplikace.
@@ -111,6 +118,7 @@ struct AppNoticesView: View {
             || store.intentFailure != nil
             || store.appearanceFailure != nil
             || store.askFailure != nil
+            || store.readMarkFailure != nil
             || store.notificationFailure != nil
             || store.terminalFailure != nil
     }

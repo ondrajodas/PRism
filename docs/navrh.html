@@ -2565,6 +2565,49 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fbcap .warn { color: var(--stale); text-transform: none; letter-spacing: 0; font-size: 10.5px; }
 .fbstack { display: flex; flex-direction: column; gap: 20px; }
 
+/* ---- sekce 40: prošlé soubory ---------------------------------------------------
+   Značka `Prošlo` u souboru (#500). Zákres přišel z decku „Směry pro PRism“ (stránka
+   *Opravy › N1*) a tady jsou jen ty čtyři třídy, které se nedaly složit z existujících:
+
+   1. `.rv-viewed` — zaškrtávátko v hlavičce souboru. **Ne `.pill`**: kapsle v `.fhead` je
+      jmenovka stavu (`nový`, `1 blokuje`), tedy něco, na co se nekliká, a tohle je jediný
+      prvek v hlavičce, který něco **dělá**. Vlastní čtvereček, ne `<input>`: dokument nikde
+      jinde systémové ovládací prvky nekreslí a v okně to je taky kresba, ne `Toggle`.
+   2. `.rv-prog` — proužek podílu pod hlavičkou stromu. **Ne `.track`** (proužek běhu review):
+      ten má výšku 4 body, akcentovou výplň a mluví o čase, který zbývá; tenhle má 3 body,
+      `--ok` a mluví o práci, která je hotová. Záporný horní okraj sedí na tom, že hlavička
+      stromu (`.tree .th`) má vlastní `padding-bottom` — proužek k ní patří, není to další řádek.
+   3. `.tnode.rv-done`, `.fhead.rv-done` — ztlumené jméno prošlého souboru. Oko po něm má
+      klouzat dál, ale jméno musí zůstat čitelné, takže `--ink-3` (strom), resp. `--ink-2`
+      a slabší řez (hlavička), ne `opacity`.
+   4. `.rv-num` — počty `+18 −6` v hlavičce. Existující zákresy je psaly inline stylem u každého
+      `<span>`u zvlášť; tady stojí vedle zaškrtávátka, takže se ta sazba pojmenovala.
+
+   Kapsle `změněno od prošlého` **vlastní třídu nedostala** — je to `.pill.stale`, tedy tatáž,
+   jakou má zastaralý nález a prázdný stav hledání. Je to týž druh sdělení: nic se nepokazilo,
+   jen se nad tím, co je na obrazovce, nedá tvrdit to, co se tvrdilo dřív. */
+.rv-prog {
+  display: flex; height: 3px; margin: -4px 13px 8px;
+  border-radius: 2px; background: var(--panel-3); overflow: hidden;
+}
+.rv-prog i { display: block; height: 100%; background: var(--ok); }
+.tnode.rv-done .nm { color: var(--ink-3); }
+.fhead.rv-done .path b { color: var(--ink-2); font-weight: 500; }
+.rv-num { font-family: var(--mono); font-size: 11px; }
+.rv-viewed {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--ink-2); white-space: nowrap;
+}
+.rv-viewed .box {
+  width: 13px; height: 13px; border-radius: 3px;
+  border: 1px solid var(--line); background: var(--panel);
+  display: grid; place-items: center; font-size: 9px; line-height: 1;
+}
+/* Prošlé je **zelené celé**, ne jen fajfkou: popisek nese čas („před 5 min“) a ten musí patřit
+   k témuž stavu jako čtvereček vedle. */
+.rv-viewed.on { color: var(--ok); }
+.rv-viewed.on .box { background: var(--ok); border-color: var(--ok); color: var(--panel); }
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -7491,6 +7534,179 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           se za něj platí jen u bloků, které jsou v pásu kolem výřezu. Dotaz proto patří do
           klíče sazby (<code>DiffBlockStyle</code>): jinak by se po jeho změně sazba
           <b>přeskočila</b> a v okně by zůstalo zvýraznění předchozího slova.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s40">
+    <div class="section-head">
+      <div class="eyebrow">40 — Změněné soubory · prošlé soubory</div>
+      <h2>Okno si pamatuje, co jsem už četl</h2>
+      <p class="muted">
+        Diff dneska neví, kde jsem skončil. U PR o sedmi souborech se po přepnutí záložky, po
+        tiku s novým commitem nebo druhý den ráno hledá očima, co už bylo přečtené — a strom
+        vlevo o tom mlčí, nese jen značku nálezu. GitHub na to má <em>Viewed</em> a je to jediná
+        věc z jeho diffu, která v okně chybí.
+      </p>
+      <p class="muted">
+        Návrh je <b>zaškrtávátko <em>Prošlo</em> v hlavičce každého souboru</b>, vpravo za počty
+        <code>+18 −6</code>. Prošlý soubor se sbalí, ve stromu dostane ✓ v <code>--ok</code>,
+        hlavička stromu počítá <em>7 souborů · 3 prošlé</em> a pod ní je tenký proužek podílu.
+      </p>
+      <p class="muted">
+        Značka je vázaná na <b>obsah souboru</b>, ne na hlavu PR: ukládá se k pull requestu (jako
+        rozhovor, sekce 33), ale nese <b>otisk z <code>index</code> řádky diffu</b>. Commit, který
+        soubor nemění, ji nechá; commit, který ho mění, ji přepne na <em>změněno od prošlého</em>
+        — protože „četl jsem starou verzi“ je jiná informace než „nečetl jsem“. Nikdy tedy
+        netvrdí <em>prošlo</em> nad kódem, který už není: je to tvrdá podmínka č. 5 v duchu, jen
+        nad souborem místo nad nálezem.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Výřez plochy diffu (strom 210 b + diff) — tři soubory prošlé, jeden změněný od prošlého</div>
+      <div class="frame flat">
+        <div class="work noside">
+          <div class="tree">
+            <div class="th">7 souborů · 3 prošlé</div>
+            <div class="rv-prog"><i style="width: 43%;"></i></div>
+            <div class="tnode dir">▾ <span class="nm">src/Vault</span></div>
+            <div class="tnode file on"><span class="nm">SecretClient.php</span><span class="mk crit">●</span></div>
+            <div class="tnode file"><span class="nm">Encryptor.php</span><span class="mk find">●</span></div>
+            <div class="tnode file rv-done"><span class="nm">SecretNotFound.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="tnode dir">▾ <span class="nm">tests</span></div>
+            <div class="tnode file rv-done"><span class="nm">SecretClientTest.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="tnode dir">▾ <span class="nm">/</span></div>
+            <div class="tnode file rv-done"><span class="nm">composer.json</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="tnode file"><span class="nm">composer.lock</span><span class="mk" style="color: var(--stale);">↻</span></div>
+            <div class="tnode file"><span class="nm">phpunit.xml.dist</span></div>
+          </div>
+
+          <div class="diffpane">
+            <div class="fhead">
+              <span>▾</span>
+              <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+              <span class="pill crit">1 blokuje</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+18</span>
+              <span class="rv-num" style="color: var(--crit);">−6</span>
+              <span class="rv-viewed"><span class="box"></span>Prošlo</span>
+            </div>
+            <table class="diff">
+              <tr class="hunk"><td colspan="3">@@ -78,9 +78,21 @@ final class SecretClient</td></tr>
+              <tr><td class="ln">78</td><td class="sg"></td><td class="code">    <span class="k">public function</span> <span class="fn">getSecret</span>(<span class="k">string</span> $key): <span class="k">string</span></td></tr>
+              <tr class="del"><td class="ln">80</td><td class="sg">−</td><td class="code">        $row = <mark class="w">$<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key)</mark>;</td></tr>
+              <tr class="add"><td class="ln">80</td><td class="sg">＋</td><td class="code">        $row = <mark class="w">$<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">get</span>($key) ?? $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key)</mark>;</td></tr>
+              <tr class="add flag"><td class="ln">81</td><td class="sg">＋</td><td class="code">        <span class="k">return</span> $row[<span class="st">'value'</span>] <mark class="w">?? <span class="st">''</span></mark>;</td></tr>
+              <tr><td class="ln">82</td><td class="sg"></td><td class="code">    }</td></tr>
+            </table>
+
+            <div class="fhead rv-done" style="border-top: 1px solid var(--line);">
+              <span>▸</span>
+              <span class="path"><span>src/Vault/</span><b>SecretNotFound.php</b></span>
+              <span class="pill">nový</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+21</span>
+              <span class="rv-num" style="color: var(--crit);">−0</span>
+              <span class="rv-viewed on"><span class="box">✓</span>Prošlo · před 5 min</span>
+            </div>
+            <div class="fhead rv-done" style="border-top: 1px solid var(--line-soft);">
+              <span>▸</span>
+              <span class="path"><span>tests/</span><b>SecretClientTest.php</b></span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+64</span>
+              <span class="rv-num" style="color: var(--crit);">−0</span>
+              <span class="rv-viewed on"><span class="box">✓</span>Prošlo · před 12 min</span>
+            </div>
+            <div class="fhead" style="border-top: 1px solid var(--line-soft);">
+              <span>▸</span>
+              <span class="path"><span>/</span><b>composer.lock</b></span>
+              <span class="pill stale">změněno od prošlého</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+1 402</span>
+              <span class="rv-num" style="color: var(--crit);">−1 388</span>
+              <span class="rv-viewed"><span class="box"></span>Prošlo znovu</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">132</span>
+        <span class="body">
+          <b>Otisk je celá dvojice z <code>index</code> řádky, ne jen hlava</b>
+          <span>Značka říká „přečetl jsem <b>diff</b> tohohle souboru“, a ten se změní i tehdy,
+          když se posune <b>základ</b> — typicky po rebase nad novým <code>main</code>em, který
+          týž soubor taky sáhl. Otisk jedné strany by takovou změnu neviděl. Bere se
+          <b>z diffu, který už máme</b> (<code>index b01c2e9..3b6bc60</code>), takže značka
+          nestojí ani jedno volání navíc; do #500 byla ta řádka na seznamu ignorovaných.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">133</span>
+        <span class="body">
+          <b>Chybějící otisk je hodnota, ne chyba</b>
+          <span>Přejmenování se <code>similarity index 100%</code> <code>index</code> řádku
+          <b>nemá</b>, protože se obsah nezměnil — a takový soubor nemá ani hunky. Porovnává se
+          proto <b>na rovnost včetně chybějícího</b>: dvakrát „nevím“ nad souborem, který se jen
+          přesunul, je pořád tentýž soubor. Kdyby to byla změna, značka by po zaškrtnutí hned
+          zhasla a nešla by udržet ani na vteřinu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">134</span>
+        <span class="body">
+          <b>Sbalení se odvozuje ze značky, nezapisuje se</b>
+          <span>Prošlý soubor je sbalený, <b>změněný od prošlého se sám rozbalí</b> — a přesně to
+          je ta úspora, kvůli které značka existuje: po druhém commitu zbude otevřené jen to, co
+          se změnilo. Kdyby zaškrtnutí jen zapsalo „sbaleno“, po restartu by se prošlé soubory
+          otevřely dokořán, i když značky na disku jsou. Naklikané sbalení a rozbalení je proti
+          tomu <b>odchylka</b>, která tu derivaci přebíjí — v obou směrech.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">135</span>
+        <span class="body">
+          <b><code>Rozbalit vše</code> rozbalí i prošlé — a značku nechá</b>
+          <span>Je to výslovný pokyn o tom, <b>co je vidět</b>, ne o tom, co je přečtené. Počet
+          v hlavičce stromu se tím tedy nemění a proužek zůstane, kde byl.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">136</span>
+        <span class="body">
+          <b>Klávesa <code>⌥V</code> platí na soubor pod ukotvenou hlavičkou</b>
+          <span><code>V</code> jako <em>Viewed</em>, tedy tatáž mnemotechnika, jakou má GitHub;
+          <code>⌥</code> je v tomhle okně klávesa práce nad diffem (<code>⌥↑ ⌥↓</code> na
+          nálezech), takže ruka nikam neuhýbá. Zkratka visí na <b>jednom</b> průhledném tlačítku,
+          ne na zaškrtávátku v každé hlavičce: padesát tlačítek s touž kombinací znamená, že
+          vyhraje to zaregistrované později a ostatní „nefungují“ (#151, #184). V poli s textem
+          ustupuje jako ostatní okenní zkratky.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">137</span>
+        <span class="body">
+          <b>Ve stromu stojí ✓ vedle puntíku nálezu, ne místo něj</b>
+          <span>Zákres obojí zároveň nekreslí, ale stát se to může: „je tu co spravit“ a „četl
+          jsem to“ jsou dvě různé otázky, a schovat jednu za druhou by znamenalo, že se
+          <em>3 prošlé</em> v hlavičce rozejde s tím, co je v seznamu vidět. Dva malé glyfy se do
+          210 bodů vejdou. Změněný soubor je ↻ v <code>--stale</code> a <b>tlumený není</b> — je
+          to práce, která se vrátila.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">138</span>
+        <span class="body">
+          <b>Kde značka není</b>
+          <span>V <em>diffu commitu</em> (sekce 30) ani v rozsahu <em>Od tvé poslední návštěvy</em>
+          (sekce 29): jejich <code>index</code> řádky mluví o rozsahu mezi dvěma commity, ne
+          o hlavě PR, takže by se otisk se značkou nepotkal a každý zaškrtnutý soubor by hned
+          hlásil <em>změněno od prošlého</em>. Zaškrtávátko se tam proto <b>nekreslí vůbec</b>,
+          ne zašedle. Panel vpravo, lišta nad diffem i procházení nálezů zůstávají, jaké jsou.</span>
         </span>
       </div>
     </div>
