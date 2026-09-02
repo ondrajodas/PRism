@@ -7604,6 +7604,30 @@ se láme na dvě řádky). Není to překryv, je to úzká kolona. Jestli má po
 (`Policy.minimumCodeWidth`, dnes 360 b pod sebou) být vyšší, je **návrhové rozhodnutí**, ne oprava
 přetečení, a nechávám ho na proklikání.
 
+#### Neověřená mezera: `71 znaků na stranu` v živém okně
+
+**Zůstává nerozhodnuté a merge to neblokovalo.** Živá aplikace hlásí v okně **1 303 × 860**
+(`Vedle sebe`, strom i panel složené) **71 znaků na stranu**, jenže kolona kódu je tam změřená ze
+snímku na **1 178,5 b** (rail 0…51, strom 52…85, kód 86…1264,5, čára 1265,0, proužek 1266…1302,5)
+a z té vychází **62**. Ověřené vstupy: šířka znaku je **8,036 b** všemi třemi cestami `FontMetric`
+**i skutečnou sazbou** (jen nepoužívaná `derived` dává 11,63) a gutter 84 b je konstanta.
+
+**Ani jedna hostovaná scéna to nereprodukuje**, a to je ta podstatná část:
+
+| Kde | kolona | co lišta hlásí |
+|---|---|---|
+| `main`, hostované okno (`MainGaugeProbe`) | 1 179 b | **62** — přečteno z renderu |
+| #503, hostované okno | 879 b (s okrajem) / 1 179 b | **44** / 62 — přečteno z renderu |
+| #503, **živá** aplikace | 1 178,5 b | **71** |
+
+Není to tedy „vada, která přišla s #503“ ani „vada `mainu`“ — obě hostované scény jsou poctivé.
+Zbývá hypotéza, **nedokázaná**: `contentWidth` v živém okně drží šířku **celého okna**. 1 303 b dá
+70,6 → 70, a rozdíl 1 179 → **1 309** b (to je šířka, kterou 71 znaků vyžaduje) je **130 b**, tedy
+skoro přesně rail 56 + strom 34 + proužek 38 = **128**. `contentWidth` je `@State` plněný
+z `onGeometryChange`, a ten se **při nezměněné hodnotě nespustí** (#361) — první změřená hodnota,
+která se nikdy nepřepsala, je proto věrohodná příčina. Rozhodnout to zvenku nejde; chce to
+`contentWidth` v diagnostice kreslení (`--diagnose`), ne v promptu ani v odhadu.
+
 **Tvrdí to test, ne jen sonda** (`DiffColumnFitTests`): pevné kolony se vejdou přes celé pásmo
 šířek v obou pohledech, nález **nikdy nezůstane bez domova** (buď okraj, nebo rozložený panel),
 strom ustupuje první a šířky se čtou z `Policy`, ne ze dvou konstant ve views. **Ověřeno vložením
