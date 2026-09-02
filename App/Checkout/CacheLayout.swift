@@ -133,6 +133,17 @@ struct CacheLayout: Sendable, Equatable {
     /// (`(pid, startedAt)`), kdežto přerušené běhy `ReviewRunKey`.
     var sessionsFile: URL { root.appending(path: "sessions.json") }
 
+    /// Co bylo otevřené jako záložky (#527) — snímek pruhu, ne log; viz `OpenTabsStore`.
+    ///
+    /// **V kořeni cache slotu**, vedle `announced.json` a `sessions.json`, a to je zároveň to
+    /// jediné, co dělí paralelní okna od sebe: kořen si aplikace bere z `CFBundleName` (#228),
+    /// takže si slot `a` a hlavní instance záložky nepřepisují.
+    ///
+    /// **Mimo dosah eviction**, jako nálezy a rozdělaná review — je to pár set bajtů a rozpočet
+    /// na místo o pruhu záložek nerozhoduje. Uklízet se nemusí nic: snímek se přepisuje celý
+    /// a jeho velikost je velikost pruhu.
+    var openTabsFile: URL { root.appending(path: "tabs.json") }
+
     /// Záznam diagnostiky kreslení (#361) — řádkový soubor, který se dá poslat, když okno začne
     /// hořet. Zakládá se **jedině se zapnutou diagnostikou**, viz `RenderDiagnostics`.
     ///

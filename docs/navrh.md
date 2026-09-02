@@ -39,7 +39,7 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **41** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **42** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo):
@@ -91,6 +91,13 @@ dvě akce v téže sekci panelu (*Větev*), takže spolu leží na stránce *Pan
 jedna z nich zatím není záznamem dneška. A **41 vedle 02** je zase případ jako 24: kreslí
 **jediný výřez hlavičky** s pilulkou `mimo zdroje` a dva stavy záložky, o které se ví jen adresa
 (#531) — celá hlavička ani celé okno se nepřekresluje.
+
+**Výřez nemusí ležet na stránce té sekce, kterou nepřekresluje** (#527). Sekce **44** kreslí pruh
+záložek před ukončením a po startu, tedy tentýž pruh jako **02** — a leží přesto na stránce
+*Start a poruchy*, ne u ní. Rozhoduje **kdy tu obrazovku vidíš**: puntík načítání je vidět pár
+sekund po spuštění a nikdy potom, takže patří k ostatním startovním stavům, kdežto 02 je klidný
+stav téhož okna. Je to tentýž rozdíl jako u sekcí, do kterých se z obrazovky jen přijde (viz níž),
+jen se místo *odkud se otevírá* ptá na *kdy nastane*.
 
 **Sekce, do které se z obrazovky jen přijde, leží na stránce toho místa, odkud se otevírá.**
 Sekce 20 kreslí surovou session na stránce *Průběh*, protože se otevírá z výpisu kroků; **28**

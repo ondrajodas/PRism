@@ -4894,15 +4894,20 @@ stojí na jedné vlastnosti store a jedné čisté funkci:
 
 | Kde | Co |
 |---|---|
-| `AppStore.externalPullRequests` (`Set<PRIdentifier>`) | značka „tuhle záložku otevřel člověk mimo zdroje“. **Žádná druhá kopie dat** |
+| `AppStore.adoptedTabs` (`[PRIdentifier: TabAdoption]`) | značka „o téhle záložce seznam z pollingu neví nic“ — **a proč**: `link` (#531), `restored` (#527). **Žádná druhá kopie dat** |
 | `AppStore.openPullRequest(_:)` (`AppStore+External.swift`) | jediný vstup pro „otevři PR podle identifikátoru“; u PR ze seznamu je to beze změny `openTab(_:)` |
-| `AppStore.summary(for:)` | u záložky mimo zdroje skládá shrnutí **z dotaženého detailu** (`PullRequestSummary.init(_:)`) |
-| `Policy.origin(of:adopted:sources:)`, `Policy.originNote(_:)` | pilulka `mimo zdroje · jen ke čtení` v hlavičce |
-| `Policy.tabContent(summary:detail:origin:)` | čtyři stavy záložky: detail, načítání, porucha, „zmizel ze seznamu“ |
+| `AppStore.summary(for:)` | u přijaté záložky skládá shrnutí **z dotaženého detailu** (`PullRequestSummary.init(_:)`) |
+| `Policy.origin(of:adopted:sources:)`, `Policy.originNote(_:)` | pilulka `mimo zdroje · jen ke čtení` v hlavičce — **jen u `link`** |
+| `Policy.tabContent(summary:detail:adoption:)` | čtyři stavy záložky: detail, načítání, porucha, „zmizel ze seznamu“ |
 | `Policy.linkedPullRequest(in:)`, `Policy.openedPullRequest(from:)` | odkaz a URL schéma |
 
-- **Množina, ne mapa se shrnutími.** Shrnutí se skládá z `detailStates`, takže dvě kopie téhož
-  PR by se uměly rozejít v okamžiku, kdy autor změní titulek. Množina odpovídá na jedinou otázku
+- **Jedna mapa s důvodem, ne dvě množiny vedle sebe** (#527, mění #531). Do #527 to byla
+  `Set<PRIdentifier>` s jedním významem; obnovená záložka po restartu potřebuje **totéž ve třech
+  věcech** (shrnutí z detailu, přežití úklidu po tiku, `loading` místo `gone`) a liší se v jedné
+  (pilulka). Druhá množina by znamenala, že se na těch třech místech dá zapomenout jedna z nich —
+  a potichu; výčet `TabAdoption` proti tomu odpovídá i na „proč“, takže si pilulka vybere sama.
+- **Shrnutí se nedrží, skládá se.** Shrnutí se počítá z `detailStates`, takže dvě kopie téhož
+  PR by se uměly rozejít v okamžiku, kdy autor změní titulek. Mapa odpovídá na jedinou otázku
   — **odkud se ta záložka vzala** — a čte ji pilulka, řádek palety i úklid po tiku.
 - **Fronta se tím nerozšiřuje, a to je nejcennější věc na téhle změně.** `pullRequests` zůstává
   tím, co přišlo ze zdrojů, takže karty, odznak, souhrn, notifikace ani automat se o takové
@@ -4943,6 +4948,120 @@ stojí na jedné vlastnosti store a jedné čisté funkci:
   zahodit ji by znamenalo, že kliknutí PRism spustí a nic neotevře.
 - **Tvrdá podmínka č. 1 platí beze změny**: `GitHubGateway` je dál bez zápisu a celá tahle cesta
   je jediné čtení (`gh pr view`).
+
+## Záložky přežijí restart (#527)
+
+Aplikace se podle pravidel repa restartuje `bin/run.sh` **po každém mergi**, takže do #527 každý
+merge zavřel všechno rozečtené — a scroll v diffu se ztratil. Snímek pruhu proto leží
+v `tabs.json` v kořeni cache slotu. Zákres je v [sekci 44](navrh.html) návrhu.
+
+| Kde | Co |
+|---|---|
+| `OpenTabs`, `OpenTab`, `DiffScrollAnchor`, `TabAdoption` (`App/Models/OpenTabs.swift`) | tvar snímku: identita PR, tab v ní, kotva scrollu, aktivní záložka |
+| `OpenTabsStore` (`App/Store/`) | čtení a zápis `tabs.json`. **Není aktor** — viz níž |
+| `CacheLayout.openTabsFile` | `<kořen slotu>/tabs.json`, mimo dosah eviction |
+| `AppStore.persistOpenTabs()`, `openTabsSnapshot`, `restoreOpenTabs()` (`AppStore+Tabs.swift`) | zápis při změně záložky a při ukončení, čtení jednou při startu |
+| `AppStore.pendingScrollAnchors`, `takePendingScrollAnchor(for:)` | kotva, kterou má diff doposadit — **spotřebuje se** |
+| `AppStore.diffScrollAnchors` (`@ObservationIgnored`) | kde stojí výřez u otevřených záložek |
+| `Policy.tabMark(isRunning:isLoading:hasDraft:state:review:)`, `WindowTabMark` | co se nakreslí u záložky — pět pater |
+| `Policy.diffScrollAnchor(top:files:extents:rows:)`, `Policy.line(at:in:)` | kotva jako **soubor a řádek** |
+| `DiffAnchorReporter` (`App/Views/`) | hlásí polohu výřezu; `DiffRowFrames.scrollRows(in:)` mu dodává čísla řádků |
+
+- **Obnovení nic nespouští, a je to ta věta, na které issue stojí.** Nepustí review ani session,
+  nepřipraví pracovní kopii a nepřidá nic do fronty — dotáhne **detail**, a to čtením (`gh pr
+  view` přes `GitHubGateway`, který zápisové metody nemá). Automat čte `summaries` z tiku, takže
+  se o obnovené záložce nemá kde dozvědět (#4). Hlídá to test s **prázdnými zdroji a zapnutým
+  automatem**, tedy ve stavu, kde je otevřená záložka to jediné, co by se dalo spustit; ověřeno
+  vložením regrese (`startReview` v obnovení shodí tři tvrzení).
+- **Detail se dotahuje u každé obnovené záložky**, i u té, která ve zdrojích bude. Před prvním
+  tikem se neví, která to je — a čekat na tik znamená čekat i tam, kde by se čekat nemuselo,
+  kdežto nedotáhnout znamená záložku, která na načítání zůstane navždycky (PR mimo zdroje se
+  v seznamu neobjeví nikdy). Je to jedno `gh pr view` na záložku, tedy právě to, co si detail
+  dotáhne sám při otevření — a jde to **bez čekání**, tou samou cestou jako u #531.
+- **Obnovení běží před prvním tikem**, jako **první** krok `keepFresh()`. Není to kosmetika:
+  úklid po tiku (`forget(whatIsNotIn:)`) zahazuje stav PR, které nejsou v seznamu, a obnovená
+  záložka se mezi chtěné dostane jedině tou značkou, kterou obnovení nasadí. Ověřeno vložením
+  regrese: bez značky `restored` vyjde `tabContent` jako `gone`, pruh nakreslí puntík stavu
+  review a záložka ze `openTabSummaries` **zmizí úplně** — tři tvrzení naráz.
+- **Mergnutý PR se vrátí a zavírá ho člověk** (pravidlo z #67). Fialový puntík je stav
+  **pull requestu**, ne review: u `merged` a `closed` je „jak to dopadlo“ důležitější než „co
+  našel reviewer“, protože od nálezů se další práce neodvíjí. `open` a `draft` do toho patra
+  **nepatří** — rozpracovaný PR je normální práce.
+- **`OpenTabsStore` není aktor, na rozdíl od ostatních ledgerů.** `AnnouncedPullRequests`
+  i `HandoffLedger` jsou aktory proto, že u nich je uložení **čtení, změna a zápis** téhož
+  souboru; tady je celý snímek v paměti store, takže je zápis jeden krok. A hlavně **musí být
+  synchronní**: snímek se ukládá i z `applicationShouldTerminate`, které se v běžném případě
+  vrací `.terminateNow` a žádné další kolo runloopu nepřijde — `await` by tam znamenal snímek, na
+  který nikdo nepočká. Je to pár set bajtů atomicky, několikrát za minutu.
+- **Dva zápisové důvody, a nedají se spojit do jednoho.** Změna záložky drží snímek aktuální;
+  **ukončení** je jediné místo, ze kterého se dá zachytit scroll, kterým člověk v diffu skončil.
+  Bez toho druhého by se po mergi obnovila poloha z okamžiku, kdy se do diffu přepnul. Ukládá se
+  **před** potvrzovacím dialogem: kdo se rozhodne nekončit, o nic nepřijde (je to tentýž stav,
+  jaký zapíše příští změna záložky), kdežto po zrušeném dotazu by se tam už nikdo nevrátil.
+- **Nečitelný soubor znamená prázdno, ne chybu v okně** — opačná volba než u nálezů a u značek
+  `Prošlo`. Nejhorší následek je **jedno spuštění bez záložek**, tedy stav před #527; není to
+  ručně psaná práce, kterou by nebylo čím nahradit. Platí to i pro **přejmenovaný případ**
+  `PullRequestTab`: takový snímek se zahodí celý, protože `?? .standard` u jednoho tabu by se
+  tvářil jako volba člověka.
+- **`PullRequestTab` je od #527 `Codable`, a je to zapsaná změna** proti jeho vlastní poznámce
+  („neukládá se, jinak bychom si pamatovali, na co se člověk koukal minulý týden“). Ta námitka
+  platí dál: volba **není** klíčovaná pull requestem na disku, ukládá se jako součást otevřené
+  záložky a se zavřením odchází.
+
+### Kotva scrollu jako soubor a řádek (#527)
+
+**Offset po restartu neplatí**, a je to změřené u #152: diff se v pohledu pod sebou zalamuje
+podle šířky okna, takže odhad z počtu řádků byl proti skutečnosti trojnásobně mimo. Kotva je
+proto `(soubor, řádek)`, tedy údaj o **kódu** — platí i tehdy, když se okno mezitím zúžilo.
+
+- **Posadí se tou samou cestou, jakou skáče paleta na nález**: `DiffRow.anchor(in:file:line:)` →
+  `scrollTarget` → `scrollTo` s podílem výšky (#152), **o průchod později** (#325) a s druhým
+  průchodem nad přeměřenými rozměry. Sedne to tedy stejně dobře — a stejně nedokonale — jako skok
+  na nález; když soubor v diffu není (mezitím přišel commit), **nestane se nic**.
+- **Kotva se spotřebuje.** Skok se má stát jednou, po obnovení: kdyby v mapě zůstala, vracel by
+  se výřez na uložené místo při **každém** přepnutí do `Změněných souborů`, tedy i po tom, co si
+  člověk odscrolloval jinam. Vyzvedává se **až po odmlce**, ne před ní — zrušený `task` (přepnutí
+  PR uprostřed) by ji jinak zahodil, aniž by se kamkoli skočilo.
+- **Hlásí ji vlastní neviditelné view** (`DiffAnchorReporter`), ne tělo `DiffView`u, a je to
+  tatáž výkonová podmínka jako u `DiffPinnedHeader` a `DiffReadShortcut`: čte `DiffViewport.top`,
+  tedy hodnotu, která se mění při každém otočení kolečka. Co v něm při každém snímku je: jeden
+  průchod přes rozsahy souborů (desítky) a jeden přes rámečky řádků (řádově tisíc) — tedy
+  **aritmetika nad krabicemi mimo observable stav**, ne dotaz do grafu SwiftUI. Právě tenhle
+  rozdíl byl u #469 ten drahý (3,5 s CPU proti 0,19 s): rámečky v souřadnicích **výřezu** se
+  scrollováním mění, v souřadnicích **obsahu** ne.
+- **Zapisuje se do paměti, ne na disk**, a cíl **není sledovaná vlastnost**
+  (`AppStore.diffScrollAnchors` je `@ObservationIgnored`) — jinak by posun výřezu překreslil
+  všechno, co ze store čte. Na disk to jde s příští změnou záložky nebo při ukončení.
+- **`nil` kotvu nemaže.** „Zrovna nevím, kde výřez stojí“ (rozsahy se přeměřují, bloky se
+  odpojily) není totéž jako „do diffu se nekouklo“; zahodit poslední známou polohu kvůli jednomu
+  průchodu bez odpovědi by znamenalo obnovit se na začátek diffu právě po přerovnání okna.
+- **Nedoposazená kotva je pořád ta poslední známá poloha**, a drží to dvě věci naráz (obojí nález
+  Copilota na #544 — a obojí byla tichá ztráta polohy, ne pád):
+
+  1. **Snímek ji čte i z `pendingScrollAnchors`** (`?? `). Obnovení zapíše snímek hned na konci
+     a ten se skládá z `diffScrollAnchors`, které jsou po startu prázdné — bez toho `??` by se
+     kotva ztratila **v okamžiku obnovení**, aniž by ji kdo spotřeboval, a záložka, do jejíhož
+     diffu se člověk nepodíval, by po druhém restartu začínala na začátku.
+  2. **Hlášení z diffu ji nepřepíše, dokud se neposadí.** `DiffAnchorReporter` hlásí polohu i při
+     vzniku (`initial: true`), tedy **dřív**, než `restoreScroll()` skočí; bez brány by první
+     hlášení nad nenaskrolovaným diffem uloženou polohu přepsalo za začátek souboru. Odemkne to
+     `takePendingScrollAnchor(for:)`, tedy skok sám.
+
+  Zbývá **jeden průchod grafu** mezi spotřebováním kotvy a skokem, ve kterém platí poloha před
+  skokem — zabité aplikaci v tom okamžiku se kotva posune o výřez. Je to zapsaná mez, ne chyba.
+- **Číslo řádku dodává `DraftAnchor`, který u řádku v krabici leží kvůli tažení rozsahu** — žádné
+  měření navíc. Bere se jen strana `.right`, tedy **nová** čísla: `DiffRow.anchor` porovnává
+  `newNumber`, kdežto číslo odebraného řádku je ze staré verze souboru a nenašlo by se. Odebraný
+  řádek u horní hrany proto vydá **první přidaný nebo kontextový pod ním**.
+- **Dvě zapsané meze.** Řádek se nikdy nebere **nad** horní hranou (když jsou bloky pod výřezem
+  odpojené, je správná odpověď „nevím“ a přistane se na hlavičce souboru), a **rozbalený kontext**
+  (#47) číslo nenese — `commentableSide` ho vydá jen pro řádek v hunku —, takže výřez uvnitř
+  velkého odkrytého úseku se obnoví na nejbližším řádku hunku pod ním. Obojí je degradace na
+  „o kus vedle“, ne na „jinde“.
+- **Jen celý diff kotvu hlásí.** Rozsah `Od tvé poslední návštěvy` (#284) je pohled na **jiný**
+  seznam souborů, takže by jeho poloha po restartu ukazovala někam jinam; diff commitu (#317) ani
+  náhled o pull requestu nic neukládají a `reportScrollAnchor` u nich zůstává `nil` — modifikátor
+  se pak **nepřipojí vůbec** (pravidlo z #438).
 
 ## Šířka v okně (`App/Views/AvailableWidth.swift`)
 

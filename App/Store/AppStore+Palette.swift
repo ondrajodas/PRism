@@ -382,7 +382,7 @@ extension AppStore {
             pullRequests,
             mine: ownLogins,
             // **Fronta jsou zdroje, ne otevřené záložky** (#4): odznak `ve frontě` má znamenat
-            // „čeká to na mě“, kdežto `externalPullRequests` je „tohle jsem si otevřel ke čtení“.
+            // „čeká to na mě“, kdežto `adoptedTabs` je „tohle jsem si otevřel ke čtení“.
             sources: Set(self.pullRequests.map(\.id)),
             now: time.now
         )

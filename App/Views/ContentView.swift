@@ -213,9 +213,7 @@ struct ContentView: View {
             ReviewTabsView(
                 active: $store.activeTab,
                 tabs: store.openTabSummaries,
-                state: store.reviewState(for:),
-                hasDraft: store.hasDraft(_:),
-                isRunning: store.isReviewing(_:),
+                mark: store.tabMark(for:),
                 close: store.closeTab(_:)
             )
             headerActions
@@ -354,14 +352,16 @@ struct ContentView: View {
                     nature: .waiting,
                     symbol: "arrow.down.circle",
                     title: "Načítám pull request",
-                    message: "\(id) není ve zdrojích, takže se o něm aplikace musí zeptat GitHubu."
+                    // Věta se **liší podle důvodu přijetí** (#527) a rozhoduje o ní `Policy`:
+                    // u obnovené záložky se v tu chvíli neví, jestli PR ve zdrojích je.
+                    message: Policy.loadingTabNote(for: id, adoption: store.adoptedTabs[id])
                 )
             case .failed(let reason):
                 EmptyStateView(
                     nature: .failure,
                     symbol: "exclamationmark.triangle",
                     title: "Pull request se nepodařilo načíst",
-                    message: "\(id) se nepovedlo dotáhnout. Zkontroluj adresu — a jestli na to repo vidíš.",
+                    message: Policy.failedTabNote(for: id, adoption: store.adoptedTabs[id]),
                     // Syrový text od `gh` **zůstává, jak přišel**: `Could not resolve to
                     // a PullRequest` a `HTTP 404` jsou dvě různé odpovědi a naší větou by z nich
                     // byla jedna.

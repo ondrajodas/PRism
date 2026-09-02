@@ -6,9 +6,20 @@ import Foundation
 /// SwiftUI mezi pull requesty ponechá (stejná pozice ve stromu), takže `@State` by přetekl
 /// z jednoho PR na druhý. Drží se proto per PR ve `AppStore`, stejně jako výběr řádku.
 ///
-/// Jako `ReviewVerdict` **není `Codable`** — neukládá se. Kdyby se ukládal, znamenalo by to
-/// pamatovat si napříč restarty, na co se člověk koukal minulý týden.
-enum PullRequestTab: Hashable, Sendable, CaseIterable {
+/// **Od #527 `Codable` je — a je to změna proti tomu, co tu stálo.** Do té doby tady bylo, že se
+/// jako `ReviewVerdict` neukládá, protože by to znamenalo „pamatovat si napříč restarty, na co se
+/// člověk koukal minulý týden“. To pořád platí a nic z toho se neruší: volba **není** klíčovaná
+/// pull requestem na disku, ukládá se jako součást **otevřené záložky** (`OpenTab.tab`
+/// v `tabs.json`). Zavřením záložky odchází se vším ostatním, takže se nedá čeho se týkalo té
+/// námitky — dožít se může jedině té jedné věci, kterou #527 řeší: restartu po mergi, po kterém
+/// je záložka pořád otevřená.
+///
+/// `String` jako raw value schválně, ne syntetizované `Codable` nad případy: v souboru pak stojí
+/// `filesChanged`, ne zanořený objekt, a je to čitelné okem — `tabs.json` leží v cache, kam se
+/// člověk chodí dívat. Přejmenovat případ tím **znamená zahodit snímek** (nečitelný soubor je
+/// jedno spuštění bez záložek, viz `OpenTabsStore`), a to je přijatelná cena za jméno, které
+/// v souboru něco říká.
+enum PullRequestTab: String, Codable, Hashable, Sendable, CaseIterable {
     /// Popis PR a konverzace, která se neváže k žádnému řádku. **Výchozí** — viz `standard`.
     case overview
     /// Diff s bublinami.

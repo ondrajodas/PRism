@@ -27,6 +27,21 @@ struct AppDelegateTerminationTests {
         return delegate
     }
 
+    /// **Snímek záložek odchází z každého ukončení**, ne jen z toho, kde na něco běží (#527) —
+    /// a je to jediné místo, ze kterého se dá zachytit scroll, kterým člověk v diffu skončil.
+    /// Ukládá se **před** dotazem, takže o něj nepřijde ani ten, kdo se zavření rozmyslí: `Zpět`
+    /// je legitimní odpověď a snímek popisuje tentýž stav, jaký zapíše příští změna záložky.
+    @Test("Snímek záložek se uloží při každém ukončení, i po Zpět v dialogu", arguments: [0, 2])
+    func theTabSnapshotIsAlwaysSaved(running: Int) {
+        let saved = Recorder()
+        let delegate = delegate(running: running, answer: false)
+        delegate.saveOpenTabs = { saved.record() }
+
+        _ = delegate.applicationShouldTerminate(NSApplication.shared)
+
+        #expect(saved.count == 1)
+    }
+
     @Test("Bez běžícího review se aplikace zavře hned a nikdo se neptá")
     func nothingRunningQuitsRightAway() {
         let asked = Recorder()

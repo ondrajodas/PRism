@@ -35,6 +35,16 @@ je obsahem domácí záložky, takže diff dostane celou šířku okna. Otevřen
 a tečka u záložky nese jeho stav; u běžícího se točí prstýnek, u rozdělaného je pero. **Zavření
 záložky nic nezahodí.**
 
+**Záložky přežijí restart** (#527), a to je potřeba proto, že se aplikace restartuje po každém
+mergi. Do cache slotu (`tabs.json`) se při každé změně záložky — a při ukončení — zapíše, co je
+otevřené: identita PR, tab v ní, **kotva scrollu jako soubor a řádek** a která záložka byla
+aktivní. Po startu se to vrátí **než proběhne první tik**; dokud u záložky nedorazí detail, má
+místo tečky **dutý kroužek** (dokreslený stav „o téhle záložce se ví jenom adresa“ — dostane ho
+i záložka otevřená odkazem, #531), a aktivní je ta, která
+byla aktivní. **Obnovení nic nespouští** — ani review, ani session; dotáhne jen detail, a to
+čtením. PR, který mezitím z fronty zmizel (mergnul se, zavřel se), se vrátí taky: má **fialovou
+tečku podle stavu pull requestu**, dá se dočíst a **zavírá ho člověk**, ne tik pollingu.
+
 **Dokud se aplikace ptá GitHubu, točí se prstýnek i v tlačítku obnovení** (#442) — týž, jaký na
 záložce znamená běžící review, takže „pracuje se“ má v okně jeden tvar. Platí to **i pro
 automatický tik**: je to stav aplikace, ne odezva na tlačítko. Po tu dobu tlačítko klik nebere
