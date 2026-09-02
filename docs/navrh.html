@@ -2608,6 +2608,48 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rv-viewed.on { color: var(--ok); }
 .rv-viewed.on .box { background: var(--ok); border-color: var(--ok); color: var(--panel); }
 
+/* ---- sekce 43: nálezy v okraji --------------------------------------------------
+   Karty nálezů zarovnané k řádkům (#503). Zákres přišel z decku „Směry pro PRism“
+   (stránka *Směry › B Nálezy jako marginálie*) a tady jsou jen ty čtyři třídy, které se
+   nedaly složit z existujících:
+
+   1. `.mgn` — sám okraj. **Ne `.side` bez odsazení**: `.side` je panel se hlavičkou,
+      segmenty a obsahem pod nimi, kdežto tohle je plocha, ve které se **pozicuje** —
+      karta stojí na výšce svého řádku, ne v pořadí pod sebou. `.side` proto zůstává
+      podkladem (hrana i barva) a `.mgn` k němu dodává jedinou věc: `position: relative`,
+      tedy soustavu, ve které karty leží.
+   2. `.mgn-list` — plocha karet. Odsazení 10 bodů z obou stran je tam kvůli spojnici:
+      v tom pásu leží, takže bez něj by čárka končila pod kartou.
+   3. `.mgn-card` — karta v okraji. Je to `.fcard` (tatáž kresba jako v panelu, protože je to
+      tentýž nález), navíc **spojnice**: `::before` je vodorovný pahýl k řádku, `.pushed::after`
+      svislé zalomení do `L` u karty, která se musela odstrčit. Posun se dává proměnnou
+      `--from`, ne pevnou výškou — v okně ho počítá `Policy.marginTops` ze změřených výšek karet
+      a v zákresu se dosadí ručně, aby bylo vidět, co ta funkce dělá.
+   4. `tr.mgn-crit`, `tr.mgn-find`, `tr.mgn-note` — 3bodový pruh na **pravé** hraně řádku s
+      kartou. **Ne `tr.flag`** (ten kreslí levou hranu u řádku s blokujícím nálezem, sekce 03):
+      levá hrana říká „tady je něco zlého“, pravá říká „tady vede spojnice do okraje“. Barvy
+      jsou tatáž stavová škála jako u `.fcard`, jen vyjádřená na hraně buňky. */
+.mgn { padding: 0; position: relative; }
+.mgn-list { position: relative; padding: 0 10px; }
+/* `overflow: visible` je tu **kvůli spojnici**, ne z nedbalosti: `.fcard` má `overflow: hidden`
+   (kvůli poloměru nad barevnou levou hranou), takže by se pseudoprvek na `left: -11px` odstřihl —
+   a v zákresu by po něm nezbylo nic. Vyzkoušeno: bez toho se čárka nenakreslí vůbec. */
+.mgn-card { position: relative; margin: 0; overflow: visible; }
+.mgn-card::before {
+  content: ""; position: absolute; left: -11px; top: 13px;
+  width: 11px; height: 1px; background: var(--ink-3);
+}
+.mgn-card.pushed::after {
+  content: ""; position: absolute; left: -11px; top: var(--from);
+  width: 1px; height: calc(13px - var(--from)); background: var(--ink-3);
+}
+.mgn-card .acts { flex-direction: row; gap: 5px; padding: 0 10px 8px; flex-wrap: wrap; }
+.mgn-card .acts .mini { padding: 3px 7px; font-size: 11px; white-space: nowrap; }
+.mgn-card.here { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+tr.mgn-crit td.code { border-right: 3px solid var(--crit); }
+tr.mgn-find td.code { border-right: 3px solid var(--find); }
+tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -7707,6 +7749,148 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           o hlavě PR, takže by se otisk se značkou nepotkal a každý zaškrtnutý soubor by hned
           hlásil <em>změněno od prošlého</em>. Zaškrtávátko se tam proto <b>nekreslí vůbec</b>,
           ne zašedle. Panel vpravo, lišta nad diffem i procházení nálezů zůstávají, jaké jsou.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================================
+       SEKCE 43 — NÁLEZY V OKRAJI (#503)
+       ==================================================================================== -->
+  <section class="section" id="s43">
+    <div class="section-head">
+      <div class="eyebrow">43 — Změněné soubory · nálezy v okraji</div>
+      <h2>Kód zůstane souvislý a nálezy stojí vedle svých řádků</h2>
+      <p class="muted">
+        <strong>Dneska</strong> visí blokující nález <b>pod</b> svým řádkem jako karta o sto bodech
+        (sekce 03, rozhodnutí #185) a ostatní jako značka na hraně řádku. Kód se tím čte přes díry
+        — u souboru s pěti nálezy je z hunku pět kusů — a tentýž nález stojí podruhé jako řádek
+        v panelu vpravo (#182), takže jedno tvrzení je na obrazovce dvakrát.
+      </p>
+      <p class="muted">
+        <strong>Návrh</strong> je <b>okraj</b>, jako mají komentáře v Google Docs nebo ve Figmě:
+        pravý sloupec (300 b, tatáž šířka jako panel) drží karty nálezů <b>zarovnané k výšce svého
+        řádku</b>, řádek s kartou má na <b>pravé</b> hraně 3bodový pruh závažnosti a mezi nimi vede
+        spojnice. Kód se nekouskuje, karty se při scrollu vezou s řádkem.
+      </p>
+      <p class="muted">
+        Když se dvě karty potkají na sousedních řádcích, druhá jde <b>níž</b> a spojnice se zalomí
+        do <code>L</code> — odstrčení počítá <code>Policy.marginTops</code> ze změřených výšek
+        karet, takže je to čistá funkce nad rámečky řádků, které aplikace hlásí už dneska
+        (<code>DiffGutterGeometry</code>, #252). Akce na kartě jsou <b>tytéž jako v bublině</b>:
+        <em>Převzít · Neplatí · Nepatří sem</em>.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Plocha diffu s okrajem — dva nálezy na sousedních řádcích a jeden hlouběji</div>
+      <div class="frame flat">
+        <div class="work two">
+          <div class="diffpane">
+            <div class="fhead">
+              <span>▾</span>
+              <span class="path"><span>src/Vault/</span><b>Encryptor.php</b></span>
+              <span class="pill crit">1 blokuje</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+31</span>
+              <span class="rv-num" style="color: var(--crit);">−12</span>
+              <span class="rv-viewed"><span class="box"></span>Prošlo</span>
+            </div>
+            <table class="diff">
+              <tr class="hunk"><td colspan="3">@@ -36,9 +36,12 @@ final class Encryptor</td></tr>
+              <tr><td class="ln">36</td><td class="sg"></td><td class="code"><span class="k">final class</span> <span class="fn">Encryptor</span></td></tr>
+              <tr><td class="ln">37</td><td class="sg"></td><td class="code">{</td></tr>
+              <tr class="add"><td class="ln">38</td><td class="sg">＋</td><td class="code">    <span class="k">private const int</span> MAX_TTL = <span class="st">3600</span>;</td></tr>
+              <tr><td class="ln">39</td><td class="sg"></td><td class="code"></td></tr>
+              <tr><td class="ln">40</td><td class="sg"></td><td class="code">    <span class="k">public function</span> <span class="fn">__construct</span>(</td></tr>
+              <tr class="add mgn-crit"><td class="ln">41</td><td class="sg">＋</td><td class="code">        <span class="k">private readonly int</span> $ttl = <mark class="w">self::MAX_TTL</mark>,</td></tr>
+              <tr class="add mgn-find"><td class="ln">42</td><td class="sg">＋</td><td class="code">        <span class="k">private readonly</span> \<span class="fn">DateTimeImmutable</span> $rotatedAt,</td></tr>
+              <tr><td class="ln">43</td><td class="sg"></td><td class="code">    ) {</td></tr>
+              <tr><td class="ln">44</td><td class="sg"></td><td class="code">    }</td></tr>
+              <tr class="hunk"><td colspan="3">@@ -55,7 +58,9 @@ final class Encryptor</td></tr>
+              <tr class="add"><td class="ln">58</td><td class="sg">＋</td><td class="code">    <span class="k">public function</span> <span class="fn">encrypt</span>(<span class="k">string</span> $plain, <span class="k">string</span> $key): <span class="k">string</span></td></tr>
+              <tr class="add"><td class="ln">59</td><td class="sg">＋</td><td class="code">    {</td></tr>
+              <tr class="del"><td class="ln">60</td><td class="sg">−</td><td class="code">        <span class="k">return</span> <span class="fn">sodium_crypto_secretbox</span>($plain, <mark class="w">$<span class="vr">this</span>-&gt;nonce</mark>, $key);</td></tr>
+              <tr class="add mgn-note"><td class="ln">60</td><td class="sg">＋</td><td class="code">        <span class="k">return</span> <span class="fn">sodium_crypto_secretbox</span>($plain, <mark class="w">$<span class="vr">this</span>-&gt;<span class="fn">nonce</span>()</mark>, $key);</td></tr>
+              <tr><td class="ln">61</td><td class="sg"></td><td class="code">    }</td></tr>
+              <tr><td class="ln">62</td><td class="sg"></td><td class="code"></td></tr>
+            </table>
+          </div>
+          <aside class="side mgn">
+            <div class="mgn-list">
+              <div class="fcard crit mgn-card here" style="margin-top: 121px;">
+                <div class="top"><span class="pill crit">blokuje</span><span class="cat">correctness · CONFIRMED · security-review</span></div>
+                <div class="sum">Horní mez TTL je pevná konstanta; u tenantů s vlastní politikou rotace ji nejde přebít.</div>
+                <div class="acts"><span class="mini pri">Převzít do review</span><span class="mini">Neplatí</span><span class="mini">Nepatří sem</span></div>
+              </div>
+              <div class="fcard warn mgn-card pushed" style="margin-top: 8px; --from: -110px;">
+                <div class="top"><span class="cat">robustness · CONFIRMED · security-review</span></div>
+                <div class="sum">Razítko rotace se nikde nečte — <code>$rotatedAt</code> projde konstruktorem a zapadne.</div>
+                <div class="acts"><span class="mini pri">Převzít do review</span><span class="mini">Neplatí</span><span class="mini">Nepatří sem</span></div>
+              </div>
+              <div class="fcard info mgn-card" style="margin-top: 84px;">
+                <div class="top"><span class="cat">style · PLAUSIBLE · php-review</span></div>
+                <div class="sum">Proč <code>nonce()</code> místo pole zrovna tady, a ne v konstruktoru?</div>
+                <div class="acts"><span class="mini pri">Převzít do review</span><span class="mini">Neplatí</span><span class="mini">Nepatří sem</span></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">139</span>
+        <span class="body">
+          <b>Karta vznikne jedině tam, kde má co k čemu zarovnat</b>
+          <span>Nález <b>bez řádku</b> (chybějící testy, poznámka k architektuře), nález na řádku,
+          který v diffu není, a nález ve <b>sbaleném</b> souboru v okraji nejsou — nemají se kde
+          postavit. Zůstávají tam, kde jsou dneska: bublina u hlavičky souboru s kapslí
+          <em>mimo diff</em> (sekce 03), respektive počet v hlavičce sbaleného souboru. Právě kvůli
+          nim se přepínač <em>Nálezy pod řádky</em> netýká všech bublin, jen těch zakotvených.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">140</span>
+        <span class="body">
+          <b>Pruh je na pravé hraně, ne na levé</b>
+          <span>Levou hranu řádku má už blokující nález (<code>tr.flag</code>, sekce 03) a znamená
+          „tady je něco zlého“. Pruh vpravo odpovídá na jinou otázku: <b>kudy vede spojnice do
+          okraje</b>. Dvě různá sdělení na jedné hraně by se pletla, a barva zůstává tatáž stavová
+          škála — <code>--crit</code>, <code>--find</code>, <code>--ink-3</code> u odmítnutého.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">141</span>
+        <span class="body">
+          <b>Odstrčení je funkce, ne kresba</b>
+          <span>Karta chce stát na horní hraně svého řádku; když by se trefila do té nad sebou,
+          jde pod ni o její výšku a mezeru. Odstrkuje se <b>jen dolů</b> — nahoru by minula řádek,
+          který je vidět, a čte se odshora. Rozhoduje <code>Policy.marginTops</code> nad
+          <b>změřenými</b> výškami karet: dopočítat je z délky textu nejde, protože se v 280 bodech
+          zalamuje.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">142</span>
+        <span class="body">
+          <b>Panel se pod okrajem složí, nezmizí</b>
+          <span>Dokud panel vpravo drží <b>seznam</b> nálezů (to ruší až druhý krok směru B), byly
+          by v tomhle tabu vpravo dvě třistabodové kolony o téže věci. Automatika proto panel
+          složí na proužek s počtem nálezů a značkou rozdělaného review — <code>⌘2</code> ho vrátí,
+          jako u složení sloupců v pohledu vedle sebe. Je to <b>mezistav</b>, ne cíl.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">143</span>
+        <span class="body">
+          <b>Karta mimo pás kolem výřezu se nekreslí</b>
+          <span>Bloky kódu mají živý <code>NSTextView</code> jen v pásu kolem výřezu (#469) a karty
+          se řídí <b>tímtéž pásem</b>: mimo něj se nekreslí vůbec. Polohu svého řádku si přitom
+          drží, takže se karta po návratu do pásu neobjeví někde na nule. Změřeno, že to není
+          ozdoba: bez pásu stálo projíždění 1,65 s CPU proti 1,47 s nad tímtéž diffem bez nálezů,
+          s pásem 1,56 s.</span>
         </span>
       </div>
     </div>

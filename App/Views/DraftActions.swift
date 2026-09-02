@@ -62,6 +62,24 @@ struct DraftActions {
             removeComment: removeComment
         )
     }
+
+    /// Totéž, ale kotvy se hledají **až když se na ně někdo zeptá** (#503).
+    ///
+    /// Existuje kvůli okraji s kartami: karta se draftu ptá jedině na **nález** (`canCompose`,
+    /// `target`, `isAdopted`, `adopt`), takže složit kotvy všech komentovatelných řádků souboru
+    /// (`Policy.commentAnchors(in:)`, průchod všemi hunky) by byla práce, kterou nikdo nepřečte —
+    /// a odehrála by se při každém průchodu tělem diffu.
+    ///
+    /// **Prázdnou mapu místo toho poslat nešlo**: kdo se na kotvu přece jen zeptá, dostal by
+    /// `LineAnchors()` a z komentáře k řádku by se potichu stala poznámka do těla review. Takhle
+    /// dostane správnou odpověď a zaplatí za ni jedině on — `Policy.commentAnchors(of:in:)` hledá
+    /// jeden řádek. Řádkům diffu se to nedává: tam se ptá **každý**, a to je právě ten kvadratický
+    /// případ, kvůli kterému mapa vznikla.
+    func bound(lazilyTo file: FileDiff) -> FileDraftActions {
+        var actions = bound(to: file, anchors: [:])
+        actions.anchors = { Policy.commentAnchors(of: $0, in: file) }
+        return actions
+    }
 }
 
 /// Akce draftu uvnitř jednoho souboru diffu.

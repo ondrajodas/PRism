@@ -21,7 +21,7 @@ někdo editoval artifact a ne repo. Zvedat to na hlídané pravidlo nemá cenu: 
 proběhne stejně při každém publikování, protože nástroj bez přečtení živé verze publikovat
 odmítne.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **41** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **42** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo):

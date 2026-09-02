@@ -31,6 +31,9 @@ struct FindingBubbleView: View {
     /// Překliknutí rozbalení. `nil` = rozbalení řídí někdo jiný (tabulka) nebo nikdo (náhledy),
     /// a pruh se pak nekreslí jako tlačítko.
     var toggle: (() -> Void)?
+    /// Kde bublina stojí (#503). Rozhoduje **jedině o odsazení od okolí**, ne o obsahu: nález je
+    /// v okraji tentýž nález jako pod řádkem, jen o kus vedle.
+    var placement: FindingBubblePlacement = .inline
 
     /// Kolik řádků kolem nálezu se ukáže, když si o to uživatel řekne. Samotný řádek bez
     /// okolí se čte špatně.
@@ -60,7 +63,12 @@ struct FindingBubbleView: View {
         // proužek, obrys a puntík, ne podbarvení celé bubliny. Do #185 měl blokující nález
         // červené pozadí — vedle přidaného řádku diffu, který je taky barevný, z toho byla
         // druhá barevná plocha na jednom místě.
-        .background(Palette.chrome, in: .rect(cornerRadius: 7))
+        // **Plocha je o krok světlejší než podklad, ne pevná barva** — tak to má návrh na obou
+        // místech: bublina pod řádkem leží na bílé ploše diffu, takže je `--panel-2`
+        // (`.inline-find`), kdežto karta v okraji leží na `--panel-2`, takže je `--panel`
+        // (`.fcard` v `.side`). Kdyby si vzala tutéž barvu jako okraj, splynula by s ním a zbyl
+        // by z ní obrys.
+        .background(placement == .margin ? Palette.surface : Palette.chrome, in: .rect(cornerRadius: 7))
         .overlay(alignment: .leading) { Rectangle().fill(accent).frame(width: 3) }
         .clipShape(.rect(cornerRadius: 7))
         .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(border, lineWidth: 1) }
@@ -69,10 +77,18 @@ struct FindingBubbleView: View {
                 .strokeBorder(.tint, lineWidth: isHighlighted ? 2 : 0)
         }
         .animation(.easeOut(duration: 0.2), value: isHighlighted)
-        .padding(.leading, indent)   // odsazení do sloupce s obsahem, vedle čísel řádků
-        .padding(.trailing, 16)
-        .padding(.vertical, 4)
+        // **Pod řádkem** se bublina odsazuje do sloupce s obsahem (vedle čísel řádků) a nechává
+        // si svislou mezeru od kódu. **V okraji** (#503) je odsazení z návrhu symetrické
+        // (`.mgn { padding: 0 10px }`) a svislé žádné: o polohu se stará zarovnání k řádku, takže
+        // by mezera kartu odsunula o čtyři body pod její řádek.
+        .padding(.leading, placement == .margin ? Self.marginInset : indent)
+        .padding(.trailing, placement == .margin ? Self.marginInset : 16)
+        .padding(.vertical, placement == .margin ? 0 : 4)
     }
+
+    /// Odsazení karty od hran okraje. Sedí na `DiffMarginView.inset`, protože spojnice končí
+    /// přesně na hraně karty — dvě čísla by znamenala, že čárka nedosáhne, nebo pod kartu podleze.
+    private static let marginInset = 10.0
 
     /// Kreslí se pruh se značkou?
     ///
@@ -652,4 +668,13 @@ struct FindingBubbleView: View {
     private var reviewers: String {
         Set(group.activeFindings.map(\.reviewer)).sorted().joined(separator: ", ")
     }
+}
+
+/// Kde bublina nálezu stojí (#503).
+enum FindingBubblePlacement: Hashable, Sendable {
+    /// Pod svým řádkem v diffu, odsazená do sloupce s obsahem — stav do #503 a od té doby jedině
+    /// za přepínačem `Nálezy pod řádky`.
+    case inline
+    /// Jako karta v okraji vpravo, zarovnaná k výšce svého řádku.
+    case margin
 }

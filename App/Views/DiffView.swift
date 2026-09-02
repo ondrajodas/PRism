@@ -72,9 +72,20 @@ struct DiffView: View {
     /// diff „co od minule přibylo“ (#284) nemluví o hlavě PR, takže by se jejich otisky se značkou
     /// nepotkaly. Zaškrtávátko, ✓ ve stromu ani počet v hlavičce se pak **nekreslí vůbec**.
     var read: DiffReadActions?
+    /// Kde stojí kurzor procházení nálezů (#187). Karta v okraji na tom místě dostane rámeček,
+    /// takže okraj a lišta ukazují **totéž** — bez toho by po `⌥↓` nebylo poznat, o které kartě
+    /// lišta mluví. Do #503 to potřeboval jen panel, protože v diffu se o kurzoru dozvěděl skok.
+    var current: FindingPlace?
 
+    /// Kreslit nálezy jako bubliny **pod** jejich řádkem? Od #503 je jejich domovem okraj vpravo,
+    /// takže je výchozí stav vypnuto a přepínač v liště je cesta, jak si obojí porovnat.
+    ///
+    /// **Vlastní klíč, ne přejmenovaná hodnota** (`showFindingBubbles` platil do #503): význam se
+    /// otočil — zapnuto dřív znamenalo „takhle to má být“, dneska „chci to po starém“. Se starým
+    /// klíčem by okraj neviděl nikdo, kdo si ten přepínač kdy vypnul a zapnul.
+    ///
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
-    @AppStorage("showFindingBubbles") private var showBubbles = true
+    @AppStorage("showInlineFindingBubbles") private var showBubbles = false
     /// Rozložený strom v levém sloupci (#197). Předvolba pohledu napříč PR, takže `UserDefaults`
     /// — a ne stav ve store, ze stejného důvodu jako u bublin.
     @AppStorage("diffTreeExpanded") private var isTreeExpanded = true
@@ -88,9 +99,9 @@ struct DiffView: View {
     /// píše i panel nálezů, a ten o hledání nic neví. Kdo cíl nastaví odjinud, dostane tedy
     /// `.bubble`, protože se hodnota po každém skoku vrací.
     @State private var jumpTarget = DiffJumpTarget.bubble
-    /// Pro který pohled už automatika sloupce složila (#188). Bez toho by se opakovala při
-    /// každém vzniku view a přebíjela ruční `⌘1`/`⌘2`.
-    @State private var appliedLayout: DiffLayout?
+    /// Které rozhodnutí o postranních sloupcích už automatika provedla (#188, od #503 i okraj).
+    /// Bez toho by se opakovalo při každém vzniku view a přebíjelo ruční `⌘1`/`⌘2`.
+    @State private var appliedColumns: DiffSideColumns?
     /// Šířka, kterou má diff k dispozici — z ní se počítá, kolik znaků se vejde na stranu (#188).
     @State private var contentWidth = 0.0
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
@@ -106,6 +117,9 @@ struct DiffView: View {
     /// Kde v obsahu leží který soubor (#469). Krabice mimo observable stav; plní ji sekce, čte ji
     /// ukotvená hlavička.
     @State private var fileExtents = DiffFileExtents()
+    /// Kde v obsahu leží řádky s kartou v okraji (#503). **Jediná sledovaná krabice v diffu** —
+    /// z téhle se kreslí, viz `DiffMarginAnchors`.
+    @State private var marginAnchors = DiffMarginAnchors()
 
     /// Souřadnicový prostor **obsahu** diffu. Rámečky řádků i poloha myši při tažení se čtou
     /// v něm, takže scrollování s nimi nehýbe.
@@ -113,6 +127,13 @@ struct DiffView: View {
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
+        // **Karty se skládají jednou za průchod**, ne jednou za soubor a ještě raz pro okraj:
+        // vybírají se hledáním řádku v hunkách, takže dvě složení znamenají dvojí průchod diffem
+        // — a hlavně dvě odpovědi na to, které karty v okraji jsou.
+        let cards = marginCards
+        // Rozhodnutí o postranních sloupcích se skládá **jednou** a slouží dvakrát: je to identita
+        // `task`u níž **i** hodnota, kterou uplatní. Dvě složení jedné odpovědi jsou dvě odpovědi.
+        let columns = Policy.diffSideColumns(layout: layout, hasMargin: !cards.isEmpty)
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
                 toolbar
@@ -135,7 +156,11 @@ struct DiffView: View {
                     // **Rozměr se měří, nevyjednává** (#361) — jinak `HStack` posílá líným
                     // seznamem diffu svoje průzkumné dotazy na pružnost a `LazyVStack` na každý
                     // z nich odpovídá zápisem do svého stavu.
-                    files.fillingSlot()
+                    files(cards: cards).fillingSlot()
+                    // Okraj s kartami nálezů (#503) — třetí kolona z návrhu
+                    // (`210px 1fr 300px`), a **jen když je co do ní postavit**: okraj bez karet
+                    // je ubraná šířka bez informace.
+                    margin(cards: cards)
                 }
             }
             .background(alignment: .topLeading) { treeShortcut }
@@ -153,16 +178,20 @@ struct DiffView: View {
             // `task(id:)`, ne `onChange`: pohled se drží napříč pull requesty (a výchozí je
             // z nastavení), takže s `onChange` by se na PR otevřeném rovnou ve splitu nesložilo
             // nic — změna nepřišla. `task(id:)` se spustí i při vzniku.
-            .task(id: layout) {
-                // **Jen jednou na pohled.** `task(id:)` se spustí i při novém vzniku view —
+            //
+            // **Identita je samo rozhodnutí, ne jeho vstupy** (#503): `task` má běžet tehdy, když
+            // z `Policy` vyjde něco jiného než minule — a to je od #503 i tím, že se objevil
+            // okraj s kartami.
+            .task(id: columns) {
+                // **Jen jednou na rozhodnutí.** `task(id:)` se spustí i při novém vzniku view —
                 // a to nastane pokaždé, když se přepne panel vpravo, protože se tím přestaví
                 // `HStack` v detailu PR. Bez téhle stráže se ručně otevřený strom hned zase
                 // složil a nešel otevřít vůbec.
-                guard appliedLayout != layout else { return }
-                appliedLayout = layout
+                guard appliedColumns != columns else { return }
+                appliedColumns = columns
                 withAnimation(.snappy(duration: 0.15)) {
-                    isTreeExpanded = layout != .split
-                    panelExpanded?.wrappedValue = layout != .split
+                    isTreeExpanded = columns.tree
+                    panelExpanded?.wrappedValue = columns.panel
                 }
             }
             // Kam cíl skočí, řeší `jumpAnchor`: **k vršku, ale s odstupem**. Na vrch samotný
@@ -272,7 +301,8 @@ struct DiffView: View {
             layout: layout,
             revealed: state.revealed,
             content: state.content,
-            findings: showBubbles ? findings : [],
+            findings: findings,
+            inlineFindings: showBubbles,
             threads: threads,
             comments: comments
         )
@@ -325,7 +355,7 @@ struct DiffView: View {
     /// nezmizela, jen se přestěhovala z rozvržení do jednoho rozhodnutí: blok kódu se nasazuje jen
     /// v pásu kolem výřezu (`DiffBlockSlot`, `Policy.mountBand(visible:)`). Bez toho by pevný
     /// stack diff položil — čísla jsou u té funkce.
-    private var files: some View {
+    private func files(cards: [DiffMarginCard]) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(diff.files, id: \.diagnosedID) { file in
@@ -336,7 +366,7 @@ struct DiffView: View {
                         // je to hlavní důvod, proč se sbaluje. Hlavička zůstává, takže
                         // sekce nezmizí a skok na soubor pořád funguje.
                         if !folding.isFolded(file) {
-                            rows(of: file)
+                            rows(of: file, cards: cards)
                         }
                     }
                     .id(file.id)
@@ -376,8 +406,68 @@ struct DiffView: View {
         // se stejnou identitou (`CLAUDE.md|174` má každý druhý PR) by dostal cizí výšku.
         .onChange(of: subject, initial: true) {
             fileExtents.reset(for: subject)
+            // Polohy karet patří **tomuhle** diffu ze stejného důvodu (#274): klíč `CLAUDE.md|174`
+            // má kdejaký PR, takže by karta v novém PR chvíli stála tam, kde byl řádek v tom
+            // předchozím. Bloky se po přepnutí ohlásí znovu, takže se nová poloha má kde vzít.
+            marginAnchors.reset()
             viewport.generation += 1
         }
+    }
+
+    /// Okraj vpravo s kartami nálezů (#503).
+    ///
+    /// **Bez karet se nekreslí vůbec**, ani jako prázdná kolona: tři sta bodů bez informace ubírá
+    /// diffu šířku, o které #182 spočítalo, že ji potřebuje. Prázdný okraj by navíc vypadal jako
+    /// druhý složený panel.
+    @ViewBuilder private func margin(cards: [DiffMarginCard]) -> some View {
+        if !cards.isEmpty {
+            DiffMarginView(
+                cards: cards,
+                anchors: marginAnchors,
+                viewport: viewport,
+                // **Změřená výška, ne pružný rámec** (#220): `viewportHeight` je plocha, kterou
+                // dostal diff, tedy přesně tolik, kolik má mít okraj vedle něj.
+                height: viewportHeight,
+                blockingCategories: blockingCategories,
+                findingActions: findingActions,
+                drafts: marginDrafts(for: cards),
+                highlighted: highlighted,
+                current: current
+            )
+        }
+    }
+
+    /// Karty do okraje. Rozhoduje `Policy` nad daty — `nil` vstup (zapnuté bubliny pod řádky) je
+    /// **prázdný okraj**, ne okraj s prázdnými kartami: obojí naráz by znamenalo tentýž nález na
+    /// obrazovce dvakrát, tedy zrovna to, co #503 ruší.
+    private var marginCards: [DiffMarginCard] {
+        guard !showBubbles, !findings.isEmpty else { return [] }
+        return Policy.marginCards(
+            of: findings,
+            in: diff.files.map { file in
+                let state = expansion.state(file)
+                return DiffMarginSource(
+                    file: file,
+                    // Tatáž úvaha jako v `DiffRow.rows`: bez obsahu není co odkrývat, takže by se
+                    // karta kotvila na řádek, který se nekreslí.
+                    revealed: state.content.isEmpty ? RevealedLines() : state.revealed,
+                    isFolded: folding.isFolded(file)
+                )
+            },
+            categories: blockingCategories
+        )
+    }
+
+    /// Akce draftu pro soubory, ve kterých karta je — **jednou za soubor, ne za kartu**, a
+    /// s **líně hledanými kotvami** (`bound(lazilyTo:)`): karta se draftu ptá jedině na nález,
+    /// takže složit kotvy všech komentovatelných řádků by byl průchod hunky, který nikdo nepřečte.
+    private func marginDrafts(for cards: [DiffMarginCard]) -> [String: FileDraftActions] {
+        var result: [String: FileDraftActions] = [:]
+        for path in Set(cards.map(\.path)) {
+            guard let file = diff.files.first(where: { $0.displayPath == path }) else { continue }
+            result[path] = draft.bound(lazilyTo: file)
+        }
+        return result
     }
 
     /// Hunk jako text k vybírání. Kód se skládá **stejnou funkcí jako pro schránku**
@@ -400,9 +490,13 @@ struct DiffView: View {
         )
     }
 
-    private func rows(of file: FileDiff) -> some View {
+    private func rows(of file: FileDiff, cards: [DiffMarginCard]) -> some View {
         let state = expansion.state(file)
         let language = Language(path: file.displayPath)
+        // Značky pruhů **jednou za soubor**, ne za řádek: je to překlad karet na čísla řádků
+        // a bloky si z něj vybírají podle svých rámečků — tentýž důvod jako u kotev pod tímhle
+        // řádkem. Prázdné, když se okraj nekreslí.
+        let marks = Policy.marginMarks(of: cards, in: file.displayPath)
         // Řádky se před vykreslením slijí do bloků (#157), aby v nich šlo vybírat text přes víc
         // řádků — v obou pohledech. Ve split se slévají **dvojice** (`blockedPairs`) do dvou
         // sloupců, které si odpovídají řádek po řádku; podrobnosti u `DiffPairBlockView`.
@@ -411,7 +505,11 @@ struct DiffView: View {
             layout: layout,
             revealed: state.revealed,
             content: state.content,
-            findings: showBubbles ? findings : [],
+            findings: findings,
+            // Zakotvený nález jde pod řádek jedině s přepnutým přepínačem (#503) — jinak stojí
+            // v okraji. Nález **bez řádku** se tím neřídí a visí u hlavičky souboru vždycky:
+            // v okraji se nemá k čemu zarovnat, takže by jinak zmizel.
+            inlineFindings: showBubbles,
             // Vlákna se přepínačem `Nálezy` **neschovávají**. Ten přepínač je o nálezech
             // naší aplikace; cizí komentář u kódu je důvod, proč se na PR člověk dívá,
             // a schovat ho spolu s nálezy by ho připravilo o to hlavní. Totéž platí o mých
@@ -485,7 +583,11 @@ struct DiffView: View {
                 // Cesta souboru, ne dotaz hledání (#152): dotaz si blok přečte z prostředí sám,
                 // takže se tělo diffu při psaní nepřekresluje. Odsud jde jen to, co se mění
                 // se **souborem**, tedy jednou za jeho vykreslení.
-                filePath: file.displayPath
+                filePath: file.displayPath,
+                marginMarks: marks,
+                // Krabice jedině tehdy, když se okraj kreslí: blok, který nemá kam hlásit, si
+                // hlášení odpustí celé (`noteMargin`).
+                marginAnchors: marks.isEmpty ? nil : marginAnchors
             )
         }
     }

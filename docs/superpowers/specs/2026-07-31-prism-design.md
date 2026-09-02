@@ -5302,3 +5302,37 @@ nepřišlo, patří ta dvě pole z `--json` pryč — a co se tím ušetří, je
 **Zapsaná mezera:** že se katalog **na tiku neobnovuje**, je vidět jedině tím, že člověk otevře
 nastavení po delší době a chvíli tam stojí `Obnovuje se…`. Do #533 to nikomu nevadí, protože seznam
 zatím nikdo jiný nečte; jak ho paleta dostane, patří k němu i rozhodnutí, kdo obnovu spouští.
+
+### Záznam rozhodnutí — nálezy v okraji (#503)
+
+Otevírá dvě zapsaná rozhodnutí. **#185** (blokující nález je rozbalený rovnou pod svým řádkem)
+platilo od doby, kdy nálezy neměly kde jinde stát než v toku diffu; jeho vlastní zápis přitom
+pojmenoval cenu — „u PR s deseti nálezy se mezi bublinami ztratí kód, kvůli kterému se okno
+otevřelo“ — a řešil ji sbalováním, tedy tím, že se místo karty ukáže pruh. Sbalený pruh ale blok
+kódu **pořád dělí** (to je v #185 taky zapsané, jako zamítnutá varianta „kreslit značku jako vrstvu
+nad blokem“), takže se cena nezmenšila, jen zúžila. **#182** (panel napravo) se nemění v tom, kde
+panel je — mění se, že přestává být **jediným** místem, kde nález stojí jako karta.
+
+Rozhodnutí je: **karta stojí vedle svého řádku**, jako komentáře v Google Docs nebo ve Figmě. Kód
+zůstane souvislý, karta se veze s řádkem a spojnice říká, ke kterému. Zákres je v sekci 43 návrhu
+a odsouhlasený 2. 9. 2026 v decku *Směry pro PRism* (stránka *Směry › B Nálezy jako marginálie*).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Karta vzniká z dat, poloha z geometrie** | Kreslit v okraji to, co hlásí bloky — tedy karty pro řádky, které jsou zrovna změřené | Blok má živý `NSTextView` jen v pásu kolem výřezu (#469), takže by karta zmizela pokaždé, když se od ní odscrolluje. Existenci karty proto rozhoduje `Policy.marginCards` nad diffem a hlášení dodává **jen** polohu; karta bez ohlášené polohy jde za předchozí, nezmizí |
+| **Nález bez řádku v okraji není** | Postavit ho na začátek okraje, nebo do vlastní sekce nad karty | Nemá se k čemu zarovnat, takže by v okraji stál na nule a při odscrollování odjel — a je to zrovna ten druh nálezu, kvůli kterého panel vznikl (#182: chybějící testy, poznámka k architektuře). Zůstává proto tam, kde je dneska: bublina u hlavičky souboru s kapslí `mimo diff`. Plyne z toho, že se přepínač `Nálezy pod řádky` **netýká všech bublin, jen zakotvených** — bez toho rozlišení by se vypnutím přepínače tiše ztratil |
+| **Bubliny nezanikly, jen se přestěhovaly za přepínač** | Odstranit `FindingBubbleView` z diffu hned | Bez obou stran se nedá změřit, jestli okraj projíždění nezhoršil — a přesně to zadání #503 chtělo. Přepínač už existoval (`Nálezy u řádků`), takže se změnil jen jeho význam a jméno: `Nálezy pod řádky`, protože vypnuté nálezy **nezmizí**, stojí vedle. Odstraní je #504, až bude s čím srovnávat |
+| **Klíč přepínače je nový** (`showInlineFindingBubbles`) | Nechat `showFindingBubbles` a jen obrátit výchozí hodnotu | Význam se otočil: zapnuto dřív znamenalo „takhle to má být“, dneska „chci to po starém“. Se starým klíčem by okraj neviděl nikdo, kdo si ten přepínač kdy vypnul a zapnul — uložená hodnota přebije výchozí |
+| **Odstrčení počítá `Policy` ze změřených výšek** | Dopočítat výšku karty z délky textu, nebo nechat odstrčení na `VStack`u | Text se v 280 bodech zalamuje, takže odhad z délky je stejně mimo jako odhad výšky bloku z počtu řádků (#152: 964 pt proti 2 900). `VStack` by zase karty naskládal pod sebe a zarovnání by zmizelo. Výšky se proto měří na kartě (#236) a `marginTops` je čistá funkce, kterou jde vyčerpat výčtem |
+| **Odstrkuje se jen dolů** | Rozstrkávat na obě strany a držet karty vycentrované na svých řádcích | Karta odstrčená nahoru mine řádek, který je vidět, a čte se odshora. Navíc by se odstrčení nedalo spočítat jedním průchodem — každá karta by mohla hýbat tou nad sebou |
+| **Karty se nasazují stejným pásem jako bloky** | Kreslit všechny a spolehnout se na ořez | Změřeno: se všemi kartami stálo projíždění 1,65 / 1,67 s CPU proti 1,47 s nad tímtéž diffem bez nálezů, s pásem 1,56 / 1,53 s. Pás je navíc **kvantovaný** (#469), takže se tělo okraje přeloží jednou za projetý výřez, ne při každém snímku |
+| **Posun s výřezem dělá vlastní modifikátor** | Přičíst `-viewport.top` k offsetům karet přímo v těle okraje | `top` se mění při **každém** otočení kolečka a tělo okraje skládá karty; uvnitř `ViewModifier.body(content:)` je `content` zástupný uzel, takže se přeloží jedině ten modifikátor. Je to tentýž vzorec jako `DiffPinnedHeader` (#469), jen o úroveň dál |
+| **Karta je `FindingBubbleView`, ne vlastní kresba** | Nakreslit v okraji vlastní kartu podle `.fcard` z návrhu | Nález je tentýž nález, jen o kus vedle: odznaky, shoda dvou reviewerů, stav z kontroly (#150), odmítnutí (#113) a řada `Převzít · Neplatí · Nepatří sem` (#283) se v okraji nesmí chovat jinak. Druhá kresba téhož by se rozešla, a rozejít se v tomhle znamená, že jedna obrazovka nabízí akci, kterou druhá nemá. Přidal se jeden parametr (`placement`), který rozhoduje **jen o odsazení** |
+| **Karta v okraji se nesbaluje** | Nechat pruh se šipkou, jak ho má bublina (#185) | Sbalování bylo odpověď na to, že karta rozráží kód — v okraji nestojí kódu v cestě, takže sbalit ji není proč. Bez pruhu se navíc hlavičky nálezů kreslí **uvnitř** karty, jako v tabu `Nálezy` |
+| **Pruh je na pravé hraně řádku** | Nechat jen levou hranu z #185 (`tr.flag`) a spojnici vést od ní | Levá hrana odpovídá na „je tu něco zlého“, pravá na „kudy vede spojnice do okraje“. Dvě různá sdělení na jedné hraně by se pletla — a spojnice zprava je to, co ze zarovnání dělá zarovnání |
+| **Panel se pod okrajem složí** | Nechat obojí rozložené; nebo panel v tomhle tabu nekreslit vůbec | Dvě třistabodové kolony o téže věci vpravo porušují slib z #182, že diff dostane šířku. Nekreslit panel je zase ztráta: v tom tabu bydlí composer review, labely, sekce `Větev` (#465) a `Zadání` na vlastním PR. Automatika ho proto **složí na proužek** a `⌘2` ho vrátí — tentýž mechanismus i tatáž vratnost jako u složení sloupců ve split pohledu (#188). Je to mezistav, který zaniká s #504 |
+
+**Zapsaná mezera:** karta u řádku, jehož blok se **nikdy** nekreslil, stojí za předchozí kartou,
+ne v hraně okraje jako značka — to dodělá #505 spolu s okrajem v úzkém okně. V praxi je to stav na
+jeden průchod (na první rozvržení se nasadí všechny bloky, #469), takže se na obrazovce projeví
+jedině tehdy, když se na nález skočí dřív, než se diff usadí.

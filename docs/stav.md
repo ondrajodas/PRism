@@ -6605,3 +6605,49 @@ Testů **4907** ve 479 suitách; nové jsou tři sady (`RepositoryCatalogPolicyT
 `RepositoryCatalogTests`, `GhRepositoryListTests`), rozšířené `ConfigurationTests`
 a `SettingsFieldsRenderTests` (osm scén, dvě šířky) a fixture `gh/repo-list.json` (skutečný výstup nad veřejným `cli`).
 Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).
+
+## #503 — nálezy stojí v okraji vedle svých řádků (M14)
+
+První a největší kus směru B z decku *Směry pro PRism*: pravý sloupec v tabu `Změněné soubory` se
+stal **okrajem**, jako mají komentáře v Google Docs nebo ve Figmě. Karta nálezu stojí na výšce
+svého řádku, řádek s kartou má na pravé hraně 3bodový pruh závažnosti a mezi nimi vede spojnice;
+když se dvě karty potkají na sousedních řádcích, druhá jde níž a spojnice se zalomí do `L`. Kód
+zůstal souvislý — bubliny pod řádky nezmizely, jen se přestěhovaly za přepínač `Nálezy pod řádky`,
+aby šlo obojí porovnat a změřit. Zákres je v [`docs/navrh.html`, sekci 43](navrh.html).
+
+**Karta vzniká z dat, poloha z geometrie.** O tom, které karty v okraji jsou, rozhoduje
+`Policy.marginCards` nad diffem (soubor rozbalený, řádek se doopravdy kreslí); kdyby o tom
+rozhodovalo hlášení z bloku, karta by zmizela pokaždé, když je její blok mimo nasazený pás (#469).
+Nález **bez řádku** proto v okraji není a zůstává tam, kde byl: jako bublina u hlavičky souboru —
+právě kvůli němu se přepínač netýká všech bublin, jen zakotvených, jinak by se tiše ztratil.
+
+**Panel vpravo se pod okrajem složí, nezmizí** (`Policy.diffSideColumns`). Dokud panel drží seznam
+nálezů, byly by vpravo dvě třistabodové kolony o téže věci; `⌘2` panel vrátí, jako u složení
+sloupců ve split pohledu (#188). Je to **mezistav** — seznam v panelu ruší #504.
+
+**Projíždění se změřilo, a poprvé to vyšlo špatně.** Se všemi kartami stálo gesto (150 × 40 pt,
+2000 řádků, 11 nálezů) **1,65 / 1,67 s** CPU proti **1,47 s** nad tímtéž diffem bez nálezů. Karty
+se proto nasazují **stejným pásem jako bloky** (`Policy.isBlockMounted`, #469) a číslo spadlo na
+**1,56 / 1,53 s**, tedy 6 % nad základem a asi 0,5 ms na snímek; bubliny stojí 1,46 / 1,47 s, tedy
+nic. Zbylých 6 % je cena za druhou vrstvu nad blokem a **zůstává** — okraj proti tomu ubral
+z dokumentu 1 200 bodů, protože bubliny do něj kód rozrážely.
+
+**Tři věci se u toho našly měřením, ne uvažováním.** (1) Nezměřený blok **nesmí hlásit ani
+prázdno**: prázdné hlášení sundá starou polohu, takže si blok při každém přestavění přepsal
+platnou polohu na nic — karty stály na sobě u horní hrany. (2) Rámečky řádků se musí posílat
+**i argumentem**, ne jen přes `@State`: zápis do `frames` je vidět až v dalším průchodu tělem,
+takže `noteRows()` hned za ním čte nulu, i když textové view zrovna ohlásilo devět. Plnilo se to
+pak teprve z `onGeometryChange` — u tažení rozsahu to nikdo nepoznal, u karty v okraji není na co
+čekat. (3) Sonda projíždění **vyhladověla hlavní aktor** (`RunLoop.current.run(until:)`), takže
+měřila scénu, do které se rámečky nikdy nedostaly; čeká se proto `await`em a na **odpojení bloků**,
+ne na odmlku (nerozvržená scéna dá 9,1–9,7 s místo 1,4–1,5 s).
+
+**Tvrdé podmínky se nemění.** Okraj nic neodesílá — `SingleWayOutTests` prochází beze změny —
+a nálezy jsou dál klíčované `headSha`; karta je jen jiné místo pro tentýž `FindingBubbleView`,
+takže odznaky, shoda reviewerů, stav z kontroly (#150), odmítnutí (#113) i řada
+`Převzít · Neplatí · Nepatří sem` (#283) zůstávají, jaké byly.
+
+Testů **4941** ve 483 suitách; nové jsou čtyři sady (`DiffMarginTests` nad `Policy`,
+`DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
+a `DiffMarginWheelProbe` jako ruční měření). Co se v nich hlídá a jak se měřilo, je
+v [`docs/testovani.md`](testovani.md).

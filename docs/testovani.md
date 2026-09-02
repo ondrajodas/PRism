@@ -7190,6 +7190,84 @@ směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` prochá
 tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
 zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
 
+### Co stojí okraj s kartami nálezů (#503)
+
+Okraj přidává nad blok kódu druhou vrstvu (karty, spojnice, pruhy na hraně řádků), takže otázka
+není „je to rychlé“, ale **jestli je to horší než dneska**. Měří to `DiffMarginWheelProbe` ručně
+(`TEST_RUNNER_PRISM_MEASURE=1`) skutečným gestem (`WheelGesture`, 150 × 40 pt), okno 1512 × 874,
+jeden soubor o 2000 řádcích a v něm 11 nálezů:
+
+| Varianta | 1. série | 2. série |
+|---|---|---|
+| bez nálezů (základ) | 1,47 s CPU | 1,47 s |
+| **okraj** | **1,56 s** | **1,53 s** |
+| bubliny pod řádky (stav do #503) | 1,46 s | 1,47 s |
+
+Okraj tedy stojí **6 %** nad diffem bez nálezů, tedy asi 0,5 ms na snímek; bubliny nestojí nic
+(jsou v toku obsahu). Bez pásu (kreslily se **všechny** karty) to bylo **1,65 / 1,67 s**, takže pás
+sundal dvě třetiny toho, co si okraj bral — a to je ten důvod, proč se karty nasazují jako bloky
+(`Policy.isBlockMounted`, #469).
+
+Čtyři věci, bez kterých z toho měření vyjde nesmysl, a všechny čtyři jsou zaplacené:
+
+- **Tři varianty, ne dvě.** Bez základu („bez nálezů“) se rozdíl nedá přiřadit: scéna s bublinami
+  má **jiný obsah** (bubliny rozrážejí bloky a přidávají do dokumentu 1 200 bodů), takže gesto
+  o stejném počtu kroků jde přes jinak drahý kód. První verze měřila jen okraj proti bublinám
+  a vyšlo z ní „+17 %“, což byl ze dvou třetin rozdíl scén.
+- **Scéna se nechá usadit `await`em, ne točením runloopu.** `RunLoop.current.run(until:)` hlavní
+  aktor **vyhladoví**, takže `DispatchQueue.main` z `updateNSView` nedorazí a rámečky řádků
+  přijdou teprve po skončení sondy — okraj se pak fotí i měří s **odhadem** výšky místo se
+  změřenou polohou. Naměřeno při stavbě sondy: karty stály u horní hrany, ačkoli bloky hlásily
+  správně, a v renderu to bylo vidět jako tři karty na sobě.
+- **Jev je odpojení bloků, ne odmlka.** Na první rozvržení se nasadí **všechny** bloky a hned nato
+  se odpojí (#469), takže gesto vypálené do rozdělané scény jde přes 34 `NSTextView` místo přes
+  pět: **9,1–9,7 s CPU proti 1,4–1,5 s**, tedy šestinásobek. A protože se to stane kterékoli
+  variantě, vyjde z toho pořadí podle toho, která se chytila nerozvrženě — první běhy sondy měly
+  „okraj“ i „bubliny“ střídavě na obou koncích. Sonda proto čeká, až počet nasazených bloků
+  spadne pod čtrnáct a přestane se měnit.
+- **Pás se musí jednou zapsat.** Zapisuje ho `onScrollGeometryChange`, a ten nad nehybným výřezem
+  nemusí přijít vůbec — pak zůstane `0...0` z konstruktoru a bloky se nemají podle čeho odpojit.
+  Sonda proto posuvníkem šťouchne o bod a vrátí ho, a **teprve pak** čeká na odpojení.
+
+**A okno musí být na obrazovce.** Nad oknem odloženým na −10 000 se gesto **nedoručí**: událost
+kolečka nese `mouseEventWindowUnderMousePointer`, takže posuvník zůstal na nule u **obou** variant
+— tedy tatáž hodnota pro funguje i nefunguje (#478), a vypadalo to jako hotové měření (0,03 s CPU
+u všeho). Sonda proto staví okno jako `DiffShapeProbe`: na (40, 40), `level = .floating`.
+
+**Naměřilo by to rozdíl, kdyby zhoršení bylo?** Ano, a je to vidět ze dvou stran: ablace pásu dala
++0,12 s (tedy měřidlo vrstvu nad blokem **vidí**) a nerozvržená scéna dala šestinásobek, což je
+tentýž řád, jaký u #469 oddělil líný seznam od pevného.
+
+### Kde blok hlásí svůj řádek (#503)
+
+`DiffMarginPlacementTests` — čtyři způsoby, jak se to dá rozbít potichu, a všechny čtyři měřené
+**dvěma různými cestami**, ne jednou dvakrát (#478): hodnota z okraje jde ze SwiftUI (pojmenovaný
+prostor obsahu), kontrolní hodnota z AppKitu (`DiffTextView.frame(ofLine:)` převedený do
+hostovaného view). Blok proto ve scéně **nezačíná na nule** — pod sebou má 137 bodů odsazení, takže
+zapomenutý počátek nemá kde zmizet.
+
+Regrese vložená z obou stran:
+
+| Vložená chyba | Co spadne |
+|---|---|
+| `top: frame.rect.minY` (zapomenutý počátek bloku) | *Ohlášená poloha sedí na horní hranu svého řádku* (o 137 pt) a *Poloha je v souřadnicích obsahu* |
+| `Policy.number(of:on: .left)` (stará strana místo nové) | *Značka na starém čísle řádku se nechytí* (poloha přišla) a poloha vyšla o 80 pt vedle |
+
+**Materiál je poskládaný tak, aby se stará a nová čísla rozcházela**: hunk začíná na řádku 50,
+odebírá pět řádků a přidává jeden, takže stará čísla `54`–`57` v nové verzi protějšek **nemají**.
+Na hunku od prvního řádku souboru by se ta druhá regrese prokázat nedala — tam obě čísla začínají
+stejně a záměna strany se schová.
+
+**A dvě tvrzení jsou o tom, že se něco nestalo**: odpojený blok (pás pryč) polohu karty
+**nesmaže** — jinak by nález zmizel z okraje pokaždé, když se od něj odscrolluje —, a vyprázdnění
+krabice při přepnutí PR ji **sundá**, protože klíč `CLAUDE.md|174` má kdejaký pull request (#274).
+
+**Že karta v okraji doopravdy stojí u svého řádku, tvrdí obrázek, ne číslo**: accessibility tree se
+v hostovaném okně nenaplní (změřeno u `DashboardCountdownRedrawTests`), takže se poloha SwiftUI
+karty z testu přečíst nedá. Sonda `drawTheMargin` proto kreslí **skutečný `DiffView`** s nálezy ve
+dvou stavech (okraj / bubliny za přepínačem) a ve třech posunech; přepínač si podává **vlastní
+doménou** `UserDefaults` (`ScratchDefaults`, #411), protože je to `@AppStorage`.
+
 ### Kolik stojí přerovnání okna (#472)
 
 Dvě sondy, obě ruční (`TEST_RUNNER_PRISM_MEASURE=1`), a **je podstatné, že jsou dvě**: měří dvě

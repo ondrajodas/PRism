@@ -102,6 +102,11 @@ enum DiffRow: Identifiable {
     ///   - content: obsah souboru na hlavě PR, po řádcích. Prázdný, dokud se nenačetl —
     ///     pak se ukazují jen rozbalovací řádky.
     ///   - findings: nálezy napříč diffem; k tomuhle souboru se z nich vyberou samy.
+    ///   - inlineFindings: zavěsit **zakotvený** nález jako bublinu pod jeho řádek? Od #503 je
+    ///     výchozí místo nálezu okraj vpravo, takže se bubliny pod řádky kreslí jedině tehdy, když
+    ///     si o ně někdo řekne (přepínač `Nálezy pod řádky` v liště). Nálezu **bez řádku** se to
+    ///     netýká: ten se v okraji nemá k čemu zarovnat, takže visí u hlavičky souboru vždycky —
+    ///     jinak by při vypnutém přepínači zmizel úplně.
     ///   - threads: vlákna konverzace napříč diffem; vybírají se stejně jako nálezy.
     ///   - comments: moje rozdělané komentáře napříč diffem; vybírají se stejně.
     static func rows(
@@ -110,6 +115,7 @@ enum DiffRow: Identifiable {
         revealed: RevealedLines = RevealedLines(),
         content: [String] = [],
         findings: [FindingGroup] = [],
+        inlineFindings: Bool = true,
         threads: [ReviewThread] = [],
         comments: [ReviewDraftComment] = []
     ) -> [DiffRow] {
@@ -120,6 +126,7 @@ enum DiffRow: Identifiable {
                 [.note(id(of: file, "note"), "Binární soubor — obsah se nezobrazuje.")],
                 of: file,
                 findings: findings,
+                inlineFindings: inlineFindings,
                 threads: threads,
                 comments: comments
             )
@@ -129,6 +136,7 @@ enum DiffRow: Identifiable {
                 [.note(id(of: file, "note"), "Beze změny obsahu.")],
                 of: file,
                 findings: findings,
+                inlineFindings: inlineFindings,
                 threads: threads,
                 comments: comments
             )
@@ -165,6 +173,7 @@ enum DiffRow: Identifiable {
             layout == .split ? paired(rows) : rows,
             of: file,
             findings: findings,
+            inlineFindings: inlineFindings,
             threads: threads,
             comments: comments
         )
@@ -187,13 +196,32 @@ enum DiffRow: Identifiable {
         guard let file = diff.file(at: path) else { return nil }
         guard let line else { return file.id }
 
-        for (index, hunk) in file.hunks.enumerated() {
-            if let position = hunk.lines.firstIndex(where: { $0.newNumber == line }) {
-                return id(of: file, "h\(index)l\(position)")
-            }
-        }
+        if let spot = position(of: line, in: file) { return id(of: file, "h\(spot.hunk)l\(spot.line)") }
         if revealed.ranges.contains(where: { $0.contains(line) }) { return id(of: file, "c\(line)") }
         return file.id
+    }
+
+    /// **Kreslí se ten řádek vůbec?** Odpověď na tutéž otázku, na kterou odpovídá `anchor` — jen
+    /// bez identity, protože okraj (#503) potřebuje vědět jedině to, jestli má karta k čemu
+    /// zarovnat.
+    ///
+    /// Je to schválně **jedno místo pro obojí** (`position(of:in:)` a rozsah odkrytého kontextu):
+    /// dvě odpovědi na „je ten řádek v diffu“ znamenají, že karta v okraji stojí u řádku, na který
+    /// skok nedojde — a naopak.
+    static func renders(line: Int, of file: FileDiff, revealed: RevealedLines) -> Bool {
+        if position(of: line, in: file) != nil { return true }
+        return revealed.ranges.contains { $0.contains(line) }
+    }
+
+    /// Kde v hunkách leží řádek s tímhle **novým** číslem. `nil` = v hunkách není (odebraný řádek,
+    /// nebo mimo diff).
+    private static func position(of line: Int, in file: FileDiff) -> (hunk: Int, line: Int)? {
+        for (index, hunk) in file.hunks.enumerated() {
+            if let position = hunk.lines.firstIndex(where: { $0.newNumber == line }) {
+                return (index, position)
+            }
+        }
+        return nil
     }
 
     /// Kam v diffu ukazuje můj rozdělaný komentář.
@@ -234,6 +262,7 @@ enum DiffRow: Identifiable {
         _ rows: [DiffRow],
         of file: FileDiff,
         findings: [FindingGroup],
+        inlineFindings: Bool = true,
         threads: [ReviewThread] = [],
         comments: [ReviewDraftComment] = []
     ) -> [DiffRow] {
@@ -270,7 +299,11 @@ enum DiffRow: Identifiable {
             // expander, poznámka) žádné nemá a bublina se k němu nevěší.
             let lines = row.sourceLines
             guard !lines.isEmpty else { continue }
-            if let number = row.newNumber, let group = byLine[number] {
+            // **Zakotvený nález jde do bubliny jedině na požádání** (#503): jeho domovem je od
+            // té doby okraj vpravo, kde stojí vedle řádku místo pod ním. Nezakotvený nález
+            // (`unanchored` výš) se tím neřídí — v okraji se nemá k čemu zarovnat, takže u
+            // hlavičky souboru zůstává vždycky.
+            if inlineFindings, let number = row.newNumber, let group = byLine[number] {
                 result.append(.finding(id(of: file, "f\(number)"), group, anchored: true))
             }
             // Vlákna jdou **pod** nálezy téhož řádku: nález je to, kvůli čemu je okno
@@ -323,7 +356,11 @@ enum DiffRow: Identifiable {
     /// Soubor se poznává i podle **staré** cesty, stejně jako u skoku z nálezu: reviewer
     /// může přejmenovaný soubor nahlásit pod tou, kterou měl dřív. Když se pak na jednom
     /// řádku potkají nálezy z obou cest, **slijí se** — zahodit jeden by byla tichá ztráta.
-    private static func groups(of file: FileDiff, from findings: [FindingGroup]) -> [FindingGroup] {
+    ///
+    /// **Od #503 to není jen pro bubliny**: tou samou funkcí si vybírá skupiny i okraj vpravo
+    /// (`Policy.marginCards`), aby se karta a bublina nemohly rozejít v tom, kolik nálezů na
+    /// jednom řádku je.
+    static func groups(of file: FileDiff, from findings: [FindingGroup]) -> [FindingGroup] {
         var byLine: [Int: FindingGroup] = [:]
         var withoutLine: [FindingGroup] = []
 

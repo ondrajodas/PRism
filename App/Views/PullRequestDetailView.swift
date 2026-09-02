@@ -1742,7 +1742,10 @@ struct PullRequestDetailView: View {
             panelExpanded: panelExpanded,
             stepFinding: { step($0) },
             search: searchActions,
-            read: read
+            read: read,
+            // Kurzor procházení (#187) — od #503 ho potřebuje i diff: karta v okraji na tom místě
+            // dostane rámeček. Do té doby stačil panelu, protože v diffu kurzor ukázal skok.
+            current: cursor.current
         )
     }
 
