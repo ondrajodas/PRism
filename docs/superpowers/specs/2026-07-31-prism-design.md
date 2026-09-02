@@ -5330,6 +5330,25 @@ PR“ — a to od #501 není.
 | **Prošlý se tlumí krytím na 35 %** | Druhý, světlejší odstín každé barvy | Šest hodnot ve škále místo tří; pás by se musel luštit. Krytí je jedna operace, kterou je vidět, že jde o **tutéž** plochu — jen odbytou práci |
 | **`Palette.okWash` je vyčíslený `color-mix`** | `Palette.ok.opacity(0.55)` | Skrz krytí prosvítá podklad, takže by se barva měnila podle toho, na čem segment leží. Tentýž důvod jako u `critLine` (#185) |
 
+**Pás je jedna kresba, ne řada prvků — a je to oprava po proklikání, ne první nápad.**
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Segment není view; pás kreslí `Canvas`** | `Button` na segment s nápovědou, dvěma `overlay`y a `contentShape`, umístěný vlastním `Layout`em (to byla první podoba) | U PR o 158 souborech je to 158 tlačítek a přes tisíc views v hlavičce, která se přerovnává při **každém** zápisu do sledované vlastnosti. Naměřeno nad `cli/cli#14320`: přerovnání okna **70 ms proti 14 ms bez pásu**, přepnutí tabu bez diffu **162 proti 57**. Po přepsání 19, resp. 63 ms. Je to tatáž věta jako u `DiffGutterGeometry` (#252): *nevyjednává se ani počet prvků* |
+| **Nápověda je jedna a řídí ji hover** | `.help()` na každém segmentu | Dva řetězce na segment (nápověda a jméno pro odečítání) znamenaly u 158 souborů **316 skládaných řetězců na každý průchod tělem** — a `Plural.czech` v nich formátuje čísla podle locale. S jednou kresbou je to jeden řetězec, a jen když kurzor stojí nad pásem |
+| **Trefení kurzoru i kliku počítá `PullRequestMapGeometry`** | Nechat hit-testing na SwiftUI (tj. ponechat tlačítka) | Bez views musí polohu přeložit výpočet — a je to zároveň to, co se dá otestovat **bez okna**. Mezera mezi segmenty padá segmentu **vlevo**: dvoubodová mezera je čtvrtina nejmenšího segmentu, takže „klik do mezery neudělá nic“ by u úzkých segmentů znamenalo, že se na soubor nedá kliknout |
+| **Mezera ustupuje dřív než minimum** (`Policy.mapSpacing`) | Nechat mezery a stlačit segmenty; nebo shlukovat soubory do skupin; nebo dát pásu strop na počet segmentů | Nad ~160 soubory si `3 b × N` a `2 b × (N − 1)` se šířkou pásu odporují (u 300 souborů 1 498 bodů proti osmi stům). Kdyby ustoupilo minimum, byly by segmenty po 0,7 bodu mezi dvoubodovými mezerami — **tečkovaná linka, ve které je víc pozadí než mapy**. Mezera je dekorace, šířka je informace. Shlukování ani strop se nedělají: znamenaly by, že soubor v pásu **není**, a to je horší než tenký segment — a nad 300 souborů se to nedostane, protože `gh pr diff` vrátí HTTP 406 a diff se nenačte vůbec |
+| **Zaplatilo se odečítáním, a je to směna, ne vylepšení** | Držet per-segment accessibility přes `accessibilityChildren` | Ten modifikátor staví ty views znovu, takže by cenu vrátil. Pás je proto **jeden** element (`Mapa souborů` + souhrn jako hodnota); k souborům vedou dál strom v `Změněných souborech` a paleta ⌘K, tedy cesty, které existovaly předtím |
+
+**Hypotéza, kterou měření vyvrátilo** (a je tady proto, aby se nezkoušela znovu): nabízelo se, že
+tělo detailu špiní **zápis z `DiffView`u do `DiffTracking`u**, který detail drží — tedy třída #421
+a #472. Neplatí to: `DiffTracking` **není `@Observable`** a `@State` v detailu drží jen referenci,
+takže zápis do `viewport.top` zneplatní jedině ty tři malé views, které si `top` čtou
+(`DiffPinnedHeader`, `DiffReadShortcut`, `PullRequestMapProbe`). Ablace to potvrdila: s vypnutým
+pásem je cena **plochá v počtu souborů**. Rozhodlo měření, ne úvaha — a aby ho sonda uměla vidět,
+musela dostat dvě osy (počet souborů a ostrý diff ze souboru), protože do té doby roztahovala
+fixture po **řádcích** a měla 9 až 14 souborů (#478).
+
 **Kde se od návrhu odchýlila implementace** (a je to tady, ne potichu):
 
 - **Úzká podoba bez popisku** v zákresu není. Vyšla ze sondy přes pásmo šířek; návrh kreslí pás
@@ -5337,9 +5356,12 @@ PR“ — a to od #501 není.
 - **Odsazení na stranu je 16 bodů, ne 22.** Návrh má u `.pr-head` i `.subtabs` 22, kdežto okno
   drží 16 (`controls`) a 12 (pruh záložek) — a rozhoduje **hlavička nad pásem**, aby pás začínal
   pod prvním znakem titulku. Změřeno na běžící aplikaci: obojí na x = 68.
-- **Výšku řádky drží pás (10 b), ne popisek (13 b).** Jinak by se hlavička při složení panelu
-  posunula o tři body. Popisek se přes rámec přelije o půldruhého bodu na stranu, což padne do
-  odsazení nad i pod ním.
+- **Výšku řádky drží pás (10 b), ne popisek (13 b) ani kreslicí plocha (18 b).** Jinak by se
+  hlavička při složení panelu posunula o tři body a čárka vlákna by ji zvedla o dalších osm.
+  Popisek i plocha z rámce přečnívají a nikde se to neořeže; `Canvas` musí být vyšší, protože si
+  kresbu ořezává do **svého** rámce.
+- **Mezera mezi segmenty se nad ~160 soubory nekreslí** (viz tabulka výš). Zákres tuhle velikost
+  nekreslí vůbec, takže je to rozhodnutí nad ním, ne proti němu.
 
 **Tvrdé podmínky se nemění ani o položku.** Pás jen čte — `GitHubGateway` zůstává bez zápisových
 metod, `SingleWayOutTests` prochází beze změny a `DiffViewport` se **nezměnil**: mapa ho čte.

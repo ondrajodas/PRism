@@ -101,8 +101,7 @@ struct PullRequestMapTests {
     }
 
     /// **A když se ani minima nevejdou, dělí se rovným dílem** — segment se nezahodí nikdy.
-    /// Padesát souborů v úzkém okně: 50 × 3 + 49 × 2 = 248 bodů, tedy víc, než co pás v tabu
-    /// o 300 bodech (třetina okna 700) unese.
+    /// Padesát souborů v úzkém okně: 50 × 3 = 150 bodů, tedy víc, než co pás o 140 bodech unese.
     @Test("Když se minima nevejdou, dělí se rovným dílem")
     func fallsBackToEqualSharesWhenEvenTheMinimumDoesNotFit() {
         let map = Policy.pullRequestMap(files: (1...50).map { file(("f\($0).php", $0 * 7)) })
@@ -111,6 +110,37 @@ struct PullRequestMapTests {
         #expect(widths.count == 50)
         #expect(Set(widths.map { ($0 * 1000).rounded() }).count == 1, "díly se nerozdělily rovně")
         #expect(widths.allSatisfy { $0 > 0 }, "segment se zahodil: \(widths)")
+    }
+
+    /// **Mezera ustupuje dřív než minimum** (#501, po měření na `cli/cli#14320`). Nad ~160
+    /// soubory si `3 b × N` a `2 b × (N − 1)` s šířkou pásu odporují — a kdyby ustoupilo minimum,
+    /// byla by z pásu tečkovaná linka: segmenty po 0,7 bodu mezi dvoubodovými mezerami.
+    @Test("Mezera padá na nulu, teprve pak minimum", arguments: [
+        // počet souborů, šířka pásu, čekaná mezera
+        (7, 800.0, 2.0),
+        (100, 800.0, 2.0),
+        // 160 souborů: 3 × 160 + 2 × 159 = 798, tedy ještě se vejde.
+        (160, 800.0, 2.0),
+        // 161: 3 × 161 + 2 × 160 = 803 — mezera padá.
+        (161, 800.0, 0.0),
+        (300, 800.0, 0.0),
+        // Jeden soubor mezeru nepotřebuje, tam se nic nerozhoduje.
+        (1, 10.0, 2.0),
+    ])
+    func theSpacingRetreatsBeforeTheMinimum(count: Int, total: Double, expected: Double) {
+        #expect(Policy.mapSpacing(count: count, in: total) == expected)
+    }
+
+    /// A ten pás pak **není děravý**: bez mezer jde souvislý barevný pruh od hrany k hraně, ne
+    /// řada čárek. Tvrdí se to součtem šířek — s mezerami by se do pásu nevešel.
+    @Test("Tři stovky souborů dají souvislý pruh")
+    func threeHundredFilesFillTheStripWithoutGaps() {
+        let map = Policy.pullRequestMap(files: (1...300).map { file(("f\($0).php", $0)) })
+        let widths = Policy.mapWidths(of: map.segments, in: 800)
+
+        #expect(widths.count == 300)
+        #expect(abs(widths.reduce(0, +) - 800) < 0.001, "součet \(widths.reduce(0, +)) místo 800")
+        #expect(Policy.mapSpacing(count: 300, in: 800) == 0)
     }
 
     /// Binárka nemění řádky, takže má váhu nula — a **dostane minimum, ne nulu**: soubor v PR je

@@ -6661,8 +6661,9 @@ a nápověda jako nativní tooltip místo kreslené bubliny.
 tam přišel — to je pravidlo o záznamu dneška (#299), ne překreslování. Jediné místo, kde `.diffstat`
 zůstal, je záznam měření stupňů pruhu v sekci 19: je to záznam z #316, ne dnešní obrazovka.
 
-Testů **4940** ve 481 suitách (proti 4907 ve 479 na `main`u po #532); nové jsou dvě sady — `PullRequestMapTests` (29 tvrzení nad čistou
-funkcí) a `PullRequestMapDrawingTests` (9 nad bitmapou) — a sonda `PullRequestMapRenderProbe`
+Testů **4947** ve 482 suitách (proti 4907 ve 479 na `main`u po #532); nové jsou tři sady — `PullRequestMapTests` (31 tvrzení nad čistou
+funkcí), `PullRequestMapDrawingTests` (9 nad bitmapou) a `PullRequestMapGeometryTests` (6 nad
+souřadnicemi a trefením kurzoru) — a sonda `PullRequestMapRenderProbe`
 (obrázek přes pásmo šířek 347/647/1047/1347 v obou režimech). Odešla `DiffstatBlocksTests` s funkcí,
 kterou hlídala, a dvě tvrzení o pilulce v `TabStripWidthTests` vyměnila **stráž nad zdrojákem**:
 `DiffCounts` ani `diffCounts` se do pruhu záložek nesmí vrátit. Katalog zkratek má **27 akcí**
@@ -6670,6 +6671,35 @@ kterou hlídala, a dvě tvrzení o pilulce v `TabStripWidthTests` vyměnila **st
 ověřena vložením regrese, čtyřmi: lineární váha, `raised` místo `okWash` u nového souboru, `opacity(1)`
 místo tlumení a obtah nasazený dovnitř. Co se v které sadě hlídá, je v
 [`docs/testovani.md`](testovani.md).
+
+**Pás se musel přepsat po proklikání, a je to nejcennější kus téhle práce.** Ondra ohlásil „zas to
+laguje při přepínání oken“ a zúžil to na přepínání tabů uvnitř PR. První podoba dělala ze segmentu
+`Button` s nápovědou, dvěma `overlay`y a `contentShape`: u PR o **158 souborech** je to 158 tlačítek
+a přes tisíc views v hlavičce — a hlavička se přerovnává při **každém** zápisu do sledované
+vlastnosti, tedy při každém tiku pollingu i při každém kliknutí. Naměřeno nad ostrými diffy
+(`cli/cli#14320`): **přerovnání okna 70 ms proti 14 ms bez pásu** a přepnutí tabu **bez diffu**
+162 ms proti 57. Od opravy je to 19, resp. 63 ms — tedy tři až šest milisekund nad stavem, kdy pás
+neexistuje. Segment přestal být view: kreslí ho `Canvas`, polohy počítá `PullRequestMapGeometry`
+a nápovědu i klik obstarává jedno gesto (#252 — *nevyjednává se ani počet prvků*).
+
+**Hypotéza, kterou to vyvrátilo, stojí za zapamatování**: nabízelo se, že tělo detailu špiní zápis
+z `DiffView`u do `DiffTracking`u, který detail drží. Ablace to vylučuje a kód to vysvětluje —
+`DiffTracking` není `@Observable` a `@State` drží jen referenci, takže zápis do `viewport`
+zneplatní jedině ty tři malé views, které si `top` čtou. Cena rostla **s počtem souborů**, ne
+s výřezem. Aby to sonda vůbec viděla, musela dostat dvě osy: počet souborů a **ostrý diff ze
+souboru** — do té doby roztahovala fixture po řádcích, takže měla 9 až 14 souborů a nad pásem se
+158 segmenty vydala totéž jako nad pilulkou `+X −Y` (#478).
+
+**Přepnutí na `Změněné soubory` je přitom drahé i bez pásu** (914 až 1 336 ms podle velikosti
+diffu) a **to už #501 nezpůsobilo** — ablace to ukazuje na tisícině. Je to pořád cena z #476, jen
+nad diffem o 5 700 řádcích ve 158 souborech místo nad 2 000 řádky.
+
+**Odchylka, která z toho vyšla nad zákres:** nad ~160 soubory si minimum tří bodů a šířka pásu
+odporují (`3 × 300 + 2 × 299` je 1 498 bodů proti osmi stům), takže **mezera ustupuje dřív než
+minimum** (`Policy.mapSpacing`) a z pásu zbude souvislý barevný pruh místo tečkované linky. Nad
+300 souborů se to nedostane: `gh pr diff` vrátí nad tím stropem HTTP 406 a diff se nenačte vůbec
+(změřeno na `home-assistant/core#181088`, 3 632 souborů). A zaplatilo se **odečítáním**: pás je
+jeden accessibility element, ne 158 prvků; k souborům vedou dál strom a paleta ⌘K.
 
 **Copilot našel jednu reálnou věc a byla to zapsaná díra v pravidle**: `threadSpots` vracela u
 souboru s nejvýš jedním řádkem podíl `0,5` **každému** vláknu, tedy bez kontroly `matches` — pás by

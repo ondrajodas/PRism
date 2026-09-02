@@ -7,10 +7,15 @@ import SwiftUI
 /// soubor má tón `ok`, prošlý je tlumený, vlákno je svislá čárka a soubor pod výřezem má obrys.
 /// **Nahrazuje pilulku `+248 −96` s pěti čtverečky** v pruhu záložek — říká totéž a víc.
 ///
-/// **Šířky počítá `Policy`, ne rozvržení** (#220, #501): `PullRequestMapStrip` je `Layout`, který
-/// se zeptá `Policy.mapWidths(of:in:)` a segmenty umístí. `HStack` umí jen rovným dílem a poměr
-/// s minimem by se `frame`y skládat nedal — je to tentýž důvod, proč existuje
-/// `ProportionalColumns`.
+/// **Pás je jedna kresba, ne řada tlačítek — a je to výkonová podmínka** (#252, #501). První
+/// podoba dělala ze segmentu `Button` s nápovědou, dvěma `overlay`y a `contentShape`; u PR
+/// o 158 souborech to je 158 tlačítek a přes tisíc views v hlavičce, které se **při každém
+/// přerovnání okna znovu umisťují**. Naměřeno na ostrých datech (`cli/cli#14320`, 158 souborů):
+/// přerovnání okna stálo **70 ms** proti 14 ms nad týmž oknem s ablovaným pásem a přepnutí tabu
+/// **bez diffu** 162 ms proti 57 — tedy cena, která roste **s počtem souborů**, ne s výřezem.
+/// Po přepsání je to 19, resp. 63 ms.
+/// Od té doby kreslí pás jediný `Canvas`, polohu segmentů počítá `PullRequestMapGeometry`
+/// a nápovědu i klik obstarává **jedno** gesto.
 struct PullRequestMapView: View {
     let map: PullRequestMap
     /// Soubory toho diffu, který je v tabu vidět. Sonda si podle nich hledá rozsahy v obsahu
@@ -30,24 +35,28 @@ struct PullRequestMapView: View {
     static let horizontalPadding = 16.0
     /// Mezera mezi pásem a popiskem (`gap: 12px`).
     static let summaryGap = 12.0
+    /// O kolik čárka vlákna přečnívá pás na každou stranu (`top: -4px; bottom: -4px`).
+    static let tickOverhang = 4.0
+    /// Plocha, na kterou se kreslí. **Vyšší než pás**, protože čárka vlákna i obrys přečnívají —
+    /// `Canvas` si kresbu ořezává do svého rámce, takže by se jinak zarovnaly s hranou pásu.
+    /// Řádka zůstává vysoká `stripHeight` a plocha z ní přečnívá, takže se výška hlavičky nemění.
+    static var canvasHeight: Double { stripHeight + 2 * tickOverhang }
 
     /// Šířka celé řádky. Měří se, protože **`availableWidth` sem nedosáhne**: nasazuje se až na
     /// hranici obsahu tabu (`PullRequestDetailView`), a pás stojí nad pruhem záložek. Rozhoduje
     /// o jediné věci — jestli se vejde popisek.
     @State private var rowWidth: Double?
+    /// Šířka samotného pásu. Kresba si ji bere z `Canvas`u (tam je vždycky přesná), tahle kopie
+    /// je pro **nápovědu a klik**: gesto hlásí polohu, ne velikost, takže se poloha musí umět
+    /// přeložit na segment i mimo kreslicí uzávěr.
+    @State private var stripWidth = 0.0
+    /// Segment pod kurzorem. Zapisuje se **jen při změně** (`Policy.hoverChange`, #358) — jinak by
+    /// každý hover update překreslil pás.
+    @State private var hovered: Int?
 
     var body: some View {
         HStack(spacing: Self.summaryGap) {
             strip
-                // Jediné vyjednávání v celém pásu, a je na jeho hranici: `Layout` uvnitř dostane
-                // konkrétní šířku a od ní už se všechno **počítá** (#220). Bez tohohle by pás
-                // v `HStack`u vyšel jako nepružný (na neurčitý dotaz odpovídá minimem), takže by
-                // se stáhl do součtu minim a vpravo by zbyl prázdný pruh.
-                .frame(maxWidth: .infinity)
-                .frame(height: Self.stripHeight)
-                // V úzké podobě nese souhrn nápověda — jinak by se `3 prošlé` nedalo přečíst
-                // nikde jinde než v hlavičce stromu. Tentýž vzorec jako u `IncrementalDiffBar`.
-                .modifier(SummaryTooltip(text: showsSummary ? nil : map.summary))
             if showsSummary {
                 Text(verbatim: map.summary)
                     .font(.system(size: 10.5, design: .monospaced))
@@ -55,10 +64,9 @@ struct PullRequestMapView: View {
                     .fixedSize()
             }
         }
-        // **Výšku řádky drží pás, ne popisek** — jinak by se hlavička při složení panelu posunula
-        // o tři body, protože řádka mono textu je 13 vysoká a pás 10. Popisek se přes rámec
-        // přelije o půldruhého bodu na stranu, což padne do odsazení nad i pod ním (8 a 10)
-        // a nikde se neořeže. Změřeno: 20 bodů v obou podobách proti 23 a 20 předtím.
+        // **Výšku řádky drží pás, ne popisek ani kreslicí plocha** — jinak by se hlavička při
+        // složení panelu posunula o tři body (řádka mono textu je 13 vysoká, pás 10) a čárka
+        // vlákna by ji zvedla o dalších osm. Obojí z rámce přečnívá a nikde se to neořeže.
         .frame(height: Self.stripHeight)
         .padding(.horizontal, Self.horizontalPadding)
         // Nahoře nic: hlavička nad pásem má vlastní `padding(.bottom, 8)`, tedy přesně tu mezeru,
@@ -69,9 +77,126 @@ struct PullRequestMapView: View {
         .onGeometryChange(for: Double.self) { $0.size.width } action: { rowWidth = $0 }
         .background(alignment: .topLeading) { probe }
         .background(alignment: .topLeading) { shortcuts }
-        .accessibilityElement(children: .contain)
+        .accessibilityElement()
         .accessibilityLabel("Mapa souborů")
         .accessibilityValue(map.summary)
+    }
+
+    /// Pás jako **jedna kresba**. `Canvas` dostane šířku, kterou mu dá řádka, a od ní se všechno
+    /// **počítá** (#220) — geometrie je `PullRequestMapGeometry`, tedy tentýž zdroj, ze kterého se
+    /// trefuje kurzor i klik.
+    private var strip: some View {
+        // **Cesta pod výřezem se čte tady, ne v kreslicím uzávěru**, a je to podmínka, ne styl:
+        // uzávěr `Canvas`u se vyhodnocuje při kreslení, tedy **mimo** sledování, které si SwiftUI
+        // zapisuje při průchodu tělem. Kdyby si `cursor.path` přečetl on, závislost by se
+        // nezaregistrovala a obrys by se po přejezdu na jiný soubor **nepřekreslil** — dokud by
+        // tutéž hodnotu nečetlo něco jiného v témže těle (dnes `shortcuts`, tedy náhodou).
+        let current = tracking.cursor.path
+        return Canvas(opaque: false, rendersAsynchronously: false) { context, size in
+            draw(in: &context, size: size, current: current)
+        }
+        // **Jediné vyjednávání v celém pásu, a je na jeho konci** (#220): pod tímhle rámcem už
+        // není nic, čemu by se nabídka předávala — `Canvas` je list a od jeho šířky se všechno
+        // dál **počítá**. Bez toho by pás v `HStack`u vyšel jako plocha o nulové šířce, protože
+        // `Canvas` si o šířku sám neříká.
+        .frame(maxWidth: .infinity)
+        .frame(height: Self.canvasHeight)
+        // Šířka **pro gesta**: kresba ji má z uzávěru, ale nápověda a klik hlásí jen polohu.
+        // Čte se do stavu, ne v každém snímku — při nezměněné hodnotě se akce nespustí (#361).
+        .onGeometryChange(for: Double.self) { $0.size.width } action: { stripWidth = $0 }
+        // Nápověda je **jedna**, ne na segment: `Canvas` je jediné view, takže se text mění podle
+        // toho, co je pod kurzorem. Nad prázdným místem nese souhrn — v úzké podobě je to jediné
+        // místo, kde se `3 prošlé` dá přečíst.
+        .help(hoveredTooltip)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            let next: Int? = if case .active(let point) = phase { geometry.index(at: point.x) } else { nil }
+            if case .write(let value) = Policy.hoverChange(from: hovered, to: next) { hovered = value }
+        }
+        .gesture(SpatialTapGesture(coordinateSpace: .local).onEnded { value in
+            guard let index = geometry.index(at: value.location.x),
+                  map.segments.indices.contains(index)
+            else { return }
+            jump(map.segments[index])
+        })
+    }
+
+    /// Geometrie pásu ze **změřené** šířky. Kresba používá tu z `Canvas`u (je vždycky přesná);
+    /// tahle je pro gesta, která hlásí polohu, ne velikost.
+    private var geometry: PullRequestMapGeometry {
+        PullRequestMapGeometry(segments: map.segments, width: stripWidth, spacing: Self.stripSpacing)
+    }
+
+    private var hoveredTooltip: String {
+        guard let hovered, map.segments.indices.contains(hovered) else { return map.summary }
+        return Policy.mapTooltip(of: map.segments[hovered])
+    }
+
+    /// Jeden průchod kresbou: plochy segmentů, čárky vláken a obrys u toho pod výřezem.
+    private func draw(in context: inout GraphicsContext, size: CGSize, current: String?) {
+        let geometry = PullRequestMapGeometry(
+            segments: map.segments,
+            width: size.width,
+            spacing: Self.stripSpacing
+        )
+        let top = (size.height - Self.stripHeight) / 2
+        for index in map.segments.indices {
+            guard let span = geometry.span(of: index) else { continue }
+            let segment = map.segments[index]
+            let rect = CGRect(
+                x: span.lowerBound,
+                y: top,
+                width: span.upperBound - span.lowerBound,
+                height: Self.stripHeight
+            )
+            // **Prošlý se tlumí krytím, ne jinou barvou** — je to tatáž plocha, jen odbytá práce;
+            // druhý odstín na každou barvu by ze škály udělal šest hodnot místo tří.
+            // `changed` tlumený **není** (#500): je to práce, která se vrátila.
+            let fill = fill(of: segment).opacity(segment.readState.isRead ? 0.35 : 1)
+            context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(fill))
+            for fraction in segment.threads { drawTick(in: &context, at: fraction, in: rect) }
+            if current == segment.path { drawOutline(in: &context, around: rect) }
+        }
+    }
+
+    /// Čárka vlákna (`.seg .tick`) — akcentem, 2 body široká a o čtyři body vyšší na každou stranu
+    /// než pás, jak ji má návrh. Přesah je vidět: uvnitř desetibodového segmentu by se čárka
+    /// v plné barvě ztratila.
+    ///
+    /// **Vystředěná na svém podílu a ořezaná do segmentu**: čárka na `1,0` by jinak visela půlkou
+    /// v mezeře vedle a čtla by se jako patřící sousedovi.
+    private func drawTick(in context: inout GraphicsContext, at fraction: Double, in rect: CGRect) {
+        let width = 2.0
+        let center = rect.minX + fraction * rect.width
+        let x = min(max(center - width / 2, rect.minX), max(rect.maxX - width, rect.minX))
+        let tick = CGRect(
+            x: x,
+            y: rect.minY - Self.tickOverhang,
+            width: width,
+            height: rect.height + 2 * Self.tickOverhang
+        )
+        context.fill(Path(roundedRect: tick, cornerRadius: 1), with: .color(Palette.accent))
+    }
+
+    /// Obrys souboru pod výřezem (`outline: 2px solid accent; outline-offset: 2px`).
+    ///
+    /// Obtah leží **na** cestě, takže se cesta rozšíří o tři body — obrys pak sedí 2 až 4 body od
+    /// hrany segmentu, jak to má `outline-offset`. Poloměr je poloměr segmentu plus odstup.
+    private func drawOutline(in context: inout GraphicsContext, around rect: CGRect) {
+        context.stroke(
+            Path(roundedRect: rect.insetBy(dx: -3, dy: -3), cornerRadius: 4),
+            with: .color(Palette.accent),
+            lineWidth: 2
+        )
+    }
+
+    /// Barva segmentu. **Nejhorší nález přebíjí druh souboru**: nový soubor s blokujícím nálezem
+    /// je červený, ne zelený — pás se čte podle závažnosti.
+    private func fill(of segment: PullRequestMapSegment) -> Color {
+        switch segment.marker {
+        case .blocking: Palette.crit
+        case .findings: Palette.find
+        case nil: segment.isNew ? Palette.okWash : Palette.raised
+        }
     }
 
     /// Vejde se vedle pásu popisek? Rozhoduje `Policy`; šířku popisku měří `TextWidth` **tím
@@ -87,80 +212,6 @@ struct PullRequestMapView: View {
 
     static func summaryWidth(of summary: String) -> Double {
         TextWidth.of(summary, font: .monospacedSystemFont(ofSize: 10.5, weight: .regular))
-    }
-
-    /// Nápověda, která tam **buď je, nebo není** — `help("")` by na `NSView` nechalo prázdný
-    /// tooltip, tedy obdélník bez textu. Tentýž typ má i pruh záložek.
-    private struct SummaryTooltip: ViewModifier {
-        let text: String?
-
-        @ViewBuilder func body(content: Content) -> some View {
-            if let text { content.help(text) } else { content }
-        }
-    }
-
-    private var strip: some View {
-        PullRequestMapStrip(segments: map.segments, spacing: Self.stripSpacing) {
-            ForEach(map.segments) { segment in
-                Button { jump(segment) } label: { shape(of: segment) }
-                    .buttonStyle(.plain)
-                    .help(Policy.mapTooltip(of: segment))
-                    .accessibilityLabel(Policy.mapTooltip(of: segment))
-            }
-        }
-    }
-
-    /// Jeden segment: plocha v barvě nejhoršího nálezu, čárky vláken a u toho pod výřezem obrys.
-    private func shape(of segment: PullRequestMapSegment) -> some View {
-        RoundedRectangle(cornerRadius: 2)
-            .fill(fill(of: segment))
-            // **Prošlý se tlumí krytím, ne jinou barvou** — je to tatáž plocha, jen odbytá práce;
-            // druhý odstín na každou barvu by ze škály udělal šest hodnot místo tří.
-            // `changed` tlumený **není** (#500): je to práce, která se vrátila.
-            .opacity(segment.readState.isRead ? 0.35 : 1)
-            .overlay { ticks(of: segment) }
-            .overlay { outline(of: segment) }
-            .contentShape(.rect)
-    }
-
-    /// Barva segmentu. **Nejhorší nález přebíjí druh souboru**: nový soubor s blokujícím nálezem
-    /// je červený, ne zelený — pás se čte podle závažnosti.
-    private func fill(of segment: PullRequestMapSegment) -> Color {
-        switch segment.marker {
-        case .blocking: Palette.crit
-        case .findings: Palette.find
-        case nil: segment.isNew ? Palette.okWash : Palette.raised
-        }
-    }
-
-    /// Čárky vláken (`.seg .tick`) — akcentem, 2 body široké a **o 4 body vyšší na každou stranu**
-    /// než pás, jak je má návrh. Přesah je vidět: uvnitř desetibodového segmentu by se čárka
-    /// v plné barvě ztratila.
-    @ViewBuilder private func ticks(of segment: PullRequestMapSegment) -> some View {
-        if !segment.threads.isEmpty {
-            PullRequestMapTicks(fractions: segment.threads) {
-                // `id: \.offset`, a je to ta správná identita: čárky jsou nerozlišitelné a dvě
-                // vlákna na témž místě mají týž podíl, takže pořadí je jediné, co je odliší.
-                // Payload se přes `offset` nekopíruje (#361) a pás navíc není líný seznam.
-                ForEach(Array(segment.threads.enumerated()), id: \.offset) { _, _ in
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(Palette.accent)
-                        .frame(width: 2, height: Self.stripHeight + 8)
-                }
-            }
-        }
-    }
-
-    /// Obrys souboru pod výřezem (`outline: 2px solid accent; outline-offset: 2px`).
-    ///
-    /// `stroke` leží **na** cestě, takže se cesta rozšíří o 3 body — obtah pak sedí 2 až 4 body
-    /// od hrany segmentu, jak to má `outline-offset`. Poloměr je poloměr segmentu plus odstup.
-    @ViewBuilder private func outline(of segment: PullRequestMapSegment) -> some View {
-        if tracking.cursor.path == segment.path {
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(Palette.accent, lineWidth: 2)
-                .padding(-3)
-        }
     }
 
     /// `⌥←`/`⌥→` — předchozí a další soubor od toho, který je pod výřezem.
@@ -203,84 +254,12 @@ struct PullRequestMapView: View {
     }
 }
 
-/// Pás segmentů: šířky ze `Policy`, umístění odsud (#501).
-///
-/// Vlastní `Layout` ze stejného důvodu jako `ProportionalColumns`: `HStack` umí rozdělit místo
-/// jen rovným dílem a `frame(width:)` na každém segmentu by potřeboval znát celkovou šířku, tedy
-/// druhé měření vedle toho, které rozvržení dělá samo.
-struct PullRequestMapStrip: Layout {
-    let segments: [PullRequestMapSegment]
-    let spacing: Double
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let height = proposal.height ?? PullRequestMapView.stripHeight
-        // **Bez konečné šířky se podíl nemá z čeho počítat.** Pás nemá přirozenou šířku — roste
-        // do té, kterou dostane —, takže se na neurčitý dotaz odpoví **součtem minim**: je to
-        // nejmenší šířka, ve které pás ještě říká pravdu o počtu souborů.
-        guard let total = proposal.width, total.isFinite, total > 0 else {
-            return CGSize(width: minimumWidth(count: subviews.count), height: height)
-        }
-        return CGSize(width: total, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        for (subview, width) in zip(subviews, Policy.mapWidths(of: segments, in: bounds.width, spacing: spacing)) {
-            subview.place(
-                at: CGPoint(x: x, y: bounds.minY),
-                proposal: ProposedViewSize(width: width, height: bounds.height)
-            )
-            x += width + spacing
-        }
-    }
-
-    private func minimumWidth(count: Int) -> Double {
-        guard count > 0 else { return 0 }
-        // Minimum se bere z `Policy`, ne z vlastní konstanty: dvě pravdy o tom, kdy je pás ještě
-        // pás, by znamenaly, že `Layout` odpovídá na neurčitý dotaz jinak, než jak se pak dělí.
-        return Policy.mapSegmentMinimum * Double(count) + spacing * Double(count - 1)
-    }
-}
-
-/// Čárky vláken na podílu své polohy v segmentu (#501).
-///
-/// Vlastní `Layout`, protože podíl se dá umístit jedině z **šířky, kterou segment doopravdy má** —
-/// a tu zná až rozvržení. `offset(x:)` by potřeboval tu šířku změřit podruhé, tedy druhou pravdu
-/// o jednom čísle (#236).
-struct PullRequestMapTicks: Layout {
-    /// Podíl `0…1` na šířce segmentu, jeden na čárku. Pořadí sedí na pořadí dětí.
-    let fractions: [Double]
-
-    /// Čárky nic nenafukují — vrší se **nad** segment, takže si berou jeho rozměr.
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        proposal.replacingUnspecifiedDimensions()
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (index, subview) in subviews.enumerated() {
-            guard index < fractions.count else { break }
-            let size = subview.sizeThatFits(.unspecified)
-            // Vystředěná na svém podílu a **ořezaná do segmentu**: čárka na `1,0` by jinak visela
-            // půlkou v mezeře vedle a čtla by se jako patřící sousedovi. Ořez zároveň drží
-            // i podíl mimo `0…1`, kdyby ho někdy `Policy` vydala.
-            let center = bounds.minX + fractions[index] * bounds.width
-            subview.place(
-                at: CGPoint(
-                    x: min(max(center - size.width / 2, bounds.minX), bounds.maxX - size.width),
-                    y: bounds.midY - size.height / 2
-                ),
-                proposal: ProposedViewSize(size)
-            )
-        }
-    }
-}
-
 /// Kdo je pod výřezem — neviditelné view, které to zapisuje do `DiffFileCursor` (#501).
 ///
 /// **Vlastní view, ne kus těla mapy, a je to výkonová podmínka** — tatáž jako u `DiffPinnedHeader`
 /// a `DiffReadShortcut` (#469, #500): čte `DiffViewport.top`, tedy hodnotu, která se mění při
-/// **každém** otočení kolečka. Kdyby ji čtelo tělo pásu, přeložilo by se při každém snímku i se
-/// všemi segmenty, jejich nápovědami a čárkami.
+/// **každém** otočení kolečka. Kdyby ji čtelo tělo pásu, překreslila by se při každém snímku celá
+/// kresba i s nápovědou a zkratkami.
 ///
 /// Odpověď je **kvantovaná**: `Policy.mapCurrentSegment` vydá tentýž soubor po celou dobu, co je
 /// pod hranou, takže se do krabice zapíše jen na hranici souborů — a jedině tehdy se překreslí

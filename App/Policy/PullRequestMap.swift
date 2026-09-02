@@ -241,6 +241,26 @@ extension Policy {
         return available - label - gap >= minimumStrip
     }
 
+    /// Mezera mezi segmenty v bodech. **Ustupuje dřív než minimum** (#501).
+    ///
+    /// Nad ~160 soubory si minimum tří bodů a šířka pásu **odporují**: `3 × 300 + 2 × 299` je
+    /// 1 498 bodů, kdežto pás má v okně kolem osmi set. Kdyby ustoupilo minimum a mezery zůstaly,
+    /// vyšly by segmenty na 0,7 bodu mezi dvoubodovými mezerami — tedy **tečkovaná linka, ve které
+    /// je víc pozadí než mapy**. Mezera je proti tomu dekorace: odděluje soubory, ale informaci
+    /// nenese, takže padá první a z pásu zbude souvislý barevný pruh.
+    ///
+    /// Přesnou hranici drží ta nerovnost, ne konstanta — u širokého okna a padesáti souborů se
+    /// mezery vejdou, u úzkého okna se stovkou ne.
+    static func mapSpacing(
+        count: Int,
+        in total: Double,
+        spacing: Double = 2,
+        minimum: Double = mapSegmentMinimum
+    ) -> Double {
+        guard count > 1 else { return spacing }
+        return minimum * Double(count) + spacing * Double(count - 1) <= total ? spacing : 0
+    }
+
     /// Šířky segmentů v bodech — **spočítané, ne vyjednané** (#220).
     ///
     /// Tři pravidla, a všechna se dají vyčerpat výčtem:
@@ -266,6 +286,9 @@ extension Policy {
     ) -> [Double] {
         guard !segments.isEmpty else { return [] }
         let count = segments.count
+        // **Mezera ustupuje dřív než minimum** (viz `mapSpacing`), takže se tady bere ta účinná,
+        // ne ta žádaná — jinak by se pás kreslil s mezerami, které se do součtu nevešly.
+        let spacing = mapSpacing(count: count, in: total, spacing: spacing, minimum: minimum)
         let available = total - spacing * Double(count - 1)
         guard available > 0 else { return Array(repeating: 0, count: count) }
         guard available >= minimum * Double(count) else {

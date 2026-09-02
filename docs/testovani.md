@@ -2522,6 +2522,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     dovnitř. Proč se u neutrálu 3 : 1 neměří, je v té sadě zapsané: `raised` na `surface` je
     v návrhu tichý podklad (1,1 : 1) a segment bez nálezu má být plocha v řadě ostatních, ne
     upozornění. **Regrese ověřena vložením regrese, třemi** — viz hlavička té sady.
+  - **Geometrie** (`PullRequestMapGeometryTests`) — souřadnice segmentů a **trefení kurzoru**.
+    Od opravy laggu je pás jedna kresba, takže plochu, na kterou se dá kliknout, nedělá SwiftUI,
+    ale výpočet: zapomenutá mezera v součtu levých hran posune klik o dva body na segment (u
+    padesátého souboru o sto), a na obrázku není nic vidět, protože kresba se posune stejně.
+    Vyčerpávající výčet přes celý pás i za jeho hranami; mezera padá segmentu **vlevo**, za
+    koncem pásu je odpověď `nil`.
   - **Sonda `PullRequestMapRenderProbe`** — obrázek přes pásmo šířek (347 / 647 / 1047 / 1347 b),
     v obou režimech a se souborem pod výřezem i bez něj. Právě z ní vyšla úzká podoba: při 347
     bodech (pohled vedle sebe) popisek nechal pásu 73 bodů a ze segmentů byly čárky. Scénu si
@@ -7402,6 +7408,37 @@ z #472, kterou člověk potká při každém kliknutí, kdežto diff jen při p�
 je to vidět i bez čísel: na **zápis do store** se najednou přeloží 3 540 těl `DiffRowView` (dnes
 nula) a bloky se nasazují dokola (135–155 nasazení proti 10). **Kdo to bude zkoušet znovu, ať měří
 tohle jako první.**
+
+#### Pás mapy PR nad ostrými diffy (#501)
+
+`DetailRelayoutMeasurement` má od #501 **dvě osy navíc**, a bez nich neuměla změřit nic, co roste
+se **soubory** — do té doby roztahovala fixture po **řádcích** (`DiffMaterial.text(lines:)` skládá
+soubory po 240 řádcích), takže měla 9 až 14 souborů a nad pásem se 158 segmenty vydala totéž jako
+nad pilulkou `+X −Y`. Je to učebnicový #478: měřidlo, které dá tutéž hodnotu pro „funguje“
+i „nefunguje“.
+
+- **`Case.files`** — týž počet řádků rozdělený do daného počtu souborů (`DiffMaterial.spread`).
+- **`PRISM_DIFF_DIR`** (přes `TEST_RUNNER_`) — složka s `*.diff`, tedy **ostrá data**. Diffy se
+  do repa nedávají (`cli/cli#14320` má 5 679 řádků) a stahují se `gh pr diff` do scratchpadu.
+
+**Ostrá data mají strop, a je to zjištění o `gh`, ne o nás**: `home-assistant/core#181088`
+(3 632 souborů) vrátí `gh pr diff` **HTTP 406 — „the diff exceeded the maximum number of files
+(300)“**. Aplikace jde tou samou cestou (`GhGateway.fetchDiff`), takže na takový PR nedosáhne
+vůbec a pás s třemi tisíci segmenty **nevznikne**. Zůstává z toho užitečná baseline: diff, který
+se nenačte, je „okno bez pásu“.
+
+Naměřená tabulka i to, co z ní plyne, je v
+[`docs/architektura.md`](architektura.md#pás-jako-jedna-kresba--co-stálo-158-tlačítek-v-hlavičce-501)
+— tady jen postup:
+
+1. **Nejdřív ostrá data v obou stavech, pak ablace.** Ablace = mapa se nekreslí vůbec (jedna
+   podmínka v `PullRequestDetailView.map`), tedy jediná změna proti měřenému stavu. Bez ní se
+   nedá říct, jestli cenu dělá pás, nebo něco jiného, co s počtem souborů roste — a v tom okně
+   roste i strom souborů a sekce diffu.
+2. **Čte se `přepnutí tabu bez diffu`**, ne to s diffem. V `Kontrolách` žádný dlouhý seznam není,
+   takže je to jediný pohon, ve kterém se pás neschová za cenu diffu.
+3. **Série se střídají A/B/A/B uvnitř jednoho běhu** (#274) a měří se **CPU hlavního vlákna**, ne
+   hodiny — vedle běžely dvě cizí instance PRismu a jejich polling by do wall-clocku prosákl.
 
 #### Pohon „tichý tik pollingu“ je ten, kvůli kterému #472 vzniklo
 

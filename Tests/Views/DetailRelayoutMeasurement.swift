@@ -41,17 +41,20 @@ struct DetailRelayoutMeasurement {
 
     @Test("Kolik stojí přerovnání okna nad otevřeným PR")
     func relayoutCost() async throws {
-        for lines in Self.diffSizes {
+        for material in try Self.materials() {
             var costs: [Case: [Double]] = [:]
             var passes: [Case: [String]] = [:]
             // Série se střídají A/B/A/B — drift sezení je větší než hledaný rozdíl (#274).
             for _ in 0..<2 {
-                for scenario in Self.cases {
+                for scenario in Self.cases where material.covers(scenario) {
                     // **Store i okno na každou sérii nové.** Odložené okno drží svůj strom dál
                     // a ten dál poslouchá store, takže by se do dalšího měření počítaly průchody
                     // tělem předchozích scén — v první podobě sondy z toho byl růst 0,57 → 2,26 s
                     // u téhož případu a osminásobný počet průchodů tělem.
-                    let (store, directory) = try await prepared(lines: lines, payload: scenario.payload)
+                    let (store, directory) = try await prepared(
+                        text: material.text(for: scenario),
+                        payload: scenario.payload
+                    )
                     defer { _ = directory }
                     store.setDetailTab(scenario.tab, for: pr)
                     let (cost, snapshot) = try await measure(store: store, scenario: scenario)
@@ -59,10 +62,10 @@ struct DetailRelayoutMeasurement {
                     passes[scenario, default: []].append(snapshot)
                 }
             }
-            for scenario in Self.cases {
+            for scenario in Self.cases where material.covers(scenario) {
                 let values = costs[scenario] ?? []
                 let average = values.reduce(0, +) / Double(max(values.count, 1))
-                print("MĚŘENÍ \(lines) řádků, \(scenario.label): "
+                print("MĚŘENÍ \(material.label), \(scenario.label): "
                     + values.map { String(format: "%.2f", $0) }.joined(separator: " / ")
                     + String(format: " s CPU za %d přerovnání (%.0f ms na jedno)", Self.relayouts,
                              average / Double(Self.relayouts) * 1000)
@@ -129,9 +132,15 @@ struct DetailRelayoutMeasurement {
         let tab: PullRequestTab
         let driver: Driver
         var payload: Payload = .loaded
+        /// **Pátá osa, od #501: počet souborů.** `nil` = fixture roztažená po řádcích
+        /// (`DiffMaterial.text(lines:)`), tedy 9 až 14 souborů podle velikosti. Číslo znamená
+        /// **týž počet řádků rozdělený do tolika souborů** — bez té osy sonda neuměla změřit nic,
+        /// co roste se **soubory**, a mapa PR (#501) kreslí segment na soubor.
+        var files: Int?
 
         var label: String {
-            "\(scene.rawValue), \(tab.czechLabel), \(driver.rawValue), \(payload.rawValue)"
+            let spread = files.map { ", \($0) souborů" } ?? ""
+            return "\(scene.rawValue), \(tab.czechLabel), \(driver.rawValue), \(payload.rawValue)\(spread)"
         }
     }
 
@@ -153,6 +162,14 @@ struct DetailRelayoutMeasurement {
         // samotnému. Drží se v sondě, protože je to jediné místo, kde je ten rozdíl vidět jako
         // číslo — v aplikaci už měřená štěrbina je.
         Case(scene: .detail, tab: .filesChanged, driver: .tab),
+        // #501: **týž počet řádků, jiný počet souborů.** Devět souborů proti pětačtyřiceti je
+        // rozdíl mezi tím, co měla sonda do #501 (fixture roztažená po řádcích), a tím, na čem
+        // se lag ohlásil — PR o pětačtyřiceti souborech. Bez téhle dvojice by měřidlo vydalo
+        // tutéž hodnotu pro „funguje“ i „nefunguje“ (#478).
+        Case(scene: .window, tab: .filesChanged, driver: .tab, files: 9),
+        Case(scene: .window, tab: .filesChanged, driver: .tab, files: 45),
+        Case(scene: .window, tab: .filesChanged, driver: .store, files: 45),
+        Case(scene: .window, tab: .checks, driver: .tabWithoutDiff, files: 45),
     ]
 
     /// Jedna série: okno se nechá usadit (**příprava se neměří**, #274) a teprve pak se dvacetkrát
@@ -195,9 +212,12 @@ struct DetailRelayoutMeasurement {
         // vůbec není, stejně jako měření nad plným oknem — jen vyjde nula (stalo se: prázdný
         // seznam znamená prázdný stav místo detailu). Je to tentýž důvod, proč `DiffShapeProbe`
         // vypisuje `dojelo na …`.
+        let loadedFiles: Int
+        if case .loaded(let diff, _) = store.diffState(for: pr) { loadedFiles = diff.files.count }
+        else { loadedFiles = 0 }
         print("SONDA scéna \(scenario.scene.rawValue): \(store.pullRequests.count) PR v seznamu,"
             + " aktivní \(store.activeTab), tab \(store.detailTab(for: pr).czechLabel),"
-            + " okno \(window.frame.size)")
+            + " souborů v diffu \(loadedFiles), okno \(window.frame.size)")
 
         // **Snímek okna**, když si o něj někdo řekne (`PRISM_RENDER_DIR`). Měřená štěrbina je
         // změna rozvržení, takže se musí dát porovnat i očima, ne jen číslem.
@@ -288,14 +308,67 @@ struct DetailRelayoutMeasurement {
     ///
     /// Diff je **skutečná fixture doplněná na požadovaný počet řádků** (`DiffMaterial`, sdílené
     /// s `DiffShapeProbe`): měří se cena, o které je otázka, jestli roste s délkou seznamu.
+    /// Nad čím se měří. **Buď syntetická fixture, nebo skutečný diff ze souboru** (#501) —
+    /// `PRISM_DIFF_DIR` (přes `TEST_RUNNER_`) ukáže na složku s `*.diff` a sonda pak jede nad
+    /// ostrými daty. Bez něj platí `diffSizes` jako do #501.
+    ///
+    /// Ostrá data jsou tady schválně **mimo repo**: diff `cli/cli#14320` má 5 679 řádků
+    /// a `home-assistant/core#181088` se přes `gh pr diff` **nedá stáhnout vůbec** (HTTP 406,
+    /// strop 300 souborů) — tedy ani aplikace na něj nedosáhne, protože jde tou samou cestou.
+    enum Material {
+        case synthetic(lines: Int)
+        case real(label: String, text: String)
+
+        var label: String {
+            switch self {
+            case .synthetic(let lines): "\(lines) řádků"
+            case .real(let label, let text):
+                "\(label) (\(text.split(separator: "\n").count { $0.hasPrefix("diff --git") }) souborů)"
+            }
+        }
+
+        /// Nad ostrým diffem se osa „počet souborů“ **nepoužívá** — počet souborů je daný tím
+        /// diffem. Rozdělovat ho znovu by měřilo něco, co v tom PR není.
+        func covers(_ scenario: Case) -> Bool {
+            switch self {
+            case .synthetic: true
+            case .real: scenario.files == nil
+            }
+        }
+
+        func text(for scenario: Case) -> String {
+            switch self {
+            case .synthetic(let lines):
+                scenario.files.map { DiffMaterial.spread(files: $0, lines: lines) }
+                    ?? DiffMaterial.text(lines: lines)
+            case .real(_, let text):
+                text
+            }
+        }
+    }
+
+    static func materials() throws -> [Material] {
+        guard let directory = ProcessInfo.processInfo.environment["PRISM_DIFF_DIR"] else {
+            return diffSizes.map { Material.synthetic(lines: $0) }
+        }
+        let url = URL(filePath: directory)
+        let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "diff" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return try files.map { file in
+            .real(label: file.deletingPathExtension().lastPathComponent,
+                  text: try String(contentsOf: file, encoding: .utf8))
+        }
+    }
+
     private func prepared(
-        lines: Int,
+        text: String,
         payload: Payload = .loaded
     ) async throws -> (store: AppStore, directory: TemporaryDirectory) {
         let gateway = FakeGitHubGateway(
             always: .success([Self.summary]),
             detail: .success(Self.detail),
-            diffs: [.success(DiffMaterial.text(lines: lines))],
+            diffs: [.success(text)],
             conversations: [.success(Self.conversation())]
         )
         // **Viewer je autor PR**, takže je to `Moje PR` — a právě na vlastním PR skládá panel

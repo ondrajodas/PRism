@@ -11,7 +11,8 @@ import Testing
 ///
 /// - **šířky dojdou až do kresby**: co spočítá `Policy.mapWidths`, to má být v bitmapě široké
 ///   stejně. Je to tentýž požadavek jako u #236 — kdo si říká o rozměr, musí ho měřit na tom,
-///   na čem kreslí, a `Layout` je zrovna to místo, kde se dvě pravdy o jedné šířce rodí snadno;
+///   na čem kreslí, a mezi `Policy`, `PullRequestMapGeometry` a `Canvas`em se dvě pravdy o jedné
+///   šířce rodí snadno;
 /// - **barvy se od sebe poznají**: čtyři výplně (`crit`, `find`, `okWash`, neutrál) plus jejich
 ///   tlumená podoba. Prošlý `crit` na 35 % se **nesmí** splést s neutrálem, jinak by pás tvrdil
 ///   „tady nic není“ nad souborem, který blokuje;
@@ -185,8 +186,8 @@ struct PullRequestMapDrawingTests {
         }
     }
 
-    /// Čárka vlákna **je v bitmapě** a leží nad svým segmentem. Bez tohohle tvrzení by se dal
-    /// `PullRequestMapTicks` rozbít tak, že podíly spočítá a nikam nic neumístí.
+    /// Čárka vlákna **je v bitmapě** a leží nad svým segmentem. Bez tohohle tvrzení by se dala
+    /// kresba rozbít tak, že podíly spočítá a nikam nic nenakreslí.
     @Test("Čárka vlákna se nakreslí uvnitř svého segmentu")
     func theThreadTickLandsInsideItsSegment() throws {
         let shot = try shot(dark: false, current: nil)

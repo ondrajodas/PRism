@@ -4101,7 +4101,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu zapíná karta `Blokuje` na dashboardu, takže musí být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh` ‖ `Zeptat se`) — podtržené, s odznakem **u každé** (#218; typy od #242) a děličem před výstupem reviewerů. **Rozsah změny v něm od #501 není** — `+X −Y` se čtverečky poměru nahradila mapa PR pod hlavičkou. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Podob má **tři** (`ViewThatFits`, `Layout`): s popisky, s ikonami a popiskem jen u aktivní (#318) a jen s ikonami (#452) — díky nim se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
-| `PullRequestMapView`, `PullRequestMapStrip`, `PullRequestMapTicks`, `PullRequestMapProbe` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem s obrysem. Šířky **počítá `Policy`** a umisťuje vlastní `Layout` (#220); čárky druhý `Layout`, protože podíl se dá umístit jedině ze skutečné šířky segmentu (#236). `PullRequestMapProbe` je neviditelné view, které do `DiffFileCursor` zapisuje soubor pod výřezem — čte hodnotu měnící se každý snímek, takže stojí samo (#469). Viz *Mapa PR — pás pod hlavičkou* |
+| `PullRequestMapView`, `PullRequestMapGeometry`, `PullRequestMapProbe` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem s obrysem. **Pás je jedna kresba** (`Canvas`), ne řada tlačítek — u 158 souborů to byla přes tisíc views v hlavičce a přerovnání okna stálo 70 ms místo 14 (#252, #501). Šířky počítá `Policy`, polohy `PullRequestMapGeometry`, nápovědu i klik obstarává jedno gesto. `PullRequestMapProbe` je neviditelné view, které do `DiffFileCursor` zapisuje soubor pod výřezem — čte hodnotu měnící se každý snímek, takže stojí samo (#469). Viz *Mapa PR — pás pod hlavičkou* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `CommitDiffView` | Diff jednoho commitu (#317) — hlavička a pod ní `DiffView`. **Nedostane `AppStore` ani identifikátor PR**, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář; `reading(_:)` je `internal` kvůli testu, který tvrdí právě to, co `DiffView` **nedostane** |
@@ -4336,14 +4336,22 @@ Co se nemá rozbít:
   zakotvená vlákna a značky `Prošlo`. Dvě místa by znamenala, že popisek `5 nálezů` tvrdí něco
   jiného než pás pod ním. Nálezy se hledají **po obou cestách** (`newPath` i `oldPath`), jako
   v `DiffView.findings(in:)`: reviewer je umí nahlásit pod tou starou.
-- **Šířky se počítají, nevyjednávají** (#220). `PullRequestMapStrip` je vlastní `Layout` —
-  tentýž důvod jako u `ProportionalColumns`: `HStack` umí jen rovným dílem a `frame(width:)` na
-  každém segmentu by potřeboval znát celkovou šířku, tedy druhé měření vedle toho, co rozvržení
-  dělá samo. Rozhoduje `Policy.mapWidths(of:in:spacing:minimum:)` a drží tři věci: podíl
-  z logaritmu, minimum tři body a **součet přesně na dostupnou šířku**. Co spadne pod minimum,
-  dostane minimum a **vypadne z dělení**; bez toho přepočtu by součet přerostl pás zrovna u PR
-  s jedním lockem a šesti drobnostmi. Když se nevejdou ani minima, dělí se rovným dílem —
-  **segment se nezahodí nikdy**.
+- **Pás je jedna kresba, ne řada prvků — a je to výkonová podmínka** (#252, #501). Segment není
+  view: `Canvas` nakreslí všechny, polohu spočítá `PullRequestMapGeometry` a nápovědu i klik
+  obstarává **jedno** gesto. Proč se to muselo přepsat a co to stálo, je v *Pás jako jedna
+  kresba* níž.
+- **Šířky se počítají, nevyjednávají** (#220). Rozhoduje `Policy.mapWidths(of:in:spacing:minimum:)`
+  a drží tři věci: podíl z logaritmu, minimum tři body a **součet přesně na dostupnou šířku**. Co
+  spadne pod minimum, dostane minimum a **vypadne z dělení**; bez toho přepočtu by součet
+  přerostl pás zrovna u PR s jedním lockem a šesti drobnostmi. Když se nevejdou ani minima, dělí
+  se rovným dílem — **segment se nezahodí nikdy**.
+- **Mezera ustupuje dřív než minimum** (`Policy.mapSpacing`, #501). Nad ~160 soubory si `3 b × N`
+  a `2 b × (N − 1)` se šířkou pásu odporují: u tří stovek souborů je to 1 498 bodů proti osmi
+  stům. Kdyby ustoupilo minimum a mezery zůstaly, byly by segmenty po 0,7 bodu mezi dvoubodovými
+  mezerami — **tečkovaná linka, ve které je víc pozadí než mapy**. Mezera informaci nenese, takže
+  padá první a z pásu zbude souvislý barevný pruh. Nad 300 souborů se to nedostane: `gh pr diff`
+  vrátí nad tím stropem **HTTP 406** a diff se nenačte vůbec (změřeno na
+  `home-assistant/core#181088`, 3 632 souborů).
 - **Barva je závažnost, ne druh souboru.** Nejhorší nález přebíjí `isNew`, takže nový soubor
   s blokujícím nálezem je červený. Neutrál je `Palette.raised`, nový soubor `Palette.okWash`
   (vyčíslený `color-mix(in srgb, ok 55 %, raised)` z návrhu — ne `ok.opacity`, protože skrz krytí
@@ -4363,6 +4371,56 @@ Co se nemá rozbít:
 - **`⌥←`/`⌥→` visí na jednom průhledném tlačítku** v mapě, ne v detailu PR — a je to výkonová
   podmínka, viz `DiffFileCursor` níž. Na krajích pásu je tlačítko **zakázané**, takže klávesu
   nebere a propadne dál; zacyklit se skok nemá (`Policy.mapStep(from:_:count:)`).
+
+#### Pás jako jedna kresba — co stálo 158 tlačítek v hlavičce (#501)
+
+První podoba pásu dělala ze segmentu **`Button` s nápovědou, dvěma `overlay`y a `contentShape`**,
+umístěný vlastním `Layout`em. Vypadalo to nevinně: u sedmi souborů je to sedm tlačítek. U PR
+o 158 souborech je to **158 tlačítek a přes tisíc views v hlavičce** — a hlavička se přerovnává
+při **každém** zápisu do sledované vlastnosti, tedy při každém tiku pollingu i při každém
+kliknutí. Ohlásilo se to jako „zas to laguje při přepínání oken“.
+
+Měřeno `DetailRelayoutMeasurement` nad **ostrými diffy** (`PRISM_DIFF_DIR`, viz
+[`docs/testovani.md`](testovani.md#pás-mapy-pr-nad-ostrými-diffy-501)), tři stavy: pás jak byl,
+pás **ablovaný** (mapa se nekreslí vůbec) a pás jako kresba. Čísla jsou ms na jedno přerovnání:
+
+| PR | souborů | | zápis do store | přepnutí tabu **bez** diffu | přepnutí tabu s diffem |
+|---|---|---|---|---|---|
+| `home-assistant/core#181088` | 0 (diff se nestáhl) | — | 10 | 55 | 28 |
+| `ondrajodas/PRism#499` | 45 | tlačítka | 18 | 68 | 971 |
+| | | **kresba** | **16** | **68** | **902** |
+| | | ablace (bez pásu) | 13 | 56 | 914–969 |
+| `cli/cli#14104` | 71 | tlačítka | 26 | 87 | 1 438 |
+| | | **kresba** | **16** | **58** | **1 306** |
+| | | ablace | 12–14 | 53–59 | 1 218–1 336 |
+| `cli/cli#14320` | 158 | tlačítka | **70** | **162** | 1 338 |
+| | | **kresba** | **19** | **63** | **1 288** |
+| | | ablace | 14–15 | 54–60 | 1 244–1 326 |
+
+Čtyři věci z toho plynou:
+
+1. **Cena rostla s počtem souborů, ne s výřezem.** Hypotéza, že špiní tělo detailu zápis
+   z `DiffView`u do `DiffTracking`u, **se měřením vyvrátila**: `DiffTracking` není `@Observable`
+   a `@State` v detailu drží jen referenci, takže zápis do `viewport` zneplatní jedině ty tři
+   malé views, které si `top` čtou. Rozhodla o tom ablace, ne úvaha — a je to ten případ, kdy
+   měřidlo muselo dostat **novou osu**, aby rozdíl vůbec vidělo (#478): do #501 sonda roztahovala
+   fixture po **řádcích**, takže měla 9 až 14 souborů a nad `+X −Y` i nad pásem vydala totéž.
+2. **Přepnutí tabu bez diffu je ta nejčistší stopa.** V `Kontrolách` žádný dlouhý seznam není,
+   takže jediné, co tam s počtem souborů roste, je pás: 55 → 162 ms mezi nulou a 158 soubory,
+   a po opravě 55 → 63.
+3. **Přepnutí na `Změněné soubory` je drahé i bez pásu** (914–1 336 ms podle velikosti diffu)
+   a **není to regrese #501** — ablace to ukazuje na tisícině. Je to pořád ta cena z #476, jen
+   nad diffem o 5 700 řádcích ve 158 souborech místo nad 2 000 řádky.
+4. **Oprava je struktura, ne mikrooptimalizace.** Segment přestal být view: `Canvas` kreslí
+   plochy, čárky i obrys jedním průchodem, `PullRequestMapGeometry` počítá polohy (a trefuje
+   kurzor i klik ze **stejného** zdroje) a nápověda je **jedna** místo dvou řetězců na segment.
+   Je to tatáž věta jako u `DiffGutterGeometry` (#252): *nevyjednává se ani počet prvků*.
+
+**Co se tím zaplatilo:** segmenty **nejsou samostatné prvky pro odečítání**. Pás je jeden
+accessibility element s popiskem `Mapa souborů` a hodnotou ze souhrnu; k souborům vedou dál
+strom v `Změněných souborech` a paleta ⌘K, tedy cesty, které existovaly předtím. Vyměnit tisíc
+prvků v hlavičce za jeden element je při té ceně správná směna, ale **je to směna**, ne
+vylepšení.
 
 #### `DiffTracking` a `DiffFileCursor` — kdo je pod výřezem (#501)
 
@@ -7798,7 +7856,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.lanes(of:skills:running:)` | Dráhy do tabu `Průběh` (#242, `ReviewerLane`) — fáze `čeká na slot` / `session` / `prochází kód` / `hlásí nálezy` **z toho, co v ose doopravdy je**. Fáze za tou, kam se běh dostal, zůstává nedotčená i u doběhlého běhu; špatný konec se značí aspoň u `session`, aby spadlý start nevypadal jako nezačatý běh. Běžící reviewer bez osy dostane dráhu ve frontě a **nastavený reviewer, který na PR neběžel, dráhu `nespuštěno`** — sada je ta z `AppStore.reviewSkills(for:)`, tedy tatáž, ze které se review pouští. Pořadí je nastavení → osy → běžící abecedně, aby dráhy mezi tiky nepřeskakovaly |
 | `Policy.progress(startedAt:phase:running:)` | Průběh běžícího review do pruhu v hlavičce (#218, `ReviewRunProgress`). `nil` = neběží nic — rozhoduje **`startedAt` běhu**, ne fáze, protože `reviewPhases` si `failed` drží i po skončení |
 | `Policy.pullRequestMap(files:findings:threads:readStates:categories:)` | Segmenty mapy PR pod hlavičkou (#501, `PullRequestMapSegment`) — z **týchž vstupů** jako strom, hlavička souboru i bubliny. Nálezy se hledají po **obou** cestách souboru; blokující přebíjí obyčejný a druh souboru; popisek se skládá tady, ne ve view. **Nahradilo `Policy.diffstatBlocks`** (pět čtverečků za `+X −Y`, #218), které s pilulkou odešlo |
-| `Policy.mapWidths(of:in:spacing:minimum:)` | Šířky segmentů v bodech (#501) — podíl z `log₂(řádků + 1)`, minimum tři body **vytlačené z dělení** a součet přesně na dostupnou šířku. Když se nevejdou ani minima, dělí se rovným dílem; **segment se nezahodí nikdy** |
+| `Policy.mapWidths(of:in:spacing:minimum:)`, `Policy.mapSpacing(count:in:spacing:minimum:)` | Šířky segmentů v bodech (#501) — podíl z `log₂(řádků + 1)`, minimum tři body **vytlačené z dělení** a součet přesně na dostupnou šířku. Když se nevejdou ani minima, dělí se rovným dílem; **segment se nezahodí nikdy**. **Mezera ustupuje dřív než minimum** — nad ~160 soubory padá na nulu, jinak by z pásu byla tečkovaná linka |
 | `Policy.mapSummary(files:read:findings:threads:)`, `Policy.mapTooltip(of:)`, `Policy.mapReadLabel(of:)` | Popisek vpravo od pásu a nápověda segmentu (#501). Části se připojují, **až když mají co říct** (jako u `fileTreeSummary`); stav značky je v nápovědě vždycky a vždycky poslední |
 | `Policy.mapShowsSummary(available:label:gap:minimumStrip:)` | Vejde se vedle pásu popisek? (#501) Práh 180 bodů je změřený: pod ním jsou z segmentů čárky. `nil` šířka = kreslí se, jako u `IncrementalDiffBar.layout(in:)` |
 | `Policy.mapCurrentSegment(extents:top:)`, `Policy.mapStep(from:_:count:)` | Který soubor je pod výřezem (#501, `pinnedFileHeader` beze zbytku posunu — **jedna odpověď** pro obrys, ukotvenou hlavičku i `⌥V`) a krok `⌥←`/`⌥→`, který se **nezacyklí** |
