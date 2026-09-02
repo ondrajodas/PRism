@@ -112,7 +112,7 @@ struct AppStoreExternalTabTests {
         store.openPullRequest(listed)
 
         #expect(store.openTabs == [listed])
-        #expect(store.externalPullRequests.isEmpty)
+        #expect(store.adoptedTabs.isEmpty)
         #expect(store.origin(of: listed) == .sources)
         #expect(gateway.detailRequests.count == details)
     }
@@ -253,7 +253,7 @@ struct AppStoreExternalTabTests {
         await settle(store)
 
         store.closeTab(vault)
-        #expect(store.externalPullRequests.isEmpty)
+        #expect(store.adoptedTabs.isEmpty)
         #expect(store.summary(for: vault) == nil)
 
         // Značka je jediné, co detail u tiku drželo — po zavření ho tedy úklid zahodí.

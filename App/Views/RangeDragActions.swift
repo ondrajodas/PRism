@@ -135,6 +135,35 @@ struct RangeDragActions {
     /// zůstává platný.
     func block(_ id: String) -> CGRect? { blocks[id] }
 
+    /// Přeměřené řádky ve svislém rozsahu, přeložené na `(rozsah, číslo řádku)` (#527).
+    ///
+    /// Čte to kotva scrollu — z ní se skládá `tabs.json`, takže musí být vyjádřená **číslem
+    /// řádku**, ne identitou v seznamu (`<soubor>|h0l3` je pozice v hunku, ne řádek souboru).
+    /// Číslo dodává `DraftAnchor`, který u řádku v krabici leží kvůli tažení rozsahu — žádné
+    /// měření navíc.
+    ///
+    /// **Jen `.right`, tedy nová čísla.** Kotva se po restartu hledá `DiffRow.anchor(in:file:line:)`
+    /// a ta porovnává `newNumber`; číslo odebraného řádku (`.left`) je ze **staré** verze souboru,
+    /// takže by se nenašlo a skok by spadl na hlavičku. Odebraný řádek u horní hrany proto
+    /// vydá **první přidaný nebo kontextový pod ním** — o pár řádků vedle, ne mimo soubor.
+    ///
+    /// **Rozsah zúží hledání na jeden soubor**, aby kotva nespárovala soubor s číslem řádku
+    /// z toho následujícího. Předává ho volající, protože rozsahy souborů drží jiná krabice
+    /// (`DiffFileExtents`).
+    ///
+    /// Hledá se lineárně, jako u `anchor(at:on:)` — je to průchod přes řádově tisíc rámečků,
+    /// tedy aritmetika, ne práce v grafu SwiftUI (proto se to smí ptát při scrollování, viz
+    /// `DiffAnchorReporter`).
+    func scrollRows(in area: ClosedRange<Double>) -> [DiffScrollRow] {
+        entries.values.compactMap { entry in
+            guard let anchor = entry.anchor, anchor.side == .right else { return nil }
+            let top = Double(entry.rect.minY)
+            let extent = top...max(top, Double(entry.rect.maxY))
+            guard area.overlaps(extent) else { return nil }
+            return DiffScrollRow(extent: extent, line: anchor.line)
+        }
+    }
+
     /// Kotva řádku pod bodem. `nil` = mimo řádky, na které se dá komentovat.
     ///
     /// Hledá se lineárně přes všechny přeměřené řádky, protože jich je řádově tisíc a odpověď

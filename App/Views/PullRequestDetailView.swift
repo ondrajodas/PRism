@@ -1561,7 +1561,11 @@ struct PullRequestDetailView: View {
     /// Jde **toutéž cestou jako skok z nálezu** (`anchor(inFile:line:)` + `scroll(to:)`), takže se
     /// nemá čím rozejít v tom, co je „to místo“ — a když soubor v diffu není, **nestane se nic**:
     /// skákat naslepo je horší než nehnout se. Rozbalit sbalený soubor umí ta kotva sama.
-    private func jumpToCode(file: String, line: Int) {
+    ///
+    /// **`line` je od #527 volitelné**: kotva scrollu umí ukázat i na soubor bez řádku (binárka,
+    /// přejmenování beze změny obsahu), a `anchor(inFile:line:)` na to odpovídá kotvou na
+    /// hlavičku souboru. Odpověď z rozhovoru řádek vždycky má, takže se pro ni nic nemění.
+    private func jumpToCode(file: String, line: Int?) {
         guard let anchor = anchor(inFile: file, line: line) else { return }
         scroll(to: anchor)
     }
@@ -1686,12 +1690,36 @@ struct PullRequestDetailView: View {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            diffView(of: diff, read: readActions)
+            diffView(of: diff, read: readActions, reportsScrollAnchor: true)
+                // Kotva z minulého běhu (#527). **Až tady, nad načteným diffem**: dřív se nemá
+                // na co skákat, protože řádky v seznamu ještě nejsou. `task(id:)` se spustí
+                // i při vzniku, takže přepnutí z `.loading` na `.loaded` stačí.
+                .task(id: pullRequest.id) { await restoreScroll() }
         case .failed(let detail):
             diffFailure(detail)
         case .loading, nil:
             loading("Načítám diff…")
         }
+    }
+
+    /// Posadí výřez tam, kde stál před restartem (#527).
+    ///
+    /// **Jde toutéž cestou jako skok z nálezu a z odpovědi** (`anchor(inFile:line:)` + `scroll(to:)`,
+    /// tedy #152 a #325), takže se nemá čím rozejít v tom, co je „to místo“ — a stejně jako ony
+    /// **neudělá nic**, když soubor v diffu není: mezitím mohl přijít commit, který ho smazal,
+    /// a skákat naslepo je horší než nehnout se.
+    ///
+    /// **O průchod později** (#325): v okamžiku, kdy se diff načte, ještě nejsou bloky rozvržené,
+    /// takže by se podíl výšky počítal z ploch, které nikdo nenahlásil. Skok sám si pak dělá
+    /// druhý průchod s přeměřenými rozměry (viz `DiffView`).
+    ///
+    /// **Kotva se vyzvedává až po odmlce**, ne před ní: spotřebování je nevratné, takže by
+    /// zrušený `task` (přepnutí PR uprostřed) polohu zahodil, aniž by se kamkoli skočilo.
+    private func restoreScroll() async {
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        guard let saved = store.takePendingScrollAnchor(for: pullRequest.id) else { return }
+        jumpToCode(file: saved.file, line: saved.line)
     }
 
     /// Rozsah „co přibylo“. Prázdný výsledek je **vlastní hláška**, ne ta od celého diffu:
@@ -1712,7 +1740,11 @@ struct PullRequestDetailView: View {
     /// Jeden diff se všemi bublinami. Bere ho **celý diff i rozsah** — nálezy, vlákna
     /// i rozdělané komentáře se kotví na `soubor:řádek` dnešní hlavy, takže se v obou pohledech
     /// pověsí na totéž místo; co v rozsahu není vidět, se chová stejně jako soubor mimo diff.
-    private func diffView(of diff: Diff, read: DiffReadActions? = nil) -> some View {
+    private func diffView(
+        of diff: Diff,
+        read: DiffReadActions? = nil,
+        reportsScrollAnchor: Bool = false
+    ) -> some View {
         DiffView(
             diff: diff,
             subject: pullRequest.id.description,
@@ -1745,7 +1777,13 @@ struct PullRequestDetailView: View {
             read: read,
             // Kurzor procházení (#187) — od #503 ho potřebuje i diff: karta v okraji na tom místě
             // dostane rámeček. Do té doby stačil panelu, protože v diffu kurzor ukázal skok.
-            current: cursor.current
+            current: cursor.current,
+            // **Jen celý diff hlásí kotvu** (#527). Rozsah „co od minule přibylo“ (#284) je
+            // pohled na **jiný** seznam souborů, takže by jeho poloha po restartu ukazovala
+            // někam jinam — a obnovit se má to, co je v tabu vidět po otevření, tedy celý diff.
+            reportScrollAnchor: reportsScrollAnchor
+                ? { store.noteDiffScrollAnchor($0, for: pullRequest.id) }
+                : nil
         )
     }
 

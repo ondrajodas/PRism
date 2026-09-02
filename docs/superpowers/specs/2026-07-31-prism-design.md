@@ -5393,6 +5393,58 @@ slitým stavem a `diff` publikované kopie proti repu, obojí u toho, kdo merguj
 cizího, a místo přečtení **15 847 řádků** publikované kopie ji prohnal `diff`em proti repu —
 bajt na bajt, bez spálení kontextu. Zapsané je to v `docs/navrh.md`, protože odpověď „souhlasí
 znak po znaku“ je tvrzení o **celém** souboru, kdežto čtení je tvrzení o tom, čeho si kdo všiml.
+### Záznam rozhodnutí — záložky přežijí restart (#527)
+
+První kámen z decku *Směry pro PRism* (stránka *Tření › T1*). Zákres je v [sekci 44](../../navrh.html)
+návrhu. Rozhodnutí, která u toho padla, a co se u nich zamítlo:
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Jedna mapa s důvodem** (`adoptedTabs: [PRIdentifier: TabAdoption]`) | Druhá množina `restoredPullRequests` vedle `externalPullRequests` z #531 | Obnovená záložka potřebuje **totéž ve třech věcech** (shrnutí z detailu, přežití úklidu po tiku, `loading` místo `gone`) a liší se v **jedné** (pilulka `mimo zdroje`). Dvě skoro stejné množiny znamenají tři místa, na kterých se dá zapomenout jedna z nich — a potichu. Výčet odpovídá i na „proč“, takže si pilulka vybere sama |
+| **Obsah záložky rozhoduje z přijetí, ne z `PullRequestOrigin`** | Nechat `tabContent(summary:detail:origin:)`, jak ho zavedlo #531 | Jsou to dvě různé otázky: pilulka odpovídá na „proč tenhle PR není ve frontě“, kdežto obsah na „kdo tomu PR dotahuje detail“. S `origin`em by obnovená záložka nad **mergnutým** PR dostala `gone`, tedy větu „pull request zmizel“ nad obrazovkou, kterou si aplikace zrovna sama načítá |
+| **Obnovená záložka pilulku nedostane** | Dát jí `outsideSources` (technicky pravda — ve zdrojích není) | Obnovení běží **před prvním tikem**, kdy je seznam ze zdrojů prázdný, takže by `mimo zdroje` bliklo u **každé** obnovené záložky — a to je zrovna to bliknutí, kvůli kterému odznak přestává něco znamenat. U těch, které z fronty doopravdy vypadly, by navíc tvrdilo „otevřel jsi ho odkazem“ |
+| **Puntík načítání je dutý kroužek, ne prstýnek** — a **odchylka od zákresu** | `.spin`, jak to kreslí deck (a `SpinningRing` v aplikaci) | Prstýnek v tomhle okně znamená **běží review** (nápověda to říká doslova), a po startu neběží nic. Reuse by tedy pár sekund po každém startu tvrdil, že na každé obnovené záložce běží review — vzor „text v UI, který tvrdí víc, než data unesou“. Deck si přitom v poznámce 53 sám říká, že je to **třetí věc**; kresba jen sáhla po existující třídě. Nový komponent má vlastní jméno (`.tdot-load`) a v sekci 44 je u něj napsané, proč `.dot` ani `.spin` nestačily |
+| **Nehybný kroužek, ne animovaný** | Točit ho jako prstýnek, jen jinou barvou | Pohyb v pruhu je vyhrazený běžícímu review — a jako bonus se tím tenhle stav nedostane do třídy zakázaných nekonečných animací (#350): kroužek je čistá kresba, nic se netočí |
+| **Mergnutý a zavřený PR kreslí stav pull requestu** | Nechat u nich stav review, jako do #527 | U `merged` a `closed` se od nálezů další práce neodvíjí: dá se to jedině dočíst a zavřít, takže „jak to dopadlo“ je důležitější než „co našel reviewer“. `open` a `draft` do toho patra **nepatří** — rozpracovaný pull request je normální práce |
+| **Značku skládá `Policy.tabMark`, ne `if`y ve view** | Nechat tři `if`y ve `ReviewTabsView` a přidat dva další | Pět pater je rozhodnutí nad daty, ne kresba — a jediné, co o něm jde tvrdit, je **pořadí**, které se ve view nedá vyčerpat výčtem. `ReviewTabsView` proto přišel o tři vstupy (`state`, `hasDraft`, `isRunning`) a dostal jeden |
+| **Kotva scrollu je `(soubor, řádek)`** | Offset výřezu; podíl výšky obsahu; identita řádku v seznamu | Offset po restartu neplatí — diff se v pohledu pod sebou **zalamuje** podle šířky okna (změřeno u #152: odhad z počtu řádků byl proti skutečnosti trojnásobně mimo). Identita v seznamu (`<soubor>\|h0l3`) je pozice v hunku, ze které se číslo řádku nepřečte, takže se na disk uložit nedá |
+| **Kotva se posadí cestou skoku z palety** | Nastavit scroll offset po načtení diffu | Je to tatáž otázka („dostaň tenhle řádek pod horní hranu“) a #152 s #325 na ni už mají odpověď i s druhým průchodem nad přeměřenými rozměry. Druhá cesta by se s tou první rozešla zrovna v tom, na čem skok stojí |
+| **Polohu hlásí vlastní neviditelné view při scrollování** | Ptát se jednou při zápisu snímku (uzávěr registrovaný ve store) | Uzávěr by musel držet stav view (rozsahy, rámečky, **aktuální diff**), a diff je hodnota — po dotažení by se registrace rozešla s tím, co je na obrazovce. Hlášení je proti tomu aritmetika nad krabicemi mimo observable stav; drahé u #469 bylo čtení rámečků v souřadnicích **výřezu**, ne počítání nad těmi v souřadnicích **obsahu** |
+| **`nil` kotvu nemaže** | Zapsat `nil` jako „do diffu se nekouklo“ | „Zrovna nevím, kde výřez stojí“ (rozsahy se přeměřují, bloky se odpojily) je jiná informace. Zahodit poslední známou polohu kvůli jednomu průchodu bez odpovědi by znamenalo obnovit se na začátek diffu právě po přerovnání okna |
+| **Zapisuje se při změně záložky a při ukončení** | Jen při změně záložky; při každém hlášení kotvy | Bez ukončení by se po mergi obnovila poloha z okamžiku, kdy se do diffu přepnul — a `bin/run.sh` ukončuje aplikaci Apple eventem, tedy cestou, ze které to jde zachytit. Zápis při každém hlášení by naopak znamenal sahání na soubor **při scrollování** |
+| **`OpenTabsStore` není aktor** | Aktor, jako `AnnouncedPullRequests` a `HandoffLedger` | Ty jsou aktory proto, že u nich je uložení **čtení, změna a zápis** téhož souboru; tady je celý snímek v paměti store, takže je zápis jeden krok. A hlavně: `applicationShouldTerminate` se v běžném případě vrací `.terminateNow` a žádné další kolo runloopu nepřijde, takže `await` by znamenal snímek, na který nikdo nepočká |
+| **Snímek se ukládá před potvrzovacím dialogem** | Po něm, až je jasné, že se doopravdy končí | Kdo se rozhodne nekončit, o nic nepřijde — je to tentýž stav, jaký zapíše příští změna záložky. Po **zrušeném** dotazu by se tam už nikdo nevrátil |
+| **Detail se dotahuje u každé obnovené záložky** | Počkat na první tik a zeptat se jen na ty, které v něm nejsou | Před prvním tikem se neví, která záložka ve zdrojích bude — a čekat na tik znamená čekat i tam, kde by se čekat nemuselo, kdežto nedotáhnout znamená záložku, která na načítání zůstane **navždycky** (PR mimo zdroje se v seznamu neobjeví nikdy). Je to jedno `gh pr view` na záložku, tedy právě to, co si detail dotáhne sám při otevření |
+| **`PullRequestTab` je `Codable` s `String` raw value** | Nechat ho bez `Codable`, jak si to jeho vlastní poznámka žádala; syntetizované `Codable` nad případy | Ta poznámka mluvila o tom, že si nebudeme pamatovat, „na co se člověk koukal minulý týden“ — a to platí dál: volba **není** klíčovaná pull requestem na disku, ukládá se jako součást otevřené záložky a se zavřením odchází. `String` proto, že v souboru pak stojí `filesChanged` a `tabs.json` je čitelný okem |
+| **Nečitelný snímek znamená prázdno** | Hlásit to v okně, jako u nálezů a značek `Prošlo` | Nejhorší následek je **jedno spuštění bez záložek**, tedy stav před #527 — není to ručně psaná práce, kterou by nebylo čím nahradit. Platí to i pro přejmenovaný případ `PullRequestTab`: `?? .standard` u jednoho tabu by se tvářil jako volba člověka |
+
+**Tvrdá podmínka č. 1 se nemění ani o položku.** `SingleWayOutTests` prochází beze změny, grep na
+`ReviewPublishing` i `BranchPushing` vypisuje týž seznam souborů a **obnovení nespouští nic** —
+dotahuje jedinou věc, a to čtením. Pravidlo, že **mergnutý PR jde dočíst a zavírá ho člověk, ne tik
+pollingu** (#67), tím dostalo druhou půlku: teď se dá dočíst i po restartu.
+
+**Tvrdá podmínka č. 3 taky beze změny**: `tabs.json` leží v kořeni cache slotu a hranici drží
+**tatáž kontrola jako jinde v repu** (`CacheFile.refusal`), ne vlastní konstanta. Kořen si aplikace
+bere z `CFBundleName`, takže je slotová separace (#228) hotová bez jediného řádku navíc.
+
+**Dvě zapsané meze kotvy**, obojí degradace na „o kus vedle“, ne na „jinde“: **rozbalený kontext**
+(#47) číslo řádku nenese (`commentableSide` ho vydá jen pro řádek v hunku), takže se výřez uvnitř
+velkého odkrytého úseku obnoví na nejbližším řádku hunku pod ním; a **odebraný řádek** má číslo ze
+staré verze souboru, takže se bere první přidaný nebo kontextový pod ním.
+
+**Jedno pravidlo přišlo až z Copilota, a je to to nejdražší z celého issue**: *nedoposazená kotva
+je pořád ta poslední známá poloha.* Drží dvě věci naráz — snímek ji čte i z `pendingScrollAnchors`
+(jinak ji zápis hned po obnovení smaže, aniž by ji kdo spotřeboval) a hlášení z diffu ji nepřepíše,
+dokud se neposadí (`DiffAnchorReporter` hlásí i při vzniku, tedy **dřív** než skok). Bez obojího by
+se poloha v diffu tiše ztrácela, a přitom by všechno vypadalo, že funguje: záložka by se otevřela,
+jen na začátku. Zbývá jeden průchod grafu mezi spotřebováním a skokem — zapsaná mez.
+
+**Co v harnessu ověřit nešlo**, a zkouší to člověk: že se výřez po restartu doopravdy posadí tam,
+kde stál. Skok jde přes `scrollTo` s podílem výšky a #152 to má zapsané jako **zmírnění, ne
+záruku** — kolik průchodů to sedne, se řídit nedá, a měřit se to musí na běžícím okně
+(v testovacím hostu se `ScrollView` nevykreslí, viz
+[`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)).
+
 
 ### Záznam rozhodnutí — nálezy v okraji (#503)
 

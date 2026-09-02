@@ -92,6 +92,13 @@ jedna z nich zatím není záznamem dneška. A **41 vedle 02** je zase případ 
 **jediný výřez hlavičky** s pilulkou `mimo zdroje` a dva stavy záložky, o které se ví jen adresa
 (#531) — celá hlavička ani celé okno se nepřekresluje.
 
+**Výřez nemusí ležet na stránce té sekce, kterou nepřekresluje** (#527). Sekce **44** kreslí pruh
+záložek před ukončením a po startu, tedy tentýž pruh jako **02** — a leží přesto na stránce
+*Start a poruchy*, ne u ní. Rozhoduje **kdy tu obrazovku vidíš**: puntík načítání je vidět pár
+sekund po spuštění a nikdy potom, takže patří k ostatním startovním stavům, kdežto 02 je klidný
+stav téhož okna. Je to tentýž rozdíl jako u sekcí, do kterých se z obrazovky jen přijde (viz níž),
+jen se místo *odkud se otevírá* ptá na *kdy nastane*.
+
 **Sekce, do které se z obrazovky jen přijde, leží na stránce toho místa, odkud se otevírá.**
 Sekce 20 kreslí surovou session na stránce *Průběh*, protože se otevírá z výpisu kroků; **28**
 (sheet s celým logem a s hunkem) leží na stránce *Kontroly*, protože odtud vede

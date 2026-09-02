@@ -76,6 +76,10 @@ struct DiffView: View {
     /// takže okraj a lišta ukazují **totéž** — bez toho by po `⌥↓` nebylo poznat, o které kartě
     /// lišta mluví. Do #503 to potřeboval jen panel, protože v diffu se o kurzoru dozvěděl skok.
     var current: FindingPlace?
+    /// Kam hlásit, kde stojí výřez (#527) — z toho se skládá kotva scrollu v `tabs.json`.
+    /// `nil` = **tuhle obrazovku nikdo neobnovuje**, takže se ani nepočítá: diff commitu (#317),
+    /// rozsahový diff (#284) ani náhled o pull requestu nic neukládají.
+    var reportScrollAnchor: ((DiffScrollAnchor?) -> Void)?
 
     /// Kreslit nálezy jako bubliny **pod** jejich řádkem? Od #503 je jejich domovem okraj vpravo,
     /// takže je výchozí stav vypnuto a přepínač v liště je cesta, jak si obojí porovnat.
@@ -174,6 +178,7 @@ struct DiffView: View {
             .background(alignment: .topLeading) { treeShortcut }
             .background(alignment: .topLeading) { searchShortcut }
             .background(alignment: .topLeading) { readShortcut }
+            .background(alignment: .topLeading) { anchorReporter }
             // Stav hledání **prostředím** (#152), ne parametrem: dotaz se mění při každém písmenu
             // a čtou ho bloky kódu a hlavičky souborů, tedy listy hierarchie. Identita objektu se
             // nemění, takže tělo diffu se tím nepřekresluje — sledují se jeho **vlastnosti**, každou
@@ -833,6 +838,24 @@ struct DiffView: View {
                 extents: fileExtents,
                 viewport: viewport,
                 toggle: read.toggle
+            )
+        }
+    }
+
+    /// Hlášení polohy výřezu pro kotvu scrollu (#527).
+    ///
+    /// **Vlastní view a ne kus těla `DiffView`u**, ze stejného důvodu jako `readShortcut`
+    /// a `DiffPinnedHeader`: čte `viewport.top`, tedy hodnotu, která se mění při každém otočení
+    /// kolečka. A **nekreslí se vůbec, když ho nikdo nečte** — pravidlo z #438: modifikátor,
+    /// jehož výsledek nikdo nepřečte, se nepřipojuje.
+    @ViewBuilder private var anchorReporter: some View {
+        if let reportScrollAnchor {
+            DiffAnchorReporter(
+                files: diff.files,
+                extents: fileExtents,
+                frames: rowFrames,
+                viewport: viewport,
+                report: reportScrollAnchor
             )
         }
     }

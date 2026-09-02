@@ -36,6 +36,10 @@ struct PRismApp: App {
                         await store.stopReviewsBeforeTermination()
                     }
                     delegate.stopTerminals = { preflight.store?.stopTerminalsBeforeTermination() }
+                    // Snímek otevřených záložek (#527). Bez tohohle by restart po mergi zahodil
+                    // scroll, kterým člověk v diffu skončil — na disku by ležel stav z poslední
+                    // změny záložky.
+                    delegate.saveOpenTabs = { preflight.store?.persistOpenTabs() }
                 }
         }
         // Systémová titulková lišta se schovává (#180): hlavičku si kreslí `ContentView` sám,

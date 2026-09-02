@@ -43,13 +43,13 @@ struct PullRequestOriginTests {
         // Tohle je ta věta, kvůli které `origin` nečte jen značku: PR otevřený odkazem, na kterém
         // si mezitím někdo vyžádal moje review, přijde do fronty přes zdroje — a pilulka
         // `mimo zdroje` na něm musí zmizet, protože by lhala.
-        #expect(Policy.origin(of: vault, adopted: [vault], sources: [vault, cli]) == .sources)
-        #expect(Policy.origin(of: vault, adopted: [], sources: [vault]) == .sources)
+        #expect(Policy.origin(of: vault, adopted: [vault: .link], sources: [vault, cli]) == .sources)
+        #expect(Policy.origin(of: vault, adopted: [:], sources: [vault]) == .sources)
     }
 
     @Test("PR, který v seznamu není a otevřel se odkazem, je mimo zdroje")
     func anAdoptedPullRequestIsOutsideSources() {
-        #expect(Policy.origin(of: vault, adopted: [vault], sources: [cli]) == .outsideSources)
+        #expect(Policy.origin(of: vault, adopted: [vault: .link], sources: [cli]) == .outsideSources)
     }
 
     /// **Nejtišší chyba téhle funkce**: PR ze zdrojů, který zrovna vypadl z tiku (mergnul se,
@@ -57,7 +57,13 @@ struct PullRequestOriginTests {
     /// že si ho člověk otevřel odkazem.
     @Test("PR, který ze zdrojů vypadl, pilulku nedostane")
     func aPullRequestThatFellOutOfTheListIsNotAdopted() {
-        #expect(Policy.origin(of: vault, adopted: [], sources: []) == .sources)
+        #expect(Policy.origin(of: vault, adopted: [:], sources: []) == .sources)
+
+        // **A obnovená záložka pilulku nedostane taky** (#527), i když v seznamu není: obnovení
+        // běží před prvním tikem, takže by `mimo zdroje` bliklo u každé z nich — a u mergnutého
+        // PR by tvrdilo „otevřel jsi ho odkazem“, což není pravda.
+        #expect(Policy.origin(of: vault, adopted: [vault: .restored], sources: []) == .sources)
+        #expect(Policy.origin(of: vault, adopted: [vault: .restored], sources: [cli]) == .sources)
     }
 
     /// Řádek `Odkaz` se ptá na něco jiného než pilulka, a je to ta past, kterou tahle sada chytila
@@ -78,9 +84,9 @@ struct PullRequestOriginTests {
 
     @Test("Se shrnutím se kreslí detail, ať je PR odkudkoli")
     func aKnownSummaryWins() {
-        for origin in [PullRequestOrigin.sources, .outsideSources] {
+        for adoption in [nil, TabAdoption.link, .restored] {
             #expect(
-                Policy.tabContent(summary: summary(vault), detail: nil, origin: origin)
+                Policy.tabContent(summary: summary(vault), detail: nil, adoption: adoption)
                     == .detail(summary(vault))
             )
         }
@@ -90,24 +96,49 @@ struct PullRequestOriginTests {
     func aMissingSourcePullRequestIsGone() {
         // I nad rozdělaným načítáním: u PR ze zdrojů je shrnutí ze seznamu, takže nenačtený
         // detail znamená jen chybějící větve v hlavičce, ne prázdnou obrazovku.
-        #expect(Policy.tabContent(summary: nil, detail: .loading, origin: .sources) == .gone)
-        #expect(Policy.tabContent(summary: nil, detail: nil, origin: .sources) == .gone)
+        #expect(Policy.tabContent(summary: nil, detail: .loading, adoption: nil) == .gone)
+        #expect(Policy.tabContent(summary: nil, detail: nil, adoption: nil) == .gone)
     }
 
-    @Test("Záložka mimo zdroje rozlišuje načítání od poruchy")
-    func anAdoptedTabTellsLoadingFromFailure() {
-        #expect(Policy.tabContent(summary: nil, detail: nil, origin: .outsideSources) == .loading)
+    /// **Oba důvody přijetí, ne jen odkaz** (#527): obnovená záložka je nad mergnutým PR ten
+    /// případ, na kterém to celé stojí — `gone` by nad ní byla věta „pull request zmizel“ nad
+    /// obrazovkou, kterou si aplikace zrovna sama načítá.
+    @Test("Přijatá záložka rozlišuje načítání od poruchy", arguments: [TabAdoption.link, .restored])
+    func anAdoptedTabTellsLoadingFromFailure(adoption: TabAdoption) {
+        #expect(Policy.tabContent(summary: nil, detail: nil, adoption: adoption) == .loading)
         #expect(
-            Policy.tabContent(summary: nil, detail: .loading, origin: .outsideSources) == .loading
+            Policy.tabContent(summary: nil, detail: .loading, adoption: adoption) == .loading
         )
         #expect(
-            Policy.tabContent(summary: nil, detail: .failed("HTTP 404"), origin: .outsideSources)
+            Policy.tabContent(summary: nil, detail: .failed("HTTP 404"), adoption: adoption)
                 == .failed("HTTP 404")
         )
         // Dotažený detail bez shrnutí se v aplikaci nestane (shrnutí se z něj skládá), ale
         // odpověď na to musí být čekání, ne porucha.
         let loaded = DetailState.loaded(detail(vault), updatedAt: Date(timeIntervalSince1970: 100))
-        #expect(Policy.tabContent(summary: nil, detail: loaded, origin: .outsideSources) == .loading)
+        #expect(Policy.tabContent(summary: nil, detail: loaded, adoption: adoption) == .loading)
+    }
+
+    /// **Věta u načítání nesmí tvrdit víc, než co data unesou** (#527). Do #527 stála ve
+    /// `ContentView` jediná — `není ve zdrojích` —, a u obnovené záložky by lhala: obnovení běží
+    /// před prvním tikem, takže se v tu chvíli **neví**, jestli PR ve zdrojích je.
+    @Test("Věta u načítání i u poruchy se liší podle důvodu přijetí")
+    func theNotesTellTheAdoptionApart() {
+        let linked = Policy.loadingTabNote(for: vault, adoption: .link)
+        let restored = Policy.loadingTabNote(for: vault, adoption: .restored)
+
+        #expect(linked.contains("není ve zdrojích"))
+        #expect(!restored.contains("není ve zdrojích"))
+        #expect(restored.contains("restartu"))
+        // Identifikátor je v obou: bez něj by věta nešla přiřadit k záložce.
+        #expect(linked.contains(vault.description))
+        #expect(restored.contains(vault.description))
+
+        // U poruchy je rozdíl v radě: adresu u obnovené záložky nikdo nepsal, takže „zkontroluj
+        // adresu“ by posílalo člověka hledat chybu, kterou neudělal.
+        #expect(Policy.failedTabNote(for: vault, adoption: .link).contains("Zkontroluj adresu"))
+        #expect(!Policy.failedTabNote(for: vault, adoption: .restored).contains("Zkontroluj adresu"))
+        #expect(Policy.failedTabNote(for: vault, adoption: .restored).contains("vidíš"))
     }
 
     /// Shrnutí pro pruh záložek nesmí nic tvrdit: pruh z něj čte `repo#číslo`, titulek je v něm

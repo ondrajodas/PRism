@@ -5,17 +5,18 @@ import SwiftUI
 /// Domácí záložka plus otevřená review. Tečka u záložky nese **stav toho review**, takže je
 /// z pruhu vidět, co běží a kde leží rozdělaná práce, aniž by se na tu záložku muselo přepnout —
 /// a přesně to bylo do #180 neviditelné.
+///
+/// **Od #527 má značka pět podob** a rozhoduje o nich `Policy.tabMark`: k běhu, rozdělanému
+/// review a stavu review přibyla **obnovená záložka bez detailu** (dutý kroužek) a **mergnutý
+/// nebo zavřený pull request** (jeho vlastní barva).
 struct ReviewTabsView: View {
     @Binding var active: WindowTab
     let tabs: [PullRequestSummary]
-    /// Stav review pro tečku. Bere ho volající, protože ho počítá store.
-    let state: (PRIdentifier) -> ReviewState
-    /// Leží na PR rozdělané review?
-    let hasDraft: (PRIdentifier) -> Bool
-    /// Běží na PR zrovna review? Bere se ze **store**, ne ze `state`: `ReviewState.running`
-    /// vzniká z fáze běhu, ale u PR, kde se zrovna klonuje, je stav `cloning` — a točit se má
-    /// v obou případech, protože obojí je „něco se právě děje“.
-    let isRunning: (PRIdentifier) -> Bool
+    /// Co se u záložky nakreslí. **Jedna otázka, ne tři vstupy** (#527): do té doby si view
+    /// bralo `state`, `hasDraft` a `isRunning` a rozhodovalo `if`y ve třech patrech — s pátým
+    /// stavem (obnovená záložka, mergnutý PR) je to rozhodnutí, které patří do `Policy`, kde se
+    /// dá vyčerpat výčtem. Skládá ho store (`AppStore.tabMark(for:)`).
+    let mark: (PRIdentifier) -> WindowTabMark
     let close: (PRIdentifier) -> Void
 
     var body: some View {
@@ -94,28 +95,58 @@ struct ReviewTabsView: View {
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }
 
-    /// Značka stavu, ve třech patrech podle toho, co se s PR zrovna děje.
-    ///
-    /// **Běh přebíjí všechno**: je to jediný stav, který se mění sám, a kolečko je jediná věc
-    /// v pruhu, ze které je vidět, že aplikace pracuje, aniž by se na tu záložku přepnulo.
-    /// Pod ním je **rozdělané review**, protože to je věc, která čeká na mě. Teprve pak barevná
-    /// tečka s výsledkem.
+    /// Značka stavu — pět podob podle toho, co se s PR zrovna děje. **Pořadí rozhoduje
+    /// `Policy.tabMark`**, ne `if`y tady: je to rozhodnutí nad daty, ne kresba.
     @ViewBuilder private func dot(for id: PRIdentifier) -> some View {
-        if isRunning(id) {
+        switch mark(id) {
+        case .running:
             SpinningRing()
                 .help("Review běží")
                 .accessibilityLabel("Review běží")
-        } else if hasDraft(id) {
+        case .loading:
+            loadingRing
+        case .draft:
             Image(systemName: "square.and.pencil")
                 .font(.system(size: 9))
                 .foregroundStyle(.tint)
                 .help("Leží tu rozdělané review")
-        } else {
+        case .pullRequest(let state):
             Circle()
-                .fill(ReviewStateAppearance.color(of: state(id)))
+                .fill(PullRequestStateAppearance.color(of: state))
                 .frame(width: 6, height: 6)
-                .help(ReviewStateAppearance.label(of: state(id)))
+                .help("Pull request je \(state.czechLabel) — dá se dočíst a zavřít")
+        case .review(let state):
+            Circle()
+                .fill(ReviewStateAppearance.color(of: state))
+                .frame(width: 6, height: 6)
+                .help(ReviewStateAppearance.label(of: state))
         }
+    }
+
+    /// Přijatá záložka, jejíž detail ještě nedorazil (#527, `.tdot-load` v sekci 44 návrhu) —
+    /// obnovená po restartu, nebo otevřená odkazem (#531).
+    ///
+    /// **Dutý kroužek, ne plný puntík a ne prstýnek**, a je to celý obsah toho rozhodnutí. Plný
+    /// puntík nese v pruhu **stav review**, a ten se u záložky, o které se ještě nic neví, nemá
+    /// odkud vzít — nakreslil by tedy stav z minula. Prstýnek (`SpinningRing`) znamená **běží
+    /// review**, a po startu neběží nic (obnovení nespouští nic), takže by o sobě záložka
+    /// tvrdila víc, než co data unesou.
+    ///
+    /// **Nehybný schválně**, i když se na pozadí doopravdy dotahuje: pohyb v pruhu je v tomhle
+    /// okně vyhrazený běžícímu review. A jako bonus se tím tenhle stav nedostane do třídy
+    /// zakázaných nekonečných animací (#350) — kroužek je čistá kresba, nic se netočí.
+    ///
+    /// `--ink-3` (`Palette.ink3`), tedy tichá šedá: je to „nemám co říct“, ne barva ze škály —
+    /// tatáž role, jakou má `.secondary` u `ReviewState.notStarted`.
+    private var loadingRing: some View {
+        Circle()
+            .strokeBorder(Palette.ink3, lineWidth: 1.5)
+            .frame(width: 8, height: 8)
+            // **Neutrálně**, ne „vrátila se po restartu“: tenhle stav dostane i záložka otevřená
+            // odkazem, u které se detail teprve dotahuje (#531) — a nápověda, která mluví
+            // o restartu, by u ní tvrdila něco, co se nestalo.
+            .help("Načítám pull request — o téhle záložce se zatím ví jenom adresa")
+            .accessibilityLabel("Načítá se")
     }
 
 }
