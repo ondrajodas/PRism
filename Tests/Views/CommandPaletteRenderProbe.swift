@@ -47,6 +47,10 @@ struct CommandPaletteRenderProbe {
         /// PR, tedy pod hranou karty — a přitom je to jediná skupina, ve které se **kreslí
         /// zkratky**. Bez tohohle scénáře se na ně nedá podívat jinak než na klávesnici.
         case actions = "akce"
+        /// Vložený odkaz (#531): skupina `Odkaz` nad zúženým katalogem. Dotaz se do renderu
+        /// dosadit nedá (je to `@State` uvnitř karty), ale **řádek odkazu se předává uzávěrem**,
+        /// takže se na něj podívat jde — a to je jediná cesta, jak ho vidět bez klávesnice.
+        case link = "odkaz"
     }
 
     @Test("Vyrendrovat paletu se skupinami Pull requesty k review a Moje PR")
@@ -57,13 +61,14 @@ struct CommandPaletteRenderProbe {
             let items = Self.items(for: scenario, from: store.paletteItems)
             let url = directory.appending(path: "paleta-\(scenario.rawValue).png")
             try render(
-                CommandPaletteView(items: items, run: { _ in }, close: {})
+                CommandPaletteView(items: items, link: Self.link(for: scenario), run: { _ in }, close: {})
                     .frame(width: Self.width, height: Self.height)
                     .background(Palette.background)
                     .tint(Palette.accent),
                 to: url
             )
-            let groups = Policy.paletteResults(of: items, query: "").map { "\($0.group.title) \($0.hits.count)" }
+            let groups = Policy.paletteResults(of: items, query: "", link: Self.link(for: scenario)(""))
+                .map { "\($0.group.title) \($0.hits.count)" }
             print("SONDA \(url.path) — \(scenario.rawValue), skupiny: \(groups.joined(separator: " | "))")
         }
     }
@@ -117,10 +122,21 @@ struct CommandPaletteRenderProbe {
         from items: [CommandPalette.Item]
     ) -> [CommandPalette.Item] {
         switch scenario {
-        case .design: trimmed(items)
+        case .design, .link: trimmed(items)
         case .full: items
         case .actions: items.filter { $0.group == .actions }
         }
+    }
+
+    /// Řádek skupiny `Odkaz` (#531) — jen ve scénáři, který o něj stojí.
+    ///
+    /// **Uzávěr ignoruje dotaz schválně**: `query` je `@State` uvnitř karty a dosadit se nedá,
+    /// takže by se řádek nad prázdným dotazem nikdy neobjevil. Skládá ho `Policy` z identifikátoru
+    /// PR, který **ve zdrojích není** — tedy s podtitulkem `není ve zdrojích`, jak ho má sekce 09.
+    private static func link(for scenario: Scenario) -> (String) -> CommandPalette.Item? {
+        guard scenario == .link else { return { _ in nil } }
+        let outside = PRIdentifier("keboola/vault#85")!
+        return { _ in Policy.paletteLink(to: outside, origin: .outsideSources) }
     }
 
     private static func trimmed(_ items: [CommandPalette.Item]) -> [CommandPalette.Item] {

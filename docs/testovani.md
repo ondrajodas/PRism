@@ -2713,15 +2713,70 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   po `↵` otevře záložku) i **týž podtitulek** jako cizí, a že dotaz najde obojí naráz.
 - **Sonda palety se dvěma skupinami (#336)** — `CommandPaletteRenderProbe`, gated `PRISM_MEASURE`,
   cesta ven `PRISM_RENDER_DIR`. Vyrendruje kartu nad katalogem ze **storu** (diff z fixture, takže
-  cesty souborů mají skutečný tvar) ve dvou podobách: zúžené na počty řádků ze sekce 09 návrhu
-  (na srovnání vedle sebe) a nad celým katalogem, kde je vidět, že se pět skupin scrolluje.
+  cesty souborů mají skutečný tvar) ve **čtyřech** podobách: zúžené na počty řádků ze sekce 09
+  návrhu (na srovnání vedle sebe), nad celým katalogem, kde je vidět, že se pět skupin scrolluje,
+  jen se skupinou `Akce` (#441 — v plném katalogu je pod hranou karty, a přitom je jediná, ve které
+  se kreslí zkratky) a od #531 se skupinou **`Odkaz`**.
   **Dotaz se do renderu dosadit nedá** — `query` je `@State` uvnitř `CommandPaletteView`, protože má
   zaniknout se zavřením palety —, takže sonda kreslí stav prázdného dotazu; zvýraznění shody v ní
   proto není. Paletu v běžící aplikaci navíc otevírá jedině ⌘K, a psát do cizí instance se
   v paralelním běhu nemá.
+
+  **Řádek `Odkaz` se přesto vyrendrovat dá, a je to důsledek toho, jak se předává** (#531): není
+  v katalogu, ale v **uzávěru** (`CommandPaletteView.link`), takže sonda dosadí uzávěr, který dotaz
+  ignoruje. Bez toho by se na ten řádek nedalo podívat jinak než na klávesnici — a v paralelním
+  běhu se do cizí instance psát nemá. Ze snímku se ověřilo, co číslo neřekne: skupina je **nad
+  nálezy**, řádek je pod kurzorem (takže `↵` hned po vložení adresy otevře záložku) a značka je
+  akcentový `link`, ne puntík nálezu.
 - **Měření hledání (#184)** — `CommandPaletteMeasurement`, gated `PRISM_MEASURE` jako měření
   layoutu. Nic netvrdí; existuje proto, že se katalog skládá **při každém stisku klávesy** a to
   rozhodnutí má být podložené číslem: 200 řádků 1,5 ms, 2000 řádků 17,6 ms.
+- **`Policy` — odkaz na pull request (#531)** — `PullRequestLinkTests`, dva výčty parametrizovaných
+  případů. První bere adresu tak, jak se **doopravdy kopíruje** z prohlížeče (přehled, `/files`,
+  `/commits/<sha>`, kotva na komentář, parametr pohledu, trailing slash, bez schématu, `www.`,
+  s bílými znaky kolem). Druhý je ten cennější a hlídá, co projít **nesmí**: `gitlab.com`,
+  GitHub Enterprise a hlavně `notgithub.com` a `github.com.evil.example` — obojí obsahuje
+  `github.com` jako podřetězec, takže by je kontrola bez lomítka pustila a identifikátor by vedl
+  na dotaz o úplně jiném pull requestu. K tomu `issues` místo `pull`, číslo `0` a `-3` (klíčovaly
+  by neexistující PR), znak, který se do adresy nedostane z prohlížeče, ale z pole palety ano
+  (`keb<ola`), a obyčejné dotazy, kvůli kterým se paleta otevírá nejčastěji.
+
+  `prism://` má vlastní dvojici výčtů — přijaté (i s percent-encodingem, s lomítkem za hostem
+  a velkými písmeny) a odmítnuté, mezi nimi **jiná akce než `open`**: z odkazu se nemá dát vyvolat
+  nic, o čem není napsáno, že to dělá. **Round-trip** hlídá, že se `githubURL(of:)` a
+  `linkedPullRequest(in:)` nerozejdou — jinak by `⌘↵` na řádku `Odkaz` vedl jinam, než co otevře
+  `↵`. A schéma se srovnává **s `Info.plist`**: přečte se `CFBundleURLTypes` ze souboru v kořeni
+  repa a musí vyjít `[Policy.urlScheme]`, protože dvě místa jinak znamenají dvě pravdy o tom, na
+  co aplikace reaguje.
+- **`Policy` — PR mimo zdroje (#531)** — `PullRequestOriginTests`, dva vyčerpávající výčty.
+  U `origin(of:adopted:sources:)` je nejcennější případ ten, ve kterém PR **ze zdrojů vypadl**
+  (mergnul se, odebral se request na review): pilulku `mimo zdroje` dostat nesmí, protože by
+  tvrdila, že si ho člověk otevřel odkazem. Vedle toho `linkOrigin(of:sources:)`, který odpovídá
+  na **jinou otázku** a u neznámého PR vychází obráceně — chytila to až první zelená sada, ne
+  review: s jednou funkcí tvrdil řádek `Odkaz` u cizího repa `je ve tvých zdrojích`.
+
+  `tabContent(summary:detail:origin:)` má případ na každý ze čtyř stavů, a to podstatné je, že se
+  **`loading` a `gone` nesmí slít**: nad rozdělaným načítáním u PR ze zdrojů vychází `gone` (tam je
+  shrnutí ze seznamu, takže nenačtený detail znamená jen chybějící větve v hlavičce), kdežto
+  u záložky mimo zdroje `loading`. A `pendingSummary(for:)` se kontroluje na to, že **nic netvrdí**:
+  titulek `Načítá se…`, prázdný autor, `distantPast`.
+- **`AppStore` — PR mimo zdroje (#531)** — `AppStoreExternalTabTests` proti fake gateway. Půlka
+  sady tvrdí, že se něco **nestalo**, protože přesně to se rozbije potichu: PR otevřený odkazem
+  není v `pullRequests`, `visiblePullRequests`, `queuePullRequests`, nezvedne odznak fronty,
+  **nezmění dashboard** (srovnává se celý, ne jedno číslo) a **automat na něj nesáhne**, ani když
+  je zapnutý globálně. K tomu, že PR **ze seznamu** se otevře bez jediného dotazu navíc, takže se
+  na `openPullRequest(_:)` nedá zdražit klik v seznamu.
+
+  Druhá půlka je o tom, co přežít **musí**: záložka drží shrnutí, detail i obsah přes tik, ve
+  kterém PR v seznamu není. **Ověřeno vložením regrese** — bez sjednocení v `forget(whatIsNotIn:)`
+  padnou tři tvrzení jednoho testu (shrnutí, obsah záložky, detail v mapě). Zavření záložky značku
+  odebere a **až příští tik** detail uklidí; to je ten test, který hlídá, že se nedrží stav, který
+  nikdo nečte.
+
+  Paleta má nad storem čtyři případy: vložený odkaz dá skupinu `Odkaz` **jako první**, u PR ze
+  zdrojů se podtitulek liší, běžné hledání ani prázdný dotaz ji nedostanou vůbec a **psaní odkazu
+  se nikoho neptá** (gateway nedostane volání ani po třech úhozech) — pravidlo palety od #184 tedy
+  platí dál.
 - **`AppStore` — rozdělané review** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
   složkou: on rozhoduje, co je po restartu, takže fake by ověřoval sám sebe. Pokrývá cestu
   od kliknutí po disk (komentář, verdikt, tělo, převzetí nálezu do těla i na řádek), a hlavně

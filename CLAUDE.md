@@ -564,7 +564,11 @@ podrobnosti. Zvlášť stojí za přečtení, než sáhneš na:
   podle autora: `queuePullRequests` (cizí, tedy fronta) a vlastní PR (#331, #332). Fronta,
   karty `Čeká na mě` a `Blokuje`, souhrn, automat, hromadné spuštění a notifikace čtou **jen
   cizí**; úklid, eviction, nastavení, nabídka filtru a rozdělaná review **obojí**
-  ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332));
+  ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332)). **Od #531 k tomu stojí
+  záložky mimo zdroje** (`externalPullRequests`) — PR otevřený odkazem nebo `prism://` **do fronty
+  nepatří**, ale úklid po tiku ho zahodit nesmí, jinak se otevřená záložka vyprázdní; obojí bere
+  `pullRequestsInPlay(besides:)` a `summary(for:)`
+  ([rozbor](docs/architektura.md#otevřít-pr-mimo-zdroje-531));
 - **[`Environment`](docs/architektura.md#vrstva-environment-appenvironment)** — podprocesy:
   blokující I/O nesmí na kooperativní pool, oba pipy se musí číst souběžně, **zrušení
   i ukončení aplikace musí proces zabít** (#264 — obě cesty, jedním `SIGKILL`em; zavírání se

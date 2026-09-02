@@ -6268,6 +6268,92 @@ padnou dva ze čtyř testů).
 hodnot — rozdíl bitmap tvrdí, že se stav kreslí, ne že se překreslí s úhozem; ta druhá věc jde
 ověřit jedině klikáním.
 
+## M18 — Otevřít jakýkoli PR (milník #20)
+
+Dnes se v okně otevře **jen PR ze zdrojů**. Milník přidává cestu k libovolnému pull requestu:
+v ⌘K se napíše jméno repa, aplikace ho najde v organizacích z nastavení, `↵` přepne paletu
+o úroveň níž na otevřené PR toho repa a druhý `↵` otevře **záložku ke čtení**. Vložený odkaz
+a URL schéma `prism://` jsou zkratka téže cesty. Rozvrh je v popisu milníku: **#531** (otevřít
+PR mimo zdroje — základ, sám) souběžně s **#532** (organizace v nastavení a cache seznamu
+repozitářů, jiné soubory), pak **#533** (paleta: skupina `Repozitáře` a druhá úroveň), která
+staví na obojím. Nakreslené je to v **sekcích 09, 10 a 41** návrhu.
+
+**Tvrdé podmínky se nemění ani o položku**: celá cesta je čtení, `GitHubGateway` zůstává bez
+zápisových metod. Mění se `forget(whatIsNotIn:)`, tedy úklid po tiku — viz níž.
+
+## #531 — otevřít jakýkoli PR jako záložku ke čtení
+
+Do #531 vedla do okna jedna cesta: PR se musel objevit ve **zdrojích** (#4). Od #531 se dá otevřít
+kterýkoli — vloženým odkazem v paletě ⌘K, přes `prism://open?url=…` a od #533 z repa organizací —
+ale jen **ke čtení**: do fronty, na karty, do odznaku ani do automatu se takový PR nedostane,
+protože frontu definují zdroje. Hlavička to říká pilulkou `mimo zdroje · jen ke čtení`.
+
+**První krok issue byl přenos zákresu T9 z decku do `docs/navrh.html`** (sekce **09** dostala dvě
+nové obrazovky — vložený odkaz a dvě úrovně nad repem —, sekce **10** výřez s organizacemi a nová
+sekce **41** výřez hlavičky s pilulkou a se dvěma stavy záložky, o které se ví jen adresa).
+Sekcí je tím **40**; číslo v [`docs/navrh.md`](navrh.md) přitom stálo 38 proti skutečným 39, takže
+se rovnalo i to.
+
+**Značka je množina, ne mapa se shrnutími.** `AppStore.externalPullRequests` drží jen
+identifikátory a shrnutí se skládá z dotaženého detailu (`summary(for:)`) — dvě kopie téhož PR by se
+uměly rozejít v okamžiku, kdy autor změní titulek. Množina tak odpovídá na jedinou otázku, *odkud se
+ta záložka vzala*, a čte ji pilulka, řádek palety i úklid po tiku.
+
+**Nejcennější věc na téhle změně je, že se fronta nerozšířila.** `pullRequests` zůstává tím, co
+přišlo ze zdrojů, takže karty, odznak, souhrn, notifikace ani automat se o takové záložce nemají kde
+dozvědět; automat navíc dostává `summaries` z tiku, ne stav store. Je na to sada testů, které
+tvrdí, že se něco **nestalo** — včetně srovnání **celého** dashboardu, ne jednoho čísla.
+
+**Zato úklid po tiku se změnit musel, a bez toho by to nefungovalo vůbec.**
+`forget(whatIsNotIn:)` zahazuje detail, diff, konverzaci, checky, commity i labely pro PR mimo
+seznam — takže by otevřenou záložku **vyprázdnil první tik** a v okně by zbyla věta „pull request
+zmizel ze seznamu“, tedy porucha nad stavem, ve kterém se nic nepokazilo. Chtěná množina je proto
+sjednocení (`pullRequestsInPlay(besides:)`) a bere ji **i eviction cache a mazání uložených
+nálezů**: jinak by po otevřené záložce zbyl klon bez záznamu, nebo záznam bez klonu. Ověřeno
+vložením regrese — bez sjednocení padnou tři tvrzení. Zahodit značku smí **jedině zavření
+záložky**; tik, ve kterém PR v seznamu není, je u téhle záložky normální stav.
+
+**Načítání, porucha a „zmizel ze seznamu“ jsou tři různé stavy** (`Policy.tabContent`, čtyři
+případy). O PR mimo zdroje se ví jenom adresa, takže mezi otevřením záložky a hlavičkou je vteřina
+čekání — a ta nesmí vypadat jako věta o zmizelém PR. U poruchy zůstává **syrová odpověď `gh`** a dvě
+východiska: `Zkusit znovu` (adresa může být v pořádku a síť ne) a `Zavřít záložku` (adresa může být
+překlep). Záložka přitom vzniká **hned**, ne až po dotažení: kliknutí, po kterém se sekundu neděje
+nic, je k nerozeznání od kliknutí, které nic neudělalo. V pruhu se do té doby kreslí
+`Policy.pendingSummary(for:)` — titulek `Načítá se…`, prázdný autor, `distantPast` — a do
+`summary(for:)` se to **dostat nesmí**, jinak by z něj byla hlavička s vymyšleným stavem `otevřený`.
+
+**Skupina `Odkaz` v paletě neprochází hledáním.** Zbytek palety hledá v katalogu z paměti; tenhle
+řádek je odpověď na to, co je v poli napsané, a hledat adresu v titulcích by znamenalo, že se
+vložený odkaz najde jedině náhodou. Je **první** — výjimka z „nálezy první“, protože při vložené
+adrese se na nic jiného neptám — a objeví se **jen** tehdy, když se dotaz dá přečíst jako adresa PR.
+Pravidlo „paleta se nikoho neptá“ (#184) platí dál: řádek se skládá z identifikátoru, PR se dotahuje
+až po `↵`.
+
+**Dvě funkce na „odkud je“, a je to zapsané rozhodnutí, ne opomenutí.** Pilulka odpovídá na *odkud
+se ta záložka vzala* (u PR, který ze zdrojů vypadl, tedy nic — jinak by tvrdila, že si ho člověk
+otevřel odkazem), kdežto řádek odkazu na *je ten PR v mých zdrojích teď* (u neznámého PR
+`není ve zdrojích`). Rozdíl **odhalila první zelená sada**, ne review: s jednou funkcí tvrdil
+řádek u cizího repa `je ve tvých zdrojích`.
+
+**Odkaz umí aplikaci spustit**, takže `prism://` musí přežít i to, že store ještě není: žádost si
+`PreflightModel` schová a vyzvedne po preflightu. Zahodit ji by znamenalo, že kliknutí na odkaz
+PRism spustí a **nic neotevře** — a podruhé už poběží, takže by se to vypadalo jako náhoda. Jméno
+schématu i akce jsou konstanty v `Policy` a **test je srovnává s `Info.plist`**.
+
+**Copilot k tomu našel dvě věci a obě jsou opravené.** (1) **Dvě `↵` na řádku `Odkaz` spustila
+dva dotazy** — `openPullRequest` se ptal, i když už jeden dotažení běželo. `.loading` v mapě proto
+znamená „někdo se právě ptá“ a druhý pokus se nepustí; k tomu se ta značka musí uklidit **na každé
+cestě ven** z `loadExternalDetail`, i na té, na které se zápis zahazuje (zavřená záložka) — jinak by
+znovuotevření uvízlo na obrazovce načítání navždycky. Obojí je pokryté testem a ověřené vložením
+regrese. (2) **Komentáře v `forget(whatIsNotIn:)` tvrdily „drží se jen to, co je v seznamu“**,
+kdežto hranice je od #531 o tu jednu záložku širší. Opraveno **jako třída, ne jako výskyt**: jedna
+věta u definice `wantedPullRequests` říká, co „v seznamu“ v komentářích níž znamená — dvacet
+přepsaných komentářů by znamenalo dvacet míst, ve kterých se dá zapomenout jedno.
+
+Testů **4859** ve 476 suitách (proti 4827 ve 473 na `main`u po #500); nové jsou tři sady
+(`PullRequestLinkTests`, `PullRequestOriginTests`, `AppStoreExternalTabTests`). Co se v nich hlídá
+a proč, je v [`docs/testovani.md`](testovani.md).
+
 ## #152 — hledání v diffu (⌘F)
 
 **Nejstarší otevřené issue v repu** (srpen 2026), a půlka jeho odůvodnění při implementaci

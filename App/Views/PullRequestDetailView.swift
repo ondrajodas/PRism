@@ -265,7 +265,10 @@ struct PullRequestDetailView: View {
                     checks: store.checks[pullRequest.id] ?? [],
                     // Pilulka `moje PR` (#334) — čte se ze stejného místa jako to, který segment
                     // kreslí panel, takže se hlavička a panel nemají čím rozejít.
-                    ownership: ownership
+                    ownership: ownership,
+                    // Pilulka `mimo zdroje` (#531) — rozhoduje o ní store, protože jedině ten ví,
+                    // co přišlo ze zdrojů a co si člověk otevřel odkazem.
+                    origin: store.origin(of: pullRequest.id)
                 )
                 draftChip
                 Spacer(minLength: 8)

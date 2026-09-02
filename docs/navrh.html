@@ -5507,6 +5507,105 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     </div>
   </section>
 
+  <section class="section" id="s41">
+    <div class="section-head">
+      <div class="eyebrow">41 — Hlavička PR · otevřeno mimo zdroje</div>
+      <h2>Pilulka, která říká, proč tenhle PR nikde ve frontě není</h2>
+      <p class="muted">
+        Od #531 se dá otevřít <b>jakýkoli</b> pull request — vloženým odkazem v ⌘K
+        (<a class="jump" href="#s09link">skupina Odkaz →</a>), z repa mých organizací
+        (<a class="jump" href="#s09repo">druhá úroveň palety →</a>) nebo přes
+        <code>prism://open?url=…</code>. Takový PR <b>není ve zdrojích</b>, a to není porucha:
+        frontu definují zdroje (#4), takže se nedostane do fronty, na karty, do odznaku ani do
+        automatu. Musí to ale být <b>vidět v okně</b>, ne jen v dokumentaci — jinak vypadá
+        záložka jako každá jiná a chybí u ní odpověď na „proč mi to nikdo nepřipomněl“.
+      </p>
+      <p class="muted">
+        <b>Výřez, ne celé okno.</b> Mění se jedna kapsle v hlavičce, takže se
+        <a class="jump" href="#s02">sekce 02 (dnešní Přehled)</a> nepřekresluje — zůstává tím,
+        proti čemu se dá aplikace srovnat. Je to tentýž vztah jako u
+        <a class="jump" href="#s24">sekce 24</a>: nová kresba ukazuje jen to, co je jinak.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane new">
+        <div class="tag"><i></i>Hlavička PR otevřeného mimo zdroje</div>
+        <div class="frame flat">
+          <div class="pr-head" style="padding-bottom: 14px;">
+            <div class="pr-title">
+              <h4>feat: configurable secret TTL with tenant ceiling</h4>
+              <span class="num">#91</span>
+            </div>
+            <div class="pr-meta">
+              <span class="state-chip">⬤ Otevřený</span>
+              <span class="pill idle">mimo zdroje · jen ke čtení</span>
+              <span><strong>odinuv</strong> chce sloučit</span>
+              <span class="branch">feat/ttl-ceiling</span>
+              <span>→</span>
+              <span class="branch">main</span>
+              <span>·</span>
+              <span>keboola/vault</span>
+            </div>
+          </div>
+        </div>
+        <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+          Review jde pustit ručně jako na každém PR. Když se na něm review <b>vyžádá</b>, přijde
+          do fronty normálně přes zdroje a pilulka zmizí — rozhoduje o tom, co je v seznamu
+          <b>teď</b>, ne jak se záložka otevřela.
+        </p>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Dokud detail nedorazil · a když nedorazí</div>
+        <div class="empty">
+          <span class="glyph" style="background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);">↓</span>
+          <span class="t">Načítám pull request</span>
+          <span class="d">keboola/vault#91 není ve zdrojích, takže se o něm aplikace musí zeptat GitHubu.</span>
+        </div>
+        <div class="empty">
+          <span class="glyph" style="background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit);">!</span>
+          <span class="t">Pull request se nepodařilo načíst</span>
+          <span class="d">keboola/vault#91 se nepovedlo dotáhnout. Zkontroluj adresu — a jestli na to repo vidíš.</span>
+          <span class="cmdline">GitHub o tom neví. HTTP 404</span>
+          <span class="a"><span class="mini pri">Zkusit znovu</span><span class="mini">Zavřít záložku</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">63b</span>
+        <span class="body">
+          <b>Tlumená trojice, ne barva ze škály</b>
+          <span>Není to porucha ani nález, je to <b>konstatování, odkud ta záložka je</b> —
+          proto <code>.pill.idle</code> (<code>--panel-3</code>/<code>--ink-2</code>). Barevná
+          kapsle vedle plné kapsle stavu by z hlavičky udělala druhý semafor; tentýž důvod, proč
+          je <code>moje PR</code> vedle ní jen mint na patnácti procentech.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">64b</span>
+        <span class="body">
+          <b>Za stavem, před autorem</b>
+          <span>Stav PR je pořád první věc, kvůli které se na hlavičku kouká. <em>Odkud ten PR
+          je</em> je odpověď na tu druhou otázku v pořadí — a <b>u PR ze zdrojů se nekreslí
+          nic</b>, protože pilulka, která platí u devadesáti devíti procent záložek, je šum.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">65b</span>
+        <span class="body">
+          <b>Načítání a porucha se nesmí slít</b>
+          <span>O PR mimo zdroje se ví jenom adresa, takže mezi otevřením záložky a hlavičkou je
+          <b>vteřina čekání</b> — a ta nesmí vypadat jako věta „pull request zmizel ze seznamu“,
+          kterou okno kreslí u PR vypadlého ze zdrojů. Když dotažení selže, zůstane <b>syrová
+          odpověď <code>gh</code></b> a dvě východiska: zkusit znovu (adresa může být v pořádku
+          a síť ne) a zavřít záložku (adresa může být překlep).</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
 
         <div class="doc-move">
           <a class="prev" href="#deni"><span class="dir">← předchozí</span><span class="t">Dění</span></a>
@@ -13620,6 +13719,15 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
         pull requesty, soubory v diffu, nálezy i akcemi — a je to zároveň jediné místo, kde se
         nemusí pamatovat, kde co v okně bydlí.
       </p>
+      <p class="muted">
+        <b>Obrazovky jsou v téhle sekci tři</b> (#531, #533). První kreslí, jak paleta hledá
+        dneska — v tom, co je v okně. Druhá a třetí přidávají cestu k <b>jakémukoli</b> pull
+        requestu: <a class="jump" href="#s09link">vložený odkaz (skupina Odkaz →)</a> jako
+        zkratku a <a class="jump" href="#s09repo">repo z mých organizací (druhá úroveň →)</a>
+        pro případ, kdy odkaz po ruce není. Ani jedna z nich nesahá do fronty — otevřená
+        záložka je <b>jen ke čtení</b>, jak to říká
+        <a class="jump" href="#s41">výřez hlavičky (pilulka mimo zdroje →)</a>.
+      </p>
     </div>
 
     <div class="pal-stage">
@@ -13714,6 +13822,155 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <span>Strop je <b>šest řádků na skupinu</b>, ne na celek — ve společné skupině by při
           dvaceti cizích PR ta moje nemusela vyjít vůbec. Vlastní skupina má svých šest a při
           prázdném dotazu je vidět začátek obou.</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- ---------- 09.2 VLOŽENÝ ODKAZ (#531) ---------- -->
+    <h3 id="s09link">Vložený odkaz: skupina Odkaz je první, protože se na nic jiného neptám</h3>
+    <p class="muted">
+      Adresa pull requestu ve schránce je dneska cesta do prohlížeče. Návrh z ní dělá vstup do
+      okna: vložím ji do ⌘K a nad všemi ostatními skupinami se objeví jediný řádek —
+      <em>Otevřít keboola/vault#85</em>. <b>Není to hledání</b>, a proto je ta skupina první:
+      vložená adresa je příkaz, kdežto zbytek palety hledá v tom, co store drží v paměti.
+      Podtitulek říká, co <code>↵</code> udělá — u PR mimo zdroje že se otevře <b>jen ke čtení</b>.
+    </p>
+    <p class="muted">
+      Přečte se adresa tak, jak se doopravdy kopíruje: s <code>/files</code>, s kotvou na
+      komentář, s parametrem pohledu, bez schématu i s <code>www.</code>. <b>Cizí host je
+      odmítnutí</b>, ne pokus — z <code>gitlab.com</code> ani z GitHub Enterprise se identifikátor
+      nebere, protože by vedl na dotaz o úplně jiném pull requestu. Totéž umí URL schéma
+      <code>prism://open?url=…</code>, tedy odkaz odkudkoli ze systému.
+    </p>
+
+    <div class="pal-stage" style="min-height: 0; padding: 26px 20px 30px;">
+      <div class="palette">
+        <div class="pal-input">
+          <span style="color: var(--ink-3);">⌕</span>
+          <span>https://github.com/keboola/vault/pull/85</span>
+          <span class="caret"></span>
+        </div>
+
+        <div class="pal-group">Odkaz</div>
+        <div class="pal-row on">
+          <span class="ico" style="color: var(--accent);">↗</span>
+          <span>Otevřít keboola/vault#85</span>
+          <span class="sub">není ve zdrojích</span>
+          <span class="kbd">↵</span>
+        </div>
+
+        <!-- Patka je **táž jako u dnešního hledání** o kus výš, ne vlastní: klávesy jsou
+             vlastnost karty, ne skupiny, a kdyby se text měnil podle toho, co je v poli,
+             musel by se do něj dívat každý řádek. `↵ otevřít` platí i tady — že se otevře
+             *jen ke čtení*, říká podtitulek řádku, ne patka. -->
+        <div class="pal-foot">
+          <span>↑↓ pohyb</span>
+          <span>↵ otevřít</span>
+          <span>⌘↵ otevřít na GitHubu</span>
+          <span>esc zavřít</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">56</span>
+        <span class="body">
+          <b>Skupina se objeví jen tehdy, když je dotaz adresa</b>
+          <span>Nad běžným hledáním v paletě není — a nad prázdným dotazem taky ne. Řádek
+          navíc <b>neprochází hledáním</b>: shoda je celý dotaz, takže by se v titulku
+          <em>Otevřít keboola/vault#85</em> nepotkalo nic a odkaz by vyšel jedině náhodou.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">57</span>
+        <span class="body">
+          <b>Celý identifikátor s ownerem, ne <code>vault#85</code></b>
+          <span>Ostatní řádky palety mluví o PR, které jsou v okně, takže jim stačí jméno repa.
+          Tenhle je z repa, které na obrazovce nikde není — a <code>keboola/vault</code> proti
+          <code>ondrajodas/vault</code> je zrovna ten rozdíl, kvůli kterému se odkaz vkládá.
+          Značka je v aplikaci SF Symbol <code>link</code>; <code>↗</code> je jeho zástupce
+          v kresbě, jako <code>◫</code> za <code>doc.text</code> o dvě skupiny výš.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">58</span>
+        <span class="body">
+          <b>Psaní se nikoho neptá</b>
+          <span>Řádek se skládá z identifikátoru, ne z dotazu na GitHub: co je to za pull
+          request, se zjistí teprve po <code>↵</code>. Pravidlo palety od #184 tedy platí dál — z každého
+          úhozu není podproces.</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- ---------- 09.3 REPO A JEHO PR (#533) ---------- -->
+    <h3 id="s09repo">Druhá úroveň: nejdřív repo z mých organizací, pak jeho pull requesty</h3>
+    <p class="muted">
+      Odkaz musí člověk napřed někde vzít — v prohlížeči, ve Slacku. Když vím, že
+      <em>„v vaultu leží PR o TTL“</em>, mám ho najít odsud: napíšu jméno repa, paleta hledá
+      v <b>repozitářích organizací z nastavení</b>
+      (<a class="jump" href="#s10org">sekce 10 (organizace k prohledávání →)</a>) a nabídne
+      skupinu <em>Repozitáře</em>. <code>↵</code> na repu paletu přepne <b>o úroveň níž</b>: v poli zůstane
+      chip s repem, pod ním otevřené PR toho repa, psaní filtruje, <code>↵</code> otevře záložku.
+      <b><code>esc</code> a <code>⌫</code> na prázdném poli vrací o úroveň</b>, ne zavírá.
+    </p>
+
+    <div class="compare">
+      <div class="pane new">
+        <div class="tag"><i></i>Úroveň 1 · napsané „vault“ najde repo v organizacích</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="pal-input"><span>vault</span><span class="caret"></span></div>
+          <div class="pal-group">Pull requesty k review</div>
+          <div class="pal-row"><span class="ico">⎇</span><span>vault#85 · chore: modernize dependencies</span><span class="sub">ve frontě · otevřený</span></div>
+          <div class="pal-group">Repozitáře · keboola, ondrajodas</div>
+          <div class="pal-row on"><span class="ico">▣</span><span><b>keboola/vault</b></span><span class="sub">7 otevřených PR · naposledy před hodinou</span><span class="kbd">↵ otevřít seznam</span></div>
+          <div class="pal-row"><span class="ico">▣</span><span>keboola/<b>vault</b>-cli</span><span class="sub">2 otevřené PR</span></div>
+          <div class="pal-row"><span class="ico">▣</span><span>keboola/php-<b>vault</b>-client</span><span class="sub">bez otevřených PR</span></div>
+          <div class="pal-foot"><span>↑↓ vybrat</span><span>↵ do repa</span><span>esc zavřít</span></div>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Úroveň 2 · PR v repu, psaní filtruje, ↵ otevře</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="pal-input"><span class="pill run" style="margin-right: 8px;">keboola/vault ›</span><span>delay</span><span class="caret"></span></div>
+          <div class="pal-group">Otevřené pull requesty · 7 · řazeno podle poslední změny</div>
+          <div class="pal-row on"><span class="ico" style="color: var(--ok);">⬤</span><span><b>#91</b> · feat: configurable secret TTL with tenant ceiling</span><span class="sub">odinuv · před 2 h</span><span class="kbd">↵ otevřít</span></div>
+          <div class="pal-row"><span class="ico" style="color: var(--ok);">⬤</span><span><b>#85</b> · chore: modernize dependencies</span><span class="sub">odinuv · před hodinou · <span class="pill crit" style="font-size: 9.5px;">ve frontě</span></span></div>
+          <div class="pal-row"><span class="ico" style="color: var(--ink-3);">◍</span><span><b>#88</b> · WIP: rotate keys without downtime</span><span class="sub">mzdrahal · před 3 dny · draft</span></div>
+          <div class="pal-row"><span class="ico" style="color: var(--ok);">⬤</span><span><b>#84</b> · fix: retry on transient KMS errors</span><span class="sub">ondrajodas · před 4 dny · <span class="pill mint" style="font-size: 9.5px;">moje</span></span></div>
+          <div class="pal-foot"><span>↑↓ vybrat</span><span>↵ otevřít ke čtení</span><span>esc o úroveň zpět</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">59</span>
+        <span class="body">
+          <b>Repozitáře z cache, ne z dotazu při každém úhozu</b>
+          <span>Keboola má stovky rep. Seznam (jméno, počet otevřených PR, čas poslední změny)
+          se dotáhne při přidání organizace a pak jednou denně nebo tlačítkem; hledání běží nad
+          cache a je okamžité. Skupina <em>Repozitáře</em> je <b>poslední</b> a má strop šest
+          řádků jako ostatní (#184) — je to nabídka, kam jít, ne odpověď na to, co je v okně.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">60</span>
+        <span class="body">
+          <b>Druhá úroveň je tatáž paleta, ne druhé okno</b>
+          <span>Chip s repem zůstává v poli, takže je pořád vidět, kde jsem; seznam PR se
+          dotáhne <b>při vstupu</b> (jen otevřené, podle poslední změny) a <em>ve frontě</em>
+          i <em>moje</em> se pozná z toho, co store už má — bez dalšího dotazu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">61</span>
+        <span class="body">
+          <b>Dvě čtecí metody, žádný zápis</b>
+          <span><code>GitHubGateway</code> dostane <em>repozitáře organizace</em> a <em>pull
+          requesty repa</em> — obojí čtení, typ zůstává bez zápisových metod (tvrdá podmínka
+          č. 1 beze změny).</span>
         </span>
       </div>
     </div>
@@ -14166,6 +14423,52 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
       </div>
     </div>
 
+    <!-- ---------- 10.2 ORGANIZACE K PROHLEDÁVÁNÍ (#532) ---------- -->
+    <h3 id="s10org">Organizace k prohledávání: seznam, ze kterého paleta bere repozitáře</h3>
+    <p class="muted">
+      Nová položka na stránce <em>Zdroje PR</em>, a leží tam schválně: odpovídá na tutéž otázku
+      jako zdroje nad ní — <b>kde se aplikace kouká</b>. Zdroje ale definují <b>frontu</b>,
+      kdežto organizace jen říkají, ve kterých repozitářích má paleta ⌘K hledat podle jména
+      (<a class="jump" href="#s09repo">druhá úroveň palety →</a>). Ten rozdíl je napsaný pod
+      polem, protože se dá splést: <b>PR odsud se otevírají jen ke čtení</b> a do fronty se
+      nedostanou.
+    </p>
+    <p class="muted">
+      <b>Výřez, ne celé okno</b> — mění se jedna sekce, takže se stránka nekreslí znovu
+      (<a class="jump" href="#s10">okno nastavení výš</a> zůstává záznamem dneška). Seznam
+      repozitářů se drží v <b>cache</b>: dotáhne se při přidání organizace a pak jednou denně
+      nebo tlačítkem, takže hledání běží nad pamětí a je okamžité i u organizace se stovkami rep.
+      Kolik jich je a kdy se to naposled obnovilo, stojí <b>vedle tlačítka</b> — bez toho se nedá
+      poznat, jestli je prázdný výsledek hledání odpověď, nebo neobnovená cache.
+    </p>
+
+    <div class="frame flat">
+      <div class="set-body">
+        <div class="set-sec">
+          <span class="t">Organizace k prohledávání</span>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="chipline">
+                <span class="tagchip">keboola</span>
+                <span class="tagchip">ondrajodas</span>
+                <span class="tagchip plus">+ organizace</span>
+              </span>
+              <span class="val">
+                <span class="mono">412 rep · obnoveno 7:58</span>
+                <span class="mini">Obnovit</span>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            Paleta ⌘K v nich hledá repozitáře podle jména. Seznam rep se drží v cache a obnovuje
+            jednou denně nebo tlačítkem; <strong>není to zdroj fronty</strong> — PR odsud se
+            otevírají jen ke čtení. <strong>Prázdný seznam je běžný stav</strong>, ne nedodělek:
+            kdo si repo najde odkazem, organizace nepotřebuje.
+          </span>
+        </div>
+      </div>
+    </div>
+
     <div class="block">
       <header>
         <span>Stránka <strong>Odesílání</strong> — vlastní položka v navigaci, ne tahle</span>
@@ -14245,6 +14548,16 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
     </div>
 
     <div class="notes">
+      <div class="note">
+        <span class="num">62</span>
+        <span class="body">
+          <b>Organizace nejsou zdroj</b>
+          <span>Leží na stránce <em>Zdroje PR</em>, ale frontu nedefinují — jsou to jen
+          repozitáře, ve kterých hledá paleta. Ten rozdíl je napsaný <b>pod polem</b>, protože
+          ze dvou seznamů vedle sebe se neuhádne: jeden říká, na co se čeká, druhý kde se dá
+          hledat.</span>
+        </span>
+      </div>
       <div class="note">
         <span class="num">23</span>
         <span class="body">

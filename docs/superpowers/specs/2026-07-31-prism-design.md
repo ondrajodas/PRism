@@ -5210,3 +5210,35 @@ otevřené jen to, co se změnilo. `AppStore.fileFolding` se proto z množiny sb
 **Co se od zákresu odchýlilo:** nic v kresbě; přidalo se to, na co zákres neodpovídal (✓ vedle
 puntíku nálezu ve stromu, chování v diffu commitu a v rozsahovém diffu). Obojí je zapsané
 v poznámkách sekce 40 `docs/navrh.html`.
+
+### Záznam rozhodnutí — otevřít PR mimo zdroje (#531)
+
+Zdroje (#4) definují frontu: co se hledá, na to se čeká. #531 přidal druhou cestu do okna —
+vložený odkaz, `prism://` a od #533 repo z organizací — a celé rozhodování je o tom, **co z toho
+zdroje nesmí zdědit**.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Značka je `Set<PRIdentifier>` a shrnutí se skládá z detailu** (`summary(for:)`) | Mapa `[PRIdentifier: PullRequestSummary]` vedle `pullRequests` | Dvě kopie téhož PR se rozejdou v okamžiku, kdy autor změní titulek — a rozejdou se **potichu**, protože v pruhu záložek by zůstal starý. Množina navíc odpovídá na jedinou otázku (*odkud se ta záložka vzala*), a to je zrovna to, co potřebuje pilulka i úklid |
+| **Detail se dotahuje vlastní cestou** (`loadExternalDetail(of:)`) | Rozšířit `loadDetail(for:)`, aby brala `PRIdentifier` | Ta metoda bere `PullRequestSummary` a **cache podle `updatedAt`** z něj; u téhle záložky shrnutí teprve vznikne z odpovědi. Rozšířený podpis by znamenal dva režimy jedné metody, ve kterých se cache chová jinak. Po dotažení se pokračuje **beze změny**: `loadDetail` si detail vezme z cache a dotáhne checky, commity, labely a větev |
+| **Záložka vzniká hned, načítání je její stav** | Dotáhnout detail a otevřít záložku až po něm | Kliknutí, po kterém se sekundu neděje nic, je k nerozeznání od kliknutí, které nic neudělalo — a u selhání by nebylo kde to říct. Cenou je `Policy.pendingSummary(for:)` pro pruh záložek, který **nesmí** do `summary(for:)`: tam by z něj byla hlavička s vymyšleným stavem `otevřený` a diff načtený proti `distantPast` |
+| **Čtyři stavy záložky v `Policy.tabContent`** | Nechat ve `ContentView` `if let summary` jako dosud | `loading` a `gone` jsou dvě různé věty a slít je znamená hlásit poruchu nad stavem, ve kterém se nic nepokazilo. Je to tatáž zásada, jakou drží `ReviewState` (`čisté` × `failed` × `inconclusive`) |
+| **Úklid po tiku bere sjednocení** (`pullRequestsInPlay(besides:)`) | Nechat `forget(whatIsNotIn:)`, jak byl | Bez toho by první tik otevřenou záložku **vyprázdnil** — a nejen v paměti: eviction by smazala klon a `ReviewStore.cleanUp` uložené nálezy z ručně puštěného review. Sjednocení bere **všechna tři místa naráz**, jinak zbude klon bez záznamu, nebo záznam bez klonu |
+| **Značku zahazuje jedině `closeTab(_:)`** | Uklidit ji na tiku, ve kterém PR v seznamu není | To je u téhle záložky **normální stav**, ne důvod ji zrušit. Zavření je naopak jednoznačné a po něm se v mapách nemá co držet — příští tik detail i diff uklidí sám |
+| **Dvě funkce na „odkud je“** (`origin` × `linkOrigin`) | Jedna funkce pro pilulku i pro řádek `Odkaz` | Jsou to dvě otázky a u neznámého PR se odpovědi **rozcházejí**: pilulka se ptá, odkud se ta záložka vzala (PR vypadlý ze zdrojů nikdo odkazem neotevřel), řádek odkazu, jestli je ten PR ve zdrojích teď. Odhalila to **první zelená sada**, ne review — s jednou funkcí tvrdil řádek u cizího repa `je ve tvých zdrojích` |
+| **Skupina `Odkaz` je první a neprochází hledáním** | Nechat ji projít `paletteMatch`em jako ostatní řádky | Shoda by musela padnout na titulek `Otevřít keboola/vault#85`, ve kterém vložená adresa není — odkaz by se našel jedině náhodou. Přidat dotaz do `keywords` by fungovalo, ale je to trik, který se rozbije při prvním úklidu vah. První je proto, že u vložené adresy **se na nic jiného neptám**; nálezy zůstávají první ve všem ostatním |
+| **`Mark.link` jako vlastní značka** | `Mark.pullRequest(state)` s odhadnutým `otevřený` | O stavu toho PR se v tu chvíli neví nic. `otevřený` u zavřeného PR je lež na tom nejtišším možném místě |
+| **Jména v odkazu se ověřují úžeji než v `RepoID`** | Nechat kontrolu na `RepoID` | Do parseru se dostane cokoli ze schránky a z výsledku se skládá `URL` — `github.com/a<b/c/pull/1` by prošlo a `URL(string:)` nad ním vrátil `nil`. `RepoID` zůstává tolerantní schválně: bere, co vrátí `gh` |
+| **`prism://` má jedinou akci `open`** | Obecnější schéma (`prism://pr/…`, `prism://run/…`) | Z odkazu, který umí vyvolat kdokoli, se nemá dát spustit nic, o čem není napsáno, že to dělá. Adresu rozebírá **tatáž funkce** jako vložený odkaz, takže se ty dvě cesty nemají čím rozejít |
+| **Odložená žádost v `PreflightModel`** | Zahodit URL, která přijde před storem | Odkaz umí aplikaci **spustit**, takže tenhle případ je ten první, na který kdo klikne — a „spustilo se to a nic se neotevřelo“ vypadá jako rozbité schéma. Vyzvedne se za nastavením `state`, ať záložka vzniká nad storem, který okno kreslí |
+| **Schéma je v `Info.plist` a jméno v `Policy`, srovnává je test** | Literál na obou místech | Dvě pravdy o tom, na co aplikace reaguje. Test čte `CFBundleURLTypes` ze souboru v kořeni repa |
+
+**Přenos zákresu T9 do `docs/navrh.html`** byl první krok issue a rozhodly se u něj dvě věci.
+Palety se kreslí **jako další obrazovky v sekci 09** (precedens sekce 20: obrazovky, které
+odpovídají na navazující otázky nad týmž místem, patří k sobě), takže dnešní hledání zůstává
+záznamem dneška. Naopak pilulka v hlavičce dostala **vlastní sekci 41 s výřezem** — tentýž vztah,
+jaký má 24 k 02: novější kresba se do záznamu dneška nepřekresluje. Organizace (#532) jsou v sekci
+10 taky jako **výřez**, ne překreslené okno nastavení.
+
+**Tvrdé podmínky se nemění ani o položku.** `GitHubGateway` je dál bez zápisových metod a celá
+cesta je jediné čtení (`gh pr view`); `SingleWayOutTests` prochází beze změny.

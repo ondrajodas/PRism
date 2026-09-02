@@ -27,9 +27,14 @@ extension Policy {
     ///
     /// Skupina, ve které nic nesedlo, **vypadne celá** — nadpis nad prázdnem by tvrdil, že se
     /// hledalo a nic není, i tam, kde se hledat nemělo kde.
+    /// - Parameter link: řádek skupiny `Odkaz` (#531), když se dotaz dá přečíst jako adresa PR.
+    ///   **Prochází mimo hledání**, ne katalogem: není to nález mezi tím, co store drží v paměti,
+    ///   ale odpověď na to, co je v poli napsané — a hledat adresu v titulcích a podtitulcích by
+    ///   znamenalo, že se vložený odkaz najde jedině tehdy, když se náhodou potká s nějakým textem.
     static func paletteResults(
         of items: [CommandPalette.Item],
         query: String,
+        link: CommandPalette.Item? = nil,
         limit: Int = paletteGroupLimit
     ) -> [CommandPalette.Section] {
         let tokens = paletteTokens(in: query)
@@ -49,7 +54,7 @@ extension Policy {
             )
         }
 
-        return CommandPalette.Group.allCases.compactMap { group in
+        let found = CommandPalette.Group.allCases.compactMap { group in
             let hits = ranked
                 .filter { $0.hit.item.group == group }
                 .sorted { ($0.rank, $0.order) < ($1.rank, $1.order) }
@@ -57,6 +62,11 @@ extension Policy {
                 .map(\.hit)
             return hits.isEmpty ? nil : CommandPalette.Section(group: group, hits: Array(hits))
         }
+        // Odkaz je **první**, protože `Group.link` je první případ výčtu — pořadí skupin je tam
+        // a tady se jen dodržuje. Bez zvýraznění: shoda je celý dotaz, takže by se podtrhla
+        // adresa, kterou řádek ani nekreslí.
+        guard let link else { return found }
+        return [CommandPalette.Section(group: .link, hits: [CommandPalette.Hit(item: link)])] + found
     }
 
     /// Dotaz rozsekaný na slova. Prázdné pole znamená „ber všechno“.

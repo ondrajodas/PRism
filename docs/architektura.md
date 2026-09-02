@@ -3715,6 +3715,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:only:)`, od #377 `agentPromptSelection(for:only:toggled:)` (zadání **i seznam položek** pro sheet; výběr si store **nedrží**, bere ho parametrem), předfiltr `hasAgentPromptItems(for:)` bez sazby textu (ptá se tou samou funkcí jako text, tedy i s předvybráním), přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 116 |
 | `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)` (od #335 si volající bere **celý report**, ne jedno číslo — pilulka i text novinek se ptají téže funkce), `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPromptSelection(for:)` pro `Sestavit i tak` (od #377 vrací i seznam, protože sheet z něj kreslí zaškrtávátka). Do paměti hned, na disk asynchronně | 78 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
+| `AppStore+External.swift` | PR **mimo zdroje** (#531) — `openPullRequest(_:)` jako jediný vstup pro „otevři PR podle identifikátoru“, `loadExternalDetail(of:)`, `origin(of:)`, `tabContent(for:)` a `pullRequestsInPlay(besides:)` pro úklid po tiku. Značka je `externalPullRequests` v `AppStore.swift`, tedy u ostatního stavu | 107 |
 | `AppStore+Commits.swift` | Commity PR do tabu `Commity` (#316) | 37 |
 | `AppStore+Metadata.swift` | Labely a vyžádaní reviewery (#392) — `loadMetadata(for:)` s detailem (cache podle `updatedAt`), nabídky `loadRepositoryLabels(for:)` a `loadAssignableUsers(for:)` **až na otevření** (volání `gh` navíc, které se má platit jen tehdy, kdy se nabídka otevře), a dvě akce (`toggleLabel(_:on:)`, `requestReview(from:on:)`), které si publisher **nedrží** — skládá se uvnitř `MetadataSubmission`. Po úspěchu se snímek přepíše z odpovědi GitHubu, ne dalším čtením | 191 |
 | `AppStore+CommitDiff.swift` | Rozkliknutý commit a jeho diff (#317) | 80 |
@@ -4047,7 +4048,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review — a u **vlastního PR** `Prompt →` (#331, `showsPromptAction`) a od #334 pilulka `N k předání` **místo odznaku stavu** (obě čísla mluví o týchž nálezech, takže by se vedle sebe pralo „3 nálezy“ s „6 k předání“; když nezbývá nic, odznak zůstává). Od #333 nese tlačítko akci (`openPrompt`) a **není zakázané**: otevře PR a v něm panel `Zadání`. **Bez akce se nekreslí** — `showsPromptAction` se ptá i na uzávěr, takže řádek bez storu (náhled, test) tlačítko nemá; nakreslit ho naprázdno je zrovna ta lež, kvůli které se do #333 kreslilo ztlumené |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: hlavička ve třech řádcích (titulek s číslem, souřadnice PR, pruh běhu), pod ní záložky, diff a nálezy. **Bez pravého sloupce** (#218) — zbylo v něm jediné akcentové místo, `Spustit review` |
-| `PullRequestHeaderView` | Souřadnice PR: kapsle stavu (plná, s puntíkem), od #334 za ní pilulka `moje PR` (mint, jen na vlastním), autor, větev → base, repo, souhrn checků a odkaz na GitHub. `StaleHeadView` vedle něj mluví jen tehdy, když se hlava rozešla se sha nálezů |
+| `PullRequestHeaderView` | Souřadnice PR: kapsle stavu (plná, s puntíkem), od #334 za ní pilulka `moje PR` (mint, jen na vlastním) a od #531 pilulka `mimo zdroje · jen ke čtení` (tlumená, jen na záložce otevřené odkazem), autor, větev → base, repo, souhrn checků a odkaz na GitHub. `StaleHeadView` vedle něj mluví jen tehdy, když se hlava rozešla se sha nálezů |
 | `ReviewRunbarView` | Pruh běhu (#218): chipy reviewerů, za nimi dráha průběhu a popisek `test-coverage · 2 z 3 hotovo · 1:12`. Bez běhu zbude jen řada chipů |
 | `DiffView` | Diff v plné šířce: lišta, strom vlevo a soubory s ukotvenou hlavičkou, kterou jde sbalit |
 | `DiffToolbar` | Lišta nad diffem (#219): pohled, procházení nálezů, varování a `Rozbalit vše` s nabídkou. **Bez přepínačů sloupců** — ty se skládají u sebe |
@@ -4118,6 +4119,11 @@ Co se u ní nemá rozbít:
   a ta hlasitější z nich. Sám návrh (`Policy.suggestedVerdict`) se nemění.
 - **Číslo PR je u titulku**, ne uvnitř `owner/repo#4`. V té větě ho nikdo nehledá; řada
   souřadnic proto nese jen `owner/repo`.
+- **Pilulky pojmenovávají odchylku, ne pravidlo** (#334, #531). `moje PR` se na cizím nekreslí
+  a `mimo zdroje · jen ke čtení` se nekreslí na PR ze zdrojů — údaj, který platí u devadesáti
+  devíti procent záložek, je šum. Obě jsou **tlumené vedle plné kapsle stavu** (mint na patnácti
+  procentech, resp. `--panel-3`/`--ink-2` z `.pill.idle`), takže v pruhu zůstává jedno plné pole.
+  O textu i o tom, jestli se pilulka kreslí, rozhoduje `Policy.originNote(_:)`, ne `if` ve view.
 - **Kapsle stavu je plná** (`.state-chip`): puntík, slovo, barva z palety návrhu a text v barvě
   plochy (`Palette.surface`), ne bílý. Systémové `.green`/`.red` jsou na plnou kapsli příliš
   světlé a bílá by na nich v tmavém režimu oslňovala.
@@ -4664,6 +4670,99 @@ Klávesy a stav:
 - **Výška seznamu se měří, šířka se předává** (#220). `ScrollView` je v ose scrollování
   nenasytný, takže bez `onGeometryChange` by byla karta vysoká i nad dvěma výsledky; šířka jde
   dolů přes `availableWidth(560)` a řádky ji nevyjednávají.
+
+### Vložený odkaz v paletě (#531)
+
+**Skupina `Odkaz` neprochází hledáním, skládá se z dotazu.** Zbytek palety je hledání nad
+katalogem, který store drží v paměti; tenhle jeden řádek je odpověď na to, co je v poli napsané —
+pull request z cizího repa v žádném katalogu není a být nemá (byl by to dotaz na GitHub při
+každém úhozu). Proto má `Policy.paletteResults` parametr `link:` a sekci **předsazuje** před
+nalezené: kdyby řádek šel `paletteMatch`em, našel by se jedině tehdy, kdyby se adresa náhodou
+potkala s nějakým titulkem.
+
+- **Skupina je první případ `CommandPalette.Group`**, tedy nad nálezy — a je to výjimka
+  z pravidla „nálezy první“ o kus výš. Nálezy jsou první proto, že jsou to nejcennější data
+  v okně; odkaz je první proto, že se v tu chvíli **na nic jiného neptám**. Objeví se **jen**
+  tehdy, když se dotaz dá přečíst jako adresa PR.
+- **Rozeznávání tvarů je jedna čistá funkce** (`Policy.linkedPullRequest(in:)`) a bere adresu tak,
+  jak se doopravdy kopíruje: s `/files`, s `/commits/<sha>`, s kotvou na komentář, s parametrem
+  pohledu, bez schématu, s `www.`, s bílými znaky kolem. **Cizí host je odmítnutí**, ne pokus —
+  a kontroluje se `github.com/` **i s lomítkem**, jinak projde
+  `github.com.evil.example/keboola/vault/pull/85`.
+- **Jména vlastníka a repa se ověřují úžeji než v `RepoID`.** `RepoID` odmítá jen to, co by
+  ublížilo cestě v cache; sem se ale text dostane **z pole palety**, tedy z čehokoli ve schránce,
+  a skládá se z něj adresa (`Policy.githubURL(of:)`). Bez toho by `github.com/a<b/c/pull/1`
+  prošlo a `URL(string:)` nad ním vrátil `nil`. Že se ty dvě funkce nerozejdou, hlídá test
+  na round-trip.
+- **`⌘↵` funguje dřív, než se cokoli dotáhne** — adresa se skládá z identifikátoru
+  (`Policy.githubURL(of:)`), ne z `PullRequestSummary.url`, který u takového PR ještě není.
+- **Podtitulek rozhoduje `Policy.linkOrigin(of:sources:)`, ne `origin(of:)`.** Jsou to dvě různé
+  otázky a rozcházejí se u PR, o kterém store neví nic: pilulka v hlavičce odpovídá na „odkud se
+  ta **záložka** vzala“ (a neznámý PR nikdo odkazem neotevřel, takže vyjde `sources`), kdežto
+  řádek odkazu na „je ten PR v mých zdrojích **teď**“ — a tam je správná odpověď
+  `není ve zdrojích`. Chytila to až první zelená sada, ne review: s jednou funkcí tvrdil řádek
+  u cizího repa `je ve tvých zdrojích`.
+- **Značka je `Mark.link`, ne `Mark.pullRequest(_:)`.** O stavu toho PR se v tu chvíli neví nic,
+  takže by se musel vymyslet — a `otevřený` u zavřeného PR je lež na tom nejtišším možném místě.
+
+## Otevřít PR mimo zdroje (#531)
+
+Zdroje (#4) definují **frontu**: co se hledá, na to se čeká, to je na kartách, v odznaku a
+v automatu. Od #531 se dá otevřít **jakýkoli** pull request — vloženým odkazem v ⌘K, přes
+`prism://open?url=…` a od #533 i z repa organizací — ale jen jako **záložka ke čtení**. Celé to
+stojí na jedné vlastnosti store a jedné čisté funkci:
+
+| Kde | Co |
+|---|---|
+| `AppStore.externalPullRequests` (`Set<PRIdentifier>`) | značka „tuhle záložku otevřel člověk mimo zdroje“. **Žádná druhá kopie dat** |
+| `AppStore.openPullRequest(_:)` (`AppStore+External.swift`) | jediný vstup pro „otevři PR podle identifikátoru“; u PR ze seznamu je to beze změny `openTab(_:)` |
+| `AppStore.summary(for:)` | u záložky mimo zdroje skládá shrnutí **z dotaženého detailu** (`PullRequestSummary.init(_:)`) |
+| `Policy.origin(of:adopted:sources:)`, `Policy.originNote(_:)` | pilulka `mimo zdroje · jen ke čtení` v hlavičce |
+| `Policy.tabContent(summary:detail:origin:)` | čtyři stavy záložky: detail, načítání, porucha, „zmizel ze seznamu“ |
+| `Policy.linkedPullRequest(in:)`, `Policy.openedPullRequest(from:)` | odkaz a URL schéma |
+
+- **Množina, ne mapa se shrnutími.** Shrnutí se skládá z `detailStates`, takže dvě kopie téhož
+  PR by se uměly rozejít v okamžiku, kdy autor změní titulek. Množina odpovídá na jedinou otázku
+  — **odkud se ta záložka vzala** — a čte ji pilulka, řádek palety i úklid po tiku.
+- **Fronta se tím nerozšiřuje, a to je nejcennější věc na téhle změně.** `pullRequests` zůstává
+  tím, co přišlo ze zdrojů, takže karty, odznak, souhrn, notifikace ani automat se o takové
+  záložce nemají kde dozvědět; automat navíc dostává `summaries` z tiku, ne stav store. Hlídá to
+  sada testů, které tvrdí, že se něco **nestalo** (`AppStoreExternalTabTests`).
+- **Záložka přežije tik, a je to změna v `forget(whatIsNotIn:)`.** Ta funkce zahazuje detail,
+  diff, konverzaci, checky, commity i labely pro PR mimo seznam — takže by otevřenou záložku
+  **vyprázdnil první tik** a v okně by zbyla věta „pull request zmizel ze seznamu“, tedy porucha
+  nad stavem, ve kterém se nic nepokazilo. Chtěná množina je proto sjednocení
+  (`pullRequestsInPlay(besides:)`) a bere ji **i eviction cache a mazání uložených nálezů** —
+  jinak by po otevřené záložce zbyl klon bez záznamu, nebo záznam bez klonu. Ověřeno vložením
+  regrese: bez toho sjednocení spadne test na tři tvrzení.
+- **Zahodit značku smí jedině zavření záložky.** Tik, ve kterém PR v seznamu není, je u téhle
+  záložky normální stav. `closeTab(_:)` značku odebere, takže **příští** tik detail i diff
+  uklidí — bez toho by v paměti zůstal stav, který nikdo nečte.
+- **Načítání a porucha se nesmí slít se „zmizel ze seznamu“.** O PR mimo zdroje se ví jenom
+  adresa, takže mezi otevřením záložky a hlavičkou je vteřina čekání. `Policy.tabContent` proto
+  vydává **čtyři** stavy a `ContentView` je sází; u poruchy zůstává **syrová odpověď `gh`**
+  (`EmptyStateView.detail`) a dvě východiska — `Zkusit znovu` (adresa může být v pořádku a síť ne)
+  a `Zavřít záložku` (adresa může být překlep).
+- **Záložka vzniká hned, ne až po dotažení.** Kliknutí, po kterém se sekundu neděje nic, je
+  k nerozeznání od kliknutí, které nic neudělalo. V pruhu záložek se proto do dotažení kreslí
+  `Policy.pendingSummary(for:)` — shrnutí, ve kterém je titulek `Načítá se…`, prázdný autor
+  a `distantPast`. **Do `summary(for:)` se dostat nesmí**: tam by z něj byla hlavička s vymyšleným
+  stavem `otevřený` a diff načtený proti `distantPast`.
+- **Detail se dotahuje vlastní cestou** (`loadExternalDetail(of:)`), protože `loadDetail(for:)`
+  bere `PullRequestSummary` — tedy přesně to, co u téhle záložky chybí a co z toho volání teprve
+  vznikne. Jakmile detail dorazí, pokračuje záložka **úplně stejnou cestou jako každá jiná**:
+  `loadDetail` si ho vezme z cache (razítko je `detail.updatedAt`) a dotáhne checky, commity,
+  labely i větev. **Zavřená záložka se nedopisuje** — mezi začátkem dotahování a odpovědí se dá
+  kliknout na křížek a zápis by v mapách nechal PR, který v okně nikde není.
+- **URL schéma je v `Info.plist` v kořeni repa** (`CFBundleURLTypes`, `prism`), jméno schématu
+  i akce jsou konstanty v `Policy` a **test srovnává obojí** — dvě místa by jinak znamenala dvě
+  pravdy o tom, na co aplikace reaguje. `prism://open?url=…` rozebírá **tatáž funkce** jako
+  vložený odkaz, takže co se dá otevřít z palety, se dá otevřít i odsud, a ani o znak víc; cokoli
+  jiného za `prism://` je odmítnutí. **Odkaz umí aplikaci spustit**, takže žádost může přijít
+  dřív, než je store na světě — `PreflightModel` si ji schová a vyzvedne po preflightu, protože
+  zahodit ji by znamenalo, že kliknutí PRism spustí a nic neotevře.
+- **Tvrdá podmínka č. 1 platí beze změny**: `GitHubGateway` je dál bez zápisu a celá tahle cesta
+  je jediné čtení (`gh pr view`).
 
 ## Šířka v okně (`App/Views/AvailableWidth.swift`)
 
@@ -8077,7 +8176,8 @@ hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
 | `Policy.automaticallyReviewable` | `.theirs` | **pravidlo, ne nastavení** — viz níž |
 | `Policy.reviewNotification`, `announceNewPullRequests` | `.theirs` | notifikace je odpověď na review request |
 | `handleNotificationClicks` | obojí | klik musí vybrat i vlastní PR |
-| úklid: `forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp` | obojí | klon vlastního PR zabírá místo stejně jako cizí |
+| úklid: `forget(whatIsNotIn:)`, `CacheEviction`, `ReviewStore.cleanUp` | obojí **plus záložky mimo zdroje** (#531) | klon vlastního PR zabírá místo stejně jako cizí — a otevřená záložka nad PR, který v seznamu není, se tikem vyprázdnit nesmí (`pullRequestsInPlay(besides:)`) |
+| `summary(for:)` | obojí **plus záložky mimo zdroje** (#531) | odpovídá na „co víme o **tomhle** PR“, ne na „co je ve frontě“; u záložky mimo zdroje se shrnutí skládá z dotaženého detailu |
 | `knownRepositories` (nastavení), `filterOptions` | obojí | přenastavit chci i repo, ve kterém mám jen svoje PR |
 | paleta ⌘K | obojí, rozřazené do **dvou skupin** (#336) | katalog čte plný seznam a `Policy.ownership` z něj skládá `Pull requesty k review` a `Moje PR`; ⌘K jen hledá, nic neuklízí |
 

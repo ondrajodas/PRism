@@ -17,3 +17,26 @@ struct PullRequestSummary: Hashable, Codable, Sendable {
     var repo: RepoID { id.repo }
     var number: Int { id.number }
 }
+
+extension PullRequestSummary {
+    /// Shrnutí z dotaženého detailu (#531).
+    ///
+    /// Obráceně, než jak to chodí obvykle: shrnutí přichází z vyhledávání a detail se dotahuje
+    /// z něj. U pull requestu **mimo zdroje** ale žádné vyhledávání neproběhlo — jediné, co
+    /// o něm aplikace má, je odpověď `gh pr view`, takže se shrnutí skládá z ní.
+    ///
+    /// **Není to druhý model téhož, jen užší pohled**: `PullRequestSummary` je to, co umí každý
+    /// řádek a každá záložka, kdežto `PullRequest` má navíc hlavu, základ a větve. Kdyby se
+    /// z detailu bralo jen `headSha` a zbytek se vymýšlel, měla by hlavička u těchhle PR jiná
+    /// data než u ostatních — a to je přesně ten rozdíl, který se v okně nepozná.
+    init(_ detail: PullRequest) {
+        self.init(
+            id: detail.id,
+            title: detail.title,
+            author: detail.author,
+            url: detail.url,
+            updatedAt: detail.updatedAt,
+            state: detail.state
+        )
+    }
+}

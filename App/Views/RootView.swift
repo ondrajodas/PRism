@@ -43,6 +43,28 @@ final class PreflightModel {
         self.makeReleaseNotes = makeReleaseNotes
     }
 
+    /// Pull request, o který si někdo řekl přes `prism://`, než byl store na světě (#531).
+    ///
+    /// **Odkaz umí aplikaci spustit**, takže obvyklé pořadí je obrácené: `onOpenURL` přijde dřív,
+    /// než preflight doběhne. Zahodit ho by znamenalo, že kliknutí na odkaz spustí PRism a **nic
+    /// neotevře** — tedy ten nejhorší možný výsledek, protože podruhé už aplikace poběží a odkaz
+    /// zabere. Vyzvedne se v `check()` a hned se zapomene.
+    private var pendingPullRequest: PRIdentifier?
+
+    /// Otevře pull request z `prism://open?url=…`.
+    ///
+    /// **Adrese, které se nerozumí, se nedělá nic** a je to vědomé: schéma může vyvolat kdokoli,
+    /// takže z nerozluštěné adresy nemá být ani chybová obrazovka, ani otevřená záložka. Co je
+    /// adresa PR, rozhoduje `Policy` na jednom místě — tomtéž, které rozebírá vložený odkaz v ⌘K.
+    func open(_ url: URL) {
+        guard let pullRequest = Policy.openedPullRequest(from: url) else { return }
+        guard let store else {
+            pendingPullRequest = pullRequest
+            return
+        }
+        store.openPullRequest(pullRequest)
+    }
+
     func check() async {
         // Store se po opakované kontrole staví znovu jen tehdy, když ještě žádný není:
         // jinak by „Zkusit znovu“ zahodilo načtené PR i rozdělaná review. Totéž platí
@@ -55,7 +77,15 @@ final class PreflightModel {
             return
         }
         releaseNotes = makeReleaseNotes(paths)
-        state = .ready(makeStore(paths))
+        let store = makeStore(paths)
+        state = .ready(store)
+        // Odložená žádost z `prism://` (#531). **Až za `state`**, aby záložka vznikla nad
+        // storem, který okno už kreslí — a **jen jednou**: druhé spuštění preflightu
+        // (`Zkusit znovu`) se sem stejně nedostane, protože store už existuje.
+        if let pendingPullRequest {
+            self.pendingPullRequest = nil
+            store.openPullRequest(pendingPullRequest)
+        }
     }
 }
 
@@ -92,6 +122,10 @@ struct RootView: View {
                 }
                 openWindow(id: ReleaseNotesWindow.id)
             }
+            // `prism://open?url=…` (#531). Patří to sem, ne do `PRismApp`: adresa se vykonává nad
+            // store, a ten vzniká teprve po preflightu — takže se o pořadí musí postarat model
+            // (`open(_:)` si žádost schová, dokud store nebude).
+            .onOpenURL { model.open($0) }
     }
 
     @ViewBuilder private var content: some View {
