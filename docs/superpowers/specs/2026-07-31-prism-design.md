@@ -5143,6 +5143,106 @@ to není vidět a někdy se i špatně scrolluje na výšku."* Byly to **tři r�
 ale ta animace — tedy vada, kterou uživatel viděl v okně. Zapsat ji jako mezeru bylo správně jen
 v tom, že se to nezamlčelo; špatně v tom, že se to vydávalo za vlastnost měřidla.
 
+### Záznam rozhodnutí — značka `Prošlo` u souboru (#500)
+
+**Rozhodnutí:** zaškrtávátko `Prošlo` v hlavičce souboru, značka se ukládá **k pull requestu**
+a nese **otisk obsahu** z `index` řádky diffu (celou dvojici `<základ>..<hlava>`). Stavy jsou
+tři — `unread`, `read`, `changed` — a **sbalení souboru se z nich odvozuje**, místo aby ho
+zaškrtnutí zapisovalo.
+
+**Proč otisk, a ne `headSha`:** kdyby byla značka klíčovaná hlavou PR jako nálezy (tvrdá
+podmínka č. 5), zmizela by při každém pushi — tedy právě ve chvíli, kdy se člověk do diffu
+vrací, a u PR, kde se pushuje často, by nedržela nikdy. Podmínka č. 5 mluví o **nálezech**,
+tedy o tvrzení proti kódu; značka je tvrzení o **mém čtení**, a to pushem do jiného souboru
+nezastará. Duch té podmínky se tím ale neobchází: `changed` je právě to, aby značka nikdy
+netvrdila „prošlo“ nad kódem, který už není.
+
+**Proč celá dvojice, a ne jen hlava:** značka říká „přečetl jsem **diff** tohohle souboru“.
+Ten se změní i tehdy, když se posune **základ** — po rebase nad novým `main`em, který týž
+soubor taky sáhl, může hlava zůstat a diff se přesto přepíše. Otisk jedné strany by takovou
+změnu neviděl. Cena je nulová: `index` řádka nese obojí a parsuje se jednou.
+
+**Proč se otisk bere z diffu, a ne z API:** `gh api …/pulls/{n}/files` per-file `sha` má, ale
+byl by to **další dotaz** u operace, která se dělá při každém otevření PR — a `index` řádka
+v diffu, který se stahuje tak jako tak, nese totéž. `GitHubGateway` tím zůstává bez nové
+metody. Do #500 byl `index ` na seznamu ignorovaných řádků `DiffParser`u, takže se z něj nic
+nečetlo; čtení otisku nesmí přidat `unrecognizedLines`, a je to otestované.
+
+**Proč `nil == nil` znamená `read`:** otisk chybí jedině u přejmenování se `similarity index
+100%` — soubor se přesunul a obsah se nezměnil, takže nemá ani hunky. Kdyby se dvakrát „nevím“
+počítalo jako změna, značka by po zaškrtnutí okamžitě zhasla na `změněno od prošlého` a nešla
+by udržet ani na vteřinu. Je to jediné místo, kde se od pravidla „co data neunesou, se netvrdí“
+ustupuje — a ustupuje se **na tu stranu, která nic nezakrývá**: přejmenovaný soubor beze změny
+obsahu žádné nové řádky nemá.
+
+**Proč se sbalení odvozuje, místo aby ho zaškrtnutí zapsalo:** zapsané sbalení je stav okna
+a `AppStore` ho po restartu nemá odkud vzít — na disku by ležela značka a diff by se otevřel
+dokořán, tedy přesně ta úspora, kvůli které značka existuje, by po prvním restartu zmizela.
+Odvozením se navíc **zdarma** získá to, že se `changed` rozbalí sám: po druhém commitu zbude
+otevřené jen to, co se změnilo. `AppStore.fileFolding` se proto z množiny sbalených stal
+**mapou odchylek** (`true`/`false`/chybí), a `Rozbalit vše` odchylky nemaže, ale přepisuje na
+`false` — je to výslovný pokyn o tom, co je vidět, ne o tom, co je přečtené.
+
+**Zamítnuté varianty:**
+
+- **Dva stavy místo tří** (prošlo / neprošlo, po změně značku smazat). Zamítnuto: „četl jsem
+  starou verzi“ je jiná informace než „nečetl jsem“ — bez prostředního stavu se po pushi
+  nepozná, co je nové a co jen zapomenuté.
+- **Otisk = jen hlava souboru.** Zamítnuto výš; drží se, protože je zdarma.
+- **Prefixové porovnání zkrácených sha** (`abc` == `abcdef`). Zamítnuto: git zkracuje podle
+  velikosti repa a v rámci jednoho repa je délka stabilní, takže by ta tolerance kryla stav,
+  který nenastává, a zároveň by z rovnosti udělala „skoro rovnost“. Kdyby se zkrácení přesto
+  prodloužilo, značka spadne na `changed` — tedy na bezpečnou stranu a jedním klikem zpátky.
+- **Nový dotaz na `pulls/{n}/files`.** Zamítnuto: volání navíc za údaj, který už v odpovědi je.
+- **Zaškrtávátko i v diffu commitu a v rozsahovém diffu.** Zamítnuto: jejich `index` řádky
+  mluví o rozsahu mezi dvěma commity, ne o hlavě PR, takže by se otisk se značkou nepotkal
+  a každý zaškrtnutý soubor by hned hlásil `změněno od prošlého`. Zaškrtávátko se tam nekreslí
+  **vůbec**, ne zašedle — zašedlé tvrdí „tady se to dělá, jen teď ne“.
+- **`⌥V` na zaškrtávátku v každé hlavičce.** Zamítnuto: padesát tlačítek s touž kombinací je
+  přesně ten stav, kdy vyhraje to zaregistrované později a ostatní „nefungují“ (#151, #184).
+  Zkratka visí na jednom průhledném tlačítku a míří na soubor pod **ukotvenou** hlavičkou —
+  tedy na to, na co se člověk dívá.
+- **✓ ve stromu místo puntíku nálezu.** Zamítnuto: „je tu co spravit“ a „četl jsem to“ jsou
+  dvě různé otázky, a schovat jednu za druhou by znamenalo, že se počet v hlavičce
+  (`7 souborů · 3 prošlé`) rozejde s tím, co je v seznamu vidět. Zákres obojí zároveň nekreslí,
+  protože v něm ta kombinace nenastala — je to doplnění zákresu, ne odchylka od něj.
+
+**Co se od zákresu odchýlilo:** nic v kresbě; přidalo se to, na co zákres neodpovídal (✓ vedle
+puntíku nálezu ve stromu, chování v diffu commitu a v rozsahovém diffu). Obojí je zapsané
+v poznámkách sekce 40 `docs/navrh.html`.
+
+### Záznam rozhodnutí — otevřít PR mimo zdroje (#531)
+
+Zdroje (#4) definují frontu: co se hledá, na to se čeká. #531 přidal druhou cestu do okna —
+vložený odkaz, `prism://` a od #533 repo z organizací — a celé rozhodování je o tom, **co z toho
+zdroje nesmí zdědit**.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Značka je `Set<PRIdentifier>` a shrnutí se skládá z detailu** (`summary(for:)`) | Mapa `[PRIdentifier: PullRequestSummary]` vedle `pullRequests` | Dvě kopie téhož PR se rozejdou v okamžiku, kdy autor změní titulek — a rozejdou se **potichu**, protože v pruhu záložek by zůstal starý. Množina navíc odpovídá na jedinou otázku (*odkud se ta záložka vzala*), a to je zrovna to, co potřebuje pilulka i úklid |
+| **Detail se dotahuje vlastní cestou** (`loadExternalDetail(of:)`) | Rozšířit `loadDetail(for:)`, aby brala `PRIdentifier` | Ta metoda bere `PullRequestSummary` a **cache podle `updatedAt`** z něj; u téhle záložky shrnutí teprve vznikne z odpovědi. Rozšířený podpis by znamenal dva režimy jedné metody, ve kterých se cache chová jinak. Po dotažení se pokračuje **beze změny**: `loadDetail` si detail vezme z cache a dotáhne checky, commity, labely a větev |
+| **Záložka vzniká hned, načítání je její stav** | Dotáhnout detail a otevřít záložku až po něm | Kliknutí, po kterém se sekundu neděje nic, je k nerozeznání od kliknutí, které nic neudělalo — a u selhání by nebylo kde to říct. Cenou je `Policy.pendingSummary(for:)` pro pruh záložek, který **nesmí** do `summary(for:)`: tam by z něj byla hlavička s vymyšleným stavem `otevřený` a diff načtený proti `distantPast` |
+| **Čtyři stavy záložky v `Policy.tabContent`** | Nechat ve `ContentView` `if let summary` jako dosud | `loading` a `gone` jsou dvě různé věty a slít je znamená hlásit poruchu nad stavem, ve kterém se nic nepokazilo. Je to tatáž zásada, jakou drží `ReviewState` (`čisté` × `failed` × `inconclusive`) |
+| **Úklid po tiku bere sjednocení** (`pullRequestsInPlay(besides:)`) | Nechat `forget(whatIsNotIn:)`, jak byl | Bez toho by první tik otevřenou záložku **vyprázdnil** — a nejen v paměti: eviction by smazala klon a `ReviewStore.cleanUp` uložené nálezy z ručně puštěného review. Sjednocení bere **všechna tři místa naráz**, jinak zbude klon bez záznamu, nebo záznam bez klonu |
+| **Značku zahazuje jedině `closeTab(_:)`** | Uklidit ji na tiku, ve kterém PR v seznamu není | To je u téhle záložky **normální stav**, ne důvod ji zrušit. Zavření je naopak jednoznačné a po něm se v mapách nemá co držet — příští tik detail i diff uklidí sám |
+| **Dvě funkce na „odkud je“** (`origin` × `linkOrigin`) | Jedna funkce pro pilulku i pro řádek `Odkaz` | Jsou to dvě otázky a u neznámého PR se odpovědi **rozcházejí**: pilulka se ptá, odkud se ta záložka vzala (PR vypadlý ze zdrojů nikdo odkazem neotevřel), řádek odkazu, jestli je ten PR ve zdrojích teď. Odhalila to **první zelená sada**, ne review — s jednou funkcí tvrdil řádek u cizího repa `je ve tvých zdrojích` |
+| **Skupina `Odkaz` je první a neprochází hledáním** | Nechat ji projít `paletteMatch`em jako ostatní řádky | Shoda by musela padnout na titulek `Otevřít keboola/vault#85`, ve kterém vložená adresa není — odkaz by se našel jedině náhodou. Přidat dotaz do `keywords` by fungovalo, ale je to trik, který se rozbije při prvním úklidu vah. První je proto, že u vložené adresy **se na nic jiného neptám**; nálezy zůstávají první ve všem ostatním |
+| **`Mark.link` jako vlastní značka** | `Mark.pullRequest(state)` s odhadnutým `otevřený` | O stavu toho PR se v tu chvíli neví nic. `otevřený` u zavřeného PR je lež na tom nejtišším možném místě |
+| **Jména v odkazu se ověřují úžeji než v `RepoID`** | Nechat kontrolu na `RepoID` | Do parseru se dostane cokoli ze schránky a z výsledku se skládá `URL` — `github.com/a<b/c/pull/1` by prošlo a `URL(string:)` nad ním vrátil `nil`. `RepoID` zůstává tolerantní schválně: bere, co vrátí `gh` |
+| **`prism://` má jedinou akci `open`** | Obecnější schéma (`prism://pr/…`, `prism://run/…`) | Z odkazu, který umí vyvolat kdokoli, se nemá dát spustit nic, o čem není napsáno, že to dělá. Adresu rozebírá **tatáž funkce** jako vložený odkaz, takže se ty dvě cesty nemají čím rozejít |
+| **Odložená žádost v `PreflightModel`** | Zahodit URL, která přijde před storem | Odkaz umí aplikaci **spustit**, takže tenhle případ je ten první, na který kdo klikne — a „spustilo se to a nic se neotevřelo“ vypadá jako rozbité schéma. Vyzvedne se za nastavením `state`, ať záložka vzniká nad storem, který okno kreslí |
+| **Schéma je v `Info.plist` a jméno v `Policy`, srovnává je test** | Literál na obou místech | Dvě pravdy o tom, na co aplikace reaguje. Test čte `CFBundleURLTypes` ze souboru v kořeni repa |
+
+**Přenos zákresu T9 do `docs/navrh.html`** byl první krok issue a rozhodly se u něj dvě věci.
+Palety se kreslí **jako další obrazovky v sekci 09** (precedens sekce 20: obrazovky, které
+odpovídají na navazující otázky nad týmž místem, patří k sobě), takže dnešní hledání zůstává
+záznamem dneška. Naopak pilulka v hlavičce dostala **vlastní sekci 41 s výřezem** — tentýž vztah,
+jaký má 24 k 02: novější kresba se do záznamu dneška nepřekresluje. Organizace (#532) jsou v sekci
+10 taky jako **výřez**, ne překreslené okno nastavení.
+
+**Tvrdé podmínky se nemění ani o položku.** `GitHubGateway` je dál bez zápisových metod a celá
+cesta je jediné čtení (`gh pr view`); `SingleWayOutTests` prochází beze změny.
+
 ### Záznam rozhodnutí — katalog repozitářů drží okno nastavení (#532)
 
 `searchOrganizations` v konfiguraci, čtecí `GitHubGateway.repositories(in:)` a cache

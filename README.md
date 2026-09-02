@@ -802,6 +802,20 @@ blokuje). Skládá se na `⌘1` na proužek s počtem souborů, a týmž kliknut
 Popover `Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je
 na dosah jedním kliknutím a v liště bral místo, kvůli kterému se v užším okně nevešla.
 
+**Hlavička každého souboru má zaškrtávátko `Prošlo`** (#500) — vpravo za počty `+18 −6`, klávesou
+`⌥V` na soubor, jehož hlavička je zrovna ukotvená nahoře. Prošlý soubor se **sbalí**, ve stromu
+dostane ✓ a hlavička stromu počítá `7 souborů · 3 prošlé` s tenkým proužkem podílu pod ní.
+`Rozbalit vše` prošlé soubory otevře a značku nechá — je to pokyn o tom, co je vidět, ne o tom,
+co je přečtené.
+
+**Značka je o obsahu, ne o hlavě.** Ukládá se k pull requestu, ale nese **otisk** souboru
+(sha z `index` řádky diffu). Nový commit, který ten soubor nemění, ji nechá; commit, který ho
+mění — i rebase, po které se změnil základ — ji přepne na `změněno od prošlého` a soubor se sám
+rozbalí. Po druhém commitu tedy zbude otevřené jen to, co se změnilo, a značka nikdy netvrdí
+„prošlo“ nad kódem, který už není. Otisk se bere z diffu, který se stahuje tak jako tak, takže
+značka nestojí ani jedno volání na GitHub navíc. V diffu commitu a v rozsahu `Ukázat, co přibylo`
+zaškrtávátko **není** — jejich `index` řádky mluví o rozsahu mezi dvěma commity, ne o hlavě PR.
+
 **Napravo od diffu je panel se segmenty** (#182): nálezy jako karty a Moje review. Panel
 je jediné místo, kde jsou vidět nálezy **bez místa v kódu** — chybějící testy nebo poznámky
 k architektuře; kvůli nim samotné bubliny nestačí. Klik kamkoli do karty odscrolluje diff
@@ -1737,6 +1751,7 @@ zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, kt
 | `⌘1` / `⌘2` | strom souborů u diffu / panel s mým review |
 | `⌘F` | hledat v diffu (podruhé vrátí fokus do pole) |
 | `⌘G` / `⌘⇧G` | další / předchozí výskyt; v poli i `⏎` / `⇧⏎` |
+| `⌥V` | značka `Prošlo` u souboru pod ukotvenou hlavičkou |
 | `⌘⏎` nebo `⌃⏎` | otevřít **potvrzení** odeslání review |
 | `⌘⇧P` | sestavit zadání pro agenta |
 | `⌘.` | zastavit běžící review na PR v okně |
@@ -1787,8 +1802,8 @@ a paleta je zároveň jediné místo, kde se nemusí pamatovat, kde co v okně b
 **⌘K** (druhé zmáčknutí zavře) nebo kapslí `⌘K` v hlavičce okna; ta tam je proto, že jinak by
 o paletě věděl jen ten, kdo si přečetl release notes.
 
-Výsledky jsou v **pěti skupinách a jejich pořadí je pevné**: **Nálezy**, soubory otevřeného
-PR, `Pull requesty k review`, `Moje PR`, akce. Nálezy jsou první schválně — je to jediná věc, kterou
+Výsledky jsou v **šesti skupinách a jejich pořadí je pevné**: `Odkaz`, **Nálezy**, soubory
+otevřeného PR, `Pull requesty k review`, `Moje PR`, akce. Nálezy jsou první schválně — je to jediná věc, kterou
 tahle aplikace má a prohlížeč ne, takže pořadí skupin je tvrzení o tom, k čemu je okno. Z každé
 skupiny je vidět **nejvýš šest** řádků; strop je na skupinu, protože jinak by dvacet nálezů
 vytlačilo všechno ostatní.
@@ -1836,6 +1851,31 @@ tutéž akci a v jednom řádku by z jedné kapsle udělala dvě.
 
 **Odsud nic neodchází.** Paleta nemá přístup k `ReviewPublishing` a nepřidává druhou cestu ven;
 jediná věc, kterou pouští, je read-only reviewer.
+
+#### Vložený odkaz — otevřít jakýkoli PR, i mimo zdroje (#531)
+
+**Adresa pull requestu ve schránce je vstup do okna.** Vloží se do ⌘K a nad všemi ostatními
+skupinami se objeví jediný řádek — `Otevřít keboola/vault#85 · není ve zdrojích`. Skupina `Odkaz`
+je první proto, že vložená adresa **není hledání, je to příkaz**; nad běžným dotazem ani nad
+prázdným polem tam není. Adresa se přečte tak, jak se doopravdy kopíruje z prohlížeče: s `/files`,
+s `/commits/<sha>`, s kotvou na komentář, s parametrem pohledu, bez schématu i s `www.`. **Cizí
+host se odmítne** — `gitlab.com` ani GitHub Enterprise identifikátor nedají, protože by vedl na
+dotaz o úplně jiném pull requestu.
+
+Totéž umí **URL schéma `prism://open?url=<adresa PR>`**, tedy odkaz odkudkoli ze systému (Slack,
+poznámky, `open` z terminálu). Aplikaci to umí i spustit — žádost přečká preflight a záložka se
+otevře, jak se okno objeví.
+
+**Takový PR není ve zdrojích, a to není porucha.** Frontu definují zdroje (#4), takže se
+nedostane do fronty, na karty, do odznaku ani do automatu — a hlavička to říká pilulkou
+`mimo zdroje · jen ke čtení`. Review na něm jde pustit **ručně jako na každém jiném**; jak se na
+něm review vyžádá, přijde do fronty normálně přes zdroje a pilulka zmizí. Záložka **přežije
+načítání seznamu**: PR, který v žádném zdroji není, se z pruhu nemá čím vytratit, dokud ji člověk
+nezavře.
+
+Dokud se detail dotahuje, stojí v záložce `Načítám pull request`; když se to nepovede (překlep
+v adrese, repo, na které nevidím), zůstane v ní **odpověď `gh`** a dvě tlačítka — `Zkusit znovu`
+a `Zavřít záložku`.
 
 ### Odeslání review
 
@@ -2506,7 +2546,9 @@ App/                      zdrojáky aplikace — target PRism
                           a jestli reviewer vůbec otevřel kód — tedy jestli se z běhu dá tvrdit čisto (#383);
                           o čem se v dění hlásí, co je nepřečtené a jak se dělí po dnech (#414),
                           na hlavy kterých PR se tik zeptá a čím se datuje zastarání nálezů (#420);
-                          jestli se z dotazu nabídne založení nového labelu a jakou dostane barvu (#413)
+                          jestli se z dotazu nabídne založení nového labelu a jakou dostane barvu (#413);
+                          co je adresa pull requestu, odkud se ta záložka vzala a co má ukázat, dokud
+                          o PR mimo zdroje známe jen adresu (#531)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), založení nového labelu
                           v repozitáři (#413 — sedmá a jediná metoda, která píše mimo PR), brána z nastavení

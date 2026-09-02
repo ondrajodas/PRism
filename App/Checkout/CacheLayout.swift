@@ -86,6 +86,11 @@ struct CacheLayout: Sendable, Equatable {
         catalogs.appending(path: "\(organization).json")
     }
 
+    /// Značky `Prošlo` u souborů (#500). **Mimo dosah eviction**, jako `reviews/`, `drafts/`
+    /// a `ask/` — je to pár set bajtů na PR a zároveň záznam odvedené práce: smazat ho kvůli
+    /// rozpočtu na místo by znamenalo přečíst padesátisouborový diff znovu.
+    var readMarks: URL { root.appending(path: "read-marks") }
+
     /// Konfigurace. Leží v kořeni cache, ne pod `reviews/` — edituje se ručně a má být
     /// vidět hned, jakmile člověk složku otevře.
     var configFile: URL { root.appending(path: "config.json") }
@@ -176,6 +181,19 @@ struct CacheLayout: Sendable, Equatable {
 
     func asks(of repo: RepoID) -> URL {
         asks.appending(path: repo.owner).appending(path: repo.name)
+    }
+
+    /// Značky `Prošlo` jednoho PR: `read-marks/<owner>/<repo>/<pr>.json` (#500).
+    ///
+    /// **Bez `headSha` v názvu**, jako draft a rozhovor — a je to celé, oč u téhle značky jde:
+    /// klíčovaná commitem by zmizela právě tím pushem, kvůli kterému se člověk do diffu vrací.
+    /// Že se soubor změnil, se pozná z otisku **uvnitř** záznamu (`ReadMark.blobs`), ne z názvu.
+    func readMarkFile(for pr: PRIdentifier) -> URL {
+        readMarks(of: pr.repo).appending(path: "\(pr.number).json")
+    }
+
+    func readMarks(of repo: RepoID) -> URL {
+        readMarks.appending(path: repo.owner).appending(path: repo.name)
     }
 
     /// Leží cesta uvnitř kořene, i po rozbalení symlinků?

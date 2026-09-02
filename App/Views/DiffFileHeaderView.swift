@@ -12,6 +12,10 @@ struct DiffFileHeaderView: View {
     let findings: [FindingGroup]
     let blockingCategories: Set<String>
     let toggle: () -> Void
+    /// Stav značky `Prošlo` (#500). `nil` = tahle obrazovka značky nemá (diff commitu, rozsahový
+    /// diff) a zaškrtávátko se **nekreslí vůbec** — zašedlé by slibovalo akci, která tam není.
+    var read: FileReviewState?
+    var toggleRead: (() -> Void)?
 
     /// Hledání v tomhle diffu (#152) — **prostředím, ne parametrem**: počet výskytů se mění při
     /// každém písmenu, takže předávat ho argumentem by znamenalo přeložit při každém znaku tělo
@@ -19,12 +23,33 @@ struct DiffFileHeaderView: View {
     @Environment(DiffSearchState.self) private var search: DiffSearchState?
 
     var body: some View {
-        Button(action: toggle) {
-            content
+        // **Řádek se od #500 dělí na dvě tlačítka**: sbalení bere všechno až po zaškrtávátko
+        // a zaškrtávátko svůj kousek vpravo. Tlačítko v tlačítku je v SwiftUI přesně ten druh
+        // věci, u které se nedá spolehnout, kdo klik dostane — a pravidlo z #219 („kliká se
+        // kamkoli do řádku“) tím zůstává v platnosti pro celou plochu kromě těch pár desítek
+        // bodů, kde je jiná akce.
+        HStack(spacing: 9) {
+            Button(action: toggle) {
+                content
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: file.displayPath))
+            .accessibilityHint(isFolded ? "Rozbalí diff souboru" : "Sbalí diff souboru")
+            if let read, let toggleRead {
+                DiffFileReadToggle(state: read, toggle: toggleRead)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(verbatim: file.displayPath))
-        .accessibilityHint(isFolded ? "Rozbalí diff souboru" : "Sbalí diff souboru")
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        // Ukotvená hlavička jede přes obsah, takže pod ní musí být neprůhledné pozadí.
+        .background(Palette.chrome)
+        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
+        // takže se vykreslí **svisle** — pod hlavičkami tedy nikdy nebyla čára, kterou tam
+        // tenhle kód chtěl, ale svislá čárka uprostřed. Dokud mezi hlavičkami byly řádky
+        // diffu, ztrácely se; po sbalení všech souborů (#59) se poskládaly do jedné čáry.
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Palette.lineSoft).frame(height: 1)
+        }
     }
 
     private var content: some View {
@@ -33,10 +58,13 @@ struct DiffFileHeaderView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Palette.ink3)
                 .frame(width: 10)
-            FilePathText(path: file.displayPath)
+            // Prošlý soubor má jméno tlumené (`.fhead.rv-done .path b` v návrhu): hlavička
+            // zůstává čitelná, ale oko po ní neklouže jako po tom, co ještě čeká.
+            FilePathText(path: file.displayPath, isMuted: read?.isRead == true)
             if let badge = badge {
                 pill(badge, color: Palette.ink2)
             }
+            stalePill
             if file.change == .renamed, let oldPath = file.oldPath {
                 Text(verbatim: "← \(oldPath)")
                     .font(.caption)
@@ -51,18 +79,19 @@ struct DiffFileHeaderView: View {
                 .font(.system(size: 11, design: .monospaced))
                 .monospacedDigit()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)
-        // Ukotvená hlavička jede přes obsah, takže pod ní musí být neprůhledné pozadí.
-        .background(Palette.chrome)
-        // **Ne `Divider()`.** Ten si orientaci bere z okolní osy a v `overlay` žádná není,
-        // takže se vykreslí **svisle** — pod hlavičkami tedy nikdy nebyla čára, kterou tam
-        // tenhle kód chtěl, ale svislá čárka uprostřed. Dokud mezi hlavičkami byly řádky
-        // diffu, ztrácely se; po sbalení všech souborů (#59) se poskládaly do jedné čáry.
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Palette.lineSoft).frame(height: 1)
+    }
+
+    /// `změněno od prošlého` (#500) — kapsle u cesty, v okrové `--stale`, tedy tam a v té barvě,
+    /// jakou má návrh (sekce 40).
+    ///
+    /// **Kapsle, ne jen jiná barva zaškrtávátka**: samotné `Prošlo znovu` vedle by se dalo
+    /// přečíst jako nabídka, ne jako to, že přečtená verze už v souboru není. Nic se nepokazilo,
+    /// takže ne červená.
+    @ViewBuilder private var stalePill: some View {
+        if let read, let text = Policy.changedSinceReadLabel(of: read) {
+            pill(text, color: Palette.stale)
         }
     }
 
@@ -142,6 +171,9 @@ struct DiffFileHeaderView: View {
 /// nemá: dá se složit, a v pohledu vedle sebe se skládá sám (#188).
 struct FilePathText: View {
     let path: String
+    /// Prošlý soubor (#500) — jméno se tlumí z `ink` na `ink2` a z 620 na 500, jak to má návrh
+    /// (`.fhead.rv-done .path b`). Složka zůstává, jaká byla: tlumená je už tak.
+    var isMuted = false
 
     var body: some View {
         let parts = Self.parts(of: path)
@@ -158,8 +190,8 @@ struct FilePathText: View {
             // Jméno má přednost v rozvržení, takže zůstane celé i v úzkém sloupci — právě kvůli
             // němu se cesta rozdělila na dva kusy.
             Text(verbatim: parts.name)
-                .fontWeight(.semibold)
-                .foregroundStyle(Palette.ink)
+                .fontWeight(isMuted ? .medium : .semibold)
+                .foregroundStyle(isMuted ? Palette.ink2 : Palette.ink)
                 .lineLimit(1)
                 .layoutPriority(1)
         }

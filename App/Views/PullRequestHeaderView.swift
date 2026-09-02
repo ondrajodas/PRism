@@ -17,10 +17,14 @@ struct PullRequestHeaderView: View {
     /// Čí PR to je (#330, kreslí se od #334). Na vlastním stojí za stavem pilulka `moje PR`, jak ji
     /// má návrh (sekce 22) — a je to jediné místo v hlavičce, které tu informaci nese.
     var ownership: PullRequestOwnership = .theirs
+    /// Odkud se záložka vzala (#531). Mimo zdroje za stavem stojí pilulka `mimo zdroje ·
+    /// jen ke čtení`, jak ji má návrh (sekce 41) — u PR ze zdrojů se nekreslí nic.
+    var origin: PullRequestOrigin = .sources
 
     var body: some View {
         HStack(spacing: 9) {
             state
+            outsideSources
             mine
             if let detail, !detail.headRef.isEmpty, !detail.baseRef.isEmpty {
                 merge(detail)
@@ -39,6 +43,25 @@ struct PullRequestHeaderView: View {
             Link("otevřít na GitHubu", destination: pullRequest.url)
         }
         .font(.callout)
+    }
+
+    /// `mimo zdroje · jen ke čtení` (#531) — pilulka z návrhu (`.pill.idle`), jen na záložce,
+    /// kterou si člověk otevřel odkazem.
+    ///
+    /// **Tlumená trojice, ne barva ze škály**: není to porucha ani nález, je to **konstatování,
+    /// odkud ta záložka je**. Barevná kapsle vedle plného stavu PR by z hlavičky udělala druhý
+    /// semafor — tentýž důvod, proč je `moje PR` vedle ní jen mint na patnácti procentech.
+    ///
+    /// **Za stavem, před autorem**, jak to kreslí návrh: stav PR je pořád první věc, kvůli které
+    /// se člověk na hlavičku dívá, a odkud PR je, je odpověď na tu druhou otázku v pořadí.
+    ///
+    /// Text i to, jestli se kreslí, rozhoduje `Policy.originNote(_:)` — ne `if` tady.
+    @ViewBuilder private var outsideSources: some View {
+        if let note = Policy.originNote(origin) {
+            Text(verbatim: note)
+                .designPill(tint: Palette.ink2, background: Palette.raised)
+                .help("Tenhle pull request není v tvých zdrojích — otevřel sis ho odkazem, takže není ve frontě, na kartách ani v odznaku. Review na něm jde pustit ručně.")
+        }
     }
 
     /// `moje PR` (#334) — pilulka z návrhu (`.pill.mint`), jen na vlastním pull requestu.

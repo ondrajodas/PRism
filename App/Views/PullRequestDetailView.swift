@@ -181,6 +181,11 @@ struct PullRequestDetailView: View {
         // obrazovce, na kterou se ten den nemusí přijít podívat. Klíčem je identifikátor, ne
         // celé shrnutí — nový commit rozhovor **nezneplatní** (ukládá se k PR, ne k `headSha`).
         .task(id: pullRequest.id) { await store.loadAskConversation(for: pullRequest.id) }
+        // Značky `Prošlo` (#500) tou samou cestou jako rozhovor a ze stejného důvodu: v seznamu
+        // nic nemají, takže by se při startu dekódovalo všechno, co kdy někdo prošel. Klíčem je
+        // identifikátor, ne celé shrnutí — nový commit značky **nezneplatní**, jen z nich udělá
+        // `změněno od prošlého`, a to se pozná z otisku v diffu.
+        .task(id: pullRequest.id) { await store.loadReadMarks(for: pullRequest.id) }
         // Skok z palety (#184). Klíčem je **žádost i to, jak dopadl diff**: paleta umí skočit do
         // PR, jehož záložka se právě otevřela, takže diff v tu chvíli ještě není — a bez druhé
         // části klíče by se úloha po jeho dorazení už nespustila.
@@ -260,7 +265,10 @@ struct PullRequestDetailView: View {
                     checks: store.checks[pullRequest.id] ?? [],
                     // Pilulka `moje PR` (#334) — čte se ze stejného místa jako to, který segment
                     // kreslí panel, takže se hlavička a panel nemají čím rozejít.
-                    ownership: ownership
+                    ownership: ownership,
+                    // Pilulka `mimo zdroje` (#531) — rozhoduje o ní store, protože jedině ten ví,
+                    // co přišlo ze zdrojů a co si člověk otevřel odkazem.
+                    origin: store.origin(of: pullRequest.id)
                 )
                 draftChip
                 Spacer(minLength: 8)
@@ -1678,7 +1686,7 @@ struct PullRequestDetailView: View {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            diffView(of: diff)
+            diffView(of: diff, read: readActions)
         case .failed(let detail):
             diffFailure(detail)
         case .loading, nil:
@@ -1704,7 +1712,7 @@ struct PullRequestDetailView: View {
     /// Jeden diff se všemi bublinami. Bere ho **celý diff i rozsah** — nálezy, vlákna
     /// i rozdělané komentáře se kotví na `soubor:řádek` dnešní hlavy, takže se v obou pohledech
     /// pověsí na totéž místo; co v rozsahu není vidět, se chová stejně jako soubor mimo diff.
-    private func diffView(of diff: Diff) -> some View {
+    private func diffView(of diff: Diff, read: DiffReadActions? = nil) -> some View {
         DiffView(
             diff: diff,
             subject: pullRequest.id.description,
@@ -1733,8 +1741,23 @@ struct PullRequestDetailView: View {
             // panel je vidět i v tabu `Přehled`, kde lišta není.
             panelExpanded: panelExpanded,
             stepFinding: { step($0) },
-            search: searchActions
+            search: searchActions,
+            read: read
         )
+    }
+
+    /// Značky `Prošlo` (#500) — stavy ze storu, tudy jde jen akce. Tentýž vzorec jako
+    /// u sbalování a hledání o kus výš.
+    ///
+    /// **`nil` u rozsahového diffu** (`Od tvé poslední návštěvy`, #284): jeho `index` řádky mluví
+    /// o rozsahu mezi dvěma commity, ne o hlavě PR, takže by se otisk v nich se značkou nepotkal
+    /// a každý zaškrtnutý soubor by hned hlásil `změněno od prošlého`. Zaškrtává se v `Změněných
+    /// souborech`, kde se čte celý diff.
+    private var readActions: DiffReadActions {
+        let id = pullRequest.id
+        return DiffReadActions(states: store.fileReviewStates(in: id)) { file in
+            store.toggleReadMark(file.displayPath, blobs: file.blobs, in: id)
+        }
     }
 
     /// Hledání v diffu `Změněných souborů` (#152). Stav drží store, tudy jdou akce — tentýž vzorec

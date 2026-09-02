@@ -2466,7 +2466,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   složkou: bez něj `updateConfiguration` skončí chybou `noStore` a nepropíše se nic.
 - **`AppStore` — sbalení souborů** — výchozí rozbaleno, přepínání tam a zpět, že sbalení
   jednoho souboru nesahá na jiné ani na jiné PR, idempotentní rozbalení (na tom stojí skok)
-  a `Rozbalit vše`, které nechá cizí PR být.
+  a `Rozbalit vše`, které nechá cizí PR být. Od #500 to všechno platí **nad odvozeným
+  sbalením**, ne nad množinou — takže ta sada zároveň tvrdí, že se značka `Prošlo`
+  do dosavadního chování nevloudila.
+- **Značka `Prošlo` u souboru (#500)** — tři sady, každá tvrdí něco jiného:
+  - **`Policy`** (`FileReviewStateTests`) — **vyčerpávající výčet** (záznam / bez záznamu) ×
+    (otisk týž / jiný / zmizel / přibyl / dvakrát chybí). Prostřední čtyři jsou to podstatné:
+    `nil == nil` musí být `read`, jinak by značka nad přejmenováním beze změny obsahu po
+    zaškrtnutí hned zhasla. K tomu skloňování hlavičky stromu, podíl pro proužek (`nil`, dokud
+    není co ukázat), popisky a to, že se `changed` **nepočítá** do počtu prošlých.
+  - **`DiffParser`** — otisk z `index` řádky **bez módu** nad skutečnými diffy: běžný soubor,
+    smazaný (nulová hlava), binárka (otisk má, hunky ne) a přejmenování se `similarity index
+    100%`, které `index` řádku nemá vůbec. A že `index` v neznámém tvaru **není ztracený
+    řádek**, jen chybějící otisk — do #500 byl na seznamu ignorovaných, takže čtení otisku
+    nesmí přidat `unrecognizedLines`.
+  - **`AppStore`** (`AppStoreReadMarkTests`) — dvě tvrzení o tom, že se něco **NEstalo**:
+    commit, který soubor nemění, značku **nesundá** (druhý diff mění jen otisk druhého souboru),
+    a `Rozbalit vše` značku **nesmaže**, jen soubor otevře. K tomu, že commit, který soubor
+    mění, ji přepne na `changed` a soubor se **sám rozbalí**; že `Prošlo znovu` zaškrtne
+    s dnešním otiskem; že klik na hlavičku prošlého souboru ho **otevře** (odchylka se počítá
+    proti odvozenému, ne proti prázdné mapě); a že značka z disku sbalí soubor **i bez
+    kliknutí** — na tom stojí celé to, proč se sbalení odvozuje.
+  - **Sonda `FileReadMarkRenderProbe`** — obrázek, protože „sedí to se sekcí 40?“ je otázka na
+    obrázek: hlavičky ve všech třech stavech, strom s ✓, ↻ a ztlumeným jménem, a **tytéž hlavičky
+    na 420 bodech** (diff vedle sebe na podlaze okna). Z toho posledního je vidět, co v úzkém místě
+    ustoupí: cesta se ořeže zepředu a kapsle `změněno od prošlého` se zkrátí, **zaškrtávátko
+    zůstane celé** — akce se neschovává. Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`).
+  - **`ReadMarkStore`** — zápis a čtení včetně toho, že **chybějící otisk přežije cestu na disk
+    jako chybějící** (kdyby se z něj stal prázdný řetězec, byla by po restartu z `read` značka
+    `změněno od prošlého`); prázdné značky soubor mažou; cizí PR v souboru se odmítne; a celá
+    trojice hranic cache (symlink na souboru, symlink v rodičovské složce u čtení, zápisu
+    i mazání) — tatáž sada jako u `AskStore`.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
   nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
   rozsahy, ale načtený obsah nechá.
@@ -2718,15 +2748,70 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   po `↵` otevře záložku) i **týž podtitulek** jako cizí, a že dotaz najde obojí naráz.
 - **Sonda palety se dvěma skupinami (#336)** — `CommandPaletteRenderProbe`, gated `PRISM_MEASURE`,
   cesta ven `PRISM_RENDER_DIR`. Vyrendruje kartu nad katalogem ze **storu** (diff z fixture, takže
-  cesty souborů mají skutečný tvar) ve dvou podobách: zúžené na počty řádků ze sekce 09 návrhu
-  (na srovnání vedle sebe) a nad celým katalogem, kde je vidět, že se pět skupin scrolluje.
+  cesty souborů mají skutečný tvar) ve **čtyřech** podobách: zúžené na počty řádků ze sekce 09
+  návrhu (na srovnání vedle sebe), nad celým katalogem, kde je vidět, že se pět skupin scrolluje,
+  jen se skupinou `Akce` (#441 — v plném katalogu je pod hranou karty, a přitom je jediná, ve které
+  se kreslí zkratky) a od #531 se skupinou **`Odkaz`**.
   **Dotaz se do renderu dosadit nedá** — `query` je `@State` uvnitř `CommandPaletteView`, protože má
   zaniknout se zavřením palety —, takže sonda kreslí stav prázdného dotazu; zvýraznění shody v ní
   proto není. Paletu v běžící aplikaci navíc otevírá jedině ⌘K, a psát do cizí instance se
   v paralelním běhu nemá.
+
+  **Řádek `Odkaz` se přesto vyrendrovat dá, a je to důsledek toho, jak se předává** (#531): není
+  v katalogu, ale v **uzávěru** (`CommandPaletteView.link`), takže sonda dosadí uzávěr, který dotaz
+  ignoruje. Bez toho by se na ten řádek nedalo podívat jinak než na klávesnici — a v paralelním
+  běhu se do cizí instance psát nemá. Ze snímku se ověřilo, co číslo neřekne: skupina je **nad
+  nálezy**, řádek je pod kurzorem (takže `↵` hned po vložení adresy otevře záložku) a značka je
+  akcentový `link`, ne puntík nálezu.
 - **Měření hledání (#184)** — `CommandPaletteMeasurement`, gated `PRISM_MEASURE` jako měření
   layoutu. Nic netvrdí; existuje proto, že se katalog skládá **při každém stisku klávesy** a to
   rozhodnutí má být podložené číslem: 200 řádků 1,5 ms, 2000 řádků 17,6 ms.
+- **`Policy` — odkaz na pull request (#531)** — `PullRequestLinkTests`, dva výčty parametrizovaných
+  případů. První bere adresu tak, jak se **doopravdy kopíruje** z prohlížeče (přehled, `/files`,
+  `/commits/<sha>`, kotva na komentář, parametr pohledu, trailing slash, bez schématu, `www.`,
+  s bílými znaky kolem). Druhý je ten cennější a hlídá, co projít **nesmí**: `gitlab.com`,
+  GitHub Enterprise a hlavně `notgithub.com` a `github.com.evil.example` — obojí obsahuje
+  `github.com` jako podřetězec, takže by je kontrola bez lomítka pustila a identifikátor by vedl
+  na dotaz o úplně jiném pull requestu. K tomu `issues` místo `pull`, číslo `0` a `-3` (klíčovaly
+  by neexistující PR), znak, který se do adresy nedostane z prohlížeče, ale z pole palety ano
+  (`keb<ola`), a obyčejné dotazy, kvůli kterým se paleta otevírá nejčastěji.
+
+  `prism://` má vlastní dvojici výčtů — přijaté (i s percent-encodingem, s lomítkem za hostem
+  a velkými písmeny) a odmítnuté, mezi nimi **jiná akce než `open`**: z odkazu se nemá dát vyvolat
+  nic, o čem není napsáno, že to dělá. **Round-trip** hlídá, že se `githubURL(of:)` a
+  `linkedPullRequest(in:)` nerozejdou — jinak by `⌘↵` na řádku `Odkaz` vedl jinam, než co otevře
+  `↵`. A schéma se srovnává **s `Info.plist`**: přečte se `CFBundleURLTypes` ze souboru v kořeni
+  repa a musí vyjít `[Policy.urlScheme]`, protože dvě místa jinak znamenají dvě pravdy o tom, na
+  co aplikace reaguje.
+- **`Policy` — PR mimo zdroje (#531)** — `PullRequestOriginTests`, dva vyčerpávající výčty.
+  U `origin(of:adopted:sources:)` je nejcennější případ ten, ve kterém PR **ze zdrojů vypadl**
+  (mergnul se, odebral se request na review): pilulku `mimo zdroje` dostat nesmí, protože by
+  tvrdila, že si ho člověk otevřel odkazem. Vedle toho `linkOrigin(of:sources:)`, který odpovídá
+  na **jinou otázku** a u neznámého PR vychází obráceně — chytila to až první zelená sada, ne
+  review: s jednou funkcí tvrdil řádek `Odkaz` u cizího repa `je ve tvých zdrojích`.
+
+  `tabContent(summary:detail:origin:)` má případ na každý ze čtyř stavů, a to podstatné je, že se
+  **`loading` a `gone` nesmí slít**: nad rozdělaným načítáním u PR ze zdrojů vychází `gone` (tam je
+  shrnutí ze seznamu, takže nenačtený detail znamená jen chybějící větve v hlavičce), kdežto
+  u záložky mimo zdroje `loading`. A `pendingSummary(for:)` se kontroluje na to, že **nic netvrdí**:
+  titulek `Načítá se…`, prázdný autor, `distantPast`.
+- **`AppStore` — PR mimo zdroje (#531)** — `AppStoreExternalTabTests` proti fake gateway. Půlka
+  sady tvrdí, že se něco **nestalo**, protože přesně to se rozbije potichu: PR otevřený odkazem
+  není v `pullRequests`, `visiblePullRequests`, `queuePullRequests`, nezvedne odznak fronty,
+  **nezmění dashboard** (srovnává se celý, ne jedno číslo) a **automat na něj nesáhne**, ani když
+  je zapnutý globálně. K tomu, že PR **ze seznamu** se otevře bez jediného dotazu navíc, takže se
+  na `openPullRequest(_:)` nedá zdražit klik v seznamu.
+
+  Druhá půlka je o tom, co přežít **musí**: záložka drží shrnutí, detail i obsah přes tik, ve
+  kterém PR v seznamu není. **Ověřeno vložením regrese** — bez sjednocení v `forget(whatIsNotIn:)`
+  padnou tři tvrzení jednoho testu (shrnutí, obsah záložky, detail v mapě). Zavření záložky značku
+  odebere a **až příští tik** detail uklidí; to je ten test, který hlídá, že se nedrží stav, který
+  nikdo nečte.
+
+  Paleta má nad storem čtyři případy: vložený odkaz dá skupinu `Odkaz` **jako první**, u PR ze
+  zdrojů se podtitulek liší, běžné hledání ani prázdný dotaz ji nedostanou vůbec a **psaní odkazu
+  se nikoho neptá** (gateway nedostane volání ani po třech úhozech) — pravidlo palety od #184 tedy
+  platí dál.
 - **`AppStore` — rozdělané review** — proti **skutečnému** `ReviewDraftStore` nad dočasnou
   složkou: on rozhoduje, co je po restartu, takže fake by ověřoval sám sebe. Pokrývá cestu
   od kliknutí po disk (komentář, verdikt, tělo, převzetí nálezu do těla i na řádek), a hlavně
@@ -7383,7 +7468,7 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (od #459 jednadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+- **Počet akcí je vyjmenovaný** (od #500 pětadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
   u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
@@ -7929,8 +8014,9 @@ takže `AppNoticesView` nekreslí nic. Zbývají tedy zdravotní puntíky a útr
 .quietTickDoesNotWakeWhatTheDiffDrawsFrom`: vyjmenuje všechna čtení storu, která `DiffView.body`
 dělá přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. **Netvrdí, že se tělo `DiffView`u
 nepřeloží** — to nad storem nejde a v okně to po #421 pořád neplatí; tvrdí, že když se přeloží,
-není to kvůli datům. Ověřeno vložením regrese (`foldedFiles = foldedFiles.filter { _ in false }`
-v `forget(whatIsNotIn:)` → `tichý tik probudil isFolded(_:in:)`).
+není to kvůli datům. Ověřeno vložením regrese (`fileFolding = fileFolding.filter { _ in false }`
+v `forget(whatIsNotIn:)` → `tichý tik probudil isFolded(_:in:)`; do #500 se ta mapa jmenovala
+`foldedFiles` a byla to množina).
 
 ### Jak se změřil `--force-with-lease` (#466)
 

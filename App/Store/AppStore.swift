@@ -20,6 +20,19 @@ final class AppStore {
     /// doby se seznam záložek skládal jen z živých dat a dokumentace tvrdila opak.
     var openTabSnapshots: [PRIdentifier: PullRequestSummary] = [:]
 
+    /// Záložky otevřené **mimo zdroje** (#531) — odkazem v ⌘K, `prism://` nebo z paletou nabídnutého
+    /// repa. PR z nich ve zdrojích není, takže o něm seznam z pollingu neví nic.
+    ///
+    /// **Jen množina identifikátorů, žádná druhá kopie dat.** Shrnutí se skládá z dotaženého
+    /// detailu (`summary(for:)`), takže tady nemá co ležet — dvě kopie téhož PR by se uměly
+    /// rozejít v okamžiku, kdy autor změní titulek. Množina je tím pádem odpověď na jedinou
+    /// otázku: **odkud se ta záložka vzala**, a to je přesně to, co potřebuje pilulka v hlavičce
+    /// (`Policy.origin(of:adopted:sources:)`) i úklid po tiku (`forget(whatIsNotIn:)`).
+    ///
+    /// **Frontu to nerozšiřuje** (#4): `pullRequests` zůstává tím, co přišlo ze zdrojů, takže se
+    /// karty, odznak, souhrn ani automat nemají kde dozvědět, že tahle záložka existuje.
+    var externalPullRequests: Set<PRIdentifier> = []
+
     /// Otevřená review jako záložky (#180), v pořadí, ve kterém se otevřela.
     ///
     /// **Jen seznam identifikátorů.** Všechno ostatní — diff, konverzace, draft, běh — visí ve
@@ -236,12 +249,37 @@ final class AppStore {
     /// přepnutí tabu i složení panelu, po kterém se `DiffView` staví znovu.
     var diffSearches: [DiffSearchKey: DiffSearchState] = [:]
 
-    /// Sbalené soubory diffu. Co v množině **není**, je rozbalené — u PR o padesáti
-    /// souborech je rozbaleno výchozí stav a sbalení je gesto, takže se pamatuje to druhé.
+    /// Co si člověk o sbalení souboru **řekl sám**: `true` = sbaleno rukou, `false` = rozbaleno
+    /// rukou (typicky `Rozbalit vše`). Klíč, který v mapě **není**, se řídí značkou `Prošlo`
+    /// (#500) — rozhoduje `Policy.isFileFolded(state:override:)`.
+    ///
+    /// **Do #500 to byla množina sbalených** a výchozí stav bylo „rozbaleno“. Značka to změnila:
+    /// prošlý soubor se má sbalit i po restartu, kdy je na disku značka a v okně žádný stav —
+    /// takže se sbalení **odvozuje** a tahle mapa je jen odchylka od odvozeného.
     ///
     /// Žije tady, ne ve view: `PullRequestDetailView` si SwiftUI mezi PR ponechá (stejná
-    /// pozice ve stromu), takže by sbalení přeteklo z jednoho pull requestu na druhý.
-    var foldedFiles: Set<FileExpansionKey> = []
+    /// pozice ve stromu), takže by odchylka přetekla z jednoho pull requestu na druhý.
+    var fileFolding: [FileExpansionKey: Bool] = [:]
+
+    /// Značky `Prošlo` (#500), načtené z disku při otevření PR. Chybějící klíč = z disku se
+    /// ještě nečetlo, a to se od „nic zaškrtnutého“ liší jen tím, že se čtení má ještě spustit.
+    var readMarks: [PRIdentifier: ReadMarks] = [:]
+
+    /// Stav značky u každého souboru **načteného** diffu (#500) — odvozená mapa, ze které čte
+    /// strom, hlavička souboru i sbalování.
+    ///
+    /// **Cache, a tady je vypsané, co ji vyprazdňuje** (#224): přepočítá ji `refreshReadStates(for:)`
+    /// a volá se ze tří míst — po načtení diffu, po načtení značek z disku a po zaškrtnutí. Bez ní
+    /// by se stav skládal při každém dotazu `isFolded`, tedy jednou na soubor a překreslení, a to
+    /// je nad padesátisouborovým diffem kvadratické hledání v `Diff.file(at:)`.
+    ///
+    /// Klíčem je `displayPath` uvnitř PR; velikost drží počet **značek**, ne počet souborů —
+    /// `Policy.fileReviewStates` vrací jen to, co značku má.
+    var readStates: [PRIdentifier: [String: FileReviewState]] = [:]
+
+    /// Proč se značky nepodařilo přečíst nebo uložit. Musí být vidět: tichá nula by v okně
+    /// vypadala jako nezaškrtnutý diff.
+    var readMarkFailure: String?
 
     /// Odchylka od pohledu na diff, který je v nastavení. `nil` = ber ho z konfigurace.
     ///
@@ -413,6 +451,10 @@ final class AppStore {
     /// Materiál pro rozhovor vedle pracovního stromu (#452). `nil` = neukládá se a session
     /// dostane prompt bez odkazu na soubor, tedy bez nálezů, konverzace a checků.
     let askContexts: AskContextStore?
+
+    /// Uložené značky `Prošlo` (#500). `nil` = neukládají se, tedy zaškrtnutí zanikne se
+    /// zavřením aplikace — v okně se přitom chová stejně, protože stav drží `readMarks`.
+    let readMarkStore: ReadMarkStore?
 
     private let configStore: ConfigStore?
 
@@ -796,6 +838,7 @@ final class AppStore {
         conflicts: (any ConflictResolving)? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
+        readMarkStore: ReadMarkStore? = nil,
         autoRuns: AutoRunLedger? = nil,
         spend: SpendLedger? = nil,
         gh: URL? = nil,
@@ -852,6 +895,7 @@ final class AppStore {
         self.conflicts = conflicts
         self.asks = asks
         self.askContexts = askContexts
+        self.readMarkStore = readMarkStore
         self.autoRuns = autoRuns
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
@@ -864,12 +908,20 @@ final class AppStore {
             let busy: @Sendable () async -> Set<RepoID> = { [weak self] in
                 await self?.busyRepositories ?? []
             }
-            try? await eviction?.run(openPullRequests: summaries.map(\.id), busy: busy)
+            // **Se záložkami mimo zdroje** (#531): úklid na disku má znát tutéž množinu jako
+            // úklid v paměti o pár řádků výš, jinak by eviction smazala klon a pracovní strom PR,
+            // který je zrovna otevřený — a `checkoutStates` by o něm dál tvrdily, že je
+            // připravený. Do fronty ani do automatu se tím nic nedostane; ty berou `summaries`.
+            let kept = await self?.pullRequestsInPlay(besides: summaries) ?? summaries.map(\.id)
+            try? await eviction?.run(openPullRequests: kept, busy: busy)
             // Stejné pravidlo jako u eviction: uklízet se smí jen po **úspěšném** tiku,
             // protože „PR chybí v seznamu“ znamená po výpadku sítě něco jiného. Selhání
             // úklidu se spolkne schválně — neuklizený soubor nikomu nevadí a příští tik to
             // zkusí znovu; hlásit to uživateli by byl šum bez akce.
-            try? await reviews?.cleanUp(openPullRequests: summaries.map(\.id))
+            // Taky se záložkami mimo zdroje (#531) a o důvod naléhavěji než u eviction: tohle
+            // maže **uložené nálezy**, tedy výsledek běhu, který si na takovém PR člověk pustil
+            // ručně. Znovu se dají získat jedině dalším během.
+            try? await reviews?.cleanUp(openPullRequests: kept)
             // Nová PR se hlásí **jen po úspěšném tiku**, ze stejného důvodu jako všechno
             // ostatní tady: po výpadku sítě je seznam prázdný, takže by se snímek vyprázdnil
             // a při zotavení by přišlo úplně všechno.
@@ -969,6 +1021,8 @@ final class AppStore {
             ),
             asks: AskStore(),
             askContexts: AskContextStore(),
+            // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
+            readMarkStore: ReadMarkStore(),
             autoRuns: AutoRunLedger(),
             spend: SpendLedger(),
             gh: toolPaths.gh,
@@ -1198,6 +1252,12 @@ final class AppStore {
         guard let index = openTabs.firstIndex(of: pullRequest) else { return }
         openTabs.remove(at: index)
         openTabSnapshots[pullRequest] = nil
+        // Záložka mimo zdroje (#531) je to **jediné**, co takový PR ve store drží — po zavření se
+        // o něm nemá kde nic nakreslit, takže by značka zůstala ležet jako stav, který nikdo
+        // nečte, a příští tik by kvůli ní držel detail, diff a konverzaci PR, na který se nikdo
+        // nedívá. Zahodit ji **smí jedině zavření záložky**: tik, ve kterém PR v seznamu není, je
+        // u téhle záložky normální stav, ne důvod ji vyprázdnit.
+        externalPullRequests.remove(pullRequest)
         stopTerminal(for: pullRequest)
 
         guard activeTab == .pullRequest(pullRequest) else { return }
@@ -1228,12 +1288,33 @@ final class AppStore {
         // Živá data mají přednost (titulek se může změnit), snapshot je záchrana pro PR, které
         // z pollingu vypadlo. `compactMap` sem nepatří: záložka bez shrnutí by z pruhu zmizela
         // i s křížkem, kterým se zavírá.
-        openTabs.compactMap { summary(for: $0) ?? openTabSnapshots[$0] }
+        //
+        // Třetí možnost je záložka **mimo zdroje**, jejíž detail se teprve dotahuje (#531): o té
+        // se ví jenom adresa, a to je zrovna tolik, kolik pruh potřebuje (`repo#číslo`). Bez ní
+        // by v pruhu sekundu chyběla záložka, na kterou `activeTab` ukazuje — tedy okno bez
+        // jediné zvýrazněné záložky nad obrazovkou, která se načítá.
+        openTabs.compactMap { pr in
+            summary(for: pr)
+                ?? openTabSnapshots[pr]
+                ?? (externalPullRequests.contains(pr) ? Policy.pendingSummary(for: pr) : nil)
+        }
     }
 
     /// Shrnutí PR podle identifikátoru. `nil` = o tomhle PR nevíme nic ani z posledního tiku.
+    ///
+    /// **U záložky mimo zdroje se skládá z dotaženého detailu** (#531): v seznamu takový PR není
+    /// a nikdy nebude, takže by bez tohohle zůstala záložka prázdná i po úspěšném načtení. Živá
+    /// data mají přednost — jakmile PR do zdrojů přijde (někdo si vyžádá moje review), je to
+    /// obyčejný řádek fronty a shrnutí se bere odtamtud.
+    ///
+    /// **Fronty se to netýká.** Tahle metoda odpovídá na „co víme o tomhle jednom PR“; seznam,
+    /// karty, odznak i automat čtou `pullRequests`, a ty zůstávají tím, co přišlo ze zdrojů.
     func summary(for pullRequest: PRIdentifier) -> PullRequestSummary? {
-        pullRequests.first { $0.id == pullRequest }
+        if let listed = pullRequests.first(where: { $0.id == pullRequest }) { return listed }
+        guard externalPullRequests.contains(pullRequest),
+              case .loaded(let detail, _) = detailStates[pullRequest]
+        else { return nil }
+        return PullRequestSummary(detail)
     }
 
     /// Odznak u fronty v railu. `nil`, dokud se seznam nenačetl — nula nad nenačtenými daty
@@ -1919,13 +2000,24 @@ final class AppStore {
     /// Zahodí stav rep, o která už není zájem. Bez toho by mapa rostla donekonečna a PR,
     /// které se po týdnu vrátí do seznamu, by přivítala chyba z minula.
     private func forget(whatIsNotIn summaries: [PullRequestSummary]) {
-        let wanted = Set(summaries.map(\.id.repo))
+        // **Záložka mimo zdroje se počítá mezi chtěné** (#531), i když v seznamu není a nikdy
+        // nebude. Bez toho by ji první tik vyprázdnil: detail, diff, konverzace, checky i commity
+        // by z map zmizely a v otevřené záložce by zbyla obrazovka „pull request zmizel ze
+        // seznamu“ — tedy porucha hlášená nad stavem, který je u téhle záložky normální.
+        // Zahazuje se **zavřením záložky**, ne tikem; do té doby je to otevřená práce jako každá
+        // jiná. Frontu to nerozšiřuje: automat, notifikace ani nové PR sem nechodí, ty dostávají
+        // `summaries`.
+        //
+        // **„V seznamu“ v komentářích níž tedy znamená „v `wantedPullRequests`“** (nález Copilota
+        // na #535): hranice je od #531 o tu jednu záložku širší než tik, a rozepisovat to
+        // u každého filtru zvlášť by znamenalo dvacet míst, ve kterých se dá zapomenout jedno.
+        let wantedPullRequests = Set(summaries.map(\.id)).union(externalPullRequests)
+        let wanted = Set(wantedPullRequests.map(\.repo))
         checkoutStates = checkoutStates.filter { wanted.contains($0.key) || $0.value == .preparing }
 
-        // Diff velkého PR jsou megabajty, takže se drží jen pro to, co je v seznamu.
+        // Diff velkého PR jsou megabajty, takže se drží jen pro to, co je v chtěné množině.
         // Rozdělané načítání přežije ze stejného důvodu jako běžící příprava: jinak by si
         // ho doběhlé volání zapsalo zpátky a v mapě by zůstalo tak jako tak.
-        let wantedPullRequests = Set(summaries.map(\.id))
         diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
         // Rozsahový diff (#284) jde tou samou cestou a ze stejného důvodu — jsou to tytéž
         // megabajty a rozdělané načítání by si sebe zapsalo zpátky.
@@ -1936,13 +2028,19 @@ final class AppStore {
             wantedPullRequests.contains($0.key.pullRequest) || $0.value.isLoading
         }
         // Sbalení je jen příznak, ale drží klíč s celým identifikátorem PR — bez úklidu by
-        // množina rostla donekonečna.
-        foldedFiles = foldedFiles.filter { wantedPullRequests.contains($0.pullRequest) }
+        // mapa rostla donekonečna.
+        fileFolding = fileFolding.filter { wantedPullRequests.contains($0.key.pullRequest) }
+        // Značky `Prošlo` (#500) se z paměti pouštějí spolu s odvozenými stavy — **na disku
+        // zůstávají**, jako rozdělané review: PR, který ze seznamu vypadl, se umí vrátit
+        // (znovuotevření) a projít padesát souborů znovu je ztráta odvedené práce. Uklízí se
+        // **spolu**, jinak by po vypadlém PR zbyly stavy odvozené z mapy, která už není.
+        readMarks = readMarks.filter { wantedPullRequests.contains($0.key) }
+        readStates = readStates.filter { wantedPullRequests.contains($0.key) }
         // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         diffSearches = diffSearches.filter { wantedPullRequests.contains($0.key.pullRequest) }
-        // Detail se drží jen pro to, co je v seznamu — je z něj `headSha` pro draft, a ten
-        // se u PR mimo seznam nepíše. Rozdělané načítání přežije jako u diffu.
+        // Detail se drží jen pro to, co je v chtěné množině — je z něj `headSha` pro draft, a ten
+        // se u PR mimo ni nepíše. Rozdělané načítání přežije jako u diffu.
         //
         // **Rozdělané review se nezahazuje.** Je to ručně psaná práce, mapa je jeden malý
         // záznam na PR a PR, které ze seznamu vypadlo, se do něj umí vrátit (znovuotevření).

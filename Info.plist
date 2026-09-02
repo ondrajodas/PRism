@@ -50,6 +50,28 @@
 	     účel musí říct tady, i když ho posílá `osascript`. Text jde do systémového dialogu. -->
 	<key>NSAppleEventsUsageDescription</key>
 	<string>PRism otevře session revieweera v Terminálu — pustí v něm claude --resume v pracovním stromu té session.</string>
+	<!-- URL schéma `prism://open?url=<adresa PR>` (#531). Otevře pull request jako záložku ke
+	     čtení, i když není ve zdrojích; rozebírá to `Policy.openedPullRequest(from:)` a jméno
+	     schématu i akce jsou tam jako konstanty, aby se s tímhle klíčem nerozešly (hlídá to test).
+
+	     `CFBundleURLName` je obrácená doména, jak to má Apple v dokumentaci; zapsaná je
+	     **doslova**, ne přes `$(PRODUCT_BUNDLE_IDENTIFIER)` — ve slotu (#228) je identifikátor
+	     jiný, takže by se jméno měnilo s buildem. Schéma samotné je jedno pro všechny buildy
+	     schválně: dvě instance registrované na `prism://` znamenají, že odkaz otevře ta, kterou
+	     vybere LaunchServices — a v hlavním checkoutu se pracuje s tou bez slotu. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.ondrajodas.prism.open</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>prism</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>

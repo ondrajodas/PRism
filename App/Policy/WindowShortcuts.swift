@@ -70,6 +70,8 @@ struct WindowShortcut: Equatable, Sendable {
         case findInDiff
         case nextSearchHit
         case previousSearchHit
+        /// Značka `Prošlo` u souboru, jehož hlavička je zrovna ukotvená nahoře (#500).
+        case toggleFileRead
     }
 
     /// Klávesa. Speciální klávesy se vyjmenovávají, protože se znakem zapsat nejdou.
@@ -283,6 +285,15 @@ extension Policy {
                 title: "Předchozí výskyt",
                 primary: .init(key: .character("g"), modifiers: [.command, .shift])
             )
+        // `⌥V` je návrh z mockupu (sekce 40) a `V` je `Viewed`, tedy tatáž mnemotechnika, jakou
+        // má GitHub. `⌘V` by vzalo vkládání a `⌥` je v tomhle okně klávesa práce nad diffem
+        // (`⌥↑`/`⌥↓` na nálezech), takže ruka nikam neuhýbá. **V poli s textem ustupuje** jako
+        // ostatní okenní zkratky — `⌥V` v composeru je běžné psaní.
+        case .toggleFileRead:
+            return WindowShortcut(
+                title: "Prošlo",
+                primary: .init(key: .character("v"), modifiers: .option)
+            )
         }
     }
 
@@ -315,6 +326,7 @@ extension Policy {
             .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
             .fileTree, .runAllReviews, .openDraft,
             .findInDiff, .nextSearchHit, .previousSearchHit,
+            .toggleFileRead,
         ]
 
     static let windowShortcuts: [WindowShortcut] = windowShortcutActions.map(windowShortcut)

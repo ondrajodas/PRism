@@ -61,6 +61,7 @@ private struct FileBuilder {
     private var newPath: String?
     private var change: FileDiff.Change = .modified
     private var isBinary = false
+    private var blobs: String?
     private var hunks: [DiffHunk] = []
     private var hunk: HunkBuilder?
     /// `GIT binary patch` uvozuje blok, kterému nerozumíme — ale je to **očekávaný**
@@ -89,7 +90,8 @@ private struct FileBuilder {
             newPath: change == .deleted ? nil : (newPath ?? headerPaths.new),
             change: change,
             isBinary: isBinary,
-            hunks: hunks
+            hunks: hunks,
+            blobs: blobs
         )
     }
 
@@ -100,6 +102,7 @@ private struct FileBuilder {
         if line.hasPrefix("+++ ") { return readNewPath(line.dropFirst(4)) }
         if line.hasPrefix("rename from ") { return rename(from: line.dropFirst(12)) }
         if line.hasPrefix("rename to ") { return rename(to: line.dropFirst(10)) }
+        if line.hasPrefix("index ") { return readBlobs(line.dropFirst(6)) }
         if line.hasPrefix("new file mode ") { change = .added; return true }
         if line.hasPrefix("deleted file mode ") { change = .deleted; return true }
         if line.hasPrefix("Binary files ") { isBinary = true; return true }
@@ -113,10 +116,29 @@ private struct FileBuilder {
 
     /// Řádky, které nesou informaci, kterou aplikace nezobrazuje. Rozpoznat je je potřeba
     /// proto, aby se nepočítaly jako ztráta.
+    ///
+    /// **`index ` mezi nimi od #500 není** — z něj se čte otisk obsahu souboru (`FileDiff.blobs`).
     private static func isIgnorable(_ line: Substring) -> Bool {
-        ["index ", "old mode ", "new mode ", "similarity index ", "dissimilarity index ",
+        ["old mode ", "new mode ", "similarity index ", "dissimilarity index ",
          "copy from ", "copy to "]
             .contains { line.hasPrefix($0) }
+    }
+
+    /// `index b01c2e9..3b6bc60 100644` → `b01c2e9..3b6bc60` (#500).
+    ///
+    /// Mód se **odřezává**: je to práva souboru, ne jeho obsah, a `chmod +x` bez změny řádku by
+    /// jinak shodil značku `Prošlo` na `změněno od prošlého`. U nového a smazaného souboru je
+    /// jedna strana samá nula (`00000000000..98625bb`) — to je pravda o souboru, ne chybějící
+    /// údaj, takže se nechává, jak přišla.
+    ///
+    /// Řádka, které nerozumíme, **není ztráta**: `index` byl do #500 na seznamu ignorovaných
+    /// a nepřečtený otisk znamená jen `nil`, tedy „nevím“ — což `Policy` umí. Hlásit kvůli
+    /// tvaru téhle řádky rozbitý diff by bylo tvrzení o kódu, který je celý v pořádku.
+    private mutating func readBlobs(_ token: Substring) -> Bool {
+        let value = token.prefix { $0 != " " }
+        // Bez `..` to není dvojice sha, ale něco jiného — takový řádek se nechává bez otisku.
+        blobs = value.contains("..") ? String(value) : nil
+        return true
     }
 
     private mutating func readOldPath(_ token: Substring) -> Bool {

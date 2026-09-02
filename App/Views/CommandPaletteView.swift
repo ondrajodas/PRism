@@ -15,6 +15,11 @@ import SwiftUI
 struct CommandPaletteView: View {
     /// Co je k prohledání. Skládá se z paměti store, žádný dotaz na GitHub.
     let items: [CommandPalette.Item]
+    /// Řádek skupiny `Odkaz` pro to, co je v poli napsané (#531). `nil` = tohle není adresa PR.
+    ///
+    /// **Uzávěr, ne hotová položka**: závisí na dotazu, a ten je `@State` tady uvnitř. Rozhoduje
+    /// se v něm `Policy` a store (`AppStore.paletteLink(for:)`) — tohle view jen předá text.
+    var link: (String) -> CommandPalette.Item? = { _ in nil }
     /// Vykonání řádku. Paletu zavírá **volající** — ví, jestli po vykonání zůstává okno na místě.
     let run: (CommandPalette.Item) -> Void
     let close: () -> Void
@@ -46,7 +51,7 @@ struct CommandPaletteView: View {
     var body: some View {
         // **Jednou za překreslení, ne na řádek.** Hledání je průchod celým katalogem, takže
         // dotaz z každé buňky by z jednoho stisku klávesy udělal desítky průchodů.
-        let sections = Policy.paletteResults(of: items, query: query)
+        let sections = Policy.paletteResults(of: items, query: query, link: link(query))
         let selected = selected(in: sections)
         return VStack(spacing: 0) {
             field { open(selected) }
