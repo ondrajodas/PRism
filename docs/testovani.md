@@ -4379,7 +4379,17 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   (867/920 a 872/925 u #316; 602/655 pro `icons` u #318 proti naměřeným 564/617). Rozdíl, o který
   u #316 šlo, replika odhadla dobře (+5 bodů okna proti skutečným +2), ale hranice se z ní brát
   nedají.
-- **Sonda pruhu záložek (#318)** — `TabStripRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
+- **Sonda pruhu záložek okna (#527)** — `WindowTabStripRenderProbe`, gated `PRISM_MEASURE`. Nic
+  netvrdí; vyrendruje pruh **se všemi pěti značkami naráz** (prstýnek běhu, dutý kroužek načítání,
+  ✎ rozdělaného review, fialová tečka mergnutého PR, tečka stavu review) ve dvou šířkách a v obou
+  režimech. **Naráz schválně**: rozhodující je, jestli se od sebe poznají — samotný kroužek na
+  pruhu vypadá dobře v jakékoli podobě. Co se **dá** tvrdit číslem (které patro vyhrává), je ve
+  `WindowTabMarkTests`.
+
+  **Je to jiný pruh než ten pod ním**: `ReviewTabsView` je pruh **okna** (domácí záložka
+  a otevřené PR), kdežto `TabStripRenderProbe` fotí pruh **záložek pull requestu**. Dvě sondy
+  proto, že jsou to dvě obrazovky, ne dvě podoby jedné.
+- **Sonda pruhu záložek PR (#318)** — `TabStripRenderProbe`, gated `PRISM_MEASURE`. Nic netvrdí;
   vyrendruje pruh přes **pásmo šířek tabu** (647–1347) s odznaky i bez, **ikonový stupeň s každou
   ze sedmi aktivních záložek** a tři šířky v **tmavém režimu**. „Pozná se záložka bez popisku?“ je
   otázka na obrázek, ne na číslo.

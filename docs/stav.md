@@ -6803,7 +6803,8 @@ aplikace bere z `CFBundleName`, takže slotová separace (#228) je hotová bez �
 nedá — `ScrollView` se v testovacím hostu nevykreslí a skok je podle #152 **zmírnění, ne záruka**.
 Zkouší to člověk na běžící aplikaci.
 
-Testů **4999** ve 485 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
-`DiffScrollAnchorTests`, `OpenTabsStoreTests`, `AppStoreTabRestoreTests`) a rozšířené
-`PullRequestOriginTests`. Co se v které z nich hlídá a proč, je v
-[`docs/testovani.md`](testovani.md).
+Testů **5003** ve 486 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
+`DiffScrollAnchorTests`, `OpenTabsStoreTests`, `AppStoreTabRestoreTests`), rozšířené
+`PullRequestOriginTests` a `AppDelegateTerminationTests` a k tomu sonda
+`WindowTabStripRenderProbe` (pruh se všemi pěti značkami, pouští se ručně jako ostatní sondy).
+Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).
