@@ -45,6 +45,11 @@ struct DiffRowView: View {
     /// Cesta souboru, do kterého řádek patří (#152). Bloky z ní poznají, jestli jim patří
     /// **aktuální** výskyt hledání; jinak se nikde nekreslí.
     var filePath: String = ""
+    /// Řádky s kartou v okraji vpravo (#503), klíčované novým číslem řádku. Skládá je `Policy`
+    /// jednou za soubor, ne za řádek.
+    var marginMarks: [Int: DiffMarginMark] = [:]
+    /// Kam bloky hlásí, kde ty řádky leží. `nil` = okraj se nekreslí.
+    var marginAnchors: DiffMarginAnchors?
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
@@ -66,7 +71,9 @@ struct DiffRowView: View {
                 rangeDrag: rangeDrag,
                 blockID: id,
                 copy: copy,
-                filePath: filePath
+                filePath: filePath,
+                marginMarks: marginMarks,
+                marginAnchors: marginAnchors
             )
         case .pairBlock(let id, let pair):
             pairBlock(id, pair)
@@ -150,7 +157,9 @@ struct DiffRowView: View {
             rangeDrag: rangeDrag,
             blockID: id,
             copy: copy,
-            filePath: filePath
+            filePath: filePath,
+            marginMarks: marginMarks,
+            marginAnchors: marginAnchors
         )
     }
 

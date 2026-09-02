@@ -1660,6 +1660,126 @@ pozná tím, že zaškrtnutý soubor se nesbalí, nebo že ho `Rozbalit vše` ne
 `readFileCount` nesmí počítat `changed`; a otisk musí zůstat **celou** dvojicí — kdo z něj
 vezme jen hlavu, přestane vidět rebase, který změnil základ.
 
+### Nálezy v okraji (#503)
+
+Karta nálezu stojí **vedle** svého řádku, ne pod ním: kód zůstane souvislý, řádek s kartou má na
+pravé hraně 3bodový pruh závažnosti a mezi nimi vede spojnice. Zákres je
+v [`docs/navrh.html`, sekce 43](navrh.html) (stránka *Změněné soubory*).
+
+**Kde to bydlí.** `App/Policy/DiffMargin.swift` (`DiffMarginCard`, `DiffMarginMark`,
+`DiffMarginSource`, `DiffMarginSeverity`, `DiffSideColumns` a všechna rozhodnutí),
+`App/Views/DiffMarginAnchors.swift` (krabice s polohami řádků), `App/Views/DiffMarginView.swift`
+(kresba okraje i s modifikátorem posunu). Pruh na hraně řádku a hlášení poloh přidávají
+`DiffBlockRowView` a `DiffPairBlockRowView`; kolonu skládá `DiffView`.
+
+**Karta vzniká z dat, poloha z geometrie — a to je celá architektura téhle věci.** O tom, které
+karty v okraji jsou, rozhoduje `Policy.marginCards` nad diffem: soubor musí být rozbalený a jeho
+řádek se musí doopravdy kreslit (`DiffRow.renders(line:of:revealed:)`, tatáž odpověď, jakou dává
+`DiffRow.anchor`). Kdyby o existenci karty rozhodovalo hlášení z bloku, **zmizela by karta u řádku,
+jehož blok je zrovna mimo nasazený pás** (#469) — tedy pokaždé, když se od ní odscrolluje.
+
+**Nález, který se nemá k čemu zarovnat, v okraji není.** Nález bez řádku (chybějící testy,
+poznámka k architektuře — a právě kvůli nim vznikl panel, #182), nález na řádku mimo diff a nález
+ve sbaleném souboru zůstávají tam, kde byly: jako bublina u hlavičky souboru s kapslí `mimo diff`,
+respektive jako počet v hlavičce sbaleného souboru. Přepínač `Nálezy pod řádky` se proto **netýká
+všech bublin, jen těch zakotvených** (`DiffRow.rows(…, inlineFindings:)`) — bez toho rozlišení by
+se vypnutím přepínače nález bez řádku tiše ztratil, a tiše zmizelý nález vypadá jako čistý PR.
+
+**Zarovnání a odstrčení je čistá funkce.** `Policy.marginTops(desired:heights:gap:)` bere polohy
+řádků a **změřené** výšky karet a vydá, kde karty stojí: karta chce stát na horní hraně svého
+řádku, a když by se trefila do té nad sebou, jde pod ni. Odstrkuje se **jen dolů** (nahoru by
+minula řádek, který je vidět) a `nil` v `desired` — polohu řádku ještě nikdo neohlásil — znamená
+**za předchozí**, ne na nule: karta zmizet nesmí. Výšky se dopočítat nedají, protože se text
+v 280 bodech zalamuje, takže se **měří na kartě samotné** (#236); do prvního změření platí odhad
+a poloha se usadí o průchod později. Je to **jediné místo v diffu, kde se výška odhaduje**, a smí
+to tu být proto, že odhad hýbe kartou, ne kódem pod prstem (u bloků je zamítnutý, viz
+`DiffBlockSlot`).
+
+**Poloha řádku jde přes sledovanou krabici, a je to jediná v diffu.** `DiffMarginAnchors` je
+`@Observable` — na rozdíl od `DiffRowFrames`, `DiffFileExtents` a `DiffBlockPlacement`, které čte
+gesto nebo ukotvená hlavička, tedy někdo, kdo se překresluje z jiného důvodu. Z téhle se
+**kreslí**, takže bez sledování by karta zůstala stát tam, kde byl řádek před přerovnáním. Cena je
+ohraničená dvěma věcmi: hlásí se **předfiltr** (jen řádky, na kterých karta je — v běžném bloku
+tedy prázdno) a **jedině při změně**, takže nasazení bloku při projíždění se sledované vlastnosti
+nedotkne. Nespoléhá se u toho na to, že `@Observable` zápis téže hodnoty nehlásí
+(`PollObservationTests` to tvrdí, ale je to vlastnost toolchainu): stráž je v krabici, protože na
+ní stojí tvrzení, že projíždění nic nestojí.
+
+**Nezměřený blok nehlásí ani prázdno.** Prázdné hlášení znamená *změřeno a žádná karta tu není*,
+takže sundá starou polohu — a blok, který se ještě nerozložil, by tím při každém přestavění přepsal
+platnou polohu na nic. Je to tatáž lekce jako u `DiffRowFrames` („prázdná plocha se ignoruje“,
+#252), jen o jednu krabici vedle, a **projevila se hned**: karty stály na sobě u horní hrany
+okraje, ačkoli bloky hlásily správně.
+
+**A rámečky řádků se posílají i argumentem, ne jen přes `@State`.** Zápis do `frames` je vidět až
+v dalším průchodu tělem, takže `noteRows()` hned za ním čte ty **staré** (naměřeno: nula, i když
+textové view zrovna ohlásilo devět rámečků). Krabice se pak plnily teprve z `onGeometryChange`,
+tedy až se blokem něco pohnulo — u tažení rozsahu to nikdo nepoznal, protože se tam mezitím
+pohne myš, u karty v okraji ale není na co čekat. Od #503 tedy `noteFrames` posílá rámečky
+`noteRows(measured:)` a obojí (`DiffRowFrames` i `DiffMarginAnchors`) se plní hned.
+
+**Posun s výřezem dělá jediný modifikátor.** `DiffMarginScroll` čte `DiffViewport.top`, tedy
+hodnotu, která se mění při **každém** otočení kolečka; uvnitř `body(content:)` je `content`
+zástupný uzel, takže se přeloží jedině ten modifikátor a karty ne. Tělo okraje samo čte **pás**
+(`DiffViewport.band`), který je kvantovaný na násobky výřezu, a kreslí jen karty v něm. Hlídá to
+`DiffMarginScrollReadTests` nad zdrojáky — v harnessu se počet průchodů tělem změřit nedá (#361).
+**Seznam čtenářů smí růst, ale vědomě**: s #527 k nim přibyl `DiffAnchorReporter` a s #501 `PullRequestMapView` (mapa leží nad pruhem záložek, tedy mimo `DiffView`, a ptá se na tutéž věc jako ukotvená hlavička) (kotva scrollu do `tabs.json`), a projde tou samou zkouškou jako ostatní — je to malé vyhrazené view, které `top` čte v `onChange`, ne tělo.
+
+**Panel vpravo se pod okrajem složí, nezmizí** (`Policy.diffSideColumns(layout:hasMargin:)`).
+Dokud panel drží **seznam** nálezů, byly by v tabu `Změněné soubory` vpravo dvě třistabodové kolony
+o téže věci; automatika ho proto složí na proužek s počtem nálezů a značkou rozdělaného review
+a `⌘2` ho vrátí — tentýž mechanismus i tatáž vratnost jako u složení sloupců ve split pohledu
+(#188). Je to **mezistav**: seznam v panelu ruší #504, a tím tahle podmínka odpadne.
+
+**Co se u toho nemá rozbít:** karta musí zůstat `FindingBubbleView` (odznaky, shoda dvou
+reviewerů, stav z kontroly #150, odmítnutí #113 a řada `Převzít · Neplatí · Nepatří sem` #283 se
+v okraji nesmí chovat jinak než pod řádkem); značka se musí hledat podle **nového** čísla řádku
+(kotva nálezu, `DiffRow.withBubbles`); a `viewport.top` nesmí přitéct do těla okraje — čtenáři
+i zapisovatelé jsou vyjmenovaní v `DiffMarginScrollReadTests`.
+
+**O kolonách rozhoduje šířka, ne jen pohled** (oprava z proklikání). `Policy.diffSideColumns`
+dostává `available` — šířku, kterou diff dostal, tedy okno bez railu a bez panelu — a **odečítá**,
+místo aby se dohadovala. Bez toho se v úzkém okně sešly strom (210), kód a okraj (300) v jednom
+`HStack`u, jehož pružné dítě je uprostřed; `HStack` rozdíl, který se nevejde, **přesype doprava**,
+tedy pod složený proužek panelu. Naměřeno v okně 700 (podlaha `RootView`u): **35 bodů** přetečení
+s okrajem, **16** bez něj, v obou pohledech — na obrazovce ukousnuté `+347 −0` v hlavičce souboru.
+
+Pořadí ustupování je podle toho, co je jak drahé zahodit: **kód nikdy**, pak **strom** (`⌘1` ho
+vrátí a v liště je pořád popover s týmž seznamem), a **okraj až potom, a nikdy tak, aby nález
+zůstal bez domova** — se zahozeným okrajem se **rozloží panel**, který karty převezme, a to
+i v pohledu vedle sebe, kde by ho #188 jinak složilo. Ve `Vedle sebe` se proto okraj drží, i když
+na kód zbývá pod podlahu; padne teprve tehdy, když se nevejde fyzicky.
+
+**Zahození okraje mění svůj vlastní vstup, a přesto to nekmitá** — to je ta neintuitivní část.
+`available` je šířka **po** odečtení panelu, takže rozložením panelu se zmenší; a menší `available`
+okraj drží zahozený. Zpětná vazba je **monotónní**, takže se ustálí na první průchod. Kmitalo by to
+jedině tehdy, kdyby zahození okraje šířku **zvětšilo** — a to nemůže, protože složený proužek je
+vždycky užší než rozložený panel. Stráž `appliedColumns != columns` v `task(id:)` hlídá jen **týž**
+výsledek, na A→B→A by nestačila.
+
+**Šířky kolon bydlí v `Policy`, ne ve views** (`treeColumnWidth`, `marginColumnWidth`): podle týchž
+čísel se rozhoduje, jestli se kolona vejde, takže `DiffView.treeWidth` i `DiffMarginView.width` je
+odsud čtou. Dvě pravdy o jedné šířce se rozejdou při první úpravě — a přesně tím ta vada vznikla.
+Hlídá to `DiffColumnFitTests` (pásmo šířek × pohled × okraj) a k tomu tvrzení, že **nález nikdy
+nezůstane bez domova**; jak se to měřilo v okně, je
+v [`docs/testovani.md`](testovani.md#zalézal-obsah-diffu-pod-boční-proužky-503).
+
+**Kdo krabici výřezu drží, se pozná gestem `přepnutí na Změněné soubory`, ne projížděním.** U #503
+je `DiffViewport` `@State` **uvnitř** `DiffView` a zná ho šest souborů, všechny pod diffem — nad
+diffem ji nikdo nedrží ani nečte, takže se zápis při scrollování nemá kam rozlézt:
+
+```bash
+grep -rn 'DiffViewport' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u  # výčet, ne prázdný
+grep -rn 'DiffViewport()' App | grep -vE ':[0-9]+: *///?'                        # kde vzniká
+```
+
+Ten výčet ale **není invariant** — #501 tu krabici vyvádí o úroveň výš (drží ji detail PR
+v `DiffTracking`), aby na ni dosáhl pruh záložek, a má na to zapsaný důvod. Co z #503 zůstává, je
+**měřicí povinnost**: kdo krabici zvedne nad diff, platí za to na **přepnutí tabu**, protože tam se
+obsah zahodí a postaví znovu (#472/#476), kdežto projíždění tu změnu nemusí ukázat vůbec. Změřit se
+to má na ostrých datech, ne na vyrobené scéně — jak, je
+v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).
+
 ## `Config` (`App/Config/`)
 
 Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé

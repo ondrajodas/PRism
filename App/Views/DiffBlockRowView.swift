@@ -24,6 +24,11 @@ struct DiffBlockRowView: View {
     /// Cesta souboru, ve kterém blok leží (#152). Z ní se pozná, jestli tomuhle bloku patří
     /// **aktuální** výskyt hledání — `DiffLine` se totiž mezi dvěma soubory umí shodovat.
     var filePath: String = ""
+    /// Řádky, ke kterým se v okraji váže karta (#503) — klíčované **novým** číslem řádku, protože
+    /// právě na něj se nález kotví. Prázdné = okraj se nekreslí (bubliny zapnuté, náhledy, testy).
+    var marginMarks: [Int: DiffMarginMark] = [:]
+    /// Kam se hlásí, kde ty řádky leží. `nil` = nikdo se neptá.
+    var marginAnchors: DiffMarginAnchors?
 
     @Environment(\.colorScheme) private var colorScheme
     /// Hledání v tomhle diffu (#152). **Prostředím, ne parametrem, a je to výkonové rozhodnutí:**
@@ -52,10 +57,17 @@ struct DiffBlockRowView: View {
             search: searchHighlight,
             commentRangeLines: rows(in: commentRangeCells),
             draggedLines: rows(in: draggedCells),
-            noteFrames: { frames = $0; noteRows() }
+            // **Rámečky se posílají dál i argumentem, ne jen přes `@State`** (#503): zápis do
+            // `frames` je vidět až v dalším průchodu tělem, takže `noteRows()` hned za ním by
+            // čtl ty **staré** (změřeno: nula, i když textové view zrovna ohlásilo devět).
+            // Krabice se pak plnily teprve z `onGeometryChange` níž, tedy až se blokem něco
+            // pohnulo — a karta v okraji na ten okamžik nemá jak čekat.
+            noteFrames: { frames = $0; noteRows(measured: $0) }
         )
         // Plocha na tažení a pilulka leží nad textem, pozicované podle rámečků řádků.
         .overlay(alignment: .topLeading) { gutter }
+        // Pruh závažnosti na **pravé** hraně řádku s kartou (#503).
+        .overlay(alignment: .topTrailing) { marginStripes }
         // Rámeček **celého bloku** v souřadnicích obsahu diffu — jeden na blok, ne jeden na řádek
         // (#252). Plochy řádků se z něj dopočítají aritmetikou (`DiffGutterGeometry`).
         .onGeometryChange(for: CGRect.self) {
@@ -159,6 +171,38 @@ struct DiffBlockRowView: View {
         }
     }
 
+    /// Pruh závažnosti na pravé hraně řádku, ke kterému se v okraji váže karta (#503) — 3 body,
+    /// jak ho má návrh (`tr.mgn-crit td.code { border-right: 3px solid var(--crit) }`).
+    ///
+    /// **Jeden prvek na kartu, ne na řádek bloku** (#252): karet je v bloku obvykle nula nebo
+    /// jedna, kdežto řádků šedesát — a prvek s prázdným obsahem se pořád umisťuje.
+    @ViewBuilder private var marginStripes: some View {
+        if !marginMarks.isEmpty {
+            ZStack(alignment: .topTrailing) {
+                ForEach(stripedFrames) { frame in
+                    if let mark = self.mark(of: frame) {
+                        Rectangle()
+                            .fill(mark.severity.stripe)
+                            .frame(width: 3, height: frame.rect.height)
+                            .offset(y: frame.rect.minY)
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// Řádky bloku, na kterých pruh je. Prázdné, dokud okraj nikoho nezajímá.
+    private var stripedFrames: [DiffBlockLineFrame] {
+        guard !marginMarks.isEmpty else { return [] }
+        return frames.filter { mark(of: $0) != nil }
+    }
+
+    private func mark(of frame: DiffBlockLineFrame) -> DiffMarginMark? {
+        guard let number = Policy.number(of: frame.line, on: .right) else { return nil }
+        return marginMarks[number]
+    }
+
     private var geometry: DiffGutterGeometry { .unified(frames: frames) }
 
     /// Kde svítí pilulka a co udělá.
@@ -181,9 +225,13 @@ struct DiffBlockRowView: View {
     /// **Hlásí se každý řádek, ne jen ten, na který se dá komentovat** (#152): z těchže ploch se
     /// počítá, kam skok posadí cílový řádek, a ten může být i v rozbaleném kontextu. Kotvu dostane
     /// jen řádek, přes který se dá táhnout rozsah.
-    private func noteRows() {
+    /// - Parameter measured: rámečky, které textové view **právě** ohlásilo. `nil` = vzít ty ze
+    ///   stavu; hodnota se předává jen z `noteFrames`, kde ještě ve stavu nejsou (viz tam).
+    private func noteRows(measured: [DiffBlockLineFrame]? = nil) {
+        let frames = measured ?? self.frames
+        noteMargin(frames)
         guard let box = rangeDrag.box else { return }
-        let gutter = geometry
+        let gutter = DiffGutterGeometry.unified(frames: frames)
         let origin = placement.rect.origin
         let rows = frames.map { frame in
             DiffRowFrames.Entry(
@@ -193,6 +241,38 @@ struct DiffBlockRowView: View {
             )
         }
         box.frames.note(rows, covering: placement.rect, of: box.subject, block: blockID)
+    }
+
+    /// Ohlásí okraji, kde leží řádky s kartou (#503).
+    ///
+    /// **Hlásí se předfiltr, ne všechny řádky** — na rozdíl od `DiffRowFrames`, ze kterých se
+    /// počítá i skok, a tak se hlásí každý. Sem jde jedině to, co okraj doopravdy kreslí, protože
+    /// je to krabice, ze které se překresluje.
+    ///
+    /// **Nezměřený blok nehlásí nic, ani prázdno** — a je to tatáž lekce jako u `DiffRowFrames`
+    /// („prázdná plocha se ignoruje“, #252), jen o jednu krabici vedle. Prázdné hlášení znamená
+    /// *změřeno a žádná karta tu není*, takže se z krabice sundá stará poloha; kdyby ho poslal
+    /// i blok, který se ještě nerozložil, přepsal by tím platnou polohu na nic — a to se děje
+    /// pokaždé, když se blok přestaví (změřeno: karty pak stály na sobě u horní hrany okraje).
+    private func noteMargin(_ frames: [DiffBlockLineFrame]) {
+        // **Nezměřený blok nehlásí nic** — a to platí i na jeho *počátek*, ne jen na rámečky
+        // řádků. `noteFrames` se ozývá z textového view, tedy **dřív** než `onGeometryChange`
+        // nasadí `placement.rect`; poloha složená v tom okamžiku nese `origin.y == 0`, takže je
+        // v souřadnicích **bloku**, ne obsahu — karta by stála o celý soubor výš. Změřeno při
+        // slévání s #501, kde se to pořadí projevilo: hlášená poloha byla 98 b místo 137 b,
+        // tedy přesně odsazení bloku. Na geometrické cestě se `noteRows()` volá hned za zápisem
+        // rectu, takže se tím o žádné hlášení nepřijde — jen se to pozdější vezme.
+        guard let marginAnchors, !frames.isEmpty, placement.rect != .zero else { return }
+        let origin = placement.rect.origin
+        var found: [String: DiffMarginSpot] = [:]
+        for frame in frames {
+            guard let mark = mark(of: frame) else { continue }
+            found[mark.id] = DiffMarginSpot(
+                top: origin.y + frame.rect.minY,
+                height: frame.rect.height
+            )
+        }
+        marginAnchors.note(found, from: blockID)
     }
 
     private func anchor(of frame: DiffBlockLineFrame) -> DraftAnchor? {

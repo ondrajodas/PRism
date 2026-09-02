@@ -106,7 +106,7 @@ struct DiffToolbar: View {
     /// Jedno tlačítko, ne dvě. Který ze dvou stavů dává smysl, plyne z toho, co je zrovna
     /// na obrazovce — dvě tlačítka by znamenala, že je jedno z nich pořád k ničemu.
     ///
-    /// Nabídka pod šipkou drží volby, které se nastaví a nechají být: bubliny nálezů u řádků
+    /// Nabídka pod šipkou drží volby, které se nastaví a nechají být: bubliny nálezů pod řádky
     /// a sbalení rozbaleného kontextu. V liště zabíraly místo, o které se v užším okně soutěží
     /// s věcmi, které se používají při každém review.
     ///
@@ -120,11 +120,16 @@ struct DiffToolbar: View {
             if hasFindings || collapseExpansion != nil {
                 Menu {
                     if hasFindings {
-                        // Jmenuje se `Nálezy u řádků`, ne `Bubliny`: schovává **jen** nálezy,
+                        // Jmenuje se `Nálezy pod řádky`, ne `Bubliny`: schovává **jen** nálezy,
                         // kdežto „bubliny“ jsou od #64 i vlákna konverzace. A ne holé `Nálezy` —
                         // tak se jmenuje přepínač panelu o kus vedle. **Nápověda tu není**:
                         // položky menu na macOS tooltip neukazují, takže by to byl mrtvý text.
-                        Toggle("Nálezy u řádků", isOn: $showBubbles)
+                        //
+                        // **`pod` místo `u`** (#503): od té doby je to volba **místa**, ne
+                        // viditelnosti — vypnuté nálezy nezmizí, stojí v okraji vpravo vedle
+                        // svého řádku. `u řádků` by o tom lhalo, protože v okraji jsou u řádků
+                        // taky.
+                        Toggle("Nálezy pod řádky", isOn: $showBubbles)
                     }
                     if let collapseExpansion {
                         Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {

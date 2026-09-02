@@ -1813,6 +1813,9 @@ struct PullRequestDetailView: View {
             // Výřez a rozsahy souborů (#501) — **drží je detail**, protože z nich čte i mapa PR
             // nad pruhem záložek. Diff do nich zapisuje jako dřív, jen krabice není jeho.
             tracking: tracking,
+            // Kurzor procházení (#187) — od #503 ho potřebuje i diff: karta v okraji na tom místě
+            // dostane rámeček. Do té doby stačil panelu, protože v diffu kurzor ukázal skok.
+            current: cursor.current,
             // **Jen celý diff hlásí kotvu** (#527). Rozsah „co od minule přibylo“ (#284) je
             // pohled na **jiný** seznam souborů, takže by jeho poloha po restartu ukazovala
             // někam jinam — a obnovit se má to, co je v tabu vidět po otevření, tedy celý diff.

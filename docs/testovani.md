@@ -7310,6 +7310,360 @@ směry — po dočasném odebrání varianty se shiftem začalo `⌥↓` prochá
 tom samém. Je to platformní chování, takže na něj **test není** a drží ho jen ten zápis; kdyby se
 zkratky zase rozdělily na dvě tlačítka, projde build i testy a rozbije se to potichu.
 
+### Co stojí okraj s kartami nálezů (#503)
+
+Okraj přidává nad blok kódu druhou vrstvu (karty, spojnice, pruhy na hraně řádků), takže otázka
+není „je to rychlé“, ale **jestli je to horší než dneska**. Měří to `DiffMarginWheelProbe` ručně
+(`TEST_RUNNER_PRISM_MEASURE=1`) skutečným gestem (`WheelGesture`, 150 × 40 pt), okno 1512 × 874,
+jeden soubor o 2000 řádcích a v něm 11 nálezů:
+
+| Varianta | 1. série | 2. série |
+|---|---|---|
+| bez nálezů (základ) | 1,47 s CPU | 1,47 s |
+| **okraj** | **1,56 s** | **1,53 s** |
+| bubliny pod řádky (stav do #503) | 1,46 s | 1,47 s |
+
+Okraj tedy stojí **6 %** nad diffem bez nálezů, tedy asi 0,5 ms na snímek; bubliny nestojí nic
+(jsou v toku obsahu). Bez pásu (kreslily se **všechny** karty) to bylo **1,65 / 1,67 s**, takže pás
+sundal dvě třetiny toho, co si okraj bral — a to je ten důvod, proč se karty nasazují jako bloky
+(`Policy.isBlockMounted`, #469).
+
+Čtyři věci, bez kterých z toho měření vyjde nesmysl, a všechny čtyři jsou zaplacené:
+
+- **Tři varianty, ne dvě.** Bez základu („bez nálezů“) se rozdíl nedá přiřadit: scéna s bublinami
+  má **jiný obsah** (bubliny rozrážejí bloky a přidávají do dokumentu 1 200 bodů), takže gesto
+  o stejném počtu kroků jde přes jinak drahý kód. První verze měřila jen okraj proti bublinám
+  a vyšlo z ní „+17 %“, což byl ze dvou třetin rozdíl scén.
+- **Scéna se nechá usadit `await`em, ne točením runloopu.** `RunLoop.current.run(until:)` hlavní
+  aktor **vyhladoví**, takže `DispatchQueue.main` z `updateNSView` nedorazí a rámečky řádků
+  přijdou teprve po skončení sondy — okraj se pak fotí i měří s **odhadem** výšky místo se
+  změřenou polohou. Naměřeno při stavbě sondy: karty stály u horní hrany, ačkoli bloky hlásily
+  správně, a v renderu to bylo vidět jako tři karty na sobě.
+- **Jev je odpojení bloků, ne odmlka.** Na první rozvržení se nasadí **všechny** bloky a hned nato
+  se odpojí (#469), takže gesto vypálené do rozdělané scény jde přes 34 `NSTextView` místo přes
+  pět: **9,1–9,7 s CPU proti 1,4–1,5 s**, tedy šestinásobek. A protože se to stane kterékoli
+  variantě, vyjde z toho pořadí podle toho, která se chytila nerozvrženě — první běhy sondy měly
+  „okraj“ i „bubliny“ střídavě na obou koncích. Sonda proto čeká, až počet nasazených bloků
+  spadne pod čtrnáct a přestane se měnit.
+- **Pás se musí jednou zapsat.** Zapisuje ho `onScrollGeometryChange`, a ten nad nehybným výřezem
+  nemusí přijít vůbec — pak zůstane `0...0` z konstruktoru a bloky se nemají podle čeho odpojit.
+  Sonda proto posuvníkem šťouchne o bod a vrátí ho, a **teprve pak** čeká na odpojení.
+
+**A okno musí být na obrazovce.** Nad oknem odloženým na −10 000 se gesto **nedoručí**: událost
+kolečka nese `mouseEventWindowUnderMousePointer`, takže posuvník zůstal na nule u **obou** variant
+— tedy tatáž hodnota pro funguje i nefunguje (#478), a vypadalo to jako hotové měření (0,03 s CPU
+u všeho). Sonda proto staví okno jako `DiffShapeProbe`: na (40, 40), `level = .floating`.
+
+**Naměřilo by to rozdíl, kdyby zhoršení bylo?** Ano, a je to vidět ze dvou stran: ablace pásu dala
++0,12 s (tedy měřidlo vrstvu nad blokem **vidí**) a nerozvržená scéna dala šestinásobek, což je
+tentýž řád, jaký u #469 oddělil líný seznam od pevného.
+
+### Okraj na ostrých datech (#503, druhé kolo)
+
+`DiffMarginWheelProbe` výš měří **scénu, kterou si sonda vyrobila** — jeden soubor o dvou tisících
+řádcích. Na otázku „laguje to v praxi“ neodpovídá, protože skutečné PR mají jiný tvar: desítky až
+tisíce souborů, krátké hunky rozeseté po repu a nálezy tam, kde je reviewer doopravdy najde. Druhé
+kolo proto měří **skutečné diffy** (`DiffMarginSharpProbe`, ručně) a k tomu **druhé gesto**:
+**přepnutí na tab `Změněné soubory`**, protože právě na něm se lag hlásí — a je to jiná cena než
+projíždění (přepnutím se obsah tabu zahodí a postaví znovu, tedy se platí **první rozvržení**;
+tatáž úvaha jako u `Driver.tab` v [*Přepnutí tabu je jiný scénář*](#přepnutí-tabu-je-jiný-scénář-než-přerovnání-a-je-to-ten-dražší)).
+
+Materiál — čtyři pull requesty, vybrané tak, aby se lišily **tvarem**, ne jen velikostí:
+
+| PR | Soubory | Řádky diffu | Na co je |
+|---|---|---|---|
+| `ondrajodas/PRism#499` | 45 | 5 727 | ostrá, ale mírná; **k ní jsou skutečné nálezy** |
+| `cli/cli#14104` | 71 | 6 222 | střed |
+| `cli/cli#14320` | 158 | 5 679 | plochá distribuce, žádný lock |
+| `home-assistant/core#181088` | 3 000 | 245 116 | krajní případ |
+
+**Krajní případ aplikace nedostane, a to je vlastní nález.** `gh pr diff` nad PR o víc než **300
+souborech** vrací `HTTP 406` (*the diff exceeded the maximum number of files*), a `GhGateway.fetchDiff(id:)`
+je zrovna `gh pr diff` — takže `home-assistant/core#181088` **v PRismu nejde otevřít vůbec**:
+`diffStates[id]` skončí na `.failed`. Není to „velký diff se kreslí pomalu“, je to „diff nedorazí“.
+A na rozdíl od logů z CI, které mez mají a **pojmenovanou** (`Policy.logAvailability` →
+`.tooLarge`), diff žádný takový stav nemá, takže se to v okně ukáže jako obyčejná chyba. Pro měření
+se ten diff musel složit z `pulls/{n}/files` (30 stránek po 100, ~30 s; API vydá **3 000 z 3 632**
+souborů a u sedmi patch nepošle vůbec) — což je zároveň odpověď na to, proč se do repa nedává jako
+fixture: 9,2 MB.
+
+**Nálezy jsou ze dvou zdrojů a je podstatné, který je který.** Na `PRism#499` proběhlo **skutečné
+review** touž cestou, jakou pouští aplikace (`code-review:code-review`, `--allowedTools
+Read,Grep,Glob,Bash(git:*),ReportFindings,Skill`, prompt z `Policy.reviewPrompt`): 84 tahů,
+14 minut, **21,97 USD** — a **dva nálezy**. Rozeseté nálezy sondy (jedenáct, na skutečných
+přidaných řádcích) jsou tedy **pětinásobek** běžné hustoty, tedy horní odhad, ne obraz; kolik stojí
+ta skutečná, měří varianta `okraj, skutečné nálezy z review` ze sidecaru `<jméno>.findings.json`.
+
+#### Co z toho vyšlo
+
+Přepnutí `Přehled` ↔ `Soubory`, **deset v sérii, dvě série střídavě**, okno 1512 × 874, Debug,
+`mainThreadCPUSeconds`. Milisekundy jsou na **jedno** přepnutí, v závorce obě série:
+
+| PR (souborů) | bez nálezů | **okraj** (12 karet) | bubliny (12) | okraj, 45 karet | okraj, **skutečné 2** |
+|---|---|---|---|---|---|
+| `PRism#499` (45) | **850** (8,53 / 8,47) | **1010** (9,23 / 10,96) | 992 (9,76 / 10,07) | 1038 (10,69 / 10,07) | **954** (10,13 / 8,96) |
+| `cli/cli#14104` (71) | **1184** (11,50 / 12,17) | **1468** (14,66 / 14,71) | 1435 (13,68 / 15,01) | 1632 (15,35 / 17,29) | — |
+| `cli/cli#14320` (158) | **1657** (15,82 / 17,33) | **2325** (17,44 / 29,07) | 1825 (17,85 / 18,65) | 1995 (17,85 / 22,06) | — |
+
+Pět věcí z toho plyne a **první dvě jsou celá odpověď**:
+
+1. **Okraj stojí totéž co bubliny, tedy co stav před #503.** Rozdíl vyjde +2 %, +2 % a +27 %, ale
+   ten poslední je jediná buňka s rozptylem **17,44 proti 29,07** — a její *nižší* série je pod
+   bublinami. Vezme-li se z každé dvojice ta nižší (nejmíň zašpiněná), je okraj u dvou PR ze tří
+   **levnější**. Znaménko tedy nedrží a rozdíl je pod rozlišením měřidla. **Bubliny jsou přitom
+   doslova ten předchozí stav**: `marginCards` má na začátku `guard !showBubbles`, takže se
+   se zapnutým přepínačem okraj nekreslí vůbec a panel vpravo se nesloží — je to A/B proti `main`u
+   změřené v jednom sezení, ne proti vzpomínce.
+2. **Co stojí, je mít nálezy vykreslené, ne mít je v okraji.** Proti diffu bez nálezů je to
+   +19 / +24 / +40 % u okraje a +17 / +21 / +10 % u bublin.
+3. **Skutečná hustota stojí méně než polovinu měřené.** Dva nálezy z opravdového review dají 954 ms
+   proti 850 ms bez nálezů (+12 %), kdežto dvanáct 1010 ms (+19 %).
+4. **Odpověď na #478 je v tabulce, ne ve větě.** Na `PRism#499` je odezva na hustotu **monotónní**:
+   850 → 954 (2 karty) → 1010 (12) → 1038 (45). Měřidlo tedy druhou vrstvu nad blokem **vidí**.
+   A je z toho vidět i **tvar** té ceny: první dvě karty stojí 104 ms, dalších deset 56 ms a dalších
+   třiatřicet 28 ms — platí se tedy hlavně za to, že okraj **vůbec je** (třetí kolona, složený
+   panel), ne za karty v něm. Proto nemá smysl karty zlevňovat.
+5. **Hlavní člen je počet souborů, ne nálezy.** Bez nálezů 850 → 1184 → 1657 ms pro 45 → 71 → 158
+   souborů. Přepnutí na `Změněné soubory` je tedy drahé samo o sobě — což #472/#476 změřilo
+   už na `main`u (576–682 ms na 2000řádkovém diffu jednoho souboru) a #503 na tom nemění nic.
+
+**Co tahle čísla netvrdí.** Není to wall clock a není to Release: je to CPU hlavního vlákna za deset
+přepnutí za sebou v Debug buildu, takže „1 s na přepnutí“ **není** doba, po kterou člověk kouká na
+prázdno. Tvrzení je **srovnání sloupců**, a to je taky jediné, co přežije zátěž: sezení běželo při
+cizím plném běhu testů (load average **13,9–28,7**, medián 19,7 na patnáctijádrovém stroji,
+vzorkováno vedle měření po dvaceti sekundách), takže absolutní hodnoty jsou nadsazené **všechny
+stejně**. Kdo je bude reprodukovat na volném stroji, dostane nižší čísla a **týž poměr**.
+
+#### Čtyři věci, bez kterých z toho vyjde nesmysl — a všechny čtyři to už jednou udělaly
+
+- **Strop na počet nasazených bloků nemůže být konstanta.** Wheel sonda si vystačí se čtrnácti,
+  protože měří **jeden** soubor; do pásu nad diffem o pětačtyřiceti souborech padne jinak velký
+  počet a nad třemi tisíci ještě jinak. Usazení se proto pozná **propadem proti vrcholu** (na
+  čtvrtinu a míň), ne absolutní hodnotou. S konstantou zůstalo nad `PRism#499` **168 nasazených
+  bloků** i po dvou minutách čekání a gesto do té scény stálo **22,8 s CPU proti 1,7 s** u téže
+  varianty, tedy třináctinásobek.
+- **Šťouchnutí posuvníkem se musí opakovat.** Pás zapisuje `onScrollGeometryChange`, a ten nad
+  nehybným výřezem nemusí přijít vůbec; jedno šťouchnutí **před** čekáním nestačí, protože v tu
+  chvíli nemusí být scéna ještě rozvržená. Šťouchá se proto uvnitř čekání, dokud bloky nespadnou.
+- **Každé gesto ve vlastní scéně.** Když se obojí měřilo nad jednou, projíždění po přepínání tabů
+  **nikdy nikam nedojelo** (`dojelo na 0` u všech variant, 0,03 s CPU). Přepnutím se obsah tabu
+  zahodí a postaví znovu, takže v hierarchii chvíli visí **starý** scroller s vysokým dokumentem;
+  `tallestScroller` sáhne na něj, šťouchnutí i gesto na něm projdou, ale rozvržení mu počátek při
+  každém kole srovná na nulu.
+- **Gesto kolečkem si žádá odemčenou obrazovku, a přepnutí tabu ne.** Nad zamčeným sezením leží
+  shield okno **nad** tím naším (v logu `elementWindow(3) is lower than shield(2001)`), takže se
+  událost nedoručí a posuvník zůstane na nule — tedy tatáž hodnota pro funguje i nefunguje (#478).
+  Je to tentýž kořen jako okno na −10 000 u prvního kola, jen zvenčí. Sonda proto (1) **nezapíše
+  gesto, které nikam nedojelo**, (2) u vynechaného měření **vypíše, jestli je obrazovka zamčená**
+  (`CGSessionCopyCurrentDictionary`), aby se příčina nehádala, a (3) umí měřit **jen jednu půlku**
+  (`PRISM_SHARP_GESTURE=tab`), protože přepínání pohání zápis do store a obrazovku nepotřebuje.
+
+**A pozor na to, co běží vedle.** Měří se `mainThreadCPUSeconds`, ne wall clock, ale při souběžném
+plném běhu testů z jiného slotu (load average 21–28 na patnáctijádrovém stroji) čísla stoupnou
+i tak. Dva vlastní testovací hosty naráz udělaly totéž — a poznalo se to jedině tím, že v `ps`
+stály dva. Sonda proto **střídá A/B/A/B po celých případech** (#274) a čte se z ní **poměr mezi
+variantami**, nikdy absolutní hodnota; a než se měří, patří zkontrolovat, že na stroji neběží cizí
+`xcodebuild test`.
+
+#### Co z druhého kola zůstalo neměřené, a proč se to nedopočítalo
+
+**Projíždění kolečkem nad ostrými diffy změřené není.** Sezení, ve kterém se druhé kolo dělalo,
+mělo po většinu času **zamčenou obrazovku**, takže se gesto nedoručilo (viz výš) a sonda ta čísla
+odmítla zapsat. Jedno pásmo hodnot z odemčeného okna vzniklo, ale **nepublikuje se**: měřilo se
+tehdy ještě nad **jednou** scénou pro obě gesta, tedy v té konfiguraci, o které se pak ukázalo, že
+`tallestScroller` v ní může sáhnout na odložený scroller — a nedá se dodatečně rozhodnout, který to
+byl. Číslo, o kterém nevím, co měřilo, je horší než chybějící.
+
+Co tedy o projíždění platí, je **první kolo** beze změny (`DiffMarginWheelProbe`, tabulka výš):
+okraj **1,56 / 1,53 s** proti **1,47 s** bez nálezů a **1,46 / 1,47 s** s bublinami, tedy 6 % nad
+základem. Doměřit se to má nad odemčenou obrazovkou příkazem
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_SHARP_DIFFS=<složka> \
+    TEST_RUNNER_PRISM_SHARP_GESTURE=wheel \
+    xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+    -only-testing:PRismTests/DiffMarginSharpProbe > /tmp/wheel.log 2>&1
+```
+
+a pozná se to podle toho, že u každé varianty stojí `dojelo na …` s nenulovou hodnotou.
+
+### Zalézal obsah diffu pod boční proužky? (#503)
+
+Vada z proklikání: v tabu `Změněné soubory` zalézal obsah pod složený proužek panelu vpravo —
+u hlavičky souboru bylo **ukousnuté `+347 −0`**. Hypotézy byly dvě a **poznají se jedním měřením**:
+buď se proužek kreslí přes obsah (pak by součet šířek souhlasil), nebo si obsah bere šířku, která
+mu nepatří (pak součet přeteče). Měří to `DiffColumnFitProbe` (ručně) nad **skutečným
+`ContentView`em** v okně: scroller diffu je `NSScrollView`, tedy jediná kolona, jejíž rámec se
+v hostovaném okně dá doopravdy přečíst (accessibility tree se v něm nenaplní).
+
+Mřížka je **pásmo šířek × pohled × okraj × co si člověk přebil ručně** (`⌘1` / `⌘2`), tedy 64
+případů. Ruční stav se nasazuje **až po usazení scény**: `task(id: columns)` v `DiffView` při vzniku
+strom i panel srovná podle `Policy`, takže hodnota nastavená dřív se přepíše.
+
+| Okno | pohled a stav | před opravou | po opravě |
+|---|---|---|---|
+| 700 | vedle sebe, okraj, rozložený strom | **přetečení 35 pt** | 0 |
+| 700 | pod sebou, okraj | **35 pt** | 0 |
+| 700 | pod sebou, bez nálezů, rozložený panel | **16 pt** | 0 |
+| 820 a víc | cokoli | 0 | 0 |
+
+**Přeteklo to, takže to bylo rozvržení, ne kresba navíc** — a hypotéza o `overlay`i (#483) tím
+padla. Příčina: `Policy.diffSideColumns` rozhodovala jen podle pohledu, takže se strom (210), kód
+a okraj (300) sešly v jednom `HStack`u; pevné části se nevešly a `HStack` rozdíl **přesypal
+doprava**, pod proužek. `DiffView` přitom svou šířku **vůbec nečetl** — je to tatáž třída jako #220,
+jen o kolonu vedle.
+
+Tři věci, které z toho měření vypadly a bez kterých by z něj vyšel nesmysl:
+
+- **Okno pod 700 nemá smysl zkoušet, a je to zaplacená slepá ulička.** První mřížka začínala na 509
+  a hlásila přetečení 153 pt ve **všech** variantách. Není to vada aplikace: `RootView` má
+  `frame(minWidth: 700)` a `PRismApp` `windowResizability(.contentMinSize)`, takže obsah se pod svým
+  minimem rozvrhne na 700 a přeteče o rozdíl. Užší okno v aplikaci nevznikne.
+- **Očekávání se musí skládat z `Policy`, ne z vlastních konstant.** První podoba sondy si pravý
+  chrom počítala sama (300 + 38) a hlásila „přetečení −306“ tam, kde okno sedělo na bod — měřila
+  rozdíl dvou názorů místo vady. Panel se navíc dá **táhnout**, takže se bere jeho **podlaha** (246):
+  kdyby obsah sahal dál než k ní, panel by se musel zmáčknout pod svoje minimum.
+- **Levý bok byl v pořádku, i když se mluvilo o „bocích“ množně.** Levá hrana scrolleru stála ve
+  všech 64 případech na hraně railu (86 se složeným stromem, 262 s rozloženým), nikdy pod ním —
+  a plyne to z tvaru: rail je v `HStack`u **před** pružným dítětem, takže mu `HStack` ubírá šířku
+  jako první. Přesypat se dá jedině to, co je **za** ním.
+
+**Podlaha kolony kódu je bracketovaná měřením, ne kulaté číslo** (`Policy.minimumCodeWidth`): 360
+pod sebou a dvojnásobek vedle sebe, protože se šířka dělí na dvě strany. Hlavička souboru nese
+`nový`, `2 blokují`, `+347 −0` a `Prošlo` na jedné řádce — při koloně 396 (okno 820) se vejde celá,
+při 276 a 169 (okno 700) se **ukousne**, a přesně tím se vada poznala.
+
+**Zbylá mez, a je vědomá:** v okně na podlaze (700) se lišta diffu pořád **ořezává uvnitř své
+kolony** (`Sbalit vše` se nevejde celé). Není to přetečení — proužek i okraj jsou vidět celé
+a součet je na bod —, je to úzké okno bez zvláštního rozvržení; patří to k #505 (*okraj v úzkém
+okně*) spolu se značkou místo karty.
+
+**Druhé kolo: co se nepovedlo změřit, a proto se netvrdí.** Po opravě podlahy Ondra vadu viděl
+dál, u okna, které označil za `defaultSize` (1100 × 700), ve `Vedle sebe` se složeným stromem
+i panelem. Ta scéna se v hostovaném okně **nereprodukuje**: kolony jsou na sobě (kód 86…762,
+okraj 763…1062, proužek 1063…1100), součet je na bod 1100 a hlavička souboru se kreslí celá.
+
+**Nesouhlasí ale číslo v liště, a to je ta stopa**: moje scéna hlásí `31 znaků na stranu`, Ondrova
+`72`. `Policy.charactersPerSide` je invertovatelná — 72 × 8,2 b + 84 b gutteru = 674 b na stranu,
+tedy kolona kódu **~1 349 b** a okno **~1 780 b**. V okně 1 100 se taková kolona nemá kde vzít, takže
+platí jedno z dvojího: buď je jeho okno o 700 bodů širší, než si myslí (a `defaultSize` platí jen
+na **první** spuštění — hlavní okno si rámec pamatuje, `setFrameAutosaveName("")` je jen na
+pomocných oknech), nebo je kolona doopravdy širší než okno, což je ta vada. **Rozhodnout se to
+z mých dat nedá**, protože obrazovka stroje má 1 512 bodů: okno o 1 792 se sice vytvoří, ale
+bitmapa z něj přišla 1 512bodová, takže řádky nad 1 512 nejsou k ničemu.
+
+**A druhé měřidlo je zatížené, takže z něj test není.** Hrany pruhů se z bitmapy hledají jako
+souvislý pás od hrany okna, jenže **okraj s kartami a složený proužek mají tutéž plochu**
+(`1E222D` u obou) a pás je tedy oba naráz; k tomu ho lámou karty. Číslo, které z toho leze,
+odpovídá na otázku *překrývá proužek obsah?* jedině tehdy, když vyjde **uvnitř** kolony kódu —
+a zelený test nad takovým měřidlem by netvrdil nic (#478). Oddělit ty dvě kolony by chtělo hledat
+1bodové dělící čárky (`Palette.lineSoft`); zatím udělané není a je to **zapsaná mezera**.
+
+Co se přes celou mřížku (6 šířek × pohled × okraj × ruční `⌘1`/`⌘2`) i tak našlo: **čtyři případy
+s kladným průnikem, všechny na podlaze 700** a malé (+2 vlevo u `vedle-nalezy-panel`, +14 vpravo
+u tří kombinací s ručně rozloženým stromem nebo panelem). Jsou reálné, ale nejsou to ty stovky
+bodů, které by vysvětlily Ondrův snímek.
+
+#### Třetí kolo: skutečná šířka okna, a čí je to číslo v liště
+
+Živé okno slotu má **1 303 × 860** bodů (`CGWindowListCopyWindowInfo` nad běžící aplikací — čte se
+to i u okna na pozadí a **bez asistenčního přístupu**, na rozdíl od `screencapture -R`; snímek pak
+vezme `screencapture -x -o -l <id>`). Pásmo šel po 700/1100/1400, takže ta šířka **ležela mezi
+vzorky** a netestovala se; výška 860 taky ne, a karty v okraji se skládají podle výšky.
+
+Na té šířce je scéna z proklikání (`Vedle sebe`, strom i panel složené, PR s nálezy) **čistá**:
+kolona kódu 86…965, okraj 965…1265, proužek 1265…1303, součet na bod a **průnik −36 vlevo, −301
+vpravo**. Přes celé pásmo zůstávají kladné jen ty **čtyři malé na podlaze 700**.
+
+**Číslo v liště se zeptalo, ne invertovalo — a `Policy.charactersPerSide` je zdravá.** Tabulka
+z `CharactersPerSideProbe` (znak **8,036 b**, gutter 84 b vedle sebe / 136 b pod sebou) dává při
+šířce okna 1 303:
+
+| Pohled | kolona kódu | znaků na stranu |
+|---|---|---|
+| vedle sebe, s okrajem | 879 b | **44** |
+| vedle sebe, bez okraje | 1 179 b | **62** |
+| pod sebou, s okrajem | 703 b | **70** |
+| pod sebou, bez okraje | 735 b | **74** |
+
+**Ondrových `72` je tedy číslo z `Pod sebou`**, ne z `Vedle sebe`: ve `Vedle sebe` se do 1 303
+nevejde víc než **62** a 72 by si žádalo kolonu 1 325 b, kterou okno po odečtení railu a proužku
+dát nemůže. Moje první úvaha to invertovala a vyšlo z ní okno ~1 780 b, které na 1 512bodové
+obrazovce **neexistuje** — inverze byla vedle dvakrát (znak 8,2 místo 8,036 a předpoklad, že okraj
+je nakreslený), ale **funkce sama je v pořádku**.
+
+**A ukazatel po přepnutí pohledu nezůstává na starém čísle** (`CharacterGaugeAfterSwitchProbe`):
+scéna postavená `Pod sebou` (kolona 703 b, ukazatel 70) a přepnutá na `Vedle sebe` ukáže **44**,
+tedy hodnotu pro novou kolonu. Hypotéza „ukazatel lže, protože zůstal viset“ tím **padá** — je to
+zaplacená slepá ulička a stálo to jednu sondu.
+
+**Co z toho zbývá jako nejpravděpodobnější výklad** (a **není** to změřené, je to dopočet): scéna
+na snímku je `Pod sebou` s rozloženým stromem, kde okraj (300) a strom (210) nechají na kód ~703 b
+z 1 303, tedy **54 % okna** — a při té koloně se hlavička souboru **ukusuje** (naměřeno: při 396 b
+se láme na dvě řádky). Není to překryv, je to úzká kolona. Jestli má podlaha kódu
+(`Policy.minimumCodeWidth`, dnes 360 b pod sebou) být vyšší, je **návrhové rozhodnutí**, ne oprava
+přetečení, a nechávám ho na proklikání.
+
+#### Neověřená mezera: `71 znaků na stranu` v živém okně
+
+**Zůstává nerozhodnuté a merge to neblokovalo.** Živá aplikace hlásí v okně **1 303 × 860**
+(`Vedle sebe`, strom i panel složené) **71 znaků na stranu**, jenže kolona kódu je tam změřená ze
+snímku na **1 178,5 b** (rail 0…51, strom 52…85, kód 86…1264,5, čára 1265,0, proužek 1266…1302,5)
+a z té vychází **62**. Ověřené vstupy: šířka znaku je **8,036 b** všemi třemi cestami `FontMetric`
+**i skutečnou sazbou** (jen nepoužívaná `derived` dává 11,63) a gutter 84 b je konstanta.
+
+**Ani jedna hostovaná scéna to nereprodukuje**, a to je ta podstatná část:
+
+| Kde | kolona | co lišta hlásí |
+|---|---|---|
+| `main`, hostované okno (`MainGaugeProbe`) | 1 179 b | **62** — přečteno z renderu |
+| #503, hostované okno | 879 b (s okrajem) / 1 179 b | **44** / 62 — přečteno z renderu |
+| #503, **živá** aplikace | 1 178,5 b | **71** |
+
+Není to tedy „vada, která přišla s #503“ ani „vada `mainu`“ — obě hostované scény jsou poctivé.
+Zbývá hypotéza, **nedokázaná**: `contentWidth` v živém okně drží šířku **celého okna**. 1 303 b dá
+70,6 → 70, a rozdíl 1 179 → **1 309** b (to je šířka, kterou 71 znaků vyžaduje) je **130 b**, tedy
+skoro přesně rail 56 + strom 34 + proužek 38 = **128**. `contentWidth` je `@State` plněný
+z `onGeometryChange`, a ten se **při nezměněné hodnotě nespustí** (#361) — první změřená hodnota,
+která se nikdy nepřepsala, je proto věrohodná příčina. Rozhodnout to zvenku nejde; chce to
+`contentWidth` v diagnostice kreslení (`--diagnose`), ne v promptu ani v odhadu.
+
+**Tvrdí to test, ne jen sonda** (`DiffColumnFitTests`): pevné kolony se vejdou přes celé pásmo
+šířek v obou pohledech, nález **nikdy nezůstane bez domova** (buď okraj, nebo rozložený panel),
+strom ustupuje první a šířky se čtou z `Policy`, ne ze dvou konstant ve views. **Ověřeno vložením
+regrese**: když se rozhodnutí o šířce vypne (`if false` na všech třech místech), spadne *Pevné
+kolony se vejdou vždycky* na sedmi kombinacích šířky a pohledu.
+
+### Kde blok hlásí svůj řádek (#503)
+
+`DiffMarginPlacementTests` — čtyři způsoby, jak se to dá rozbít potichu, a všechny čtyři měřené
+**dvěma různými cestami**, ne jednou dvakrát (#478): hodnota z okraje jde ze SwiftUI (pojmenovaný
+prostor obsahu), kontrolní hodnota z AppKitu (`DiffTextView.frame(ofLine:)` převedený do
+hostovaného view). Blok proto ve scéně **nezačíná na nule** — pod sebou má 137 bodů odsazení, takže
+zapomenutý počátek nemá kde zmizet.
+
+Regrese vložená z obou stran:
+
+| Vložená chyba | Co spadne |
+|---|---|
+| `top: frame.rect.minY` (zapomenutý počátek bloku) | *Ohlášená poloha sedí na horní hranu svého řádku* (o 137 pt) a *Poloha je v souřadnicích obsahu* |
+| `Policy.number(of:on: .left)` (stará strana místo nové) | *Značka na starém čísle řádku se nechytí* (poloha přišla) a poloha vyšla o 80 pt vedle |
+
+**Materiál je poskládaný tak, aby se stará a nová čísla rozcházela**: hunk začíná na řádku 50,
+odebírá pět řádků a přidává jeden, takže stará čísla `54`–`57` v nové verzi protějšek **nemají**.
+Na hunku od prvního řádku souboru by se ta druhá regrese prokázat nedala — tam obě čísla začínají
+stejně a záměna strany se schová.
+
+**A dvě tvrzení jsou o tom, že se něco nestalo**: odpojený blok (pás pryč) polohu karty
+**nesmaže** — jinak by nález zmizel z okraje pokaždé, když se od něj odscrolluje —, a vyprázdnění
+krabice při přepnutí PR ji **sundá**, protože klíč `CLAUDE.md|174` má kdejaký pull request (#274).
+
+**Že karta v okraji doopravdy stojí u svého řádku, tvrdí obrázek, ne číslo**: accessibility tree se
+v hostovaném okně nenaplní (změřeno u `DashboardCountdownRedrawTests`), takže se poloha SwiftUI
+karty z testu přečíst nedá. Sonda `drawTheMargin` proto kreslí **skutečný `DiffView`** s nálezy ve
+dvou stavech (okraj / bubliny za přepínačem) a ve třech posunech; přepínač si podává **vlastní
+doménou** `UserDefaults` (`ScratchDefaults`, #411), protože je to `@AppStorage`.
+
 ### Kolik stojí přerovnání okna (#472)
 
 Dvě sondy, obě ruční (`TEST_RUNNER_PRISM_MEASURE=1`), a **je podstatné, že jsou dvě**: měří dvě

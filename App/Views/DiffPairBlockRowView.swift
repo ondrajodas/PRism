@@ -18,6 +18,11 @@ struct DiffPairBlockRowView: View {
     var copy = DiffCopyActions()
     /// Cesta souboru, ve kterém blok leží (#152) — viz `DiffBlockRowView.filePath`.
     var filePath: String = ""
+    /// Řádky s kartou v okraji (#503) — viz `DiffBlockRowView.marginMarks`. **Kotví se na novou
+    /// stranu**, tedy na pravý sloupec: nález na odebraném řádku se váže k tomu, který ho
+    /// nahradil, jak to dnes dělá bublina.
+    var marginMarks: [Int: DiffMarginMark] = [:]
+    var marginAnchors: DiffMarginAnchors?
 
     @Environment(\.colorScheme) private var colorScheme
     /// Hledání v tomhle diffu (#152) — prostředím, ze stejného důvodu jako u pohledu pod sebou.
@@ -50,9 +55,13 @@ struct DiffPairBlockRowView: View {
             rightRangeLines: rows(in: commentRangeCells, on: .right),
             leftDraggedLines: rows(in: draggedCells, on: .left),
             rightDraggedLines: rows(in: draggedCells, on: .right),
-            noteFrames: { frames = $0; noteRows() }
+            // Rámečky i argumentem, ne jen přes `@State` (#503) — viz `DiffBlockRowView`.
+            noteFrames: { frames = $0; noteRows(measured: $0) }
         )
         .overlay(alignment: .topLeading) { gutters }
+        // Pruh závažnosti na pravé hraně bloku (#503) — okraj patří **nové** straně, takže pruh
+        // stojí za pravým sloupcem, ne mezi nimi.
+        .overlay(alignment: .topTrailing) { marginStripes }
         // Rámeček **celého bloku** v souřadnicích obsahu diffu — jeden na blok, ne jeden na řádek
         // a stranu (#252). Plochy řádků se z něj dopočítají aritmetikou (`DiffGutterGeometry`).
         //
@@ -155,6 +164,55 @@ struct DiffPairBlockRowView: View {
         }
     }
 
+    // MARK: - Okraj (#503)
+
+    /// Pruh závažnosti na pravé hraně řádku s kartou — viz `DiffBlockRowView.marginStripes`.
+    @ViewBuilder private var marginStripes: some View {
+        if !marginMarks.isEmpty {
+            ZStack(alignment: .topTrailing) {
+                ForEach(stripedFrames) { frame in
+                    if let mark = self.mark(of: frame) {
+                        Rectangle()
+                            .fill(mark.severity.stripe)
+                            .frame(width: 3, height: frame.rect.height)
+                            .offset(y: frame.rect.minY)
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var stripedFrames: [DiffBlockLineFrame] {
+        guard !marginMarks.isEmpty else { return [] }
+        return frames.filter { mark(of: $0) != nil }
+    }
+
+    /// Značka řádku — hledá se **jen v pravém sloupci**: v levém stojí stará čísla, a nález se
+    /// kotví na nové.
+    private func mark(of frame: DiffBlockLineFrame) -> DiffMarginMark? {
+        guard let line = line(of: frame, on: .right),
+              let number = Policy.number(of: line, on: .right)
+        else { return nil }
+        return marginMarks[number]
+    }
+
+    /// Ohlásí okraji, kde leží řádky s kartou — viz `DiffBlockRowView.noteMargin()`, i s tím, proč
+    /// nezměřený blok nehlásí ani prázdno.
+    private func noteMargin(_ frames: [DiffBlockLineFrame]) {
+        guard let marginAnchors, !frames.isEmpty else { return }
+        let origin = placement.rect.origin
+        var found: [String: DiffMarginSpot] = [:]
+        for frame in frames {
+            guard let mark = mark(of: frame) else { continue }
+            found[mark.id] = DiffMarginSpot(
+                top: origin.y + frame.rect.minY,
+                height: frame.rect.height
+            )
+        }
+        marginAnchors.note(found, from: blockID)
+    }
+
     // MARK: - Odvozené
 
     private var geometry: DiffGutterGeometry { .split(frames: frames) }
@@ -178,9 +236,13 @@ struct DiffPairBlockRowView: View {
 
     /// Zapíše plochy řádků do krabice pro tažení — **naráz za celý blok** (#252). Volá se odkud
     /// přijde nová informace: z rámečků řádků i z polohy bloku, protože obojí je potřeba.
-    private func noteRows() {
+    /// - Parameter measured: rámečky, které textová view **právě** ohlásila — viz
+    ///   `DiffBlockRowView.noteRows(measured:)`.
+    private func noteRows(measured: [DiffBlockLineFrame]? = nil) {
+        let frames = measured ?? self.frames
+        noteMargin(frames)
         guard let box = rangeDrag.box else { return }
-        let gutter = geometry
+        let gutter = DiffGutterGeometry.split(frames: frames)
         let origin = placement.rect.origin
         var rows: [DiffRowFrames.Entry] = []
         for side in [DiffSide.left, .right] {

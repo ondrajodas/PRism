@@ -39,7 +39,7 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **43** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **44** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo):

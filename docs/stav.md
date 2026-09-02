@@ -7000,3 +7000,84 @@ Testů **5005** ve 486 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
 `PullRequestOriginTests` a `AppDelegateTerminationTests` a k tomu sonda
 `WindowTabStripRenderProbe` (pruh se všemi pěti značkami, pouští se ručně jako ostatní sondy).
 Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).
+
+
+## #503 — nálezy stojí v okraji vedle svých řádků (M14)
+
+První a největší kus směru B z decku *Směry pro PRism*: pravý sloupec v tabu `Změněné soubory` se
+stal **okrajem**, jako mají komentáře v Google Docs nebo ve Figmě. Karta nálezu stojí na výšce
+svého řádku, řádek s kartou má na pravé hraně 3bodový pruh závažnosti a mezi nimi vede spojnice;
+když se dvě karty potkají na sousedních řádcích, druhá jde níž a spojnice se zalomí do `L`. Kód
+zůstal souvislý — bubliny pod řádky nezmizely, jen se přestěhovaly za přepínač `Nálezy pod řádky`,
+aby šlo obojí porovnat a změřit. Zákres je v [`docs/navrh.html`, sekci 43](navrh.html).
+
+**Karta vzniká z dat, poloha z geometrie.** O tom, které karty v okraji jsou, rozhoduje
+`Policy.marginCards` nad diffem (soubor rozbalený, řádek se doopravdy kreslí); kdyby o tom
+rozhodovalo hlášení z bloku, karta by zmizela pokaždé, když je její blok mimo nasazený pás (#469).
+Nález **bez řádku** proto v okraji není a zůstává tam, kde byl: jako bublina u hlavičky souboru —
+právě kvůli němu se přepínač netýká všech bublin, jen zakotvených, jinak by se tiše ztratil.
+
+**Panel vpravo se pod okrajem složí, nezmizí** (`Policy.diffSideColumns`). Dokud panel drží seznam
+nálezů, byly by vpravo dvě třistabodové kolony o téže věci; `⌘2` panel vrátí, jako u složení
+sloupců ve split pohledu (#188). Je to **mezistav** — seznam v panelu ruší #504.
+
+**Projíždění se změřilo, a poprvé to vyšlo špatně.** Se všemi kartami stálo gesto (150 × 40 pt,
+2000 řádků, 11 nálezů) **1,65 / 1,67 s** CPU proti **1,47 s** nad tímtéž diffem bez nálezů. Karty
+se proto nasazují **stejným pásem jako bloky** (`Policy.isBlockMounted`, #469) a číslo spadlo na
+**1,56 / 1,53 s**, tedy 6 % nad základem a asi 0,5 ms na snímek; bubliny stojí 1,46 / 1,47 s, tedy
+nic. Zbylých 6 % je cena za druhou vrstvu nad blokem a **zůstává** — okraj proti tomu ubral
+z dokumentu 1 200 bodů, protože bubliny do něj kód rozrážely.
+
+**Tři věci se u toho našly měřením, ne uvažováním.** (1) Nezměřený blok **nesmí hlásit ani
+prázdno**: prázdné hlášení sundá starou polohu, takže si blok při každém přestavění přepsal
+platnou polohu na nic — karty stály na sobě u horní hrany. (2) Rámečky řádků se musí posílat
+**i argumentem**, ne jen přes `@State`: zápis do `frames` je vidět až v dalším průchodu tělem,
+takže `noteRows()` hned za ním čte nulu, i když textové view zrovna ohlásilo devět. Plnilo se to
+pak teprve z `onGeometryChange` — u tažení rozsahu to nikdo nepoznal, u karty v okraji není na co
+čekat. (3) Sonda projíždění **vyhladověla hlavní aktor** (`RunLoop.current.run(until:)`), takže
+měřila scénu, do které se rámečky nikdy nedostaly; čeká se proto `await`em a na **odpojení bloků**,
+ne na odmlku (nerozvržená scéna dá 9,1–9,7 s místo 1,4–1,5 s).
+
+**Tvrdé podmínky se nemění.** Okraj nic neodesílá — `SingleWayOutTests` prochází beze změny —
+a nálezy jsou dál klíčované `headSha`; karta je jen jiné místo pro tentýž `FindingBubbleView`,
+takže odznaky, shoda reviewerů, stav z kontroly (#150), odmítnutí (#113) i řada
+`Převzít · Neplatí · Nepatří sem` (#283) zůstávají, jaké byly.
+
+**Druhé kolo měření na ostrých datech** (po slití `main`u). Čísla z první verze jsou z vyrobené
+scény — jeden soubor o dvou tisících řádcích —, takže na otázku „laguje to v praxi“ neodpovídají.
+Druhé kolo proto měří **skutečné diffy** (`PRism#499`, `cli/cli#14104`, `cli/cli#14320`) a k tomu
+**druhé gesto**: přepnutí na tab `Změněné soubory`, tedy to, na kterém se lag pozná — přepnutím se
+obsah tabu zahodí a postaví znovu, takže se platí první rozvržení, kdežto projíždění tuhle třídu
+změny nemusí ukázat vůbec.
+
+**Nálezy na jednom z nich jsou skutečné.** Review nad `PRism#499` proběhlo touž cestou, jakou pouští
+aplikace (`code-review:code-review`, tatáž sada povolení, prompt z `Policy.reviewPrompt`): 84 tahů,
+14 minut, 21,97 USD — a **dva** nálezy na 45 souborech a +4 670 řádcích. Rozeseté nálezy sondy
+(jedenáct) jsou tedy pětinásobek běžné hustoty, tedy horní odhad, ne obraz.
+
+**A krajní případ z referenční sady aplikace nedostane vůbec**, což je vlastní nález: `gh pr diff`
+nad PR o víc než 300 souborech vrací `HTTP 406`, a `GhGateway.fetchDiff(id:)` je zrovna
+`gh pr diff` — takže `home-assistant/core#181088` (3 632 souborů) skončí na `.failed` dřív, než se
+diff začne kreslit. Na rozdíl od logů z CI, které mez mají a **pojmenovanou**
+(`Policy.logAvailability` → `.tooLarge`), diff žádný takový stav nemá; v okně je z toho obyčejná
+chyba. Opravit to sem nepatří (je to jiná vrstva než okraj), ale zapsané to být musí.
+
+**Oprava z proklikání: obsah diffu zalézal pod boční proužky.** `Policy.diffSideColumns`
+rozhodovala jen podle pohledu, takže se v úzkém okně sešly strom (210), kód a okraj (300) v jednom
+`HStack`u — a `HStack` rozdíl, který se nevejde, přesype doprava, tedy pod složený proužek panelu.
+Naměřeno v okně 700 (podlaha `RootView`u): **35 bodů** s okrajem, **16** bez něj, v obou pohledech;
+na obrazovce ukousnuté `+347 −0` v hlavičce souboru. Od téhle opravy je **šířka vstupem** rozhodnutí
+a kolony se **odečítají**: kód nikdy neustoupí, strom jde první (`⌘1` ho vrátí), okraj až potom —
+a **nikdy tak, aby nález zůstal bez domova**, takže se s ním rozloží panel, který karty převezme.
+Zpětná vazba přes panel je monotónní, proto se to ustálí na první průchod. Přes celou mřížku
+(pásmo šířek × pohled × okraj × ruční `⌘1`/`⌘2`, 64 případů) je přetečení **0**; před opravou až 35.
+Zbylá mez je vědomá: v okně na podlaze se lišta diffu ořezává uvnitř své kolony, což patří k #505.
+
+Testů **5110** v 501 suitách; nových je **devět** sad (`DiffMarginTests` nad
+`Policy`, `DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
+`DiffColumnFitTests` nad šířkami kolon a tři ruční měření — `DiffMarginWheelProbe` nad vyrobenou
+scénou, `DiffMarginSharpProbe` nad skutečnými diffy, `DiffColumnFitProbe` nad rámci kolon v okně,
+`CharactersPerSideProbe` nad tabulkou znaků na stranu a `CharacterGaugeAfterSwitchProbe` nad
+ukazatelem po přepnutí pohledu).
+Co se v nich hlídá a jak se měřilo, je
+v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).

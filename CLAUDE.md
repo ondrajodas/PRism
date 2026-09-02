@@ -707,6 +707,21 @@ protože většina z nich se v harnessu neprojeví.
   umisťuje, takže plochu, gesto a čtení geometrie nad blokem kódu počítá **jednou**
   `DiffGutterGeometry`. A co se při scrollování mění, **nesmí být ve `@State`**
   ([rozbor](docs/architektura.md#appdiff)).
+- **Kdo čte posun výřezu, je vyjmenovaný — a čte ho v modifikátoru, ne v těle** (#503).
+  `DiffViewport.top` se mění při **každém** otočení kolečka, takže se za jeho čtení platí
+  překladem toho těla, ve kterém stojí: v `ViewModifier.body(content:)` je `content` zástupný
+  uzel, takže se přeloží jedině modifikátor. Kdo potřebuje rozhodnout **co kreslit**, bere
+  **pás** (`DiffViewport.band`, kvantovaný na násobky výřezu) — karty v okraji se proto nasazují
+  jako bloky (`Policy.isBlockMounted`; bez toho 1,65 s CPU proti 1,56 s za gesto). Hlídá to
+  `DiffMarginScrollReadTests` nad zdrojáky — v harnessu se počet průchodů tělem změřit nedá
+  ([rozbor](docs/architektura.md#nálezy-v-okraji-503), [měření](docs/testovani.md#co-stojí-okraj-s-kartami-nálezů-503)).
+- **Krabice, ze které se kreslí, hlásí předfiltr a jedině při změně** (#503). `DiffRowFrames`,
+  `DiffFileExtents` a `DiffBlockPlacement` sledované **nejsou** (čte je gesto a ukotvená hlavička);
+  `DiffMarginAnchors` sledovaná **je**, protože z ní jde kresba — a proto do ní jde jen to, co se
+  kreslí, a zápis má stráž na rovnost. **Nezměřený blok nehlásí ani prázdno**: prázdno znamená
+  „změřeno a nic tu není“, takže by si blok při každém přestavění přepsal platnou polohu na nic
+  (tatáž lekce jako „prázdná plocha se ignoruje“ u #252). A **rámečky řádků se předávají
+  argumentem, ne přes `@State`** — zápis do `@State` je vidět až v dalším průchodu tělem.
 - **V líném seznamu se neiteruje pole tuplů** (#361): `ForEach(Array(x.enumerated()),
   id: \.element.id)` čte identitu **přes tuple**, takže u enumu s asociovanými hodnotami
   **kopíruje** payload při každém dotazu. Identita patří do **uloženého pole**
