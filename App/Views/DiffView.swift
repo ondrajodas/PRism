@@ -68,6 +68,10 @@ struct DiffView: View {
     /// Hledání v diffu (#152). Stav drží store (musí přežít přepnutí tabu i složení panelu), tudy
     /// jdou akce. **Prázdné znamená „tady se nehledá“** — tak to má náhled i sonda.
     var search = DiffSearchActions()
+    /// Značky `Prošlo` (#500). `nil` = tahle obrazovka je nemá — diff commitu (#317) ani rozsahový
+    /// diff „co od minule přibylo“ (#284) nemluví o hlavě PR, takže by se jejich otisky se značkou
+    /// nepotkaly. Zaškrtávátko, ✓ ve stromu ani počet v hlavičce se pak **nekreslí vůbec**.
+    var read: DiffReadActions?
 
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showFindingBubbles") private var showBubbles = true
@@ -136,6 +140,7 @@ struct DiffView: View {
             }
             .background(alignment: .topLeading) { treeShortcut }
             .background(alignment: .topLeading) { searchShortcut }
+            .background(alignment: .topLeading) { readShortcut }
             // Stav hledání **prostředím** (#152), ne parametrem: dotaz se mění při každém písmenu
             // a čtou ho bloky kódu a hlavičky souborů, tedy listy hierarchie. Identita objektu se
             // nemění, takže tělo diffu se tím nepřekresluje — sledují se jeho **vlastnosti**, každou
@@ -531,11 +536,12 @@ struct DiffView: View {
                 // se sloupec zavře. Zavírat jedině z lišty nad diffem znamená hledat tlačítko
                 // na druhém konci okna, než u kterého člověk zrovna je.
                 HStack(spacing: 8) {
-                    Text(verbatim: Plural.czech(
-                        diff.files.count,
-                        one: "soubor",
-                        few: "soubory",
-                        many: "souborů"
+                    // `7 SOUBORŮ · 3 PROŠLÉ` (#500) — druhá polovina se objeví, teprve když má
+                    // co říct. Skládá ji `Policy`, ať se počet v hlavičce nemůže rozejít s tím,
+                    // co je v seznamu pod ní.
+                    Text(verbatim: Policy.fileTreeSummary(
+                        files: diff.files.count,
+                        read: readFileCount
                     ).uppercased())
                         .font(.system(size: 10, design: .monospaced))
                         .tracking(1)
@@ -558,7 +564,13 @@ struct DiffView: View {
                 .padding(.vertical, 9)
                 .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
 
-                FileTreeView(files: diff.files, markers: fileMarkers) { file in
+                readProgress
+
+                FileTreeView(
+                    files: diff.files,
+                    markers: fileMarkers,
+                    readStates: read?.states ?? [:]
+                ) { file in
                     jump(to: file, with: proxy)
                 }
             }
@@ -612,6 +624,39 @@ struct DiffView: View {
         }
     }
 
+    /// Kolik souborů je prošlých (#500). Nula, když značky tahle obrazovka nemá.
+    private var readFileCount: Int {
+        Policy.readFileCount(in: read?.states ?? [:])
+    }
+
+    /// Tenký proužek podílu pod hlavičkou stromu (#500) — 3 body, `--ok` na `--panel-3`, jak ho
+    /// má návrh (sekce 40).
+    ///
+    /// **Nekreslí se, dokud není zaškrtnuté nic**: prázdná linka nad nezapočatým PR je stálý prvek
+    /// bez informace. `Policy` na to odpovídá `nil`em, ne nulou — tady se jen rozhoduje, co to
+    /// znamená v kresbě.
+    @ViewBuilder private var readProgress: some View {
+        if let share = Policy.readFileShare(read: readFileCount, of: diff.files.count) {
+            // **Šířka se počítá, nevyjednává** (#220): proužek zná šířku sloupce, takže se podíl
+            // dá vyjádřit rámečkem, ne pružností.
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(Palette.ok)
+                    .frame(width: (Self.treeWidth - 26) * share)
+                Spacer(minLength: 0)
+            }
+            .frame(height: 3)
+            .background(Palette.raised)
+            .clipShape(.rect(cornerRadius: 2))
+            .padding(.horizontal, 13)
+            .padding(.top, 7)
+            .accessibilityLabel(Text(verbatim: Policy.fileTreeSummary(
+                files: diff.files.count,
+                read: readFileCount
+            )))
+        }
+    }
+
     /// Skok na soubor ze stromu. Sbalený soubor se **nejdřív rozbalí** — jinak by se ukázala
     /// jen jeho hlavička.
     private func jump(to file: FileDiff, with proxy: ScrollViewProxy) {
@@ -650,8 +695,34 @@ struct DiffView: View {
             isFolded: folding.isFolded(file),
             findings: findings(in: file),
             blockingCategories: blockingCategories,
-            toggle: { folding.toggle(file) }
+            toggle: { folding.toggle(file) },
+            read: read.map { $0.state(of: file) },
+            toggleRead: read.map { actions in { actions.toggle(file) } }
         )
+    }
+
+    /// `⌥V` na soubor, jehož hlavička je zrovna **ukotvená nahoře** (#500).
+    ///
+    /// **Vlastní malé view, ne zkratka na zaškrtávátku v hlavičce**, a je to podmínka: hlaviček
+    /// je v diffu tolik co souborů, takže by tutéž kombinaci registrovalo padesát tlačítek —
+    /// a to je přesně ten stav, kdy vyhraje to zaregistrované později a ostatní „nefungují“
+    /// (#151, #184). Zkratka proto visí na jednom průhledném tlačítku.
+    ///
+    /// Čte `viewport.top`, tedy hodnotu, která se mění při každém otočení kolečka — proto **vlastní
+    /// view a ne kus těla `DiffView`u**, ze stejného důvodu jako `DiffPinnedHeader`: tělo diffu
+    /// skládá řádky všech souborů a překládat ho při každém snímku je zakázaná třída (#469).
+    ///
+    /// Bez ukotveného souboru (rozsahy ještě nikdo nezměřil) je tlačítko **zakázané** — a zakázané
+    /// klávesu nebere, takže propadne dál, místo aby zaškrtlo něco jiného, než na co se člověk dívá.
+    @ViewBuilder private var readShortcut: some View {
+        if let read {
+            DiffReadShortcut(
+                files: diff.files,
+                extents: fileExtents,
+                viewport: viewport,
+                toggle: read.toggle
+            )
+        }
     }
 
     /// Nálezy patřící k souboru. Nález umí přijít pod **starou** cestou přejmenovaného

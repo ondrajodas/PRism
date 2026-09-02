@@ -6352,3 +6352,87 @@ Testů **4776** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSe
 `DiffJumpPlacementTests` — poslední měří polohu po skoku v hostovaném okně), dvě měření barev
 v `DiffPaletteTests` a sonda `DiffSearchRenderProbe`. Co se v které z nich hlídá a proč,
 je v [`docs/testovani.md`](testovani.md).
+
+### M14 — Čtení kódu (milník #16)
+
+Milník o tom, kde se v review tráví čas: **čtení diffu**. Mění tři věci naráz a všechny čtou
+tatáž data — kód zůstane souvislý a nálezy, vlákna i poznámky stojí v okraji vpravo u svého
+řádku (směr B); pod hlavičkou je **mapa PR**, tedy celý diff jako pás podle souborů, barva podle
+nálezů, prošlé tlumeně (směr E); strom souborů vyroste v **itinerář** se zastávkami a s tím, co
+je hotové (směr A). Zákresy jsou v decku **Směry pro PRism**, stránky B, E, A a N1; přenos do
+`docs/navrh.html` dělá **první issue každé dvojice nebo trojice** ve svém PR.
+
+**Základem je značka `Prošlo` u souboru (#500)** — stojí na ní E i A, takže jde sama a jako první.
+Pořadí zbytku i to, co jde souběžně, je v popisu milníku na GitHubu; tady se to neopisuje, aby se
+ta dvě místa nerozešla.
+
+Milník **otevírá čtyři zapsaná rozhodnutí**: #185 (bubliny pod řádkem), #182 (panel vpravo jako
+seznam), #172 (spektrum reviewerů v řádku) a #197 (strom podle cesty). U každého vznikne záznam
+rozhodnutí ve specifikaci — co tehdy platilo a co se mění v argumentu.
+
+## #500 — značka `Prošlo` u souboru, vázaná na obsah
+
+Diff do #500 nevěděl, kde jsem skončil. U PR o sedmi souborech se po přepnutí záložky, po tiku
+s novým commitem nebo druhý den hledalo očima, co už bylo přečtené — a strom vlevo o tom mlčel,
+nesl jen značku nálezu. GitHub na to má *Viewed* a byla to jediná věc z jeho diffu, která v okně
+chyběla. Zákres je **sekce 40** návrhu (stránka *Změněné soubory*), přenesená z decku *Směry pro
+PRism* (stránka *Opravy › N1*).
+
+Přibylo: **zaškrtávátko v hlavičce** každého souboru za počty `+18 −6`, **✓ ve stromu** (a `↻`
+u změněného), **`7 souborů · 3 prošlé`** v hlavičce stromu s tenkým proužkem podílu pod ní,
+a klávesa **`⌥V`** na soubor pod ukotvenou hlavičkou. Prošlý soubor se sbalí, změněný se sám
+rozbalí.
+
+**Značka je o obsahu, ne o hlavě.** Ukládá se k PR (`read-marks/<owner>/<repo>/<pr>.json`, jako
+rozhovor #452), ale nese **otisk** — sha z `index` řádky diffu, celou dvojici `<základ>..<hlava>`.
+Commit, který soubor nemění, ji nechá; commit, který ho mění — i rebase, po které se změnil základ
+— ji přepne na `změněno od prošlého`. Tvrdá podmínka č. 5 se tím neobchází, jen se doplňuje: mluví
+o **nálezech**, tedy o tvrzení proti kódu, kdežto značka je tvrzení o mém čtení. Duch té podmínky
+drží prostřední stav — nikdy „prošlo“ nad kódem, který už není.
+
+**Otisk nestojí ani jedno volání navíc.** `index` řádka byla do #500 na seznamu ignorovaných
+v `DiffParser`u, takže se z diffu, který se stahuje tak jako tak, jen začala číst;
+`GitHubGateway` kvůli tomu nedostal metodu a `gh api …/pulls/{n}/files` (kde per-file `sha` je)
+se zamítlo jako dotaz za údaj, který už v odpovědi je. **`nil` je platná hodnota**: přejmenování
+se `similarity index 100%` `index` řádku nemá vůbec, takže se porovnává na rovnost **včetně
+`nil`u** — dvakrát „nevím“ nad souborem, který se jen přesunul, je pořád tentýž soubor. Kdyby to
+byla změna, značka by po zaškrtnutí okamžitě zhasla.
+
+**Sbalení se odvozuje ze značky, nezapisuje se** — a to je ta věc, kterou by šlo udělat snadněji
+a bylo by to špatně. Zapsané sbalení je stav okna, takže by se prošlé soubory po restartu otevřely
+dokořán, i když značky na disku jsou. `AppStore.fileFolding` se proto z **množiny sbalených** stal
+**mapou odchylek** (`true` sbaleno rukou, `false` rozbaleno rukou, chybějící klíč = platí značka)
+a rozhoduje `Policy.isFileFolded(state:override:)`. Zdarma z toho vyšlo, že se `changed` rozbalí
+sám — po druhém commitu zbude otevřené jen to, co se změnilo — a `Rozbalit vše` odchylky
+nemaže, ale **přepisuje na `false`**, protože je to pokyn o tom, co je vidět, ne o tom, co je
+přečtené.
+
+**Ve stromu stojí ✓ vedle puntíku nálezu, ne místo něj.** Zákres tu kombinaci nekreslí (v něm
+nenastane), ale stát se může: „je tu co spravit“ a „četl jsem to“ jsou dvě různé otázky, a schovat
+jednu za druhou by znamenalo, že se počet v hlavičce rozejde s tím, co je v seznamu vidět.
+Doplnilo se to do poznámek sekce 40, ne do kresby.
+
+**Kde značka není:** v diffu commitu (#317) a v rozsahovém diffu „co od minule přibylo“ (#284).
+Jejich `index` řádky mluví o rozsahu mezi dvěma commity, ne o hlavě PR, takže by se otisk se
+značkou nepotkal a každý zaškrtnutý soubor by hned hlásil `změněno od prošlého`. Zaškrtávátko se
+tam **nekreslí vůbec**, ne zašedle.
+
+**Zkratka `⌥V` visí na jednom průhledném tlačítku**, ne na zaškrtávátku v každé hlavičce: padesát
+tlačítek s touž kombinací je přesně ten stav, kdy vyhraje to zaregistrované později a ostatní
+„nefungují“ (#151, #184). Katalog má **25 akcí**. Že klávesa zabere, ověřuje člověk — v harnessu
+to nejde (#184).
+
+**U toho se zjistilo, že publikovaná kopie návrhu se rozešla s repem**: artifact neměl sekci 39,
+kterou #152 do `docs/navrh.html` přidalo — commit tedy proběhl a publikování ne. Postup, jak se
+to porovná (a proč se z toho nedělá hlídané pravidlo), je v [`docs/navrh.md`](navrh.md).
+
+Testů **4827** ve 473 suitách (proti 4776 ve 468 na `main`u); nové jsou tři sady
+(`FileReviewStateTests`, `ReadMarkStoreTests` i s vnořenou `Značky mimo cache`,
+`AppStoreReadMarkTests`), pět tvrzení v `DiffParserTests` a sonda `FileReadMarkRenderProbe`
+(obrázek hlaviček i stromu, a hlaviček **na 420 bodech** — v úzkém místě ustoupí cesta a kapsle,
+zaškrtávátko zůstane celé). Nejcennější jsou dvě, která říkají, že
+se něco **NEstalo**: commit, který soubor nemění, značku nesundá, a `Rozbalit vše` ji nesmaže.
+Regrese ověřena vložením regrese — otisk vyřazený z rozhodování shodí devět tvrzení, odvozené
+sbalení vyřazené z `Policy` dalších pět. Co se v které sadě hlídá, je
+v [`docs/testovani.md`](testovani.md); rozhodnutí i se zamítnutými variantami v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--značka-prošlo-u-souboru-500).

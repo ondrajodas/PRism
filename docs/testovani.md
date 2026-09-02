@@ -2431,7 +2431,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   složkou: bez něj `updateConfiguration` skončí chybou `noStore` a nepropíše se nic.
 - **`AppStore` — sbalení souborů** — výchozí rozbaleno, přepínání tam a zpět, že sbalení
   jednoho souboru nesahá na jiné ani na jiné PR, idempotentní rozbalení (na tom stojí skok)
-  a `Rozbalit vše`, které nechá cizí PR být.
+  a `Rozbalit vše`, které nechá cizí PR být. Od #500 to všechno platí **nad odvozeným
+  sbalením**, ne nad množinou — takže ta sada zároveň tvrdí, že se značka `Prošlo`
+  do dosavadního chování nevloudila.
+- **Značka `Prošlo` u souboru (#500)** — tři sady, každá tvrdí něco jiného:
+  - **`Policy`** (`FileReviewStateTests`) — **vyčerpávající výčet** (záznam / bez záznamu) ×
+    (otisk týž / jiný / zmizel / přibyl / dvakrát chybí). Prostřední čtyři jsou to podstatné:
+    `nil == nil` musí být `read`, jinak by značka nad přejmenováním beze změny obsahu po
+    zaškrtnutí hned zhasla. K tomu skloňování hlavičky stromu, podíl pro proužek (`nil`, dokud
+    není co ukázat), popisky a to, že se `changed` **nepočítá** do počtu prošlých.
+  - **`DiffParser`** — otisk z `index` řádky **bez módu** nad skutečnými diffy: běžný soubor,
+    smazaný (nulová hlava), binárka (otisk má, hunky ne) a přejmenování se `similarity index
+    100%`, které `index` řádku nemá vůbec. A že `index` v neznámém tvaru **není ztracený
+    řádek**, jen chybějící otisk — do #500 byl na seznamu ignorovaných, takže čtení otisku
+    nesmí přidat `unrecognizedLines`.
+  - **`AppStore`** (`AppStoreReadMarkTests`) — dvě tvrzení o tom, že se něco **NEstalo**:
+    commit, který soubor nemění, značku **nesundá** (druhý diff mění jen otisk druhého souboru),
+    a `Rozbalit vše` značku **nesmaže**, jen soubor otevře. K tomu, že commit, který soubor
+    mění, ji přepne na `changed` a soubor se **sám rozbalí**; že `Prošlo znovu` zaškrtne
+    s dnešním otiskem; že klik na hlavičku prošlého souboru ho **otevře** (odchylka se počítá
+    proti odvozenému, ne proti prázdné mapě); a že značka z disku sbalí soubor **i bez
+    kliknutí** — na tom stojí celé to, proč se sbalení odvozuje.
+  - **Sonda `FileReadMarkRenderProbe`** — obrázek, protože „sedí to se sekcí 40?“ je otázka na
+    obrázek: hlavičky ve všech třech stavech, strom s ✓, ↻ a ztlumeným jménem, a **tytéž hlavičky
+    na 420 bodech** (diff vedle sebe na podlaze okna). Z toho posledního je vidět, co v úzkém místě
+    ustoupí: cesta se ořeže zepředu a kapsle `změněno od prošlého` se zkrátí, **zaškrtávátko
+    zůstane celé** — akce se neschovává. Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`).
+  - **`ReadMarkStore`** — zápis a čtení včetně toho, že **chybějící otisk přežije cestu na disk
+    jako chybějící** (kdyby se z něj stal prázdný řetězec, byla by po restartu z `read` značka
+    `změněno od prošlého`); prázdné značky soubor mažou; cizí PR v souboru se odmítne; a celá
+    trojice hranic cache (symlink na souboru, symlink v rodičovské složce u čtení, zápisu
+    i mazání) — tatáž sada jako u `AskStore`.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
   nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
   rozsahy, ale načtený obsah nechá.
@@ -7348,7 +7378,7 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (od #459 jednadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+- **Počet akcí je vyjmenovaný** (od #500 pětadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
   u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
@@ -7894,8 +7924,9 @@ takže `AppNoticesView` nekreslí nic. Zbývají tedy zdravotní puntíky a útr
 .quietTickDoesNotWakeWhatTheDiffDrawsFrom`: vyjmenuje všechna čtení storu, která `DiffView.body`
 dělá přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. **Netvrdí, že se tělo `DiffView`u
 nepřeloží** — to nad storem nejde a v okně to po #421 pořád neplatí; tvrdí, že když se přeloží,
-není to kvůli datům. Ověřeno vložením regrese (`foldedFiles = foldedFiles.filter { _ in false }`
-v `forget(whatIsNotIn:)` → `tichý tik probudil isFolded(_:in:)`).
+není to kvůli datům. Ověřeno vložením regrese (`fileFolding = fileFolding.filter { _ in false }`
+v `forget(whatIsNotIn:)` → `tichý tik probudil isFolded(_:in:)`; do #500 se ta mapa jmenovala
+`foldedFiles` a byla to množina).
 
 ### Jak se změřil `--force-with-lease` (#466)
 

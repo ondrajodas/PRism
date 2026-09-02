@@ -11,9 +11,20 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **38** sekcí. To číslo patří ke
+**A rozešlo se to** (zjištěno u #500): publikovaná kopie neměla sekci 39, kterou #152 do repa
+přidalo — commit tedy proběhl a publikování ne. Poznat to jde jedině **porovnáním**, protože
+artifact nemá diff a v repu na tom nic vidět není. Postup je krátký: `action: "read"` uloží
+publikovanou verzi do souboru, z něj se odřízne obálka (`<body>` … `</body>`, kterou přidává
+publikování) a zbytek se pustí přes `diff` proti `docs/navrh.html`. **Jednosměrný diff je
+v pořádku** — repo napřed —, kdežto řádek, který má jedině publikovaná kopie, znamená, že
+někdo editoval artifact a ne repo. Zvedat to na hlídané pravidlo nemá cenu: ta kontrola
+proběhne stejně při každém publikování, protože nástroj bez přečtení živé verze publikovat
+odmítne.
+
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **40** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
-stálo 28, kdežto sekcí bylo 30:
+stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
+#152, aniž by to číslo zvedlo):
 
 ```bash
 grep -c '<section class="section" id="s' docs/navrh.html

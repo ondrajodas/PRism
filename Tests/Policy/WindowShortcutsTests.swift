@@ -37,10 +37,10 @@ struct WindowShortcutsTests {
     /// Počet je **vyjmenovaný, ne „aspoň tolik“** — stejně jako u `SingleWayOutTests`. Nová zkratka
     /// v okně je rozhodnutí, ne přírůstek: má projít úvahou, jestli se s něčím nesrazí a jestli se
     /// nakreslí tam, kde se na ni přijde.
-    @Test("Katalog má právě čtyřiadvacet akcí")
-    func catalogHasExactlyTwentyFourActions() {
-        #expect(Policy.windowShortcutActions.count == 24)
-        #expect(Policy.windowShortcuts.count == 24)
+    @Test("Katalog má právě pětadvacet akcí")
+    func catalogHasExactlyTwentyFiveActions() {
+        #expect(Policy.windowShortcutActions.count == 25)
+        #expect(Policy.windowShortcuts.count == 25)
     }
 
     /// Kombinace, které patří systému nebo scéně nastavení, si okno **nesmí vzít**. `⌘W` je zrovna
@@ -202,6 +202,7 @@ struct WindowShortcutsTests {
             (.findInDiff, "⌘F"),
             (.nextSearchHit, "⌘G"),
             (.previousSearchHit, "⌘⇧G"),
+            (.toggleFileRead, "⌥V"),
         ]
 
         for (action, display) in expected {

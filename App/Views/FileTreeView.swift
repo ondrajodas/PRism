@@ -16,6 +16,8 @@ struct FileTreeView: View {
     let files: [FileDiff]
     /// Které soubory nesou nález (#197). Prázdné = nekreslí se žádná značka.
     var markers: [String: FileMarker] = [:]
+    /// Stav značky `Prošlo` u souborů (#500). Prázdné = nic prošlého, tedy ani ✓, ani ↻.
+    var readStates: [String: FileReviewState] = [:]
     let jump: (FileDiff) -> Void
 
     /// Sbalené složky. Výchozí je **rozbaleno** — seznam slouží ke skoku na soubor, takže
@@ -31,6 +33,7 @@ struct FileTreeView: View {
                         depth: 0,
                         collapsed: $collapsed,
                         markers: markers,
+                        readStates: readStates,
                         jump: jump
                     )
                 }
@@ -50,6 +53,7 @@ private struct FileTreeBranch: View {
     let depth: Int
     @Binding var collapsed: Set<String>
     let markers: [String: FileMarker]
+    let readStates: [String: FileReviewState]
     let jump: (FileDiff) -> Void
 
     /// O kolik se odsazuje každá úroveň. Šířka šipky a ikony, ať řádky drží sloupec — a málo,
@@ -65,6 +69,7 @@ private struct FileTreeBranch: View {
                     depth: depth + 1,
                     collapsed: $collapsed,
                     markers: markers,
+                    readStates: readStates,
                     jump: jump
                 )
             }
@@ -99,7 +104,10 @@ private struct FileTreeBranch: View {
                 .frame(width: 14)
             Text(verbatim: node.name)
                 .font(.caption)
-                .foregroundStyle(file == nil ? .secondary : .primary)
+                // Prošlý soubor je tlumený (`.tnode.rv-done .nm` v návrhu) — oko po něm klouže
+                // dál, ale jméno zůstává čitelné. `changed` tlumený **není**: je to práce, která
+                // se vrátila.
+                .foregroundStyle(nameTint(of: file))
                 .lineLimit(1)
                 // **Soubor se ořezává zezadu, složka zepředu.** U jména souboru nese význam
                 // začátek (`SecretClient.php` a `SecretClientTest.php` se poznají jen podle
@@ -113,6 +121,7 @@ private struct FileTreeBranch: View {
                     .frame(width: 6, height: 6)
                     .help(marker == .blocking ? "Je tu blokující nález" : "Jsou tu nálezy")
             }
+            readGlyph(of: file)
             // **Ve stromu žádné počty ani slovní odznak** (#197). Zkoušely se vedle jména
             // i pod ním a obojí bylo horší než nic: vedle ukously jméno, pod ním rozhodily
             // řádkování. GitHub je ve stromu nemá taky — patří k hlavičce souboru v diffu,
@@ -122,6 +131,41 @@ private struct FileTreeBranch: View {
         .padding(.vertical, 2)
         .padding(.leading, Double(depth) * indent)
         .contentShape(.rect)
+    }
+
+    /// Značka `Prošlo` (#500) — ✓ v `--ok` u prošlého, ↻ v `--stale` u změněného od prošlého.
+    ///
+    /// **Stojí vedle puntíku nálezu, ne místo něj**, i když návrh (sekce 40) obojí zároveň
+    /// nekreslí: jsou to odpovědi na dvě různé otázky („je tu co spravit“ proti „četl jsem to“)
+    /// a schovat jednu za druhou by znamenalo, že se počet v hlavičce stromu (`3 prošlé`)
+    /// rozejde s tím, co je v seznamu vidět. Dva glyfy se do 210 bodů vejdou.
+    @ViewBuilder private func readGlyph(of file: FileDiff?) -> some View {
+        switch file.map({ readStates[$0.displayPath] ?? .unread }) ?? .unread {
+        case .unread:
+            EmptyView()
+        case .read:
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Palette.ok)
+                .help("Prošlo")
+        case .changed:
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Palette.stale)
+                .help("Změněno od prošlého")
+        }
+    }
+
+    /// Barva jména v řádku. Složka zůstává na `.secondary` a nepřečtený soubor na `.primary`,
+    /// jak to bylo do #500 — mění se **jen** prošlý, a ten jde na `Palette.ink3`.
+    ///
+    /// `AnyShapeStyle`, protože `.secondary` a `.primary` jsou hierarchické styly, ne barvy —
+    /// smíchat je s paletovým tokenem v jednom výrazu jinak nejde.
+    private func nameTint(of file: FileDiff?) -> AnyShapeStyle {
+        guard let file else { return AnyShapeStyle(.secondary) }
+        return (readStates[file.displayPath] ?? .unread).isRead
+            ? AnyShapeStyle(Palette.ink3)
+            : AnyShapeStyle(.primary)
     }
 
     /// Soubor šipku nemá, ale místo po ní ano — jinak by se jméno nesrovnalo se jmény
