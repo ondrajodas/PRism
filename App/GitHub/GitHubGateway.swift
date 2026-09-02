@@ -292,4 +292,26 @@ protocol GitHubGateway: Sendable {
         base: String,
         head: String
     ) async throws -> BranchDivergence?
+
+    /// Repozitáře organizace (#532) — jméno, počet otevřených PR a čas poslední změny.
+    ///
+    /// Na tom stojí hledání repa v paletě ⌘K (#533): Keboola má přes tisíc rep, takže dotaz při
+    /// každém úhozu nepřipadá v úvahu. Výpis se proto **dotahuje zřídka a drží se v cache**
+    /// (`RepositoryCatalog`), a tahle metoda je ta drahá půlka.
+    ///
+    /// **Je drahá kvůli počtu otevřených PR, a je to změřené.** Nad organizací `keboola`
+    /// (`--limit 1000`) stál výpis **46,8 s** s polem `pullRequests` a **9,5 s** bez něj, tedy
+    /// pětinásobek za jedno číslo v řádku nabídky. Odpověď má 98 kB. Volající proto musí počítat
+    /// s desítkami sekund a nesmí tuhle metodu pouštět na tik ani na úhoz.
+    ///
+    /// **Strop `--limit` je vidět z odpovědi** (`OrganizationRepositories.hitLimit`): `keboola` na
+    /// tisíc položek doopravdy naráží, takže „tolik jich je“ by byla lež. Kdo výpis ukazuje, to
+    /// musí říct — je to tatáž úvaha jako u 250 commitů v `fetchCommits`.
+    ///
+    /// **Prázdné jméno organizace se neptá vůbec** a vrátí prázdno: řádek v nastavení vzniká
+    /// prázdný a `gh repo list ""` by byla jistá chyba za jedno volání navíc.
+    ///
+    /// **Čtyřiadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád
+    /// nemá nic, čím by šlo něco odeslat, a katalog repozitářů je čtení jako každé jiné.
+    func repositories(in organization: String) async throws -> OrganizationRepositories
 }

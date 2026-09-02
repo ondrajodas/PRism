@@ -14,6 +14,18 @@ struct GhGateway: GitHubGateway {
     /// **Parametr, ne konstanta**, aby se opakovaný dotaz dal otestovat bez čekání ve zkoušce —
     /// je to totéž, co dělá `timeout` o řádek výš.
     private let branchStatusDelay: Duration
+    /// Kolik rep organizace se vypíše nejvýš (#532) — `--limit` u `gh repo list`.
+    ///
+    /// Tisíc, protože to je hodnota ze zákresu a `keboola` na ni **doopravdy naráží** (změřeno:
+    /// přesně 1000 položek). Že se na strop došlo, se z odpovědi pozná — viz
+    /// `OrganizationRepositories.hitLimit`.
+    private let repositoryLimit: Int
+    /// Vlastní limit pro výpis rep organizace (#532), protože se do třiceti sekund **nevejde**:
+    /// změřeno 46,8 s nad `keboola`.
+    ///
+    /// **Parametr, ne konstanta**, ze stejného důvodu jako `branchStatusDelay` — test se nemá
+    /// s čím měřit tři minuty.
+    private let repositoryTimeout: Duration
 
     /// Kolikrát se aplikace zeptá na slévatelnost, než to vzdá (#465).
     ///
@@ -31,13 +43,17 @@ struct GhGateway: GitHubGateway {
         runner: ProcessRunning,
         timeout: Duration = .seconds(30),
         searchLimit: Int = 100,
-        branchStatusDelay: Duration = .seconds(1)
+        branchStatusDelay: Duration = .seconds(1),
+        repositoryLimit: Int = 1000,
+        repositoryTimeout: Duration = .seconds(300)
     ) {
         self.gh = gh
         self.runner = runner
         self.timeout = timeout
         self.searchLimit = searchLimit
         self.branchStatusDelay = branchStatusDelay
+        self.repositoryLimit = repositoryLimit
+        self.repositoryTimeout = repositoryTimeout
     }
 
     func checkAuth() async -> GhAuthState {
@@ -365,6 +381,41 @@ struct GhGateway: GitHubGateway {
         return items.compactMap(\.pullRequestCommit)
     }
 
+    func repositories(in organization: String) async throws -> OrganizationRepositories {
+        // Prázdné jméno se **neptá**: řádek v nastavení vzniká prázdný a `gh repo list ""` je
+        // jistá chyba za jedno volání navíc. Je to tatáž ochrana jako u prázdného dotazu zdroje
+        // (`Configuration.activeSources`) a u prázdné větve v `fetchDivergence`.
+        guard !organization.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return OrganizationRepositories(repositories: [], hitLimit: false)
+        }
+
+        let items = try await run(
+            [
+                "repo", "list", organization,
+                "--limit", String(repositoryLimit),
+                "--json", GhRepositoryItem.jsonFields,
+            ],
+            phase: "Repozitáře organizace",
+            decodedAs: [GhRepositoryItem].self,
+            // Vlastní limit, ne ten společný: změřeno 46,8 s nad `keboola`, tedy víc než
+            // půldruhého násobku výchozích třiceti sekund.
+            timeout: repositoryTimeout
+        )
+
+        // **Strop se pozná z počtu, ne z hlaviček.** `gh` o dosaženém `--limit` nic neříká, takže
+        // je počet položek jediné, co k tomu je — a když jich přijde tolik, kolik jich smělo přijít,
+        // je pravděpodobnější, že je jich víc, než že jich je přesně tolik. Tvrdit „tolik jich je“
+        // by v tom případě bylo víc, než co data unesou.
+        //
+        // **`>=`, ne `==`, a je to pojistka, ne nerozhodnost** (nález Copilota): dnes to vyjde
+        // nastejno, protože `gh` víc než `--limit` vydat nemá. Kdyby ale vydal, `==` by ten výpis
+        // vydávalo za úplný — tedy zrovna to tvrzení, kterému se tenhle příznak vyhýbá.
+        return OrganizationRepositories(
+            repositories: items.compactMap(\.repository),
+            hitLimit: items.count >= repositoryLimit
+        )
+    }
+
     // MARK: - Slévatelnost větve (#465)
 
     /// Jestli se dá větev mergnout. **Ptá se opakovaně, dokud GitHub neodpoví jinak než `UNKNOWN`.**
@@ -434,9 +485,10 @@ struct GhGateway: GitHubGateway {
     private func run<T: Decodable>(
         _ arguments: [String],
         phase: String,
-        decodedAs type: T.Type
+        decodedAs type: T.Type,
+        timeout: Duration? = nil
     ) async throws -> T {
-        let output = try await run(arguments)
+        let output = try await run(arguments, timeout: timeout)
         do {
             return try GhOutput.decoder.decode(type, from: Data(output.utf8))
         } catch {
@@ -444,10 +496,14 @@ struct GhGateway: GitHubGateway {
         }
     }
 
-    private func run(_ arguments: [String]) async throws -> String {
+    /// `timeout` je **volitelný, ne povinný parametr u všech volajících**: jediné volání, které se
+    /// do společného limitu nevejde, je výpis rep organizace (#532, změřeno 46,8 s). Kdyby ho
+    /// musel předávat každý, byla by z jedné výjimky dvacet čtyři míst, kde se dá napsat jiné
+    /// číslo.
+    private func run(_ arguments: [String], timeout: Duration? = nil) async throws -> String {
         let result: ProcessResult
         do {
-            result = try await runner.run(gh, arguments: arguments, timeout: timeout)
+            result = try await runner.run(gh, arguments: arguments, timeout: timeout ?? self.timeout)
         } catch ProcessError.timedOut {
             throw GitHubError.timedOut
         } catch ProcessError.launchFailed(let detail) {

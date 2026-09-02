@@ -529,7 +529,7 @@ tamtéž.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem a slévatelnost větve (líné pole, ptá se opakovaně). **Pořád bez zápisu** | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem, slévatelnost větve (líné pole, ptá se opakovaně) a **repozitáře organizace** (#532 — nejdražší čtení v aplikaci, 46,8 s nad `keboola`, proto vlastní limit a cache). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i zahození rozdělaného rebase a **zápis slitých souborů do indexu a dokončení rebase** (`git add`, `rebase --continue` — commituje aplikace, ne session). **Pořád bez zápisu do remote** | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452, vlastní užší sada a `--resume`) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**. Umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |

@@ -5243,6 +5243,65 @@ jaký má 24 k 02: novější kresba se do záznamu dneška nepřekresluje. Orga
 **Tvrdé podmínky se nemění ani o položku.** `GitHubGateway` je dál bez zápisových metod a celá
 cesta je jediné čtení (`gh pr view`); `SingleWayOutTests` prochází beze změny.
 
+### Záznam rozhodnutí — katalog repozitářů drží okno nastavení (#532)
+
+`searchOrganizations` v konfiguraci, čtecí `GitHubGateway.repositories(in:)` a cache
+`catalogs/<org>.json`. Rozhodnutí, která u toho padla, a co se u nich zamítlo:
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Katalog je vlastní typ** (`RepositoryCatalog` + `RepositoryCatalogStore` v `App/Store/`) | Nové pole ve stavu `AppStore.swift` | Uzavřený kus stavu s vlastní persistencí, jako `ReviewDraftStore` nebo `AskStore`. Rozhodl to **rozvrh dávky**: souběžně běžely #531 a #500 a obě do stavu `AppStore.swift` sahají, což je strop, který [`paralelni-vyvoj.md`](../../paralelni-vyvoj.md) na takové větve dává |
+| **Drží ho okno nastavení** (`@State` v `SettingsView`) | Držet ho `AppStore` a obnovovat na tiku pollingu | Dnes ho čte **jediná obrazovka** — ta pod tím oknem. Držet ho ve storu by znamenalo sáhnout do `AppStore.swift` (viz řádek výš), a **obnova na tiku** je u operace za 46,8 s špatná třída: tik má být levný a tichý. Až na katalogu bude stát paleta ⌘K (#533), přestěhuje se; **typ se u toho nemusí měnit, protože pravda leží v cache** |
+| **Denní obnova se dělá při použití, ne na tiku** — otevření stránky `Zdroje PR`, dopsání organizace, tlačítko | „Jednou denně na tiku“, jak stálo v zadání issue | Vědomá odchylka. Katalog nikdo nečte, dokud neotevře nastavení nebo (od #533) paletu, takže obnova na tiku je desítky sekund práce za nic. **Cena je zapsaná**: kdo otevře paletu s týden starou cache, dostane starý seznam — dorovnat to je na #533, které katalog dostane do ruky |
+| **Dotahuje se jedině na vyžádání** (`onSubmit`, tlačítko), nikdy na změnu textu | Fetch navěšený na uloženou hodnotu, jako to dělá `SettingsModel` se zápisem | `keboola` po písmenech je sedm hodnot, takže by z jednoho dopsaného řádku bylo **sedmkrát tři čtvrtě minuty** a sedm podprocesů `gh`. Je to ten nejcennější test celého issue — tvrdí, že se něco **ne**stalo |
+| **Počet otevřených PR v `--json` zůstává** | Vypustit ho a tahat jen jména | Je v zákresu (`7 otevřených PR` v řádku palety) a platí se jednou denně. **Cena je změřená a zapsaná** (46,8 s proti 9,5 s), takže se dá kdykoli otočit — a je vidět, co se tím koupí |
+| **Vlastní, delší limit na tohle volání** (`repositoryTimeout`) | Zvednout společný `timeout` gateway | Jedno volání z dvaadvaceti se do třiceti sekund nevejde; zvednout limit všem by znamenalo, že se u ostatních čeká pět minut na `gh`, který se zasekl. Tvrdí to test nad `FakeProcessRunner.timeouts` — **test s prázdným výstupem by prošel i s limitem, se kterým to v provozu vždycky spadne** |
+| **Chipy podle zákresu** (`TagChipStyle`, `.chipline` + `.tagchip` + `.tagchip.plus`) | Řádky s polem, aby se sekce shodovala s `Moje loginy` o řádek výš (první podoba) | **Zamítl to uživatel** a rozhodl to sám, když mu byl argument předložen i s tím, že na stránce pak budou dvě podoby téhož vedle sebe: kreslí se to, co je v návrhu, a sjednocení `Moje loginy` je jiné issue. Chipline potřebovala tři věci, které statická kresba nemá — křížek v chipu, pole místo přidávacího chipu po kliknutí (jméno organizace je volný text, ne uzavřená množina jako label) a větu o selhání pod chipline |
+| **`catalogs/<org>.json`** | `repositories/<org>.json` ze zadání issue | `CacheLayout.repositories` je zabrané a ukazuje na `repos/` s bare klony. Dvě složky se skoro stejným jménem vedle sebe v cache, do které se člověk chodí dívat, znamenají jednu otázku pokaždé |
+| **Souhrn bere nejstarší razítko** | Nejnovější, nebo razítko poslední obnovy | `obnoveno 7:58` je tvrzení o **celém** katalogu. S nejnovějším by se nad týden starým seznamem `keboola` psalo, že se obnovil před minutou, protože se mezitím dotáhl `ondrajodas` |
+| **Nad prázdným seznamem se cache neuklízí** | Vždycky smazat, co v konfiguraci není | Prázdno znamená buď „žádnou organizaci nemám“, nebo „konfigurace se ještě nenačetla“ (okno nastavení jde otevřít dřív, než dorazí disk) — a ty dva se odsud nerozeznají. Smazat na tom druhém = zahodit cache za desítky sekund práce. **Cena je jeden osiřelý soubor**, dokud si člověk nějakou organizaci nenapíše |
+| **`GitHubError` se nemění** | Přidat `not recognized` mezi `notFoundSignals`, ať hláška zní `GitHub o tom neví` | Klasifikaci čte dvaadvacet metod a věta z `gh` se do okna dostane i tak (`commandFailed` ji nese v `userDescription`). Hezčí čtení za zásah do sdíleného rozhodování se nevyplatí |
+
+**Tvrdá podmínka č. 1 se nemění**: `repositories(in:)` je čtení, `SingleWayOutTests` prochází beze
+změny a grep na `ReviewPublishing` i `BranchPushing` vypisuje týž seznam souborů. **Tvrdá podmínka
+č. 3 taky**: `catalogs/` leží v cache aplikace a hranici u čtení, zápisu i mazání drží `CacheFile`,
+tedy tatáž kontrola jako u nálezů a draftů.
+
+**Render vedle referenční kresby našel čtyři věci, a tři z nich měly týž kořen.** Referenční
+kresba je markup ze stránky T9 decku vyrenderovaný **stylopisem z `docs/navrh.html`** — deck si
+tokeny nese vlastní, takže jeho vlastním CSS by se měřila jiná paleta než ta, která je
+`Palette.swift` jedna ku jedné.
+
+| Co bylo špatně | Proč to od oka vypadalo správně |
+|---|---|
+| Přidávací chip měl **UI font medium** | `.chip-add` u labelů ho tak má — `.tagchip.plus` ale přebíjí **jen `color` a `border-style`**, takže řez i velikost dědí |
+| Přidávací chip byl **bez výplně** | Průhledný chip vypadá jako „ještě není“; zákres mu ale `background: var(--panel-3)` nechává |
+| Přidávací chip měl **akcentový okraj** | Akcentový text svádí k akcentovému okraji; `border-color` zůstává `--line-soft`, mění se jen `border-style` |
+| Souhrn se kreslil **přes první chip** (`kebo412 rep`) | Na krátkém souhrnu se to neprojevilo — vylezlo to teprve na scéně, kde souhrn nese i `1 organizace nenačtena` |
+
+To poslední je vada rozvržení, ne barvy: SwiftUI nemá `flex-shrink`, takže `FlowRow`
+s `maxWidth: .infinity` si v `HStack`u řekne o celou šířku. **`layoutPriority(1)` na souhrnu to
+nespravilo** (ideální šířka nekonečného rámce zůstane nekonečná) a měřit šířku souhrnu přes
+`TextWidth` a odečítat ji chipline by byla druhá pravda o jedné šířce. Rozhoduje proto
+**`ViewThatFits`**: řádek ze zákresu, dokud se vejde (změřeno — při 820 bodech ano), jinak dva řádky
+pod sebou (509 bodů, tedy nejužší podoba okna). Hlídá to rozdíl bitmap při obou šířkách.
+
+**Z renderu vypadla jedna oprava** ([`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)):
+řádek organizace nesl **stav** (`412 rep`, `zatím nenačteno`) a nad souhrnem, který říká totéž,
+z toho byla **tatáž věta dvakrát pod sebou** — u jedné organizace se zdvojoval i počet rep. Řádku
+zbyla **jen věta o selhání**, protože tu souhrn říct neumí (je na organizaci, ne na katalog);
+o počtech, stáří a sražení mluví **jedno místo**. `Policy.organizationRowStatus` se tím celá zahodila.
+
+**Druhá zapsaná mezera — a je to ta, na kterou se u revize diffu naráží nejdřív:** `openPullRequests`
+a `lastPushedAt` se **v #532 nikde nekreslí**. Je to vědomé: cache je **deliverable téhle poloviny
+milníku** (řádek palety z #533 má tři údaje a všechny tři jsou v zákresu), takže dotáhnout je až
+příště by znamenalo, že se všem uloženým snímkům změní tvar a tisíc rep se tahá znovu. Pravidlo
+*„stav, který se drží, ale nikdo ho nečte“* tím **není obejité, jen splacené dopředu**: kdyby #533
+nepřišlo, patří ta dvě pole z `--json` pryč — a co se tím ušetří, je změřené (46,8 s → 9,5 s).
+
+**Zapsaná mezera:** že se katalog **na tiku neobnovuje**, je vidět jedině tím, že člověk otevře
+nastavení po delší době a chvíli tam stojí `Obnovuje se…`. Do #533 to nikomu nevadí, protože seznam
+zatím nikdo jiný nečte; jak ho paleta dostane, patří k němu i rozhodnutí, kdo obnovu spouští.
 ### Záznam rozhodnutí — mapa PR pod hlavičkou (#501)
 
 První issue směru E z milníku M14. Zákres byl v decku *Směry pro PRism* (stránka E), odsouhlasený

@@ -370,6 +370,26 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return divergence
     }
 
+    // MARK: - Repozitáře organizace (#532)
+
+    /// Co vrátí `repositories(in:)` pro danou organizaci. Chybějící klíč = prázdný výpis.
+    var organizationRepositories: [String: OrganizationRepositories] = [:]
+    /// Čím `repositories(in:)` spadne. Klíčem je organizace, aby šlo mít jednu funkční a jednu
+    /// nedostupnou naráz — což je zrovna ta scéna, kvůli které se chyba hlásí u řádku.
+    var organizationFailures: [String: any Error] = [:]
+    /// Na co se kdo ptal, **v pořadí**. Na počtu stojí test, že se výpis nedotahuje při každém
+    /// úhozu — jinak by tenhle typ o téhle vlastnosti netvrdil nic.
+    var repositoryRequests: [String] { lock.withLock { repositoriesAsked } }
+
+    private var repositoriesAsked: [String] = []
+
+    func repositories(in organization: String) async throws -> OrganizationRepositories {
+        lock.withLock { repositoriesAsked.append(organization) }
+        if let failure = organizationFailures[organization] { throw failure }
+        return organizationRepositories[organization]
+            ?? OrganizationRepositories(repositories: [], hitLimit: false)
+    }
+
     /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
     /// vyrobit label.
     var repositoryLabels: [PullRequestLabel] = []

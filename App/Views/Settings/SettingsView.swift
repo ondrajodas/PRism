@@ -16,6 +16,14 @@ struct SettingsView: View {
     /// a vracet se do něj tam, kde jsem skončil minule, není, co člověk čeká — na rozdíl od
     /// výšky panelu, kterou si vytáhne jednou a chce ji mít.
     @State private var section: SettingsSection = .sources
+    /// Seznamy repozitářů organizací (#532).
+    ///
+    /// **Drží ho okno nastavení, ne `AppStore`.** Katalog je uzavřený kus stavu s vlastní
+    /// persistencí a dnes ho čte jediná obrazovka — ta pod tímhle oknem. Dotahuje se z něj
+    /// zřídka a draze (nad velkou organizací desítky sekund), takže se sem nehodí ani jako
+    /// pole storu, které by se drželo pořád. Až na něm bude stát paleta ⌘K (#533), přestěhuje se
+    /// tam, kde ho uvidí i hlavní okno; typ na to nemusí měnit nic, protože pravda leží v cache.
+    @State private var catalog: RepositoryCatalog
 
     init(store: AppStore) {
         self.store = store
@@ -23,6 +31,13 @@ struct SettingsView: View {
             initialValue: SettingsModel(configuration: store.configuration) { configuration in
                 try await store.updateConfiguration(configuration)
             }
+        )
+        _catalog = State(
+            initialValue: RepositoryCatalog(
+                gateway: store.gateway,
+                store: RepositoryCatalogStore(layout: store.cacheLayout),
+                time: store.time
+            )
         )
     }
 
@@ -149,7 +164,13 @@ struct SettingsView: View {
     /// nečte jen konfiguraci, ale i to, co dorazilo z pollingu.
     @ViewBuilder private var page: some View {
         switch section {
-        case .sources: SourcesSettingsView(settings: settings, viewer: store.viewer)
+        case .sources:
+            SourcesSettingsView(
+                settings: settings,
+                viewer: store.viewer,
+                catalog: catalog,
+                time: store.time
+            )
         case .review: ReviewSettingsView(settings: settings)
         case .diff: DiffSettingsView(settings: settings)
         case .publishing: PublishingSettingsView(settings: settings)

@@ -53,6 +53,7 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
     private let outcome: Result<ProcessResult, ProcessError>
     private let lock = NSLock()
     private var recorded: [Invocation] = []
+    private var recordedTimeouts: [Duration] = []
 
     init(exitCode: Int32, standardOutput: String = "", standardError: String = "") {
         outcome = .success(
@@ -70,6 +71,12 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
 
     var invocations: [Invocation] { lock.withLock { recorded } }
 
+    /// S jakým limitem se volalo, v pořadí. **Zvlášť od `invocations`**, aby se do porovnávané
+    /// invokace nedostalo pole, které dnešní testy neuvádějí — a přitom šlo tvrdit, že výpis rep
+    /// organizace (#532) neběží pod společným třicetisekundovým limitem, do kterého se změřených
+    /// 46,8 s nevejde.
+    var timeouts: [Duration] { lock.withLock { recordedTimeouts } }
+
     func run(
         _ executable: URL,
         arguments: [String],
@@ -80,6 +87,7 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
             recorded.append(
                 Invocation(executable: executable, arguments: arguments, environment: environment)
             )
+            recordedTimeouts.append(timeout)
         }
         return try outcome.get()
     }
