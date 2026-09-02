@@ -26,6 +26,13 @@ struct GhGateway: GitHubGateway {
     /// **Parametr, ne konstanta**, ze stejného důvodu jako `branchStatusDelay` — test se nemá
     /// s čím měřit tři minuty.
     private let repositoryTimeout: Duration
+    /// Kolik otevřených PR repa se vypíše nejvýš (#533) — `--limit` u `gh pr list`.
+    ///
+    /// **Hodnota je z `Policy`** (`paletteRepositoryPullRequestCap`), ne konstanta tady: podle
+    /// stejného čísla se pozná, že seznam není celý, a nadpis druhé úrovně to musí umět říct
+    /// (`prvních 100`). Dvě čísla na dvou místech by znamenala, že se strop dosáhne jinde, než kde
+    /// se o něm píše — je to tatáž hranice jako u `commitListCap`.
+    private let pullRequestLimit: Int
 
     /// Kolikrát se aplikace zeptá na slévatelnost, než to vzdá (#465).
     ///
@@ -45,7 +52,8 @@ struct GhGateway: GitHubGateway {
         searchLimit: Int = 100,
         branchStatusDelay: Duration = .seconds(1),
         repositoryLimit: Int = 1000,
-        repositoryTimeout: Duration = .seconds(300)
+        repositoryTimeout: Duration = .seconds(300),
+        pullRequestLimit: Int = Policy.paletteRepositoryPullRequestCap
     ) {
         self.gh = gh
         self.runner = runner
@@ -54,6 +62,7 @@ struct GhGateway: GitHubGateway {
         self.branchStatusDelay = branchStatusDelay
         self.repositoryLimit = repositoryLimit
         self.repositoryTimeout = repositoryTimeout
+        self.pullRequestLimit = pullRequestLimit
     }
 
     func checkAuth() async -> GhAuthState {
@@ -414,6 +423,29 @@ struct GhGateway: GitHubGateway {
             repositories: items.compactMap(\.repository),
             hitLimit: items.count >= repositoryLimit
         )
+    }
+
+    /// Otevřené pull requesty repa (#533).
+    ///
+    /// **Běžný `timeout`, ne ten pro katalog rep**: změřeno 1,1 s nad padesáti PR v `cli/cli`,
+    /// tedy o dva řády jinde než 46,8 s u výpisu organizace. Vlastní limit by tady byl mez bez
+    /// důvodu.
+    ///
+    /// **Neřadí se tady** — `gh pr list` vrací PR podle čísla, ne podle poslední změny (změřeno,
+    /// viz protokol), a řazení má `Policy`.
+    func pullRequests(in repo: RepoID) async throws -> [PullRequestSummary] {
+        let items = try await run(
+            [
+                "pr", "list",
+                "--repo", repo.description,
+                "--state", "open",
+                "--limit", String(pullRequestLimit),
+                "--json", GhRepoPullRequestItem.jsonFields,
+            ],
+            phase: "Otevřené pull requesty repozitáře",
+            decodedAs: [GhRepoPullRequestItem].self
+        )
+        return try items.map { try $0.summary(in: repo) }
     }
 
     // MARK: - Slévatelnost větve (#465)

@@ -51,6 +51,15 @@ struct CommandPaletteRenderProbe {
         /// dosadit nedá (je to `@State` uvnitř karty), ale **řádek odkazu se předává uzávěrem**,
         /// takže se na něj podívat jde — a to je jediná cesta, jak ho vidět bez klávesnice.
         case link = "odkaz"
+        /// Skupina `Repozitáře` v první úrovni (#533) — nadpis s organizacemi, počty otevřených
+        /// PR a stáří posledního pushe. Katalog se do sondy dosazuje **napřímo z `Policy`**, ne
+        /// přes `RepositoryCatalog`: ten by chtěl snímky na disku, a sonda kreslí kartu.
+        case repositories = "repa"
+        /// Druhá úroveň (#533) — chip v poli, odznaky `ve frontě` a `moje`, patka s `esc
+        /// o úroveň zpět`. Jediná cesta, jak se na to podívat bez klávesnice.
+        case repository = "repo-pr"
+        /// Druhá úroveň, dokud odpověď nedorazila (#533): puntík načítání místo řádků.
+        case repositoryLoading = "repo-tahani"
     }
 
     @Test("Vyrendrovat paletu se skupinami Pull requesty k review a Moje PR")
@@ -60,16 +69,73 @@ struct CommandPaletteRenderProbe {
             let store = try await prepared()
             let items = Self.items(for: scenario, from: store.paletteItems)
             let url = directory.appending(path: "paleta-\(scenario.rawValue).png")
+            let sections = Self.sections(for: scenario, items: items)
             try render(
-                CommandPaletteView(items: items, link: Self.link(for: scenario), run: { _ in }, close: {})
-                    .frame(width: Self.width, height: Self.height)
-                    .background(Palette.background)
-                    .tint(Palette.accent),
+                CommandPaletteView(
+                    sections: sections,
+                    stage: Self.stage(for: scenario),
+                    run: { _ in },
+                    close: {}
+                )
+                .frame(width: Self.width, height: Self.height)
+                .background(Palette.background)
+                .tint(Palette.accent),
                 to: url
             )
-            let groups = Policy.paletteResults(of: items, query: "", link: Self.link(for: scenario)(""))
-                .map { "\($0.group.title) \($0.hits.count)" }
+            let groups = sections("").map { "\($0.group.title) \($0.hits.count)" }
             print("SONDA \(url.path) — \(scenario.rawValue), skupiny: \(groups.joined(separator: " | "))")
+        }
+    }
+
+    /// Výsledky, jak by je složil store — ve scénáři druhé úrovně tou druhou cestou.
+    private static func sections(
+        for scenario: Scenario,
+        items: [CommandPalette.Item]
+    ) -> (String) -> [CommandPalette.Section] {
+        switch scenario {
+        case .repository:
+            let rows = Policy.paletteRepositoryPullRequests(
+                repositoryPullRequests,
+                mine: ["ondrajodas"],
+                sources: [theirs[0].id],
+                now: now
+            )
+            return { query in
+                Policy.paletteRepositoryResults(
+                    of: rows,
+                    query: query,
+                    total: repositoryPullRequests.count
+                )
+            }
+        // Dokud se tahá, nejsou řádky žádné — kartu vyplní věta ze `Stage`.
+        case .repositoryLoading:
+            return { _ in [] }
+        default:
+            let catalog = scenario == .repositories
+                ? Policy.paletteRepositories(repositoryCatalog, query: "", now: now)
+                : []
+            return { query in
+                Policy.paletteResults(
+                    of: items + catalog,
+                    query: query,
+                    link: link(for: scenario)(query),
+                    organizations: scenario == .repositories ? ["keboola", "ondrajodas"] : []
+                )
+            }
+        }
+    }
+
+    private static func stage(for scenario: Scenario) -> CommandPalette.Stage {
+        switch scenario {
+        case .repository:
+            Policy.paletteStage(
+                level: .repository(vault),
+                repository: .loaded(repositoryPullRequests)
+            )
+        case .repositoryLoading:
+            Policy.paletteStage(level: .repository(vault), repository: .loading)
+        default:
+            Policy.paletteStage(level: .top)
         }
     }
 
@@ -122,9 +188,11 @@ struct CommandPaletteRenderProbe {
         from items: [CommandPalette.Item]
     ) -> [CommandPalette.Item] {
         switch scenario {
-        case .design, .link: trimmed(items)
+        case .design, .link, .repositories: trimmed(items)
         case .full: items
         case .actions: items.filter { $0.group == .actions }
+        // Druhá úroveň katalog z první vůbec nevidí — skládá si vlastní seznam.
+        case .repository, .repositoryLoading: []
         }
     }
 
@@ -212,6 +280,61 @@ struct CommandPaletteRenderProbe {
             ago: 8_400
         ),
     ]
+
+    // MARK: - Druhá úroveň (#533)
+
+    private static let vault = RepoID("keboola/vault")!
+
+    /// Okamžik, proti kterému se počítá `naposledy před hodinou` a `před 2 hodinami`. Pevný, aby
+    /// se dva snímky z jednoho běhu nelišily o sekundy.
+    private static let now = Date()
+
+    /// Katalog rep, jak ho má zákres: `vault` se sedmi PR, `vault-cli` se dvěma a klient bez PR.
+    private static let repositoryCatalog = [
+        OrganizationRepository(
+            repo: vault,
+            openPullRequests: 7,
+            lastPushedAt: now.addingTimeInterval(-3_600)
+        ),
+        OrganizationRepository(
+            repo: RepoID("keboola/vault-cli")!,
+            openPullRequests: 2,
+            lastPushedAt: now.addingTimeInterval(-86_400 * 3)
+        ),
+        OrganizationRepository(
+            repo: RepoID("keboola/php-vault-client")!,
+            openPullRequests: 0,
+            lastPushedAt: now.addingTimeInterval(-86_400 * 40)
+        ),
+    ]
+
+    /// Otevřené PR `keboola/vault` ze zákresu — jeden je ve frontě (`theirs[0]`), jeden můj,
+    /// jeden draft. Pořadí je schválně **jiné než podle razítka**, aby bylo na snímku vidět, že
+    /// se řadí v `Policy`.
+    private static let repositoryPullRequests = [
+        pullRequest(91, "feat: configurable secret TTL with tenant ceiling", "odinuv", 7_200),
+        pullRequest(85, "chore: modernize dependencies (Symfony 8-ready)", "odinuv", 3_600),
+        pullRequest(88, "WIP: rotate keys without downtime", "mzdrahal", 86_400 * 3, state: .draft),
+        pullRequest(84, "fix: retry on transient KMS errors", "ondrajodas", 86_400 * 4),
+    ]
+
+    private static func pullRequest(
+        _ number: Int,
+        _ title: String,
+        _ author: String,
+        _ ago: TimeInterval,
+        state: PullRequestState = .open
+    ) -> PullRequestSummary {
+        let id = PRIdentifier(repo: vault, number: number)
+        return PullRequestSummary(
+            id: id,
+            title: title,
+            author: author,
+            url: Policy.githubURL(of: id),
+            updatedAt: now.addingTimeInterval(-ago),
+            state: state
+        )
+    }
 
     private static func summary(
         _ identifier: String,

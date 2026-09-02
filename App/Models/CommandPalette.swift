@@ -3,19 +3,63 @@ import Foundation
 /// Command palette ⌘K (#184) — jmenný prostor pro to, co se v ní ukazuje.
 ///
 /// Není to typ k instanciování, jen střecha nad tvary: `Item` je jeden řádek, `Section` je
-/// skupina řádků, `Target` je to, co se stane po `↵`, a `Jump` je žádost o odscrollování,
-/// kterou vyřídí detail PR. **Pravidla** (co na dotaz sedne a v jakém pořadí) bydlí v `Policy`
-/// — viz `App/Policy/CommandPaletteSearch.swift`.
+/// skupina řádků, `Target` je to, co se stane po `↵`, `Level` je úroveň, ve které paleta stojí
+/// (#533), `Stage` to, co se v ní kreslí okolo výsledků, a `Jump` je žádost o odscrollování,
+/// kterou vyřídí detail PR. **Pravidla** (co na dotaz sedne, v jakém pořadí a co říká patka)
+/// bydlí v `Policy` — viz `App/Policy/CommandPaletteSearch.swift`
+/// a `App/Policy/CommandPaletteLevel.swift`.
 ///
 /// **Jmenný prostor, ne prefix v každém názvu**: `Palette` v tomhle repu už znamená barvy okna
 /// (`App/Views/Palette.swift`), takže `PaletteItem` by se čtl jako barevný token.
 ///
 /// **Odsud nic neodchází.** Ve výčtu `Action` není nic, co by sahalo na jedinou cestu ven
-/// (`App/Publish/`, tvrdá podmínka č. 1), a paleta si nikdy nic nedotahuje — hledá se v tom, co
-/// store už v paměti má.
+/// (`App/Publish/`, tvrdá podmínka č. 1).
+///
+/// **A dotahuje se jediná věc, na jediný pokyn** (#533): otevřené PR repa, do kterého jsem
+/// vstoupil `↵`. Psaní v poli **nedotahuje nic** — ani v první úrovni (hledá se v tom, co store
+/// má v paměti, a repozitáře leží v cache na disku), ani v druhé (filtruje se dotažený seznam).
+/// Je na to test, který po každém úhozu i po každém cíli počítá volání gateway.
 enum CommandPalette {}
 
 extension CommandPalette {
+    /// Ve které úrovni paleta je (#533).
+    ///
+    /// **Dvě úrovně, ne dvě palety.** Enter na repu nechá kartu, pole i klávesy na místě a změní
+    /// jedině to, v čem se hledá — proto je to stav palety, ne druhý překryv. V poli po tom zůstane
+    /// chip s repem, takže je z obrazovky vidět, kde člověk je.
+    ///
+    /// **Ve store, ne v `@State` karty**, na rozdíl od dotazu a kurzoru: druhá úroveň si nechává
+    /// dotažený seznam PR, a ten by se s každým překreslením karty tahal znovu. Zavřením palety se
+    /// úroveň **vrací na `top`** — ⌘K je „začínám hledat“, takže se nikdo nemá vracet do repa,
+    /// o kterém před minutou zapomněl.
+    enum Level: Hashable, Sendable {
+        case top
+        /// Otevřené pull requesty jednoho repa.
+        case repository(RepoID)
+
+        /// Repo, ve kterém paleta stojí. `nil` = první úroveň.
+        var repository: RepoID? {
+            switch self {
+            case .top: nil
+            case .repository(let repo): repo
+            }
+        }
+    }
+
+    /// Otevřené pull requesty repa, do kterého paleta vstoupila (#533).
+    ///
+    /// **Tři stavy, ne pole a `Bool`**: „tahá se“, „je tu tohle“ a „nepovedlo se“ jsou tři různé
+    /// věci na obrazovce a prázdné pole by je slilo do jedné — repo bez otevřených PR by vypadalo
+    /// stejně jako repo, na které `gh` neodpověděl. Je to tentýž důvod, kvůli kterému `ReviewState`
+    /// rozlišuje chybové stavy.
+    enum RepositoryPullRequests: Hashable, Sendable {
+        case loading
+        /// Dotažené **otevřené** PR v pořadí, ve kterém přišly z gateway.
+        case loaded([PullRequestSummary])
+        /// Věta z `gh`. Prázdno by tvrdilo „repo nemá otevřené PR“, což je něco jiného.
+        case failed(String)
+    }
+
     /// Skupina výsledků.
     ///
     /// **Pořadí případů je pořadí skupin v okně** a je to tvrzení o tom, k čemu tohle okno je:
@@ -26,6 +70,14 @@ extension CommandPalette {
     /// `Policy.paletteGroupLimit` platí **na skupinu**, takže ve společné skupině by při dvaceti
     /// cizích PR to moje nemuselo vyjít vůbec. Odznak u řádku ten problém neřeší, jen ho schová.
     /// Stojí **za** cizími: cizí PR jsou to, na co se čeká.
+    ///
+    /// **Skupina `Repozitáře` je poslední** (#533, návrh pozn. 59), a je to tatáž úvaha jako
+    /// u nálezů, jen z druhé strany: je to **nabídka, kam jít**, ne odpověď na to, co je v okně.
+    /// Kdo píše `vault`, hledá nejčastěji něco, co v okně už je.
+    ///
+    /// **Otevřené PR repa jsou taky skupina, i když je v druhé úrovni sama** (#533). Nadpis nad
+    /// nimi říká, kolik jich je a jak jsou řazené, takže bez skupiny by ta věta neměla kde být —
+    /// a strop se na ni schválně nevztahuje, viz `Policy.paletteRepositoryResults`.
     enum Group: Hashable, Sendable, CaseIterable {
         case link
         case findings
@@ -33,6 +85,8 @@ extension CommandPalette {
         case pullRequests
         case myPullRequests
         case actions
+        case repositories
+        case repositoryPullRequests
 
         /// Nadpis skupiny, jak ho má návrh (#184, sekce 09 od #336 a od #531).
         var title: String {
@@ -49,8 +103,96 @@ extension CommandPalette {
             case .pullRequests: "Pull requesty k review"
             case .myPullRequests: "Moje PR"
             case .actions: "Akce"
+            // **Ne „Repozitáře mých organizací“**: které to jsou, dopisuje nadpis za tečkou
+            // (`Section.detail`), a to jmenovitě — jedno slovo `organizací` by za sebe muselo
+            // ručit, aniž by řeklo, kterých.
+            case .repositories: "Repozitáře"
+            // **„Otevřené“ je součást tvrzení, ne zkrášlení** (#533): dotahují se jedině otevřené
+            // PR, takže `Pull requesty` by nad tím seznamem tvrdilo, že jsou v repu všechny.
+            case .repositoryPullRequests: "Otevřené pull requesty"
             }
         }
+    }
+
+    /// Odznak u řádku pull requestu v druhé úrovni (#533) — `ve frontě`, nebo `moje`.
+    ///
+    /// **Skládá se z toho, co store už má**, ne z dalšího dotazu (návrh pozn. 60): „ve frontě“
+    /// znamená „je v seznamu ze zdrojů“ a „moje“ rozhoduje `Policy.ownership`. PR, o kterém store
+    /// neví nic, odznak nedostane — a to je ta většina, protože druhá úroveň chodí do rep, která
+    /// ve zdrojích nejsou.
+    ///
+    /// Text nese model (jako `PullRequestState.czechLabel`), barvu sází view: `Mark` říká, **co**
+    /// ten řádek je, a tohle říká, **co se o něm ví**.
+    enum Badge: Hashable, Sendable {
+        /// PR je ve zdrojích, tedy ve frontě k review (#4).
+        case inQueue
+        case mine
+
+        var czechLabel: String {
+            switch self {
+            case .inQueue: "ve frontě"
+            case .mine: "moje"
+            }
+        }
+    }
+
+    /// Jedna položka patky palety — `↵ otevřít`.
+    ///
+    /// Existuje kvůli tomu, že se patka mění podle **úrovně** (#533): v druhé úrovni `esc` nezavírá,
+    /// ale vrací o úroveň zpět, a to se musí dát otestovat výčtem. Rozhoduje `Policy.paletteStage`.
+    ///
+    /// **Podle úrovně, ne podle vybraného řádku** (návrh, s09link): klávesy jsou vlastnost karty,
+    /// takže kdyby text patky závisel na tom, co je zrovna pod kurzorem, musel by se do něj dívat
+    /// každý řádek — a patka by se měnila pod rukou při každé šipce.
+    struct Hint: Hashable, Sendable, Identifiable {
+        let key: String
+        let what: String
+
+        var id: String { key }
+    }
+
+    /// Co se napíše, když v paletě není vidět ani jeden řádek.
+    ///
+    /// **Dvě věty, ne jedna**, a druhá je ta cennější: `Na „x“ nic nesedí` říká, že se nenašlo,
+    /// kdežto `note` říká **kde se hledalo** — a paleta nechodí na GitHub, takže bez toho by
+    /// prázdný výsledek vypadal jako tvrzení, že takový pull request neexistuje.
+    ///
+    /// **`note` je optional**, protože jsou stavy, ve kterých se nehledalo vůbec: repo bez
+    /// otevřených PR není prázdný **výsledek**, je to prázdné **repo**, a věta o tom, v čem se
+    /// hledá, by tam byla vytáčka.
+    struct EmptyState: Hashable, Sendable {
+        let headline: String
+        let note: String?
+    }
+
+    /// Věta nad seznamem, která říká, že se něco děje nebo nepovedlo (#533).
+    ///
+    /// **Vlastní typ, ne `String?`**: puntík načítání a červená věta o selhání jsou dvě různé
+    /// kresby, a jeden řetězec by z nich udělal jednu.
+    enum Notice: Hashable, Sendable {
+        case loading(String)
+        case failed(String)
+    }
+
+    /// Jak paleta vypadá v téhle úrovni (#533) — všechno, co **nezávisí na dotazu**.
+    ///
+    /// Skládá to `Policy.paletteStage(level:repository:)`, takže se dá projít výčtem. Ve view
+    /// nesmí zůstat žádné `if` nad úrovní — jinak by se rozhodnutí „co říká patka“ dalo přečíst
+    /// jedině z kresby.
+    ///
+    /// **Prázdný stav v tom není**, protože závisí na dotazu: skládá ho
+    /// `Policy.paletteEmpty(at:query:)` tam, kde je dotaz po ruce (tedy ve view, jako výsledky).
+    struct Stage: Hashable, Sendable {
+        let level: Level
+        /// Chip s repem v poli. `nil` = první úroveň, tedy pole bez chipu.
+        let chip: String?
+        /// Výzva v prázdném poli.
+        let prompt: String
+        let hints: [Hint]
+        /// `nil` = nic se netahá a nic se nepokazilo.
+        let notice: Notice?
+        /// Vrací `esc` a `⌫` o úroveň zpět? `false` = `esc` zavírá paletu.
+        let goesBack: Bool
     }
 
     /// Co se stane po `↵`.
@@ -66,6 +208,12 @@ extension CommandPalette {
         case file(PRIdentifier, path: String)
         /// Otevření PR jako záložky.
         case pullRequest(PRIdentifier)
+        /// Vstup do druhé úrovně palety (#533) — otevřené PR toho repa.
+        ///
+        /// **Cíl jako každý jiný, ne zvláštní cesta:** `↵` v paletě má jednu trasu
+        /// (`AppStore.reveal(_:)`), takže i „přepni úroveň“ chodí tudy. Jediné, čím se liší, je
+        /// že po něm **paleta zůstane otevřená** — rozhoduje `Policy.paletteClosesAfter(_:)`.
+        case repository(RepoID)
         case action(Action)
     }
 
@@ -108,6 +256,10 @@ extension CommandPalette {
         /// se v tu chvíli neví nic — dotáhne se, až se záložka otevře —, takže by se musel
         /// vymyslet, a `otevřený` u zavřeného PR je lež v tom nejtišším možném místě.
         case link
+        /// Repozitář z organizací v nastavení (#533). **Vlastní značka, ne `pullRequest(_:)`**:
+        /// řádek nemluví o pull requestu, ale o místu, kam se dá vejít — a stav, který by značka
+        /// PR chtěla, u repa neexistuje.
+        case repository
         /// Akce si symbol nese, protože každá dělá něco jiného a jeden společný by neřekl nic.
         case action(symbol: String)
     }
@@ -137,6 +289,12 @@ extension CommandPalette {
         /// viditelného (celá cesta vs. jméno souboru, `owner/repo` vs. `repo#85`) nebo synonymum
         /// titulku. Co má samo rozhodovat o tom, jestli řádek vyjde, patří do podtitulku.
         let keywords: [String]
+        /// Odznak za podtitulkem (#533) — `ve frontě` / `moje`. `nil` = o řádku se nic takového
+        /// neví, což je většina řádků palety.
+        ///
+        /// **Vlastní pole, ne slovo v podtitulku**: kreslí se jako kapsle s barvou, takže by se
+        /// v řetězci nedalo odlišit od autora vedle sebe — a hledání by v něm shodu zvýrazňovalo.
+        let badge: Badge?
         let target: Target
 
         init(
@@ -148,6 +306,7 @@ extension CommandPalette {
             shortcut: String? = nil,
             url: URL? = nil,
             keywords: [String] = [],
+            badge: Badge? = nil,
             target: Target
         ) {
             self.id = id
@@ -158,6 +317,7 @@ extension CommandPalette {
             self.shortcut = shortcut
             self.url = url
             self.keywords = keywords
+            self.badge = badge
             self.target = target
         }
     }
@@ -191,8 +351,20 @@ extension CommandPalette {
     struct Section: Identifiable, Hashable, Sendable {
         let group: Group
         let hits: [Hit]
+        /// Co se dopíše do nadpisu za tečkou — `keboola, ondrajodas` u repozitářů, `7 · řazeno
+        /// podle poslední změny` u otevřených PR repa (#533). `nil` = nadpis je jen jméno skupiny.
+        ///
+        /// **Skládá to `Policy`, ne view**: je to tvrzení o tom, kde se hledalo a jak je to
+        /// seřazené, tedy rozhodnutí — ne kosmetika nadpisu.
+        let detail: String?
 
         var id: Group { group }
+
+        init(group: Group, hits: [Hit], detail: String? = nil) {
+            self.group = group
+            self.hits = hits
+            self.detail = detail
+        }
     }
 
     /// Žádost o skok do diffu, kterou vyřídí detail PR (#184).

@@ -8350,3 +8350,62 @@ gh repo list neexistuje-xyz --limit 5 --json name    # exit 1
 
 Klasifikace `GitHubError` z toho vydá `commandFailed`, protože hláška žádný ze signálů neobsahuje —
 a `userDescription` tu větu nese celou, což je přesně to, co se má objevit u řádku organizace.
+
+## Druhá úroveň palety (#533)
+
+Tři věci, které se u druhé úrovně dají pokazit potichu, a **jedno číslo**, kvůli kterému je celá
+věc postavená takhle.
+
+### Kolik stojí výpis otevřených PR repa
+
+Změřeno na `cli/cli` (`gh` 2.x, tenhle stroj, 2. 9. 2026), tedy na **veřejném** repu:
+
+```bash
+time gh pr list --repo cli/cli --state open --limit 50 \
+    --json number,title,author,url,updatedAt,state,isDraft > /tmp/prs.json
+#  → 1,1 s · 14 kB · 50 položek
+```
+
+Je to o **dva řády** jinde než výpis rep organizace (46,8 s nad `keboola`, viz sekce výš), a proto
+si druhá úroveň může dovolit dotažení **při vstupu do repa**. Výpis rep se naproti tomu drží
+v cache a dotahuje se jednou denně — obojí je tatáž otázka („kolik to stojí“) se dvěma různými
+odpověďmi, a proto jedno má vlastní `timeout` a druhé ne.
+
+### Že `gh pr list` neřadí podle poslední změny, se muselo změřit
+
+Nadpis skupiny tvrdí `řazeno podle poslední změny`. Kdyby se řazení nechalo na `gh`, byl by to
+text, který tvrdí víc, než co data unesou — a **nepoznalo by se to na malém repu**, kde číslo
+a razítko jdou zpravidla ruku v ruce:
+
+```bash
+gh pr list --repo cli/cli --state open --limit 10 --json number,updatedAt |
+    jq -r '.[] | "\(.number) \(.updatedAt)"'
+# 14282 2026-08-28T13:16:26Z
+# 14259 2026-08-31T17:15:26Z     ← novější, a přitom níž
+```
+
+Odpověď je řazená **podle čísla**. Fixture `gh/pr-list-open.json` je ten skutečný výstup i s touhle
+dvojicí, takže test o pořadí tvrdí něco, co by se na vymyšleném JSONu dalo omylem „opravit“
+seřazením. Řadí proto `Policy.paletteRepositoryPullRequests` a tvrdí to test výčtem.
+
+### Co se testuje na tom, co se nestalo
+
+Nejcennější test v `AppStorePaletteTests` je *Paleta nad repem nepustila nic než dotažení seznamu*:
+po pěti úhozech v první úrovni, po vstupu do repa a po čtyřech úhozech ve druhé se počítají
+volání gateway — `pullRequests(in:)` **jednou**, `repositories(in:)` **vůbec**. Bez toho by stačilo,
+aby se katalog rep dotahoval při otevření palety, a z ⌘K by byla operace za 46,8 s.
+
+Druhý takový je *Start ani otevření palety katalog rep nedotahuje, jen čte disk*: store při startu
+čte `RepositoryCatalog.load(organizations:)`, což je **jen disk**. Když v cache nic není, skupina
+`Repozitáře` se **nekreslí** — a to je správná odpověď, ne prázdný nadpis.
+
+A třetí je *Odpověď na opuštěné repo se do stavu nezapíše*: mezi dotazem a odpovědí se dá zmáčknout
+`esc`, a zápis by nakreslil cizí seznam pod chipem, který mluví o něčem jiném.
+
+### Co se v harnessu ověřit nedá
+
+**Že `⌫` na prázdném poli vrací o úroveň a nad napsaným dotazem maže znaky.** Že klávesa zabere, se
+v testovacím hostu ověřit nedá (viz *Jak změřit fokus a klávesy*), takže `Policy` tvrdí jen
+**rozhodnutí** (`paletteBackspaceGoesBack(level:query:)`) a to, jestli se tlačítko se zkratkou
+doopravdy neobjeví, zkouší člověk v pauze na proklikání. Je to ta nejdražší chyba, kterou tady jde
+udělat — kdyby zkratka platila i nad napsaným dotazem, v paletě by přestalo jít mazat.

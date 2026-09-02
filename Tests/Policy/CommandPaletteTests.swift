@@ -425,6 +425,141 @@ struct CommandPaletteTests {
         )
     }
 
+    // MARK: - Nadpisy s dopiskem a druhá úroveň (#533)
+
+    /// Skupina `Repozitáře` je **poslední** (návrh pozn. 59): je to nabídka, kam jít, ne odpověď
+    /// na to, co je v okně.
+    @Test("Repozitáře jsou poslední skupina a nadpis vypisuje organizace")
+    func repositoriesComeLastAndNameTheOrganizations() throws {
+        let sections = Policy.paletteResults(
+            of: [
+                item("keboola/vault", group: .repositories, id: "repo"),
+                item("akce", group: .actions, id: "action"),
+                item("nález", group: .findings, id: "finding"),
+            ],
+            query: "",
+            organizations: ["keboola", "ondrajodas"]
+        )
+
+        #expect(sections.map(\.group) == [.findings, .actions, .repositories])
+        let repositories = try #require(sections.last)
+        #expect(repositories.detail == "keboola, ondrajodas")
+        // Ostatní skupiny dopisek nemají — jinak by nad nimi stálo tvrzení, které se jich netýká.
+        #expect(sections.dropLast().allSatisfy { $0.detail == nil })
+    }
+
+    /// Bez organizací se dopisek **nekreslí**, ne aby v nadpisu zbyla tečka bez pokračování.
+    @Test("Bez organizací zůstane nadpis Repozitáře sám")
+    func withoutOrganizationsTheHeadingStaysBare() {
+        let sections = Policy.paletteResults(
+            of: [item("keboola/vault", group: .repositories, id: "repo")],
+            query: ""
+        )
+
+        #expect(sections.first?.detail == nil)
+    }
+
+    /// **Filtr, ne hledání s vážením**: nadpis tvrdí `řazeno podle poslední změny`, takže by
+    /// řazení podle váhy shody z toho tvrzení udělalo lež — jakmile by se napsalo písmeno,
+    /// poskočil by nahoru PR, jehož titulek jím začíná.
+    @Test("Druhá úroveň drží pořadí, které dostala")
+    func theSecondLevelKeepsTheOrderItWasGiven() throws {
+        let items = [
+            item("#91 · secret TTL", group: .repositoryPullRequests, id: "91"),
+            item("secret rotation", group: .repositoryPullRequests, id: "88"),
+            item("#84 · retry on secret errors", group: .repositoryPullRequests, id: "84"),
+        ]
+
+        let sections = Policy.paletteRepositoryResults(of: items, query: "secret", total: 3)
+
+        // `secret rotation` má shodu na začátku titulku, tedy nejlepší váhu — a přesto zůstává
+        // druhý, protože se v druhé úrovni neváží.
+        #expect(try #require(sections.first).hits.map(\.id) == ["91", "88", "84"])
+    }
+
+    /// Strop **šesti řádků** je pro skupinu **mezi jinými**; tady je ta skupina obsah celé
+    /// úrovně, takže by uřízla PR, na které se člověk přišel podívat.
+    @Test("V druhé úrovni není strop na skupinu")
+    func theSecondLevelHasNoGroupCap() throws {
+        let items = (1...20).map {
+            item("#\($0) · titulek", group: .repositoryPullRequests, id: "pr\($0)")
+        }
+
+        let sections = Policy.paletteRepositoryResults(of: items, query: "", total: 20)
+
+        #expect(try #require(sections.first).hits.count == 20)
+    }
+
+    /// Počet je odpověď na „kolik jich v repu je“, a ta se dopsaným písmenem nemění.
+    @Test("Nadpis druhé úrovně píše celý počet, ne počet po filtru")
+    func theSecondLevelHeadingCountsEverything() throws {
+        let items = [
+            item("#91 · secret TTL", group: .repositoryPullRequests, id: "91"),
+            item("#84 · retry", group: .repositoryPullRequests, id: "84"),
+        ]
+
+        let filtered = Policy.paletteRepositoryResults(of: items, query: "secret", total: 7)
+
+        #expect(try #require(filtered.first).hits.count == 1)
+        #expect(try #require(filtered.first).detail == "7 · řazeno podle poslední změny")
+    }
+
+    /// Věta o pořadí nad jedním řádkem je informace bez obsahu.
+    @Test("Nad jedním PR se o řazení nepíše")
+    func oneRowSaysNothingAboutOrder() throws {
+        let items = [item("#91 · secret", group: .repositoryPullRequests, id: "91")]
+
+        let sections = Policy.paletteRepositoryResults(of: items, query: "", total: 1)
+
+        #expect(try #require(sections.first).detail == "1")
+    }
+
+    /// Na stropu `--limit` to nadpis **řekne** — tatáž úvaha jako u 250 commitů: `100` samo by
+    /// tvrdilo, že jich v repu tolik **je**, kdežto je jich tolik **vidět**. A na tom v takovém
+    /// repu záleží, protože filtr prochází jen to, co dorazilo.
+    @Test("Na stropu výpisu nadpis napíše „prvních“")
+    func theHeadingAdmitsTheCap() throws {
+        let cap = Policy.paletteRepositoryPullRequestCap
+        let items = (1...cap).map {
+            item("#\($0) · titulek", group: .repositoryPullRequests, id: "pr\($0)")
+        }
+
+        let sections = Policy.paletteRepositoryResults(of: items, query: "", total: cap)
+
+        #expect(try #require(sections.first).detail == "prvních \(cap) · řazeno podle poslední změny")
+        // Pod stropem se `prvních` **nepíše** — jinak by věta tvrdila, že seznam není celý, i tam,
+        // kde celý je.
+        let under = Policy.paletteRepositoryResults(of: items, query: "", total: cap - 1)
+        #expect(try #require(under.first).detail == "\(cap - 1) · řazeno podle poslední změny")
+    }
+
+    @Test("Když v druhé úrovni nic nesedí, není ani nadpis")
+    func nothingMatchingLeavesNoHeading() {
+        let items = [item("#91 · secret", group: .repositoryPullRequests, id: "91")]
+
+        #expect(Policy.paletteRepositoryResults(of: items, query: "xyzzy", total: 1).isEmpty)
+    }
+
+    /// Zvýrazňování se s první úrovní **dělí**, ne opisuje: shoda v autorovi (podtitulek) by bez
+    /// něj vypadala jako výsledek, u kterého není poznat, proč vyšel.
+    @Test("Druhá úroveň zvýrazňuje ve stejných místech jako první")
+    func highlightingIsSharedWithTheFirstLevel() throws {
+        let items = [
+            item(
+                "#91 · configurable TTL",
+                group: .repositoryPullRequests,
+                subtitle: "odinuv · před 2 hodinami",
+                id: "91"
+            ),
+        ]
+
+        let sections = Policy.paletteRepositoryResults(of: items, query: "odinuv", total: 1)
+
+        let hit = try #require(sections.first?.hits.first)
+        #expect(hit.titleHighlight == nil)
+        #expect(hit.subtitleHighlight != nil)
+    }
+
     @Test("Akce jsou vždycky ve své skupině a nikam neodesílají")
     func actionsAreActions() {
         // Tvrdá podmínka č. 1: ve výčtu není nic, co by sahalo na `ReviewPublishing`. Kdyby se
