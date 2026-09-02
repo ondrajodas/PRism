@@ -6691,6 +6691,52 @@ a `CommandPaletteRenderProbe` (tři nové scény) a fixture `gh/pr-list-open.jso
 veřejným `cli/cli`). Co se v které z nich hlídá a proč, je v
 [`docs/testovani.md`](testovani.md#druhá-úroveň-palety-533).
 
+## #537 — souběžné issues si v mockupu berou totéž číslo sekce
+
+Pravidlo z reálné srážky, nic v aplikaci. Ve vlně 1 milníků M14 a M18 běžely souběžně **#500**
+(PR #536) a **#531** (PR #535), obě měly v zadání přenést svůj zákres do `docs/navrh.html` jako
+„další volné číslo proti `main`u“ — a obě si vzaly **`s40`**.
+
+**Git to nenahlásil.** Jsou to dva bloky na různých místech souboru, takže by se slily čistě
+a v repu by zbyly dvě sekce s týmž `id`; `#s40` vede vždycky na tu první, takže odkaz z druhého
+PR i z jeho issue míří na cizí obrazovku. Našel to orchestrátor před mergem a přečíslování #531
+na `s41` zadal ručně; od té doby čísla **přiděluje v zadání** (#501 → `s42`, #503 → `s43`,
+#527 → `s44`).
+
+**Podruhé, ne poprvé.** Přesně tohle se stalo u #401 a #410 a #410 z toho zapsalo kontrolu čísla
+proti `mainu` v den publikování. Ta kontrola je v pořádku a platí dál, jenom na tuhle třídu
+nedosáhne: obě větve se proti `mainu` porovnaly správně a obě dostaly tutéž odpověď. Chytá větev,
+která leží týden — souběh dvou zákresů z jedné vlny ne. Pravidlo tedy nebylo špatně napsané,
+bylo na **špatné straně**: u toho, kdo číslo používá, místo u toho, kdo ho rozdává.
+
+**Druhá polovina je publikovaná kopie.** Publikování není merge (#410) — nahraje se celý dokument
+a to předchozí z něj zmizí —, takže agent od #501 publikoval ze své větve a **smetl sekci `s43`**
+z branche #503, a agent od #533 publikoval a smetl `s42`. Rada „naposled publikuje ten, který se
+má ukazovat“ na to v dávce nedosáhne, protože je to plán a **pořadí mergů se neurčuje předem**.
+Pravidlo se proto váže na merge: **publikuje každý, kdo merguje, a v pořadí mergů** — každé další
+publikování jde ze stavu, který obsahuje i to předchozí, takže poslední merge srovná i to, co
+smetl ten před ním, a nikdo nemusí vědět, že je poslední.
+
+Zapsané je to do [`docs/paralelni-vyvoj.md`](paralelni-vyvoj.md#číslo-sekce-v-mockupu-přiděluje-orchestrátor)
+(řádek `docs/navrh.html` v tabulce §1, nová podsekce s pravidlem a bod v zadání subagenta v §3),
+do [`docs/navrh.md`](navrh.md) na tři místa a jednou větou do `CLAUDE.md` u sekce *Návrh
+(mockup)*; velikost `CLAUDE.md` po tom je **84,9 kB** proti stropu ~100 kB.
+
+**Ověření je grep, ne test** — vada nevzniká v repu, ale v pořadí dvou větví, které v jednom
+pracovním stromě nikdy naráz nejsou. Nad slitým stavem musí vyjít prázdný:
+
+```bash
+grep -o 'id="s[0-9]*"' docs/navrh.html | sort | uniq -d
+```
+
+**A jedna věc se u toho ukázala jako levnější než čtení.** Agent od #501 chtěl vědět, jestli na
+adrese neleží něco cizího, a místo přečtení **15 847 řádků** publikované kopie ji prohnal `diff`em
+proti repu — bajt na bajt, bez spálení kontextu. Je to v `docs/navrh.md` u postupu porovnání,
+protože „souhlasí znak po znaku“ je tvrzení o celém souboru, kdežto čtení je tvrzení o tom, čeho
+si kdo všiml.
+
+Na obrazovce se nemění nic; testů dál **4958** ve 481 suitách, beze změny.
+
 ## #503 — nálezy stojí v okraji vedle svých řádků (M14)
 
 První a největší kus směru B z decku *Směry pro PRism*: pravý sloupec v tabu `Změněné soubory` se
