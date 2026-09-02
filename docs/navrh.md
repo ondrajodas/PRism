@@ -21,6 +21,24 @@ někdo editoval artifact a ne repo. Zvedat to na hlídané pravidlo nemá cenu: 
 proběhne stejně při každém publikování, protože nástroj bez přečtení živé verze publikovat
 odmítne.
 
+**K tomu porovnání patří grep na duplicitní kotvy.** Dvě sekce s týmž `id` se v repu slijí, aniž
+by to git nahlásil, a `#sNN` pak vede vždycky na tu první; vzniká to v dávce, kde si dvě větve
+vezmou totéž „další volné číslo“ (co tomu předchází, je
+v [`paralelni-vyvoj.md`](paralelni-vyvoj.md#číslo-sekce-v-mockupu-přiděluje-orchestrátor)).
+**Musí vyjít prázdný:**
+
+```bash
+grep -o 'id="s[0-9]*"' docs/navrh.html | sort | uniq -d
+```
+
+**A publikovanou kopii je levnější porovnat než přečíst.** Soubor, který `action: "read"` uloží,
+je celý návrh i s obálkou — u #501 **15 847 řádků** —, takže čtení do kontextu je nejdražší
+způsob, jak se dozvědět, že na adrese nic cizího není. `diff` odpoví na tutéž otázku bajt na bajt
+a je to tvrzení o **celém** souboru, ne o tom, čeho si kdo všiml: #501 tím zjistilo, že na adrese
+nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti souboru **z `mainu`** se
+porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
+se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
+
 Je to jedna HTML stránka: tokeny v `:root` a pod nimi **41** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
@@ -246,12 +264,24 @@ v repu — publikovaná kopie o ní jen nevěděla.
 **Po každém publikování z branche si odkaz otevři a zkontroluj, že tam ta sekce je.** A když leží
 víc zákresů naráz, publikuje se **naposled ten, který se má ukazovat**.
 
+**V dávce to ale nikdo nenaplánuje** (#537): pořadí mergů se předem neurčuje, takže v okamžiku
+publikování se neví, kdo bude poslední. Místo plánu se proto publikuje **znovu po každém mergi,
+ze slitého stavu** — každé další publikování jde ze stavu, který obsahuje i to předchozí, takže
+poslední merge srovná i to, co smetl ten před ním. Postup je
+v [`paralelni-vyvoj.md`](paralelni-vyvoj.md#číslo-sekce-v-mockupu-přiděluje-orchestrátor).
+
 **Číslo sekce se kontroluje proti `mainu` v den publikování**, ne proti stavu při zakládání
 branche (#410). „Další volné číslo“ z bodu 1 si dvě nezávisle vzniklé branche vezmou obě: #401
 i #410 vyšly z mainu, na kterém bylo 25 sekcí, takže si obě vzaly **26** — a po mergnutí obou by
 dokument měl kotvu `#s26` dvakrát. Přečísluje se ta, která se merguje později (u #410 na **27**),
 a s číslem se mění i eyebrow sekce a komentáře u jejího CSS. Že je kotva navěky (viz *Kde návrh
 je*) tomu neodporuje: nemergnutá sekce ještě žádnou kotvu, na kterou se odkazuje, nemá.
+
+**V dávce ta kontrola nestačí a číslo přiděluje orchestrátor v zadání** (#537). Dvě větve vzniklé
+v jedné vlně se proti `mainu` porovnají obě správně a obě dostanou tutéž odpověď — po #410 se to
+tak stalo znovu u #500 a #531, které si vzaly `s40` obě. Kontrola proti mainu chytá větev, která
+leží týden; souběh v jedné vlně nechytá vůbec. Podrobně v
+[`paralelni-vyvoj.md`](paralelni-vyvoj.md#číslo-sekce-v-mockupu-přiděluje-orchestrátor).
 
 Nové obrazovky se kreslí **stejnými třídami jako zbytek** (`.win`, `.card`, `.pill`, `.mini`, …).
 Vlastní styl pro jednu sekci znamená, že se návrh přestal skládat z jednoho systému, a to je
