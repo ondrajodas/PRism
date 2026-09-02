@@ -28,7 +28,13 @@ struct DiffColumnFitProbe {
     /// v aplikaci nevznikne. Zkoušet 509 **nemá smysl a je to zaplacená slepá ulička**: obsah se
     /// pod svým minimem rozvrhne na 700 a přeteče o 153 bodů, což je artefakt sondy, ne vada
     /// aplikace.
-    private static let widths = [700.0, 820.0, 1100.0, 1400.0]
+    ///
+    /// **Horní konec je dopočítaný z toho, co Ondra viděl**, ne odhadnutý: v liště mu stálo
+    /// `72 znaků na stranu`, a `Policy.charactersPerSide` je invertovatelná —
+    /// 72 × 8,2 b + 84 b gutter = 674 b na stranu, tedy kolona kódu ~1 349 b, tedy okno
+    /// ~1 777 b (rail 56 + složený strom 34 + okraj 300 + proužek 38). To je 16" MacBook Pro
+    /// v „More Space" (1 792 × 1 120), takže se pásmo muselo natáhnout až tam.
+    private static let widths = [700.0, 820.0, 1100.0, 1400.0, 1792.0, 2048.0]
 
     @Test("Rámec scrolleru diffu proti šířce okna")
     func columnsFit() async throws {
@@ -50,7 +56,7 @@ struct DiffColumnFitProbe {
                                           layout == .split ? "vedle" : "podsebou",
                                           findings ? "nalezy" : "bez", forced.rawValue)
                         print("SONDA \(slug): \(scene.report(findings: findings))")
-                        if let directory, width <= 820 {
+                        if let directory {
                             scene.write(to: URL(filePath: directory).appending(path: "kolony-\(slug).png"))
                         }
                     }
@@ -118,13 +124,13 @@ struct DiffColumnFitProbe {
             )
             host.sizingOptions = [.minSize]
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: width, height: 800),
+                contentRect: NSRect(x: 0, y: 0, width: width, height: 700),
                 styleMask: [.titled, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             window.contentView = host
-            window.setContentSize(NSSize(width: width, height: 800))
+            window.setContentSize(NSSize(width: width, height: 700))
             window.setFrameOrigin(NSPoint(x: 20, y: 20))
             window.level = .floating
             window.orderFrontRegardlessUnanimated()
@@ -176,11 +182,19 @@ struct DiffColumnFitProbe {
             )
             let panelWidth = store.isReviewPanelExpanded ? Self.expandedPanelFloor : Self.collapsedPanelWidth
             let needed = Policy.marginColumnWidth(shown: columns.margin) + panelWidth
+            // **Průnik, ne součet** — to je ta otázka, na kterou rámec scrolleru sám neodpoví.
+            let edges = stripEdges()
+            let overlapRight = edges.map { frame.maxX - $0.right } ?? .nan
+            let overlapLeft = edges.map { $0.left - frame.minX } ?? .nan
             return String(
-                format: "okno %.0f | scroller x %.0f…%.0f (šířka %.0f) | vpravo zbývá %.0f,"
-                    + " potřeba %.0f → PŘETEČENÍ %.0f | okraj %@ strom %@",
-                width, frame.minX, frame.maxX, frame.width, right, needed, needed - right,
-                columns.margin ? "ano" : "ne", columns.tree ? "ano" : "ne"
+                format: "okno %.0f | scroller %.0f…%.0f | součet: zbývá %.0f, potřeba %.0f → %.0f"
+                    + " | pruhy %@…%@ → PRŮNIK vlevo %@ vpravo %@ | okraj %@",
+                width, frame.minX, frame.maxX, right, needed, needed - right,
+                edges.map { String(format: "%.0f", $0.left) } ?? "?",
+                edges.map { String(format: "%.0f", $0.right) } ?? "?",
+                overlapLeft.isNaN ? "?" : String(format: "%.0f", overlapLeft),
+                overlapRight.isNaN ? "?" : String(format: "%.0f", overlapRight),
+                columns.margin ? "ano" : "ne"
             )
         }
 
@@ -199,6 +213,48 @@ struct DiffColumnFitProbe {
                 if height > (best?.documentView?.frame.height ?? 0) { best = found }
             }
             return best
+        }
+
+        /// **Kde jsou hrany pruhů, čtené z bitmapy** — a je to jiné měřidlo než rámec
+        /// scrolleru, schválně (#478). Rámec může být správný a pruh na něm přesto malovat;
+        /// z rámce se to nepozná ani náhodou, takže se hledá **průnik**, ne součet.
+        ///
+        /// Hrany se hledají **bez znalosti barev**, a je to opravená chyba: první podoba
+        /// porovnávala `Palette.chrome` ve světlém režimu a v hostovaném okně, které se renderuje
+        /// **tmavé**, nenašla nikdy nic — tedy „pruh nenalezen“ u všech 64 případů, což je tatáž
+        /// hodnota pro funguje i nefunguje (#478). Místo barvy se proto bere **tvar**: pruh je
+        /// souvislý svislý pás, který se dotýká hrany okna, takže se skenuje vodorovná řádka od
+        /// hrany dovnitř a hlásí se, kde ten pás končí.
+        ///
+        /// **Co tohle měřidlo neumí, a proto se z něj nesmí dělat test** (#478): okraj s kartami
+        /// a složený proužek panelu mají **tutéž plochu** (naměřeno `1E222D` u obou), takže
+        /// souvislý pás od pravé hrany je **oba naráz** a hranici mezi nimi nenajde. K tomu ho
+        /// **lámou karty**: na řádce, kde karta je, pás skončí na jejím okraji, ne na hraně
+        /// kolony. Vrácená pravá hodnota je tedy „kde začíná pravý blok (okraj + proužek), nebo
+        /// první karta v něm“ — na otázku *překrývá proužek obsah?* to odpovídá jedině tehdy,
+        /// když vyjde uvnitř kolony kódu. Oddělit ty dvě kolony by chtělo hledat 1bodové dělící
+        /// čárky (`Palette.lineSoft`), a to zatím udělané není.
+        ///
+        /// - Returns: pravá hrana levého pruhu a levá hrana pravého bloku, v bodech okna.
+        func stripEdges() -> (left: Double, right: Double)? {
+            guard let view = window.contentView,
+                  let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+            else { return nil }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let scale = Double(bitmap.pixelsWide) / Double(view.bounds.width)
+            // Řádka pod lištou diffu a nad stavovým řádkem — tedy tam, kde je kód i oba pruhy.
+            let row = Int(Double(bitmap.pixelsHigh) * 0.6)
+            func hex(_ column: Int) -> String? {
+                guard let c = bitmap.colorAt(x: column, y: row)?.usingColorSpace(.sRGB) else { return nil }
+                return String(format: "%02X%02X%02X", Int(c.redComponent * 255),
+                              Int(c.greenComponent * 255), Int(c.blueComponent * 255))
+            }
+            guard let leftColour = hex(0), let rightColour = hex(bitmap.pixelsWide - 1) else { return nil }
+            var left = 0
+            while left + 1 < bitmap.pixelsWide, hex(left + 1) == leftColour { left += 1 }
+            var right = bitmap.pixelsWide - 1
+            while right - 1 >= 0, hex(right - 1) == rightColour { right -= 1 }
+            return (Double(left) / scale, Double(right) / scale)
         }
 
         func write(to url: URL) {
@@ -265,3 +321,4 @@ struct DiffColumnFitProbe {
         body: "Popis pull requestu, nad kterým se měří, jestli se kolony vejdou."
     )
 }
+

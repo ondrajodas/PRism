@@ -7418,6 +7418,32 @@ kolony** (`Sbalit vše` se nevejde celé). Není to přetečení — proužek i 
 a součet je na bod —, je to úzké okno bez zvláštního rozvržení; patří to k #505 (*okraj v úzkém
 okně*) spolu se značkou místo karty.
 
+**Druhé kolo: co se nepovedlo změřit, a proto se netvrdí.** Po opravě podlahy Ondra vadu viděl
+dál, u okna, které označil za `defaultSize` (1100 × 700), ve `Vedle sebe` se složeným stromem
+i panelem. Ta scéna se v hostovaném okně **nereprodukuje**: kolony jsou na sobě (kód 86…762,
+okraj 763…1062, proužek 1063…1100), součet je na bod 1100 a hlavička souboru se kreslí celá.
+
+**Nesouhlasí ale číslo v liště, a to je ta stopa**: moje scéna hlásí `31 znaků na stranu`, Ondrova
+`72`. `Policy.charactersPerSide` je invertovatelná — 72 × 8,2 b + 84 b gutteru = 674 b na stranu,
+tedy kolona kódu **~1 349 b** a okno **~1 780 b**. V okně 1 100 se taková kolona nemá kde vzít, takže
+platí jedno z dvojího: buď je jeho okno o 700 bodů širší, než si myslí (a `defaultSize` platí jen
+na **první** spuštění — hlavní okno si rámec pamatuje, `setFrameAutosaveName("")` je jen na
+pomocných oknech), nebo je kolona doopravdy širší než okno, což je ta vada. **Rozhodnout se to
+z mých dat nedá**, protože obrazovka stroje má 1 512 bodů: okno o 1 792 se sice vytvoří, ale
+bitmapa z něj přišla 1 512bodová, takže řádky nad 1 512 nejsou k ničemu.
+
+**A druhé měřidlo je zatížené, takže z něj test není.** Hrany pruhů se z bitmapy hledají jako
+souvislý pás od hrany okna, jenže **okraj s kartami a složený proužek mají tutéž plochu**
+(`1E222D` u obou) a pás je tedy oba naráz; k tomu ho lámou karty. Číslo, které z toho leze,
+odpovídá na otázku *překrývá proužek obsah?* jedině tehdy, když vyjde **uvnitř** kolony kódu —
+a zelený test nad takovým měřidlem by netvrdil nic (#478). Oddělit ty dvě kolony by chtělo hledat
+1bodové dělící čárky (`Palette.lineSoft`); zatím udělané není a je to **zapsaná mezera**.
+
+Co se přes celou mřížku (6 šířek × pohled × okraj × ruční `⌘1`/`⌘2`) i tak našlo: **čtyři případy
+s kladným průnikem, všechny na podlaze 700** a malé (+2 vlevo u `vedle-nalezy-panel`, +14 vpravo
+u tří kombinací s ručně rozloženým stromem nebo panelem). Jsou reálné, ale nejsou to ty stovky
+bodů, které by vysvětlily Ondrův snímek.
+
 **Tvrdí to test, ne jen sonda** (`DiffColumnFitTests`): pevné kolony se vejdou přes celé pásmo
 šířek v obou pohledech, nález **nikdy nezůstane bez domova** (buď okraj, nebo rozložený panel),
 strom ustupuje první a šířky se čtou z `Policy`, ne ze dvou konstant ve views. **Ověřeno vložením
