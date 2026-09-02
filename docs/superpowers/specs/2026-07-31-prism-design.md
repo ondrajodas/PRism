@@ -5433,7 +5433,7 @@ fixture po **řádcích** a měla 9 až 14 souborů (#478).
 
 **Značka souboru pod výřezem: dnešní obrys je změřený a neunese hustý pás.** Z bitmapy (#432), přes
 pásmo počtů souborů a šířek okna — čísla jsou
-v [`docs/architektura.md`](../../architektura.md#značka-souboru-pod-výřezem--co-dnešní-obrys-unese-501).
+v [`docs/architektura.md`](../../architektura.md#značka-souboru-pod-výřezem--proč-obrys-odešel-a-jezdec-přišel-501).
 Podíl obálky značky, který je cílový segment, spadne z 91–98 % (tři soubory) na **21–30 %** (158),
 protože obrys je **odstup od segmentu**, tedy vždycky o osm bodů širší než to, co obtahuje. A při
 158 souborech má celá značka **39 b² inkoustu ve dvou svislých čárkách dvou bodů** — přesně tolik

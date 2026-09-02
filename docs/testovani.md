@@ -7527,7 +7527,7 @@ Pásmo je dvojrozměrné: **počty souborů** 3 / 7 / 10 / 20 / 45 / 158 (`PRism
 `cli/cli#14320` 158) × **šířky detailu** 347 / 647 / 1047 / 1347 bodů. Čtou se čtyři čísla:
 obálka značky, nakreslená šířka cílového segmentu, kolik segmentů obálka **potkává** a **podíl**
 obálky, který je cílový segment. Naměřená tabulka je
-v [`docs/architektura.md`](architektura.md#značka-souboru-pod-výřezem--co-dnešní-obrys-unese-501).
+v [`docs/architektura.md`](architektura.md#značka-souboru-pod-výřezem--proč-obrys-odešel-a-jezdec-přišel-501).
 
 **Čtyři věci, které to měřidlo stály jednu opravu každá** — a všechny čtyři jsou past, do které se
 dá spadnout znovu:
