@@ -53,17 +53,36 @@ struct PullRequestMapGeometry {
         return starts[index]...(starts[index] + widths[index])
     }
 
+    /// Konec pásu — pravá hrana posledního segmentu.
+    var end: Double {
+        guard let last = starts.indices.last else { return 0 }
+        return starts[last] + widths[last]
+    }
+
     /// Který segment leží pod danou souřadnicí — **jedno místo pro nápovědu i pro klik**.
     ///
-    /// **Mezera mezi segmenty padne tomu vlevo.** Dvoubodová mezera je čtvrtina nejmenšího
-    /// segmentu, takže „klik do mezery neudělá nic“ by u úzkých segmentů znamenalo, že se na
-    /// soubor nedá kliknout; hledá se proto **poslední segment, který začal nalevo od kurzoru**.
+    /// **Trefné plochy vykládají celý pás beze zbytku a mezera se dělí napůl mezi oba sousedy.**
+    /// Dvoubodová mezera je dvě třetiny nejmenšího segmentu, takže „klik do mezery neudělá nic“
+    /// by u úzkých segmentů znamenalo, že se na soubor nedá kliknout — a „celá mezera patří tomu
+    /// vlevo“ (tak to bylo napsané do #501) je zase nesymetrické: u tří bodů šířky je půl mezery
+    /// znatelný kus plochy. Trefná plocha proto **obsahuje celý nakreslený segment** a k němu
+    /// polovinu mezery na každou stranu; na krajích pásu jde až k hraně.
+    ///
     /// Nalevo od pásu a napravo za jeho koncem je odpověď `nil` — tam už žádný soubor není.
+    ///
+    /// Že se **každý** segment dá trefit, tvrdí `PullRequestMapGeometryTests` přes pásmo počtů
+    /// souborů. Není to samozřejmost: chyba o půl mezery se **kumuluje zleva doprava**, takže by
+    /// se u jednoho počtu vůbec neprojevila a u vyššího by vyšla mimo — a kresba by přitom byla
+    /// v pořádku, protože kreslí z týchž čísel. Proto je to jedna funkce, ne dva výpočty.
     func index(at x: Double) -> Int? {
-        guard let last = starts.indices.last, x >= 0 else { return nil }
-        guard x <= starts[last] + widths[last] else { return nil }
-        // Od konce, tedy tatáž úvaha jako u `Policy.pinnedFileHeader`: hrany se dotýkají, takže
-        // rozhoduje ten poslední, který začal dřív.
-        return starts.lastIndex(where: { $0 <= x })
+        guard !starts.isEmpty, x >= 0, x <= end else { return nil }
+        // Od konce: trefné plochy se dotýkají, takže rozhoduje ten poslední, který začal dřív.
+        return starts.indices.last { hitStart(of: $0) <= x }
+    }
+
+    /// Levá hrana **trefné** plochy segmentu — o půl mezery vlevo od nakreslené, na kraji pásu
+    /// od nuly.
+    private func hitStart(of index: Int) -> Double {
+        index == 0 ? 0 : starts[index] - spacing / 2
     }
 }

@@ -6746,7 +6746,7 @@ a nápověda jako nativní tooltip místo kreslené bubliny.
 tam přišel — to je pravidlo o záznamu dneška (#299), ne překreslování. Jediné místo, kde `.diffstat`
 zůstal, je záznam měření stupňů pruhu v sekci 19: je to záznam z #316, ne dnešní obrazovka.
 
-Testů **4998** ve 484 suitách (proti 4958 ve 481 na `main`u po #533); nové jsou tři sady — `PullRequestMapTests` (31 tvrzení nad čistou
+Testů **5000** ve 484 suitách (proti 4958 ve 481 na `main`u po #533); nové jsou tři sady — `PullRequestMapTests` (31 tvrzení nad čistou
 funkcí), `PullRequestMapDrawingTests` (9 nad bitmapou) a `PullRequestMapGeometryTests` (6 nad
 souřadnicemi a trefením kurzoru) — a sonda `PullRequestMapRenderProbe`
 (obrázek přes pásmo šířek 347/647/1047/1347 v obou režimech). Odešla `DiffstatBlocksTests` s funkcí,
@@ -6785,6 +6785,22 @@ minimum** (`Policy.mapSpacing`) a z pásu zbude souvislý barevný pruh místo t
 300 souborů se to nedostane: `gh pr diff` vrátí nad tím stropem HTTP 406 a diff se nenačte vůbec
 (změřeno na `home-assistant/core#181088`, 3 632 souborů). A zaplatilo se **odečítáním**: pás je
 jeden accessibility element, ne 158 prvků; k souborům vedou dál strom a paleta ⌘K.
+
+**Po druhém proklikání se v zákresu otevřely dvě otázky a leží tam jako varianty, ne jako
+rozhodnutí.** Ondrovi v pásu chyběla **legenda** (z okna se nepozná, co který tón znamená) a k tomu
+se zeptal, jestli **nemají být segmenty stejně široké** — na jeho PR bylo deset podobných souborů,
+takže se lišily jedině šířkou a proměnná šířka vypadala jako šum. Významů je přitom **sedm** a řádka
+pásu má **deset bodů**, takže se do ní všechny natrvalo nevejdou. V sekci 42 návrhu jsou proto čtyři
+panely k výběru: **A** legenda na vyžádání z popisku (v řádce nepřibude nic, popover), **B** zkrácená
+trvalá legenda místo počtů (natrvalo jen tři tóny závažnosti, souhrn odejde), **C** plná legenda jako
+druhá řádka jen na širokém okně (16 bodů chromu, pod ~980 body mizí) a **W** `log₂` proti stejné
+šířce na dvou rozloženích. **Vybere se jedno z každé dvojice a ostatní se ze zákresu zahodí** —
+v repu nemají zůstat čtyři.
+
+**Zákres si u toho vyžádal jednu opravu, která je věcná:** legenda brala barvy **inline**
+(`style="background: var(--crit)"`), tedy z druhého místa než segmenty. Teď je čerpají ze **společného
+selektoru**, protože rozejití se škálou by na obrázku nebylo vidět — je to ta samá barva, jen jinde.
+V okně tomu odpovídá to, že legenda musí volat **tutéž funkci**, jakou kreslí `Canvas`.
 
 **Copilot našel jednu reálnou věc a byla to zapsaná díra v pravidle**: `threadSpots` vracela u
 souboru s nejvýš jedním řádkem podíl `0,5` **každému** vláknu, tedy bez kontroly `matches` — pás by
