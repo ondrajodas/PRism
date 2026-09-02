@@ -6550,21 +6550,37 @@ v poli nevolá nic — `keboola` po písmenech je sedm hodnot, tedy sedmkrát t�
 podprocesů `gh`. Je na to test a je to to nejcennější tvrzení celé oblasti, protože tvrdí, že se
 něco **ne**stalo.
 
-**Dvě rozhodnutí jsou odchylka od zadání a obě jsou zapsané.** Katalog **drží okno nastavení**, ne
+**Jedno rozhodnutí je odchylka od zadání a je zapsané.** Katalog **drží okno nastavení**, ne
 `AppStore` (uzavřený kus stavu s vlastní persistencí; rozvrh dávky navíc nedovoloval třetí větev ve
 stavu `AppStore.swift`), a s tím se **denní obnova dělá při použití, ne na tiku pollingu** — katalog
 nikdo nečte, dokud neotevře nastavení nebo (od #533) paletu, takže obnova na tiku je desítky sekund
-práce za nic. Kdo obnovu spouští, až katalog dostane paleta, patří k #533. A sekce má **řádky
-s polem, ne chipy** ze zákresu: mockup kreslí chipy i o řádek výš u `Moje loginy`, kde je aplikace od
-#389 sází jako obyčejný seznam polí, protože okno nastavení je nativní `Form` — druhá vizuální podoba
-pro tutéž věc na téže stránce by znamenala, že se dva sousední řádky ovládají jinak. Zbytek je
-v [záznamu
+práce za nic. Kdo obnovu spouští, až katalog dostane paleta, patří k #533. Zbytek je v [záznamu
 rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--katalog-repozitářů-drží-okno-nastavení-532).
 
-**Z renderu vypadla jedna oprava.** Řádek organizace nesl **stav** (`412 rep`, `zatím nenačteno`)
-a nad souhrnem, který říká totéž, z toho byla tatáž věta dvakrát pod sebou — u jedné organizace se
-zdvojoval i počet rep. Řádku zbyla jen věta o selhání (tu souhrn říct neumí, je na organizaci)
-a `Policy.organizationRowStatus` se celá zahodila.
+**Sekce je chipline podle zákresu** (`.chipline` + `.tagchip` + `.tagchip.plus`, sazba
+v `TagChipStyle` jeden ku jedné). **První podoba měla řádky s poli**, aby se shodovala s `Moje
+loginy` o řádek výš, kde je aplikace od #389 sází jako nativní seznam polí — to jsem **zamítl**:
+kreslí se to, co je v návrhu, a sjednocení `Moje loginy` je jiné issue. Chipline potřebovala tři
+věci, které statická kresba nemá: **křížek v chipu** (jinak se organizace nedá dostat pryč jinak než
+zásahem do `config.json`), **pole místo přidávacího chipu** po kliknutí (jméno organizace je volný
+text, na rozdíl od labelu z uzavřené množiny) a **věta o selhání pod chipline**, uvozenou jménem
+organizace.
+
+**Render vedle referenční kresby našel čtyři věci** (headless Chrome nad `docs/navrh.html` proti
+offscreen renderu sekce). Tři z nich byly v přidávacím chipu a všechny měly týž kořen:
+**`.tagchip.plus` přebíjí jen `color` a `border-style`**, kdežto řez, velikost, odsazení, poloměr
+**i podklad** si dědí — první podoba mu dala UI font medium, průhlednou výplň a akcentový okraj.
+Od oka vypadaly správně; našlo je jedině přečtení CSS doslova. Čtvrtá byla **souhrn nakreslený přes
+první chip** (`kebo412 rep`): SwiftUI nemá `flex-shrink`, takže `FlowRow` s `maxWidth: .infinity`
+si v `HStack`u řekne o celou šířku, a `layoutPriority(1)` to **nespravilo** (ideální šířka
+nekonečného rámce zůstane nekonečná). Rozhoduje proto **rozměr, ne vyjednávání**: `ViewThatFits`
+vybere řádek ze zákresu, dokud se vejde (změřeno — při 820 bodech ano), a v úzkém okně dva řádky pod
+sebou (509 bodů). Hlídá to rozdíl bitmap při obou šířkách.
+
+**A ještě dřív z renderu vypadla jedna oprava**: řádek organizace nesl **stav** (`412 rep`, `zatím
+nenačteno`) a nad souhrnem, který říká totéž, z toho byla tatáž věta dvakrát pod sebou — u jedné
+organizace se zdvojoval i počet rep. Zbyla jen věta o selhání (tu souhrn říct neumí, je na
+organizaci) a `Policy.organizationRowStatus` se celá zahodila.
 
 **Copilot našel dvě věci a obě jsou opravené.** (1) Souhrn hlásil `Obnovuje se…` pokaždé, když se
 tahalo cokoli — tedy i organizace, kterou někdo z pole mezitím smazal; rozhoduje teď **průnik** se
@@ -6585,7 +6601,7 @@ změny. **Č. 3 taky**: `catalogs/` leží v cache aplikace a hranici u čtení,
 `CacheFile`, tedy tatáž kontrola jako u nálezů a draftů. Složka se jmenuje `catalogs/`, ne
 `repositories/` ze zadání, protože to jméno v `CacheLayout` ukazuje na `repos/` s bare klony.
 
-Testů **4823** ve 471 suitách; nové jsou tři sady (`RepositoryCatalogPolicyTests`,
+Testů **4907** ve 479 suitách; nové jsou tři sady (`RepositoryCatalogPolicyTests`,
 `RepositoryCatalogTests`, `GhRepositoryListTests`), rozšířené `ConfigurationTests`
-a `SettingsFieldsRenderTests` a fixture `gh/repo-list.json` (skutečný výstup nad veřejným `cli`).
+a `SettingsFieldsRenderTests` (osm scén, dvě šířky) a fixture `gh/repo-list.json` (skutečný výstup nad veřejným `cli`).
 Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).

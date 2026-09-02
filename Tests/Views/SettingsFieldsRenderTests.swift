@@ -24,6 +24,9 @@ import Testing
 struct SettingsFieldsRenderTests {
     /// Obsahová část okna nastavení při `minWidth` 720: navigace 210 bodů a dělič 1. Užší
     /// z možných šířek je ta zajímavá — do ní se popisky vejdou nejhůř.
+    ///
+    /// **Výchozí, ne jediná** (#532): sekce organizací se v širokém okně rozvrhuje jinak
+    /// (`ViewThatFits`), takže scéna si šířku umí přebít.
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     private static let height: CGFloat = 1600
@@ -115,6 +118,32 @@ struct SettingsFieldsRenderTests {
         #expect(pending != loaded)
     }
 
+    /// Že `.set-row` ze zákresu (chipy vlevo, souhrn a `Obnovit` vpravo) **v širokém okně
+    /// doopravdy nastane** — a v úzkém se zalomí na dva řádky. `ViewThatFits` rozhoduje z rozměru,
+    /// takže tvrzení je rozdíl bitmap při dvou šířkách; bez toho by prošla i verze, která je
+    /// vždycky pod sebou.
+    @Test("Souhrn jde vedle chipů, dokud se vejde")
+    func theSummarySitsBesideTheChipsWhenItFits() async throws {
+        let narrow = try await renderSources(
+            "organizace-uzke",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola", "ondrajodas"],
+            catalog: ["keboola": 412, "ondrajodas": 37],
+            width: 509
+        )
+        let wide = try await renderSources(
+            "organizace-siroke",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola", "ondrajodas"],
+            catalog: ["keboola": 412, "ondrajodas": 37],
+            width: 820
+        )
+
+        #expect(narrow != wide)
+    }
+
     /// **Věta u řádku je jediné, co organizaci bez přístupu odlišuje od organizace bez repozitářů**
     /// — obojí je jinak prázdný seznam. Text je skutečná hláška `gh repo list` na neznámé jméno.
     @Test("Nedostupná organizace má u řádku větu")
@@ -159,13 +188,14 @@ struct SettingsFieldsRenderTests {
         viewer: String,
         organizations: [String] = [],
         catalog snapshots: [String: Int] = [:],
-        failing: [String: String] = [:]
+        failing: [String: String] = [:],
+        width: CGFloat = Self.width
     ) async throws -> Data {
         var configuration = Configuration.standard
         configuration.global.ownLogins = logins
         configuration.global.searchOrganizations = organizations
         let catalog = await catalog(snapshots, failing: failing)
-        return try bitmap(name) {
+        return try bitmap(name, width: width) {
             SourcesSettingsView(
                 settings: SettingsModel(configuration: configuration) { _ in },
                 viewer: viewer,
@@ -219,17 +249,21 @@ struct SettingsFieldsRenderTests {
     /// - Parameter name: jméno souboru, když je nastavené `PRISM_RENDER_DIR`. Bitmapy jsou tady
     ///   **tvrzení**, ale koukat se na ně je pořád ta jediná cesta, jak si zkontrolovat sazbu —
     ///   proto se dají pustit i na disk, touž cestou jako sondy.
-    private func bitmap<Content: View>(_ name: String, _ content: () -> Content) throws -> Data {
+    private func bitmap<Content: View>(
+        _ name: String,
+        width: CGFloat = Self.width,
+        _ content: () -> Content
+    ) throws -> Data {
         let appearance = try #require(NSAppearance(named: .darkAqua))
         var result: Result<Data, any Error>?
         appearance.performAsCurrentDrawingAppearance {
             do {
                 let scene = content()
-                    .frame(width: Self.width, height: Self.height)
+                    .frame(width: width, height: Self.height)
                     .environment(\.colorScheme, .dark)
                     .tint(Palette.accent)
                 let hosting = NSHostingView(rootView: scene)
-                hosting.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.height)
+                hosting.frame = NSRect(x: 0, y: 0, width: width, height: Self.height)
                 let window = NSWindow(
                     contentRect: hosting.frame,
                     styleMask: [.borderless],

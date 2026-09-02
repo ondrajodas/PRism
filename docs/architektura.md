@@ -4112,6 +4112,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `TextWidth` | Šířka popisku ve skutečném písmu (#284) — z ní se rozhoduje, jestli se řada vejde. Řez si bere z `MiniButtonStyle.labelFont`, u kapsle z `DesignPill` (#348), aby se měření a kresba nemohly rozejít. **Šířka jednoho popisku, ne metrika písma** — ta má vlastní měřidlo (`FontMetric`), protože se dá zapamatovat na proces; klíčem je tady text, takže by z cache byla přihrádka na každý popisek |
 | `FontMetric` | **Jediné místo, kde se čte metrika písma** (#407): šířka znaku, výška řádku a obalový rámec. Jedno měření na proces (`shared`, mez 64 hodnot, klíč `(jméno, velikost, druh)`), tři cesty (`measured` → `fresh` → `derived`) **opakované až čtyřikrát s milisekundovou odmlkou**, a **nula se nepamatuje** — vada je přechodná a vadný je *objekt* písma. Náhradní měření **nesmí sázet text**: sazba tím písmem položí proces uvnitř CoreTextu. `tally` (počty měření, opakování a zamítnutá hodnota) čte sonda a zprávy u tvrzení. Viz *Metrika písma na jednom místě* |
 | `DesignPill` | Kapsle stavu z návrhu (`.pill`) — **jedno místo pro její sazbu** (#348): mono 10,5 / 600, odsazení 7 a 2, `.capsule`. Volá se `designPill(tint:background:)` a od #404 si ji bere **třináct souborů** (17 volání); řez je `DesignPill.font` (AppKit) a **kreslí se i měří tímtéž** (`Font(_:)`, `TextWidth.pill(_:)`). `lineLimit` v ní **není** (rozhoduje o něm volající). Bere `Color`, ne `ShapeStyle` — kdo dědil `.tint`, musí barvu pojmenovat. Viz *Kapsle stavu na jednom místě* |
+| `TagChipStyle`, `TagChipView`, `AddTagChipLabel` | Chip z návrhu (`.tagchip`, #532) — mono 10,5, odsazení 2/7, obtažení 1, poloměr 5, mezera 5, `--panel-3` / `--line-soft` / `--ink-2`. **Není to `LabelChipStyle` s jinými barvami**: `.lchip` je slovo z repozitáře (UI font, semibold, kapsle, puntík), `.tagchip` **hodnota, kterou jsem napsal** (mono, regular). Přidávací chip přebíjí **jen barvu textu a `border-style`** — podklad, řez i poloměr dědí, což byly tři odchylky první podoby. Křížek na odebrání v zákresu **není** a je to nejmenší přípustný přídavek |
 | `ConversationView` | Tab `Konverzace` (#183): lišta s filtrem, časová osa a **composer komentáře pod PR** na spodní hraně (#216) |
 | `ConversationNodeView` | Jeden uzel osy — puntík 24 bodů, svislá linka **jako pozadí** (#375, ne pružná výška v řádku) a obsah vpravo; slévá za sebou jdoucí commity |
 | `ConversationEntryView` | Položka osy: karta cizího review nebo komentáře, řádek události, vlákno bez kotvy |
@@ -5351,7 +5352,7 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
 | `SourcesSettingsView` | Zdroje PR (search dotazy), **moje loginy** (#389) — seznam plus přihlášený účet ke čtení — a **organizace k prohledávání** (#532) |
-| `OrganizationListEditor` | Organizace k prohledávání (#532): řádky s polem, pod řádkem věta při selhání, dole souhrn (`412 rep · obnoveno 7:58`) a `Obnovit` |
+| `OrganizationListEditor` | Organizace k prohledávání (#532): chipline (`.chipline`), `+ organizace` s polem po kliknutí, věta při selhání pod ní a souhrn (`412 rep · obnoveno 7:58`) s `Obnovit` |
 | `ReviewSettingsView` | Výchozí režim, jazyk nálezů a **časový limit běhu** (#320), skilly, sady podle jazyka, **prompt review** (#281), **text issue z trackeru** (#389), blokující kategorie |
 | `ReviewPromptEditor` | Psaná šablona, legenda zástupných textů, `Obnovit výchozí`, náhled složeného promptu a zamčené jádro (#281) |
 | `ReviewTimeoutField` | Číslo v minutách a stížnost, když je hodnota v souboru mimo meze (#320). **Jedno view pro obě místa**, kde se limit nastavuje |
@@ -5391,19 +5392,40 @@ Věci, které se u toho nemají rozbít:
     to je u nenačteného viewera napsané.
   - **`appearance` v nastavení pořád není** (#278) — přepíná se v railu a druhé místo by se s ním
     rozešlo. Že „celá konfigurace“ jde z okna, tuhle výjimku neruší.
-- **Organizace k prohledávání jsou řádky s polem, ne chipy** (#532) — a je to **vědomá odchylka od
-  zákresu**. Mockup kreslí chipy (`.tagchip`) i o řádek výš u `Moje loginy`, kde je aplikace od #389
-  sází jako obyčejný seznam polí (`StringListEditor`), protože okno nastavení je nativní `Form`.
-  Druhá vizuální podoba pro tutéž věc na téže stránce by znamenala, že se dva sousední řádky
-  ovládají jinak. Co proti `StringListEditor`u přibylo — a proč to není on:
-  - **pod řádkem je věta, když se výpis nepodařilo dotáhnout.** Organizace, na kterou účet nevidí,
-    a organizace bez repozitářů dávají obojí prázdný seznam — bez té věty je to k nerozeznání. Je to
-    **jediné, co na řádku je**: stav (`412 rep`, `zatím nenačteno`) tam byl a **z renderu vypadl**,
-    protože nad souhrnem, který říká totéž, stála tatáž věta dvakrát pod sebou;
-  - **dole je souhrn a `Obnovit`**, a kreslí se **jen když nějaká organizace je**: prázdná sekce
-    nemá co obnovovat a tlačítko, které nikdy nic neudělá, je horší než žádné. Tlačítko je uprostřed
-    dotažení zakázané — druhý klik by ten první nezrychlil, tatáž úvaha jako u `Policy.refreshControl`;
-  - **dotahuje se na `onSubmit`, ne na změnu textu.** Viz *Katalog repozitářů* výš.
+- **Organizace k prohledávání jsou chipy podle zákresu** (#532, `.chipline` + `.tagchip` +
+  `.tagchip.plus`), sazba v `TagChipStyle` jeden ku jedné. **První podoba měla řádky s poli**, aby se
+  sekce shodovala s `Moje loginy` o řádek výš — je to **zamítnuté rozhodnutím uživatele**: kreslí se
+  to, co je v návrhu, a sjednocení `Moje loginy` je jiné issue. Čtyři věci, které z toho plynou:
+  - **chipline potřebovala tři věci, které statická kresba nemá**: **křížek v chipu** (bez něj se
+    organizace nedá dostat pryč jinak než zásahem do `config.json`), **pole místo přidávacího chipu**
+    po kliknutí (jméno organizace je volný text, na rozdíl od labelu z uzavřené množiny, #392)
+    a **věta o selhání pod chipline**, uvozenou jménem organizace — organizace, na kterou účet
+    nevidí, se od organizace bez repozitářů jinak nepozná;
+  - **souhrn a `Obnovit` jdou vedle chipů, dokud se vejdou** (`ViewThatFits`), tedy `.set-row` ze
+    zákresu; v úzkém okně se to zalomí pod sebe. **Není to `layoutPriority`, a je to ze dvou
+    renderů** — viz níž;
+  - **kreslí se jen když nějaká organizace je**: prázdná sekce nemá co obnovovat a tlačítko, které
+    nikdy nic neudělá, je horší než žádné. Uprostřed dotažení je zakázané — druhý klik by ten první
+    nezrychlil, tatáž úvaha jako u `Policy.refreshControl`;
+  - **dotahuje se na potvrzení napsaného jména, ne na změnu textu.** Viz *Katalog repozitářů* výš.
+  - **`onExitCommand` na tom poli vědomě není** a `⎋` zůstává zkratkou okna (#151). `onExitCommand`
+    se váže na **fokus**, kdežto zkratka na tlačítku se registruje na **celé okno** (změřeno
+    u `hiddenShortcuts`), takže která z nich vyhraje, se v harnessu ověřit nedá (#184). Nechat
+    obojí by byla klávesa, o které se neví, kam padne; takhle `⎋` dělá jednu věc a rozepsané jméno
+    se zahodí se zavřením okna — se stejným výsledkem, jaký by mělo zrušení. Zrušit bez zavírání
+    okna jde odkliknutím nebo `⏎` na prázdném poli.
+
+  **Co vypadlo z renderu vedle referenční kresby** (headless Chrome nad `docs/navrh.html`
+  proti offscreen renderu sekce, [postup](testovani.md#jak-si-zkontrolovat-jak-view-vypadá)):
+  - **`.tagchip.plus` přebíjí jen `color` a `border-style`** — řez, velikost, odsazení, poloměr
+    **i podklad** si dědí. První podoba měla u přidávacího chipu UI font medium (jako `.chip-add`
+    u labelů), průhlednou výplň a akcentový okraj, tedy **tři odchylky naráz**. Přečtení CSS
+    doslova je jediné, co je našlo — od oka vypadaly všechny tři správně;
+  - **souhrn se kreslil přes první chip** (`kebo412 rep`), protože SwiftUI nemá `flex-shrink`:
+    `FlowRow` s `maxWidth: .infinity` si v `HStack`u řekne o celou šířku. `layoutPriority(1)` na
+    souhrnu to **nespravilo** (ideální šířka nekonečného rámce zůstane nekonečná), takže
+    o rozvržení rozhoduje **rozměr, ne vyjednávání**: `ViewThatFits` vybere řádek ze zákresu, když
+    se vejde, jinak dva řádky pod sebou. Hlídá to rozdíl bitmap při **dvou šířkách** (509 a 820).
 - **Neplatná šablona promptu se neuloží** (#281, `ReviewPromptEditor`). Je to jediné pole v okně,
   které si drží vlastní `@State` místo `Binding`u do konfigurace — a je to schválně: šablona bez
   `{{baseSha}}` by běhu sebrala to, proti čemu diffuje, takže se zapíše teprve platná hodnota

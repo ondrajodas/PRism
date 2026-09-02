@@ -1531,7 +1531,9 @@ a to je celé rozhodnutí, které za tím je: `issueTextTool` je věc **review**
 rozešlo.
 
 **Organizace k prohledávání** (#532) jsou na stránce `Zdroje PR`, pod `Moje loginy` — je to seznam
-míst, ve kterých se hledají **repozitáře podle jména**, ne další zdroj fronty. Rozdíl je celý v tom,
+míst, ve kterých se hledají **repozitáře podle jména**, ne další zdroj fronty. Kreslí se jako
+**chipy** podle návrhu: organizaci odebere křížek v chipu, přidá se kliknutím na `+ organizace`
+(z chipu vyroste pole, Enter potvrdí, Esc zahodí). Rozdíl je celý v tom,
 co z něj plyne: zdroje říkají, co se tahá pravidelně a co se počítá do karet, odznaku a automatu,
 kdežto odsud se jen hledá, když chci otevřít nějaký PR ke čtení.
 
@@ -1539,7 +1541,7 @@ Seznam repozitářů každé organizace se **drží v cache** (`catalogs/<org>.j
 dotažení je drahé — nad `keboola` naměřeno **46,8 s** a 98 kB (`gh repo list --limit 1000` s počtem
 otevřených PR; bez toho počtu 9,5 s). Z toho plyne, jak se obnovuje: **jednou denně, dopsáním
 organizace nebo tlačítkem `Obnovit`** — a **nikdy při psaní**, protože `keboola` po písmenech je
-sedm hodnot, tedy sedm takových výpisů. Pod seznamem stojí souhrn `412 rep · obnoveno 7:58` (bere
+sedm hodnot, tedy sedm takových výpisů. Vedle chipů stojí souhrn `412 rep · obnoveno 7:58` (bere
 **nejstarší** razítko, protože je to tvrzení o celém katalogu) a organizaci bez snímku počítá
 zvlášť — `1 organizace nenačtena`, aby součet mlčky nevynechal, co v něm není. Když repozitářů
 přijde přesně tisíc, stojí tam `nejméně 1 000 rep`: `--limit` se dosáhl, takže jich je víc.

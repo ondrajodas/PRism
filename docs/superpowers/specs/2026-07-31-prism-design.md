@@ -5256,7 +5256,7 @@ cesta je jediné čtení (`gh pr view`); `SingleWayOutTests` prochází beze zm�
 | **Dotahuje se jedině na vyžádání** (`onSubmit`, tlačítko), nikdy na změnu textu | Fetch navěšený na uloženou hodnotu, jako to dělá `SettingsModel` se zápisem | `keboola` po písmenech je sedm hodnot, takže by z jednoho dopsaného řádku bylo **sedmkrát tři čtvrtě minuty** a sedm podprocesů `gh`. Je to ten nejcennější test celého issue — tvrdí, že se něco **ne**stalo |
 | **Počet otevřených PR v `--json` zůstává** | Vypustit ho a tahat jen jména | Je v zákresu (`7 otevřených PR` v řádku palety) a platí se jednou denně. **Cena je změřená a zapsaná** (46,8 s proti 9,5 s), takže se dá kdykoli otočit — a je vidět, co se tím koupí |
 | **Vlastní, delší limit na tohle volání** (`repositoryTimeout`) | Zvednout společný `timeout` gateway | Jedno volání z dvaadvaceti se do třiceti sekund nevejde; zvednout limit všem by znamenalo, že se u ostatních čeká pět minut na `gh`, který se zasekl. Tvrdí to test nad `FakeProcessRunner.timeouts` — **test s prázdným výstupem by prošel i s limitem, se kterým to v provozu vždycky spadne** |
-| **Řádky s polem, ne chipy** (`OrganizationListEditor`) | Nakreslit `.tagchip` podle zákresu | Mockup kreslí chipy i o řádek výš u `Moje loginy`, kde je aplikace od #389 sází jako obyčejný seznam polí — okno nastavení je nativní `Form`. Druhá vizuální podoba pro tutéž věc **na téže stránce** by znamenala, že se dva sousední řádky ovládají jinak. Sjednotit to na chipy je práce na obě sekce naráz, tedy jiné issue |
+| **Chipy podle zákresu** (`TagChipStyle`, `.chipline` + `.tagchip` + `.tagchip.plus`) | Řádky s polem, aby se sekce shodovala s `Moje loginy` o řádek výš (první podoba) | **Zamítl to uživatel** a rozhodl to sám, když mu byl argument předložen i s tím, že na stránce pak budou dvě podoby téhož vedle sebe: kreslí se to, co je v návrhu, a sjednocení `Moje loginy` je jiné issue. Chipline potřebovala tři věci, které statická kresba nemá — křížek v chipu, pole místo přidávacího chipu po kliknutí (jméno organizace je volný text, ne uzavřená množina jako label) a větu o selhání pod chipline |
 | **`catalogs/<org>.json`** | `repositories/<org>.json` ze zadání issue | `CacheLayout.repositories` je zabrané a ukazuje na `repos/` s bare klony. Dvě složky se skoro stejným jménem vedle sebe v cache, do které se člověk chodí dívat, znamenají jednu otázku pokaždé |
 | **Souhrn bere nejstarší razítko** | Nejnovější, nebo razítko poslední obnovy | `obnoveno 7:58` je tvrzení o **celém** katalogu. S nejnovějším by se nad týden starým seznamem `keboola` psalo, že se obnovil před minutou, protože se mezitím dotáhl `ondrajodas` |
 | **Nad prázdným seznamem se cache neuklízí** | Vždycky smazat, co v konfiguraci není | Prázdno znamená buď „žádnou organizaci nemám“, nebo „konfigurace se ještě nenačetla“ (okno nastavení jde otevřít dřív, než dorazí disk) — a ty dva se odsud nerozeznají. Smazat na tom druhém = zahodit cache za desítky sekund práce. **Cena je jeden osiřelý soubor**, dokud si člověk nějakou organizaci nenapíše |
@@ -5266,6 +5266,25 @@ cesta je jediné čtení (`gh pr view`); `SingleWayOutTests` prochází beze zm�
 změny a grep na `ReviewPublishing` i `BranchPushing` vypisuje týž seznam souborů. **Tvrdá podmínka
 č. 3 taky**: `catalogs/` leží v cache aplikace a hranici u čtení, zápisu i mazání drží `CacheFile`,
 tedy tatáž kontrola jako u nálezů a draftů.
+
+**Render vedle referenční kresby našel čtyři věci, a tři z nich měly týž kořen.** Referenční
+kresba je markup ze stránky T9 decku vyrenderovaný **stylopisem z `docs/navrh.html`** — deck si
+tokeny nese vlastní, takže jeho vlastním CSS by se měřila jiná paleta než ta, která je
+`Palette.swift` jedna ku jedné.
+
+| Co bylo špatně | Proč to od oka vypadalo správně |
+|---|---|
+| Přidávací chip měl **UI font medium** | `.chip-add` u labelů ho tak má — `.tagchip.plus` ale přebíjí **jen `color` a `border-style`**, takže řez i velikost dědí |
+| Přidávací chip byl **bez výplně** | Průhledný chip vypadá jako „ještě není“; zákres mu ale `background: var(--panel-3)` nechává |
+| Přidávací chip měl **akcentový okraj** | Akcentový text svádí k akcentovému okraji; `border-color` zůstává `--line-soft`, mění se jen `border-style` |
+| Souhrn se kreslil **přes první chip** (`kebo412 rep`) | Na krátkém souhrnu se to neprojevilo — vylezlo to teprve na scéně, kde souhrn nese i `1 organizace nenačtena` |
+
+To poslední je vada rozvržení, ne barvy: SwiftUI nemá `flex-shrink`, takže `FlowRow`
+s `maxWidth: .infinity` si v `HStack`u řekne o celou šířku. **`layoutPriority(1)` na souhrnu to
+nespravilo** (ideální šířka nekonečného rámce zůstane nekonečná) a měřit šířku souhrnu přes
+`TextWidth` a odečítat ji chipline by byla druhá pravda o jedné šířce. Rozhoduje proto
+**`ViewThatFits`**: řádek ze zákresu, dokud se vejde (změřeno — při 820 bodech ano), jinak dva řádky
+pod sebou (509 bodů, tedy nejužší podoba okna). Hlídá to rozdíl bitmap při obou šířkách.
 
 **Z renderu vypadla jedna oprava** ([`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)):
 řádek organizace nesl **stav** (`412 rep`, `zatím nenačteno`) a nad souhrnem, který říká totéž,

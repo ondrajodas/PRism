@@ -83,11 +83,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   ne výpis**, prázdná organizace, na kterou se gateway neptá, a **skutečná hláška `gh`** na
   neexistující organizaci, u které se ověřuje, že se ta věta dostane do `userDescription`.
 
-  Okno (`SettingsFieldsRenderTests`): že sekce na stránce `Zdroje PR` **doopravdy je** a je napojená
-  na konfiguraci, že se **dotažený katalog od nedotaženého liší** a že nedostupná organizace má
-  u řádku **větu** — všechno rozdílem bitmap, jako u polí z #389. Scény se dají pustit na disk
-  (`TEST_RUNNER_PRISM_RENDER_DIR`) a **z jedné z nich vypadla oprava**: řádek nesl stav (`412 rep`,
-  `zatím nenačteno`) a nad souhrnem, který říká totéž, z toho byla tatáž věta dvakrát pod sebou.
+  Okno (`SettingsFieldsRenderTests`, osm scén): že sekce na stránce `Zdroje PR` **doopravdy je** a je
+  napojená na konfiguraci, že se **dotažený katalog od nedotaženého liší**, že nedostupná organizace
+  má **větu**, a že **souhrn jde vedle chipů, dokud se vejde** — to poslední je rozdíl bitmap při
+  **dvou šířkách** (509 a 820), protože `ViewThatFits` rozhoduje z rozměru a bez druhé šířky by
+  prošla i verze, která je vždycky pod sebou. Scény se dají pustit na disk
+  (`TEST_RUNNER_PRISM_RENDER_DIR`) a **vypadlo z nich pět oprav** — čtyři při srovnání s referenční
+  kresbou zákresu (viz *Jak si zkontrolovat, jak view vypadá*), plus zdvojená věta o stavu na řádku
+  nad souhrnem, který říká totéž.
 - **Rozřazení PR podle autora (#330)** — tři vrstvy a v každé je nejcennější to, co tvrdí, že se
   něco **NEstalo**:
 
@@ -5675,6 +5678,18 @@ PY
 U #181 to našlo čtyři odchylky, kterých si předtím nikdo nevšiml: pevná šířka pravého sloupce
 místo poměru `1.45fr 1fr`, chybějící popisky v hlavičkách bloků, chybějící blok `Co teď`
 a proužek řádku odsazený od hrany.
+
+**Referenční kresba se skládá z markupu zákresu a CSS mockupu, ne z jednoho zdroje** (#532). Zákres
+bývá v **decku** (`Směry pro PRism`), kdežto `:root`, který je `App/Views/Palette.swift` jedna ku
+jedné, je v **`docs/navrh.html`** — deck si tokeny nese vlastní. Vyrenderovat deck jeho vlastním CSS
+tedy měří **jinou paletu, než jakou aplikace kreslí**. Markup sekce se proto vezme z decku a vloží do
+stylopisu z `docs/navrh.html`; `assert` na `.tagchip` uvnitř vyříznutého `<style>` je tam proto, že
+`re.search` vezme **první** blok, a ten nemusí být ten s layoutem.
+
+U #532 to našlo **čtyři odchylky** a tři z nich měly týž kořen: `.tagchip.plus` přebíjí **jen
+`color` a `border-style`**, takže řez, výplň i barva okraje se dědí — implementace jim dala UI font,
+průhlednou výplň a akcentový okraj a **od oka to vypadalo správně**. Čtvrtá byla souhrn nakreslený
+přes první chip, tedy vada rozvržení, kterou krátký text neprojeví.
 
 **Rozvržení okna se dá změřit i přes accessibility** (#180), a je to pořád nejrychlejší způsob,
 jak dokázat jedno konkrétní číslo: `System Events` vrátí `position` a `size` každého prvku.
