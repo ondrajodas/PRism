@@ -72,6 +72,9 @@ struct WindowShortcut: Equatable, Sendable {
         case previousSearchHit
         /// Značka `Prošlo` u souboru, jehož hlavička je zrovna ukotvená nahoře (#500).
         case toggleFileRead
+        /// Předchozí a další soubor v mapě PR (#501) — od toho, který je zrovna pod výřezem.
+        case previousFile
+        case nextFile
     }
 
     /// Klávesa. Speciální klávesy se vyjmenovávají, protože se znakem zapsat nejdou.
@@ -86,6 +89,10 @@ struct WindowShortcut: Equatable, Sendable {
         case cancelAction
         case upArrow
         case downArrow
+        /// Vodorovné šipky — mapa PR (#501). Že je monospace systémové písmo **má**, je změřené
+        /// stejně jako u těch svislých (`CTFontGetGlyphsForCharacters`: `←` 1312, `→` 1314).
+        case leftArrow
+        case rightArrow
 
         /// Jak se klávesa kreslí v paletě a v nápovědě.
         ///
@@ -103,6 +110,8 @@ struct WindowShortcut: Equatable, Sendable {
             case .cancelAction: "esc"
             case .upArrow: "↑"
             case .downArrow: "↓"
+            case .leftArrow: "←"
+            case .rightArrow: "→"
             }
         }
     }
@@ -294,6 +303,22 @@ extension Policy {
                 title: "Prošlo",
                 primary: .init(key: .character("v"), modifiers: .option)
             )
+        // `⌥←`/`⌥→` je návrh z mockupu (sekce 42) a doplňuje `⌥↑`/`⌥↓` na nálezech: `⌥` je
+        // v tomhle okně klávesa práce nad diffem, svislé šipky skáčou po **nálezech** a vodorovné
+        // po **souborech**. Ruka nikam neuhýbá a obě osy říkají, o jak velký skok jde.
+        //
+        // **V poli s textem ustupují** jako ostatní okenní zkratky bez `⌘` — `⌥←` je tam skok
+        // o slovo a to je běžné psaní.
+        case .previousFile:
+            return WindowShortcut(
+                title: "Předchozí soubor",
+                primary: .init(key: .leftArrow, modifiers: .option)
+            )
+        case .nextFile:
+            return WindowShortcut(
+                title: "Další soubor",
+                primary: .init(key: .rightArrow, modifiers: .option)
+            )
         }
     }
 
@@ -326,7 +351,7 @@ extension Policy {
             .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
             .fileTree, .runAllReviews, .openDraft,
             .findInDiff, .nextSearchHit, .previousSearchHit,
-            .toggleFileRead,
+            .toggleFileRead, .previousFile, .nextFile,
         ]
 
     static let windowShortcuts: [WindowShortcut] = windowShortcutActions.map(windowShortcut)

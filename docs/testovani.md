@@ -2462,6 +2462,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `změněno od prošlého`); prázdné značky soubor mažou; cizí PR v souboru se odmítne; a celá
     trojice hranic cache (symlink na souboru, symlink v rodičovské složce u čtení, zápisu
     i mazání) — tatáž sada jako u `AskStore`.
+- **Mapa PR — pás pod hlavičkou (#501)** — dvě sady a jedna sonda:
+  - **`Policy`** (`PullRequestMapTests`) — šířky, barvy, popisek a krok. Nejcennější je dvojice
+    o **logaritmu**: nad rozložením ze sekce 03 návrhu (sedm souborů, `composer.lock` 2 790 řádků
+    z 2 952) vezme lock **30,8 %** pásu, kdežto lineárně 94,5 % — a druhý test spočítá lineární
+    podíl **vlastní cestou** a tvrdí, že by v něm test o 64 řádcích spadl na 21 bodů proti 175.
+    K tomu součet přesně na dostupnou šířku **přes pásmo šířek** (200 až 1600 b), minimum tři
+    body nad rozložením „jedno velké a šest malých“, rovné dělení u padesáti souborů v úzké
+    řádce, binárky s nulovou váhou (dělení nulou by vydalo `NaN` a pás by zmizel), blokující
+    nález přebíjející obyčejný **v obou pořadích**, nález pod **starou** cestou přejmenovaného
+    souboru, odmítnutý nález, který značku nedá (#113), tlumení jen u `read` (ne u `changed`),
+    podíl vlákna z pořadí řádku v diffu a **vyčerpávající výčet popisku** včetně toho, že se
+    `0 nálezů` nikde nenapíše.
+  - **Kresba** (`PullRequestMapDrawingTests`) — **z bitmapy, ne z tokenů** (#432): nakreslené
+    podíly segmentů proti spočítaným, každý segment ve své barvě, tlumený blokující, který se
+    nesmí splést s neutrálem, `změněno od prošlého`, které tlumené **není**, kontrast akcentu
+    proti ploše hlavičky (netextová hranice 3 : 1) a obrys, který jde **kolem** segmentu, ne
+    dovnitř. Proč se u neutrálu 3 : 1 neměří, je v té sadě zapsané: `raised` na `surface` je
+    v návrhu tichý podklad (1,1 : 1) a segment bez nálezu má být plocha v řadě ostatních, ne
+    upozornění. **Regrese ověřena vložením regrese, třemi** — viz hlavička té sady.
+  - **Sonda `PullRequestMapRenderProbe`** — obrázek přes pásmo šířek (347 / 647 / 1047 / 1347 b),
+    v obou režimech a se souborem pod výřezem i bez něj. Právě z ní vyšla úzká podoba: při 347
+    bodech (pohled vedle sebe) popisek nechal pásu 73 bodů a ze segmentů byly čárky. Scénu si
+    sonda i měření berou z **jednoho místa** (`MapScene`), ať se obrázek a čísla nerozejdou.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
   nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
   rozsahy, ale načtený obsah nechá.
@@ -7433,7 +7456,7 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (od #500 pětadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+- **Počet akcí je vyjmenovaný** (od #501 sedmadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
   u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
@@ -7456,7 +7479,9 @@ Co z toho stojí za zapamatování:
 - **Kapsli sází monospace systémové písmo a dva glyfy v něm nejsou.** Změřeno samostatným
   `swift` skriptem nad `.AppleSystemUIFontMonospaced-Regular`: `⇥` (U+21E5) a `⎋` (U+238B) vrátí
   `CTFontGetGlyphsForCharacters` **`false`**, kdežto `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` `true`.
-  Proto se `Tab` a `esc` píšou slovem. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
+  Proto se `Tab` a `esc` píšou slovem. **U #501 se doměřily vodorovné šipky**, protože je mapa PR
+  potřebuje: `←` je glyf 1312 a `→` 1314, tedy obojí `true` — a nová klávesa v katalogu se takhle
+  doměřit **musí**, jinak se text propadne do náhradního písma a kapsle bude jinak široká. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
   běhu — `NSFont` v hostu pod zátěží vydá přechodně nepoužitelnou metriku (#407) a sáhnout si sem
   na písmo znamená koupit si falešně červený `main`. Přeměřit se to dá takhle:
 

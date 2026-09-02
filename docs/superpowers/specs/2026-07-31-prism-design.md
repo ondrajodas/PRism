@@ -5242,3 +5242,45 @@ jaký má 24 k 02: novější kresba se do záznamu dneška nepřekresluje. Orga
 
 **Tvrdé podmínky se nemění ani o položku.** `GitHubGateway` je dál bez zápisových metod a celá
 cesta je jediné čtení (`gh pr view`); `SingleWayOutTests` prochází beze změny.
+
+### Záznam rozhodnutí — mapa PR pod hlavičkou (#501)
+
+První issue směru E z milníku M14. Zákres byl v decku *Směry pro PRism* (stránka E), odsouhlasený
+2. 9. 2026; prvním krokem bylo přenést ho do `docs/navrh.html` jako **sekci 42**.
+
+**Otevírá dvě zapsaná rozhodnutí:** #174 a #218 (pilulka `+X −Y` v pruhu záložek) a #316 (pořadí,
+ve kterém pruh ustupuje). Obojí platilo, dokud byla pilulka jediná odpověď na „jak velký je tenhle
+PR“ — a to od #501 není.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Šířka roste s `log₂(řádků + 1)`** | Lineární podíl změněných řádků; nebo `√n`; nebo pevná šířka na soubor | Změřeno nad rozložením ze sekce 03 návrhu (sedm souborů, `composer.lock` 2 790 řádků z 2 952): lineárně vezme lock **94,5 %** pásu a ze zbytku je šest čárek, logaritmem **30,8 %** — pořád největší, ale test o 64 řádcích je vidět (175 bodů proti 21 v pásu o tisíci). Pevná šířka na soubor by ze pásu udělala počet souborů, což už je v odznaku záložky |
+| **Barva je závažnost, ne reviewer** | Kódovat v segmentu, kdo nález nahlásil (jako spektrum reviewerů v řádku fronty, #172) | V pásu se obojí naráz kódovat nedá a závažnost je to, podle čeho se čte první. Kdo našel, zůstává v chipech runbaru a v dráhách `Průběhu` — tedy tam, kde už to je |
+| **Nejhorší nález přebíjí druh souboru** | Nechat `isNew` rozhodovat dřív (nový soubor vždycky zelený) | Nový soubor s blokujícím nálezem by byl zelený a **v pásu by to nešlo poznat** — přesně ta chyba, kterou pás má chytat. Míří na to vlastní tvrzení v obou sadách |
+| **Pilulku `+X −Y` pás nahrazuje, nedoplňuje** | Nechat pilulku v pruhu záložek vedle pásu | Dvě místa s týmž údajem se rozejdou a pilulka je z nich ta chudší. S ní odešla i podoba `Layout.full`, která se od `labels` lišila jedině tím, že ji kreslila, a `Policy.diffstatBlocks`, kterou pak nikdo nečetl |
+| **Číslo `+248 −96` v okně nezůstalo nikde** | Přidat rozsah do popisku pásu (`7 souborů · +248 −96 · …`) | Schválený zákres má popisek `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna`, tedy odpovědi na jiné otázky: kolik souborů, kolik hotových, kolik k vyřízení. Pás nese velikost **jako plochu**; kdo chce čísla, má je v nápovědě segmentu a v hlavičce souboru v diffu. **Je to ztráta a je zapsaná** — kdyby chyběla, vrátí se to jako jedna položka do popisku, ne jako nová pilulka |
+| **Šířky počítá `Policy`, umisťuje vlastní `Layout`** | `HStack` s `frame(width:)` na každém segmentu a změřenou šířkou pásu ve `@State` | `frame(width:)` potřebuje znát celkovou šířku, tedy druhé měření vedle toho, co rozvržení dělá samo (#236) — a v prvním průchodu by pás nebyl. `Layout` dostane navrženou šířku a od ní se všechno **spočítá** (#220); je to tentýž důvod, proč existuje `ProportionalColumns` |
+| **Minimum tři body se vytlačuje z dělení** | Nasadit `min-width` na segment a nechat součet přerůst; nebo malé soubory zahodit | Bez přepočtu přeroste součet pás **zrovna u PR s jedním lockem a šesti drobnostmi**, tedy v tom případě, kvůli kterému logaritmus existuje. A zahozený soubor je horší než tenký: pás by tvrdil, že PR má míň souborů, než má |
+| **Popisek ustupuje první, práh 180 bodů** | Nechat popisek vždycky; nebo ho zkrátit na `7 souborů` | Popisek stojí ~230 bodů; v pohledu vedle sebe (detail 347 b) by pásu nechal **73** a v nich vyjde nejmenší segment na 4,5 bodu, tedy na hranici minima. Se 180 body má nejmenší 11 a lock 55. Zkrácený popisek by neřekl nic a zabral totéž — jeho čísla jsou navíc v hlavičce stromu a v odznacích záložek. **Vyšlo to ze sondy, ne z rozvahy**: v návrhu ta šířka nakreslená není |
+| **Cesta souboru pod výřezem je vlastní `@Observable` krabice** (`DiffFileCursor`) | Přidat vlastnost do `DiffViewport`; nebo nechat pás čítat `viewport.top` | Je to totéž rozhodnutí, jaké #469 udělalo mezi `band` a `top`: `top` se mění při **každém** otočení kolečka, tahle hodnota **jen na hranici souborů**. Kdyby pás čítal `top`, přeložilo by se při každém snímku jeho tělo i se všemi segmenty, nápovědami a čárkami. Do `DiffViewport` to nepatří, protože ta krabice popisuje **výřez**, ne odpověď nad ním |
+| **`DiffTracking` drží detail PR a `DiffView` ho dostane parametrem** | Nechat krabice ve `@State` `DiffView`u a poslat pásu odpověď zpátky uzávěrem | Pás leží **nad** pruhem záložek, takže by uzávěr znamenal zápis do `@State` detailu z podstromu diffu — a překreslil by celé okno. Parametr je optional a `nil` znamená „nikdo se odjinud nekouká“, takže diff commitu i náhled zůstávají beze změny |
+| **Který soubor je pod výřezem, odpovídá `pinnedFileHeader`** | Vlastní funkce nad rozsahy | Obrys musí ukazovat na **týž** soubor, jehož hlavička je ukotvená nahoře a který zaškrtne `⌥V`. Dvě odpovědi na jednu otázku znamenají obrys u jiného souboru, než jehož jméno stojí nad kódem |
+| **Kurzor drží cestu, ne index** | `Int?` z `pinnedFileHeader` | Pás skládá `Policy` ze souborů toho diffu, který je v tabu **vidět**, kdežto rozsahy jsou z `DiffView`u — po přepnutí na `Od tvé poslední návštěvy` by index chvíli ukazoval na cizí soubor. Cesta, která v pásu není, prostě nikde nesvítí |
+| **`⌥←`/`⌥→` se nezacyklí** | Přetočit z posledního souboru na první | Pás je **mapa, tedy věc s koncem**. Skok z konce na začátek by v padesátisouborovém PR vypadal, jako by se okno odscrollovalo samo. Na krajích je tlačítko zakázané, takže klávesu nebere a propadne dál |
+| **Nápověda je nativní tooltip, ne kreslená bublina** | Vlastní `overlay` jako `.rv-tip` v návrhu | `.rv-tip` je v mockupu proto, že HTML nemá jak nativní tooltip ukázat. V okně je `help()` to, co dělá zbytek okna (strom, kapsle, hlavičky), a navíc se nemá o co ořezat (#483) |
+| **Prošlý se tlumí krytím na 35 %** | Druhý, světlejší odstín každé barvy | Šest hodnot ve škále místo tří; pás by se musel luštit. Krytí je jedna operace, kterou je vidět, že jde o **tutéž** plochu — jen odbytou práci |
+| **`Palette.okWash` je vyčíslený `color-mix`** | `Palette.ok.opacity(0.55)` | Skrz krytí prosvítá podklad, takže by se barva měnila podle toho, na čem segment leží. Tentýž důvod jako u `critLine` (#185) |
+
+**Kde se od návrhu odchýlila implementace** (a je to tady, ne potichu):
+
+- **Úzká podoba bez popisku** v zákresu není. Vyšla ze sondy přes pásmo šířek; návrh kreslí pás
+  ve výchozím okně, kde se popisek vejde.
+- **Odsazení na stranu je 16 bodů, ne 22.** Návrh má u `.pr-head` i `.subtabs` 22, kdežto okno
+  drží 16 (`controls`) a 12 (pruh záložek) — a rozhoduje **hlavička nad pásem**, aby pás začínal
+  pod prvním znakem titulku. Změřeno na běžící aplikaci: obojí na x = 68.
+- **Výšku řádky drží pás (10 b), ne popisek (13 b).** Jinak by se hlavička při složení panelu
+  posunula o tři body. Popisek se přes rámec přelije o půldruhého bodu na stranu, což padne do
+  odsazení nad i pod ním.
+
+**Tvrdé podmínky se nemění ani o položku.** Pás jen čte — `GitHubGateway` zůstává bez zápisových
+metod, `SingleWayOutTests` prochází beze změny a `DiffViewport` se **nezměnil**: mapa ho čte.

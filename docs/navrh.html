@@ -2608,6 +2608,64 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rv-viewed.on { color: var(--ok); }
 .rv-viewed.on .box { background: var(--ok); border-color: var(--ok); color: var(--panel); }
 
+/* ---- sekce 42: mapa PR -----------------------------------------------------------
+   Pás pod hlavičkou PR (#501). Zákres přišel z decku „Směry pro PRism“ (stránka *Směry › E
+   Mapa PR*) a **nahrazuje pilulku `+X −Y` s pěti čtverečky** (`.diffstat`), takže ta z pruhu
+   záložek odešla ve **všech sedmi** rámech okna, které ji kreslily (sekce 02, 03 dvakrát, 04,
+   19 dvakrát a 25). `.diffstat` v dokumentu přesto **zůstává** — kreslí ho dál záznam měření
+   stupňů pruhu v sekci 19 (`.stripbox`), a to je záznam z #316, ne dnešní obrazovka.
+
+   Nové jméno dostaly čtyři věci, které se z existujících složit nedaly:
+
+   1. `.rv-prmap` — pás sám. **Ne `.diffstat`**: ten je řádek textu zarovnaný doprava v pruhu
+      záložek (`margin-left: auto`), kdežto tohle je **vlastní řádka chromu** pod hlavičkou,
+      která jde od hrany k hraně a musí se dělit s popiskem vpravo.
+   2. `.rv-prmap .seg` — segment souboru. Barva je **závažnost** (`crit` / `find` / neutrál),
+      nový soubor má tón `ok` na vyvýšeném podkladu a prošlý (#500) 35 % krytí. Krytí, ne druhý
+      odstín: šest hodnot ve škále by z pásu udělalo obrázek, který se musí luštit.
+   3. `.rv-legend` — legenda pod pásem. **Ne `.legend`** (svislý seznam u mikrografu v sekci
+      01): tahle je vodorovná řádka a `.legend` si v dokumentu bere `flex-direction: column`,
+      takže by pod pásem stála na sedmi řádcích. Je to tentýž druh pasti jako `.lbl` u #390,
+      jen z opačné strany — jméno je volné, ale to existující by kreslilo něco jiného.
+   4. `.rv-mapnames` — jména souborů pod pásem, ve stejných poměrech jako segmenty. Kreslí se
+      **jen v sekci 42**, jako popis obrázku: v okně se jména čtou z nápovědy pod kurzorem,
+      protože do dvacetibodového segmentu se `SecretClient.php` nevejde.
+
+   `.rv-tip` je bublina nápovědy, a v **okně to je nativní tooltip** (`help()`), ne kresba —
+   dokument ji má proto, že HTML mockup nemá jak nativní tooltip ukázat. */
+.rv-prmap {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  padding: 8px 22px 10px; background: var(--panel);
+}
+.rv-prmap .strip { flex: 1; display: flex; gap: 2px; height: 10px; }
+/* Zvětšený pás pro zákres — v okně má 10 bodů, tady 22, aby se do něj vešla čárka i obrys. */
+.rv-prmap.big { padding: 40px 22px 8px; }
+.rv-prmap.big .rv-tip { top: auto; bottom: calc(100% + 8px); }
+.rv-prmap.big .strip { height: 22px; gap: 3px; }
+.rv-prmap .seg { position: relative; border-radius: 2px; background: var(--panel-3); min-width: 3px; }
+.rv-prmap .seg.crit { background: var(--crit); }
+.rv-prmap .seg.find { background: var(--find); }
+.rv-prmap .seg.new { background: color-mix(in srgb, var(--ok) 55%, var(--panel-3)); }
+.rv-prmap .seg.viewed { opacity: 0.35; }
+.rv-prmap .seg.cur { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rv-prmap .seg .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent); border-radius: 1px; }
+.rv-prmap .lbl { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); white-space: nowrap; flex: none; }
+.rv-tip {
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--panel); font-size: 11px; font-family: var(--ui);
+  padding: 4px 8px; border-radius: 6px; white-space: nowrap; box-shadow: var(--shadow-sm); z-index: 2;
+}
+.rv-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 4px 22px 10px; font-size: 11.5px; color: var(--ink-2); }
+.rv-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rv-legend i { width: 14px; height: 9px; border-radius: 2px; display: inline-block; }
+.rv-legend i.t { width: 2px; height: 14px; background: var(--accent); border-radius: 1px; }
+.rv-legend i.o { width: 12px; height: 7px; background: transparent; outline: 2px solid var(--accent); outline-offset: 1px; }
+.rv-mapnames { display: flex; gap: 3px; padding: 0 22px 14px; }
+.rv-mapnames span {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -4481,6 +4539,21 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               </div>
             </div>
 
+            <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+                 Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+            <div class="rv-prmap">
+              <div class="strip">
+                <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+                <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+                <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+                <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+                <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+              </div>
+              <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+            </div>
+
             <div class="subtabs">
               <div class="stab on">Přehled <span class="cnt">4</span></div>
               <div class="stab">Změněné soubory <span class="cnt">7</span></div>
@@ -4489,13 +4562,6 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <span class="tsep"></span>
               <div class="stab">Nálezy <span class="cnt crit">3</span></div>
               <div class="stab">Průběh <span class="live"></span></div>
-              <div class="diffstat">
-                <span class="add">+248</span>
-                <span class="del">−96</span>
-                <span class="blocks">
-                  <i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i></i>
-                </span>
-              </div>
             </div>
 
             <div class="work two">
@@ -5606,6 +5672,187 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     </div>
   </section>
 
+  <!-- ====================================================================================
+       42 — MAPA PR (#501)
+       Pás pod hlavičkou PR: každý soubor segment, šířka podle log₂(řádků + 1), barva podle
+       nejhoršího nálezu. Nahrazuje pilulku `+X −Y` s pěti čtverečky, takže ta z rámů okna
+       v tomhle dokumentu odešla (viz komentář u CSS `.rv-prmap`).
+       ==================================================================================== -->
+  <section class="section" id="s42">
+    <div class="section-head">
+      <div class="eyebrow">42 — Hlavička PR · mapa PR</div>
+      <h2>Celý diff na jednom pásu, dřív než se otevře první soubor</h2>
+      <p class="muted">
+        Na „jak velký a jak zlý je tenhle PR“ odpovídala pilulka <code>+248 −96</code> a pět
+        čtverečků poměru v pruhu záložek. <b>Kde</b> v diffu je to zlé, se z ní poznat nedalo —
+        na to se muselo do stromu souborů, a i tam jen po puntíku u jména. Pás pod hlavičkou to
+        řekne naráz: každý soubor je segment, <b>šířka roste s <code>log₂(řádků + 1)</code></b>,
+        barva je <b>nejhorší nález</b> v souboru, nový soubor má tón <code>ok</code>, prošlý
+        (<a class="jump" href="#s40">značka <em>Prošlo</em> →</a>) je tlumený, vlákno je svislá
+        čárka a soubor, který zrovna čtu, má obrys akcentem. Vpravo od pásu stojí popisek
+        <code>7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</code>.
+      </p>
+      <p class="muted">
+        <b>Pilulku nahrazuje, nedoplňuje.</b> Říká totéž (rozsah změny) a k tomu, kde ta změna
+        je — dvě místa s týmž údajem by se rozešla a pilulka by z nich byla ta chudší. Pás proto
+        v rámech okna v tomhle dokumentu stojí <b>místo</b> <code>.diffstat</code>; jediné, kde
+        pilulka zůstala, je <a class="jump" href="#s19">záznam měření stupňů pruhu v sekci 19
+        →</a>, protože to je záznam z #316, ne dnešní obrazovka.
+      </p>
+      <p class="muted">
+        <b>Výřez, ne celé okno.</b> Mění se jedna řádka chromu mezi hlavičkou a záložkami, takže
+        se <a class="jump" href="#s02">sekce 02 (dnešní Přehled)</a> nepřekresluje — jen jí
+        (a ostatním šesti rámům) pilulka odešla a pás přišel. Je to tentýž vztah jako u
+        <a class="jump" href="#s41">sekce 41</a>.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Mapa PR zvětšená, s popiskem pod kurzorem a legendou</div>
+      <div class="frame flat">
+        <div class="rv-prmap big">
+          <div class="strip">
+            <span class="seg crit viewed" style="flex: 4.64;"></span>
+            <span class="seg find cur" style="flex: 5.46;"><i class="tick" style="left: 62%;"></i><span class="rv-tip">Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo</span></span>
+            <span class="seg new" style="flex: 4.46;"></span>
+            <span class="seg viewed" style="flex: 6.02;"><i class="tick" style="left: 30%;"></i></span>
+            <span class="seg viewed" style="flex: 2.32;"></span>
+            <span class="seg" style="flex: 11.45;"></span>
+            <span class="seg" style="flex: 2.81;"></span>
+          </div>
+          <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+        </div>
+        <div class="rv-legend">
+          <span><i style="background: var(--crit);"></i>blokuje</span>
+          <span><i style="background: var(--find);"></i>nález</span>
+          <span><i style="background: color-mix(in srgb, var(--ok) 55%, var(--panel-3));"></i>nový soubor</span>
+          <span><i style="background: var(--panel-3);"></i>bez nálezu</span>
+          <span><i style="background: var(--panel-3); opacity: 0.35;"></i>prošlo</span>
+          <span><i class="t"></i>vlákno</span>
+          <span><i class="o"></i>čtu</span>
+        </div>
+        <div class="rv-mapnames">
+          <span style="flex: 4.64;">SecretClient</span><span style="flex: 5.46;">Encryptor</span><span style="flex: 4.46;">SecretNotFound</span><span style="flex: 6.02;">SecretClientTest</span><span style="flex: 2.32;">json</span><span style="flex: 11.45;">composer.lock · 2 790 řádků</span><span style="flex: 2.81;">xml</span>
+        </div>
+      </div>
+      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+        Jména pod pásem jsou <b>popis obrázku, ne kresba okna</b>: do dvacetibodového segmentu se
+        <code>SecretClient.php</code> nevejde, takže v okně se čtou z nápovědy pod kurzorem.
+        Legenda je tady taky jen kvůli téhle stránce — v okně by to byla druhá řádka chromu
+        o něčem, co se naučí jednou.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Jak to leží v okně: hlavička, pás, záložky bez pilulky</div>
+      <div class="frame flat">
+        <div class="pr-head">
+          <div class="pr-title">
+            <h4>chore: modernize dependencies</h4>
+            <span class="num">#85</span>
+          </div>
+          <div class="pr-meta">
+            <span class="state-chip">⬤ Otevřený</span>
+            <span><strong>odinuv</strong> chce sloučit</span>
+            <span class="branch">chore/deps-2026</span>
+            <span>→</span>
+            <span class="branch">main</span>
+            <span>·</span>
+            <span>keboola/vault</span>
+          </div>
+        </div>
+
+        <div class="rv-prmap">
+          <div class="strip">
+            <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+            <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+            <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+            <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+            <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+            <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+          </div>
+          <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+        </div>
+
+        <div class="subtabs">
+          <div class="stab">Přehled <span class="cnt">4</span></div>
+          <div class="stab on">Změněné soubory <span class="cnt">7</span></div>
+          <div class="stab">Commity <span class="cnt">7</span></div>
+          <div class="stab">Konverzace <span class="cnt">2</span></div>
+          <div class="stab">Kontroly <span class="cnt crit">1</span></div>
+          <span class="tsep"></span>
+          <div class="stab">Nálezy <span class="cnt crit">3</span></div>
+          <div class="stab">Průběh <span class="live"></span></div>
+        </div>
+      </div>
+      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+        Pás má <b>10 bodů</b> a s mezerami zabere pod hlavičkou zhruba dvacet — tedy přesně to
+        místo, které do #501 držela pilulka. <code>+X −Y</code> v pruhu záložek <b>není</b>,
+        a proto z něj odešel i první stupeň zužování (viz sekce 19).
+      </p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">139</span>
+        <span class="body">
+          <b>Logaritmus, ne lineární šířka</b>
+          <span><code>composer.lock</code> má v rozložení, na kterém je pás změřený, 2 790
+          změněných řádků ze 2 952 v celém PR. <b>Lineárně by vzal 94,5 %</b> pásu a ze zbytku by
+          bylo šest čárek; s <code>log₂(n + 1)</code> má <b>30,8 %</b> — pořád největší, ale test
+          o 64 řádcích je vidět. Je to jediná věc na pásu, která se dá pokazit potichu, takže na
+          ni míří i test s vloženou regresí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">140</span>
+        <span class="body">
+          <b>Jedno kódování, ne dvě</b>
+          <span>Barva je <b>závažnost, ne reviewer</b> — v pásu se obojí naráz kódovat nedá
+          a závažnost je to, podle čeho se čte první. Kdo našel, zůstává v chipech runbaru a
+          v dráhách <em>Průběhu</em>. Nejhorší nález přitom přebíjí druh souboru: <b>nový soubor
+          s blokujícím nálezem je červený</b>, ne zelený.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">141</span>
+        <span class="body">
+          <b>Prošlé tlumeně, aktuální s obrysem</b>
+          <span>Se značkou <em>Prošlo</em> (<a class="jump" href="#s40">sekce 40 →</a>) je pás
+          zároveň ukazatel, kolik zbývá: tlumené segmenty jsou hotové. Tlumí se <b>krytím na
+          35 %</b>, ne druhým odstínem — šest hodnot ve škále by z pásu udělalo obrázek k luštění.
+          Stav <em>změněno od prošlého</em> tlumený <b>není</b>: je to práce, která se vrátila.
+          Obrys akcentem je soubor pod výřezem a čte se z <code>DiffViewport</code>, tedy
+          z místa, kam se scroll zapisuje už dneska.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">142</span>
+        <span class="body">
+          <b>Minimum 3 body, a součet je celá šířka</b>
+          <span>Segment o půl bodu je antialiasing, na který se nedá kliknout, takže co spadne
+          pod tři body, dostane tři a <b>vypadne z dělení</b> — zbytek se přepočítá znovu. Bez
+          toho přepočtu by součet přerostl pás zrovna u PR s jedním lockem a šesti drobnostmi,
+          tedy v tom případě, kvůli kterému logaritmus existuje. A když se ani minima nevejdou
+          (padesát souborů v úzkém okně), dělí se <b>rovným dílem</b>: pás pak přestává mluvit
+          o velikosti, ale <b>segment se nezahodí nikdy</b> — zmizelý soubor je horší než tenký.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">143</span>
+        <span class="body">
+          <b>Klik skočí, <code>⌥←</code> a <code>⌥→</code> posunou o soubor</b>
+          <span>Klik jde <b>tou cestou, kterou skáče paleta</b> ⌘K: rozbalí sbalený soubor,
+          přepne na <em>Změněné soubory</em> a odscrolluje na jeho hlavičku. Klávesy doplňují
+          <code>⌥↑ ⌥↓</code> na nálezech — <code>⌥</code> je v tomhle okně práce nad diffem,
+          svislé šipky skáčou po nálezech a vodorovné po souborech. <b>Nezacyklují se</b>: na
+          posledním souboru <code>⌥→</code> nedělá nic, protože pás je mapa, tedy věc s koncem.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
 
         <div class="doc-move">
           <a class="prev" href="#deni"><span class="dir">← předchozí</span><span class="t">Dění</span></a>
@@ -5729,6 +5976,21 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             </div>
 
             <!-- podzáložky -->
+            <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+                 Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+            <div class="rv-prmap">
+              <div class="strip">
+                <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+                <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+                <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+                <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+                <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+              </div>
+              <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+            </div>
+
             <div class="subtabs">
               <div class="stab">Přehled <span class="cnt">4</span></div>
               <div class="stab on">Změněné soubory <span class="cnt">7</span></div>
@@ -5737,13 +5999,6 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <span class="tsep"></span>
               <div class="stab">Nálezy <span class="cnt crit">3</span></div>
               <div class="stab">Průběh <span class="live"></span></div>
-              <div class="diffstat">
-                <span class="add">+248</span>
-                <span class="del">−96</span>
-                <span class="blocks">
-                  <i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i></i>
-                </span>
-              </div>
             </div>
 
             <!-- lišta diffu: přepínač pohledu a procházení nálezů -->
@@ -6025,6 +6280,21 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               </div>
             </div>
 
+            <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+                 Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+            <div class="rv-prmap">
+              <div class="strip">
+                <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+                <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+                <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+                <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+                <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+              </div>
+              <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+            </div>
+
             <div class="subtabs">
               <div class="stab">Přehled <span class="cnt">4</span></div>
               <div class="stab on">Změněné soubory <span class="cnt">7</span></div>
@@ -6033,10 +6303,6 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <span class="tsep"></span>
               <div class="stab">Nálezy <span class="cnt crit">3</span></div>
               <div class="stab">Průběh <span class="live"></span></div>
-              <div class="diffstat">
-                <span class="add">+248</span>
-                <span class="del">−96</span>
-              </div>
             </div>
 
             <!-- lišta diffu s přepínačem -->
@@ -7774,6 +8040,13 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       s tím, co naměřilo #306 — šest záložek bez odznaků vyšlo na 750 b (#306 hlásí „vejde se
       od ~780“), se všemi na 867 b („od ~920“).
     </p>
+    <p class="muted">
+      <b>Stupně níž jsou záznam měření z #316, ne dnešní pruh.</b> Od #501 v něm pilulka
+      <code>+248 −96</code> s pěti čtverečky <b>není vůbec</b> — nahradila ji
+      <a class="jump" href="#s42">mapa PR pod hlavičkou →</a>, takže první stupeň (<em>Plný
+      pruh</em>) i to, co ustupuje jako první, se posunuly o jedno místo. Čísla se nechávají,
+      jak byla naměřena: přepsat je bez nového měření by z nich udělalo odhad.
+    </p>
 
     <div class="ruler">
       <header>
@@ -8028,6 +8301,21 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               </div>
             </div>
 
+            <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+                 Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+            <div class="rv-prmap">
+              <div class="strip">
+                <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+                <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+                <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+                <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+                <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+              </div>
+              <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+            </div>
+
             <div class="subtabs">
               <div class="stab">Přehled <span class="cnt">4</span></div>
               <div class="stab">Změněné soubory <span class="cnt">7</span></div>
@@ -8037,13 +8325,6 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <span class="tsep"></span>
               <div class="stab">Nálezy <span class="cnt crit">3</span></div>
               <div class="stab">Průběh <span class="live"></span></div>
-              <div class="diffstat">
-                <span class="add">+248</span>
-                <span class="del">−96</span>
-                <span class="blocks">
-                  <i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i></i>
-                </span>
-              </div>
             </div>
 
             <!-- Panel od #392 (viz sekce 25): labely a reviewery platí pro celý PR, takže se
@@ -8322,6 +8603,21 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               </div>
             </div>
 
+            <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+                 Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+            <div class="rv-prmap">
+              <div class="strip">
+                <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+                <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+                <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+                <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+                <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+              </div>
+              <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+            </div>
+
             <div class="subtabs">
               <div class="stab">Přehled <span class="cnt">4</span></div>
               <div class="stab">Změněné soubory <span class="cnt">7</span></div>
@@ -8331,13 +8627,6 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
               <span class="tsep"></span>
               <div class="stab">Nálezy <span class="cnt crit">3</span></div>
               <div class="stab">Průběh <span class="live"></span></div>
-              <div class="diffstat">
-                <span class="add">+248</span>
-                <span class="del">−96</span>
-                <span class="blocks">
-                  <i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i></i>
-                </span>
-              </div>
             </div>
 
             <!-- hlavička rozkliknutého commitu -->
@@ -8682,6 +8971,21 @@ projeví hned v tom dalším.</div>
       na výchozím okně 1100 — na šířce tady záleží, protože panel je to, co ji ubírá.
     </p>
     <div class="win sm" style="max-width: 1047px;">
+      <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+           Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+      <div class="rv-prmap">
+        <div class="strip">
+          <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+          <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+          <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+          <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+          <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+          <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+          <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+        </div>
+        <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+      </div>
+
       <div class="subtabs">
         <div class="stab">Přehled <span class="cnt">4</span></div>
         <div class="stab">Změněné soubory <span class="cnt">7</span></div>
@@ -8691,13 +8995,6 @@ projeví hned v tom dalším.</div>
         <span class="tsep"></span>
         <div class="stab">Nálezy <span class="cnt crit">3</span></div>
         <div class="stab">Průběh <span class="live"></span></div>
-        <div class="diffstat">
-          <span class="add">+248</span>
-          <span class="del">−96</span>
-          <span class="blocks">
-            <i class="a"></i><i class="a"></i><i class="a"></i><i class="d"></i><i></i>
-          </span>
-        </div>
       </div>
 
       <div class="work" style="grid-template-columns: 1fr 300px;">
@@ -9067,6 +9364,21 @@ projeví hned v tom dalším.</div>
               </div>
             </div>
 
+            <!-- Mapa PR (#501, sekce 42): každý soubor segment, šířka roste s log₂(řádků + 1).
+                 Nahradila pilulku `+248 −96` s pěti čtverečky (`.diffstat`) — říká totéž a víc. -->
+            <div class="rv-prmap">
+              <div class="strip">
+                <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
+                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
+                <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
+                <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
+                <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
+                <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
+              </div>
+              <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
+            </div>
+
             <div class="subtabs">
               <div class="stab">Přehled <span class="cnt">4</span></div>
               <div class="stab">Změněné soubory <span class="cnt">7</span></div>
@@ -9075,10 +9387,6 @@ projeví hned v tom dalším.</div>
               <span class="tsep"></span>
               <div class="stab">Nálezy <span class="cnt crit">3</span></div>
               <div class="stab">Průběh <span class="live"></span></div>
-              <div class="diffstat">
-                <span class="add">+248</span>
-                <span class="del">−96</span>
-              </div>
             </div>
 
             <div class="work two">

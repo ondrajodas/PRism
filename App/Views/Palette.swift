@@ -53,6 +53,17 @@ enum Palette {
     /// „něco našel“ není porucha: ta je `crit` a od nálezu se musí poznat.
     static let find = Color(light: 0xB4560A, dark: 0xE8944A)
 
+    /// Nový soubor v mapě PR (#501) — `color-mix(in srgb, ok 55 %, raised)` z návrhu, vyčíslené.
+    ///
+    /// **Ne `ok.opacity(0.55)`**, ze stejného důvodu jako u `critLine`: skrz krytí prosvítá to,
+    /// na čem segment leží, a pás visí střídavě na `surface` (hlavička PR) i v řádku fronty. Mix
+    /// je jedna barva, která vyjde všude stejně.
+    ///
+    /// **Tlumený `ok`, ne plný**: nový soubor není výsledek, ale druh — plná zelená vedle plné
+    /// `crit` a `find` v témže pásu by z něj udělala třetí stav závažnosti. Tón `ok` na vyvýšeném
+    /// podkladu říká „přírůstek“ a přitom neodvádí oko od toho, co je červené.
+    static let okWash = Color(light: 0x79B28D, dark: 0x2F7540)
+
     /// Obrys bubliny blokujícího nálezu u kódu (#185) — `color-mix(in srgb, crit 35 %, line)`
     /// z návrhu, vyčíslené.
     ///

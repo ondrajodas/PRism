@@ -4027,7 +4027,8 @@ na `.task` okna, takže zavření okna ji zruší.
 | `CodeText`, `CodeTextSheet`, `CodeSheetText`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny — a od #417 týmž sheetem i **celý log jobu**: druh nese `CodeText.Kind`, velikost `Policy.codeSheetSizing`, věty hlavičky a patičky `CodeSheetText`. Viz *Sheet s kódem a s logem* |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu zapíná karta `Blokuje` na dashboardu, takže musí být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
-| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh`) — podtržené, s odznakem **u každé** (#218; typy od #242), děličem před výstupem reviewerů a vpravo `+X −Y` se čtverečky poměru. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Od #316 má **tři podoby** (`ViewThatFits`, `Layout`): s popisky a `+X −Y`, s popisky bez ní a od #318 **ikony s odznaky a popiskem jen u aktivní** — díky té třetí se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
+| `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh` ‖ `Zeptat se`) — podtržené, s odznakem **u každé** (#218; typy od #242) a děličem před výstupem reviewerů. **Rozsah změny v něm od #501 není** — `+X −Y` se čtverečky poměru nahradila mapa PR pod hlavičkou. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Podob má **tři** (`ViewThatFits`, `Layout`): s popisky, s ikonami a popiskem jen u aktivní (#318) a jen s ikonami (#452) — díky nim se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
+| `PullRequestMapView`, `PullRequestMapStrip`, `PullRequestMapTicks`, `PullRequestMapProbe` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem s obrysem. Šířky **počítá `Policy`** a umisťuje vlastní `Layout` (#220); čárky druhý `Layout`, protože podíl se dá umístit jedině ze skutečné šířky segmentu (#236). `PullRequestMapProbe` je neviditelné view, které do `DiffFileCursor` zapisuje soubor pod výřezem — čte hodnotu měnící se každý snímek, takže stojí samo (#469). Viz *Mapa PR — pás pod hlavičkou* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `CommitDiffView` | Diff jednoho commitu (#317) — hlavička a pod ní `DiffView`. **Nedostane `AppStore` ani identifikátor PR**, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář; `reading(_:)` je `internal` kvůli testu, který tvrdí právě to, co `DiffView` **nedostane** |
@@ -4242,6 +4243,82 @@ schválně chovají jako přerušené, ne jako zrušené:
   `startAutomaticReviews`.
 - **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
   zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
+
+### Mapa PR — pás pod hlavičkou (#501)
+
+Mezi hlavičkou a pruhem záložek leží od #501 **pás, ve kterém je každý soubor diffu segment**
+(návrh sekce 42, zákres přišel z decku *Směry pro PRism*, stránka E). Odpovídá na „jak velký
+a jak zlý je tenhle PR“ dřív, než se otevře první soubor: šířka segmentu roste s logaritmem
+změněných řádků, barva je nejhorší nález v souboru, nový soubor má tón `ok`, prošlý je tlumený,
+vlákno je svislá čárka a soubor pod výřezem má obrys akcentem.
+
+**Nahradil pilulku `+X −Y` s pěti čtverečky** (#174, #218) v pruhu záložek. Ta z `PullRequestTabBar`
+odešla celá i s podobou `Layout.full`, která se od `labels` lišila jedině tím, že ji kreslila —
+a s ní `Policy.diffstatBlocks` i `DiffstatBlock`, protože je nikdo jiný nečetl.
+Co se nemá rozbít:
+
+- **Segmenty skládá `Policy`, jedno místo.** `Policy.pullRequestMap(files:findings:threads:readStates:categories:)`
+  čte **tytéž vstupy jako strom, hlavička souboru i bubliny** — soubory diffu, skupiny nálezů,
+  zakotvená vlákna a značky `Prošlo`. Dvě místa by znamenala, že popisek `5 nálezů` tvrdí něco
+  jiného než pás pod ním. Nálezy se hledají **po obou cestách** (`newPath` i `oldPath`), jako
+  v `DiffView.findings(in:)`: reviewer je umí nahlásit pod tou starou.
+- **Šířky se počítají, nevyjednávají** (#220). `PullRequestMapStrip` je vlastní `Layout` —
+  tentýž důvod jako u `ProportionalColumns`: `HStack` umí jen rovným dílem a `frame(width:)` na
+  každém segmentu by potřeboval znát celkovou šířku, tedy druhé měření vedle toho, co rozvržení
+  dělá samo. Rozhoduje `Policy.mapWidths(of:in:spacing:minimum:)` a drží tři věci: podíl
+  z logaritmu, minimum tři body a **součet přesně na dostupnou šířku**. Co spadne pod minimum,
+  dostane minimum a **vypadne z dělení**; bez toho přepočtu by součet přerostl pás zrovna u PR
+  s jedním lockem a šesti drobnostmi. Když se nevejdou ani minima, dělí se rovným dílem —
+  **segment se nezahodí nikdy**.
+- **Barva je závažnost, ne druh souboru.** Nejhorší nález přebíjí `isNew`, takže nový soubor
+  s blokujícím nálezem je červený. Neutrál je `Palette.raised`, nový soubor `Palette.okWash`
+  (vyčíslený `color-mix(in srgb, ok 55 %, raised)` z návrhu — ne `ok.opacity`, protože skrz krytí
+  prosvítá podklad a pás visí střídavě na `surface` i v jiných místech).
+- **Prošlý se tlumí krytím na 35 %, `changed` ne** (#500). Krytí, ne druhý odstín: šest hodnot ve
+  škále by z pásu udělalo obrázek k luštění. `změněno od prošlého` je práce, která se vrátila,
+  takže zůstává v plné barvě.
+- **Popisek vpravo ustupuje první.** `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna` stojí ~230
+  bodů, takže by v pohledu vedle sebe (detail 347 b) nechal pásu 73 a z segmentů čárky. Rozhoduje
+  `Policy.mapShowsSummary(available:label:gap:minimumStrip:)` s prahem **180 bodů**; v úzké podobě
+  nese souhrn nápověda a `accessibilityValue`. Je to tatáž úvaha jako u `+X −Y` v pruhu záložek
+  (#316): jeho čísla stojí i v hlavičce stromu a v odznacích záložek, kdežto pás jinde není.
+  **Výšku řádky drží pás, ne popisek** — jinak by se hlavička při složení panelu posunula o tři
+  body (řádka mono textu je 13 vysoká, pás 10).
+- **Klik jde tou cestou, kterou skáče paleta** (#184): `anchor(inFile:line:)` rozbalí sbalený
+  soubor a `scroll(to:)` přepne na `Změněné soubory`. Soubor, který v diffu není, **neudělá nic**.
+- **`⌥←`/`⌥→` visí na jednom průhledném tlačítku** v mapě, ne v detailu PR — a je to výkonová
+  podmínka, viz `DiffFileCursor` níž. Na krajích pásu je tlačítko **zakázané**, takže klávesu
+  nebere a propadne dál; zacyklit se skok nemá (`Policy.mapStep(from:_:count:)`).
+
+#### `DiffTracking` a `DiffFileCursor` — kdo je pod výřezem (#501)
+
+Obrys se čte z `DiffViewport` (#469), a to je jediná netriviální část zapojení: **pás leží nad
+pruhem záložek, tedy mimo `DiffView`**, kde ta krabice do #501 žila jako `@State`.
+
+Od #501 ji drží **detail PR** v `DiffTracking` (výřez, rozsahy souborů a kurzor) a předává ji
+`DiffView`u parametrem. Parametr je optional a `nil` znamená „nikdo se odjinud nekouká“ — diff
+commitu i náhled si pak drží vlastní, takže se pro ně nemění nic. `DiffView` tím **nepřestal
+zapisovat**; jen mu ta krabice nepatří.
+
+**Cesta souboru pod výřezem je vlastní `@Observable` krabice** (`DiffFileCursor`), ne vlastnost
+`DiffViewport`u — a je to totéž rozhodnutí, jaké #469 udělalo mezi `band` a `top`: `top` se mění
+při **každém** otočení kolečka, kdežto tahle hodnota **jen na hranici souborů**. Kdyby se pás ptal
+na `top`, přeložilo by se při každém snímku jeho tělo i se všemi segmenty, nápovědami a čárkami.
+Zapisuje do ní **neviditelná sonda** (`PullRequestMapProbe`), tedy tentýž vzorec jako
+`DiffPinnedHeader` a `DiffReadShortcut` (#500): view, které čte hodnotu měnící se každý snímek,
+stojí samo a překresluje se samo. Zápis je **podmíněný** (`onChange`), ne bezpodmínečný (#358).
+
+Odpověď dává `Policy.mapCurrentSegment(extents:top:)`, což je `pinnedFileHeader` s nulovou výškou
+hlavičky — **tatáž odpověď, jakou dostane ukotvená hlavička v diffu a `⌥V`**. Dvě odpovědi na
+jednu otázku by znamenaly obrys u jiného souboru, než jehož jméno stojí nad kódem. **Kurzor drží
+cestu, ne index**: pás skládá `Policy` ze souborů toho diffu, který je v tabu vidět, takže index
+z rozsahů by po přepnutí na `Od tvé poslední návštěvy` chvíli ukazoval na cizí soubor — kdežto
+cesta, která v pásu není, prostě nikde nesvítí.
+
+**Co se ztratilo, a je to vědomé:** číslo `+248 −96` v okně už nikde nestojí. Pás nese velikost
+jako **plochu**, ne jako číslo; kdo chce čísla, má je v nápovědě segmentu (`Encryptor.php · +31 −12
+· 1 nález · 1 vlákno · neprošlo`) a v hlavičce souboru v diffu. Popisek pásu odpovídá na jiné
+otázky — kolik souborů, kolik hotových, kolik k vyřízení —, a tak ho má i schválený zákres.
 
 ### Obnovování je vidět na tlačítku (#442)
 
@@ -5102,36 +5179,41 @@ Dvě věci, které z toho platí dál:
   i po smazání `narrowingWidth(by: 26)`. Cena je jedna úroveň vyjednávání na tab, což proti
   ~5,5× na úroveň v zanořeném seznamu není nic — tady jde o jeden blok, ne o tisíc řádků.
 
-### Pruh záložek — čtyři podoby podle šířky (#316, #318, #452)
+### Pruh záložek — tři podoby podle šířky (#316, #318, #452, #501)
 
 `PullRequestTabBar` je jediné místo v okně, kde se o podobě rozhoduje **`ViewThatFits`em**, a ne
-spočítanou šířkou. Kandidáti jsou čtyři a jmenují se `Layout`; bere se **první, který se vejde**,
+spočítanou šířkou. Kandidáti jsou tři a jmenují se `Layout`; bere se **první, který se vejde**,
 takže pořadí je to, co říká, co ustupuje dřív. Čísla jsou **po osmé záložce** (`Zeptat se`, #452):
 
 | Podoba | Co kreslí | Ideální šířka tabu | Okno (+ rail 53) | S odznaky `888` |
 |---|---|---|---|---|
-| `full` | popisky u všech záložek a vpravo `+X −Y` | 1131–1133 b | 1184–1186 b | 1216–1218 b |
-| `labels` | popisky, bez `+X −Y` (#316) | 1021–1023 b | 1074–1076 b | 1093–1095 b |
+| `labels` | popisky u všech záložek | 1021–1023 b | 1074–1076 b | 1093–1095 b |
 | `icons` | ikony s odznaky, popisek jen u aktivní (#318) | 573–639 b | 626–692 b | 645–711 b |
 | `compact` | jen ikony s odznaky (#452) | 526 b | 579 b | 598 b |
+
+**Čtvrtá podoba `full` (popisky a vpravo `+X −Y`) odešla u #501** s pilulkou samotnou: byla to
+jediná věc, kterou se od `labels` lišila. Naměřená měla 1131–1133 b tabu (okno 1184–1186,
+s odznaky `888` 1216–1218). Ostatní tři se **neposunuly ani o bod**, protože pilulku nikdy
+nekreslily.
 
 Pásma jsou tam proto, že šířka závisí na tom, **která záložka je aktivní** — její popisek je
 polotučný a v `icons` je jediný, co se kreslí. Horní konec drží `Změněné soubory`, dolní `Nálezy`.
 
 Co se u toho nemá rozbít:
 
-- **`+X −Y` ustupuje první, a je to ten správný kus** (#316). Mluví o rozsahu **celého PR**, což je
-  odpověď na otázku `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem.
-  Záložka je proti tomu cesta k obsahu, který jinudy vidět není. Ta výměna vyšla skoro na nulu:
-  pilulka stojí 110 bodů a sedmá záložka s odznakem 112, takže hranice povyrostla o **dva body
-  okna**, ne o sto dvanáct.
-- **Popisky ustupují druhé, a všechny naráz** (#318). Ustupovat po jednom (nejdřív `Změněné
+- **`+X −Y` v pruhu už není vůbec** (#501, mění #316). Do #501 byla první podoba a první věc,
+  která z pruhu ustupovala — mluvila o rozsahu **celého PR**, tedy o odpovědi na otázku
+  `Změněných souborů`, kdežto záložka je cesta k obsahu, který jinudy vidět není. Ta výměna
+  vycházela skoro na nulu (pilulka 110 bodů proti sedmé záložce s odznakem 112, tedy dva body
+  okna). Od #501 tu odpověď nese **mapa PR pod hlavičkou**, a to úplněji; dvě místa s týmž
+  údajem by se rozešla a pilulka by z nich byla ta chudší.
+- **Popisky ustupují první, a všechny naráz** (#318). Ustupovat po jednom (nejdřív `Změněné
   soubory`, pak `Konverzace`…) by znamenalo pruh, ve kterém část záložek text má a část ne — tedy
   sedm podob podle šířky místo tří, a v každé jinak dlouhý skok mezi sousedy.
 - **Popisek u aktivní záložky zůstává.** Odpovídá na jinou otázku než ostatní: ne „kam se dá jít“,
   ale „kde jsem“. Podtržení to říká taky, jenže samo o sobě mezi sedmi ikonami — a je to zrovna ten
   údaj, kvůli kterému se do pruhu kouká nejčastěji.
-- **Odznaky zůstávají ve všech třech podobách.** Počet nálezů, červený počet u `Kontrol`, puntík
+- **Odznaky zůstávají ve všech podobách.** Počet nálezů, červený počet u `Kontrol`, puntík
   u běžícího `Průběhu` a počet commitů jsou ta informace, kvůli které se do pruhu kouká; kdyby
   padly s popisky, byla by z ikonového stupně řada ozdob.
 - **Bez popisku musí záložku pojmenovat něco jiného.** Ikona přebírá `accessibilityLabel`
@@ -5147,8 +5229,10 @@ Co se u toho nemá rozbít:
   `compact` se s 598 b vejde. **Na běžná data se na ni nepřijde** (`icons` chtějí 573–639 b) a je
   to samo tvrzení v `TabStripWidthTests`: `compact` se ukazuje jedině s trojmístnými odznaky.
 - **Osmá záložka posunula i to, co je vidět ve výchozím okně** (#452). Okno 1100 dávalo do té doby
-  `full`; dneska je to `labels`, takže ve výchozí šířce **není `+X −Y`** a vrací se od ~1184 bodů.
-  Je to ta výměna, kterou pořadí podob předepisuje, a tatáž, jakou zaplatila sedmá záložka (#316).
+  `full`; po #452 to bylo `labels`, takže ve výchozí šířce nebylo `+X −Y` a vracelo se od ~1184
+  bodů. Od #501 je to bezpředmětné — pilulka není nikde a `labels` je nejširší podoba —, ale
+  zůstává to zapsané: byla to ta výměna, kterou pořadí podob předepisuje, a tatáž, jakou
+  zaplatila sedmá záložka (#316).
 - **Kandidáti se vypisují, nedělají se `ForEach`em.** `ViewThatFits` vybírá mezi **svými dětmi**
   a jedna `ForEach` je jedno dítě.
 - **`bar(_:)` je `internal` a nese i okraj a linku pod pruhem.** Okraj je šířka, která se taky musí
@@ -7604,7 +7688,11 @@ Věci, které se u toho nemají rozbít:
 | `Policy.findingTableLayout(availableWidth:)` | Šířky sloupců tabulky (#242, `FindingTableLayout`) — spočítané, ne vyjednané (#220). Pod `findingTableReviewerBreakpoint` odpadá sloupec `reviewer · kategorie`; je to jediný, jehož obsah je i v bublině a v chipech |
 | `Policy.lanes(of:skills:running:)` | Dráhy do tabu `Průběh` (#242, `ReviewerLane`) — fáze `čeká na slot` / `session` / `prochází kód` / `hlásí nálezy` **z toho, co v ose doopravdy je**. Fáze za tou, kam se běh dostal, zůstává nedotčená i u doběhlého běhu; špatný konec se značí aspoň u `session`, aby spadlý start nevypadal jako nezačatý běh. Běžící reviewer bez osy dostane dráhu ve frontě a **nastavený reviewer, který na PR neběžel, dráhu `nespuštěno`** — sada je ta z `AppStore.reviewSkills(for:)`, tedy tatáž, ze které se review pouští. Pořadí je nastavení → osy → běžící abecedně, aby dráhy mezi tiky nepřeskakovaly |
 | `Policy.progress(startedAt:phase:running:)` | Průběh běžícího review do pruhu v hlavičce (#218, `ReviewRunProgress`). `nil` = neběží nic — rozhoduje **`startedAt` běhu**, ne fáze, protože `reviewPhases` si `failed` drží i po skončení |
-| `Policy.diffstatBlocks(additions:deletions:)` | Pět čtverečků poměru změny za `+X −Y` (#218). Zaokrouhluje se **dolů**, každá strana zvlášť, zbytek zůstává šedý; prázdný diff nedá žádný čtvereček |
+| `Policy.pullRequestMap(files:findings:threads:readStates:categories:)` | Segmenty mapy PR pod hlavičkou (#501, `PullRequestMapSegment`) — z **týchž vstupů** jako strom, hlavička souboru i bubliny. Nálezy se hledají po **obou** cestách souboru; blokující přebíjí obyčejný a druh souboru; popisek se skládá tady, ne ve view. **Nahradilo `Policy.diffstatBlocks`** (pět čtverečků za `+X −Y`, #218), které s pilulkou odešlo |
+| `Policy.mapWidths(of:in:spacing:minimum:)` | Šířky segmentů v bodech (#501) — podíl z `log₂(řádků + 1)`, minimum tři body **vytlačené z dělení** a součet přesně na dostupnou šířku. Když se nevejdou ani minima, dělí se rovným dílem; **segment se nezahodí nikdy** |
+| `Policy.mapSummary(files:read:findings:threads:)`, `Policy.mapTooltip(of:)`, `Policy.mapReadLabel(of:)` | Popisek vpravo od pásu a nápověda segmentu (#501). Části se připojují, **až když mají co říct** (jako u `fileTreeSummary`); stav značky je v nápovědě vždycky a vždycky poslední |
+| `Policy.mapShowsSummary(available:label:gap:minimumStrip:)` | Vejde se vedle pásu popisek? (#501) Práh 180 bodů je změřený: pod ním jsou z segmentů čárky. `nil` šířka = kreslí se, jako u `IncrementalDiffBar.layout(in:)` |
+| `Policy.mapCurrentSegment(extents:top:)`, `Policy.mapStep(from:_:count:)` | Který soubor je pod výřezem (#501, `pinnedFileHeader` beze zbytku posunu — **jedna odpověď** pro obrys, ukotvenou hlavičku i `⌥V`) a krok `⌥←`/`⌥→`, který se **nezacyklí** |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |
 | `Policy.snippet(of:context:)` | `diffHunk` vlákna → `ThreadSnippet`: posledních pár řádků po komentovaný a příznak zkrácení (#158). `nil` = úryvek se nemá z čeho vzít. **Není to `Policy.snapshot`** — ten je z dnešního diffu a slouží kotvám draftu |
 | `Policy.commentableSide(of:in:)` | Ke které **kanonické** straně by šel komentář; `nil` = nedá se komentovat |
@@ -8609,7 +8697,8 @@ Nad nálezy platí navíc:
   se na `soubor:řádek` **dnešní hlavy**, a čísla řádků na nové straně jsou v obou diffech tatáž,
   takže se pověsí na totéž místo; co v rozsahu není vidět, se chová jako soubor mimo diff.
 
-  **Odznak u záložky a `+X −Y` v pruhu počítají to, co je vidět** (`shownDiff`), ne celý PR — pruh
+  **Odznak u záložky a mapa PR pod hlavičkou počítají to, co je vidět** (`shownDiff`), ne celý PR
+  (do #501 to platilo i o `+X −Y` v pruhu záložek, dneska tu pilulku nese pás) — pruh
   kousek nad diffem by jinak tvrdil sedm souborů nad dvěma. Dlaždice v `Přehledu` z toho **nečtou**:
   „Soubory: 7“ je fakt o PR a `Přehled` rozsah nikdy nekreslí.
 

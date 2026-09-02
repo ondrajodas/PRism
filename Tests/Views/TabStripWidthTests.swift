@@ -16,10 +16,15 @@ import Testing
 ///
 /// | Podoba | Ideální šířka tabu | Okno (+ rail 53) | S odznaky `888` |
 /// |---|---|---|---|
-/// | `full` — popisky a `+X −Y` | 1131–1133 b | 1184–1186 b | 1216–1218 b |
-/// | `labels` — popisky, bez `+X −Y` | 1021–1023 b | 1074–1076 b | 1093–1095 b |
+/// | `labels` — popisky u všech záložek | 1021–1023 b | 1074–1076 b | 1093–1095 b |
 /// | `icons` — ikony, popisek u aktivní | 573–639 b | 626–692 b | 645–711 b |
 /// | `compact` — jen ikony (#452) | 526 b | 579 b | 598 b |
+///
+/// **Čtvrtá podoba (`full` — popisky a `+X −Y`) odešla u #501** s pilulkou samotnou: byla to
+/// jediná věc, kterou se od `labels` lišila. Naměřená měla 1131–1133 b tabu (okno 1184–1186,
+/// s odznaky `888` 1216–1218) a byla to zároveň první věc, která z pruhu ustupovala — od #501
+/// na otázku „jak velký je tenhle PR“ odpovídá mapa pod hlavičkou. Ostatní tři se **neposunuly
+/// ani o bod**, protože pilulku nikdy nekreslily.
 ///
 /// Pásma jsou tam proto, že šířka závisí na tom, **která záložka je aktivní**: aktivní popisek je
 /// polotučný a v `icons` je jediný, co se kreslí. Horní konec drží `Změněné soubory`, dolní
@@ -31,12 +36,12 @@ import Testing
 /// v nejužším okně má 647 — takže by se pruh v tom krajním stavu zalomil. `compact` je proto
 /// od #452 poslední kandidát a s 598 b se vejde i tam.
 ///
-/// Pro srovnání, co bylo naměřené u #316 (a co z toho pořád platí): 6 záložek se všemi odznaky
-/// a `+X −Y` potřebovalo tab 884 b / okno 937, sedmá záložka to posunula o dva body na 886 / 939
-/// tím, že v úzkém pruhu ustoupila pilulka `+X −Y` (110 b za záložku o 112 b). Ta výměna zůstává
-/// prvním stupněm; #318 přidává druhý pod ní.
+/// Pro srovnání, co bylo naměřené u #316: 6 záložek se všemi odznaky a `+X −Y` potřebovalo tab
+/// 884 b / okno 937, sedmá záložka to posunula o dva body na 886 / 939 tím, že v úzkém pruhu
+/// ustoupila pilulka `+X −Y` (110 b za záložku o 112 b). **Ta výměna od #501 neplatí** — pilulka
+/// v pruhu není vůbec, takže sedmá i osmá záložka se platí popisky (`icons`), ne rozsahem změny.
 ///
-/// Čtyři věci, které se tu dají pokazit potichu:
+/// Pět věcí, které se tu dají pokazit potichu:
 ///
 /// - **zalomit pruh v úzkém okně.** Uživatel to pozná jedině tím, že se mu při stažení okna pruh
 ///   ztrojnásobí — a přesně tohle #318 opravuje;
@@ -46,7 +51,10 @@ import Testing
 /// - **zahodit popisky i tam, kde je na ně místo** — to by byl regres proti tomu, jak pruh vypadá
 ///   ve výchozím okně, a nikdo by si nevšiml, protože ikony vypadají úmyslně;
 /// - **zahodit popisek u aktivní záložky**, tedy jedinou odpověď na „kde jsem“, kterou v úzkém
-///   pruhu kromě podtržení je.
+///   pruhu kromě podtržení je;
+/// - **vrátit do pruhu `+X −Y`** (#501). Vypadalo by to jako oprava — pilulka v pruhu deset verzí
+///   byla —, jenže by to znamenalo dvě místa s jedním údajem. Hlídá se to nad zdrojákem, protože
+///   pruh o diffu nic neví a není tedy co měřit.
 ///
 /// **Měří se přes pásmo šířek, ne na jedné**: sazba se láme jen v pásmu, takže jediná šířka umí
 /// projít náhodou. A na `NSHostingView`, ne `ImageRenderer`u — ten `ViewThatFits` vyhodnocuje jinak
@@ -66,13 +74,11 @@ struct TabStripWidthTests {
     /// široké šířce**, tedy tam, kde se zalomit nemá — ať se nepíše zadrátované číslo, které se
     /// rozejde s první změnou sazby.
     private func singleRowHeight() -> CGFloat {
-        height(at: 1600, selection: .commits, badges: true, counts: (additions: 248, deletions: 96))
+        height(at: 1600, selection: .commits, badges: true)
     }
 
-    private func height(at width: CGFloat, selection: PullRequestTab, badges: Bool,
-                        counts: (additions: Int, deletions: Int)?) -> CGFloat {
-        measure(bar(selection: selection, badges: badges, counts: counts).frame(width: width),
-                width: width).height
+    private func height(at width: CGFloat, selection: PullRequestTab, badges: Bool) -> CGFloat {
+        measure(bar(selection: selection, badges: badges).frame(width: width), width: width).height
     }
 
     // MARK: - Pruh se nezalomí
@@ -89,8 +95,7 @@ struct TabStripWidthTests {
         for selection in PullRequestTab.allCases {
             for window in [narrowestWindow, 760, 860, 940, 1000, 1050, 1100, 1400] as [CGFloat] {
                 let width = tabWidth(ofWindow: window)
-                let measured = height(at: width, selection: selection, badges: true,
-                                      counts: (additions: 248, deletions: 96))
+                let measured = height(at: width, selection: selection, badges: true)
                 let where_ = "okno \(Int(window)), tab \(Int(width)) b, aktivní \(selection.czechLabel)"
                 #expect(measured == single, "\(where_): pruh je \(measured) b místo \(single)")
             }
@@ -108,7 +113,6 @@ struct TabStripWidthTests {
         for selection in PullRequestTab.allCases {
             let measured = measure(
                 PullRequestTabBar(selection: .constant(selection), badge: Self.wideBadge(of:))
-                    .diffCounts((additions: 2480, deletions: 960))
                     .frame(width: tabWidth(ofWindow: narrowestWindow)),
                 width: tabWidth(ofWindow: narrowestWindow)
             ).height
@@ -125,7 +129,7 @@ struct TabStripWidthTests {
 
         for window in [narrowestWindow, 785, 900, 1100] as [CGFloat] {
             let measured = height(at: tabWidth(ofWindow: window), selection: .commits,
-                                  badges: false, counts: nil)
+                                  badges: false)
             #expect(measured == single, "okno \(Int(window)) bez odznaků: pruh je \(measured) b")
         }
     }
@@ -136,18 +140,17 @@ struct TabStripWidthTests {
     /// proti té podobě vykreslené napřímo (`bar(_:)`), takže test nezávisí na tom, čím se podoby
     /// od sebe liší — jen na tom, že se vybrala ta správná.
     ///
-    /// Hranice jsou z naměřených ideálních šířek: `full` od tabu ~1131, `labels` od ~1021, pod tím
-    /// `icons` (a pod ním `compact`, na který se s běžnými odznaky nedá přijít — viz test níž).
-    /// Šířky v testu jsou uvnitř pásem, ne na hranách — hrana se hlídá měřením výšky výš.
+    /// Hranice jsou z naměřených ideálních šířek: `labels` od tabu ~1021, pod tím `icons` (a pod
+    /// ním `compact`, na který se s běžnými odznaky nedá přijít — viz test níž). Šířky v testu
+    /// jsou uvnitř pásem, ne na hranách — hrana se hlídá měřením výšky výš.
     ///
-    /// **Posunuly se u #452 o osmou záložku**: co bylo `full` v okně 1100, je dneska `labels`.
-    /// Ustupuje tedy `+X −Y`, přesně jak to pořadí podob předepisuje — je to tatáž výměna, jakou
-    /// zaplatila sedmá záložka u #316.
+    /// **Od #501 je nejširší podoba `labels`**: `full` odešla s pilulkou `+X −Y`, takže i ve
+    /// velkém okně se kreslí ta s popisky. Do té doby tady stálo `full` pro 1400 a 1250.
     @Test("V jaké šířce se kreslí která podoba")
     func picksTheStageThatFits() throws {
         let cases: [(window: CGFloat, layout: PullRequestTabBar.Layout)] = [
-            (1400, .full),
-            (1250, .full),
+            (1400, .labels),
+            (1250, .labels),
             (1150, .labels),
             (1080, .labels),
             (1000, .icons),
@@ -156,11 +159,9 @@ struct TabStripWidthTests {
 
         for (window, layout) in cases {
             let width = tabWidth(ofWindow: window)
-            let whole = try render(bar(selection: .commits, badges: true,
-                                       counts: (additions: 248, deletions: 96)), width: width)
+            let whole = try render(bar(selection: .commits, badges: true), width: width)
             let expected = try render(
                 PullRequestTabBar(selection: .constant(.commits), badge: Self.badge(of:))
-                    .diffCounts((additions: 248, deletions: 96))
                     .bar(layout),
                 width: width
             )
@@ -183,56 +184,58 @@ struct TabStripWidthTests {
     @Test("Na každou podobu se dá přijít")
     func everyStageIsReachable() throws {
         for layout in PullRequestTabBar.Layout.allCases {
-            let wide = layout == .compact
-            let badge = wide ? Self.wideBadge(of:) : Self.badge(of:)
-            let counts = wide ? (additions: 2480, deletions: 960) : (additions: 248, deletions: 96)
+            let badge = layout == .compact ? Self.wideBadge(of:) : Self.badge(of:)
             let width = max(idealWidth(of: layout, selection: .commits),
                             tabWidth(ofWindow: narrowestWindow))
             let whole = try render(
-                PullRequestTabBar(selection: .constant(.commits), badge: badge)
-                    .diffCounts(counts),
+                PullRequestTabBar(selection: .constant(.commits), badge: badge),
                 width: width
             )
             let expected = try render(
-                PullRequestTabBar(selection: .constant(.commits), badge: badge)
-                    .diffCounts(counts)
-                    .bar(layout),
+                PullRequestTabBar(selection: .constant(.commits), badge: badge).bar(layout),
                 width: width
             )
             #expect(whole == expected, "na \(layout) se v tabu \(Int(width)) b nedá přijít")
         }
     }
 
-    /// **Tvrdí, že se něco NEstalo**: v úzkém pruhu se `+X −Y` nenakreslí. Vlastní test vedle
-    /// žebříku výš — ten by prošel i tehdy, kdyby `full` přestala rozsah změny kreslit úplně,
-    /// protože porovnává obě strany proti témuž kódu.
+    /// **Tvrdí, že se něco NEstalo** (#501): pilulka `+X −Y` s pěti čtverečky se do pruhu
+    /// **nesmí vrátit**. Od #501 na otázku „jak velký je tenhle PR“ odpovídá mapa pod hlavičkou
+    /// (`PullRequestMapView`), a dvě místa s týmž údajem by se rozešla.
     ///
-    /// Šířka je z pásma, ve kterém se ta výměna doopravdy odehrává: okno 1100 je nad hranicí
-    /// popisků (1076) a pod tím, co by pruh potřeboval i s pilulkou (~1186). **Posunuto u #452**
-    /// z okna 1000, kde se od osmé záložky kreslí už `icons`.
-    @Test("V úzkém pruhu se rozsah změny nekreslí")
-    func dropsTheDiffstatWhenItDoesNotFit() throws {
-        let narrow = tabWidth(ofWindow: 1100)
+    /// Tvrdí se to **nad zdrojákem**, ne z bitmapy: pruh o diffu od #501 nic neví, takže není co
+    /// měnit a porovnávat — a to je zrovna ta chyba, kterou by měření nechytlo. Do #501 sem
+    /// mířily dva testy (že se v úzkém pruhu pilulka nekreslí a v širokém ano), oba postavené na
+    /// tom, že se pruhu podávají počty.
+    @Test("Rozsah změny se do pruhu záložek nevrátí")
+    func theTabStripKnowsNothingAboutTheDiff() throws {
+        let source = try String(
+            contentsOf: Self.sourceRoot.appending(path: "App/Views/PullRequestTabBar.swift"),
+            encoding: .utf8
+        )
+        let code = TextLines.all(source).filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
 
-        let withCounts = try render(bar(selection: .commits, badges: true,
-                                        counts: (additions: 248, deletions: 96)), width: narrow)
-        let without = try render(bar(selection: .commits, badges: true, counts: nil), width: narrow)
-
-        #expect(withCounts == without,
-                "v šířce \(Int(narrow)) b se `+X −Y` nakreslilo — sedmá záložka pak stojí celých 112 bodů")
+        for forbidden in ["DiffCounts", "diffstatBlocks", "diffCounts"] {
+            #expect(!code.contains { $0.contains(forbidden) },
+                    "`\(forbidden)` je zpátky v pruhu záložek — rozsah změny nese mapa PR (#501)")
+        }
     }
 
-    /// A druhá polovina téhož: **tam, kde je místo, se kreslit musí**. Bez toho by `ViewThatFits`
-    /// mohl vybírat užší podobu pořád a #174 by tiše zmizela.
-    @Test("V širokém pruhu se rozsah změny kreslí")
-    func keepsTheDiffstatWhenItFits() throws {
-        let wide = tabWidth(ofWindow: 1400)
+    /// Kořen repa z cesty tohohle souboru. **Ne `Bundle`**: zdrojáky v bundlu testovacího hosta
+    /// nejsou, a `#filePath` je jediné, co v obou (Xcode i `xcodebuild`) ukazuje na strom.
+    private static var sourceRoot: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
 
-        let withCounts = try render(bar(selection: .commits, badges: true,
-                                        counts: (additions: 248, deletions: 96)), width: wide)
-        let without = try render(bar(selection: .commits, badges: true, counts: nil), width: wide)
-
-        #expect(withCounts != without, "v šířce \(Int(wide)) b se `+X −Y` nenakreslilo")
+    /// A podoby jsou od #501 **tři**, ne čtyři: `full` se od `labels` lišila jedině tou pilulkou,
+    /// takže s ní odešla. Vyjmenovaný počet, ne „aspoň tolik“ — kdo přidá čtvrtou, musí ukázat
+    /// šířku, ve které se kreslí (test `everyStageIsReachable` výš).
+    @Test("Pruh má tři podoby")
+    func hasThreeStages() {
+        #expect(PullRequestTabBar.Layout.allCases.count == 3)
     }
 
     // MARK: - Co se v ikonovém stupni nesmí ztratit
@@ -296,22 +299,18 @@ struct TabStripWidthTests {
 
     // MARK: - Měření
 
-    private func bar(selection: PullRequestTab, badges: Bool,
-                     counts: (additions: Int, deletions: Int)?) -> PullRequestTabBar {
+    private func bar(selection: PullRequestTab, badges: Bool) -> PullRequestTabBar {
         PullRequestTabBar(
             selection: .constant(selection),
             badge: badges ? Self.badge(of:) : { _ in nil }
         )
-        .diffCounts(counts)
     }
 
     /// Kolik ta která podoba potřebuje — tedy to, co `ViewThatFits` porovnává s dostupnou šířkou.
     /// Měří se **jedna podoba** (`bar(_:)`), ne celý pruh: ten by vrátil šířku té, kterou vybral.
     private func idealWidth(of layout: PullRequestTabBar.Layout, selection: PullRequestTab) -> CGFloat {
         measure(
-            PullRequestTabBar(selection: .constant(selection), badge: Self.badge(of:))
-                .diffCounts((additions: 248, deletions: 96))
-                .bar(layout),
+            PullRequestTabBar(selection: .constant(selection), badge: Self.badge(of:)).bar(layout),
             width: 4000
         ).width
     }

@@ -77,11 +77,19 @@ struct PullRequestDetailView: View {
     /// Nula znamená „ještě se neměřilo“ a zásuvka se pak otevře na ideál, ne na podlahu.
     @State private var detailHeight: CGFloat = 0
 
+    /// Kde diff právě je (#501) — drží to detail, protože z toho čte **mapa PR nad pruhem
+    /// záložek** i `DiffView` pod ním. Do #501 si obojí držel diff sám; viz `DiffTracking`.
+    @State private var tracking = DiffTracking()
+
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 controls
+                // Mapa PR (#501) — pás mezi hlavičkou a záložkami, přesně tam, kde ho má návrh
+                // (sekce 42). Nad prázdným ani nenačteným diffem se nekreslí vůbec: pás bez
+                // segmentů je linka, která tvrdí „tenhle PR nic nemění“.
+                map
                 // Záložky nesou vlastní linku po celé šířce, takže samostatný `Divider()` mezi
                 // hlavičkou a obsahem by byl druhá čára pod sebou.
                 tabs
@@ -316,7 +324,40 @@ struct PullRequestDetailView: View {
     /// záložek nemá čím měnit podle toho, co zrovna dorazilo ze sítě.
     private var tabs: some View {
         PullRequestTabBar(selection: tabSelection, badge: badge(in:))
-            .diffCounts(loadedDiffCounts)
+    }
+
+    /// Mapa PR (#501) — pás pod hlavičkou. **Nahradila `+X −Y` s pěti čtverečky** v pruhu záložek
+    /// (#174, #218): říká totéž (rozsah změny) a k tomu, **kde** v diffu je co k vyřízení.
+    ///
+    /// Čte **ten diff, který je v tabu vidět** (`shownDiff`), tedy i rozsah `Od tvé poslední
+    /// návštěvy` — stejně jako to dělal `+X −Y` a odznak u záložky. Pás nad rozsahem, který by
+    /// mluvil o celém PR, by tvrdil sedm souborů nad dvěma.
+    @ViewBuilder private var map: some View {
+        if let diff = shownDiff, !diff.isEmpty {
+            PullRequestMapView(
+                map: Policy.pullRequestMap(
+                    files: diff.files,
+                    findings: findingGroups,
+                    threads: store.anchoredThreads(for: pullRequest.id),
+                    readStates: store.fileReviewStates(in: pullRequest.id),
+                    categories: blockingCategories
+                ),
+                files: diff.files,
+                tracking: tracking,
+                jump: { jump(toFile: $0.path) }
+            )
+        }
+    }
+
+    /// Skok na soubor z mapy PR (#501) — **tou cestou, kterou skáče paleta** (#184): `anchor`
+    /// rozbalí sbalený soubor a `scroll` přepne na `Změněné soubory`. Bez řádku míří kotva na
+    /// hlavičku souboru, takže se skok nezastaví na bublině nálezu.
+    ///
+    /// Soubor, který v diffu není (přišel nový commit), **neudělá nic** — jedna z těch situací,
+    /// kde je druhý pokus stejně marný jako první.
+    private func jump(toFile path: String) {
+        guard let anchor = anchor(inFile: path, line: nil) else { return }
+        scroll(to: anchor)
     }
 
     /// Odznak u záložky. `nil` = nedá se říct, takže se nekreslí nic — nula by tvrdila, že se
@@ -394,12 +435,6 @@ struct PullRequestDetailView: View {
         // souborů celého PR nad prázdným tabem.
         guard let incremental = store.incrementalDiff(for: pullRequest.id) else { return loadedDiff }
         return incremental.loaded
-    }
-
-    /// Rozsah změny pro záložky (#174). `nil`, dokud diff nedorazí — nuly by tvrdily,
-    /// že PR nic nemění.
-    private var loadedDiffCounts: (additions: Int, deletions: Int)? {
-        shownDiff.map { ($0.additions, $0.deletions) }
     }
 
     /// Načtený detail PR. `nil` u načítání i selhání — hlavička si v obou případech
@@ -1742,7 +1777,10 @@ struct PullRequestDetailView: View {
             panelExpanded: panelExpanded,
             stepFinding: { step($0) },
             search: searchActions,
-            read: read
+            read: read,
+            // Výřez a rozsahy souborů (#501) — **drží je detail**, protože z nich čte i mapa PR
+            // nad pruhem záložek. Diff do nich zapisuje jako dřív, jen krabice není jeho.
+            tracking: tracking
         )
     }
 

@@ -37,10 +37,10 @@ struct WindowShortcutsTests {
     /// Počet je **vyjmenovaný, ne „aspoň tolik“** — stejně jako u `SingleWayOutTests`. Nová zkratka
     /// v okně je rozhodnutí, ne přírůstek: má projít úvahou, jestli se s něčím nesrazí a jestli se
     /// nakreslí tam, kde se na ni přijde.
-    @Test("Katalog má právě pětadvacet akcí")
-    func catalogHasExactlyTwentyFiveActions() {
-        #expect(Policy.windowShortcutActions.count == 25)
-        #expect(Policy.windowShortcuts.count == 25)
+    @Test("Katalog má právě sedmadvacet akcí")
+    func catalogHasExactlyTwentySevenActions() {
+        #expect(Policy.windowShortcutActions.count == 27)
+        #expect(Policy.windowShortcuts.count == 27)
     }
 
     /// Kombinace, které patří systému nebo scéně nastavení, si okno **nesmí vzít**. `⌘W` je zrovna
@@ -203,6 +203,8 @@ struct WindowShortcutsTests {
             (.nextSearchHit, "⌘G"),
             (.previousSearchHit, "⌘⇧G"),
             (.toggleFileRead, "⌥V"),
+            (.previousFile, "⌥←"),
+            (.nextFile, "⌥→"),
         ]
 
         for (action, display) in expected {
@@ -213,8 +215,8 @@ struct WindowShortcutsTests {
 
     /// **Kapsli sází monospace systémové písmo a dva glyfy v něm nejsou** — `⇥` (U+21E5)
     /// a `⎋` (U+238B). Změřeno `CTFontGetGlyphsForCharacters` nad
-    /// `.AppleSystemUIFontMonospaced-Regular`: `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` v něm **jsou**,
-    /// ty dva ne. Text s nimi by se propadl do náhradního písma, tedy do jiné šířky i kresby než
+    /// `.AppleSystemUIFontMonospaced-Regular`: `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` v něm **jsou**
+    /// a od #501 se ověřilo i `←` (glyf 1312) a `→` (1314), ty dva ne. Text s nimi by se propadl do náhradního písma, tedy do jiné šířky i kresby než
     /// zbytek kapsle — proto se `Tab` a `esc` píšou slovem, jak je aplikace psala i před #441.
     ///
     /// Tvrdí se to nad **výčtem**, ne měřením písma za běhu: `NSFont` v testovacím hostu pod
@@ -223,7 +225,7 @@ struct WindowShortcutsTests {
     /// zopakovat.
     @Test("Kreslená zkratka nesahá po glyfu, který písmo kapsle nemá")
     func drawnShortcutsStayInsideTheMonospacedFont() {
-        let drawable: Set<Character> = ["⌘", "⌃", "⌥", "⇧", "⏎", "↑", "↓"]
+        let drawable: Set<Character> = ["⌘", "⌃", "⌥", "⇧", "⏎", "↑", "↓", "←", "→"]
 
         for shortcut in Policy.windowShortcuts {
             for character in shortcut.display where !character.isASCII {

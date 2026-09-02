@@ -6522,3 +6522,69 @@ Regrese ověřena vložením regrese — otisk vyřazený z rozhodování shodí
 sbalení vyřazené z `Policy` dalších pět. Co se v které sadě hlídá, je
 v [`docs/testovani.md`](testovani.md); rozhodnutí i se zamítnutými variantami v [záznamu
 rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--značka-prošlo-u-souboru-500).
+
+## #501 — mapa PR: pás pod hlavičkou ze segmentů souborů
+
+Na „jak velký a jak zlý je tenhle PR“ odpovídala pilulka `+248 −96` a pět čtverečků poměru v pruhu
+záložek. **Kde** v diffu je to zlé, se z ní poznat nedalo — na to se muselo do stromu, a i tam jen
+po puntíku u jména. Od #501 leží mezi hlavičkou a záložkami **pás, ve kterém je každý soubor
+segment**: šířka roste s `log₂(řádků + 1)`, barva je nejhorší nález v souboru, nový soubor má tón
+`ok`, prošlý (#500) je tlumený, vlákno je svislá čárka a soubor pod výřezem má obrys akcentem.
+Vpravo stojí `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna`. Klik skočí na soubor tou cestou, kterou
+skáče paleta ⌘K; `⌥←`/`⌥→` posunou o soubor. Je to první issue směru E z milníku **M14** a zákres
+se do `docs/navrh.html` přenesl jako **sekce 42**.
+
+**Logaritmus je celé to issue.** Nad rozložením ze sekce 03 návrhu (sedm souborů, `composer.lock`
+2 790 řádků z 2 952) by lineární šířka dala locku **94,5 %** pásu a ze zbytku šest čárek;
+s `log₂(n + 1)` má **30,8 %** — pořád největší, ale test o 64 řádcích je vidět (175 bodů proti 21
+v pásu o tisíci). Míří na to dvojice testů, z nichž jeden si lineární podíl spočítá **vlastní
+cestou**, aby bylo vidět, o kolik se pás zhorší.
+
+**Pilulku pás nahrazuje, nedoplňuje** — dvě místa s týmž údajem by se rozešla. Z `PullRequestTabBar`
+tím odešla i podoba `Layout.full` (od `labels` se lišila jedině tím, že pilulku kreslila) a `Policy`
+přišla o `diffstatBlocks`, protože je pak nikdo nečetl; pruh má **tři podoby** místo čtyř a nejširší
+je `labels`. **Číslo `+248 −96` v okně tím ale nezůstalo nikde**, a je to zapsaná ztráta: pás nese
+velikost jako plochu, kdo chce čísla, má je v nápovědě segmentu a v hlavičce souboru v diffu.
+Popisek pásu odpovídá na jiné otázky, a tak ho má i schválený zákres.
+
+**Obrys se čte z `DiffViewport`, a to bylo to jediné netriviální zapojení**: pás leží **nad** pruhem
+záložek, tedy mimo `DiffView`, kde ta krabice do #501 žila jako `@State`. Od #501 ji drží detail PR
+v `DiffTracking` a `DiffView` ji dostane parametrem (`nil` = diff commitu a náhled si drží vlastní,
+takže se pro ně nemění nic). Cesta souboru pod výřezem je **vlastní `@Observable` krabice**
+(`DiffFileCursor`), ne vlastnost `DiffViewport`u — tentýž důvod, jaký #469 mělo pro rozdělení
+`band` a `top`: `top` se mění při každém otočení kolečka, tahle hodnota jen na hranici souborů.
+Zapisuje do ní neviditelná sonda, takže se pás nepřekresluje při každém snímku. Odpověď dává
+`Policy.mapCurrentSegment`, což je `pinnedFileHeader` beze zbytku posunu — **jedna odpověď** pro
+obrys, ukotvenou hlavičku i `⌥V`.
+
+**Šířky počítá `Policy`, umisťuje vlastní `Layout`** (#220): `frame(width:)` na každém segmentu by
+potřeboval znát celkovou šířku, tedy druhé měření vedle toho, co rozvržení dělá samo (#236). Tři
+pravidla drží pohromadě: podíl z logaritmu, minimum tři body **vytlačené z dělení** (bez přepočtu
+by součet přerostl pás zrovna u PR s jedním lockem a šesti drobnostmi) a součet přesně na dostupnou
+šířku. Když se nevejdou ani minima, dělí se rovným dílem — **segment se nezahodí nikdy**.
+
+**Úzká podoba vyšla ze sondy, ne z návrhu.** Popisek stojí ~230 bodů, takže by v pohledu vedle sebe
+(detail 347 b) nechal pásu 73 a ze segmentů byly čárky. Popisek proto **ustupuje první** (práh 180
+bodů, `Policy.mapShowsSummary`) a v úzké podobě nese souhrn nápověda — tatáž úvaha jako u `+X −Y`
+v pruhu záložek (#316): jeho čísla jsou i v hlavičce stromu a v odznacích záložek, kdežto pás jinde
+není. Výšku řádky přitom drží pás (10 b), ne popisek (13 b), jinak by se hlavička při složení
+panelu posunula o tři body.
+
+**Odchylky od zákresu** jsou tři a všechny jsou v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--mapa-pr-pod-hlavičkou-501):
+úzká podoba, odsazení 16 bodů místo 22 (rozhoduje hlavička nad pásem — změřeno, obojí na x = 68)
+a nápověda jako nativní tooltip místo kreslené bubliny.
+
+**Pilulka odešla ze sedmi rámů okna v návrhu** (sekce 02, 03 dvakrát, 04, 19 dvakrát a 25) a pás
+tam přišel — to je pravidlo o záznamu dneška (#299), ne překreslování. Jediné místo, kde `.diffstat`
+zůstal, je záznam měření stupňů pruhu v sekci 19: je to záznam z #316, ne dnešní obrazovka.
+
+Testů **4890** ve 478 suitách; nové jsou dvě sady — `PullRequestMapTests` (29 tvrzení nad čistou
+funkcí) a `PullRequestMapDrawingTests` (9 nad bitmapou) — a sonda `PullRequestMapRenderProbe`
+(obrázek přes pásmo šířek 347/647/1047/1347 v obou režimech). Odešla `DiffstatBlocksTests` s funkcí,
+kterou hlídala, a dvě tvrzení o pilulce v `TabStripWidthTests` vyměnila **stráž nad zdrojákem**:
+`DiffCounts` ani `diffCounts` se do pruhu záložek nesmí vrátit. Katalog zkratek má **27 akcí**
+(`⌥←`, `⌥→`); že jsou ty glyfy v monospace písmu kapsle, je doměřené (`←` 1312, `→` 1314). Regrese
+ověřena vložením regrese, čtyřmi: lineární váha, `raised` místo `okWash` u nového souboru, `opacity(1)`
+místo tlumení a obtah nasazený dovnitř. Co se v které sadě hlídá, je v
+[`docs/testovani.md`](testovani.md).
