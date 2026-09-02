@@ -314,4 +314,29 @@ protocol GitHubGateway: Sendable {
     /// **Čtyřiadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád
     /// nemá nic, čím by šlo něco odeslat, a katalog repozitářů je čtení jako každé jiné.
     func repositories(in organization: String) async throws -> OrganizationRepositories
+
+    /// **Otevřené** pull requesty jednoho repa (#533) — druhá úroveň palety ⌘K.
+    ///
+    /// Existuje kvůli tomu, že katalog rep (`repositories(in:)`) nese jen **počet** otevřených PR,
+    /// ne jejich seznam: dotáhnout je pro tisíc rep organizace naráz nepřipadá v úvahu, kdežto pro
+    /// jedno repo na výslovný `↵` ano.
+    ///
+    /// **Jen otevřené, a je to součást otázky, ne filtr pro pohodlí.** Druhá úroveň odpovídá na
+    /// „co se v tomhle repu dá teď číst“; mergnutý PR z půl roku zpátky by seznam zaplevelil
+    /// a nedal se z něj vyfiltrovat, protože se v paletě hledá podle titulku.
+    ///
+    /// **Řazení tady není, a je to schválně.** `gh pr list` vrací PR **podle čísla, ne podle
+    /// poslední změny** — změřeno na `cli/cli` (`#14282` s razítkem 28. 8. stálo nad `#14259`
+    /// s 31. 8.), takže „podle poslední změny“ ze zákresu musí složit `Policy`, kde se to dá
+    /// otestovat výčtem. Gateway vrací, co přišlo.
+    ///
+    /// Změřeno na `cli/cli`: **1,1 s** a 14 kB nad padesáti otevřenými PR, tedy nesrovnatelně
+    /// méně než katalog rep. Strop je `Policy.paletteRepositoryPullRequestCap` (sto) a **je to
+    /// tatáž konstanta, ze které se pozná, že seznam není celý**: nadpis druhé úrovně pak píše
+    /// `prvních 100`, jako u 250 commitů. Dvě čísla na dvou místech by znamenala, že se strop
+    /// dosáhne jinde, než kde se o něm píše.
+    ///
+    /// **Pětadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád nemá
+    /// nic, čím by šlo něco odeslat, a výpis PR repa je čtení jako každé jiné.
+    func pullRequests(in repo: RepoID) async throws -> [PullRequestSummary]
 }

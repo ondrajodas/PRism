@@ -127,4 +127,15 @@ extension Policy {
     static func githubURL(of pullRequest: PRIdentifier) -> URL {
         URL(string: "https://github.com/\(pullRequest.repo)/pull/\(pullRequest.number)")!
     }
+
+    /// Adresa **seznamu otevřených PR** repozitáře (#533) — kam vede `⌘↵` na řádku repozitáře.
+    ///
+    /// `/pulls`, ne přehled repa: řádek palety mluví o otevřených pull requestech, takže `⌘↵`
+    /// má otevřít je. Je to tatáž úvaha jako `/files` u řádku souboru.
+    ///
+    /// **Rozbalení je invariant, ne optimismus**, přesně jako u `githubURL(of:)`: `RepoID` je
+    /// zúžený na jména, která GitHub dovolí, a zbytek adresy je statický.
+    static func githubPullsURL(of repo: RepoID) -> URL {
+        URL(string: "https://github.com/\(repo)/pulls")!
+    }
 }

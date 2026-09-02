@@ -390,6 +390,27 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
             ?? OrganizationRepositories(repositories: [], hitLimit: false)
     }
 
+    // MARK: - Otevřené PR repozitáře (#533)
+
+    /// Co vrátí `pullRequests(in:)` pro dané repo. Chybějící klíč = prázdný seznam, tedy repo
+    /// bez otevřených PR — což je platný stav, ne selhání.
+    var repositoryPullRequests: [RepoID: [PullRequestSummary]] = [:]
+    /// Čím `pullRequests(in:)` spadne. Klíčem je repo, aby šlo mít jedno funkční a jedno
+    /// nedostupné naráz.
+    var repositoryPullRequestFailures: [RepoID: any Error] = [:]
+    /// Na co se kdo ptal, **v pořadí**. Na počtu stojí test, že se druhá úroveň palety tahá
+    /// **jedině při vstupu do repa**, ne při každém úhozu — jinak by tenhle typ o téhle
+    /// vlastnosti netvrdil nic.
+    var repositoryPullRequestRequests: [RepoID] { lock.withLock { repositoryPullRequestsAsked } }
+
+    private var repositoryPullRequestsAsked: [RepoID] = []
+
+    func pullRequests(in repo: RepoID) async throws -> [PullRequestSummary] {
+        lock.withLock { repositoryPullRequestsAsked.append(repo) }
+        if let failure = repositoryPullRequestFailures[repo] { throw failure }
+        return repositoryPullRequests[repo] ?? []
+    }
+
     /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
     /// vyrobit label.
     var repositoryLabels: [PullRequestLabel] = []
