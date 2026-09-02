@@ -5339,6 +5339,21 @@ se nerozšířila a nový cíl `Target.repository` jen přepíná úroveň.
 (`7 otevřených PR · naposledy před hodinou`), takže „stav, který se drží, ale nikdo ho nečte“
 přestal být splacený dopředu a je splacený.
 
+**Zákres se v tomhle PR opravil, a je to výjimka z pravidla „návrh se schvaluje dřív, než vznikne
+issue“** — protože se neschvaluje nic nového. Sekce `s09repo` si ve dvou věcech **odporovala sama**:
+pořadí řádků v druhé úrovni mělo `#91 · před 2 h` nad `#85 · před hodinou`, ačkoli nadpis nad tím
+tvrdí řazení podle poslední změny, a patka úzkého výřezu měla `↑↓ vybrat` proti `↑↓ pohyb` v hlavní
+kresbě palety. Rozhodl to uživatel při proklikání („oprav to hned v tomhle PR“); srovnat se šlo
+jedině s tím, co drží pohromadě se zbytkem palety, takže **kresba se přerovnala podle svého vlastního
+nadpisu** (a kapsle `↵ otevřít` šla s kurzorem na první řádek, jak to dělá aplikace) a patka se
+sjednotila na `pohyb`. Poznámka 60 to od téhle změny **říká slovy**, aby kresba neměla jak nadpisu
+odporovat znovu.
+
+**Našlo to srovnání renderu s kresbou, ne čtení**, a to je na tom to poučení: aplikace řadila správně
+od začátku (řadí `Policy`, tvrdí to test výčtem), takže z kódu ani z textu zákresu nešlo poznat nic —
+vylezlo to teprve tím, že vedle sebe stály dva obrázky a v jednom byl první řádek jiný. Je to tentýž
+druh nálezu jako čtyři odchylky u #532, jen obráceně: tam měla chybu implementace, tady kresba.
+
 **Dvě věci, které se v harnessu ověřit nedají**, a obojí zkouší člověk: že `⌫` na prázdném poli
 vrátí o úroveň a nad napsaným dotazem maže znaky, a že `esc` v druhé úrovni paletu nezavře.
 Klávesa v testovacím hostu nezabere (viz [`docs/testovani.md`](../../testovani.md#jak-změřit-fokus-a-klávesy-184)),

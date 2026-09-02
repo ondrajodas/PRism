@@ -6656,12 +6656,21 @@ místo (#348) a osmá kopie metriky kvůli jednomu bodu je zrovna to, čemu se t
 (3) **Relativní čas má v obou skupinách týž tvar** (`před 2 hodinami`), kdežto zákres míchá plný
 u repa a zkrácený u PR; dva tvary v jedné kartě jsou horší než jeden. (4) **Stáří posledního pushe
 je na každém řádku repa**, kdežto zákres ho kreslí jen u prvního — mizející údaj u druhého řádku
-není chování, které by šlo vysvětlit, takže je to zúžení kresby, ne rozhodnutí.
+není chování, které by šlo vysvětlit, takže je to zúžení kresby, ne rozhodnutí. Odchylka č. 1
+zůstává i po opravě zákresu níž: patka první úrovně v něm má `↵ do repa`, protože ten výřez kreslí
+kurzor na řádku repozitáře — a právě to je ten údaj, který se podle úrovně měnit nemá.
 
-**A zákres si ve dvou věcech odporuje sám**, takže se šlo podle toho, co drží pohromadě se zbytkem
-palety: pořadí v druhé úrovni má `#91 · před 2 h` **nad** `#85 · před hodinou`, ačkoli nadpis nad
-tím tvrdí řazení podle poslední změny (aplikace řadí správně), a patka úzkého výřezu má
-`↑↓ vybrat`, kdežto hlavní kresba palety `↑↓ pohyb` (zůstalo `pohyb`).
+**A zákres si ve dvou věcech odporoval sám** — obojí se **opravilo v tomhle PR**, protože je to
+rozpor uvnitř už odsouhlaseného zákresu, ne nový návrh (rozhodl uživatel při proklikání). Pořadí
+v druhé úrovni mělo `#91 · před 2 h` **nad** `#85 · před hodinou`, ačkoli nadpis nad tím tvrdí
+řazení podle poslední změny; teď je kresba přerovnaná od naposledy změněného a kapsle `↵ otevřít`
+jde s kurzorem na první řádek, jak to dělá aplikace. A patka úzkého výřezu měla `↑↓ vybrat`, kdežto
+hlavní kresba palety `↑↓ pohyb`; sjednoceno na `pohyb` v obou výřezech. Poznámka 60 u sekce to od
+téhle změny **říká**, aby kresba neměla jak nadpisu odporovat znovu.
+
+**Ten rozpor našlo srovnání renderu s kresbou, ne čtení.** Aplikace řadila správně od začátku (řadí
+`Policy` a tvrdí to test výčtem), takže z kódu ani z textu zákresu se nedalo poznat nic — vylezlo to
+teprve tím, že vedle sebe stály dva obrázky a v jednom byl první řádek jiný.
 
 **Prázdný stav rozlišuje „nezeptal jsem se“ od „nenašlo se“**, což byla oprava z vlastní revize:
 repo bez otevřených PR není prázdný **výsledek**, ale prázdné **repo**, a `Na „“ nic nesedí` nad
