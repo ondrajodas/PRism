@@ -101,6 +101,47 @@ struct RenderDiagnosticsTests {
         #expect(diagnostics.graphSnapshot().isEmpty)
     }
 
+    /// Šířky, na kterých diff stojí (#546) — poslední hodnota za úsek, vlastní řádek.
+    @Test("Šířky jdou do vlastního řádku a za úsek se vynulují")
+    func writesTheWidths() throws {
+        let (diagnostics, file, directory) = try make()
+        defer { _ = directory }
+        diagnostics.note(width: 1_010, at: .diffSlot)
+        // **Poslední hodnota, ne řada**: hledá se, na čem scéna stojí, ne kudy se tam dostala.
+        diagnostics.note(width: 970, at: .diffCodeColumn)
+        diagnostics.note(width: 1_110, at: .diffMeasuredContent)
+        diagnostics.note(width: 1_422, at: .diffSlot)
+        #expect(diagnostics.widthSnapshot() == [
+            "DiffView.slot": 1_422,
+            "DiffView.code": 970,
+            "DiffView.measured": 1_110,
+        ])
+        diagnostics.noteCycle()
+        #expect(diagnostics.flush(at: start.addingTimeInterval(1), cpu: 0.5))
+        #expect(diagnostics.widthSnapshot().isEmpty)
+        let lines = TextLines.content(try String(contentsOf: file, encoding: .utf8))
+        #expect(lines.contains {
+            $0.hasSuffix("šířky: DiffView.slot=1422.0 DiffView.code=970.0 DiffView.measured=1110.0")
+        }, "V záznamu není řádek se šířkami:\n\(lines.joined(separator: "\n"))")
+    }
+
+    /// **Šířka se zapíše i v klidném úseku, a je to podmínka** (#546): kolony se rozvrhnou jednou
+    /// při otevření záložky a pak se nemusí hnout celé minuty. Kdyby se řádek vázal na hlavní
+    /// řádek úseku, ta jediná chvíle, ve které se šířka změřila, by spadla do folding klidu — tedy
+    /// zrovna to, na co se u #546 ptáme. Je to **rozdíl proti řádkům o grafu**, které v tichu
+    /// přílohu nedostanou.
+    @Test("Šířka se zapíše i tehdy, když se v úseku nic nedělo")
+    func silentSliceStillWritesTheWidths() throws {
+        let (diagnostics, file, directory) = try make()
+        defer { _ = directory }
+        diagnostics.note(width: 970, at: .diffCodeColumn)
+        #expect(diagnostics.flush(at: start.addingTimeInterval(1), cpu: 0))
+        let lines = TextLines.content(try String(contentsOf: file, encoding: .utf8))
+        #expect(lines.count == 1, "Čekal se jediný řádek se šířkou, přišlo:\n\(lines.joined(separator: "\n"))")
+        #expect(lines[0].hasSuffix("šířky: DiffView.code=970.0"))
+        #expect(diagnostics.widthSnapshot().isEmpty)
+    }
+
     /// **Vzorků zásobníku se za úsek vezme nejvýš `stackBudget`** — bez toho stropu by hořící kolo
     /// vyrobilo tisíce dotazů za sekundu a diagnostika by se stala tím, co měří.
     ///

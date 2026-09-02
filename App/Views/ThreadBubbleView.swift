@@ -77,9 +77,21 @@ struct ThreadBubbleView: View {
         // plochy, ne na hraně obsahu (změřeno, viz `EmojiSuggestionBox`).
         .emojiMenuAbove { EmojiSuggestionMenu(suggestions: emoji) }
         .padding(.leading, indent)   // u kódu do sloupce s obsahem, na ose nula
-        .padding(.trailing, 16)
+        .padding(.trailing, Self.trailingInset)
         .padding(.vertical, 4)
+        // **Kdo paduje, musí o to zúžit šířku pro děti** (#546, pravidlo #220) — jinak si `filling()`
+        // uvnitř vezme šířku **rodiče** a bublina o to odsazení přeteče. Právě tohle byla #546:
+        // v diffu je `indent` 84 bodů, takže bublina vycházela o 100 širší, než jaké místo dostala,
+        // `ScrollView` diffu se v nescrollované ose řídí obsahem — a celý diff se tím vylil ven.
+        // Zúžení patří **za** odsazení: `transformEnvironment` platí pro podstrom, tedy pro to,
+        // co je uvnitř. Na ose konverzace je `indent` nula, takže se tam odečte jen `16`.
+        .narrowingWidth(by: indent + Self.trailingInset)
     }
+
+    /// Odsazení zprava. **Konstanta, protože se o ni zužuje šířka pro děti** (#546) — dvě čísla
+    /// (jedno v `padding`, druhé v `narrowingWidth`) by se při první úpravě rozešla a bublina by
+    /// zase přetekla, jen o míň.
+    private static let trailingInset = 16.0
 
     /// Úryvek kódu k vláknu (#158) — **jen na ose**. U kódu ho kreslit nemá cenu: tentýž kus
     /// souboru je nad bublinou vidět v diffu.

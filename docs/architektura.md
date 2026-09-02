@@ -1780,6 +1780,88 @@ obsah zahodí a postaví znovu (#472/#476), kdežto projíždění tu změnu nem
 to má na ostrých datech, ne na vyrobené scéně — jak, je
 v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).
 
+### Kolona kódu se sází na svou šířku (#546)
+
+Vada, kterou uživatel viděl při každém otevření diffu: **obsah diffu se sázel na plochu širší, než
+jakou dostal**, a přesah odcházel **doleva** přes rail — levá polovina splitu tím přišla o čísla
+řádků, cesta souboru začínala uprostřed (`ping/AGENTS.md` místo `…/input-mapping/AGENTS.md`) a text
+uprostřed slova. Druhý projev téže vady byl ukazatel `N znaků na stranu`: v okně 1 512 hlásil **84**
+nad kolonou, do které se jich vejde 62.
+
+**Nebyla to hypotéza ze zadání.** #503 tipovalo, že `contentWidth` drží šířku okna, protože je to
+`@State` z `onGeometryChange` a ten se při nezměněné hodnotě nespustí (#361). Změřeno v diagnostice
+kreslení: `onGeometryChange` běžel a měřil správně **tu plochu, na které stál** — jenže ta plocha
+byla 1 110 b nad kolonou 970 b. Čísla i postup jsou
+v [`docs/testovani.md`](testovani.md#neověřená-mezera-71-znaků-na-stranu-v-živém-okně--vyřešeno-546).
+
+#### Řetěz, na jehož konci je vylitý diff
+
+1. **`\.availableWidth` v podstromu diffu byla štěrbina celého tabu.** Detail PR ji změří jednou
+   a pošle dolů (#220); `DiffView` z ní odečte strom, okraj a mezeru — jenže **jen pro sebe**,
+   do prostředí ten odečet nešel. Cokoli, co si šířku bere z prostředí (`filling()`), se tedy
+   přibilo na okno bez railu a panelu.
+2. **`ThreadBubbleView` k tomu nezúžila šířku pro děti o své odsazení.** Uvnitř `filling()`, kolem
+   `padding(.leading, indent)` + `padding(.trailing, 16)` — v diffu je `indent`
+   `DiffLineView.contentInset(for:)`, tedy 84 b. Bublina proto vycházela **o 100 b širší** než
+   plocha, kterou dostala. (Uvnitř téže bubliny to hlavička dělá **správně** — `narrowingWidth(by: 22)`
+   proti `padding(.horizontal, 11)` —, takže vzor v souboru byl, jen o úroveň výš chyběl.)
+3. **`ScrollView` se v nescrollované ose řídí velikostí obsahu.** Široký řádek tedy nezmizel
+   v ořezu: plocha diffu si o tu šířku řekla a dostala ji.
+4. **`fillingSlot()` ji vystředil.** `frame(width:)` neořezává, takže se přebytek rozdělil na obě
+   strany — vpravo ho zakryl okraj s kartami a proužek panelu, vlevo vylezl přes rail.
+
+Sedí to na bod na třech nezávislých živých měřeních (obsah = štěrbina + 100 b) a ablace to potvrdila
+z druhé strany: zúžení prostředí o 40 b srazilo obsah přesně o 40 b.
+
+#### Oprava je předání, ne dohadování (#220)
+
+- **`Policy.diffCodeColumnWidth(available:columns:)`** je jediné místo, které tu šířku počítá:
+  štěrbina minus strom, minus okraj, minus `codeColumnTrailingGap`. Je to **tatáž aritmetika, jakou
+  provádí `HStack`** — a tatáž čísla, podle kterých se rozhoduje o kolonách, takže se dvě pravdy
+  o jedné šířce nemají kde vzít (#236). `nil` znamená „štěrbinu nikdo nezměřil“ (náhledy, sondy)
+  a chová se jako do #546.
+- **Není to další pole `DiffSideColumns`**, a je to podstatné: ta struktura je identita
+  `task(id:)` v `DiffView`, tedy rozhodnutí, které se má uplatnit **jednou**. Číslo, které se mění
+  při každém bodu tažení za roh okna, by tu automatiku pouštělo pořád.
+- **`DiffView` tu šířku posílá do prostředí** (`availableWidth(code)`) a **do lišty**
+  (`contentWidth: code ?? contentWidth`). Ukazatel je tím **důsledek**, ne cíl opravy: mluví
+  o koloně, protože o ní mluví i sazba.
+- **`ThreadBubbleView` se zúží o své odsazení** (`narrowingWidth(by: indent + trailingInset)`,
+  úplně navrch, protože `transformEnvironment` platí pro podstrom). Odsazení zprava je konstanta,
+  ne dvě čísla: `padding` a zúžení musí být tatáž hodnota.
+- **`fillingSlot(alignment: .topLeading)` je pojistka, ne oprava.** Ve zdravém stavu na zarovnání
+  nezáleží; rozhoduje teprve tehdy, když si obsah zase vezme víc — a pak je rozdíl mezi „ořízne se
+  vpravo, kde je okraj“ a „vyleze doleva přes rail a sežere čísla řádků“. **Vadu to nezakrývá**:
+  šířka plochy se dál dá změřit a test na ni vidí.
+- **Změřený `contentWidth` ve stavu `DiffView`u zmizel.** Zůstalo jen měření do diagnostiky —
+  rozdíl proti spočítané koloně je celá #546 a bez něj by ho nebylo z čeho přečíst. Ukazatel bez
+  předané štěrbiny se **nekreslí vůbec**: `DiffView` hostovaný mimo okno (náhledy) o šířce nemá co
+  tvrdit, a záloha, kterou nikdo nečte, je stav navíc.
+
+**Ostatní bubliny v řádku diffu jsou v pořádku a bylo to ověřeno, ne předpokládáno**:
+`FindingBubbleView` i `DraftCommentBubbleView` používají `frame(maxWidth: .infinity)`, tedy
+**přijímají návrh** místo aby se přibíjely na prostředí. Vzor, který se hlídá, je `filling()`
+uvnitř odsazení — ne odsazení samo.
+
+**Zúžení dostane jen kolona kódu, ne strom a okraj, a je to rozhodnutí.** Obě zbylé kolony mají
+`frame(width:)` z `Policy`, takže se jejich obsah nemá jak roztáhnout přes ně — a nic uvnitř nich
+si šířku z prostředí nebere (`FileTreeView` používá `fillingSlot()`, karta v okraji
+`frame(maxWidth: .infinity)`). Kdyby si vzalo, projeví se to **stejně** jako #546 a najde se to
+týmž sweepem; předávat tam šířku „pro jistotu“ by znamenalo dvě další místa, která se s `HStack`em
+umí rozejít.
+
+#### Šířky v diagnostice kreslení (`WidthSite`)
+
+Tři hodnoty, které jdou při zapnuté diagnostice (`./bin/run.sh --diagnose`) na vlastní řádek:
+štěrbina diffu, spočítaná kolona a **změřená** plocha se sazbou. `diffMeasuredContent` je z nich ta
+podstatná — je to jediné místo, kde se ještě měří, takže rozdíl proti spočítané koloně je vidět
+z log souboru bez okna.
+
+**Řádek se zapisuje i v klidném úseku**, na rozdíl od řádků o grafu: kolony se rozvrhnou jednou při
+otevření záložky a pak se nemusí hnout celé minuty, takže by ta jediná zajímavá chvíle spadla do
+minutového souhrnu klidu (#412). Vypnutá diagnostika stojí jeden load `Optional`u, jako `pass(_:)`.
+
+
 ## `Config` (`App/Config/`)
 
 Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé
@@ -5506,6 +5588,46 @@ tabulky výš patří:
 ```bash
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'
 ```
+
+### Kdo paduje kolem `filling()`, musí o to zúžit prostředí (#546)
+
+`filling()` je **přibití na hodnotu z prostředí**, ne pružnost: dostane `frame(width: availableWidth)`,
+takže se okolní `padding` **přičte** a view vyjde širší, než jaké místo dostalo. Je to napsané
+u `narrowingWidth(by:)` od #220 („bez toho by dítě dostalo šířku rodiče a přeteklo by o padding“),
+jenže se to dá minout — a #546 je přesně to: `ThreadBubbleView` zúžila prostředí uvnitř své
+hlavičky (`narrowingWidth(by: 22)` proti `padding(.horizontal, 11)`) a **o úroveň výš, kde má
+`indent + 16`, ne**.
+
+**Přetečení není vidět tam, kde vzniklo.** Bublina je uvnitř `ScrollView`u diffu, a ten se
+v nescrollované ose řídí velikostí obsahu — takže se z bubliny o 100 b širší stane **plocha
+o 100 b širší** a `frame(width:)` nad ní obsah vystředí. Vada se pak projeví na úplně jiném konci
+okna (kód bez čísel řádků přes rail), což je důvod, proč se hledala tak dlouho.
+
+Tři věci, které z toho platí:
+
+- **`padding` a zúžení jsou tatáž hodnota, tedy jedna konstanta.** Dvě čísla se při první úpravě
+  rozejdou a view přeteče znovu, jen o míň.
+- **Zúžení jde úplně navrch.** `narrowingWidth` je `transformEnvironment`, tedy platí pro podstrom
+  — pod odsazením by `filling()` nad ním nechytilo.
+- **Vzor, který se hlídá, je `filling()` uvnitř odsazení**, ne odsazení samo.
+  `frame(maxWidth: .infinity)` návrh **přijímá**, takže se paduje bez zúžení bez následku — a přesně
+  proto jsou `FindingBubbleView` i `DraftCommentBubbleView` v pořádku.
+
+**Rozhoduje pořadí, a to grep neumí**, takže je to výčet k posouzení, ne stráž: `padding` **před**
+`filling()` je odsazení **uvnitř** přibité šířky, tedy v pořádku; `filling()` před `padding`em je
+ten vadný tvar. Prázdný vyjít nemůže — `filling()` s odsazením uvnitř je běžný a správný:
+
+```bash
+grep -rln 'filling(' App | while read -r f; do
+    grep -q 'padding(' "$f" && echo "$f"
+done
+```
+
+**Sweep u #546 nad celým `App/` vydal 14 souborů a vadný tvar byl v jednom** — `ThreadBubbleView`.
+Ve všech ostatních je `padding` uvnitř (`AskView`, `CommandPaletteView`, `CommandPaletteRowView`,
+`IncrementalDiffBar`, `CommitListView`, `CommitDiffView`, `PullRequestDetailView`), nebo je zúžení
+zapsané (`MarkdownText`, `ConversationEntryView`, `ConversationNodeView`, `CommitHeaderView`,
+`OverviewView`).
 
 ### `fillingSlot()` — líný seznam rozměr nevyjednává vůbec (#361)
 

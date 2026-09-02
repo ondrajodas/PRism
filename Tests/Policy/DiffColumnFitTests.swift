@@ -94,6 +94,58 @@ struct DiffColumnFitTests {
         #expect(!split.margin)
     }
 
+    // MARK: - Šířka kolony kódu (#546)
+
+    /// **Kolona kódu je štěrbina bez toho, co v ní stojí** — a je to tatáž aritmetika, jakou
+    /// provádí `HStack` v `DiffView`. Kdyby se rozešly, předaná šířka by mluvila o jiné ploše než
+    /// ta, na které se doopravdy sází, a byla by z toho #546 v jiné podobě.
+    @Test("Kolona kódu je štěrbina bez stromu, okraje a mezery", arguments: widths,
+          [DiffLayout.unified, .split])
+    func theCodeColumnIsWhatTheStackLeaves(width: Double, layout: DiffLayout) throws {
+        for hasMargin in [true, false] {
+            let columns = Policy.diffSideColumns(layout: layout, hasMargin: hasMargin, available: width)
+            let column = try #require(Policy.diffCodeColumnWidth(available: width, columns: columns))
+            let sides = Policy.treeColumnWidth(expanded: columns.tree)
+                + Policy.marginColumnWidth(shown: columns.margin)
+                + Policy.codeColumnTrailingGap
+            #expect(column == max(width - sides, 0), """
+                Šířka \(width), \(layout), okraj \(hasMargin): kolona \(column), \
+                ale po kolonách zbývá \(width - sides)
+                """)
+        }
+    }
+
+    /// **Mezera před pravou kolonou se odečítá** (#503) — je mimo `fillingSlot`, takže od štěrbiny
+    /// ubírá. Bez toho by předaná šířka byla o šest bodů větší než plocha, kterou `HStack` dá.
+    @Test("Mezera před pravou kolonou se od kolony odečte")
+    func theTrailingGapIsSubtracted() throws {
+        let columns = Policy.diffSideColumns(layout: .split, hasMargin: false, available: 1_010)
+        let column = try #require(Policy.diffCodeColumnWidth(available: 1_010, columns: columns))
+        // Štěrbina 1010, složený strom 34, žádný okraj → 1010 − 34 − 6 = 970. To je číslo
+        // změřené na živém okně 1100 × 700 u #546.
+        #expect(column == 970)
+    }
+
+    /// **Nikdy záporná, a nikdy `nil` u změřené štěrbiny.** `frame` se zápornou šířkou je
+    /// nedefinovaný stav, takže odečítání má podlahu; `nil` znamená jedinou věc — štěrbinu nikdo
+    /// nezměřil (náhledy, sondy), a tam se obsah chová jako do #546.
+    @Test("Nikdy záporná, bez štěrbiny nic", arguments: [DiffLayout.unified, .split])
+    func neverNegative(layout: DiffLayout) {
+        for width in [0.0, 10, 40, 200, 340] {
+            for hasMargin in [true, false] {
+                let columns = Policy.diffSideColumns(
+                    layout: layout,
+                    hasMargin: hasMargin,
+                    available: width
+                )
+                let column = Policy.diffCodeColumnWidth(available: width, columns: columns)
+                #expect(column ?? 0 >= 0, "Šířka \(width), \(layout): kolona \(column ?? -1)")
+            }
+        }
+        let unmeasured = Policy.diffSideColumns(layout: layout, hasMargin: true, available: nil)
+        #expect(Policy.diffCodeColumnWidth(available: nil, columns: unmeasured) == nil)
+    }
+
     @Test("Šířky kolon má na starost Policy, ne dvě konstanty ve views")
     func widthsComeFromPolicy() {
         // Rozhodnutí i kresba musí čísla brát z jednoho místa — dvě pravdy o jedné šířce se

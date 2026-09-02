@@ -111,6 +111,14 @@ final class RenderDiagnostics: @unchecked Sendable {
         current?.note(site: site)
     }
 
+    /// Na jakou šířku se v diffu doopravdy sází (#546). Viz `WidthSite`.
+    ///
+    /// **Poslední hodnota, ne řada**: zápis pod zámkem a nic víc, takže je to tatáž cena jako
+    /// `pass(_:)`. Vypnutá diagnostika stojí jeden load `Optional`u.
+    static func measured(_ site: WidthSite, _ width: Double) {
+        current?.note(width: width, at: site)
+    }
+
     private let log: DiagnosticsLog
     private let zone: TimeZone
     /// Jak často se zapisuje řádek. Je to **cadence zapisovacího vlákna**, ne strop: co se za tu
@@ -126,6 +134,9 @@ final class RenderDiagnostics: @unchecked Sendable {
     private var sites: [String: Int] = [:]
     /// Odebrané evaluační zásobníky — **vejde se jich do úseku nejvýš `stackBudget`**.
     private var stacks: [String] = []
+    /// Poslední změřená šířka v každém místě (#546). Prázdné = v tomhle úseku se šířka neměřila,
+    /// a to je zrovna ta informace, kterou #546 hledá.
+    private var widths: [String: Double] = [:]
     /// Kolikrát se v úseku vzorek **vzal** (i když z něj nic nepřišlo, viz `note(site:)`).
     private var samples = 0
     /// Který úsek to je. Zvyšuje se s každým vynulováním a slouží k jediné věci: poznat vzorek,
@@ -289,6 +300,16 @@ final class RenderDiagnostics: @unchecked Sendable {
         }
     }
 
+    /// Přišla nová šířka (#546). Zápis pod zámkem, nic jiného.
+    func note(width: Double, at site: WidthSite) {
+        lock.withLock { widths[site.rawValue] = width }
+    }
+
+    /// Poslední změřené šířky — pro sondy, které si řádky skládají samy.
+    func widthSnapshot() -> [String: Double] {
+        lock.withLock { widths }
+    }
+
     /// Co se od posledního řádku nasbíralo. **Nic tím nenuluje** — je to čtení pro sondy, které
     /// počitadla vyhodnocují samy a řádek do souboru nepotřebují.
     func snapshot() -> [String: Int] {
@@ -319,6 +340,7 @@ final class RenderDiagnostics: @unchecked Sendable {
         lock.withLock {
             passes.removeAll(keepingCapacity: true)
             resetGraph()
+            widths.removeAll(keepingCapacity: true)
             // I nasbíraný klid (#412): bez toho by souhrn v druhém úseku nesl minuty z prvního
             // a „po gestu se nic nepřekresluje“ by se z čísel nedalo přečíst.
             resetQuiet()
@@ -440,6 +462,12 @@ final class RenderDiagnostics: @unchecked Sendable {
                 passes: namedPasses()
             )
             var out: [String] = []
+            // **Šířky se zapisují i v klidném úseku** (#546), a je to podmínka, ne rozmar: kolony se
+            // rozvrhnou jednou při otevření záložky a pak se nemusí hnout celé minuty. Kdyby se
+            // řádek vázal na hlavní řádek úseku, ta jediná chvíle, ve které se šířka změřila, by
+            // spadla do folding klidu — tedy zrovna to, na co se ptáme.
+            let widthLines = Policy.widthDiagnosticLines(widths)
+            widths.removeAll(keepingCapacity: true)
             if let line {
                 if let summary = quietSummary(at: moment) { out.append(summary) }
                 out.append(line)
@@ -455,6 +483,7 @@ final class RenderDiagnostics: @unchecked Sendable {
                     out.append(summary)
                 }
             }
+            out += widthLines.map { Policy.stamp(of: moment, in: zone) + " " + $0 }
             cycles = 0
             passes.removeAll(keepingCapacity: true)
             resetGraph()

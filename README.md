@@ -2347,6 +2347,18 @@ za 1.01 s: 0 kol runloopu, 1.007 s CPU — HLAVNÍ VLÁKNO NEPUSTILO RUNLOOP KE 
 Čte se to jednou funkcí privátního frameworku a **jedině se zapnutou diagnostikou**; když ji systém
 nemá, stojí to v souboru hned za hlavičkou, takže „graf nic neřekl“ a „graf nejde otevřít“ nesplyne.
 
+**A od #546 v něm jsou i šířky, na kterých diff stojí** — štěrbina, kterou dostal, spočítaná kolona
+kódu a **změřená** plocha, na které se doopravdy sází. Rozdíl mezi posledními dvěma je vada, kterou
+z okna nejde přečíst jinak než pravítkem:
+
+```
+2026-09-02T23:21:21+0200 šířky: DiffView.slot=1010.0 DiffView.code=970.0 DiffView.measured=1110.0
+```
+
+Ten řádek se zapisuje **i v úseku, ve kterém se nic nedělo** (na rozdíl od řádků o grafu): kolony se
+rozvrhnou jednou při otevření záložky a pak se celé minuty nehnou, takže by ta jediná zajímavá
+chvíle spadla do souhrnu klidu.
+
 **Vypnutá nestojí nic** (jedna podmínka na začátku `body`, resp. u dotazu na identitu řádku)
 a **vypne se sama**: příznak umře
 s procesem, takže další `./bin/run.sh` bez `--diagnose` je zpátky v normálním provozu. Že je

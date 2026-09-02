@@ -218,6 +218,32 @@ extension Policy {
         )
     }
 
+    /// Šířka kolony kódu — **plocha, na které se doopravdy sází** (#546).
+    ///
+    /// Je to tatáž aritmetika, jakou provádí `HStack` v `DiffView`: od štěrbiny diffu se odečte
+    /// strom, okraj a **mezera před tím, co stojí vpravo** (`codeColumnTrailingGap`, #503 — ta je
+    /// mimo `fillingSlot` schválně, takže od štěrbiny ubývá). Odsud se šířka **předává** obsahu
+    /// i ukazateli `N znaků na stranu`; do #546 si ji obsah měřil sám a měřil něco jiného.
+    ///
+    /// **Proč to není další pole `DiffSideColumns`.** Ta struktura je identita `task(id:)`
+    /// v `DiffView` — rozhodnutí o kolonách se má uplatnit jednou —, kdežto tohle je číslo, které se
+    /// mění při každém tažení za roh okna. Slité dohromady by se automatika sloupců pouštěla při
+    /// každém bodu změny šířky.
+    ///
+    /// `nil` znamená „nikdo štěrbinu nezměřil“ a chová se jako do #546: obsah si vezme, co dostane.
+    /// Bez toho by `DiffView` mimo okno (náhledy, sondy) dostal nulu a zmizel by.
+    ///
+    /// **Nikdy záporná**: v okně užším než postranní kolony by odečítání šlo pod nulu a `frame`
+    /// se zápornou šířkou je nedefinovaný stav. `diffSideColumns` proto okraj v takovém okně
+    /// zahodí — tahle podlaha je druhá pojistka, ne to rozhodnutí.
+    static func diffCodeColumnWidth(available: Double?, columns: DiffSideColumns) -> Double? {
+        guard let available else { return nil }
+        let sides = treeColumnWidth(expanded: columns.tree)
+            + marginColumnWidth(shown: columns.margin)
+            + codeColumnTrailingGap
+        return max(available - sides, 0)
+    }
+
     /// Kolik musí zbýt na kód, aby to k něčemu bylo.
     ///
     /// **Je to změřená mez, ne kulaté číslo.** Hlavička souboru nese `nový`, `2 blokují`,

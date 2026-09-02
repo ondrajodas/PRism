@@ -118,8 +118,6 @@ struct DiffView: View {
     /// Které rozhodnutí o postranních sloupcích už automatika provedla (#188, od #503 i okraj).
     /// Bez toho by se opakovalo při každém vzniku view a přebíjelo ruční `⌘1`/`⌘2`.
     @State private var appliedColumns: DiffSideColumns?
-    /// Šířka, kterou má diff k dispozici — z ní se počítá, kolik znaků se vejde na stranu (#188).
-    @State private var contentWidth = 0.0
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
     /// mimo observable stav, takže se jimi diff nepřekresluje — viz `DiffRowFrames`.
     @State private var rowFrames = DiffRowFrames()
@@ -158,9 +156,17 @@ struct DiffView: View {
             hasMargin: !cards.isEmpty,
             available: slotWidth.map(Double.init)
         )
+        // Šířka kolony kódu se **předává** (#546, pravidlo #220): plocha, na kterou se sází, je
+        // štěrbina bez stromu, bez okraje a bez mezery před nimi — a ta se dá spočítat, takže se
+        // nemá co měřit. Do #546 si ji obsah bral z `onGeometryChange` a měřil něco jiného.
+        let code = Policy.diffCodeColumnWidth(available: slotWidth.map(Double.init), columns: columns)
+        // Diagnostika kreslení (#546): na čem scéna doopravdy stojí. Vypnutá stojí jeden load
+        // `Optional`u; viz `WidthSite`.
+        let _ = slotWidth.map { RenderDiagnostics.measured(.diffSlot, Double($0)) }
+        let _ = code.map { RenderDiagnostics.measured(.diffCodeColumn, $0) }
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: 0) {
-                toolbar
+                toolbar(codeWidth: code)
                 // Pruh hledání (#152) — **druhá řádka chromu pod lištou**, přes celou šířku, tedy
                 // i nad stromem: hledá se v celém diffu, ne v jednom souboru. Existuje jen
                 // otevřený, takže lišta nad ním zůstává, jaká byla.
@@ -180,11 +186,25 @@ struct DiffView: View {
                     // **Rozměr se měří, nevyjednává** (#361) — jinak `HStack` posílá líným
                     // seznamem diffu svoje průzkumné dotazy na pružnost a `LazyVStack` na každý
                     // z nich odpovídá zápisem do svého stavu.
-                    files(cards: cards).fillingSlot()
+                    // **Kolona kódu je vlastní štěrbina, a musí to vědět i podstrom** (#546).
+                    // Do #546 tady zůstávala štěrbina **celého tabu**, takže se všechno, co si
+                    // šířku bere z prostředí (`filling()` — v diffu bublina vlákna), přibilo na
+                    // okno bez railu a panelu, tedy o strom, okraj a mezeru **širší**, než jaké
+                    // místo dostalo. `ScrollView` se v nescrollované ose velikostí řídí obsahem,
+                    // takže z toho byla plocha širší než kolona — a ta se centrovala, tedy vylila
+                    // **doleva** přes rail. Změřeno v okně 1100: kolona 970 b, obsah 1110 b.
+                    files(cards: cards)
+                        .availableWidth(code.map { CGFloat($0) } ?? slotWidth)
+                        // **Zarovnání doleva, ne na střed** (#546). Ve zdravém stavu na něm
+                        // nezáleží (plocha má přesně tu velikost, kterou dostala); rozhoduje
+                        // teprve tehdy, když si obsah vezme víc — a pak je rozdíl mezi „ořízne se
+                        // vpravo, kde je okraj“ a „vyleze doleva přes rail a sežere čísla řádků“.
+                        // **Vadu to neschovává**: šířka té plochy se pořád dá změřit a přeteklá je
+                        // pořád jiná než kolona, takže na ni test vidí (`DiffCodeColumnWidthTests`).
+                        .fillingSlot(alignment: .topLeading)
                         // **Vzduch mezi kódem a tím, co je vpravo** (#503). Mimo `fillingSlot`,
-                        // takže se ta mezera odečte od štěrbiny a `contentWidth` dál měří
-                        // plochu, na které se doopravdy sází — ukazatel „znaků na stranu“ tím
-                        // nezačne slibovat sloupec, který není.
+                        // takže se ta mezera odečte od štěrbiny — a `Policy.diffCodeColumnWidth`
+                        // ji odečítá taky, aby předaná šířka byla ta, kterou `HStack` doopravdy dá.
                         .padding(.trailing, Policy.codeColumnTrailingGap)
                     // Okraj s kartami nálezů (#503) — třetí kolona z návrhu
                     // (`210px 1fr 300px`), a **jen když je co do ní postavit**: okraj bez karet
@@ -428,7 +448,13 @@ struct DiffView: View {
             return $0.size
         } action: {
             viewportHeight = $0.height
-            contentWidth = $0.width
+            // **Šířka se odsud už nikam nezapisuje** (#546). Do #546 z ní byl `contentWidth` pro
+            // ukazatel „znaků na stranu“, jenže je to velikost **plochy**, a ta je při přeteklém
+            // obsahu větší než kolona — v okně 1512 z ní vyšlo 84 znaků nad kolonou, do které se
+            // jich vejde 62. Ukazatel proto bere šířku předanou (`Policy.diffCodeColumnWidth`)
+            // a tohle zbylo jako **měřidlo do diagnostiky**: rozdíl proti spočítané koloně je celá
+            // #546 a bez něj by ho nebylo z čeho přečíst.
+            RenderDiagnostics.measured(.diffMeasuredContent, $0.width)
         }
         .sheet(item: $codeText) { CodeTextSheet(content: $0) }
         // Rozsahy i změřené výšky bloků patří **tomuhle** diffu: `@State` detailu přetéká mezi
@@ -622,7 +648,12 @@ struct DiffView: View {
         }
     }
 
-    private var toolbar: some View {
+    /// Lišta nad diffem.
+    ///
+    /// **Šířka kolony přichází parametrem, ne z počítané vlastnosti** (#546): skládá se z karet
+    /// v okraji (`marginCards`) a ty se smí složit **jednou za průchod** — dvě složení jsou dvě
+    /// odpovědi na to, které karty v okraji jsou (viz `body`).
+    private func toolbar(codeWidth: Double?) -> some View {
         DiffToolbar(
             diff: diff,
             layout: $layout,
@@ -634,7 +665,11 @@ struct DiffView: View {
             folding: folding,
             collapseExpansion: expansion.collapse,
             missingThreads: missingThreads,
-            contentWidth: contentWidth,
+            // **Předaná šířka kolony, ne změřená plocha** (#546): měřená plocha je při přeteklém
+            // obsahu širší než kolona, takže by ukazatel sliboval sloupec, který na obrazovce není.
+            // `0` znamená „štěrbinu nikdo nezměřil“ a ukazatel se pak nekreslí vůbec — `DiffView`
+            // hostovaný mimo okno (náhledy) o šířce nemá co tvrdit.
+            contentWidth: codeWidth ?? 0,
             // `nil`, když hledání nikdo nedodal (náhledy, sondy) — popisek se pak nekreslí, místo
             // aby otevíral pruh, který nemá kde vzniknout.
             openSearch: search.open,

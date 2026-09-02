@@ -33,6 +33,21 @@ struct GraphSiteWiringTests {
         }
     }
 
+    /// Totéž pro šířky (#546). **Nezapojená šířka je řádek, který v záznamu chybí** — a chybějící
+    /// hodnota se nedá odlišit od „tou cestou se to nepočítalo“, tedy od odpovědi, kterou u #546
+    /// hledáme. `diffMeasuredContent` je u toho ta podstatná: je to jediné místo, kde se ještě
+    /// **měří**, takže bez jejího volání by se rozdíl proti spočítané koloně z log nedal přečíst.
+    @Test("Každá vyjmenovaná šířka se v aplikaci hlásí")
+    func everyWidthIsWired() throws {
+        let code = try appCode()
+        for site in WidthSite.allCases {
+            #expect(
+                code.contains("RenderDiagnostics.measured(.\(site)"),
+                "šířka \(site) (\(site.rawValue)) se v App/ nikde nehlásí"
+            )
+        }
+    }
+
     /// **Identita líných seznamů jde přes hák.** Tři seznamy, ve kterých se kolo z #361 chytlo:
     /// soubory a řádky diffu a osa konverzace. Kdyby se `ForEach` vrátil na `\.id`, diagnostika by
     /// v kole osy konverzace neviděla **nic** — tam je dotaz na identitu jediná přítomnost
