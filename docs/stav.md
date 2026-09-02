@@ -6807,3 +6807,51 @@ souboru s nejvýš jedním řádkem podíl `0,5` **každému** vláknu, tedy bez
 pak tvrdil diskuzi v souboru, ve kterém pro ni není řádek. Tvrzení `Vlákno mimo hunky čárku
 nedostane` to nechytalo, protože běželo nad desetiřádkovým hunkem. Opraveno tak, že pravidlo platí
 i v degenerovaném případě (bez řádků se nekreslí nic) a přibyla na to dvě tvrzení.
+
+**Z těch dvou otázek je jedna dotažená a druhá otevřená znovu — a to druhé je výsledek měření.**
+Ondra vybral **legendu A** (na vyžádání z popisku) a **`log₂` nechal**, ale s podmínkou: *„zobrazený
+file by se měl teda spolehlivě zvýraznit"*. Je to protiváha za proměnnou šířku — když šířka nese
+objem, neříká, kde jsem.
+
+**Legenda A je hotová.** Popisek s počty je tlačítko (tečkované podtržení, `▾` — glyf 1126
+v monospace písmu, doměřeno jako u kapslí zkratek) a klik otevře popover se všemi sedmi významy.
+Dvě pasti, které u toho byly pojmenované předem, se ošetřily obě: **barvu vydává jedna funkce** pro
+kresbu i pro legendu (`PullRequestMapView.fill(of:)` nad `PullRequestMapTone`, který tón dostane
+segment rozhoduje `Policy.mapFill`), a hlídá to stráž nad zdrojákem — v legendě nesmí stát žádný
+barevný token ze škály. A **legenda nevrátila to, co se zlevnilo**: popover se staví, až se otevře,
+`isOpen` drží vlastní view (ne tělo pásu) a `.popover` visí na nulovém kotvicím view. To poslední je
+změřené, ne odhadnuté: nasazený přímo na tlačítko zdražil průchod tělem pásu při 158 souborech ze
+3,0–4,8 na **7,1–7,3 ms**, na kotvicím view je to 5,1–5,2 ms. Zbytek toho rozdílu se ale
+**neprokázal** — ty podoby se měřily v samostatných bězích a stroj mezi nimi driftoval, takže je
+v `docs/testovani.md` zapsané, co by bylo potřeba (prokládaná série, tedy přepínač v produkčním
+kódu, který jsem nedal).
+
+**Zvýraznění se změřilo a dnešní obrys ho neunese.** Z bitmapy, přes pásmo počtů souborů (3 až 158)
+a šířek okna (347 až 1347 b), metodou „dva snímky téže scény a rozdílové body“: podíl toho, co
+z obálky značky je **cílový segment**, je 91–98 % u tří souborů, 74–94 % u sedmi, 62–90 % u desíti,
+44–83 % u dvaceti, **27–60 % u pětačtyřiceti** a **21–30 % u sto padesáti osmi**. Hranice je
+u ~19 bodů šířky segmentu — obrys je totiž **odstup od segmentu**, takže je vždycky o osm bodů
+širší než to, co obtahuje. A druhé číslo: při 158 souborech má celá značka **39 b² inkoustu** ve
+dvou svislých čárkách dvou bodů, tedy **přesně tolik a přesně toho tvaru, co jedna čárka vlákna**
+(36–44 b²). Kontrast akcentu proti ploše hlavičky je přitom v pořádku při každé šířce, takže
+**samotné číslo z palety netvrdí nic** (#432).
+
+**Návrh nové podoby je zakreslený v sekci 42 a čeká na schválení** — `jezdec`, pevný trojúhelník
+14 × 7 bodů pod pásem s hrotem v ose segmentu, který obrys nahrazuje. Tři vlastnosti, kvůli kterým
+takhle: velikost nezávisí na šířce segmentu, hrot je bod (ukazuje přesně, i když je značka širší
+než cíl) a tvar se nedá splést s čárkou vlákna. Do schválení kreslí aplikace i dokument obrys;
+implementovat se to má **až po souhlasu**, protože je to nový prvek na obrazovce.
+
+**A hover dostal vlastní vrstvu, což je úklid na vlastním důvodu, ne oprava naslepo.** Dokud
+`hovered` drželo tělo pásu, čtl ho popisek nápovědy v témže těle jako `Canvas` — přejezd hranice
+segmentu tedy přeložil tělo a překreslil celou kresbu. Změřeno: jeden průchod tělem stojí při 158
+souborech **7,2 ms**, a segment má při té hustotě dva až tři body, takže jeden přejezd pásu myší je
+**157 hranic, tedy 1,1 s CPU hlavního vlákna**. Že to hover doopravdy nespustí, se v harnessu
+ověřit nedá (offscreen okno hover nedostane, `CGEvent` je v testech zakázaný, #490), takže se to
+tvrdí **nad zdrojákem** a je to zapsaná mez. **Ondrův nekliknutelný segment to nevysvětluje**
+a nepředstírá se to: oprava nesymetrické trefné plochy je v předchozím kole a tohle je jiná věc.
+
+**Sekce 42 se zúžila na vybranou podobu.** Panely B, C a W jsou z repa venku i s jejich CSS
+(`.rv-legend.inline`, `.rv-legend.row`, `.rv-narrow`, `.rv-medium`); z W zůstala **poznámka 144**
+o tom, že šířka nese objem a že `log₂` byl v zadání #501 jmenovitě, a v ní i odchylka o ustupujících
+mezerách nad ~160 soubory, která **platí dál**.

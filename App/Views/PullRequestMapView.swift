@@ -14,8 +14,13 @@ import SwiftUI
 /// přerovnání okna stálo **70 ms** proti 14 ms nad týmž oknem s ablovaným pásem a přepnutí tabu
 /// **bez diffu** 162 ms proti 57 — tedy cena, která roste **s počtem souborů**, ne s výřezem.
 /// Po přepsání je to 19, resp. 63 ms.
-/// Od té doby kreslí pás jediný `Canvas`, polohu segmentů počítá `PullRequestMapGeometry`
-/// a nápovědu i klik obstarává **jedno** gesto.
+/// Od té doby kreslí pás jediný `Canvas` a polohu segmentů počítá `PullRequestMapGeometry`.
+///
+/// **Kolem kresby stojí tři malá views a každé z nich existuje z téhož důvodu**: co se mění jinak
+/// často, nesmí přeložit tělo pásu. `PullRequestMapHoverLayer` drží nápovědu, hover a klik (hranice
+/// segmentu je při 158 souborech dva body, takže přejezd myší je 157 změn),
+/// `PullRequestMapLegendButton` drží popisek s legendou i její otevřený stav
+/// a `PullRequestMapProbe` čte výřez. Čísla jsou v `docs/testovani.md`.
 struct PullRequestMapView: View {
     let map: PullRequestMap
     /// Soubory toho diffu, který je v tabu vidět. Sonda si podle nich hledá rozsahy v obsahu
@@ -46,22 +51,14 @@ struct PullRequestMapView: View {
     /// hranici obsahu tabu (`PullRequestDetailView`), a pás stojí nad pruhem záložek. Rozhoduje
     /// o jediné věci — jestli se vejde popisek.
     @State private var rowWidth: Double?
-    /// Šířka samotného pásu. Kresba si ji bere z `Canvas`u (tam je vždycky přesná), tahle kopie
-    /// je pro **nápovědu a klik**: gesto hlásí polohu, ne velikost, takže se poloha musí umět
-    /// přeložit na segment i mimo kreslicí uzávěr.
-    @State private var stripWidth = 0.0
-    /// Segment pod kurzorem. Zapisuje se **jen při změně** (`Policy.hoverChange`, #358) — jinak by
-    /// každý hover update překreslil pás.
-    @State private var hovered: Int?
 
     var body: some View {
         HStack(spacing: Self.summaryGap) {
             strip
             if showsSummary {
-                Text(verbatim: map.summary)
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Palette.ink3)
-                    .fixedSize()
+                // **Popisek je od #501 tlačítko k legendě** (varianta A) a stav si drží sám, aby
+                // otevření legendy nepřeložilo tělo pásu i s kresbou.
+                PullRequestMapLegendButton(summary: map.summary)
             }
         }
         // **Výšku řádky drží pás, ne popisek ani kreslicí plocha** — jinak by se hlavička při
@@ -77,9 +74,6 @@ struct PullRequestMapView: View {
         .onGeometryChange(for: Double.self) { $0.size.width } action: { rowWidth = $0 }
         .background(alignment: .topLeading) { probe }
         .background(alignment: .topLeading) { shortcuts }
-        .accessibilityElement()
-        .accessibilityLabel("Mapa souborů")
-        .accessibilityValue(map.summary)
     }
 
     /// Pás jako **jedna kresba**. `Canvas` dostane šířku, kterou mu dá řádka, a od ní se všechno
@@ -101,34 +95,23 @@ struct PullRequestMapView: View {
         // `Canvas` si o šířku sám neříká.
         .frame(maxWidth: .infinity)
         .frame(height: Self.canvasHeight)
-        // Šířka **pro gesta**: kresba ji má z uzávěru, ale nápověda a klik hlásí jen polohu.
-        // Čte se do stavu, ne v každém snímku — při nezměněné hodnotě se akce nespustí (#361).
-        .onGeometryChange(for: Double.self) { $0.size.width } action: { stripWidth = $0 }
-        // Nápověda je **jedna**, ne na segment: `Canvas` je jediné view, takže se text mění podle
-        // toho, co je pod kurzorem. Nad prázdným místem nese souhrn — v úzké podobě je to jediné
-        // místo, kde se `3 prošlé` dá přečíst.
-        .help(hoveredTooltip)
-        .onContinuousHover(coordinateSpace: .local) { phase in
-            let next: Int? = if case .active(let point) = phase { geometry.index(at: point.x) } else { nil }
-            if case .write(let value) = Policy.hoverChange(from: hovered, to: next) { hovered = value }
+        // **Nápověda, hover a klik leží ve vlastní vrstvě** (#501): dokud je držel pás, přeložil
+        // přejezd hranice segmentu tělo mapy a překreslil celou kresbu. Trefení má pořád jediný
+        // zdroj — `PullRequestMapGeometry`, jen měřený tam, kde se na něj ptají gesta.
+        .overlay {
+            PullRequestMapHoverLayer(
+                segments: map.segments,
+                spacing: Self.stripSpacing,
+                summary: map.summary,
+                jump: jump
+            )
         }
-        .gesture(SpatialTapGesture(coordinateSpace: .local).onEnded { value in
-            guard let index = geometry.index(at: value.location.x),
-                  map.segments.indices.contains(index)
-            else { return }
-            jump(map.segments[index])
-        })
-    }
-
-    /// Geometrie pásu ze **změřené** šířky. Kresba používá tu z `Canvas`u (je vždycky přesná);
-    /// tahle je pro gesta, která hlásí polohu, ne velikost.
-    private var geometry: PullRequestMapGeometry {
-        PullRequestMapGeometry(segments: map.segments, width: stripWidth, spacing: Self.stripSpacing)
-    }
-
-    private var hoveredTooltip: String {
-        guard let hovered, map.segments.indices.contains(hovered) else { return map.summary }
-        return Policy.mapTooltip(of: map.segments[hovered])
+        // **Pás je jeden accessibility element**, ne 158 prvků: per-segment odečítání by ty views
+        // muselo postavit, tedy vrátit cenu, kvůli které je pás kresba. Sedí to na kresbě, ne na
+        // řádce, aby popisek s legendou zůstal vlastním tlačítkem.
+        .accessibilityElement()
+        .accessibilityLabel("Mapa souborů")
+        .accessibilityValue(map.summary)
     }
 
     /// Jeden průchod kresbou: plochy segmentů, čárky vláken a obrys u toho pod výřezem.
@@ -151,10 +134,11 @@ struct PullRequestMapView: View {
             // **Prošlý se tlumí krytím, ne jinou barvou** — je to tatáž plocha, jen odbytá práce;
             // druhý odstín na každou barvu by ze škály udělal šest hodnot místo tří.
             // `changed` tlumený **není** (#500): je to práce, která se vrátila.
-            let fill = fill(of: segment).opacity(segment.readState.isRead ? 0.35 : 1)
+            let fill = Self.fill(of: Policy.mapFill(of: segment))
+                .opacity(segment.readState.isRead ? Policy.mapReadOpacity : 1)
             context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(fill))
-            for fraction in segment.threads { drawTick(in: &context, at: fraction, in: rect) }
-            if current == segment.path { drawOutline(in: &context, around: rect) }
+            for fraction in segment.threads { Self.drawTick(in: &context, at: fraction, in: rect) }
+            if current == segment.path { Self.drawOutline(in: &context, around: rect) }
         }
     }
 
@@ -164,7 +148,7 @@ struct PullRequestMapView: View {
     ///
     /// **Vystředěná na svém podílu a ořezaná do segmentu**: čárka na `1,0` by jinak visela půlkou
     /// v mezeře vedle a čtla by se jako patřící sousedovi.
-    private func drawTick(in context: inout GraphicsContext, at fraction: Double, in rect: CGRect) {
+    static func drawTick(in context: inout GraphicsContext, at fraction: Double, in rect: CGRect) {
         let width = 2.0
         let center = rect.minX + fraction * rect.width
         let x = min(max(center - width / 2, rect.minX), max(rect.maxX - width, rect.minX))
@@ -174,28 +158,31 @@ struct PullRequestMapView: View {
             width: width,
             height: rect.height + 2 * Self.tickOverhang
         )
-        context.fill(Path(roundedRect: tick, cornerRadius: 1), with: .color(Palette.accent))
+        context.fill(Path(roundedRect: tick, cornerRadius: 1), with: .color(fill(of: .thread)))
     }
 
     /// Obrys souboru pod výřezem (`outline: 2px solid accent; outline-offset: 2px`).
     ///
     /// Obtah leží **na** cestě, takže se cesta rozšíří o tři body — obrys pak sedí 2 až 4 body od
     /// hrany segmentu, jak to má `outline-offset`. Poloměr je poloměr segmentu plus odstup.
-    private func drawOutline(in context: inout GraphicsContext, around rect: CGRect) {
+    static func drawOutline(in context: inout GraphicsContext, around rect: CGRect) {
         context.stroke(
             Path(roundedRect: rect.insetBy(dx: -3, dy: -3), cornerRadius: 4),
-            with: .color(Palette.accent),
+            with: .color(fill(of: .current)),
             lineWidth: 2
         )
     }
 
-    /// Barva segmentu. **Nejhorší nález přebíjí druh souboru**: nový soubor s blokujícím nálezem
-    /// je červený, ne zelený — pás se čte podle závažnosti.
-    private func fill(of segment: PullRequestMapSegment) -> Color {
-        switch segment.marker {
+    /// Barva tónu — **jedno místo pro kresbu i pro legendu** (#501). Kdyby si legenda barvy
+    /// dosadila sama, rozejití by nebylo vidět: obojí je ta samá barva, jen jinde. Který tón
+    /// segment dostane, rozhoduje `Policy.mapFill(of:)`.
+    static func fill(of tone: PullRequestMapTone) -> Color {
+        switch tone {
         case .blocking: Palette.crit
         case .findings: Palette.find
-        case nil: segment.isNew ? Palette.okWash : Palette.raised
+        case .new: Palette.okWash
+        case .clean, .read: Palette.raised
+        case .thread, .current: Palette.accent
         }
     }
 
@@ -210,8 +197,15 @@ struct PullRequestMapView: View {
         )
     }
 
+    /// Šířka popisku **tím písmem a s tím textem, jaký se kreslí** (#236) — tedy včetně `▾`,
+    /// které z popisku dělá tlačítko k legendě. Bez toho znaku by práh na skrytí popisku počítal
+    /// s o třináct bodů užší řádkou, než jaká je na obrazovce (naměřeno: 273 proti 286 bodům nad
+    /// popiskem `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna`).
     static func summaryWidth(of summary: String) -> Double {
-        TextWidth.of(summary, font: .monospacedSystemFont(ofSize: 10.5, weight: .regular))
+        TextWidth.of(
+            PullRequestMapLegendButton.title(of: summary),
+            font: .monospacedSystemFont(ofSize: 10.5, weight: .regular)
+        )
     }
 
     /// `⌥←`/`⌥→` — předchozí a další soubor od toho, který je pod výřezem.

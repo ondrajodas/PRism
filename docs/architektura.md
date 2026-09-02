@@ -4101,7 +4101,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu zapíná karta `Blokuje` na dashboardu, takže musí být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh` ‖ `Zeptat se`) — podtržené, s odznakem **u každé** (#218; typy od #242) a děličem před výstupem reviewerů. **Rozsah změny v něm od #501 není** — `+X −Y` se čtverečky poměru nahradila mapa PR pod hlavičkou. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Podob má **tři** (`ViewThatFits`, `Layout`): s popisky, s ikonami a popiskem jen u aktivní (#318) a jen s ikonami (#452) — díky nim se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
-| `PullRequestMapView`, `PullRequestMapGeometry`, `PullRequestMapProbe` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem s obrysem. **Pás je jedna kresba** (`Canvas`), ne řada tlačítek — u 158 souborů to byla přes tisíc views v hlavičce a přerovnání okna stálo 70 ms místo 14 (#252, #501). Šířky počítá `Policy`, polohy `PullRequestMapGeometry`, nápovědu i klik obstarává jedno gesto. `PullRequestMapProbe` je neviditelné view, které do `DiffFileCursor` zapisuje soubor pod výřezem — čte hodnotu měnící se každý snímek, takže stojí samo (#469). Viz *Mapa PR — pás pod hlavičkou* |
+| `PullRequestMapView`, `PullRequestMapGeometry`, `PullRequestMapProbe`, `PullRequestMapHoverLayer`, `PullRequestMapLegendButton` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem označený. **Pás je jedna kresba** (`Canvas`), ne řada tlačítek — u 158 souborů to byla přes tisíc views v hlavičce a přerovnání okna stálo 70 ms místo 14 (#252, #501). Šířky počítá `Policy`, polohy `PullRequestMapGeometry`. **Kolem kresby stojí tři malá views a všechna z téhož důvodu**: co se mění jinak často, nesmí přeložit tělo pásu — `PullRequestMapHoverLayer` drží nápovědu, hover a klik, `PullRequestMapLegendButton` popisek s legendou a `PullRequestMapProbe` čte výřez a zapisuje do `DiffFileCursor` (#469). Viz *Mapa PR — pás pod hlavičkou* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `CommitDiffView` | Diff jednoho commitu (#317) — hlavička a pod ní `DiffView`. **Nedostane `AppStore` ani identifikátor PR**, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář; `reading(_:)` je `internal` kvůli testu, který tvrdí právě to, co `DiffView` **nedostane** |
@@ -4324,7 +4324,9 @@ Mezi hlavičkou a pruhem záložek leží od #501 **pás, ve kterém je každý 
 (návrh sekce 42, zákres přišel z decku *Směry pro PRism*, stránka E). Odpovídá na „jak velký
 a jak zlý je tenhle PR“ dřív, než se otevře první soubor: šířka segmentu roste s logaritmem
 změněných řádků, barva je nejhorší nález v souboru, nový soubor má tón `ok`, prošlý je tlumený,
-vlákno je svislá čárka a soubor pod výřezem má obrys akcentem.
+vlákno je svislá čárka a soubor pod výřezem je označený — dnes obrysem akcentem, a **čím se má
+označovat dál, je otevřená otázka**: obrys je změřený a nad hustým pásem neunese, co se od něj
+čeká (viz *Značka souboru pod výřezem* níž).
 
 **Nahradil pilulku `+X −Y` s pěti čtverečky** (#174, #218) v pruhu záložek. Ta z `PullRequestTabBar`
 odešla celá i s podobou `Layout.full`, která se od `labels` lišila jedině tím, že ji kreslila —
@@ -4359,8 +4361,10 @@ Co se nemá rozbít:
 - **Prošlý se tlumí krytím na 35 %, `changed` ne** (#500). Krytí, ne druhý odstín: šest hodnot ve
   škále by z pásu udělalo obrázek k luštění. `změněno od prošlého` je práce, která se vrátila,
   takže zůstává v plné barvě.
-- **Popisek vpravo ustupuje první.** `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna` stojí ~230
-  bodů, takže by v pohledu vedle sebe (detail 347 b) nechal pásu 73 a z segmentů čárky. Rozhoduje
+- **Popisek vpravo ustupuje první.** `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna` stojí **273
+  bodů** a s `▾`, které z něj od legendy dělá tlačítko, **286** (doměřeno tím písmem, kterým se
+  kreslí), takže by v pohledu vedle sebe (detail 347 b) nechal pásu 61 a ze segmentů čárky.
+  Rozhoduje
   `Policy.mapShowsSummary(available:label:gap:minimumStrip:)` s prahem **180 bodů**; v úzké podobě
   nese souhrn nápověda a `accessibilityValue`. Je to tatáž úvaha jako u `+X −Y` v pruhu záložek
   (#316): jeho čísla stojí i v hlavičce stromu a v odznacích záložek, kdežto pás jinde není.
@@ -4371,6 +4375,100 @@ Co se nemá rozbít:
 - **`⌥←`/`⌥→` visí na jednom průhledném tlačítku** v mapě, ne v detailu PR — a je to výkonová
   podmínka, viz `DiffFileCursor` níž. Na krajích pásu je tlačítko **zakázané**, takže klávesu
   nebere a propadne dál; zacyklit se skok nemá (`Policy.mapStep(from:_:count:)`).
+
+#### Legenda k pásu — na vyžádání z popisku (#501)
+
+Významů, které pás kóduje, je **sedm** (blokuje, nález, nový soubor, bez nálezu, prošlo, vlákno,
+čtu) a řádka má deset bodů, takže se do ní natrvalo nevejdou. Vybraná podoba je proto **varianta
+A ze sekce 42**: popisek s počty je tlačítko (tečkované podtržení, `▾`) a klik na něj otevře
+popover se všemi sedmi. Zamítnuté jsou **B** (zkrácená trvalá legenda na místě počtů — vzala by
+z obrazovky souhrn, tedy to, čím je pás zároveň ukazatel zbývající práce) a **C** (plná legenda
+jako druhá řádka chromu — ubírá diffu 16 bodů výšky natrvalo za informaci, kterou se člověk naučí
+jednou); důvody jsou v záznamu rozhodnutí ve specifikaci.
+
+Tři věci, na kterých to stojí:
+
+- **Barvu vydává jedna funkce pro kresbu i pro legendu.** `PullRequestMapView.fill(of:)` bere
+  `PullRequestMapTone` a čte ji `Canvas` i vzorek v popoveru; který tón dostane segment,
+  rozhoduje `Policy.mapFill(of:)`. Bez toho by legenda měla barvy dosazené podruhé — a rozejití
+  by **nebylo vidět**, protože je to ta samá barva, jen jinde. Přesně ta past je i v zákresu
+  (tam měla legenda `style="background: var(--crit)"`) a je opravená na společný selektor. Hlídá
+  to stráž nad zdrojákem: v `PullRequestMapLegendView.swift` nesmí stát žádný barevný token ze
+  škály. Krytí prošlého je z téhož důvodu `Policy.mapReadOpacity`, ne literál na dvou místech.
+- **Sedm tónů, ale výplň jsou čtyři.** `read` je krytí nad výplní, `thread` čárka a `current`
+  značka souboru pod výřezem — tři jiné kanály. `Policy.mapFill(of:)` proto vydá **jedině** jeden
+  ze čtyř tónů výplně a tvrdí to test; kdyby se do výplně dostal `accent`, byl by v pásu pátý
+  stav závažnosti a na obrázku by to vypadalo jako „něco tu je“.
+- **Popover se staví, až se otevře — a visí na nulovém kotvicím view, ne na tlačítku.** Tohle je
+  změřené: `.popover` nasazený přímo na tlačítko zdražil **průchod tělem pásu** ze 3,0–4,8 na
+  7,1–7,3 ms při 158 souborech. Na nulovém potomkovi v `background`u to bylo 5,1–5,2 ms; je to
+  tentýž tvar, jaký v řádce už mají `probe` a `shortcuts`. **Podmíněné připojení** (`if isOpen`)
+  je změřené a zamítnuté — nebylo lepší (5,5–7,4 ms) a nese riziko, že se popover v tom průchodu,
+  ve kterém se modifikátor objeví, neotevře. Čísla a mez měřidla jsou
+  v [`docs/testovani.md`](testovani.md#co-stojí-průchod-tělem-pásu-501).
+
+#### Nápověda a hover mají vlastní vrstvu (#501)
+
+`PullRequestMapHoverLayer` je `Color.clear` s `contentShape`, `help`, `onContinuousHover`
+a `SpatialTapGesture` — a existuje proto, že **hover nemá překreslovat kresbu**. Je to tatáž věta
+jako u #358 a #438, jen o krok dál: dokud `hovered` drželo tělo pásu, čtl ho popisek nápovědy
+v témže těle jako `Canvas`, takže přejezd hranice segmentu přeložil tělo a překreslil celou
+kresbu. Při 158 souborech má segment dva až tři body, takže **jeden přejezd pásu myší je 157
+hranic** — a jeden průchod tělem stojí 7,2 ms, tedy **1,1 s CPU hlavního vlákna za jedno gesto**.
+
+Dvě věci u toho zůstávají:
+
+- **Trefení má pořád jediný zdroj.** Vrstva se ptá `PullRequestMapGeometry`, jen měřeného tam, kde
+  se na něj ptají gesta — kresba si šířku bere z `Canvas`u, protože tam je vždycky přesná.
+  Dvě aritmetiky by znamenaly, že nápověda mluví o jiném souboru, než na který se skočí.
+- **Šířka pro gesta se čte do stavu té vrstvy**, ne do stavu pásu, takže resize okna přeloží
+  vrstvu, ne kresbu.
+
+**Že to hover doopravdy nespustí, se v harnessu ověřit nedá** a je to zapsaná mez: offscreen okno
+hover nedostane a skládat `CGEvent` v testech tenhle repo zakazuje (#490). Tvrdí se to proto
+**nad zdrojákem** (`PullRequestMapLegendTests`: v těle pásu nesmí stát `onContinuousHover`,
+`hovered`, `Policy.mapTooltip` ani `.help(`) a k tomu je změřená **cena jednoho průchodu**, tedy
+to, co se každou hranicí neplatí.
+
+#### Značka souboru pod výřezem — co dnešní obrys unese (#501)
+
+**Proč se to vůbec měřilo:** `log₂` v pásu zůstalo, takže **šířka nese objem, a ne to, kde jsem**.
+Jediné, co v pásu odpovídá na „který soubor zrovna čtu“, je značka souboru pod výřezem — a když
+na ní rozhodnutí o šířce stojí, musí být spolehlivá, ne dekorace.
+
+Změřeno **z bitmapy** (ne z tokenu, #432) přes pásmo počtů souborů a šířek okna, metodou „dva
+snímky téže scény a rozdílové body“. Podíl toho, co z obálky značky je **cílový segment**:
+
+| souborů | 347 b | 647 b | 1047 b | 1347 b |
+|---|---|---|---|---|
+| 3 | 91,1 % | 95,8 % | 97,6 % | 98,2 % |
+| 7 | 73,8 % | 85,9 % | 91,2 % | 93,6 % |
+| 10 | 61,6 % | 78,3 % | 87,2 % | 89,6 % |
+| 20 | 44,4 % | 69,4 % | 78,9 % | 83,3 % |
+| 45 | 27,3 % | 39,7 % | 54,1 % | 59,9 % |
+| 158 | 20,9 % | 30,0 % | 27,3 % | 27,5 % |
+
+Z toho plyne trojí a **žádné z toho by z tokenu nevyšlo**:
+
+1. **Obrys je odvozený od segmentu, ne pevný.** `outline-offset: 2px` a obtah dvou bodů znamenají,
+   že značka je vždycky o osm bodů širší než to, co obtahuje — takže pod **~19 body šířky
+   segmentu** pojmenovává okolí víc než svůj soubor.
+2. **Při 158 souborech má celá značka 39 b² inkoustu** a skládá se ze dvou svislých čárek dvou
+   bodů, tedy **přesně tolik a přesně toho tvaru, co jedna čárka vlákna** (36–44 b², změřeno tou
+   samou cestou). Nekóduje už „tady jsem“, ale „tady je něco akcentem“.
+3. **Kontrast akcentu proti ploše hlavičky je přitom v pořádku při každé šířce** (3 : 1 a víc),
+   takže `PullRequestMapDrawingTests` prochází beze změny — je to nutná podmínka, ne dostatečná.
+
+K tomu jedno pozorování, které se hodí znát, než se cokoli kreslí: **obrys prvního a posledního
+segmentu je ořezaný**. Jeho vnější hrana leží na `x = −4`, tedy mimo kreslicí plochu, a `Canvas`
+si kresbu ořezává — u tříbodového segmentu na kraji vyjde značka 7 bodů široká místo 11. Měřidlo
+proto cílí **dovnitř** pásu (`narrowestInside`); kdo bude měřit znovu, ať to nedělá na kraji.
+
+**Návrh nové podoby je v sekci 42 jako `jezdec`** — pevný trojúhelník 14 × 7 bodů pod pásem,
+hrotem v ose segmentu — a **čeká na schválení**; do té doby kreslí aplikace i dokument obrys.
+Co se u toho zvažovalo a zahodilo (minimální šířka pro zvýrazněný segment, obrys s pevnou
+minimální šířkou, ztlumení ostatních segmentů, obrys i jezdec vedle sebe), je v záznamu rozhodnutí
+ve specifikaci.
 
 #### Pás jako jedna kresba — co stálo 158 tlačítek v hlavičce (#501)
 
@@ -7964,6 +8062,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.pullRequestMap(files:findings:threads:readStates:categories:)` | Segmenty mapy PR pod hlavičkou (#501, `PullRequestMapSegment`) — z **týchž vstupů** jako strom, hlavička souboru i bubliny. Nálezy se hledají po **obou** cestách souboru; blokující přebíjí obyčejný a druh souboru; popisek se skládá tady, ne ve view. **Nahradilo `Policy.diffstatBlocks`** (pět čtverečků za `+X −Y`, #218), které s pilulkou odešlo |
 | `Policy.mapWidths(of:in:spacing:minimum:)`, `Policy.mapSpacing(count:in:spacing:minimum:)` | Šířky segmentů v bodech (#501) — podíl z `log₂(řádků + 1)`, minimum tři body **vytlačené z dělení** a součet přesně na dostupnou šířku. Když se nevejdou ani minima, dělí se rovným dílem; **segment se nezahodí nikdy**. **Mezera ustupuje dřív než minimum** — nad ~160 soubory padá na nulu, jinak by z pásu byla tečkovaná linka |
 | `Policy.mapSummary(files:read:findings:threads:)`, `Policy.mapTooltip(of:)`, `Policy.mapReadLabel(of:)` | Popisek vpravo od pásu a nápověda segmentu (#501). Části se připojují, **až když mají co říct** (jako u `fileTreeSummary`); stav značky je v nápovědě vždycky a vždycky poslední |
+| `Policy.mapFill(of:)`, `Policy.mapLegend()`, `Policy.mapLegendRows(perRow:)`, `Policy.mapReadOpacity`, `Policy.mapLegendTitle` | Tón výplně segmentu a legenda k pásu (#501, `PullRequestMapTone`). **Barvu vydává jedna funkce pro kresbu i pro legendu** (`PullRequestMapView.fill(of:)`), tady se rozhoduje **který tón** a **jak se jmenuje**. `mapFill` vydá jedině jeden ze čtyř tónů výplně — `read`, `thread` a `current` jsou jiné kanály (krytí, čárka, značka) a tvrdí to test. Zalomení vzorků po dvou je taky rozhodnutí nad daty, ne kresba: v `Grid`u by z něj byl `enumerated()` s tuplem |
 | `Policy.mapShowsSummary(available:label:gap:minimumStrip:)` | Vejde se vedle pásu popisek? (#501) Práh 180 bodů je změřený: pod ním jsou z segmentů čárky. `nil` šířka = kreslí se, jako u `IncrementalDiffBar.layout(in:)` |
 | `Policy.mapCurrentSegment(extents:top:)`, `Policy.mapStep(from:_:count:)` | Který soubor je pod výřezem (#501, `pinnedFileHeader` beze zbytku posunu — **jedna odpověď** pro obrys, ukotvenou hlavičku i `⌥V`) a krok `⌥←`/`⌥→`, který se **nezacyklí** |
 | `Policy.code(of:)` (řádky / rozsah / hunk), `Policy.copyTargets(for:in:comments:)`, `Policy.range(covering:in:of:)` | Kód z diffu pro schránku (#157): **bez `+`/`-` a bez čísel řádků**, u rozsahu v pořadí a ze strany, na které rozsah leží |

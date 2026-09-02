@@ -2528,10 +2528,32 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     padesátého souboru o sto), a na obrázku není nic vidět, protože kresba se posune stejně.
     Vyčerpávající výčet přes celý pás i za jeho hranami; mezera padá segmentu **vlevo**, za
     koncem pásu je odpověď `nil`.
+  - **Legenda a tóny** (`PullRequestMapLegendTests`) — vyčerpávající výčet nad `Policy`
+    (každý tón má v legendě právě jednu položku, pořadí je ze zákresu, zalomení po dvou nevyrobí
+    prázdnou řádku ani při `perRow: 0`, výplň je vždycky jeden ze **čtyř** tónů) a k tomu **dvě
+    stráže nad zdrojáky**, protože zrovna tyhle dvě věci se z bitmapy poznat nedají:
+    v `PullRequestMapLegendView.swift` nesmí stát **žádný barevný token ze škály** (barvu vydává
+    `PullRequestMapView.fill(of:)`, a rozejití by nebylo vidět — je to ta samá barva, jen jinde)
+    a v těle pásu nesmí stát `onContinuousHover`, `hovered`, `Policy.mapTooltip` ani `.help(`
+    (hover nemá překreslovat kresbu). **Obojí ověřeno vložením regrese**: `Palette.crit`
+    dosazená vzorku a `.help(map.summary)` vrácené do těla pásu shodí právě ta dvě tvrzení.
+    Z bitmapy se u legendy měří jen to, co je **kanál, ne barva** — že vzorek `prošlo` je tlumený
+    a nesplyne s `bez nálezu` ani s plochou pod ním.
   - **Sonda `PullRequestMapRenderProbe`** — obrázek přes pásmo šířek (347 / 647 / 1047 / 1347 b),
-    v obou režimech a se souborem pod výřezem i bez něj. Právě z ní vyšla úzká podoba: při 347
-    bodech (pohled vedle sebe) popisek nechal pásu 73 bodů a ze segmentů byly čárky. Scénu si
-    sonda i měření berou z **jednoho místa** (`MapScene`), ať se obrázek a čísla nerozejdou.
+    v obou režimech a se souborem pod výřezem i bez něj, a od legendy i **samotný popover** (v pásu
+    není vidět: staví se, až se otevře). Právě z ní vyšla úzká podoba: při 347 bodech (pohled vedle
+    sebe) popisek nechal pásu 73 bodů a ze segmentů byly čárky. Scénu si sonda i měření berou
+    z **jednoho místa** (`MapScene`), ať se obrázek a čísla nerozejdou.
+
+    **Sonda, která staví okno, musí být `.serialized`** — a je to podmínka, ne opatrnost. Jakmile
+    měla sonda mapy dva testy, běžely souběžně (`@MainActor` suite paralelismus nevypíná), dvě
+    hosting views se rozvrhla z vnořených runloopů a testovací host **spadl** v
+    `_postWindowNeedsUpdateConstraints` uprostřed display cyklu: `SIGABRT`, **žádný `✘`**, oba
+    testy hlášené jako failing a nezapsaný ani první obrázek. Poznávací znak je řádka
+    `Restarting after unexpected exit, crash, or test timeout` v logu a `0 tests` v souhrnu.
+  - **Hostovat popover mimo obrazovku jde jedině s `fixedSize()`** — v pevném rámci položí
+    testovacího hosta stejně jako souběh výš. Je to vlastnost sondy, ne legendy (v okně si popover
+    bere vlastní okno a velikost od obsahu), takže se to řeší v sondě.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
   nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
   rozsahy, ale načtený obsah nechá.
@@ -7408,6 +7430,79 @@ z #472, kterou člověk potká při každém kliknutí, kdežto diff jen při p�
 je to vidět i bez čísel: na **zápis do store** se najednou přeloží 3 540 těl `DiffRowView` (dnes
 nula) a bloky se nasazují dokola (135–155 nasazení proti 10). **Kdo to bude zkoušet znovu, ať měří
 tohle jako první.**
+
+#### Jak se změřila značka souboru pod výřezem (#501)
+
+**Otázka**, na kterou to odpovídá: pás nechal `log₂`, takže šířka nese objem — a jediné, co v něm
+říká, *kde jsem*, je značka souboru pod výřezem. Unese to dnešní obrys?
+
+**Měřidlo**: `PullRequestMapHighlightMeasurement` (ruční, `TEST_RUNNER_PRISM_MEASURE=1`). Metoda
+je **dva snímky téže scény a rozdílové body**: jednou bez souboru pod výřezem, jednou s ním. To,
+co se mezi snímky změnilo, je značka — a nic jiného v tom rozdílu není. Měří se **z bitmapy, ne
+z tokenu** (#432), protože kontrast akcentu proti ploše hlavičky vyjde v pořádku při každé šířce:
+je to vlastnost dvou barev a o tom, **na co značka ukazuje**, netvrdí nic.
+
+Pásmo je dvojrozměrné: **počty souborů** 3 / 7 / 10 / 20 / 45 / 158 (`PRism#499` má 45,
+`cli/cli#14320` 158) × **šířky detailu** 347 / 647 / 1047 / 1347 bodů. Čtou se čtyři čísla:
+obálka značky, nakreslená šířka cílového segmentu, kolik segmentů obálka **potkává** a **podíl**
+obálky, který je cílový segment. Naměřená tabulka je
+v [`docs/architektura.md`](architektura.md#značka-souboru-pod-výřezem--co-dnešní-obrys-unese-501).
+
+**Čtyři věci, které to měřidlo stály jednu opravu každá** — a všechny čtyři jsou past, do které se
+dá spadnout znovu:
+
+1. **Nad pásem musí být v renderu místo.** Plocha `Canvas`u přečnívá řádku o čtyři body na každou
+   stranu a v okně ten přesah leží v odsazení hlavičky; bez mezery v harnessu ho ořízne hrana
+   hosting view a značka vyjde **nižší, než jaká je** (naměřeno 251 × 2 b místo 251 × 18).
+   Měřidlo tedy neměřilo kresbu, ale ořez bitmapy.
+2. **Kraj pásu se měřit nesmí.** Obrys prvního segmentu má levou hranu na `x = −4`, tedy mimo
+   kreslicí plochu — u tříbodového segmentu vyjde značka 7 bodů široká místo 11. První podoba
+   měřidla cílila na nejužší segment **v celém pásu**, a ten byl vždycky index 0.
+3. **Popisek se musí brát z toho pásu, který se kreslí.** Šířka segmentu se počítá z šířky pásu
+   a ta ze šířky popisku; složený znovu z jiných čísel vyjde jinak široký, takže se spočítaná
+   šířka rozejde s nakreslenou. Je to tatáž past jako #236, jen v měřidle.
+4. **Čárku vlákna se musí měřit přesunutím, ne přidáním.** Popisek vpravo vlákna počítá, takže
+   scéna *bez* vlákna má užší popisek, širší pás a **jiné šířky všech segmentů** — rozdílové body
+   pak nejsou čárka, ale celý pás (naměřeno **1 930 b²** místo 36). Přesunuté vlákno nechá popisek
+   i šířky beze změny, takže v rozdílu jsou dvě čárky a jedna má poloviční plochu.
+
+#### Co stojí průchod tělem pásu (#501)
+
+Druhá polovina téhož měřidla, a odpovídá na otázku, kterou nešlo změřit přímo: **kolik platí
+hover**. Dokud `hovered` drželo tělo pásu, čtl ho popisek nápovědy v témže těle jako `Canvas`,
+takže přejezd hranice segmentu přeložil tělo a překreslil celou kresbu.
+
+**Hover se v harnessu vyvolat nedá** — offscreen okno ho nedostane a skládat `CGEvent` v testech
+tenhle repo zakazuje (#490). Měří se proto **zápisem do `DiffFileCursor`**: `cursor.path` čte
+tatáž funkce těla (`strip`), takže zneplatní přesně tutéž množinu. **Je to měření té třídy, ne
+toho gesta**, a je to zapsaná mez měřidla; že hover v té množině není, se tvrdí **nad zdrojákem**
+(`PullRequestMapLegendTests`).
+
+Ms na jeden průchod, série A/B v jednom běhu, CPU hlavního vlákna, šířka 1047 b:
+
+| souborů | průchod | přejezd pásu (N − 1 hranic) |
+|---|---|---|
+| 3 | 4,5 | 9 ms |
+| 7 | 3,0 | 18 ms |
+| 10 | 2,9 | 26 ms |
+| 20 | 3,9 | 74 ms |
+| 45 | 4,3 | 188 ms |
+| 158 | **7,2** | **1 131 ms** |
+
+To je ta cena, kterou přejezd myší **neplatí**, když hover leží ve vlastní vrstvě.
+
+**Ablace na legendu, a vyšla nepříjemně**: `.popover` nasazený přímo na tlačítko zdražil průchod
+při 158 souborech na **7,1–7,3 ms** proti **3,0–4,8 ms** s prostým `Text`em na tomtéž místě.
+Nebyla to šířka popisku (`▾` ho dělá o 13 bodů širším) — s **týmž** textem bez tlačítka vyšlo
+3,3–3,4 ms — ani samo tlačítko: `Button` **bez** popoveru dal 3,9 ms. Popover na nulovém kotvicím
+view v `background`u dal 5,1–5,2 ms a podmíněné připojení (`if isOpen`) 5,5–7,4 ms.
+
+**Mez toho měření se musí přiznat**: ty čtyři podoby popoveru se měřily **v samostatných bězích**,
+protože ablace „s legendou / bez legendy“ nejde udělat uvnitř jednoho běhu bez přepínače
+v produkčním kódu — a ten jsem tam nedal. Stroj přitom mezi běhy driftoval (souběžně buildily
+další sloty), takže **rozdíly ±1,5 ms mezi podobami popoveru nejsou průkazné**; průkazný je jedině
+ten první, dvojnásobný. Kdo v tom bude pokračovat, potřebuje **prokládanou sérii A/B/A/B** (#274),
+tedy i ten přepínač.
 
 #### Pás mapy PR nad ostrými diffy (#501)
 

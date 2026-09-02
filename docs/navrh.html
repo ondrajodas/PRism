@@ -2665,17 +2665,20 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rv-legend i { width: 14px; height: 9px; border-radius: 2px; display: inline-block; }
 .rv-legend i.t { width: 2px; height: 14px; background: var(--accent); border-radius: 1px; }
 .rv-legend i.o { width: 12px; height: 7px; background: transparent; outline: 2px solid var(--accent); outline-offset: 1px; }
-/* ---- legenda k pásu: tři varianty k výběru (#501, po prvním proklikání) ----
+/* ---- legenda k pásu: vybraná podoba (#501, varianta A) ----
    Významů je **sedm** (blokuje, nález, bez nálezu, nový soubor, prošlo, vlákno, čtu) a řádka pásu
    má **deset bodů** výšky, přičemž vpravo v ní už stojí popisek s počty, který pod ~180 body pásu
-   mizí. Sedm položek natrvalo do řádky tedy nejde a varianty se liší **právě v tom, co z toho je
-   vidět vždycky** — ne v odstínu. Zúžit na vybranou variantu, ostatní zahodit. */
+   mizí. Sedm položek natrvalo do řádky tedy nejde — a vybráno je proto, že se legenda **vyžádá
+   z popisku**: ten je od #501 tlačítko a klik na něj otevře popover. Varianty B (zkrácená trvalá
+   legenda místo počtů) a C (plná legenda jako druhá řádka chromu) jsou zahozené a jejich CSS
+   (`.rv-legend.inline`, `.rv-legend.row`, `.rv-narrow`, `.rv-medium`) odešlo s nimi; důvody jsou
+   v záznamu rozhodnutí ve specifikaci. */
 .rv-lblbtn {
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); white-space: nowrap; flex: none;
   background: none; border: 0; padding: 0; cursor: pointer;
   border-bottom: 1px dotted var(--ink-3);
 }
-.rv-lblbtn::after { content: " ▾"; color: var(--ink-3); }
+.rv-lblbtn::after { content: " \25be"; color: var(--ink-3); }
 /* Legenda vyžádaná z popisku. Kotví se na `.rv-prmap` (ta je `position: relative`), takže
    **nezabírá v řádce žádné místo** — a v okně to je popover, ne řádka chromu. */
 .rv-legend.asked {
@@ -2686,14 +2689,22 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 /* Nadpis přes celou šířku popoveru, ne jako první položka v řádce vzorků. */
 .rv-legend.asked b { flex-basis: 100%; font-size: 11px; color: var(--ink-3); font-weight: 600; }
-/* Zkrácená legenda **v řádce**, tedy na místě popisku s počty. `flex: none`, aby si brala jen
-   svoji šířku a zbytek nechala pásu. */
-.rv-legend.inline { padding: 0; gap: 0 12px; flex: none; flex-wrap: nowrap; }
-/* Plná legenda jako **druhá řádka** chromu — jen tam, kde je na ni šířka. */
-.rv-legend.row { background: var(--panel); padding: 0 22px 10px; }
-/* Užší rámy k témuž zákresu: mockup nemá jak okno zúžit, takže se šířka předepíše. */
-.rv-narrow { max-width: 380px; }
-.rv-medium { max-width: 720px; }
+/* ---- hustý pás: 45 a 158 souborů (#501) ----
+   Nad těmito počty jsou segmenty **na minimu tří bodů** a mezera padá na nulu, aby z pásu nebyla
+   tečkovaná linka. V okně to rozhoduje `Policy.mapSpacing`; v dokumentu se to musí předepsat,
+   protože `flex` by mezery nechal a segmenty stlačil pod minimum. */
+.rv-prmap.dense .strip { gap: 0; }
+.rv-prmap.dense .seg { min-width: 2px; border-radius: 1px; }
+/* ---- navrhovaná značka souboru pod výřezem: „jezdec“ (#501, ke schválení) ----
+   Dnešní obrys (`.seg.cur`) je **odstup od segmentu**, takže jeho velikost roste a klesá se
+   segmentem — a pod ~19 body šířky ukazuje na sousedy víc než na svůj soubor (změřeno, čísla jsou
+   u panelu v sekci 42). Jezdec je proti tomu **pevný**: 14 × 7 bodů, hrot v ose segmentu, a nemění
+   se s tím, kolik je v PR souborů. `transform` ho středí na hrot, ne na hranu. */
+.rv-prmap .runner {
+  position: absolute; left: 50%; bottom: -7px; width: 14px; height: 7px;
+  transform: translateX(-50%);
+  background: var(--accent); clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
 .rv-mapnames { display: flex; gap: 3px; padding: 0 22px 14px; }
 .rv-mapnames span {
   font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
@@ -5723,7 +5734,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         řekne naráz: každý soubor je segment, <b>šířka roste s <code>log₂(řádků + 1)</code></b>,
         barva je <b>nejhorší nález</b> v souboru, nový soubor má tón <code>ok</code>, prošlý
         (<a class="jump" href="#s40">značka <em>Prošlo</em> →</a>) je tlumený, vlákno je svislá
-        čárka a soubor, který zrovna čtu, má obrys akcentem. Vpravo od pásu stojí popisek
+        čárka a soubor, který zrovna čtu, je označený. Vpravo od pásu stojí popisek
         <code>7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</code>.
       </p>
       <p class="muted">
@@ -5734,13 +5745,14 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         →</a>, protože to je záznam z #316, ne dnešní obrazovka.
       </p>
       <p class="muted">
-        <b>Dvě věci se tady rozhodují a jsou vidět z obrázku, ne z popisu.</b> První: <b>legenda</b>
-        — významů je sedm a řádka pásu má deset bodů, takže se do ní všechny natrvalo nevejdou;
-        varianty <b>A</b>, <b>B</b> a <b>C</b> níž se liší právě v tom, <b>co je vidět vždycky, co
-        si člověk musí vyžádat a co unese nápověda</b>. Druhá: <b>šířka segmentu</b> — varianta
-        <b>W</b> staví <code>log₂</code> proti stejně širokým okýnkům na dvou rozloženích, protože
-        u desíti podobných souborů proměnná šířka nekupuje nic, kdežto u PR s lockem je to celá
-        informace. <b>Vybere se jedno z každé dvojice a ostatní se ze zákresu zahodí.</b>
+        <b>Ze dvou otázek, které tady byly otevřené, je jedna rozhodnutá a druhá otevřená znovu.</b>
+        <b>Legenda</b> se vyžádá z popisku (bývalá varianta A) — v řádce nepřibude nic a významy
+        se ukážou po kliknutí; varianty B a C jsou zahozené. <b>Šířka segmentu</b> zůstává
+        <code>log₂</code>, tedy <b>proměnná</b>: nese objem, a to je informace, kterou stejně široká
+        okýnka ztratí beze zbytku. Za to se ale platí — <b>když šířka nese objem, neříká, kde jsem</b>,
+        a jediné, co v pásu odpovídá na „který soubor zrovna čtu“, je značka souboru pod výřezem.
+        Ta se změřila a <b>dnešní obrys ji neunese</b>; návrh nové podoby je v posledním panelu
+        a <b>čeká na schválení</b>.
       </p>
       <p class="muted">
         <b>Výřez, ne celé okno.</b> Mění se jedna řádka chromu mezi hlavičkou a záložkami, takže
@@ -5781,8 +5793,8 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
         Jména pod pásem jsou <b>popis obrázku, ne kresba okna</b>: do dvacetibodového segmentu se
         <code>SecretClient.php</code> nevejde, takže v okně se čtou z nápovědy pod kurzorem.
-        <b>Tahle legenda je zvětšený zákres, ne rozhodnutí</b> — jak (a jestli) patří do okna,
-        rozhodují tři varianty níž. Sedm položek na jednu vodorovnou řádku je právě to, co se do
+        <b>Tahle legenda je zvětšený zákres, ne řádka chromu</b> — v okně je to popover, který se
+        vyžádá z popisku (panel níž). Sedm položek na jednu vodorovnou řádku je právě to, co se do
         desetibodové řádky pásu nevejde.
       </p>
     </div>
@@ -5837,9 +5849,8 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </p>
     </div>
 
-
     <div class="pane new">
-      <div class="tag"><i></i>Varianta A — legenda na vyžádání z popisku (řádka zůstane, jak je)</div>
+      <div class="tag"><i></i>Legenda na vyžádání z popisku — vybraná podoba, řádka zůstane, jak je</div>
       <div class="frame flat">
         <div class="rv-prmap">
           <div class="strip">
@@ -5855,12 +5866,12 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <div class="rv-legend asked">
             <b>Co který tón v pásu znamená</b>
             <span><i class="sw crit"></i>blokuje</span>
-          <span><i class="sw find"></i>nález</span>
-          <span><i class="sw new"></i>nový soubor</span>
-          <span><i class="sw"></i>bez nálezu</span>
-          <span><i class="sw viewed"></i>prošlo</span>
-          <span><i class="t"></i>vlákno</span>
-          <span><i class="o"></i>čtu</span>
+            <span><i class="sw find"></i>nález</span>
+            <span><i class="sw new"></i>nový soubor</span>
+            <span><i class="sw"></i>bez nálezu</span>
+            <span><i class="sw viewed"></i>prošlo</span>
+            <span><i class="t"></i>vlákno</span>
+            <span><i class="o"></i>čtu</span>
           </div>
         </div>
         <div class="subtabs">
@@ -5873,233 +5884,155 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div style="height: 96px; background: var(--bg);"></div>
       </div>
       <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Co v téhle variantě platí.</b> V řádce nepřibude <b>nic</b> — popisek s počty je od teď
-        tlačítko (tečkované podtržení) a klik na něj otevře <b>popover se všemi sedmi významy</b>.
-        Pod ~180 body popisek mizí, jak mizel dosud, a s ním i cesta k legendě; v tom stavu ji nese
-        <b>nápověda segmentu</b>, která ta slova říká rovnou (<code>1 nález · 1 vlákno · neprošlo</code>).
+        <b>V řádce nepřibude nic</b> — popisek s počty je tlačítko (tečkované podtržení a <code>▾</code>)
+        a klik na něj otevře <b>popover se všemi sedmi významy</b>. Pod ~180 body popisek mizí, jak
+        mizel dosud, a s ním i cesta k legendě; v tom stavu ji nese <b>nápověda segmentu</b>, která
+        ta slova říká rovnou (<code>1 nález · 1 vlákno · neprošlo</code>).
         <b>Cena:</b> kdo neví, že se dá kliknout, legendu nenajde — tečkované podtržení je jediné,
-        co to prozradí. <b>Co se tím kupuje:</b> chrom se nezvětší ani o bod a v okně to je popover,
-        tedy ani v hlavičce, která se přerovnává při každém tiku pollingu.
+        co to prozradí. <b>Co se tím kupuje:</b> chrom se nezvětší ani o bod. Popisek je s <code>▾</code>
+        o <b>13 bodů širší</b> (273 → 286 b), takže mizí o tolik dřív — změřeno tím písmem, kterým
+        se kreslí.
+      </p>
+    </div>
+
+    <div class="pane">
+      <div class="tag"><i></i>Značka souboru pod výřezem: co dnešní obrys unese a co ne</div>
+      <div class="frame flat">
+        <div class="rv-prmap big dense" style="padding: 26px 22px 18px;">
+          <div class="strip">
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg crit" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg find" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 11.45;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg new" style="flex: 4.64;"></span><span class="seg find" style="flex: 5.00;"></span><span class="seg cur" style="flex: 5.29;"></span><span class="seg new" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg viewed" style="flex: 3.91;"></span><span class="seg viewed" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span>
+          </div>
+        </div>
+        <p style="margin: -6px 22px 14px; font-size: 11.5px; color: var(--ink-3);">
+          45 souborů — obrys je <b>11 bodů</b> široký nad segmentem o <b>3 bodech</b>
+        </p>
+        <div class="rv-prmap big dense" style="padding: 26px 22px 18px;">
+          <div class="strip">
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg crit" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg find" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"></span><span class="seg new" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg find" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 11.45;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg new" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg cur" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg viewed" style="flex: 2.32;"></span><span class="seg viewed" style="flex: 3.58;"></span><span class="seg viewed" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span>
+          </div>
+        </div>
+        <p style="margin: -6px 22px 16px; font-size: 11.5px; color: var(--ink-3);">
+          158 souborů — obrys je <b>7 bodů</b> nad segmentem o <b>1,5 bodu</b>, tedy pět souborů naráz
+        </p>
+      </div>
+      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+        <b>Obrys je odstup od segmentu</b> (<code>outline-offset: 2px</code>), takže je vždycky
+        o osm bodů širší než to, co obtahuje — a nad hustým pásem tedy ukazuje víc na sousedy než
+        na svůj soubor. <b>Změřeno z bitmapy</b> (ne z tokenu, #432), přes pásmo počtů souborů
+        a šířek okna: podíl toho, co z obálky značky je cílový segment, je <b>91–98 %</b> u tří
+        souborů, <b>74–94 %</b> u sedmi, <b>62–90 %</b> u desíti, <b>44–83 %</b> u dvaceti,
+        <b>27–60 %</b> u pětačtyřiceti a <b>21–30 %</b> u sto padesáti osmi. Hranice je
+        u <b>~19 bodů šířky segmentu</b>; pod ní značka pojmenovává okolí.
+      </p>
+      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+        A druhé číslo, které rozhoduje: při 158 souborech má celá značka <b>39 b² inkoustu</b>
+        a skládá se ze dvou svislých čárek dvou bodů — tedy <b>přesně tolik a přesně toho tvaru,
+        co jedna čárka vlákna</b> (36–44 b²). Nekóduje už „tady jsem“, ale „tady je něco akcentem“.
+        Kontrast akcentu proti ploše hlavičky je přitom v pořádku při každé šířce (3 : 1 a víc) —
+        <b>samotné číslo z palety tedy netvrdí nic</b>.
       </p>
     </div>
 
     <div class="pane new">
-      <div class="tag"><i></i>Varianta B — zkrácená trvalá legenda místo počtů</div>
+      <div class="tag"><i></i>Ke schválení — jezdec pod pásem místo obrysu</div>
       <div class="frame flat">
-        <div class="rv-prmap">
+        <div class="rv-prmap big" style="padding: 26px 22px 18px;">
           <div class="strip">
-            <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
-            <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
-            <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
-            <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
-            <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
-            <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
-          </div>
-          <div class="rv-legend inline">
-            <span><i class="sw crit"></i>blokuje</span>
-            <span><i class="sw find"></i>nález</span>
-            <span><i class="sw new"></i>nový</span>
+              <span class="seg crit viewed" style="flex: 4.64;"></span><span class="seg find" style="flex: 5.46;"></span><span class="seg new" style="flex: 4.46;"></span><span class="seg viewed" style="flex: 6.02;"><i class="runner"></i></span><span class="seg viewed" style="flex: 2.32;"></span><span class="seg" style="flex: 11.45;"></span><span class="seg" style="flex: 2.81;"></span>
           </div>
         </div>
-        <div class="subtabs">
-          <div class="stab">Přehled <span class="cnt">4</span></div>
-          <div class="stab on">Změněné soubory <span class="cnt">7</span></div>
-          <div class="stab">Commity <span class="cnt">7</span></div>
-          <div class="stab">Konverzace <span class="cnt">2</span></div>
-          <div class="stab">Kontroly <span class="cnt crit">1</span></div>
-        </div>
-      </div>
-      <div class="rv-narrow">
-        <div class="frame flat">
-          <div class="rv-prmap">
-            <div class="strip">
-              <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
-            <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
-            <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
-            <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
-            <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
-            <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
-            </div>
+        <p style="margin: -6px 22px 14px; font-size: 11.5px; color: var(--ink-3);">
+          7 souborů — jezdec je <b>14 × 7 bodů</b>, hrot v ose segmentu
+        </p>
+        <div class="rv-prmap big dense" style="padding: 26px 22px 18px;">
+          <div class="strip">
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg crit" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg find" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 11.45;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg new" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"><i class="runner"></i></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg viewed" style="flex: 3.91;"></span><span class="seg viewed" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span>
           </div>
         </div>
+        <p style="margin: -6px 22px 14px; font-size: 11.5px; color: var(--ink-3);">
+          45 souborů — <b>táž značka</b>, i když je segment na minimu
+        </p>
+        <div class="rv-prmap big dense" style="padding: 26px 22px 18px;">
+          <div class="strip">
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg crit" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg find" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 11.45;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg" style="flex: 2.32;"></span><span class="seg" style="flex: 3.58;"></span><span class="seg" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg new" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"><i class="runner"></i></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span><span class="seg" style="flex: 4.95;"></span><span class="seg" style="flex: 5.25;"></span>
+              <span class="seg viewed" style="flex: 2.32;"></span><span class="seg viewed" style="flex: 3.58;"></span><span class="seg viewed" style="flex: 4.25;"></span><span class="seg" style="flex: 4.70;"></span><span class="seg" style="flex: 5.04;"></span><span class="seg" style="flex: 5.32;"></span><span class="seg" style="flex: 2.81;"></span><span class="seg" style="flex: 3.81;"></span>
+              <span class="seg" style="flex: 4.39;"></span><span class="seg" style="flex: 4.81;"></span><span class="seg" style="flex: 5.13;"></span><span class="seg" style="flex: 5.39;"></span><span class="seg" style="flex: 3.17;"></span><span class="seg" style="flex: 4.00;"></span><span class="seg" style="flex: 4.52;"></span><span class="seg" style="flex: 4.91;"></span>
+              <span class="seg" style="flex: 5.21;"></span><span class="seg" style="flex: 5.46;"></span><span class="seg" style="flex: 3.46;"></span><span class="seg" style="flex: 4.17;"></span><span class="seg" style="flex: 4.64;"></span><span class="seg" style="flex: 5.00;"></span><span class="seg" style="flex: 5.29;"></span><span class="seg" style="flex: 2.58;"></span>
+              <span class="seg" style="flex: 3.70;"></span><span class="seg" style="flex: 4.32;"></span><span class="seg" style="flex: 4.75;"></span><span class="seg" style="flex: 5.09;"></span><span class="seg" style="flex: 5.36;"></span><span class="seg" style="flex: 3.00;"></span><span class="seg" style="flex: 3.91;"></span><span class="seg" style="flex: 4.46;"></span>
+              <span class="seg" style="flex: 4.86;"></span><span class="seg" style="flex: 5.17;"></span><span class="seg" style="flex: 5.43;"></span><span class="seg" style="flex: 3.32;"></span><span class="seg" style="flex: 4.09;"></span><span class="seg" style="flex: 4.58;"></span>
+          </div>
+        </div>
+        <p style="margin: -6px 22px 16px; font-size: 11.5px; color: var(--ink-3);">
+          158 souborů — pořád táž: velikost značky nesouvisí s hustotou pásu
+        </p>
       </div>
       <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Co v téhle variantě platí.</b> Natrvalo je vidět <b>jen to, co nese barvu</b> — tři tóny
-        závažnosti —, a je to <b>na místě popisku s počty</b>, protože o tu jednu řádku se dělí
-        pás s jedním sousedem vpravo, ne se dvěma. Zbytek (prošlé, vlákno, čtu) zůstává nápovědě:
-        tlumení a čárka se totiž <b>nedají vysvětlit vzorkem</b> stejně dobře jako barva — poznají
-        se z toho, že se mění, když se čte. <b>Cena je tvrdá:</b> souhrn <code>3 prošlé</code>
-        z obrazovky odejde, a s ním to, čím byl pás zároveň ukazatel zbývající práce. Ve druhém rámu
-        je úzký stav (380 b): legenda se do něj nevejde a mizí celá, takže tam nezůstane ani jedno.
-      </p>
-    </div>
-
-    <div class="pane new">
-      <div class="tag"><i></i>Varianta C — plná legenda jako druhá řádka, ale jen na širokém okně</div>
-      <div class="frame flat">
-        <div class="rv-prmap">
-          <div class="strip">
-            <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
-            <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
-            <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
-            <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
-            <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
-            <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
-          </div>
-          <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
-        </div>
-        <div class="rv-legend row">
-          <span><i class="sw crit"></i>blokuje</span>
-          <span><i class="sw find"></i>nález</span>
-          <span><i class="sw new"></i>nový soubor</span>
-          <span><i class="sw"></i>bez nálezu</span>
-          <span><i class="sw viewed"></i>prošlo</span>
-          <span><i class="t"></i>vlákno</span>
-          <span><i class="o"></i>čtu</span>
-        </div>
-        <div class="subtabs">
-          <div class="stab">Přehled <span class="cnt">4</span></div>
-          <div class="stab on">Změněné soubory <span class="cnt">7</span></div>
-          <div class="stab">Commity <span class="cnt">7</span></div>
-          <div class="stab">Konverzace <span class="cnt">2</span></div>
-          <div class="stab">Kontroly <span class="cnt crit">1</span></div>
-        </div>
-      </div>
-      <div class="rv-medium">
-        <div class="frame flat">
-          <div class="rv-prmap">
-            <div class="strip">
-              <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
-            <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
-            <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
-            <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
-            <span class="seg" style="flex: 11.45;" title="composer.lock · +2 100 −690 · neprošlo"></span>
-            <span class="seg" style="flex: 2.81;" title="phpunit.xml.dist · +4 −2 · neprošlo"></span>
-            </div>
-            <span class="lbl">7 souborů · 3 prošlé · 5 nálezů · 2 vlákna</span>
-          </div>
-          <div class="subtabs">
-          <div class="stab">Přehled <span class="cnt">4</span></div>
-          <div class="stab on">Změněné soubory <span class="cnt">7</span></div>
-          <div class="stab">Commity <span class="cnt">7</span></div>
-          <div class="stab">Konverzace <span class="cnt">2</span></div>
-          <div class="stab">Kontroly <span class="cnt crit">1</span></div>
-        </div>
-        </div>
-      </div>
-      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Co v téhle variantě platí.</b> Legenda je <b>úplná a bez kliknutí</b>, ale platí se za ni
-        <b>druhou řádkou chromu</b> (asi 16 bodů) — a jedině tam, kde na ni je šířka. Druhý rám je
-        okno o 720 bodech: legenda zmizela a zbyl pás s počty, tedy dnešní stav. Je to <b>tentýž
-        druh pravidla, jaké už v řádce platí pro popisek</b>, jen o stupeň dřív — a proto se nedá
-        říct, že by přidávalo nový druh chování. <b>Cena:</b> na širokém okně ubere diffu 16 bodů
-        výšky natrvalo, a to za informaci, kterou se člověk naučí jednou a pak ji nepotřebuje.
-      </p>
-    </div>
-
-    <div class="pane new">
-      <div class="tag"><i></i>Varianta W — stejně široké segmenty (k otázce „neměly by být stejně široký?“)</div>
-      <div class="frame flat">
-        <div class="rv-prmap big" style="padding: 22px 22px 6px;">
-          <div class="strip">
-            <span class="seg new" style="flex: 5.43;" title="AskTab.swift · +42 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 4.25;" title="AskLog.swift · +18 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 5.00;" title="AskCommand.swift · +31 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 4.70;" title="AskSession.swift · +25 −0 · nový soubor"></span>
-            <span class="seg find" style="flex: 5.93;" title="AppStore+Ask.swift · +54 −6 · 1 nález"></span>
-            <span class="seg new" style="flex: 3.70;" title="AskPrompt.swift · +12 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 5.29;" title="AskBubble.swift · +38 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 4.52;" title="AskComposer.swift · +22 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 4.00;" title="AskState.swift · +15 −0 · nový soubor"></span>
-            <span class="seg" style="flex: 4.91;" title="ContentView.swift · +21 −8"></span>
-          </div>
-        </div>
-        <div class="rv-mapnames" style="padding-bottom: 10px;">
-          <span style="flex: 5.43;">AskTab</span><span style="flex: 4.25;">AskLog</span><span style="flex: 5.00;">AskCommand</span><span style="flex: 4.70;">AskSession</span><span style="flex: 5.93;">AppStore+Ask</span><span style="flex: 3.70;">AskPrompt</span><span style="flex: 5.29;">AskBubble</span><span style="flex: 4.52;">AskComposer</span><span style="flex: 4.00;">AskState</span><span style="flex: 4.91;">ContentView</span>
-        </div>
-        <div class="rv-prmap big" style="padding: 10px 22px 6px;">
-          <div class="strip">
-            <span class="seg new" style="flex: 1;" title="AskTab.swift · +42 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 1;" title="AskLog.swift · +18 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 1;" title="AskCommand.swift · +31 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 1;" title="AskSession.swift · +25 −0 · nový soubor"></span>
-            <span class="seg find" style="flex: 1;" title="AppStore+Ask.swift · +54 −6 · 1 nález"></span>
-            <span class="seg new" style="flex: 1;" title="AskPrompt.swift · +12 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 1;" title="AskBubble.swift · +38 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 1;" title="AskComposer.swift · +22 −0 · nový soubor"></span>
-            <span class="seg new" style="flex: 1;" title="AskState.swift · +15 −0 · nový soubor"></span>
-            <span class="seg" style="flex: 1;" title="ContentView.swift · +21 −8"></span>
-          </div>
-        </div>
-        <div class="rv-mapnames" style="padding-bottom: 14px;">
-          <span style="flex: 1;">AskTab</span><span style="flex: 1;">AskLog</span><span style="flex: 1;">AskCommand</span><span style="flex: 1;">AskSession</span><span style="flex: 1;">AppStore+Ask</span><span style="flex: 1;">AskPrompt</span><span style="flex: 1;">AskBubble</span><span style="flex: 1;">AskComposer</span><span style="flex: 1;">AskState</span><span style="flex: 1;">ContentView</span>
-        </div>
-      </div>
-      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Deset podobných souborů</b> (12 až 54 změn) — nahoře <code>log₂</code>, dole stejná šířka.
-        Nahoře jsou šířky 68 až 110 bodů, tedy rozdíl <b>1,6×</b> u souborů, které jsou si prací
-        rovnocenné: proměnná šířka tady <b>nekupuje nic</b> a čte se jako šum. Dole je pás
-        pravidelný, jména se vejdou stejně a zbývá jediné, co v takovém PR mluví — <b>kolik je
-        souborů a v jakém jsou stavu</b>.
-      </p>
-      <div class="frame flat">
-        <div class="rv-prmap big" style="padding: 22px 22px 6px;">
-          <div class="strip">
-            <span class="seg" style="flex: 8.68;" title="docs/navrh.html · +394 −15 · 409 změn"></span>
-            <span class="seg find" style="flex: 2.32;" title="PullRequestMapView.swift · +3 −1 · 1 nález"></span>
-            <span class="seg new" style="flex: 2.58;" title="PullRequestMapGeometry.swift · +5 −0 · nový soubor"></span>
-            <span class="seg" style="flex: 1.58;" title="Palette.swift · +2 −0"></span>
-            <span class="seg" style="flex: 3.17;" title="PullRequestMap.swift · +6 −2"></span>
-            <span class="seg viewed" style="flex: 3.70;" title="architektura.md · +9 −3 · prošlo"></span>
-            <span class="seg" style="flex: 2.32;" title="stav.md · +3 −1"></span>
-            <span class="seg new" style="flex: 2.81;" title="MapGeometryTests.swift · +6 −0 · nový soubor"></span>
-            <span class="seg" style="flex: 2.00;" title="testovani.md · +2 −1"></span>
-            <span class="seg" style="flex: 1.58;" title="navrh.md · +1 −1"></span>
-          </div>
-        </div>
-        <div class="rv-mapnames" style="padding-bottom: 10px;">
-          <span style="flex: 8.68;">docs/navrh.html · 409 změn</span><span style="flex: 2.32;">MapView</span><span style="flex: 2.58;">MapGeometry</span><span style="flex: 1.58;">Palette</span><span style="flex: 3.17;">Map</span><span style="flex: 3.70;">architektura</span><span style="flex: 2.32;">stav</span><span style="flex: 2.81;">MapGeoTests</span><span style="flex: 2.00;">testovani</span><span style="flex: 1.58;">navrh</span>
-        </div>
-        <div class="rv-prmap big" style="padding: 10px 22px 6px;">
-          <div class="strip">
-            <span class="seg" style="flex: 1;" title="docs/navrh.html · +394 −15 · 409 změn"></span>
-            <span class="seg find" style="flex: 1;" title="PullRequestMapView.swift · +3 −1 · 1 nález"></span>
-            <span class="seg new" style="flex: 1;" title="PullRequestMapGeometry.swift · +5 −0 · nový soubor"></span>
-            <span class="seg" style="flex: 1;" title="Palette.swift · +2 −0"></span>
-            <span class="seg" style="flex: 1;" title="PullRequestMap.swift · +6 −2"></span>
-            <span class="seg viewed" style="flex: 1;" title="architektura.md · +9 −3 · prošlo"></span>
-            <span class="seg" style="flex: 1;" title="stav.md · +3 −1"></span>
-            <span class="seg new" style="flex: 1;" title="MapGeometryTests.swift · +6 −0 · nový soubor"></span>
-            <span class="seg" style="flex: 1;" title="testovani.md · +2 −1"></span>
-            <span class="seg" style="flex: 1;" title="navrh.md · +1 −1"></span>
-          </div>
-        </div>
-        <div class="rv-mapnames" style="padding-bottom: 14px;">
-          <span style="flex: 1;">docs/navrh.html · 409 změn</span><span style="flex: 1;">MapView</span><span style="flex: 1;">MapGeometry</span><span style="flex: 1;">Palette</span><span style="flex: 1;">Map</span><span style="flex: 1;">architektura</span><span style="flex: 1;">stav</span><span style="flex: 1;">MapGeoTests</span><span style="flex: 1;">testovani</span><span style="flex: 1;">navrh</span>
-        </div>
-      </div>
-      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Týž pás nad PR s jedním velkým souborem</b> (<code>docs/navrh.html</code> se 409 změnami
-        proti sousedům o dvou až devíti řádcích). Nahoře je na první pohled vidět, <b>kde je v PR
-        objem</b> — jeden segment má při pásu o 900 bodech <b>304 bodů</b>, ostatní 42 až 98. Dole je <b>ta informace pryč
-        beze zbytku</b>: deset stejných okýnek netvrdí nic o tom, že devadesát procent práce je
-        v prvním z nich, a soubor o dvou řádcích vypadá stejně důležitě jako ten o čtyřech stech.
+        <b>Jezdec je pevný, obrys byl odvozený.</b> Trojúhelník 14 × 7 bodů pod pásem, hrot na
+        spodní hraně <b>v ose segmentu</b>, plný akcent. Tři vlastnosti, kvůli kterým je to
+        navržené takhle: <b>velikost nezávisí na šířce segmentu</b> (takže se nerozpadne zrovna
+        tam, kde je pás nejužitečnější), <b>hrot je bod</b> (ukazuje přesně, i když je značka širší
+        než to, na co míří — obrys naopak <em>obklopuje</em>, a to při dvou bodech ztrácí smysl),
+        a <b>tvar se nedá splést s čárkou vlákna</b>: čárka je 2 body široká v každém řádku, jezdec
+        má 14 bodů plné šířky u základny. <b>Obrys tím odchází</b> — dvě značky na jednu věc by
+        znamenaly, že se člověk učí dvě.
       </p>
       <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Co která šířka tvrdí.</b> Proměnná říká <b>„kde je v tomhle PR objem“</b>, stejná říká
-        <b>„kolik je souborů a v jakém jsou stavu“</b>. Obojí je legitimní pás, ale je to <b>jiný
-        nástroj</b>, ne jiný odstín — a zvolit se musí jeden, protože dvě šířky téhož segmentu
-        nejdou. <code>log₂</code> byl v zadání #501 jmenovitě, takže jeho zahození je <b>odchylka
-        k zapsání do specifikace</b>. Stejná šířka by přitom <b>zrušila dvě věci naráz</b>: pravidlo
-        o mezerách nad ~160 soubory (pravidelná mřížka je jedno dělení, minimum ani vytlačování
-        z podílu v ní nejsou) a s ním celou třídu chyb v trefení, protože segment i trefná plocha
-        vycházejí z téhož dělení. Naměřeno k tomu: u <b>deseti</b> souborů má nejužší segment
-        s <code>log₂</code> <b>68 bodů</b>, u <b>čtyřiceti pěti</b> (<code>PRism#499</code>) už
-        <b>3 body</b>, tedy minimum — u stejné šířky je to 17 bodů.
+        <b>Co se zvažovalo a zahodilo.</b> (1) <b>Minimální šířka pro zvýrazněný segment</b> — pás
+        by se přerovnával při každém přejezdu hranice souboru, takže by se cíle kliknutí hýbaly
+        pod kurzorem a šířka by přestala mluvit o objemu. (2) <b>Obrys s pevnou minimální šířkou</b>
+        vystředěný na segment — pořád obklopuje, takže při dvoubodové hustotě orámuje osm souborů.
+        (3) <b>Ztlumit ostatní segmenty</b> — tlumení už znamená <em>prošlo</em>.
+        (4) <b>Nechat obrys a jezdce přidat</b> — jedna věc, dvě značky.
+      </p>
+      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+        <b>Dokud to není schválené, kreslí obrys i tenhle dokument</b> — v rámech okna výš
+        i v sekcích 02, 03, 04, 19 a 25. Jezdec je zakreslený jedině tady; až bude odsouhlasený,
+        přejde do všech sedmi rámů v jednom commitu, aby si kresba neodporovala sama.
+        <b>Pás v těchhle třech rámech je zvětšený</b> (22 bodů místo deseti), aby byly tvary vidět;
+        vodorovné poměry, o které se rozhoduje, jsou skutečné.
       </p>
     </div>
     <div class="notes">
@@ -6127,13 +6060,14 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <div class="note">
         <span class="num">141</span>
         <span class="body">
-          <b>Prošlé tlumeně, aktuální s obrysem</b>
+          <b>Prošlé tlumeně, aktuální označený</b>
           <span>Se značkou <em>Prošlo</em> (<a class="jump" href="#s40">sekce 40 →</a>) je pás
           zároveň ukazatel, kolik zbývá: tlumené segmenty jsou hotové. Tlumí se <b>krytím na
           35 %</b>, ne druhým odstínem — šest hodnot ve škále by z pásu udělalo obrázek k luštění.
           Stav <em>změněno od prošlého</em> tlumený <b>není</b>: je to práce, která se vrátila.
-          Obrys akcentem je soubor pod výřezem a čte se z <code>DiffViewport</code>, tedy
-          z místa, kam se scroll zapisuje už dneska.</span>
+          Soubor pod výřezem se čte z <code>DiffViewport</code>, tedy z místa, kam se scroll
+          zapisuje už dneska; <b>čím se označuje</b>, je otevřená otázka — dnešní obrys je změřený
+          a neunese hustý pás, návrh je jezdec (panel výš).</span>
         </span>
       </div>
       <div class="note">
@@ -6157,6 +6091,22 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           <code>⌥↑ ⌥↓</code> na nálezech — <code>⌥</code> je v tomhle okně práce nad diffem,
           svislé šipky skáčou po nálezech a vodorovné po souborech. <b>Nezacyklují se</b>: na
           posledním souboru <code>⌥→</code> nedělá nic, protože pás je mapa, tedy věc s koncem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">144</span>
+        <span class="body">
+          <b>Šířka nese objem, a proto zůstala proměnná</b>
+          <span>Stejně široká okýnka byla zvažovaná a <b>zahozená</b>: u deseti podobných souborů
+          proměnná šířka nekupuje nic (rozdíl 1,6×, čte se jako šum), ale u PR s jedním velkým
+          souborem je to <b>celá informace</b> — jeden segment má při pásu o 900 bodech 304 bodů
+          proti 42 až 98 u ostatních, kdežto deset stejných okýnek netvrdí o objemu nic.
+          <code>log₂</code> byl navíc v zadání #501 jmenovitě. <b>Platí se za to</b> tím, že šířka
+          neříká, kde jsem — a proto musí značka souboru pod výřezem stát sama za sebe.
+          A <b>mezera mezi segmenty ustupuje dřív než minimum</b>: nad ~160 soubory si
+          <code>3 b × N</code> a <code>2 b × (N − 1)</code> se šířkou pásu odporují (u 300 souborů
+          1 498 bodů proti osmi stům), takže by ze pásu byla tečkovaná linka. Shlukování ani strop
+          na počet segmentů se <b>nedělají</b> — znamenaly by, že soubor v pásu není.</span>
         </span>
       </div>
     </div>

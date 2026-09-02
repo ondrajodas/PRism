@@ -5419,5 +5419,51 @@ fixture po **řádcích** a měla 9 až 14 souborů (#478).
 - **Mezera mezi segmenty se nad ~160 soubory nekreslí** (viz tabulka výš). Zákres tuhle velikost
   nekreslí vůbec, takže je to rozhodnutí nad ním, ne proti němu.
 
+**Po druhém proklikání se vybíralo ze čtyř panelů v sekci 42 a vybralo se `A` + `log₂`.**
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Legenda se vyžádá z popisku** (varianta A) — popisek je tlačítko a klik otevře popover se všemi sedmi významy | **B**: zkrácená trvalá legenda (tři tóny závažnosti) na místě počtů. **C**: plná legenda jako druhá řádka chromu, jen na širokém okně | U **B** odejde z obrazovky souhrn `3 prošlé`, tedy to, čím je pás zároveň ukazatel zbývající práce — a v úzkém stavu (380 b) zmizí legenda celá, takže tam nezůstane ani jedno. U **C** se platí **druhou řádkou chromu** (~16 bodů výšky diffu natrvalo) za informaci, kterou se člověk naučí jednou a pak ji nepotřebuje. **A** nezvětší chrom ani o bod. **Cena A je zapsaná**: kdo neví, že se dá kliknout, legendu nenajde — tečkované podtržení a `▾` je jediné, co to prozradí; a v úzké podobě, kde popisek mizí, k ní cesta není vůbec (tam ta slova říká nápověda segmentu rovnou) |
+| **Barvu vydává jedna funkce pro kresbu i pro legendu** (`PullRequestMapView.fill(of:)` nad `PullRequestMapTone`) | Dosadit barvy ve vzorcích legendy přímo z palety | Je to ta samá barva, jen ze druhého místa — takže **rozejití se škálou by nebylo vidět**. Tatáž past byla i v zákresu (`style="background: var(--crit)"`) a je tam opravená na společný selektor. Hlídá to stráž nad zdrojákem, ne měření: bitmapa obě podoby nerozliší |
+| **Sedm tónů v legendě, ale čtyři ve výplni** | Udělat z `read`, `thread` a `current` další tóny výplně | `read` je krytí nad výplní, `thread` čárka a `current` značka — tři jiné kanály. Kdyby se do výplně dostal `accent`, byl by v pásu **pátý stav závažnosti** a na obrázku by to vypadalo jako „něco tu je“. `Policy.mapFill(of:)` proto vydá jedině jeden ze čtyř a tvrdí to test |
+| **`.popover` visí na nulovém kotvicím view, ne na tlačítku** | Nasadit `.popover` přímo na tlačítko; nebo připojit ho podmíněně (`if isOpen`) | **Změřeno**: přímo na tlačítku zdražil průchod tělem pásu při 158 souborech ze 3,0–4,8 na **7,1–7,3 ms**; na nulovém potomkovi v `background`u 5,1–5,2. Podmíněné připojení nebylo lepší (5,5–7,4 ms) a nese riziko, že se popover v tom průchodu, ve kterém se modifikátor objeví, **neotevře**. Je to tentýž tvar, jaký v řádce už mají `probe` a `shortcuts`. **Mez toho měření je zapsaná**: podoby se měřily v samostatných bězích a stroj driftoval, takže průkazný je jedině ten první, dvojnásobný rozdíl |
+| **`isOpen` drží legenda, ne tělo pásu** | `@State` v `PullRequestMapView` | Otevření legendy by přeložilo tělo pásu i s kresbou 158 segmentů. Je to tatáž věta jako u hoveru a u sondy výřezu |
+| **Šířka zůstává `log₂`, tedy proměnná** (varianta W: `log₂` proti stejně širokým okýnkům) | Stejně široká okýnka | U deseti podobných souborů proměnná šířka **nekupuje nic** (rozdíl 1,6×, čte se jako šum) — a to byl ten případ, kvůli kterému otázka vznikla. U PR s jedním velkým souborem je to ale **celá informace**: jeden segment má při pásu o 900 bodech 304 bodů proti 42 až 98 u ostatních, kdežto deset stejných okýnek netvrdí o objemu nic. `log₂` byl navíc v zadání #501 jmenovitě. Stejná šířka by k tomu zrušila dvě věci naráz: pravidlo o mezerách nad ~160 soubory (pravidelná mřížka je jedno dělení) a s ním celou třídu chyb v trefení |
+| **Za proměnnou šířku se platí značkou souboru pod výřezem** | Nechat to bez podmínky | Když šířka nese objem, **neříká, kde jsem** — a jediné, co v pásu na „který soubor zrovna čtu“ odpovídá, je ta značka. Rozhodnutí nechat `log₂` na ní tedy stojí, takže se musela **změřit**, ne prohlásit |
+
+**Značka souboru pod výřezem: dnešní obrys je změřený a neunese hustý pás.** Z bitmapy (#432), přes
+pásmo počtů souborů a šířek okna — čísla jsou
+v [`docs/architektura.md`](../../architektura.md#značka-souboru-pod-výřezem--co-dnešní-obrys-unese-501).
+Podíl obálky značky, který je cílový segment, spadne z 91–98 % (tři soubory) na **21–30 %** (158),
+protože obrys je **odstup od segmentu**, tedy vždycky o osm bodů širší než to, co obtahuje. A při
+158 souborech má celá značka **39 b² inkoustu ve dvou svislých čárkách dvou bodů** — přesně tolik
+a přesně toho tvaru, co jedna čárka vlákna (36–44 b²).
+
+**Návrh je `jezdec` a čeká na schválení** (zakreslený v sekci 42, implementace až po souhlasu —
+je to nový prvek na obrazovce, tedy jediná schvalovací brána v tomhle repu):
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Pevný trojúhelník 14 × 7 bodů pod pásem, hrotem v ose segmentu** — a obrys odchází | **Nechat obrys a jezdce přidat** | Jedna věc, dvě značky: člověk se učí dvakrát a v hustém pásu by se obrysové čárky dál pletly s vlákny |
+| | **Minimální šířka pro zvýrazněný segment** (segment pod výřezem by se rozšířil) | Pás by se **přerovnával při každém přejezdu hranice souboru**, takže by se cíle kliknutí hýbaly pod kurzorem — a šířka by přestala mluvit o objemu právě u toho segmentu, na který se člověk kouká |
+| | **Obrys s pevnou minimální šířkou** vystředěný na segment | Pořád **obklopuje**, takže při dvoubodové hustotě orámuje osm souborů. Pevná velikost problém neřeší, když je tvar „rámeček okolo“ |
+| | **Ztlumit ostatní segmenty** | Tlumení už znamená `prošlo` (#500) — druhý význam na tentýž kanál |
+| | Značka **nad** pásem místo pod ním | Nad pásem je osm bodů odsazení hlavičky a hned nad nimi text meta řádky; pod pásem je deset bodů do pruhu záložek. A pruh záložek značí aktivní tab **podtržením**, ne trojúhelníkem, takže se to nepere |
+
+**Tři vlastnosti, kvůli kterým je návrh takový**, a všechny tři jsou odpovědí na to, co se změřilo:
+velikost **nezávisí na šířce segmentu** (takže se značka nerozpadne zrovna tam, kde je pás
+nejužitečnější), **hrot je bod** (ukazuje přesně, i když je značka širší než cíl — obrys naopak
+obklopuje, a to při dvou bodech ztrácí smysl) a **tvar se nedá splést s čárkou vlákna** (čárka má
+dva body v každém řádku, jezdec 14 bodů plné šířky u základny).
+
+**Hover má vlastní vrstvu, a je to úklid na vlastním důvodu.** Ondrův nekliknutelný segment se
+nezreprodukoval a slepá oprava podezření na `.help` se **nedělá** — má horší selhání než ta chyba.
+Co se udělalo, stojí samo za sebe: **hover nemá překreslovat kresbu** (tatáž věta jako #358 a #438).
+Dokud `hovered` drželo tělo pásu, čtl ho popisek nápovědy v témže těle jako `Canvas`, takže přejezd
+hranice segmentu přeložil tělo a překreslil celou kresbu — a **jeden průchod tělem stojí při 158
+souborech 7,2 ms**, tedy 1,1 s CPU za jeden přejezd pásu (157 hranic). Že to hover doopravdy
+nespustí, se v harnessu ověřit nedá (offscreen okno ho nedostane, `CGEvent` je v testech zakázaný,
+#490), takže se to tvrdí **nad zdrojákem** — a je to zapsaná mez, ne domněnka.
+
 **Tvrdé podmínky se nemění ani o položku.** Pás jen čte — `GitHubGateway` zůstává bez zápisových
 metod, `SingleWayOutTests` prochází beze změny a `DiffViewport` se **nezměnil**: mapa ho čte.

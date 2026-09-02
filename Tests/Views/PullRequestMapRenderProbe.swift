@@ -19,6 +19,12 @@ import Testing
 @MainActor
 @Suite(
     "Sonda mapy PR (#501)",
+    // **`.serialized`, a je to podmínka, ne opatrnost.** Od chvíle, kdy má sonda dva testy, staví
+    // dvě okna mimo obrazovku — a souběžně, protože `@MainActor` suite paralelismus nevypíná.
+    // Dvě hosting views, která se rozvrhují z vnořených runloopů, položí testovacího hosta
+    // v `_postWindowNeedsUpdateConstraints` uprostřed display cyklu (`SIGABRT`, žádný `✘`
+    // a nezapsaný ani první obrázek). Tatáž konstrukce i tentýž důvod jako u `IdleDiffSpinProbe`.
+    .serialized,
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
 )
 struct PullRequestMapRenderProbe {
@@ -45,6 +51,35 @@ struct PullRequestMapRenderProbe {
                             )
                         }
                     }
+                } catch { thrown = error }
+            }
+            if let thrown { throw thrown }
+        }
+    }
+
+    /// Legenda z popisku (#501, varianta A) — **vlastní snímek**, protože v pásu není vidět:
+    /// popover se staví, až se otevře, takže ho render řádky nezachytí.
+    @Test("Vyrendrovat legendu pásu")
+    func rendersTheLegend() throws {
+        for dark in [false, true] {
+            let appearance = try #require(NSAppearance(named: dark ? .darkAqua : .aqua))
+            var thrown: (any Error)?
+            appearance.performAsCurrentDrawingAppearance {
+                do {
+                    // **`fixedSize()` tady musí být.** Popover si v okně bere vlastní okno
+                    // a velikost od obsahu; hostovaný v pevném rámci mimo obrazovku položí
+                    // testovacího hosta v `_postWindowNeedsUpdateConstraints`. Je to vlastnost
+                    // sondy, ne legendy — proto se to řeší v ní.
+                    let scene = PullRequestMapLegendPopover()
+                        .fixedSize()
+                        .frame(width: 330, height: 140, alignment: .topLeading)
+                        .background(Palette.surface)
+                        .environment(\.colorScheme, dark ? .dark : .light)
+                        .tint(Palette.accent)
+                    let name = "legenda-\(dark ? "tmava" : "svetla")"
+                    let url = Self.outputDirectory.appending(path: "\(name).png")
+                    let size = try render(scene, width: 330, height: 140, to: url)
+                    print("SONDA \(url.path) — legenda, vlastní velikost \(size)")
                 } catch { thrown = error }
             }
             if let thrown { throw thrown }
@@ -97,7 +132,7 @@ struct PullRequestMapRenderProbe {
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         try #require(rep.representation(using: .png, properties: [:])).write(to: url)
-        return hosting.fittingSize
+        return hosting.frame.size
     }
 
     private static var outputDirectory: URL {
