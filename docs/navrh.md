@@ -240,7 +240,8 @@ který platí.
 
 1. Upravit sekci, které se to týká — novou obrazovku přidat jako další sekci **i s poznámkami**
    (`.notes`), protože návrh bez důvodů se za měsíc nedá obhájit ani změnit. Nová sekce dostane
-   **další volné číslo** (ne to, kam v UI patří) a zařadí se do stránky podle místa v aplikaci;
+   **další volné číslo** (ne to, kam v UI patří) — **v dávce ho ale nepočítáš, dostaneš ho
+   v zadání** (viz níž) — a zařadí se do stránky podle místa v aplikaci;
    mapa stránek je v kostře dokumentu, v komentáři nad rozcestníkem.
 2. Publikovat: `Artifact` s `file_path: "docs/navrh.html"`,
    `url: "https://claude.ai/code/artifact/5206622c-…"` a `favicon: "🎨"`. Titulek a favicon
@@ -262,25 +263,27 @@ aplikace* jen *Přehled*. Uživatel tedy neměl co odsouhlasit, a ta sekce přit
 v repu — publikovaná kopie o ní jen nevěděla.
 
 **Po každém publikování z branche si odkaz otevři a zkontroluj, že tam ta sekce je.** A když leží
-víc zákresů naráz, publikuje se **naposled ten, který se má ukazovat**.
-
-**V dávce to ale nikdo nenaplánuje** (#537): pořadí mergů se předem neurčuje, takže v okamžiku
-publikování se neví, kdo bude poslední. Místo plánu se proto publikuje **znovu po každém mergi,
-ze slitého stavu** — každé další publikování jde ze stavu, který obsahuje i to předchozí, takže
-poslední merge srovná i to, co smetl ten před ním. Postup je
+víc zákresů naráz, rozhoduje **pořadí publikování**: naposled má jít ten, který se má ukazovat.
+Naplánovat to ale jde jedině tam, kde ty větve drží jeden člověk — **v dávce to nikdo
+nenaplánuje** (#537), protože pořadí mergů se předem neurčuje a kdo je dřív hotov, jde dřív.
+Místo plánu se proto publikuje **znovu po každém mergi, ze slitého stavu**: každé další
+publikování jde ze stavu, který obsahuje i to předchozí, takže poslední merge srovná i to, co
+smetl ten před ním — a nikdo nemusí vědět, že je poslední. Postup je
 v [`paralelni-vyvoj.md`](paralelni-vyvoj.md#číslo-sekce-v-mockupu-přiděluje-orchestrátor).
 
-**Číslo sekce se kontroluje proti `mainu` v den publikování**, ne proti stavu při zakládání
-branche (#410). „Další volné číslo“ z bodu 1 si dvě nezávisle vzniklé branche vezmou obě: #401
-i #410 vyšly z mainu, na kterém bylo 25 sekcí, takže si obě vzaly **26** — a po mergnutí obou by
+**Mimo dávku se číslo sekce kontroluje proti `mainu` v den publikování**, ne proti stavu při
+zakládání branche (#410). „Další volné číslo“ z bodu 1 si dvě nezávisle vzniklé branche vezmou
+obě: #401 i #410 vyšly z mainu, na kterém bylo 25 sekcí, takže si obě vzaly **26** — a po
+mergnutí obou by
 dokument měl kotvu `#s26` dvakrát. Přečísluje se ta, která se merguje později (u #410 na **27**),
 a s číslem se mění i eyebrow sekce a komentáře u jejího CSS. Že je kotva navěky (viz *Kde návrh
 je*) tomu neodporuje: nemergnutá sekce ještě žádnou kotvu, na kterou se odkazuje, nemá.
 
-**V dávce ta kontrola nestačí a číslo přiděluje orchestrátor v zadání** (#537). Dvě větve vzniklé
-v jedné vlně se proti `mainu` porovnají obě správně a obě dostanou tutéž odpověď — po #410 se to
-tak stalo znovu u #500 a #531, které si vzaly `s40` obě. Kontrola proti mainu chytá větev, která
-leží týden; souběh v jedné vlně nechytá vůbec. Podrobně v
+**V dávce se číslo nekontroluje, ale přiděluje** — dostaneš ho v zadání od orchestrátora (#537),
+takže tahle kontrola tam pro tebe není práce. Dvě větve vzniklé v jedné vlně se totiž proti
+`mainu` porovnají obě správně a obě dostanou tutéž odpověď: po #410 se to tak stalo znovu u #500
+a #531, které si vzaly `s40` obě. Kontrola proti mainu chytá větev, která leží týden; souběh
+v jedné vlně nechytá vůbec. Podrobně v
 [`paralelni-vyvoj.md`](paralelni-vyvoj.md#číslo-sekce-v-mockupu-přiděluje-orchestrátor).
 
 Nové obrazovky se kreslí **stejnými třídami jako zbytek** (`.win`, `.card`, `.pill`, `.mini`, …).
