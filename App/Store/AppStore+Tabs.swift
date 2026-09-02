@@ -121,6 +121,11 @@ extension AppStore {
             // místa by znamenala pruh, který tvrdí něco jiného než obrazovka pod ním.
             isLoading: tabContent(for: pullRequest) == .loading,
             hasDraft: hasDraft(pullRequest),
+            // **Snímek záložky jako záloha, ne jako pravda** (#201): u PR, který vypadl ze
+            // seznamu a nikdo mu nedotahuje detail, je to jediné, co o jeho stavu zbylo. Může být
+            // zastaralý (`otevřený` z posledního tiku), a to je v pořádku — puntík pak kreslí stav
+            // review, tedy to, co platilo do #527. Prázdno by proti tomu znamenalo `nil`, tedy
+            // taky stav review; záloha tady tedy nikdy netvrdí **víc**, jen někdy víc ví.
             state: summary(for: pullRequest)?.state ?? openTabSnapshots[pullRequest]?.state,
             review: reviewState(for: pullRequest)
         )
