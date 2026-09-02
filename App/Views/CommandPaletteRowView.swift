@@ -95,6 +95,9 @@ struct CommandPaletteRowView: View {
         case .blockingFinding, .finding: "circle.fill"
         case .pullRequest: PullRequestStateAppearance.symbol
         case .file: "doc.text"
+        // Řetěz, ne šipka: řádek vznikl z **odkazu** ve schránce (#531), a šipka „ven“ patří
+        // v tomhle okně tomu, co odchází na GitHub.
+        case .link: "link"
         case .action(let symbol): symbol
         }
     }
@@ -113,6 +116,9 @@ struct CommandPaletteRowView: View {
         case .blockingFinding: Palette.crit
         case .finding: Palette.find
         case .pullRequest(let state): PullRequestStateAppearance.color(of: state)
+        // Akcent u odkazu: je to jediný řádek palety, který **není** nález v katalogu, ale
+        // odpověď na to, co je v poli napsané — a akcent je v tomhle okně barva akce.
+        case .link: Palette.accent
         case .file, .action: Palette.ink3
         }
     }

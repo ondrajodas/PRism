@@ -11,9 +11,9 @@ odkaz, žije jako artifact `PRism — návrh vizuální revize`:
 <https://claude.ai/code/artifact/5206622c-19b2-4c4e-9041-849d5b6d4a51>. Obojí musí odejít
 **v jednom commitu a jednom publikování** — rozejít se smí leda na dobu jedné úpravy.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **38** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **40** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
-stálo 28, kdežto sekcí bylo 30:
+stálo 28, kdežto sekcí bylo 30, a do #531 stálo 38 proti 39:
 
 ```bash
 grep -c '<section class="section" id="s' docs/navrh.html
@@ -59,7 +59,9 @@ v panelu**, ne celý panel znovu. Ve stejném vztahu stojí **38 k 04**: 04 je z
 *Konverzace* i s composerem, 38 kreslí **jen ten composer s nabídkou emotikonů**, protože se
 nemění nic jiného. A **37 vedle 36** je jiný případ — nejsou to dvě podoby jedné obrazovky, ale
 dvě akce v téže sekci panelu (*Větev*), takže spolu leží na stránce *Panel u vlastního PR* a ani
-jedna z nich zatím není záznamem dneška.
+jedna z nich zatím není záznamem dneška. A **40 vedle 02** je zase případ jako 24: kreslí
+**jediný výřez hlavičky** s pilulkou `mimo zdroje` a dva stavy záložky, o které se ví jen adresa
+(#531) — celá hlavička ani celé okno se nepřekresluje.
 
 **Sekce, do které se z obrazovky jen přijde, leží na stránce toho místa, odkud se otevírá.**
 Sekce 20 kreslí surovou session na stránce *Průběh*, protože se otevírá z výpisu kroků; **28**
@@ -91,7 +93,9 @@ přesně to, čemu má pravidlo „tokeny jsou `Palette` jedna ku jedné“ zabr
 **v obou** světlých větvích (`:root` i `:root[data-theme="light"]`), jako se u #277 měnily obě
 tmavé.
 
-**A jedna sekce může mít víc obrazovek.** Sekce 20 jich má dvě — živý výpis kroků a surovou
+**A jedna sekce může mít víc obrazovek.** Sekce 09 jich má od #531 **tři** — dnešní hledání,
+vložený odkaz a dvě úrovně nad repem —, protože všechny tři jsou tatáž karta ⌘K a odpovídají na
+sebe navazující otázky. Sekce 20 jich má dvě — živý výpis kroků a surovou
 session —, protože **odpovídají na jinou otázku nad týmž místem** a druhá je východ z první.
 Rozdělit je na dvě sekce by ten vztah zahodilo; dokud spolu obrazovky takhle souvisejí, patří
 k sobě. Poznají se podle vlastního `<h3>` a vlastního bloku `.notes`.

@@ -290,6 +290,7 @@ struct ContentView: View {
                     .onTapGesture { store.closePalette() }
                 CommandPaletteView(
                     items: store.paletteItems,
+                    link: store.paletteLink(for:),
                     run: choose(_:),
                     close: store.closePalette
                 )
@@ -333,7 +334,10 @@ struct ContentView: View {
             // rozumí — ne každé, které ji potřebuje.
             HomeView(store: store, openSettings: { openSettings() })
         case .pullRequest(let id):
-            if let summary = store.summary(for: id) {
+            // Čtyři stavy, o kterých rozhoduje `Policy.tabContent` (#531) — `if let` nad shrnutím
+            // by je slilo na dva a „načítám“ by v okně vypadalo jako „zmizel“.
+            switch store.tabContent(for: id) {
+            case .detail(let summary):
                 PullRequestDetailView(
                     store: store,
                     pullRequest: summary,
@@ -341,7 +345,31 @@ struct ContentView: View {
                     merge: $merge,
                     branchPush: $branchPush
                 )
-            } else {
+            case .loading:
+                EmptyStateView(
+                    nature: .waiting,
+                    symbol: "arrow.down.circle",
+                    title: "Načítám pull request",
+                    message: "\(id) není ve zdrojích, takže se o něm aplikace musí zeptat GitHubu."
+                )
+            case .failed(let reason):
+                EmptyStateView(
+                    nature: .failure,
+                    symbol: "exclamationmark.triangle",
+                    title: "Pull request se nepodařilo načíst",
+                    message: "\(id) se nepovedlo dotáhnout. Zkontroluj adresu — a jestli na to repo vidíš.",
+                    // Syrový text od `gh` **zůstává, jak přišel**: `Could not resolve to
+                    // a PullRequest` a `HTTP 404` jsou dvě různé odpovědi a naší větou by z nich
+                    // byla jedna.
+                    detail: reason,
+                    // Zkusit znovu **a taky zavřít**: adresa může být překlep, a záložka, kterou
+                    // nejde ničím zavřít, by v pruhu zůstala do restartu.
+                    primary: .init(title: "Zkusit znovu") {
+                        Task { await store.loadExternalDetail(of: id) }
+                    },
+                    secondary: .init(title: "Zavřít záložku") { store.closeTab(id) }
+                )
+            case .gone:
                 EmptyStateView(
                     // Čekání, ne porucha: nic se nerozbilo, PR jen vypadl z výsledků hledání
                     // (typicky po odeslaném review). Po **vlastním** mergi se sem nedojde —

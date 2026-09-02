@@ -222,6 +222,33 @@ extension AppStore {
         (summary(for: pr) ?? openTabSnapshots[pr])?.url
     }
 
+    // MARK: - Vložený odkaz (#531)
+
+    /// Výsledky pro dotaz — katalog z paměti a k tomu **řádek `Odkaz`**, když je v poli adresa PR.
+    ///
+    /// Skládá se to tady, ne ve view: rozhodnutí „tohle je adresa“ dělá `Policy` a „je ten PR ve
+    /// zdrojích?“ umí zodpovědět jedině store. Ve `CommandPaletteView` by z toho byla dvě `if`
+    /// nad výsledky, tedy přesně to, co v něm být nemá.
+    ///
+    /// **Pořád se nic nestahuje.** Řádek se skládá z identifikátoru, ne z dotazu na GitHub — co
+    /// je to za PR, se zjistí až po `↵`, když se otevře záložka.
+    func paletteSections(for query: String) -> [CommandPalette.Section] {
+        Policy.paletteResults(of: paletteItems, query: query, link: paletteLink(for: query))
+    }
+
+    /// Řádek skupiny `Odkaz` pro dotaz. `nil` = v poli není adresa pull requestu.
+    func paletteLink(for query: String) -> CommandPalette.Item? {
+        guard let pr = Policy.linkedPullRequest(in: query) else { return nil }
+        // `linkOrigin`, ne `origin(of:)`: řádek odkazu se ptá, jestli je ten PR **teď** ve
+        // zdrojích, kdežto pilulka v hlavičce na to, odkud se vzala otevřená záložka. U PR,
+        // o kterém store neví nic, se ty dvě odpovědi rozcházejí — a tady je správná
+        // `není ve zdrojích`.
+        return Policy.paletteLink(
+            to: pr,
+            origin: Policy.linkOrigin(of: pr, sources: Set(pullRequests.map(\.id)))
+        )
+    }
+
     // MARK: - Vykonání
 
     /// Vykoná to, na co se v paletě kliklo (nebo co se potvrdilo `↵`).
@@ -232,7 +259,10 @@ extension AppStore {
     func reveal(_ target: CommandPalette.Target) -> CommandPalette.Effect? {
         switch target {
         case .pullRequest(let pr):
-            openTab(pr)
+            // **`openPullRequest`, ne `openTab`** (#531): tenhle cíl nese od #531 i řádek
+            // `Odkaz`, tedy PR, o kterém store nemusí vědět nic. U PR ze seznamu je to totéž
+            // volání jako dřív a nikdo se nikoho na nic neptá.
+            openPullRequest(pr)
         case .file(let pr, let path):
             openTab(pr, in: .filesChanged)
             paletteJump = CommandPalette.Jump(pullRequest: pr, file: path, line: nil, kind: .file)

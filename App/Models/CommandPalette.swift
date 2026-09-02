@@ -27,15 +27,21 @@ extension CommandPalette {
     /// cizích PR to moje nemuselo vyjít vůbec. Odznak u řádku ten problém neřeší, jen ho schová.
     /// Stojí **za** cizími: cizí PR jsou to, na co se čeká.
     enum Group: Hashable, Sendable, CaseIterable {
+        case link
         case findings
         case files
         case pullRequests
         case myPullRequests
         case actions
 
-        /// Nadpis skupiny, jak ho má návrh (#184, sekce 09 od #336).
+        /// Nadpis skupiny, jak ho má návrh (#184, sekce 09 od #336 a od #531).
         var title: String {
             switch self {
+            // **První, a je to výjimka z pravidla nad výčtem** (#531): nálezy jsou první proto,
+            // že jsou to nejcennější data v okně, kdežto odkaz je první proto, že se v tu chvíli
+            // **na nic jiného neptám** — vložená adresa PR není hledání, je to příkaz. Skupina se
+            // navíc objeví jedině tehdy, když dotaz je adresa; nad běžným hledáním tam není.
+            case .link: "Odkaz"
             case .findings: "Nálezy"
             case .files: "Soubory v otevřeném PR"
             // **Ne jen „Pull requesty“** (#336): se dvěma skupinami musí první říct, čeho se
@@ -98,6 +104,10 @@ extension CommandPalette {
         case finding
         case pullRequest(PullRequestState)
         case file
+        /// Vložený odkaz na PR (#531). **Vlastní značka, ne `pullRequest(_:)`**: o stavu toho PR
+        /// se v tu chvíli neví nic — dotáhne se, až se záložka otevře —, takže by se musel
+        /// vymyslet, a `otevřený` u zavřeného PR je lež v tom nejtišším možném místě.
+        case link
         /// Akce si symbol nese, protože každá dělá něco jiného a jeden společný by neřekl nic.
         case action(symbol: String)
     }
