@@ -7,7 +7,7 @@ extension Policy {
     /// kreslí `Text(date, format: .relative(presentation: .named))`, tedy jako samostatný prvek,
     /// který se sám přepočítává. Řádek palety má ale podtitulek jako **jeden řetězec** (hledá se
     /// v něm a zvýrazňuje se v něm shoda), a návrh do něj píše `naposledy před hodinou` —
-    /// tedy slovo, čas a nic mezi tím. Rozdělit tu věty mezi `Policy` a view by znamenalo, že
+    /// tedy slovo, čas a nic mezi tím. Rozdělit tu větu mezi `Policy` a view by znamenalo, že
     /// polovinu podtitulku skládá kresba.
     ///
     /// **Referenční okamžik je parametr, ne `Date.now`**, a je to podmínka testovatelnosti:
