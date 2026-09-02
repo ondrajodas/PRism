@@ -5467,3 +5467,38 @@ nespustí, se v harnessu ověřit nedá (offscreen okno ho nedostane, `CGEvent` 
 
 **Tvrdé podmínky se nemění ani o položku.** Pás jen čte — `GitHubGateway` zůstává bez zápisových
 metod, `SingleWayOutTests` prochází beze změny a `DiffViewport` se **nezměnil**: mapa ho čte.
+
+### Záznam rozhodnutí — číslo sekce v mockupu přiděluje orchestrátor (#537)
+
+Vzniklo to ze srážky ve vlně 1 milníků M14 a M18 (2. 9. 2026): **#500** (PR #536) a **#531**
+(PR #535) běžely souběžně, obě měly v zadání přenést svůj zákres do `docs/navrh.html` jako „další
+volné číslo proti `main`u“ — a obě si vzaly `s40`. Zachránilo to jedině to, že si to orchestrátor
+všiml před mergem a přečíslování #531 na `s41` zadal ručně.
+
+**Podruhé, ne poprvé.** Přesně tohle se stalo u **#401 a #410** (obě `26`) a #410 z toho zapsalo
+pravidlo „číslo se kontroluje proti `mainu` v den publikování“. To pravidlo je v pořádku a platí
+dál — jenom **na tuhle třídu nedosáhne**: obě větve se proti `mainu` porovnaly správně a obě
+dostaly tutéž odpověď. Kontrola proti mainu chytá větev, která leží týden; souběh dvou zákresů
+z jedné vlny nechytá vůbec. Je to poučení o pravidlech obecně: pravidlo, které se dvakrát obešlo
+samo od sebe, není špatně napsané, ale **je na špatné straně** — u toho, kdo číslo *používá*,
+místo u toho, kdo ho *rozdává*.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Číslo sekce přiděluje orchestrátor v zadání**, stejně jako slot | Nechat „další volné číslo“ na subagentovi a přitvrdit kontrolu (proti `mainu` **a** proti otevřeným PR) | Subagent nevidí větve ostatních — a i kdyby se koukal do otevřených PR, druhý zákres v tu chvíli **ještě nemusí být pushnutý**. Číslo je vlastnost rozvrhu, a rozvrh drží orchestrátor. Je to tentýž důvod, proč je slot v zadání zástupný znak `<slot>` a ne hotové `a`: **dvě zadání psaná zkopírováním jednoho** jsou právě ta cesta, jak dva agenti dojdou k jedné hodnotě |
+| **Řádek v tabulce §1 zní „souběžně ano, ale s přiděleným číslem“** | Zakázat souběžné zákresy do mockupu úplně, jako u `ReviewPublishing` | Zákresy jsou to nejčastější, co v dávce běží naráz — v dávce M14/M18 dostalo číslo **pět** zákresů (`s40` až `s44`). Zákaz by dávku zúžil na jednu obrazovku za kolo, a přitom se ta srážka řeší jedním číslem v zadání |
+| **Konflikt se pojmenuje jako sémantický** | Nechat to u „git to vyřeší“ | Dva bloky na různých místech souboru se slijí **čistě**, takže git nenahlásí nic a v repu zbudou dvě sekce s týmž `id`. `#s40` pak vede vždycky na tu první — odkaz z druhého PR i z jeho issue míří na cizí obrazovku, a to je ta třída, která se pozná až po mergi |
+| **Grep na duplicitní kotvy patří k porovnání s publikovanou kopií**, ne mezi grepy v `CLAUDE.md` | Vlastní stráž nad souborem, případně test | Ta kontrola už jedno místo má (`action: "read"`, odříznout obálku, `diff`) a probíhá při každém publikování, protože nástroj bez přečtení živé verze publikovat odmítne. Druhá kopie u druhého spouštěče je přesně to, co se v tomhle repu rozešlo u očisty konfigurace (#262) |
+| **Publikuje se dvakrát a to druhé publikování je povinné** | Jedno publikování z branche, jak to dělal každý zákres do #537 | Publikování není merge (#410): nahraje se celý dokument a to předchozí z něj zmizí. Agent od #501 tak publikoval ze své větve a **smetl sekci `s43`** z branche #503; agent od #533 publikoval a smetl `s42`. Bez druhého publikování zůstane na odkazu **půlka**, a přitom `docs/navrh.md` tvrdí, kolik sekcí návrh má |
+| **Publikuje ten, kdo merguje — a v pořadí mergů** | „Naposled publikuje ten, který se má ukazovat“ (rada z `navrh.md`); nechat druhé publikování na orchestrátorovi | Ta rada je **plán**, a plán o pořadí mergů v dávce neexistuje: pořadí se neurčuje předem, kdo je dřív hotov, jde dřív. Vázat publikování na merge to řeší **bez plánu** — každé další jde ze stavu, který obsahuje i to předchozí, takže poslední merge srovná i to, co smetl ten před ním, a nikdo nemusí vědět, že je poslední. Orchestrátorovi to nepatří ze stejného důvodu jako merge (#247): hotová práce by ležela a čekala, až na ni přijde řada |
+| **Pravidlo je v `docs/paralelni-vyvoj.md`, ne v `docs/navrh.md`** | Napsat obojí k postupu u mockupu | Je to pravidlo o **dávce**, ne o mockupu: rozhoduje o něm zadání a pořadí mergů. `navrh.md` na něj odkazuje ze dvou míst, kde by se jinak dala přečíst zastaralá odpověď — u kontroly čísla proti `mainu` a u rady „publikuje se naposled ten…“ |
+
+**Testovat se to nedá kódem** a je to zapsané schválně: `docs/navrh.html` je jeden soubor
+v repu, takže duplicitní `id` by našel test nad ním — jenže vada nevzniká v repu, ale v **pořadí
+dvou větví**, které v jednom pracovním stromě nikdy naráz nejsou. Ověření je proto grep nad
+slitým stavem a `diff` publikované kopie proti repu, obojí u toho, kdo merguje.
+
+**Levnější než čtení je porovnání.** Agent od #501 chtěl vědět, jestli na adrese neleží něco
+cizího, a místo přečtení **15 847 řádků** publikované kopie ji prohnal `diff`em proti repu —
+bajt na bajt, bez spálení kontextu. Zapsané je to v `docs/navrh.md`, protože odpověď „souhlasí
+znak po znaku“ je tvrzení o **celém** souboru, kdežto čtení je tvrzení o tom, čeho si kdo všiml.
