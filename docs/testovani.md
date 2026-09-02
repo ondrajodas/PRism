@@ -66,7 +66,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   minuty práce), a co se o katalogu smí napsat: nejstarší razítko, `nejméně` u sraženého výpisu,
   `1 organizace nenačtena` u té bez snímku.
 
-  Cache (`RepositoryCatalogTests`): zápis a čtení **přes dvě instance** (druhá = jiné okno
+  Cache (`RepositoryCatalogTests`): a k tomu **druhé negativní tvrzení, u kterého se regrese
+  ověřila vložením regrese** — okno nastavení jde otevřít dřív, než dorazí konfigurace, takže první
+  dotaz přijde s **prázdným** seznamem; kdyby si katalog z toho odnesl „disk je přečtený“ (jedna
+  značka místo množiny přečtených organizací), tahala by se `keboola` znovu. S vrácenou chybou test
+  spadl na `repositoryRequests → ["keboola"]`. Dál zápis a čtení **přes dvě instance** (druhá = jiné okno
   nastavení, tedy prázdná paměť a čtení z disku), stáří přes `FakeTimeSource.advance` (**ne pevný
   čas**), `Obnovit` ignorující čerstvost, dedup v jednom seznamu, selhání jedné organizace, které
   nezahodí předchozí snímek ani nezastaví ostatní, úklid souboru po smazané organizaci, **prázdný

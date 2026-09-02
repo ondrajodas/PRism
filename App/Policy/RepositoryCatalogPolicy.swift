@@ -97,7 +97,7 @@ extension Policy {
         }
     }
 
-    /// Co se o katalogu napíše vpravo v sekci `Organizace k prohledávání`.
+    /// Co se o katalogu napíše pod seznamem v sekci `Organizace k prohledávání`.
     ///
     /// **Nejstarší razítko, ne nejnovější.** Věta `obnoveno 7:58` je tvrzení o **celém** katalogu,
     /// takže musí platit i pro tu organizaci, která se tahala nejdřív. S nejnovějším razítkem by
@@ -112,8 +112,11 @@ extension Policy {
         refreshing: Set<String>
     ) -> RepositoryCatalogStatus {
         guard !organizations.isEmpty else { return .noOrganizations }
-        if !refreshing.isEmpty {
-            let running = organizations.filter { refreshing.contains($0) }.count
+        // **Rozhoduje průnik, ne `refreshing.isEmpty`.** Organizaci se dá z pole smazat uprostřed
+        // dotažení, takže se v `refreshing` může držet jméno, které v seznamu není — a z toho by
+        // vyšlo `Obnovuje se… 2/2` nad katalogem, na kterém se nic netahá.
+        let running = organizations.filter { refreshing.contains($0) }.count
+        if running > 0 {
             return .refreshing(done: organizations.count - running, total: organizations.count)
         }
 
@@ -127,7 +130,7 @@ extension Policy {
         )
     }
 
-    /// Věta vpravo v sekci — `412 rep · obnoveno 7:58`.
+    /// Věta pod seznamem, vlevo od tlačítka `Obnovit` — `412 rep · obnoveno 7:58`.
     ///
     /// Skládá se tady, ne ve view, protože o tom, co se smí tvrdit, rozhoduje `Policy`: `nejméně`
     /// u sraženého výpisu i `1 nenačtena` u organizace bez snímku jsou součást téhož tvrzení jako

@@ -66,7 +66,8 @@ struct OrganizationListEditor: View {
         }
     }
 
-    /// Souhrn nad celým katalogem a tlačítko `Obnovit` — pravá strana řádku ze zákresu.
+    /// Souhrn nad celým katalogem a tlačítko `Obnovit` — v zákresu je to pravá strana řádku
+    /// s chipy; ve `Form`u je to řádek pod seznamem.
     ///
     /// **Kreslí se, jen když nějaká organizace je.** Prázdná sekce nemá co obnovovat a tlačítko,
     /// které nikdy nic neudělá, je horší než žádné.

@@ -6396,6 +6396,13 @@ a nad souhrnem, který říká totéž, z toho byla tatáž věta dvakrát pod s
 zdvojoval i počet rep. Řádku zbyla jen věta o selhání (tu souhrn říct neumí, je na organizaci)
 a `Policy.organizationRowStatus` se celá zahodila.
 
+**Copilot našel dvě věci a obě jsou opravené.** (1) Souhrn hlásil `Obnovuje se…` pokaždé, když se
+tahalo cokoli — tedy i organizace, kterou někdo z pole mezitím smazal; rozhoduje teď **průnik** se
+seznamem. Tlačítko `Obnovit` zůstává na prázdnosti množiny a **je to rozdíl, ne tentýž omyl**: ptá se
+„běží podproces `gh`?“, ne „děje se něco s tímhle katalogem“. (2) Komentář u detekce sraženého výpisu
+tvrdil, že rozhoduje rovnost, kdežto kód má `>=`. Zůstává `>=` jako pojistka pro případ, že by `gh`
+vydal víc, než o kolik se řeklo — `==` by takový výpis vydávalo za úplný — a komentář to teď říká.
+
 **Chyba se přiznává u řádku, ne prázdným seznamem.** Organizace, na kterou účet nevidí, a organizace
 bez repozitářů dávají obojí prázdno, takže se pod řádkem píše věta z `gh` (`the owner handle "…" was
 not recognized…`). Selhané obnovení přitom **nezahodí starý snímek** a jedna nedostupná organizace
@@ -6408,7 +6415,7 @@ změny. **Č. 3 taky**: `catalogs/` leží v cache aplikace a hranici u čtení,
 `CacheFile`, tedy tatáž kontrola jako u nálezů a draftů. Složka se jmenuje `catalogs/`, ne
 `repositories/` ze zadání, protože to jméno v `CacheLayout` ukazuje na `repos/` s bare klony.
 
-Testů **4821** ve 471 suitách; nové jsou tři sady (`RepositoryCatalogPolicyTests`,
+Testů **4823** ve 471 suitách; nové jsou tři sady (`RepositoryCatalogPolicyTests`,
 `RepositoryCatalogTests`, `GhRepositoryListTests`), rozšířené `ConfigurationTests`
 a `SettingsFieldsRenderTests` a fixture `gh/repo-list.json` (skutečný výstup nad veřejným `cli`).
 Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).

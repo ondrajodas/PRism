@@ -3621,6 +3621,11 @@ Věci, které se u toho nemají rozbít:
 - **Denní lhůta se počítá od dotažení, ne od půlnoci.** Kalendářní den by po dotažení v 23:55
   znamenal obnovu za pět minut. **Razítko z budoucnosti se bere jako čerstvé** — posunuté hodiny
   nemají spustit tři čtvrtě minuty práce při každém otevření nastavení.
+- **`isRefreshing` je prázdnost množiny, souhrn je průnik — a je to rozdíl, ne nedopatření** (nález
+  Copilota na #534). Tlačítko se ptá „běží podproces `gh`?“ a odpověď je ano i tehdy, když se tahá
+  organizace, kterou mezitím někdo z pole smazal; souhrn se ptá „děje se něco s **tímhle**
+  katalogem“, a tam by z neprázdné množiny byla věta o práci, která se nedělá (`Obnovuje se… 2/2`
+  nad katalogem, na kterém nic neběží).
 - **Tahá se po jedné, ne souběžně.** Jeden výpis je desítky sekund a stovka kilobajtů; tři naráz
   neznamenají třikrát rychleji, ale tři podprocesy `gh` proti témuž rate limitu. **Duplicity
   zahazuje `Policy.searchOrganizations` u volajícího, ne guard `refreshing`** — ten chrání proti
@@ -9463,9 +9468,11 @@ Tedy **pětinásobek za jedno číslo v řádku nabídky**. Z toho plynou tři r
   ověřeno na živém API (`keboola/keboola-operator`: `pullRequests.totalCount` 17 a `gh pr list
   --state open` tamtéž 17).
 - **Dosažený strop je vidět z odpovědi** (`hitLimit`), a pozná se **z počtu, ne z hlaviček** —
-  `gh` o `--limit` nic neříká. Když jich přijde přesně tisíc, je pravděpodobnější, že je jich víc;
-  tvrdit „tisíc rep“ by tedy bylo víc, než co data unesou. Je to tatáž úvaha jako u 250 commitů
-  v `fetchCommits`.
+  `gh` o `--limit` nic neříká. Když jich přijde tolik, kolik jich smělo přijít, je pravděpodobnější,
+  že je jich víc; tvrdit „tisíc rep“ by tedy bylo víc, než co data unesou. Je to tatáž úvaha jako
+  u 250 commitů v `fetchCommits`. Podmínka je `>=`, ne `==`, a je to **pojistka, ne nerozhodnost**
+  (nález Copilota na #534): dnes to vyjde nastejno, protože `gh` víc než `--limit` vydat nemá —
+  kdyby ale vydal, `==` by ten výpis vydávalo za úplný.
 
 Dvě věci navíc:
 

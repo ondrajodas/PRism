@@ -200,6 +200,20 @@ struct RepositoryCatalogPolicyTests {
         #expect(summary.contains(yesterday.formatted(date: .abbreviated, time: .shortened)))
     }
 
+    /// Organizaci se dá z pole smazat uprostřed dotažení, takže se v `refreshing` může držet jméno,
+    /// které v seznamu není — a `Obnovuje se… 2/2` nad katalogem, na kterém se nic netahá, je věta
+    /// o něčem, co se nedělá.
+    @Test("Dotahování organizace, která už v seznamu není, souhrn nezmění")
+    func ignoresRefreshingOfARemovedOrganization() throws {
+        let status = Policy.repositoryCatalogStatus(
+            organizations: ["cli"],
+            snapshots: ["cli": snapshot("cli", repositories: 2, fetchedAt: now)],
+            refreshing: ["smazana"]
+        )
+
+        #expect(status == .loaded(repositories: 2, oldest: now, missing: 0, hitLimit: false))
+    }
+
     /// Souhrn je **jediné místo, kde se o katalogu píše** (oprava z renderu) — na řádcích
     /// organizací žádný stav není, takže se nemůže zdvojit.
     @Test("Rozepsaný řádek do souhrnu nespadne")

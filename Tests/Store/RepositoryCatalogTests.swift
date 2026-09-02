@@ -74,6 +74,27 @@ struct RepositoryCatalogTests {
         #expect(reopened.snapshots["keboola"]?.hitLimit == true)
     }
 
+    /// **Tvrzení, že se něco NEstalo**, a je na reálnou cestu: okno nastavení jde otevřít dřív, než
+    /// dorazí konfigurace z disku, takže první dotaz přijde s **prázdným** seznamem. Kdyby si
+    /// katalog z toho odnesl „disk je přečtený“, vypadala by `keboola` po načtení konfigurace jako
+    /// nedotažená a tahala by se znovu — desítky sekund za snímek, který v cache leží.
+    @Test("Organizace, o které se katalog dozví později, se dočte z cache a netahá se")
+    func readsTheDiskAgainForALateOrganization() async throws {
+        let workspace = try TemporaryDirectory()
+        let time = FakeTimeSource()
+        let filled = gateway(["keboola": listing("keboola", ["vault", "vault-cli"])])
+        await catalog(filled, workspace, time: time).refresh(organizations: ["keboola"])
+
+        // Nové okno nastavení: `.task` proběhne, než dorazí konfigurace, takže seznam je prázdný.
+        let source = gateway(["keboola": listing("keboola", ["vault", "vault-cli"])])
+        let reopened = catalog(source, workspace, time: time)
+        await reopened.refreshStale(organizations: [])
+        await reopened.refreshStale(organizations: ["keboola"])
+
+        #expect(reopened.snapshots["keboola"]?.repositories.count == 2)
+        #expect(source.repositoryRequests.isEmpty)
+    }
+
     // MARK: - Stáří
 
     @Test("Čerstvý výpis se podruhé netahá")

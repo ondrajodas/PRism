@@ -403,9 +403,13 @@ struct GhGateway: GitHubGateway {
         )
 
         // **Strop se pozná z počtu, ne z hlaviček.** `gh` o dosaženém `--limit` nic neříká, takže
-        // je rovnost jediné, co k tomu je — a když jich je přesně tisíc, je pravděpodobnější, že
-        // je jich víc, než že jich je přesně tolik. Tvrdit „tolik jich je“ by v tom případě bylo
-        // víc, než co data unesou.
+        // je počet položek jediné, co k tomu je — a když jich přijde tolik, kolik jich smělo přijít,
+        // je pravděpodobnější, že je jich víc, než že jich je přesně tolik. Tvrdit „tolik jich je“
+        // by v tom případě bylo víc, než co data unesou.
+        //
+        // **`>=`, ne `==`, a je to pojistka, ne nerozhodnost** (nález Copilota): dnes to vyjde
+        // nastejno, protože `gh` víc než `--limit` vydat nemá. Kdyby ale vydal, `==` by ten výpis
+        // vydávalo za úplný — tedy zrovna to tvrzení, kterému se tenhle příznak vyhýbá.
         return OrganizationRepositories(
             repositories: items.compactMap(\.repository),
             hitLimit: items.count >= repositoryLimit
