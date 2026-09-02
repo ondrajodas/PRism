@@ -6808,9 +6808,11 @@ Zpětná vazba přes panel je monotónní, proto se to ustálí na první průch
 (pásmo šířek × pohled × okraj × ruční `⌘1`/`⌘2`, 64 případů) je přetečení **0**; před opravou až 35.
 Zbylá mez je vědomá: v okně na podlaze se lišta diffu ořezává uvnitř své kolony, což patří k #505.
 
-Testů **5000** ve 488 suitách; nových je **sedm** sad (`DiffMarginTests` nad
+Testů **5002** ve 490 suitách; nových je **devět** sad (`DiffMarginTests` nad
 `Policy`, `DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
 `DiffColumnFitTests` nad šířkami kolon a tři ruční měření — `DiffMarginWheelProbe` nad vyrobenou
-scénou, `DiffMarginSharpProbe` nad skutečnými diffy a `DiffColumnFitProbe` nad rámci kolon v okně).
+scénou, `DiffMarginSharpProbe` nad skutečnými diffy, `DiffColumnFitProbe` nad rámci kolon v okně,
+`CharactersPerSideProbe` nad tabulkou znaků na stranu a `CharacterGaugeAfterSwitchProbe` nad
+ukazatelem po přepnutí pohledu).
 Co se v nich hlídá a jak se měřilo, je
 v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).

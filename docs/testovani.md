@@ -7444,6 +7444,46 @@ s kladným průnikem, všechny na podlaze 700** a malé (+2 vlevo u `vedle-nalez
 u tří kombinací s ručně rozloženým stromem nebo panelem). Jsou reálné, ale nejsou to ty stovky
 bodů, které by vysvětlily Ondrův snímek.
 
+#### Třetí kolo: skutečná šířka okna, a čí je to číslo v liště
+
+Živé okno slotu má **1 303 × 860** bodů (`CGWindowListCopyWindowInfo` nad běžící aplikací — čte se
+to i u okna na pozadí a **bez asistenčního přístupu**, na rozdíl od `screencapture -R`; snímek pak
+vezme `screencapture -x -o -l <id>`). Pásmo šel po 700/1100/1400, takže ta šířka **ležela mezi
+vzorky** a netestovala se; výška 860 taky ne, a karty v okraji se skládají podle výšky.
+
+Na té šířce je scéna z proklikání (`Vedle sebe`, strom i panel složené, PR s nálezy) **čistá**:
+kolona kódu 86…965, okraj 965…1265, proužek 1265…1303, součet na bod a **průnik −36 vlevo, −301
+vpravo**. Přes celé pásmo zůstávají kladné jen ty **čtyři malé na podlaze 700**.
+
+**Číslo v liště se zeptalo, ne invertovalo — a `Policy.charactersPerSide` je zdravá.** Tabulka
+z `CharactersPerSideProbe` (znak **8,036 b**, gutter 84 b vedle sebe / 136 b pod sebou) dává při
+šířce okna 1 303:
+
+| Pohled | kolona kódu | znaků na stranu |
+|---|---|---|
+| vedle sebe, s okrajem | 879 b | **44** |
+| vedle sebe, bez okraje | 1 179 b | **62** |
+| pod sebou, s okrajem | 703 b | **70** |
+| pod sebou, bez okraje | 735 b | **74** |
+
+**Ondrových `72` je tedy číslo z `Pod sebou`**, ne z `Vedle sebe`: ve `Vedle sebe` se do 1 303
+nevejde víc než **62** a 72 by si žádalo kolonu 1 325 b, kterou okno po odečtení railu a proužku
+dát nemůže. Moje první úvaha to invertovala a vyšlo z ní okno ~1 780 b, které na 1 512bodové
+obrazovce **neexistuje** — inverze byla vedle dvakrát (znak 8,2 místo 8,036 a předpoklad, že okraj
+je nakreslený), ale **funkce sama je v pořádku**.
+
+**A ukazatel po přepnutí pohledu nezůstává na starém čísle** (`CharacterGaugeAfterSwitchProbe`):
+scéna postavená `Pod sebou` (kolona 703 b, ukazatel 70) a přepnutá na `Vedle sebe` ukáže **44**,
+tedy hodnotu pro novou kolonu. Hypotéza „ukazatel lže, protože zůstal viset“ tím **padá** — je to
+zaplacená slepá ulička a stálo to jednu sondu.
+
+**Co z toho zbývá jako nejpravděpodobnější výklad** (a **není** to změřené, je to dopočet): scéna
+na snímku je `Pod sebou` s rozloženým stromem, kde okraj (300) a strom (210) nechají na kód ~703 b
+z 1 303, tedy **54 % okna** — a při té koloně se hlavička souboru **ukusuje** (naměřeno: při 396 b
+se láme na dvě řádky). Není to překryv, je to úzká kolona. Jestli má podlaha kódu
+(`Policy.minimumCodeWidth`, dnes 360 b pod sebou) být vyšší, je **návrhové rozhodnutí**, ne oprava
+přetečení, a nechávám ho na proklikání.
+
 **Tvrdí to test, ne jen sonda** (`DiffColumnFitTests`): pevné kolony se vejdou přes celé pásmo
 šířek v obou pohledech, nález **nikdy nezůstane bez domova** (buď okraj, nebo rozložený panel),
 strom ustupuje první a šířky se čtou z `Policy`, ne ze dvou konstant ve views. **Ověřeno vložením

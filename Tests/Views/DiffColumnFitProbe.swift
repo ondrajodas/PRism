@@ -29,12 +29,22 @@ struct DiffColumnFitProbe {
     /// pod svým minimem rozvrhne na 700 a přeteče o 153 bodů, což je artefakt sondy, ne vada
     /// aplikace.
     ///
-    /// **Horní konec je dopočítaný z toho, co Ondra viděl**, ne odhadnutý: v liště mu stálo
-    /// `72 znaků na stranu`, a `Policy.charactersPerSide` je invertovatelná —
-    /// 72 × 8,2 b + 84 b gutter = 674 b na stranu, tedy kolona kódu ~1 349 b, tedy okno
-    /// ~1 777 b (rail 56 + složený strom 34 + okraj 300 + proužek 38). To je 16" MacBook Pro
-    /// v „More Space" (1 792 × 1 120), takže se pásmo muselo natáhnout až tam.
-    private static let widths = [700.0, 820.0, 1100.0, 1400.0, 1792.0, 2048.0]
+    /// **Horní konec je šířka obrazovky, ne dopočet z lišty.** Displej stroje má **1 512 × 982**
+    /// bodů a je jediný, takže širší okno neexistuje — a řádky, které jsem si nad 1 512 vyrobil,
+    /// vyšly nesmyslně (bitmapa z „1 792“ okna přišla 1 512bodová), takže jsou pryč.
+    ///
+    /// **Horní část pásma je ta zajímavá, a chyběla.** `72 znaků na stranu` z proklikání odpovídá
+    /// koloně kódu ~**1 325 b** (`Policy.charactersPerSide` se zeptaná, ne invertovaná: znak
+    /// 8,036 b, gutter 84 b, dvě strany) — a taková kolona se do 1 512 vejde **jedině tehdy, když
+    /// se nekreslí okraj**: s ním zbývá 1 084 b, tedy 57 znaků. Scéna z proklikání tedy okraj
+    /// **neměla**, ačkoli nálezy ano; to nastane, když žádný nález nesedí na kreslený řádek
+    /// (`Policy.marginCards` je prázdná) — a přesně tuhle kombinaci pásmo do 1 400 netrefilo.
+    private static let widths = [700.0, 1250.0, 1303.0, 1350.0]
+    /// **Výška patří do scény, ne jako konstanta.** Živé okno má **860** bodů, ne 700, a karty
+    /// v okraji se skládají podle výšky (odstrkování), takže se na jedné výšce dá minout stav,
+    /// ve kterém se karty potkají. Změřená šířka i výška jsou z `CGWindowListCopyWindowInfo`
+    /// nad běžící slotovou aplikací — funguje to i na okno na pozadí a bez asistenčního přístupu.
+    private static let height = 860.0
 
     @Test("Rámec scrolleru diffu proti šířce okna")
     func columnsFit() async throws {
@@ -124,13 +134,13 @@ struct DiffColumnFitProbe {
             )
             host.sizingOptions = [.minSize]
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: width, height: 700),
+                contentRect: NSRect(x: 0, y: 0, width: width, height: DiffColumnFitProbe.height),
                 styleMask: [.titled, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             window.contentView = host
-            window.setContentSize(NSSize(width: width, height: 700))
+            window.setContentSize(NSSize(width: width, height: DiffColumnFitProbe.height))
             window.setFrameOrigin(NSPoint(x: 20, y: 20))
             window.level = .floating
             window.orderFrontRegardlessUnanimated()
@@ -284,7 +294,19 @@ struct DiffColumnFitProbe {
         out += "+++ b/App/Policy/PullRequestMap.swift\n"
         out += "@@ -0,0 +1,347 @@\n"
         for line in 0..<347 {
-            out += "+    let segment\(line) = PullRequestMapSegment(file: file, rows: rows, kind: .added)\n"
+            // **Každý osmý řádek je dlouhý, a je to podmínka reprodukce, ne ozdoba.** Skutečné
+            // diffy mají řádky, které se do kolony nevejdou — v `PRism#499` je nejdelší **557
+            // znaků** —, takže blok kódu si říká o šířku dokumentu, kterou mu kolona nemůže dát.
+            // S krátkými řádky (~80 znaků) se vodorovné přetečení nemá kde vzít a sonda měřila
+            // scénu, ve které ta vada nastat nemůže.
+            if line.isMultiple(of: 8) {
+                out += "+    let segment\(line) = PullRequestMapSegment(file: file, rows: rows,"
+                    + " kind: .added, anchor: DiffMarginAnchor(line: line, side: .right),"
+                    + " severity: .blocking, summary: \"nález číslo \(line) na řádku, který se"
+                    + " do kolony nevejde ani zdaleka\", reviewer: \"code-review\")\n"
+            } else {
+                out += "+    let segment\(line) = PullRequestMapSegment(file: file, rows: rows, kind: .added)\n"
+            }
         }
         return out
     }
@@ -322,3 +344,109 @@ struct DiffColumnFitProbe {
     )
 }
 
+
+/// **Co doopravdy vydá `Policy.charactersPerSide`** — sonda, ne inverze.
+///
+/// Vznikla z chyby v úsudku: z Ondrova `72 znaků na stranu` jsem si šířku kolony **dopočítal
+/// inverzí** (72 × 8,2 b + 84 b gutteru) a vyšlo mi okno ~1 780 b. Obrazovka stroje má ale
+/// **1 512 × 982** bodů a je jediná, takže takové okno **fyzicky nemůže existovat** — jeden
+/// z předpokladů inverze tedy neplatil. Ptát se funkce je levnější než hádat, který.
+///
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`.
+@MainActor
+@Suite(
+    "Kolik znaků na stranu Policy hlásí (#503)",
+    .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
+)
+struct CharactersPerSideProbe {
+    @Test("Tabulka znaků na stranu přes pásmo šířek")
+    func theTable() {
+        let characterWidth = FontMetric.shared.characterWidth(
+            of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        )
+        print(String(format: "SONDA metrika: znak %.3f b, gutter split %.1f b, unified %.1f b, slib %d",
+                     characterWidth,
+                     DiffLineView.contentInset(for: .split),
+                     DiffLineView.contentInset(for: .unified),
+                     Policy.promisedCharactersPerSide))
+        // Šířky **kolony kódu**, ne okna: to je ten vstup, který funkce dostane (`contentWidth`).
+        // Pásmo jde od úzké kolony až po celou šířku obrazovky, aby bylo vidět, že 72 na stranu
+        // ve `Vedle sebe` nemá kde vzniknout ani při kolonu přes celou obrazovku.
+        for content in [200.0, 338.0, 500.0, 676.0, 800.0, 1000.0, 1088.0, 1174.0, 1300.0, 1440.0, 1512.0] {
+            let split = Policy.charactersPerSide(
+                contentWidth: content, characterWidth: characterWidth,
+                layout: .split, gutter: DiffLineView.contentInset(for: .split)
+            )
+            let unified = Policy.charactersPerSide(
+                contentWidth: content, characterWidth: characterWidth,
+                layout: .unified, gutter: DiffLineView.contentInset(for: .unified)
+            )
+            print(String(format: "SONDA kolona %6.0f b → vedle sebe %3d znaků | pod sebou %3d znaků",
+                         content, split, unified))
+        }
+    }
+}
+
+/// **Nezůstane ukazatel „znaků na stranu“ na čísle z předchozího pohledu?** (#503)
+///
+/// Vzniklo z rozporu, který se nedal vysvětlit šířkou: v okně **1 303 × 860** ve `Vedle sebe`
+/// hlásí lišta `72 znaků na stranu`, jenže **tolik se tam nevejde**. `Policy.charactersPerSide`
+/// se zeptaná (ne invertovaná) vydá při té šířce **44** znaků s okrajem a **62** bez něj — 72 by
+/// si žádalo kolonu **1 325 b**, kdežto okno jich po odečtení railu a proužku dá nejvýš 1 179.
+///
+/// **72 ale odpovídá pohledu `Pod sebou`** při téže šířce: tam je jedna strana a gutter 136 b,
+/// takže kolona ~714 b dá 70–72 znaků. Číslo z Ondrova snímku je tedy **číslo z toho druhého
+/// pohledu** — a ukazatel je jediné vodítko, podle kterého člověk pozná, že má okno moc úzké.
+///
+/// Sonda proto scénu **přepne** (`Pod sebou` → `Vedle sebe`), nechá ji usadit a vypíše, jakou
+/// šířku kolony kód doopravdy má; číslo v liště se přečte z přiloženého renderu.
+///
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, kresba do `TEST_RUNNER_PRISM_RENDER_DIR`.
+@MainActor
+@Suite(
+    "Znaků na stranu po přepnutí pohledu (#503)",
+    .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil),
+    .serialized
+)
+struct CharacterGaugeAfterSwitchProbe {
+    @Test("Kolona kódu a ukazatel po přepnutí Pod sebou → Vedle sebe")
+    func afterSwitchingLayout() async throws {
+        let directory = ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"]
+        let characterWidth = FontMetric.shared.characterWidth(
+            of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        )
+        func expected(_ code: Double, _ layout: DiffLayout) -> Int {
+            Policy.charactersPerSide(
+                contentWidth: code, characterWidth: characterWidth,
+                layout: layout, gutter: DiffLineView.contentInset(for: layout)
+            )
+        }
+
+        for findings in [true, false] {
+            // Scéna začíná **pod sebou**, tedy v tom pohledu, jehož číslo se v liště objevilo.
+            let scene = try await DiffColumnFitProbe.Scene.make(
+                width: 1303, layout: .unified, findings: findings
+            )
+            defer { scene.window.orderOut(nil) }
+            await scene.letItSettle()
+            let root = try #require(scene.window.contentView)
+            let before = try #require(DiffColumnFitProbe.Scene.tallestScroller(in: root))
+                .convert(DiffColumnFitProbe.Scene.tallestScroller(in: root)!.bounds, to: nil)
+            print(String(format: "SONDA pod sebou, nálezy %@: kolona %.0f b → čekaný ukazatel %d znaků",
+                         findings ? "ano" : "ne", before.width, expected(before.width, .unified)))
+
+            scene.store.setDiffLayout(.split)
+            await scene.letItSettle()
+            let after = try #require(DiffColumnFitProbe.Scene.tallestScroller(in: root))
+                .convert(DiffColumnFitProbe.Scene.tallestScroller(in: root)!.bounds, to: nil)
+            print(String(format: "SONDA vedle sebe, nálezy %@: kolona %.0f b → čekaný ukazatel %d znaků"
+                         + " (číslo z pod sebou by bylo %d)",
+                         findings ? "ano" : "ne", after.width, expected(after.width, .split),
+                         expected(before.width, .unified)))
+            if let directory {
+                scene.write(to: URL(filePath: directory)
+                    .appending(path: "prepnuti-\(findings ? "nalezy" : "bez").png"))
+            }
+        }
+    }
+}
