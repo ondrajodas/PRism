@@ -5358,6 +5358,127 @@ druh nálezu jako čtyři odchylky u #532, jen obráceně: tam měla chybu imple
 vrátí o úroveň a nad napsaným dotazem maže znaky, a že `esc` v druhé úrovni paletu nezavře.
 Klávesa v testovacím hostu nezabere (viz [`docs/testovani.md`](../../testovani.md#jak-změřit-fokus-a-klávesy-184)),
 takže `Policy` tvrdí **rozhodnutí** a zabrání klávesy je na proklikání.
+### Záznam rozhodnutí — mapa PR pod hlavičkou (#501)
+
+První issue směru E z milníku M14. Zákres byl v decku *Směry pro PRism* (stránka E), odsouhlasený
+2. 9. 2026; prvním krokem bylo přenést ho do `docs/navrh.html` jako **sekci 42**.
+
+**Otevírá dvě zapsaná rozhodnutí:** #174 a #218 (pilulka `+X −Y` v pruhu záložek) a #316 (pořadí,
+ve kterém pruh ustupuje). Obojí platilo, dokud byla pilulka jediná odpověď na „jak velký je tenhle
+PR“ — a to od #501 není.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Šířka roste s `log₂(řádků + 1)`** | Lineární podíl změněných řádků; nebo `√n`; nebo pevná šířka na soubor | Změřeno nad rozložením ze sekce 03 návrhu (sedm souborů, `composer.lock` 2 790 řádků z 2 952): lineárně vezme lock **94,5 %** pásu a ze zbytku je šest čárek, logaritmem **30,8 %** — pořád největší, ale test o 64 řádcích je vidět (175 bodů proti 21 v pásu o tisíci). Pevná šířka na soubor by ze pásu udělala počet souborů, což už je v odznaku záložky |
+| **Barva je závažnost, ne reviewer** | Kódovat v segmentu, kdo nález nahlásil (jako spektrum reviewerů v řádku fronty, #172) | V pásu se obojí naráz kódovat nedá a závažnost je to, podle čeho se čte první. Kdo našel, zůstává v chipech runbaru a v dráhách `Průběhu` — tedy tam, kde už to je |
+| **Nejhorší nález přebíjí druh souboru** | Nechat `isNew` rozhodovat dřív (nový soubor vždycky zelený) | Nový soubor s blokujícím nálezem by byl zelený a **v pásu by to nešlo poznat** — přesně ta chyba, kterou pás má chytat. Míří na to vlastní tvrzení v obou sadách |
+| **Pilulku `+X −Y` pás nahrazuje, nedoplňuje** | Nechat pilulku v pruhu záložek vedle pásu | Dvě místa s týmž údajem se rozejdou a pilulka je z nich ta chudší. S ní odešla i podoba `Layout.full`, která se od `labels` lišila jedině tím, že ji kreslila, a `Policy.diffstatBlocks`, kterou pak nikdo nečetl |
+| **Číslo `+248 −96` v okně nezůstalo nikde** | Přidat rozsah do popisku pásu (`7 souborů · +248 −96 · …`) | Schválený zákres má popisek `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna`, tedy odpovědi na jiné otázky: kolik souborů, kolik hotových, kolik k vyřízení. Pás nese velikost **jako plochu**; kdo chce čísla, má je v nápovědě segmentu a v hlavičce souboru v diffu. **Je to ztráta a je zapsaná** — kdyby chyběla, vrátí se to jako jedna položka do popisku, ne jako nová pilulka |
+| **Šířky počítá `Policy`, umisťuje vlastní `Layout`** | `HStack` s `frame(width:)` na každém segmentu a změřenou šířkou pásu ve `@State` | `frame(width:)` potřebuje znát celkovou šířku, tedy druhé měření vedle toho, co rozvržení dělá samo (#236) — a v prvním průchodu by pás nebyl. `Layout` dostane navrženou šířku a od ní se všechno **spočítá** (#220); je to tentýž důvod, proč existuje `ProportionalColumns` |
+| **Minimum tři body se vytlačuje z dělení** | Nasadit `min-width` na segment a nechat součet přerůst; nebo malé soubory zahodit | Bez přepočtu přeroste součet pás **zrovna u PR s jedním lockem a šesti drobnostmi**, tedy v tom případě, kvůli kterému logaritmus existuje. A zahozený soubor je horší než tenký: pás by tvrdil, že PR má míň souborů, než má |
+| **Popisek ustupuje první, práh 180 bodů** | Nechat popisek vždycky; nebo ho zkrátit na `7 souborů` | Popisek stojí ~230 bodů; v pohledu vedle sebe (detail 347 b) by pásu nechal **73** a v nich vyjde nejmenší segment na 4,5 bodu, tedy na hranici minima. Se 180 body má nejmenší 11 a lock 55. Zkrácený popisek by neřekl nic a zabral totéž — jeho čísla jsou navíc v hlavičce stromu a v odznacích záložek. **Vyšlo to ze sondy, ne z rozvahy**: v návrhu ta šířka nakreslená není |
+| **Cesta souboru pod výřezem je vlastní `@Observable` krabice** (`DiffFileCursor`) | Přidat vlastnost do `DiffViewport`; nebo nechat pás čítat `viewport.top` | Je to totéž rozhodnutí, jaké #469 udělalo mezi `band` a `top`: `top` se mění při **každém** otočení kolečka, tahle hodnota **jen na hranici souborů**. Kdyby pás čítal `top`, přeložilo by se při každém snímku jeho tělo i se všemi segmenty, nápovědami a čárkami. Do `DiffViewport` to nepatří, protože ta krabice popisuje **výřez**, ne odpověď nad ním |
+| **`DiffTracking` drží detail PR a `DiffView` ho dostane parametrem** | Nechat krabice ve `@State` `DiffView`u a poslat pásu odpověď zpátky uzávěrem | Pás leží **nad** pruhem záložek, takže by uzávěr znamenal zápis do `@State` detailu z podstromu diffu — a překreslil by celé okno. Parametr je optional a `nil` znamená „nikdo se odjinud nekouká“, takže diff commitu i náhled zůstávají beze změny |
+| **Který soubor je pod výřezem, odpovídá `pinnedFileHeader`** | Vlastní funkce nad rozsahy | Obrys musí ukazovat na **týž** soubor, jehož hlavička je ukotvená nahoře a který zaškrtne `⌥V`. Dvě odpovědi na jednu otázku znamenají obrys u jiného souboru, než jehož jméno stojí nad kódem |
+| **Kurzor drží cestu, ne index** | `Int?` z `pinnedFileHeader` | Pás skládá `Policy` ze souborů toho diffu, který je v tabu **vidět**, kdežto rozsahy jsou z `DiffView`u — po přepnutí na `Od tvé poslední návštěvy` by index chvíli ukazoval na cizí soubor. Cesta, která v pásu není, prostě nikde nesvítí |
+| **`⌥←`/`⌥→` se nezacyklí** | Přetočit z posledního souboru na první | Pás je **mapa, tedy věc s koncem**. Skok z konce na začátek by v padesátisouborovém PR vypadal, jako by se okno odscrollovalo samo. Na krajích je tlačítko zakázané, takže klávesu nebere a propadne dál |
+| **Nápověda je nativní tooltip, ne kreslená bublina** | Vlastní `overlay` jako `.rv-tip` v návrhu | `.rv-tip` je v mockupu proto, že HTML nemá jak nativní tooltip ukázat. V okně je `help()` to, co dělá zbytek okna (strom, kapsle, hlavičky), a navíc se nemá o co ořezat (#483) |
+| **Prošlý se tlumí krytím na 35 %** | Druhý, světlejší odstín každé barvy | Šest hodnot ve škále místo tří; pás by se musel luštit. Krytí je jedna operace, kterou je vidět, že jde o **tutéž** plochu — jen odbytou práci |
+| **`Palette.okWash` je vyčíslený `color-mix`** | `Palette.ok.opacity(0.55)` | Skrz krytí prosvítá podklad, takže by se barva měnila podle toho, na čem segment leží. Tentýž důvod jako u `critLine` (#185) |
+
+**Pás je jedna kresba, ne řada prvků — a je to oprava po proklikání, ne první nápad.**
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Segment není view; pás kreslí `Canvas`** | `Button` na segment s nápovědou, dvěma `overlay`y a `contentShape`, umístěný vlastním `Layout`em (to byla první podoba) | U PR o 158 souborech je to 158 tlačítek a přes tisíc views v hlavičce, která se přerovnává při **každém** zápisu do sledované vlastnosti. Naměřeno nad `cli/cli#14320`: přerovnání okna **70 ms proti 14 ms bez pásu**, přepnutí tabu bez diffu **162 proti 57**. Po přepsání 19, resp. 63 ms. Je to tatáž věta jako u `DiffGutterGeometry` (#252): *nevyjednává se ani počet prvků* |
+| **Nápověda je jedna a řídí ji hover** | `.help()` na každém segmentu | Dva řetězce na segment (nápověda a jméno pro odečítání) znamenaly u 158 souborů **316 skládaných řetězců na každý průchod tělem** — a `Plural.czech` v nich formátuje čísla podle locale. S jednou kresbou je to jeden řetězec, a jen když kurzor stojí nad pásem |
+| **Trefení kurzoru i kliku počítá `PullRequestMapGeometry`** | Nechat hit-testing na SwiftUI (tj. ponechat tlačítka) | Bez views musí polohu přeložit výpočet — a je to zároveň to, co se dá otestovat **bez okna**. Mezera mezi segmenty padá segmentu **vlevo**: dvoubodová mezera je čtvrtina nejmenšího segmentu, takže „klik do mezery neudělá nic“ by u úzkých segmentů znamenalo, že se na soubor nedá kliknout |
+| **Mezera ustupuje dřív než minimum** (`Policy.mapSpacing`) | Nechat mezery a stlačit segmenty; nebo shlukovat soubory do skupin; nebo dát pásu strop na počet segmentů | Nad ~160 soubory si `3 b × N` a `2 b × (N − 1)` se šířkou pásu odporují (u 300 souborů 1 498 bodů proti osmi stům). Kdyby ustoupilo minimum, byly by segmenty po 0,7 bodu mezi dvoubodovými mezerami — **tečkovaná linka, ve které je víc pozadí než mapy**. Mezera je dekorace, šířka je informace. Shlukování ani strop se nedělají: znamenaly by, že soubor v pásu **není**, a to je horší než tenký segment — a nad 300 souborů se to nedostane, protože `gh pr diff` vrátí HTTP 406 a diff se nenačte vůbec |
+| **Zaplatilo se odečítáním, a je to směna, ne vylepšení** | Držet per-segment accessibility přes `accessibilityChildren` | Ten modifikátor staví ty views znovu, takže by cenu vrátil. Pás je proto **jeden** element (`Mapa souborů` + souhrn jako hodnota); k souborům vedou dál strom v `Změněných souborech` a paleta ⌘K, tedy cesty, které existovaly předtím |
+
+**Hypotéza, kterou měření vyvrátilo** (a je tady proto, aby se nezkoušela znovu): nabízelo se, že
+tělo detailu špiní **zápis z `DiffView`u do `DiffTracking`u**, který detail drží — tedy třída #421
+a #472. Neplatí to: `DiffTracking` **není `@Observable`** a `@State` v detailu drží jen referenci,
+takže zápis do `viewport.top` zneplatní jedině ty tři malé views, které si `top` čtou
+(`DiffPinnedHeader`, `DiffReadShortcut`, `PullRequestMapProbe`). Ablace to potvrdila: s vypnutým
+pásem je cena **plochá v počtu souborů**. Rozhodlo měření, ne úvaha — a aby ho sonda uměla vidět,
+musela dostat dvě osy (počet souborů a ostrý diff ze souboru), protože do té doby roztahovala
+fixture po **řádcích** a měla 9 až 14 souborů (#478).
+
+**Kde se od návrhu odchýlila implementace** (a je to tady, ne potichu):
+
+- **Úzká podoba bez popisku** v zákresu není. Vyšla ze sondy přes pásmo šířek; návrh kreslí pás
+  ve výchozím okně, kde se popisek vejde.
+- **Odsazení na stranu je 16 bodů, ne 22.** Návrh má u `.pr-head` i `.subtabs` 22, kdežto okno
+  drží 16 (`controls`) a 12 (pruh záložek) — a rozhoduje **hlavička nad pásem**, aby pás začínal
+  pod prvním znakem titulku. Změřeno na běžící aplikaci: obojí na x = 68.
+- **Výšku řádky drží pás (10 b), ne popisek (13 b) ani kreslicí plocha (18 b).** Jinak by se
+  hlavička při složení panelu posunula o tři body a čárka vlákna by ji zvedla o dalších osm.
+  Popisek i plocha z rámce přečnívají a nikde se to neořeže; `Canvas` musí být vyšší, protože si
+  kresbu ořezává do **svého** rámce.
+- **Mezera mezi segmenty se nad ~160 soubory nekreslí** (viz tabulka výš). Zákres tuhle velikost
+  nekreslí vůbec, takže je to rozhodnutí nad ním, ne proti němu.
+
+**Po druhém proklikání se vybíralo ze čtyř panelů v sekci 42 a vybralo se `A` + `log₂`.**
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Legenda se vyžádá z popisku** (varianta A) — popisek je tlačítko a klik otevře popover se všemi sedmi významy | **B**: zkrácená trvalá legenda (tři tóny závažnosti) na místě počtů. **C**: plná legenda jako druhá řádka chromu, jen na širokém okně | U **B** odejde z obrazovky souhrn `3 prošlé`, tedy to, čím je pás zároveň ukazatel zbývající práce — a v úzkém stavu (380 b) zmizí legenda celá, takže tam nezůstane ani jedno. U **C** se platí **druhou řádkou chromu** (~16 bodů výšky diffu natrvalo) za informaci, kterou se člověk naučí jednou a pak ji nepotřebuje. **A** nezvětší chrom ani o bod. **Cena A je zapsaná**: kdo neví, že se dá kliknout, legendu nenajde — tečkované podtržení a `▾` je jediné, co to prozradí; a v úzké podobě, kde popisek mizí, k ní cesta není vůbec (tam ta slova říká nápověda segmentu rovnou) |
+| **Barvu vydává jedna funkce pro kresbu i pro legendu** (`PullRequestMapView.fill(of:)` nad `PullRequestMapTone`) | Dosadit barvy ve vzorcích legendy přímo z palety | Je to ta samá barva, jen ze druhého místa — takže **rozejití se škálou by nebylo vidět**. Tatáž past byla i v zákresu (`style="background: var(--crit)"`) a je tam opravená na společný selektor. Hlídá to stráž nad zdrojákem, ne měření: bitmapa obě podoby nerozliší |
+| **Sedm tónů v legendě, ale čtyři ve výplni** | Udělat z `read`, `thread` a `current` další tóny výplně | `read` je krytí nad výplní, `thread` čárka a `current` značka — tři jiné kanály. Kdyby se do výplně dostal `accent`, byl by v pásu **pátý stav závažnosti** a na obrázku by to vypadalo jako „něco tu je“. `Policy.mapFill(of:)` proto vydá jedině jeden ze čtyř a tvrdí to test |
+| **`.popover` visí na nulovém kotvicím view, ne na tlačítku** | Nasadit `.popover` přímo na tlačítko; nebo připojit ho podmíněně (`if isOpen`) | **Změřeno**: přímo na tlačítku zdražil průchod tělem pásu při 158 souborech ze 3,0–4,8 na **7,1–7,3 ms**; na nulovém potomkovi v `background`u 5,1–5,2. Podmíněné připojení nebylo lepší (5,5–7,4 ms) a nese riziko, že se popover v tom průchodu, ve kterém se modifikátor objeví, **neotevře**. Je to tentýž tvar, jaký v řádce už mají `probe` a `shortcuts`. **Mez toho měření je zapsaná**: podoby se měřily v samostatných bězích a stroj driftoval, takže průkazný je jedině ten první, dvojnásobný rozdíl |
+| **`isOpen` drží legenda, ne tělo pásu** | `@State` v `PullRequestMapView` | Otevření legendy by přeložilo tělo pásu i s kresbou 158 segmentů. Je to tatáž věta jako u hoveru a u sondy výřezu |
+| **Šířka zůstává `log₂`, tedy proměnná** (varianta W: `log₂` proti stejně širokým okýnkům) | Stejně široká okýnka | U deseti podobných souborů proměnná šířka **nekupuje nic** (rozdíl 1,6×, čte se jako šum) — a to byl ten případ, kvůli kterému otázka vznikla. U PR s jedním velkým souborem je to ale **celá informace**: jeden segment má při pásu o 900 bodech 304 bodů proti 42 až 98 u ostatních, kdežto deset stejných okýnek netvrdí o objemu nic. `log₂` byl navíc v zadání #501 jmenovitě. Stejná šířka by k tomu zrušila dvě věci naráz: pravidlo o mezerách nad ~160 soubory (pravidelná mřížka je jedno dělení) a s ním celou třídu chyb v trefení |
+| **Za proměnnou šířku se platí značkou souboru pod výřezem** | Nechat to bez podmínky | Když šířka nese objem, **neříká, kde jsem** — a jediné, co v pásu na „který soubor zrovna čtu“ odpovídá, je ta značka. Rozhodnutí nechat `log₂` na ní tedy stojí, takže se musela **změřit**, ne prohlásit |
+
+**Značka souboru pod výřezem: dnešní obrys je změřený a neunese hustý pás.** Z bitmapy (#432), přes
+pásmo počtů souborů a šířek okna — čísla jsou
+v [`docs/architektura.md`](../../architektura.md#značka-souboru-pod-výřezem--proč-obrys-odešel-a-jezdec-přišel-501).
+Podíl obálky značky, který je cílový segment, spadne z 91–98 % (tři soubory) na **21–30 %** (158),
+protože obrys je **odstup od segmentu**, tedy vždycky o osm bodů širší než to, co obtahuje. A při
+158 souborech má celá značka **39 b² inkoustu ve dvou svislých čárkách dvou bodů** — přesně tolik
+a přesně toho tvaru, co jedna čárka vlákna (36–44 b²).
+
+**Nahradil ho `jezdec`** (zakreslený v sekci 42, odsouhlasený 2. 9. 2026 — je to nový prvek na
+obrazovce, tedy jediná schvalovací brána v tomhle repu):
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Pevný trojúhelník 14 × 7 bodů pod pásem, hrotem v ose segmentu** — a obrys odchází | **Nechat obrys a jezdce přidat** | Jedna věc, dvě značky: člověk se učí dvakrát a v hustém pásu by se obrysové čárky dál pletly s vlákny |
+| | **Minimální šířka pro zvýrazněný segment** (segment pod výřezem by se rozšířil) | Pás by se **přerovnával při každém přejezdu hranice souboru**, takže by se cíle kliknutí hýbaly pod kurzorem — a šířka by přestala mluvit o objemu právě u toho segmentu, na který se člověk kouká |
+| | **Obrys s pevnou minimální šířkou** vystředěný na segment | Pořád **obklopuje**, takže při dvoubodové hustotě orámuje osm souborů. Pevná velikost problém neřeší, když je tvar „rámeček okolo“ |
+| | **Ztlumit ostatní segmenty** | Tlumení už znamená `prošlo` (#500) — druhý význam na tentýž kanál |
+| | Značka **nad** pásem místo pod ním | Nad pásem je osm bodů odsazení hlavičky a hned nad nimi text meta řádky; pod pásem je deset bodů do pruhu záložek. A pruh záložek značí aktivní tab **podtržením**, ne trojúhelníkem, takže se to nepere |
+
+**Tři vlastnosti, kvůli kterým je návrh takový**, a všechny tři jsou odpovědí na to, co se změřilo:
+velikost **nezávisí na šířce segmentu** (takže se značka nerozpadne zrovna tam, kde je pás
+nejužitečnější), **hrot je bod** (ukazuje přesně, i když je značka širší než cíl — obrys naopak
+obklopuje, a to při dvou bodech ztrácí smysl) a **tvar se nedá splést s čárkou vlákna** (čárka má
+dva body v každém řádku, jezdec 14 bodů plné šířky u základny).
+
+**A je to doložené tím samým měřením, ne prohlášené** — jinak by to bylo tvrzení o tvaru, ne
+o podmínce. Značka má **12–14 × 7 bodů a 34–56 b² inkoustu ve všech 36 kombinacích** pásma, přes
+které se měřil obrys, zatímco segment pod ní se mění z **1,4 na 433 bodů**; a protože je nad hustým
+pásem širší než cíl, rozhoduje **hrot**, jehož odchylka od středu segmentu je **0,0 až 0,6 bodu**.
+Čísla i to, co se u jezdce **měřit nedá** (podíl obálky), jsou
+v [`docs/testovani.md`](../../testovani.md#a-jak-se-změřilo-že-jezdec-tu-podmínku-splňuje-501).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Hrot zůstává na skutečném středu segmentu; ořezává se základna** | Posunout celý jezdec dovnitř plochy, aby byl na kraji pásu symetrický | Posunutý hrot ukazuje na **soubor, který to není** — a hrot je u téhle značky jediná souřadnice, která o cíli něco tvrdí. Nesymetrický jezdec na prvním a posledním segmentu je proti tomu **přiznaná** cena; obrys měl tutéž vadu nepřiznaně (vnější hrana na `x = −4`, `Canvas` ji potichu ořezal). Hlídá to tvrzení nad bitmapou na **dvou** cílech, protože s jedním (uprostřed pásu) tuhle regresi **propustilo** |
+| **Obrys zůstává v dokumentu jako záznam měření** | Smazat ho z mockupu úplně | Je to doklad, **proč** jezdec vznikl — a bez obrázku by z toho zbyla jen čísla. Je to tentýž vztah, jaký má pilulka `+X −Y` k sekci 19: dnešní obrazovku kreslí `.runner`, záznam kreslí `.seg.cur` a je to u něj napsané |
+
+**Hover má vlastní vrstvu, a je to úklid na vlastním důvodu.** Ondrův nekliknutelný segment se
+nezreprodukoval a slepá oprava podezření na `.help` se **nedělá** — má horší selhání než ta chyba.
+Co se udělalo, stojí samo za sebe: **hover nemá překreslovat kresbu** (tatáž věta jako #358 a #438).
+Dokud `hovered` drželo tělo pásu, čtl ho popisek nápovědy v témže těle jako `Canvas`, takže přejezd
+hranice segmentu přeložil tělo a překreslil celou kresbu — a **jeden průchod tělem stojí při 158
+souborech 7,2 ms**, tedy 1,1 s CPU za jeden přejezd pásu (157 hranic). Že to hover doopravdy
+nespustí, se v harnessu ověřit nedá (offscreen okno ho nedostane, `CGEvent` je v testech zakázaný,
+#490), takže se to tvrdí **nad zdrojákem** — a je to zapsaná mez, ne domněnka.
+
+**Tvrdé podmínky se nemění ani o položku.** Pás jen čte — `GitHubGateway` zůstává bez zápisových
+metod, `SingleWayOutTests` prochází beze změny a `DiffViewport` se **nezměnil**: mapa ho čte.
 
 ### Záznam rozhodnutí — číslo sekce v mockupu přiděluje orchestrátor (#537)
 

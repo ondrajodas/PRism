@@ -62,12 +62,12 @@ struct DiffMarginScrollReadTests {
         case unreadable(String)
     }
 
-    /// **Čtyři čtenáři plus zapisovatel, jmenovitě.** Pátý znamená, že se při každém snímku
+    /// **Pět čtenářů plus zapisovatel, jmenovitě.** Šestý znamená, že se při každém snímku
     /// překládá něco dalšího — a je to věc do review, ne detail. Seznam **smí růst**, ale jedině
     /// vědomě: `DiffAnchorReporter` k němu přibyl s #527 (kotva scrollu do `tabs.json`) a projde
     /// tou samou zkouškou jako ostatní tři — je to **malé vyhrazené view**, které `top` čte
     /// v `onChange`, ne tělo, do kterého by se ta hodnota vlila i se vším ostatním.
-    @Test("Posun výřezu čtou čtyři malá view")
+    @Test("Posun výřezu čte pět míst")
     func onlyThreePlacesReadTheOffset() throws {
         let readers = try sources(under: "App")
             .filter { $0.code.contains("viewport.top") }
@@ -82,6 +82,10 @@ struct DiffMarginScrollReadTests {
             "Views/DiffReadShortcut.swift",
             // Zapisovatel — porovnává starou hodnotu s novou, takže to jméno v něm stojí taky.
             "Views/DiffView.swift",
+            // Mapa PR (#501) — leží **nad pruhem záložek**, tedy mimo `DiffView`, a ptá se na
+            // tutéž věc jako ukotvená hlavička: který soubor drží horní hranu. Čte `top` z krabice,
+            // kterou jí podává detail, ne druhým měřením geometrie (#236).
+            "Views/PullRequestMapView.swift",
         ])
     }
 

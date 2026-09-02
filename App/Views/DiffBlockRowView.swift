@@ -255,7 +255,14 @@ struct DiffBlockRowView: View {
     /// i blok, který se ještě nerozložil, přepsal by tím platnou polohu na nic — a to se děje
     /// pokaždé, když se blok přestaví (změřeno: karty pak stály na sobě u horní hrany okraje).
     private func noteMargin(_ frames: [DiffBlockLineFrame]) {
-        guard let marginAnchors, !frames.isEmpty else { return }
+        // **Nezměřený blok nehlásí nic** — a to platí i na jeho *počátek*, ne jen na rámečky
+        // řádků. `noteFrames` se ozývá z textového view, tedy **dřív** než `onGeometryChange`
+        // nasadí `placement.rect`; poloha složená v tom okamžiku nese `origin.y == 0`, takže je
+        // v souřadnicích **bloku**, ne obsahu — karta by stála o celý soubor výš. Změřeno při
+        // slévání s #501, kde se to pořadí projevilo: hlášená poloha byla 98 b místo 137 b,
+        // tedy přesně odsazení bloku. Na geometrické cestě se `noteRows()` volá hned za zápisem
+        // rectu, takže se tím o žádné hlášení nepřijde — jen se to pozdější vezme.
+        guard let marginAnchors, !frames.isEmpty, placement.rect != .zero else { return }
         let origin = placement.rect.origin
         var found: [String: DiffMarginSpot] = [:]
         for frame in frames {

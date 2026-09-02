@@ -72,6 +72,14 @@ struct DiffView: View {
     /// diff „co od minule přibylo“ (#284) nemluví o hlavě PR, takže by se jejich otisky se značkou
     /// nepotkaly. Zaškrtávátko, ✓ ve stromu ani počet v hlavičce se pak **nekreslí vůbec**.
     var read: DiffReadActions?
+    /// Výřez a rozsahy souborů **zvenku** (#501). `nil` = na tuhle obrazovku se nikdo odjinud
+    /// nedívá (diff commitu, náhled), takže si je diff drží sám.
+    ///
+    /// Existuje kvůli mapě PR: ta leží **nad pruhem záložek**, tedy mimo `DiffView`, a ptá se na
+    /// tutéž věc jako ukotvená hlavička souboru — který soubor drží horní hranu. Předat jednu
+    /// krabici je proti tomu levnější než druhé měření: rozsahy se zapisují z geometrie sekcí
+    /// a dvě místa, která je počítají, by se rozešla (#236).
+    var tracking: DiffTracking?
     /// Kde stojí kurzor procházení nálezů (#187). Karta v okraji na tom místě dostane rámeček,
     /// takže okraj a lišta ukazují **totéž** — bez toho by po `⌥↓` nebylo poznat, o které kartě
     /// lišta mluví. Do #503 to potřeboval jen panel, protože v diffu se o kurzoru dozvěděl skok.
@@ -118,13 +126,17 @@ struct DiffView: View {
     /// Hunk otevřený jako text k vybírání (#157). Sheet drží diff, protože je nad celým seznamem
     /// řádků — a `nil` znamená, že žádný otevřený není.
     @State private var codeText: CodeText?
+    /// Výřez a rozsahy souborů, když si je nikdo nepředává (#501). Vzniká jednou na identitu
+    /// view, takže `tracking == nil` znamená přesně to, co bylo do #501: diff si obojí drží sám.
+    @State private var ownTracking = DiffTracking()
+
     /// Kde je výřez v obsahu (#469). Z něj si bloky berou pás, ve kterém se nasazují, a ukotvená
     /// hlavička polohu. Viz `DiffViewport` — dvě vlastnosti, protože každou čte někdo jiný a jinak
     /// často.
-    @State private var viewport = DiffViewport()
+    private var viewport: DiffViewport { (tracking ?? ownTracking).viewport }
     /// Kde v obsahu leží který soubor (#469). Krabice mimo observable stav; plní ji sekce, čte ji
     /// ukotvená hlavička.
-    @State private var fileExtents = DiffFileExtents()
+    private var fileExtents: DiffFileExtents { (tracking ?? ownTracking).extents }
     /// Kde v obsahu leží řádky s kartou v okraji (#503). **Jediná sledovaná krabice v diffu** —
     /// z téhle se kreslí, viz `DiffMarginAnchors`.
     @State private var marginAnchors = DiffMarginAnchors()

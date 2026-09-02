@@ -27,6 +27,8 @@ extension WindowShortcut.Key {
         case .cancelAction: .escape
         case .upArrow: .upArrow
         case .downArrow: .downArrow
+        case .leftArrow: .leftArrow
+        case .rightArrow: .rightArrow
         }
     }
 }
