@@ -23,6 +23,9 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `PullRequestSummary` | Totéž **bez SHA** — co dá vyhledávání. Viz `App/GitHub/` níž |
 | `PullRequestHead` | Hlava PR a **kdy vznikla** (#420) — odpověď dávkového dotazu na `headRefOid`. **Vlastní model vedle `PullRequest`**, ne jeho zúžení: detail je odpověď na „všechno o tomhle PR“ pro jeden pull request, tohle je jedna otázka pro celou frontu naráz. `committedAt == nil` znamená „datum nevíme“, ne dnešek |
 | `Source` | Zdroj PR: jméno pro UI + search dotaz. Výchozí dvojice je `Source.reviewRequested` a `Source.mine` (#330) |
+| `OrganizationRepository` | Jedno repo z výpisu organizace (#532): `RepoID`, **počet otevřených PR** a čas poslední změny. **Tři údaje, protože přesně tři se kreslí v řádku palety** — čtvrtý by se do řádku nevešel a platil by se pomalejším výpisem. Není to `PullRequestSummary` pro repa: katalog odpovídá na „která repa existují“, ne na „co je v nich k review“ |
+| `OrganizationRepositories` | Celý výpis organizace + `hitLimit` (#532). **Vlastní typ místo holého pole je kvůli tomu příznaku**: `keboola` na `--limit 1000` **doopravdy naráží** (změřeno — přesně tisíc položek), takže „tolik jich je“ by bylo víc, než co data unesou |
+| `RepositorySnapshot` | Uložený výpis i s razítkem `fetchedAt` (#532). Razítko je **v snímku, ne ve vedlejším souboru**: podle něj se rozhoduje o denní obnově, a dva soubory by se uměly rozejít — pak by se psalo `obnoveno 7:58` nad seznamem z minulého týdne |
 | `ReportedFinding` | Nález přesně jak ho poslal reviewer; `FindingVerdict` je `CONFIRMED`/`PLAUSIBLE` |
 | `Finding` | `ReportedFinding` + **kdo** ho našel (skill) a **proti čemu** (`headSha`) |
 | `FindingKey` | Identita nálezu napříč běhy. Skládá ji **jen** `Policy.key(of:)` |
@@ -1579,7 +1582,7 @@ aplikaci (skilly, blokující kategorie, interval pollingu, limit souběhu, rozp
 | Typ | Co je |
 |---|---|
 | `Configuration` | Celý `config.json`: globální část + `[RepoID: RepositoryConfig]`; `resolved(for:)` a `activeSources` říkají, co doopravdy platí |
-| `GlobalConfig` | `sources`, `ownLogins`, `skills`, `skillsByLanguage`, `reviewPrompt`, `reviewTimeoutMinutes`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
+| `GlobalConfig` | `sources`, `ownLogins`, `searchOrganizations`, `skills`, `skillsByLanguage`, `reviewPrompt`, `reviewTimeoutMinutes`, `blockingCategories`, `mode`, `allowsPublishing`, `findingsLanguage`, `diffLayout`, `appearance`, `notifications`, interval, souběh, `autoRunsPerDay`, rozpočet, model |
 | `RepositoryConfig` | Override pro jedno repo: `mode`, `allowsPublishing`, `findingsLanguage`, skilly, kategorie, `reviewTimeoutMinutes` — **všechno volitelné** |
 | `ResolvedConfig` | Co z toho vyjde pro jedno repo — `resolved(for:)` je čistá funkce |
 | `ConfigStore` | Aktor nad souborem: načtení, založení chybějícího, atomický zápis |
@@ -1613,6 +1616,15 @@ Věci, které se u toho nemají rozbít:
   `Moje loginy`, protože loginy jsou otázka identity, tedy tatáž, na kterou odpovídají zdroje; do
   #389 byl soubor jediná cesta, kterou se hodnota do aplikace dostala, a rozřazení fronty tak bylo
   bez editoru textu nedostupné. Round-trip na disk drží testem dál.
+- **`searchOrganizations` je seznam organizací, ve kterých se hledají repozitáře** (#532) — **ne
+  zdroj fronty**, a to je celý rozdíl proti `sources`. Zdroje říkají, co se má tahat pravidelně
+  a co se počítá do karet, odznaku a automatu; tohle je jen seznam míst, ve kterých se hledá, když
+  chci otevřít nějaký PR ke čtení. **Prázdné pole je běžný stav** a znamená chování před #532. Čte
+  se **přísně jako `sources`, `skills` a `ownLogins`** — hodnota jiného typu položí čtení —, protože
+  tiše podstrčené prázdno by vypadalo jako organizace bez repozitářů a chyba by se hledala v `gh`
+  místo v čárce v souboru. **Globálně, ne per repo** (kde hledám repa, z repozitáře neplyne).
+  V konfiguraci leží **jen jména**; seznamy rep drží cache, protože jejich dotažení je drahé —
+  nad `keboola` změřeno 46,8 s (viz *Katalog repozitářů* níž).
 - **Hodnoty se čtou při použití**, ne při startu: limit souběhu při každém pokusu o slot,
   rozpočet při každém úklidu, skilly při spuštění review. Proto stačí načíst a nemusí se
   restartovat.
@@ -3584,6 +3596,62 @@ Věci, které se u toho nemají rozbít:
   `pullRequest` uvnitř souboru, který se stejně ověří. Pomlčka je součást prefixu, takže
   `42-` nesedí na `421-`; je na to test.
 
+## Katalog repozitářů (#532)
+
+Seznamy repozitářů organizací z `searchOrganizations` — `catalogs/<org>.json` v cache aplikace.
+Existuje kvůli jednomu číslu: dotažení výpisu `keboola` stojí **46,8 s** (viz `GitHubGateway` níž),
+takže hledání repa podle jména nesmí být dotaz. Hledá se nad tím, co leží na disku.
+
+| Typ | Co je |
+|---|---|
+| `RepositoryCatalogStore` | Aktor nad `catalogs/`: `snapshots(for:)`, `save`, `discard(keeping:)`. Atomický zápis, hranice cache přes `CacheFile` |
+| `RepositoryCatalog` | `@MainActor @Observable`: snímky, věty o selhání a to, co se právě tahá. Umí `load`, `refreshStale` a `refresh` |
+| `Policy.organizationName(from:)` | Ověřené jméno organizace, nebo `nil` — z něj vzniká cesta do cache |
+| `Policy.searchOrganizations(_:)` | Seznam z konfigurace: ověřený, bez duplicit, **v pořadí ze souboru** |
+| `Policy.staleOrganizations(_:snapshots:now:)` | Co je potřeba dotáhnout: chybí, nebo je starší než den |
+| `Policy.repositoryCatalogStatus(…)`, `repositoryCatalogSummary(_:now:)` | Co se o katalogu smí napsat v nastavení |
+
+Věci, které se u toho nemají rozbít:
+
+- **Dotahuje se jedině na vyžádání, a je to podmínka, ne optimalizace.** `refresh(_:)` volá tlačítko
+  `Obnovit`, `refreshStale(_:)` otevření stránky `Zdroje PR` a **dopsání** organizace (`onSubmit`).
+  **Psaní v poli nevolá nic**: `keboola` po písmenech je sedm hodnot, takže fetch navěšený na změnu
+  textu by z jednoho dopsaného řádku udělal sedmkrát tři čtvrtě minuty práce a sedm podprocesů
+  `gh`. Je na to test, a je to ten nejcennější test celého #532 — tvrdí, že se něco **ne**stalo.
+- **Denní lhůta se počítá od dotažení, ne od půlnoci.** Kalendářní den by po dotažení v 23:55
+  znamenal obnovu za pět minut. **Razítko z budoucnosti se bere jako čerstvé** — posunuté hodiny
+  nemají spustit tři čtvrtě minuty práce při každém otevření nastavení.
+- **Tahá se po jedné, ne souběžně.** Jeden výpis je desítky sekund a stovka kilobajtů; tři naráz
+  neznamenají třikrát rychleji, ale tři podprocesy `gh` proti témuž rate limitu. **Duplicity
+  zahazuje `Policy.searchOrganizations` u volajícího, ne guard `refreshing`** — ten chrání proti
+  souběžnému druhému volání (dvojklik na `Obnovit`), kdežto `keboola` dvakrát v jednom seznamu by
+  jím prošlo, protože se značka odebírá na konci iterace. Změřeno: bez toho vyšly na
+  `["cli", "cli", "@cli"]` **tři** dotazy.
+- **Selhané obnovení nezahodí, co už v cache je.** Starý seznam je pořád lepší než žádný a věta
+  u řádku říká, co se stalo; prázdno by vypadalo jako organizace bez repozitářů. A **jedna
+  nedostupná organizace nezastaví ostatní** — tatáž úvaha jako u částečné odpovědi na hlavy PR
+  (#420).
+- **Nečitelný soubor se přeskočí, nepoloží čtení.** Organizace bez snímku vypadá jako nedotažená,
+  takže se dotáhne znovu a souhrn ji **nezapočítá** (`missing`). Položit kvůli jednomu souboru celé
+  čtení by schovalo i to, co je v pořádku.
+- **Nad prázdným seznamem se neuklízí.** `load` maže soubory organizací, které v nastavení už
+  nejsou (eviction do `catalogs/` nechodí, řídí se to stářím snímku, ne rozpočtem na místo) — ale
+  prázdný seznam znamená buď „žádnou organizaci nemám“, nebo „konfigurace se ještě nenačetla“,
+  a ty dva se odsud nerozeznají. Smazat na tom druhém by zahodilo cache za desítky sekund práce jen
+  proto, že se okno nastavení otevřelo dřív než disk. Cena je jeden osiřelý soubor, dokud si člověk
+  nějakou organizaci nenapíše.
+- **`catalogs/`, ne `repositories/`** — jméno z zadání issue je v `CacheLayout` zabrané a ukazuje na
+  `repos/` s bare klony. Dvě složky se skoro stejným jménem vedle sebe by v cache, do které se
+  člověk chodí dívat, znamenaly jednu otázku pokaždé.
+- **Souhrn bere nejstarší razítko, ne nejnovější.** Věta `obnoveno 7:58` je tvrzení o **celém**
+  katalogu, takže musí platit i pro tu organizaci, která se tahala nejdřív — s nejnovějším by se nad
+  týden starým seznamem `keboola` psalo, že se obnovil před minutou, protože se mezitím dotáhl
+  `ondrajodas`. Snímek **z jiného dne nese i datum**: holé `7:58` nad snímkem z minulého týdne
+  vypadá jako „před chvílí“, a to je zrovna u denní obnovy ta informace, na kterou se člověk ptá.
+- **Katalog drží okno nastavení, ne `AppStore`** — a je to **vědomé a dočasné**, viz [záznam
+  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--katalog-repozitářů-drží-okno-nastavení-532).
+  Pravda leží v cache, takže se typ při přestěhování k paletě (#533) nemusí měnit.
+
 ## `AppStore` (`App/Store/`) a okno (`App/Views/`)
 
 `AppStore` drží to, co kreslí okno: polling seznamu, **výběr řádku**, **stav pracovních
@@ -5085,7 +5153,8 @@ Scéna `Settings` (⌘, i ozubené kolo v toolbaru přes `openSettings`). Zapisu
 | `SettingsView` | Boční navigace (#177), patička s cestou a stavem uložení, zámek na rozbitý soubor |
 | `SettingsSection` | Sedm stránek ve třech skupinách — `Co se hlídá`, `Co jde ven`, `Prostředí` |
 | `SettingsModel` | Rozepsané nastavení: odložený zápis, rozpoznání změny zvenčí |
-| `SourcesSettingsView` | Zdroje PR (search dotazy) a **moje loginy** (#389) — seznam plus přihlášený účet ke čtení |
+| `SourcesSettingsView` | Zdroje PR (search dotazy), **moje loginy** (#389) — seznam plus přihlášený účet ke čtení — a **organizace k prohledávání** (#532) |
+| `OrganizationListEditor` | Organizace k prohledávání (#532): řádky s polem, pod řádkem věta při selhání, dole souhrn (`412 rep · obnoveno 7:58`) a `Obnovit` |
 | `ReviewSettingsView` | Výchozí režim, jazyk nálezů a **časový limit běhu** (#320), skilly, sady podle jazyka, **prompt review** (#281), **text issue z trackeru** (#389), blokující kategorie |
 | `ReviewPromptEditor` | Psaná šablona, legenda zástupných textů, `Obnovit výchozí`, náhled složeného promptu a zamčené jádro (#281) |
 | `ReviewTimeoutField` | Číslo v minutách a stížnost, když je hodnota v souboru mimo meze (#320). **Jedno view pro obě místa**, kde se limit nastavuje |
@@ -5125,6 +5194,19 @@ Věci, které se u toho nemají rozbít:
     to je u nenačteného viewera napsané.
   - **`appearance` v nastavení pořád není** (#278) — přepíná se v railu a druhé místo by se s ním
     rozešlo. Že „celá konfigurace“ jde z okna, tuhle výjimku neruší.
+- **Organizace k prohledávání jsou řádky s polem, ne chipy** (#532) — a je to **vědomá odchylka od
+  zákresu**. Mockup kreslí chipy (`.tagchip`) i o řádek výš u `Moje loginy`, kde je aplikace od #389
+  sází jako obyčejný seznam polí (`StringListEditor`), protože okno nastavení je nativní `Form`.
+  Druhá vizuální podoba pro tutéž věc na téže stránce by znamenala, že se dva sousední řádky
+  ovládají jinak. Co proti `StringListEditor`u přibylo — a proč to není on:
+  - **pod řádkem je věta, když se výpis nepodařilo dotáhnout.** Organizace, na kterou účet nevidí,
+    a organizace bez repozitářů dávají obojí prázdný seznam — bez té věty je to k nerozeznání. Je to
+    **jediné, co na řádku je**: stav (`412 rep`, `zatím nenačteno`) tam byl a **z renderu vypadl**,
+    protože nad souhrnem, který říká totéž, stála tatáž věta dvakrát pod sebou;
+  - **dole je souhrn a `Obnovit`**, a kreslí se **jen když nějaká organizace je**: prázdná sekce
+    nemá co obnovovat a tlačítko, které nikdy nic neudělá, je horší než žádné. Tlačítko je uprostřed
+    dotažení zakázané — druhý klik by ten první nezrychlil, tatáž úvaha jako u `Policy.refreshControl`;
+  - **dotahuje se na `onSubmit`, ne na změnu textu.** Viz *Katalog repozitářů* výš.
 - **Neplatná šablona promptu se neuloží** (#281, `ReviewPromptEditor`). Je to jediné pole v okně,
   které si drží vlastní `@State` místo `Binding`u do konfigurace — a je to schválně: šablona bez
   `{{baseSha}}` by běhu sebrala to, proti čemu diffuje, takže se zapíše teprve platná hodnota
@@ -7435,6 +7517,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.recheckStatuses(_:of:)` | Spáruje odpovědi kontroly (#150) s nálezy, na které se ptala — index z promptu → `Policy.key(of:)`. **Nepáruje se přes text**: model si věty přeformuluje |
 | `Policy.severityBadge(isBlocking:recheck:dismissal:)`, `Policy.severityBadge(of:categories:)` | Co stojí v odznaku závažnosti u nálezu a jestli se jeho text přeškrtne (`FindingSeverityBadge`, #150): `dismissed` / `resolved(_, blocking:)` / `blocking` / `none`. **`blokuje` se k `vyřešeno` přidává, nenahrazuje** — první je fakt, druhé tvrzení modelu. Odmítnutí přebíjí kontrolu a **nepřeškrtává** (celořádkové „nepočítá se“ patří člověku). Skupinová varianta vydá `resolved` jedině tehdy, když ho kontrola dala **všem platným** nálezům místa |
 | `Policy.incrementalDiff(from:to:rewroteHistory:)` | Dá se ukázat **jen to, co od minule přibylo** (#284)? `nil` = tlačítko se nenabídne. Chce viděnou hlavu, dnešní hlavu, rozdílné a **nepřepsanou historii**; `rewroteHistory: nil` (nenačtená osa) se chová jako „přepsala“ |
+| `Policy.organizationName(from:)`, `searchOrganizations(_:)`, `staleOrganizations(_:snapshots:now:)`, `repositoryCatalogStatus(…)`, `repositoryCatalogSummary(_:now:)` | Katalog repozitářů (#532) — ověřené jméno organizace (z něj vzniká cesta do cache), seznam bez duplicit v pořadí ze souboru, co je starší než den a co se o katalogu smí napsat. Rozbor je v *Katalog repozitářů* výš |
 | `Policy.recheck(of:head:)` | Co o uložených nálezech říká poslední kontrola (`RecheckReport`, `RecheckTally`): `none` / `outdated(againstHeadSha:)` / `current`. **Platí jen pro hlavu, proti které běžela** — jinak se odznaky nevydají (tvrdá podmínka č. 5); počítá se z **platných** nálezů, takže odmítnutý (#113) se nepočítá, a nález bez odpovědi jde do `unanswered` |
 
 - **Vstup jsou výsledky po zdrojích** (`[[PullRequestSummary]]`), ne jeden plochý seznam.
@@ -9355,6 +9438,50 @@ Odpověď proto přináší **druhé volání** uvnitř téže metody — `Branc
 jména základu nebo bez hlavy se na ni neptáme vůbec**: prázdné hodnoty by z dotazu udělaly
 `ref(qualifiedName: "refs/heads/")`, tedy jistou chybu za jedno volání navíc, kdežto chybějící
 divergence je platná odpověď („nevím“), kterou panel umí ukázat.
+
+### Repozitáře organizace (#532) — a proč je to nejdražší čtení v aplikaci
+
+`repositories(in organization:)` je **čtyřiadvacátá čtecí metoda**; tvrdá podmínka č. 1 platí dál —
+gateway pořád nemá nic, čím by šlo něco odeslat.
+
+**Změřené na `keboola`, a je to to hlavní číslo celého #532:**
+
+```
+gh repo list keboola --limit 1000 --json name,pullRequests,pushedAt   → 46,8 s · 98 kB · 1000 položek
+gh repo list keboola --limit 1000 --json name,pushedAt                →  9,5 s ·        1000 položek
+```
+
+Tedy **pětinásobek za jedno číslo v řádku nabídky**. Z toho plynou tři rozhodnutí:
+
+- **Vlastní, delší limit** (`repositoryTimeout`, 300 s). Do společných třiceti sekund se to
+  nevejde, takže by výpis té organizace **vždycky** skončil `timedOut` — a to je chyba, kterou test
+  s prázdným výstupem nepozná, proto se limit v `FakeProcessRunner`u zaznamenává a je na něj
+  tvrzení. `run(_:timeout:)` má parametr **volitelný**, aby z jedné výjimky nebylo dvacet čtyři
+  míst, kde se dá napsat jiné číslo.
+- **Počet otevřených PR v tom zůstává, i když je drahý** — je v zákresu (řádek palety říká
+  `7 otevřených PR`), a hlavně: tahá se jednou denně, ne při hledání. Číslo je **otevřených PR**,
+  ověřeno na živém API (`keboola/keboola-operator`: `pullRequests.totalCount` 17 a `gh pr list
+  --state open` tamtéž 17).
+- **Dosažený strop je vidět z odpovědi** (`hitLimit`), a pozná se **z počtu, ne z hlaviček** —
+  `gh` o `--limit` nic neříká. Když jich přijde přesně tisíc, je pravděpodobnější, že je jich víc;
+  tvrdit „tisíc rep“ by tedy bylo víc, než co data unesou. Je to tatáž úvaha jako u 250 commitů
+  v `fetchCommits`.
+
+Dvě věci navíc:
+
+- **Prázdné jméno organizace se neptá vůbec.** Řádek v nastavení vzniká prázdný a `gh repo list ""`
+  je jistá chyba za jedno volání navíc — tatáž ochrana jako u prázdného dotazu zdroje
+  a u prázdné větve v `fetchDivergence`.
+- **Neplatné jméno zahodí položku, ne celý výpis** — na rozdíl od `GhSearchItem`, kde neplatné jméno
+  položí celé vyhledávání. Rozdíl je v tom, co na tom stojí: tam se z `summary` klíčují nálezy, tady
+  je to řádek v nabídce, takže jedno nepřečtené jméno mezi tisícem nemá důvod vzít organizaci celou.
+
+**Organizace, kterou `gh` nezná, dá větu z odpovědi**, ne prázdno. Změřeno — `gh repo list
+neexistuje-xyz` končí kódem 1 a na `stderr` je `the owner handle "…" was not recognized as either
+a GitHub user or an organization`. Klasifikace `GitHubError` se kvůli tomu **nemění**: hláška
+neobsahuje žádný ze signálů, takže z ní vyjde `commandFailed`, a `userDescription` tu větu nese celou.
+Přidat `not recognized` mezi `notFoundSignals` by bylo hezčí čtení za cenu zásahu do klasifikace,
+kterou čte dvacet čtyři metod — a k tomu, co #532 potřebuje (věta u řádku), to nepřidává nic.
 
 ## `ReviewPublisher` (`App/Publish/`)
 

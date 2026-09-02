@@ -64,6 +64,28 @@ struct CacheLayout: Sendable, Equatable {
     /// jsou to kilobajty a je to ručně napsaná otázka i zaplacená odpověď, ne pracovní kopie.
     var asks: URL { root.appending(path: "ask") }
 
+    /// Seznamy repozitářů organizací (#532) — `catalogs/<org>.json`.
+    ///
+    /// **Mimo dosah eviction**, jako `reviews/` a `drafts/`: je to sto kilobajtů na organizaci
+    /// a řídí se to stářím snímku, ne rozpočtem na místo. Uklízí se to podle konfigurace —
+    /// organizace, která v `searchOrganizations` není, ztratí svůj soubor
+    /// (`RepositoryCatalogStore.discard`).
+    ///
+    /// **`catalogs/`, ne `repositories/` ze zadání issue**, a je to vědomá odchylka:
+    /// `repositories` je v tomhle typu už zabrané a ukazuje na `repos/` s bare klony. Dvě složky
+    /// se skoro stejným jménem vedle sebe by v cache, do které se člověk chodí dívat, znamenaly
+    /// jedinou otázku — „ve které z nich to je?“ — pokaždé.
+    var catalogs: URL { root.appending(path: "catalogs") }
+
+    /// Seznam repozitářů jedné organizace: `catalogs/<org>.json`.
+    ///
+    /// Jméno organizace se do cesty dostane **jen ověřené** (`Policy.organizationName(from:)`) —
+    /// je to text z pole v nastavení a na téhle cestě se maže. Ověření dělá volající, protože
+    /// tenhle typ jen skládá cesty; hranici cache pak hlídá `CacheFile` jako u všeho ostatního.
+    func catalogFile(for organization: String) -> URL {
+        catalogs.appending(path: "\(organization).json")
+    }
+
     /// Konfigurace. Leží v kořeni cache, ne pod `reviews/` — edituje se ručně a má být
     /// vidět hned, jakmile člověk složku otevře.
     var configFile: URL { root.appending(path: "config.json") }

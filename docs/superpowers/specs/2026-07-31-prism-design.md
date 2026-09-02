@@ -5142,3 +5142,44 @@ to není vidět a někdy se i špatně scrolluje na výšku."* Byly to **tři r�
 **Co se tím potvrdilo o prvním kole:** „jedna scéna z pěti se neodscrolluje“ **nebyla mez harnessu**,
 ale ta animace — tedy vada, kterou uživatel viděl v okně. Zapsat ji jako mezeru bylo správně jen
 v tom, že se to nezamlčelo; špatně v tom, že se to vydávalo za vlastnost měřidla.
+
+### Záznam rozhodnutí — katalog repozitářů drží okno nastavení (#532)
+
+`searchOrganizations` v konfiguraci, čtecí `GitHubGateway.repositories(in:)` a cache
+`catalogs/<org>.json`. Rozhodnutí, která u toho padla, a co se u nich zamítlo:
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Katalog je vlastní typ** (`RepositoryCatalog` + `RepositoryCatalogStore` v `App/Store/`) | Nové pole ve stavu `AppStore.swift` | Uzavřený kus stavu s vlastní persistencí, jako `ReviewDraftStore` nebo `AskStore`. Rozhodl to **rozvrh dávky**: souběžně běžely #531 a #500 a obě do stavu `AppStore.swift` sahají, což je strop, který [`paralelni-vyvoj.md`](../../paralelni-vyvoj.md) na takové větve dává |
+| **Drží ho okno nastavení** (`@State` v `SettingsView`) | Držet ho `AppStore` a obnovovat na tiku pollingu | Dnes ho čte **jediná obrazovka** — ta pod tím oknem. Držet ho ve storu by znamenalo sáhnout do `AppStore.swift` (viz řádek výš), a **obnova na tiku** je u operace za 46,8 s špatná třída: tik má být levný a tichý. Až na katalogu bude stát paleta ⌘K (#533), přestěhuje se; **typ se u toho nemusí měnit, protože pravda leží v cache** |
+| **Denní obnova se dělá při použití, ne na tiku** — otevření stránky `Zdroje PR`, dopsání organizace, tlačítko | „Jednou denně na tiku“, jak stálo v zadání issue | Vědomá odchylka. Katalog nikdo nečte, dokud neotevře nastavení nebo (od #533) paletu, takže obnova na tiku je desítky sekund práce za nic. **Cena je zapsaná**: kdo otevře paletu s týden starou cache, dostane starý seznam — dorovnat to je na #533, které katalog dostane do ruky |
+| **Dotahuje se jedině na vyžádání** (`onSubmit`, tlačítko), nikdy na změnu textu | Fetch navěšený na uloženou hodnotu, jako to dělá `SettingsModel` se zápisem | `keboola` po písmenech je sedm hodnot, takže by z jednoho dopsaného řádku bylo **sedmkrát tři čtvrtě minuty** a sedm podprocesů `gh`. Je to ten nejcennější test celého issue — tvrdí, že se něco **ne**stalo |
+| **Počet otevřených PR v `--json` zůstává** | Vypustit ho a tahat jen jména | Je v zákresu (`7 otevřených PR` v řádku palety) a platí se jednou denně. **Cena je změřená a zapsaná** (46,8 s proti 9,5 s), takže se dá kdykoli otočit — a je vidět, co se tím koupí |
+| **Vlastní, delší limit na tohle volání** (`repositoryTimeout`) | Zvednout společný `timeout` gateway | Jedno volání z dvaadvaceti se do třiceti sekund nevejde; zvednout limit všem by znamenalo, že se u ostatních čeká pět minut na `gh`, který se zasekl. Tvrdí to test nad `FakeProcessRunner.timeouts` — **test s prázdným výstupem by prošel i s limitem, se kterým to v provozu vždycky spadne** |
+| **Řádky s polem, ne chipy** (`OrganizationListEditor`) | Nakreslit `.tagchip` podle zákresu | Mockup kreslí chipy i o řádek výš u `Moje loginy`, kde je aplikace od #389 sází jako obyčejný seznam polí — okno nastavení je nativní `Form`. Druhá vizuální podoba pro tutéž věc **na téže stránce** by znamenala, že se dva sousední řádky ovládají jinak. Sjednotit to na chipy je práce na obě sekce naráz, tedy jiné issue |
+| **`catalogs/<org>.json`** | `repositories/<org>.json` ze zadání issue | `CacheLayout.repositories` je zabrané a ukazuje na `repos/` s bare klony. Dvě složky se skoro stejným jménem vedle sebe v cache, do které se člověk chodí dívat, znamenají jednu otázku pokaždé |
+| **Souhrn bere nejstarší razítko** | Nejnovější, nebo razítko poslední obnovy | `obnoveno 7:58` je tvrzení o **celém** katalogu. S nejnovějším by se nad týden starým seznamem `keboola` psalo, že se obnovil před minutou, protože se mezitím dotáhl `ondrajodas` |
+| **Nad prázdným seznamem se cache neuklízí** | Vždycky smazat, co v konfiguraci není | Prázdno znamená buď „žádnou organizaci nemám“, nebo „konfigurace se ještě nenačetla“ (okno nastavení jde otevřít dřív, než dorazí disk) — a ty dva se odsud nerozeznají. Smazat na tom druhém = zahodit cache za desítky sekund práce. **Cena je jeden osiřelý soubor**, dokud si člověk nějakou organizaci nenapíše |
+| **`GitHubError` se nemění** | Přidat `not recognized` mezi `notFoundSignals`, ať hláška zní `GitHub o tom neví` | Klasifikaci čte dvaadvacet metod a věta z `gh` se do okna dostane i tak (`commandFailed` ji nese v `userDescription`). Hezčí čtení za zásah do sdíleného rozhodování se nevyplatí |
+
+**Tvrdá podmínka č. 1 se nemění**: `repositories(in:)` je čtení, `SingleWayOutTests` prochází beze
+změny a grep na `ReviewPublishing` i `BranchPushing` vypisuje týž seznam souborů. **Tvrdá podmínka
+č. 3 taky**: `catalogs/` leží v cache aplikace a hranici u čtení, zápisu i mazání drží `CacheFile`,
+tedy tatáž kontrola jako u nálezů a draftů.
+
+**Z renderu vypadla jedna oprava** ([`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)):
+řádek organizace nesl **stav** (`412 rep`, `zatím nenačteno`) a nad souhrnem, který říká totéž,
+z toho byla **tatáž věta dvakrát pod sebou** — u jedné organizace se zdvojoval i počet rep. Řádku
+zbyla **jen věta o selhání**, protože tu souhrn říct neumí (je na organizaci, ne na katalog);
+o počtech, stáří a sražení mluví **jedno místo**. `Policy.organizationRowStatus` se tím celá zahodila.
+
+**Druhá zapsaná mezera — a je to ta, na kterou se u revize diffu naráží nejdřív:** `openPullRequests`
+a `lastPushedAt` se **v #532 nikde nekreslí**. Je to vědomé: cache je **deliverable téhle poloviny
+milníku** (řádek palety z #533 má tři údaje a všechny tři jsou v zákresu), takže dotáhnout je až
+příště by znamenalo, že se všem uloženým snímkům změní tvar a tisíc rep se tahá znovu. Pravidlo
+*„stav, který se drží, ale nikdo ho nečte“* tím **není obejité, jen splacené dopředu**: kdyby #533
+nepřišlo, patří ta dvě pole z `--json` pryč — a co se tím ušetří, je změřené (46,8 s → 9,5 s).
+
+**Zapsaná mezera:** že se katalog **na tiku neobnovuje**, je vidět jedině tím, že člověk otevře
+nastavení po delší době a chvíli tam stojí `Obnovuje se…`. Do #533 to nikomu nevadí, protože seznam
+zatím nikdo jiný nečte; jak ho paleta dostane, patří k němu i rozhodnutí, kdo obnovu spouští.

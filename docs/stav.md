@@ -6352,3 +6352,63 @@ Testů **4776** ve 468 suitách; nových je sedm sad (`DiffSearchTests`, `DiffSe
 `DiffJumpPlacementTests` — poslední měří polohu po skoku v hostovaném okně), dvě měření barev
 v `DiffPaletteTests` a sonda `DiffSearchRenderProbe`. Co se v které z nich hlídá a proč,
 je v [`docs/testovani.md`](testovani.md).
+
+## #532 — organizace k prohledávání a cache seznamu repozitářů (M18)
+
+**První polovina M18** (*Otevřít jakýkoli PR*): aby paleta ⌘K našla repo podle jména, musí mít
+seznam rep — a ten se nedá tahat při každém úhozu. Přibyla tedy položka konfigurace
+`searchOrganizations`, sekce **Nastavení › Zdroje PR › Organizace k prohledávání**, čtecí
+`GitHubGateway.repositories(in:)` a cache `catalogs/<org>.json` s denní obnovou. Hledání v paletě na
+tom staví #533; **odsud se nic nedostane do fronty, karet, odznaku ani automatu** — frontu definují
+zdroje (#4) a věta pod sekcí to říká.
+
+**Celé issue plyne z jednoho změřeného čísla.** Výpis rep organizace `keboola`
+(`gh repo list --limit 1000 --json name,pullRequests,pushedAt`) stojí **46,8 s** a má 98 kB; bez pole
+`pullRequests` je to **9,5 s**, tedy pětinásobek za jedno číslo v řádku nabídky. Počet otevřených PR
+v tom zůstal (je v zákresu a platí se jednou denně), ale cena je zapsaná v
+[`docs/testovani.md`](testovani.md#kolik-stojí-výpis-repozitářů-organizace-532), takže se to dá
+kdykoli otočit s vědomím, co se tím koupí. Že `pullRequests.totalCount` je počet **otevřených** PR,
+je změřené taky (`keboola/keboola-operator`: 17 proti 17 z `gh pr list --state open`).
+
+**Tři věci z toho čísla vypadly.** (1) Výpis má **vlastní, delší limit** — do společných třiceti
+sekund se nevejde, takže by ta organizace **vždycky** skončila `timedOut`; tvrdí to test nad
+`FakeProcessRunner.timeouts`, protože test s prázdným výstupem by prošel i se špatným limitem.
+(2) **`--limit 1000` se doopravdy dosáhl** (přesně tisíc položek), takže se z počtu pozná sražení
+(`hitLimit`) a v okně stojí `nejméně 1 000 rep` — „tisíc rep“ by data neunesla. (3) **Dotahuje se
+jedině na vyžádání**: tlačítko `Obnovit`, otevření stránky, dopsání organizace (`onSubmit`). Psaní
+v poli nevolá nic — `keboola` po písmenech je sedm hodnot, tedy sedmkrát tři čtvrtě minuty a sedm
+podprocesů `gh`. Je na to test a je to to nejcennější tvrzení celé oblasti, protože tvrdí, že se
+něco **ne**stalo.
+
+**Dvě rozhodnutí jsou odchylka od zadání a obě jsou zapsané.** Katalog **drží okno nastavení**, ne
+`AppStore` (uzavřený kus stavu s vlastní persistencí; rozvrh dávky navíc nedovoloval třetí větev ve
+stavu `AppStore.swift`), a s tím se **denní obnova dělá při použití, ne na tiku pollingu** — katalog
+nikdo nečte, dokud neotevře nastavení nebo (od #533) paletu, takže obnova na tiku je desítky sekund
+práce za nic. Kdo obnovu spouští, až katalog dostane paleta, patří k #533. A sekce má **řádky
+s polem, ne chipy** ze zákresu: mockup kreslí chipy i o řádek výš u `Moje loginy`, kde je aplikace od
+#389 sází jako obyčejný seznam polí, protože okno nastavení je nativní `Form` — druhá vizuální podoba
+pro tutéž věc na téže stránce by znamenala, že se dva sousední řádky ovládají jinak. Zbytek je
+v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--katalog-repozitářů-drží-okno-nastavení-532).
+
+**Z renderu vypadla jedna oprava.** Řádek organizace nesl **stav** (`412 rep`, `zatím nenačteno`)
+a nad souhrnem, který říká totéž, z toho byla tatáž věta dvakrát pod sebou — u jedné organizace se
+zdvojoval i počet rep. Řádku zbyla jen věta o selhání (tu souhrn říct neumí, je na organizaci)
+a `Policy.organizationRowStatus` se celá zahodila.
+
+**Chyba se přiznává u řádku, ne prázdným seznamem.** Organizace, na kterou účet nevidí, a organizace
+bez repozitářů dávají obojí prázdno, takže se pod řádkem píše věta z `gh` (`the owner handle "…" was
+not recognized…`). Selhané obnovení přitom **nezahodí starý snímek** a jedna nedostupná organizace
+**nezastaví ostatní**. Souhrn vpravo bere **nejstarší** razítko (věta `obnoveno 7:58` je tvrzení
+o celém katalogu) a organizaci bez snímku počítá **zvlášť** (`1 organizace nenačtena`), aby součet
+mlčky nevynechal, co v něm není.
+
+**Tvrdá podmínka č. 1 se nemění** — `repositories(in:)` je čtení, `SingleWayOutTests` prochází beze
+změny. **Č. 3 taky**: `catalogs/` leží v cache aplikace a hranici u čtení, zápisu i mazání drží
+`CacheFile`, tedy tatáž kontrola jako u nálezů a draftů. Složka se jmenuje `catalogs/`, ne
+`repositories/` ze zadání, protože to jméno v `CacheLayout` ukazuje na `repos/` s bare klony.
+
+Testů **4821** ve 471 suitách; nové jsou tři sady (`RepositoryCatalogPolicyTests`,
+`RepositoryCatalogTests`, `GhRepositoryListTests`), rozšířené `ConfigurationTests`
+a `SettingsFieldsRenderTests` a fixture `gh/repo-list.json` (skutečný výstup nad veřejným `cli`).
+Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).

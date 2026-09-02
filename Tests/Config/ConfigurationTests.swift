@@ -811,6 +811,54 @@ struct RepositoryConfigDecodingTests {
         #expect(decoded.global.ownLogins == ["github-actions[bot]", "Copilot"])
     }
 
+    // MARK: - Organizace k prohledávání (#532)
+
+    @Test("Organizace ze souboru se přečtou")
+    func readsSearchOrganizations() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"searchOrganizations": ["keboola", "ondrajodas"]}}"#
+        )
+
+        #expect(configuration.global.searchOrganizations == ["keboola", "ondrajodas"])
+    }
+
+    /// Chybějící klíč = chování před #532, tedy „v paletě se repa nehledají“. Konfiguraci bez
+    /// toho klíče má na disku každý, kdo aplikaci používal dřív.
+    @Test("Chybějící organizace znamenají prázdno")
+    func fallsBackOnMissingSearchOrganizations() throws {
+        let configuration = try self.configuration(#"{"global": {"mode": "automatic"}}"#)
+
+        #expect(configuration.global.searchOrganizations.isEmpty)
+    }
+
+    /// Prázdné pole je **vlastní odpověď**, ne chybějící klíč: znamená totéž, ale je napsané.
+    @Test("Prázdné pole organizací projde")
+    func acceptsAnEmptySearchOrganizationList() throws {
+        let configuration = try self.configuration(#"{"global": {"searchOrganizations": []}}"#)
+
+        #expect(configuration.global.searchOrganizations.isEmpty)
+    }
+
+    /// Přísně jako `sources`, `skills` a `ownLogins`: tiše podstrčené prázdno by vypadalo jako
+    /// organizace, ve které nejsou žádná repa — a člověk by chybu hledal v `gh`, ne v čárce.
+    @Test("Rozbité organizace položí čtení, nepodstrčí prázdno")
+    func rejectsBrokenSearchOrganizations() {
+        #expect(throws: (any Error).self) {
+            try self.configuration(#"{"global": {"searchOrganizations": "keboola"}}"#)
+        }
+    }
+
+    @Test("Organizace přežijí cestu na disk a zpátky")
+    func searchOrganizationsSurviveARoundTrip() throws {
+        var original = Configuration.standard
+        original.global.searchOrganizations = ["keboola", "cli"]
+
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Configuration.self, from: encoded)
+
+        #expect(decoded.global.searchOrganizations == ["keboola", "cli"])
+    }
+
     /// **Tohle je ta past z #330** a je to test na to, že se něco NEstane: uložené `sources` se
     /// nemigrují, takže nový výchozí zdroj se do existující konfigurace nedoplní. Kdyby se
     /// doplňoval, dopsala by aplikace do ručně editovaného souboru dotaz, o který nikdo neřekl —

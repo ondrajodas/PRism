@@ -53,6 +53,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   klasifikace chyb tabulkou nad `ProcessResult`, mapování stavu vyčerpávajícím výčtem.
   Testuje se i **tvar argumentů** předaných `gh` — rozdělení dotazu na tokeny a seznam
   `--json` polí je kontrakt s `gh`, ne detail.
+- **Katalog repozitářů organizací (#532)** — čtyři sady a **to nejcennější je negativní tvrzení**:
+  `RepositoryCatalogTests.typingFetchesNothing` prochází mezistavy tak, jak vznikají při psaní
+  (`k`, `ke`, `keb`, … `keboola`), a tvrdí, že se **nezavolalo nic**. Rozbije se to potichu a je to
+  ta nejdražší chyba, jakou tady jde udělat: jeden výpis `keboola` stojí 46,8 s, takže by
+  z dopsaného řádku bylo sedm dotazů po tři čtvrtě minuty. Zbytek po sadách:
+
+  `Policy` výčtem (`RepositoryCatalogPolicyTests`): co je platné jméno organizace — a **hlavně co
+  není**, protože z něj vzniká cesta `catalogs/<org>.json` a na té cestě se maže (`..`, `.`,
+  `../../etc`, `keboola/vault`, `---`). Dál denní lhůta včetně **přesné hranice** (24 h se obnovuje)
+  a **razítka z budoucnosti** (bere se jako čerstvé — posunuté hodiny nemají spustit tři čtvrtě
+  minuty práce), a co se o katalogu smí napsat: nejstarší razítko, `nejméně` u sraženého výpisu,
+  `1 organizace nenačtena` u té bez snímku.
+
+  Cache (`RepositoryCatalogTests`): zápis a čtení **přes dvě instance** (druhá = jiné okno
+  nastavení, tedy prázdná paměť a čtení z disku), stáří přes `FakeTimeSource.advance` (**ne pevný
+  čas**), `Obnovit` ignorující čerstvost, dedup v jednom seznamu, selhání jedné organizace, které
+  nezahodí předchozí snímek ani nezastaví ostatní, úklid souboru po smazané organizaci, **prázdný
+  seznam, který cache nesmaže**, a rozbitý soubor, který nepoloží zbytek.
+
+  Gateway (`GhRepositoryListTests`): tvar argumentů a `--json` polí, **vlastní delší limit**
+  (`FakeProcessRunner.timeouts` — bez něj by výpis `keboola` vždycky skončil `timedOut` a test
+  s prázdným výstupem by to nepoznal), skutečný výstup `gh repo list cli` jako fixture,
+  `hitLimit` nad stropem i pod ním, repo bez `pushedAt`, neplatné jméno, které zahodí **položku,
+  ne výpis**, prázdná organizace, na kterou se gateway neptá, a **skutečná hláška `gh`** na
+  neexistující organizaci, u které se ověřuje, že se ta věta dostane do `userDescription`.
+
+  Okno (`SettingsFieldsRenderTests`): že sekce na stránce `Zdroje PR` **doopravdy je** a je napojená
+  na konfiguraci, že se **dotažený katalog od nedotaženého liší** a že nedostupná organizace má
+  u řádku **větu** — všechno rozdílem bitmap, jako u polí z #389. Scény se dají pustit na disk
+  (`TEST_RUNNER_PRISM_RENDER_DIR`) a **z jedné z nich vypadla oprava**: řádek nesl stav (`412 rep`,
+  `zatím nenačteno`) a nad souhrnem, který říká totéž, z toho byla tatáž věta dvakrát pod sebou.
 - **Rozřazení PR podle autora (#330)** — tři vrstvy a v každé je nejcennější to, co tvrdí, že se
   něco **NEstalo**:
 
@@ -8168,3 +8199,45 @@ Panel se kouká sondou `BranchSyncRenderProbe` (scény `13-slevam`, `14-nerozres
 a se seznamem souborů před podmětem se věta rozpadla („Konflikt v a, b, c session nerozřešila…“).
 Odtud pořadí *Session konflikt nerozřešila (…)*.
 
+
+## Kolik stojí výpis repozitářů organizace (#532)
+
+Změřeno na `keboola` (`gh` 2.x, tenhle stroj, ráno 2. 9. 2026). **Je to to jediné číslo, ze kterého
+celé #532 plyne** — kdyby byl výpis levný, žádná cache by nebyla potřeba.
+
+```bash
+time gh repo list keboola --limit 1000 --json name,pullRequests,pushedAt > /tmp/a.json
+#  → 46,8 s · 98 kB · 1000 položek
+time gh repo list keboola --limit 1000 --json name,pushedAt > /tmp/b.json
+#  →  9,5 s ·        1000 položek
+```
+
+Tři věci, které z toho vypadly:
+
+- **Počet otevřených PR je pětinásobek ceny.** Zůstává tam, protože je v zákresu (řádek palety říká
+  `7 otevřených PR`) a platí se jednou denně, ne při hledání. Kdyby to někdy začalo vadit, tohle je
+  ten řádek, který se z `--json` vyhodí — a číslo výš říká, co se tím koupí.
+- **Do třiceti sekund se to nevejde**, takže výpis má vlastní limit. Ověřuje se to tvrzením nad
+  `FakeProcessRunner.timeouts`, protože **test s prázdným výstupem doběhne i s limitem, se kterým by
+  to v provozu vždycky spadlo** — tedy měřidlo, které vydá tutéž hodnotu pro „funguje“
+  i „nefunguje“.
+- **`--limit 1000` se dosáhl.** Výpis vydal **přesně** tisíc položek, tedy `keboola` jich má víc.
+  Odtud `hitLimit` a `nejméně 1 000 rep` v okně: „tisíc rep“ by bylo tvrzení, které data neunesou.
+
+**Že je `pullRequests.totalCount` počet otevřených PR, je taky změřené**, ne odvozené z dokumentace:
+
+```bash
+gh repo list keboola --limit 3 --json name,pullRequests   # keboola-operator → 17
+gh pr list --repo keboola/keboola-operator --state open --json number   # → 17 položek
+```
+
+A **hláška na neexistující organizaci** je fixture toho testu, ne vymyšlený text:
+
+```bash
+gh repo list neexistuje-xyz --limit 5 --json name    # exit 1
+# stderr: the owner handle "neexistuje-xyz" was not recognized as either
+#         a GitHub user or an organization
+```
+
+Klasifikace `GitHubError` z toho vydá `commandFailed`, protože hláška žádný ze signálů neobsahuje —
+a `userDescription` tu větu nese celou, což je přesně to, co se má objevit u řádku organizace.

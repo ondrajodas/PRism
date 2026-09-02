@@ -1484,7 +1484,8 @@ nepovede, nic se nezablokuje: puntík se řídí voláními a nápověda po hove
 nepovedlo a kdy se to zjišťovalo.
 
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
-PR, **další „moje“ loginy** (`ownLogins`, #330), **jméno MCP nástroje, kterým se čte text issue**
+PR, **další „moje“ loginy** (`ownLogins`, #330), **organizace k prohledávání**
+(`searchOrganizations`, #532), **jméno MCP nástroje, kterým se čte text issue**
 (`issueTextTool`, #345), sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
 review, jazyk nálezů, povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
@@ -1514,6 +1515,24 @@ a to je celé rozhodnutí, které za tím je: `issueTextTool` je věc **review**
 
 `appearance` v nastavení schválně **není** — přepíná se v railu (#278) a druhé místo by se s ním
 rozešlo.
+
+**Organizace k prohledávání** (#532) jsou na stránce `Zdroje PR`, pod `Moje loginy` — je to seznam
+míst, ve kterých se hledají **repozitáře podle jména**, ne další zdroj fronty. Rozdíl je celý v tom,
+co z něj plyne: zdroje říkají, co se tahá pravidelně a co se počítá do karet, odznaku a automatu,
+kdežto odsud se jen hledá, když chci otevřít nějaký PR ke čtení.
+
+Seznam repozitářů každé organizace se **drží v cache** (`catalogs/<org>.json`), protože jeho
+dotažení je drahé — nad `keboola` naměřeno **46,8 s** a 98 kB (`gh repo list --limit 1000` s počtem
+otevřených PR; bez toho počtu 9,5 s). Z toho plyne, jak se obnovuje: **jednou denně, dopsáním
+organizace nebo tlačítkem `Obnovit`** — a **nikdy při psaní**, protože `keboola` po písmenech je
+sedm hodnot, tedy sedm takových výpisů. Pod seznamem stojí souhrn `412 rep · obnoveno 7:58` (bere
+**nejstarší** razítko, protože je to tvrzení o celém katalogu) a organizaci bez snímku počítá
+zvlášť — `1 organizace nenačtena`, aby součet mlčky nevynechal, co v něm není. Když repozitářů
+přijde přesně tisíc, stojí tam `nejméně 1 000 rep`: `--limit` se dosáhl, takže jich je víc.
+
+**Organizace, na kterou účet nevidí, dostane větu z `gh`** pod svým řádkem, ne prázdný seznam —
+prázdno by vypadalo jako organizace bez repozitářů. Selhané obnovení přitom nezahodí, co už v cache
+je, a jedna nedostupná organizace nezastaví ostatní.
 
 **Časový limit běhu se dá nastavit** (#320) na stránce `Review a skilly`, v sekci `Režim review`.
 Do té doby byl zadrátovaný v kódu (patnáct minut), takže dlouhé review skončilo `timeout`
@@ -2471,8 +2490,9 @@ App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace, předvolby
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu;
-                          labely a vyžádaní reviewery i nabídky k nim (#392) a hlavy víc PR jedním
-                          dávkovým dotazem (#420) — pořád bez zápisu
+                          labely a vyžádaní reviewery i nabídky k nim (#392), hlavy víc PR jedním
+                          dávkovým dotazem (#420) a repozitáře organizace (#532 — nejdražší čtení,
+                          proto vlastní limit) — pořád bez zápisu
   Checkout/               vlastní cache repozitářů: klony, worktrees, úklid
   Config/                 config.json: globální default, override per repo, čtení a zápis
   Diff/                   parsování unified diffu na soubory, hunky a řádky, slití do dvojic pro pohled
@@ -2502,7 +2522,9 @@ App/                      zdrojáky aplikace — target PRism
                           ActivityNoticeLedger — o čem už se u vlastního PR hlásilo (#335);
                           ActivityLog a ActivityVisitLedger — záznam dění se stropem 200 položek
                           a značka poslední návštěvy té sekce (#414);
-                          AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452)
+                          AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452);
+                          RepositoryCatalog a RepositoryCatalogStore — seznamy repozitářů organizací
+                          v cache s denní obnovou (#532)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Terminal/               vestavěný terminál (#459): plocha SwiftTermu obarvená paletou, hlášení fokusu
                           a zabití popředí pty; hostitel drží od #460 víc relací na pull request
