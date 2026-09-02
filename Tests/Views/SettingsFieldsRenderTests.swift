@@ -5,7 +5,7 @@ import Testing
 
 @testable import PRism
 
-/// Že ta dvě pole z #389 v okně **doopravdy jsou** a že se v nich hodnota mění.
+/// Že pole a sekce z #389 a #532 v okně **doopravdy jsou** a že se v nich hodnota mění.
 ///
 /// Existuje kvůli jedné mezeře: `SettingsFieldEffectTests` tvrdí, co z hodnoty plyne, ale jde na
 /// to přes `SettingsModel` — takže by prošlo i nad stránkou, na které to pole vůbec není nakreslené
@@ -20,12 +20,15 @@ import Testing
 /// `NSHostingView` v okně, ne `ImageRenderer`: `Form` je `ScrollView`, jehož obsah se offscreen
 /// nerasterizuje. Okno se ukazuje **bez animace** (#462).
 @MainActor
-@Suite("Nastavení — pole z #389 jsou v okně nakreslená")
+@Suite("Nastavení — pole z #389 a sekce z #532 jsou v okně nakreslené")
 struct SettingsFieldsRenderTests {
     /// Obsahová část okna nastavení při `minWidth` 720: navigace 210 bodů a dělič 1. Užší
     /// z možných šířek je ta zajímavá — do ní se popisky vejdou nejhůř.
+    ///
+    /// **Výchozí, ne jediná** (#532): sekce organizací se v širokém okně rozvrhuje jinak
+    /// (`ViewThatFits`), takže scéna si šířku umí přebít.
     private static let width: CGFloat = 509
-    /// Vyšší než okno: obě sekce jsou až za těmi, které na stránce byly dřív.
+    /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     private static let height: CGFloat = 1600
 
     // MARK: - Text issue z trackeru
@@ -55,9 +58,9 @@ struct SettingsFieldsRenderTests {
     // MARK: - Moje loginy
 
     @Test("Seznam loginů se na stránce Zdroje PR kreslí")
-    func theLoginListIsDrawn() throws {
-        let empty = try renderSources("loginy-prazdne", logins: [], viewer: "ondrajodas")
-        let filled = try renderSources(
+    func theLoginListIsDrawn() async throws {
+        let empty = try await renderSources("loginy-prazdne", logins: [], viewer: "ondrajodas")
+        let filled = try await renderSources(
             "loginy-vyplnene",
             logins: ["github-actions[bot]"],
             viewer: "ondrajodas"
@@ -69,11 +72,102 @@ struct SettingsFieldsRenderTests {
     /// Řádek s přihlášeným účtem musí být vidět, a nenačtený viewer se od načteného musí lišit —
     /// je to ten stav, ve kterém je každý pull request cizí.
     @Test("Přihlášený účet je vidět a nenačtený se od načteného liší")
-    func theSignedInAccountIsVisible() throws {
-        let known = try renderSources("ucet-znamy", logins: [], viewer: "ondrajodas")
-        let unknown = try renderSources("ucet-nezjisteny", logins: [], viewer: "")
+    func theSignedInAccountIsVisible() async throws {
+        let known = try await renderSources("ucet-znamy", logins: [], viewer: "ondrajodas")
+        let unknown = try await renderSources("ucet-nezjisteny", logins: [], viewer: "")
 
         #expect(known != unknown)
+    }
+
+    // MARK: - Organizace k prohledávání (#532)
+
+    /// Že sekce v okně **doopravdy je** a je napojená na konfiguraci. Bez tohohle by prošla
+    /// i stránka, na které se `searchOrganizations` nikde nekreslí — a nastavení by se dalo
+    /// napsat jedině ručně do souboru, tedy přesně ten stav, ze kterého #389 sekce vyváděl.
+    @Test("Seznam organizací se na stránce Zdroje PR kreslí")
+    func theOrganizationListIsDrawn() async throws {
+        let empty = try await renderSources("organizace-prazdne", logins: [], viewer: "ondrajodas")
+        let filled = try await renderSources(
+            "organizace-vyplnene",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola"]
+        )
+
+        #expect(empty != filled)
+    }
+
+    /// Nedotažená a dotažená organizace **se od sebe musí poznat** — jinak by `zatím nenačteno`
+    /// vypadalo stejně jako `412 rep · obnoveno 7:58` a z okna by nebylo poznat, jestli cache je.
+    @Test("Dotažený katalog se od nedotaženého v okně liší")
+    func theFetchedCatalogLooksDifferent() async throws {
+        let pending = try await renderSources(
+            "organizace-nenacteno",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola"]
+        )
+        let loaded = try await renderSources(
+            "organizace-nactene",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola", "ondrajodas"],
+            catalog: ["keboola": 412, "ondrajodas": 37]
+        )
+
+        #expect(pending != loaded)
+    }
+
+    /// Že `.set-row` ze zákresu (chipy vlevo, souhrn a `Obnovit` vpravo) **v širokém okně
+    /// doopravdy nastane** — a v úzkém se zalomí na dva řádky. `ViewThatFits` rozhoduje z rozměru,
+    /// takže tvrzení je rozdíl bitmap při dvou šířkách; bez toho by prošla i verze, která je
+    /// vždycky pod sebou.
+    @Test("Souhrn jde vedle chipů, dokud se vejde")
+    func theSummarySitsBesideTheChipsWhenItFits() async throws {
+        let narrow = try await renderSources(
+            "organizace-uzke",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola", "ondrajodas"],
+            catalog: ["keboola": 412, "ondrajodas": 37],
+            width: 509
+        )
+        let wide = try await renderSources(
+            "organizace-siroke",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola", "ondrajodas"],
+            catalog: ["keboola": 412, "ondrajodas": 37],
+            width: 820
+        )
+
+        #expect(narrow != wide)
+    }
+
+    /// **Věta u řádku je jediné, co organizaci bez přístupu odlišuje od organizace bez repozitářů**
+    /// — obojí je jinak prázdný seznam. Text je skutečná hláška `gh repo list` na neznámé jméno.
+    @Test("Nedostupná organizace má u řádku větu")
+    func theFailureSentenceIsDrawn() async throws {
+        let ok = try await renderSources(
+            "organizace-bez-chyby",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola"],
+            catalog: ["keboola": 412]
+        )
+        let failed = try await renderSources(
+            "organizace-chyba",
+            logins: [],
+            viewer: "ondrajodas",
+            organizations: ["keboola", "tajna-organizace"],
+            catalog: ["keboola": 412],
+            failing: [
+                "tajna-organizace":
+                    "the owner handle \"tajna-organizace\" was not recognized as either a GitHub user or an organization"
+            ]
+        )
+
+        #expect(ok != failed)
     }
 
     // MARK: - Kreslení
@@ -86,16 +180,68 @@ struct SettingsFieldsRenderTests {
         }
     }
 
-    private func renderSources(_ name: String, logins: [String], viewer: String) throws -> Data {
+    /// - Parameter catalog: kolik rep má která organizace v cache. Prázdná mapa = nic dotaženého,
+    ///   tedy stav `zatím nenačteno`.
+    private func renderSources(
+        _ name: String,
+        logins: [String],
+        viewer: String,
+        organizations: [String] = [],
+        catalog snapshots: [String: Int] = [:],
+        failing: [String: String] = [:],
+        width: CGFloat = Self.width
+    ) async throws -> Data {
         var configuration = Configuration.standard
         configuration.global.ownLogins = logins
-        return try bitmap(name) {
+        configuration.global.searchOrganizations = organizations
+        let catalog = await catalog(snapshots, failing: failing)
+        return try bitmap(name, width: width) {
             SourcesSettingsView(
                 settings: SettingsModel(configuration: configuration) { _ in },
-                viewer: viewer
+                viewer: viewer,
+                catalog: catalog,
+                time: FakeTimeSource()
             )
         }
     }
+
+    /// Katalog, ve kterém už něco leží — přes fake gateway, tedy touž cestou, jakou se plní
+    /// doopravdy. Míří do dočasné složky (drží ji suite), takže render nesáhne na skutečnou cache.
+    private func catalog(
+        _ snapshots: [String: Int],
+        failing: [String: String] = [:]
+    ) async -> RepositoryCatalog {
+        let gateway = FakeGitHubGateway(always: .success([]))
+        for (organization, message) in failing {
+            gateway.organizationFailures[organization] = GitHubError.commandFailed(
+                exitCode: 1,
+                message: message
+            )
+        }
+        for (organization, count) in snapshots {
+            gateway.organizationRepositories[organization] = OrganizationRepositories(
+                repositories: (0..<count).map {
+                    OrganizationRepository(
+                        repo: RepoID(owner: organization, name: "r\($0)"),
+                        openPullRequests: $0 % 5,
+                        lastPushedAt: nil
+                    )
+                },
+                hitLimit: false
+            )
+        }
+        let catalog = RepositoryCatalog(
+            gateway: gateway,
+            store: RepositoryCatalogStore(layout: CacheLayout(root: workspace.url)),
+            time: FakeTimeSource()
+        )
+        await catalog.refresh(organizations: Set(snapshots.keys).union(failing.keys).sorted())
+        return catalog
+    }
+
+    /// Dočasná cache pro katalog v renderu. `TemporaryDirectory` se maže v `deinit`, takže se
+    /// musí držet po celý test.
+    private let workspace = try! TemporaryDirectory()
 
     /// **Vzhled se nastavuje na svém okně**, ne na `NSApp` (#367) — a `performAsCurrentDrawingAppearance`
     /// je tu proto, že paleta je dynamická `NSColor`.
@@ -103,17 +249,21 @@ struct SettingsFieldsRenderTests {
     /// - Parameter name: jméno souboru, když je nastavené `PRISM_RENDER_DIR`. Bitmapy jsou tady
     ///   **tvrzení**, ale koukat se na ně je pořád ta jediná cesta, jak si zkontrolovat sazbu —
     ///   proto se dají pustit i na disk, touž cestou jako sondy.
-    private func bitmap<Content: View>(_ name: String, _ content: () -> Content) throws -> Data {
+    private func bitmap<Content: View>(
+        _ name: String,
+        width: CGFloat = Self.width,
+        _ content: () -> Content
+    ) throws -> Data {
         let appearance = try #require(NSAppearance(named: .darkAqua))
         var result: Result<Data, any Error>?
         appearance.performAsCurrentDrawingAppearance {
             do {
                 let scene = content()
-                    .frame(width: Self.width, height: Self.height)
+                    .frame(width: width, height: Self.height)
                     .environment(\.colorScheme, .dark)
                     .tint(Palette.accent)
                 let hosting = NSHostingView(rootView: scene)
-                hosting.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.height)
+                hosting.frame = NSRect(x: 0, y: 0, width: width, height: Self.height)
                 let window = NSWindow(
                     contentRect: hosting.frame,
                     styleMask: [.borderless],

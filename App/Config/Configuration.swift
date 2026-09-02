@@ -34,6 +34,19 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// (běžný stav) vypadal stejně jako nenačtený viewer, a to je stav, ve kterém je **každý** PR
     /// cizí.
     var ownLogins: [String]
+    /// Organizace, ve kterých paleta ⌘K hledá repozitáře podle jména (#532).
+    ///
+    /// **Není to zdroj fronty, a je to celý rozdíl proti `sources`.** Zdroje říkají, co se má
+    /// pravidelně tahat, co se počítá do karet, odznaku a automatu; tohle je jen seznam míst, ve
+    /// kterých se **hledá**, když chci otevřít nějaký PR ke čtení. Prázdné pole je běžný stav
+    /// a znamená, že se v paletě žádná repa nabízet nebudou — nic dalšího z něj neplyne.
+    ///
+    /// **Globálně, ne per repo**: „kde hledám repa“ z repozitáře neplyne, stejně jako `ownLogins`
+    /// nebo prompt.
+    ///
+    /// Seznam rep každé organizace se drží v cache (`RepositoryCatalog`), protože dotažení je
+    /// drahé — nad `keboola` změřeno 46,8 s. Konfigurace tedy nese jen jména organizací, ne data.
+    var searchOrganizations: [String]
     /// Sada, která platí, dokud ji nepřebije jazyk nebo repo. Je to ta „hvězdička“
     /// z rozpisu v #24 — druhý zápis téhož by byla past pro toho, kdo soubor čte.
     ///
@@ -130,6 +143,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     init(
         sources: [Source],
         ownLogins: [String] = [],
+        searchOrganizations: [String] = [],
         skills: [String],
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
         blockingCategories: [String],
@@ -150,6 +164,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     ) {
         self.sources = sources
         self.ownLogins = ownLogins
+        self.searchOrganizations = searchOrganizations
         self.skills = skills
         self.skillsByLanguage = skillsByLanguage
         self.blockingCategories = blockingCategories
@@ -178,6 +193,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // by z PR mého agenta udělalo cizí PR, tedy řádek ve frontě k review, o které nikdo
         // nepožádal — a to je zrovna to rozřazení, kvůli kterému pole existuje.
         ownLogins = try container.decodeIfPresent([String].self, forKey: .ownLogins) ?? standard.ownLogins
+        // Chybějící klíč = prázdné pole, tedy „v paletě se repa nehledají“ — chování před #532.
+        // **Hodnota jiného typu položí čtení** (`try`, ne `try?`), jako u `sources`, `skills`
+        // a `ownLogins`: tiše podstrčené prázdno by vypadalo jako organizace, ve které nejsou
+        // žádná repa, a člověk by hledal chybu v `gh` místo v čárce v souboru.
+        searchOrganizations = try container.decodeIfPresent([String].self, forKey: .searchOrganizations)
+            ?? standard.searchOrganizations
         skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? standard.skills
         // Rozbitá mapa se hlásí ze stejného důvodu jako rozbité `skills`: tiše podstrčený
         // výchozí (prázdný) obsah by na jazykových repech pustil jiné reviewery, než jaké

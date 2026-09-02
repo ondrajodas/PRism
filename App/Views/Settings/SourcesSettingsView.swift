@@ -10,6 +10,9 @@ struct SourcesSettingsView: View {
     /// Login z `gh api user`. Prázdný = ještě se nezjistil; **není to totéž jako prázdný seznam
     /// vlastních loginů** a v okně se to nesmí slít.
     let viewer: String
+    /// Seznamy repozitářů organizací (#532) — sekce `Organizace k prohledávání` níž.
+    let catalog: RepositoryCatalog
+    let time: any TimeSource
 
     var body: some View {
         Form {
@@ -38,8 +41,34 @@ struct SourcesSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section {
+                OrganizationListEditor(
+                    organizations: $settings.draft.global.searchOrganizations,
+                    catalog: catalog,
+                    refreshStale: { Task { await catalog.refreshStale(organizations: organizations) } },
+                    refreshAll: { Task { await catalog.refresh(organizations: organizations) } },
+                    now: time.now
+                )
+            } header: {
+                Text("Organizace k prohledávání")
+            } footer: {
+                Text("Seznam repozitářů těchhle organizací se drží v cache, aby se dal prohledávat bez dotazu na GitHub — dotažení je nad velkou organizací věc desítek sekund. Obnovuje se **jednou denně, dopsáním organizace nebo tlačítkem**, nikdy při psaní. **Není to zdroj fronty**: co se tahá pravidelně a počítá se do karet, odznaku a automatu, říkají zdroje výš.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
+        // Dotáhne, co v cache chybí nebo je starší než den. **Při otevření stránky, ne na tik** —
+        // je to desítky sekund práce nad seznamem, do kterého se nikdo nedívá, dokud sem nepřijde.
+        .task { await catalog.refreshStale(organizations: organizations) }
+    }
+
+    /// Organizace tak, jak jsou zrovna ve formuláři — ne z uložené konfigurace: mezi dopsáním
+    /// řádku a zápisem na disk je zpoždění (`SettingsModel`), takže by se čerstvě napsaná
+    /// organizace nedotáhla.
+    private var organizations: [String] {
+        settings.draft.global.searchOrganizations
     }
 
     /// Přihlášený účet — **řádek ke čtení, ne pole**. Nad seznamem schválně: bez něj by prázdný
