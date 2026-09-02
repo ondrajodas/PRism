@@ -6815,7 +6815,7 @@ Zkouší to člověk na běžící aplikaci; já to změřil na slotové instanc
 zbývá **jeden průchod grafu** mezi spotřebováním kotvy a skokem, ve kterém platí poloha před
 skokem — zabité aplikaci v tom okamžiku se kotva posune o výřez.
 
-Testů **5003** ve 486 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
+Testů **5005** ve 486 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
 `DiffScrollAnchorTests`, `OpenTabsStoreTests`, `AppStoreTabRestoreTests`), rozšířené
 `PullRequestOriginTests` a `AppDelegateTerminationTests` a k tomu sonda
 `WindowTabStripRenderProbe` (pruh se všemi pěti značkami, pouští se ručně jako ostatní sondy).
