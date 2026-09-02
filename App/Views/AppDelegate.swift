@@ -3,7 +3,7 @@ import AppKit
 /// Zachytí ukončení aplikace, dokud běží review — a při startu uklidí, co po zabité aplikaci
 /// zbylo.
 ///
-/// Dělá u toho tři věci a každá řeší jinou ztrátu:
+/// Dělá u toho čtyři věci a každá řeší jinou ztrátu:
 ///
 /// 1. **Zeptá se** (#94). Nálezy, které reviewer nahlásil, jsou v běžící session, ne na disku,
 ///    a zavřít okno uprostřed review je obvykle omyl. Dialog nepokrývá pád aplikace ani zabití
@@ -18,6 +18,9 @@ import AppKit
 ///    kde spustit a `claude -p` běží dál pod `launchd`. Změřeno `ps -o ppid` na potomkovi
 ///    `Foundation.Process`u: přežije rodičovi `SIGTERM` i `SIGKILL`. Prevence na macOS není
 ///    (viz `RunningSessions`), takže zbývá úklid při dalším startu.
+/// 4. **Zapíše snímek otevřených záložek** (#527), a to při **každém** ukončení, ne jen v tom,
+///    kde na něco běží. Je to jediné místo, ze kterého se dá zachytit **scroll v diffu**, kterým
+///    člověk skončil: `bin/run.sh` po mergi ukončuje aplikaci Apple eventem, tedy touhle cestou.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kolik review právě běží. Doplní `PRismApp`, jakmile má store; do té doby nic neběží.
     @MainActor var runningReviews: () -> Int = { 0 }
@@ -36,6 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Zabije shelly v zásuvce (#459). **Synchronně**, na rozdíl od review: signál odchází přímo
     /// z téhle cesty, takže není na co čekat.
     @MainActor var stopTerminals: @MainActor () -> Void = {}
+
+    /// Zapíše snímek otevřených záložek (#527). Taky **synchronně**, a ze stejného důvodu jako
+    /// u shellů: `applicationShouldTerminate` se v běžném případě vrací `.terminateNow`, po
+    /// kterém už žádné další kolo runloopu nepřijde — `await` by tady znamenal snímek, na který
+    /// nikdo nepočká.
+    @MainActor var saveOpenTabs: @MainActor () -> Void = {}
 
     /// Jak se zeptat. Vlastnost, ne jen metoda, kvůli testům: `NSAlert.runModal()` v nich čeká
     /// na kliknutí, které nikdo neudělá.
@@ -83,6 +92,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // otevřel druhý dialog nad ukončením, které už běží, a systému by se odpovědělo
             // dvakrát — `reply(toApplicationShouldTerminate:)` je na jedno odložené ukončení.
             guard !isStoppingReviews else { return .terminateLater }
+
+            // **Záložky napřed, před dotazem** (#527), a je to celý důvod, proč se snímek ukládá
+            // i odsud: `bin/run.sh` po mergi ukončuje aplikaci Apple eventem, tedy touhle cestou,
+            // a scroll, kterým člověk v diffu skončil, leží do té chvíle jen v paměti. Před
+            // dotazem schválně — když se člověk rozhodne **nekončit**, snímek se tím nezkazí
+            // (je to tentýž stav, jaký zapíše příští změna záložky), kdežto po zrušeném dotazu
+            // by se sem už nikdo nevrátil.
+            saveOpenTabs()
 
             // Co běží a jak se na to zeptat, rozhoduje `Policy.quitPrompt` — `nil` znamená, že
             // neběží nic. Zabíjení shellů se nedá odložit za `terminateNow`, takže se dělá tady:

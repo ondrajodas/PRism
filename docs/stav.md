@@ -6901,3 +6901,87 @@ protože „souhlasí znak po znaku“ je tvrzení o celém souboru, kdežto čt
 si kdo všiml.
 
 Na obrazovce se nemění nic; testů dál **4958** ve 481 suitách, beze změny.
+## #527 — záložky přežijí restart
+
+**Aplikace se podle pravidel repa restartuje `bin/run.sh` po každém mergi**, takže do #527 každý
+merge zavřel všechno rozečtené a scroll v diffu se ztratil. Od #527 leží snímek pruhu
+v `tabs.json` v kořeni cache slotu: identita PR, tab v ní, kotva scrollu jako **soubor a řádek**
+a která záložka byla aktivní. Zapisuje se **při každé změně záložky a při ukončení**, čte se
+**jednou** při startu — jako **první** krok `keepFresh()`, tedy před prvním tikem. Zákres je
+v [sekci 44](navrh.html) návrhu (deck *Směry pro PRism*, stránka *Tření › T1*).
+
+**Nejcennější věta celého issue: obnovení nic nespouští.** Nepustí review ani session, nepřipraví
+pracovní kopii a nepřidá nic do fronty — dotáhne **detail**, a to čtením (`gh pr view` přes
+`GitHubGateway`, který zápisové metody nemá). Automat čte `summaries` z tiku, takže se o obnovené
+záložce nemá kde dozvědět (#4). Test na to má scénu **s prázdnými zdroji a zapnutým automatem**,
+tedy ve stavu, kde je otevřená záložka to jediné, co by se dalo spustit; **ověřeno vložením
+regrese** — `startReview` v obnovení shodí tři tvrzení.
+
+**Puntík načítání je nový, pátý stav značky u záložky** — a je to jediná odchylka od zákresu.
+Deck ho kreslí prstýnkem (`.spin`), jenže ten v tomhle okně znamená **běží review** (nápověda to
+říká doslova) a po startu neběží nic; reuse by tedy pár sekund po každém startu tvrdil, že na
+každé obnovené záložce běží review. Deck si přitom v poznámce sám říká, že je to *třetí věc* —
+kresba jen sáhla po existující třídě. V aplikaci i v sekci 44 je proto **dutý nehybný kroužek**
+(`.tdot-load`, `Palette.ink3`) a v návrhu je u něj napsané, proč `.dot` ani `.spin` nestačily.
+
+**Značku skládá `Policy.tabMark`, ne `if`y ve view.** Pět pater — běh, načítání, rozdělané review,
+mergnutý/zavřený PR, stav review — je rozhodnutí nad daty a jediné, co o něm jde tvrdit, je
+**pořadí**. `ReviewTabsView` proto přišel o tři vstupy a dostal jeden. **Mergnutý a zavřený PR
+kreslí stav pull requestu**, ne review: od nálezů se u nich další práce neodvíjí, dá se to jedině
+dočíst a zavřít — a **zavírá to člověk, ne tik pollingu** (pravidlo z #67 tím dostalo druhou
+půlku: teď se dá dočíst i po restartu).
+
+**Značka přijaté záložky se z množiny stala mapou s důvodem** (`adoptedTabs`, `TabAdoption`:
+`link` z #531, `restored` z #527). Obnovená záložka potřebuje totéž ve třech věcech (shrnutí
+z detailu, přežití úklidu po tiku, `loading` místo `gone`) a liší se v jedné — pilulce
+`mimo zdroje`, kterou **nedostane**: obnovení běží před prvním tikem, takže by bliklo u každé
+záložky a u těch, které z fronty vypadly, by tvrdilo „otevřel jsi ho odkazem“. Druhá množina vedle
+té z #531 by znamenala tři místa, na kterých se dá zapomenout jedna z nich, a potichu.
+
+**Kotva scrollu je soubor a řádek, ne offset.** Offset po restartu neplatí — diff se v pohledu pod
+sebou zalamuje podle šířky okna (změřeno u #152: odhad z počtu řádků byl proti skutečnosti
+trojnásobně mimo). Posadí se **tou samou cestou, jakou skáče paleta na nález** (#152 a #325,
+včetně druhého průchodu nad přeměřenými rozměry), takže sedne stejně dobře — a stejně nedokonale.
+Hlásí ji **vlastní neviditelné view** (`DiffAnchorReporter`), ne tělo `DiffView`u, protože čte
+`DiffViewport.top`; je to aritmetika nad krabicemi mimo observable stav, ne dotaz do grafu SwiftUI
+(u #469 bylo drahé právě to druhé, 3,5 s CPU proti 0,19 s). Cíl **není sledovaná vlastnost**
+(`@ObservationIgnored`), takže posun výřezu nikoho nepřekresluje, a na disk to jde s příští změnou
+záložky nebo při ukončení — při scrollování se na soubor nesahá.
+
+**Zapsané meze:** rozbalený kontext (#47) číslo řádku nenese, takže se výřez uvnitř velkého
+odkrytého úseku obnoví na nejbližším řádku hunku pod ním; odebraný řádek má číslo ze staré verze
+souboru, takže se bere první přidaný nebo kontextový pod ním. Obojí je degradace na „o kus vedle“,
+ne na „jinde“. A **nečitelný snímek znamená prázdno**, ne chybu v okně: nejhorší následek je jedno
+spuštění bez záložek, tedy stav před #527.
+
+**`PullRequestTab` je od #527 `Codable`, a je to zapsaná změna proti jeho vlastní poznámce.**
+Ta říkala „neukládá se, jinak bychom si pamatovali, na co se člověk koukal minulý týden“ — a platí
+dál: volba **není** klíčovaná pull requestem na disku, ukládá se jako součást otevřené záložky
+a se zavřením odchází.
+
+**Tvrdé podmínky beze změny.** Č. 1: `SingleWayOutTests` prochází beze změny, grep na
+`ReviewPublishing` i `BranchPushing` vypisuje týž seznam souborů. Č. 3: `tabs.json` leží v kořeni
+cache slotu a hranici drží **tatáž kontrola jako jinde v repu** (`CacheFile.refusal`); kořen si
+aplikace bere z `CFBundleName`, takže slotová separace (#228) je hotová bez řádku navíc.
+
+**Copilot našel tři věci a všechny byly reálné**, dvě z nich tichá ztráta polohy v diffu.
+(1) Snímek se skládal jen z `diffScrollAnchors`, které jsou po startu prázdné, takže **zápis hned
+po obnovení kotvu smazal** — záložka, do jejíhož diffu se člověk nepodíval, by po druhém restartu
+začínala na začátku. (2) `DiffAnchorReporter` hlásí polohu i **při vzniku**, tedy dřív než skok,
+takže první hlášení nad nenaskrolovaným diffem uloženou polohu přepsalo za začátek souboru. Obojí
+teď drží jedno pravidlo — *nedoposazená kotva je pořád ta poslední známá poloha* — a obojí má test
+ověřený vložením regrese. (3) Doprovodná dokumentace zúžila `WindowTabMark.loading` na „obnovená
+po restartu“, přitom ten stav dostane i záložka otevřená odkazem (#531); opraveno **jako třída**,
+tedy včetně `README` a popisu parametru, ne jen na tom jednom řádku.
+
+**Zapsaná mezera:** že se výřez po restartu doopravdy posadí tam, kde stál, se v harnessu ověřit
+nedá — `ScrollView` se v testovacím hostu nevykreslí a skok je podle #152 **zmírnění, ne záruka**.
+Zkouší to člověk na běžící aplikaci; já to změřil na slotové instanci (viz popis PR). K tomu
+zbývá **jeden průchod grafu** mezi spotřebováním kotvy a skokem, ve kterém platí poloha před
+skokem — zabité aplikaci v tom okamžiku se kotva posune o výřez.
+
+Testů **5005** ve 486 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
+`DiffScrollAnchorTests`, `OpenTabsStoreTests`, `AppStoreTabRestoreTests`), rozšířené
+`PullRequestOriginTests` a `AppDelegateTerminationTests` a k tomu sonda
+`WindowTabStripRenderProbe` (pruh se všemi pěti značkami, pouští se ručně jako ostatní sondy).
+Co se v které z nich hlídá a proč, je v [`docs/testovani.md`](testovani.md).

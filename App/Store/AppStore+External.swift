@@ -10,6 +10,11 @@ import Foundation
 ///
 /// **Nic se odsud neodesílá.** Dotahuje se jediná věc, a to čtením: `gh pr view` přes
 /// `GitHubGateway`, který zápisové metody nemá (tvrdá podmínka č. 1).
+///
+/// **Od #527 tuhle cestu sdílí i záložka obnovená po restartu** (`TabAdoption.restored`).
+/// Potřebuje totéž a ve stejném pořadí: záložku hned, detail dotažený čtením a stav načítání
+/// místo věty „pull request zmizel“. Rozdíl je jediný a je v `Policy.origin` — obnovená záložka
+/// pilulku `mimo zdroje` nedostane, viz `TabAdoption`.
 extension AppStore {
     /// Otevře **jakýkoli** pull request jako záložku — i takový, který ve zdrojích není.
     ///
@@ -20,10 +25,10 @@ extension AppStore {
     ///
     /// **Záložka vzniká hned, ne až po dotažení.** Kliknutí, po kterém se sekundu neděje nic, je
     /// k nerozeznání od kliknutí, které nic neudělalo; načítání i selhání jsou proto stavy
-    /// záložky (`Policy.tabContent(summary:detail:origin:)`), ne čekání před ní.
+    /// záložky (`Policy.tabContent(summary:detail:adoption:)`), ne čekání před ní.
     func openPullRequest(_ pullRequest: PRIdentifier) {
         if summary(for: pullRequest) == nil {
-            externalPullRequests.insert(pullRequest)
+            adoptedTabs[pullRequest] = .link
             // **Značka umí detail oživit**, takže se ptáme až po ní: po zavření a znovuotevření
             // záložky ho tik ještě nemusel uklidit, a v tom případě je `summary(for:)` rovnou
             // zpátky. Ptát se znovu by stálo volání `gh` **a** vrátilo záložku na obrazovku
@@ -60,20 +65,20 @@ extension AppStore {
             let detail = try await gateway.fetchDetail(id: pullRequest)
             // Zavřená záložka se nedopisuje: mezi začátkem dotahování a odpovědí je sekunda,
             // ve které se dá kliknout na křížek — a zápis by v mapách nechal PR, který v okně
-            // nikde není, i s jeho detailem. Tik po tom by ho neuklidil, protože značka `mimo
-            // zdroje` se zavřením zmizela.
+            // nikde není, i s jeho detailem. Tik po tom by ho neuklidil, protože značka
+            // přijaté záložky se zavřením zmizela.
             //
             // **Rozdělané `.loading` se u toho musí uklidit**, jinak by po zavření zůstalo v mapě
             // — a znovuotevření by na něm uvízlo, protože `openPullRequest` bere `.loading` jako
             // „někdo se právě ptá“ a nový dotaz by nepustil.
-            guard externalPullRequests.contains(pullRequest) else {
+            guard adoptedTabs[pullRequest] != nil else {
                 if detailStates[pullRequest] == .loading { detailStates[pullRequest] = nil }
                 return
             }
             detailStates[pullRequest] = .loaded(detail, updatedAt: detail.updatedAt)
             // Hlavu si pamatuje i návštěva (#173) — tatáž věta jako v `refreshDetail`.
             noteHead(detail.headSha, for: pullRequest)
-            // Snímek záložky (#201): PR mimo zdroje v seznamu není, takže bez tohohle by po
+            // Snímek záložky (#201): přijatý PR v seznamu není, takže bez tohohle by po
             // zavření a znovuotevření zmizel z pruhu i s křížkem, kterým se zavírá.
             openTabSnapshots[pullRequest] = PullRequestSummary(detail)
         } catch is CancellationError {
@@ -92,7 +97,7 @@ extension AppStore {
     func origin(of pullRequest: PRIdentifier) -> PullRequestOrigin {
         Policy.origin(
             of: pullRequest,
-            adopted: externalPullRequests,
+            adopted: adoptedTabs,
             sources: Set(pullRequests.map(\.id))
         )
     }
@@ -102,11 +107,12 @@ extension AppStore {
         Policy.tabContent(
             summary: summary(for: pullRequest),
             detail: detailStates[pullRequest],
-            origin: origin(of: pullRequest)
+            adoption: adoptedTabs[pullRequest]
         )
     }
 
-    /// Pull requesty, na kterých v okně něco stojí: seznam z tiku **plus** záložky mimo zdroje.
+    /// Pull requesty, na kterých v okně něco stojí: seznam z tiku **plus** přijaté záložky
+    /// (odkazem #531 i obnovené #527).
     ///
     /// Jedno místo pro tu množinu schválně — čte ji úklid map v paměti (`forget(whatIsNotIn:)`),
     /// eviction cache a mazání uložených nálezů, a kdyby se ty tři rozešly, zůstal by po
@@ -115,6 +121,6 @@ extension AppStore {
     /// Řadí se, protože se z toho skládají cesty na disku a poloha slovníku v paměti není
     /// stabilní: nesetříděná množina by dělala z každého tiku jiné pořadí mazání.
     func pullRequestsInPlay(besides summaries: [PullRequestSummary]) -> [PRIdentifier] {
-        Set(summaries.map(\.id)).union(externalPullRequests).sorted()
+        Set(summaries.map(\.id)).union(adoptedTabs.keys).sorted()
     }
 }
