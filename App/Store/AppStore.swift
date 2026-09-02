@@ -1341,6 +1341,10 @@ final class AppStore {
     /// a další v řadě je to, co člověk chce vidět. Domů se propadne, až když nezbyde žádná.
     func closeTab(_ pullRequest: PRIdentifier) {
         guard let index = openTabs.firstIndex(of: pullRequest) else { return }
+        // **Jeden zápis snímku na jednom místě** (#527): funkce má dva výstupy (zavřená záložka
+        // byla aktivní, nebo nebyla) a dvě volání by znamenala dvě místa, na kterých se dá
+        // zapomenout. Za `guard`em schválně — u záložky, která v pruhu není, se nic nezměnilo.
+        defer { persistOpenTabs() }
         openTabs.remove(at: index)
         openTabSnapshots[pullRequest] = nil
         // Kotva scrollu odchází se záložkou (#527) — je to stav otevřené záložky, ne PR. Držet ji
@@ -1355,15 +1359,11 @@ final class AppStore {
         adoptedTabs[pullRequest] = nil
         stopTerminal(for: pullRequest)
 
-        guard activeTab == .pullRequest(pullRequest) else {
-            persistOpenTabs()
-            return
-        }
+        guard activeTab == .pullRequest(pullRequest) else { return }
         let neighbour = openTabs.indices.contains(index) ? openTabs[index] : openTabs.last
         activeTab = neighbour.map(WindowTab.pullRequest) ?? .home
         selection = neighbour
         syncActivityVisit()
-        persistOpenTabs()
     }
 
     /// Přepne na sousední záložku v pruhu (#245) — `⌃Tab` dopředu, `⌃⇧Tab` zpátky.
