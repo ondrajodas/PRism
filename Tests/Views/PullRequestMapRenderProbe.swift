@@ -132,7 +132,7 @@ struct PullRequestMapRenderProbe {
         let rep = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         try #require(rep.representation(using: .png, properties: [:])).write(to: url)
-        return hosting.frame.size
+        return hosting.fittingSize
     }
 
     private static var outputDirectory: URL {
