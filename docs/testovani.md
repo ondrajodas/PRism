@@ -7238,6 +7238,135 @@ u všeho). Sonda proto staví okno jako `DiffShapeProbe`: na (40, 40), `level = 
 +0,12 s (tedy měřidlo vrstvu nad blokem **vidí**) a nerozvržená scéna dala šestinásobek, což je
 tentýž řád, jaký u #469 oddělil líný seznam od pevného.
 
+### Okraj na ostrých datech (#503, druhé kolo)
+
+`DiffMarginWheelProbe` výš měří **scénu, kterou si sonda vyrobila** — jeden soubor o dvou tisících
+řádcích. Na otázku „laguje to v praxi“ neodpovídá, protože skutečné PR mají jiný tvar: desítky až
+tisíce souborů, krátké hunky rozeseté po repu a nálezy tam, kde je reviewer doopravdy najde. Druhé
+kolo proto měří **skutečné diffy** (`DiffMarginSharpProbe`, ručně) a k tomu **druhé gesto**:
+**přepnutí na tab `Změněné soubory`**, protože právě na něm se lag hlásí — a je to jiná cena než
+projíždění (přepnutím se obsah tabu zahodí a postaví znovu, tedy se platí **první rozvržení**;
+tatáž úvaha jako u `Driver.tab` v [*Přepnutí tabu je jiný scénář*](#přepnutí-tabu-je-jiný-scénář-než-přerovnání-a-je-to-ten-dražší)).
+
+Materiál — čtyři pull requesty, vybrané tak, aby se lišily **tvarem**, ne jen velikostí:
+
+| PR | Soubory | Řádky diffu | Na co je |
+|---|---|---|---|
+| `ondrajodas/PRism#499` | 45 | 5 727 | ostrá, ale mírná; **k ní jsou skutečné nálezy** |
+| `cli/cli#14104` | 71 | 6 222 | střed |
+| `cli/cli#14320` | 158 | 5 679 | plochá distribuce, žádný lock |
+| `home-assistant/core#181088` | 3 000 | 245 116 | krajní případ |
+
+**Krajní případ aplikace nedostane, a to je vlastní nález.** `gh pr diff` nad PR o víc než **300
+souborech** vrací `HTTP 406` (*the diff exceeded the maximum number of files*), a `GhGateway.fetchDiff(id:)`
+je zrovna `gh pr diff` — takže `home-assistant/core#181088` **v PRismu nejde otevřít vůbec**:
+`diffStates[id]` skončí na `.failed`. Není to „velký diff se kreslí pomalu“, je to „diff nedorazí“.
+A na rozdíl od logů z CI, které mez mají a **pojmenovanou** (`Policy.logAvailability` →
+`.tooLarge`), diff žádný takový stav nemá, takže se to v okně ukáže jako obyčejná chyba. Pro měření
+se ten diff musel složit z `pulls/{n}/files` (30 stránek po 100, ~30 s; API vydá **3 000 z 3 632**
+souborů a u sedmi patch nepošle vůbec) — což je zároveň odpověď na to, proč se do repa nedává jako
+fixture: 9,2 MB.
+
+**Nálezy jsou ze dvou zdrojů a je podstatné, který je který.** Na `PRism#499` proběhlo **skutečné
+review** touž cestou, jakou pouští aplikace (`code-review:code-review`, `--allowedTools
+Read,Grep,Glob,Bash(git:*),ReportFindings,Skill`, prompt z `Policy.reviewPrompt`): 84 tahů,
+14 minut, **21,97 USD** — a **dva nálezy**. Rozeseté nálezy sondy (jedenáct, na skutečných
+přidaných řádcích) jsou tedy **pětinásobek** běžné hustoty, tedy horní odhad, ne obraz; kolik stojí
+ta skutečná, měří varianta `okraj, skutečné nálezy z review` ze sidecaru `<jméno>.findings.json`.
+
+#### Co z toho vyšlo
+
+Přepnutí `Přehled` ↔ `Soubory`, **deset v sérii, dvě série střídavě**, okno 1512 × 874, Debug,
+`mainThreadCPUSeconds`. Milisekundy jsou na **jedno** přepnutí, v závorce obě série:
+
+| PR (souborů) | bez nálezů | **okraj** (12 karet) | bubliny (12) | okraj, 45 karet | okraj, **skutečné 2** |
+|---|---|---|---|---|---|
+| `PRism#499` (45) | **850** (8,53 / 8,47) | **1010** (9,23 / 10,96) | 992 (9,76 / 10,07) | 1038 (10,69 / 10,07) | **954** (10,13 / 8,96) |
+| `cli/cli#14104` (71) | **1184** (11,50 / 12,17) | **1468** (14,66 / 14,71) | 1435 (13,68 / 15,01) | 1632 (15,35 / 17,29) | — |
+| `cli/cli#14320` (158) | **1657** (15,82 / 17,33) | **2325** (17,44 / 29,07) | 1825 (17,85 / 18,65) | 1995 (17,85 / 22,06) | — |
+
+Pět věcí z toho plyne a **první dvě jsou celá odpověď**:
+
+1. **Okraj stojí totéž co bubliny, tedy co stav před #503.** Rozdíl vyjde +2 %, +2 % a +27 %, ale
+   ten poslední je jediná buňka s rozptylem **17,44 proti 29,07** — a její *nižší* série je pod
+   bublinami. Vezme-li se z každé dvojice ta nižší (nejmíň zašpiněná), je okraj u dvou PR ze tří
+   **levnější**. Znaménko tedy nedrží a rozdíl je pod rozlišením měřidla. **Bubliny jsou přitom
+   doslova ten předchozí stav**: `marginCards` má na začátku `guard !showBubbles`, takže se
+   se zapnutým přepínačem okraj nekreslí vůbec a panel vpravo se nesloží — je to A/B proti `main`u
+   změřené v jednom sezení, ne proti vzpomínce.
+2. **Co stojí, je mít nálezy vykreslené, ne mít je v okraji.** Proti diffu bez nálezů je to
+   +19 / +24 / +40 % u okraje a +17 / +21 / +10 % u bublin.
+3. **Skutečná hustota stojí méně než polovinu měřené.** Dva nálezy z opravdového review dají 954 ms
+   proti 850 ms bez nálezů (+12 %), kdežto dvanáct 1010 ms (+19 %).
+4. **Odpověď na #478 je v tabulce, ne ve větě.** Na `PRism#499` je odezva na hustotu **monotónní**:
+   850 → 954 (2 karty) → 1010 (12) → 1038 (45). Měřidlo tedy druhou vrstvu nad blokem **vidí**.
+   A je z toho vidět i **tvar** té ceny: první dvě karty stojí 104 ms, dalších deset 56 ms a dalších
+   třiatřicet 28 ms — platí se tedy hlavně za to, že okraj **vůbec je** (třetí kolona, složený
+   panel), ne za karty v něm. Proto nemá smysl karty zlevňovat.
+5. **Hlavní člen je počet souborů, ne nálezy.** Bez nálezů 850 → 1184 → 1657 ms pro 45 → 71 → 158
+   souborů. Přepnutí na `Změněné soubory` je tedy drahé samo o sobě — což #472/#476 změřilo
+   už na `main`u (576–682 ms na 2000řádkovém diffu jednoho souboru) a #503 na tom nemění nic.
+
+**Co tahle čísla netvrdí.** Není to wall clock a není to Release: je to CPU hlavního vlákna za deset
+přepnutí za sebou v Debug buildu, takže „1 s na přepnutí“ **není** doba, po kterou člověk kouká na
+prázdno. Tvrzení je **srovnání sloupců**, a to je taky jediné, co přežije zátěž: sezení běželo při
+cizím plném běhu testů (load average **13,9–28,7**, medián 19,7 na patnáctijádrovém stroji,
+vzorkováno vedle měření po dvaceti sekundách), takže absolutní hodnoty jsou nadsazené **všechny
+stejně**. Kdo je bude reprodukovat na volném stroji, dostane nižší čísla a **týž poměr**.
+
+#### Čtyři věci, bez kterých z toho vyjde nesmysl — a všechny čtyři to už jednou udělaly
+
+- **Strop na počet nasazených bloků nemůže být konstanta.** Wheel sonda si vystačí se čtrnácti,
+  protože měří **jeden** soubor; do pásu nad diffem o pětačtyřiceti souborech padne jinak velký
+  počet a nad třemi tisíci ještě jinak. Usazení se proto pozná **propadem proti vrcholu** (na
+  čtvrtinu a míň), ne absolutní hodnotou. S konstantou zůstalo nad `PRism#499` **168 nasazených
+  bloků** i po dvou minutách čekání a gesto do té scény stálo **22,8 s CPU proti 1,7 s** u téže
+  varianty, tedy třináctinásobek.
+- **Šťouchnutí posuvníkem se musí opakovat.** Pás zapisuje `onScrollGeometryChange`, a ten nad
+  nehybným výřezem nemusí přijít vůbec; jedno šťouchnutí **před** čekáním nestačí, protože v tu
+  chvíli nemusí být scéna ještě rozvržená. Šťouchá se proto uvnitř čekání, dokud bloky nespadnou.
+- **Každé gesto ve vlastní scéně.** Když se obojí měřilo nad jednou, projíždění po přepínání tabů
+  **nikdy nikam nedojelo** (`dojelo na 0` u všech variant, 0,03 s CPU). Přepnutím se obsah tabu
+  zahodí a postaví znovu, takže v hierarchii chvíli visí **starý** scroller s vysokým dokumentem;
+  `tallestScroller` sáhne na něj, šťouchnutí i gesto na něm projdou, ale rozvržení mu počátek při
+  každém kole srovná na nulu.
+- **Gesto kolečkem si žádá odemčenou obrazovku, a přepnutí tabu ne.** Nad zamčeným sezením leží
+  shield okno **nad** tím naším (v logu `elementWindow(3) is lower than shield(2001)`), takže se
+  událost nedoručí a posuvník zůstane na nule — tedy tatáž hodnota pro funguje i nefunguje (#478).
+  Je to tentýž kořen jako okno na −10 000 u prvního kola, jen zvenčí. Sonda proto (1) **nezapíše
+  gesto, které nikam nedojelo**, (2) u vynechaného měření **vypíše, jestli je obrazovka zamčená**
+  (`CGSessionCopyCurrentDictionary`), aby se příčina nehádala, a (3) umí měřit **jen jednu půlku**
+  (`PRISM_SHARP_GESTURE=tab`), protože přepínání pohání zápis do store a obrazovku nepotřebuje.
+
+**A pozor na to, co běží vedle.** Měří se `mainThreadCPUSeconds`, ne wall clock, ale při souběžném
+plném běhu testů z jiného slotu (load average 21–28 na patnáctijádrovém stroji) čísla stoupnou
+i tak. Dva vlastní testovací hosty naráz udělaly totéž — a poznalo se to jedině tím, že v `ps`
+stály dva. Sonda proto **střídá A/B/A/B po celých případech** (#274) a čte se z ní **poměr mezi
+variantami**, nikdy absolutní hodnota; a než se měří, patří zkontrolovat, že na stroji neběží cizí
+`xcodebuild test`.
+
+#### Co z druhého kola zůstalo neměřené, a proč se to nedopočítalo
+
+**Projíždění kolečkem nad ostrými diffy změřené není.** Sezení, ve kterém se druhé kolo dělalo,
+mělo po většinu času **zamčenou obrazovku**, takže se gesto nedoručilo (viz výš) a sonda ta čísla
+odmítla zapsat. Jedno pásmo hodnot z odemčeného okna vzniklo, ale **nepublikuje se**: měřilo se
+tehdy ještě nad **jednou** scénou pro obě gesta, tedy v té konfiguraci, o které se pak ukázalo, že
+`tallestScroller` v ní může sáhnout na odložený scroller — a nedá se dodatečně rozhodnout, který to
+byl. Číslo, o kterém nevím, co měřilo, je horší než chybějící.
+
+Co tedy o projíždění platí, je **první kolo** beze změny (`DiffMarginWheelProbe`, tabulka výš):
+okraj **1,56 / 1,53 s** proti **1,47 s** bez nálezů a **1,46 / 1,47 s** s bublinami, tedy 6 % nad
+základem. Doměřit se to má nad odemčenou obrazovkou příkazem
+
+```bash
+TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_SHARP_DIFFS=<složka> \
+    TEST_RUNNER_PRISM_SHARP_GESTURE=wheel \
+    xcodebuild -project PRism.xcodeproj -scheme PRism -derivedDataPath build.noindex test \
+    -only-testing:PRismTests/DiffMarginSharpProbe > /tmp/wheel.log 2>&1
+```
+
+a pozná se to podle toho, že u každé varianty stojí `dojelo na …` s nenulovou hodnotou.
+
 ### Kde blok hlásí svůj řádek (#503)
 
 `DiffMarginPlacementTests` — čtyři způsoby, jak se to dá rozbít potichu, a všechny čtyři měřené

@@ -6732,7 +6732,27 @@ a nálezy jsou dál klíčované `headSha`; karta je jen jiné místo pro tentý
 takže odznaky, shoda reviewerů, stav z kontroly (#150), odmítnutí (#113) i řada
 `Převzít · Neplatí · Nepatří sem` (#283) zůstávají, jaké byly.
 
-Testů **4941** ve 483 suitách; nové jsou čtyři sady (`DiffMarginTests` nad `Policy`,
-`DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
-a `DiffMarginWheelProbe` jako ruční měření). Co se v nich hlídá a jak se měřilo, je
-v [`docs/testovani.md`](testovani.md).
+**Druhé kolo měření na ostrých datech** (po slití `main`u). Čísla z první verze jsou z vyrobené
+scény — jeden soubor o dvou tisících řádcích —, takže na otázku „laguje to v praxi“ neodpovídají.
+Druhé kolo proto měří **skutečné diffy** (`PRism#499`, `cli/cli#14104`, `cli/cli#14320`) a k tomu
+**druhé gesto**: přepnutí na tab `Změněné soubory`, tedy to, na kterém se lag pozná — přepnutím se
+obsah tabu zahodí a postaví znovu, takže se platí první rozvržení, kdežto projíždění tuhle třídu
+změny nemusí ukázat vůbec.
+
+**Nálezy na jednom z nich jsou skutečné.** Review nad `PRism#499` proběhlo touž cestou, jakou pouští
+aplikace (`code-review:code-review`, tatáž sada povolení, prompt z `Policy.reviewPrompt`): 84 tahů,
+14 minut, 21,97 USD — a **dva** nálezy na 45 souborech a +4 670 řádcích. Rozeseté nálezy sondy
+(jedenáct) jsou tedy pětinásobek běžné hustoty, tedy horní odhad, ne obraz.
+
+**A krajní případ z referenční sady aplikace nedostane vůbec**, což je vlastní nález: `gh pr diff`
+nad PR o víc než 300 souborech vrací `HTTP 406`, a `GhGateway.fetchDiff(id:)` je zrovna
+`gh pr diff` — takže `home-assistant/core#181088` (3 632 souborů) skončí na `.failed` dřív, než se
+diff začne kreslit. Na rozdíl od logů z CI, které mez mají a **pojmenovanou**
+(`Policy.logAvailability` → `.tooLarge`), diff žádný takový stav nemá; v okně je z toho obyčejná
+chyba. Opravit to sem nepatří (je to jiná vrstva než okraj), ale zapsané to být musí.
+
+Testů **4993** ve 486 suitách; nových je **pět** sad (`DiffMarginTests` nad
+`Policy`, `DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
+a dvě ruční měření — `DiffMarginWheelProbe` nad vyrobenou scénou a `DiffMarginSharpProbe`
+nad skutečnými diffy). Co se v nich hlídá a jak se měřilo, je
+v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).

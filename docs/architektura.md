@@ -1736,6 +1736,22 @@ v okraji nesmí chovat jinak než pod řádkem); značka se musí hledat podle *
 (kotva nálezu, `DiffRow.withBubbles`); a `viewport.top` nesmí přitéct do těla okraje — čtenáři
 i zapisovatelé jsou vyjmenovaní v `DiffMarginScrollReadTests`.
 
+**Kdo krabici výřezu drží, se pozná gestem `přepnutí na Změněné soubory`, ne projížděním.** U #503
+je `DiffViewport` `@State` **uvnitř** `DiffView` a zná ho šest souborů, všechny pod diffem — nad
+diffem ji nikdo nedrží ani nečte, takže se zápis při scrollování nemá kam rozlézt:
+
+```bash
+grep -rn 'DiffViewport' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u  # výčet, ne prázdný
+grep -rn 'DiffViewport()' App | grep -vE ':[0-9]+: *///?'                        # kde vzniká
+```
+
+Ten výčet ale **není invariant** — #501 tu krabici vyvádí o úroveň výš (drží ji detail PR
+v `DiffTracking`), aby na ni dosáhl pruh záložek, a má na to zapsaný důvod. Co z #503 zůstává, je
+**měřicí povinnost**: kdo krabici zvedne nad diff, platí za to na **přepnutí tabu**, protože tam se
+obsah zahodí a postaví znovu (#472/#476), kdežto projíždění tu změnu nemusí ukázat vůbec. Změřit se
+to má na ostrých datech, ne na vyrobené scéně — jak, je
+v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).
+
 ## `Config` (`App/Config/`)
 
 Nastavení ve dvou úrovních. Nahrazuje konstanty, které byly do #23 roztroušené po celé
