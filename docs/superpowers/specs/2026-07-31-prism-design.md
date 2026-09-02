@@ -5439,8 +5439,8 @@ protože obrys je **odstup od segmentu**, tedy vždycky o osm bodů širší ne�
 158 souborech má celá značka **39 b² inkoustu ve dvou svislých čárkách dvou bodů** — přesně tolik
 a přesně toho tvaru, co jedna čárka vlákna (36–44 b²).
 
-**Návrh je `jezdec` a čeká na schválení** (zakreslený v sekci 42, implementace až po souhlasu —
-je to nový prvek na obrazovce, tedy jediná schvalovací brána v tomhle repu):
+**Nahradil ho `jezdec`** (zakreslený v sekci 42, odsouhlasený 2. 9. 2026 — je to nový prvek na
+obrazovce, tedy jediná schvalovací brána v tomhle repu):
 
 | Rozhodnutí | Zamítnutá varianta | Proč |
 |---|---|---|
@@ -5455,6 +5455,18 @@ velikost **nezávisí na šířce segmentu** (takže se značka nerozpadne zrovn
 nejužitečnější), **hrot je bod** (ukazuje přesně, i když je značka širší než cíl — obrys naopak
 obklopuje, a to při dvou bodech ztrácí smysl) a **tvar se nedá splést s čárkou vlákna** (čárka má
 dva body v každém řádku, jezdec 14 bodů plné šířky u základny).
+
+**A je to doložené tím samým měřením, ne prohlášené** — jinak by to bylo tvrzení o tvaru, ne
+o podmínce. Značka má **12–14 × 7 bodů a 34–56 b² inkoustu ve všech 36 kombinacích** pásma, přes
+které se měřil obrys, zatímco segment pod ní se mění z **1,4 na 433 bodů**; a protože je nad hustým
+pásem širší než cíl, rozhoduje **hrot**, jehož odchylka od středu segmentu je **0,0 až 0,6 bodu**.
+Čísla i to, co se u jezdce **měřit nedá** (podíl obálky), jsou
+v [`docs/testovani.md`](../../testovani.md#a-jak-se-změřilo-že-jezdec-tu-podmínku-splňuje-501).
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Hrot zůstává na skutečném středu segmentu; ořezává se základna** | Posunout celý jezdec dovnitř plochy, aby byl na kraji pásu symetrický | Posunutý hrot ukazuje na **soubor, který to není** — a hrot je u téhle značky jediná souřadnice, která o cíli něco tvrdí. Nesymetrický jezdec na prvním a posledním segmentu je proti tomu **přiznaná** cena; obrys měl tutéž vadu nepřiznaně (vnější hrana na `x = −4`, `Canvas` ji potichu ořezal). Hlídá to tvrzení nad bitmapou na **dvou** cílech, protože s jedním (uprostřed pásu) tuhle regresi **propustilo** |
+| **Obrys zůstává v dokumentu jako záznam měření** | Smazat ho z mockupu úplně | Je to doklad, **proč** jezdec vznikl — a bez obrázku by z toho zbyla jen čísla. Je to tentýž vztah, jaký má pilulka `+X −Y` k sekci 19: dnešní obrazovku kreslí `.runner`, záznam kreslí `.seg.cur` a je to u něj napsané |
 
 **Hover má vlastní vrstvu, a je to úklid na vlastním důvodu.** Ondrův nekliknutelný segment se
 nezreprodukoval a slepá oprava podezření na `.help` se **nedělá** — má horší selhání než ta chyba.

@@ -7547,6 +7547,31 @@ dá spadnout znovu:
    pak nejsou čárka, ale celý pás (naměřeno **1 930 b²** místo 36). Přesunuté vlákno nechá popisek
    i šířky beze změny, takže v rozdílu jsou dvě čárky a jedna má poloviční plochu.
 
+#### A jak se změřilo, že jezdec tu podmínku splňuje (#501)
+
+**Táž metoda, totéž pásmo, jinak by to nebyl důkaz** — jen porovnání. Rozdíl dvou snímků,
+3–158 souborů × 347–1347 bodů, z bitmapy:
+
+| | obrys | jezdec |
+|---|---|---|
+| šířka značky | 6 → 251 b (roste se segmentem) | **12–14 b** (9 b tam, kde se ořezává kraj) |
+| inkoust | 39 → 5 007 b² | **34–56 b²** |
+| odchylka hrotu od středu segmentu | — | **0,0–0,6 b** |
+| hrot leží v cílovém segmentu | — | **ano ve všech 36 kombinacích** |
+
+Segment se přes to pásmo mění z **1,4 na 433 bodů**, takže konstantní velikost není shoda.
+**A pozor na to, co se u jezdce měřit nedá**: `podíl obálky` a `pokrytých segmentů` u něj nic
+neříkají — značka je nad hustým pásem **širší než cíl** (14 bodů proti třem), takže obálka
+legitimně sahá na sousedy a rozhoduje **hrot**. Měřidlo proto od #501 vypisuje i **střed nejvyššího
+řádku značky**: u trojúhelníku je to hrot, u rámečku to byla horní hrana, tedy nic.
+
+**Do tvrzení nad bitmapou z toho šlo přeložit tohle** (`PullRequestMapDrawingTests`): značka je pod
+pásem a aspoň osm bodů široká, má tutéž velikost nad sedmi i nad 158 soubory, a hrot leží na středu
+svého segmentu — na **dvou** cílech, uvnitř pásu i na prvním segmentu. **Ověřeno vložením regrese,
+třemi**, a ta třetí je poučná: **hrot sevřený do plochy** (aby byl jezdec symetrický i na kraji)
+**projde uprostřed pásu** a spadne až na krajním segmentu. První podoba toho tvrzení měřila jen
+prostřední cíl a tuhle regresi **propustila** — proto jsou cíle dva.
+
 #### Co stojí průchod tělem pásu (#501)
 
 Druhá polovina téhož měřidla, a odpovídá na otázku, kterou nešlo změřit přímo: **kolik platí

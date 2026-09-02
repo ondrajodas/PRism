@@ -6836,11 +6836,26 @@ dvou svislých čárkách dvou bodů, tedy **přesně tolik a přesně toho tvar
 (36–44 b²). Kontrast akcentu proti ploše hlavičky je přitom v pořádku při každé šířce, takže
 **samotné číslo z palety netvrdí nic** (#432).
 
-**Návrh nové podoby je zakreslený v sekci 42 a čeká na schválení** — `jezdec`, pevný trojúhelník
-14 × 7 bodů pod pásem s hrotem v ose segmentu, který obrys nahrazuje. Tři vlastnosti, kvůli kterým
-takhle: velikost nezávisí na šířce segmentu, hrot je bod (ukazuje přesně, i když je značka širší
-než cíl) a tvar se nedá splést s čárkou vlákna. Do schválení kreslí aplikace i dokument obrys;
-implementovat se to má **až po souhlasu**, protože je to nový prvek na obrazovce.
+**Obrys nahradil `jezdec`** — pevný trojúhelník 14 × 7 bodů pod pásem s hrotem v ose segmentu,
+odsouhlasený 2. 9. 2026. Tři vlastnosti, kvůli kterým takhle: velikost nezávisí na šířce segmentu,
+hrot je bod (ukazuje přesně, i když je značka širší než cíl) a tvar se nedá splést s čárkou vlákna.
+
+**Že podmínku splňuje, je změřené tou samou metodou, ne prohlášené**: značka má **12–14 × 7 bodů
+a 34–56 b² inkoustu ve všech kombinacích**, zatímco segment pod ní se mění z 1,4 na 433 bodů — a
+protože je nad hustým pásem širší než cíl, rozhoduje **hrot**: odchylka od středu segmentu je
+**0,0 až 0,6 bodu** a hrot leží v segmentu **ve všech 36 kombinacích**. Hlídají to **tři tvrzení
+nad bitmapou**, protože „někdo to zítra zmenší" je reálná cesta, jak podmínku zrušit beze změny
+čísel v `Policy`. **Ověřeno vložením regrese, třemi** — a ta třetí je poučná: hrot sevřený do
+plochy (aby byl jezdec symetrický i na kraji) **projde uprostřed pásu** a spadne až na krajním
+segmentu, takže první podoba toho tvrzení s jedním cílem regresi propustila.
+
+**Hrot zůstává na skutečném středu segmentu, základna se ořezává do plochy** — na kraji pásu je
+tedy jezdec nesymetrický, a je to vědomá volba: posunutý hrot by ukazoval na soubor, který to není.
+Obrys měl na krajích tutéž vadu nepřiznaně (vnější hrana na `x = −4`, `Canvas` ji potichu ořezal).
+
+**Jezdce kreslí i všech sedm rámů okna v dokumentu** (sekce 02, 03 dvakrát, 04, 19 dvakrát a 25),
+takže si kresba neodporuje. Obrys zůstal jedině v panelu *Proč obrys odešel* jako **záznam
+měření** — je to tentýž vztah, jaký má pilulka `+X −Y` k sekci 19.
 
 **A hover dostal vlastní vrstvu, což je úklid na vlastním důvodu, ne oprava naslepo.** Dokud
 `hovered` drželo tělo pásu, čtl ho popisek nápovědy v témže těle jako `Canvas` — přejezd hranice
@@ -6851,7 +6866,7 @@ ověřit nedá (offscreen okno hover nedostane, `CGEvent` je v testech zakázan�
 tvrdí **nad zdrojákem** a je to zapsaná mez. **Ondrův nekliknutelný segment to nevysvětluje**
 a nepředstírá se to: oprava nesymetrické trefné plochy je v předchozím kole a tohle je jiná věc.
 
-**Sekce 42 se zúžila na vybranou podobu.** Panely B, C a W jsou z repa venku i s jejich CSS
+**Sekce 42 se zúžila na vybrané podoby.** Panely B, C a W jsou z repa venku i s jejich CSS
 (`.rv-legend.inline`, `.rv-legend.row`, `.rv-narrow`, `.rv-medium`); z W zůstala **poznámka 144**
 o tom, že šířka nese objem a že `log₂` byl v zadání #501 jmenovitě, a v ní i odchylka o ustupujících
 mezerách nad ~160 soubory, která **platí dál**.

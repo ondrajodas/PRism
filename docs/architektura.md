@@ -4324,9 +4324,9 @@ Mezi hlavičkou a pruhem záložek leží od #501 **pás, ve kterém je každý 
 (návrh sekce 42, zákres přišel z decku *Směry pro PRism*, stránka E). Odpovídá na „jak velký
 a jak zlý je tenhle PR“ dřív, než se otevře první soubor: šířka segmentu roste s logaritmem
 změněných řádků, barva je nejhorší nález v souboru, nový soubor má tón `ok`, prošlý je tlumený,
-vlákno je svislá čárka a soubor pod výřezem je označený — dnes obrysem akcentem, a **čím se má
-označovat dál, je otevřená otázka**: obrys je změřený a nad hustým pásem neunese, co se od něj
-čeká (viz *Značka souboru pod výřezem* níž).
+vlákno je svislá čárka a soubor pod výřezem má pod sebou **jezdce** — pevný trojúhelník
+14 × 7 bodů, hrotem v ose segmentu. Obrys, který tu roli držel do 2. 9. 2026, **neunesl, co se od
+něj čekalo**, a je to změřené (viz *Značka souboru pod výřezem* níž).
 
 **Nahradil pilulku `+X −Y` s pěti čtverečky** (#174, #218) v pruhu záložek. Ta z `PullRequestTabBar`
 odešla celá i s podobou `Layout.full`, která se od `labels` lišila jedině tím, že ji kreslila —
@@ -4430,7 +4430,7 @@ hover nedostane a skládat `CGEvent` v testech tenhle repo zakazuje (#490). Tvrd
 `hovered`, `Policy.mapTooltip` ani `.help(`) a k tomu je změřená **cena jednoho průchodu**, tedy
 to, co se každou hranicí neplatí.
 
-#### Značka souboru pod výřezem — co dnešní obrys unese (#501)
+#### Značka souboru pod výřezem — proč obrys odešel a jezdec přišel (#501)
 
 **Proč se to vůbec měřilo:** `log₂` v pásu zůstalo, takže **šířka nese objem, a ne to, kde jsem**.
 Jediné, co v pásu odpovídá na „který soubor zrovna čtu“, je značka souboru pod výřezem — a když
@@ -4464,11 +4464,38 @@ segmentu je ořezaný**. Jeho vnější hrana leží na `x = −4`, tedy mimo kr
 si kresbu ořezává — u tříbodového segmentu na kraji vyjde značka 7 bodů široká místo 11. Měřidlo
 proto cílí **dovnitř** pásu (`narrowestInside`); kdo bude měřit znovu, ať to nedělá na kraji.
 
-**Návrh nové podoby je v sekci 42 jako `jezdec`** — pevný trojúhelník 14 × 7 bodů pod pásem,
-hrotem v ose segmentu — a **čeká na schválení**; do té doby kreslí aplikace i dokument obrys.
-Co se u toho zvažovalo a zahodilo (minimální šířka pro zvýrazněný segment, obrys s pevnou
-minimální šířkou, ztlumení ostatních segmentů, obrys i jezdec vedle sebe), je v záznamu rozhodnutí
-ve specifikaci.
+**Obrys proto odešel a nahradil ho `jezdec`** (odsouhlaseno 2. 9. 2026, sekce 42): pevný
+trojúhelník **14 × 7 bodů pod pásem, hrotem v ose segmentu**. Co se u toho zvažovalo a zahodilo
+(minimální šířka pro zvýrazněný segment, obrys s pevnou minimální šířkou, ztlumení ostatních
+segmentů, obrys i jezdec vedle sebe), je v záznamu rozhodnutí ve specifikaci.
+
+**Že jezdec tu podmínku splňuje, je změřené — tou samou metodou a přes totéž pásmo:**
+
+| | obrys | jezdec |
+|---|---|---|
+| šířka značky | **6 → 251 b**, roste se segmentem | **12–14 b** ve všech kombinacích (9 b v jednom extrému, viz níž) |
+| inkoust | 39 → 5 007 b² | **34–56 b²** |
+| podíl obálky = cíl | 21 % (158 souborů) → 98 % (3) | o obálce nerozhoduje: značka je nad hustým pásem **širší než cíl** |
+| odchylka hrotu od středu segmentu | — (rámeček hrot nemá) | **0,0 až 0,6 b**, a hrot leží v segmentu **ve všech 36 kombinacích** |
+
+Segment se přitom mezi krajními kombinacemi mění z **1,4 na 433 bodů**, takže konstantní velikost
+značky není shoda okolností — je to ta vlastnost, kvůli které náhrada vznikla. **Rozhoduje hrot,
+ne obálka**: u značky, která je širší než cíl, je poloha hrotu jediná souřadnice, která o cíli něco
+tvrdí, a proto na ni míří i tvrzení v testech.
+
+**Hrot zůstává na skutečném středu segmentu, základna se ořezává do plochy.** U prvního
+a posledního segmentu je jezdec nesymetrický (naměřeno 9 × 7 b místo 14 × 7 tam, kde se ořezává
+i antialiasingem) a je to **vědomá volba**: posunutý hrot by ukazoval na soubor, který to není.
+Obrys měl na krajích tutéž vadu **nepřiznaně** — vnější hrana ležela na `x = −4`, tedy mimo plochu,
+a `Canvas` ji potichu ořezal.
+
+**Hlídají to tři tvrzení nad bitmapou** (`PullRequestMapDrawingTests`), protože „někdo to zítra
+zmenší“ je reálná cesta, jak podmínku zrušit beze změny čísel v `Policy`: značka je **pod** pásem
+a aspoň osm bodů široká (ne dvě čárky), má **tutéž velikost nad sedmi i nad 158 soubory**, a **hrot
+leží na středu svého segmentu** — měřeno na dvou cílech, uvnitř pásu i na prvním segmentu.
+**Ověřeno vložením regrese, třemi**: značka odvozená od segmentu (rozdíl šířek 74 b), zmenšená na
+dva body a **hrot sevřený do plochy** — ten poslední projde uprostřed pásu a spadne až na krajním
+segmentu, což je zrovna ten případ, na kterém to rozhodnutí stojí.
 
 #### Pás jako jedna kresba — co stálo 158 tlačítek v hlavičce (#501)
 

@@ -99,13 +99,17 @@ struct PullRequestMapRenderProbe {
             tracking: tracking,
             jump: { _ in }
         )
+        // **Nad pásem musí být místo**: plocha `Canvas`u přečnívá řádku o sedm bodů na každou
+        // stranu (jezdec) a v okně ten přesah leží v odsazení hlavičky. Bez mezery ho hrana
+        // hosting view ořeže a na obrázku by čárka vlákna vyšla nižší, než jaká je.
+        .padding(.top, 12)
         .frame(width: width, alignment: .topLeading)
         .background(Palette.surface)
         .environment(\.colorScheme, dark ? .dark : .light)
         .tint(Palette.accent)
 
         let url = Self.outputDirectory.appending(path: "\(name).png")
-        let size = try render(scene, width: width, height: 40, to: url)
+        let size = try render(scene, width: width, height: 52, to: url)
         print("SONDA \(url.path) — šířka \(Int(width)) b, výška \(size.height)")
     }
 
