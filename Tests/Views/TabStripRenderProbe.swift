@@ -84,7 +84,6 @@ struct TabStripRenderProbe {
             selection: .constant(selection),
             badge: badges ? Self.badge(of:) : { _ in nil }
         )
-        .diffCounts((additions: 248, deletions: 96))
         .frame(width: width)
         .background(Palette.surface)
         .environment(\.colorScheme, dark ? .dark : .light)

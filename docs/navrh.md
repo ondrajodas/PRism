@@ -39,7 +39,7 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **42** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **43** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo):
@@ -90,7 +90,8 @@ nemění nic jiného. A **37 vedle 36** je jiný případ — nejsou to dvě pod
 dvě akce v téže sekci panelu (*Větev*), takže spolu leží na stránce *Panel u vlastního PR* a ani
 jedna z nich zatím není záznamem dneška. A **41 vedle 02** je zase případ jako 24: kreslí
 **jediný výřez hlavičky** s pilulkou `mimo zdroje` a dva stavy záložky, o které se ví jen adresa
-(#531) — celá hlavička ani celé okno se nepřekresluje.
+(#531) — celá hlavička ani celé okno se nepřekresluje. Tentýž vztah má **42** (mapa PR, #501):
+kreslí zvětšený pás s legendou a k tomu jeden výřez „jak to leží v okně“, ne celé okno znovu.
 
 **Výřez nemusí ležet na stránce té sekce, kterou nepřekresluje** (#527). Sekce **44** kreslí pruh
 záložek před ukončením a po startu, tedy tentýž pruh jako **02** — a leží přesto na stránce
@@ -117,6 +118,12 @@ nikdo nenajde, a čtenář nemá jak poznat, jestli chybu má aplikace, nebo ná
 poznáš podle toho, že **kreslí to, co okno umí dneska** — u #299 to byla sekce **02**
 (dnešní `Přehled`; #215 z ní vzalo souhrn checků, #291 rozdělil hlavičku karty na dvě podoby),
 **03** (patička nálezu po #283), **19** (seznam commitů po #316) a **01** (rail po #278).
+U #501 se to promítlo hned do **sedmi rámů okna** (02, 03 dvakrát, 04, 19 dvakrát a 25): mapa PR
+nahradila pilulku `+X −Y`, takže `.diffstat` ze všech odešel a pás přišel. Že se přitom
+**nepřekreslily celé**, si nijak neodporuje — mění se jedna řádka chromu, a ta se mění všude,
+kde byla. Jediné místo, kde pilulka zůstala, je **záznam měření stupňů pruhu v sekci 19**
+(`.stripbox`): to je záznam z #316, ne dnešní obrazovka, a přepsat naměřená čísla bez nového
+měření by z nich udělalo odhad.
 Poznávací znak to **není** „vedle ní nestojí novější varianta“: 01 má vedle sebe 21, 02 má
 od #390 vedle sebe 24 a 19 má 25, a záznamem dneška jsou pořád dál — mít vedle sebe kresbu
 budoucího stavu neznamená, že se ta dnešní přestane udržovat. Zapsat to jako „vědomě

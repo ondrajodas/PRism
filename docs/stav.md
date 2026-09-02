@@ -5574,7 +5574,7 @@ i **pět pastí**, o které se ta první sonda rozbila, jsou v [`docs/testovani.
 **Na tomhle není co vidět a člověk ověřuje jediné**: že se dialog neobjeví ani nad bare klonem,
 tedy u PR, na kterém review ještě neběželo. Do pty se v harnessu psát nedá.
 
-**Cestou se opravily zapomenuté značky konfliktu v tomhle souboru** — `<<<<<<< HEAD`, `=======`
+**Cestou se opravily zapomenuté značky konfliktu v tomhle souboru** — `, `=======`
 a `>>>>>>> origin/main` se do `main`u dostaly s #477 a rozdělovaly záznamy #476 a #460. Odstranily
 se jen ty tři řádky, obsah obou stran zůstal.
 
@@ -6690,6 +6690,186 @@ Testů **4958** ve 481 suitách; nové jsou dvě sady (`CommandPaletteLevelTests
 a `CommandPaletteRenderProbe` (tři nové scény) a fixture `gh/pr-list-open.json` (skutečný výstup nad
 veřejným `cli/cli`). Co se v které z nich hlídá a proč, je v
 [`docs/testovani.md`](testovani.md#druhá-úroveň-palety-533).
+## #501 — mapa PR: pás pod hlavičkou ze segmentů souborů
+
+Na „jak velký a jak zlý je tenhle PR“ odpovídala pilulka `+248 −96` a pět čtverečků poměru v pruhu
+záložek. **Kde** v diffu je to zlé, se z ní poznat nedalo — na to se muselo do stromu, a i tam jen
+po puntíku u jména. Od #501 leží mezi hlavičkou a záložkami **pás, ve kterém je každý soubor
+segment**: šířka roste s `log₂(řádků + 1)`, barva je nejhorší nález v souboru, nový soubor má tón
+`ok`, prošlý (#500) je tlumený, vlákno je svislá čárka a soubor pod výřezem má obrys akcentem.
+Vpravo stojí `7 souborů · 3 prošlé · 5 nálezů · 2 vlákna`. Klik skočí na soubor tou cestou, kterou
+skáče paleta ⌘K; `⌥←`/`⌥→` posunou o soubor. Je to první issue směru E z milníku **M14** a zákres
+se do `docs/navrh.html` přenesl jako **sekce 42**.
+
+**Logaritmus je celé to issue.** Nad rozložením ze sekce 03 návrhu (sedm souborů, `composer.lock`
+2 790 řádků z 2 952) by lineární šířka dala locku **94,5 %** pásu a ze zbytku šest čárek;
+s `log₂(n + 1)` má **30,8 %** — pořád největší, ale test o 64 řádcích je vidět (175 bodů proti 21
+v pásu o tisíci). Míří na to dvojice testů, z nichž jeden si lineární podíl spočítá **vlastní
+cestou**, aby bylo vidět, o kolik se pás zhorší.
+
+**Pilulku pás nahrazuje, nedoplňuje** — dvě místa s týmž údajem by se rozešla. Z `PullRequestTabBar`
+tím odešla i podoba `Layout.full` (od `labels` se lišila jedině tím, že pilulku kreslila) a `Policy`
+přišla o `diffstatBlocks`, protože je pak nikdo nečetl; pruh má **tři podoby** místo čtyř a nejširší
+je `labels`. **Číslo `+248 −96` v okně tím ale nezůstalo nikde**, a je to zapsaná ztráta: pás nese
+velikost jako plochu, kdo chce čísla, má je v nápovědě segmentu a v hlavičce souboru v diffu.
+Popisek pásu odpovídá na jiné otázky, a tak ho má i schválený zákres.
+
+**Obrys se čte z `DiffViewport`, a to bylo to jediné netriviální zapojení**: pás leží **nad** pruhem
+záložek, tedy mimo `DiffView`, kde ta krabice do #501 žila jako `@State`. Od #501 ji drží detail PR
+v `DiffTracking` a `DiffView` ji dostane parametrem (`nil` = diff commitu a náhled si drží vlastní,
+takže se pro ně nemění nic). Cesta souboru pod výřezem je **vlastní `@Observable` krabice**
+(`DiffFileCursor`), ne vlastnost `DiffViewport`u — tentýž důvod, jaký #469 mělo pro rozdělení
+`band` a `top`: `top` se mění při každém otočení kolečka, tahle hodnota jen na hranici souborů.
+Zapisuje do ní neviditelná sonda, takže se pás nepřekresluje při každém snímku. Odpověď dává
+`Policy.mapCurrentSegment`, což je `pinnedFileHeader` beze zbytku posunu — **jedna odpověď** pro
+obrys, ukotvenou hlavičku i `⌥V`.
+
+**Šířky počítá `Policy`, umisťuje vlastní `Layout`** (#220): `frame(width:)` na každém segmentu by
+potřeboval znát celkovou šířku, tedy druhé měření vedle toho, co rozvržení dělá samo (#236). Tři
+pravidla drží pohromadě: podíl z logaritmu, minimum tři body **vytlačené z dělení** (bez přepočtu
+by součet přerostl pás zrovna u PR s jedním lockem a šesti drobnostmi) a součet přesně na dostupnou
+šířku. Když se nevejdou ani minima, dělí se rovným dílem — **segment se nezahodí nikdy**.
+
+**Úzká podoba vyšla ze sondy, ne z návrhu.** Popisek stojí ~230 bodů, takže by v pohledu vedle sebe
+(detail 347 b) nechal pásu 73 a ze segmentů byly čárky. Popisek proto **ustupuje první** (práh 180
+bodů, `Policy.mapShowsSummary`) a v úzké podobě nese souhrn nápověda — tatáž úvaha jako u `+X −Y`
+v pruhu záložek (#316): jeho čísla jsou i v hlavičce stromu a v odznacích záložek, kdežto pás jinde
+není. Výšku řádky přitom drží pás (10 b), ne popisek (13 b), jinak by se hlavička při složení
+panelu posunula o tři body.
+
+**Odchylky od zákresu** jsou tři a všechny jsou v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--mapa-pr-pod-hlavičkou-501):
+úzká podoba, odsazení 16 bodů místo 22 (rozhoduje hlavička nad pásem — změřeno, obojí na x = 68)
+a nápověda jako nativní tooltip místo kreslené bubliny.
+
+**Pilulka odešla ze sedmi rámů okna v návrhu** (sekce 02, 03 dvakrát, 04, 19 dvakrát a 25) a pás
+tam přišel — to je pravidlo o záznamu dneška (#299), ne překreslování. Jediné místo, kde `.diffstat`
+zůstal, je záznam měření stupňů pruhu v sekci 19: je to záznam z #316, ne dnešní obrazovka.
+
+Testů **5000** ve 484 suitách (proti 4958 ve 481 na `main`u po #533); nové jsou tři sady — `PullRequestMapTests` (31 tvrzení nad čistou
+funkcí), `PullRequestMapDrawingTests` (9 nad bitmapou) a `PullRequestMapGeometryTests` (6 nad
+souřadnicemi a trefením kurzoru) — a sonda `PullRequestMapRenderProbe`
+(obrázek přes pásmo šířek 347/647/1047/1347 v obou režimech). Odešla `DiffstatBlocksTests` s funkcí,
+kterou hlídala, a dvě tvrzení o pilulce v `TabStripWidthTests` vyměnila **stráž nad zdrojákem**:
+`DiffCounts` ani `diffCounts` se do pruhu záložek nesmí vrátit. Katalog zkratek má **27 akcí**
+(`⌥←`, `⌥→`); že jsou ty glyfy v monospace písmu kapsle, je doměřené (`←` 1312, `→` 1314). Regrese
+ověřena vložením regrese, čtyřmi: lineární váha, `raised` místo `okWash` u nového souboru, `opacity(1)`
+místo tlumení a obtah nasazený dovnitř. Co se v které sadě hlídá, je v
+[`docs/testovani.md`](testovani.md).
+
+**Pás se musel přepsat po proklikání, a je to nejcennější kus téhle práce.** Ondra ohlásil „zas to
+laguje při přepínání oken“ a zúžil to na přepínání tabů uvnitř PR. První podoba dělala ze segmentu
+`Button` s nápovědou, dvěma `overlay`y a `contentShape`: u PR o **158 souborech** je to 158 tlačítek
+a přes tisíc views v hlavičce — a hlavička se přerovnává při **každém** zápisu do sledované
+vlastnosti, tedy při každém tiku pollingu i při každém kliknutí. Naměřeno nad ostrými diffy
+(`cli/cli#14320`): **přerovnání okna 70 ms proti 14 ms bez pásu** a přepnutí tabu **bez diffu**
+162 ms proti 57. Od opravy je to 19, resp. 63 ms — tedy tři až šest milisekund nad stavem, kdy pás
+neexistuje. Segment přestal být view: kreslí ho `Canvas`, polohy počítá `PullRequestMapGeometry`
+a nápovědu i klik obstarává jedno gesto (#252 — *nevyjednává se ani počet prvků*).
+
+**Hypotéza, kterou to vyvrátilo, stojí za zapamatování**: nabízelo se, že tělo detailu špiní zápis
+z `DiffView`u do `DiffTracking`u, který detail drží. Ablace to vylučuje a kód to vysvětluje —
+`DiffTracking` není `@Observable` a `@State` drží jen referenci, takže zápis do `viewport`
+zneplatní jedině ty tři malé views, které si `top` čtou. Cena rostla **s počtem souborů**, ne
+s výřezem. Aby to sonda vůbec viděla, musela dostat dvě osy: počet souborů a **ostrý diff ze
+souboru** — do té doby roztahovala fixture po řádcích, takže měla 9 až 14 souborů a nad pásem se
+158 segmenty vydala totéž jako nad pilulkou `+X −Y` (#478).
+
+**Přepnutí na `Změněné soubory` je přitom drahé i bez pásu** (914 až 1 336 ms podle velikosti
+diffu) a **to už #501 nezpůsobilo** — ablace to ukazuje na tisícině. Je to pořád cena z #476, jen
+nad diffem o 5 700 řádcích ve 158 souborech místo nad 2 000 řádky.
+
+**Odchylka, která z toho vyšla nad zákres:** nad ~160 soubory si minimum tří bodů a šířka pásu
+odporují (`3 × 300 + 2 × 299` je 1 498 bodů proti osmi stům), takže **mezera ustupuje dřív než
+minimum** (`Policy.mapSpacing`) a z pásu zbude souvislý barevný pruh místo tečkované linky. Nad
+300 souborů se to nedostane: `gh pr diff` vrátí nad tím stropem HTTP 406 a diff se nenačte vůbec
+(změřeno na `home-assistant/core#181088`, 3 632 souborů). A zaplatilo se **odečítáním**: pás je
+jeden accessibility element, ne 158 prvků; k souborům vedou dál strom a paleta ⌘K.
+
+**Po druhém proklikání se v zákresu otevřely dvě otázky a leží tam jako varianty, ne jako
+rozhodnutí.** Ondrovi v pásu chyběla **legenda** (z okna se nepozná, co který tón znamená) a k tomu
+se zeptal, jestli **nemají být segmenty stejně široké** — na jeho PR bylo deset podobných souborů,
+takže se lišily jedině šířkou a proměnná šířka vypadala jako šum. Významů je přitom **sedm** a řádka
+pásu má **deset bodů**, takže se do ní všechny natrvalo nevejdou. V sekci 42 návrhu jsou proto čtyři
+panely k výběru: **A** legenda na vyžádání z popisku (v řádce nepřibude nic, popover), **B** zkrácená
+trvalá legenda místo počtů (natrvalo jen tři tóny závažnosti, souhrn odejde), **C** plná legenda jako
+druhá řádka jen na širokém okně (16 bodů chromu, pod ~980 body mizí) a **W** `log₂` proti stejné
+šířce na dvou rozloženích. **Vybere se jedno z každé dvojice a ostatní se ze zákresu zahodí** —
+v repu nemají zůstat čtyři.
+
+**Zákres si u toho vyžádal jednu opravu, která je věcná:** legenda brala barvy **inline**
+(`style="background: var(--crit)"`), tedy z druhého místa než segmenty. Teď je čerpají ze **společného
+selektoru**, protože rozejití se škálou by na obrázku nebylo vidět — je to ta samá barva, jen jinde.
+V okně tomu odpovídá to, že legenda musí volat **tutéž funkci**, jakou kreslí `Canvas`.
+
+**Copilot našel jednu reálnou věc a byla to zapsaná díra v pravidle**: `threadSpots` vracela u
+souboru s nejvýš jedním řádkem podíl `0,5` **každému** vláknu, tedy bez kontroly `matches` — pás by
+pak tvrdil diskuzi v souboru, ve kterém pro ni není řádek. Tvrzení `Vlákno mimo hunky čárku
+nedostane` to nechytalo, protože běželo nad desetiřádkovým hunkem. Opraveno tak, že pravidlo platí
+i v degenerovaném případě (bez řádků se nekreslí nic) a přibyla na to dvě tvrzení.
+
+**Z těch dvou otázek je jedna dotažená a druhá otevřená znovu — a to druhé je výsledek měření.**
+Ondra vybral **legendu A** (na vyžádání z popisku) a **`log₂` nechal**, ale s podmínkou: *„zobrazený
+file by se měl teda spolehlivě zvýraznit"*. Je to protiváha za proměnnou šířku — když šířka nese
+objem, neříká, kde jsem.
+
+**Legenda A je hotová.** Popisek s počty je tlačítko (tečkované podtržení, `▾` — glyf 1126
+v monospace písmu, doměřeno jako u kapslí zkratek) a klik otevře popover se všemi sedmi významy.
+Dvě pasti, které u toho byly pojmenované předem, se ošetřily obě: **barvu vydává jedna funkce** pro
+kresbu i pro legendu (`PullRequestMapView.fill(of:)` nad `PullRequestMapTone`, který tón dostane
+segment rozhoduje `Policy.mapFill`), a hlídá to stráž nad zdrojákem — v legendě nesmí stát žádný
+barevný token ze škály. A **legenda nevrátila to, co se zlevnilo**: popover se staví, až se otevře,
+`isOpen` drží vlastní view (ne tělo pásu) a `.popover` visí na nulovém kotvicím view. To poslední je
+změřené, ne odhadnuté: nasazený přímo na tlačítko zdražil průchod tělem pásu při 158 souborech ze
+3,0–4,8 na **7,1–7,3 ms**, na kotvicím view je to 5,1–5,2 ms. Zbytek toho rozdílu se ale
+**neprokázal** — ty podoby se měřily v samostatných bězích a stroj mezi nimi driftoval, takže je
+v `docs/testovani.md` zapsané, co by bylo potřeba (prokládaná série, tedy přepínač v produkčním
+kódu, který jsem nedal).
+
+**Zvýraznění se změřilo a dnešní obrys ho neunese.** Z bitmapy, přes pásmo počtů souborů (3 až 158)
+a šířek okna (347 až 1347 b), metodou „dva snímky téže scény a rozdílové body“: podíl toho, co
+z obálky značky je **cílový segment**, je 91–98 % u tří souborů, 74–94 % u sedmi, 62–90 % u desíti,
+44–83 % u dvaceti, **27–60 % u pětačtyřiceti** a **21–30 % u sto padesáti osmi**. Hranice je
+u ~19 bodů šířky segmentu — obrys je totiž **odstup od segmentu**, takže je vždycky o osm bodů
+širší než to, co obtahuje. A druhé číslo: při 158 souborech má celá značka **39 b² inkoustu** ve
+dvou svislých čárkách dvou bodů, tedy **přesně tolik a přesně toho tvaru, co jedna čárka vlákna**
+(36–44 b²). Kontrast akcentu proti ploše hlavičky je přitom v pořádku při každé šířce, takže
+**samotné číslo z palety netvrdí nic** (#432).
+
+**Obrys nahradil `jezdec`** — pevný trojúhelník 14 × 7 bodů pod pásem s hrotem v ose segmentu,
+odsouhlasený 2. 9. 2026. Tři vlastnosti, kvůli kterým takhle: velikost nezávisí na šířce segmentu,
+hrot je bod (ukazuje přesně, i když je značka širší než cíl) a tvar se nedá splést s čárkou vlákna.
+
+**Že podmínku splňuje, je změřené tou samou metodou, ne prohlášené**: značka má **12–14 × 7 bodů
+a 34–56 b² inkoustu ve všech kombinacích**, zatímco segment pod ní se mění z 1,4 na 433 bodů — a
+protože je nad hustým pásem širší než cíl, rozhoduje **hrot**: odchylka od středu segmentu je
+**0,0 až 0,6 bodu** a hrot leží v segmentu **ve všech 36 kombinacích**. Hlídají to **tři tvrzení
+nad bitmapou**, protože „někdo to zítra zmenší" je reálná cesta, jak podmínku zrušit beze změny
+čísel v `Policy`. **Ověřeno vložením regrese, třemi** — a ta třetí je poučná: hrot sevřený do
+plochy (aby byl jezdec symetrický i na kraji) **projde uprostřed pásu** a spadne až na krajním
+segmentu, takže první podoba toho tvrzení s jedním cílem regresi propustila.
+
+**Hrot zůstává na skutečném středu segmentu, základna se ořezává do plochy** — na kraji pásu je
+tedy jezdec nesymetrický, a je to vědomá volba: posunutý hrot by ukazoval na soubor, který to není.
+Obrys měl na krajích tutéž vadu nepřiznaně (vnější hrana na `x = −4`, `Canvas` ji potichu ořezal).
+
+**Jezdce kreslí i všech sedm rámů okna v dokumentu** (sekce 02, 03 dvakrát, 04, 19 dvakrát a 25),
+takže si kresba neodporuje. Obrys zůstal jedině v panelu *Proč obrys odešel* jako **záznam
+měření** — je to tentýž vztah, jaký má pilulka `+X −Y` k sekci 19.
+
+**A hover dostal vlastní vrstvu, což je úklid na vlastním důvodu, ne oprava naslepo.** Dokud
+`hovered` drželo tělo pásu, čtl ho popisek nápovědy v témže těle jako `Canvas` — přejezd hranice
+segmentu tedy přeložil tělo a překreslil celou kresbu. Změřeno: jeden průchod tělem stojí při 158
+souborech **7,2 ms**, a segment má při té hustotě dva až tři body, takže jeden přejezd pásu myší je
+**157 hranic, tedy 1,1 s CPU hlavního vlákna**. Že to hover doopravdy nespustí, se v harnessu
+ověřit nedá (offscreen okno hover nedostane, `CGEvent` je v testech zakázaný, #490), takže se to
+tvrdí **nad zdrojákem** a je to zapsaná mez. **Ondrův nekliknutelný segment to nevysvětluje**
+a nepředstírá se to: oprava nesymetrické trefné plochy je v předchozím kole a tohle je jiná věc.
+
+**Sekce 42 se zúžila na vybrané podoby.** Panely B, C a W jsou z repa venku i s jejich CSS
+(`.rv-legend.inline`, `.rv-legend.row`, `.rv-narrow`, `.rv-medium`); z W zůstala **poznámka 144**
+o tom, že šířka nese objem a že `log₂` byl v zadání #501 jmenovitě, a v ní i odchylka o ustupujících
+mezerách nad ~160 soubory, která **platí dál**.
 
 ## #537 — souběžné issues si v mockupu berou totéž číslo sekce
 

@@ -20,17 +20,6 @@ struct PullRequestTabBar: View {
     /// jako vlastnost té záložky, ne jako počet. Od #242 to není `Int?`, ale `PullRequestTabBadge`
     /// — u `Nálezů` musí být poznat, že něco blokuje, a u `Průběhu` je „běží“ stav, ne množství.
     var badge: (PullRequestTab) -> PullRequestTabBadge? = { _ in nil }
-    /// Rozsah změny (#174) — `+X −Y` vpravo v řadě záložek. `nil`, dokud diff nedorazí:
-    /// nuly by tvrdily, že PR nic nemění.
-    private(set) var diffCounts: (additions: Int, deletions: Int)?
-
-    /// Doplní rozsah změny. Vlastní metoda, ne parametr v `init`u: volající ho počítá až
-    /// z načteného diffu, takže by jinak musel psát `nil` i tam, kde ho nemá odkud vzít.
-    func diffCounts(_ counts: (additions: Int, deletions: Int)?) -> PullRequestTabBar {
-        var copy = self
-        copy.diffCounts = counts
-        return copy
-    }
 
     /// Kvůli podtržení, které mezi záložkami **přejede**, ne přeskočí. Jedna instance
     /// v aktivní záložce, takže se animuje přesun ze zmizelé do nové.
@@ -38,13 +27,13 @@ struct PullRequestTabBar: View {
     @State private var hovered: PullRequestTab?
 
     var body: some View {
-        // **Čtyři podoby, ne zúžení jednoho pruhu** (#316, třetí od #318, čtvrtá od #452). Co
-        // ustupuje a v jakém pořadí, je u `Layout`.
+        // **Tři podoby, ne zúžení jednoho pruhu** (#316, druhá od #318, třetí od #452; první
+        // z nich odešla u #501 s pilulkou `+X −Y`). Co ustupuje a v jakém pořadí, je u `Layout`.
         //
         // **`ViewThatFits` měří ideální šířku každé podoby**, a ta je u pruhu bez `lineLimit`u
         // šířka nezalomeného textu — přesně to, co potřebujeme vědět. **Že to tady doopravdy
-        // platí, je změřené**, ne předpokládané (`TabStripWidthTests`): pruh v tabu 1347 b nakreslí
-        // `bar(.full)`, v 1097 b `bar(.labels)` a v 647 b `bar(.icons)`, pixel po pixelu. To je ten
+        // platí, je změřené**, ne předpokládané (`TabStripWidthTests`): pruh v tabu 1097 b nakreslí
+        // `bar(.labels)` a v 647 b `bar(.icons)`, pixel po pixelu. To je ten
         // rozdíl proti #284, kde `ViewThatFits` vybíral pořád nejširší variantu a rozhodovat musela
         // spočítaná šířka (`TextWidth`): tam byly popisky v řadě se `lineLimit`em, takže se
         // **zkracovaly** a ideální šířka o zúžení nic neřekla. Tady se pruh **zalomí**, a proto
@@ -54,7 +43,6 @@ struct PullRequestTabBar: View {
         // **svými dětmi**, a jedna `ForEach` je jedno dítě — kandidáti by se z ní stali leda
         // shodou okolností, kterou by nikdo nekontroloval.
         ViewThatFits(in: .horizontal) {
-            bar(.full)
             bar(.labels)
             bar(.icons)
             bar(.compact)
@@ -78,11 +66,13 @@ struct PullRequestTabBar: View {
     /// Co z pruhu zbyde, jak se okno zužuje. **Pořadí je rozhodnutí**, ne vedlejší efekt: bere se
     /// první podoba, která se vejde, takže pořadí říká, co ustupuje dřív.
     ///
-    /// **`+X −Y` jde první** (#316) — mluví o rozsahu **celého PR**, což je odpověď na otázku
-    /// `Změněných souborů`; v `Commitech`, `Kontrolách` ani `Průběhu` není o čem. Záložka je proti
-    /// tomu cesta k obsahu, který jinudy vidět není.
+    /// **`+X −Y` odsud odešlo celé** (#501, mění #316). Do té doby to byla první podoba a první
+    /// věc, která z pruhu ustupovala — mluvila o rozsahu **celého PR**, tedy o odpovědi na otázku
+    /// `Změněných souborů`. Od #501 tu odpověď nese **mapa PR pod hlavičkou**
+    /// (`PullRequestMapView`), a to úplněji: rozsah i to, kde v diffu je co k vyřízení. Dvě místa
+    /// s týmž údajem by se rozešla a pilulka by z nich byla ta chudší.
     ///
-    /// **Popisky jdou druhé, a všechny naráz** (#318). Ustupovat po jednom (nejdřív `Změněné
+    /// **Popisky jdou první, a všechny naráz** (#318). Ustupovat po jednom (nejdřív `Změněné
     /// soubory`, pak `Konverzace`…) by znamenalo pruh, ve kterém část záložek má text a část ne —
     /// tedy sedm různých podob podle šířky místo tří, a v každé jinak dlouhý skok mezi sousedy.
     ///
@@ -90,7 +80,7 @@ struct PullRequestTabBar: View {
     /// „kam se dá jít“, ale „kde jsem“. Podtržení to říká taky, jenže samo o sobě jen u jedné ze
     /// sedmi ikon — a to je zrovna ten údaj, kvůli kterému se do pruhu kouká nejčastěji.
     ///
-    /// **Čtvrtá podoba přibyla u #452 — a je to změna měření, ne změna názoru.** Do té doby tady
+    /// **Poslední podoba přibyla u #452 — a je to změna měření, ne změna názoru.** Do té doby tady
     /// stálo, že samotné ikony bez popisku i u aktivní záložky **nevzniknou**, protože se na ně
     /// nedá přijít: se sedmi záložkami se `icons` vešly do tabu od 564 b (okno 617) a i
     /// s trojmístnými odznaky u všech od 636 b (okno 689), tedy pod podlahu okna 700.
@@ -101,9 +91,7 @@ struct PullRequestTabBar: View {
     /// je přesně ta porucha, kterou #318 opravovalo. Kód, který nikdo neuvidí, je horší než měření;
     /// tady ale to měření říká, že se na něj přijít **dá**.
     enum Layout: CaseIterable {
-        /// Jak to má být: popisky u všech záložek a vpravo `+X −Y`.
-        case full
-        /// Bez rozsahu změny. Popisky zůstávají.
+        /// Jak to má být: popisky u všech záložek.
         case labels
         /// Ikony s odznaky; popisek jen u aktivní záložky.
         case icons
@@ -114,11 +102,11 @@ struct PullRequestTabBar: View {
         /// ztrojnásobí výšku a odsune obsah, kvůli kterému je okno otevřené.
         case compact
 
-        /// Kreslí se v téhle podobě popisek? Vyčerpávající `switch`, ne `!= .icons`: pátá podoba
+        /// Kreslí se v téhle podobě popisek? Vyčerpávající `switch`, ne `!= .icons`: čtvrtá podoba
         /// by jinak mlčky dostala popisky podle toho, kam ji někdo napsal.
         func showsLabel(isActive: Bool) -> Bool {
             switch self {
-            case .full, .labels: true
+            case .labels: true
             case .icons: isActive
             case .compact: false
             }
@@ -134,7 +122,6 @@ struct PullRequestTabBar: View {
                 item(tab, layout: layout)
             }
             Spacer(minLength: 8)
-            if layout == .full, let diffCounts { diffstat(diffCounts) }
         }
     }
 
@@ -166,55 +153,6 @@ struct PullRequestTabBar: View {
             .frame(width: 1, height: 15)
             .padding(.horizontal, 9)
             .accessibilityHidden(true)
-    }
-
-    /// Rozsah změny vpravo v řadě záložek (`.diffstat`).
-    ///
-    /// Stojí u záložek, ne v hlavičce: mluví o tom, co je v `Změněných souborech`, a je to
-    /// tentýž údaj, jaký po souborech rozepisují hlavičky v diffu — proto `DiffCounts`, ne
-    /// vlastní skládání, které by se s ním jednou rozešlo. (Souhrn nad diffem, se kterým to
-    /// sedělo dřív, u #219 zmizel.)
-    private func diffstat(_ counts: (additions: Int, deletions: Int)) -> some View {
-        HStack(spacing: 8) {
-            DiffCounts.text(additions: counts.additions, deletions: counts.deletions)
-                .font(.caption)
-                .monospacedDigit()
-            blocks(counts)
-        }
-        .padding(.trailing, 4)
-        .help("Kolik řádků PR přidává a ubírá — a v jakém poměru")
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Rozsah změny")
-        .accessibilityValue("přidáno \(counts.additions), odebráno \(counts.deletions)")
-    }
-
-    /// Čtverečky poměru za počty (#218, `.diffstat .blocks`). Poměr počítá `Policy`, aby se
-    /// dal vyčerpat výčtem — je to jediné místo, kde se z čísel rozhoduje o obrázku.
-    private func blocks(_ counts: (additions: Int, deletions: Int)) -> some View {
-        HStack(spacing: 2) {
-            let blocks = Policy.diffstatBlocks(
-                additions: counts.additions,
-                deletions: counts.deletions
-            )
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(color(of: block))
-                    .frame(width: 8, height: 8)
-            }
-        }
-        // Čtverečky říkají totéž co `+X −Y` vedle nich, jen obrázkem — odečítat je dvakrát
-        // nemá cenu.
-        .accessibilityHidden(true)
-    }
-
-    /// Barvy z **téhož zdroje** jako znak změny v řádku diffu (#156): dvě sady by se rozešly
-    /// a `+` v řádku by bylo jinak zelené než čtvereček nad ním.
-    private func color(of block: DiffstatBlock) -> Color {
-        switch block {
-        case .added: DiffLineView.signColor(of: .added)
-        case .removed: DiffLineView.signColor(of: .removed)
-        case .neither: Palette.line
-        }
     }
 
     private func item(_ tab: PullRequestTab, layout: Layout) -> some View {
@@ -369,7 +307,7 @@ struct PullRequestTabBar: View {
     @Previewable @State var selection = PullRequestTab.filesChanged
 
     // Přes pásmo šířek, ať jsou všechny tři podoby vedle sebe: 1047 je výchozí okno bez railu,
-    // 947 je pásmo bez `+X −Y` a 647 je nejužší povolené okno, tedy stupeň s ikonami.
+    // 947 je pásmo s popisky a 647 je nejužší povolené okno, tedy stupeň s ikonami.
     return VStack(spacing: 24) {
         ForEach([1047.0, 947.0, 647.0] as [CGFloat], id: \.self) { width in
             PullRequestTabBar(selection: $selection) { tab in
@@ -381,7 +319,6 @@ struct PullRequestTabBar: View {
                 default: nil
                 }
             }
-            .diffCounts((additions: 248, deletions: 96))
             .frame(width: width)
         }
         Text(verbatim: selection.czechLabel)

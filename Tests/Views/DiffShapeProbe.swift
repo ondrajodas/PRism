@@ -571,6 +571,21 @@ enum DiffMaterial {
         return real + synthetic(files: files, hunks: 4, lines: 60)
     }
 
+    /// Diff o **daném počtu souborů** a přibližně daném počtu řádků celkem (#501).
+    ///
+    /// `text(lines:)` výš roztahuje seznam po souborech o 240 řádcích, takže s počtem řádků roste
+    /// i počet souborů — a **na otázku „co stojí počet souborů“ tedy neodpovídá**. Tahle podoba
+    /// drží řádky konstantní a mění jedině počet souborů, protože mapa PR (#501) kreslí segment
+    /// **na soubor**, ne na řádek: u PR o pětačtyřiceti souborech je v hlavičce pětačtyřicet
+    /// tlačítek s nápovědou a devadesát skládaných řetězců.
+    ///
+    /// Hunk je jeden na soubor a řádky se rozdělí rovným dílem; nejmíň pět na soubor, aby soubor
+    /// nebyl prázdný.
+    static func spread(files: Int, lines: Int) -> String {
+        let perFile = max(lines / max(files, 1), 5)
+        return synthetic(files: files, hunks: 1, lines: perFile)
+    }
+
     static func synthetic(files: Int, hunks: Int, lines: Int) -> String {
         var out = ""
         for file in 0..<files {
