@@ -257,7 +257,7 @@ struct DiffCodeColumnWidthTests {
 
         /// Nechá scénu doskládat. **Jev, ne pevný okamžik** (#269): čeká se, dokud se přestane
         /// měnit šířka plochy obsahu.
-        func letItSettle() {
+        func letItSettle(sourceLocation: SourceLocation = #_sourceLocation) {
             let limit = ContinuousClock.now.advanced(by: TestWait.deadline)
             var quiet = 0
             var previous = -1.0
@@ -267,6 +267,18 @@ struct DiffCodeColumnWidthTests {
                 let width = Self.contentArea(in: hosting)?.frame.width ?? -1
                 quiet = width == previous ? quiet + 1 : 0
                 previous = width
+            }
+            // **Nedočkání se hlásí, nepolyká** (nález Copilota): měřit polorozloženou scénu znamená
+            // buď náhodně zelený běh, nebo pád o pár kroků dál, ze kterého se příčina nepozná.
+            // Tentýž vzorec jako v `DiffScrollerRideTests`.
+            if quiet < 3 {
+                Issue.record(
+                    """
+                    Nedočkalo se: šířka plochy obsahu se do \(TestWait.deadline) neustálila \
+                    (naposled \(previous) b, štěrbina \(slot), \(layout)).
+                    """,
+                    sourceLocation: sourceLocation
+                )
             }
         }
 

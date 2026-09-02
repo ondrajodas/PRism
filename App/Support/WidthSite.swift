@@ -2,12 +2,16 @@ import Foundation
 
 /// Šířky, na kterých se v diffu rozhoduje o sazbě (#546).
 ///
-/// ## Proč to je v diagnostice a ne v testu
+/// ## Proč to je v diagnostice, když na to je i test
 ///
-/// #546 je vada, kterou **hostované okno nereprodukuje**: v testu se scéna staví najednou, kdežto
-/// v okně se boční kolony rozvrhnou až po prvním měření. Jediné místo, kde se dá zjistit, na jakou
-/// šířku se diff doopravdy sází, je tedy **běžící aplikace** — a `print` do konzole se z GUI
-/// aplikace spuštěné z Finderu nikam nedostane.
+/// **Hostované okno tu vadu vyrobit umí** — `DiffCodeColumnWidthTests` ji hlídá —, ale zjistilo se
+/// to **až tímhle měřidlem**. Do #546 sonda z #503 stavěla scénu, ve které ta vada nastat nemůže
+/// (chybělo v ní vlákno s kotvou v diffu), takže z hostovaného okna vycházela pořád tatáž hodnota
+/// pro „funguje“ i „nefunguje“ (#478); rozdíl proti živému oknu neměl kdo změřit.
+///
+/// Zůstává to tady ze dvou důvodů, a ani jeden test nenahradí: **bisekce** (na kterou úroveň se
+/// šířka propsala) a **živé okno** — `print` do konzole se z GUI aplikace spuštěné z Finderu nikam
+/// nedostane a scéna, kterou má člověk zrovna na obrazovce, v testu není.
 ///
 /// Diagnostika kreslení (`PRISM_DIAGNOSE=1`, `./bin/run.sh --diagnose`) je na to už postavená:
 /// vypnutá stojí jeden load `Optional`u, vypíná se sama dalším spuštěním bez přepínače a zapisuje
