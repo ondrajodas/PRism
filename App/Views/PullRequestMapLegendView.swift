@@ -123,16 +123,18 @@ struct PullRequestMapLegendPopover: View {
             }
             .frame(width: 8, height: 14)
         case .current:
+            // **Vzorek je kus pásu s jezdcem pod ním**, kreslený tou samou funkcí — u značky to
+            // platí doslova: kdyby ji legenda napodobila vlastním trojúhelníkem, rozešel by se
+            // s pásem **tvar**, ne jen barva, a na obrázku by to nebylo vidět.
             Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-                PullRequestMapView.drawOutline(
-                    in: &context,
-                    around: CGRect(x: 5, y: 5, width: size.width - 10, height: PullRequestMapView.stripHeight)
+                let strip = CGRect(x: 0, y: 0, width: size.width, height: 5)
+                context.fill(
+                    Path(roundedRect: strip, cornerRadius: 1),
+                    with: .color(PullRequestMapView.fill(of: .clean))
                 )
+                PullRequestMapView.drawMarker(in: &context, under: strip, in: size)
             }
-            // **Vzorek má proporci pásu** (10 bodů na výšku), ne zmenšenou: obrys má odstup
-            // dva až čtyři body a poloměr čtyři, takže na šestibodovém obdélníku by z něj byla
-            // pilulka — a to už není ten tvar, který je v pásu.
-            .frame(width: 22, height: 20)
+            .frame(width: PullRequestMapView.markerWidth, height: 5 + PullRequestMapView.markerHeight)
         }
     }
 }

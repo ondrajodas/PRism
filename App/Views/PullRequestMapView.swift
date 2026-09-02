@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// Odpovídá na „jak velký a jak zlý je tenhle PR“ **dřív, než se otevře první soubor**:
 /// šířka segmentu roste s logaritmem změněných řádků, barva je nejhorší nález v souboru, nový
-/// soubor má tón `ok`, prošlý je tlumený, vlákno je svislá čárka a soubor pod výřezem má obrys.
+/// soubor má tón `ok`, prošlý je tlumený, vlákno je svislá čárka a soubor pod výřezem má pod
+/// sebou jezdce.
 /// **Nahrazuje pilulku `+248 −96` s pěti čtverečky** v pruhu záložek — říká totéž a víc.
 ///
 /// **Pás je jedna kresba, ne řada tlačítek — a je to výkonová podmínka** (#252, #501). První
@@ -42,10 +43,18 @@ struct PullRequestMapView: View {
     static let summaryGap = 12.0
     /// O kolik čárka vlákna přečnívá pás na každou stranu (`top: -4px; bottom: -4px`).
     static let tickOverhang = 4.0
-    /// Plocha, na kterou se kreslí. **Vyšší než pás**, protože čárka vlákna i obrys přečnívají —
+    /// Šířka základny jezdce — značky souboru pod výřezem (#501).
+    static let markerWidth = 14.0
+    /// Výška jezdce, tedy o kolik přečnívá pás **pod** ním.
+    static let markerHeight = 7.0
+    /// O kolik plocha přečnívá pás na každou stranu. Rozhoduje **ta vyšší z obou značek**, tedy
+    /// jezdec; čárka vlákna si dál bere svoje čtyři body. Symetricky schválně — kresba se v řádce
+    /// středí, takže asymetrická plocha by pás posunula o rozdíl nahoru.
+    static var markerOverhang: Double { markerHeight }
+    /// Plocha, na kterou se kreslí. **Vyšší než pás**, protože čárka vlákna i jezdec přečnívají —
     /// `Canvas` si kresbu ořezává do svého rámce, takže by se jinak zarovnaly s hranou pásu.
     /// Řádka zůstává vysoká `stripHeight` a plocha z ní přečnívá, takže se výška hlavičky nemění.
-    static var canvasHeight: Double { stripHeight + 2 * tickOverhang }
+    static var canvasHeight: Double { stripHeight + 2 * markerOverhang }
 
     /// Šířka celé řádky. Měří se, protože **`availableWidth` sem nedosáhne**: nasazuje se až na
     /// hranici obsahu tabu (`PullRequestDetailView`), a pás stojí nad pruhem záložek. Rozhoduje
@@ -138,7 +147,7 @@ struct PullRequestMapView: View {
                 .opacity(segment.readState.isRead ? Policy.mapReadOpacity : 1)
             context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(fill))
             for fraction in segment.threads { Self.drawTick(in: &context, at: fraction, in: rect) }
-            if current == segment.path { Self.drawOutline(in: &context, around: rect) }
+            if current == segment.path { Self.drawMarker(in: &context, under: rect, in: size) }
         }
     }
 
@@ -161,16 +170,40 @@ struct PullRequestMapView: View {
         context.fill(Path(roundedRect: tick, cornerRadius: 1), with: .color(fill(of: .thread)))
     }
 
-    /// Obrys souboru pod výřezem (`outline: 2px solid accent; outline-offset: 2px`).
+    /// Jezdec — značka souboru pod výřezem (`.rv-prmap .runner` v návrhu, sekce 42).
     ///
-    /// Obtah leží **na** cestě, takže se cesta rozšíří o tři body — obrys pak sedí 2 až 4 body od
-    /// hrany segmentu, jak to má `outline-offset`. Poloměr je poloměr segmentu plus odstup.
-    static func drawOutline(in context: inout GraphicsContext, around rect: CGRect) {
-        context.stroke(
-            Path(roundedRect: rect.insetBy(dx: -3, dy: -3), cornerRadius: 4),
-            with: .color(fill(of: .current)),
-            lineWidth: 2
-        )
+    /// **Pevný trojúhelník 14 × 7 bodů pod pásem, hrotem v ose segmentu.** Nahradil obrys, a je to
+    /// změna z **měření, ne z chuti**: obrys byl `outline-offset`, tedy odstup od segmentu, takže
+    /// byl vždycky o osm bodů širší než to, co obtahoval — nad hustým pásem pojmenovával okolí víc
+    /// než svůj soubor (podíl cílového segmentu spadl z 91–98 % u tří souborů na **21–30 %** u sto
+    /// padesáti osmi) a měl přitom **tolik inkoustu a týž tvar co jedna čárka vlákna** (39 proti
+    /// 36–44 b²). Čísla jsou v `docs/architektura.md`.
+    ///
+    /// Tři vlastnosti, na kterých ta náhrada stojí, a všechny tři jsou kontrolovatelné:
+    ///
+    /// - **velikost nezávisí na šířce segmentu** — jinak se značka rozpadne zrovna tam, kde je pás
+    ///   nejužitečnější;
+    /// - **hrot je bod**, takže ukazuje přesně i tehdy, když je značka širší než cíl. Obrys naopak
+    ///   *obklopoval*, a to při dvou bodech šířky ztrácí smysl;
+    /// - **tvar se nedá splést s čárkou vlákna** — čárka má dva body v každém svém řádku, jezdec
+    ///   čtrnáct u základny.
+    ///
+    /// **Hrot zůstává na skutečném středu segmentu, základna se ořezává do plochy.** U prvního
+    /// a posledního segmentu tedy vyjde jezdec nesymetrický, a je to vědomá volba: posunutý hrot
+    /// by ukazoval na soubor, který to není. Obrys měl na krajích tutéž vadu **nepřiznaně** —
+    /// jeho vnější hrana ležela na `x = −4`, tedy mimo plochu, a `Canvas` ji potichu ořezal.
+    static func drawMarker(in context: inout GraphicsContext, under rect: CGRect, in size: CGSize) {
+        let center = rect.midX
+        let half = markerWidth / 2
+        let left = max(center - half, 0)
+        let right = min(center + half, size.width)
+        let base = rect.maxY + markerHeight
+        var path = Path()
+        path.move(to: CGPoint(x: center, y: rect.maxY))
+        path.addLine(to: CGPoint(x: right, y: base))
+        path.addLine(to: CGPoint(x: left, y: base))
+        path.closeSubpath()
+        context.fill(path, with: .color(fill(of: .current)))
     }
 
     /// Barva tónu — **jedno místo pro kresbu i pro legendu** (#501). Kdyby si legenda barvy

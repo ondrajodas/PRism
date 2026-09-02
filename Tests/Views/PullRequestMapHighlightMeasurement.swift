@@ -53,8 +53,8 @@ struct PullRequestMapHighlightMeasurement {
     @Test("Změřit značku souboru pod výřezem přes pásmo počtů a šířek")
     func measuresTheHighlight() throws {
         print("")
-        print("| souborů | šířka | segment | značka (š × v) | inkoust | pokrytých | podíl |")
-        print("|---|---|---|---|---|---|---|")
+        print("| souborů | šířka | segment | značka (š × v) | inkoust | pokrytých | podíl | hrot od středu | hrot v segmentu |")
+        print("|---|---|---|---|---|---|---|---|---|")
         for count in counts {
             for width in widths {
                 let files = Self.files(count: count)
@@ -76,8 +76,8 @@ struct PullRequestMapHighlightMeasurement {
         }
         print("")
         // A totéž na **nejširším** segmentu, ať je vidět, že to není vlastnost pásu, ale šířky.
-        print("| souborů | šířka | nejširší segment | značka (š × v) | inkoust | pokrytých | podíl |")
-        print("|---|---|---|---|---|---|---|")
+        print("| souborů | šířka | nejširší segment | značka (š × v) | inkoust | pokrytých | podíl | hrot od středu | hrot v segmentu |")
+        print("|---|---|---|---|---|---|---|---|---|")
         for count in [7, 45, 158] {
             for width in widths {
                 let files = Self.files(count: count)
@@ -233,13 +233,22 @@ struct PullRequestMapHighlightMeasurement {
         mark: Box?
     ) -> String {
         guard let mark else {
-            return "| \(count) | \(Int(width)) | \(fmt(widths[target])) | **nenakreslila se** | 0 | 0 | — |"
+            return "| \(count) | \(Int(width)) | \(fmt(widths[target])) | **nenakreslila se** | 0 | 0 | — | — | NE |"
         }
         let spacing = Policy.mapSpacing(count: count, in: strip)
         let covered = Self.covered(widths: widths, spacing: spacing, target: target, mark: mark)
         let share = widths[target] / Double(mark.width)
+        let geometry = PullRequestMapGeometry(widths: widths, spacing: spacing)
+        let span = geometry.span(of: target)
+        let center = span.map { ($0.lowerBound + $0.upperBound) / 2 + PullRequestMapView.horizontalPadding }
+        let offset = center.map { abs(mark.apex - $0) }
+        let inside = span.map { span in
+            let x = mark.apex - PullRequestMapView.horizontalPadding
+            return x >= span.lowerBound - 1 && x <= span.upperBound + 1
+        } ?? false
         return "| \(count) | \(Int(width)) | \(fmt(widths[target])) | \(mark.width) × \(mark.height) |"
             + " \(mark.ink) | \(covered) | \(fmt(share * 100)) % |"
+            + " \(offset.map { fmt($0) } ?? "—") | \(inside ? "ano" : "NE") |"
     }
 
     private func fmt(_ value: Double) -> String { String(format: "%.1f", value) }
@@ -252,6 +261,9 @@ struct PullRequestMapHighlightMeasurement {
         let top: Int
         let bottom: Int
         let ink: Int
+        /// Střed **nejvyššího** řádku značky. U jezdce je to hrot, tedy to, čím ukazuje;
+        /// u obrysu to byla horní hrana rámečku, tedy nic.
+        let apex: Double
 
         var width: Int { right - left + 1 }
         var height: Int { bottom - top + 1 }
@@ -274,21 +286,35 @@ struct PullRequestMapHighlightMeasurement {
         let with = try pixels(files: files, map: second.map, width: width, current: second.current)
         var box: Box?
         var ink = 0
+        var apexRow: [Int] = []
         for y in without.indices where with.indices.contains(y) {
             for x in without[y].indices where with[y].indices.contains(x) {
                 guard without[y][x].distance(to: with[y][x]) > 0.02 else { continue }
                 ink += 1
+                if box == nil || box?.top == y { apexRow.append(x) }
                 box = Box(
                     left: min(box?.left ?? x, x),
                     right: max(box?.right ?? x, x),
                     top: box?.top ?? y,
                     bottom: y,
-                    ink: 0
+                    ink: 0,
+                    apex: 0
                 )
             }
         }
         guard let box else { return nil }
-        return Box(left: box.left, right: box.right, top: box.top, bottom: box.bottom, ink: ink)
+        // **Hrot se čte z nejvyššího řádku, ne ze středu obálky.** U jezdce je základna ořezaná
+        // do plochy (na kraji pásu nesymetricky), takže střed obálky se od hrotu **liší** — a je
+        // to hrot, čím značka ukazuje.
+        let apex = apexRow.isEmpty ? 0 : Double(apexRow.reduce(0, +)) / Double(apexRow.count)
+        return Box(
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            ink: ink,
+            apex: apex
+        )
     }
 
     /// Kolik segmentů obálka značky potkává — v souřadnicích pásu, tedy po odečtení odsazení.
@@ -324,12 +350,10 @@ struct PullRequestMapHighlightMeasurement {
         )
     }
 
-    /// Nejužší segment, který **není na kraji pásu**. Krajní se měřit nesmí: obrys prvního
-    /// segmentu má levou hranu na `x = −4`, tedy mimo kreslicí plochu, a `Canvas` si kresbu
-    /// ořezává — značka by u něj vyšla o dva body užší, než jaká v pásu je.
+    /// Nejužší segment, který **není na kraji pásu**. Krajní se měřit nesmí: značka má u něj
+    /// ořezanou základnu (a obrys tam měl ořezanou hranu), takže by se měřilo něco jiného.
     private static func narrowestInside(_ widths: [Double]) -> Int? {
-        let inside = Array(widths.indices).filter { $0 > 0 && $0 < widths.count - 1 }
-        return inside.min { widths[$0] < widths[$1] }
+        MapScene.narrowestInside(widths)
     }
 
     private static func widestInside(_ widths: [Double]) -> Int? {
@@ -337,29 +361,8 @@ struct PullRequestMapHighlightMeasurement {
         return inside.max { widths[$0] < widths[$1] }
     }
 
-    /// `count` souborů s **různým** objemem: jeden lock a k němu drobnosti, tedy to rozložení,
-    /// kvůli kterému logaritmus existuje. Nejmenší soubor leží **uvnitř** pásu, ne na kraji.
-    static func files(count: Int) -> [FileDiff] {
-        (0..<count).map { index in
-            let lines = index == count / 3 && count > 3 ? 2790 : 4 + (index * 7) % 40
-            return file("src/File\(index).swift", added: lines, removed: 0)
-        }
-    }
-
-    private static func file(_ path: String, added: Int, removed: Int) -> FileDiff {
-        let new = (0..<added).map {
-            DiffLine(kind: .added, oldNumber: nil, newNumber: $0 + 1, text: "nové \($0 + 1)")
-        }
-        return FileDiff(
-            oldPath: path,
-            newPath: path,
-            change: .modified,
-            isBinary: false,
-            hunks: [DiffHunk(oldStart: 1, oldCount: removed, newStart: 1, newCount: added,
-                             heading: "", lines: new)],
-            blobs: "aaa..bbb"
-        )
-    }
+    /// Scéna je **jedno místo** (`MapScene.spread`), ať se obrázek, čísla a tvrzení nerozejdou.
+    static func files(count: Int) -> [FileDiff] { MapScene.spread(count: count) }
 
     private struct Rgb {
         let red: Double

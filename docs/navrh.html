@@ -2652,6 +2652,9 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rv-prmap .seg.find, .rv-legend i.sw.find { background: var(--find); }
 .rv-prmap .seg.new, .rv-legend i.sw.new { background: color-mix(in srgb, var(--ok) 55%, var(--panel-3)); }
 .rv-prmap .seg.viewed, .rv-legend i.sw.viewed { opacity: 0.35; }
+/* Obrys u segmentu je od #501 **záznam měření, ne dnešní obrazovka** — kreslí ho jedině panel
+   *Proč obrys odešel* v sekci 42. Je to tentýž vztah, jaký má `.diffstat` k sekci 19: pravidlo
+   je „co je na obrazovce, kreslí `.runner`", a tohle je doklad, proč. */
 .rv-prmap .seg.cur { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rv-prmap .seg .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent); border-radius: 1px; }
 .rv-prmap .lbl { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); white-space: nowrap; flex: none; }
@@ -2664,7 +2667,17 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rv-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .rv-legend i { width: 14px; height: 9px; border-radius: 2px; display: inline-block; }
 .rv-legend i.t { width: 2px; height: 14px; background: var(--accent); border-radius: 1px; }
-.rv-legend i.o { width: 12px; height: 7px; background: transparent; outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Vzorek „čtu“ je od #501 **kus pásu s jezdcem pod ním**, ne rámeček — kreslí se tím, čím
+   kreslí pás, takže se s ním nemůže rozejít ani tvarem. */
+.rv-legend i.o {
+  width: 14px; height: 5px; background: var(--panel-3); border-radius: 1px;
+  position: relative; overflow: visible;
+}
+.rv-legend i.o::after {
+  content: ""; position: absolute; left: 50%; top: 100%; width: 14px; height: 7px;
+  transform: translateX(-50%);
+  background: var(--accent); clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
 /* ---- legenda k pásu: vybraná podoba (#501, varianta A) ----
    Významů je **sedm** (blokuje, nález, bez nálezu, nový soubor, prošlo, vlákno, čtu) a řádka pásu
    má **deset bodů** výšky, přičemž vpravo v ní už stojí popisek s počty, který pod ~180 body pásu
@@ -2695,11 +2708,14 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
    protože `flex` by mezery nechal a segmenty stlačil pod minimum. */
 .rv-prmap.dense .strip { gap: 0; }
 .rv-prmap.dense .seg { min-width: 2px; border-radius: 1px; }
-/* ---- navrhovaná značka souboru pod výřezem: „jezdec“ (#501, ke schválení) ----
-   Dnešní obrys (`.seg.cur`) je **odstup od segmentu**, takže jeho velikost roste a klesá se
-   segmentem — a pod ~19 body šířky ukazuje na sousedy víc než na svůj soubor (změřeno, čísla jsou
-   u panelu v sekci 42). Jezdec je proti tomu **pevný**: 14 × 7 bodů, hrot v ose segmentu, a nemění
-   se s tím, kolik je v PR souborů. `transform` ho středí na hrot, ne na hranu. */
+/* ---- značka souboru pod výřezem: „jezdec“ (#501) ----
+   **Nahradil obrys** (`.seg.cur`, teď už jen v záznamu měření), a je to změna z čísel: obrys byl
+   `outline-offset`, tedy **odstup od segmentu**, takže jeho velikost rostla a klesala se
+   segmentem — pod ~19 body šířky ukazoval na sousedy víc než na svůj soubor (podíl cílového
+   segmentu 21–30 % u 158 souborů) a měl přitom **tolik inkoustu a týž tvar co jedna čárka
+   vlákna**. Jezdec je proti tomu **pevný**: 14 × 7 bodů, hrot v ose segmentu, a nemění se s tím,
+   kolik je v PR souborů. `transform` ho středí na hrot, ne na hranu; v okně se základna na kraji
+   pásu ořezává, aby hrot zůstal na skutečném středu segmentu. */
 .rv-prmap .runner {
   position: absolute; left: 50%; bottom: -7px; width: 14px; height: 7px;
   transform: translateX(-50%);
@@ -4589,7 +4605,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="rv-prmap">
               <div class="strip">
                 <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
                 <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
                 <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
                 <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -5745,14 +5761,15 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         →</a>, protože to je záznam z #316, ne dnešní obrazovka.
       </p>
       <p class="muted">
-        <b>Ze dvou otázek, které tady byly otevřené, je jedna rozhodnutá a druhá otevřená znovu.</b>
-        <b>Legenda</b> se vyžádá z popisku (bývalá varianta A) — v řádce nepřibude nic a významy
-        se ukážou po kliknutí; varianty B a C jsou zahozené. <b>Šířka segmentu</b> zůstává
+        <b>Obě otázky, které tady byly otevřené, jsou rozhodnuté — a druhou rozhodlo měření.</b>
+        <b>Legenda</b> se vyžádá z popisku (bývalá varianta A): v řádce nepřibude nic a významy se
+        ukážou po kliknutí; varianty B a C jsou zahozené. <b>Šířka segmentu</b> zůstává
         <code>log₂</code>, tedy <b>proměnná</b>: nese objem, a to je informace, kterou stejně široká
-        okýnka ztratí beze zbytku. Za to se ale platí — <b>když šířka nese objem, neříká, kde jsem</b>,
-        a jediné, co v pásu odpovídá na „který soubor zrovna čtu“, je značka souboru pod výřezem.
-        Ta se změřila a <b>dnešní obrys ji neunese</b>; návrh nové podoby je v posledním panelu
-        a <b>čeká na schválení</b>.
+        okýnka ztratí beze zbytku. Platí se za to tím, že <b>když šířka nese objem, neříká, kde
+        jsem</b> — a jediné, co v pásu odpovídá na „který soubor zrovna čtu“, je značka souboru pod
+        výřezem. Ta se změřila z bitmapy, <b>dnešní obrys ji neunesl</b> a nahradil ho <b>jezdec</b>:
+        pevný trojúhelník pod pásem, hrotem v ose segmentu. Proč a s jakými čísly, je ve dvou
+        posledních panelech.
       </p>
       <p class="muted">
         <b>Výřez, ne celé okno.</b> Mění se jedna řádka chromu mezi hlavičkou a záložkami, takže
@@ -5768,7 +5785,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div class="rv-prmap big">
           <div class="strip">
             <span class="seg crit viewed" style="flex: 4.64;"></span>
-            <span class="seg find cur" style="flex: 5.46;"><i class="tick" style="left: 62%;"></i><span class="rv-tip">Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo</span></span>
+            <span class="seg find" style="flex: 5.46;"><i class="tick" style="left: 62%;"></i><span class="rv-tip">Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo<i class="runner"></i></span></span>
             <span class="seg new" style="flex: 4.46;"></span>
             <span class="seg viewed" style="flex: 6.02;"><i class="tick" style="left: 30%;"></i></span>
             <span class="seg viewed" style="flex: 2.32;"></span>
@@ -5821,7 +5838,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div class="rv-prmap">
           <div class="strip">
             <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+            <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
             <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
             <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
             <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -5855,7 +5872,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         <div class="rv-prmap">
           <div class="strip">
             <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-            <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+            <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
             <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
             <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
             <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -5896,7 +5913,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     </div>
 
     <div class="pane">
-      <div class="tag"><i></i>Značka souboru pod výřezem: co dnešní obrys unese a co ne</div>
+      <div class="tag"><i></i>Proč obrys odešel — záznam měření, ne dnešní obrazovka</div>
       <div class="frame flat">
         <div class="rv-prmap big dense" style="padding: 26px 22px 18px;">
           <div class="strip">
@@ -5909,7 +5926,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           </div>
         </div>
         <p style="margin: -6px 22px 14px; font-size: 11.5px; color: var(--ink-3);">
-          45 souborů — obrys je <b>11 bodů</b> široký nad segmentem o <b>3 bodech</b>
+          45 souborů — obrys byl <b>11 bodů</b> široký nad segmentem o <b>3 bodech</b>
         </p>
         <div class="rv-prmap big dense" style="padding: 26px 22px 18px;">
           <div class="strip">
@@ -5936,12 +5953,12 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           </div>
         </div>
         <p style="margin: -6px 22px 16px; font-size: 11.5px; color: var(--ink-3);">
-          158 souborů — obrys je <b>7 bodů</b> nad segmentem o <b>1,5 bodu</b>, tedy pět souborů naráz
+          158 souborů — obrys byl <b>7 bodů</b> nad segmentem o <b>1,5 bodu</b>, tedy pět souborů naráz
         </p>
       </div>
       <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Obrys je odstup od segmentu</b> (<code>outline-offset: 2px</code>), takže je vždycky
-        o osm bodů širší než to, co obtahuje — a nad hustým pásem tedy ukazuje víc na sousedy než
+        <b>Obrys byl odstup od segmentu</b> (<code>outline-offset: 2px</code>), takže byl vždycky
+        o osm bodů širší než to, co obtahoval — a nad hustým pásem tedy ukazuje víc na sousedy než
         na svůj soubor. <b>Změřeno z bitmapy</b> (ne z tokenu, #432), přes pásmo počtů souborů
         a šířek okna: podíl toho, co z obálky značky je cílový segment, je <b>91–98 %</b> u tří
         souborů, <b>74–94 %</b> u sedmi, <b>62–90 %</b> u desíti, <b>44–83 %</b> u dvaceti,
@@ -5958,7 +5975,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     </div>
 
     <div class="pane new">
-      <div class="tag"><i></i>Ke schválení — jezdec pod pásem místo obrysu</div>
+      <div class="tag"><i></i>Jezdec pod pásem — dnešní podoba značky, i s naměřenými čísly</div>
       <div class="frame flat">
         <div class="rv-prmap big" style="padding: 26px 22px 18px;">
           <div class="strip">
@@ -6028,9 +6045,18 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         (4) <b>Nechat obrys a jezdce přidat</b> — jedna věc, dvě značky.
       </p>
       <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
-        <b>Dokud to není schválené, kreslí obrys i tenhle dokument</b> — v rámech okna výš
-        i v sekcích 02, 03, 04, 19 a 25. Jezdec je zakreslený jedině tady; až bude odsouhlasený,
-        přejde do všech sedmi rámů v jednom commitu, aby si kresba neodporovala sama.
+        <b>Že to opravdu platí, je změřené, ne jen nakreslené.</b> Táž metoda jako u obrysu (rozdíl
+        dvou snímků, pásmo 3–158 souborů × 347–1347 bodů): značka má <b>12 až 14 × 7 bodů</b>
+        a 34–56 b² inkoustu <b>v každé kombinaci</b>, přičemž segment pod ní se mění z 1,4 na
+        433 bodů. A protože je značka nad hustým pásem <b>širší než cíl</b>, obálka o ničem
+        nesvědčí a rozhoduje <b>hrot</b>: jeho odchylka od středu segmentu je <b>0,0 až 0,6 bodu</b>
+        a leží v segmentu ve všech <b>šestatřiceti</b> kombinacích. Hlídají to tři tvrzení nad
+        bitmapou — jinak by to zítra někdo zmenšil.
+      </p>
+      <p style="margin-top: 2px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+        <b>Jezdce kreslí od teď všechny rámy okna</b> — v sekcích 02, 03, 04, 19 a 25 i v obou
+        výřezech výš —, takže si kresba neodporuje. Obrys zůstal jedině v panelu nad tímhle, a to
+        jako <b>záznam měření</b>: je to tentýž vztah, jaký má pilulka <code>+X −Y</code> k sekci 19.
         <b>Pás v těchhle třech rámech je zvětšený</b> (22 bodů místo deseti), aby byly tvary vidět;
         vodorovné poměry, o které se rozhoduje, jsou skutečné. <b>Jezdec je tím ale podceněný</b>:
         v okně stojí sedmibodový trojúhelník proti <b>desetibodovému</b> pásu, ne proti
@@ -6068,8 +6094,10 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
           35 %</b>, ne druhým odstínem — šest hodnot ve škále by z pásu udělalo obrázek k luštění.
           Stav <em>změněno od prošlého</em> tlumený <b>není</b>: je to práce, která se vrátila.
           Soubor pod výřezem se čte z <code>DiffViewport</code>, tedy z místa, kam se scroll
-          zapisuje už dneska; <b>čím se označuje</b>, je otevřená otázka — dnešní obrys je změřený
-          a neunese hustý pás, návrh je jezdec (panel výš).</span>
+          zapisuje už dneska, a <b>označuje ho jezdec</b>: pevný trojúhelník 14 × 7 bodů pod pásem,
+          hrotem v ose segmentu. <b>Obrys to byl a přestal být</b> — jako odstup od segmentu se
+          s ním zvětšoval i zmenšoval, takže nad hustým pásem pojmenovával okolí; jezdec je nad
+          třemi i nad 158 soubory týž (panely výš).</span>
         </span>
       </div>
       <div class="note">
@@ -6242,7 +6270,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="rv-prmap">
               <div class="strip">
                 <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
                 <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
                 <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
                 <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -6546,7 +6574,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="rv-prmap">
               <div class="strip">
                 <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
                 <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
                 <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
                 <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -8567,7 +8595,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="rv-prmap">
               <div class="strip">
                 <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
                 <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
                 <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
                 <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -8869,7 +8897,7 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
             <div class="rv-prmap">
               <div class="strip">
                 <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
                 <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
                 <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
                 <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -9237,7 +9265,7 @@ projeví hned v tom dalším.</div>
       <div class="rv-prmap">
         <div class="strip">
           <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-          <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+          <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
           <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
           <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
           <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>
@@ -9630,7 +9658,7 @@ projeví hned v tom dalším.</div>
             <div class="rv-prmap">
               <div class="strip">
                 <span class="seg crit viewed" style="flex: 4.64;" title="SecretClient.php · +18 −6 · 1 nález · prošlo"></span>
-                <span class="seg find cur" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i></span>
+                <span class="seg find" style="flex: 5.46;" title="Encryptor.php · +31 −12 · 1 nález · 1 vlákno · neprošlo"><i class="tick" style="left: 62%;"></i><i class="runner"></i></span>
                 <span class="seg new" style="flex: 4.46;" title="SecretNotFound.php · +21 −0 · nový soubor · neprošlo"></span>
                 <span class="seg viewed" style="flex: 6.02;" title="SecretClientTest.php · +64 −0 · 1 vlákno · prošlo"><i class="tick" style="left: 30%;"></i></span>
                 <span class="seg viewed" style="flex: 2.32;" title="composer.json · +3 −1 · prošlo"></span>

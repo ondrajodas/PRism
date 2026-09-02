@@ -200,28 +200,72 @@ struct PullRequestMapDrawingTests {
         #expect(box.height > 10, "čárka má \(box.height) b, pás 10")
     }
 
-    /// **Obrys se kreslí kolem segmentu pod výřezem, ne dovnitř.** Čte se z `DiffViewport` přes
+    /// **Soubor pod výřezem má pod pásem jezdce** (#501). Čte se z `DiffViewport` přes
     /// `DiffFileCursor`, takže scéna má výřez posazený na druhý soubor a čeká se, až sonda
     /// (`PullRequestMapProbe`) cestu do krabice zapíše.
-    @Test("Soubor pod výřezem má obrys akcentem kolem sebe")
-    func theCurrentFileGetsAnOutline() throws {
-        let without = try shot(dark: false, current: nil)
-        let with = try shot(dark: false, current: 1)
+    ///
+    /// Měří se **rozdílem dvou snímků téže scény** (bez souboru pod výřezem a s ním): to, co se
+    /// mezi nimi změnilo, je značka a nic jiného. Podle barvy to hledat nejde — akcent v pásu
+    /// nese i čárka vlákna.
+    @Test("Soubor pod výřezem má pod pásem jezdce")
+    func theCurrentFileGetsAMarker() throws {
+        let segment = try #require(shot(dark: false, current: nil).segmentBounds(1))
+        let mark = try #require(try marker(count: nil, target: 1), "jezdec se nenakreslil")
 
-        let plain = try #require(without.accentBox, "čárka vlákna se nenakreslila")
-        let outlined = try #require(with.accentBox, "obrys se nenakreslil")
-        // Hranice segmentu se berou ze snímku **bez** obrysu: s ním je obtah taky „ne plocha
-        // hlavičky“, takže by běhy pixelů slily segment se sousedem.
-        let segment = try #require(without.segmentBounds(1), "segment 1 se nenakreslil")
+        // **Pod pásem, ne v něm**: nejvyšší řádek značky leží na spodní hraně segmentu nebo pod ní.
+        #expect(mark.top >= segment.top,
+                "jezdec začíná na \(mark.top), řádek pásu je na \(segment.top)")
+        #expect(mark.height <= Int(PullRequestMapView.markerHeight) + 1,
+                "jezdec má \(mark.height) b, čekalo se nejvýš \(Int(PullRequestMapView.markerHeight) + 1)")
+        // **Plný trojúhelník, ne dvě čárky.** Tohle je ta vlastnost, kvůli které obrys odešel:
+        // ten měl při 158 souborech dvě svislé čárky dvou bodů, tedy týž tvar co vlákno.
+        #expect(mark.width >= 8, "jezdec je \(mark.width) b široký, čárka vlákna má dva")
+    }
 
-        // Obrys je širší než samotná čárka — a je to jediné, co se mezi snímky změnilo.
-        #expect(outlined.width > plain.width + 20,
-                "obrys má \(outlined.width) b, čárka \(plain.width) b")
-        // **Kolem segmentu, ne dovnitř** (`outline-offset`): obtah přečnívá na obě strany.
-        #expect(outlined.left < segment.left,
-                "obrys začíná na \(outlined.left), segment na \(segment.left)")
-        #expect(outlined.right > segment.right,
-                "obrys končí na \(outlined.right), segment na \(segment.right)")
+    /// **Velikost značky nezávisí na šířce segmentu** — a to je celý důvod, proč jezdec nahradil
+    /// obrys. Obrys byl odstup od segmentu, takže se s ním zvětšoval i zmenšoval: nad sedmi
+    /// soubory byl 58 bodů široký, nad 158 sedm. Jezdec je nad obojím týž.
+    ///
+    /// Sedm souborů proti sto padesáti osmi je rozdíl **93 proti 3 bodům** šířky segmentu, takže
+    /// kdyby značka byla odvozená od segmentu, vyjde tady rozdíl řádu.
+    @Test("Jezdec má tutéž velikost nad sedmi i nad 158 soubory")
+    func theMarkerDoesNotScaleWithTheSegment() throws {
+        let sparse = try #require(try marker(count: nil, target: 1), "jezdec nad sedmi soubory")
+        let dense = try #require(try marker(count: 158, target: 40), "jezdec nad 158 soubory")
+
+        #expect(abs(sparse.width - dense.width) <= 2,
+                "jezdec je \(sparse.width) b nad sedmi a \(dense.width) b nad 158 soubory")
+        #expect(sparse.height == dense.height,
+                "jezdec je \(sparse.height) b vysoký nad sedmi a \(dense.height) b nad 158")
+    }
+
+    /// **Hrot ukazuje na svůj segment** — i tam, kde je segment užší než značka.
+    ///
+    /// Je to to jediné tvrzení, které o „spolehlivě zvýrazní“ doopravdy mluví: nad hustým pásem je
+    /// značka **širší než cíl** (14 bodů proti třem), takže obálka o ničem nesvědčí a rozhoduje
+    /// **poloha hrotu**. Naměřeno přes celé pásmo 3–158 souborů × 347–1347 bodů: odchylka hrotu od
+    /// středu segmentu je **0,0 až 0,6 bodu** a hrot leží v segmentu ve všech šestatřiceti
+    /// kombinacích. Tolerance je 1,5 bodu — bitmapa má hrany vyhlazené a hrot se sází na
+    /// půlpixelu.
+    ///
+    /// **Měří se dva cíle, a ten druhý je ten podstatný**: uvnitř pásu i na **prvním** segmentu.
+    /// Na kraji se totiž základna značky ořezává do plochy, a odtud je jen krok k tomu posunout
+    /// rovnou celý jezdec, aby byl symetrický — tím by ale hrot ukazoval na soubor, který to
+    /// není. Ověřeno vloženou regresí: hrot sevřený do `markerWidth / 2 … šířka − markerWidth / 2`
+    /// projde uprostřed pásu a **spadne až na prvním segmentu** (posun o 5,5 bodu při segmentu
+    /// o 1,5 bodu).
+    @Test("Hrot jezdce leží na středu svého segmentu i nad hustým pásem", arguments: [0, 40])
+    func theMarkerApexPointsAtItsSegment(target: Int) throws {
+        let mark = try #require(try marker(count: 158, target: target), "jezdec se nenakreslil")
+        let span = try #require(Self.denseGeometry(count: 158).span(of: target))
+        let center = (span.lowerBound + span.upperBound) / 2 + PullRequestMapView.horizontalPadding
+
+        #expect(abs(mark.apex - center) <= 1.5,
+                "segment \(target): hrot je na \(mark.apex), střed segmentu na \(center)")
+        // A kontrola, že tenhle test měří to, co má: kdyby byl segment širší než značka,
+        // procházel by i s posunutým hrotem.
+        #expect(span.upperBound - span.lowerBound < Double(mark.width),
+                "segment je širší než značka, takže tvrzení o hrotu nic nehlídá")
     }
 
     // MARK: - Měřidlo
@@ -231,6 +275,9 @@ struct PullRequestMapDrawingTests {
         let right: Int
         let top: Int
         let bottom: Int
+        /// Střed **nejvyššího** řádku. U jezdce je to hrot, tedy to, čím ukazuje — a u značky,
+        /// která je širší než cíl, je to jediná souřadnice, která o cíli něco tvrdí.
+        var apex: Double = 0
 
         var width: Int { right - left + 1 }
         var height: Int { bottom - top + 1 }
@@ -360,6 +407,71 @@ struct PullRequestMapDrawingTests {
             }
             return box
         }
+    }
+
+    /// Značka souboru pod výřezem — **rozdíl dvou snímků téže scény**. `count == nil` je scéna
+    /// ze sekce 42 (sedm souborů), číslo je hustý pás (`MapScene.spread`).
+    ///
+    /// Rozdílem, ne barvou: akcent v pásu nese i čárka vlákna, takže hledat značku podle barvy by
+    /// vrátilo obálku obojího. Tolerance 0,02 je tatáž jako u hledání pásu.
+    private func marker(count: Int?, target: Int) throws -> Box? {
+        let files = count.map { MapScene.spread(count: $0) } ?? MapScene.files
+        let map = count == nil ? MapScene.map : Policy.pullRequestMap(files: files)
+        let without = try pixels(of: scene(files: files, map: map, current: nil), size: canvas, dark: false)
+        let with = try pixels(of: scene(files: files, map: map, current: target), size: canvas, dark: false)
+
+        var box: Box?
+        var apexRow: [Int] = []
+        for y in without.indices where with.indices.contains(y) {
+            for x in without[y].indices where with[y].indices.contains(x) {
+                guard without[y][x].distance(to: with[y][x]) > 0.02 else { continue }
+                if box == nil || box?.top == y { apexRow.append(x) }
+                box = Box(
+                    left: min(box?.left ?? x, x),
+                    right: max(box?.right ?? x, x),
+                    top: box?.top ?? y,
+                    bottom: y
+                )
+            }
+        }
+        guard let box, !apexRow.isEmpty else { return nil }
+        return Box(
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            apex: Double(apexRow.reduce(0, +)) / Double(apexRow.count)
+        )
+    }
+
+    /// Geometrie hustého pásu tak, jak ji dostane kresba: **celá dostupná šířka**, protože
+    /// v téhle scéně není popisek (`N souborů` se do prahu vejde, ale pás jde od hrany k hraně
+    /// jedině tehdy, když popisek zmizí — proto se tady počítá s šířkou po odsazení a tvrzení má
+    /// toleranci).
+    private static func denseGeometry(count: Int) -> PullRequestMapGeometry {
+        let map = Policy.pullRequestMap(files: MapScene.spread(count: count))
+        let available = 900.0 - 2 * PullRequestMapView.horizontalPadding
+            - PullRequestMapView.summaryWidth(of: map.summary) - PullRequestMapView.summaryGap
+        return PullRequestMapGeometry(
+            segments: map.segments,
+            width: available,
+            spacing: PullRequestMapView.stripSpacing
+        )
+    }
+
+    /// Plocha, na které se snímky berou. Musí být **vyšší než řádka i s přesahem značky**, jinak
+    /// se jezdec ořeže hranou hosting view a měřilo by se ořezání, ne kresba.
+    private var canvas: CGSize { CGSize(width: width, height: 48) }
+
+    /// Řádka pásu se scénou a s výřezem posazeným na daný soubor.
+    private func scene(files: [FileDiff], map: PullRequestMap, current: Int?) -> some View {
+        let tracking = DiffTracking()
+        for (index, file) in files.enumerated() {
+            tracking.extents.note(file.id, Double(index * 100)...Double((index + 1) * 100))
+        }
+        tracking.viewport.top = current.map { Double($0 * 100 + 50) } ?? -1000
+        return PullRequestMapView(map: map, files: files, tracking: tracking, jump: { _ in })
+            .padding(.top, 12)
     }
 
     /// Scéna: sedm souborů, z nichž první blokuje a je prošlý, druhý má nález i vlákno, čtvrtý je
@@ -532,6 +644,25 @@ enum MapScene {
     /// Soubor s daným počtem přidaných a odebraných řádků. **Přidané jdou první a mají nová čísla
     /// 1…N**, protože vlákno se kotví na nové číslo (`Policy.matches`) — bez toho by čárka neměla
     /// na co sednout.
+    /// **Hustý pás**: `count` souborů s různým objemem — jeden lock a k němu drobnosti, tedy to
+    /// rozložení, kvůli kterému logaritmus existuje. Nejmenší soubor leží **uvnitř** pásu, ne na
+    /// kraji, protože kraj má značka ořezanou základnu a měřilo by se něco jiného.
+    ///
+    /// Je to tady, ne v měřidle: scéna má **jedno místo**, ať se obrázek, čísla a tvrzení
+    /// nerozejdou.
+    static func spread(count: Int) -> [FileDiff] {
+        (0..<count).map { index in
+            let lines = index == count / 3 && count > 3 ? 2790 : 4 + (index * 7) % 40
+            return file("src/File\(index).swift", added: lines, removed: 0)
+        }
+    }
+
+    /// Nejužší segment, který **není na kraji pásu**.
+    static func narrowestInside(_ widths: [Double]) -> Int? {
+        Array(widths.indices).filter { $0 > 0 && $0 < widths.count - 1 }
+            .min { widths[$0] < widths[$1] }
+    }
+
     private static func file(
         _ path: String,
         added: Int,
