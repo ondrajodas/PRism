@@ -5432,6 +5432,13 @@ bere z `CFBundleName`, takže je slotová separace (#228) hotová bez jediného 
 velkého odkrytého úseku obnoví na nejbližším řádku hunku pod ním; a **odebraný řádek** má číslo ze
 staré verze souboru, takže se bere první přidaný nebo kontextový pod ním.
 
+**Jedno pravidlo přišlo až z Copilota, a je to to nejdražší z celého issue**: *nedoposazená kotva
+je pořád ta poslední známá poloha.* Drží dvě věci naráz — snímek ji čte i z `pendingScrollAnchors`
+(jinak ji zápis hned po obnovení smaže, aniž by ji kdo spotřeboval) a hlášení z diffu ji nepřepíše,
+dokud se neposadí (`DiffAnchorReporter` hlásí i při vzniku, tedy **dřív** než skok). Bez obojího by
+se poloha v diffu tiše ztrácela, a přitom by všechno vypadalo, že funguje: záložka by se otevřela,
+jen na začátku. Zbývá jeden průchod grafu mezi spotřebováním a skokem — zapsaná mez.
+
 **Co v harnessu ověřit nešlo**, a zkouší to člověk: že se výřez po restartu doopravdy posadí tam,
 kde stál. Skok jde přes `scrollTo` s podílem výšky a #152 to má zapsané jako **zmírnění, ne
 záruku** — kolik průchodů to sedne, se řídit nedá, a měřit se to musí na běžícím okně

@@ -6799,9 +6799,21 @@ a se zavřením odchází.
 cache slotu a hranici drží **tatáž kontrola jako jinde v repu** (`CacheFile.refusal`); kořen si
 aplikace bere z `CFBundleName`, takže slotová separace (#228) je hotová bez řádku navíc.
 
+**Copilot našel tři věci a všechny byly reálné**, dvě z nich tichá ztráta polohy v diffu.
+(1) Snímek se skládal jen z `diffScrollAnchors`, které jsou po startu prázdné, takže **zápis hned
+po obnovení kotvu smazal** — záložka, do jejíhož diffu se člověk nepodíval, by po druhém restartu
+začínala na začátku. (2) `DiffAnchorReporter` hlásí polohu i **při vzniku**, tedy dřív než skok,
+takže první hlášení nad nenaskrolovaným diffem uloženou polohu přepsalo za začátek souboru. Obojí
+teď drží jedno pravidlo — *nedoposazená kotva je pořád ta poslední známá poloha* — a obojí má test
+ověřený vložením regrese. (3) Doprovodná dokumentace zúžila `WindowTabMark.loading` na „obnovená
+po restartu“, přitom ten stav dostane i záložka otevřená odkazem (#531); opraveno **jako třída**,
+tedy včetně `README` a popisu parametru, ne jen na tom jednom řádku.
+
 **Zapsaná mezera:** že se výřez po restartu doopravdy posadí tam, kde stál, se v harnessu ověřit
 nedá — `ScrollView` se v testovacím hostu nevykreslí a skok je podle #152 **zmírnění, ne záruka**.
-Zkouší to člověk na běžící aplikaci.
+Zkouší to člověk na běžící aplikaci; já to změřil na slotové instanci (viz popis PR). K tomu
+zbývá **jeden průchod grafu** mezi spotřebováním kotvy a skokem, ve kterém platí poloha před
+skokem — zabité aplikaci v tom okamžiku se kotva posune o výřez.
 
 Testů **5003** ve 486 suitách; nové jsou čtyři sady (`WindowTabMarkTests`,
 `DiffScrollAnchorTests`, `OpenTabsStoreTests`, `AppStoreTabRestoreTests`), rozšířené

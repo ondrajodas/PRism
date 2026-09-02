@@ -39,7 +39,8 @@ záložky nic nezahodí.**
 mergi. Do cache slotu (`tabs.json`) se při každé změně záložky — a při ukončení — zapíše, co je
 otevřené: identita PR, tab v ní, **kotva scrollu jako soubor a řádek** a která záložka byla
 aktivní. Po startu se to vrátí **než proběhne první tik**; dokud u záložky nedorazí detail, má
-místo tečky **dutý kroužek** (dokreslený stav: „obnovená, ještě nevím“), a aktivní je ta, která
+místo tečky **dutý kroužek** (dokreslený stav „o téhle záložce se ví jenom adresa“ — dostane ho
+i záložka otevřená odkazem, #531), a aktivní je ta, která
 byla aktivní. **Obnovení nic nespouští** — ani review, ani session; dotáhne jen detail, a to
 čtením. PR, který mezitím z fronty zmizel (mergnul se, zavřel se), se vrátí taky: má **fialovou
 tečku podle stavu pull requestu**, dá se dočíst a **zavírá ho člověk**, ne tik pollingu.

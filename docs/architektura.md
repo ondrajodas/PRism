@@ -5035,6 +5035,20 @@ proto `(soubor, řádek)`, tedy údaj o **kódu** — platí i tehdy, když se o
 - **`nil` kotvu nemaže.** „Zrovna nevím, kde výřez stojí“ (rozsahy se přeměřují, bloky se
   odpojily) není totéž jako „do diffu se nekouklo“; zahodit poslední známou polohu kvůli jednomu
   průchodu bez odpovědi by znamenalo obnovit se na začátek diffu právě po přerovnání okna.
+- **Nedoposazená kotva je pořád ta poslední známá poloha**, a drží to dvě věci naráz (obojí nález
+  Copilota na #544 — a obojí byla tichá ztráta polohy, ne pád):
+
+  1. **Snímek ji čte i z `pendingScrollAnchors`** (`?? `). Obnovení zapíše snímek hned na konci
+     a ten se skládá z `diffScrollAnchors`, které jsou po startu prázdné — bez toho `??` by se
+     kotva ztratila **v okamžiku obnovení**, aniž by ji kdo spotřeboval, a záložka, do jejíhož
+     diffu se člověk nepodíval, by po druhém restartu začínala na začátku.
+  2. **Hlášení z diffu ji nepřepíše, dokud se neposadí.** `DiffAnchorReporter` hlásí polohu i při
+     vzniku (`initial: true`), tedy **dřív**, než `restoreScroll()` skočí; bez brány by první
+     hlášení nad nenaskrolovaným diffem uloženou polohu přepsalo za začátek souboru. Odemkne to
+     `takePendingScrollAnchor(for:)`, tedy skok sám.
+
+  Zbývá **jeden průchod grafu** mezi spotřebováním kotvy a skokem, ve kterém platí poloha před
+  skokem — zabité aplikaci v tom okamžiku se kotva posune o výřez. Je to zapsaná mez, ne chyba.
 - **Číslo řádku dodává `DraftAnchor`, který u řádku v krabici leží kvůli tažení rozsahu** — žádné
   měření navíc. Bere se jen strana `.right`, tedy **nová** čísla: `DiffRow.anchor` porovnává
   `newNumber`, kdežto číslo odebraného řádku je ze staré verze souboru a nenašlo by se. Odebraný

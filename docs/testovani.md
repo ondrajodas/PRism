@@ -2859,6 +2859,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   tvrzení jednoho testu naráz. To je zároveň důkaz, že se ta věta („obnovení musí být před prvním
   tikem a se značkou“) doopravdy hlídá.
 
+  **Třetí a čtvrtá regrese jsou o kotvě, a obojí byla tichá ztráta polohy** (nálezy Copilota):
+  bez `?? pendingScrollAnchors` ve snímku spadnou **tři** tvrzení testu „kotva, kterou nikdo
+  nespotřeboval, zůstane ve snímku“ (kotva se ztrácela v okamžiku obnovení), a bez brány
+  v `noteDiffScrollAnchor` spadne tvrzení testu „hlášení z diffu nepřepíše kotvu, dokud se
+  neposadí“ (`DiffAnchorReporter` hlásí i při vzniku, tedy dřív než skok).
+
   Dál: **mergnutý PR se vrátí s fialovým puntíkem a tik ho nezavře** (pravidlo z #67), první tik
   obnovenou záložku nevyprázdní, pilulka `mimo zdroje` restart přežije a obnovená ji nedostane,
   aktivní záložka mimo pruh se ignoruje (ručně editovaný snímek), a kotva scrollu se **vyzvedne

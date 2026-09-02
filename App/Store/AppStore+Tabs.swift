@@ -36,7 +36,13 @@ extension AppStore {
                     // **Volba tabu, ne výchozí hodnota** — `detailTab(for:)` odpovídá i za PR,
                     // který v mapě odchylek není, a právě to se má obnovit.
                     tab: detailTab(for: pullRequest),
-                    anchor: diffScrollAnchors[pullRequest],
+                    // **Nedoposazená kotva z minula je pořád ta poslední známá poloha** (nález
+                    // Copilota na #544). Bez toho `??` by ji snímek zapsaný hned po obnovení
+                    // (nebo při první změně záložky) přepsal na `nil` — a záložka, do jejíhož
+                    // diffu se ještě nikdo nepodíval, by o svou polohu přišla, aniž by ji kdo
+                    // spotřeboval. Živé hlášení má přednost: jak se do diffu přijde a kotva se
+                    // doposadí, `pendingScrollAnchors` se vyprázdní a platí `diffScrollAnchors`.
+                    anchor: diffScrollAnchors[pullRequest] ?? pendingScrollAnchors[pullRequest],
                     // Odkaz se pamatuje, obnovení ne: `restored` je značka **tohohle** spuštění,
                     // takže by se z ní jinak stal trvalý příznak „tenhle PR se kdysi obnovil“.
                     openedByLink: adoptedTabs[pullRequest] == .link
@@ -152,6 +158,16 @@ extension AppStore {
     /// komu), ale i tak: mapa bez téhle brány by držela záznamy o PR, které v pruhu nejsou.
     func noteDiffScrollAnchor(_ anchor: DiffScrollAnchor?, for pullRequest: PRIdentifier) {
         guard openTabs.contains(pullRequest) else { return }
+        // **Dokud kotva z minula čeká na doposazení, hlášení z diffu ji nepřepíše** (nález
+        // Copilota na #544). `DiffAnchorReporter` hlásí polohu i při vzniku (`initial: true`),
+        // tedy **dřív**, než `restoreScroll()` skočí — bez téhle brány by první hlášení nad
+        // nenaskrolovaným diffem přepsalo uloženou polohu za začátek souboru, a snímek zapsaný
+        // do té chvíle by tvrdil, že člověk skončil na začátku diffu.
+        //
+        // Odemkne to `takePendingScrollAnchor(for:)`, tedy skok sám. Zůstává jeden průchod
+        // grafu, ve kterém platí poloha před skokem — zabité aplikaci v tom okamžiku se kotva
+        // posune o výřez, a to je zapsaná mez, ne chyba.
+        guard pendingScrollAnchors[pullRequest] == nil else { return }
         // `nil` **nemaže**, a je to rozhodnutí: „zrovna nevím, kde výřez stojí“ (rozsahy souborů
         // se přeměřují, bloky se odpojily) není totéž jako „do diffu se nekouklo“. Zahodit
         // poslední známou polohu kvůli jednomu průchodu bez odpovědi by znamenalo obnovit se na

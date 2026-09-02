@@ -356,6 +356,57 @@ struct AppStoreTabRestoreTests {
         #expect(store.takePendingScrollAnchor(for: vault) == nil)
     }
 
+    /// **Nedoposazená kotva musí přežít zápis snímku** (nález Copilota na #544). Obnovení zapíše
+    /// snímek hned na konci (srovnává ho s tím, co se doopravdy obnovilo) — a ten se skládá
+    /// z `diffScrollAnchors`, které jsou po startu prázdné. Bez `??` na `pendingScrollAnchors` by
+    /// se kotva ztratila **v okamžiku obnovení**, aniž by ji kdo spotřeboval: záložka, do jejíhož
+    /// diffu se člověk nepodíval, by po druhém restartu začínala na začátku diffu.
+    @Test("Kotva, kterou nikdo nespotřeboval, zůstane ve snímku")
+    func anUnconsumedAnchorSurvivesThePersist() async {
+        let anchor = DiffScrollAnchor(file: "App/A.swift", line: 42)
+        tabs.save(OpenTabs(
+            tabs: [OpenTab(pullRequest: vault, tab: .filesChanged, anchor: anchor)],
+            active: vault
+        ))
+
+        let (store, _) = await started(list: [])
+
+        // Zápis na konci obnovení kotvu nesmí smazat…
+        #expect(tabs.load().tabs.first?.anchor == anchor)
+        #expect(store.openTabsSnapshot.tabs.first?.anchor == anchor)
+
+        // …ani ten při další změně záložky.
+        store.show(.queue)
+        #expect(tabs.load().tabs.first?.anchor == anchor)
+    }
+
+    /// **Hlášení z diffu nesmí přebít kotvu, která se ještě neposadila** (nález Copilota na #544).
+    /// `DiffAnchorReporter` hlásí polohu i při vzniku (`initial: true`), tedy **dřív**, než skok
+    /// proběhne — bez brány by první hlášení nad nenaskrolovaným diffem uloženou polohu přepsalo
+    /// za začátek souboru a snímek by tvrdil, že člověk skončil na začátku diffu.
+    @Test("Hlášení z diffu nepřepíše kotvu, dokud se neposadí")
+    func aReportDoesNotOverwriteAPendingAnchor() async {
+        let saved = DiffScrollAnchor(file: "App/A.swift", line: 420)
+        tabs.save(OpenTabs(
+            tabs: [OpenTab(pullRequest: vault, tab: .filesChanged, anchor: saved)],
+            active: vault
+        ))
+
+        let (store, _) = await started(list: [])
+
+        // Diff se právě nasadil a hlásí, kde stojí — tedy na začátku.
+        store.noteDiffScrollAnchor(DiffScrollAnchor(file: "App/A.swift", line: 1), for: vault)
+        #expect(store.openTabsSnapshot.tabs.first?.anchor == saved)
+
+        // Teprve spotřebování kotvy (tedy skok sám) hlášení odemkne.
+        #expect(store.takePendingScrollAnchor(for: vault) == saved)
+        store.noteDiffScrollAnchor(DiffScrollAnchor(file: "App/A.swift", line: 420), for: vault)
+        #expect(
+            store.openTabsSnapshot.tabs.first?.anchor
+                == DiffScrollAnchor(file: "App/A.swift", line: 420)
+        )
+    }
+
     /// Zavření záložky je jediné, co kotvu smí zahodit: je to stav **otevřené záložky**, ne PR.
     @Test("Zavření záložky kotvu zahodí")
     func closingTheTabDropsTheAnchor() async {
