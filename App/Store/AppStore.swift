@@ -1974,11 +1974,15 @@ final class AppStore {
         // Zahazuje se **zavřením záložky**, ne tikem; do té doby je to otevřená práce jako každá
         // jiná. Frontu to nerozšiřuje: automat, notifikace ani nové PR sem nechodí, ty dostávají
         // `summaries`.
+        //
+        // **„V seznamu“ v komentářích níž tedy znamená „v `wantedPullRequests`“** (nález Copilota
+        // na #535): hranice je od #531 o tu jednu záložku širší než tik, a rozepisovat to
+        // u každého filtru zvlášť by znamenalo dvacet míst, ve kterých se dá zapomenout jedno.
         let wantedPullRequests = Set(summaries.map(\.id)).union(externalPullRequests)
         let wanted = Set(wantedPullRequests.map(\.repo))
         checkoutStates = checkoutStates.filter { wanted.contains($0.key) || $0.value == .preparing }
 
-        // Diff velkého PR jsou megabajty, takže se drží jen pro to, co je v seznamu.
+        // Diff velkého PR jsou megabajty, takže se drží jen pro to, co je v chtěné množině.
         // Rozdělané načítání přežije ze stejného důvodu jako běžící příprava: jinak by si
         // ho doběhlé volání zapsalo zpátky a v mapě by zůstalo tak jako tak.
         diffStates = diffStates.filter { wantedPullRequests.contains($0.key) || $0.value == .loading }
@@ -1996,8 +2000,8 @@ final class AppStore {
         // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         diffSearches = diffSearches.filter { wantedPullRequests.contains($0.key.pullRequest) }
-        // Detail se drží jen pro to, co je v seznamu — je z něj `headSha` pro draft, a ten
-        // se u PR mimo seznam nepíše. Rozdělané načítání přežije jako u diffu.
+        // Detail se drží jen pro to, co je v chtěné množině — je z něj `headSha` pro draft, a ten
+        // se u PR mimo ni nepíše. Rozdělané načítání přežije jako u diffu.
         //
         // **Rozdělané review se nezahazuje.** Je to ručně psaná práce, mapa je jeden malý
         // záznam na PR a PR, které ze seznamu vypadlo, se do něj umí vrátit (znovuotevření).

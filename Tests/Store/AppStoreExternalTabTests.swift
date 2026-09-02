@@ -196,6 +196,40 @@ struct AppStoreExternalTabTests {
         #expect(store.queuePullRequests.map(\.id) == [listed])
     }
 
+    /// Dvě `↵` na řádku `Odkaz` (nebo dvakrát otevřený `prism://`) jsou dva pokusy o totéž —
+    /// a bez `.loading` v podmínce z nich byly **dva `gh pr view`** a dva zápisy do jednoho stavu.
+    /// Nález Copilota na PR #535.
+    @Test("Druhé otevření během načítání se neptá podruhé")
+    func openingTwiceWhileLoadingAsksOnce() async {
+        let (store, gateway) = await loaded([summary(listed)])
+
+        store.openPullRequest(vault)
+        store.openPullRequest(vault)
+        store.openPullRequest(vault)
+        await settle(store)
+
+        #expect(gateway.detailRequests == [vault])
+        #expect(store.openTabs == [vault])
+    }
+
+    /// Zavření uprostřed načítání nesmí v mapě nechat `.loading`: `openPullRequest` ho bere jako
+    /// „někdo se právě ptá“, takže by znovuotevření uvízlo na obrazovce načítání navždycky.
+    @Test("Zavření uprostřed načítání nechá záložku znovu otevřít")
+    func closingWhileLoadingLeavesNoStaleState() async {
+        let (store, gateway) = await loaded([summary(listed)])
+        store.openPullRequest(vault)
+        store.closeTab(vault)
+        await waitUntil("dotažení dojede") { store.detailStates[vault] != .loading }
+
+        #expect(store.detailStates[vault] == nil)
+
+        store.openPullRequest(vault)
+        await settle(store)
+
+        #expect(store.summary(for: vault) != nil)
+        #expect(gateway.detailRequests == [vault, vault])
+    }
+
     /// Znovuotevření nad detailem, který tik ještě neuklidil, se **neptá znovu** — a hlavně
     /// záložku nevrátí na obrazovku načítání nad daty, která už jsou v ruce.
     @Test("Znovuotevření záložky se neptá, dokud je detail v paměti")

@@ -6340,7 +6340,17 @@ otevřel odkazem), kdežto řádek odkazu na *je ten PR v mých zdrojích teď* 
 PRism spustí a **nic neotevře** — a podruhé už poběží, takže by se to vypadalo jako náhoda. Jméno
 schématu i akce jsou konstanty v `Policy` a **test je srovnává s `Info.plist`**.
 
-Testů **4806** ve 471 suitách; nové jsou tři sady (`PullRequestLinkTests`,
+**Copilot k tomu našel dvě věci a obě jsou opravené.** (1) **Dvě `↵` na řádku `Odkaz` spustila
+dva dotazy** — `openPullRequest` se ptal, i když už jeden dotažení běželo. `.loading` v mapě proto
+znamená „někdo se právě ptá“ a druhý pokus se nepustí; k tomu se ta značka musí uklidit **na každé
+cestě ven** z `loadExternalDetail`, i na té, na které se zápis zahazuje (zavřená záložka) — jinak by
+znovuotevření uvízlo na obrazovce načítání navždycky. Obojí je pokryté testem a ověřené vložením
+regrese. (2) **Komentáře v `forget(whatIsNotIn:)` tvrdily „drží se jen to, co je v seznamu“**,
+kdežto hranice je od #531 o tu jednu záložku širší. Opraveno **jako třída, ne jako výskyt**: jedna
+věta u definice `wantedPullRequests` říká, co „v seznamu“ v komentářích níž znamená — dvacet
+přepsaných komentářů by znamenalo dvacet míst, ve kterých se dá zapomenout jedno.
+
+Testů **4808** ve 471 suitách; nové jsou tři sady (`PullRequestLinkTests`,
 `PullRequestOriginTests`, `AppStoreExternalTabTests`). Co se v nich hlídá a proč, je
 v [`docs/testovani.md`](testovani.md).
 

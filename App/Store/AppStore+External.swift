@@ -28,7 +28,13 @@ extension AppStore {
             // záložky ho tik ještě nemusel uklidit, a v tom případě je `summary(for:)` rovnou
             // zpátky. Ptát se znovu by stálo volání `gh` **a** vrátilo záložku na obrazovku
             // načítání nad daty, která už jsou v ruce.
-            if summary(for: pullRequest) == nil {
+            //
+            // **A `.loading` je druhá polovina té podmínky** (nález Copilota na #535): dvě `↵` na
+            // řádku `Odkaz` nebo dvakrát otevřený `prism://` jsou dva pokusy o totéž a bez tohohle
+            // by z nich byly dva `gh pr view` a dva zápisy do jednoho stavu. `.loading` v mapě
+            // znamená „někdo se právě ptá“ — proto ho `loadExternalDetail` na **každé** cestě ven
+            // zase uklidí, i na té, na které zápis zahazuje.
+            if summary(for: pullRequest) == nil, detailStates[pullRequest] != .loading {
                 // Rovnou tady, ať `tabContent` nemá mezeru mezi otevřením záložky a začátkem
                 // dotahování — v ní by se kreslilo „pull request zmizel“, tedy porucha nad
                 // stavem, ve kterém se nic nepokazilo.
@@ -56,7 +62,14 @@ extension AppStore {
             // ve které se dá kliknout na křížek — a zápis by v mapách nechal PR, který v okně
             // nikde není, i s jeho detailem. Tik po tom by ho neuklidil, protože značka `mimo
             // zdroje` se zavřením zmizela.
-            guard externalPullRequests.contains(pullRequest) else { return }
+            //
+            // **Rozdělané `.loading` se u toho musí uklidit**, jinak by po zavření zůstalo v mapě
+            // — a znovuotevření by na něm uvízlo, protože `openPullRequest` bere `.loading` jako
+            // „někdo se právě ptá“ a nový dotaz by nepustil.
+            guard externalPullRequests.contains(pullRequest) else {
+                if detailStates[pullRequest] == .loading { detailStates[pullRequest] = nil }
+                return
+            }
             detailStates[pullRequest] = .loaded(detail, updatedAt: detail.updatedAt)
             // Hlavu si pamatuje i návštěva (#173) — tatáž věta jako v `refreshDetail`.
             noteHead(detail.headSha, for: pullRequest)
