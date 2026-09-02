@@ -66,8 +66,14 @@ extension Policy {
         var below: DiffScrollRow?
         for row in rows where row.extent.upperBound >= top {
             if row.extent.lowerBound <= top {
-                // Řádky se nepřekrývají, takže hranu protíná nejvýš jeden — a ten vyhrává.
-                covering = row
+                // **Na hranici dvou řádků vyhrává ten dolní.** Řádky se nepřekrývají, ale
+                // dotýkají se: když hrana výřezu padne přesně na `maxY` jednoho a `minY`
+                // druhého, splňují podmínku **oba**. Bez porovnání by odpověď záležela na
+                // pořadí ve slovníku ploch, tedy na ničem — a vyšla by o řádek výš, tedy nad
+                // hranu, což je zrovna to, co tahle funkce dělat nesmí.
+                if row.extent.lowerBound > (covering?.extent.lowerBound ?? -.infinity) {
+                    covering = row
+                }
             } else if row.extent.lowerBound < (below?.extent.lowerBound ?? .infinity) {
                 below = row
             }

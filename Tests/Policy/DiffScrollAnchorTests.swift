@@ -55,12 +55,21 @@ struct DiffScrollAnchorTests {
         #expect(Policy.line(at: 0, in: []) == nil)
     }
 
-    @Test("Pořadí v poli nerozhoduje — krabice ploch je slovník")
+    /// **Pořadí ve vstupu nesmí rozhodovat**, protože krabice ploch je slovník a ten pořadí nemá.
+    ///
+    /// Nejcennější je tady ta **hranice**: řádky se nepřekrývají, ale dotýkají se, takže na hraně
+    /// `maxY == minY` splňují podmínku „protíná hranu“ **oba**. Vyhrát musí ten dolní — jinak by
+    /// kotva vyšla o řádek nad hranu, a to podle pořadí ve slovníku, tedy náhodně. Chyceno vlastní
+    /// revizí diffu, ne testem: první podoba funkce přepisovala `covering` bez porovnání.
+    @Test("Pořadí v poli nerozhoduje, ani na hranici dvou řádků")
     func theOrderOfRowsDoesNotMatter() {
         let ordered = [row(10, 0, 20), row(11, 20, 40), row(12, 40, 60)]
 
-        #expect(Policy.line(at: 25, in: ordered.reversed()) == 11)
-        #expect(Policy.line(at: 25, in: ordered.shuffled()) == 11)
+        for rows in [ordered, ordered.reversed(), ordered.shuffled(), ordered.shuffled()] {
+            #expect(Policy.line(at: 25, in: Array(rows)) == 11)
+            #expect(Policy.line(at: 20, in: Array(rows)) == 11)
+            #expect(Policy.line(at: 40, in: Array(rows)) == 12)
+        }
     }
 
     // MARK: - Soubor a řádek dohromady
