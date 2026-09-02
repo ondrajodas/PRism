@@ -169,6 +169,11 @@ struct DiffView: View {
                     // seznamem diffu svoje průzkumné dotazy na pružnost a `LazyVStack` na každý
                     // z nich odpovídá zápisem do svého stavu.
                     files(cards: cards).fillingSlot()
+                        // **Vzduch mezi kódem a tím, co je vpravo** (#503). Mimo `fillingSlot`,
+                        // takže se ta mezera odečte od štěrbiny a `contentWidth` dál měří
+                        // plochu, na které se doopravdy sází — ukazatel „znaků na stranu“ tím
+                        // nezačne slibovat sloupec, který není.
+                        .padding(.trailing, Policy.codeColumnTrailingGap)
                     // Okraj s kartami nálezů (#503) — třetí kolona z návrhu
                     // (`210px 1fr 300px`), a **jen když je co do ní postavit**: okraj bez karet
                     // je ubraná šířka bez informace.

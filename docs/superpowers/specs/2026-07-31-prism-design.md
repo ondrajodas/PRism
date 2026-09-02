@@ -5446,6 +5446,22 @@ záruku** — kolik průchodů to sedne, se řídit nedá, a měřit se to musí
 [`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)).
 
 
+### Záznam rozhodnutí — mezera mezi kódem a pravou kolonou (#503)
+
+Naměřeno na **živém** okně (1 303 × 860, `Vedle sebe`, strom i panel složené): kolona kódu končí
+na 1 264,5 b, dělící čára je na 1 265,0 b a proužek panelu začíná na 1 266,0 b. Čára tedy **je**
+a je vidět (`29303D` proti `23262E` kódu a `1E222D` proužku) — chybělo **vzduch**: text se ořezával
+naplocho na ni, a půlka znaku doražená na hranu se čte jako „text leze pod proužek“, ne jako
+„text pokračuje a je ořezaný“. Ořez sám je správný, kolona se vodorovně posouvá.
+
+**Rozhodnuto: 6 bodů mezery** (`Policy.codeColumnTrailingGap`), nasazených **mimo `fillingSlot`**,
+takže se odečtou od štěrbiny a `contentWidth` dál měří plochu, na které se doopravdy sází.
+Šest bodů je **necelý znak** (8,036 b), takže se za mezeru neplatí ani jedním sloupcem textu.
+Zamítnuto: silnější čára místo mezery — čára už tam je a vidět je, přidat kontrast by řešilo
+jiný problém než ten naměřený.
+
+**Není to nová obrazovka ke schválení, je to odchylka k zapsání**: mockup tuhle mez nekreslí.
+
 ### Záznam rozhodnutí — nálezy v okraji (#503)
 
 Otevírá dvě zapsaná rozhodnutí. **#185** (blokující nález je rozbalený rovnou pod svým řádkem)

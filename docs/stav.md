@@ -6893,7 +6893,7 @@ Zpětná vazba přes panel je monotónní, proto se to ustálí na první průch
 (pásmo šířek × pohled × okraj × ruční `⌘1`/`⌘2`, 64 případů) je přetečení **0**; před opravou až 35.
 Zbylá mez je vědomá: v okně na podlaze se lišta diffu ořezává uvnitř své kolony, což patří k #505.
 
-Testů **5049** ve 495 suitách; nových je **devět** sad (`DiffMarginTests` nad
+Testů **5050** ve 496 suitách; nových je **devět** sad (`DiffMarginTests` nad
 `Policy`, `DiffMarginPlacementTests` nad oknem, `DiffMarginScrollReadTests` nad zdrojáky
 `DiffColumnFitTests` nad šířkami kolon a tři ruční měření — `DiffMarginWheelProbe` nad vyrobenou
 scénou, `DiffMarginSharpProbe` nad skutečnými diffy, `DiffColumnFitProbe` nad rámci kolon v okně,

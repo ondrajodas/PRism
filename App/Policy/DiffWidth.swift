@@ -29,6 +29,21 @@ extension Policy {
         return max(Int(available / characterWidth), 0)
     }
 
+    /// **Mezera mezi kolonou kódu a tím, co stojí vpravo od ní** (#503).
+    ///
+    /// Kolona kódu se vodorovně posouvá, takže dlouhý řádek se **ořezává** — to je správné.
+    /// Naměřeno na živém okně (1 303 b, `Vedle sebe`, panel složený) ale ten ořez padl **naplocho
+    /// na dělící čáru**: kód končil na 1 264,5 b, čára je na 1 265,0 b a proužek panelu začíná na
+    /// 1 266,0 b. Čára tedy **je** a je vidět (`29303D` proti `23262E` kódu a `1E222D` proužku),
+    /// jen mezi posledním glyfem a ní nezbyl ani bod — a půlka znaku doražená na hranu se čte
+    /// jako „text leze pod proužek“, ne jako „text pokračuje a je ořezaný“.
+    ///
+    /// Šest bodů je **necelý znak** (znak mono písma má 8,036 b), takže se za tu mezeru neplatí
+    /// ani jedním sloupcem textu; dvakrát tolik už by ubralo znak, míň by při zaoblení na body
+    /// zmizelo. Platí to na **obě** situace vpravo — okraj s kartami i složený proužek —, protože
+    /// obě mají vlastní plochu a obě se o hranu opíraly stejně.
+    static let codeColumnTrailingGap = 6.0
+
     /// Kolik znaků aplikace slibuje. Pod tím se v liště rozsvítí varování — a je to **slib
     /// z `CLAUDE.md`**, ne odhad: PHP se v Keboole píše na 120.
     static let promisedCharactersPerSide = 120
