@@ -322,8 +322,12 @@ struct DetailRelayoutMeasurement {
         var label: String {
             switch self {
             case .synthetic(let lines): "\(lines) řádků"
+            // **`TextLines`, ne `split(separator:)`** — a zrovna tady to platí doslova: je to
+            // **cizí diff ze souboru**, tedy text, jehož zakončení řádků aplikace nevybírá (#292,
+            // #295). Nad `CRLF` diffem je `split(separator: "\n")` **jeden** řádek, takže by
+            // popisek série tvrdil `0 souborů` — a měřidlo by přitom vypadalo zeleně.
             case .real(let label, let text):
-                "\(label) (\(text.split(separator: "\n").count { $0.hasPrefix("diff --git") }) souborů)"
+                "\(label) (\(TextLines.all(text).count { $0.hasPrefix("diff --git") }) souborů)"
             }
         }
 

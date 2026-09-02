@@ -7431,6 +7431,21 @@ je to vidět i bez čísel: na **zápis do store** se najednou přeloží 3 540 
 nula) a bloky se nasazují dokola (135–155 nasazení proti 10). **Kdo to bude zkoušet znovu, ať měří
 tohle jako první.**
 
+#### Sonda, která čte cizí data, dělí řádky `TextLines` (#501)
+
+Grep na `split(separator: "\n")` z `CLAUDE.md` čte **jen `App/`**, takže na tuhle třídu v `Tests/`
+nedosáhne — a přesně tam se do ní dá spadnout, protože měřidla čtou **cizí soubory**.
+`DetailRelayoutMeasurement` má od #501 osu `PRISM_DIFF_DIR`, tedy skutečné `*.diff` z disku, a
+popisek série z nich počítá soubory: nad `CRLF` diffem je `split(separator: "\n")` **jeden** řádek,
+takže by popisek tvrdil `0 souborů` a měřidlo by u toho vypadalo zeleně. Našel to Copilot na PR
+#539.
+
+**Zůstává z toho hranice, ne nový grep**: v `Tests/` je dvanáct dalších výskytů toho vzoru a
+**všechny jsou v pořádku** — dělí text, který si aplikace složila sama (těla notifikací, výstup
+kopírování, stdout `gitu`), nebo přímo dokládají chování `CRLF` (`TextLinesTests`). Plošný grep nad
+`Tests/` by tedy byl výčet k posouzení, ne prázdný, a rozhoduje **odkud ten text je**: co přišlo
+zvenčí, dělí `TextLines`.
+
 #### Jak se změřila značka souboru pod výřezem (#501)
 
 **Otázka**, na kterou to odpovídá: pás nechal `log₂`, takže šířka nese objem — a jediné, co v něm

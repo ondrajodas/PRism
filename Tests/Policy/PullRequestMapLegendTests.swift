@@ -259,7 +259,7 @@ struct PullRequestMapLegendTests {
         isNew: Bool,
         readState: FileReviewState = .unread
     ) -> PullRequestMapSegment {
-        PullRequestMapMapSegmentStub(marker: marker, isNew: isNew, readState: readState).value
+        PullRequestMapSegmentStub(marker: marker, isNew: isNew, readState: readState).value
     }
 
     /// Kód souboru bez komentářových řádků — stráž hlídá **kód, ne text**, protože se o týchž
@@ -282,7 +282,7 @@ struct PullRequestMapLegendTests {
 }
 
 /// Segment mapy poskládaný jen z toho, co `mapFill(of:)` čte — zbytek je nula.
-struct PullRequestMapMapSegmentStub {
+struct PullRequestMapSegmentStub {
     let marker: FileMarker?
     let isNew: Bool
     let readState: FileReviewState
