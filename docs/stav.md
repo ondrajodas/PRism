@@ -7426,7 +7426,17 @@ nedá přečíst jako „čisto“.
 `Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
 **vyčerpávajícím výčtem** — 208 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
 
-**Dvě věci se změnily z proklikání, tedy proti odsouhlasené kresbě.** `K merge` šlo z čtvrtého
+**Tři věci se změnily z proklikání, tedy proti odsouhlasené kresbě.** Třetí je **rozřazení**:
+mergnutelný vlastní PR je `K merge`, i když na něm něco zbývá předat — projevilo se to na
+schváleném PR se všemi osmi checky zelenými (`keboola/job-queue-daemon#934`), který ležel
+v `Předat agentovi`, protože `pending > 0` rozhodovalo dřív než merge. Rozhoduje se to **po
+případech**: přebít merge smí jedině `HandoffReport.Stage.changed`, tedy jediný stav, který mluví
+o něčem **nevyřízeném** (typicky cizí odpověď v předaném vlákně, a tu chci vidět **než** mergnu);
+„nepředáno“, „neví se, proti čemu“ a „zadání zastaralo“ jsou tvrzení o minulosti. **Informace se
+tím neztrácí a nebylo pro to potřeba nic přidávat** — pilulka `N k předání` i `Prompt →` visí na
+řádku, ne na pruhu.
+
+**Zbylé dvě věci z proklikání:** `K merge` šlo z čtvrtého
 místa **na první** (a s ním `Dopsat a odeslat` z konce na druhé): osa pořadí přestala být „od cizí
 práce k vlastní“ a je „jak blízko je řádek k tomu, aby míč nebyl u mě“ — mergnout je nejlevnější tah
 a jediný, po kterém řádek z desky rovnou zmizí. A **prázdný pruh se nekreslí vůbec**, kdežto kresba

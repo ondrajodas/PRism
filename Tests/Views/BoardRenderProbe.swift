@@ -47,6 +47,11 @@ struct BoardRenderProbe {
         /// Prázdný blok `Dění`: jediné místo, kde z celé sekce zbude jedna věta, a věta pod
         /// hlavičkou vypadá jinak než nakreslený seznam.
         case activityEmpty = "prazdne-deni"
+        /// **Vlastní PR, který je slévatelný a přitom na něm něco zbývá předat** — přesně ten
+        /// případ z proklikání (`keboola/job-queue-daemon#934`). Otázka, na kterou scéna
+        /// odpovídá, je „je v `K merge` pořád vidět, že něco zbývá?“; klikáním se k ní člověk
+        /// dostane jedině nad vlastním PR se zeleným CI.
+        case mergeWithHandoff = "k-merge-s-predanim"
     }
 
     @Test("Vyrendrovat desku do PNG")
@@ -116,14 +121,16 @@ struct BoardRenderProbe {
     private func store(_ scenario: Scenario) async -> AppStore {
         let count = switch scenario {
         case .everythingDone: 0
-        case .single: 1
+        case .single, .mergeWithHandoff: 1
         case .lanes, .activityEmpty: 7
         }
         let queue = (1..<(1 + count)).map { number in
             PullRequestSummary(
                 id: PRIdentifier(repo: RepoID("keboola/vault")!, number: number),
                 title: "chore: modernize dependencies (Symfony 8-ready)",
-                author: "odinuv",
+                // U scény `k-merge-s-predanim` musí být PR **můj**, jinak se do vlastních pruhů
+                // nedostane vůbec (#332).
+                author: scenario == .mergeWithHandoff ? "ondrajodas" : "odinuv",
                 url: URL(string: "https://github.com/keboola/vault/pull/\(number)")!,
                 updatedAt: Date(timeIntervalSince1970: Double(number) * 100),
                 state: .open
@@ -133,8 +140,13 @@ struct BoardRenderProbe {
         // skutečnému kalendáři, kdežto `Policy.activityTime` proti `store.time.now`. S výchozím
         // rokem 1970 by ty dvě odpovědi mířily každá jinam a `včera v 7:58` by se v renderu
         // ukázalo jako `včera` — tedy zrovna to, kvůli čemu sonda vznikla.
+        var configuration = Configuration.standard
+        // **Bez mých loginů je všechno cizí** (`ownership(ofAuthor:mine:)`), takže scéna
+        // o vlastních pruzích je musí nastavit — jinak by vyrendrovala `Přečíst`.
+        configuration.global.ownLogins = ["ondrajodas"]
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success(queue)),
+            configuration: configuration,
             time: FakeTimeSource(start: Date())
         )
         await store.refresh()
@@ -156,9 +168,59 @@ struct BoardRenderProbe {
                 runs: [makeStoredRun(findings: [], headSha: "aaaa1111")]
             )
         }
+        if scenario == .mergeWithHandoff, let id = queue.first?.id {
+            // **Slévatelnost se skládá ze čtyř vstupů** (`Policy.mergeOffer`), takže se sázejí
+            // všechny — jinak by z předfiltru vyšlo `factsMissing` a PR by spadl do `Čeká na
+            // ostatní`. Brána odesílání zapnutá být nemusí: `notAllowed` není překážka
+            // pull requestu (`MergeObstacle.isPublishingGate`).
+            store.detailStates[id] = .loaded(Self.mergeableDetail(id), updatedAt: Date())
+            store.branchStatuses[id] = .loaded(
+                BranchStatus(mergeability: .mergeable, mergeState: .clean),
+                updatedAt: Date()
+            )
+            store.checks[id] = []
+            store.commits[id] = []
+            // Dva aktivní nálezy udělají `2 k předání` bez razítka, tedy `stage == .never` —
+            // ten stav merge **nepřebíjí**, takže PR skončí v `K merge` a pilulka mu zůstane.
+            //
+            // **Ani jeden z nich nesmí být blokující** (`Policy.defaultBlockingCategories`:
+            // `correctness`, `security`, `data-loss`) — blokující nález je **skutečná** překážka
+            // merge (`MergeObstacle.blockingFindings`), takže by scéna neukázala nový případ, ale
+            // starý. Přesně tak vypadal i PR z proklikání: `2 k předání` bez odznaku `blokuje`.
+            store.reviewRecords[id] = ReviewRecord(
+                pullRequest: id,
+                headSha: Self.mergeableHead,
+                runs: [makeStoredRun(
+                    findings: [
+                        makeReported(category: "clarity", summary: "Ta věta v komentáři mluví o starém názvu."),
+                        makeReported(category: "docs", summary: "Popis nemluví o novém příznaku.")
+                    ],
+                    headSha: Self.mergeableHead
+                )]
+            )
+        }
         guard scenario != .activityEmpty else { return store }
         store.activityEvents = Self.events
         return store
+    }
+
+    private static let mergeableHead = "aaaa1111"
+
+    /// Detail vlastního PR **bez jakékoli překážky**: otevřený, ne draft, ne fork, s větví.
+    private static func mergeableDetail(_ id: PRIdentifier) -> PullRequest {
+        PullRequest(
+            id: id,
+            title: "[AJDA-3077] Deduplicate shared logic across task-scoping operators",
+            author: "ondrajodas",
+            headSha: mergeableHead,
+            baseSha: "bbbb2222",
+            headRef: "ondra/AJDA-3077",
+            baseRef: "main",
+            url: URL(string: "https://github.com/keboola/vault/pull/\(id.number)")!,
+            updatedAt: Date(),
+            state: .open,
+            isCrossRepository: false
+        )
     }
 
     /// Položky ze sekce 31 doslova — a pátá **ze včerejška**, protože právě na ní je vidět den

@@ -344,3 +344,78 @@ extension BoardTests {
         #expect(loading.title != done.title)
     }
 }
+
+// MARK: - Merge přebíjí předání (z proklikání #515)
+
+extension BoardTests {
+    private func own(_ number: Int) -> QueueEntry {
+        QueueEntry(
+            pullRequest: summary(number, author: "ondrajodas"),
+            state: .clean,
+            row: .empty,
+            hasDraft: false
+        )
+    }
+
+    /// **Mergnutelný vlastní PR s nevyřízeným předáním je v `K merge`**, ne v `Předat agentovi` —
+    /// a pilulka `N k předání` mu zůstane v řádku.
+    ///
+    /// Tohle je to tvrzení, které pinuje nález z proklikání: schválený PR se všemi checky
+    /// zelenými (`keboola/job-queue-daemon#934`) ležel v `Předat agentovi`, protože `pending > 0`
+    /// rozhodovalo dřív než merge. Tvrdí se **obojí naráz** — pruh i obsah řádku —, protože
+    /// samotný přesun by informaci o předání ztratil, a to je horší vada než špatný pruh.
+    @Test("Mergnutelný PR s nevyřízeným předáním je v K merge, ale pilulku si nese")
+    func putsAMergeableOwnPullRequestIntoMergeAndKeepsThePill() {
+        let board = Policy.board(
+            entries: [own(1)],
+            mine: ["ondrajodas"],
+            handoff: { _ in WorkLaneTests.handoff(pending: 2, stage: .never) },
+            isMergeReady: { _ in true }
+        )
+
+        #expect(lane(.merge, in: board).rows.map(\.pullRequest.number) == [1])
+        #expect(lane(.handOff, in: board).rows.isEmpty)
+        #expect(board.visibleLanes.map(\.lane) == [.merge])
+        // **Pilulka visí na řádku, ne na pruhu**, takže jde s PR do kteréhokoli z nich. Kdyby
+        // záležela na pruhu, zmizela by právě tímhle přesunem jediná zmínka o tom, že něco zbývá.
+        let row = PullRequestRow(
+            pullRequest: own(1).pullRequest,
+            reviewState: .clean,
+            ownership: .mine,
+            pending: 2
+        )
+        #expect(row.pendingHandoff == 2)
+        #expect(row.showsPromptAction == false)  // bez `openPrompt` se tlačítko nekreslí
+    }
+
+    /// **Cizí odpověď v předaném vlákně merge přebíjí** — `changed` je jediný stav předání, který
+    /// mluví o něčem nevyřízeném, a odpověď kolegy chci vidět **než** mergnu.
+    @Test("Nevyřízené předání (changed) drží PR v Předat agentovi i nad mergnutelnou větví")
+    func keepsAChangedHandoffInItsLane() {
+        let board = Policy.board(
+            entries: [own(1)],
+            mine: ["ondrajodas"],
+            handoff: { _ in WorkLaneTests.handoff(pending: 1, stage: .changed) },
+            isMergeReady: { _ in true }
+        )
+
+        #expect(lane(.handOff, in: board).rows.map(\.pullRequest.number) == [1])
+        #expect(lane(.merge, in: board).rows.isEmpty)
+    }
+
+    /// A **akce nad `K merge` se tím nezměnila**: `Otevřít` bez klávesy, protože `⏎` patří
+    /// `Rozhodnout`. Nová obsazenost pruhu nesmí rozdat druhou zkratku na tutéž klávesu.
+    @Test("K merge s řádky nedostane ⏎")
+    func doesNotHandTheBareReturnToMerge() {
+        let board = Policy.board(
+            entries: [own(1)],
+            mine: ["ondrajodas"],
+            handoff: { _ in WorkLaneTests.handoff(pending: 2, stage: .never) },
+            isMergeReady: { _ in true }
+        )
+
+        let visible = board.visibleLanes
+        #expect(visible.compactMap { $0.action.shortcut } == [])
+        #expect(lane(.merge, in: board).action == .openFirst(count: 1, isPrimary: false))
+    }
+}

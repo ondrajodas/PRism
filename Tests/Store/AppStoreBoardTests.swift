@@ -28,9 +28,9 @@ struct AppStoreBoardTests {
         )
     }
 
-    /// - Parameter mine: moje loginy. **Bez nich je vsechno cizi** (`ownership(ofAuthor:mine:)`),
-    ///   takze testy o vlastnich pruzich je musi nastavit - jinak tvrdi o desce neco, co v okne
-    ///   neplati.
+    /// - Parameter mine: moje loginy. **Bez nich je všechno cizí** (`ownership(ofAuthor:mine:)`),
+    ///   takže testy o vlastních pruzích je musí nastavit — jinak tvrdí o desce něco, co v okně
+    ///   neplatí.
     private func store(
         _ pullRequests: [PullRequestSummary],
         mine: [String] = []

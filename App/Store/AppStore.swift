@@ -1419,7 +1419,7 @@ final class AppStore {
             mine: ownLogins,
             // Kolik zbývá předat (#334) — **tatáž funkce**, ze které čte odznak v railu, pilulka
             // v řádku i panel `Zadání`. Uzávěrem, ne mapou: čte se jen u vlastních PR.
-            pending: { self.handoffReport(for: $0).pending },
+            handoff: { self.handoffReport(for: $0) },
             // Je vlastní PR bez známé překážky (#515)? Předfiltr je na straně storu — bez
             // načteného detailu se `mergeOffer` neskládá vůbec.
             isMergeReady: { self.isMergeReadyForLane($0) },

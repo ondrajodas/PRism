@@ -66,15 +66,33 @@ struct WorkLaneTests {
         ownership: PullRequestOwnership = .theirs,
         hasDraft: Bool = false,
         pending: Int = 0,
+        stage: HandoffReport.Stage = .never,
         isMergeReady: Bool = false
     ) -> WorkLane {
         Policy.lane(
             of: entry(1, state: state, hasDraft: hasDraft),
             ownership: ownership,
-            pending: pending,
+            handoff: Self.handoff(pending: pending, stage: stage),
             isMergeReady: isMergeReady
         )
     }
+
+    /// Report s **jedním** rozhodujícím obsahem: kolik zbývá předat a v jakém stavu to je.
+    /// Zbytek polí se do rozřazování nedostane a je na to tvrzení (`ignoresTheRestOfTheReport`).
+    static func handoff(pending: Int, stage: HandoffReport.Stage) -> HandoffReport {
+        HandoffReport(
+            stage: stage,
+            handoff: nil,
+            pending: pending,
+            freshDiscussion: [],
+            staleFindings: 0,
+            commits: nil
+        )
+    }
+
+    /// **Všech pět stavů předání**, vyjmenovaných ručně: `Stage` má asociovaný typ `Equatable`,
+    /// ale `CaseIterable` není, takže by přidaný stav z výčtu vypadl beze slova.
+    static let stages: [HandoffReport.Stage] = [.never, .unverified, .outdated, .changed, .delivered]
 }
 
 // MARK: - Výčet: každá kombinace do právě jednoho pruhu
@@ -100,14 +118,17 @@ extension WorkLaneTests {
             for ownership in [PullRequestOwnership.theirs, .mine] {
                 for hasDraft in [false, true] {
                     for pending in [0, 3] {
-                        for ready in [false, true] {
-                            seen.insert(lane(
-                                state,
-                                ownership: ownership,
-                                hasDraft: hasDraft,
-                                pending: pending,
-                                isMergeReady: ready
-                            ))
+                        for stage in Self.stages {
+                            for ready in [false, true] {
+                                seen.insert(lane(
+                                    state,
+                                    ownership: ownership,
+                                    hasDraft: hasDraft,
+                                    pending: pending,
+                                    stage: stage,
+                                    isMergeReady: ready
+                                ))
+                            }
                         }
                     }
                 }
@@ -158,7 +179,7 @@ extension WorkLaneTests {
         for state in Self.states {
             #expect(lane(state, hasDraft: true) == .finishReview)
             #expect(
-                lane(state, ownership: .mine, hasDraft: true, pending: 5, isMergeReady: true)
+                lane(state, ownership: .mine, hasDraft: true, pending: 5, stage: .changed, isMergeReady: true)
                     == .finishReview
             )
         }
@@ -189,13 +210,71 @@ extension WorkLaneTests {
         }
     }
 
-    /// Vlastní PR: **co zbývá předat, přebíjí merge**. Nemá cenu nabízet merge nad PR, na kterém
-    /// leží nevyřízený nález nebo cizí vlákno — a `pending` je tatáž otázka jako odznak v railu.
-    @Test("Vlastní PR: předání přebíjí merge")
-    func handoffBeatsMerge() {
-        #expect(lane(.clean, ownership: .mine, pending: 2, isMergeReady: true) == .handOff)
-        #expect(lane(.clean, ownership: .mine, pending: 0, isMergeReady: true) == .merge)
-        #expect(lane(.clean, ownership: .mine, pending: 0, isMergeReady: false) == .waiting)
+    /// Vlastní PR: **merge přebíjí předání** (z proklikání #515, mění pravidlo přesně naopak).
+    ///
+    /// Vzniklo z toho, že schválený PR se všemi checky zelenými ležel v `Předat agentovi`
+    /// (`keboola/job-queue-daemon#934`): `pending > 0` rozhodovalo dřív než merge. Slévatelnost je
+    /// ale nejsilnější signál, jaký vlastní PR má, a tah „mergni to“ má **dobu trvanlivosti**.
+    ///
+    /// **Jedinou výjimkou je `changed`** — jediný stav předání, který mluví o něčem
+    /// **nevyřízeném** (typicky o cizí odpovědi v předaném vlákně, a tu chci vidět **než** mergnu).
+    /// Rozhoduje se po případech, ne plošně, takže se to tvrdí **přes všech pět stavů**.
+    @Test("Vlastní PR: merge přebíjí předání, jedině changed ne")
+    func mergeBeatsHandoff() {
+        for stage in Self.stages {
+            let expected: WorkLane = stage == .changed ? .handOff : .merge
+            #expect(
+                lane(.clean, ownership: .mine, pending: 2, stage: stage, isMergeReady: true) == expected,
+                "\(stage)"
+            )
+        }
+        // Nemergnutelný PR se dělí jako dřív — tam se nic nezměnilo, a je to ta polovina pravidla,
+        // kterou by změna pořadí podmínek rozbila potichu.
+        for stage in Self.stages {
+            #expect(
+                lane(.clean, ownership: .mine, pending: 2, stage: stage, isMergeReady: false) == .handOff,
+                "\(stage)"
+            )
+        }
+        #expect(lane(.clean, ownership: .mine, pending: 0, stage: .delivered, isMergeReady: true) == .merge)
+        #expect(lane(.clean, ownership: .mine, pending: 0, stage: .delivered, isMergeReady: false) == .waiting)
+        // A `changed` bez čeho předat je taky `merge`: přebíjí **nevyřízené položky**, ne sám sebe.
+        #expect(lane(.clean, ownership: .mine, pending: 0, stage: .changed, isMergeReady: true) == .merge)
+    }
+
+    /// **`outranksMerge` je vlastnost stavu předání, a tvrdí se výčtem** — plošné „předání přebíjí
+    /// merge“ i plošné „nepřebíjí nikdy“ by prošly jedním příkladem.
+    @Test("Merge přebíjí čtyři stavy předání z pěti")
+    func outranksMergeOnlyWhenSomethingIsUnresolved() {
+        let outranking = Self.stages.filter { Self.handoff(pending: 1, stage: $0).outranksMerge }
+
+        #expect(outranking == [.changed])
+        #expect(Self.stages.count == 5)
+    }
+
+    /// Do rozřazování jde z reportu **`pending` a `stage`, nic jiného**. Kdyby se opřelo
+    /// o `staleFindings` nebo o razítko, začal by pruh záležet na tom, jestli se načetla
+    /// konverzace — a to je stav, který se mění pod rukou.
+    @Test("Zbytek reportu na pruh nemá vliv")
+    func ignoresTheRestOfTheReport() {
+        let rich = HandoffReport(
+            stage: .never,
+            handoff: nil,
+            pending: 2,
+            freshDiscussion: ["a", "b"],
+            staleFindings: 7,
+            commits: 3,
+            hasMovedHead: true,
+            activity: .none
+        )
+        let plain = Self.handoff(pending: 2, stage: .never)
+
+        for ready in [false, true] {
+            #expect(
+                Policy.lane(of: entry(1, state: .clean), ownership: .mine, handoff: rich, isMergeReady: ready)
+                    == Policy.lane(of: entry(1, state: .clean), ownership: .mine, handoff: plain, isMergeReady: ready)
+            )
+        }
     }
 
     /// **Vlastní PR se do `Rozhodnout` ani do `Přečíst` nedostane nikdy**, ať je review
@@ -204,15 +283,18 @@ extension WorkLaneTests {
     func keepsOwnPullRequestsOutOfForeignLanes() {
         for state in Self.states {
             for pending in [0, 2] {
-                for ready in [false, true] {
-                    let lane = lane(
-                        state,
-                        ownership: .mine,
-                        pending: pending,
-                        isMergeReady: ready
-                    )
-                    #expect(lane != .read, "\(state)")
-                    #expect(lane != .decide, "\(state)")
+                for stage in Self.stages {
+                    for ready in [false, true] {
+                        let lane = lane(
+                            state,
+                            ownership: .mine,
+                            pending: pending,
+                            stage: stage,
+                            isMergeReady: ready
+                        )
+                        #expect(lane != .read, "\(state)")
+                        #expect(lane != .decide, "\(state)")
+                    }
                 }
             }
         }
@@ -223,9 +305,11 @@ extension WorkLaneTests {
     @Test("Cizí PR nikdy nespadne do vlastních pruhů")
     func keepsForeignPullRequestsOutOfOwnLanes() {
         for state in Self.states {
-            let lane = lane(state, pending: 9, isMergeReady: true)
-            #expect(lane != .handOff, "\(state)")
-            #expect(lane != .merge, "\(state)")
+            for stage in Self.stages {
+                let lane = lane(state, pending: 9, stage: stage, isMergeReady: true)
+                #expect(lane != .handOff, "\(state) \(stage)")
+                #expect(lane != .merge, "\(state) \(stage)")
+            }
         }
     }
 }

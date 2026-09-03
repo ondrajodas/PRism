@@ -117,19 +117,33 @@ extension Policy {
     ///    běžící PR zůstal v `read`, hromadná akce pruhu by hlásila víc, než pustí.
     /// 3. **Cizí PR** se dělí jedinou otázkou: *běželo, nebo neběželo.* `notStarted` je `read`
     ///    (tedy přesně to, co pustí `startReviewsForNotReviewed()`), všechno ostatní je `decide`.
-    /// 4. **Vlastní PR** se dělí podle toho, co se dá udělat: co zbývá předat (`handOff`), co se
-    ///    dá mergnout (`merge`), zbytek čeká.
+    /// 4. **Vlastní PR** se dělí podle toho, co se dá udělat — a **slévatelnost je z toho ten
+    ///    nejsilnější signál** (změna z proklikání #515): mergnutelný PR je `merge`, i když na něm
+    ///    něco zbývá předat. Jedinou výjimkou je `HandoffReport.Stage.changed`
+    ///    (`HandoffReport.outranksMerge`), protože to je jediný stav předání, který mluví o **něčem
+    ///    nevyřízeném** — typicky o cizí odpovědi v předaném vlákně, a tu chci vidět **než**
+    ///    mergnu. Nemergnutelný PR se dělí jako dřív: co zbývá předat je `handOff`, zbytek čeká.
+    ///
+    ///    Do proklikání to bylo obráceně (`pending > 0` přebíjelo merge) a projevilo se to na
+    ///    schváleném PR se všemi checky zelenými, který ležel v `Předat agentovi`
+    ///    ([`keboola/job-queue-daemon#934`](https://github.com/keboola/job-queue-daemon/pull/934)).
+    ///
+    ///    **Informace o předání se tím neztrácí, a nebylo pro to potřeba nic přidávat**: pilulka
+    ///    `N k předání` i `Prompt →` visí na **řádku** (`PullRequestRow.pendingHandoff`), ne na
+    ///    pruhu, takže jdou s PR do kteréhokoli pruhu. Jedna podoba řádku, ne třetí (#172).
     ///
     /// - Parameters:
-    ///   - pending: kolik zbývá předat agentovi (`HandoffReport.pending`). Na cizím PR se nečte —
-    ///     volající ho tam ani nemá odkud vzít, protože zadání se skládá jedině z vlastních.
+    ///   - handoff: v jakém stavu je předání agentovi. Bere se **celý report, ne jen `pending`**
+    ///     (změna z proklikání #515): o tom, jestli předání přebije merge, rozhoduje `stage`, a dvě
+    ///     čísla ze dvou volání téhož výpočtu by se dala rozejít. Na cizím PR se nečte — volající
+    ///     ho tam ani nemá odkud vzít, protože zadání se skládá jedině z vlastních.
     ///   - isMergeReady: je vlastní PR **bez známé překážky**? Rozhoduje `isMergeReady(_:)` nad
     ///     `MergeOffer`, tedy tatáž funkce, ze které se kreslí sekce `Větev` — druhé místo by
     ///     znamenalo dvě odpovědi na jednu otázku.
     static func lane(
         of entry: QueueEntry,
         ownership: PullRequestOwnership,
-        pending: Int,
+        handoff: HandoffReport,
         isMergeReady: Bool
     ) -> WorkLane {
         if entry.hasDraft { return .finishReview }
@@ -142,8 +156,10 @@ extension Policy {
         guard ownership == .mine else {
             return entry.state == .notStarted ? .read : .decide
         }
-        if pending > 0 { return .handOff }
-        return isMergeReady ? .merge : .waiting
+        let pending = handoff.pending
+        if pending > 0, handoff.outranksMerge { return .handOff }
+        if isMergeReady { return .merge }
+        return pending > 0 ? .handOff : .waiting
     }
 
     /// Je vlastní PR **bez známé překážky k merge** (#515)?
@@ -175,4 +191,32 @@ extension Policy.MergeObstacle {
         if case .notAllowed = self { return true }
         return false
     }
+}
+
+extension HandoffReport {
+    /// Přebíjí tenhle stav předání **slévatelnost** při rozřazování na desce (#515)?
+    ///
+    /// Vzniklo z proklikání: schválený PR se zelenými checky ležel v `Předat agentovi`, protože
+    /// `pending > 0` rozhodovalo dřív než merge. Slévatelnost je ale nejsilnější signál, jaký
+    /// vlastní PR má — a tah „mergni to“ má **dobu trvanlivosti**, kdežto nepředaná položka ne.
+    ///
+    /// Rozhoduje se **po případech, ne plošně**, protože „něco zbývá předat“ znamená u každého
+    /// stavu jinou věc:
+    ///
+    /// - **`changed` merge přebíjí** — je to jediný stav, který mluví o něčem **nevyřízeném**:
+    ///   nepředaná položka, nová položka, nebo **cizí odpověď v předaném vlákně**. Ta poslední je
+    ///   důvod celé téhle výjimky: odpověď kolegy ve vlákně, které jsem předal agentovi, chci
+    ///   vidět **než** mergnu, ne až z historie.
+    /// - **`never` merge nepřebíjí** — nic se nepředávalo, takže nic není „v letu“. Položky
+    ///   k předání jsou nabídka, ne rozdělaná práce; nad schváleným a slévatelným PR je rozhodnutí
+    ///   udělané.
+    /// - **`unverified` ne** — „neví se, proti čemu se předávalo“ je tvrzení o minulosti, ne úkol.
+    /// - **`outdated` ne** — „zadání mluví o kódu, který na PR není“ je taky o minulosti: hlava se
+    ///   posunula a zadání zastaralo. Nad PR, který je **teď** slévatelný, je to informace.
+    /// - **`delivered` ne** — předáno a nic nového; do `handOff` by se takový PR nedostal ani
+    ///   předtím (`pending` je u něj nula).
+    ///
+    /// Vlastnost `HandoffReportu`, ne `if` v `Policy.lane`: je to tvrzení o **stavu předání**,
+    /// takže patří k němu — a dá se projít výčtem přes všech pět případů.
+    var outranksMerge: Bool { stage == .changed }
 }

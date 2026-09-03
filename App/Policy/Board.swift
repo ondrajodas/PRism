@@ -202,16 +202,17 @@ extension Policy {
     /// pruhu.
     ///
     /// - Parameters:
-    ///   - pending: kolik na vlastním PR zbývá předat (`HandoffReport.pending`). Uzávěrem, ne
-    ///     mapou: čte se jen u vlastních PR a skládat pro desku kopii všech načtených konverzací
-    ///     při každém průchodu tělem by byla práce za odpověď, kterou nikdo nepřečte (tatáž
-    ///     úvaha jako u `ownPullRequestsAwaitingMove`).
+    ///   - handoff: v jakém stavu je předání na vlastním PR. Uzávěrem, ne mapou: čte se jen
+    ///     u vlastních PR a skládat pro desku kopii všech načtených konverzací při každém průchodu
+    ///     tělem by byla práce za odpověď, kterou nikdo nepřečte (tatáž úvaha jako
+    ///     u `ownPullRequestsAwaitingMove`). Od proklikání #515 se bere **celý report**, ne jen
+    ///     `pending` — o tom, jestli předání přebije merge, rozhoduje `stage`.
     ///   - isMergeReady: je vlastní PR bez známé překážky? Taky uzávěrem, a s předfiltrem na
     ///     straně storu — bez načteného detailu se `mergeOffer` neskládá vůbec.
     static func board(
         entries: [QueueEntry],
         mine: Set<String> = [],
-        pending: (PRIdentifier) -> Int = { _ in 0 },
+        handoff: (PRIdentifier) -> HandoffReport = { _ in .never },
         isMergeReady: (PRIdentifier) -> Bool = { _ in false },
         activity: [ActivityEvent] = [],
         lastVisit: Date? = nil,
@@ -225,7 +226,7 @@ extension Policy {
             let lane = lane(
                 of: entry,
                 ownership: ownership,
-                pending: ownership == .mine ? pending(entry.id) : 0,
+                handoff: ownership == .mine ? handoff(entry.id) : .never,
                 isMergeReady: ownership == .mine && isMergeReady(entry.id)
             )
             grouped[lane, default: []].append(entry)

@@ -3964,9 +3964,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   na konci téhle odrážky.
 
   **Rozřazení do pruhů je to nejcennější a testuje se vyčerpávajícím výčtem** (`WorkLaneTests`).
-  `Policy.lane` má čtyři vstupní osy — čí PR to je, v jakém stavu je review, leží tu draft, dá se to
-  mergnout — a projdou se **všechny kombinace** (13 stavů × 2 × 2 × 2 × 2 = 208). Tvrdí se u nich
-  trojice, protože každý sám by prošel naprázdno:
+  `Policy.lane` má **pět** vstupních os — čí PR to je, v jakém stavu je review, leží tu draft, co
+  zbývá předat **a v jakém stavu to předání je**, dá se to mergnout — a projdou se **všechny
+  kombinace** (13 stavů × 2 × 2 × 2 × **5** × 2 = **1 040**; do proklikání #515 to bylo 208, než
+  přibyla osa `HandoffReport.Stage`). Tvrdí se u nich trojice, protože každý sám by prošel
+  naprázdno:
 
   - **totalita** — nad každou kombinací vyjde pruh, a všech šest je z nich **dosažitelných**: pruh,
     do kterého se nedá dostat, by byl mrtvá kresba;
@@ -3979,7 +3981,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   **Že je stavů třináct, je taky tvrzení.** `ReviewState` má asociované hodnoty, takže nemůže být
   `CaseIterable` a výčet je ruční — bez tvrzení o počtu by přidaný stav z celého testu vypadl
-  a nikdo by si toho nevšiml.
+  a nikdo by si toho nevšiml. **Totéž platí o pěti stavech předání** (`HandoffReport.Stage`), a je
+  na to vlastní tvrzení, protože rozhodnutí „přebíjí merge“ se dělá **po případech**.
+
+  **Slévatelnost přebíjí předání** (z proklikání #515, tedy pravidlo přesně naopak proti první
+  verzi) a testuje se to ze tří stran:
+
+  - **Přes všech pět stavů předání**: mergnutelný vlastní PR s `pending: 2` je `K merge` u všech
+    kromě `changed`. Plošné „přebíjí vždycky“ i plošné „nikdy“ by prošlo jedním příkladem.
+  - **Druhá polovina pravidla**: **ne**mergnutelný PR s `pending: 2` je `Předat agentovi` u všech
+    pěti stavů — to je ta část, kterou by pouhé přeskládání podmínek rozbilo potichu. A `changed`
+    **bez** čeho předat je `merge`: přebíjí nevyřízené položky, ne sám sebe.
+  - **Do rozhodování jde z reportu jedině `pending` a `stage`**: report s bohatým obsahem
+    (`staleFindings`, `commits`, `hasMovedHead`, `freshDiscussion`) vydá **tentýž** pruh jako
+    prázdný se stejnou dvojicí. Bez toho tvrzení by pruh mohl začít záležet na tom, jestli se
+    načetla konverzace — a to je stav, který se mění pod rukou.
+
+  **Ve store to pinuje dvojice tvrzení naráz** (`BoardTests`): mergnutelný vlastní PR
+  s nevyřízeným předáním je v `K merge` **a** jeho řádek pořád hlásí `2 k předání`
+  (`PullRequestRow.pendingHandoff`). Samotný přesun by informaci o předání ztratil, a to je horší
+  vada než špatný pruh — proto se tvrdí obojí v jednom testu. K tomu, že `K merge` s řádky
+  **nedostane `⏎`** (patří `Rozhodnout`), takže se novou obsazeností pruhu nerozdá druhá zkratka
+  na tutéž klávesu.
+
+  **Ověřeno vložením regrese**: návrat na `pending > 0 → handOff` před merge shodí čtyři tvrzení
+  ve výčtu stavů a tři ve store — včetně toho o pilulce.
+
+  **Sonda k tomu má vlastní scénu** (`BoardRenderProbe`, `k-merge-s-predanim`) a při její stavbě
+  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález je skutečná překážka
+  merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` — tedy
+  přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho napsané
+  proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
 
   **Brána odesílání není překážka pull requestu** (`Policy.isMergeReady`). Testuje se z obou stran:
   `notAllowed` sama pruh `K merge` **nezavře** (jinak by byl při výchozím vypnutém odesílání

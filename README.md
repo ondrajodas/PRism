@@ -93,6 +93,12 @@ Osa toho pořadí je **jak blízko je řádek k tomu, aby míč nebyl u mě** �
 a jediný, po kterém řádek z desky rovnou zmizí. Uvnitř pruhu se řadí **podle závažnosti**, ne podle
 času.
 
+**Slévatelnost je z vlastního PR nejsilnější signál**, takže mergnutelný PR je `K merge`, i když na
+něm něco zbývá předat agentovi. Jedinou výjimkou je stav předání, ve kterém je něco
+**nevyřízeného** — typicky cizí odpověď v předaném vlákně, a tu je potřeba vidět **než** se mergne.
+Informace o předání se přesunem neztrácí: pilulka `N k předání` i `Prompt →` visí na **řádku**, ne
+na pruhu, takže jdou s PR do kteréhokoli z nich.
+
 **Vpravo v hlavičce pruhu je akce nad celým pruhem**: `Otevřít první ⏎`, `Pustit review na 2 ⌘⇧R`,
 `Sestavit 2 zadání`, `Dopsat ⌘⇧D`. Potvrzení si nechává jedině spuštění review — je to jediná akce
 v aplikaci, která z jednoho kliknutí utratí víc než jednu session; otevřít záložky nestojí nic a jde

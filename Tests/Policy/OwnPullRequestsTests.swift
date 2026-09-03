@@ -331,7 +331,7 @@ struct OwnPullRequestsTests {
         let board = Policy.board(
             entries: [entry(own), entry(quiet)],
             mine: ["ondrajodas"],
-            pending: { $0 == own.id ? 3 : 0 }
+            handoff: { $0 == own.id ? WorkLaneTests.handoff(pending: 3, stage: .never) : .never }
         )
 
         #expect(rows(.handOff, in: board) == [1])

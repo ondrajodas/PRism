@@ -5832,7 +5832,7 @@ osou **dat**: v railu (`Fronta`, `Moje PR`) a ve všem, co čte jen cizí PR (#3
 |---|---|---|
 | **Šest pruhů podle tahu** (pořadí **změnilo proklikání**, viz *Dvě korekce* níž), autora nese šipka v mintu | Nechat dvě fronty a v každé řadit podle tahu | Řazení uvnitř množiny odpovídá na „co první z těchhle“, ne na „co teď“. Cizí PR s hotovým review a vlastní PR k merge jsou dva **různé tahy**, které se v jedné frontě nedají oddělit, a naopak cizí `neběželo` a vlastní `čeká na CI` jsou tentýž *nic teď*, i když jsou od různých autorů |
 | ~~**Prázdný pruh se kreslí, i s nulou**~~ — **zrušeno z proklikání**, viz *Dvě korekce* níž | Vypustit prázdné pruhy a šetřit výšku (**tohle nakonec vyhrálo**) | Původní důvod byl, že mizející pruh přeskládá desku a prázdno je taky odpověď. Nad hotovou obrazovkou vyhrálo, že šest rámečků s nulou je pět šestin obrazovky za odpověď, o kterou se nikdo neptal. Věty na pruh (`Nic nedoběhlo` proti `Nic rozepsaného`) zůstávají — kreslí se v pruhu, který se vyprazdňuje pod rukou |
-| **Draft přebíjí všechny ostatní pruhy** | Nechat draft jako tužku v řádku a zařadit PR podle stavu review | Rozdělané review je ručně psaná práce, tedy můj tah bez ohledu na to, co se na PR stalo. Je to tatáž úvaha, kvůli které karta `Rozdělaná review` počítala celý seznam, ne jen frontu (#332) |
+| **Draft přebíjí všechny ostatní pruhy** (a od proklikání je to **jediné** pravidlo, které přebíjí i slévatelnost — viz *Tři korekce* níž) | Nechat draft jako tužku v řádku a zařadit PR podle stavu review | Rozdělané review je ručně psaná práce, tedy můj tah bez ohledu na to, co se na PR stalo. Je to tatáž úvaha, kvůli které karta `Rozdělaná review` počítala celý seznam, ne jen frontu (#332) |
 | **Běžící review je `Čeká na ostatní`** | Nechat ho v `Přečíst` (je to pořád „k přečtení“) | Pruh `Přečíst` má akci `Pustit review na N`, a ta pouští `notStarted`. Kdyby v pruhu leželo i běžící review, hlásil by víc, než co akce udělá — a poznalo by se to jedině účtem za session |
 | **Selhání, neprůkazný běh a zastaralé nálezy jdou do `Rozhodnout`** | Vrátit je do `Přečíst`, protože tahem je pustit znovu | To by rozvázalo počet v hlavičce od akce (viz řádek výš). „Podívat se a rozhodnout, co dál“ je navíc pravdivější popis: u zastaralých nálezů se rozhoduje mezi *pustit znovu* a *nechat to tak* |
 | **Zavřená brána odesílání není překážka merge** (`MergeObstacle.isPublishingGate`) | Brát `mergeOffer` doslova | Odesílání je ve výchozím stavu **vypnuté** (tvrdá podmínka č. 1, bod 6), takže by pruh `K merge` byl u každého, kdo si ho nezapnul, navždycky prázdný — tedy tvrzení o nastavení, ne o práci. Brána mluví o tom, co smí *aplikace*; pruh se ptá, jak stojí *pull request* |
@@ -5881,14 +5881,15 @@ u tvrdé podmínky č. 2 — vlastní rozhodnutí a vlastní issue.
 | **`DashboardBlock`, `Policy.dashboardBlock`** | Z typu zbyla patka jako `BlockFooter` — prázdný obal kolem jedné vnořené struktury by byl mrtvá váha |
 | **`dashboardQueue`, `dashboardOwnPullRequests`** | Jeden getter (`boardEntries`) nad plným seznamem; rozřazení proběhne uvnitř `Policy.board` jednou na řádek |
 
-#### Dvě korekce z proklikání: `K merge` nahoru a prázdné pruhy se nekreslí (#515)
+#### Tři korekce z proklikání: `K merge` nahoru, prázdné pruhy se nekreslí a slévatelnost přebíjí předání (#515)
 
-Obojí přišlo **nad hotovou obrazovkou**, ne z rozboru, a obojí je **změna proti odsouhlasenému
-zákresu** z decku (*Směry › C*). Zapisuje se to tady i s tím, co se tím ruší, aby se k tomu příští
+Všechny tři přišly **nad hotovou obrazovkou**, ne z rozboru, a všechny jsou **změna proti
+odsouhlasenému zákresu** z decku (*Směry › C*). Zapisuje se to tady i s tím, co se tím ruší, aby se k tomu příští
 session nevracela: kresba už neplatí ve dvou věcech a v repu je proti ní překreslená sekce 45.
 
-Zadání znělo doslova takhle: *„chtěl bych to co je k merge dát úplně nahoru“* a *„ty okýnka který
-jsou prázdný nemusíme vůbec ukazovat“*.
+Zadání znělo doslova takhle: *„chtěl bych to co je k merge dát úplně nahoru“*, *„ty okýnka který
+jsou prázdný nemusíme vůbec ukazovat“* a *„proč není k mergnutí tento můj PR? … vidím ho že lze
+předat agentovi…ale to není dobře… už je mergnutelný“*.
 
 **1. Pořadí pruhů: změnila se osa, ne jen jedna položka.** Deck kreslil pořadí od **cizí práce
 k vlastní** (`Rozhodnout`, `Přečíst`, `Předat agentovi`, `K merge`, `Čeká na ostatní`, `Dopsat
@@ -5951,4 +5952,56 @@ hlídá, protože prázdné pruhy by přiskočily třemi čárami každý.
 **Co zůstává platit z původního záznamu #515:** deska je pohled, ne množina; #332 se nemění;
 `Přečíst` je vázané na `notStarted` a jeho akce pouští `startReviewsForNotReviewed()`; potvrzení má
 jedině hromadné spuštění review; a čísla z karet zůstávají v railu a ve stavovém řádku.
+
+**3. Slévatelnost přebíjí předání — a je to změna rozřazení, ne pořadí.** Vyšlo to najevo hned
+u druhé připomínky: schválený PR se všemi osmi checky zelenými ležel v `Předat agentovi`.
+
+```
+keboola/job-queue-daemon#934  OPEN  draft=false  autor=ondrajodas
+mergeable=MERGEABLE  mergeState=CLEAN  reviewDecision=APPROVED  checky: SUCCESS×8
+```
+
+Žádná překážka — a přesto `handOff`, protože `Policy.lane` rozhodovalo `pending > 0` **dřív** než
+`isMergeReady`. Otočilo se to: **slévatelnost je z vlastního PR nejsilnější signál**, a tah
+„mergni to“ má navíc **dobu trvanlivosti** (zelené CI a slévatelná větev zítra platit nemusí),
+kdežto nepředaná položka počká. Je to konzistentní s korekcí č. 1: `K merge` je nejen první pruh,
+ale i nejsilnější rozřazovací pravidlo.
+
+**Rozhodovalo se po případech, ne plošně**, protože „něco zbývá předat“ znamená u každého stavu
+`HandoffReport.Stage` jinou věc:
+
+| Stav | Přebíjí merge? | Proč |
+|---|---|---|
+| `changed` | **ano** | Jediný stav, který mluví o něčem **nevyřízeném**: nepředaná položka, nová položka, nebo **cizí odpověď v předaném vlákně**. Ta poslední je celý důvod téhle výjimky — odpověď kolegy ve vlákně, které jsem předal agentovi, chci vidět **než** mergnu, ne až z historie |
+| `never` | ne | Nic se nepředávalo, takže nic není „v letu“. Položky k předání jsou **nabídka**, ne rozdělaná práce, a nad schváleným a slévatelným PR je rozhodnutí udělané. Tohle je i případ z proklikání |
+| `unverified` | ne | „Neví se, proti čemu se předávalo“ je tvrzení o **minulosti**, ne úkol |
+| `outdated` | ne | „Zadání mluví o kódu, který na PR není“ je taky o minulosti: hlava se posunula a zadání zastaralo. Nad PR, který je **teď** slévatelný, je to informace |
+| `delivered` | ne | Předáno a nic nového; `pending` je u něj nula, takže se do `handOff` nedostal ani předtím |
+
+Rozhoduje o tom **`HandoffReport.outranksMerge`**, tedy vlastnost stavu předání, ne `if` uvnitř
+`Policy.lane`: je to tvrzení o předání, patří k němu a dá se projít výčtem přes všech pět případů.
+`lane` k tomu bere **celý report místo `pending`** — dvě čísla ze dvou volání téhož výpočtu by se
+dala rozejít, a je na to tvrzení, že do rozhodování z reportu nejde nic jiného než `pending`
+a `stage` (jinak by pruh začal záležet na tom, jestli se načetla konverzace).
+
+**Informace o předání se přesunem neztrácí, a nebylo pro to potřeba nic přidávat.** Pilulka
+`N k předání` i `Prompt →` visí na **řádku** (`PullRequestRow.pendingHandoff`, `showsPromptAction`)
+a řídí se jedině tím, že je PR můj a že něco zbývá — takže jdou s ním do kteréhokoli pruhu. **Vlastní
+značka do řádku v `K merge` se zvažovala a zamítla**: byla by to druhá kresba jedné informace, a ta
+se s tou první rozejde (tatáž úvaha jako u `designPill`, #348). Je na to tvrzení, které obojí drží
+v jednom testu — pruh **a** obsah řádku —, protože samotný přesun by tu informaci ztratil a to je
+horší vada než špatný pruh.
+
+**Hranice, kterou to nemění: blokující nález je skutečná překážka merge.** PR s blokujícím
+nálezem (`correctness`, `security`, `data-loss` — `Policy.defaultBlockingCategories`) není
+mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje o tom `mergeOffer`, ne
+`outranksMerge`. Zvenčí to vypadá jako „předání zase přebilo merge“, ale je to jiná věta.
+**Našlo se to při stavbě sondy** — první verze scény měla nálezy kategorie `correctness`
+a vyrendrovala `Předat agentovi`, tedy přesně to, co se opravovalo; sonda by tak tvrdila
+opak toho, co měla ukázat. Že tohle nebyl případ z proklikání, je vidět v jeho řádku:
+`2 k předání` **bez** odznaku `blokuje`.
+
+**Co to udělalo s výčtem:** přibyla pátá osa (`Stage`), takže z 208 kombinací je **1 040**. Zbylá
+tvrzení výčtu (totalita, disjunktnost, draft přebíjí všechno, cizí do vlastních pruhů a naopak)
+platí beze změny, jen se procházejí přes všech pět stavů předání.
 
