@@ -145,7 +145,7 @@ extension BoardTests {
 
         #expect(shortcuts.count == 3)
         #expect(Set(shortcuts).count == shortcuts.count)
-        // `K merge` ma tutez akci jako `Rozhodnout`, ale **bez klavesy** - `⏎` je rozdane.
+        // `K merge` má tutéž akci jako `Rozhodnout`, ale **bez klávesy** — `⏎` je rozdané.
         #expect(Policy.laneAction(of: .decide, count: 2).shortcut == .openFirstOnBoard)
         #expect(Policy.laneAction(of: .merge, count: 2).shortcut == nil)
         #expect(Policy.laneAction(of: .handOff, count: 2).shortcut == nil)

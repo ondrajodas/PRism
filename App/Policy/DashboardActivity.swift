@@ -1,15 +1,18 @@
 import Foundation
 
-/// Blok `Dění` na dashboardu (#443) — pět nejnovějších řádků a cesta do sekce.
+/// Blok `Dění` na domácí záložce (#443) — nejnovější řádky a cesta do sekce.
 ///
-/// Do #443 nebylo na dashboardu o dění ani řádka: sekce v railu (#414) je dobré místo, **když se
+/// Do #443 nebylo na domově o dění ani řádka: sekce v railu (#414) je dobré místo, **když se
 /// do ní jde** — jenže napřed se musí vědět, že je do čeho koukat, a odznak v railu říká počet, ne
-/// co se stalo. Dashboard je jediná obrazovka, na kterou se člověk podívá, aniž by se ptal.
+/// co se stalo. Domácí záložka je jediná obrazovka, na kterou se člověk podívá, aniž by se ptal.
 ///
 /// **Ukázka a rozcestník, ne druhé místo, kde se dá v dění zůstat** (návrh, sekce 31, poznámka 98).
-/// Proto tentýž strop pěti řádků jako u obou front (#371), proto patka se zbytkem — a proto blok
-/// nemá **vlastní prázdné obrazovky, vlastní pruh poslední návštěvy ani vlastní řádek**. Kdyby si
-/// je pořídil, jsou to dvě dění.
+/// Proto strop, proto patka se zbytkem — a proto blok nemá **vlastní prázdné obrazovky, vlastní
+/// pruh poslední návštěvy ani vlastní řádek**. Kdyby si je pořídil, jsou to dvě dění.
+///
+/// **Kolik řádků to je, drží `Policy.activityRowLimit`, ne tenhle text.** Do #515 to bylo pět,
+/// tedy tolik co bloky front (#371); od #515 osm, protože levý sloupec má šest pruhů a pravý dva
+/// bloky, takže by pět řádků nechalo v koloně prázdno.
 struct DashboardActivity: Hashable, Sendable {
     /// Nadpis bloku — `Dění`, nebo `Dění · 3 nové`.
     ///
@@ -25,22 +28,23 @@ struct DashboardActivity: Hashable, Sendable {
     /// kdežto prázdné obrazovky sekce (#414) mají u sebe tlačítka a ta patří tam, kam jsem přišel
     /// schválně.
     let emptyExplanation: String?
-    /// Patka se zbytkem záznamu. `nil` = pod pěti řádky už nic neleží, takže „zobrazit celé“ je
-    /// akce, po které se nic nezmění — tatáž úvaha jako u pruhů desky.
+    /// Patka se zbytkem záznamu. `nil` = pod nakreslenými řádky už nic neleží, takže „zobrazit
+    /// celé“ je akce, po které se nic nezmění — tatáž úvaha jako u pruhů desky. **Kolik těch
+    /// řádků je, říká `Policy.activityRowLimit`**, ne tenhle komentář: číslo se od #443 měnilo.
     let footer: BlockFooter?
 }
 
 extension Policy {
-    /// Blok `Dění` na dashboardu (#443) — nadpis s počtem nepřečtených, pět řádků a patka.
+    /// Blok `Dění` na domácí záložce (#443) — nadpis s počtem nepřečtených, řádky a patka.
     ///
     /// **Strop je `activityRowLimit`, od #515 osm řádků** (do té doby pět, tehdy tolik co bloky
-    /// front): domov je jedna
-    /// obrazovka bez rolování, takže blok, který roste s daty, položí ten pod sebou pod hranu okna.
-    /// Co se nevešlo, nese patka **číslem**, ne mlčením — bez ní je to useknutý seznam, ze kterého
-    /// se nepozná, jestli se za posledním řádkem nic nestalo, nebo se to tam jen nevešlo.
+    /// front): domov je jedna obrazovka bez rolování, takže blok, který roste s daty, položí ten
+    /// pod sebou pod hranu okna. Co se nevešlo, nese patka **číslem**, ne mlčením — bez ní je to
+    /// useknutý seznam, ze kterého se nepozná, jestli se za posledním řádkem nic nestalo, nebo se
+    /// to tam jen nevešlo.
     ///
-    /// **Pořadí se srovná znovu**, ze stejného důvodu jako v `activityFeed`: „pět nejnovějších“ je
-    /// řez, a řez nad špatně seřazeným vstupem tiše ukáže pět jiných. Cena je jedno seřazení nejvýš
+    /// **Pořadí se srovná znovu**, ze stejného důvodu jako v `activityFeed`: „osm nejnovějších“ je
+    /// řez, a řez nad špatně seřazeným vstupem tiše ukáže osm jiných. Cena je jedno seřazení nejvýš
     /// dvou set položek na průchod tělem — strop záznamu je právě to, co ji ohraničuje.
     ///
     /// - Parameters:

@@ -97,7 +97,8 @@ struct BoardRenderProbe {
         try #require(rep.representation(using: .png, properties: [:])).write(to: url)
     }
 
-    /// Store s frontou a se záznamem dění, jak ho kreslí sekce 31 — pět řádků a patka `+37`.
+    /// Store s frontou a se záznamem dění, jak ho kreslí sekce 31 — od #515 osm řádků a patka
+    /// `+34` (do #515 pět a `+37`; položek je pořád dvaačtyřicet).
     ///
     /// Fronta má sedm PR schválně: levý sloupec je pak vysoký jako v mockupu, takže je na obrázku
     /// vidět i to, kvůli čemu se blok stěhoval — kolik prázdna pod `Co teď` zbývalo.
@@ -180,7 +181,8 @@ struct BoardRenderProbe {
                 wasAnnounced: false
             )
         ]
-        // Zbytek záznamu, ať patka hlásí `+37` jako mockup.
+        // Zbytek záznamu, ať je patka na obrázku vidět. Do #515 z toho vyšlo `+37` jako v sekci
+        // 31; od #515 je strop osm řádků, takže z týchž dvaačtyřiceti položek vyjde `+34`.
         events += (0..<37).map { index in
             ActivityEvent(
                 id: "reReview|keboola/connection#\(200 + index)|old",

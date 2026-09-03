@@ -76,7 +76,7 @@ extension AppStore {
     /// **Sada kategorií per repo**, ne globální: mluví se o jednom pull requestu, tak jako
     /// v řádku fronty (`queueRow(for:)`) a v panelu — kdežto souhrn ve stavovém řádku
     /// (`Policy.summary`, do #515 i karta `Blokuje`) počítá celou frontu, a proto bere globální.
-    func blockingFindingCount(for pr: PRIdentifier) -> Int {
+    private func blockingFindingCount(for pr: PRIdentifier) -> Int {
         guard let record = reviewRecords[pr] else { return 0 }
         return Policy.blockingCount(in: record, categories: resolved(for: pr.repo).blockingCategories)
     }

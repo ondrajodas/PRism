@@ -71,8 +71,8 @@ extension DashboardActivityTests {
         #expect(block.footer == nil)
     }
 
-    /// Vstup v opačném pořadí je ten případ, ve kterém by řez ukázal **pět jiných** položek a nikdo
-    /// by si toho nevšiml: pět řádků vypadá platně, ať v nich stojí cokoli.
+    /// Vstup v opačném pořadí je ten případ, ve kterém by řez ukázal **osm jiných** položek a nikdo
+    /// by si toho nevšiml: osm řádků vypadá platně, ať v nich stojí cokoli.
     @Test("Rozházené pořadí se srovná před řezem")
     func reordersBeforeCutting() {
         let block = Policy.dashboardActivity(Array(events(12).reversed()), since: nil, empty: nil)
