@@ -44,9 +44,27 @@ enum WorkLane: String, CaseIterable, Hashable, Sendable {
     case finishReview
 
     /// Pořadí na obrazovce. **Zapsané tady, ne ve view** — je to rozhodnutí o tom, v jakém pořadí
-    /// se otázky kladou (*co rozhodnout · co přečíst · co předat · co mergnout · co čeká · co
-    /// dopsat*), a takové rozhodnutí patří do `Policy`, kde se dá projít testem.
-    static let order: [WorkLane] = [.decide, .read, .handOff, .merge, .waiting, .finishReview]
+    /// se otázky kladou, a takové rozhodnutí patří do `Policy`, kde se dá projít testem.
+    ///
+    /// **Osa je „jak blízko je ten řádek k tomu, aby míč nebyl u mě“, ne „čí to je“** (změna
+    /// proti kresbě, z proklikání #515). Deck kreslil pořadí od cizí práce k vlastní
+    /// (*rozhodnout · přečíst · předat · k merge · čeká · dopsat*) a `K merge` v něm bylo čtvrté;
+    /// nad hotovou obrazovkou vyhrálo, že **mergnout je nejlevnější tah** a je jediný, po kterém
+    /// řádek z desky rovnou zmizí — takže patří první.
+    ///
+    /// Tím se osa změnila, a s ní **jedna další věc, ne žádná**: `Dopsat a odeslat` jde z konce
+    /// na druhé místo, protože je to tentýž druh „skoro hotovo“ — text už je napsaný, chybí ho
+    /// odeslat. Zbylé čtyři si **relativní pořadí drží beze změny** (`decide` → `read` →
+    /// `handOff` → `waiting`), protože v nové ose vycházejí stejně: u `Rozhodnout` už review
+    /// doběhlo a kolega čeká na verdikt, u `Přečíst` to ještě nezačalo, `Předat agentovi` je
+    /// vlastní práce, na kterou nečeká nikdo než já, a v tichém pruhu **míč u mě není vůbec**.
+    ///
+    /// **Tohle je pořadí kresby, ne přednost při rozřazování.** Že `finishReview` „přebíjí
+    /// všechno“ (viz `lane(of:…)`) je věta o tom, do kterého pruhu PR **spadne**; že se kreslí
+    /// druhý, je věta o tom, kde ten pruh na obrazovce **stojí**. Kdyby se ty dvě věci spletly,
+    /// bylo by to čtení pořadí jako přednosti — a to je přesně ten druh záměny, kvůli které tu
+    /// stojí tenhle odstavec.
+    static let order: [WorkLane] = [.merge, .finishReview, .decide, .read, .handOff, .waiting]
 
     /// Nadpis pruhu.
     var title: String {

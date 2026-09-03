@@ -5830,8 +5830,8 @@ osou **dat**: v railu (`Fronta`, `Moje PR`) a ve všem, co čte jen cizí PR (#3
 
 | Rozhodnutí | Zamítnutá varianta | Proč |
 |---|---|---|
-| **Šest pruhů podle tahu**, autora nese šipka v mintu | Nechat dvě fronty a v každé řadit podle tahu | Řazení uvnitř množiny odpovídá na „co první z těchhle“, ne na „co teď“. Cizí PR s hotovým review a vlastní PR k merge jsou dva **různé tahy**, které se v jedné frontě nedají oddělit, a naopak cizí `neběželo` a vlastní `čeká na CI` jsou tentýž *nic teď*, i když jsou od různých autorů |
-| **Prázdný pruh se kreslí, i s nulou** | Vypustit prázdné pruhy a šetřit výšku | Mizející pruh by desku při každém tiku přeskládal a `Rozhodnout` by pod rukou skočilo tam, kde bylo `Přečíst`. Prázdno je navíc **odpověď** a je na pruh jiná (`Nic nedoběhlo` proti `Nic rozepsaného`) — jedna společná věta by u některého lhala |
+| **Šest pruhů podle tahu** (pořadí **změnilo proklikání**, viz *Dvě korekce* níž), autora nese šipka v mintu | Nechat dvě fronty a v každé řadit podle tahu | Řazení uvnitř množiny odpovídá na „co první z těchhle“, ne na „co teď“. Cizí PR s hotovým review a vlastní PR k merge jsou dva **různé tahy**, které se v jedné frontě nedají oddělit, a naopak cizí `neběželo` a vlastní `čeká na CI` jsou tentýž *nic teď*, i když jsou od různých autorů |
+| ~~**Prázdný pruh se kreslí, i s nulou**~~ — **zrušeno z proklikání**, viz *Dvě korekce* níž | Vypustit prázdné pruhy a šetřit výšku (**tohle nakonec vyhrálo**) | Původní důvod byl, že mizející pruh přeskládá desku a prázdno je taky odpověď. Nad hotovou obrazovkou vyhrálo, že šest rámečků s nulou je pět šestin obrazovky za odpověď, o kterou se nikdo neptal. Věty na pruh (`Nic nedoběhlo` proti `Nic rozepsaného`) zůstávají — kreslí se v pruhu, který se vyprazdňuje pod rukou |
 | **Draft přebíjí všechny ostatní pruhy** | Nechat draft jako tužku v řádku a zařadit PR podle stavu review | Rozdělané review je ručně psaná práce, tedy můj tah bez ohledu na to, co se na PR stalo. Je to tatáž úvaha, kvůli které karta `Rozdělaná review` počítala celý seznam, ne jen frontu (#332) |
 | **Běžící review je `Čeká na ostatní`** | Nechat ho v `Přečíst` (je to pořád „k přečtení“) | Pruh `Přečíst` má akci `Pustit review na N`, a ta pouští `notStarted`. Kdyby v pruhu leželo i běžící review, hlásil by víc, než co akce udělá — a poznalo by se to jedině účtem za session |
 | **Selhání, neprůkazný běh a zastaralé nálezy jdou do `Rozhodnout`** | Vrátit je do `Přečíst`, protože tahem je pustit znovu | To by rozvázalo počet v hlavičce od akce (viz řádek výš). „Podívat se a rozhodnout, co dál“ je navíc pravdivější popis: u zastaralých nálezů se rozhoduje mezi *pustit znovu* a *nechat to tak* |
@@ -5880,3 +5880,75 @@ u tvrdé podmínky č. 2 — vlastní rozhodnutí a vlastní issue.
 | **Legenda `Nálezy podle reviewera`** (`ReviewerShareOfFindings`, `Policy.reviewerShares`) | Blok `Reviewery` postaví #514 a bude to **jiný tvar** (podíl v čase, ne sedmidenní součet), takže se nemá cenu držet téhož typu. **Tvrzení „nula v legendě není čisto“ (#383) odešlo s legendou** a patří zpátky, jak blok vznikne |
 | **`DashboardBlock`, `Policy.dashboardBlock`** | Z typu zbyla patka jako `BlockFooter` — prázdný obal kolem jedné vnořené struktury by byl mrtvá váha |
 | **`dashboardQueue`, `dashboardOwnPullRequests`** | Jeden getter (`boardEntries`) nad plným seznamem; rozřazení proběhne uvnitř `Policy.board` jednou na řádek |
+
+#### Dvě korekce z proklikání: `K merge` nahoru a prázdné pruhy se nekreslí (#515)
+
+Obojí přišlo **nad hotovou obrazovkou**, ne z rozboru, a obojí je **změna proti odsouhlasenému
+zákresu** z decku (*Směry › C*). Zapisuje se to tady i s tím, co se tím ruší, aby se k tomu příští
+session nevracela: kresba už neplatí ve dvou věcech a v repu je proti ní překreslená sekce 45.
+
+Zadání znělo doslova takhle: *„chtěl bych to co je k merge dát úplně nahoru“* a *„ty okýnka který
+jsou prázdný nemusíme vůbec ukazovat“*.
+
+**1. Pořadí pruhů: změnila se osa, ne jen jedna položka.** Deck kreslil pořadí od **cizí práce
+k vlastní** (`Rozhodnout`, `Přečíst`, `Předat agentovi`, `K merge`, `Čeká na ostatní`, `Dopsat
+a odeslat`) — což je řazení podle **autora**, tedy podle té osy, kterou #515 zrušilo všude jinde.
+Nová osa je **„jak blízko je řádek k tomu, aby míč nebyl u mě“**:
+
+| # | Pruh | Proč tady |
+|---|---|---|
+| 1 | `K merge` | Mergnout je **nejlevnější tah** a jediný, po kterém řádek z desky rovnou zmizí. Je to navíc tah **s dobou trvanlivosti**: zelené CI a slévatelná větev zítra platit nemusí |
+| 2 | `Dopsat a odeslat` | Tentýž druh „skoro hotovo“ — text už je napsaný, chybí ho odeslat. Šlo z **konce** na druhé místo |
+| 3 | `Rozhodnout` | Review doběhlo a kolega čeká na verdikt; míč je u mě nejdéle ze zbytku |
+| 4 | `Přečíst` | Ještě to nezačalo |
+| 5 | `Předat agentovi` | Vlastní práce, na kterou nečeká nikdo než já |
+| 6 | `Čeká na ostatní` | Míč u mě **není vůbec** — tichý pruh zůstává poslední |
+
+**Zbylé čtyři se přeskládat nemusely, a je to výsledek, ne opomenutí**: v nové ose vycházejí ve
+tomtéž pořadí jako ve staré. Přesunuly se tedy jedině dvě položky a je na to tvrzení
+(`BoardTests.putsTheFinishedWorkFirst` srovnává i to relativní pořadí).
+
+**Zamítnutá varianta: řadit podle „ceny tahu“** (`K merge` → `Přečíst` → `Rozhodnout` → …), protože
+pustit review je taky jedno kliknutí. Zahozeno: cena kliknutí není cena tahu — po `Pustit review`
+se čeká na session, kdežto `Rozhodnout` je hotové v okamžiku, kdy odpovím. A hlavně by to rozhodilo
+pořadí zbylých čtyř bez toho, aby o to někdo požádal.
+
+**A jedna záměna, kterou to odhalilo.** V hlášení stálo, že `Dopsat a odeslat` „přebíjí všechno“ —
+což je věta o **rozřazování** (`Policy.lane`: draft rozhoduje první, ať je PR v jakémkoli stavu),
+ne o pořadí kresby. Teď, když ten pruh stojí druhý, jsou to dvě různá tvrzení o dvou různých věcech
+a v kódu je to napsané u obou (`WorkLane.order` i `Policy.lane`), protože právě tady by si to někdo
+spletl.
+
+**2. Prázdný pruh se nekreslí — a zaplatilo se za to třemi věcmi.** Do proklikání byl v repu opačný
+zápis (*mizející pruh by desku při každém tiku přeskládal a prázdno je taky odpověď*) a **ten
+neplatí**. Rozhodlo, že rámeček s nulou nese **jedinou** informaci — „tady nic není“ — a šest
+takových je pět šestin obrazovky za odpověď, o kterou se nikdo neptal. Kreslí se `visibleLanes`,
+`lanes` zůstávají celé.
+
+Deska tím ale **přestala být stabilní**, a to má tři důsledky, které se musely dořešit:
+
+1. **Zkratka visí na pruhu, ne na pozici.** „První pruh“ je pokaždé jiný, takže kdyby `⏎` patřilo
+   hornímu pruhu, byla by to kolize z #151 a #184 **v čase**: dvě tlačítka na jedné klávese
+   v různých stavech desky, nezachytitelná pohledem do katalogu. `LaneAction.shortcut` se proto
+   skládá z `WorkLane` a nad skrytým `Rozhodnout` klávesu **nevydá nikdo** — ani `K merge`, které má
+   tutéž akci. Hlídá to výčet přes všech **64** podmnožin pruhů, ověřený vloženou regresí.
+2. **Vznikl stav, na kterém není ani jeden pruh** — ten skrývání teprve **vyrobilo**. Prázdná plocha
+   by z něj udělala poruchu, přitom je to nejlepší možný stav; je to **opačná lež** než ta z tabulky
+   vzorů v `CLAUDE.md`: tam text tvrdí víc, než data unesou, tady by mlčení tvrdilo **méně**. Na
+   desce proto stojí blok `Všechno vyřízené` a pod ním věta o tom, co se stane dál
+   (`Policy.boardEmpty(isLoaded:)`). **Nenačtená fronta se od vyřízené pozná** (`Načítám frontu`),
+   protože „všechno hotové“ nad nestaženým seznamem je tvrzení o ničem. Ta věta se navíc
+   **neopakuje** s větou pod pozdravem: jedna říká, jak to stojí, druhá co bude dál.
+3. **Věta pod pozdravem se s deskou nemá čím rozejít**, a je to shoda podmínek, ne opatrnost: pruh se
+   skrývá **při nule** a část věty se při nule **nepíše**, takže „4 čekají na ostatní“ a nakreslený
+   tichý pruh nastávají zároveň. Zvažovalo se držet počty ve větě i nad skrytým pruhem —
+   **nepotřebné**, protože skrývá se jedině nula, a nula ve větě nestojí ani ve staré verzi.
+
+**Co se tím v testech změnilo:** výčet 208 kombinací zůstává beze změny (rozřazení se nedotklo),
+`BoardSeparatorTests` počítá **čtrnáct** čar místo třiadvaceti — a právě tím ten počet skrývání
+hlídá, protože prázdné pruhy by přiskočily třemi čárami každý.
+
+**Co zůstává platit z původního záznamu #515:** deska je pohled, ne množina; #332 se nemění;
+`Přečíst` je vázané na `notStarted` a jeho akce pouští `startReviewsForNotReviewed()`; potvrzení má
+jedině hromadné spuštění review; a čísla z karet zůstávají v railu a ve stavovém řádku.
+

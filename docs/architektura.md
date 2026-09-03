@@ -4483,11 +4483,11 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`) a uvnitř rámu ikony**, jak ho kreslí návrh — viz *Odznak v railu* |
 | `HomeView` | Obsah domácí záložky podle railu. Nad deskou **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
-| `BoardView` | Domácí záložka (#515) — **deska pruhů podle mého tahu**. Nahradila `DashboardView` z #181: karty odešly celé (`Policy.board`, `WorkLane`), věta pod pozdravem mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a levý sloupec drží **šest pruhů, vždycky všechny** — mizející pruh by desku při každém tiku přeskládal. Řádek je **týž `PullRequestRow`** jako v seznamu (#172), ne třetí podoba; vlastní PR pozná šipka v mintu a `Prompt →`. Vpravo v hlavičce pruhu je **akce nad celým pruhem** (`LaneAction`) — potvrzení si nechává jedině `Pustit review na N`, protože je to jediná, která utratí víc než jednu session. Tichý pruh (`Čeká na ostatní`) je ztlumený na 0,7, má strop **dva** řádky místo pěti a místo akce popisek `nic k udělání`; patka pruhu **rozbaluje na místě**, nepřepíná do sekce (pruh míchá cizí a vlastní PR, takže žádná sekce nemá tutéž množinu). Pravý sloupec drží od #515 **dva** bloky: `Dění` (#443, od #515 **osm** řádků — `Policy.activityRowLimit`) a `Dneska stálo` jako malý blok s částkou v hlavičce; legenda reviewerů odešla s kartami a `Reviewery` postaví #514 |
+| `BoardView` | Domácí záložka (#515) — **deska pruhů podle mého tahu**. Nahradila `DashboardView` z #181: karty odešly celé (`Policy.board`, `WorkLane`), věta pod pozdravem mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a levý sloupec drží **jen neprázdné pruhy** (`Board.visibleLanes`, z proklikání #515) v pořadí od hotového k rozdělanému (`K merge` první); když není ani jeden, stojí místo nich blok `Všechno vyřízené` (`Policy.boardEmpty`). Řádek je **týž `PullRequestRow`** jako v seznamu (#172), ne třetí podoba; vlastní PR pozná šipka v mintu a `Prompt →`. Vpravo v hlavičce pruhu je **akce nad celým pruhem** (`LaneAction`) — potvrzení si nechává jedině `Pustit review na N`, protože je to jediná, která utratí víc než jednu session. Tichý pruh (`Čeká na ostatní`) je ztlumený na 0,7, má strop **dva** řádky místo pěti a místo akce popisek `nic k udělání`; patka pruhu **rozbaluje na místě**, nepřepíná do sekce (pruh míchá cizí a vlastní PR, takže žádná sekce nemá tutéž množinu). Pravý sloupec drží od #515 **dva** bloky: `Dění` (#443, od #515 **osm** řádků — `Policy.activityRowLimit`) a `Dneska stálo` jako malý blok s částkou v hlavičce; legenda reviewerů odešla s kartami a `Reviewery` postaví #514 |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
 | `DashboardCountdown` | Samotný odpočet — `za 43s znovu`, **bez mezery mezi číslem a jednotkou** (#260). Formát je náš (systémový mezeru má a nejde vyndat), takt dává `TimelineView`, takže se přepočítává jen tenhle `Text`. Text i rozvrh jsou statické funkce, aby se daly otestovat |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181). Od #515 **vlastní soubor** — `DashboardView` odešel a graf kreslí blok `Dneska stálo` |
-| `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181). Od #515 ho dělí deska: vlevo šest pruhů, vpravo dění a útrata |
+| `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181). Od #515 ho dělí deska: vlevo pruhy (nejvýš šest), vpravo dění a útrata |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky a stav pracovní kopie, vpravo puntíky služeb |
 | `WorkingCopyStatusView` | `Pracovní kopie připravená · HEAD 4f2ac91` ve stavovém řádku (#218) — přestěhováno z hlavičky PR, protože je to **stav prostředí**, ne údaj o PR. Selhaný checkout se sem nekreslí |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
@@ -8640,7 +8640,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
-| `Policy.board(entries:mine:pending:isMergeReady:activity:lastVisit:activityEmpty:)`, `Policy.boardSentence(_:)` | Podklad domácí záložky (#515, `Board`) — **šest pruhů podle mého tahu** a v témže snímku blok `Dění`. Nahradilo `Policy.dashboard` z #181: karty odešly, a s nimi `Dashboard`, `Dashboard.*Card`, `ReviewerShareOfFindings` i `reviewerShares`. **Jeden snímek na překreslení** (týž důvod jako u #331 a #443): deska prochází celý seznam a u vlastních PR se ptá na předání i na merge, takže getter na jeden pruh by tu práci udělal šestkrát. `pending` a `isMergeReady` jsou **uzávěry, ne mapy** — čtou se jen u vlastních PR. `boardSentence` mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a **nuly nepíše**; nad prázdnou deskou řekne slovem, že je čisto |
+| `Policy.board(entries:mine:pending:isMergeReady:activity:lastVisit:activityEmpty:)`, `Policy.boardSentence(_:)` | Podklad domácí záložky (#515, `Board`) — **šest pruhů podle mého tahu** (kreslí se z nich jen neprázdné, `Board.visibleLanes`) a v témže snímku blok `Dění`. Nahradilo `Policy.dashboard` z #181: karty odešly, a s nimi `Dashboard`, `Dashboard.*Card`, `ReviewerShareOfFindings` i `reviewerShares`. **Jeden snímek na překreslení** (týž důvod jako u #331 a #443): deska prochází celý seznam a u vlastních PR se ptá na předání i na merge, takže getter na jeden pruh by tu práci udělal šestkrát. `pending` a `isMergeReady` jsou **uzávěry, ne mapy** — čtou se jen u vlastních PR. `boardSentence` mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a **nuly nepíše**; nad prázdnou deskou řekne slovem, že je čisto |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí řádků na domácí záložce (#181, #331, od #515 uvnitř pruhů) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první. Od #515 se řadí **jednou nad celým seznamem** a pruhy si z něj berou pořadí — řez nad špatně seřazeným vstupem by tiše ukázal jiných pět |
 | `Policy.lane(of:ownership:pending:isMergeReady:)`, `Policy.isMergeReady(_:)` | Do kterého pruhu pull request patří (#515, `WorkLane`). **Právě jeden pruh na PR** — `switch` je vyčerpávající a návrat není optional; testuje se **vyčerpávajícím výčtem** (13 stavů × 2 × 2 × 2 × 2), protože rozřazení je věc, kterou se dá pokazit potichu. Pořadí priorit: draft přebíjí všechno (ručně psaná práce), běžící review je `waiting` (jinak by pruh `Přečíst` hlásil víc, než co jeho akce pustí), cizí PR se dělí na `notStarted → read` a zbytek `→ decide`, vlastní na `pending > 0 → handOff`, `isMergeReady → merge`, zbytek `waiting`. `isMergeReady(_:)` staví na `mergeOffer(…)` a bere z něj jednu výjimku: **zavřená brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`) — s výchozím vypnutým odesíláním by jinak byl pruh `K merge` navždycky prázdný |
 | `Policy.laneAction(of:count:)`, `Policy.laneRowLimit(_:)`, `Policy.laneSlice(_:of:expanded:)`, `Policy.canOpenFirstOnBoard(count:isPaletteOpen:)` | Akce nad pruhem a strop na řádky (#515, `LaneAction`, `LaneSlice`). Akce nese **počet z vlastního pruhu**, takže se to, co je na tlačítku, nemá čím rozejít s tím, co akce udělá; **potvrzení má jedině `runReviews`** (jediná, která utratí víc než jednu session) a **prázdný pruh akci nedostane vůbec**. Zkratky jsou rozdané tak, aby na jednu kombinaci byla nejvýš jedna akce (#151, #184): `⏎` pruhu `Rozhodnout` (`isPrimary`), `⌘⇧R` review, `⌘⇧D` draftu — `K merge` má tutéž akci bez klávesy. Strop je **pět, tichý pruh dva**, a je to strop **o kresbě, ne o množině** (#371); patka **rozbaluje na místě**, protože žádná sekce railu nemá tutéž množinu jako pruh |
@@ -9247,9 +9247,36 @@ pro pruh špatně: pruh míchá cizí a vlastní PR, takže žádná sekce railu
 vedl někam jinam, než co je nad ním. Rozbalené pruhy jsou `@State` view — je to stav pohledu
 v jednom běhu, takže se nikam neukládá (tatáž úvaha jako u sledování konce ve výpisu kroků, #325).
 
-**Prázdný pruh se kreslí.** Šest pruhů je vidět vždycky, i s nulou: mizející pruh by desku při
-každém tiku přeskládal a `Rozhodnout` by pod rukou skočilo tam, kde bylo `Přečíst`. Prázdno je navíc
-odpověď, a **na pruh jiná** (`WorkLane.emptyExplanation`) — jako u prázdných sekcí railu.
+**Prázdný pruh se nekreslí, a je to změna proti kresbě z proklikání** (#515). Do proklikání tu
+stálo, že šest pruhů je vidět vždycky, i s nulou — mizející pruh přeskládá desku a prázdno je taky
+odpověď. Nad hotovou obrazovkou vyhrálo, že rámeček s nulou nese **jedinou** informaci a šest
+takových je pět šestin obrazovky za odpověď, o kterou se nikdo neptal. Kreslí se `Board.visibleLanes`
+(filtr `count > 0` nad `lanes`), `lanes` zůstávají celé, protože z nich mluví věta pod pozdravem.
+
+Platí se za to třemi věcmi a každá z nich má vlastní stráž:
+
+- **Deska přestala být stabilní, takže „první pruh“ je pokaždé jiný.** Proto **zkratka visí na
+  pruhu, ne na pozici**: `LaneAction.shortcut` se skládá z `WorkLane` (`Policy.laneAction(of:count:)`),
+  takže se `⏎` u skrytého `Rozhodnout` **nepředá sousedovi** — nezaregistruje ji nikdo. Kdyby se
+  vázala na pozici, byla by to kolize z #151 a #184, **jen v čase**, a z katalogu by se nepoznala.
+  Hlídá to `BoardTests.neverRebindsAShortcutToAnotherLane` nad všemi 64 podmnožinami pruhů.
+- **Vznikl stav, na kterém není ani jeden pruh** (`Board.isEverythingDone`), a ten skrývání teprve
+  **vyrobilo**. Prázdná plocha by z něj udělala poruchu, takže na desce stojí jeden blok
+  `Všechno vyřízené` s větou o tom, co se stane dál (`Policy.boardEmpty(isLoaded:)`, `BoardEmpty`).
+  **Nenačtená fronta není vyřízená fronta** — do stažení seznamu se říká `Načítám frontu`, protože
+  „všechno hotové“ nad nestaženými daty je tvrzení o ničem.
+- **Věta pod pozdravem se s deskou nemá čím rozejít**, a je to shoda podmínek, ne opatrnost: pruh se
+  skrývá **při nule** a část věty se při nule **nepíše**, takže „4 čekají na ostatní“ a nakreslený
+  tichý pruh nastávají zároveň. `WorkLane.emptyExplanation` proto **nezaniká**: kreslí se v pruhu,
+  který se vyprazdňuje pod rukou, a nad `Board.lanes` je pořád úplná.
+
+**Pořadí pruhů je od proklikání jiné** (`WorkLane.order` = `merge`, `finishReview`, `decide`, `read`,
+`handOff`, `waiting`), a je to změna osy: deck kreslil pořadí od cizí práce k vlastní, kdežto teď
+jde o to, **jak blízko je řádek k tomu, aby míč nebyl u mě**. `K merge` je první, protože mergnout je
+nejlevnější tah a jediný, po kterém řádek z desky rovnou zmizí; `Dopsat a odeslat` jde z konce na
+druhé místo, protože je to tentýž druh „skoro hotovo“. Zbylé čtyři si **relativní pořadí drží beze
+změny**. A pozor na jednu záměnu: že `finishReview` „přebíjí všechno“, je věta o **rozřazení**
+(`Policy.lane`), ne o pořadí kresby.
 
 **Co #515 zrušilo, a proč:**
 

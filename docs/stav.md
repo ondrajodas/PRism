@@ -7422,9 +7422,22 @@ nedá přečíst jako „čisto“.
 ## #515 — deska podle mého tahu (M16)
 
 **Domov se přeskládal podle tahu, ne podle autora.** Karty (#181, #371) a dvě fronty podle autora
-(#331) vystřídalo **šest pruhů**: `Rozhodnout`, `Přečíst`, `Předat agentovi`, `K merge`,
-`Čeká na ostatní`, `Dopsat a odeslat` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
+(#331) vystřídalo **šest pruhů**: `K merge`, `Dopsat a odeslat`, `Rozhodnout`, `Přečíst`,
+`Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
 **vyčerpávajícím výčtem** — 208 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
+
+**Dvě věci se změnily z proklikání, tedy proti odsouhlasené kresbě.** `K merge` šlo z čtvrtého
+místa **na první** (a s ním `Dopsat a odeslat` z konce na druhé): osa pořadí přestala být „od cizí
+práce k vlastní“ a je „jak blízko je řádek k tomu, aby míč nebyl u mě“ — mergnout je nejlevnější tah
+a jediný, po kterém řádek z desky rovnou zmizí. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
+i první verze měly všech šest, i s nulou. Zbylé čtyři pruhy si relativní pořadí drží beze změny.
+
+**Skrývání zaplatilo tři věci a každá má stráž.** Deska přestala být stabilní, takže „první pruh“
+je pokaždé jiný — proto **zkratka visí na pruhu, ne na pozici** (`⏎` u skrytého `Rozhodnout`
+nepřevezme soused; hlídá to výčet přes všech 64 podmnožin pruhů). Vznikl stav, na kterém není ani
+jeden pruh, a ten by jako prázdná plocha vypadal jako porucha — stojí v něm blok `Všechno vyřízené`,
+a **nenačtená fronta se od vyřízené pozná** (`Načítám frontu`). A věta pod pozdravem se s deskou
+nemá čím rozejít, protože skrytí pruhu i vypuštění části věty mají **tutéž podmínku**: nulu.
 
 **Deska je pohled, ne množina.** Rail dál nabízí `Frontu` a `Moje PR` jako seznamy podle autora
 a #332 platí beze změny: hromadné spuštění review, notifikace i automat čtou dál jen cizí PR. Akce
@@ -7435,7 +7448,8 @@ odjakživa — a je na to tvrzení z obou stran (co pruh ukazuje i co akce pust�
 N záložek s rozloženým panelem `Zadání`, ne N sheetů za sebou (sheet, ve kterém se prompt skládá,
 aplikace nemá); kapsle jako `Copilot · za mainem o 3` v tichém pruhu se nekreslí, protože se
 z nenačteného PR nemají kde vzít; a `⏎` má jedině pruh `Rozhodnout` — `K merge` má tutéž akci bez
-klávesy, aby na jedné kombinaci nebyly dvě.
+klávesy, aby na jedné kombinaci nebyly dvě; a patka pruhu má stříšku, ne šipku, protože rozbaluje
+na místě.
 
 **Co odešlo**: `Dashboard` a všechny čtyři karty, `DashboardCard`, `DashboardDestination`
 (a s ním osa filtru zapínaná kartou `Blokuje` — odškrtává se v nabídce filtru dál),

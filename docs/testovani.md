@@ -493,11 +493,22 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   tvrzení z pěti (výška 32 až 80 bodů místo 24), a se zahozeným `lineLimit(1)` u titulku spadla
   výška u nejdelší položky (45 b) — tedy přesně ten stav, kdy se řádek místo ořezu zalomí.
 
-  Čar v levém sloupci je od #515 **třiadvacet** (`BoardSeparatorTests`, do té doby jedenáct)
-  a je to tvrzení, ne opomenutí: osm z pruhu `Přečíst` (obrys, hlavička, čtyři mezi pěti řádky, jedna
-  nad patkou, obrys) a po třech z **pěti prázdných pruhů**, které se od #515 kreslí i s nulou. Blok
-  `Dění` v tom není — stojí v **pravém** sloupci, kdežto vzorek jde přes levý. Okno je u toho vyšší
-  (1400 místo 1000 bodů): šest pruhů pod sebou je vyšší než dva bloky, a čára pod hranou okna se
+  Čar v levém sloupci je od #515 **čtrnáct** (`BoardSeparatorTests`, do #515 jedenáct a před
+  proklikáním #515 třiadvacet) a je to tvrzení, ne opomenutí. Scéna má **tři neprázdné pruhy ze
+  šesti** (draft, doběhlé review, zbytek `neběželo`): po třech z obou jednořádkových (obrys,
+  hlavička, obrys) a osm z pruhu `Přečíst` (obrys, hlavička, čtyři mezi pěti řádky, **jedna nad
+  patkou**, obrys). **Prázdné pruhy nepřidávají nic** — a právě tím ten počet hlídá skrývání
+  z proklikání #515: kdyby se prázdný pruh začal kreslit i s nulou, přiskočí třikrát tři a vyjde
+  přesně těch starých třiadvacet.
+
+  Dvě věci u té scény jsou nutné, ne kosmetické. **Devět PR, ne sedm**: draft a doběhlé review si
+  vezmou po jednom, takže na `Přečíst` zbude sedm a patka **vznikne** — se sedmi v celku by v pruhu
+  zbylo přesně pět, patka odpadne a test o čáře nad patkou netvrdí nic (naměřeno: 13 čar místo 14).
+  A **draft se sází přímo do `drafts`**, protože `setDraftBody` si bere `headSha` z načteného
+  detailu, který scéna nemá — přes něj by draft tiše nevznikl.
+
+  Blok `Dění` v tom není — stojí v **pravém** sloupci, kdežto vzorek jde přes levý. Okno je u toho
+  vyšší (1400 místo 1000 bodů): pruhy pod sebou jsou vyšší než dva bloky, a čára pod hranou okna se
   nenakreslí, takže by test hlásil menší počet, ne dvojitou čáru.
 
   **Ověřeno vložením regrese, dvakrát:** posun značky při vstupu (`guard visible || wasActivityVisible`)
@@ -3991,6 +4002,35 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **Věta pod pozdravem nezmiňuje nuly** a nad prázdnou deskou mluví slovem, ne nulou. Vedle toho
     případ „nic na tahu, ale něco čeká“, kde musí říct **obojí**.
 
+  **Pořadí a skrývání prázdných pruhů** (z proklikání #515, tedy změna proti kresbě) — čtyři
+  tvrzení, a to nejcennější z nich je poslední:
+
+  - **Pořadí se tvrdí celým literálem**, ne první položkou: `WorkLane.order` je `merge`,
+    `finishReview`, `decide`, `read`, `handOff`, `waiting`. K tomu dvě věci, které by se jinak
+    rozešly potichu — že `order` obsahuje **všechny** případy právě jednou (jinak by pruh z desky
+    vypadl beze slova) a že zbylé čtyři si drží **relativní** pořadí z kresby. Kdyby se osa změnila
+    znovu, má spadnout tenhle test, ne render.
+  - **Prázdný pruh se nekreslí, ale z desky nezmizí**: `visibleLanes` má dva pruhy, `lanes` pořád
+    šest. Rozdíl je v tom, že věta pod pozdravem mluví o celé desce — kdyby se skrývání promítlo
+    i do `lanes`, začaly by počty ve větě záležet na tom, co je zrovna vidět.
+  - **Skrytí pruhu a nula ve větě je jedna podmínka.** Tvrdí se to z obou stran (tichý pruh se
+    čtyřmi řádky je vidět **a** je ve větě; prázdný není nikde), protože právě tady by se deska
+    a věta mohly rozejít, a nikdo by si toho nevšiml.
+  - **Skrytý pruh svou zkratku nepředá sousedovi.** Prochází se **všech 64 podmnožin** pruhů
+    a tvrdí se, že `⏎` nikdy nevydá jiný pruh než `Rozhodnout` a že ji nad skrytým `Rozhodnout`
+    **nevydá nikdo** — ani `K merge`, které má tutéž akci. Bez skrývání by to bylo tvrzení
+    o jednom stavu; se skrýváním je „první pruh“ pokaždé jiný, takže by vazba na pozici byla
+    kolize z #151 a #184 **v čase** — a ta se z katalogu nepozná.
+
+    **Ověřeno vložením regrese**: `isPrimary: true` i u `merge` shodilo 48 tvrzení v tomhle jednom
+    testu (dvě zkratky na jedné klávese ve všech podmnožinách, kde jsou oba pruhy vidět).
+
+  **Prázdná deska má vlastní věty** (`Policy.boardEmpty(isLoaded:)`): `Všechno vyřízené`, a nad
+  nenačtenou frontou `Načítám frontu`. Tvrdí se u toho i to, že se ta věta **neopakuje** s větou pod
+  pozdravem — dvě věty o tomtéž nad prázdnou obrazovkou znamenají, že si jedna z nich nevěří. Ten
+  stav navíc **vyrobilo až skrývání**, takže se k němu klikáním nedostaneš; renderuje ho sonda
+  (`BoardRenderProbe`, scéna `hotovo`), stejně jako stav s **jediným** neprázdným pruhem.
+
   Ve store (`AppStoreBoardTests`): pruhy jsou seřazené **jinak než `pullRequests`** (obojí v jednom
   tvrzení, jinak by se dalo splést getter), **filtr seznamu desku nezúží** a vlastní PR bez
   načteného detailu **není k merge** (`isMergeReadyForLane` i pruh, tedy z obou stran).
@@ -4001,6 +4041,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   ukazuje i co akce pustí) — samotné „počet se rovná“ by prošlo i tehdy, kdyby v obou stálo prázdno.
   K tomu druhé tvrzení o **odloženém** PR: zapnutý filtr počet u akce **nezmění**, protože akce
   stojí na plném seznamu cizích PR, ne na zúženém pohledu.
+
+  **Vzhled má sondu, ne tvrzení** (`BoardRenderProbe`, `TEST_RUNNER_PRISM_MEASURE=1`
+  + `TEST_RUNNER_PRISM_RENDER_DIR`): deska ve **třech** šířkách (1240, 900 a **636**, což je nejužší
+  povolené okno — podlaha `RootView`u je 700 a rail z ní ubere 64) a ve **čtyřech** scénách. Dvě
+  z nich **vyrábí až skrývání**, takže se k nim klikáním nedostaneš: `hotovo` (není ani jeden pruh)
+  a `jediny-pruh`. Zbylé dvě jsou `pruhy` (tři pruhy ze šesti, tedy nové pořadí i skrývání naráz)
+  a `prazdne-deni`. Otázka, na kterou sonda odpovídá, je jediná: **akce v hlavičce pruhu je nejdelší
+  prvek desky**, takže se v 636 bodech pozná, jestli z ní ustoupí nadpis, počet, nebo ona sama
+  (naměřeno: vejde se celá včetně kapsle klávesy, ustupuje jedině titulek řádku).
 
   Sedmidenní historie útraty se ověřuje proti skutečné dočasné složce: přesun včerejška po
   půlnoci, prázdný den, který v řadě zůstává, a ořez na sedm dní.

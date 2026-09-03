@@ -233,3 +233,114 @@ extension BoardTests {
         #expect(Policy.boardSentence(board) == "Nic na tahu · 2 čekají na ostatní")
     }
 }
+
+// MARK: - Pořadí pruhů a skrývání prázdných (z proklikání #515)
+
+extension BoardTests {
+    private func board(counts: [WorkLane: Int]) -> Board {
+        var next = 1
+        return Board(
+            lanes: WorkLane.order.map { lane in
+                let count = counts[lane] ?? 0
+                let rows = entries(count, from: next)
+                next += max(count, 1)
+                return Board.Lane(lane: lane, rows: rows, action: Policy.laneAction(of: lane, count: count))
+            },
+            activity: Policy.board(entries: []).activity
+        )
+    }
+
+    /// **`K merge` je první a `Dopsat a odeslat` druhé** — z proklikání #515, tedy změna proti
+    /// kresbě z decku (*rozhodnout · přečíst · předat · k merge · čeká · dopsat*). Osa je
+    /// „jak blízko je řádek k tomu, aby míč nebyl u mě“, takže první jsou dva pruhy, ve kterých
+    /// je práce hotová a chybí ji odeslat.
+    ///
+    /// Tvrdí se tu **celé pořadí literálem**, ne jen první položka: kdyby se osa změnila znovu,
+    /// má spadnout tenhle test a ne render.
+    @Test("Pořadí pruhů začíná tím, co je hotové")
+    func putsTheFinishedWorkFirst() {
+        #expect(WorkLane.order == [.merge, .finishReview, .decide, .read, .handOff, .waiting])
+        #expect(Set(WorkLane.order) == Set(WorkLane.allCases))
+        #expect(WorkLane.order.count == WorkLane.allCases.count)
+        // Zbylé čtyři si drží **relativní** pořadí z kresby, `merge` a `finishReview` se jen
+        // předsunuly. Kdyby se přeskládaly i ty, je to jiné rozhodnutí a chce vlastní záznam.
+        #expect(WorkLane.order.filter { $0 != .merge && $0 != .finishReview }
+            == [.decide, .read, .handOff, .waiting])
+        // Deska pořadí **nepřeskládává** — bere ho z `WorkLane.order`.
+        #expect(Policy.board(entries: entries(2)).lanes.map(\.lane) == WorkLane.order)
+    }
+
+    /// **Prázdný pruh se nekreslí** (z proklikání #515), ale v `lanes` zůstane: věta pod
+    /// pozdravem mluví o celé desce, ne o tom, co je zrovna vidět.
+    @Test("Prázdné pruhy se nekreslí, ale z desky nezmizí")
+    func hidesEmptyLanesFromTheDrawingOnly() {
+        let two = board(counts: [.read: 3, .waiting: 1])
+
+        #expect(two.lanes.count == 6)
+        #expect(two.visibleLanes.map(\.lane) == [.read, .waiting])
+        #expect(!two.isEverythingDone)
+        // Pořadí se skrýváním nemíchá: `visibleLanes` je filtr nad `order`, ne nové řazení.
+        #expect(board(counts: [.waiting: 1, .merge: 2]).visibleLanes.map(\.lane) == [.merge, .waiting])
+    }
+
+    /// **Tichý pruh se skrývá jako každý jiný** — ale jen když je prázdný, takže se věta pod
+    /// pozdravem a deska nemají čím rozejít: „4 čekají na ostatní“ a nakreslený pruh mají
+    /// **tutéž podmínku**, totiž nenulový počet.
+    @Test("Skrytí tichého pruhu a nula ve větě je jedna podmínka")
+    func keepsTheSentenceAndTheDrawingInAgreement() {
+        let waiting = board(counts: [.waiting: 4])
+
+        #expect(waiting.visibleLanes.map(\.lane) == [.waiting])
+        #expect(Policy.boardSentence(waiting) == "Nic na tahu · 4 čekají na ostatní")
+
+        let none = board(counts: [.read: 1])
+        #expect(none.visibleLanes.map(\.lane) == [.read])
+        #expect(!Policy.boardSentence(none).contains("čeká"))
+    }
+
+    /// **Zkratka visí na pruhu, ne na pozici**, a je to to nejcennější tvrzení celého skrývání:
+    /// „první pruh“ je od proklikání #515 pokaždé jiný, takže kdyby se `⏎` vázalo na pozici,
+    /// byla by to kolize z #151 a #184 — jen v čase, tedy nezachytitelná pohledem do katalogu.
+    ///
+    /// Prochází se **všech 64 podmnožin** neprázdných pruhů. Tvrdí se dvě věci naráz: `⏎` nikdy
+    /// nevydá jiný pruh než `Rozhodnout`, a když je `Rozhodnout` skryté, **nevydá ji nikdo** —
+    /// nepřevezme ji ani pruh, který zbyl nahoře.
+    @Test("Skrytý pruh svou zkratku nepředá sousedovi")
+    func neverRebindsAShortcutToAnotherLane() {
+        for mask in 0..<(1 << WorkLane.order.count) {
+            let present = WorkLane.order.enumerated().filter { mask & (1 << $0.offset) != 0 }.map(\.element)
+            let visible = board(counts: Dictionary(uniqueKeysWithValues: present.map { ($0, 2) }))
+                .visibleLanes
+
+            #expect(visible.map(\.lane) == present)
+            let holders = visible.filter { $0.action.shortcut == .openFirstOnBoard }.map(\.lane)
+            #expect(holders == (present.contains(.decide) ? [.decide] : []))
+            // A žádná kombinace neumí rozdat jednu klávesu dvakrát.
+            let shortcuts = visible.compactMap { $0.action.shortcut }
+            #expect(Set(shortcuts).count == shortcuts.count)
+        }
+    }
+
+    /// **Prázdná deska má vlastní věty, ne prázdnou plochu.** Je to stav, který skrývání teprve
+    /// vyrábí — do proklikání #515 na obrazovce stálo šest rámečků s nulou.
+    ///
+    /// A **nenačtená fronta není vyřízená fronta**: to je ta nebezpečná strana, protože
+    /// „všechno vyřízené“ nad nestaženým seznamem je tvrzení o ničem.
+    @Test("Prázdná deska řekne, že je vyřízeno — a nad nenačtenou frontou to neřekne")
+    func explainsTheEmptyBoard() {
+        #expect(board(counts: [:]).isEverythingDone)
+        #expect(board(counts: [.waiting: 1]).isEverythingDone == false)
+
+        let done = Policy.boardEmpty(isLoaded: true)
+        #expect(done.title == "Všechno vyřízené")
+        #expect(done.explanation.contains("objeví jako pruh samy"))
+        // **Neopakuje větu pod pozdravem** — ta mluví o stavu, tahle o tom, co bude dál. Dvě
+        // věty o tomtéž nad prázdnou obrazovkou znamenají, že si jedna z nich nevěří.
+        #expect(!done.explanation.contains("Nic na tahu"))
+
+        let loading = Policy.boardEmpty(isLoaded: false)
+        #expect(loading.title == "Načítám frontu")
+        #expect(!loading.explanation.contains("vyřízen"))
+        #expect(loading.title != done.title)
+    }
+}

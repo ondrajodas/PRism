@@ -31,11 +31,22 @@ struct BoardRenderProbe {
     /// z ní ustoupí nadpis, počet, nebo ona sama.
     private let widths: [CGFloat] = [1240, 900, 636]
 
-    /// Prázdný blok se posuzuje taky: je to jediné místo, kde z celé sekce zbude jedna věta, a věta
-    /// pod hlavičkou vypadá jinak než nakreslený seznam.
+    /// Čtyři scény, a **dvě z nich vyrábí až skrývání prázdných pruhů** (z proklikání #515):
+    /// ke stavu, na kterém není ani jeden pruh, ani k tomu s jediným se klikáním nedostaneš,
+    /// protože fronta si o svůj obsah neřekne.
     private enum Scenario: String, CaseIterable {
-        case filled = "s-radky"
-        case empty = "prazdny"
+        /// Tři pruhy ze šesti: draft, doběhlé review a zbytek `neběželo`. Vidět je na ní
+        /// **nové pořadí** (`Dopsat a odeslat` nad `Rozhodnout` nad `Přečíst`) a to, že tři
+        /// prázdné pruhy na obrazovce nejsou.
+        case lanes = "pruhy"
+        /// Jediný neprázdný pruh — na tomhle se pozná, jestli deska s jedním blokem není spíš
+        /// oznámení než seznam.
+        case single = "jediny-pruh"
+        /// Není ani jeden pruh: místo šesti rámečků s nulou jedna věta, že je vyřízeno.
+        case everythingDone = "hotovo"
+        /// Prázdný blok `Dění`: jediné místo, kde z celé sekce zbude jedna věta, a věta pod
+        /// hlavičkou vypadá jinak než nakreslený seznam.
+        case activityEmpty = "prazdne-deni"
     }
 
     @Test("Vyrendrovat desku do PNG")
@@ -103,7 +114,12 @@ struct BoardRenderProbe {
     /// Fronta má sedm PR schválně: levý sloupec je pak vysoký jako v mockupu, takže je na obrázku
     /// vidět i to, kvůli čemu se blok stěhoval — kolik prázdna pod `Co teď` zbývalo.
     private func store(_ scenario: Scenario) async -> AppStore {
-        let queue = (1...7).map { number in
+        let count = switch scenario {
+        case .everythingDone: 0
+        case .single: 1
+        case .lanes, .activityEmpty: 7
+        }
+        let queue = (1..<(1 + count)).map { number in
             PullRequestSummary(
                 id: PRIdentifier(repo: RepoID("keboola/vault")!, number: number),
                 title: "chore: modernize dependencies (Symfony 8-ready)",
@@ -122,7 +138,25 @@ struct BoardRenderProbe {
             time: FakeTimeSource(start: Date())
         )
         await store.refresh()
-        guard scenario == .filled else { return store }
+        if scenario == .lanes, let first = queue.first?.id, let second = queue.dropFirst().first?.id {
+            // Draft posadí PR do `Dopsat a odeslat` (přebíjí všechno), uložený běh do
+            // `Rozhodnout` — zbytek zůstane v `Přečíst`. Tři pruhy tedy stojí a tři chybí,
+            // což je přesně to, co má být na obrázku vidět.
+            // **Draft se sází přímo do `drafts`**, ne přes `setDraftBody`: ta cesta si bere
+            // `headSha` z **načteného** detailu (`mutateDraft`), a sonda detail nenačítá — bez
+            // toho by draft tiše nevznikl a pruh `Dopsat a odeslat` by na obrázku chyběl.
+            store.drafts[first] = ReviewDraft(
+                pullRequest: first,
+                headSha: "aaaa1111",
+                body: "Zbytek vypadá dobře, jen ta jedna kontrola."
+            )
+            store.reviewRecords[second] = ReviewRecord(
+                pullRequest: second,
+                headSha: "aaaa1111",
+                runs: [makeStoredRun(findings: [], headSha: "aaaa1111")]
+            )
+        }
+        guard scenario != .activityEmpty else { return store }
         store.activityEvents = Self.events
         return store
     }

@@ -84,11 +84,14 @@ akcent okna jen zamýšlený.
 
 Obsahem domácí záložky je od #515 **deska pruhů podle mého tahu**, ne karty a dvě fronty podle
 autora. Otázka, se kterou se aplikace otevírá, je „co udělám teď“ — a na tu karty neodpovídaly:
-`Čeká na mě 13` je počet, ne tah. Deska proto skládá tytéž řádky do **šesti pruhů**:
-`Rozhodnout` (cizí PR, na kterém review doběhlo — i to čisté, protože schválit je taky rozhodnutí),
-`Přečíst` (na čem review neběželo), `Předat agentovi` (vlastní PR s něčím k předání), `K merge`
-(vlastní bez známé překážky), `Čeká na ostatní` (tichý pruh, ve kterém se nic nedělá) a
-`Dopsat a odeslat` (rozdělané review). Uvnitř pruhu se řadí **podle závažnosti**, ne podle času.
+`Čeká na mě 13` je počet, ne tah. Deska proto skládá tytéž řádky do **šesti pruhů**, a to
+v pořadí **od hotového k rozdělanému**: `K merge` (vlastní PR bez známé překážky),
+`Dopsat a odeslat` (rozdělané review), `Rozhodnout` (cizí PR, na kterém review doběhlo — i to čisté,
+protože schválit je taky rozhodnutí), `Přečíst` (na čem review neběželo), `Předat agentovi`
+(vlastní PR s něčím k předání) a `Čeká na ostatní` (tichý pruh, ve kterém se nic nedělá).
+Osa toho pořadí je **jak blízko je řádek k tomu, aby míč nebyl u mě** — mergnout je nejlevnější tah
+a jediný, po kterém řádek z desky rovnou zmizí. Uvnitř pruhu se řadí **podle závažnosti**, ne podle
+času.
 
 **Vpravo v hlavičce pruhu je akce nad celým pruhem**: `Otevřít první ⏎`, `Pustit review na 2 ⌘⇧R`,
 `Sestavit 2 zadání`, `Dopsat ⌘⇧D`. Potvrzení si nechává jedině spuštění review — je to jediná akce
@@ -98,8 +101,12 @@ to vzít zpátky. **Tichý pruh akci nemá vůbec**, místo ní stojí popisek `
 **Pruh kreslí nejvýš pět řádků** (tichý dva) a pod nimi patku `Zobrazit všechny +8`, která pruh
 **rozbalí na místě** — do sekce railu nevede, protože pruh míchá cizí a vlastní PR a žádná sekce
 nemá tutéž množinu. **Počet v hlavičce přitom zůstává celý**: strop je o kresbě, ne o množině.
-Prázdný pruh se **kreslí i s nulou** a má vlastní větu (`Nic rozepsaného.`) — mizející pruh by desku
-při každém tiku přeskládal.
+**Prázdný pruh se nekreslí vůbec** (z proklikání #515) — rámeček s nulou nese jedinou informaci
+a šest takových je pět šestin obrazovky za odpověď, o kterou se nikdo neptal. Když není ani jeden
+pruh, stojí místo nich blok `Všechno vyřízené` s větou o tom, co se stane dál; **nenačtená fronta
+není vyřízená fronta**, takže do stažení seznamu se říká `Načítám frontu`. Zkratky se přitom vážou
+**na pruh, ne na pozici**: `⏎` patří `Rozhodnout`, a když je ten pruh skrytý, klávesu nepřevezme
+pruh, který zbyl nahoře.
 
 **Pravý sloupec drží dva bloky**: `Dění` (#443 — od #515 osm nejnovějších řádků toho, co se na pull
 requestech stalo, a cesta do celé sekce) a `Dneska stálo` s grafem útraty za posledních sedm dní.

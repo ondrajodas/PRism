@@ -28,6 +28,11 @@ struct BoardView: View {
     /// **Klíčované pruhem, ne jedním `Bool`em**: rozbalit `Čeká na ostatní` neznamená rozbalit
     /// `Rozhodnout`. Je to stav pohledu v jednom běhu, takže se nikam neukládá — tatáž úvaha
     /// jako u sledování konce ve výpisu kroků (#325).
+    ///
+    /// **Značka po skrytém pruhu tady zůstane, a je to vědomé.** Od proklikání #515 se prázdný
+    /// pruh nekreslí, takže pruh, který se vyprázdnil a zase naplnil, se vrátí **rozbalený**.
+    /// Uklízet to jde jedině zápisem do `@State` při kresbě, a to je zakázaná třída (#503);
+    /// cena je jeden rozbalený pruh navíc, kdežto zápis při kresbě je průchod tělem na každý tik.
     @State private var expandedLanes: Set<WorkLane> = []
 
     /// Patka bloku pod kurzorem, klíčovaná sekcí, do které vede (#371).
@@ -147,18 +152,39 @@ struct BoardView: View {
         // Poměr z návrhu (`1.45fr 1fr`), ne pevná šířka: pravý sloupec drží dění a útratu, a ty
         // se v proužku číst nedají.
         ProportionalColumns(ratios: [1.45, 1], spacing: 16) {
-            // **Šest pruhů pod sebou, vždycky všechny** (`Policy.board`): mizející pruh by desku
-            // při každém tiku přeskládal. Mezera 12 je z návrhu (sekce 45), tedy jiná než 16
-            // mezi sloupci.
+            // **Jen neprázdné pruhy** (`Board.visibleLanes`, z proklikání #515): prázdný rámeček
+            // s nulou nese jedinou informaci a šest takových je pět šestin obrazovky za odpověď,
+            // o kterou se nikdo neptal. Mezera 12 je z návrhu (sekce 45), tedy jiná než 16 mezi
+            // sloupci.
             VStack(spacing: 12) {
-                ForEach(board.lanes) { lane in
-                    laneBlock(lane)
+                if board.isEverythingDone {
+                    everythingDone
+                } else {
+                    ForEach(board.visibleLanes) { lane in
+                        laneBlock(lane)
+                    }
                 }
             }
             VStack(spacing: 12) {
                 activity(board.activity)
                 spendBlock
             }
+        }
+    }
+
+    /// Deska, na které není ani jeden pruh.
+    ///
+    /// **Vlastní blok, ne prázdná plocha**: prázdno by se čtlo jako porucha, přitom je to
+    /// nejlepší možný stav. Věty skládá `Policy.boardEmpty(isLoaded:)` — včetně toho, že
+    /// **nenačtená fronta není vyřízená fronta**.
+    private var everythingDone: some View {
+        let empty = Policy.boardEmpty(isLoaded: store.lastSuccess != nil)
+        return block(empty.title, action: { EmptyView() }) {
+            Text(verbatim: empty.explanation)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Palette.ink2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(13)
         }
     }
 

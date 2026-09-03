@@ -4185,9 +4185,11 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
         front. Karty na ni neodpovídají vůbec: <code>Čeká na mě 13</code> je počet, ne tah.
       </p>
       <p class="muted">
-        Domov jsou proto <b>pruhy podle mého tahu</b>: <em>Rozhodnout</em>, <em>Přečíst</em>,
-        <em>Předat agentovi</em>, <em>K merge</em>, <em>Čeká na ostatní</em>, <em>Dopsat
-        a odeslat</em>. Cizí a vlastní PR leží v jedné desce, protože tah je osa práce; autor
+        Domov jsou proto <b>pruhy podle mého tahu</b>, a to <b>v pořadí od hotového k rozdělanému</b>
+        (z proklikání, mění pořadí z decku): <em>K merge</em>, <em>Dopsat a odeslat</em>,
+        <em>Rozhodnout</em>, <em>Přečíst</em>, <em>Předat agentovi</em>, <em>Čeká na ostatní</em>.
+        <b>Prázdný pruh se nekreslí vůbec</b> — na obrázku proto chybí <em>Dopsat a odeslat</em>.
+        Cizí a vlastní PR leží v jedné desce, protože tah je osa práce; autor
         zůstává poznat šipkou <code>↑</code> v mintu a v railu zůstávají <em>Fronta</em>
         a <em>Moje PR</em> jako seznamy podle autora. <b>Karty odcházejí</b> — čísla zůstávají
         v railu a ve stavovém řádku, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z téhle.
@@ -4240,6 +4242,37 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 
             <div class="dash-cols brd">
               <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0;">
+                <!-- K merge je **první pruh desky** (z proklikání #515, mění pořadí z decku):
+                     mergnout je nejlevnější tah a jediný, po kterém řádek z desky rovnou
+                     zmizí. Zavřená brána odesílání překážka není — ta mluví o tom, co smí
+                     aplikace, ne o tom, jak stojí PR. -->
+                <div class="block">
+                  <header>
+                    <span>K merge <span class="cnt">1</span></span>
+                    <span class="mini">Otevřít</span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--mint);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">chore: ready probe for 482</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">ondrajodas/prism-review-sandbox #11</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill mint">k merge</span></div>
+                  </div>
+                </div>
+
+
+                <!-- Tady by stál pruh `Dopsat a odeslat` — a **není tu, protože je prázdný**
+                     (z proklikání #515). Do té doby na jeho místě byl rámeček s nulou a větou
+                     `Nic rozepsaného.`; v pořadí je **druhý**, hned za `K merge`, protože text
+                     už je napsaný a chybí ho odeslat. -->
+
                 <!-- Rozhodnout: cizí PR, na kterých review doběhlo — i to čisté, protože
                      schválit je taky rozhodnutí. -->
                 <div class="block">
@@ -4377,29 +4410,6 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                   </div>
                 </div>
 
-                <!-- K merge: vlastní PR, na kterém není **známá** překážka. Zavřená brána
-                     odesílání překážka není — ta mluví o tom, co smí aplikace, ne o PR. -->
-                <div class="block">
-                  <header>
-                    <span>K merge <span class="cnt">1</span></span>
-                    <span class="mini">Otevřít</span>
-                  </header>
-
-                  <div class="qrow">
-                    <div class="stripe" style="background: var(--mint);"></div>
-                    <div class="mid">
-                      <div class="t1">
-                        <span class="pr-ico" style="color: var(--mint);">↑</span>
-                        <span class="title">chore: ready probe for 482</span>
-                      </div>
-                      <div class="t2">
-                        <span class="slug">ondrajodas/prism-review-sandbox #11</span>
-                      </div>
-                    </div>
-                    <div class="right"><span class="pill mint">k merge</span></div>
-                  </div>
-                </div>
-
                 <!-- Čeká na ostatní: tichý pruh. Ztlumený, nejvýš dva řádky, bez akce —
                      je to jediný pruh, ve kterém nic nedělám. -->
                 <div class="block brd-quiet">
@@ -4433,13 +4443,6 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                   </div>
 
                   <div class="more-rows">Zobrazit všechny <span class="count">+2</span> →</div>
-                </div>
-
-                <!-- Dopsat a odeslat: prázdný pruh **zůstává**. Prázdno je odpověď a mizející
-                     pruh by desku při každém tiku přeskládal. -->
-                <div class="block">
-                  <header><span>Dopsat a odeslat <span class="cnt">0</span></span></header>
-                  <div class="brd-empty">Nic rozepsaného.</div>
                 </div>
               </div>
 
@@ -4559,7 +4562,9 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           <b>neběželo</b>. <em>Předat agentovi</em> je vlastní PR s něčím k předání, <em>K
           merge</em> vlastní bez známé překážky. <em>Čeká na ostatní</em> je zbytek — běžící
           review i vlastní PR, o kterém se nic z toho tvrdit nedá. <em>Dopsat a odeslat</em>
-          přebíjí všechno: rozdělané review je ručně psaná práce a ta má přednost.</span>
+          <b>přebíjí všechno</b>: rozdělané review je ručně psaná práce a ta má přednost —
+          a je to věta o tom, do <b>kterého pruhu</b> PR spadne, ne o tom, kolikátý ten pruh
+          na obrazovce stojí (kreslí se druhý, za <em>K merge</em>).</span>
         </span>
       </div>
       <div class="note">
@@ -4599,11 +4604,34 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <div class="note">
         <span class="num">152</span>
         <span class="body">
-          <b>Prázdný pruh zůstává</b>
-          <span>Šest pruhů je vidět vždycky, i s nulou. Mizející pruh by desku při každém tiku
-          přeskládal a <code>Rozhodnout</code> by pod rukou skočilo tam, kde bylo
-          <code>Přečíst</code>. Prázdno navíc <b>je</b> odpověď — a věta je na pruh jiná, jako
-          u prázdných sekcí railu.</span>
+          <b>Prázdný pruh se nekreslí</b>
+          <span><b>Změna proti kresbě, z proklikání</b>: do té doby tu stálo, že šest pruhů je
+          vidět vždycky, i s nulou. Rámeček s nulou ale nese jedinou informaci — „tady nic
+          není“ —, a šest takových je pět šestin obrazovky za odpověď, o kterou se nikdo
+          neptal. Věta na pruh (<code>Nic rozepsaného.</code>) proto zbývá jedině pro pruh,
+          který se zrovna vyprazdňuje pod rukou.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">153</span>
+        <span class="body">
+          <b>Zkratka visí na pruhu, ne na pozici</b>
+          <span>Skrývání znamená, že <b>„první pruh“ je pokaždé jiný</b>. <code>⏎</code> proto
+          patří <em>Rozhodnout</em>, ne hornímu pruhu: když je <em>Rozhodnout</em> skryté,
+          klávesu <b>nevydá nikdo</b> a nepřevezme ji ani <em>K merge</em>, které má tutéž akci.
+          Jinak by to byla kolize dvou tlačítek na jedné klávese (#151, #184) — jen v čase,
+          takže by se z katalogu nepoznala.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">154</span>
+        <span class="body">
+          <b>Když není ani jeden pruh</b>
+          <span>Ten stav skrývání teprve <b>vyrábí</b>, a prázdná plocha by z něj udělala
+          poruchu. Místo šesti nul stojí na desce jeden blok: <code>Všechno vyřízené</code>
+          a pod ním věta o tom, co se stane dál. „Nic tu není“ a „všechno je hotové“ jsou dvě
+          různá tvrzení a pravdivé je to druhé — a <b>nenačtená fronta není vyřízená fronta</b>,
+          takže do stažení seznamu se říká <code>Načítám frontu</code>.</span>
         </span>
       </div>
     </div>

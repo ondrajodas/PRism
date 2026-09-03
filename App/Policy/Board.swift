@@ -12,11 +12,11 @@ import Foundation
 /// pravdy o jedné obrazovce. Ze stejného důvodu je uvnitř i blok `Dění` — tak to bylo
 /// i u `Dashboard` (#443).
 struct Board: Hashable, Sendable {
-    /// Pruhy **v pořadí, ve kterém se kreslí**, a vždycky všechny (`WorkLane.order`).
+    /// Pruhy **v pořadí, ve kterém se kreslí** (`WorkLane.order`), a **všech šest, i prázdné**.
     ///
-    /// **Prázdný pruh se nevypouští**: mizející pruh by desku při každém tiku přeskládal a
-    /// `Rozhodnout` by pod rukou skočilo tam, kde bylo `Přečíst`. Prázdno je navíc odpověď a je
-    /// na pruh jiná (`WorkLane.emptyExplanation`).
+    /// Kreslí se z `visibleLanes`; tenhle úplný seznam zůstává proto, že o něm mluví věta pod
+    /// pozdravem (`Policy.boardSentence`) a počty v ní se **nesmí** řídit tím, co je zrovna
+    /// vidět. Rozřazení do pruhů je tedy pořád tvrzení o celém seznamu — skrývání je až kresba.
     let lanes: [Lane]
     /// Blok `Dění` v pravém sloupci. Součást téhož snímku — viz doc komentář typu.
     let activity: DashboardActivity
@@ -34,6 +34,31 @@ struct Board: Hashable, Sendable {
         var id: WorkLane { lane }
         var count: Int { rows.count }
     }
+
+    /// Pruhy, které se **doopravdy kreslí** — prázdné se od proklikání #515 nezobrazují vůbec.
+    ///
+    /// **Změna proti kresbě**, a je to rozhodnutí nad hotovou obrazovkou: deck kreslil všech šest
+    /// pruhů i s nulou a v `lanes` je tak zapsané dodneška. Prázdný pruh ale nese jedinou
+    /// informaci — „tady nic není“ —, a šest takových rámečků s nulou je pět šestin obrazovky
+    /// utracených za odpověď, o kterou se nikdo neptal.
+    ///
+    /// **Co se tím platí, a je to zapsané, ne přehlédnuté**: deska přestává být stabilní, takže
+    /// „první pruh“ je pokaždé jiný. Proto **zkratka visí na pruhu, ne na pozici**
+    /// (`LaneAction.shortcut` se skládá z `WorkLane`, viz `Policy.laneAction(of:count:)`) — když
+    /// se pruh `Rozhodnout` skryje, `⏎` **nepřevezme** jeho soused; nezaregistruje ji nikdo.
+    /// Kdyby se vázala na pozici, byla by to kolize z #151 a #184, jen v čase.
+    ///
+    /// `WorkLane.emptyExplanation` tím **nezaniká**: kreslí se v pruhu, který se pod rukou
+    /// vyprazdňuje (řádky odejdou v témže průchodu, ve kterém se pruh ještě kreslí), a nad
+    /// `lanes` je pořád úplná — filtruje se až kresba.
+    var visibleLanes: [Lane] { lanes.filter { $0.count > 0 } }
+
+    /// Není na desce **vůbec nic**?
+    ///
+    /// Vlastnost, ne `isEmpty` nad `visibleLanes` ve view: je to stav, který má **vlastní věty**
+    /// (`Policy.boardEmpty(isLoaded:)`), a ty musí být na jednom místě. „Nic tu není“ a „všechno
+    /// je vyřízené“ jsou dvě různá tvrzení a pravdivé je tady to druhé.
+    var isEverythingDone: Bool { visibleLanes.isEmpty }
 }
 
 /// Akce nad celým pruhem (#515).
@@ -111,6 +136,16 @@ enum LaneAction: Hashable, Sendable {
         if case .runReviews = self { return true }
         return false
     }
+}
+
+/// Co se kreslí místo pruhů, když není ani jeden (#515).
+///
+/// **Dvě věty, ne jedna**: nadpis se sází jako hlavička bloku a čte se z odstupu, vysvětlení je
+/// pod ním. Skládá je `Policy.boardEmpty(isLoaded:)`, takže „vyřízeno“ a „ještě nenačteno“ mají
+/// jedno místo — a tady se jedině kreslí.
+struct BoardEmpty: Hashable, Sendable {
+    let title: String
+    let explanation: String
 }
 
 /// Kolik řádků pruhu se kreslí a kolik se nevešlo (#515).
@@ -246,6 +281,33 @@ extension Policy {
         // První část začíná velkým písmenem, zbytek ne — je to jedna věta oddělená středníkovými
         // tečkami, ne tři nadpisy.
         return parts.joined(separator: " · ").capitalizedFirst
+    }
+
+    /// Co stojí na desce, na které **není ani jeden pruh** (#515).
+    ///
+    /// Prázdné pruhy se od proklikání #515 nekreslí, takže tenhle stav skrývání teprve
+    /// **vyrábí** — do té doby stálo na obrazovce šest rámečků s nulou. Prázdná plocha by z něj
+    /// udělala poruchu, a to je **opačná lež** než ta z tabulky vzorů v `CLAUDE.md`: tam text
+    /// tvrdí víc, než data unesou, tady by mlčení tvrdilo **méně**. „Nic tu není“ a „všechno je
+    /// vyřízené“ jsou dvě různé věty a pravdivá je ta druhá.
+    ///
+    /// **Nenačtená fronta se od vyřízené musí poznat**, a je to ta nebezpečnější strana:
+    /// „všechno vyřízené“ nad seznamem, který se ještě nestáhl, je tvrzení o ničem. Rozhoduje
+    /// o tom `isLoaded`, tedy `AppStore.lastSuccess != nil` — tentýž vstup, jakým se řídí věta
+    /// pod pozdravem (`boardSentence` se za ní vůbec nevolá).
+    static func boardEmpty(isLoaded: Bool) -> BoardEmpty {
+        guard isLoaded else {
+            return BoardEmpty(
+                title: "Načítám frontu",
+                explanation: "Než se seznam stáhne, nedá se o práci tvrdit nic — ani že žádná není."
+            )
+        }
+        return BoardEmpty(
+            title: "Všechno vyřízené",
+            // **Neopakuje větu pod pozdravem.** Ta říká, jak to stojí („nic na tahu“); tady se
+            // říká, co se stane dál — jinak by nad prázdnou deskou stály dvě věty o tomtéž.
+            explanation: "Nový PR k review, rozdělané review i vlastní větev bez překážky se tu objeví jako pruh samy. Zatím není co udělat."
+        )
     }
 
     /// Smí si deska vzít `⏎` (#515)?

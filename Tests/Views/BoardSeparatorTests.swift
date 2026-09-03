@@ -29,21 +29,24 @@ import Testing
 struct BoardSeparatorTests {
     /// Kolik vodorovných čar má levý sloupec desky v tomhle scénáři.
     ///
-    /// Pruh `Přečíst` (sedm cizích PR, na kterých review neběželo): obrys nahoře, spodní linka
-    /// hlavičky, čtyři mezi pěti řádky, **jedna nad patkou** a obrys dole — tedy osm. Zbylých
-    /// **pět pruhů je prázdných** (ve scénáři není vlastní PR, draft ani doběhlé review), takže
-    /// z každého jsou tři: obrys, hlavička, obrys. Celkem 8 + 5 × 3 = **23**.
+    /// Scéna má **tři neprázdné pruhy ze šesti** (draft, doběhlé review, zbytek `neběželo`):
     ///
-    /// **Prázdné pruhy se do počtu promítají schválně** — od #515 se kreslí i s nulou, protože
-    /// mizející pruh by desku při každém tiku přeskládal. Kdyby se přestaly kreslit, spadne test
-    /// tady, a to je správně.
+    /// - `Dopsat a odeslat` s jedním řádkem: obrys, spodní linka hlavičky, obrys — **tři**;
+    /// - `Rozhodnout` s jedním řádkem — taky **tři**;
+    /// - `Přečíst` se sedmi v pruhu, z nichž se kreslí pět: obrys, hlavička, čtyři mezi řádky,
+    ///   **jedna nad patkou** a obrys — **osm**.
+    ///
+    /// Celkem **čtrnáct**. **Prázdné pruhy nepřidávají nic**, a je to to podstatné tvrzení
+    /// (z proklikání #515): kdyby se začaly kreslit i s nulou, jak to bylo do proklikání, přiskočí
+    /// tři × tři a vyjde třiadvacet — tedy přesně to číslo, které tu stálo předtím. Test tím drží
+    /// **obojí**: že se patka kreslí jednou čárou, i že se prázdný pruh nekreslí vůbec.
     ///
     /// **Blok `Dění` (#443) se do počtu nepromítá**: stojí v **pravém** sloupci, kdežto vzorek
     /// jde přes levý (viz `bands(in:)`).
     ///
     /// Počet je v tvrzení schválně: bez něj by test prošel i tehdy, kdyby se patka nenakreslila
-    /// vůbec — dvaadvacet stejně silných čar je taky „všechny stejně silné“.
-    private static let expectedLines = 23
+    /// vůbec — třináct stejně silných čar je taky „všechny stejně silné“.
+    private static let expectedLines = 14
 
     @Test("Nad patkou je jedna čára, ne dvě")
     func drawsASingleHairlineAboveTheFooter() async throws {
@@ -186,13 +189,17 @@ struct BoardSeparatorTests {
         }
     }
 
-    /// Deska se sedmi cizími PR, na kterých review neběželo — pruh `Přečíst` má pět řádků
-    /// a patku `+2`, ostatních pět pruhů je prázdných.
+    /// Deska s devíti cizími PR: na jednom leží draft, na druhém doběhlé review, sedm zbylých
+    /// `neběželo` (z nich se kreslí pět a patka hlásí `+2`). Kreslí se tedy **tři pruhy ze šesti** a tři se skrývají — bez toho by scéna
+    /// o skrývání netvrdila nic (jeden pruh vypadá stejně, ať se prázdné kreslí, nebo ne).
     ///
     /// Kreslí se přes `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: deska je `ScrollView`
     /// a ten se offscreen nerasterizuje (změřeno u #237).
     private func store() async -> AppStore {
-        let queue = (1...7).map { number in
+        // **Devět, ne sedm**: draft a doběhlé review si vezmou po jednom, takže na `Přečíst`
+        // zbude sedm — pět nakreslených a patka `+2`. Se sedmi v celku by v pruhu zbylo přesně
+        // pět, patka by odpadla a test by o čáře nad patkou netvrdil nic.
+        let queue = (1...9).map { number in
             PullRequestSummary(
                 id: PRIdentifier(repo: RepoID("cli/cli")!, number: number),
                 title: "titulek \(number)",
@@ -204,6 +211,18 @@ struct BoardSeparatorTests {
         }
         let store = AppStore(gateway: FakeGitHubGateway(always: .success(queue)), time: FakeTimeSource())
         await store.refresh()
+        // **Draft se sází přímo do `drafts`**: `setDraftBody` si bere `headSha` z načteného
+        // detailu, a ten scéna nenačítá.
+        store.drafts[queue[0].id] = ReviewDraft(
+            pullRequest: queue[0].id,
+            headSha: "aaaa1111",
+            body: "Zbytek vypadá dobře."
+        )
+        store.reviewRecords[queue[1].id] = ReviewRecord(
+            pullRequest: queue[1].id,
+            headSha: "aaaa1111",
+            runs: [makeStoredRun(findings: [], headSha: "aaaa1111")]
+        )
         return store
     }
 
