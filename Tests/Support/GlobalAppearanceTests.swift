@@ -32,10 +32,30 @@ struct GlobalAppearanceTests {
 
     private struct Source {
         let path: String
-        /// Jen kód — řádky, které začínají `//`, jsou pryč.
-        let code: String
         /// Řádky `import …`, tak jak v souboru stojí.
+        ///
+        /// **Tyhle se schválně nezhušťují** (na rozdíl od `condensed` níž): je to **výčet povolených**,
+        /// a ten se mezerou obejít nedá — cokoli napsaného jinak než přesně `import Foundation` v něm
+        /// není, takže stráž spadne. Zhuštění by tady jen ubralo hlášce čitelnost.
         let imports: [String]
+
+        /// Kód **bez jediné mezery a bez zalomení** (#490, sem u #550). Hledá se nad tímhle, protože
+        /// ve Swiftu je mezera uvnitř volání i za operátorem volná: `NSApp . appearance`
+        /// a `foo ??\n    AppAppearance` jsou platný zápis téhož, takže stráž nad surovým textem by
+        /// je pustila — tedy zezelenala by právě nad tou chybou, na kterou je.
+        ///
+        /// **Uložený, ne počítaný** — čísla jsou u `UnanimatedWindowTests.Source.condensed`: jeden
+        /// průchod přes 518 zdrojáků stojí 0,23 s, takže dva vzory z computed property stály dva.
+        /// Surový text se nedrží: nikdo ho tady nečte.
+        let condensed: String
+
+        /// `code` je kód **bez řádkových komentářů** — o `NSApp.appearance` se v dokumentaci mluví
+        /// a vysvětlení nemá být porušením pravidla, které vysvětluje.
+        init(path: String, code: String, imports: [String]) {
+            self.path = path
+            self.imports = imports
+            self.condensed = code.filter { !$0.isWhitespace }
+        }
     }
 
     /// Zdrojáky pod složkou repa, s cestou relativní k ní.
@@ -82,7 +102,7 @@ struct GlobalAppearanceTests {
 
         for file in try sources(under: "App/Store") {
             // `NSApp` chytá i `NSApplication` a `NSAppearance` — je to prefix všech tří.
-            #expect(!file.code.contains("NSApp"), "Store/\(file.path) sahá na aplikaci")
+            #expect(!file.condensed.contains("NSApp"), "Store/\(file.path) sahá na aplikaci")
             for line in file.imports {
                 #expect(allowed.contains(line), "Store/\(file.path) importuje „\(line)“, a to sem nepatří")
             }
@@ -95,19 +115,22 @@ struct GlobalAppearanceTests {
     @Test("Živý cíl se zapojuje na jednom místě")
     func wiresTheLiveTargetOnce() throws {
         let application = try sources(under: "App")
-        let wiring = application.filter { $0.code.contains("AppAppearance.application") }.map(\.path).sorted()
+        let wiring = application.filter { $0.condensed.contains("AppAppearance.application") }.map(\.path).sorted()
 
         #expect(wiring == ["Store/AppStore.swift"])
 
         let store = try #require(application.first { $0.path == "Store/AppStore.swift" })
-        #expect(store.code.components(separatedBy: "AppAppearance.application").count - 1 == 1)
+        #expect(store.condensed.components(separatedBy: "AppAppearance.application").count - 1 == 1)
         // Uplatňuje se **jedině** optional-chainem na injektovaný cíl. `??` s živým cílem by byla
         // druhá cesta k `NSApp`, a to potichu: v testech by se objevila jako přebarvený hostitel.
-        #expect(store.code.contains("appearance?.applyAppearance("))
-        #expect(!store.code.contains("?? AppAppearance"))
-        #expect(!store.code.contains("?? NSApplication"))
+        //
+        // **Zakázané vzory jsou bez mezery za `??`** (#550) — hledá se v `condensed`, takže se ta
+        // druhá cesta nedá otevřít ani zápisem `?? AppAppearance`, ani zalomením za operátorem.
+        #expect(store.condensed.contains("appearance?.applyAppearance("))
+        #expect(!store.condensed.contains("??AppAppearance"))
+        #expect(!store.condensed.contains("??NSApplication"))
 
-        let applying = application.filter { $0.code.contains("applyAppearance") }.map(\.path).sorted()
+        let applying = application.filter { $0.condensed.contains("applyAppearance") }.map(\.path).sorted()
         #expect(applying == ["Store/AppStore.swift", "Views/AppAppearance.swift"])
     }
 
@@ -122,11 +145,27 @@ struct GlobalAppearanceTests {
         let tests = try sources(under: "Tests").filter { $0.path != Self.guardFile }
 
         for file in tests {
-            #expect(!file.code.contains("NSApp.appearance"), "\(file.path) sahá na vzhled hostitele")
+            #expect(!file.condensed.contains("NSApp.appearance"), "\(file.path) sahá na vzhled hostitele")
             #expect(
-                !file.code.contains("NSApplication.shared.appearance"),
+                !file.condensed.contains("NSApplication.shared.appearance"),
                 "\(file.path) sahá na vzhled hostitele"
             )
         }
+    }
+
+    /// Pojistka proti tomu, aby stráž zezelenala tím, že přestane hledat: hledané vzory musí na
+    /// **tomhle** souboru sedět (stojí v něm jako literály) a v `condensed` doopravdy nesmí zůstat
+    /// mezery. Bez toho druhého tvrzení by se `NSApp . appearance` v testu neodhalilo (#550).
+    @Test("Stráž hledá v kódu bez mezer a vzory na ní sedí")
+    func searchesTheCondensedCode() throws {
+        let tests = try sources(under: "Tests")
+        #expect(tests.count > 100, "Čekaly se stovky zdrojáků, přišlo \(tests.count).")
+        let guardFile = try #require(tests.first { $0.path == Self.guardFile }, "stráž se nenašla")
+        #expect(guardFile.condensed.contains("NSApp.appearance"))
+        #expect(guardFile.condensed.contains("NSApplication.shared.appearance"))
+        #expect(
+            !guardFile.condensed.contains(where: { $0.isWhitespace }),
+            "v `condensed` zůstaly mezery"
+        )
     }
 }

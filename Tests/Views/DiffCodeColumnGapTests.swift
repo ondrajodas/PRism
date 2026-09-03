@@ -22,7 +22,8 @@ struct DiffCodeColumnGapTests {
     /// **Ověřeno vloženou regresí**: s `codeColumnTrailingGap = 0` tohle tvrzení spadne.
     @Test("Mezera je menší než jeden znak kódu a není nulová")
     func gapCostsNoColumnOfText() {
-        let characterWidth = FontMetric.shared.characterWidth(
+        let characterWidth = TestWait.settledFontMetric(
+            .characterWidth,
             of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         )
         #expect(Policy.codeColumnTrailingGap > 0)

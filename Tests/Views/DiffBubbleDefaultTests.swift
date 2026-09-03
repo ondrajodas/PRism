@@ -310,7 +310,8 @@ struct DiffBubbleDefaultTests {
             "\(phase) (\(layout)): plocha \(reading.area) b proti koloně \(expected) b",
             sourceLocation: sourceLocation
         )
-        let characterWidth = FontMetric.shared.characterWidth(
+        let characterWidth = TestWait.settledFontMetric(
+            .characterWidth,
             of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         )
         let gutter = DiffLineView.contentInset(for: layout)

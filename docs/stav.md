@@ -7168,3 +7168,57 @@ zabírají svislé místo) a jedno sdílené hledání plochy obsahu (`NSView.di
 **Ověřeno vložením regrese**: s výchozí hodnotou zpátky na `false` padnou čtyři tvrzení z pěti
 (37 nálezů), zelené zůstane jen to nad `Policy`, které na výchozí hodnotě nezávisí. Co se v té sadě
 měří a proč, je v [`docs/testovani.md`](testovani.md#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548).
+
+## #550 — tři starší stráže se daly obejít mezerou a `FontMetric` vydal nepoužitelnou nulu
+
+Dvě věci z téže třídy jako #367, #411, #407, #462 a #490: **test tvrdí něco o prostředí, ne
+o kódu**. Obojí vypadlo z práce na #490 a #152 jako zapsaná mezera a ani jedno se tam neopravovalo.
+Rozhodnutí i zamítnuté varianty jsou
+v [specifikaci](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--nepoužitelná-metrika-je-nil-ne-nula-550),
+měření a vložené regrese
+v [`docs/testovani.md`](testovani.md#páté-kolo-stráž-nad-surovým-textem-a-nula-z-měřidla-550).
+
+**Stráže hledají v kódu bez mezer.** `UnanimatedWindowTests`, `GlobalAppearanceTests`
+a `FontMetricTests` porovnávaly surový text, takže jim `orderFront (nil)`, `NSApp . appearance`
+i `?? AppAppearance` (u zákazu, tedy **otevřená druhá cesta k `NSApp`**) prošly. Od #550 hledají
+v `Source.condensed`, stejně jako `WheelEventTests` z #490 — a zhuštění je **uložené, ne počítané**,
+protože jeden průchod přes 518 zdrojáků (5,1 MB) stojí 0,23 s a stráž se ptá až třikrát.
+Seznamy výjimek se přitom **nezhušťují**
+— jsou to cesty, ne text — a výčet povolených importů v `GlobalAppearanceTests` taky ne, protože
+whitelist se mezerou obejít nedá.
+
+**Zadání mělo u `FontMetricTests` jiný vzor, než který byl doopravdy dírou.** `maximumAdvancement`,
+`defaultLineHeight` a `boundingRectForFont` jsou **jedno slovo**, takže je mezera rozdělit neumí;
+obejít se dalo `FontMetric . shared` u kladného tvrzení. Zhuštění se přesto nasadilo i na ně —
+rozhodovat u každého vzoru zvlášť je práce, na které se dřív nebo později udělá chyba.
+
+**Nepoužitelná metrika je `nil`, ne nula.** #407 zavedlo jedno měřidlo a ověřilo, že vada je
+přechodná, ale nepovedené měření z něj vypadlo jako **nula** — tedy jako měření.
+`CommitPanelRoomTests` proto padaly zprávou `šířka znaku: 0`, kterou měřidlo o zlomek sekundy
+později skládalo už z 8,036. Od #550 je primitivum `FontMetric.metric(_:of:) -> CGFloat?`; tři
+pojmenované metody vydávají `CGFloat` dál a nulu z nich dělá **jedno místo**, protože z nich kreslí
+okno a to čekat nesmí. **Nula tím zakrytá není**: rozhoduje o ní dál `Policy.usableFontMetric(_:)`,
+takže legitimní nula by se vydala jako `.some(0)` a od `nil` se pozná.
+
+**Kdo si čekání dovolit může, ten čeká.** Testy a sondy berou `TestWait.settledFontMetric(_:of:)`
+(v `Tests/Support/TestWaiting.swift`, protože čekání má jedno místo, #296) — synchronně, se stropem
+**5 s** místo `deadline` 120 s, protože blokuje vlákno; a když se nedočká, **zapíše nález** a test
+spadne větou o metrice, ne číslem o šířce. Převedeno je **čtrnáct** čtení v deseti sadách a sondách; hlídá to
+`FontMetricTests` dvěma tvrzeními — pět jmenovaných sad **čeká** a měřidlo si přímo nebere nikdo
+mimo tři vyjmenované výjimky (stráž, `FontMetricProbe` a `CodeTextSheetSizingTests`, která
+schválně čte touž nečekající cestou jako aplikace).
+
+**Na tomhle není co vidět** — `App/` se změnilo o jednu novou metodu a tři `?? 0`, kresba dostává
+tutéž hodnotu jako do #550. **Deset plných běhů, všechny zelené** (pět nad mezistavem, pět nad
+výsledným kódem; 106,7–124,3 s, load 6,7–12,9, ve třech z nich souběžný build sousedního slotu —
+`CommitPanelRoomTests` padaly právě pod zátěží). Testů **5128** ve 503 suitách; nové jsou čtyři (rozdíl `nil` proti nule,
+vzdání se čekání nahlas, stráž nad zhuštěným kódem u `GlobalAppearanceTests` a zákaz nečekaného
+čtení měřidla v `Tests/`). **Ověřeno vložením regrese** u každé stráže v **obcházející** podobě
+a u měřidla vrácením `return 0` — všechny čtyři padly a každá jmenovala své místo.
+
+**Zapsané mezery**: že se čekání doopravdy dočká *přechodné* vady, se v harnessu tvrdit nedá
+(`FontMetric.shared` se nedá podstrčit a vadné písmo z matice je vadné natrvalo); `static let`
+v `SelectableCodeView` a `DiffToolbar` může nulu pořád zapamatovat na celý proces (vlastnost z #407);
+a **dvanáct dalších stráží porovnává surový text dál** — u nich to není přehození jedné vlastnosti,
+protože hledané vzory samy obsahují mezery a zalomení, takže se musí přepsat literál po literálu
+(nejbolavější je `SingleWayOutTests`, hlídá tvrdou podmínku č. 1).

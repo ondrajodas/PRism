@@ -38,8 +38,18 @@ struct CommitPanelRoomTests {
     /// Odsud už je to **jedno volání**: měřidlo si hodnotu drží na proces, nikdy si nezapamatuje
     /// nulu a má na ni tři nezávislé cesty. Sada tedy o metrice **nemusí vědět nic** — a to je ten
     /// rozdíl mezi opravou třídy a opravou výskytu.
+    ///
+    /// **A od #550 se na ni ještě počká.** #407 zavedlo jedno měřidlo, ale nepovedené měření z něj
+    /// vypadlo jako **nula** — takže tahle sada padala na `šířka znaku: 0`, zatímco hlášku k tomu
+    /// pádu měřidlo o zlomek sekundy později skládalo už z 8,036. Nula tady není tvrzení
+    /// o aplikaci, je to tvrzení o tom, co se v tu sekundu dělo v procesu, a to je zrovna ta
+    /// třída pádů, kterou #367 zakazuje. `TestWait.settledFontMetric` se proto metriky **dočká**,
+    /// a když ne, řekne to větou o metrice, ne číslem o šířce.
     private var characterWidth: Double {
-        FontMetric.shared.characterWidth(of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular))
+        TestWait.settledFontMetric(
+            .characterWidth,
+            of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        )
     }
 
     private func charactersPerSide(_ width: Double, layout: DiffLayout) -> Int {

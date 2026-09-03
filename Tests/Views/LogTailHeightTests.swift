@@ -38,7 +38,7 @@ struct LogTailHeightTests {
     /// číslo s tím, které si spočítá test. Se sdíleným měřidlem je to **totéž číslo z jednoho
     /// měření**, takže se rozejít nemá čím.
     private var lineHeight: CGFloat {
-        FontMetric.shared.lineHeight(of: LogTailTextView.font(size: fontSize)) + spacing
+        TestWait.settledFontMetric(.lineHeight, of: LogTailTextView.font(size: fontSize)) + spacing
     }
 
     /// Proti **metrice fontu**, ne proti spočítané konstantě: kdyby se výška řádku brala odjinud

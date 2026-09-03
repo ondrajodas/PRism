@@ -111,7 +111,8 @@ struct DiffCodeColumnWidthTests {
         let column = try #require(scene.codeColumn(hasFindings: false))
         let gauge = Policy.charactersPerSide(
             contentWidth: column,
-            characterWidth: FontMetric.shared.characterWidth(
+            characterWidth: TestWait.settledFontMetric(
+                .characterWidth,
                 of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             ),
             layout: .split,
@@ -120,7 +121,8 @@ struct DiffCodeColumnWidthTests {
         // Kolik by hlásil, kdyby se počítalo z plochy — tedy to, co dělal do #546.
         let fromTheArea = Policy.charactersPerSide(
             contentWidth: measured.area,
-            characterWidth: FontMetric.shared.characterWidth(
+            characterWidth: TestWait.settledFontMetric(
+                .characterWidth,
                 of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
             ),
             layout: .split,

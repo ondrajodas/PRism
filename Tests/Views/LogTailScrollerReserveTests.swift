@@ -36,7 +36,7 @@ struct LogTailScrollerReserveTests {
     /// a v `LogTailHeightTests`. Vlastní `NSLayoutManager` tu byl do #407 a je to tatáž třída, kvůli
     /// které padal plný běh: dvě čtení metriky písma v jednom procesu se pod zátěží umí rozejít.
     private var lineHeight: CGFloat {
-        FontMetric.shared.lineHeight(of: LogTailTextView.font(size: fontSize)) + spacing
+        TestWait.settledFontMetric(.lineHeight, of: LogTailTextView.font(size: fontSize)) + spacing
     }
 
     /// **Tohle je to tvrzení, na kterém #347 stálo.** Zábor se nebere z API, ale z rozdílu výšky

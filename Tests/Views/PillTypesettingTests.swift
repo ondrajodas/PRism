@@ -27,11 +27,11 @@ struct PillTypesettingTests {
     /// sadě: metrika písma se v testovacím hostu pod zátěží umí přechodně nepovést, a jediné, co
     /// s tím pomůže, je jedno měřidlo pro aplikaci i testy.
     private var pillHeight: CGFloat {
-        FontMetric.shared.lineHeight(of: DesignPill.font) + 2 * DesignPill.verticalPadding
+        TestWait.settledFontMetric(.lineHeight, of: DesignPill.font) + 2 * DesignPill.verticalPadding
     }
 
     private var caption2Line: CGFloat {
-        FontMetric.shared.lineHeight(of: .preferredFont(forTextStyle: .caption2))
+        TestWait.settledFontMetric(.lineHeight, of: .preferredFont(forTextStyle: .caption2))
     }
 
     // MARK: - Šířka: co má místo spočítané
