@@ -7118,3 +7118,53 @@ Testů **5119** v 502 suitách; nová je jedna sada nad oknem (`DiffCodeColumnWi
 nad `Policy`. **Ověřeno vložením regrese, obou polovin zvlášť.** Jak se to měřilo a proč to
 hostované okno do #546 nereprodukovalo, je
 v [`docs/testovani.md`](testovani.md#neověřená-mezera-71-znaků-na-stranu-v-živém-okně--vyřešeno-546).
+
+## #548 — výchozí stav diffu jsou zase bubliny pod řádky
+
+**Poznatek z používání, ne oprava chyby.** #503 postavilo nálezy do okraje vpravo a udělalo z toho
+výchozí stav; proklikání po mergi ukázalo, že se ta kolona platí **300 body natrvalo** — i v souboru
+bez nálezu, tedy skoro pořád. V okně 1 512 je to **pětina** šířky a ve `Vedle sebe` se bere
+z kolony, která se ještě dělí na dvě strany, takže se platí dvakrát. Zákres to nepředvídal, protože
+kreslí PR **s nálezy**; v běžném čtení jsou nálezy na pár řádcích z dvaceti souborů.
+
+**Mění se jedna hodnota** (`DiffView.showBubbles` má výchozí `true`), okraj zůstává **za
+přepínačem** `Nálezy pod řádky` a v kódu celý — zapnutí je jedno kliknutí. Odvozuje se z ní
+všechno ostatní: prázdné `marginCards`, tedy `hasMargin == false`, tedy **nesložený panel**
+(návrat k #188) a kolona kódu o **300 b širší** i s ukazatelem `N znaků na stranu`.
+`Policy.codeColumnTrailingGap` (6 b, #503) **zůstává** — platí i na složený proužek panelu, ne
+jen na okraj.
+
+**Klíč `showInlineFindingBubbles` se nepřejmenovává, a je to rozdíl proti #503.** Tam se otočil
+význam hodnoty, takže se starý klíč zahodit musel; tady se otáčí jen výchozí hodnota, takže je
+uložená volba dál platná odpověď a nový klíč by zahodil rozhodnutí toho, kdo si okraj vědomě nechal.
+
+**Změřené kolony** (kolona kódu podle `Policy.diffCodeColumnWidth`): 1 213 / `Vedle sebe`
+**1 173 b** s bublinami proti **873 b** s okrajem; 1 422 / `Pod sebou` **1 206** proti **906**.
+Rozdíl je 300 b v sedmi případech z osmi. Ten osmý je **správná odpověď, ne výjimka**: na podlaze
+okna (štěrbina 610) v `Pod sebou` automatika okraj zahodí **a k tomu složí strom**, takže s okrajem
+vyjde kolona naopak širší (**570 b** proti 394 b). Tvrzení „bubliny mají o 300 b víc“ se proto váže
+na `columns.margin`, ne na šířku okna.
+
+**Změřeno na živém okně** (slot `a`, 1 100 × 700, PR s jednou skupinou nálezů, přepínáno za
+běhu): ve `Vedle sebe` **49 → 31 znaků na stranu** (kolona 970 → 670 b), tedy plných 300 b, protože
+tam panel složilo už #188. V `Pod sebou` je to **48 → 44 znaků**, protože okraj panel **složí** a
+300 b se skoro vrátí — cenou je tam **panel** (composer review, labely, `Větev`, `Zadání`), ne
+kolona. Ta druhá řádka je ta neintuitivní část a patří k rozhodnutí.
+
+**Tři z těch čtyř čtení sedí na vypočítanou kolonu na jeden znak**, což je zároveň kontrola
+ukazatele z #546 na živém okně. Čtvrté (`Pod sebou` s bublinami, hlášeno 48 místo dopočítaných 49)
+je **zapsaná mezera**: zpětně z něj vychází rozložený panel o 302–310 b místo konstanty 300.
+Na rozhodnutí to nemá vliv a doměří to diagnostika kreslení (`WidthSite`).
+
+**Zamítnuto: zahodit okraj úplně.** Vypnutý okraj **nestojí nic** (`marginCards` vydá prázdno na
+prvním `guard`), kdežto zahození je nevratná práce, po které by vrácení bylo znovu celé PR #540.
+Vrátíme se k tomu, až se ukáže, že si okraj **nikdo nezapíná**. **#504 a #505 se odkládají** z M14
+do `Průběžné` — obě na okraji stojí a dělat je pro stav, který se neukazuje, je práce naslepo;
+zbytek M14 (#502, #506, #507) je mapa a itinerář, těch se to netýká.
+
+Testů **5124** v 503 suitách; nová je jedna sada nad oknem (`DiffBubbleDefaultTests` — výčet tří
+stavů klíče × pásmo šířek × oba pohledy, panel, **přepnutí tam a zpět** a to, že bubliny doopravdy
+zabírají svislé místo) a jedno sdílené hledání plochy obsahu (`NSView.diffContentArea()`).
+**Ověřeno vložením regrese**: s výchozí hodnotou zpátky na `false` padnou čtyři tvrzení z pěti
+(37 nálezů), zelené zůstane jen to nad `Policy`, které na výchozí hodnotě nezávisí. Co se v té sadě
+měří a proč, je v [`docs/testovani.md`](testovani.md#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548).

@@ -5585,6 +5585,12 @@ jiný problém než ten naměřený.
 
 ### Záznam rozhodnutí — nálezy v okraji (#503)
 
+> **Změněno #548**: jedno z rozhodnutí níž — *„a je to výchozí stav“* — už neplatí. Okraj je od té
+> doby za přepínačem `Nálezy pod řádky` a výchozí jsou zase bubliny; ostatní rozhodnutí z téhle
+> tabulky platí beze změny. Proč, je v [záznamu rozhodnutí
+> #548](#záznam-rozhodnutí--výchozí-stav-diffu-jsou-bubliny-548). Tabulka se nemaže schválně: je
+> to zápis toho, co se rozhodlo tehdy a proč.
+
 Otevírá dvě zapsaná rozhodnutí. **#185** (blokující nález je rozbalený rovnou pod svým řádkem)
 platilo od doby, kdy nálezy neměly kde jinde stát než v toku diffu; jeho vlastní zápis přitom
 pojmenoval cenu — „u PR s deseti nálezy se mezi bublinami ztratí kód, kvůli kterému se okno
@@ -5650,3 +5656,52 @@ s kotvou v tom diffu**, protože `ThreadBubbleView` je jediné, co se v řádku 
 `\.availableWidth`. Bez něj vydá měřidlo tutéž hodnotu pro „funguje“ i „nefunguje“ (#478), takže
 `DiffCodeColumnWidthTests` k tvrzení o šířce **přidává tvrzení o scéně**: kolik bublin v seznamu
 doopravdy je, počítané tou cestou, kterou seznam skládá `DiffView`.
+
+## Záznam rozhodnutí — výchozí stav diffu jsou bubliny (#548)
+
+Rozbor je
+v [`docs/architektura.md`](../../architektura.md#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548),
+co se v té sadě měří a proč,
+v [`docs/testovani.md`](../../testovani.md#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548).
+
+**Mění zápis #503**, a je to poznatek z používání, ne oprava chyby. #503 postavilo nálezy do okraje
+vpravo a udělalo z toho **výchozí** stav; #548 tu jednu hodnotu otáčí zpátky (`Nálezy pod řádky`
+zapnuto) a okraj nechává **za přepínačem**. Vyšlo to z proklikání po mergi PR #540: *„tohle boční
+okno s nálezama se mi nelíbí, bere to hodně drahýho místa, můžeme to asi vrátit jak to bylo.“*
+
+**Co ukázalo používání, a co zákres ukázat nemohl.** Okraj je kolona **300 bodů a platí se
+natrvalo** — i v souboru, ve kterém žádný nález není, tedy skoro pořád. V okně 1 512 je to
+**pětina** šířky, a ve `Vedle sebe` se ta pětina bere z kolony, která se ještě dělí na dvě strany,
+takže se platí **dvakrát**. Zákres v sekci 43 návrhu kreslí PR **s nálezy**, kde okraj vypadá plný;
+v běžném čtení jsou nálezy na pár řádcích z dvaceti souborů, takže se na většině obrazovek platí
+šířka bez informace. Bublina proti tomu zabere místo **jen tam, kde nález je**, a **svisle** — a to
+je ta osa, kde je v diffu místa dost, protože se scrolluje.
+
+**Proti #503 tím nepadá ani jedno z jeho rozhodnutí.** Karta pořád vzniká z dat a poloha
+z geometrie, odstrkuje se jen dolů, kreslí ji `FindingBubbleView`, posun s výřezem dělá vlastní
+modifikátor a panel se pod okrajem skládá. Padá jen věta *„a je to výchozí stav“*.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Otočit výchozí hodnotu, okraj nechat v kódu** | **Zahodit okraj úplně** — smazat `DiffMarginView`, `DiffMarginAnchors`, rozhodnutí v `Policy`, pruhy na hraně řádků a čtyři sady testů | Okraj je hotový a otestovaný a zapnutí je **jedno kliknutí**, takže je to teď levná volba pro PR, na kterém nálezů doopravdy je. Zahození je proti tomu nevratná práce, která nic nezlepší: vypnutý okraj **nestojí nic** (`marginCards` vydá prázdno na první `guard`, kolona se neodečte). Za jakých okolností se k té variantě vrátíme, je pod tabulkou |
+| **Klíč `showInlineFindingBubbles` se nepřejmenovává** | Vzít nový klíč, jak to udělalo #503 | #503 otáčelo **význam hodnoty**, takže starý klíč zahodit muselo — jinak by okraj neviděl nikdo, kdo si přepínač kdy vypnul a zapnul. #548 otáčí jen **výchozí hodnotu**: `true` pořád znamená bubliny, `false` pořád okraj. Uložená hodnota je tedy dál platná odpověď a nový klíč by zahodil volbu toho, kdo si okraj vědomě nechal |
+| **Jméno přepínače zůstává `Nálezy pod řádky`** | Přejmenovat na `Nálezy v okraji` (tedy pojmenovat tu druhou stranu) | Přepínač se jmenuje po tom, co **zapíná**, a zapíná pořád totéž. Přejmenovat by znamenalo obrátit i polaritu hodnoty, tedy zahodit uloženou volbu — viz řádek výš. `pod řádky` navíc dál platí doslova: vypnutý přepínač nálezy **neschová**, přesune je do okraje |
+| **Panel se s bublinami nesloží** | Nechat panel složený i s bublinami, ať se okraj zapíná do prázdna | Skládání panelu bylo v #503 daň za dvě třistabodové kolony o téže věci. S bublinami druhá kolona vpravo není, takže by složený panel byla ztráta bez důvodu: bydlí v něm composer review, labely, sekce `Větev` (#465) a `Zadání`. Rozhoduje to `Policy.diffSideColumns(hasMargin:)` sama — je to tedy návrat k #188, ne nová podmínka |
+| **`Policy.codeColumnTrailingGap` zůstává** (6 b) | Zrušit ji s okrajem, protože kvůli okraji vznikla | Změřeno u #503: chyběl **vzduch**, ne čára, a platí to na **obě** situace vpravo — okraj i **složený proužek panelu**, který je vidět skoro pořád. Bez ní se text ořezává naplocho na dělící čáru. Šest bodů je navíc necelý znak (8,036 b), takže se za mezeru neplatí ani jedním sloupcem textu |
+| **#504 a #505 se odkládají, neruší** | Dodělat je na vypnutém okraji | Obě na okraji stojí (#504 do něj přidává převzatý nález, vlákno a poznámku a ruší seznam v panelu; #505 řeší okraj v úzkém okně) a dělat je pro stav, který se neukazuje, je práce naslepo. Přesouvají se z M14 do `Průběžné` a počkají, až bude jasné, jestli si okraj někdo zapíná. Zbytek M14 (#502, #506, #507) je mapa a itinerář, těch se to netýká |
+| **Zákres v `docs/navrh.html` zůstává, jak je** | Překreslit sekci 43 na bubliny | V mockupu se nemění vzhled okraje ani bublin — mění se, **co je výchozí**, a to zákres nekreslí. Překreslovat by znamenalo zahodit obrázek, podle kterého se okraj implementoval a podle kterého se bude dodělávat #504 a #505 |
+
+**Za jakých okolností zahodíme okraj úplně.** Když se ukáže, že si ho **nikdo nezapíná** — tedy až
+proklikání několika PR s nálezy skončí tím, že šipka u `Sbalit vše` zůstala nedotčená. Do té doby
+je to volba, ne mrtvý kód. Rozhodnout to má **používání, ne odhad**: přesně tak vzniklo #548, a je
+to i důvod, proč se okraj nezahazuje hned — vrátit ho by bylo znovu celé PR #540.
+
+**Cena vypnutého okraje je nula, a je to vlastnost kódu, ne měření.** `DiffView.marginCards` vydá
+prázdné pole na prvním `guard` (`!showBubbles`), takže se diffem neprochází; `hasMargin` je pak
+`false`, `marginColumnWidth(shown: false)` je nula a `margin(cards: [])` nekreslí ani plochu.
+Neplatí se tedy ani za rozhodnutí, ani za kolonu.
+
+**Co na obrazovce zůstává jinak než do #503.** Přepínač se od té doby jmenuje `Nálezy pod řádky`
+(ne `Nálezy u řádků`), pruh závažnosti na **pravé** hraně řádku se s vypnutým okrajem nekreslí
+a mezera před pravou kolonou (6 b) je vidět i u složeného proužku panelu. První dvě věci jsou
+z #503 a zůstávají v platnosti, třetí je změna, která s okrajem nesouvisí.

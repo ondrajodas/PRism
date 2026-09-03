@@ -8,6 +8,11 @@ import SwiftUI
 /// vedle svého řádku, spojnice říká vedle kterého a řádek nese na pravé hraně 3bodový pruh
 /// závažnosti (`DiffBlockRowView`).
 ///
+/// **Od #548 je to volba za přepínačem, ne výchozí stav** (`Nálezy pod řádky` v liště diffu).
+/// Z provozu vyšlo, že se ta kolona platí i v souborech bez nálezu — tedy skoro pořád —, kdežto
+/// bublina zabere místo jen tam, kde nález je. Kód okraje **zůstává celý**: zapíná se jedním
+/// kliknutím a rozhodnutí zahodit ho je samostatné (viz záznam rozhodnutí ve specifikaci).
+///
 /// **Tři věci, na kterých to stojí, a všechny tři jsou geometrie, ne data:**
 ///
 /// 1. **Kde řádek leží** hlásí blok kódu do `DiffMarginAnchors` — v souřadnicích **obsahu**,

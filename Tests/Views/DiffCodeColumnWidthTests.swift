@@ -309,22 +309,11 @@ struct DiffCodeColumnWidthTests {
             return Policy.diffCodeColumnWidth(available: slot, columns: columns)
         }
 
-        /// Plocha obsahu diffu — **největší `NSScrollView`, který není sloupec dvojice**.
-        ///
-        /// Rozlišovat je potřeba dvakrát: `DiffPairScrollView` je posuvná plocha **uvnitř** bloku
-        /// kódu (#422) a strom souborů má vlastní plochu. Rozhodne dokument: obsah diffu je
-        /// řádově vyšší než seznam souborů i než jeden blok.
+        /// Plocha obsahu diffu. Hledá ji **jedno místo** (`NSView.diffContentArea()`, od #548):
+        /// tutéž procházku potřebuje i sada nad výchozím stavem přepínače, a dvě kopie by se při
+        /// první opravě rozešly.
         static func contentArea(in view: NSView) -> NSScrollView? {
-            var best: NSScrollView?
-            if let scroller = view as? NSScrollView, !(scroller is DiffPairScrollView) {
-                best = scroller
-            }
-            for child in view.subviews {
-                guard let found = contentArea(in: child) else { continue }
-                let height = found.documentView?.frame.height ?? 0
-                if height > (best?.documentView?.frame.height ?? 0) { best = found }
-            }
-            return best
+            view.diffContentArea()
         }
 
         // MARK: - Materiál

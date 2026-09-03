@@ -154,8 +154,15 @@ extension Policy {
     /// **A okraj s kartami složí panel vpravo**, protože v tom stavu jsou vpravo dvě třistabodové
     /// kolony o téže věci: karta v okraji a týž nález jako řádek v panelu. Panel **nezmizí** —
     /// složený je proužek s počtem nálezů a značkou rozdělaného review, a `⌘2` ho vrátí až do
-    /// další změny pohledu, přesně jako u #188. Je to **mezistav**: seznam nálezů v panelu ruší
-    /// #504, a tím tahle podmínka odpadne.
+    /// další změny pohledu, přesně jako u #188.
+    ///
+    /// **Od #548 je to větev za přepínačem, ne výchozí stav.** Výchozí jsou bubliny pod řádky,
+    /// takže `hasMargin` je `false` a o panelu rozhoduje jedině pohled — tedy #188 beze změny,
+    /// stav, jaký byl do #503. Skládání panelu je tedy vidět jedině s okrajem zapnutým z lišty,
+    /// **a vrací se to zpátky**: přepnutím na bubliny se panel zase rozloží, protože `task(id:)`
+    /// v `DiffView` má identitou samo rozhodnutí, ne jeho vstupy. Odpadne to teprve se #504
+    /// (seznam nálezů v panelu zaniká), a to je od #548 odložené v `Průběžné`.
+    ///
     /// **Šířka je vstup, ne dodatečná kontrola** (#220, oprava z proklikání #503). Do téhle
     /// opravy o kolonách rozhodoval jen pohled, takže se v úzkém okně sešly strom (210), kód
     /// a okraj (300) v jednom `HStack`u, jehož pružné dítě je uprostřed — a když se pevné části
