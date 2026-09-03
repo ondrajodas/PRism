@@ -8915,6 +8915,10 @@ Jeden špinavý průchod tělem `DiffView`u tedy stojí **~197 průchodů tělem
 dotazů na `DiffRow.id`** (1 970 / 10, 4 140 / 10). Poměr je v obou pohledech i v obou scénářích týž,
 takže se dá počítat: **cena je lineární v počtu řádků, ne v počtu zašpinění.**
 
+**Tahle tabulka je stav s vadou**, tedy to, co sonda vydávala do třetího kola. Co v každé z těch
+řádek stojí po opravě, je v *Kdo tělo diffu špinil, a jak se to našlo* níž — a řádka `kontrola
+měřidla` se přitom **nesmí změnit**, jinak by nula nad ostatními netvrdila nic.
+
 #### Dvě věci, které to měřidlo lhaly
 
 Obě mají tentýž tvar: **práce, kterou sonda nepustila, se přičetla k úseku, který sonda pojmenovala
@@ -9002,11 +9006,11 @@ Po opravě je v tom úseku nula a čísla jsou opakovatelná.
   jediné místo, které z rozvržení diffu píše do storu) daly **stejná čísla**. Ani jedna ablace není
   v repu — jsou to ablace, ne sondy.
 
-#### Co o tom pohonu zbývá zjistit
+#### Zúžení, ze kterého se to vyřešilo
 
-Zúžení po #421 je konkrétní a nepříjemné: **tělo `DiffView`u se přeloží 1× za tik, a všechny jeho
-vstupy jsou přitom shodné.** Doloženo ablačním výpisem přímo z těla — v každém z jedenácti průchodů
-stojí tatáž řádka (`slot=Optional(1474.0) bubliny=true strom=false výška=718.0
+Po druhém kole zbylo zúžení, které bylo konkrétní a nepříjemné: **tělo `DiffView`u se přeloží 1× za
+tik, a všechny jeho vstupy jsou přitom shodné.** Doloženo ablačním výpisem přímo z těla — v každém
+z jedenácti průchodů stojí tatáž řádka (`slot=Optional(1474.0) bubliny=true strom=false výška=718.0
 kolony=(tree: false, panel: false, margin: false) skok=nil rozsahů=0 vláken=0 komentářů=0
 layout=split hledá=nil`). K tomu:
 
@@ -9017,13 +9021,105 @@ layout=split hledá=nil`). K tomu:
   skončilo první kolo, patří **usazování scény**, ne tiku (a v záznamu z #489 je od tiků nešlo
   odlišit, protože scéna se tehdy usazovala do prvního `await`u — viz výš).
 
-Zbývá tedy dvojice, na kterou dosavadní nástroje nedosáhly: `forget(whatIsNotIn:)` s pětadvaceti
-bezpodmínečnými přiřazeními map (`x = x.filter { … }`) a **jméno toho, kdo z nich tělo `DiffView`u
-zneplatní**. Zrcadlo tvrdí, že po tiku je stav totožný, takže se to musí dít **uvnitř** tiku, mezi
-dvěma zápisy téže hodnoty — a to je stav, na který se `withObservationTracking` po tiku už nezeptá.
-Kdo v tom bude pokračovat, má na to dva použitelné nástroje: **jednorázový odběr nad každým polem
-zvlášť pouštěný v půlce tiku**, a **ablaci samotného `forget`u** (dnes `private`, takže na ni je
-potřeba sáhnout do aplikace).
+Zbývala tedy dvojice, na kterou dosavadní nástroje nedosáhly: `forget(whatIsNotIn:)` s bezpodmínečnými
+přiřazeními map (`x = x.filter { … }`) a **jméno toho, kdo z nich tělo `DiffView`u zneplatní**.
+Zrcadlo tvrdí, že po tiku je stav totožný, takže se to muselo dít **uvnitř** tiku, mezi dvěma zápisy
+téže hodnoty — a to je stav, na který se `withObservationTracking` po tiku už nezeptá.
+
+#### Kdo tělo diffu špinil, a jak se to našlo (#421)
+
+**Pohonem byla jedna řádka: `diffSearches` ve `forget(whatIsNotIn:)`.** Kořen je obecnější než ta
+řádka a je to **výjimka z pravidla o zápisu téže hodnoty**, ne nedůslednost:
+
+> `@Observable` nehlásí zápis **téže** hodnoty (proto je `if` na rovnost jinde mrtvá váha,
+> `PollObservationTests.writingTheSameValueDoesNotWake`) — jenže ta suprese stojí na tom, že se ty
+> dvě hodnoty dají **porovnat**. `diffSearches` je `[DiffSearchKey: DiffSearchState]`
+> a `DiffSearchState` je `@Observable` **třída** (a je jí schválně, kvůli #472), takže ten slovník
+> `Equatable` **není**. Bezpodmínečné `x = x.filter { … }` v něm proto budilo své čtenáře **při
+> každém tichém tiku, a i tehdy, když je mapa prázdná** — tedy i u člověka, který v diffu nikdy
+> nehledal.
+
+Z osmatřiceti map, které tik prořezává, je to **jediná** taková; ostatních sedmatřicet má hodnotu
+`Equatable`, takže se jejich zápis doopravdy nehlásí. Změřeno jednorázovým odběrem nad všemi
+osmatřiceti naráz nad **prázdným** storem — probudila se právě jedna, a jmenovala se.
+
+**Postup, který na to dosáhl** (pro příště, protože předchozí dvě kola na to nedosáhla):
+
+1. **`Self._printChanges()` v těle `DiffView`u**, zapnuté proměnnou prostředí. SwiftUI u každého
+   průchodu vypíše, **co ho vyvolalo**. Ve všech deseti průchodech za deset tiků to bylo
+   `DiffView: @self, _layout changed.` a **nikdy keypath** — takže tělo se nepřekládalo proto, že by
+   si tu mapu čtlo samo. Je to privátní API cizí knihovny, takže platí pravidlo z #361: rozhoduje,
+   jestli to v hostu projde, ne odhad. Prošlo, ale **v repu to nezůstalo** — je to ablace, ne sonda.
+2. **Ablace celého `forget(whatIsNotIn:)`** (`return` na prvním řádku, za proměnnou prostředí).
+   `DiffView` a `DiffRowView` spadly na nulu, kdežto `ContentView=21 PullRequestDetailView=20`
+   zůstaly — což naráz oddělilo `isRefreshing` (kořen okna) od toho, co špinilo diff.
+3. **Odběr nad všemi mapami, které `forget` prořezává**, ne nad čteními, která dělá diff. To je ten
+   krok, který dal jméno: druhé kolo se ptalo „co čte diff“, a odpověď byla „nic z toho“ — správně,
+   jenže tím se hledalo na špatné straně.
+4. **Ta jedna řádka opravená, a znovu změřeno.** Vydala **tatáž čísla jako ablace celého `forget`u**,
+   takže v tom úklidu nic dalšího není.
+
+**A/B/A/B** (A = s vadou, B = po opravě; přepínané proměnnou prostředí nad tímtéž buildem, aby se
+neměnilo nic než ta podmínka), usazené okno, 18 nasazených bloků, 535 prvků, split, 1512×874:
+
+| úsek, `s chromem okna` | A | B | A | B |
+|---|---|---|---|---|
+| 10 tichých tiků, `DiffView` | 10 | **0** | 10 | **0** |
+| 10 tichých tiků, `DiffRowView` | 1 970 | **0** | 1 970 | **0** |
+| 10 tichých tiků, `DiffRow.id` | 4 140 | **0** | 4 140 | **0** |
+| 10 tichých tiků, `ContentView` / `PullRequestDetailView` | 20 / 20 | 20 / 20 | 20 / 20 | 20 / 20 |
+| kontrola měřidla, `DiffView` | 4 | 4 | 4 | 4 |
+
+Ty dvě spodní řádky jsou to, proč se ta nula dá čemu věřit: **kořen okna se nezměnil** (takže se
+práce nikam nepřesunula, pravidlo z #275) a **kontrolní úsek měří dál** (takže nula výš je odpověď
+měřidla, ne jeho porucha, pravidlo z #478). Ve scénáři `jen detail PR` jde `DiffView` z 11 na 1
+a `DiffRowView` z 2 101 na 191 — ta jednička je zbytek usazení, ne tik: **ablace celého `forget`u dá
+tutéž jedničku**, a druhý úsek s tiky (`10 tiků bez zdržení`) vydá po opravě **prázdno**.
+
+**Cena je lineární v počtu řádků, a je na to osa** (`PRISM_BIG_FILES`, přidané u #421 ze stejného
+důvodu jako `Case.files` u #501). Nad stem syntetických souborů (1 591 prvků) dává táž vada
+`DiffRowView` **12 530** a `DiffRow.id` **26 140** za deset tiků, po opravě nulu — tedy ~1 253
+průchodů `DiffRowView`u na jedno zašpinění proti ~197 u výchozí scény.
+
+##### Co se u toho naměřit NEPODAŘILO, a je to součást výsledku
+
+**Čas.** Pravidlo z #275 říká, že u téhle vady se má měřit čas, ne počty průchodů — tak se do sondy
+přidal součet CPU hlavního vlákna za dobu, kdy se točí runloop (`IdleDiffSpinProbe.cpu`). **Ten
+rozdíl nerozliší.** A/B/A/B nad scénou o stu souborů, tedy nad `DiffRowView` 12 530 proti nule:
+
+| | A (s vadou) | B (po opravě) |
+|---|---|---|
+| CPU na runloopu za 10 tichých tiků | 42 ms, 26 ms | 24 ms, **58 ms** |
+
+Jedno z „po opravě“ čísel je **vyšší než obě „s vadou“**. Rozptyl měřidla je tedy větší než hledaný
+efekt, a je to učebnicová #478: kdyby se čekalo na potvrzení časem, vyšlo by z toho „oprava
+nepomohla“ nad opravou, která tu práci **odstranila**. Proč je tak malá, je vidět z grafové části
+téže tabulky: **`DiffBlockRow.geometry` se v úsecích s tiky neobjeví vůbec** (v kontrolním úseku má
+~1 340), takže zašpiněné tělo po #469 **nepřerovnává nasazené bloky kódu** — nasazených je pořád 18,
+ať má diff dvanáct souborů nebo sto. Zbývají struktury řádků a dotazy na identitu, a ty jsou po
+jednom levné.
+
+Co z toho plyne pro čtení té sondy: **nula v počtech znamená „ta práce se nedělá“, ne „ušetřilo se
+X ms“.** Doložit ms by chtělo scénu, ve které je nasazených bloků řádově víc — tedy ostrý diff přes
+`PRISM_DIFF_DIR` (#501) a okno, ve kterém je vidět víc než osmnáct bloků. **Neuděláno**, a je to
+zapsaná mezera, ne hotová práce.
+
+##### Co zůstává zapsané jako mez
+
+**Hodnota `DiffView`u se nikdy neshodne, takže každé probuzení čtení „při skládání“ stojí celý
+diff.** `_printChanges()` hlásilo `@self, _layout changed` — a `_layout` je `Binding`, který
+`PullRequestDetailView` staví v **computed property**
+(`Binding(get: { store.diffLayout }, set: { store.setDiffLayout($0) })`), takže se dvě takové
+hodnoty nemají jak porovnat. Důsledek: nezáleží na tom, že `DiffView.body` sám tu mapu nečte —
+stačí, že ji čte `searchActions` **při skládání jeho hodnoty**, a tělo se přeloží celé.
+
+Co k tomu **není** změřené: jestli SwiftUI v takovém případě překládá celé tělo rodiče, nebo jen
+tu jeho část, která hodnotu diffu skládá. Sonda umí říct jedině to, že **počitadlo
+`PullRequestDetailView`u se nehne** (1 průchod za deset tiků), takže „rodič se přeložil“ to není.
+Odstranit tu churn (předat `layout` hodnotou a akcí místo `Binding`u) se **nezkoušelo**: po opravě
+#421 nad nečinným diffem nic nebudí, takže by to bylo zlevňování něčeho, co se nedělá. Je to ale
+kandidát na příčinu u **#541** (přepnutí na `Změněné soubory` stojí nad ostrým diffem víc než
+sekundu), kde se ta hodnota skládá znovu z podstaty věci.
 
 #### Co se nepodařilo zlevnit, a proč to sem patří
 
@@ -9086,13 +9182,23 @@ jedenáct jeho příznaků je v té scéně vypnutých a nemění se).
 scéna tehdy usazovala teprve v prvním úseku, který `await`nul — a to byl zrovna ten s tiky.
 Hypotéza o stavovém řádku tím padá i z druhé strany: bez chromu okna je cena **tatáž**.
 
-**Trvalé tvrzení k tomu**, co z toho jde uhlídat bez okna, je `PollObservationTests
-.quietTickDoesNotWakeWhatTheDiffDrawsFrom`: vyjmenuje všechna čtení storu, která `DiffView.body`
-dělá přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. **Netvrdí, že se tělo `DiffView`u
-nepřeloží** — to nad storem nejde a v okně to po #421 pořád neplatí; tvrdí, že když se přeloží,
-není to kvůli datům. Ověřeno vložením regrese (`fileFolding = fileFolding.filter { _ in false }`
-v `forget(whatIsNotIn:)` → `tichý tik probudil isFolded(_:in:)`; do #500 se ta mapa jmenovala
-`foldedFiles` a byla to množina).
+**Trvalá tvrzení k tomu**, co z toho jde uhlídat bez okna, jsou v `PollObservationTests` dvě a je
+mezi nimi rozdíl, na kterém #421 stálo pět kol:
+
+- **`quietTickDoesNotWakeWhatTheDiffDrawsFrom`** vyjmenuje čtení storu, která `DiffView.body` dělá
+  přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. Ověřeno vložením regrese
+  (`fileFolding = fileFolding.filter { _ in false }` ve `forget(whatIsNotIn:)` → `tichý tik probudil
+  isFolded(_:in:)`; do #500 se ta mapa jmenovala `foldedFiles` a byla to množina).
+- **`quietTickWakesNoneOfTheMapsTheTickPrunes`** (#421) vyjmenuje naopak **všech osmatřicet map,
+  které tik prořezává** — tedy i ty, ze kterých diff nekreslí. To je ta strana, na které vada byla:
+  první tvrzení bylo celou dobu zelené a **pravdivé**, protože `DiffView.body` `diffSearches` doopravdy
+  nečte; čte je `searchActions` při skládání jeho hodnoty. Store je u toho **prázdný schválně**, protože
+  vada byla nezávislá na obsahu mapy. Ověřeno vložením regrese (`diffSearches = keptSearches`
+  bezpodmínečně → `tichý tik probudil diffSearches`), a spadne u toho **právě** tenhle test.
+
+**Ani jedno z nich netvrdí, že se tělo `DiffView`u nepřeloží** — to nad storem nejde říct. Tvrdí, že
+když se přeloží, není to proto, že by si o to řekl tik. To „hotovo“ ze zadání #421, které se v druhém
+kole napsat nedalo, protože neplatilo, je tím splněné v podobě, která platí.
 
 ### Jak se změřil `--force-with-lease` (#466)
 

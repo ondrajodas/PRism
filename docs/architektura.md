@@ -8301,8 +8301,30 @@ takže se skládá jen z nich a `isRefreshing` ani `nextPoll` do něj nepatří.
 polovina opravy a **není** — `@Observable` na tomhle toolchainu zápis téže hodnoty **nehlásí**
 (změřeno vloženou regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ten
 `if` by tedy byl porovnání navíc, které nic nemění. Z téhož důvodu se nesahalo ani na
-`forget(whatIsNotIn:)`, který po tiku přepisuje přes třicet map výsledkem `filter`u: se stráží
-i bez ní vychází tvrzení o nezneplatnění stejně.
+`forget(whatIsNotIn:)`, který po tiku přepisuje osmatřicet map výsledkem `filter`u: u sedmatřiceti
+z nich vychází tvrzení o nezneplatnění se stráží i bez ní stejně.
+
+**Ta osmatřicátá je `diffSearches`, a je to celé #421.** Suprese zápisu téže hodnoty stojí na tom,
+že se ty dvě hodnoty dají **porovnat** — a `DiffSearchState` je `@Observable` **třída** (schválně,
+kvůli #472), takže `[DiffSearchKey: DiffSearchState]` `Equatable` **není**. Bezpodmínečné
+`x = x.filter { … }` v ní proto budilo své čtenáře při **každém** tichém tiku, a i tehdy, když je
+mapa prázdná, tedy u každého, kdo v diffu nikdy nehledal. V okně z toho byl jeden průchod tělem
+`DiffView`u za tik, a s ním ~197 průchodů `DiffRowView`u a ~414 dotazů na `DiffRow.id`; nad stem
+souborů ~1 253, respektive 2 614. Od #421 se tam zapisuje jen při změně (`count` stačí — `filter`
+umí jedině ubrat) a hlídá to `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad
+**všemi** osmatřiceti, ne jen nad tou jednou: příště má taková mapa spadnout tam, ne v okně.
+
+Dvě věci u toho stojí za zapamatování, protože se z nich dá spočítat, kde hledat příště:
+
+- **`DiffView.body` tu mapu nečte, a přesto se překládal.** Čte ji `searchActions`
+  v `PullRequestDetailView`u, tedy kód, který skládá **hodnotu** diffu — a ta se nemá jak porovnat,
+  protože `layout` je `Binding` stavěný v computed property. Probuzení kteréhokoli čtení „při
+  skládání“ tedy stojí celé tělo diffu. Druhé kolo #421 proto hledalo na špatné straně: ptalo se,
+  co čte diff, a odpověď „nic z toho“ byla pravdivá.
+- **Zašpiněné tělo už ale nepřerovnává nasazené bloky kódu** (#469): `DiffBlockRow.geometry` se
+  v úsecích s tiky neobjeví vůbec. Proto se ten rozdíl nedá naměřit v milisekundách, i když je
+  v počtech 12 530 proti nule — viz [`docs/testovani.md`, *Co se u toho naměřit
+  nepodařilo*](testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421).
 
 **A pozor na to, co z toho pravidlo NENÍ** (#421). Nabízí se dovodit, že vadné je i **hrubé místo
 čtení**: `store.isRefreshing` se čte v těle `ContentView`u — dvakrát, v `headerActions` (tlačítko
@@ -8321,11 +8343,20 @@ jsou `DiffView` 10 a `DiffRow.id` 4 140 za deset tiků — a přidalo se k tomu 
 průchody za tik **i tehdy, když se `isRefreshing` přepne a vrátí v jednom nepřerušeném úseku**.
 Suprese se uplatní na zápis téže hodnoty, ne na dvojici tam-a-zpátky.
 
+**Ty dva průchody kořenem okna za tik zůstávají i po opravě #421, a je to schválně**: příznak se tam
+a zpátky doopravdy **mění**, takže to není třída #472 (hrubá vlastnost) ani #421 (neporovnatelná
+hodnota) a zápisem „jen při změně“ se neopraví. Slouží u toho ale jako kontrola: v A/B nad opravou
+#421 se `ContentView` i `PullRequestDetailView` drží na 20 průchodech za deset tiků v obou ramenech,
+takže je vidět, že se práce z diffu **nikam nepřesunula** (pravidlo z #275).
+
 **Co tím opravené není**: sedm průchodů tělem `DiffView` a tisíc řádků diffu za dvacet tichých
-tiků zbývá, a cena tiku spadla jen o třetinu, přestože průchodů tělem ubylo šedesátkrát. Zbytek
+tiků zbývalo, a cena tiku spadla jen o třetinu, přestože průchodů tělem ubylo šedesátkrát. Zbytek
 leží v **rozvržení okna**, ne v tělech — vlastní práce aplikace je ve `sample`u té fáze **~1,5 %**
 hlavního vlákna a **tři zlevnění vedle rozvržení se změřila a zahodila**; viz *Kolik stojí
 přerovnání okna* v [`docs/testovani.md`](testovani.md#kolik-stojí-přerovnání-okna-472).
+**Ty zbylé průchody tělem diffu dořešilo #421** (odstavec o `diffSearches` výš); na tom, že zbytek
+ceny tiku leží v rozvržení okna, se tím **nic nemění** — po opravě zbývá kořen okna s dvěma
+průchody za tik a ten se pořád přerovnává celý.
 
 `run()` je smyčka (obnovit → počkat → opakovat), `refresh()` jeden cyklus. Tlačítko
 „obnovit teď“ volá `refresh()` — ruční obnovení není nic jiného než tik mimo pořadí.

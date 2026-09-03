@@ -3750,13 +3750,54 @@ tím na pravidlo: co se mění jinak často a čte jinde, patří do vlastní vl
 | Varianta | Proč ne |
 |---|---|
 | Psát jen změnu (`if pullRequests != merged { … }`) | **Změřeno, že to nic nedělá**: zápis téže hodnoty `@Observable` na tomhle toolchainu nehlásí (ověřeno vloženou regresí z obou stran). Byl by to `if`, který nic nemění — a takový kód se v tomhle repu nedrží. Pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`, takže se to pozná, kdyby se chování změnilo |
-| Stráž na `forget(whatIsNotIn:)` (přes třicet map, přepisovaných po každém tiku výsledkem `filter`u) | Tentýž důvod: se stráží i bez ní vychází tvrzení o nezneplatnění stejně. Bylo to napsané a **zase zahozené**, aby diff nebyl o třicet míst větší za nic |
+| Stráž na `forget(whatIsNotIn:)` (osmatřicet map, přepisovaných po každém tiku výsledkem `filter`u) | Tentýž důvod: se stráží i bez ní vychází tvrzení o nezneplatnění stejně. Bylo to napsané a **zase zahozené**, aby diff nebyl o osmatřicet míst větší za nic. **U jedné z těch map to zamítnutí neplatilo a #421 ji opravilo** — viz záznam níž |
 | Vrátit #469 (líný diff) | Hypotéza z hlavičky #472. **Změřeno, že cenu nedělá**: jedno zneplatnění detailu stojí 95–116 ms **bez ohledu na délku diffu** (500 proti 2000 řádkům: 99 proti 105 ms) i na tabu (`Přehled` bez dlouhého seznamu je nejdražší), a `DiffView.body` se u toho vůbec nepřeloží |
 | Zlevnit `updateWindowContentSizeExtremaIfNecessary` (`.windowResizability(.contentMinSize)`) | Je to 15–50 % rozvržení podle fáze, takže je to reálná nitka — ale `.contentMinSize` je tam kvůli tomu, že s `.automatic` **nešlo okno zmenšit na výšku**, a ověřit tu změnu jde jedině rukou na běžícím okně. Zapsáno jako nedodělané, ne zamítnuté |
 
 **Co zůstalo nedokázané.** Průchodů tělem ubylo šedesátkrát, ale cena tichého tiku spadla jen
 o třetinu (u 500řádkového diffu z 451 na 427 ms, tedy skoro vůbec). Zbytek leží v rozvržení okna,
 ne v tělech — a sedm průchodů tělem `DiffView` na dvacet tichých tiků taky nikdo nevysvětlil.
+**Ty průchody tělem diffu vysvětlilo a odstranilo #421** (záznam níž); na tom, že zbytek ceny leží
+v rozvržení okna, se tím nic nemění.
+
+### Záznam rozhodnutí — zápis „jen při změně“ má jednu výjimku, a je změřená (#421)
+
+#472 zamítlo psát `if` na rovnost před zápisem do `@Observable` vlastnosti, a **to zamítnutí platí
+dál**: zápis téže hodnoty toolchain nehlásí, takže je to porovnání navíc, které nic nemění. #421
+k tomu doplnilo podmínku, která v tom zamítnutí chyběla: **ta suprese funguje jedině tam, kde se ty
+dvě hodnoty dají porovnat.**
+
+`forget(whatIsNotIn:)` přiřazuje osmatřicet map bezpodmínečně. Sedmatřicet z nich má hodnotu
+`Equatable`, takže se jejich zápis doopravdy nehlásí. Osmatřicátá je `diffSearches`, a její hodnota
+je `DiffSearchState` — `@Observable` **třída**, což **není omyl, ale rozhodnutí z #472**: dotaz
+hledání se mění při každém písmenu, takže kdyby ležel ve slovníku ve store, budil by každé písmeno
+všechny čtenáře toho slovníku. Cena té správné volby byla, že `[DiffSearchKey: DiffSearchState]`
+`Equatable` není, takže bezpodmínečné `x = x.filter { … }` budilo své čtenáře **při každém tichém
+tiku, a i nad prázdnou mapou**.
+
+**Rozhodnuto: zapisovat tam jen při změně, a nikde jinde.** Tři varianty, které se u toho zvážily:
+
+| Varianta | Proč ne |
+|---|---|
+| `DiffSearchState: Equatable` s `==` jako `===` | Elegantnější (žádný `if` na místě zápisu, a pokrylo by to i budoucí mapy téhož tvaru), ale **postavilo by celý úklid na nedokumentovaném chování toolchainu**: kdyby suprese zápisu téže hodnoty zmizela, rozbije se osmatřicet map naráz místo jedné. Explicitní podmínka na místě zápisu je vidět a nezávisí na ničem |
+| Podmíněný zápis u **všech** osmatřiceti | Přesně ten `if`, který #472 změřilo a zamítlo, jen třicetsedmkrát. Mrtvá váha, která navíc svádí k dojmu, že je to obecné pravidlo |
+| Nechat to a zlevnit následek (identita řádků, počet prvků) | Zadání #421 to zakazuje výslovně: **odstranit pohon, ne zlevnit následek** — a 4 140 dotazů na identitu za deset tichých tiků se nemá dít vůbec |
+
+**Co se u toho nepodařilo dokázat: že se tím ušetřil čas.** Počty jsou jednoznačné a opakovatelné
+(A/B/A/B: `DiffRowView` 1 970 → 0 nad výchozí scénou, 12 530 → 0 nad scénou o stu souborů), ale CPU
+hlavního vlákna na runloopu ten rozdíl **nerozliší** — 42 a 26 ms s vadou proti 24 a **58** ms po
+opravě. Po #469 totiž zašpiněné tělo nepřerovnává nasazené bloky kódu, takže zbývají struktury
+řádků a dotazy na identitu, a ty jsou po jednom levné. Zapsané je to proto, že je to učebnicová
+#478 z druhé strany: kdyby se na potvrzení časem čekalo, vyšlo by „oprava nepomohla“ nad opravou,
+která tu práci odstranila. Doložit ms by chtělo scénu s řádově víc nasazenými bloky (ostrý diff
+přes `PRISM_DIFF_DIR`); **neuděláno**.
+
+**Zapsaná mez, která z toho vyšla jako vedlejší nález**: hodnota `DiffView`u se nikdy neshodne,
+protože `layout` je `Binding` stavěný v computed property `PullRequestDetailView`u. Důsledek je, že
+probuzení kteréhokoli čtení, které se děje **při skládání** té hodnoty, stojí celé tělo diffu — i když
+si `DiffView.body` tu vlastnost sám nečte. Odstranit tu churn se nezkoušelo (po #421 nad nečinným
+diffem nic nebudí, takže by to bylo zlevňování něčeho, co se nedělá), ale je to kandidát na příčinu
+u **#541**.
 
 ### Záznam rozhodnutí — co u #472 nešlo zlevnit, a proč se to zkusilo
 

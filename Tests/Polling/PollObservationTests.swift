@@ -144,13 +144,19 @@ struct PollObservationTests {
     }
 
     /// **A úklid po tiku taky nikoho nebudí** — což je tvrzení o `forget(whatIsNotIn:)`, který
-    /// po každém úspěšném tiku přepíše přes třicet map výsledkem `filter`u.
+    /// po každém úspěšném tiku přepíše osmatřicet map výsledkem `filter`u.
     ///
     /// Vypadá to jako druhá polovina #472 a **není**: nabízelo se zapisovat jen tehdy, když
     /// z mapy opravdu ubylo, jenže s takovou úpravou i bez ní je tenhle test zelený — zápis téže
     /// hodnoty toolchain nehlásí (viz test o řádek výš). Zůstává proto jen tvrzení, aby se ta
     /// cesta hlídala; kdyby se chování `@Observable` změnilo, spadne tohle **i** ten test výš
     /// a bude z toho jasné, co dělat.
+    ///
+    /// **U jedné z těch map to ale neplatilo, a je to #421**: suprese zápisu téže hodnoty stojí na
+    /// tom, že se ty dvě hodnoty dají **porovnat**, a `diffSearches` drží `@Observable` třídu, takže
+    /// `Equatable` není. Věta „ten `if` nic nemění“ tedy platí o mapách s `Equatable` hodnotou, ne
+    /// plošně — a která mapa to je, se z jednoho čtení nepozná. Proto je níž
+    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** osmatřiceti.
     @Test("Tichý tik nezneplatní ani rozbalení kontextu v diffu")
     func quietTickDoesNotWakeTheDiffReader() async throws {
         let pr = PRIdentifier("cli/cli#1")!
@@ -270,5 +276,105 @@ struct PollObservationTests {
         diff.watch { _ = store.diffState(for: pr) }
         store.diffStates[pr] = .loading
         #expect(diff.woken)
+    }
+
+    /// **A nezneplatní ani jednu z map, které sám prořezává** (#421).
+    ///
+    /// Tohle je to tvrzení, které #421 doopravdy chytá, a je **širší než čtení diffu** o kus výš
+    /// schválně. `forget(whatIsNotIn:)` přiřazuje **osmatřicet** map bezpodmínečně
+    /// (`x = x.filter { … }`) a spoléhá při tom na to, co tvrdí `writingTheSameValueDoesNotWake`:
+    /// zápis téže hodnoty `@Observable` nehlásí, takže je `if` na rovnost mrtvá váha.
+    ///
+    /// **Ta suprese ale stojí na tom, že se hodnoty dají porovnat** — a to je celé #421.
+    /// `diffSearches` drží `DiffSearchState`, což je `@Observable` **třída** (a je jí schválně,
+    /// kvůli #472), takže `[DiffSearchKey: DiffSearchState]` `Equatable` **není**, porovnat se
+    /// nedá a bezpodmínečný zápis se hlásil **při každém tichém tiku, i nad prázdnou mapou**.
+    /// V okně z toho byl jeden průchod tělem `DiffView`u za tik, a s ním ~197 průchodů
+    /// `DiffRowView`u a ~414 dotazů na `DiffRow.id`
+    /// ([čísla](../../docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
+    ///
+    /// Proto se tady nevyjmenovávají **čtení, která dělá diff**, ale **všechny mapy, které tik
+    /// prořezává**. Kdo do storu přidá další mapu s neporovnatelnou hodnotou a prořeže ji tikem,
+    /// spadne tady — ne až v okně za pět kol měření. Store je nad tím **prázdný schválně**: kdyby
+    /// hranice ležela v obsahu, tvrdilo by se to jen o naplněné mapě, kdežto ta vada byla
+    /// nezávislá na obsahu.
+    @Test("Tichý tik nezneplatní ani jednu z map, které prořezává")
+    func quietTickWakesNoneOfTheMapsTheTickPrunes() async throws {
+        let gateway = FakeGitHubGateway(always: .success([summary("cli/cli#1")]))
+        let directory = try TemporaryDirectory()
+        defer { _ = directory }
+        let store = AppStore(
+            gateway: gateway,
+            time: FakeTimeSource(),
+            drafts: ReviewDraftStore(layout: CacheLayout(root: directory.url))
+        )
+        await store.refresh()
+
+        // Ve stejném pořadí, v jakém je přiřazuje `forget(whatIsNotIn:)` — aby se dvojice, které
+        // se uklízejí spolu, daly proti tomu kódu přečíst.
+        let reads: [(name: String, read: @MainActor () -> Void)] = [
+            ("checkoutStates", { _ = store.checkoutStates }),
+            ("diffStates", { _ = store.diffStates }),
+            ("incrementalDiffs", { _ = store.incrementalDiffs }),
+            ("expansions", { _ = store.expansions }),
+            ("fileFolding", { _ = store.fileFolding }),
+            ("readMarks", { _ = store.readMarks }),
+            ("readStates", { _ = store.readStates }),
+            ("diffSearches", { _ = store.diffSearches }),
+            ("detailStates", { _ = store.detailStates }),
+            ("conversationStates", { _ = store.conversationStates }),
+            ("toggledThreads", { _ = store.toggledThreads }),
+            ("toggledFindings", { _ = store.toggledFindings }),
+            ("threadReplies", { _ = store.threadReplies }),
+            ("threadStates", { _ = store.threadStates }),
+            ("pullRequestComments", { _ = store.pullRequestComments }),
+            ("pullRequestCommentStates", { _ = store.pullRequestCommentStates }),
+            ("detailTabs", { _ = store.detailTabs }),
+            ("rangeTargets", { _ = store.rangeTargets }),
+            ("reviewTimelines", { _ = store.reviewTimelines }),
+            ("recheckFailures", { _ = store.recheckFailures }),
+            ("checks", { _ = store.checks }),
+            ("checkFailures", { _ = store.checkFailures }),
+            ("commits", { _ = store.commits }),
+            ("commitFailures", { _ = store.commitFailures }),
+            ("headProbes", { _ = store.headProbes }),
+            ("metadataStates", { _ = store.metadataStates }),
+            ("metadataActionStates", { _ = store.metadataActionStates }),
+            ("branchStatuses", { _ = store.branchStatuses }),
+            ("repositoryLabels", { _ = store.repositoryLabels }),
+            ("repositoryLabelFailures", { _ = store.repositoryLabelFailures }),
+            ("assignableUsers", { _ = store.assignableUsers }),
+            ("assignableTeams", { _ = store.assignableTeams }),
+            ("assignableUserFailures", { _ = store.assignableUserFailures }),
+            ("openCommits", { _ = store.openCommits }),
+            ("commitDiffs", { _ = store.commitDiffs }),
+            ("expandedChecks", { _ = store.expandedChecks }),
+            ("checkDetails", { _ = store.checkDetails }),
+            ("consideredForAutomation", { _ = store.consideredForAutomation }),
+        ]
+        // **Počet je součást tvrzení.** Kdo do `forget(whatIsNotIn:)` přidá mapu a tady ji
+        // nedopíše, projde s tímhle seznamem zeleně — což je ta chyba, kterou #421 hledalo pět
+        // kol. Nedá se to spočítat z kódu, takže je to číslo napsané ručně, a rozejde-li se,
+        // spadne to na tomhle řádku, ne o padesát řádků níž.
+        #expect(reads.count == 38, "forget(whatIsNotIn:) prořezává jiný počet map než tenhle výčet")
+
+        let watchers = reads.map { entry -> (name: String, watcher: Watcher) in
+            let watcher = Watcher()
+            watcher.watch(entry.read)
+            return (entry.name, watcher)
+        }
+        await store.refresh()
+
+        for entry in watchers {
+            #expect(!entry.watcher.woken, "tichý tik probudil \(entry.name)")
+        }
+
+        // **Ověřeno i obráceně** (#478): kdyby ta čtení nebyla sledovaná, byla by tahle sada
+        // zelená nad ničím. Skutečná změna té mapy, na které #421 stálo, probudit **musí**.
+        let searches = Watcher()
+        searches.watch { _ = store.diffSearches }
+        store.diffSearches[DiffSearchKey(pullRequest: PRIdentifier("cli/cli#1")!, commit: nil)]
+            = DiffSearchState()
+        #expect(searches.woken)
     }
 }

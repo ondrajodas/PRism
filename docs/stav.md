@@ -6003,7 +6003,9 @@ ověřená vloženou regresí.
 všechny jeho vstupy jsou přitom shodné** (doloženo výpisem z těla — jedenáct identických řádek),
 kdežto tělo rodiče se nepřeloží vůbec. Zbývá `forget(whatIsNotIn:)` s pětadvaceti bezpodmínečnými
 přiřazeními map a **jméno toho, kdo z nich tělo zneplatní**; hledat se to musí **uvnitř** tiku, ne
-po něm, protože po tiku je stav totožný. **Issue proto zůstává otevřené.**
+po něm, protože po tiku je stav totožný. **Issue proto zůstává otevřené** — dořešilo ho třetí kolo
+o záznam níž a to zúžení bylo správné (map je jich osmatřicet, ne pětadvacet, a ta hledaná se jmenuje
+`diffSearches`).
 
 Testů **5127**, všechny zelené — z toho **dvě nová tvrzení** a jedna nová sonda; dva starší testy
 (`SmokeTests.appPresentsItselfAsPRism`, `CacheLayoutTests`) se musely přepsat, protože tvrdily
@@ -6011,6 +6013,70 @@ rovnost s `PRism`, což je zrovna ta vada.
 
 **Na obrazovce není co vidět**: aplikace se nezměnila, změnil se testovací host, sondy
 a dokumentace.
+
+## #421, třetí kolo — pohonem byla jedna mapa, jejíž hodnotu nejde porovnat
+
+**Hotovo, issue zavřené.** Zúžení z druhého kola („tělo `DiffView`u se přeloží 1× za tik a všechny
+jeho vstupy jsou přitom shodné; zbývá `forget(whatIsNotIn:)`“) vedlo na **jednu řádku**:
+
+**`diffSearches` je jediná z osmatřiceti map, které tik prořezává, jejíž hodnotu nejde porovnat.**
+`@Observable` nehlásí zápis **téže** hodnoty — na tom stojí #472 a je to důvod, proč se ostatních
+sedmatřicet map přiřazuje bezpodmínečně. Ta suprese ale platí jedině tehdy, když se ty dvě hodnoty
+dají **porovnat**, a `DiffSearchState` je `@Observable` **třída** (schválně, kvůli #472), takže
+`[DiffSearchKey: DiffSearchState]` `Equatable` není. Bezpodmínečné `x = x.filter { … }` proto budilo
+své čtenáře při **každém** tichém tiku — **i nad prázdnou mapou**, tedy u každého, kdo v diffu nikdy
+nehledal. Od #421 se tam zapisuje jen při změně; `count` stačí, protože `filter` umí jedině ubrat.
+
+**Změřeno A/B/A/B** nad tímtéž buildem (rameno se přepínalo proměnnou prostředí), usazené okno,
+18 nasazených bloků, 535 prvků, split, 1512×874:
+
+| úsek, 10 tichých tiků | s vadou | po opravě |
+|---|---|---|
+| `DiffView` | 10, 10 | **0, 0** |
+| `DiffRowView` | 1 970, 1 970 | **0, 0** |
+| `DiffRow.id` | 4 140, 4 140 | **0, 0** |
+| `ContentView` / `PullRequestDetailView` | 20 / 20 | 20 / 20 |
+| kontrola měřidla, `DiffView` | 4 | 4 |
+
+Spodní dvě řádky jsou to, čím se ta nula dá obhájit: kořen okna se **nezměnil** (práce se nikam
+nepřesunula, pravidlo z #275) a **kontrolní úsek měří dál** (nula je odpověď, ne porucha, #478).
+Ablace **celého** `forget(whatIsNotIn:)` vydala tatáž čísla jako ta jedna řádka, takže v tom úklidu
+nic dalšího není.
+
+**Čas se naměřit nepodařilo, a je to výsledek, ne mezera v práci.** Do sondy se kvůli #275 přidal
+součet CPU hlavního vlákna za dobu, kdy se točí runloop. Nad scénou o **stu** souborů, kde je ten
+rozdíl `DiffRowView` **12 530 proti nule**, dalo A/B/A/B `42, 26 ms` s vadou a `24, 58 ms` po opravě
+— jedno „po opravě“ číslo je tedy **vyšší než obě „s vadou“**. Rozptyl měřidla je větší než efekt.
+Proč: po #469 zašpiněné tělo **nepřerovnává nasazené bloky kódu** (`DiffBlockRow.geometry` se
+v úsecích s tiky neobjeví vůbec, v kontrolním úseku má ~1 340), takže nasazených je pořád 18, ať má
+diff dvanáct souborů nebo sto. Zbývají struktury řádků a dotazy na identitu, a ty jsou po jednom
+levné. **Nula v počtech tedy znamená „ta práce se nedělá“, ne „ušetřilo se X ms“**; doložit ms by
+chtělo scénu s řádově víc nasazenými bloky (ostrý diff přes `PRISM_DIFF_DIR`) a to **neuděláno**.
+
+**Jak se na to dosáhlo**, protože předchozí dvě kola na to nedosáhla: `Self._printChanges()` v těle
+diffu (privátní API, v repu **nezůstalo** — je to ablace) ukázalo `@self, _layout changed` a **nikdy
+keypath**, tedy že si tělo tu mapu nečte samo. Pak ablace celého `forget`u, která oddělila
+`isRefreshing` (kořen okna) od diffu. A pak odběr nad **mapami, které tik prořezává**, místo nad
+čteními, která dělá diff — to je ten krok, který dal jméno. Druhé kolo se ptalo „co čte diff“
+a odpověď „nic z toho“ byla **pravdivá**: `diffSearches` čte `searchActions`
+v `PullRequestDetailView`u, tedy kód, který skládá **hodnotu** diffu.
+
+**Zapsaná mez**: hodnota `DiffView`u se nikdy neshodne, protože `layout` je `Binding` stavěný
+v computed property — takže probuzení kteréhokoli čtení „při skládání“ stojí celé tělo diffu.
+Odstranit tu churn se **nezkoušelo**: po opravě nad nečinným diffem nic nebudí, takže by to bylo
+zlevňování něčeho, co se nedělá. Je to ale kandidát na příčinu u **#541**. A není změřené, jestli
+SwiftUI v takovém případě překládá celé tělo rodiče, nebo jen tu jeho část — sonda umí říct jedině
+to, že se počitadlo `PullRequestDetailView`u **nehne**.
+
+Testů **5132** v 503 suitách, zelené s jedním známým nálezem (`FontMetricTests`, záměr z #550);
+nové je jedno tvrzení — `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi**
+osmatřiceti mapami, ne jen nad tou jednou, aby další neporovnatelná hodnota spadla tam, ne v okně.
+**Ověřeno vložením regrese**: bezpodmínečný zápis zpátky → `tichý tik probudil diffSearches`, a spadne
+u toho právě jen tenhle test. Do sondy přibyla osa `PRISM_BIG_FILES` (počet syntetických souborů —
+cena je lineární v počtu řádků, takže z jedné velikosti scény se to nepozná) a součet CPU.
+
+**Na obrazovce není co vidět**: v `App/` je to jeden `if` v úklidu po tiku a nad nečinným diffem
+z něj plyne, že se **nepřekresluje** to, co se do #421 překreslovalo zbytečně.
 
 ## #483 — Emotikony s našeptáváním shortcodů ve třech polích, která posílají text ven
 

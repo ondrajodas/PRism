@@ -756,9 +756,16 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
 - **`@Observable` sleduje po vlastnostech, takže hrubá vlastnost je výkonová vada** (#469, znovu
   #472) — co se mění jinak často a čte jinde, patří do **vlastní** vlastnosti. Naopak **psát „jen
   změnu“ nemá smysl**: zápis téže hodnoty toolchain nehlásí (pinuje to `PollObservationTests`).
+  **Neplatí to ale u hodnoty, kterou nejde porovnat** (#421) — mapa s hodnotou, která `Equatable`
+  není (typicky `@Observable` **třída**), se neporovnává, takže ji bezpodmínečný zápis hlásí **i
+  když je prázdná**. Tam se zapisuje jen při změně, a je to výjimka, ne nový vzor: `forget(whatIsNotIn:)`
+  přiřazuje osmatřicet map a jedině `diffSearches` má tuhle podmínku. Hlídá to
+  `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** z nich
+  ([čím to bylo v okně](docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
   **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421) — kdo to zkusí
-  znovu, ať měří **čas**, ne počty průchodů. **#421 je pořád otevřené a čísla z jeho prvního kola
-  neplatí** (měřidlo lhalo dvěma způsoby, opraveno v druhém kole); než na něj sáhneš, přečti si
+  znovu, ať měří **čas**, ne počty průchodů. **#421 je zavřené, ale čísla z jeho prvního kola
+  neplatí** (měřidlo lhalo dvěma způsoby, opraveno v druhém kole) a **u téhle vady se čas naměřit
+  nepodařilo** — počty jsou nula proti 12 530, kdežto CPU nerozliší nic; než na to sáhneš, přečti si
   [*Co zašpiní tělo `DiffView`u*](docs/testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421)
   a [čísla u #472](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
 - **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — vlastní práce aplikace je ve
