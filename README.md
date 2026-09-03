@@ -2395,15 +2395,16 @@ Ten pak čte `bin/run.sh` a odvodí z něj celou identitu instance:
 |---|---|---|---|
 | bundle ID | `com.ondrajodas.prism` | `com.ondrajodas.prism.a` | `com.ondrajodas.prism.testhost` |
 | v `/Applications` | `PRism.app` | `PRism-a.app` | neinstaluje se |
-| jméno v Docku | `PRism` | `PRism-a` | `PRism` |
-| cache | `~/Library/Application Support/PRism/` | `…/PRism-a/` | `…/PRism/`, tedy sdílená |
+| jméno v Docku | `PRism` | `PRism-a` | `PRism-testhost` |
+| cache | `~/Library/Application Support/PRism/` | `…/PRism-a/` | `…/PRism-testhost/` |
 | build | `build.noindex/` v tom stromu | vlastní, cesta je relativní | `build.noindex/` v tom stromu |
 
 Bez souboru `.prism-slot` se nemění vůbec nic, takže hlavní strom zůstává tou aplikací,
 která se používá. Slotů může být víc; slot je libovolný řetězec z písmen, číslic a pomlček,
 protože jde do bundle ID.
 
-**Třetí sloupec je testovací host a od #411 má vlastní doménu.** `bin/run.sh` předává
+**Třetí sloupec je testovací host a od #411 má vlastní doménu, od #421 i vlastní cache.**
+`bin/run.sh` předává
 `PRISM_SLOT` (a `PRISM_SLOT_LABEL`) na příkazové řádce **vždycky, i prázdné**, takže identitu
 aplikace stanoví ten skript; **výchozí hodnota v `project.pbxproj` je `.testhost`**, a platí
 tedy pro každý build, který si o identitu neřekl — pro `xcodebuild test` i pro samotné
@@ -2413,12 +2414,19 @@ se doopravdy používá** — po jednom běhu tam takhle ležela uložená velik
 u vymyšlených PR (`cli/cli#1` s časem z roku 1970) a poslední viděné vydání. Podrobnosti,
 včetně zamítnutých cest, jsou v [`docs/testovani.md`](docs/testovani.md).
 
-Dvě věci, které z toho plynou. **`bin/slot-cleanup.sh testhost` po té doméně uklidí** — je to
-slotové jméno, takže na ni platí tentýž skript jako na sloty. A **`xcodebuild test` po
+Dvě věci, které z toho plynou. **`bin/slot-cleanup.sh testhost` po hostiteli uklidí** — je to
+slotové jméno, takže na něj platí tentýž skript jako na sloty. A **`xcodebuild test` po
 `bin/run.sh` (nebo naopak) nespustí překlad znovu**: měřeno, přeložily se nula souborů, jen se
-přepsal `Info.plist` a podepsal bundle. **Cache sdílená zůstává** — `CFBundleName` se nemění,
-takže testovací host pořád píše `sessions.json` do cache hlavní instance (viz `RunningSessions`);
-#411 řešilo `UserDefaults`, ne cache.
+přepsal `Info.plist` a podepsal bundle.
+
+**Cache dostal hostitel u #421, a nebyla to kosmetika.** #411 dalo výchozí hodnotu jen
+`PRISM_SLOT`u; `PRISM_SLOT_LABEL` zůstal prázdný, takže `CFBundleName` vyšlo `PRism` — a **kořen
+cache si aplikace bere z `CFBundleName`**. `xcodebuild test` tedy pouštěl celou aplikaci nad cache
+hlavní instance: od #527 si při každém běhu testů **obnovil otevřené záložky**, dotáhl k nim detail
+a diff **skutečnými** dotazy na `gh`, vykreslil je ve svém okně a psal do `tabs.json`
+i `sessions.json` (viz `RunningSessions`). Kromě té škody to **rozbíjelo měření**: průchody těly
+z jeho okna se přičítaly k sondám, protože diagnostika kreslení je jedna na proces. Podrobnosti
+i naměřený rozdíl jsou v [`docs/testovani.md`](docs/testovani.md).
 
 **Kořen cache si aplikace odvozuje z `CFBundleName`**, ne z konstanty — proto má slot vlastní
 konfiguraci, klony i uložené nálezy. Je to ta podstatná část: build s rozbitou persistencí

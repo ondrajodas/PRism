@@ -757,8 +757,9 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   #472) — co se mění jinak často a čte jinde, patří do **vlastní** vlastnosti. Naopak **psát „jen
   změnu“ nemá smysl**: zápis téže hodnoty toolchain nehlásí (pinuje to `PollObservationTests`).
   **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421) — kdo to zkusí
-  znovu, ať měří **čas**, ne počty průchodů. **#421 je pořád otevřené**; než na něj sáhneš, přečti
-  si [*Co zašpiní tělo `DiffView`u*](docs/testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421)
+  znovu, ať měří **čas**, ne počty průchodů. **#421 je pořád otevřené a čísla z jeho prvního kola
+  neplatí** (měřidlo lhalo dvěma způsoby, opraveno v druhém kole); než na něj sáhneš, přečti si
+  [*Co zašpiní tělo `DiffView`u*](docs/testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421)
   a [čísla u #472](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
 - **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — vlastní práce aplikace je ve
   `sample`u **~1,5 %** hlavního vlákna, takže **napřed změř, která část scénáře je drahá**
@@ -890,8 +891,8 @@ Zásady, které platí všude:
   `performAsCurrentDrawingAppearance`; „kdo smí sáhnout na globál“ se tvrdí nad **zdrojáky**
   (`GlobalAppearanceTests`,
   [proč](docs/testovani.md#globální-stav-procesu-se-v-testech-neměří-367)). Tentýž kořen má
-  **čtyři podoby** a každá už jednou udělala `main` **falešně červený**; u každé je helper, který
-  se místo globálu bere:
+  **pět podob** a každá už jednou udělala `main` falešně červený, nebo **vyrobila falešné měření**;
+  u každé je helper nebo jedna hodnota v projektu, která se místo globálu bere:
 
   - **`UserDefaults`, a ten přežije běh** (#411) — výchozí `PRISM_SLOT` v projektu je
     `.testhost`, takže `@AppStorage` ani `UserDefaults.standard` nepíšou do nastavení, které se
@@ -899,6 +900,14 @@ Zásady, které platí všude:
     pojmenovaná doména je sdílená **napříč procesy**, a úklid po sobě); hlídají to
     `ProcessPreferencesTests`
     ([podrobnosti](docs/testovani.md#userdefaults-je-tentýž-případ-a-měl-tři-projevy-411)).
+  - **Cache hostitele, a #411 to nechalo otevřené** (#421) — identita hostitele stojí na **dvou**
+    hodnotách a #411 dalo výchozí jen jedné: `PRISM_SLOT` (bundle ID) měl `.testhost`, kdežto
+    `PRISM_SLOT_LABEL` (`CFBundleName`, tedy **kořen cache**) zůstal prázdný, takže `xcodebuild
+    test` pouštěl aplikaci nad cache hlavní instance. Od #527 to i **měřilo**: host si obnovil
+    záložky uživatele, dotáhl k nim diff skutečnými dotazy na `gh` a jeho průchody tělem se
+    přičetly k sondě #421 (`DiffView` 26 proti 14, a nereprodukovatelně). Hlídá to
+    `ProcessPreferencesTests` **dvěma** tvrzeními — kořen cache za běhu a `PRISM_SLOT_LABEL`
+    v `project.pbxproj` ([rozbor](docs/testovani.md#cache-hostitele-je-čtvrtý-projev-téhož-421)).
   - **Metrika písma se čte na jednom místě** (#407) — `NSFont` v testovacím hostu pod zátěží
     vydá **přechodně nepoužitelnou metriku** a sazba tím písmem navíc **položí proces**. Vydává
     ji proto **`FontMetric`**; hlídají to dvě tvrzení nad zdrojáky ve `FontMetricTests`
@@ -918,8 +927,9 @@ Zásady, které platí všude:
     `UnanimatedWindowTests` ([rozbor i jak se zaseknutý běh pozná od `Early unexpected
     exit`](docs/testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)).
 
-  Šest grepů. Pět **musí vyjít prázdných** (guard soubory se odečítají — hledané řetězce v nich
-  stojí jako literály), šestý v `App/` **musí vypsat jen `FontMetric.swift`**:
+  Sedm grepů. Pět **musí vyjít prázdných** (guard soubory se odečítají — hledané řetězce v nich
+  stojí jako literály), šestý v `App/` **musí vypsat jen `FontMetric.swift`** a sedmý je **výčet
+  k posouzení**: žádná hodnota v něm nesmí být prázdná:
 
   ```bash
   grep -rn 'NSApp.appearance\|NSApplication.shared.appearance' Tests |
@@ -937,6 +947,8 @@ Zásady, které platí všude:
   grep -rn 'orderFront(\|orderFrontRegardless(\|makeKeyAndOrderFront(' Tests |
       grep -vE ':[0-9]+: *//' | grep -v UnanimatedWindow
   grep -rn 'maximumAdvancement\|defaultLineHeight\|boundingRectForFont' App | grep -vE ':[0-9]+: *//'
+  # Výčet k posouzení (#421): prázdná hodnota znamená, že hostitel testů pracuje v cache aplikace.
+  grep -n 'PRISM_SLOT\b\|PRISM_SLOT_LABEL' PRism.xcodeproj/project.pbxproj
   ```
 - **Jak se v tomhle repu měří, je v [`docs/testovani.md`](docs/testovani.md)** — a než začneš
   měřit, přečti si to, protože každá z těch věcí už jednou vyrobila falešný výsledek: test, který
@@ -952,6 +964,13 @@ Zásady, které platí všude:
   nástroj na **živý** záchvat nesmí měřit z runloopu hlavního vlákna, protože ten se do stavu
   čekání nedostane (#391, [rozbor](docs/architektura.md#diagnostika-kreslení-361)); a u cizího
   privátního API rozhoduje **pád v testu v hostu**, ne odhad z footprintu (#361).
+- **Usazení scény se pozná měřením, ne uplynulým časem** (#421, mění postup z #489) —
+  `spinMainRunLoop` je **synchronní smyčka držící hlavní actor**, takže rozvrhne okno, ale
+  rozdělanou práci scény (`.task`, dotažení, hodiny pollingu) k ní nepustí; ta se rozběhne teprve
+  v úseku, ve kterém sonda poprvé `await`ne, a **připíše se tomu úseku**. Čeká se proto na dvě tichá
+  kola počitadel (`settleUntilQuiet`), hodiny sondy musí **doopravdy spát** a k číslům patří **počet
+  dotazů na fake gateway**, aby se poznaly tiky, které si nikdo nevyžádal
+  ([rozbor](docs/testovani.md#dvě-věci-které-to-měřidlo-lhaly)).
 - **Měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“, netvrdí nic** (#478) — a vypadá
   u toho zeleně. Když měření končí větou „neopravovalo se nic“, patří k němu druhá otázka:
   **naměřilo by rozdíl, kdyby ta chyba byla?**

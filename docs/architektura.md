@@ -3721,6 +3721,12 @@ Věci, které se u toho nemají rozbít:
   vyhýbáme. Klíč je v `Info.plist` napevno, takže jeho absence není provozní stav, ale
   rozbitý bundle.
 
+  **Od #421 má vlastní kořen i testovací host** (`PRism-testhost`). Do té doby ho neměl, protože
+  `PRISM_SLOT_LABEL` měl v `project.pbxproj` prázdnou výchozí hodnotu — a `xcodebuild test` tím
+  pouštěl celou aplikaci nad cache hlavní instance: obnovoval její záložky, ptal se za ni `gh`
+  a psal jí `tabs.json` i `sessions.json`. Je to tentýž kořen jako #411 a #367; rozbor je
+  v [`docs/testovani.md`](testovani.md#cache-hostitele-je-čtvrtý-projev-téhož-421).
+
   Hlídá to test „Slot na cache hlavní instance nesáhne, ani jedním směrem“, který se ptá
   `contains` na obě strany. Chytá i past, do které by se spadlo připojením slotu bez
   oddělovače — `"PRism"` + `""` je pořád `"PRism"`.
@@ -8307,6 +8313,14 @@ průchodů tělem za deset tiků, zato dvě nová views 9 + 9, **celkem tedy ví
 měřit **čas**, ne počty. Rozbor je v [`docs/testovani.md`, *Co zašpiní tělo
 `DiffView`u*](testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421).
 
+**Čísla v odstavci výš jsou z rozbitého měřidla** (druhé kolo #421 našlo dvě nezávislé
+kontaminace), ale závěr platí dál: bylo to A/B nad toutéž scénou v tomtéž běhu, takže kontaminace
+byla v obou ramenech stejná a rozdíl na diffu byl v obou **nula**. Dnešní čísla nad týmž scénářem
+jsou `DiffView` 10 a `DiffRow.id` 4 140 za deset tiků — a přidalo se k tomu jedno tvrzení navíc:
+`@Observable` ohlásí **zápis**, ne rozdíl proti poslednímu snímku, takže `ContentView` dostane dva
+průchody za tik **i tehdy, když se `isRefreshing` přepne a vrátí v jednom nepřerušeném úseku**.
+Suprese se uplatní na zápis téže hodnoty, ne na dvojici tam-a-zpátky.
+
 **Co tím opravené není**: sedm průchodů tělem `DiffView` a tisíc řádků diffu za dvacet tichých
 tiků zbývá, a cena tiku spadla jen o třetinu, přestože průchodů tělem ubylo šedesátkrát. Zbytek
 leží v **rozvržení okna**, ne v tělech — vlastní práce aplikace je ve `sample`u té fáze **~1,5 %**
@@ -12031,9 +12045,11 @@ Jak to drží pohromadě:
   `kinfo_proc` vypadala jako platná odpověď.
 - **Záznam nese i vlastníka**, tedy identitu instance aplikace, která běh spustila — a **sirotek je
   jen ten, jehož vlastník už neběží.** Bez toho by úklid zabíjel session běžící aplikaci pod
-  rukama, a naráží na to `xcodebuild test`: testovací host je tentýž bundle, takže má stejné
-  `CFBundleName` a sahá do **téže cache** jako aplikace v `/Applications`. Kontrola vlastníka je
-  zároveň to, co dovoluje nechat v souboru značky cizí instance a nemazat je.
+  rukama. **Do #421 na to naráželo i `xcodebuild test`**: testovací host má tentýž `Info.plist`
+  a `PRISM_SLOT_LABEL` měl v projektu prázdnou výchozí hodnotu, takže vyšlo `CFBundleName = PRism`
+  a host sahal do **téže cache** jako aplikace v `/Applications`. Dnes má vlastní kořen
+  (`PRism-testhost`), takže tenhle případ zbývá už jen pro dvě instance téhož slotu. Kontrola
+  vlastníka je zároveň to, co dovoluje nechat v souboru značky cizí instance a nemazat je.
 - **Rozhodnutí je čistá funkce** `Policy.orphanVerdict(for:ownerNow:processNow:)` se třemi
   výsledky — `keep` (živý vlastník), `kill` (vlastník pryč a identita se shoduje), `discard`
   (proces doběhl nebo jeho PID dostal někdo jiný). `RunningSessions` dělá jen I/O.

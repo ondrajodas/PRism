@@ -95,9 +95,14 @@ final class RunningSessions: @unchecked Sendable {
     /// běžný stav (aplikace se obvykle zavírá normálně, takže po ní nic nezůstává) a start by za
     /// něj platil sáhnutím na disk i zakládáním složky, která by jinak nemusela vzniknout. Za
     /// druhé je to jediná ochrana proti tomu, aby úklid **přepsal značku cizí instance**, která
-    /// vznikla mezi čtením a zápisem: `xcodebuild test` spouští testovacího hosta nad **tou samou
-    /// cache** jako aplikaci v `/Applications`, takže by běh testů uměl zahodit značku právě
-    /// spuštěné session — a její sirotek by pak neodešel nikdy.
+    /// vznikla mezi čtením a zápisem — dvě instance téhož slotu nad jednou cache jsou stav, který
+    /// nic nezakazuje, a druhá z nich by uměla zahodit značku právě spuštěné session; její sirotek
+    /// by pak neodešel nikdy.
+    ///
+    /// **Testovací host mezi ně od #421 nepatří.** Do té doby ano, a byl to ten hlavní případ:
+    /// `CFBundleName` se skládal z `PRISM_SLOT_LABEL` s prázdnou výchozí hodnotou, takže
+    /// `xcodebuild test` pouštěl aplikaci nad **tou samou cache** jako instalace v `/Applications`.
+    /// Dnes má host vlastní kořen (`PRism-testhost`) a hlídají to `ProcessPreferencesTests`.
     @discardableResult
     func reapOrphans() -> Int {
         lock.withLock {

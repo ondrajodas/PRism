@@ -5951,6 +5951,67 @@ vydal nulu, tedy „nezašpinilo se“ nad tím, co se právě zašpinilo). Je t
 **Na obrazovce není co vidět**: aplikace se nezměnila, přibyly jen sondy, jedno tvrzení
 a dokumentace.
 
+## #421, druhé kolo — čísla z prvního kola neplatila, protože měřidlo lhalo dvěma způsoby
+
+Druhé kolo mělo přeměřit základ (mezi tím se mergnulo #152 a další) a pokračovat po stopě „skáče
+výška plochy diffu“. Přeměření vydalo `DiffView=26` proti dřívějším 6, tedy na první pohled
+**čtyřnásobnou regresi** — a to bylo špatně. Regrese žádná není; rozbité bylo měřidlo, a to
+**dvakrát nezávisle**:
+
+- **Testovací host pracoval v cache aplikace.** `CFBundleName` skládal `PRISM_SLOT_LABEL`, který měl
+  v `project.pbxproj` **prázdnou** výchozí hodnotu, takže `xcodebuild test` pouštěl celou aplikaci
+  nad `~/Library/Application Support/PRism`. Od #527 si tím při každém běhu testů **obnovil otevřené
+  záložky uživatele**, dotáhl k nim detail i diff **skutečnými** dotazy na `gh` a vykreslil je ve
+  svém okně — a `RenderDiagnostics.current` je jedna hodnota na proces, takže se ty průchody tělem
+  přičetly k sondě. Poznalo se to podle `ContentView`u ve scénáři, ve kterém žádný `ContentView`
+  není, a podle **druhého** `DiffView`u o 52 bodů užšího (rail hlavního okna). Je to **čtvrtý projev
+  téhož kořene jako #367 a #411** a #411 to nechalo otevřené: identita hostitele stojí na dvou
+  hodnotách a výchozí dostala jen jedna.
+- **`spinMainRunLoop` drží hlavní actor.** Sonda se usazovala `spinMainRunLoop(seconds: 2)`, což je
+  synchronní smyčka: rozvrhne okno, ale rozdělanou práci scény na hlavním actoru (`.task` v detailu,
+  dotažení konverzace, značky `Prošlo`) k ní nepustí. Ta se rozběhla teprve v úseku, ve kterém sonda
+  poprvé `await`la — a to byl zrovna ten „s tiky“. K tomu `FakeTimeSource.sleep(for:)` se vrací
+  **hned**, takže smyčka `keepFresh()` startovaná `ContentView`em hořela tak rychle, jak jí hlavní
+  actor dovolil.
+
+**Po opravě jsou čísla opakovatelná do jedničky** a jeden závěr prvního kola je **vyvrácený**:
+
+| úsek | `DiffView` | `DiffRowView` | `DiffRow.id` | dotazů na `gh` |
+|---|---|---|---|---|
+| nečinnost, běh smyčky bez tiku, **úloha na hlavním actoru bez tiku** | 0 | 0 | 0 | 0 |
+| **10 tichých tiků** | **10** | **1 970** | **4 140** | 20 |
+| 10 tiků **bez zdržení** (`isRefreshing` se nestihne projevit) | 10 | 1 970 | 4 140 | 20 |
+| **10 tichých tiků, jen detail PR bez chromu okna** | **11** | **2 101** | **4 422** | 20 |
+
+- **Chrome okna cenu neztrojnásobuje** — bez hlavičky a stavového řádku je **tatáž**. „Pohon sedí
+  v hlavičce a ve stavovém řádku“ z prvního kola tedy neplatí; vzniklo to z toho, že cizí scéna
+  hostitele přispívala jen do jednoho ze dvou scénářů.
+- **Skoky výšky `623 → 639 → 623 → 655` patří usazování scény, ne tiku.** V úseku s tiky se
+  `viewportHeight` nezmění ani jednou. Stopa, na které první kolo skončilo, byla vedle.
+- **Není to `isRefreshing`** (nezdržený tik dá totéž), **není to `UserDefaults`** (nula změn domény
+  za úsek), **není to `availableWidth`** ani **kotva scrollu z #527** (ablace obojího dá totéž).
+- **Tik nezmění ve storu ani jedno pole**: nová sonda projde `Mirror`em **234** uložených polí
+  `AppStore`u i jeho vnořených objektů a po tiku se liší **jediné** — log dotazů na fake gateway.
+
+**Co z toho zbylo jako oprava v repu:** vlastní cache hostitele (`PRism-testhost`) a čtyři změny
+měřidla — usazení podle počitadel místo podle času, hodiny, které doopravdy spí, počet dotazů na
+`gh` u každého úseku a kontrolní úsek s úlohou na hlavním actoru. K tomu dvě tvrzení
+v `ProcessPreferencesTests` (kořen cache za běhu, `PRISM_SLOT_LABEL` nad `project.pbxproj`), obě
+ověřená vloženou regresí.
+
+**Zúžení pro třetí kolo je konkrétní a nepříjemné:** tělo `DiffView`u se přeloží **1× za tik, a
+všechny jeho vstupy jsou přitom shodné** (doloženo výpisem z těla — jedenáct identických řádek),
+kdežto tělo rodiče se nepřeloží vůbec. Zbývá `forget(whatIsNotIn:)` s pětadvaceti bezpodmínečnými
+přiřazeními map a **jméno toho, kdo z nich tělo zneplatní**; hledat se to musí **uvnitř** tiku, ne
+po něm, protože po tiku je stav totožný. **Issue proto zůstává otevřené.**
+
+Testů **5127**, všechny zelené — z toho **dvě nová tvrzení** a jedna nová sonda; dva starší testy
+(`SmokeTests.appPresentsItselfAsPRism`, `CacheLayoutTests`) se musely přepsat, protože tvrdily
+rovnost s `PRism`, což je zrovna ta vada.
+
+**Na obrazovce není co vidět**: aplikace se nezměnila, změnil se testovací host, sondy
+a dokumentace.
+
 ## #483 — Emotikony s našeptáváním shortcodů ve třech polích, která posílají text ven
 
 Okno má tři místa, kde se píše text pro GitHub: composer komentáře pod PR (#216), odpověď do vlákna
