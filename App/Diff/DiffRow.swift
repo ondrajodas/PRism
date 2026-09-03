@@ -105,8 +105,8 @@ enum DiffRow: Identifiable {
     ///   - inlineFindings: zavěsit **zakotvený** nález jako bublinu pod jeho řádek? Od #548 je to
     ///     zpátky výchozí místo nálezu (#503 ho na jednu verzi přesunulo do okraje vpravo) a okraj
     ///     je za přepínačem `Nálezy pod řádky` v liště. Nálezu **bez řádku** se to netýká: ten se
-    ///     v okraji nemá k čemu zarovnat, takže visí u hlavičky souboru vždycky — jinak by se
-    ///     zapnutým okrajem zmizel úplně.
+    ///     v okraji nemá k čemu zarovnat, takže visí u hlavičky souboru vždycky — se zapnutým
+    ///     okrajem by jinak zmizel úplně.
     ///   - threads: vlákna konverzace napříč diffem; vybírají se stejně jako nálezy.
     ///   - comments: moje rozdělané komentáře napříč diffem; vybírají se stejně.
     static func rows(
