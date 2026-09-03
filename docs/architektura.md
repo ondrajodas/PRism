@@ -3898,6 +3898,16 @@ Věci, které se u toho nemají rozbít:
   jinak **sám dotáhne z promisor remote** — takže „levná lokální kontrola“ chodí na síť,
   bez credential helperu, a fetch `refs/pull/<n>/head` pod ní se nikdy nespustí. Commit by
   pak v klonu ležel bez refu, který ho drží.
+- **A `merge-base --is-ancestor` potřebuje `GIT_NO_LAZY_FETCH=1` z téhož důvodu** (#517), jen tam
+  na tom záleží ještě víc: ptáme se ho zrovna na commit, který v cache **nemusí být** (po force
+  pushi je nedosažitelný, takže ho `fetch` nemusel přinést). Bez té proměnné by si ho `git` šel
+  hledat po síti — tedy pomalu, s naším timeoutem a přesně v tom případě, kvůli kterému se ptáme.
+  Odpověď má být **lokální**: co v cache není, se nemá jak ohraničit, a to je platná odpověď
+  (`BranchAncestry.unknown`).
+- **`merge-base --is-ancestor` odpovídá návratovým kódem, ne výstupem** (#517): `0` je předkem,
+  `1` není, cokoli jiného znamená „neznámý commit, rozbitý strom“. Trojice se proto **nedá složit
+  ze `succeeds`**, které druhé dva případy slévá do `false` — a věta o přepsané historii by pak
+  stála nad chybějícím objektem, tedy nad něčím, co se nezjistilo.
 - **Každé volání `gitu`, které může sáhnout na promisor remote, potřebuje credential
   helper.** Netýká se to jen `clone` a `fetch`: na partial klonu si bloby dotahuje
   i `worktree add`. Bez helperu skončí u privátního repa hláškou, kterou klasifikace
