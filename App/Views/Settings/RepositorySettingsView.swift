@@ -100,6 +100,17 @@ private struct RepositoryDetailView: View {
                 }
                 .pickerStyle(.radioGroup)
 
+                // Tříhodnotový jako odesílání (#517), a ze stejného důvodu: `false` u repa není
+                // totéž jako `nil` — repo, u kterého chci po pushi vždycky celé review, si to
+                // podrží i po přepnutí globálního defaultu.
+                Picker("Po pushi jen přírůstek", selection: config.incrementalAfterPush) {
+                    Text("Podle globálního nastavení (\(incrementName(settings.draft.global.incrementalAfterPush)))")
+                        .tag(Bool?.none)
+                    Text("Jen přírůstek").tag(Bool?.some(true))
+                    Text("Vždycky celý diff").tag(Bool?.some(false))
+                }
+                .pickerStyle(.radioGroup)
+
                 // `nil` je i tady vlastní volba, ne prázdno — ze stejného důvodu jako
                 // u režimu.
                 Picker("Jazyk nálezů", selection: config.findingsLanguage) {
@@ -113,7 +124,7 @@ private struct RepositoryDetailView: View {
                 Text(verbatim: repo.description)
                     .font(.headline)
             } footer: {
-                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou.")
+                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou. Přírůstek platí až od druhého kola — v prvním se čte celý diff tak jako tak, a stejně tak u revieweera, který nad předchozí hlavou nedoběhl.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -259,6 +270,10 @@ private struct RepositoryDetailView: View {
 
     private func publishingName(_ allowed: Bool) -> String {
         allowed ? "povoleno" : "zakázáno"
+    }
+
+    private func incrementName(_ enabled: Bool) -> String {
+        enabled ? "jen přírůstek" : "vždycky celý diff"
     }
 
     private func modeName(_ mode: ReviewMode) -> String {

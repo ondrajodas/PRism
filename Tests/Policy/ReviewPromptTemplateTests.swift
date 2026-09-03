@@ -57,7 +57,15 @@ struct ReviewPromptTemplateTests {
     /// `intent:` se sem předává výslovně a `Policy.reviewPrompt` na tom parametru **default
     /// nemá** — s `= nil` by obě produkční volání zůstala zelená a věta by se nepřipojila nikdy.
     private func compose(_ template: String, skill: String = "code-review", base: String = "bbbb2222") -> String {
-        Policy.reviewPrompt(template: template, skillID: skill, baseSha: base, intent: nil)
+        Policy.reviewPrompt(
+            template: template,
+            skillID: skill,
+            baseSha: base,
+            intent: nil,
+            // Přírůstek (#517) se sem předává výslovně ze stejného důvodu jako zadání: `Policy`
+            // na tom parametru **default nemá**, aby se nová věta nedala zapomenout připojit.
+            increment: nil
+        )
     }
 
     /// Tatáž cesta se zadáním. **Vlastní funkce, ne parametr `compose`** — tím by se cesta se
@@ -67,7 +75,13 @@ struct ReviewPromptTemplateTests {
         skill: String = "code-review",
         base: String = "bbbb2222"
     ) -> String {
-        Policy.reviewPrompt(template: template, skillID: skill, baseSha: base, intent: intentFile)
+        Policy.reviewPrompt(
+            template: template,
+            skillID: skill,
+            baseSha: base,
+            intent: intentFile,
+            increment: nil
+        )
     }
 
     // MARK: - Nic se nezměnilo
@@ -108,8 +122,11 @@ struct ReviewPromptTemplateTests {
     /// byla konstanta, kterou si náhled kreslil sám — a nová věta by v něm nebyla vidět.
     @Test("Připojovaná půlka je jedna funkce pro běh i pro náhled")
     func theAppendedHalfIsOneFunction() {
-        #expect(Policy.reviewPromptCore(intentPath: nil) == ReviewPromptTemplate.core)
-        let withIntent = Policy.reviewPromptCore(intentPath: intentFile.path(percentEncoded: false))
+        #expect(Policy.reviewPromptCore(intentPath: nil, increment: nil) == ReviewPromptTemplate.core)
+        let withIntent = Policy.reviewPromptCore(
+            intentPath: intentFile.path(percentEncoded: false),
+            increment: nil
+        )
         #expect(withIntent.hasPrefix(ReviewPromptTemplate.core + " "))
         #expect(withIntent.contains(intentFile.path(percentEncoded: false)))
         // A složený prompt se skládá **z ní**, ne z vlastní kopie věty.
@@ -126,7 +143,8 @@ struct ReviewPromptTemplateTests {
             template: ReviewPromptTemplate.standard,
             skillID: "code-review",
             baseSha: "bbbb2222",
-            intent: spaced
+            intent: spaced,
+            increment: nil
         )
 
         #expect(prompt.contains("/Users/x/Library/Application Support/PRism/worktrees/cli/cli/1-a.md"))

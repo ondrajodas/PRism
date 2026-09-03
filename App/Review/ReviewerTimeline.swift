@@ -66,6 +66,9 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         var loadedSkill: String?
         /// Proč nebylo zadání celé (#345) — **první** takový příznak.
         var intentGap: IntentGap?
+        /// Nad čím běh jel (#517) — **první** takové hlášení. `nil` = neohlásilo se nic, tedy
+        /// celý diff bez vysvětlování (viz `ReviewScope.belongsInTimeline`).
+        var scope: ReviewScope?
 
         struct Finish: Equatable, Sendable {
             let outcome: ReviewRunOutcome
@@ -88,6 +91,9 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             /// Zadání pro reviewera nebylo celé (#345). **Není to fáze běhu** — je to fakt
             /// o materiálu, se kterým běh začal, takže osu nikam neposouvá.
             case intentGap(IntentGap)
+            /// Nad čím běh jel (#517). **Není to fáze běhu** — je to fakt o tom, nad čím se
+            /// běží, takže osu nikam neposouvá; tatáž úvaha jako u `intentGap`.
+            case scope(ReviewScope)
             case finished(ReviewRunOutcome)
         }
     }
@@ -150,6 +156,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             digest.reportedFindings = count
         case .intentGap(let gap):
             if digest.intentGap == nil { digest.intentGap = gap }
+        case .scope(let scope):
+            if digest.scope == nil { digest.scope = scope }
         case .finished(let outcome):
             digest.finish = Digest.Finish(outcome: outcome, at: entry.at)
         }
@@ -190,7 +198,15 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
         // **Příznak zadání se za průběh nepočítá** (#345): je to fakt o materiálu, se kterým běh
         // začal, ne o tom, co běh dělal. Osa, ve které je jen on, je pořád osa bez průběhu — a
         // doplnit jí konec by z ní udělala dráhu, která tvrdí `doběhlo` nad prázdnými fázemi.
-        let progress = entries.contains { if case .intentGap = $0.kind { false } else { true } }
+        let progress = entries.contains {
+            switch $0.kind {
+            // **Ani příznak zadání (#345), ani rozsah přírůstku (#517)** — obojí je fakt
+            // o materiálu, se kterým běh začal, ne o tom, co běh dělal. Osa, ve které jsou jen
+            // tyhle dvě události, je pořád osa bez průběhu.
+            case .intentGap, .scope: false
+            default: true
+            }
+        }
         guard progress, !isFinished else { return }
         let hasFindings = entries.contains { if case .findings = $0.kind { true } else { false } }
         if !hasFindings, run.calledReportFindings {
@@ -252,6 +268,12 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
     /// s jakou běh začal — ne ta, kterou by přepsalo pozdější hlášení.
     var intentGap: IntentGap? { digest.intentGap }
 
+    /// Nad čím běh jel (#517). `nil` = neohlásilo se nic (celý diff bez vysvětlování).
+    ///
+    /// Počítá se **z osy**, jako `intentGap`, a ze stejného důvodu: s událostí to přežije restart,
+    /// takže tab `Průběh` tvrdí o starším běhu totéž, co tvrdil, když běžel.
+    var scope: ReviewScope? { digest.scope }
+
     mutating func record(_ progress: ReviewProgress, at time: Date) {
         switch progress {
         case .queued:
@@ -267,6 +289,8 @@ struct ReviewerTimeline: Identifiable, Equatable, Sendable {
             append(.findings(count: count), at: time)
         case .intentGap(let gap):
             append(.intentGap(gap), at: time)
+        case .scope(let scope):
+            append(.scope(scope), at: time)
         }
     }
 

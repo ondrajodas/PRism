@@ -547,7 +547,7 @@ struct PullRequestDetailView: View {
             jump: jump,
             findings: visibleFindings,
             dismissals: dismissals,
-            rechecks: recheck.statuses,
+            rechecks: findingStatuses,
             findingActions: findingActions,
             blockingCategories: blockingCategories,
             isRunning: store.isReviewing(pullRequest.id),
@@ -714,6 +714,16 @@ struct PullRequestDetailView: View {
     /// znamená, že kontrola neběžela nebo pro tuhle hlavu neplatí — a odznaky pak nejsou.
     private var recheck: Policy.RecheckReport {
         store.recheckReport(for: pullRequest.id)
+    }
+
+    /// Odznaky u nálezů (#150, #517) — **jedna mapa do všech tří míst**, která nálezy kreslí.
+    ///
+    /// Od #517 umí verdikt o nálezu přinést dvojí běh: kontrola nálezů a přírůstkové review.
+    /// Skládá je `Policy.findingStatuses`, tedy jedno místo — dvě čtení by znamenala, že u nálezu
+    /// stojí jeden odznak a ve větě nad diffem druhý. Věta v hlavičce zůstává na `recheck` výš:
+    /// mluví o **kontrole**, ne o odznacích.
+    private var findingStatuses: [FindingKey: RecheckStatus] {
+        Policy.findingStatuses(of: store.reviewRecord(for: pullRequest.id), head: store.head(of: pullRequest.id))
     }
 
     /// Odmítnutí nálezu (#113) — jedno místo pro bubliny u kódu i pro tabulku v panelu.
@@ -917,7 +927,7 @@ struct PullRequestDetailView: View {
     /// **i** procházení — dvě volání `Policy.groups` by se mohla rozejít v tom, co je jedno
     /// místo, a lišta by pak počítala něco jiného, než na co skáče.
     private var findingGroups: [FindingGroup] {
-        Policy.groups(of: visibleFindings, dismissals: dismissals, rechecks: recheck.statuses)
+        Policy.groups(of: visibleFindings, dismissals: dismissals, rechecks: findingStatuses)
     }
 
     /// Skok na další nebo předchozí nález (#187).
@@ -1499,7 +1509,7 @@ struct PullRequestDetailView: View {
             pullRequest: pullRequest.id,
             findings: visibleFindings,
             dismissals: dismissals,
-            rechecks: recheck.statuses,
+            rechecks: findingStatuses,
             blockingCategories: blockingCategories,
             isRunning: store.isReviewing(pullRequest.id),
             clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },

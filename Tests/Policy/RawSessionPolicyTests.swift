@@ -392,6 +392,8 @@ struct RawSessionStateTests {
             loadedSkill: nil,
             intentGap: nil,
             entries: [],
+            increment: nil,
+            wholeReason: nil,
             isConfigured: true
         )
     }

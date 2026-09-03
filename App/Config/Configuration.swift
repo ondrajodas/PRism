@@ -137,6 +137,21 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     ///
     /// **Globálně, ne per repo**: který nástroj čte issues, z repozitáře neplyne.
     var issueTextTool: String?
+    /// Po pushi se reviewer ptá **jen na přírůstek** a staré nálezy dostane jako materiál (#517).
+    ///
+    /// **Výchozí zapnuto**, a je to jediná výchozí hodnota v tomhle souboru, která přidává
+    /// chování — proto k ní patří důvod: přírůstek nic neztrácí. Nálezy z minula se přenášejí na
+    /// novou hlavu s odznakem `trvá / vyřešeno / nejasné`, a co běh neposoudil, zůstane v okně
+    /// jako `bez odpovědi`. Vypnuto by proti tomu znamenalo platit za druhé přečtení celého diffu
+    /// a k tomu **přijít** o odpověď na „co ze starých nálezů trvá“ — dnes ji dává až kontrola
+    /// (#150), tedy další session.
+    ///
+    /// Že je to pravda i v provozu, drží dvě pojistky v `Policy.reviewScope`: bez doběhlého běhu
+    /// z minula a bez společné historie se jde na celé review, a v `Průběhu` je vidět proč.
+    ///
+    /// **Per repo se přebít dá** (jako režim nebo limit): velké repo s dlouhými PR z toho těží
+    /// nejvíc, malé se v prvním kole přečte celé tak jako tak.
+    var incrementalAfterPush: Bool
     /// Co se má hlásit notifikací (#86). Jen globálně — viz `NotificationSettings`.
     var notifications: NotificationSettings
 
@@ -160,6 +175,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         cacheBudgetMegabytes: Int,
         model: String?,
         issueTextTool: String? = nil,
+        incrementalAfterPush: Bool = true,
         notifications: NotificationSettings = NotificationSettings()
     ) {
         self.sources = sources
@@ -181,6 +197,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.cacheBudgetMegabytes = cacheBudgetMegabytes
         self.model = model
         self.issueTextTool = issueTextTool
+        self.incrementalAfterPush = incrementalAfterPush
         self.notifications = notifications
     }
 
@@ -267,6 +284,14 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // se text issue nikdy nedotáhne a v okně bude stát „nástroj není nastavený“ nad souborem,
         // ve kterém nastavený je.
         issueTextTool = try container.decodeIfPresent(String.self, forKey: .issueTextTool)
+        // Chybějící klíč = výchozí, tedy **zapnuto** (#517). Rozbitá hodnota se ale nesráží na
+        // výchozí, jako u režimu a odesílání, nýbrž na **`false`** — a je to tentýž princip, ne
+        // výjimka z něj: sráží se na **bezpečnou stranu**, a ta je tady opačná než default. Celé
+        // review přečte víc kódu, takže překlep v souboru nesmí skončit tím, že se přírůstkově
+        // přeskočí něco, co nikdo nečetl.
+        incrementalAfterPush = container.contains(.incrementalAfterPush)
+            ? ((try? container.decode(Bool.self, forKey: .incrementalAfterPush)) ?? false)
+            : standard.incrementalAfterPush
         // Chybějící klíč = výchozí (všechno zapnuté). Rozbitý obsah řeší `NotificationSettings`
         // sám, po jednotlivých přepínačích — celá sekce se kvůli jednomu překlepu zahazovat
         // nemá, jinak by se s ním vypnulo i to, co je napsané správně.
@@ -296,6 +321,11 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// `nil` = ber globální. Velké repo potřebuje delší limit a je to vlastnost **repa**, ne
     /// člověka — proto to má override, na rozdíl od promptu, pohledu na diff a vzhledu okna.
     var reviewTimeoutMinutes: Int?
+    /// `nil` = ber globální (#517). Vyplněná hodnota znamená „řekl jsem si o tohle“ — a `false`
+    /// u repa se proto **nesmaže** jako „shodné s globálním“, stejně jako u odesílání: repo, u
+    /// kterého chci po pushi vždycky celé review, si to má podržet i po přepnutí globálního
+    /// defaultu.
+    var incrementalAfterPush: Bool?
 
     init(
         mode: ReviewMode? = nil,
@@ -303,7 +333,8 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         findingsLanguage: FindingsLanguage? = nil,
         skills: [String]? = nil,
         blockingCategories: [String]? = nil,
-        reviewTimeoutMinutes: Int? = nil
+        reviewTimeoutMinutes: Int? = nil,
+        incrementalAfterPush: Bool? = nil
     ) {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
@@ -311,6 +342,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         self.skills = skills
         self.blockingCategories = blockingCategories
         self.reviewTimeoutMinutes = reviewTimeoutMinutes
+        self.incrementalAfterPush = incrementalAfterPush
     }
 
     /// Tolerantní ze stejného důvodu jako `GlobalConfig`, a tady na tom záleží nejvíc:
@@ -347,6 +379,15 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         // a číslo mimo meze se drží syrové a srazí se až při použití. Přísnost jako u režimu tu
         // nemá co chránit — delší limit nic nespustí a nic neodešle, jen dovolí běhu doběhnout.
         reviewTimeoutMinutes = try container.decodeIfPresent(Int.self, forKey: .reviewTimeoutMinutes)
+        // Jako na globální úrovni (#517): chybějící klíč je „ber globální“, kdežto **rozbitá
+        // hodnota se srazí na `false`**, tedy na celé review. Vzít u ní globální hodnotu by
+        // znamenalo, že překlep v repu, u kterého jsem si přírůstek zakázal, ho zapne.
+        if container.contains(.incrementalAfterPush) {
+            incrementalAfterPush = (try? container.decode(Bool.self, forKey: .incrementalAfterPush))
+                ?? false
+        } else {
+            incrementalAfterPush = nil
+        }
     }
 }
 
@@ -436,7 +477,8 @@ struct Configuration: Codable, Equatable, Sendable {
             // by neměl kdo pojmenovat.
             reviewTimeout: Policy.reviewTimeout(
                 minutes: overrides?.reviewTimeoutMinutes ?? global.reviewTimeoutMinutes
-            )
+            ),
+            incrementalAfterPush: overrides?.incrementalAfterPush ?? global.incrementalAfterPush
         )
     }
 
@@ -496,4 +538,7 @@ struct ResolvedConfig: Equatable, Sendable {
     /// Limit jednoho běhu (#320), **už sražený do mezí** — kdo si ho odsud vezme, nemá co dál
     /// kontrolovat. Předává se do `ReviewRequest`, ne čte v runneru.
     let reviewTimeout: Duration
+    /// Smí se po pushi ptát jen na přírůstek (#517)? Rozhodnutí z toho skládá
+    /// `Policy.reviewScope` — tady je jen brána, kterou si repo přebít smí.
+    let incrementalAfterPush: Bool
 }

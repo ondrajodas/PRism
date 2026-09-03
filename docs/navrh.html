@@ -11239,7 +11239,7 @@ er adding @template-covariant TValue to Basket::items().</div>
         <div class="doc-head">
           <div class="doc-where"><span>Pull request</span><b>Průběh</b></div>
           <h2>Průběh</h2>
-          <p class="doc-lede">Co reviewery dělaly. Dvě vrstvy jedné obrazovky: dráha s fázemi (07) a živý výpis kroků, který do ní přibyl (20).</p>
+          <p class="doc-lede">Co reviewery dělaly. Dvě vrstvy jedné obrazovky: dráha s fázemi (07) a živý výpis kroků, který do ní přibyl (20). Co dráha řekne o běhu jen nad přírůstkem, je v 46.</p>
           <nav class="doc-tabs" aria-label="Záložky pull requestu">
             <a class="doc-tab" href="#pr-prehled" data-page="pr-prehled">Přehled</a>
             <a class="doc-tab" href="#pr-soubory" data-page="pr-soubory">Změněné soubory</a>
@@ -12523,6 +12523,253 @@ Secret Client
           <span>Vestavěný terminál by znamenal, že se z okna dá spustit <code>gh pr merge</code>
           i <code>git push</code> — tedy že tvrdá podmínka č. 1 přestane platit a nepůjde ji
           uhlídat testem, protože ta cesta nevede přes kód aplikace. Tohle je totéž bez té ceny.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================== 46 ==================================== -->
+  <section class="section" id="s46">
+    <div class="section-head">
+      <div class="eyebrow">46 — Průběh · automat po pushi</div>
+      <h2>Po pushi se reviewer ptá jen na přírůstek — a na to, co ze starých nálezů trvá</h2>
+      <p class="muted">
+        <b>Dneska</b> automat po každém pushi pouští celé review znovu. Reviewer projde tentýž
+        diff podruhé, staré nálezy nahlásí jako nové a odpověď na otázku <em>„spravily to nové
+        commity?“</em> se musí koupit zvlášť — vlastní session kontroly nálezů.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: po pushi dostane reviewer <b>diff jen nových commitů</b>
+        (<code>git diff &lt;minulá hlava&gt;...HEAD</code>, tentýž rozsah, jaký umí ukázat tab
+        <em>Změněné soubory</em>) a k tomu <b>nálezy z minula jako materiál v souboru</b>. Z jednoho
+        běhu tak vypadne obojí: <b>nové nálezy v přírůstku</b> a <b>verdikt o starých</b>. Staré se
+        přitom neztrácejí — přepíšou se na novou hlavu s odznakem <em>pořád platí</em>,
+        <em>vyřešeno</em>, <em>nejasné</em>, nebo zůstanou <em>bez odpovědi</em>.
+      </p>
+      <p class="muted">
+        <b>Rozhoduje se to na reviewera, ne na review</b>, a jsou tři důvody, po kterých se jde
+        na celý diff: první kolo nad touhle hlavou, reviewer, který minule <b>nedoběhl</b> (kód
+        nepřečetl, takže by přírůstek přeskočil něco, o čem nikdo nic neřekl), a <b>force push bez
+        společné historie</b>. Ten poslední se od <a class="jump" href="#s36">sekce 36</a> bude dít
+        pravidelně, protože aplikace umí vlastní větev přetlačit — a v dráze je pak vidět
+        <b>proč</b>. Dráhy jsou ty ze <a class="jump" href="#s07">sekce 07</a>, jen jim v hlavičce
+        přibyla jedna kapsle a pod nimi jedna věta.
+      </p>
+      <p class="muted">
+        <b>Routing reviewerů</b> (kapsle <em>přeskočeno</em>) a <b>odklad velkých PR do tichých
+        hodin</b> (kapsle <em>odloženo na noc</em>) jsou zakreslené tady, ale patří k dalším dvěma
+        issues téže skupiny. Dráha je pro všechny tři totéž místo, proto stojí v jednom obrázku.
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · tab Průběh po pushi: přírůstek, přeskočený, odložený a celý běh</div>
+        <div class="frame flat">
+          <div class="lanes">
+            <div class="lane">
+              <header>
+                <span class="nm">php-review</span>
+                <span class="pill ok">doběhlo</span>
+                <span class="pill run">přírůstek</span>
+                <span class="meta">proti 4f2ac91 → 9c1de02</span>
+                <span class="sp"></span>
+                <span class="meta">0:48 · 0,12 $ · 4 kola</span>
+              </header>
+              <div class="phases">
+                <span class="ph done" style="flex: 0 0 16%;">session ✓</span>
+                <span class="ph done" style="flex: 1;">prochází kód · 21 kroků ✓</span>
+                <span class="ph done" style="flex: 0 0 20%;">hlásí nálezy 1 ✓</span>
+              </div>
+              <div class="last">Doběhlo · <b>1 nález</b>.</div>
+              <div class="last" style="padding-top: 0;">
+                <b>1 nový nález v přírůstku</b> · 2 starých trvá · 1 vyřešených pushem ·
+                1 bez odpovědi.<br>
+                <span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3);">Přírůstek 0,12 $ proti 0,82 $ za celý běh v 1. kole.</span>
+              </div>
+            </div>
+
+            <div class="lane">
+              <header>
+                <span class="nm">security-review</span>
+                <span class="pill idle">přeskočeno</span>
+                <span class="meta">routing: žádný soubor z <code>src/Auth/**, src/Crypto/**, *.env*</code></span>
+                <span class="sp"></span>
+                <span class="meta">0,00 $</span>
+              </header>
+              <div class="phases">
+                <span class="ph idle" style="flex: 1;">nepustilo se — pravidlo repa</span>
+              </div>
+              <div class="last">Pustit ručně jde vždycky: <span class="mini">Pustit přesto</span></div>
+            </div>
+
+            <div class="lane">
+              <header>
+                <span class="nm">docs</span>
+                <span class="pill stale">odloženo na noc</span>
+                <span class="meta">2 790 řádků nad prahem 1 500 · nikdo na PR nečeká</span>
+                <span class="sp"></span>
+                <span class="meta">poběží 23:00</span>
+              </header>
+              <div class="phases">
+                <span class="ph idle" style="flex: 1;">čeká na tiché hodiny</span>
+              </div>
+              <div class="last">Otevřít PR teď = pustit hned; odklad platí jen dokud se na PR nedívám. <span class="mini">Pustit teď</span></div>
+            </div>
+
+            <div class="lane">
+              <header>
+                <span class="nm">perf-review</span>
+                <span class="pill ok">doběhlo</span>
+                <span class="meta">celý diff — od minula tu není jeho doběhlý běh, takže není od čeho odpočítávat</span>
+                <span class="sp"></span>
+                <span class="meta">2:11 · 0,74 $ · 12 kol</span>
+              </header>
+              <div class="phases">
+                <span class="ph done" style="flex: 0 0 14%;">session ✓</span>
+                <span class="ph done" style="flex: 1;">prochází kód · 63 kroků ✓</span>
+                <span class="ph done" style="flex: 0 0 20%;">hlásí nálezy 0 ✓</span>
+              </div>
+              <div class="last">Doběhlo a nahlásilo prázdný seznam, tedy čisto.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · tab Nálezy po tomtéž běhu: nový nález vedle přenesených</div>
+        <div class="frame flat">
+          <div class="ftable">
+            <div class="fcols">
+              <span></span>
+              <span class="srt">závažnost ↓</span>
+              <span>shrnutí</span>
+              <span>místo</span>
+              <span>reviewer · kategorie</span>
+              <span></span>
+            </div>
+
+            <div class="frow crit">
+              <span class="bar"></span>
+              <span><span class="pill crit">blokuje</span></span>
+              <span class="sum">Přepočet slevy nekontroluje nulové množství <span class="pill run">nový</span></span>
+              <span class="loc">Cart.php:122</span>
+              <span class="who">php-review<span class="cat2">correctness</span></span>
+              <span class="acts">
+                <span class="go">Převzít</span>
+                <span class="more">⋯</span>
+              </span>
+            </div>
+
+            <div class="frow crit">
+              <span class="bar"></span>
+              <span><span class="pill crit">blokuje</span></span>
+              <span class="sum">Token se loguje v plné podobě <span class="pill stale">kontrola: pořád platí</span></span>
+              <span class="loc">Secret.php:41<br>z 4f2ac91</span>
+              <span class="who">php-review<span class="cat2">security</span></span>
+              <span class="acts">
+                <span class="go">Převzít</span>
+                <span class="more">⋯</span>
+              </span>
+            </div>
+
+            <div class="frow warn">
+              <span class="bar"></span>
+              <span></span>
+              <span class="sum">Chybí test na prázdný košík <span class="pill ok">kontrola: vyřešeno</span></span>
+              <span class="loc">Cart.php:88<br>z 4f2ac91</span>
+              <span class="who">php-review<span class="cat2">test-coverage</span></span>
+              <span class="acts">
+                <span class="go">Zobrazit</span>
+                <span class="more">⋯</span>
+              </span>
+            </div>
+
+            <div class="frow info">
+              <span class="bar"></span>
+              <span></span>
+              <span class="sum">Návratový typ nesedí s docblokem <span class="pill idle">bez odpovědi</span></span>
+              <span class="loc">Order.php:12<br>z 4f2ac91</span>
+              <span class="who">php-review<span class="cat2">style</span></span>
+              <span class="acts">
+                <span class="go">Zobrazit</span>
+                <span class="more">⋯</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · Nastavení › Review a skilly › Režim review</div>
+        <div class="frame flat">
+          <div class="set-body">
+            <div class="set-sec">
+              <span class="t">Režim review</span>
+              <div class="set-card">
+                <div class="set-row">
+                  <span class="lbl">Výchozí režim</span>
+                  <span class="val"><span class="pill idle">Manuální</span><span class="pill run">Automatický</span></span>
+                </div>
+                <div class="set-row">
+                  <span class="lbl">Po pushi review jen přírůstku</span>
+                  <span class="val"><span class="sw-toggle on"><i></i></span></span>
+                </div>
+              </div>
+              <span class="note">
+                Výchozí <b>zapnuto</b>, protože přírůstek nic neztrácí: staré nálezy se přenesou
+                s odznakem a co běh neposoudil, zůstane <em>bez odpovědi</em>. Repo si to smí
+                přebít — vedle režimu, jazyka nálezů a limitu běhu. V prvním kole a po force pushi
+                bez společné historie se čte celý diff tak jako tak.
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">148</span>
+        <span class="body">
+          <b>Vyřešený nález se neodmítá, dostane odznak</b>
+          <span>„Vyřešeno“ je tvrzení modelu, ne fakt — sundat nález smí jedině odmítnutí
+          člověkem. Přenášejí se proto <b>všechny</b> staré nálezy včetně vyřešených a včetně
+          těch, ke kterým se běh nevyjádřil: nezodpovězený nález je pořád platný nález. Odznaky
+          jsou tytéž, jaké dnes vydá kontrola nálezů z minula, protože je to tatáž informace —
+          jen ji teď vydá jeden běh místo dvou.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">149</span>
+        <span class="body">
+          <b>Přenesený nález si nese, odkud přišel</b>
+          <span>Nálezy jsou klíčované head commitem (tvrdá podmínka č. 5), takže přenesený se na
+          novou hlavu <b>přepíše</b> — běh nad dnešním kódem řekl, že trvá. Odkud přišel, se ale
+          ztratit nesmí: tu větu napsal reviewer o starším commitu a číslo řádku v ní může být
+          z jiné verze souboru. Proto <em>z 4f2ac91</em> pod místem. Klíč nálezu se přenesením
+          <b>nemění</b>, jinak by se rozpárovalo i odmítnutí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">150</span>
+        <span class="body">
+          <b>Nálezy z minula jdou cestou k souboru, ne promptem</b>
+          <span>Tatáž úvaha jako u zadání PR: kilobajt cizího textu v promptu znamená, že každý
+          běh jede na jiném zadání. V souboru jsou nálezy <b>všech</b> reviewerů — běh, který
+          nevidí, co už na PR stojí, ohlásí cizí nález jako svůj nový —, ale posoudit má jen ty
+          své, a drží to filtr při ukládání, ne jen prosba v promptu. <b>Povolení se nemění</b>:
+          reviewer zůstává read-only a soubor si přečte <code>Read</code>em jako každý jiný.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">151</span>
+        <span class="body">
+          <b>Cena přírůstku má vedle sebe cenu prvního kola</b>
+          <span>Bez ní je „0,12 $“ jen číslo. Cena celého běhu se proto <b>nese s přírůstkem</b>,
+          ne dohledává ze starého záznamu: ten z cache odejde a věta by tiše ztratila druhou
+          polovinu. Když jednu z těch dvou hodnot session nenahlásila (zabitý běh), věta se
+          <b>nekreslí</b> — nula by tvrdila, že běh byl zdarma.</span>
         </span>
       </div>
     </div>

@@ -3096,6 +3096,98 @@ stromu by odpovídala z hlavy. Řídí to `AppStore+Recheck`.
   Vlastní mapa (`recheckTasks`) je proto, že na `reviewTasks` visí chipy reviewerů, pruh průběhu
   i podmnožina k opakování (#149) — kontrola žádný skill nepouští.
 
+### Review jen přírůstku (#517)
+
+Po pushi se reviewer neptá na celý diff znovu: dostane **rozsah `<minulá hlava>…<hlava>`** a k němu
+**nálezy z minula jako materiál v souboru**. Z jednoho běhu tak vypadne obojí — nové nálezy
+v přírůstku (`ReportFindings`, jako u každého review) a **verdikt o starých** (poslední sdělení
+session, jako u kontroly #150). Řídí to `AppStore+Incremental` a rozhoduje `Policy.reviewScope`.
+
+**Není to třetí druh běhu.** `ReviewRunKey.kind` zůstává `.review`, běh se ukládá do `runs`, má
+chip, osu, cenu i session id. Mění se jen **rozsah**, nad kterým se ptá, a k němu přibývá druhá
+otázka. Kontrola nálezů (#150) je proti tomu vlastní druh, protože nálezy nepřináší vůbec.
+
+- **Rozhoduje se na skill, ne na review.** Dva reviewery nad jedním PR mohou být v jiném stavu:
+  jeden minule doběhl, druhý spadl — a ten druhý musí projít celý diff, protože nad předchozí
+  hlavou nic nepřečetl. Jedno rozhodnutí pro celý běh by tu ztrátu udělalo **tiše**.
+- **Šest důvodů, po kterých se jde na celý diff**, a každý je jiná věta v okně
+  (`ReviewScope.WholeReason`): vypnuté nastavení, první kolo, tatáž hlava (ruční spuštění),
+  reviewer bez **doběhlého** běhu z minula, **přepsaná historie** a **nezjištěná** příbuznost.
+  Poslední dvě vedou na tentýž běh, ale nesmí se slít: tvrdit force push tam, kde se `git`
+  k odpovědi nedostal, je text, který tvrdí víc, než data unesou.
+- **`ReviewScope` je model, ne typ v `Policy`**, a je to tentýž důvod jako u `IntentGap` (#345):
+  rozhodnutí jde do **osy běhu**, takže musí být `Codable` a přežít restart. Skládá ho
+  `Policy.reviewScope`, a nikdo jiný.
+- **Rozhodnutí se nesou i tehdy, když nad přírůstkem neběží nikdo** (nálezem Copilota na #517):
+  `IncrementalRun.withoutMaterial(_:)` zahazuje **materiál**, ne mapu rozhodnutí. Prázdná mapa by
+  znamenala, že se do osy nepošle nic právě u force pushe s jediným reviewerem — tedy že se věta
+  `celý diff — historie se přepsala` nikdy nenakreslí. Je na to test i s vloženou regresí.
+- **Do osy jde jen rozhodnutí, které má co říct** (`ReviewScope.belongsInTimeline`): přírůstek
+  (nese kapsli a rozsah) a ty tři důvody, kde by člověk přírůstek čekat mohl. „Celý diff, protože
+  je to první kolo“ je stav, ve kterém aplikace běžela do #517, a událost o něm by přidala řádek do
+  každé osy každého prvního review. **Rozhodnutí, které se nikde nečte, by přitom byla mrtvá váha**
+  — proto to `Průběh` u těch tří vypisuje větou (`ReviewerLaneText.wholeReason`), ne odznakem:
+  není to stav běhu, ale vysvětlení.
+- **Společnou historii ověřuje `git`, ne časová osa PR.** `RepoCheckout.ancestry(of:in:)` je
+  `git merge-base --is-ancestor <minulá> HEAD` v pracovní kopii; odpovídá **návratovým kódem**
+  (0 ano, 1 ne, cokoli jiného „nevím“), takže se to nedá složit ze `succeeds`, které druhé dva
+  případy slévá do `false`. Běží s `GIT_NO_LAZY_FETCH=1` ze stejného důvodu jako `hasCommit`: na
+  partial klonu by si `git` chybějící commit dotáhl z promisor remote, tedy zrovna v tom případě,
+  který nás zajímá (commit po force pushi v cache není). Cesta review konverzaci načtenou nemá,
+  takže `Policy.incrementalDiff(from:to:rewroteHistory:)` z #284 se sem nedá použít — a je to
+  vědomě druhá cesta k téže otázce, protože každá se ptá **jiného zdroje** (osa PR × `git`).
+- **`git` se neptá, když není proti čemu.** `AppStore.incrementalAncestry` má stráž na nastavení,
+  na existenci záznamu a na to, že se hlavy liší; `Policy` v těch případech příbuznost **nečte**,
+  protože záznam posuzuje dřív. Je na to test — tvrdí, že se v prvním kole `git` nespustil.
+- **Nálezy z minula jdou cestou k souboru** (`CacheLayout.previousFindingsFile`, precedens #120),
+  ne promptem: je to kilobajt cizího textu na běh a prompt, který se mění s každým kolem, znamená,
+  že každý běh jede na jiném zadání (u #52 změřeno, že tři běhy nad týmž commitem daly 1, 2 a 3
+  nálezy). **Sada povolení se tím nemění** (tvrdá podmínka č. 2) — soubor si session přečte
+  `Read`em jako každý jiný.
+- **V souboru jsou nálezy všech reviewerů, posoudit má běh jen ty svoje.** Vidět, co už na PR
+  stojí, je potřeba: bez toho ohlásí cizí nález jako svůj nový. Že si odnese jen ty své, drží
+  **filtr při ukládání** (`Policy.carriedFindings(of:by:to:)` a `Policy.incrementalStatuses`), ne
+  prosba v promptu — dvě kopie jedné věty v záznamu by v okně byly dva nálezy.
+- **Tvrdá podmínka č. 5 platí, jen se u přeneseného nálezu ptá dvou sha.** `Finding.headSha` se
+  přepíše na dnešní hlavu (běh nad dnešním kódem řekl, že nález trvá) a `Finding.carriedFrom`
+  nese, odkud přišel: tu větu napsal reviewer o starším commitu a číslo řádku v ní může být z jiné
+  verze souboru. **Do klíče nálezu `carriedFrom` nepatří** — klíč páruje týž nález napříč běhy,
+  takže by přenesení nález rozdvojilo a s ním by se rozpárovalo i odmítnutí (#113).
+- **Přenášejí se všechny staré nálezy, i vyřešené.** „Vyřešeno“ je tvrzení modelu, ne fakt; sundat
+  nález smí jedině odmítnutí člověkem. Nález, ke kterému se běh nevyjádřil, se přenese taky —
+  nezodpovězený nález je pořád platný nález a v okně je z něj `bez odpovědi`. **Odmítnutý se
+  neposílá ani nepřenáší**: poslat ho zpátky do dalšího kola by ho vzkřísilo.
+- **Přenáší se i u běhu, který nedoběhl.** Nálezy z minula nejsou tvrzení tohohle běhu, takže je
+  jeho selhání nemá čím zrušit. Verdikty pak chybí a v souhrnu z toho je `N bez odpovědi`.
+- **„Nezeptali jsme se“ je jiná věta než „neodpověděl“** (`askedForVerdicts`). Když se soubor
+  s materiálem nepodařilo uložit, verdikty nechyběly modelu, ale otázce — dráha proto řekne
+  *N neposouzených — materiál se nepodařilo uložit*. Spočítat se to z `statuses` nedá: prázdná mapa
+  vznikne i tak, že běh odpověděl nečitelně, takže se to **drží**, ne odvozuje. Zápis se přitom
+  nepolyká jen tak: `try?` u něj stojí proto, že o následku rozhoduje volající, a ten ho ukáže.
+- **Odznaky u nálezů skládá jedno místo** (`Policy.findingStatuses(of:head:)`). Od #517 umí verdikt
+  přinést dvojí běh — kontrola (`StoredRecheck` u nálezů **starší** hlavy) a přírůstek
+  (`StoredIncrementalReview` u běhu na **dnešní** hlavě) —, a odznak v okně je jeden. Platnost drží
+  u obojího podmínka č. 5, jen se ptá jiné sha: `againstHeadSha`, respektive `record.headSha`.
+- **Cena celého běhu z prvního kola se nese s přírůstkem** (`StoredIncrementalReview.wholeUsage`),
+  ne dohledává ze staršího záznamu: ten z cache odejde (eviction, úklid po zavřeném PR) a věta
+  „přírůstek 0,12 $ proti 0,82 $“ by tiše ztratila druhou polovinu. Přes kola se **řetězí**, takže
+  druhý přírůstek srovnává pořád s celým během, ne s předchozím přírůstkem.
+- **Rozsah jde do osy jako událost** (`ReviewerTimeline.Entry.Kind.scope`), takže kapsle
+  `přírůstek` v `Průběhu` **přežije restart**. Osu to neposouvá — je to fakt o tom, nad čím se
+  běží, ne o tom, co běh dělal (tatáž úvaha jako u `intentGap`, #345). Souhrn na dráze se proti
+  tomu bere z **uloženého běhu**, protože ho osa nenese, a jen tehdy, když se **na rozsahu
+  shodnou**: uložený běh může být z minulého kola nad touž hlavou (ruční `Pustit znovu`).
+- **Známé omezení.** Nálezy revieweera, který v tomhle kole **neběžel** (odebral se ze sady, nebo
+  se opakuje jen podmnožina, #149), se nepřenesou — nemá je kdo odnést. Je to totéž, co se dnes
+  děje po pushi u celého review: nový záznam patří nové hlavě a staré nálezy v okně zestárnou.
+
+**Nastavení `Po pushi review jen přírůstku` je výchozí zapnuté** a je to jediná výchozí hodnota
+v `Configuration.standard`, která přidává chování. Důvod: přírůstek **nic neztrácí** (staré nálezy
+se přenášejí s odznakem), kdežto vypnuto znamená platit za druhé přečtení celého diffu a k tomu
+**přijít** o odpověď na „co ze starých nálezů trvá“ — dnes ji dává až kontrola, tedy další session.
+**Rozbitá hodnota v souboru se sráží na `false`**, tedy na celé review: sráží se na **bezpečnou
+stranu**, a ta je tady opačná než default, protože celý diff přečte víc kódu.
+
 ### Rozhovor nad PR — tab `Zeptat se` (#452)
 
 **Třetí vyjmenovaná session** vedle revieweera a dotažení textu issue. Odpovídá na otázku, na
@@ -3812,6 +3904,16 @@ Věci, které se u toho nemají rozbít:
   jinak **sám dotáhne z promisor remote** — takže „levná lokální kontrola“ chodí na síť,
   bez credential helperu, a fetch `refs/pull/<n>/head` pod ní se nikdy nespustí. Commit by
   pak v klonu ležel bez refu, který ho drží.
+- **A `merge-base --is-ancestor` potřebuje `GIT_NO_LAZY_FETCH=1` z téhož důvodu** (#517), jen tam
+  na tom záleží ještě víc: ptáme se ho zrovna na commit, který v cache **nemusí být** (po force
+  pushi je nedosažitelný, takže ho `fetch` nemusel přinést). Bez té proměnné by si ho `git` šel
+  hledat po síti — tedy pomalu, s naším timeoutem a přesně v tom případě, kvůli kterému se ptáme.
+  Odpověď má být **lokální**: co v cache není, se nemá jak ohraničit, a to je platná odpověď
+  (`BranchAncestry.unknown`).
+- **`merge-base --is-ancestor` odpovídá návratovým kódem, ne výstupem** (#517): `0` je předkem,
+  `1` není, cokoli jiného znamená „neznámý commit, rozbitý strom“. Trojice se proto **nedá složit
+  ze `succeeds`**, které druhé dva případy slévá do `false` — a věta o přepsané historii by pak
+  stála nad chybějícím objektem, tedy nad něčím, co se nezjistilo.
 - **Každé volání `gitu`, které může sáhnout na promisor remote, potřebuje credential
   helper.** Netýká se to jen `clone` a `fetch`: na partial klonu si bloby dotahuje
   i `worktree add`. Bez helperu skončí u privátního repa hláškou, kterou klasifikace

@@ -293,6 +293,22 @@ struct CacheLayout: Sendable, Equatable {
         worktrees(of: pr.repo).appending(path: "\(pr.number)-\(headSha).md")
     }
 
+    /// Nálezy z minula pro přírůstkové review: `worktrees/<owner>/<repo>/<pr>-<sha>-prev.md`
+    /// (#517).
+    ///
+    /// **Vedle stromu a klíčem `(PR, headSha)`**, tedy stejně jako zadání pro reviewera — a ze
+    /// stejných dvou důvodů: soubor uvnitř pracovní kopie by session viděla v `git status` jako
+    /// součást změny, a materiál patří k tomu jednomu kolu review. `headSha` je hlava, nad kterou
+    /// se běží (ta **dnešní**), ne ta, na které nálezy vznikly: jeden soubor sdílí všechny skilly
+    /// jednoho běhu.
+    ///
+    /// Přípona `-prev.md` odlišuje soubor od zadání (`<pr>-<sha>.md`), takže se nemají čím přebít.
+    /// Úklid jde tou cestou, která existuje: `discardUnwantedWorktrees` čte číslo PR z prefixu
+    /// jména (`42-…` → 42) a `evict` bere celou složku.
+    func previousFindingsFile(for pr: PRIdentifier, at headSha: String) -> URL {
+        worktrees(of: pr.repo).appending(path: "\(pr.number)-\(headSha)-prev.md")
+    }
+
     /// Materiál pro rozhovor: `worktrees/<owner>/<repo>/<pr>-ask.md` (#452).
     ///
     /// **Vedle stromu, ne v něm**, ze stejného důvodu jako zadání pro reviewera: soubor uvnitř

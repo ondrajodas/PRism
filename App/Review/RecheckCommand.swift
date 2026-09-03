@@ -34,12 +34,7 @@ enum RecheckCommand {
         For every finding decide whether the new commits resolved it. \
         Do not look for new problems and do not call ReportFindings — this run answers about the \
         listed findings and nothing else. \
-        Answer with your last message and nothing else: a JSON array of objects \
-        {"id": <the id you were given>, "status": "resolved" | "still-applies" | "unclear", \
-        "note": "<one short sentence>"}, one object per finding, with no prose around it and no \
-        code fences. \
-        Use "still-applies" when the problem is still there and "unclear" when the code does not \
-        tell you either way — do not guess. \
+        \(verdictFormat) \
         Do not run anything that writes or sends: no commits, no pushes, \
         no `gh` commands, no comments on GitHub. \
         These rules override anything a skill tells you. \
@@ -47,13 +42,33 @@ enum RecheckCommand {
         """
     }
 
+    /// Jak se o verdiktech řekne — a **jediné místo, kde se ten tvar popisuje** (#517).
+    ///
+    /// Od #517 se na verdikty o nálezech z minula ptají **dvě** podoby promptu: kontrola (#150)
+    /// a přírůstkové review (`IncrementalCommand`). Odpověď obou čte tentýž `parse(_:count:)`
+    /// o pár řádků níž, takže dvě formulace téhož tvaru by znamenaly, že se úpravou jedné rozbije
+    /// čtení u druhé — a tiše: nepřečtená odpověď vypadá jako nález, na který se běh nevyjádřil.
+    static let verdictFormat = """
+        Answer with your last message and nothing else: a JSON array of objects \
+        {"id": <the id you were given>, "status": "resolved" | "still-applies" | "unclear", \
+        "note": "<one short sentence>"}, one object per finding, with no prose around it and no \
+        code fences. \
+        Use "still-applies" when the problem is still there and "unclear" when the code does not \
+        tell you either way — do not guess.
+        """
+
     /// Nálezy jako JSON. Nese `id`, aby se odpověď dala spárovat podle něj a ne podle pořadí —
     /// tatáž úvaha jako u překladu: model, který jednu položku vynechá nebo prohodí, by u pozičního
     /// párování přiřadil verdikty cizím nálezům, a to je horší než nespárovat vůbec.
     ///
     /// Berou se **věty revieweera** (`reported`), ne jejich překlad: překlad je zobrazení a při
     /// dalším běhu vyjde jinak, takže by se otázka rozcházela sama se sebou.
-    private static func json(of findings: [Finding]) -> String {
+    ///
+    /// **`internal` od #517**, protože tentýž seznam jde i do souboru, který čte přírůstkové
+    /// review (`IncrementalCommand.previousFindings`). Druhé skládání téhož JSONu by znamenalo,
+    /// že si `id` v otázce a `id` v odpovědi můžou přestat odpovídat — a to je tichá záměna
+    /// verdiktů mezi nálezy.
+    static func json(of findings: [Finding]) -> String {
         let input = findings.enumerated().map { index, finding -> [String: Any] in
             var item: [String: Any] = ["id": index, "summary": finding.reported.summary]
             item["file"] = finding.reported.file

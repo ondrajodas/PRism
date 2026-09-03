@@ -25,14 +25,26 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     /// odmítne, takže by se běh rozsypal na `launchFailed` místo aby se rozjel.
     private let worktree: URL?
 
+    /// Co fake odpoví na „sdílí ta dvě sha historii“ (#517).
+    ///
+    /// **Výchozí `.unknown`, ne `.ancestor`**: fake nemá `git`, takže nic neví — a `ancestor` by
+    /// znamenal, že každý test, který o přírůstek nestojí, začne mít review nad přírůstkem.
+    /// Bezpečná strana je tady tatáž jako v aplikaci: celé review.
+    private let ancestry: BranchAncestry
+
+    /// Na která sha se fake ptal — na tom se pozná, že se `git` **nespouštěl** tam, kde neměl.
+    private var ancestryQueries: [String] = []
+
     init(
         tracked: [RepoID: [Int]] = [:],
         outcome: Result<URL, CheckoutError> = .success(URL(filePath: "/tmp/klon")),
         existing: [RepoID: URL] = [:],
         files: Result<[String], CheckoutError> = .success([]),
         worktree: URL? = nil,
+        ancestry: BranchAncestry = .unknown,
         gate: AsyncGate? = nil
     ) {
+        self.ancestry = ancestry
         self.tracked = tracked
         self.outcome = outcome
         self.existing = existing
@@ -62,6 +74,13 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     }
 
     func trackedFiles(in worktree: URL) async throws -> [String] { try files.get() }
+
+    func ancestry(of sha: String, in worktree: URL) async -> BranchAncestry {
+        lock.withLock { ancestryQueries.append(sha) }
+        return ancestry
+    }
+
+    var askedAncestryOf: [String] { lock.withLock { ancestryQueries } }
 
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws {}
 

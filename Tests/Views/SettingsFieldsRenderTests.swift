@@ -29,7 +29,13 @@ struct SettingsFieldsRenderTests {
     /// (`ViewThatFits`), takže scéna si šířku umí přebít.
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
-    private static let height: CGFloat = 1600
+    ///
+    /// **Od #517 o dvě stě bodů výš.** `Form` je `ScrollView`, takže co se do okna nevejde, se
+    /// **nenakreslí** — a přepínač `Po pushi review jen přírůstku` s vysvětlením pod sekcí
+    /// `Režim review` posunul `Text issue z trackeru` pod dosavadní hranici. Test se tím nezměnil
+    /// v tom, co tvrdí: dvě bitmapy vyšly stejné právě proto, že se pole přestalo kreslit, což je
+    /// zrovna ta vada, kterou má chytat.
+    private static let height: CGFloat = 1800
 
     // MARK: - Text issue z trackeru
 

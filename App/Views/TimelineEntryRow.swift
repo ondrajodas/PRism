@@ -135,6 +135,10 @@ struct TimelineEntryRow: View {
         // na řádek jedna věc, takže se místem šetřit nemusí.
         case .intentGap(let gap):
             "\(ReviewerLaneText.intentGapLabel) — \(ReviewerLaneText.intentGapReason(gap))"
+        // Ve výpisu stojí i **rozsah** (#517), jako u zadání: na řádek je jedna věc, takže se
+        // dvě sha vejdou — a je to jediné místo, kde se dá po restartu přečíst, nad čím ten
+        // běh doopravdy jel.
+        case .scope(let scope): ReviewerLaneText.scope(scope)
         case .finished(let outcome): finishedTitle(outcome)
         }
     }
@@ -169,7 +173,7 @@ struct TimelineEntryRow: View {
         switch entry.kind {
         case .findings, .finished: color
         case .tool(let tool): Policy.toolStepMark(of: tool) == .pending ? Palette.ink : nil
-        case .queued, .started, .intentGap: nil
+        case .queued, .started, .intentGap, .scope: nil
         }
     }
 
@@ -180,6 +184,7 @@ struct TimelineEntryRow: View {
         case .tool(let tool): Self.toolSymbol(tool.name)
         case .findings: "text.magnifyingglass"
         case .intentGap: "doc.badge.ellipsis"
+        case .scope: "arrow.triangle.branch"
         case .finished(let outcome): outcome == .finished ? "checkmark.circle" : "exclamationmark.triangle"
         }
     }

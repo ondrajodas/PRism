@@ -99,7 +99,10 @@ struct AppStorePromptTests {
             baseSha: "bbbb2222",
             // Tenhle store zadání nepřipravuje (`intents` nedostal), takže prompt o něm mlčí —
             // cesta zadání se testuje v `AppStoreIntentTests` (#120).
-            intent: nil
+            intent: nil,
+            // A o přírůstku (#517) taky: nad prvním commitem není od čeho odpočítávat, takže
+            // `Policy.reviewScope` vydá celé review.
+            increment: nil
         ))
     }
 }

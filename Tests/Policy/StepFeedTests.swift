@@ -34,6 +34,8 @@ struct StepFeedTests {
             loadedSkill: nil,
             intentGap: nil,
             entries: timeline.entries,
+            increment: nil,
+            wholeReason: nil,
             isConfigured: true
         )
     }

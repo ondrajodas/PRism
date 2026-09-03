@@ -168,6 +168,107 @@ enum ReviewerLaneText {
         lane.usage.flatMap(RunUsageText.summary(of:))
     }
 
+    // MARK: - Přírůstek (#517)
+
+    /// Kapsle vedle stavu. Krátká schválně — rozsah stojí hned za ní a věta pod dráhou.
+    static let incrementLabel = "přírůstek"
+
+    /// Rozsah, nad kterým běh běžel. **Zkrácená sha, jako všude jinde v okně**: celých čtyřicet
+    /// znaků dvakrát by z hlavičky dráhy vytlačilo cenu.
+    static func incrementRange(_ range: IncrementalDiffRange) -> String {
+        "proti \(range.seen.prefix(7)) → \(range.head.prefix(7))"
+    }
+
+    /// Rozhodnutí o rozsahu do **výpisu kroků** — jeden řádek osy (#517).
+    ///
+    /// Ve výpisu je na řádek jedna věc, takže se sem vejde celá věta: u přírůstku rozsah, u celého
+    /// diffu **důvod**. Do osy se přitom dostane jedině rozhodnutí, které má co říct
+    /// (`ReviewScope.belongsInTimeline`), takže věta „celý diff, protože je to první kolo“ tady
+    /// nikdy nestojí.
+    static func scope(_ scope: ReviewScope) -> String {
+        switch scope {
+        case .increment(let range): "jen přírůstek — \(incrementRange(range))"
+        case .whole(let reason): "celý diff — \(wholeReason(reason))"
+        }
+    }
+
+    /// Proč se šlo na celý diff, i když by se čekal přírůstek (#517).
+    ///
+    /// **Každý důvod má vlastní věty**, jako u `intentGap`: „nedoběhlo minule“ a „přepsala se
+    /// historie“ vedou na tentýž běh, ale znamenají něco jiného — a jedna souhrnná hláška by je
+    /// slila zpátky do sebe. Věty o vypnutém nastavení, prvním kole a téže hlavě jsou tu jen kvůli
+    /// úplnosti výčtu; do okna se nedostanou (`ReviewScope.saysWhyWhole`).
+    static func wholeReason(_ reason: ReviewScope.WholeReason) -> String {
+        switch reason {
+        case .disabled: "přírůstek je v nastavení vypnutý"
+        case .firstReview: "první kolo na tomhle PR, takže není od čeho odpočítávat"
+        case .sameHead: "hlava se od minulého review nezměnila"
+        // **Nesmí tvrdit, že běželo**: tenhle důvod pokrývá spadlý i vytimeoutovaný běh **a taky**
+        // reviewera, který nad předchozí hlavou vůbec nebyl (přibyl do sady). „Minule nedoběhlo“ by
+        // u toho druhého tvrdilo víc, než data unesou.
+        case .noFinishedRun: "od minula tu není jeho doběhlý běh, takže není od čeho odpočítávat"
+        case .rewroteHistory: "historie se přepsala (force push), společná část není"
+        case .unknownAncestry: "společnou historii se nepodařilo zjistit"
+        }
+    }
+
+    /// Nápověda ke kapsli. Musí říct, **co běh nečetl** — bez toho se `přírůstek` čte jako
+    /// vlastnost výsledku, kdežto je to vlastnost zadání.
+    static func incrementHelp(_ range: IncrementalDiffRange) -> String {
+        "Reviewer prošel jen to, co se pushlo od minulého review (`git diff "
+            + "\(range.seen.prefix(7))...\(range.head.prefix(7))`) — ne celý diff PR. Nálezy "
+            + "z minula dostal jako materiál a řekl o nich, jestli trvají."
+    }
+
+    /// Nápověda k té větě. Musí říct, **co to znamená pro výsledek** — samotné „celý diff“ se dá
+    /// přečíst jako porucha, přitom je to stav, ve kterém aplikace běžela do #517.
+    static func wholeReasonHelp(_ reason: ReviewScope.WholeReason) -> String {
+        "Reviewer prošel **celý** diff PR, ne jen to, co se pushlo od minula: "
+            + "\(wholeReason(reason)). Nálezy z minula se tedy nepřenášely — tenhle běh je "
+            + "nahlásí sám, pokud pořád platí."
+    }
+
+    /// Jak přírůstek dopadl — věta pod dráhou. `nil` = běh ještě neskončil, takže se netvrdí nic.
+    ///
+    /// **Nesčítá se do jednoho čísla.** „3 staré trvají“ a „1 nový“ jsou různá tvrzení: první je
+    /// o kódu, který nikdo znovu nečetl, druhé o tom, co se pushlo. Jedno číslo „4 nálezy“ by ten
+    /// rozdíl zahodilo — a on je celý smysl přírůstku.
+    ///
+    /// Co běh **neposoudil**, se přiznává (`bez odpovědi`), a `vyřešený pushem` se píše jako
+    /// odznak, ne jako ubraný nález: sundat nález smí jedině odmítnutí člověkem (#113).
+    static func increment(_ tally: Policy.IncrementalTally) -> String? {
+        var parts: [String] = []
+        if tally.new > 0 {
+            parts.append(Plural.czech(tally.new, one: "nový nález", few: "nové nálezy", many: "nových nálezů")
+                + " v přírůstku")
+        }
+        if tally.stillApplies > 0 { parts.append("\(tally.stillApplies) starých trvá") }
+        if tally.resolved > 0 { parts.append("\(tally.resolved) vyřešených pushem") }
+        if tally.unclear > 0 { parts.append("\(tally.unclear) nejasných") }
+        // **„Nezeptali jsme se“ je jiná věta než „neodpověděl“** (#517): první tvrdí něco o nás,
+        // druhá o modelu. Slít je do jedné by znamenalo, že se selhání zápisu materiálu čte jako
+        // mlčení revieweera.
+        if tally.unanswered > 0 {
+            parts.append(tally.askedForVerdicts
+                ? "\(tally.unanswered) bez odpovědi"
+                : "\(tally.unanswered) neposouzených — materiál se nepodařilo uložit")
+        }
+        // Prázdný souhrn není „čisto“: znamená, že běh nic nenahlásil a z minula nebylo co nést.
+        // Věta o tom už stojí výš (`finished(_:)`), takže se tady mlčí.
+        guard !parts.isEmpty else { return nil }
+        return parts.joined(separator: " · ") + "."
+    }
+
+    /// Cena přírůstku proti ceně celého běhu z prvního kola. `nil` = jedna z nich není známá,
+    /// a **dohadovat se nesmí**: nula by tvrdila, že běh byl zdarma.
+    static func incrementSaving(of lane: ReviewerLane) -> String? {
+        guard let whole = lane.increment?.tally?.wholeUsage?.cost,
+              let increment = lane.usage?.cost
+        else { return nil }
+        return "Přírůstek \(RunUsageText.cost(increment)) proti \(RunUsageText.cost(whole)) "
+            + "za celý běh v 1. kole."
+    }
+
     // MARK: - Krok v ose (#326)
 
     /// Odznak odmítnutého kroku. **Verzálky a mono jako v návrhu** — je to štítek, ne věta.

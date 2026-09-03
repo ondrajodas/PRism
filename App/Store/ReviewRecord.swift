@@ -125,16 +125,26 @@ struct StoredReviewRun: Codable, Hashable, Sendable {
     /// úmluva jako u `usage`. `nil` znamená „osa se neuložila“, ne „nic se nedělo“: prázdné pole
     /// by po restartu tvrdilo, že běh proběhl bez jediné události.
     let timeline: StoredTimeline?
+    /// Že běh jel **jen nad přírůstkem** a co řekl o nálezech z minula (#517). `nil` = běžel nad
+    /// celým diffem, tedy jako do #517.
+    ///
+    /// **Volitelné**, protože starší soubory ten klíč nemají — tatáž úmluva jako u `usage`
+    /// a `timeline`, a stejně jako tam to obstará optional.
+    let increment: StoredIncrementalReview?
 
     init(_ run: ReviewRun, finishedAt: Date, timeline: StoredTimeline? = nil) {
         skillID = run.key.skillID
         outcome = run.outcome
         sessionID = run.sessionID
-        findings = run.findings
+        // Nálezy z minula se ukládají **za** ty nové a v pořadí, ve kterém se na ně ptalo (#517):
+        // `Policy.findingOrder` je pak stejně přeskládá podle vážnosti, ale uložený soubor se
+        // čte i očima a „co je nové“ má stát nahoře.
+        findings = run.findings + (run.increment?.carried ?? [])
         droppedFindings = run.summary.droppedFindings
         calledReportFindings = run.summary.calledReportFindings
         self.finishedAt = finishedAt
         usage = run.summary.usage
         self.timeline = timeline
+        increment = run.increment.map(StoredIncrementalReview.init)
     }
 }

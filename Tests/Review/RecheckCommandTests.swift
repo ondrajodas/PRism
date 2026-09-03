@@ -93,7 +93,9 @@ struct RecheckCommandTests {
             skillID: "code-review",
             baseSha: "bbbb2222",
             // Požadavek bez zadání (#120) — o souboru se v promptu nemluví.
-            intent: nil
+            intent: nil,
+            // A bez přírůstku (#517) — o rozsahu taky ne.
+            increment: nil
         ))
     }
 

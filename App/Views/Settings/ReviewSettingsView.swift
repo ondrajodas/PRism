@@ -33,10 +33,15 @@ struct ReviewSettingsView: View {
                     label: "Časový limit běhu (min)",
                     minutes: $settings.draft.global.reviewTimeoutMinutes
                 )
+
+                // Sem, ne na stránku `Běh` (#517): je to čtvrtá věc o **spuštěném** review, kterou
+                // si repo smí přebít — vedle režimu, jazyka a limitu. A je to rozhodnutí o tom,
+                // *nad čím* se běží, tedy tatáž otázka jako režim o pár řádků výš.
+                Toggle("Po pushi review jen přírůstku", isOn: $settings.draft.global.incrementalAfterPush)
             } header: {
                 Text("Režim review")
             } footer: {
-                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se týká textu nálezů; `category` zůstává vždycky anglicky, protože je to slug, na který se váže blokující sada. Limit platí na jednu session — tedy na každý skill zvlášť a stejně tak na kontrolu nálezů. Zabitý běh si nechá, co stihl nahlásit. Rozsah je \(ReviewTimeout.minimumMinutes)–\(ReviewTimeout.maximumMinutes) min a „bez limitu“ mezi volbami není: je to jediná pojistka proti session, která se zacyklí a utrácí.")
+                Text("Platí pro repa, která si neřeknou o jiný. Manuální čeká na tlačítko, automatický spustí review, jakmile se PR objeví v seznamu. Jazyk se týká textu nálezů; `category` zůstává vždycky anglicky, protože je to slug, na který se váže blokující sada. Limit platí na jednu session — tedy na každý skill zvlášť a stejně tak na kontrolu nálezů. Zabitý běh si nechá, co stihl nahlásit. Rozsah je \(ReviewTimeout.minimumMinutes)–\(ReviewTimeout.maximumMinutes) min a „bez limitu“ mezi volbami není: je to jediná pojistka proti session, která se zacyklí a utrácí. Přírůstek znamená, že po pushi dostane reviewer jen diff nových commitů a k tomu nálezy z minula — řekne, které trvají, a hlásí jen nové. Staré nálezy se **neztrácejí**: přenesou se na novou hlavu s odznakem. V prvním kole a po force pushi bez společné historie se jde na celý diff a v tabu `Průběh` je vidět proč.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
