@@ -7151,6 +7151,11 @@ tam panel složilo už #188. V `Pod sebou` je to **48 → 44 znaků**, protože 
 300 b se skoro vrátí — cenou je tam **panel** (composer review, labely, `Větev`, `Zadání`), ne
 kolona. Ta druhá řádka je ta neintuitivní část a patří k rozhodnutí.
 
+**Tři z těch čtyř čtení sedí na vypočítanou kolonu na jeden znak**, což je zároveň kontrola
+ukazatele z #546 na živém okně. Čtvrté (`Pod sebou` s bublinami, hlášeno 48 místo dopočítaných 49)
+je **zapsaná mezera**: zpětně z něj vychází rozložený panel o 302–310 b místo konstanty 300.
+Na rozhodnutí to nemá vliv a doměří to diagnostika kreslení (`WidthSite`).
+
 **Zamítnuto: zahodit okraj úplně.** Vypnutý okraj **nestojí nic** (`marginCards` vydá prázdno na
 prvním `guard`), kdežto zahození je nevratná práce, po které by vrácení bylo znovu celé PR #540.
 Vrátíme se k tomu, až se ukáže, že si okraj **nikdo nezapíná**. **#504 a #505 se odkládají** z M14

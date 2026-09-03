@@ -1850,9 +1850,17 @@ přepínáno za běhu, čteno z lišty diffu a ze screenshotu):
 **Ta druhá řádka je ta neintuitivní část a patří k rozhodnutí.** V `Pod sebou` není cenou okraje
 šířka kódu, ale **panel**: composer review, labely, sekce `Větev` a `Zadání` zmizí do proužku.
 Ve `Vedle sebe`, kde panel složilo už #188, se platí celá kolona — a to je to, co bylo v provozu
-vidět. Všechna čtyři čtení jsou navíc **konzistentní s jedním gutterem** (136 b pod sebou, 84 b
-vedle sebe) a s vypočítanými kolonami, takže ukazatel `N znaků na stranu` doopravdy mluví o té
-koloně, na které se sází (#546).
+vidět.
+
+**Tři z těch čtyř čtení sedí na vypočítanou kolonu na jeden znak**, což je zároveň kontrola, že
+ukazatel mluví o té koloně, na které se sází (#546) — a to na živém okně, kde se ta vada
+projevila. Dopočítáno ze `Policy.diffCodeColumnWidth` a `Policy.charactersPerSide` (šířka znaku
+8,036 b, gutter 84 b vedle sebe a 136 b pod sebou): `Vedle sebe` 970 b → **49**, 670 b → **31**;
+`Pod sebou` s okrajem 494 b → **44**. **Zapsaná mezera je čtvrté čtení**: `Pod sebou` s bublinami
+hlásí **48**, ačkoli z předpokládané štěrbiny (1 100 − rail 52 − panel 300 = 748, kolona 532 b)
+vychází 49. Zpětně z toho čísla vyjde štěrbina 738–746 b, tedy **rozložený panel o 302–310 b**
+místo své konstanty 300 — pár bodů, které si bere něco vedle něj. Na rozhodnutí to nemá vliv
+a doměřit se to dá diagnostikou kreslení (`WidthSite`, #546).
 
 **Co se u toho nemá rozbít.** (1) **Přepnutí tam a zpět**, ne jen výchozí stav: `task(id: columns)`
 v `DiffView` má identitou **samo rozhodnutí**, ne jeho vstupy, a stráž `appliedColumns != columns`

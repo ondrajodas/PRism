@@ -7790,11 +7790,20 @@ asistenční práva. Čtení z lišty diffu:
 | `Vedle sebe` | `49 znaků na stranu`, panel složený (#188) | `31 znaků na stranu` |
 | `Pod sebou` | `48 znaků`, panel **rozložený** | `44 znaků`, panel **složený** |
 
-**Ta čtyři čísla jsou konzistentní s jedním gutterem** (136 b pod sebou, 84 b vedle sebe) a s
-kolonami, které vydá `Policy.diffCodeColumnWidth` — takže je to zároveň kontrola, že ukazatel
-mluví o té koloně, na které se sází (#546), a to **na živém okně**, kde se ta vada u #546
-projevila. Rozdíl mezi řádkami je poučný: v `Pod sebou` okraj panel složí, takže se 300 b skoro
-vrátí a **cenou je panel**; ve `Vedle sebe` se platí celá kolona, tedy 18 sloupců na každé straně.
+**Tři z těch čtyř čísel sedí na vypočítanou kolonu na jeden znak** (`Policy.diffCodeColumnWidth`
+a `Policy.charactersPerSide`, šířka znaku 8,036 b, gutter 84 b vedle sebe a 136 b pod sebou):
+970 b → 49, 670 b → 31, a `Pod sebou` s okrajem 494 b → 44. Je to tedy zároveň kontrola, že
+ukazatel mluví o té koloně, na které se sází (#546) — **na živém okně**, kde se ta vada projevila.
+
+**Čtvrté čtení je zapsaná mezera**: `Pod sebou` s bublinami hlásí **48**, ačkoli z předpokládané
+štěrbiny (1 100 − rail 52 − rozložený panel 300 = 748, kolona 532 b) vychází 49. Zpětně z toho
+čísla vyjde štěrbina 738–746 b, tedy rozložený panel o **302–310 b** místo konstanty 300 — pár
+bodů, které si bere něco vedle něj. Doměří to diagnostika kreslení (`WidthSite`, #546); na tvrzení
+téhle sady to nemá vliv, protože ta srovnává **změřenou plochu s předanou kolonou**, ne s ručně
+dopočítaným číslem.
+
+Rozdíl mezi řádkami je poučný: v `Pod sebou` okraj panel složí, takže se 300 b skoro vrátí
+a **cenou je panel**; ve `Vedle sebe` se platí celá kolona, tedy 18 sloupců na každé straně.
 
 **Co ta sada netvrdí a je to vědomé:** že přepínač v nabídce pod `Sbalit vše` **zabere** — položka
 menu se v hostovaném okně nedá naklikat, takže se přepíná zápisem do domény. Tou samou cestou to
