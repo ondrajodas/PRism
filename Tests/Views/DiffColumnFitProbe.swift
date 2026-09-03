@@ -361,7 +361,8 @@ struct DiffColumnFitProbe {
 struct CharactersPerSideProbe {
     @Test("Tabulka znaků na stranu přes pásmo šířek")
     func theTable() {
-        let characterWidth = FontMetric.shared.characterWidth(
+        let characterWidth = TestWait.settledFontMetric(
+            .characterWidth,
             of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         )
         print(String(format: "SONDA metrika: znak %.3f b, gutter split %.1f b, unified %.1f b, slib %d",
@@ -412,7 +413,8 @@ struct CharacterGaugeAfterSwitchProbe {
     @Test("Kolona kódu a ukazatel po přepnutí Pod sebou → Vedle sebe")
     func afterSwitchingLayout() async throws {
         let directory = ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"]
-        let characterWidth = FontMetric.shared.characterWidth(
+        let characterWidth = TestWait.settledFontMetric(
+            .characterWidth,
             of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         )
         func expected(_ code: Double, _ layout: DiffLayout) -> Int {

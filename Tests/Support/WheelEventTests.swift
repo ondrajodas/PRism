@@ -157,14 +157,22 @@ struct WheelEventTests {
 
     private struct Source {
         let path: String
-        /// Jen kód — řádky, které začínají `//`, jsou pryč. Bez toho by stráž zakazovala i to,
-        /// aby se pravidlo v komentáři vysvětlilo.
-        let code: String
 
-        /// Tentýž kód **bez jediné mezery a bez zalomení**. Nad tímhle se hledá, protože ve Swiftu
-        /// je mezera uvnitř volání volná: `CGEvent (…)` i `Source:\n    nil` jsou platný zápis
-        /// téhož, takže stráž nad surovým textem by je pustila (nález Copilota na #490).
-        var condensed: String { code.filter { !$0.isWhitespace } }
+        /// Kód **bez jediné mezery a bez zalomení**. Hledá se nad tímhle, protože ve Swiftu je
+        /// mezera uvnitř volání volná: `CGEvent (…)` i `Source:\n    nil` jsou platný zápis téhož,
+        /// takže stráž nad surovým textem by je pustila (nález Copilota na #490).
+        ///
+        /// **Uložený, ne počítaný** (#550) — jeden průchod přes 518 zdrojáků (5,1 MB) stojí 0,23 s
+        /// v optimalizovaném buildu, takže se zhušťuje **jednou při čtení**, ne při každém dotazu.
+        /// Surový text se nedrží: nikdo ho tady nečte. Tři stráže z #550 mají tentýž tvar.
+        let condensed: String
+
+        /// `code` je kód **bez řádkových komentářů** — bez toho by stráž zakazovala i to, aby se
+        /// pravidlo v komentáři vysvětlilo.
+        init(path: String, code: String) {
+            self.path = path
+            self.condensed = code.filter { !$0.isWhitespace }
+        }
     }
 
     private static func sources() throws -> [Source] {

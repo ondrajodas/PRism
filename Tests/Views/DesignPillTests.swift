@@ -33,8 +33,8 @@ struct DesignPillTests {
     /// Do #407 se čítaly `NSLayoutManager`em jednou za test (#348). Bylo to léčení příznaku v nové
     /// sadě: každá další sada by to musela vědět taky, a přesně na tomhle #367 skončilo. Odsud si
     /// obě hodnoty bere měřidlo, které je drží na proces — sada o tom nemusí vědět nic.
-    private var pillLine: CGFloat { FontMetric.shared.lineHeight(of: DesignPill.font) }
-    private var previousLine: CGFloat { FontMetric.shared.lineHeight(of: .systemFont(ofSize: 11)) }
+    private var pillLine: CGFloat { TestWait.settledFontMetric(.lineHeight, of: DesignPill.font) }
+    private var previousLine: CGFloat { TestWait.settledFontMetric(.lineHeight, of: .systemFont(ofSize: 11)) }
 
     // MARK: - Že je to mono
 

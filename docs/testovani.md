@@ -5703,6 +5703,142 @@ třídě**: `CommitPanelRoomTests` na `šířka znaku: 0` (#407 — `FontMetric`
 **vydá**, hlášku k tomu složí o zlomek sekundy později už z 8,036). S #490 to nesouvisí a je to
 zvlášť.
 
+### Páté kolo: stráž nad surovým textem a nula z měřidla (#550)
+
+Dvě věci, obě z téže třídy jako čtyři podoby výš — **test tvrdí něco o prostředí, ne o kódu** —
+a obě vypadly z práce na #490 a #152 jako zapsané mezery.
+
+**1. Stráž nad surovým textem zezelená právě nad tou chybou, na kterou je.** #490 to vyřešilo
+zavedením `Source.condensed` (kód bez jediné mezery), ale nasadilo ho **jen u svých** vzorů; tři
+starší stráže porovnávaly dál surový text. Od #550 hledají v `condensed` všechny čtyři.
+
+Co tím **doopravdy** přestalo utíkat — a je to jinde, než čekalo zadání:
+
+| Stráž | Vzor, který mezerou utekl | Poznámka |
+|---|---|---|
+| `UnanimatedWindowTests` | `orderFront (nil)`, `orderFrontRegardless (…)`, `makeKeyAndOrderFront (…)` | Volání s mezerou před závorkou je platný Swift |
+| `GlobalAppearanceTests` | `NSApp . appearance`, `NSApplication . shared . appearance`, `??AppAppearance` proti `?? AppAppearance` | U `??` je to zákaz, takže se mezerou **otevírala druhá cesta k `NSApp`** |
+| `FontMetricTests` | `FontMetric . shared` u kladného tvrzení | **Zadání to mělo u `rawMetricReads`, a to je omyl**: `maximumAdvancement`, `defaultLineHeight` a `boundingRectForFont` jsou **jedno slovo**, takže je mezera rozdělit neumí. Zhuštění je u nich uniformita, ne oprava |
+
+Z toho plyne pravidlo obecnější než „nasaď `condensed`“: **mezerou se dá obejít vzor, ve kterém je
+hranice** — tečka, závorka, operátor. Vzor, který je jeden identifikátor, mezerou obejít nejde,
+a stráž nad ním je v tomhle ohledu v pořádku i nad surovým textem. Zhuštění se přesto nasazuje
+plošně: rozhodovat to u každého vzoru zvlášť je práce, na které se dřív nebo později udělá chyba.
+
+**Ověřeno vložením regrese**, u každé stráže zvlášť a v **obcházející** podobě: dočasný
+`Tests/Support/Regression550.swift` s `window.orderFront (nil)`, `NSApp . appearance`
+a `FontMetric . shared . characterWidth (of: font)`. Nad surovým textem ten soubor **žádný**
+z hledaných řetězců neobsahuje (ověřeno `grep -c`, tři nuly), tedy původní stráže by nad ním byly
+zelené; se `condensed` padly všechny tři a **každá vyjmenovala ten soubor**:
+
+```
+✘ Žádný test neukazuje okno mimo `orderFrontUnanimated`  → ["Support/Regression550.swift: orderFront("]
+✘ Žádný test neměří vzhled hostitele                     → …contains("NSApp.appearance") → true
+✘ Metriku z měřidla si v testech nebere nikdo mimo helper → ["Tests/Support/Regression550.swift"]
+```
+
+Ověřovalo se to **nad každou podobou, kterou ten typ v PR prošel** — computed `condensed`, uložený
+`condensed`, a výsledný tvar, který **surový text vůbec nedrží** —, protože zhuštění při čtení je
+jiná cesta k témuž řetězci. Výstup je u všech tří týž.
+
+**Zhuštění je uložené, ne počítané, a je to změřené.** `condensed` byl u #490 computed property,
+takže se korpus zhušťoval **při každém dotazu** — a stráž se ptá jednou za vzor, tedy až třikrát.
+Změřeno nad tím korpusem, nad kterým to stráže pouštějí (**518 zdrojáků, 5,1 MB**, optimalizovaný
+build, dva odečty): čtení z disku **0,07–0,15 s**, jeden průchod zhuštěním **0,23–0,25 s**, tři
+průchody **0,69–0,77 s**. Půl sekundy CPU na stráž, čtyřikrát, v běhu, kde vedle sebe běží pět set
+suit — proto se zhušťuje **jednou při čtení** a `Source.condensed` je `let`, u všech čtyř stráží
+stejně. (V debug buildu testovacího hosta je to dražší; měření je z optimalizovaného, protože jde
+o poměr, ne o absolutní číslo.)
+
+**A surový text se v těch typech nedrží vůbec.** Po přechodu na `condensed` ho žádná ze čtyř stráží
+nečte, a stav, který nikdo nečte, je mrtvá váha, která svádí se na ni spolehnout — což je zrovna
+jeden z těch vzorů, které Copilot v tomhle repu nachází opakovaně. `Source` má tedy `path`
+a `condensed` (v `GlobalAppearanceTests` k tomu `imports`) a odřezání komentářů se děje **v initu**.
+
+**Co se u toho nesmí rozbít**: seznamy výjimek (`exempt`, `allowed`) jsou **cesty, ne text**,
+takže se zhušťovat nesmí — a `GlobalAppearanceTests` má k tomu **výčet povolených importů**, který
+se schválně porovnává **tak, jak v souboru stojí**: whitelist se mezerou obejít nedá (cokoli
+napsaného jinak v něm není), takže by zhuštění jen ubralo hlášce čitelnost.
+
+**2. Nepoužitelná metrika je `nil`, ne nula.** #407 zavedlo `FontMetric` jako jediné místo, kde se
+metrika čte, ale nepovedené měření z něj vypadlo jako **nula** — tedy k nerozeznání od rozměru nula.
+Projev: `CommitPanelRoomTests` padaly zprávou `šířka znaku: 0`, kterou měřidlo o zlomek sekundy
+později skládalo už z 8,036 (jednou ze šesti běhů u #490, znovu u #152).
+
+**Rozhodnutí ze tří nabídnutých cest, a dvě z nich se spojily:**
+
+| Cesta | Daň | Verdikt |
+|---|---|---|
+| **nevydat ji** a nechat volajícího čekat | Kdo čeká, ten se zasekne — a v okně je zaseknutí horší než o pixel jinde nakreslený řádek. `FontMetric` navíc měří **pod zámkem**, takže by čekající kresba držela měřidlo všem | zamítnuto **pro kresbu** |
+| **vydat a poznat to** | Jeden nový přístup na měřidle a jedno `?? 0` uvnitř něj | **vybráno** |
+| **nechat to na testu**, který si o metriku říká | Sada, která na to zapomene, si tu nulu vpustí do tvrzení zpátky — přesně tak vznikly tři léčby před #407 | **vybráno, ale ne jako tvrzení sady**: čekání má jedno místo a stráž nad zdrojáky ho vynucuje |
+
+Tvar je tedy takový: `FontMetric.metric(_:of:)` vydává `CGFloat?` (`nil` = „použitelnou metriku
+nemám“), kdežto `characterWidth`, `lineHeight` a `boundingHeight` dál vydávají `CGFloat` a nulu
+z nich dělá **jedno dokumentované místo** — kreslí z nich okno a to čekat nesmí, `Policy` tu nulu
+zavírá `guardem`. **Nula tím zakrytá není**: rozhoduje o ní dál `Policy.usableFontMetric(_:)` na
+jednom místě, takže kdyby se u některé metriky stala legitimní odpovědí, vydá se jako `.some(0)`
+a od `nil` se pozná.
+
+**Kdo si čekání dovolit může, ten čeká** — `TestWait.settledFontMetric(_:of:)`
+(`Tests/Support/TestWaiting.swift`, protože čekání má v tomhle repu jedno místo, #296) zkouší
+`metric(_:of:)`, dokud se neusadí, a když se nedočká, **zapíše nález a vrátí nulu**: test pak spadne
+větou o metrice, ne číslem o šířce. Tři věci u toho nejsou zjevné:
+
+- **je synchronní, a je to vědomá daň.** `waitUntil` je `async` a metriku čte půltucet sad
+  a dvě sondy ze **synchronních** computed properties; převést je znamená přepsat kolem čtyřiceti
+  testů na `async` kvůli hodnotě, která se usadí za milisekundu. Blokuje se tedy vlákno, a proto je
+  strop **5 s**, ne `TestWait.deadline` (120 s) — držet vlákno dvě minuty je třída #462;
+- **strop se kontroluje po pokusu**, takže i na vyhladovělém stroji proběhnou aspoň dva pokusy
+  a druhý je od prvního o tu odmlku dál, kterou stroj doopravdy dal (u #296 se odmlka o 100 ms
+  probudila za 8,6 s). Rozpočet kol to schválně není (#292);
+- **zaplaceno je to jedině v poruše.** Co se dočká, dočká se prvním pokusem, takže zelený běh
+  nezdrží ani o milisekundu.
+
+**Hlídá to stráž, ne dohoda**: `FontMetricTests` tvrdí, že pět jmenovaných sad si na metriku
+**počká** (kladné tvrzení, aby se pravidlo nedalo splnit zahozením tvrzení o rozměru) a že
+`FontMetric.shared.characterWidth(` a spol. si v `Tests/` nebere **nikdo jiný** než tři vyjmenované
+výjimky. Ty tři jsou: sama stráž (vzory v ní stojí jako literály), `FontMetricProbe` (porovnává
+cesty vedle sebe) a `CodeTextSheetSizingTests` — ta srovnává `static let` konstantu aplikace s tím,
+co měřidlo vydá **aplikaci**, takže se musí ptát touž nečekající cestou; s čekáním by tvrdila něco
+jiného, než co v té konstantě leží.
+
+**Ověřeno vložením regrese** (`return 0` místo `return nil` u nepovedeného měření): padne
+`Chybějící metrika je nil, ne nula` (`0.0 == nil`) **a k tomu** `Nedočkaná metrika zapíše nález`
+s `Known issue was not recorded` — druhé tvrzení chytá tutéž chybu z druhé strany, protože čekání
+nad vydanou nulou nemá na co čekat.
+
+**Za jakých podmínek se měřilo, a nebyl to volný stroj.** Deset plných běhů: pět nad mezistavem
+(computed `condensed`) a **pět nad výsledným kódem**, všechny zelené — 5 128 testů v 503 suitách,
+**106,7–124,3 s** na běh. Load average při startu **6,7–12,9** a ve **třech** z těch pěti závěrečných
+běžel souběžně `xcodebuild` **sousedního slotu** na #421 (u #490 vyšlo z téhož počtu běhů 64–66 s
+při load 6,8–9,6, takže ten dvojnásobek času je zátěž vedle, ne zdejší práce). To je zároveň to, co
+těm běhům dává cenu: `CommitPanelRoomTests` padaly **právě pod zátěží** a v žádném z deseti běhů to
+neudělaly. Jedno „known issue“ v každém běhu je `theWaitGivesUpLoudly`, tedy záměr.
+
+**Co tím opravené není** (zapsané mezery):
+
+- **že se čekání doopravdy dočká přechodné vady**, se v harnessu tvrdit nedá: `FontMetric.shared`
+  se nedá podstrčit a písmo, které selže jednou a pak ne, se vyrobit neumí (vadné písmo z matice je
+  vadné **natrvalo**). Změřená je proto jen ta druhá polovina — že se čekání **vzdává nahlas**;
+- **`static let` v `SelectableCodeView` a `DiffToolbar` může nulu pořád zapamatovat navždycky**
+  (jedno měření na proces v okamžiku prvního použití). Je to původní vlastnost z #407, #550 ji
+  nemění — jen ji teď jde poznat, protože se měřidlo dá zeptat `metric(_:of:)`;
+- **čtyři stráže mají čtyři kopie `Source`/`condensed`.** Zdrojáky si v `Tests/` čte
+  **dvacet jeden** soubor a svést je do jednoho čtení je vlastní úklid, ne tohle issue; #550 sjednotil
+  ty tři, které zadání jmenuje, plus tu z #490;
+- **a zbylých dvanáct stráží porovnává surový text dál** — a je to **změřené, ne odhad**:
+  `SingleWayOutTests` (`Process(`, `.write(to:`, `.resolve(`), `WindowShortcutsTests`
+  (`keyboardShortcut(`), `LazyIdealSizeTests` (`fillingSlot(`), `DiffMarginScrollReadTests`
+  (`viewport.top =`), `DiffLineGeometryTests`, `EmojiFieldWiringTests`, `DesignPillTests`,
+  `GraphSiteWiringTests`, `ProcessPreferencesTests`, `SlotCleanupTests`, `AskLogEagerTests`,
+  `ConversationAxisEagerTests`. **Nedá se to ale doopravdy dodělat přehozením jedné vlastnosti**,
+  a to je ten důvod, proč to #550 nedělá: **hledané vzory samy obsahují mezery** —
+  `VStack(alignment: .leading, spacing: 14)`, `.designPill(tint:`, a `GraphSiteWiringTests` má
+  v jednom vzoru i **zalomení s odsazením**. Přejít na `condensed` tam znamená **přepsat každý
+  literál vzoru** a u každé stráže znovu ověřit vloženou regresí, tedy dvanáct samostatných úvah.
+  Nejbolavější z nich je `SingleWayOutTests`, protože hlídá tvrdou podmínku č. 1.
+
 ## Jak si zkontrolovat, jak view vypadá
 
 **Screenshot běžící aplikace dostaneš** — od #181, kdy terminálu přibylo oprávnění Screen

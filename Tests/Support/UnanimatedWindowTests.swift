@@ -27,13 +27,15 @@ struct UnanimatedWindowTests {
     /// Volání, kterými se okno ukáže s výchozí (tedy animovanou) `animationBehavior`. Bez tečky
     /// vpředu schválně: `orderFront(nil)` bez příjemce jde napsat i uvnitř podtřídy `NSWindow`.
     /// Jména helperů tím netrpí — `orderFrontUnanimated(` na `orderFront(` nesedne.
+    ///
+    /// **Bez mezery za jménem** — hledá se v `condensed`, takže `orderFront (nil)` neuteče (#550).
     private static let forbidden = ["orderFront(", "orderFrontRegardless(", "makeKeyAndOrderFront("]
 
     @Test("Žádný test neukazuje okno mimo `orderFrontUnanimated`")
     func showsWindowsOnlyThroughTheHelper() throws {
         var offenders: [String] = []
         for source in try Self.sources() where !Self.exempt.contains(source.path) {
-            for call in Self.forbidden where source.code.contains(call) {
+            for call in Self.forbidden where source.condensed.contains(call) {
                 offenders.append("\(source.path): \(call)")
             }
         }
@@ -49,6 +51,10 @@ struct UnanimatedWindowTests {
 
     /// Pojistka proti tomu, aby stráž zezelenala tím, že přestane číst nebo přestane hledat —
     /// kdyby se složka přejmenovala nebo `#filePath` přestal sedět, prošlo by nad prázdnem cokoli.
+    ///
+    /// Od #550 se tvrdí i to, že se v `condensed` doopravdy zahazují **mezery**: bez toho by stráž
+    /// nad surovým textem propustila `orderFront (nil)`, tedy zezelenala právě nad tou chybou, na
+    /// kterou je.
     @Test("Stráž doopravdy čte zdrojáky testů a vzory na nich sedí")
     func readsTheTestSources() throws {
         let sources = try Self.sources()
@@ -56,16 +62,36 @@ struct UnanimatedWindowTests {
         for path in Self.exempt {
             let exempt = try #require(sources.first { $0.path == path }, "\(path) se nenašel")
             #expect(
-                Self.forbidden.contains { exempt.code.contains($0) },
+                Self.forbidden.contains { exempt.condensed.contains($0) },
                 "V \(path) nesedl ani jeden hledaný vzor — stráž hledá něco, co v kódu není."
+            )
+            #expect(
+                !exempt.condensed.contains(where: { $0.isWhitespace }),
+                "v `condensed` u \(path) zůstaly mezery"
             )
         }
     }
 
     private struct Source {
         let path: String
-        /// Jen kód — řádky, které začínají `//`, jsou pryč.
-        let code: String
+
+        /// Kód **bez jediné mezery a bez zalomení** (#490, sem u #550). Hledá se nad tímhle, protože
+        /// ve Swiftu je mezera uvnitř volání volná: `orderFront (nil)` i `orderFront(\n nil)` jsou
+        /// platný zápis téhož.
+        ///
+        /// **Uložený, ne počítaný**, a je to změřené: jeden průchod přes 518 zdrojáků (5,1 MB) stojí
+        /// 0,23 s v optimalizovaném buildu, takže tři vzory `forbidden` čtené z computed property
+        /// stály tři průchody (0,69–0,77 s) za jednu stráž. Zhuštění se dělá **jednou při čtení**.
+        ///
+        /// **Surový text se nedrží vůbec** — nikdo ho tady nečte, a stav, který nikdo nečte, je
+        /// mrtvá váha, která svádí se na ni spolehnout.
+        let condensed: String
+
+        /// `code` je kód **bez řádkových komentářů** — vysvětlení pravidla nemá být jeho porušením.
+        init(path: String, code: String) {
+            self.path = path
+            self.condensed = code.filter { !$0.isWhitespace }
+        }
     }
 
     private static func sources() throws -> [Source] {

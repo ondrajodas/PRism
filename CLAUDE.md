@@ -903,14 +903,21 @@ Zásady, které platí všude:
     vydá **přechodně nepoužitelnou metriku** a sazba tím písmem navíc **položí proces**. Vydává
     ji proto **`FontMetric`**; hlídají to dvě tvrzení nad zdrojáky ve `FontMetricTests`
     ([rozbor](docs/testovani.md#metrika-písma-je-tentýž-kořen-v-jiné-podobě-407)).
+    **A od #550 je nepovedené měření `nil`, ne nula**: nulu vydávají `characterWidth` a spol.,
+    protože z nich kreslí okno a to čekat nesmí — kdo se potřebuje **dočkat**, bere
+    `TestWait.settledFontMetric(_:of:)`, a v `Tests/` je to podmínka, ne nabídka
+    ([proč](docs/testovani.md#páté-kolo-stráž-nad-surovým-textem-a-nula-z-měřidla-550)).
   - **Událost skládaná pro test nesmí dědit živý stav procesu** (#490) —
     `CGEvent(scrollWheelEvent2Source: nil, …)` nese **modifikátory, které měl člověk zrovna
     zmáčknuté**. Skládá se proto **jedině v `Tests/Support/WheelEvent.swift`** (privátní stav
     zdroje **a** `flags` z argumentu) a **`waitUntil` ani `.disabled` to neřeší** — není na co
-    čekat. **Stráž nad zdrojáky porovnává text bez mezer**, protože ve Swiftu je mezera uvnitř
-    volání volná (starší tři stráže to zatím nedělají a je to zapsaná mezera). Explicitní továrny
+    čekat. **Stráž nad zdrojáky porovnává text bez mezer** (`Source.condensed`), protože ve Swiftu
+    je mezera uvnitř volání volná — **od #550 to dělají všechny čtyři**, a mezerou se obejde jedině
+    vzor, ve kterém je hranice (tečka, závorka, operátor); jeden identifikátor rozdělit nejde.
+    Seznamy výjimek jsou přitom **cesty, ne text**, takže se nezhušťují. Explicitní továrny
     AppKitu (`NSEvent.keyEvent(with:…)`) v zákazu nejsou — modifikátory berou z argumentu
-    ([měření](docs/testovani.md#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490)).
+    ([měření](docs/testovani.md#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490),
+    [páté kolo](docs/testovani.md#páté-kolo-stráž-nad-surovým-textem-a-nula-z-měřidla-550)).
   - **Okno se v testu ukazuje bez animace** (#462) — `orderFront` na okně s výchozí
     `animationBehavior` si drží **vlákno z globálního dispatch poolu** po celou dobu animace, a
     `SubprocessRunner` z téhož poolu bere vlákna na blokující čtení pip. Ukazuje se proto přes
@@ -918,8 +925,11 @@ Zásady, které platí všude:
     `UnanimatedWindowTests` ([rozbor i jak se zaseknutý běh pozná od `Early unexpected
     exit`](docs/testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)).
 
-  Šest grepů. Pět **musí vyjít prázdných** (guard soubory se odečítají — hledané řetězce v nich
-  stojí jako literály), šestý v `App/` **musí vypsat jen `FontMetric.swift`**:
+  Sedm grepů. Pět **musí vyjít prázdných** (guard soubory se odečítají — hledané řetězce v nich
+  stojí jako literály), šestý v `App/` **musí vypsat jen `FontMetric.swift`** a sedmý je **výčet
+  k posouzení: tři soubory** (stráž, sonda a `CodeTextSheetSizingTests`, která schválně čte touž
+  nečekající cestou jako aplikace). **Pozor, tyhle grepy hledají v surovém textu, kdežto stráže
+  v kódu bez mezer** — prázdný grep tedy sám nestačí, rozhoduje běh testů:
 
   ```bash
   grep -rn 'NSApp.appearance\|NSApplication.shared.appearance' Tests |
@@ -937,6 +947,8 @@ Zásady, které platí všude:
   grep -rn 'orderFront(\|orderFrontRegardless(\|makeKeyAndOrderFront(' Tests |
       grep -vE ':[0-9]+: *//' | grep -v UnanimatedWindow
   grep -rn 'maximumAdvancement\|defaultLineHeight\|boundingRectForFont' App | grep -vE ':[0-9]+: *//'
+  grep -rn 'FontMetric.shared.characterWidth(\|FontMetric.shared.lineHeight(\|FontMetric.shared.boundingHeight(' \
+      Tests | grep -vE ':[0-9]+: *//'
   ```
 - **Jak se v tomhle repu měří, je v [`docs/testovani.md`](docs/testovani.md)** — a než začneš
   měřit, přečti si to, protože každá z těch věcí už jednou vyrobila falešný výsledek: test, který
