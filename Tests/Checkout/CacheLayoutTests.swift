@@ -24,10 +24,13 @@ struct CacheLayoutTests {
     @Test("Výchozí cache je ve složce aplikace")
     func defaultCacheLivesInApplicationSupport() {
         // Nikdy ne vedle uživatelových klonů — appka má vlastní místo a jinam nesahá.
-        // Jméno složky je `CFBundleName`, což je v testech test host, tedy `PRism`.
+        // Jméno složky je `CFBundleName`, což je od #421 u hostitele `PRism-testhost`: do té
+        // doby to bylo holé `PRism`, tedy cache hlavní instance, a `xcodebuild test` nad ní
+        // pouštěl celou aplikaci. Tvrdí se tedy **složka hostitele**, ne obecný tvar; o to, že
+        // to není cache aplikace, se stará `ProcessPreferencesTests`.
         let path = CacheLayout.applicationSupport.root.path(percentEncoded: false)
 
-        #expect(path.hasSuffix("/Library/Application Support/PRism"))
+        #expect(path.hasSuffix("/Library/Application Support/PRism-testhost"))
     }
 
     @Test("Pojmenovaná cache leží ve složce aplikace pod svým jménem")

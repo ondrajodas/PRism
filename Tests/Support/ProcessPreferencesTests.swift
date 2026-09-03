@@ -216,4 +216,57 @@ struct ProcessPreferencesTests {
         #expect(lines.contains { $0.contains("SLOT_ARGS=(PRISM_SLOT=") && $0.contains("PRISM_SLOT_LABEL=") })
         #expect(lines.contains { $0.contains("\"${SLOT_ARGS[@]}\"") })
     }
+
+    // MARK: - Cache hostitele (#421)
+
+    /// **Hostitel nepracuje v cache aplikace.** Tatáž třída jako doména `UserDefaults` výš, jen se
+    /// na ni přišlo o deset issues později: `CacheLayout.applicationSupport` si kořen bere
+    /// z `CFBundleName`, a ten se do #421 skládal z `PRISM_SLOT_LABEL`, který měl v projektu
+    /// **prázdnou** výchozí hodnotu. `xcodebuild test` tedy pouštěl aplikaci nad
+    /// `~/Library/Application Support/PRism` — tedy nad cache, kterou používá hlavní instance.
+    ///
+    /// Nebylo to teoretické. Testovací host je celá aplikace, takže při každém běhu testů
+    /// **obnovil otevřené záložky** (#527), dotáhl si k nim detail i diff **skutečnými** dotazy na
+    /// `gh` a vykreslil je ve svém okně — a protože `RenderDiagnostics.current` je jedna hodnota na
+    /// proces, ty průchody tělem se přičetly k tomu, co měřila sonda #421. Naměřený rozdíl:
+    /// `DiffView` 26 průchodů proti 14, `DiffRow.id` 9 701 proti 5 820, a čísla se mezi běhy hýbala,
+    /// protože záviselo na tom, kdy dorazí odpověď ze sítě. Po opravě jsou opakovatelná do jedničky.
+    /// K tomu psal do `tabs.json` a `sessions.json` hlavní instance, tedy do souborů, podle kterých
+    /// se uklízejí osiřelé session (#351).
+    ///
+    /// Hlídá se to **dvakrát**, protože každé z těch tvrzení chytá jinou polovinu: za běhu, že
+    /// hostitel má vlastní kořen, a nad `project.pbxproj`, že výchozí hodnota v projektu není
+    /// prázdná — bez toho druhého by šlo pravidlo obejít tím, že `PRISM_SLOT_LABEL` z projektu
+    /// zmizí a `Info.plist` z něj složí zase `PRism`.
+    @Test("Testovací host nepracuje v cache aplikace")
+    func theHostDoesNotShareTheApplicationCache() {
+        let root = CacheLayout.applicationSupport.root.lastPathComponent
+        #expect(
+            root != "PRism",
+            """
+            Testovací host má kořen cache hlavní instance (\(root)), takže xcodebuild test pracuje \
+            nad cache, kterou používá aplikace — obnoví její záložky, ptá se za ni gh a přepisuje \
+            jí sessions.json. Zkontroluj výchozí PRISM_SLOT_LABEL v project.pbxproj.
+            """
+        )
+    }
+
+    @Test("Projekt dává buildu bez identity vlastní jméno")
+    func theProjectStampsATesthostName() throws {
+        let project = try String(
+            contentsOf: Self.repository.appending(path: "PRism.xcodeproj/project.pbxproj"),
+            encoding: .utf8
+        )
+        let labels = TextLines.content(project)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("PRISM_SLOT_LABEL = ") }
+
+        #expect(!labels.isEmpty, "project.pbxproj nemá PRISM_SLOT_LABEL — cache hostitele je pak cache aplikace")
+        for label in labels {
+            #expect(
+                label != "PRISM_SLOT_LABEL = \"\";",
+                "PRISM_SLOT_LABEL má v projektu prázdnou výchozí hodnotu, takže CFBundleName vyjde PRism"
+            )
+        }
+    }
 }

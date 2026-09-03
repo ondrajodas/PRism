@@ -14,13 +14,20 @@ import Testing
     #expect(Bundle.main.bundleIdentifier == "com.ondrajodas.prism.testhost")
 }
 
-/// Název je jeden napříč vším — hlídá, že se v bundlu neobjeví jiný než `PRism`.
+/// Název je jeden napříč vším — hlídá, že se v bundlu neobjeví jiný než `PRism` a jeho slot.
+///
+/// **Od #421 má i hostitel svůj slot** (`PRism-testhost`), takže se tady netvrdí rovnost
+/// s `PRism`. Důvod je v `ProcessPreferencesTests` — `CFBundleName` určuje kořen cache, takže
+/// hostitel s holým `PRism` pracoval nad cache hlavní instance; rovnost by tvrdila zrovna to, co
+/// se opravovalo. Tvrdí se tedy tři věci: že se **oba klíče shodují** (do menu baru a do Docku
+/// nesmí jít dvě různá jména), že jméno **začíná** na `PRism`, a jaké je jméno hostitele.
 @Test func appPresentsItselfAsPRism() {
     let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
     let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
 
-    #expect(displayName == "PRism")
-    #expect(name == "PRism")
+    #expect(displayName == name)
+    #expect(name?.hasPrefix("PRism") == true)
+    #expect(name == "PRism-testhost", "hostitel má mít vlastní slot, viz ProcessPreferencesTests")
 }
 
 @Test @MainActor func contentViewCanBeCreated() {

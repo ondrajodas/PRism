@@ -40,6 +40,22 @@ import Testing
 )
 struct IdleDiffSpinProbe {
     private let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 13084)
+    /// Kolik syntetických souborů se přidá k fixture v `big` scéně (#421, třetí kolo).
+    ///
+    /// **Osa, ne konstanta**, ze stejného důvodu jako `Case.files` u #501: cena jednoho
+    /// zašpiněného průchodu tělem `DiffView`u je lineární v **počtu řádků seznamu**, ne v počtu
+    /// zašpinění, takže se z jedné velikosti scény nepozná, jestli číslo roste s daty, nebo se
+    /// škáluje s vadou. Výchozích dvanáct dá 18 nasazených bloků a ~197 průchodů `DiffRowView`u
+    /// na jedno zašpinění; `PRISM_BIG_FILES=100` z toho udělá ~1 253 a v grafu 26 140 dotazů na
+    /// `DiffRow.id` za deset tiků. **Nasazených bloků kódu je při tom pořád 18** (pás z #469), což
+    /// je odpověď na to, proč se ten rozdíl nedá naměřit v milisekundách.
+    ///
+    /// **Nepřečtená hodnota nesmí propadnout potichu.** `?? 12` nad `Int(_:)` je zrovna to
+    /// `?? default` nad operací, která může selhat, o kterém mluví `CLAUDE.md`: `PRISM_BIG_FILES=sto`
+    /// by dalo scénu o dvanácti souborech a čísla by vypadala jako platné měření nad stem. Proto se
+    /// **použitá hodnota vypisuje** v řádce `SONDA #421` — kdo v ní uvidí `12`, ví, že se jeho
+    /// knoflík nechytil.
+    static let bigFiles = Int(ProcessInfo.processInfo.environment["PRISM_BIG_FILES"] ?? "") ?? 12
 
     /// Kolik CPU stojí nečinné okno podle toho, co je v něm. Rozhoduje **rozdíl mezi řádky
     /// tabulky**, ne absolutní číslo: kolo smyčky samo něco stojí, takže se scénáře poměřují
@@ -130,12 +146,34 @@ struct IdleDiffSpinProbe {
     /// 1 324, a ve 113 ze 123 vzorků týž `changed` vstup — `StaticBody` toho `LazyVStack`u
     /// v `DiffView`u. Otázka byla, **kdo si o to řekne**, když se v diffu nic nemění.
     ///
-    /// **Odpověď je tik pollingu, a vada tím pořád trvá.** Naměřeno nad usazeným oknem
-    /// (201 bloků kódu, 1 210 prvků, split, 1512×874): deset tichých tiků dá `DiffView`u
-    /// **6 průchodů tělem**, `DiffRowView`u **1 182** a `DiffRow.id` **2 541 dotazů**, kdežto
-    /// týž běh smyčky **bez tiku** dá nulu. `LazyVStack` z toho zásobníku po #469 zmizel —
-    /// `changed` vstup je dnes `StaticBody<…VStack<ForEach<Array<FileDiff>…` —, takže se změnila
-    /// **cena** jednoho zašpinění, ne to, že k němu dochází.
+    /// **Odpověď je tik pollingu, a od třetího kola je to jedna řádka v `AppStore`u.** Pohonem byl
+    /// `forget(whatIsNotIn:)` — konkrétně `diffSearches`, jediná z osmatřiceti map, které tik
+    /// prořezává, jejíž hodnota (`DiffSearchState`, `@Observable` **třída**) není `Equatable`.
+    /// Zápis téže hodnoty `@Observable` nehlásí jedině tehdy, když se ta hodnota dá **porovnat**;
+    /// tady se nedala, takže bezpodmínečné `x = x.filter { … }` budilo čtenáře **při každém
+    /// tichém tiku a i nad prázdnou mapou**. Od #421 se tam zapisuje jen při změně a tvrdí to
+    /// `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes`.
+    ///
+    /// **Čím se to prokázalo**, protože samotné „opravil jsem a je nula“ nic netvrdí (#478) —
+    /// A/B/A/B nad usazeným oknem (18 nasazených bloků, 535 prvků, split, 1512×874):
+    ///
+    /// | úsek | s vadou | po opravě |
+    /// |---|---|---|
+    /// | 10 tichých tiků, `DiffView` | 10, 10 | **0, 0** |
+    /// | 10 tichých tiků, `DiffRowView` | 1 970, 1 970 | **0, 0** |
+    /// | 10 tichých tiků, `DiffRow.id` | 4 140, 4 140 | **0, 0** |
+    /// | kontrola měřidla, `DiffView` | 4 | **4** |
+    ///
+    /// Ta poslední řádka je podstatná: kontrolní úsek měří dál, takže nula výš je odpověď
+    /// měřidla, ne jeho porucha. **Ablace celého `forget(whatIsNotIn:)` vydala tatáž čísla jako
+    /// ta jedna řádka**, takže v tom úklidu nic dalšího není.
+    ///
+    /// `LazyVStack` z toho zásobníku po #469 zmizel — `changed` vstup byl
+    /// `StaticBody<…VStack<ForEach<Array<FileDiff>…` — a `_printChanges()` u toho hlásilo
+    /// `@self, _layout changed`, nikdy keypath: tělo se tedy nepřekládalo proto, že by si tu mapu
+    /// čtlo samo, ale proto, že se **znovu složila jeho hodnota** (`layout` je `Binding`, který
+    /// `PullRequestDetailView` staví v computed property, takže se nikdy neshodne). To zůstává
+    /// zapsané jako mez, viz `docs/testovani.md`.
     ///
     /// Sonda dělí běh na čtyři úseky, protože každý odpovídá na jinou otázku:
     ///
@@ -149,10 +187,13 @@ struct IdleDiffSpinProbe {
     ///    vidět, co jeden špinavý průchod dnes stojí — a hlavně **že by to sonda naměřila**.
     ///    Bez tohohle úseku by nula v úsecích 1 a 2 netvrdila nic (#478).
     ///
-    /// Měří se **dvakrát**, s chromem okna i bez něj, protože se ta dvě čísla liší trojnásobně
-    /// (`DiffView` 6 proti 2 za deset tiků) — cesta na diff tedy vede převážně přes hlavičku
-    /// a stavový řádek, ne přes detail PR. Co se z toho podařilo přišpendlit a co zbývá, je
-    /// v [`docs/testovani.md`](../../docs/testovani.md).
+    /// Měří se **dvakrát**, s chromem okna i bez něj. Do #421 z toho vycházel závěr, že cesta na
+    /// diff vede přes hlavičku a stavový řádek (`DiffView` 6 proti 2); ten **neplatí** a padl už
+    /// v druhém kole — bez chromu je cena **tatáž nebo vyšší** (11 proti 10). Oba průchody
+    /// zůstávají, protože právě ten druhý oddělil `ContentView` a `isRefreshing` od toho, co
+    /// špinilo diff: po opravě má chrome okna dál `ContentView=20 PullRequestDetailView=20` za
+    /// deset tiků a diff nulu. Rozbor je
+    /// v [`docs/testovani.md`](../../docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421).
     @Test("Co zašpiní tělo DiffView nad nečinným diffem (#421)")
     func whatDirtiesTheDiffBody() async throws {
         // **Dvakrát, s chromem okna i bez něj.** Bez toho druhého průchodu by se nedalo poznat,
@@ -177,12 +218,8 @@ struct IdleDiffSpinProbe {
             window.orderOut(nil)
             window.contentViewController = NSViewController()
         }
-        _ = spinMainRunLoop(seconds: 2)
         let root = try #require(window.contentView)
-        // **Scéna se musí doložit**, jinak by nula mohla být nula nad prázdným oknem — tatáž past
-        // jako u ostatních řádků téhle sondy.
         let chrome = full ? "s chromem okna" : "jen detail PR"
-        print("SONDA #421 \(chrome): \(Self.blocks(in: root)) bloků kódu, \(Self.descendants(of: root)) prvků")
 
         let diagnostics = RenderDiagnostics(
             log: DiagnosticsLog(url: scene.directory.url.appending(path: "d421.log")),
@@ -192,44 +229,155 @@ struct IdleDiffSpinProbe {
         // Bez tohohle nepřijde ani jeden zásobník a `changed` vstup by se nedozvěděl nikdo.
         #expect(GraphProbe.prepare())
         defer { RenderDiagnostics.current = nil }
-        _ = diagnostics.snapshot()
+        // **Usadit se musí podle počitadel, ne podle času** (#421, opravuje #489). Do #421 tu
+        // stálo `spinMainRunLoop(seconds: 2)` a měřilo se hned potom — jenže `spinMainRunLoop`
+        // **drží hlavní actor**, takže rozdělaná práce scény (`.task` v detailu, dotažení
+        // konverzace, značky `Prošlo`) se za něj vůbec nedostane ke slovu a spustí se teprve
+        // v tom úseku, kde sonda poprvé `await`ne. Ten úsek pak vypadá jako práce tiku.
+        let rounds = await settleUntilQuiet(diagnostics)
+        // **Scéna se musí doložit**, jinak by nula mohla být nula nad prázdným oknem — tatáž past
+        // jako u ostatních řádků téhle sondy. Kol usazení je u toho schválně: `rounds` na stropu
+        // znamená, že se scéna neusadila a čísla pod tím se nemají číst.
+        print("""
+            SONDA #421 \(chrome): \(Self.blocks(in: root)) bloků kódu, \
+            \(Self.descendants(of: root)) prvků, \(Self.bigFiles) souborů navíc k fixture, \
+            usazeno po \(rounds) kolech
+            """)
         diagnostics.reset()
 
-        _ = spinMainRunLoop(seconds: 5)
-        print("MĚŘENÍ #421 [\(chrome)] nečinnost 5 s — \(Self.report(diagnostics))")
+        var asked = scene.gateway.searchCount
+        let idleCPU = spinMainRunLoop(seconds: 5)
+        print("""
+            MĚŘENÍ #421 [\(chrome)] nečinnost 5 s — \
+            \(Self.report(diagnostics, scene.gateway, since: asked)) | \(Self.cpu(idleCPU))
+            """)
 
         // **Kontrola tvaru měření, ne tiku** (#478): tentýž rozsekaný běh runloopu, ale bez
         // jediného tiku. Bez tohohle řádku by se nedalo poznat, jestli čísla u tiků mluví
         // o tiku, nebo o tom, že se smyčka pouští po kouscích.
         let ticks = 10
+        asked = scene.gateway.searchCount
+        var loopCPU = 0.0
         for _ in 0..<ticks {
-            _ = spinMainRunLoop(seconds: 0.4)
-            _ = spinMainRunLoop(seconds: 0.2)
+            loopCPU += spinMainRunLoop(seconds: 0.4)
+            loopCPU += spinMainRunLoop(seconds: 0.2)
         }
-        print("MĚŘENÍ #421 [\(chrome)] \(ticks)× tentýž běh smyčky bez tiku — \(Self.report(diagnostics))")
+        print("""
+            MĚŘENÍ #421 [\(chrome)] \(ticks)× tentýž běh smyčky bez tiku — \
+            \(Self.report(diagnostics, scene.gateway, since: asked)) | \(Self.cpu(loopCPU))
+            """)
+
+        // **Druhá kontrola tvaru měření** (#478, přidáno u #421): tentýž běh **i s úlohou na
+        // hlavním actoru**, jen bez tiku. Úsek s tiky totiž nepouští jen `refresh()`, ale i `Task`
+        // a `await` na hlavním actoru — a `spinMainRunLoop` hlavní actor **drží**, takže rozdělaná
+        // práce scény se dostane ke slovu teprve v úseku, kde sonda `await`ne. Bez tohohle řádku
+        // se ty dvě věci nedají rozeznat.
+        asked = scene.gateway.searchCount
+        var actorCPU = 0.0
+        for _ in 0..<ticks {
+            let idle = Task { await TestWait.pause() }
+            actorCPU += spinMainRunLoop(seconds: 0.4)
+            await idle.value
+            actorCPU += spinMainRunLoop(seconds: 0.2)
+        }
+        print("""
+            MĚŘENÍ #421 [\(chrome)] \(ticks)× úloha na hlavním actoru bez tiku — \
+            \(Self.report(diagnostics, scene.gateway, since: asked)) | \(Self.cpu(actorCPU))
+            """)
 
         // Zdržený tik: `isRefreshing = true`, kolo runloopu, pak `= false` a další kolo.
         // **Odmlka jde přes `TestWait`**, ne přes vlastní `Task.sleep` (#296): čekání má v tomhle
         // repu jedno místo. Nečeká se tu na jev — jde o to, aby `isRefreshing = true` přežilo
         // aspoň jedno kolo smyčky, jako když `gh` odpovídá sekundy.
         scene.gateway.duringSearch = { await TestWait.pause() }
+        asked = scene.gateway.searchCount
+        let defaults = DefaultsChanges()
+        var tickCPU = 0.0
         for _ in 0..<ticks {
             let tick = Task { await store.refresh() }
-            _ = spinMainRunLoop(seconds: 0.4)
+            tickCPU += spinMainRunLoop(seconds: 0.4)
             await tick.value
-            _ = spinMainRunLoop(seconds: 0.2)
+            tickCPU += spinMainRunLoop(seconds: 0.2)
         }
         // **Zásobníky, ne jen počty**: `changed` vstup je jediné, co pojmenuje toho, kdo si
         // o přepočet řekl — je to tentýž údaj, ze kterého vznikl histogram v zadání #421.
         let stacks = diagnostics.graphStacks()
-        print("MĚŘENÍ #421 [\(chrome)] \(ticks) tichých tiků — \(Self.report(diagnostics))")
+        print("""
+            MĚŘENÍ #421 [\(chrome)] \(ticks) tichých tiků — \
+            \(Self.report(diagnostics, scene.gateway, since: asked)) \
+            | \(Self.cpu(tickCPU)) | změn v UserDefaults: \(defaults.total)
+            """)
         for (index, stack) in stacks.enumerated() {
             print("MĚŘENÍ #421 [\(chrome)] zásobník \(index + 1)/\(stacks.count):\n\(stack)")
         }
 
+        // **Tentýž tik, ale nezdržený** (#421): bez hooku proběhne `isRefreshing = true` a `= false`
+        // v jednom nepřerušeném úseku, takže se ten příznak **nestihne projevit** ve vlastním
+        // snímku. Všechno ostatní, co tik dělá, zůstává. Je to ablace jediné podezřelé hodnoty
+        // **bez sáhnutí do aplikace** — rozdíl proti úseku výš je celá odpověď na otázku, jestli
+        // je pohonem `isRefreshing`, nebo něco jiného v `refresh()`.
+        scene.gateway.duringSearch = nil
+        asked = scene.gateway.searchCount
+        var undelayedCPU = 0.0
+        for _ in 0..<ticks {
+            await store.refresh()
+            undelayedCPU += spinMainRunLoop(seconds: 0.6)
+        }
+        print("""
+            MĚŘENÍ #421 [\(chrome)] \(ticks) tiků bez zdržení — \
+            \(Self.report(diagnostics, scene.gateway, since: asked)) | \(Self.cpu(undelayedCPU))
+            """)
+
         store.setDiffLayout(.unified)
         _ = spinMainRunLoop(seconds: 2)
         print("MĚŘENÍ #421 [\(chrome)] kontrola měřidla — \(Self.report(diagnostics))")
+    }
+
+    /// Hodiny, které **stojí, ale doopravdy spí** (#421). Sonda si je bere místo `FakeTimeSource`u.
+    ///
+    /// `FakeTimeSource.sleep(for:)` se vrátí **hned** a jen posune svoje hodiny — což je přesně to,
+    /// co v testu nad storem chceme, ale nad **oknem** to je past: `ContentView` startuje
+    /// `store.keepFresh()`, a ta smyčka je `refresh(); sleep(interval); repeat`. S hodinami, které
+    /// nespí, z toho je **hoření** — smyčka se ptá tak rychle, jak jí hlavní actor dovolí, a protože
+    /// `spinMainRunLoop` hlavní actor **drží**, nasype se ta práce do prvního úseku, ve kterém sonda
+    /// `await`ne. Naměřeno: úsek nazvaný „bez tiku“ vydal `DiffView=11` a scéna se neusadila ani po
+    /// čtyřiceti kolech.
+    ///
+    /// `now` je proto zamrzlé (deterministické `lastSuccess` i `nextPoll`, tedy žádné zápisy do
+    /// storu ze hodin) a `sleep` skutečné, takže smyčka po prvním dotazu **prospí celý test**.
+    private struct FrozenClock: TimeSource {
+        var now: Date { Date(timeIntervalSince1970: 1_000_000) }
+
+        func sleep(for duration: Duration) async throws {
+            try await Task.sleep(for: duration)
+        }
+    }
+
+    /// Usadí scénu a **pozná to podle počitadel průchodů tělem**, ne podle uplynulého času (#421).
+    ///
+    /// Vrací počet kol, po kterých se scéna utišila (nebo strop, když se neutišila — pak se čísla
+    /// pod tím nemají číst). Kolo je záměrně **dvojí**: `spinMainRunLoop` rozvrhne okno, ale drží
+    /// při tom hlavní actor, takže rozdělaná práce scény na hlavním actoru se za něj nedostane;
+    /// `settle()` ji naopak pustí ke slovu, ale sám nerozvrhuje. Usazená scéna je až ta, po které
+    /// je ticho v obojím.
+    ///
+    /// **Dvě kola ticha, ne jedno**: práce scény přichází ve vlnách (dotaz → zápis do storu →
+    /// průchod tělem → další dotaz), takže jedno tiché kolo umí padnout mezi dvě vlny.
+    private func settleUntilQuiet(_ diagnostics: RenderDiagnostics, rounds: Int = 40) async -> Int {
+        var quiet = 0
+        for round in 1...rounds {
+            diagnostics.reset()
+            _ = spinMainRunLoop(seconds: 0.3)
+            await settle()
+            _ = spinMainRunLoop(seconds: 0.2)
+            if diagnostics.snapshot().isEmpty {
+                quiet += 1
+                if quiet == 2 { return round }
+            } else {
+                quiet = 0
+            }
+        }
+        return rounds
     }
 
     /// **Který kus tiku to je** (#421). Bisekce nad toutéž scénou: každý krok, který
@@ -240,8 +388,14 @@ struct IdleDiffSpinProbe {
     /// **jako zbytek** po odečtení vyjmenovaných kroků od celého tiku.
     ///
     /// **Naměřeno: všech pět vyjmenovaných kroků dá nulu**, celý tik dá `DiffView=6`. Práce po
-    /// úspěšném tiku — úklid map, automat, notifikace, rozhlídka po hlavách a po cizí aktivitě,
-    /// součet útraty — tedy v tom není; zbývá `isRefreshing` a `forget(whatIsNotIn:)`.
+    /// úspěšném tiku — automat, notifikace, rozhlídka po hlavách a po cizí aktivitě, součet
+    /// útraty — tedy v tom není; zbyl `isRefreshing` a `forget(whatIsNotIn:)`.
+    ///
+    /// **Ten zbytek se ve třetím kole rozdělil na dvě věci a obě mají jméno** (#421):
+    /// `isRefreshing` špiní `ContentView` a `PullRequestDetailView` (dvakrát za tik, ten příznak
+    /// se tam a zpátky doopravdy **mění**, takže to není třída #472 a neopravuje se to zápisem
+    /// „jen při změně“), kdežto diff špinil `forget(whatIsNotIn:)` přes `diffSearches`. Po opravě
+    /// dává tenhle výčet nulu i pro celý tik nad diffem — dvacet průchodů kořenem okna zůstává.
     @Test("Který kus tiku zašpiní tělo DiffView (#421)")
     func whichPartOfTheTickDirtiesTheDiffBody() async throws {
         let scene = try await preparedScene(big: true, full: true)
@@ -255,9 +409,7 @@ struct IdleDiffSpinProbe {
             window.orderOut(nil)
             window.contentViewController = NSViewController()
         }
-        _ = spinMainRunLoop(seconds: 2)
         let root = try #require(window.contentView)
-        print("SONDA #421 scéna: \(Self.blocks(in: root)) bloků kódu, \(Self.descendants(of: root)) prvků")
 
         let diagnostics = RenderDiagnostics(
             log: DiagnosticsLog(url: scene.directory.url.appending(path: "d421b.log")),
@@ -265,6 +417,14 @@ struct IdleDiffSpinProbe {
         )
         RenderDiagnostics.current = diagnostics
         defer { RenderDiagnostics.current = nil }
+        // Usazení podle počitadel, ne podle času — viz `settleUntilQuiet`. Tady na tom stojí celá
+        // bisekce: první krok, který doopravdy uspí hlavní actor, by jinak dostal na triko
+        // rozdělanou práci scény.
+        let rounds = await settleUntilQuiet(diagnostics)
+        print("""
+            SONDA #421 scéna: \(Self.blocks(in: root)) bloků kódu, \
+            \(Self.descendants(of: root)) prvků, usazeno po \(rounds) kolech
+            """)
         diagnostics.reset()
         _ = spinMainRunLoop(seconds: 3)
         print("MĚŘENÍ #421b nečinnost 3 s — \(Self.report(diagnostics))")
@@ -287,13 +447,16 @@ struct IdleDiffSpinProbe {
         // repu jedno místo. Nečeká se tu na jev — jde o to, aby `isRefreshing = true` přežilo
         // aspoň jedno kolo smyčky, jako když `gh` odpovídá sekundy.
         scene.gateway.duringSearch = { await TestWait.pause() }
+        let asked = scene.gateway.searchCount
         for _ in 0..<10 {
             let tick = Task { await store.refresh() }
             _ = spinMainRunLoop(seconds: 0.4)
             await tick.value
             _ = spinMainRunLoop(seconds: 0.2)
         }
-        print("MĚŘENÍ #421b 10× celý tik — \(Self.report(diagnostics))")
+        // Počet dotazů i tady, ze stejného důvodu jako u `measureTickDirt`: „10× celý tik“ musí
+        // vydat **20** (dva zdroje na tik), jinak se do toho úseku připletla smyčka `keepFresh()`.
+        print("MĚŘENÍ #421b 10× celý tik — \(Self.report(diagnostics, scene.gateway, since: asked))")
     }
 
     /// **Kterou vlastnost storu tik zneplatní** (#421). Bez okna a bez hodin: nad každým
@@ -357,6 +520,51 @@ struct IdleDiffSpinProbe {
         print("MĚŘENÍ #421c tik neprobudil: \(quiet)")
     }
 
+    /// **Která pole storu tik doopravdy změní** (#421). Bez okna, bez hodin: přečte se stav storu
+    /// zrcadlem, pustí se jeden tik a vypíše se, které pole se liší.
+    ///
+    /// Proč zrcadlo a ne výčet čtení jako u `whichPropertyTheTickInvalidates`: ten výčet umí
+    /// odpovědět jen na to, co se do něj napsalo, a u #421 se ukázalo, že to nestačí — tělo
+    /// `DiffView`u se špiní, i když se **žádné** z jednadvaceti vypsaných čtení neprobudí a všechny
+    /// jeho vstupy jsou v každém průchodu shodné. Zrcadlo naproti tomu projde **všechna** uložená
+    /// pole, tedy i ta, na která by nikdo nepomyslel; `@Observable` z nich dělá počítané vlastnosti
+    /// nad zálohou `_jméno`, takže je čtení zrcadlem **neregistruje** jako přístup a měření tím
+    /// nemění, co se sleduje.
+    ///
+    /// Srovnává se `String(describing:)`, ne rovnost: pole storu nejsou `Equatable` napříč, kdežto
+    /// popis má každé. Cena je v tom, že se sáhne i na megabajtové diffy — proto se to pouští
+    /// ručně a jen dvakrát.
+    @Test("Která pole storu tik změní (#421)")
+    func whichFieldsTheTickChanges() async throws {
+        let scene = try await preparedScene(big: true, full: true)
+        defer { _ = scene.directory }
+        let store = scene.store
+        let before = Self.fields(of: store)
+        await store.refresh()
+        let after = Self.fields(of: store)
+        let changed = after.filter { before[$0.key] != $0.value }.keys.sorted()
+        let appeared = after.keys.filter { before[$0] == nil }.sorted()
+        print("MĚŘENÍ #421d tik změnil pole: \(changed.isEmpty ? ["žádné"] : changed)")
+        print("MĚŘENÍ #421d polí celkem: \(after.count), nově se objevilo: \(appeared)")
+    }
+
+    /// Uložená pole objektu (a jeho vnořených objektů o úroveň hloub) jako `jméno → popis`.
+    ///
+    /// Hloubka jedna schválně: `AppStore` drží `PollingService` a `HealthMonitor` jako **vlastní**
+    /// `@Observable` objekty, takže `isRefreshing` ani `status` by v plochém průchodu nebyly vidět
+    /// — a zrovna o ty tady jde. Hloub se nechodí, protože pod tím jsou už jen data.
+    private static func fields(of object: Any, prefix: String = "") -> [String: String] {
+        var out: [String: String] = [:]
+        for child in Mirror(reflecting: object).children {
+            guard let label = child.label else { continue }
+            let name = prefix.isEmpty ? label : "\(prefix).\(label)"
+            out[name] = String(describing: child.value)
+            guard prefix.isEmpty, Mirror(reflecting: child.value).displayStyle == .class else { continue }
+            for (nested, value) in Self.fields(of: child.value, prefix: name) { out[nested] = value }
+        }
+        return out
+    }
+
     /// Čtenář, který si pamatuje, jestli ho někdo probudil. Kopie z `PollObservationTests` (#472)
     /// — `withObservationTracking` je jednorázové a sondě stačí „přišla vůbec nějaká změna?“.
     private final class Watcher: @unchecked Sendable {
@@ -378,6 +586,77 @@ struct IdleDiffSpinProbe {
         let bodies = diagnostics.snapshot()
         diagnostics.reset()
         return "těla: \(Self.tally(bodies)) | graf: \(Self.tally(sites))"
+    }
+
+    /// Totéž, ale **i s počtem dotazů na GitHub za ten úsek** (#421).
+    ///
+    /// Bez toho čísla se nedá poznat, kolik tiků v úseku doopravdy bylo: seznam si udržuje
+    /// smyčka `keepFresh()`, kterou startuje `ContentView` sám, takže úsek nazvaný „10 tichých
+    /// tiků“ jich může mít stovky — a v tom případě ta čísla nemluví o deseti ticích.
+    /// Naměřeno u #421: s hodinami, které nespí, jich smyčka stihla tolik, že se scéna
+    /// neusadila ani po čtyřiceti kolech.
+    private static func report(_ diagnostics: RenderDiagnostics, _ gateway: FakeGitHubGateway, since: Int) -> String {
+        "\(Self.report(diagnostics)) | dotazů na gh: \(gateway.searchCount - since)"
+    }
+
+    /// Počitadlo změn v `UserDefaults` (#421). `@AppStorage` se **nepřekresluje podle hodnoty, ale
+    /// podle úložiště**, takže zápis téže hodnoty do kterékoli položky domény umí zneplatnit každé
+    /// view, které si z ní čte — a `DiffView` si čte dvě. Bez tohohle počitadla se ta hypotéza od
+    /// „tělo se zašpinilo neznámo čím“ nedá odlišit: v ablaci u #421 vyšlo, že se v každém
+    /// průchodu tělem **všechny** vstupy shodují.
+    /// **Uzávěr chytá počitadlo, ne `self`, a je to podmínka, ne styl** (nález Copilota na #553).
+    /// Blokový observer drží notifikační centrum, takže `{ [self] … }` uzavře kruh
+    /// (centrum → uzávěr → `self` → `token`), `deinit` se nikdy nespustí a observer přežije
+    /// v procesu do konce běhu — v `.serialized` sadě, která si počitadlo zakládá dvakrát, by po
+    /// každém běhu zůstal jeden živý. Jinde v repu se proto blokové observery nepoužívají vůbec
+    /// (`DiffPairBlockView` a `SpinningRingView` berou selektorovou podobu, u které token není);
+    /// tady je potřeba **cizí** notifikace bez `NSObject`u, takže zbývá odregistrovat ho ručně —
+    /// a to jde jedině tehdy, když `deinit` doopravdy přijde.
+    private final class DefaultsChanges: @unchecked Sendable {
+        private let counter = Counter()
+        private let token: any NSObjectProtocol
+
+        init() {
+            let counter = counter
+            token = NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification,
+                object: nil,
+                queue: nil
+            ) { _ in counter.bump() }
+        }
+
+        deinit { NotificationCenter.default.removeObserver(token) }
+
+        var total: Int { counter.total }
+
+        private final class Counter: @unchecked Sendable {
+            private let lock = NSLock()
+            private var count = 0
+
+            func bump() { lock.withLock { count += 1 } }
+
+            var total: Int { lock.withLock { count } }
+        }
+    }
+
+    /// CPU hlavního vlákna za úsek, v milisekundách (#421, třetí kolo).
+    ///
+    /// **Existuje kvůli pravidlu z #275**: počty průchodů tělem samy nedokazují, že se něco
+    /// zlevnilo — zamítnutá oprava z druhého kola je snížila v jednom view a zvedla ve dvou
+    /// jiných. Kdo tvrdí, že vada zmizela, má vedle nuly v počtech mít i čas.
+    ///
+    /// **Je to CPU jedině za dobu, kdy se točí runloop** — sečtené návratové hodnoty
+    /// `spinMainRunLoop`u v tom úseku, ne celá jeho délka. Práce, která běží v `await`u mezi
+    /// dvěma otočkami, v tom čísle **není**.
+    ///
+    /// **A tenhle údaj rozdíl u #421 NEROZLIŠÍ — to je součást toho, co se změřilo, ne mez, na
+    /// kterou se zapomnělo.** A/B/A/B nad scénou o stu souborů dalo se vadou 42 a 26 ms, bez ní
+    /// 24 a **58** ms; rozptyl měřidla je tedy větší než hledaný efekt, i když v počtech je ten
+    /// rozdíl `DiffRowView` 12 530 proti **nule**. Kdo odsud bude číst čas, ať čte i tenhle
+    /// odstavec: nula v počtech znamená „ta práce se nedělá“, ne „ušetřilo se X ms“
+    /// ([rozbor](../../docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
+    private static func cpu(_ seconds: TimeInterval) -> String {
+        String(format: "CPU na runloopu: %.0f ms", seconds * 1000)
     }
 
     private static func tally(_ counts: [String: Int]) -> String {
@@ -1269,7 +1548,7 @@ struct IdleDiffSpinProbe {
         full: Bool
     ) async throws -> (store: AppStore, directory: TemporaryDirectory, gateway: FakeGitHubGateway) {
         var text = try Fixture.text("gh/pr-diff-ordinary.diff")
-        if big { text += Self.synthetic(files: 12, hunks: 4, lines: 40) }
+        if big { text += Self.synthetic(files: Self.bigFiles, hunks: 4, lines: 40) }
         let gateway = FakeGitHubGateway(
             always: .success(Self.summaries),
             detail: .success(Self.detail),
@@ -1279,7 +1558,7 @@ struct IdleDiffSpinProbe {
         let directory = try TemporaryDirectory()
         let store = AppStore(
             gateway: gateway,
-            time: FakeTimeSource(),
+            time: FrozenClock(),
             drafts: ReviewDraftStore(layout: CacheLayout(root: directory.url))
         )
         await store.loadDetail(for: Self.summary)

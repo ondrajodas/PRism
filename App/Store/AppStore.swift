@@ -2152,7 +2152,22 @@ final class AppStore {
         readStates = readStates.filter { wantedPullRequests.contains($0.key) }
         // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
-        diffSearches = diffSearches.filter { wantedPullRequests.contains($0.key.pullRequest) }
+        //
+        // **Tady se zapisuje jedině při změně, a je to výjimka z pravidla, ne nedůslednost**
+        // (#421). Zbylých sedmatřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
+        // hodnoty `@Observable` nehlásí, takže je `if` navíc jen mrtvá váha
+        // (`PollObservationTests`). Jenže suprese stojí na tom, že se ty dvě hodnoty dají
+        // **porovnat** — a `DiffSearchState` je `@Observable` **třída**, takže
+        // `[DiffSearchKey: DiffSearchState]` `Equatable` není a porovnat se nedá. Tichý tik tím
+        // budil každého čtenáře téhle mapy, **i když je prázdná**, a v okně z toho byl jeden
+        // průchod tělem `DiffView`u za tik, tedy ~197 průchodů `DiffRowView`u a ~414 dotazů na
+        // `DiffRow.id`. Změřeno v [`docs/testovani.md`](../../docs/testovani.md).
+        //
+        // `count` stačí: `filter` umí jedině ubrat, takže stejný počet znamená stejnou mapu.
+        // Hlídá to `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` — a to
+        // nad **všemi** mapami, aby další neporovnatelná hodnota spadla tam, ne až v okně.
+        let keptSearches = diffSearches.filter { wantedPullRequests.contains($0.key.pullRequest) }
+        if keptSearches.count != diffSearches.count { diffSearches = keptSearches }
         // Detail se drží jen pro to, co je v chtěné množině — je z něj `headSha` pro draft, a ten
         // se u PR mimo ni nepíše. Rozdělané načítání přežije jako u diffu.
         //
