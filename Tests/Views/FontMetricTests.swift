@@ -14,6 +14,10 @@ import Testing
 ///
 /// Tvrzení jsou čtyři druhy: **kolikrát se měří**, **co se stane, když měření nevyjde**, **jestli
 /// jsou náhradní cesty použitelné**, a **kde v repu smí metrika bydlet**.
+///
+/// **Od #550 je ten druhý druh o jednu otázku bohatší**: nejen „co se stane“, ale **jak se to
+/// pozná**. Měřidlo nepovedené měření vydávalo jako nulu, tedy k nerozeznání od rozměru nula —
+/// odsud je to `nil` z `metric(_:of:)`, kdežto nulu dostane jedině kresba.
 @Suite("Metrika písma z jednoho místa (#407)")
 struct FontMetricTests {
     private let mono = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -164,6 +168,50 @@ struct FontMetricTests {
         #expect(metric.tally.measurements == 2, "druhé volání neměřilo znovu: \(metric.tally)")
     }
 
+    /// **Nepovedené měření se dá poznat od rozměru nula** (#550), a je to celý ten rozdíl, který do
+    /// #550 chyběl: `CommitPanelRoomTests` padaly zprávou `šířka znaku: 0`, ze které nebylo poznat,
+    /// jestli je písmo nulové, nebo jestli měřidlo v tu sekundu nic nemělo.
+    ///
+    /// Tvrdí se **obě strany naráz**, protože jedna bez druhé nic neznamená: `metric(_:of:)` vydá
+    /// `nil` (nemám), kdežto `characterWidth(of:)` dál vydá **nulu**, protože z něj kreslí okno
+    /// a to čekat nesmí. A tvrdí se u toho i to, že se **nula nezakryla**: `.some(0)` z měřidla
+    /// vypadnout nemůže, protože o použitelnosti rozhoduje `Policy.usableFontMetric(_:)` — kdyby se
+    /// tam nula jednou stala legitimní odpovědí, vydá se jako `.some(0)` a od `nil` se pozná.
+    @Test("Chybějící metrika je nil, ne nula")
+    func tellsAMissingMetricFromAZeroSize() throws {
+        let metric = FontMetric()
+        let broken = try #require(brokenFont(scaledBy: .infinity, size: 10), "vadné písmo se nepostavilo")
+
+        #expect(metric.metric(.characterWidth, of: broken) == nil, "měřidlo vydalo hodnotu: \(metric.tally)")
+        #expect(metric.characterWidth(of: broken) == 0, "kresba nedostala nulu: \(metric.tally)")
+
+        // A na zdravém písmu je to `.some`, ne „něco kladného“ — jinak by tvrzení výš prošlo i nad
+        // měřidlem, které vrací `nil` vždycky.
+        let usable = try #require(metric.metric(.characterWidth, of: mono))
+        #expect(usable > 0, "šířka znaku: \(usable), \(metric.tally)")
+        #expect(Policy.usableFontMetric(CGFloat(0)) == nil, "nula je pořád nepoužitelná hodnota")
+    }
+
+    /// **A čekání se vzdává nahlas** (#550). `TestWait.settledFontMetric` vrací nulu i tehdy, když
+    /// se metriky nedočká — jenže k té nule **zapíše nález**, takže test spadne na místě čekání
+    /// a v hlášce stojí, že metrika není, ne že je rozměr nula. Kdyby se ten nález nezapisoval,
+    /// vypadalo by nedočkání se přesně jako to, co #550 opravuje.
+    ///
+    /// Zkouší se na písmu, které je vadné **natrvalo** (nekonečná matice) a s nejkratším stropem —
+    /// `withKnownIssue` ten nález spolkne, a **spadne, když žádný nepřijde**, takže je to tvrzení
+    /// o zapsání, ne o návratové hodnotě.
+    @Test("Nedočkaná metrika zapíše nález, ne jen nulu")
+    func theWaitGivesUpLoudly() throws {
+        let broken = try #require(brokenFont(scaledBy: .infinity, size: 10), "vadné písmo se nepostavilo")
+        var value: CGFloat = -1
+
+        withKnownIssue("metrika se neusadí, na to je tenhle test") {
+            value = TestWait.settledFontMetric(.characterWidth, of: broken, within: .milliseconds(1))
+        }
+
+        #expect(value == 0, "nedočkané čekání vydalo \(value)")
+    }
+
     /// Co se z naměřené hodnoty smí zapamatovat, rozhoduje `Policy.usableFontMetric(_:)` — čistá
     /// funkce, tedy vyčerpávajícím výčtem. **Nekonečno a `NaN` v něm nejsou navíc**: `Int(x)` na nich
     /// **shodí proces**, kdežto nulu zavře `guard` v `Policy.charactersPerSide`.
@@ -226,7 +274,7 @@ struct FontMetricTests {
     /// jedině na čísla, která má `NSFont` sám u sebe.
     @Test("Náhradní měření nesází text")
     func theFallbackNeverTypesets() throws {
-        let source = try code(at: "App/Views/FontMetric.swift")
+        let source = try condensed(at: "App/Views/FontMetric.swift")
         #expect(!source.contains("NSAttributedString"), "měřidlo sází text")
     }
 
@@ -254,17 +302,22 @@ struct FontMetricTests {
         ]
         let offenders = try (sources(in: "App") + sources(in: "Tests"))
             .filter { !allowed.contains($0.path) }
-            .filter { source in Self.rawMetricReads.contains { source.code.contains($0) } }
+            .filter { source in Self.rawMetricReads.contains { source.condensed.contains($0) } }
             .map(\.path)
 
         #expect(offenders.isEmpty, "vlastní čtení metriky písma: \(offenders.joined(separator: ", "))")
     }
 
-    /// A **sady, které na té třídě padaly, ji berou z měřidla** — tvrzení výš zakazuje surové čtení,
-    /// tohle tvrdí, odkud si tedy metriku vzaly. Bez něj by šlo pravidlo splnit i tím, že se tvrzení
-    /// o rozměru zahodí.
-    @Test("Sady, které na tom padaly, berou metriku z měřidla")
-    func theSuitesThatFellTakeTheMetricFromOnePlace() throws {
+    /// A **sady, které na té třídě padaly, si na metriku počkají** — tvrzení výš zakazuje surové
+    /// čtení, tohle tvrdí, odkud si tedy metriku vzaly. Bez něj by šlo pravidlo splnit i tím, že se
+    /// tvrzení o rozměru zahodí.
+    ///
+    /// **Od #550 je to `TestWait.settledFontMetric`, ne `FontMetric.shared`** a je to změna kvůli
+    /// nule: měřidlo z pojmenovaných metod nepovedené měření vydává jako nulu (kreslí z nich okno
+    /// a to čekat nesmí), takže sada, která z nuly skládá tvrzení, tvrdí něco o procesu, ne
+    /// o aplikaci. Test čekat může — a `settledFontMetric` je jediné místo, kde se čeká.
+    @Test("Sady, které na tom padaly, si na metriku počkají")
+    func theSuitesThatFellWaitForTheMetric() throws {
         let places = [
             "Tests/Views/CommitPanelRoomTests.swift",
             "Tests/Views/LogTailHeightTests.swift",
@@ -273,8 +326,48 @@ struct FontMetricTests {
             "Tests/Views/CheckLogRoomProbe.swift",
         ]
         for path in places {
-            #expect(try code(at: path).contains("FontMetric.shared"), "\(path) nebere metriku z `FontMetric`")
+            #expect(
+                try condensed(at: path).contains("TestWait.settledFontMetric("),
+                "\(path) si na metriku nepočká"
+            )
         }
+    }
+
+    /// **A žádná jiná sada si o metriku neřekne přímo** (#550) — jinak by se ta nula vrátila do
+    /// tvrzení tou cestou, kterou se do nich dostala poprvé: novou sadou, která o #407 ani #550
+    /// nevěděla. Tvrzení výš jmenuje pět sad, tohle uzavírá zbytek `Tests/`, a to je ten rozdíl
+    /// mezi opravou třídy a opravou výskytu.
+    ///
+    /// **Tři výjimky, každá s důvodem:** tahle sada (hledané řetězce v ní stojí jako literály
+    /// a měří samo měřidlo), `FontMetricProbe` (porovnává cesty vedle sebe) a
+    /// `CodeTextSheetSizingTests` — ta srovnává `static let` konstantu aplikace s tím, co měřidlo
+    /// vydá **aplikaci**, takže se musí ptát touž nečekající cestou; s čekáním by tvrdila něco
+    /// jiného, než co v konstantě leží.
+    ///
+    /// **`tally` v hlášce zakázaná není** — je to počet měření, ne rozměr, a je to zrovna to, co
+    /// u #407 udělalo z „šířka znaku: 0“ příznak s příčinou.
+    @Test("Metriku z měřidla si v testech nebere nikdo mimo helper čekání")
+    func noSuiteReadsTheDeviceWithoutWaiting() throws {
+        let allowed = [
+            "Tests/Views/FontMetricTests.swift",
+            "Tests/Views/FontMetricProbe.swift",
+            "Tests/Views/CodeTextSheetSizingTests.swift",
+        ]
+        let reads = [
+            "FontMetric.shared.characterWidth(",
+            "FontMetric.shared.lineHeight(",
+            "FontMetric.shared.boundingHeight(",
+        ]
+        let offenders = try sources(in: "Tests")
+            .filter { !allowed.contains($0.path) }
+            .filter { source in reads.contains { source.condensed.contains($0) } }
+            .map(\.path)
+
+        #expect(offenders.isEmpty, "metrika bez čekání: \(offenders.joined(separator: ", "))")
+        // Pojistka, že stráž doopravdy hledá: v tomhle souboru ty vzory stojí, a musí sednout.
+        let guardFile = try condensed(at: "Tests/Views/FontMetricTests.swift")
+        #expect(reads.allSatisfy { guardFile.contains($0) }, "vzory nesedly ani na stráži samotné")
+        #expect(!guardFile.contains(where: { $0.isWhitespace }), "v `condensed` zůstaly mezery")
     }
 
     /// Surová čtení metriky písma. `boundingRectForFont` je v tom výčtu taky, i když se na něm ta
@@ -299,8 +392,23 @@ struct FontMetricTests {
 
     private struct Source {
         let path: String
-        /// Jen kód — řádkové komentáře jsou pryč, protože o metrice se v nich mluví.
-        let code: String
+
+        /// Kód **bez jediné mezery a bez zalomení** (#490, sem u #550). Hledá se nad tímhle, protože
+        /// ve Swiftu je mezera uvnitř volání volná: `FontMetric . shared` je platný zápis téhož,
+        /// takže stráž nad surovým textem by ho pustila — tedy zezelenala by právě nad tou chybou,
+        /// na kterou je. (U `rawMetricReads` je to uniformita, ne oprava: jeden identifikátor mezera
+        /// rozdělit neumí.)
+        ///
+        /// **Uložený, ne počítaný** — čísla jsou u `UnanimatedWindowTests.Source.condensed`: tři
+        /// vzory čtené z computed property znamenaly tři průchody přes 5,1 MB zdrojáků. Surový text
+        /// se nedrží: nikdo ho tady nečte.
+        let condensed: String
+
+        /// `code` je kód **bez řádkových komentářů**, protože o metrice se v nich mluví.
+        init(path: String, code: String) {
+            self.path = path
+            self.condensed = code.filter { !$0.isWhitespace }
+        }
     }
 
     private static let repository = URL(filePath: #filePath)
@@ -308,9 +416,11 @@ struct FontMetricTests {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
 
-    private func code(at path: String) throws -> String {
+    /// Kód jednoho souboru, bez řádkových komentářů a **bez mezer** — viz `Source.condensed` (#550).
+    /// Nad surovým textem se v téhle sadě nehledá nic, takže se ani nevydává.
+    private func condensed(at path: String) throws -> String {
         let text = try String(contentsOf: Self.repository.appending(path: path), encoding: .utf8)
-        return Self.stripped(text)
+        return Self.stripped(text).filter { !$0.isWhitespace }
     }
 
     private static func stripped(_ text: String) -> String {

@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import Testing
 
+@testable import PRism
+
 /// Čekání na jev v testech — jedno místo, kde je napsané, **jak** se čeká a **jak dlouho** (#296).
 ///
 /// Vzniklo to tím, že tentýž problém našlo šest různých míst v repu zvlášť: `AsyncGate` (#292),
@@ -59,6 +61,59 @@ enum TestWait {
     /// jev platí i tady, je ta odmlka — spin na `yield()` bere procesor ostatním suitám.
     static func pause() async {
         try? await Task.sleep(for: step)
+    }
+
+    /// Strop pro **usazení metriky písma** (#550) — a je schválně o dva řády kratší než `deadline`.
+    ///
+    /// Rozdíl je v tom, čím se čeká: `waitUntil` čeká `await`em, takže drží jen task, kdežto tady se
+    /// blokuje **vlákno** volajícího (metrika se čte synchronně z půltuctu sad a sondy, převádět je
+    /// na `async` by znamenalo přepsat čtyřicet testů kvůli hodnotě, která se usadí za milisekundu).
+    /// Držet vlákno dvě minuty je tatáž třída jako #462, takže se drží pět sekund — naměřená vada
+    /// trvá **zlomek sekundy** (#407), tohle je proti tomu řádová rezerva.
+    ///
+    /// **Strop se kontroluje po pokusu**, takže i na vyhladovělém stroji proběhnou aspoň dva pokusy
+    /// a druhý je od prvního o tu odmlku dál, kterou stroj doopravdy dal (změřeno u #296: odmlka
+    /// o 100 ms se pod zátěží probudila za 8,6 s). Rozpočet kol to schválně není (#292).
+    static let metricSettling: Duration = .seconds(5)
+
+    /// Jak často se na metriku ptá — **tatáž milisekunda jako `step`**, jen v sekundách, protože
+    /// `Thread.sleep` bere `TimeInterval`. Dvě čísla by se rozešla, tak je u nich napsané, že jsou
+    /// jedno.
+    private static let metricPollSeconds: TimeInterval = 0.001
+
+    /// **Metrika písma, na kterou se dá tvrdit číslo** (#550) — počká, dokud ji měřidlo nemá.
+    ///
+    /// `FontMetric` vydává nulu tam, kde se měření nepovedlo, protože z těch metod kreslí okno
+    /// a to čekat nesmí. Test čekat **může**, a musí: nepovedené měření je přechodné (#407), takže
+    /// tvrzení „šířka znaku je 8,04“ nad ním není o aplikaci, ale o tom, co se v tu sekundu dělo
+    /// v procesu — a to je zrovna ta třída pádů, kterou #367 zakazuje.
+    ///
+    /// Když se metrika neusadí, **zapíše se nález a vrátí nula**: test spadne na místě čekání
+    /// a v hlášce stojí, že metrika není, ne že je rozměr nula. Tenhle rozdíl u #490 a #152 chyběl.
+    static func settledFontMetric(
+        _ kind: FontMetric.Kind,
+        of font: NSFont,
+        within deadline: Duration = metricSettling,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) -> CGFloat {
+        let clock = ContinuousClock()
+        let limit = clock.now.advanced(by: deadline)
+        var attempts = 0
+        while true {
+            attempts += 1
+            if let value = FontMetric.shared.metric(kind, of: font) { return value }
+            if clock.now >= limit { break }
+            Thread.sleep(forTimeInterval: metricPollSeconds)
+        }
+        Issue.record(
+            """
+            Nedočkalo se: metrika písma se neusadila (\(kind) u \(font.fontName) \(font.pointSize), \
+            \(attempts) pokusů, strop \(deadline)). Tvrzení níž tím ztrácejí platnost. \
+            \(FontMetric.shared.tally)
+            """,
+            sourceLocation: sourceLocation
+        )
+        return 0
     }
 
     /// Počká, až se v procesu **usadí styl scrollerů**, a teprve pak se smí stavět AppKitová

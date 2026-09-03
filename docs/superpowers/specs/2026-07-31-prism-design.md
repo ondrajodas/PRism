@@ -5705,3 +5705,36 @@ Neplatí se tedy ani za rozhodnutí, ani za kolonu.
 (ne `Nálezy u řádků`), pruh závažnosti na **pravé** hraně řádku se s vypnutým okrajem nekreslí
 a mezera před pravou kolonou (6 b) je vidět i u složeného proužku panelu. První dvě věci jsou
 z #503 a zůstávají v platnosti, třetí je změna, která s okrajem nesouvisí.
+
+## Záznam rozhodnutí — nepoužitelná metrika je `nil`, ne nula (#550)
+
+Měření, vložené regrese a podmínky běhů jsou
+v [`docs/testovani.md`](../../testovani.md#páté-kolo-stráž-nad-surovým-textem-a-nula-z-měřidla-550);
+sem patří **co se rozhodlo a co se za to zaplatilo**.
+
+**Otázka nebyla „jak nulu opravit“, ale „komu ta nula patří“.** #407 zavedlo `FontMetric` jako
+jediné místo, kde se metrika písma čte, a ověřilo, že vada je **přechodná** — písmo, které jednou
+nedá metriku, ji o zlomek sekundy později dá. Nedodělalo ale to, co z toho plyne: nepovedené měření
+z měřidla vypadlo jako **nula**, tedy jako měření. Kdo tu nulu dostal, nemohl vědět, že měřidlo nic
+nemělo — a `CommitPanelRoomTests` proto padaly zprávou `šířka znaku: 0`, kterou měřidlo o zlomek
+sekundy později skládalo už z 8,036.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **`metric(_:of:) -> CGFloat?` jako primitivum**, `nil` = „použitelnou metriku nemám“ | Nechat nulu a dokumentovat, co znamená | Sentinel v hodnotě je přesně ten vzor, který se v tomhle repu opakovaně opravuje (`try?`, `?? default` nad operací, která může selhat): selhání vypadá jako data. `Optional` je způsob, jak to říct v typu, ne v komentáři |
+| **Tři pojmenované metody vydávají dál `CGFloat`** a nulu z nich dělá **jedno místo** uvnitř měřidla | Udělat optional i z nich a nechat `?? 0` na sedmi místech v `App/` a dvou desítkách v `Testech` | Kresba čekat nesmí a **musí nakreslit něco**; `Policy.charactersPerSide` nulu zavírá `guardem`. Dvacet sedm `?? 0` je dvacet sedm míst, kde se ta úvaha musí zopakovat — a je to zrovna ten vzor, který v tomhle repu Copilot chytá. Jedno místo s vysvětlením je čitelnější než sedmadvacet bez |
+| **Kdo si čekání dovolit může, ten čeká** — testy a sondy berou `TestWait.settledFontMetric(_:of:)` | Nechat čekat i měřidlo (delší řetěz pokusů pro všechny) | Vada trvá „zlomek sekundy“, kdežto řetěz pokusů v měřidle je 3 ms. Prodloužit ho na stovky milisekund by znamenalo, že se **okno** může zaseknout na neznámo dlouho, a měří se navíc **pod zámkem**, takže by čekající kresba držela měřidlo všem. Strop čekání patří tomu volajícímu, který si ho může dovolit |
+| **Čekání je synchronní, se stropem 5 s** | `waitUntil` (async, strop 120 s) | Metriku čte půltucet sad a dvě sondy ze **synchronních** computed properties; `async` by znamenalo přepsat kolem čtyřiceti testů kvůli hodnotě, která se usadí za milisekundu. Blokuje se tedy vlákno — a proto strop **5 s**, ne dvě minuty: držet vlákno dvě minuty je třída #462. Strop se kontroluje **po** pokusu, takže i na vyhladovělém stroji proběhnou aspoň dva |
+| **Nedočkané čekání zapíše nález a vrátí nulu** | Vyhodit chybu, nebo nulu vrátit potichu | Potichu je totéž co dnes. `throws` by znamenalo `try` u každého čtení rozměru v půltuctu sad, a to kvůli stavu, který nastane jednou z deseti běhů. Nález v hlášce říká **metrika není**, ne **rozměr je nula**, a to je celý rozdíl, který #550 dodává |
+| **Stráž nad zdrojáky, ne dohoda** | Nechat na sadách, že si o metriku řeknou přes čekání | Tři léčby na třech místech před #407 vznikly přesně takhle: nová sada o pravidle nevěděla. `FontMetricTests` proto tvrdí, že pět jmenovaných sad **čeká** a že měřidlo si přímo nebere nikdo mimo tři vyjmenované výjimky |
+| **Nula se nezakrývá** | Vyhodit nulu z `Policy.usableFontMetric` jako nemožnou | O použitelnosti rozhoduje dál jedna čistá funkce na jednom místě. Kdyby se u některé metriky nula stala legitimní odpovědí, vydá se jako `.some(0)` a od `nil` se pozná — jinak by se řešení té dvojznačnosti vyměnilo za jinou dvojznačnost |
+
+**Druhá polovina issue je stráž nad zdrojáky bez zhuštění**, a rozhodnutí u ní je jen jedno:
+**zhušťuje se plošně, i tam, kde to nic neopravuje.** `maximumAdvancement`, `defaultLineHeight`
+a `boundingRectForFont` jsou jedno slovo, takže je mezera rozdělit neumí — u nich je to uniformita.
+Rozhodovat to u každého vzoru zvlášť by znamenalo, že se u příštího vzoru rozhodne špatně
+a nikdo si toho nevšimne, protože stráž bude zelená.
+
+**Co se z toho nezmenšilo, a je to zapsané**: čtyři stráže mají čtyři kopie `Source`/`condensed`.
+Zdrojáky si v `Tests/` čte dvacet jeden soubor a svést je do jednoho čtení je vlastní úklid
+(zapsaný už u #490), ne tohle issue.

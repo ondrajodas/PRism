@@ -85,6 +85,13 @@ import Synchronization
 /// **Nezdařené měření se nepamatuje**, takže se z něj nedá stát stav procesu: příští volání měří
 /// znovu. Zapamatovat nulu by bylo horší než ji vrátit jednou, protože `SelectableCodeView`
 /// i `DiffToolbar` si šířku znaku drží jako `static let`, tedy **navždycky**.
+///
+/// **A od #550 se to nepovedené měření dá poznat**: `metric(_:of:)` vydá `nil`, kdežto
+/// `characterWidth` a spol. dál vydávají nulu, protože z nich kreslí okno. Do #550 tu byla jen ta
+/// nula — tedy nepovedené měření k nerozeznání od rozměru nula, a `CommitPanelRoomTests` na tom
+/// padaly zprávou `šířka znaku: 0`, kterou měřidlo o zlomek sekundy později skládalo už z 8,036.
+/// Kdo si čekání dovolit může (test, sonda), ptá se přes `TestWait.settledFontMetric(_:of:)`; okno
+/// nečeká nikdy.
 final class FontMetric: Sendable {
     /// Měřidlo, které používá aplikace i testy. Sdílené schválně — v tom je celá pointa: `mono 13`
     /// je tentýž font v liště diffu, v bloku kódu i v sheetu.
@@ -100,21 +107,46 @@ final class FontMetric: Sendable {
         self.capacity = capacity
     }
 
-    /// Šířka jednoho znaku písma, kterým se sází kód. Mono má všechny znaky stejně široké, takže
-    /// stačí změřit jeden.
-    func characterWidth(of font: NSFont) -> CGFloat {
-        value(.characterWidth, of: font)
+    /// **Metrika, kterou měřidlo doopravdy má — `nil` znamená „nemám ji“** (#550).
+    ///
+    /// Tři metody níž vydávají `CGFloat` a při nepovedeném měření z nich vypadne **nula**. To je
+    /// hodnota, kterou od nich potřebuje **kresba**: okno musí nakreslit něco, čekat nesmí (tvrdé
+    /// pravidlo z #350 i #220), a `Policy.charactersPerSide` nulu zavírá `guardem`. Jenže z té nuly
+    /// se nedá poznat „metriku nemám“ od „rozměr je nula“ — a přesně ten rozdíl chyběl, když
+    /// `CommitPanelRoomTests` padaly na `šířka znaku: 0` a hlášku o zlomek sekundy později skládaly
+    /// už z 8,036.
+    ///
+    /// Odsud je ten rozdíl **v typu**: `nil` je „použitelnou metriku nemám“, `.some(x)` je „mám x“.
+    /// **Nula tím zakrytá není** — o tom, co je použitelná hodnota, rozhoduje dál
+    /// `Policy.usableFontMetric(_:)` na jednom místě; kdyby se u některé metriky nula jednou stala
+    /// legitimní odpovědí, vydá se jako `.some(0)` a od `nil` se pořád pozná.
+    ///
+    /// **Kdo si čekání dovolit může, ten čeká** — testy a sondy si o metriku říkají přes
+    /// `TestWait.settledFontMetric(_:of:)`, které tuhle metodu zkouší, dokud se neusadí. Kresba
+    /// nečeká nikdy: ta vada je přechodná (naměřeno u #407) a v okně je zaseknutí horší než
+    /// o pixel jinde nakreslený řádek.
+    func metric(_ kind: Kind, of font: NSFont) -> CGFloat? {
+        value(kind, of: font)
     }
 
-    /// Výška jednoho řádku sazby v tom písmu, kterým se kreslí (#236).
+    /// Šířka jednoho znaku písma, kterým se sází kód. Mono má všechny znaky stejně široké, takže
+    /// stačí změřit jeden.
+    ///
+    /// **Nula znamená „metriku nemám“** a je to jediná věc, kterou znamenat může (#550) — kdo ten
+    /// rozdíl potřebuje poznat, ptá se `metric(_:of:)`.
+    func characterWidth(of font: NSFont) -> CGFloat {
+        value(.characterWidth, of: font) ?? 0
+    }
+
+    /// Výška jednoho řádku sazby v tom písmu, kterým se kreslí (#236). Nula viz `characterWidth`.
     func lineHeight(of font: NSFont) -> CGFloat {
-        value(.lineHeight, of: font)
+        value(.lineHeight, of: font) ?? 0
     }
 
     /// Výška obalového rámce písma — tedy inkoust, ne řádek sazby. Kreslí se z ní pásek s čísly
-    /// řádků v diffu.
+    /// řádků v diffu. Nula viz `characterWidth`.
     func boundingHeight(of font: NSFont) -> CGFloat {
-        value(.boundingHeight, of: font)
+        value(.boundingHeight, of: font) ?? 0
     }
 
     /// Kolik měření měřidlo udělalo, kolikrát musela pomoct náhradní cesta a kolikrát nepomohla ani
@@ -155,7 +187,7 @@ final class FontMetric: Sendable {
 
     // MARK: - Měření
 
-    private func value(_ kind: Kind, of font: NSFont) -> CGFloat {
+    private func value(_ kind: Kind, of font: NSFont) -> CGFloat? {
         let key = Key(name: font.fontName, size: font.pointSize, kind: kind)
         // Měří se **pod zámkem**, ne vedle něj: dvě vlákna, která minou zapamatovanou hodnotu
         // naráz, by změřila dvakrát — a „jedno měření na proces“ je zrovna to, co se má držet.
@@ -169,7 +201,10 @@ final class FontMetric: Sendable {
             if store.tally.firstRejected == nil { store.tally.firstRejected = measurement.rejected }
             guard let value = measurement.value else {
                 store.tally.failures += 1
-                return 0
+                // **`nil`, ne nula** (#550): nepovedené měření je jiná informace než rozměr nula
+                // a volající to má poznat. Nulu z toho dělá až `characterWidth` a spol., protože
+                // z nich kreslí okno.
+                return nil
             }
             if measurement.route != .measured { store.tally.fallbacks += 1 }
             // Mez se počítá **včetně toho, co se právě vkládá**, aby se přes ni sada nedostala ani
