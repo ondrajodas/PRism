@@ -672,9 +672,10 @@ struct FindingBubbleView: View {
 
 /// Kde bublina nálezu stojí (#503).
 enum FindingBubblePlacement: Hashable, Sendable {
-    /// Pod svým řádkem v diffu, odsazená do sloupce s obsahem — stav do #503 a od té doby jedině
-    /// za přepínačem `Nálezy pod řádky`.
+    /// Pod svým řádkem v diffu, odsazená do sloupce s obsahem — **výchozí stav**: platil do #503
+    /// a od #548 zase platí.
     case inline
-    /// Jako karta v okraji vpravo, zarovnaná k výšce svého řádku.
+    /// Jako karta v okraji vpravo, zarovnaná k výšce svého řádku — od #548 jedině za přepínačem
+    /// `Nálezy pod řádky`.
     case margin
 }

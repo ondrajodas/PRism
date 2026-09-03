@@ -89,19 +89,24 @@ struct DiffView: View {
     /// rozsahový diff (#284) ani náhled o pull requestu nic neukládají.
     var reportScrollAnchor: ((DiffScrollAnchor?) -> Void)?
 
-    /// Kreslit nálezy jako bubliny **pod** jejich řádkem? Od #503 je jejich domovem okraj vpravo,
-    /// takže je výchozí stav vypnuto a přepínač v liště je cesta, jak si obojí porovnat.
-    ///
-    /// **Vlastní klíč, ne přejmenovaná hodnota** (`showFindingBubbles` platil do #503): význam se
-    /// otočil — zapnuto dřív znamenalo „takhle to má být“, dneska „chci to po starém“. Se starým
-    /// klíčem by okraj neviděl nikdo, kdo si ten přepínač kdy vypnul a zapnul.
-    ///
-    /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     /// Šířka, kterou diff dostal — okno bez railu a bez panelu vpravo (#220). Rozhoduje se z ní
     /// o kolonách: bez ní se strom a okraj skládají jen podle pohledu a v úzkém okně přetečou
     /// pod proužek panelu (změřeno u opravy #503, 35 bodů v okně 700).
     @Environment(\.availableWidth) private var slotWidth
-    @AppStorage("showInlineFindingBubbles") private var showBubbles = false
+    /// Kreslit nálezy jako bubliny **pod** jejich řádkem? **Od #548 zapnuto**, tedy zpátky to, co
+    /// platilo do #503: okraj vpravo si bere 300 bodů natrvalo — i v souboru bez nálezu, což je
+    /// skoro pořád —, kdežto bublina zabere místo jen tam, kde nález doopravdy je, a svisle, kde
+    /// je ho dost. Okraj zůstává **za přepínačem** `Nálezy pod řádky` v liště.
+    ///
+    /// **Klíč se nepřejmenovává, i když se u #503 přejmenoval** (`showFindingBubbles` do #503,
+    /// `showInlineFindingBubbles` od té doby). Tehdy se otočil **význam hodnoty** — zapnuto přešlo
+    /// z „takhle to má být“ na „chci to po starém“ —, takže se starý klíč zahodit musel. Teď se
+    /// otáčí jen **výchozí hodnota**: `true` pořád znamená bubliny a `false` pořád okraj. Uložená
+    /// hodnota je tedy dál platná odpověď a přejmenovat klíč by znamenalo zahodit volbu toho,
+    /// kdo si okraj vědomě nechal.
+    ///
+    /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
+    @AppStorage("showInlineFindingBubbles") private var showBubbles = true
     /// Rozložený strom v levém sloupci (#197). Předvolba pohledu napříč PR, takže `UserDefaults`
     /// — a ne stav ve store, ze stejného důvodu jako u bublin.
     @AppStorage("diffTreeExpanded") private var isTreeExpanded = true
@@ -562,7 +567,7 @@ struct DiffView: View {
             revealed: state.revealed,
             content: state.content,
             findings: findings,
-            // Zakotvený nález jde pod řádek jedině s přepnutým přepínačem (#503) — jinak stojí
+            // Zakotvený nález jde pod řádek, dokud si někdo nepřepne okraj (#548) — pak stojí
             // v okraji. Nález **bez řádku** se tím neřídí a visí u hlavičky souboru vždycky:
             // v okraji se nemá k čemu zarovnat, takže by jinak zmizel.
             inlineFindings: showBubbles,

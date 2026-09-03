@@ -1666,6 +1666,11 @@ Karta nálezu stojí **vedle** svého řádku, ne pod ním: kód zůstane souvis
 pravé hraně 3bodový pruh závažnosti a mezi nimi vede spojnice. Zákres je
 v [`docs/navrh.html`, sekce 43](navrh.html) (stránka *Změněné soubory*).
 
+> **Od #548 je okraj za přepínačem, ne výchozí stav.** Všechno níž platí beze změny — jen se
+> to na obrazovce objeví teprve po zapnutí `Nálezy pod řádky` v liště diffu. Proč se ta hodnota
+> otočila, je o sekci níž ([*Výchozí stav diffu jsou bubliny pod
+> řádky*](#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548)).
+
 **Kde to bydlí.** `App/Policy/DiffMargin.swift` (`DiffMarginCard`, `DiffMarginMark`,
 `DiffMarginSource`, `DiffMarginSeverity`, `DiffSideColumns` a všechna rozhodnutí),
 `App/Views/DiffMarginAnchors.swift` (krabice s polohami řádků), `App/Views/DiffMarginView.swift`
@@ -1729,7 +1734,9 @@ zástupný uzel, takže se přeloží jedině ten modifikátor a karty ne. Tělo
 Dokud panel drží **seznam** nálezů, byly by v tabu `Změněné soubory` vpravo dvě třistabodové kolony
 o téže věci; automatika ho proto složí na proužek s počtem nálezů a značkou rozdělaného review
 a `⌘2` ho vrátí — tentýž mechanismus i tatáž vratnost jako u složení sloupců ve split pohledu
-(#188). Je to **mezistav**: seznam v panelu ruší #504, a tím tahle podmínka odpadne.
+(#188). **Od #548 je to větev za přepínačem**: s výchozími bublinami je `hasMargin` `false`, takže
+o panelu rozhoduje jedině pohled — tedy #188 beze změny, stav, jaký byl do #503. Odpadne to teprve
+se #504 (seznam v panelu zaniká), a to je od #548 odložené v `Průběžné`.
 
 **Co se u toho nemá rozbít:** karta musí zůstat `FindingBubbleView` (odznaky, shoda dvou
 reviewerů, stav z kontroly #150, odmítnutí #113 a řada `Převzít · Neplatí · Nepatří sem` #283 se
@@ -1779,6 +1786,87 @@ v `DiffTracking`), aby na ni dosáhl pruh záložek, a má na to zapsaný důvod
 obsah zahodí a postaví znovu (#472/#476), kdežto projíždění tu změnu nemusí ukázat vůbec. Změřit se
 to má na ostrých datech, ne na vyrobené scéně — jak, je
 v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).
+
+### Výchozí stav diffu jsou bubliny pod řádky (#548)
+
+**Nález stojí ve výchozím stavu jako bublina pod svým řádkem; okraj s kartami (#503) je za
+přepínačem `Nálezy pod řádky`** (lišta diffu, šipka u `Sbalit vše`). Je to návrat ke stavu, jaký
+byl do #503 — a **poznatek z používání, ne oprava chyby**: kód okraje zůstává celý, otestovaný
+a jedno kliknutí od zapnutí.
+
+**Proč se to otočilo.** Okraj je kolona **300 bodů, a platí se natrvalo** — i v souboru, ve kterém
+žádný nález není, tedy skoro pořád. V okně 1 512 (štěrbina diffu 1 422) je to **pětina** šířky, a ve
+`Vedle sebe` se ta pětina bere z kolony, která se ještě dělí na dvě strany, takže se platí dvakrát.
+Bublina proti tomu zabere místo **jen tam, kde nález doopravdy je**, a **svisle**, kde je ho dost.
+Zákres to takhle nepředvídal, protože kreslí PR s nálezy; v běžném čtení jsou nálezy na pár řádcích
+z dvaceti souborů. Kolik to je v číslech, je v tabulce níž.
+
+**Mění se jedna hodnota, ne mechanismus.** `DiffView.showBubbles` je `@AppStorage` a od #548 má
+výchozí `true`. Všechno ostatní se z ní odvozuje samo:
+
+| Co na té hodnotě visí | Ve výchozím stavu |
+|---|---|
+| `marginCards` (`DiffView`) | prázdné, takže `hasMargin == false` — okraj se nekreslí a kolona pro něj neubývá |
+| `Policy.diffSideColumns` | **panel se neskládá**; rozhoduje jedině pohled, tedy #188 beze změny (`Pod sebou` rozložený, `Vedle sebe` složené) |
+| `Policy.diffCodeColumnWidth` | kolona kódu je o **300 b** širší — a s ní ukazatel `N znaků na stranu` (#546) |
+| `DiffRow.rows(…, inlineFindings:)` | zakotvený nález jde pod svůj řádek jako bublina |
+| `Policy.codeColumnTrailingGap` | **zůstává** (6 b): platí na obě situace vpravo, tedy i na složený proužek panelu, ne jen na okraj |
+
+**Klíč `showInlineFindingBubbles` se nepřejmenovává, a je to rozdíl proti #503.** Tam se otočil
+**význam hodnoty** — zapnuto přešlo z „takhle to má být“ na „chci to po starém“ —, takže se starý
+klíč (`showFindingBubbles`) zahodit musel, jinak by okraj neviděl nikdo, kdo si přepínač kdy vypnul
+a zapnul. U #548 se otáčí jen **výchozí hodnota**: `true` pořád znamená bubliny, `false` pořád
+okraj. Uložená hodnota je tedy dál platná odpověď a nový klíč by zahodil volbu toho, kdo si okraj
+vědomě nechal.
+
+**Kolik to je v číslech** (kolona kódu podle `Policy.diffCodeColumnWidth`, štěrbina = okno bez railu
+52 a bez složeného proužku panelu 38). **Štěrbina je tady pevná schválně** — v okně se mění tím, jak
+je složený panel, a to je ta druhá tabulka za touhle:
+
+| Okno / štěrbina | Pohled | S bublinami | S okrajem | Rozdíl |
+|---|---|---|---|---|
+| 700 / 610 | `Pod sebou` | 394 b (strom rozložený) | 570 b (strom **i okraj** zahozené) | −176 b |
+| 700 / 610 | `Vedle sebe` | 570 b | 270 b | 300 b |
+| 1 100 / 1 010 | `Pod sebou` | 794 b | 494 b | 300 b |
+| 1 100 / 1 010 | `Vedle sebe` | 970 b | 670 b | 300 b |
+| 1 303 / 1 213 | `Pod sebou` | 997 b | 697 b | 300 b |
+| 1 303 / 1 213 | `Vedle sebe` | 1 173 b | 873 b | 300 b |
+| 1 512 / 1 422 | `Pod sebou` | 1 206 b | 906 b | 300 b |
+| 1 512 / 1 422 | `Vedle sebe` | 1 382 b | 1 082 b | 300 b |
+
+**Ten jeden řádek s `−176 b` je správná odpověď, ne výjimka**: na podlaze okna automatika okraj
+zahodí (kód by šel pod podlahu `minimumCodeWidth`) **a k tomu složí strom**, takže s okrajem vyjde
+kolona naopak širší. Tvrzení „bubliny mají o 300 b víc“ se proto váže na `columns.margin`, ne na
+šířku okna — a v testu je to napsané jako podmínka, ne jako tolerance.
+
+**A takhle to dopadá na živém okně** (PRism-a, okno 1 100 × 700, PR s jednou skupinou nálezů;
+přepínáno za běhu, čteno z lišty diffu a ze screenshotu):
+
+| Pohled | S bublinami | S okrajem | Co se stalo |
+|---|---|---|---|
+| `Vedle sebe` | **49 znaků na stranu**, kolona 970 b, panel složený (#188) | **31 znaků na stranu**, kolona 670 b | plných **300 b** ubráno, tedy **18 sloupců na každé straně** |
+| `Pod sebou` | **48 znaků**, kolona ~532 b, panel **rozložený** | **44 znaků**, kolona ~494 b, panel **složený** | okraj panel složí, takže se 300 b skoro vrátí (net **−38 b**) — zaplatí se **panelem**, ne kolonou |
+
+**Ta druhá řádka je ta neintuitivní část a patří k rozhodnutí.** V `Pod sebou` není cenou okraje
+šířka kódu, ale **panel**: composer review, labely, sekce `Větev` a `Zadání` zmizí do proužku.
+Ve `Vedle sebe`, kde panel složilo už #188, se platí celá kolona — a to je to, co bylo v provozu
+vidět. Všechna čtyři čtení jsou navíc **konzistentní s jedním gutterem** (136 b pod sebou, 84 b
+vedle sebe) a s vypočítanými kolonami, takže ukazatel `N znaků na stranu` doopravdy mluví o té
+koloně, na které se sází (#546).
+
+**Co se u toho nemá rozbít.** (1) **Přepnutí tam a zpět**, ne jen výchozí stav: `task(id: columns)`
+v `DiffView` má identitou **samo rozhodnutí**, ne jeho vstupy, a stráž `appliedColumns != columns`
+hlídá jen **týž** výsledek — kdyby to bylo obráceně, zůstal by po jednom zapnutí okraje panel
+složený a kolona úzká navždycky. (2) **Ukazatel `N znaků na stranu`**: počítá se z **předané**
+kolony (#546), takže se s přepnutím musí pohnout o šířku okraje — 300 b je při šířce znaku 8,036 b
+asi 37 sloupců v `Pod sebou` a 18 na stranu v `Vedle sebe`. (3) **Nález bez řádku** visí u hlavičky
+souboru v obou stavech; přepínač se týká **jen zakotvených** nálezů.
+
+Hlídá to `DiffBubbleDefaultTests` (výčet tří stavů klíče × pásmo šířek × oba pohledy, panel,
+přepnutí tam a zpět a to, že bubliny doopravdy zabírají svislé místo) —
+[co se v něm měří a proč](testovani.md#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548). Zamítnutá
+varianta „zahodit okraj úplně“ i to, za jakých okolností se k ní vrátíme, je v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--výchozí-stav-diffu-jsou-bubliny-548).
 
 ### Kolona kódu se sází na svou šířku (#546)
 

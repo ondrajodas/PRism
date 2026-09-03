@@ -628,7 +628,7 @@ Do té doby tam bylo jen jméno, takže u dvou souborů, které se jmenují stej
 je který. V úzkém sloupci ustupuje složka, ne jméno.
 
 **Lišta nad diffem** má vlevo pohled a procházení nálezů, vpravo `Rozbalit vše`. Co se používá
-jednou za čas (bubliny nálezů u řádků, `Zobrazit jen diff`), sedí v nabídce pod ním. Přepínače
+jednou za čas (`Nálezy pod řádky`, `Zobrazit jen diff`), sedí v nabídce pod ním. Přepínače
 postranních sloupců v ní **nejsou**: strom i panel se skládají u sebe, takže by to byly třetí
 dveře k témuž — zkratky `⌘1` a `⌘2` platí dál a stojí v nápovědě u těch tlačítek.
 
@@ -781,8 +781,15 @@ a světlejší plocha by křičela hlasitěji než sama změna.
 **Nálezy visí jako bubliny u řádků, kterých se týkají** — pill kategorie, verdict, jméno
 revieweru a rozbalitelný scénář selhání; blokující nález má červený pruh. Shodu dvou
 reviewerů na jednom místě označí `2×`, ale jejich texty se neslučují. Nález na řádek, který
-v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout. Bubliny
-jdou vypnout v nabídce u `Rozbalit vše` (`Nálezy u řádků`) — vlákna konverzace zůstanou.
+v diffu není, se neztratí: visí u hlavičky souboru a nabídne ten řádek dotáhnout.
+
+**Bubliny pod řádky jsou výchozí stav, druhá možnost je okraj s kartami vpravo** (#503, výchozí
+hodnota otočená u #548). Přepíná to `Nálezy pod řádky` v nabídce u `Rozbalit vše`; v okraji stojí
+karta **na výšce svého řádku** a řádek nese na pravé hraně pruh závažnosti, takže kód zůstane
+souvislý. Výchozí jsou bubliny proto, že okraj je kolona 300 bodů **natrvalo** — i v souboru bez
+nálezu —, kdežto bublina zabere místo jen tam, kde nález je. Zakotvený nález se tím přesune;
+nález **bez řádku** visí u hlavičky souboru vždycky a vlákna konverzace se přepínačem
+neschovávají.
 
 **Blokující nález je rozbalený rovnou, ostatní jsou značka na hraně řádku** (#185). Značka je
 pruh s odznaky, kategorií, reviewerem a náhledem textu — kliknutím se rozbalí celá bublina

@@ -7712,6 +7712,95 @@ karty z testu přečíst nedá. Sonda `drawTheMargin` proto kreslí **skutečný
 dvou stavech (okraj / bubliny za přepínačem) a ve třech posunech; přepínač si podává **vlastní
 doménou** `UserDefaults` (`ScratchDefaults`, #411), protože je to `@AppStorage`.
 
+### Výchozí stav diffu jsou bubliny pod řádky (#548)
+
+`DiffBubbleDefaultTests` — jedna `@AppStorage` hodnota, na které visí kolona kódu, panel vpravo
+i ukazatel `N znaků na stranu`. Sada je zajímavá tím, **co se dá na výchozí hodnotě změřit
+z okna**, když se kolony diffu z accessibility tree přečíst nedají.
+
+**Měří se dvě čísla z AppKitu**, protože ani jedno samo o sobě ty dva stavy nerozliší:
+
+| Čtení | Co tvrdí | Odkud |
+|---|---|---|
+| šířka plochy obsahu | kolona kódu — okraj je 300 b, takže se o ně zkrátí | `NSScrollView.frame.width` (`NSView.diffContentArea()`) |
+| výška dokumentu | **bublina stojí v toku** pod svým řádkem, karta v okraji ne | `documentView.frame.height` |
+
+Plocha obsahu se hledá **jedním místem** (`NSView.diffContentArea()`, od #548 sdílené
+s `DiffCodeColumnWidthTests`): rozlišit je potřeba `DiffPairScrollView` uvnitř bloku kódu (#422)
+a plochu stromu souborů, a dvě kopie té procházky by se při první opravě rozešly.
+
+**Výchozí hodnota se tvrdí výčtem tří stavů klíče, ne jedním tvrzením.** Nic uloženo, uloženo
+`true`, uloženo `false` — a výchozí stav se musí chovat **stejně jako zapnutý přepínač**
+a zároveň **jinak než okraj**. Ta druhá polovina je tam kvůli #478: bez ní by tvrzení „výchozí stav
+je bublinový“ prošlo i nad měřidlem, které ty dva stavy vůbec nerozliší. Třetí pojistka je nad
+**materiálem** scény: karty se počítají `Policy.marginCards`, tedy tou funkcí, kterou je skládá
+`DiffView`, a nula karet znamená, že se okraj nemá kde vzít ani ve stavu `margin`.
+
+**Ptá se to přes pásmo šířek** (#236) — štěrbiny 610, 1 010, 1 213 a 1 422, tedy okna 700, 1 100,
+1 303 a 1 512 — a v obou pohledech, protože **u jedné šířky test projde**. Na podlaze okna
+v `Pod sebou` vyjde s okrajem kolona naopak **širší** (570 b proti 394 b), protože automatika
+zahodí okraj **a k tomu složí strom**; tvrzení o rozdílu 300 b se proto váže na `columns.margin`,
+ne na šířku okna, a je to v testu napsané jako podmínka, ne jako tolerance. Tabulka změřených
+kolon je [v architektuře](architektura.md#výchozí-stav-diffu-jsou-bubliny-pod-řádky-548).
+
+**Tolerance je změřená rezerva na posuvník, ne nepřesnost.** `NSScrollView` s legacy posuvníky
+hlásí v nescrollované ose šířku obsahu **plus pás posuvníku** (17 b, bere se z AppKitu — tentýž
+důvod jako u #422 a #546). Rozdíl mezi oběma stavy je 300 b, tedy o řád víc, takže rezerva vadu
+zakrýt nemůže.
+
+**Scéna se čeká na jev, a čeká se dvěma způsoby zároveň** (#269, #296). Odmlka (`TestWait.pause()`)
+pustí `MainActor`, takže se dostane ke slovu `task(id: columns)` v `DiffView` i přepsaná hodnota
+`@AppStorage`; pumpování smyčky pak nechá AppKit a SwiftUI doopravdy rozvrhnout. Samotná odmlka
+rozvržení nevyvolá, samotné pumpování zase vyhladoví aktor. Pumpování musí být
+**v synchronní funkci** — `RunLoop.current.run(until:)` je z asynchronního kontextu nedostupné
+a toolchain to odmítne přeložit.
+
+**Po přepnutí se čeká na to, že se čtení odliší od předchozího**, ne na pevný okamžik: bez toho by
+se měření mohlo trefit do stavu **před** přepnutím a vyšlo by zeleně omylem. Nedočkání se **hlásí**
+(`Issue.record`), protože polorozložená scéna je buď náhodně zelený běh, nebo pád o pár kroků dál,
+ze kterého se příčina nepozná.
+
+**Přepnutí tam a zpět je vlastní tvrzení, a měří se na jedné scéně.** Kdyby identitou `task(id:)`
+byly vstupy místo výsledku, dala by se výchozí hodnota otočit a přesto to nechat rozbité: po jednom
+zapnutí okraje by zůstal panel složený a kolona úzká. Třemi scénami by se to nepoznalo — proto se
+jedna scéna měří třikrát a přepínač se v ní přepisuje **za živa**, tou samou cestou, jakou ho
+přepíná člověk v liště (`@AppStorage` sleduje doménu).
+
+**Ukazatel `N znaků na stranu` se kontroluje v každé fázi zvlášť** (#546): počítá se z předané
+kolony, takže se srovnává s tím, co vyšlo ze **změřené** plochy — rezerva na posuvník je nejvýš
+jeden znak na stranu, víc znamená, že ukazatel slibuje sloupce, které v okně nejsou.
+
+Regrese vložená ze všech stran (výchozí hodnota přepnutá zpátky na `false`):
+
+| Vložená chyba | Co spadne |
+|---|---|
+| `showBubbles = false` (výchozí stav zpátky okraj) | *Výchozí stav je bublinový* — plocha 873 b proti koloně 1 173 b, tedy rozdíl přesně **300 b** (štěrbina 1 213, `Vedle sebe`) |
+| tamtéž | *Panel se s bublinami neskládá* (panel složený i v `Pod sebou`), *Zapnout okraj a vypnout ho vrátí kolonu i panel* a *Bubliny ve výchozím stavu zabírají svislé místo* |
+
+**Jak se to změřilo na živém okně** (a proč se to do testu nedá napsat). Aplikace ve slotu
+(`PRism-a`, okno 1 100 × 700) dostala do cache **zkopírované review** z hlavní instance, aby na PR
+doopravdy nějaký nález byl, a přepínač se přepínal **zápisem do domény** slotu
+(`defaults write com.ondrajodas.prism.a showInlineFindingBubbles -bool false`) — na živé okno se
+z harnessu klikat nedá a `System Events` se v tomhle repu nepoužívá. Okno se fotí přes id
+(`CGWindowListCopyWindowInfo` → `screencapture -x -o -l <id>`), takže na to nejsou potřeba
+asistenční práva. Čtení z lišty diffu:
+
+| Pohled | S bublinami | S okrajem |
+|---|---|---|
+| `Vedle sebe` | `49 znaků na stranu`, panel složený (#188) | `31 znaků na stranu` |
+| `Pod sebou` | `48 znaků`, panel **rozložený** | `44 znaků`, panel **složený** |
+
+**Ta čtyři čísla jsou konzistentní s jedním gutterem** (136 b pod sebou, 84 b vedle sebe) a s
+kolonami, které vydá `Policy.diffCodeColumnWidth` — takže je to zároveň kontrola, že ukazatel
+mluví o té koloně, na které se sází (#546), a to **na živém okně**, kde se ta vada u #546
+projevila. Rozdíl mezi řádkami je poučný: v `Pod sebou` okraj panel složí, takže se 300 b skoro
+vrátí a **cenou je panel**; ve `Vedle sebe` se platí celá kolona, tedy 18 sloupců na každé straně.
+
+**Co ta sada netvrdí a je to vědomé:** že přepínač v nabídce pod `Sbalit vše` **zabere** — položka
+menu se v hostovaném okně nedá naklikat, takže se přepíná zápisem do domény. Tou samou cestou to
+jde v aplikaci taky (`@AppStorage`), ale že je položka v menu k nalezení a že se u ní kreslí
+zatržítko, ověří jedině člověk.
+
 ### Kolik stojí přerovnání okna (#472)
 
 Dvě sondy, obě ruční (`TEST_RUNNER_PRISM_MEASURE=1`), a **je podstatné, že jsou dvě**: měří dvě
