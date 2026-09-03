@@ -7271,11 +7271,19 @@ ze staršího záznamu by znamenalo, že po eviction věta tiše ztratí druhou 
 jako událost, takže kapsle přežije restart; souhrn se bere z uloženého běhu, a jen když se
 **na rozsahu shodnou** (uložený běh může být z minulého kola nad touž hlavou).
 
-Testů **5177** v 507 suitách, plný běh zelený (109,5 s, jedno známé `theWaitGivesUpLoudly`). Nové
+**Copilot našel jednu reálnou věc, a byla to zrovna ta, kterou tohle issue mělo zavřít**: rozhodnutí
+o rozsahu se zahazovala vždycky, když nad přírůstkem neběžel nikdo — tedy u force pushe s jediným
+reviewerem —, takže se věta `celý diff — historie se přepsala` nikdy nenakreslila a `Policy` by
+rozhodovala do prázdna. Opraveno tím, že se zahazuje **materiál**, ne mapa rozhodnutí; ověřeno
+vložením regrese. Cestou se opravila i věta u `noFinishedRun`: „minule nedoběhlo“ by u reviewera,
+který nad předchozí hlavou vůbec nebyl, tvrdilo, že běžel.
+
+Testů **5184** v 508 suitách, plný běh zelený (105,0 s, jedno známé `theWaitGivesUpLoudly`). Nové
 sady jsou čtyři: `IncrementalReviewScopeTests` (výčet rozhodnutí, párování, přenášení),
 `IncrementalReportTests` (souhrn a platnost odznaků), `IncrementalCommandTests` (prompt, soubor,
 jedna konstanta tvaru verdiktů) a `AppStoreIncrementalTests` (celá cesta, včetně toho, že se
-`git` v prvním kole vůbec neptá). `SessionToolSetsTests` prošly **beze změny**.
+`git` v prvním kole vůbec neptá); k tomu ruční sonda `IncrementalLaneRenderProbe` — dráha v sedmi
+stavech, dvě šířky, obě témata. `SessionToolSetsTests` prošly **beze změny**.
 
 **Zapsané mezery**: nálezy revieweera, který v tomhle kole **neběžel** (odebral se ze sady, nebo se
 opakuje jen podmnožina, #149), se nepřenesou — nemá je kdo odnést; je to totéž, co se dnes děje po

@@ -1306,6 +1306,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     **vůbec neptá** v prvním kole a při vypnutém nastavení, že se uloží nový nález **i** ten
     přenesený s odznakem, že **vyřešený pushem zůstane v záznamu**, že nepřečtená odpověď nálezy
     nezahodí (skončí jako `bez odpovědi`) a že dráha v `Průběhu` nese rozsah, souhrn a **obě ceny**.
+
+    A dva testy z **nálezu Copilota**: že se **důvod celého diffu donese do dráhy i tehdy, když
+    nad přírůstkem neběží nikdo** (force push u repa s jediným reviewerem — do opravy se v tom
+    případě zahodila celá mapa rozhodnutí a věta se nikdy nenakreslila) a že první kolo naopak
+    **nevysvětluje nic**. **Ověřeno vložením regrese** — s prázdnou mapou padá první z nich
+    s `wholeReason → nil`.
   - **`IncrementalCommand`** — že prompt nese oba rozsahy, že zakazuje hlásit staré nálezy znovu
     (bez té věty vyjde jeden nález dvakrát), že nálezy jdou **cestou k souboru**, že se bez nich na
     verdikty vůbec neptá, že je to jeden řádek a že **o jazyku mlčí** (tatáž pojistka jako u review

@@ -24,13 +24,21 @@ struct IncrementalRun: Sendable {
     /// Co stál **celý** běh z prvního kola, na skill — druhá polovina věty o ceně přírůstku.
     let wholeUsage: [String: RunUsage]
 
-    /// Běh, ve kterém žádný reviewer nejde nad přírůstkem.
-    static let whole = IncrementalRun(
-        scopes: [:],
-        previous: [],
-        previousFindingsFile: nil,
-        wholeUsage: [:]
-    )
+    /// Rozhodnutí bez materiálu — nikdo nejde nad přírůstkem, takže není co posílat.
+    ///
+    /// **Rozhodnutí se přesto nesou dál** (nálezem Copilota na #517): jsou mezi nimi zrovna ty
+    /// tři důvody, které se v `Průběhu` vysvětlují (`rewroteHistory`, `unknownAncestry`,
+    /// `noFinishedRun`), a prázdná mapa by znamenala, že se do osy nepošle nic a věta
+    /// `celý diff — …` se nikdy nenakreslí. Tedy přesně to, čemu se `ReviewScope.saysWhyWhole`
+    /// vyhýbá: rozhodnutí držené, ale nikde nečtené.
+    static func withoutMaterial(_ scopes: [String: ReviewScope]) -> IncrementalRun {
+        IncrementalRun(
+            scopes: scopes,
+            previous: [],
+            previousFindingsFile: nil,
+            wholeUsage: [:]
+        )
+    }
 
     /// Rozsah pro jednoho revieweera. `nil` = jde nad celým diffem.
     func range(of skill: String) -> IncrementalDiffRange? { scopes[skill]?.increment }
@@ -107,7 +115,8 @@ extension AppStore {
     ///
     /// Soubor s nálezy z minula se zakládá **jen tehdy, když někdo poběží nad přírůstkem**: běh,
     /// který jde nad celým diffem, ho nemá kde přečíst a psát ho do cache pro nic je zbytečný
-    /// zápis při každém review.
+    /// zápis při každém review. **Rozhodnutí se ale nesou vždycky** — jsou mezi nimi ty tři, které
+    /// se v `Průběhu` vysvětlují.
     func incrementalRun(
         for pr: PRIdentifier,
         at headSha: String,
@@ -127,7 +136,7 @@ extension AppStore {
             )
         }
         guard let previous, scopes.values.contains(where: { $0.increment != nil }) else {
-            return .whole
+            return .withoutMaterial(scopes)
         }
 
         let findings = Policy.previousFindings(of: previous)

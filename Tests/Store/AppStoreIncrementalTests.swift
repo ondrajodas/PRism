@@ -141,6 +141,57 @@ struct AppStoreIncrementalTests {
         #expect(reviewer.requests.first?.increment == nil)
     }
 
+    /// **Nález Copilota na #517**: rozhodnutí se musí donést do osy i tehdy, když nad přírůstkem
+    /// neběží **nikdo** — a to je zrovna případ force pushe u repa s jedním reviewerem. Bez toho
+    /// by věta `celý diff — historie se přepsala` nikdy nevyšla a rozhodnutí `Policy.reviewScope`
+    /// by zůstalo držené, ale nikde nečtené.
+    @Test("Důvod celého diffu se donese do Průběhu, i když přírůstek neběží nikde")
+    func theWholeDiffReasonReachesTheLane() async throws {
+        let reviews = ReviewStore(layout: layout, time: time)
+        _ = try await firstRound(in: reviews)
+        let store = store(
+            reviewer: FakeReviewRunner(),
+            checkout: FakeRepoCheckout(ancestry: .rewritten),
+            reviews: reviews
+        )
+        await prepared(store)
+
+        store.startReview(for: pr)
+        await waitUntil("review doběhne") { !store.isReviewing(self.pr) }
+
+        let lanes = Policy.lanes(
+            of: store.timelines(for: pr),
+            skills: ["code-review"],
+            record: store.reviewRecord(for: pr)
+        )
+        #expect(lanes.first?.wholeReason == .rewroteHistory)
+        #expect(lanes.first?.increment == nil)
+    }
+
+    /// První kolo naopak **nic nevysvětluje**: „celý diff, protože je to první kolo“ je stav,
+    /// ve kterém aplikace běžela do #517, a řádek o něm by přidal šum do každé osy.
+    @Test("První kolo do osy žádné vysvětlení neposílá")
+    func theFirstRoundExplainsNothing() async throws {
+        let reviews = ReviewStore(layout: layout, time: time)
+        let store = store(
+            reviewer: FakeReviewRunner(),
+            checkout: FakeRepoCheckout(ancestry: .ancestor),
+            reviews: reviews
+        )
+        await prepared(store)
+
+        store.startReview(for: pr)
+        await waitUntil("review doběhne") { !store.isReviewing(self.pr) }
+
+        let lanes = Policy.lanes(
+            of: store.timelines(for: pr),
+            skills: ["code-review"],
+            record: store.reviewRecord(for: pr)
+        )
+        #expect(lanes.first?.wholeReason == nil)
+        #expect(lanes.first?.increment == nil)
+    }
+
     /// Nezjištěná příbuznost je tatáž bezpečná strana: co se nedá ohraničit, se čte celé.
     @Test("Nezjištěná příbuznost znamená celý diff")
     func anUnknownAncestryMeansTheWholeDiff() async throws {

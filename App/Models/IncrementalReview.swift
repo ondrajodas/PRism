@@ -31,6 +31,10 @@ enum ReviewScope: Hashable, Codable, Sendable {
         case sameHead
         /// Tenhle reviewer nad předchozí hlavou **nedoběhl** (spadl, vytimeoutoval, nebo tam
         /// nikdy nebyl). Přírůstek by přeskočil kód, který nikdo nečetl — a potichu.
+        ///
+        /// **Jeden důvod pro obojí je vědomý**: následek i sazba jsou stejné a věta o něm
+        /// proto **netvrdí, že běželo** (`ReviewerLaneText.wholeReason`). Dva důvody by v okně
+        /// znamenaly dvě věty, které se čtou stejně.
         case noFinishedRun
         /// Historie se přepsala (force push), takže společná část není.
         case rewroteHistory

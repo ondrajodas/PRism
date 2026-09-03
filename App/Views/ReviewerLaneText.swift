@@ -203,7 +203,10 @@ enum ReviewerLaneText {
         case .disabled: "přírůstek je v nastavení vypnutý"
         case .firstReview: "první kolo na tomhle PR, takže není od čeho odpočítávat"
         case .sameHead: "hlava se od minulého review nezměnila"
-        case .noFinishedRun: "minule nedoběhlo, takže není od čeho odpočítávat"
+        // **Nesmí tvrdit, že běželo**: tenhle důvod pokrývá spadlý i vytimeoutovaný běh **a taky**
+        // reviewera, který nad předchozí hlavou vůbec nebyl (přibyl do sady). „Minule nedoběhlo“ by
+        // u toho druhého tvrdilo víc, než data unesou.
+        case .noFinishedRun: "od minula tu není jeho doběhlý běh, takže není od čeho odpočítávat"
         case .rewroteHistory: "historie se přepsala (force push), společná část není"
         case .unknownAncestry: "společnou historii se nepodařilo zjistit"
         }

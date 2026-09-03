@@ -3118,6 +3118,10 @@ otázka. Kontrola nálezů (#150) je proti tomu vlastní druh, protože nálezy 
 - **`ReviewScope` je model, ne typ v `Policy`**, a je to tentýž důvod jako u `IntentGap` (#345):
   rozhodnutí jde do **osy běhu**, takže musí být `Codable` a přežít restart. Skládá ho
   `Policy.reviewScope`, a nikdo jiný.
+- **Rozhodnutí se nesou i tehdy, když nad přírůstkem neběží nikdo** (nálezem Copilota na #517):
+  `IncrementalRun.withoutMaterial(_:)` zahazuje **materiál**, ne mapu rozhodnutí. Prázdná mapa by
+  znamenala, že se do osy nepošle nic právě u force pushe s jediným reviewerem — tedy že se věta
+  `celý diff — historie se přepsala` nikdy nenakreslí. Je na to test i s vloženou regresí.
 - **Do osy jde jen rozhodnutí, které má co říct** (`ReviewScope.belongsInTimeline`): přírůstek
   (nese kapsli a rozsah) a ty tři důvody, kde by člověk přírůstek čekat mohl. „Celý diff, protože
   je to první kolo“ je stav, ve kterém aplikace běžela do #517, a událost o něm by přidala řádek do
