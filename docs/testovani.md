@@ -5565,7 +5565,9 @@ co z toho platí pro testy:
   První je **plošné**: `maximumAdvancement`, `defaultLineHeight` a `boundingRectForFont` smí v `App/`
   i v `Tests/` znát jedině `FontMetric.swift`, tahle sada (porovnává cesty mezi sebou) a
   `FontMetricProbe` (vypisuje je vedle sebe). Druhé tvrdí, že jmenované sady si metriku **berou
-  z měřidla** — bez něj by šlo pravidlo splnit i tím, že se tvrzení o rozměru zahodí. Převedeno je
+  z měřidla** — bez něj by šlo pravidlo splnit i tím, že se tvrzení o rozměru zahodí. (**Od #550 je
+  to tvrzení o čekání, a je k němu třetí**: měřidlo si v `Tests/` nesmí přímo přečíst nikdo mimo tři
+  vyjmenované výjimky, viz *Páté kolo* níž.) Převedeno je
   **deset** míst: pět v `App/` a pět v `Tests/` (`CommitPanelRoomTests`, `LogTailHeightTests`,
   `DesignPillTests`, `LogTailScrollerReserveTests`, `CheckLogRoomProbe`, k nim `PillTypesettingTests`
   a `CodeTextSheetSizingTests` — ta druhá porovnávala `static let` konstantu se **svým** surovým
@@ -5594,7 +5596,9 @@ co z toho platí pro testy:
 1. **zapamatování pryč** (měřit v `FontMetric.value(_:of:)` pokaždé) → `Metrika se měří jednou`
    hlásí `měření 32 000` místo 1;
 2. **vlastní čtení zpátky do sady** (`NSLayoutManager().defaultLineHeight` v `LogTailHeightTests`) →
-   padne `Sady, které na tom padaly, metriku nečtou samy`, a to jmenovitě na tom souboru.
+   padne plošné tvrzení `Metriku písma čtou v repu jen měřidlo a to, co ho zkouší`, a to jmenovitě
+   na tom souboru. (Druhé tvrzení té sady se od #550 jmenuje `Sady, které na tom padaly, si na
+   metriku počkají` — tvrdí `TestWait.settledFontMetric`, ne `FontMetric.shared`.)
 
 **Zátěž se vyrábí čtyřmi paralelními optimalizovanými kompilacemi** (load 10–22). Bundle se u nich
 nebuildí schválně: build aplikace ji na konci registruje v LaunchServices, takže by z každé zátěže
