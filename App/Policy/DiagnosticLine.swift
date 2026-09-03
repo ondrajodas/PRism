@@ -64,6 +64,26 @@ extension Policy {
         return head + ", body: " + sorted.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
     }
 
+    /// Řádek o šířkách, na kterých diff stojí (#546) — prázdné pole znamená, že se v tom úseku
+    /// žádná šířka nezměřila.
+    ///
+    /// **Vrací se bez časové značky**: volající ji připíše, protože řádek může jít i do klidného
+    /// úseku, kde se hlavní řádek nezapisuje. Skládá se tady ze stejného důvodu jako `diagnosticLine`
+    /// — je to jediné, co z měření zbyde, takže musí být složené čistou funkcí bez hodin a bez disku.
+    ///
+    /// **Pořadí je pevné podle `WidthSite.allCases`, ne podle hodnot**: dva záznamy z různých sezení
+    /// se mají dát srovnat řádek po řádku. Co se v tom úseku neměřilo, v řádku **není** — a to je
+    /// zrovna ta informace, kterou #546 hledá (kolona se rozvrhla, sazba se nepřeměřila).
+    static func widthDiagnosticLines(_ widths: [String: Double]) -> [String] {
+        guard !widths.isEmpty else { return [] }
+        let parts = WidthSite.allCases.compactMap { site -> String? in
+            guard let width = widths[site.rawValue] else { return nil }
+            return String(format: "%@=%.1f", site.rawValue, width)
+        }
+        guard !parts.isEmpty else { return [] }
+        return ["šířky: " + parts.joined(separator: " ")]
+    }
+
     /// Od kolika CPU se úsek považuje za práci, i když v něm není ani kolo runloopu, ani průchod
     /// tělem — **podíl z uplynulého času**, ne absolutní sekundy, aby to nezáviselo na cadenci
     /// zapisovacího vlákna.

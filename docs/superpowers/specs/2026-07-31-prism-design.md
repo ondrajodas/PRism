@@ -5616,3 +5616,37 @@ a odsouhlasený 2. 9. 2026 v decku *Směry pro PRism* (stránka *Směry › B N�
 ne v hraně okraje jako značka — to dodělá #505 spolu s okrajem v úzkém okně. V praxi je to stav na
 jeden průchod (na první rozvržení se nasadí všechny bloky, #469), takže se na obrazovce projeví
 jedině tehdy, když se na nález skočí dřív, než se diff usadí.
+
+## Záznam rozhodnutí — kolona kódu se sází na svou šířku (#546)
+
+Vada na `main`u, kterou uživatel viděl při každém otevření diffu: obsah se sázel na plochu širší,
+než jakou dostal, a přesah odcházel **doleva** přes rail. Rozbor je
+v [`docs/architektura.md`](../../architektura.md#kolona-kódu-se-sází-na-svou-šířku-546), měření
+v [`docs/testovani.md`](../../testovani.md#neověřená-mezera-71-znaků-na-stranu-v-živém-okně--vyřešeno-546).
+Tady jsou rozhodnutí a to, co se cestou zahodilo.
+
+**Hypotéza ze zadání se nepotvrdila, a je to zapsané.** #503 i #546 tipovaly, že `contentWidth`
+drží šířku okna, protože je to `@State` z `onGeometryChange`, který se při nezměněné hodnotě
+nespustí (#361). Změřeno: hák běžel a měřil poctivě tu plochu, na které stál — jenže ta plocha byla
+opravdu širší. Rozdíl proti hypotéze je podstatný pro příště: hledalo by se **v mechanismu měření**,
+kdežto vada byla v tom, **co se měří**.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Šířka kolony se předává, nezjišťuje měřením** (`Policy.diffCodeColumnWidth`) | Nechat `contentWidth` z `onGeometryChange` a jen ho opravit | Měřená hodnota je velikost **plochy**, a ta se od kolony liší přesně tehdy, když je něco špatně — takže by ukazatel dál mluvil o vadě místo o koloně. Předaná šířka je navíc tatáž aritmetika, jakou provádí `HStack`, tedy jedno místo pravdy (#236) |
+| **Není to další pole `DiffSideColumns`** | Přidat `code: Double` do té struktury a mít vše pohromadě | `DiffSideColumns` je identita `task(id:)` v `DiffView` — rozhodnutí, které se uplatní **jednou**. Číslo, které se mění při každém bodu tažení za roh okna, by tu automatiku pouštělo pořád, a ta sahá na strom i na panel |
+| **Zúží se prostředí pro celý podstrom diffu** | Předat šířku parametrem do `files()` a rámcem na obsah `ScrollView`u | Prostředí je ta cesta, kterou si šířku bere `filling()` — tedy to, co vadu způsobilo. Parametr by opravil jen ty prvky, které ho čtou, a bublina vlákna mezi ně nepatří. `frame(width:)` na obsahu by navíc **oslepil měřidlo**: plocha by hlásila správnou šířku i nad přeteklým obsahem, takže by test přestal vidět tu vadu (#478) |
+| **Bublina vlákna se zúží o vlastní odsazení** | Zmenšit odsazení, nebo bublinu přepnout na `frame(maxWidth: .infinity)` | Odsazení je návrh (bublina míří do sloupce s obsahem vedle čísel řádků). `maxWidth: .infinity` by fungovalo, ale zahodilo by přibitou šířku, kvůli které `filling()` v tomhle repu je (#220) — a bublina visí uvnitř diffu, tedy v podstromu, kde se vyjednávání platí nejdráž |
+| **Odsazení zprava je konstanta, ne dvě čísla** | Nechat `16` v `padding` a napsat `16` i do zúžení | Dvě čísla se při první úpravě rozejdou a bublina přeteče znovu, jen o míň — a to je horší než dnešek, protože to nikdo nenajde |
+| **`fillingSlot(alignment: .topLeading)` jako pojistka** | Nechat `.center`; nebo ořezat obsah (`clipped()`) | Ve zdravém stavu na zarovnání nezáleží, plocha má přesně tu velikost, kterou dostala. Rozhoduje teprve při dalším přetečení — a pak je rozdíl mezi „ořízne se vpravo, kde stojí okraj“ a „vyleze doleva přes rail a sežere čísla řádků“. `clipped()` by vadu **schoval** a měřidlo oslepil, tohle ji nechává změřitelnou |
+| **Změřený `contentWidth` ze stavu odchází celý** | Nechat ho jako zálohu pro hostitele, který šířku nepředal | Záloha, kterou nečte ani jeden test ani jedna obrazovka, je přesně ten „stav, co se drží a nikdo ho nečte“, na který se v tomhle repu naráží opakovaně. Bez předané štěrbiny se ukazatel **nekreslí**, což je poctivější: `DiffView` mimo okno o šířce nemá co tvrdit. Měření samo zůstává — ale jako **měřidlo do diagnostiky**, ne jako vstup kresby |
+| **Šířky jdou do diagnostiky kreslení, ne do UI** | Ukazatel v okně, nebo `print` | Vypnutá diagnostika stojí jeden load `Optional`u a vypne se sama dalším spuštěním bez `--diagnose`; ukazatel v okně je nová věc na obrazovce (tedy mockup a schválení) a `print` z GUI aplikace spuštěné z Finderu se nikam nedostane |
+| **Řádek se šířkami se zapisuje i v klidném úseku** | Vázat ho na hlavní řádek úseku, jako řádky o grafu | Kolony se rozvrhnou **jednou** při otevření záložky a pak se nemusí hnout celé minuty, takže by ta jediná zajímavá chvíle spadla do minutového souhrnu klidu (#412) — tedy zrovna to, na co se ptáme |
+
+**Co scéna pro test musí mít, a proč to nikdo netrefil dřív.** Sonda z #503 stavěla diff
+s dlouhými řádky a s nálezy — a ani jedno tu vadu nevyrobí: blok kódu si šířku bere z návrhu
+(`sizeThatFits`) a nález je od #503 v okraji, tedy mimo řádek. Chybějící přísada je **vlákno
+s kotvou v tom diffu**, protože `ThreadBubbleView` je jediné, co se v řádku diffu přibíjí na
+`\.availableWidth`. Bez něj vydá měřidlo tutéž hodnotu pro „funguje“ i „nefunguje“ (#478), takže
+`DiffCodeColumnWidthTests` k tvrzení o šířce **přidává tvrzení o scéně**: kolik bublin v seznamu
+doopravdy je, počítané tou cestou, kterou seznam skládá `DiffView`.

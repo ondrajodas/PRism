@@ -7604,35 +7604,83 @@ se láme na dvě řádky). Není to překryv, je to úzká kolona. Jestli má po
 (`Policy.minimumCodeWidth`, dnes 360 b pod sebou) být vyšší, je **návrhové rozhodnutí**, ne oprava
 přetečení, a nechávám ho na proklikání.
 
-#### Neověřená mezera: `71 znaků na stranu` v živém okně
+#### ~~Neověřená mezera: `71 znaků na stranu` v živém okně~~ — vyřešeno #546
 
-**Zůstává nerozhodnuté a merge to neblokovalo.** Živá aplikace hlásí v okně **1 303 × 860**
-(`Vedle sebe`, strom i panel složené) **71 znaků na stranu**, jenže kolona kódu je tam změřená ze
-snímku na **1 178,5 b** (rail 0…51, strom 52…85, kód 86…1264,5, čára 1265,0, proužek 1266…1302,5)
-a z té vychází **62**. Ověřené vstupy: šířka znaku je **8,036 b** všemi třemi cestami `FontMetric`
-**i skutečnou sazbou** (jen nepoužívaná `derived` dává 11,63) a gutter 84 b je konstanta.
+**Byla to skutečná vada, ne kosmetika v ukazateli**, a hypotéza z #503 (`contentWidth` drží šířku
+celého okna, protože `onGeometryChange` se při nezměněné hodnotě nespustí) se **nepotvrdila**.
+Číslo v liště sedělo na to, co `contentWidth` doopravdy měřil; měřená plocha byla ale širší než
+kolona, protože **obsah diffu si o tu šířku sám řekl**. Podrobný rozbor je
+v [`docs/architektura.md`](architektura.md#kolona-kódu-se-sází-na-svou-šířku-546), tady zůstává,
+**jak se to změřilo** a proč to hostované okno neumělo vyrobit.
 
-**Ani jedna hostovaná scéna to nereprodukuje**, a to je ta podstatná část:
+##### Změřilo se to na živém okně, protože jinde ta scéna nebyla
 
-| Kde | kolona | co lišta hlásí |
-|---|---|---|
-| `main`, hostované okno (`MainGaugeProbe`) | 1 179 b | **62** — přečteno z renderu |
-| #503, hostované okno | 879 b (s okrajem) / 1 179 b | **44** / 62 — přečteno z renderu |
-| #503, **živá** aplikace | 1 178,5 b | **71** |
+`contentWidth` a šířka, ze které se počítá, jdou od #546 do **diagnostiky kreslení**
+(`./bin/run.sh --diagnose`, `WidthSite`) — tři hodnoty na vlastním řádku:
 
-Není to tedy „vada, která přišla s #503“ ani „vada `mainu`“ — obě hostované scény jsou poctivé.
-Zbývá hypotéza, **nedokázaná**: `contentWidth` v živém okně drží šířku **celého okna**. 1 303 b dá
-70,6 → 70, a rozdíl 1 179 → **1 309** b (to je šířka, kterou 71 znaků vyžaduje) je **130 b**, tedy
-skoro přesně rail 56 + strom 34 + proužek 38 = **128**. `contentWidth` je `@State` plněný
-z `onGeometryChange`, a ten se **při nezměněné hodnotě nespustí** (#361) — první změřená hodnota,
-která se nikdy nepřepsala, je proto věrohodná příčina. Rozhodnout to zvenku nejde; chce to
-`contentWidth` v diagnostice kreslení (`--diagnose`), ne v promptu ani v odhadu.
+```
+2026-09-02T23:21:21+0200 šířky: DiffView.slot=1010.0 DiffView.code=970.0 DiffView.measured=1110.0
+```
 
-**Tvrdí to test, ne jen sonda** (`DiffColumnFitTests`): pevné kolony se vejdou přes celé pásmo
-šířek v obou pohledech, nález **nikdy nezůstane bez domova** (buď okraj, nebo rozložený panel),
-strom ustupuje první a šířky se čtou z `Policy`, ne ze dvou konstant ve views. **Ověřeno vložením
-regrese**: když se rozhodnutí o šířce vypne (`if false` na všech třech místech), spadne *Pevné
-kolony se vejdou vždycky* na sedmi kombinacích šířky a pohledu.
+Postup, který k tomu vedl (a je použitelný na každou další „v okně to je jinak než v testu“):
+
+1. **Slot se připraví bez klikání** (#527): do `~/Library/Application Support/PRism-<slot>/tabs.json`
+   se zapíše otevřená záložka s `"tab": "filesChanged"` a aplikace se spustí — scéna je hotová
+   při startu.
+2. **Řádek se šířkami se zapisuje i v klidném úseku**, a je to podmínka: kolony se rozvrhnou
+   jednou při otevření záložky a pak se celé minuty nehnou, takže by ta jediná zajímavá chvíle
+   spadla do minutového souhrnu klidu (#412) — tedy zrovna to, na co se ptáme.
+3. **Bisekce se dělá týmž nástrojem, ne odhadem.** Dočasné `WidthSite` na vnitřní `VStack`,
+   na hlavičku souboru a na návrh, který dostane blok kódu, vydaly 1110 na **všech** úrovních —
+   z čehož plyne, že jde o **jednu** šířku prosáklou celým podstromem, ne o jeden široký prvek.
+4. **Ablace rozhodla.** Zúžení `\.availableWidth` pro podstrom diffu z 1010 na 970 srazilo obsah
+   z 1110 na **1070**, tedy přesně o těch 40 — takže šířka pochází z prostředí, a zbylých **+100**
+   je `indent 84 + trailing 16` bubliny vlákna. Sedí to na bod na **všech třech** živých měřeních:
+
+   | Okno | štěrbina | obsah = štěrbina + 100 | co lišta hlásila |
+   |---|---|---|---|
+   | 1 100 × 700 | 1 010 | 1 110 (změřeno) | 58 |
+   | 1 303 × 860 | 1 213 | 1 313 | **71** |
+   | 1 512 × 883 | 1 422 | 1 522 | **84** |
+
+   Po opravě: štěrbina 1 010 → kolona **970** → plocha **987** (rezerva na posuvník) a ukazatel
+   **49**.
+
+**Screenshot živého okna k tomu patří** (`screencapture -x -o -l <id>` na id okna z
+`CGWindowListCopyWindowInfo`): z čísel se pozná, že je plocha širší, ale ne **kam** přesah odchází.
+Odchází **doleva**, protože `fillingSlot()` obsah vystředil — a to je ta část, kvůli které vada
+vypadala jako „diff nemá čísla řádků“, ne jako „kolona je o kus širší“.
+
+##### Proč to hostované okno nereprodukovalo — a čím se to spraví
+
+Sonda z #503 (`DiffColumnFitProbe`) staví scénu s **dlouhými řádky kódu a s nálezy**, a ani jedno
+tu vadu nevyrobí: blok kódu si šířku bere z návrhu (`sizeThatFits`) a nález je od #503 v okraji,
+tedy mimo řádek. Chybějící přísada je **vlákno s kotvou v tom diffu** — jedině `ThreadBubbleView`
+se v řádku diffu přibíjí na `\.availableWidth` (`filling()`). Bez něj vydá měřidlo tutéž hodnotu
+pro „funguje“ i „nefunguje“ (#478).
+
+`DiffCodeColumnWidthTests` proto staví scénu **s vláknem** a hostované okno tím tu vadu vyrobit
+umí. Měří se **plocha obsahu diffu a její dokument** z AppKitu (SwiftUI `ScrollView` je na macOS
+`NSScrollView`; kolony samotné jsou SwiftUI a z accessibility tree se v hostu nepřečtou) přes
+**pásmo štěrbin** 610 / 1 010 / 1 213 / 1 422 (okna 700 / 1 100 / 1 303 / 1 512 bez railu
+a proužku), v obou pohledech a s okrajem i bez něj. Druhá polovina tvrzení je nad **měřidlem**:
+kolik bublin vlákna v seznamu doopravdy je, počítané tou cestou, kterou seznam skládá `DiffView`.
+
+**Plocha je o pás posuvníku širší než dokument, a není to tolerance na nepřesnost**: `NSScrollView`
+s legacy posuvníky hlásí v nescrollované ose šířku obsahu **plus** ten pás (naměřeno 17 b — plocha
+987 nad dokumentem 970). Bere se z AppKitu (`NSScroller.scrollerWidth`), ne jako konstanta, tentýž
+důvod jako u `DiffPairScrollView.scrollerHeight` (#422). Vadu to nezakrývá: #546 přetékalo o **140**
+bodů bez okraje a o **440** s ním, tedy o řád víc.
+
+**Ověřeno vložením regrese, obou polovin zvlášť:**
+
+| Co se vrátilo | Co test naměřil (štěrbina 610, `Vedle sebe`) |
+|---|---|
+| bez `narrowingWidth` v `ThreadBubbleView` | dokument **670** nad kolonou 570 (s okrajem 370 nad 270) |
+| bez `availableWidth(code)` v `DiffView` | dokument **610** nad kolonou 570 (s okrajem 610 nad 270) |
+
+Obě spadnou na celém pásmu a v obou pohledech.
+
 
 ### Kde blok hlásí svůj řádek (#503)
 

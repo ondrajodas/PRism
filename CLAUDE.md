@@ -685,6 +685,14 @@ protože většina z nich se v harnessu neprojeví.
 - **Rozměr se nenechává vyjednávat, když se dá spočítat** (#220): `frame(maxWidth: .infinity)`
   stojí **~5,5× na úroveň** zanoření, takže se šířka **předává** (`availableWidth`,
   `narrowingWidth`, `filling` v `App/Views/AvailableWidth.swift`).
+- **Kdo si šířku rozdělí na kolony, musí ji předat i zúženou** (#546) — a **kdo paduje kolem
+  `filling()`, o to zúží prostředí** (`narrowingWidth(by:)`, **jedna** konstanta na `padding`
+  i zúžení, a zúžení jde navrch). `filling()` je přibití na hodnotu z prostředí, ne pružnost,
+  takže se odsazení **přičte**; `ScrollView` se pak v nescrollované ose řídí obsahem a `frame`
+  tu přeteklou plochu **vystředí**, takže je vada vidět na druhém konci okna. `DiffView` do #546
+  posílal dolů štěrbinu celého tabu a diff se sázel o 100 b vedle
+  ([rozbor](docs/architektura.md#kdo-paduje-kolem-filling-musí-o-to-zúžit-prostředí-546),
+  [měření](docs/testovani.md#neověřená-mezera-71-znaků-na-stranu-v-živém-okně--vyřešeno-546)).
 - **Pružná výška v řádku líného seznamu je zakázaná taky, ale z jiného měření** (#375) — měřidlo
   na projíždění tuhle třídu **nevidí**, takže se cena **neodhaduje z tabulky pro šířku**.
   Zakázaná je **v řádku**, ne plošně; ohraničené formy jsou
@@ -734,6 +742,9 @@ protože většina z nich se v harnessu neprojeví.
 grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
 grep -rn 'maxHeight: .infinity' App | grep -vE ':[0-9]+: *//'    # výčet k posouzení, ne prázdný
 grep -rn 'fillingSlot' App/Views | grep -vE ':[0-9]+: *//'       # osm míst + modifikátor sám
+# Výčet k posouzení (#546), ne prázdný: `padding` **před** `filling()` je odsazení uvnitř přibité
+# šířky a je v pořádku; vadný tvar je `filling()` **před** odsazením — a to grep nepozná.
+grep -rln 'filling(' App | while read -r f; do grep -q 'padding(' "$f" && echo "$f"; done
 # Prázdný (#361, #469) — filtr zahazuje komentáře, ve kterých se to rozhodnutí vysvětluje.
 grep -n 'LazyVStack' App/Views/ConversationView.swift App/Views/DiffView.swift |
     grep -vE ':[0-9]+: *//|:[0-9]+: *///'

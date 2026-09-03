@@ -7081,3 +7081,40 @@ scénou, `DiffMarginSharpProbe` nad skutečnými diffy, `DiffColumnFitProbe` nad
 ukazatelem po přepnutí pohledu).
 Co se v nich hlídá a jak se měřilo, je
 v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).
+
+## #546 — obsah diffu se sází na svou kolonu
+
+**Vada na `main`u, kterou bylo vidět při každém otevření diffu**: obsah se sázel na plochu širší,
+než jakou dostal, a přesah odcházel **doleva** přes rail — levá polovina splitu tím přišla o čísla
+řádků, cesta souboru začínala uprostřed a text uprostřed slova. Druhý projev téže vady byl
+ukazatel `N znaků na stranu`: v okně 1 512 hlásil **84** nad kolonou, do které se jich vejde 62.
+
+**Hypotéza ze zadání se nepotvrdila** a je to zapsané. #503 tipovalo, že `contentWidth` drží šířku
+okna, protože je to `@State` z `onGeometryChange` a ten se při nezměněné hodnotě nespustí (#361).
+Diagnostika ukázala opak: `onGeometryChange` běžel a měřil poctivě **tu plochu, na které stál** —
+jenže ta plocha byla 1 110 b nad kolonou 970 b. Příčina je řetěz: `\.availableWidth` v podstromu
+diffu zůstávala štěrbina **celého tabu**, `ThreadBubbleView` k tomu nezúžila prostředí o své
+odsazení (`indent 84 + trailing 16`), `ScrollView` se v nescrollované ose řídí velikostí obsahu
+a `fillingSlot()` tu přeteklou plochu **vystředil**. Sedí to na bod na třech živých měřeních
+(obsah = štěrbina + 100 b) a ablace to potvrdila z druhé strany.
+
+**Oprava je předání, ne dohadování** (#220): `Policy.diffCodeColumnWidth` počítá kolonu jedinou
+aritmetikou (štěrbina − strom − okraj − mezera z #503), `DiffView` ji posílá **do prostředí i do
+lišty**, a `ThreadBubbleView` se zúží o vlastní odsazení. Ukazatel je tím **důsledek**, ne cíl
+opravy. `fillingSlot(alignment: .topLeading)` je pojistka: budoucí přetečení půjde vpravo, kde ho
+zakryje okraj, ne doleva přes rail — a **vadu to nezakrývá**, protože šířka plochy se dál měří
+a test na ni vidí. Sweep nad celým `App/` našel ten vadný tvar (`filling()` uvnitř odsazení bez
+zúžení) v **jednom** souboru ze čtrnácti, které obojí mají.
+
+**Čísla před/po** (živé okno 1 100 × 700, `Vedle sebe`, strom složený): kolona **970 b**, obsah
+**1 110 → 970 b**, plocha **1 127 → 987 b** (rozdíl je pás posuvníku), ukazatel **58 → 49**.
+
+**Diagnostika kreslení umí od #546 vypsat šířky** (`WidthSite`: štěrbina, spočítaná kolona,
+změřená plocha) — na vlastní řádek a **i v klidném úseku**, protože kolony se rozvrhnou jednou
+a pak se celé minuty nehnou.
+
+Testů **5119** v 502 suitách; nová je jedna sada nad oknem (`DiffCodeColumnWidthTests` — pásmo
+štěrbin × pohled × okraj, druhá polovina tvrzení nad měřidlem) a tři tvrzení v `DiffColumnFitTests`
+nad `Policy`. **Ověřeno vložením regrese, obou polovin zvlášť.** Jak se to měřilo a proč to
+hostované okno do #546 nereprodukovalo, je
+v [`docs/testovani.md`](testovani.md#neověřená-mezera-71-znaků-na-stranu-v-živém-okně--vyřešeno-546).
