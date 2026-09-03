@@ -516,6 +516,17 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    u přejmenování beze změny obsahu. Sbalení se z toho **odvozuje**
    ([proč](docs/architektura.md#značka-prošlo-u-souboru-500)).
 
+   **Přírůstkové review (#517) tu podmínku drží nad dvěma sha, ne obchází ji.** Nález přenesený
+   z minulého kola se na dnešní hlavu **přepíše** (`Finding.headSha`) — běh nad dnešním kódem řekl,
+   že trvá —, a k tomu si nese **odkud přišel** (`Finding.carriedFrom`): tu větu napsal reviewer
+   o starším commitu a číslo řádku v ní může být z jiné verze souboru. **Do klíče nálezu původ
+   nepatří** (`Policy.key(of:)`), jinak by přenesení nález rozdvojilo a rozpáralo se s ním
+   odmítnutí. Přenášejí se **všechny** staré nálezy včetně vyřešených a nezodpovězených; odmítnutý
+   se **neposílá ani nepřenáší**. Kdy se jde na celé review, rozhoduje `Policy.reviewScope` —
+   a **force push bez společné historie i nezjištěná příbuznost jsou dvě různé věty**; v `Průběhu`
+   je u dráhy vidět, **proč** se šlo na celý diff
+   ([rozbor](docs/architektura.md#review-jen-přírůstku-517)).
+
    **Kontrola nálezů (#150) na tom stojí, ne obchází to**: nese `againstHeadSha` — hlavu, proti
    které běžela —, a jak se hlava posune, `Policy.recheck(of:head:)` odznaky nevydá. „Vyřešeno“
    přitom nikdy nález nesundá, to smí jedině odmítnutí (#113) — a od odmítnutí se musí poznat
@@ -533,8 +544,8 @@ tamtéž.
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem, slévatelnost větve (líné pole, ptá se opakovaně), **repozitáře organizace** (#532 — nejdražší čtení v aplikaci, 46,8 s nad `keboola`, proto vlastní limit a cache) a **otevřené PR jednoho repa** (#533 — 1,1 s, řadí `Policy`, protože `gh pr list` řadí podle čísla). **Pořád bez zápisu** | `gh` CLI |
-| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i zahození rozdělaného rebase a **zápis slitých souborů do indexu a dokončení rebase** (`git add`, `rebase --continue` — commituje aplikace, ne session). **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452, vlastní užší sada a `--resume`) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**. Umí transcript session i **přepsat k přečtení** | `claude` CLI |
+| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i zahození rozdělaného rebase, **zápis slitých souborů do indexu a dokončení rebase** (`git add`, `rebase --continue` — commituje aplikace, ne session) a **je předchozí hlava předkem té dnešní** (#517 — `merge-base --is-ancestor`, odpovídá `ancestor`/`rewritten`/`unknown`). **Pořád bez zápisu do remote** | `git` |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem** s nálezy z minula jako materiálem) a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452, vlastní užší sada a `--resume`) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**. Umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu i zadání pro agenta, obsah dashboardu a dění, geometrie, na kterou se ptá kresba, a **desítky dalších**. Úplný katalog s důvody je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej tam podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |

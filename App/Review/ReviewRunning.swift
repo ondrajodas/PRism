@@ -1,5 +1,20 @@
 import Foundation
 
+/// Že běh review jde **jen nad přírůstkem** (#517), a s čím.
+///
+/// **Vlastní typ, ne dvojice `(IncrementalDiffRange, URL?)`**: soubor bez rozsahu a rozsah bez
+/// souboru znamenají dvě různé věci (druhé je „minule bylo čisto“) a z dvojice by to nikdo
+/// nepoznal. `nil` na místě celého typu je proti tomu „celý diff“, tedy chování do #517.
+struct IncrementalReviewRequest: Sendable, Equatable {
+    /// `seen` je hlava předchozího review, `head` ta dnešní.
+    let range: IncrementalDiffRange
+    /// Soubor s nálezy z minula (#120), nebo `nil`, když minule nic nahlášené nebylo.
+    ///
+    /// Cestu k němu dostane reviewer v promptu a přečte si ho `Read`em — obsah do promptu
+    /// **nejde**, aby se prompt nerozkolísal cizím textem (tatáž úvaha jako u zadání PR).
+    let previousFindings: URL?
+}
+
 /// Zadání jednoho běhu.
 struct ReviewRequest: Sendable, Equatable {
     let key: ReviewRunKey
@@ -46,6 +61,15 @@ struct ReviewRequest: Sendable, Equatable {
     /// **Sada nástrojů se tím nemění** (tvrdá podmínka č. 2): `Read` v ní je odjakživa a soubor
     /// leží v cache aplikace, kam session vidí, protože v ní stojí i pracovní strom.
     let intentFile: URL?
+    /// Že běh má projít **jen přírůstek** (#517), a s jakým materiálem. `nil` = celý diff PR.
+    ///
+    /// Putuje **s požadavkem** jako šablona, limit a zadání, a ze stejného důvodu: runner si
+    /// rozsah nemá kde zjistit a rozhodnutí, nad čím se běží, se nesmí změnit pod rukama běhu,
+    /// který už jede.
+    ///
+    /// **Sada nástrojů se tím nemění** (tvrdá podmínka č. 2): je to rozsah v promptu a nálezy
+    /// z minula v souboru, který session přečte `Read`em — tedy tatáž cesta jako u zadání (#120).
+    let increment: IncrementalReviewRequest?
 
     /// - Parameter promptTemplate: prázdná znamená **výchozí šablonu**, ne prompt bez zadání
     ///   (#281). Výchozí hodnota parametru je tu kvůli testům; produkční cesta jde přes
@@ -61,7 +85,8 @@ struct ReviewRequest: Sendable, Equatable {
         baseSha: String,
         promptTemplate: String = "",
         timeout: Duration = ReviewTimeout.standard,
-        intentFile: URL? = nil
+        intentFile: URL? = nil,
+        increment: IncrementalReviewRequest? = nil
     ) {
         self.key = key
         self.worktree = worktree
@@ -69,6 +94,7 @@ struct ReviewRequest: Sendable, Equatable {
         self.promptTemplate = promptTemplate
         self.timeout = timeout
         self.intentFile = intentFile
+        self.increment = increment
         recheck = nil
     }
 
@@ -87,6 +113,9 @@ struct ReviewRequest: Sendable, Equatable {
         // Kontrola nálezů zadání **nedostává** (#150): má vlastní, natvrdo psaný prompt, jehož
         // odpověď čte parser — cesta k souboru by v něm nebyla k čemu.
         intentFile = nil
+        // Kontrola nálezů **přírůstkem není** (#517), i když se ptá na tytéž verdikty: rozsah si
+        // skládá sama (`RecheckCommand.prompt`) a nálezy do ní jdou promptem, ne souborem.
+        increment = nil
         self.recheck = recheck
     }
 

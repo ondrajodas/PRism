@@ -28,6 +28,20 @@ enum ReviewProgress: Sendable, Equatable {
     /// Hlásí se **za každého revieweera**, i když je to fakt o celém review: příznak žije na dráze
     /// (`ReviewerLane`), takže dráha bez události by o sobě tvrdila, že zadání dostala celé.
     case intentGap(IntentGap)
+    /// Nad čím běh jede (#517) — jen nad přírůstkem, nebo nad celým diffem a **proč**.
+    ///
+    /// Hlásí se **na začátku běhu**, ze stejného důvodu jako `intentGap`: rozhodnutí padlo dřív,
+    /// než se session pustila, takže s ním není na co čekat — a kapsle `přírůstek` má v `Průběhu`
+    /// stát od chvíle, kdy se dráha objeví, ne až po konci.
+    ///
+    /// **Není to fáze běhu** a osu nikam neposouvá: je to fakt o tom, nad čím se běží.
+    ///
+    /// Hlásí se **za každého revieweera zvlášť**, protože rozhodnutí je na skill — jeden reviewer
+    /// může jít nad přírůstkem a druhý (ten, co minule spadl) nad celým diffem. A hlásí se **jen
+    /// tehdy, když je co říct** (`ReviewScope.belongsInTimeline`): „celý diff, protože je to první
+    /// kolo“ je stav, ve kterém aplikace běžela do #517, a událost o něm by přidala řádek do každé
+    /// osy každého prvního review.
+    case scope(ReviewScope)
 }
 
 /// Kam běh hlásí průběh.

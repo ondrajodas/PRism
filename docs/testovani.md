@@ -1284,6 +1284,44 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **Sazba** — věty o počtech, nápověda u odznaku a u tlačítka (`nonisolated static` funkce,
     takže bez kreslení). Hlídá se hlavně to, aby text netvrdil víc, než data unesou: nálezy bez
     odpovědi jsou ve větě, spadlý běh to řekne v nápovědě a odznak nese v sobě `kontrola:`.
+- **Review jen přírůstku (#517)** — pět oblastí, a **nejcennější tvrzení jsou negativní**:
+  - **`Policy.reviewScope`** — vyčerpávajícím výčtem, protože každá odpověď je jiná věta v okně
+    a `increment` znamená, že reviewer **nepřečte** kód mimo rozsah: bez záznamu, tatáž hlava,
+    vypnuté nastavení, prázdná hlava v záznamu, přepsaná historie, nezjištěná příbuznost — a
+    reviewer, který minule **nedoběhl**, ve všech třech podobách (`timedOut`, `interrupted`,
+    `failed`) i v té čtvrté (nad předchozí hlavou vůbec neběžel). Tohle je ten případ, který se
+    rozbije potichu: přírůstek nad nepřečteným kódem doběhne, nálezy nahlásí a v okně nic neřekne.
+  - **Párování a přenášení** — verdikty **přes index, ne přes text** (regrese: přeformulovaná věta
+    párování nerozbije, protože `id` nese aplikace na obou stranách), verdikt o **cizím** nálezu se
+    zahodí, `id` mimo rozsah se **nedomýšlí**, odmítnutý nález se neposílá ani nepřenáší, přenesený
+    si drží **původ i po druhém pushi** a **klíč nálezu se přenesením nemění** (jinak by se
+    rozpárovalo odmítnutí).
+  - **Souhrn a odznaky** (`Policy.incrementalTally`, `Policy.findingStatuses`) — že **vyřešený
+    pushem nezmizí** (jen dostane odznak) a že nezodpovězený se přenese **bez** odznaku; že se
+    odmítnutý do počtů nepočítá (počty jdou z platných nálezů, ne z uložených čísel); že běh nad
+    celým diffem souhrn **nemá** (`nil`, ne nuly); a že **odznaky zhasnou, jak se hlava posune**
+    nebo když detail není načtený — tvrdá podmínka č. 5.
+  - **`AppStore`** — celá cesta: že reviewer dostane rozsah **i soubor**, který na disku doopravdy
+    leží, že se **bez společné historie přírůstek nepustí** (`rewritten` i `unknown`), že se `git`
+    **vůbec neptá** v prvním kole a při vypnutém nastavení, že se uloží nový nález **i** ten
+    přenesený s odznakem, že **vyřešený pushem zůstane v záznamu**, že nepřečtená odpověď nálezy
+    nezahodí (skončí jako `bez odpovědi`) a že dráha v `Průběhu` nese rozsah, souhrn a **obě ceny**.
+  - **`IncrementalCommand`** — že prompt nese oba rozsahy, že zakazuje hlásit staré nálezy znovu
+    (bez té věty vyjde jeden nález dvakrát), že nálezy jdou **cestou k souboru**, že se bez nich na
+    verdikty vůbec neptá, že je to jeden řádek a že **o jazyku mlčí** (tatáž pojistka jako u review
+    a u kontroly). A dvě tvrzení o tom, že se nic nerozešlo: **tvar verdiktů je jedna konstanta**
+    pro kontrolu i pro přírůstek (jinak by úprava jedné formulace rozbila čtení u druhé, a potichu)
+    a **požadavek bez přírůstku dává doslova ten prompt, co dával do #517**.
+
+  **Fake `RepoCheckout` odpovídá na příbuznost `unknown`, ne `ancestor`**, a je to schválně: fake
+  `git` nemá, takže nic neví — a `ancestor` by znamenal, že každý existující test, který o přírůstek
+  nestojí, začne mít review nad přírůstkem. Bezpečná strana je v testech tatáž jako v aplikaci.
+
+  **A `SettingsFieldsRenderTests` musely dostat vyšší okno** (1600 → 1800 bodů). `Form` je
+  `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — nový přepínač s vysvětlením
+  posunul sekci `Text issue z trackeru` pod dosavadní hranici a dvě bitmapy vyšly **stejné**. Test
+  tedy spadl na to, co má chytat (pole se přestalo kreslit), ne na svoji vlastní konstantu; je to
+  zároveň doklad, že to měření funguje.
 - **`DiffParser`** — proti **skutečným** výstupům `gh pr diff` z veřejných repozitářů
   (`Tests/Fixtures/gh/pr-diff-*.diff`: běžný diff, přejmenování včetně `similarity index
   100%` bez hunků, 44 binárek vedle textových souborů, smazaný soubor). U každé fixture se

@@ -78,7 +78,10 @@ enum ClaudeCommand {
                 skillID: request.key.skillID,
                 baseSha: request.baseSha,
                 // Zadání jde s požadavkem (#120), ne z konfigurace — tatáž úvaha jako u šablony.
-                intent: request.intentFile
+                intent: request.intentFile,
+                // A stejně tak přírůstek (#517): rozhodnutí, nad čím se běží, patří k požadavku,
+                // ne k tomu, co je zrovna v nastavení.
+                increment: request.increment
             )
         }
         return RecheckCommand.prompt(for: material, baseSha: request.baseSha)
@@ -102,6 +105,11 @@ enum ClaudeCommand {
     /// příkaz, který ukazuje na smazané zadání, by reviewera poslal čtením za nic, a příkaz bez
     /// věty o zadání by lhal opačným směrem. Existenci proto ověřuje volající
     /// (`ReviewIntentStore.existingFile`), ne tahle funkce: `ClaudeCommand` je čistý.
+    ///
+    /// **O přírůstku (#517) mlčí schválně.** Příkaz je „jak bych tenhle reviewer pustil teď“ a teď
+    /// je pro něj hlava PR ta dnešní: rozsah z minulého kola už nemusí platit (mezitím mohl přijít
+    /// další push) a soubor s nálezy z minula na disku být nemusí. Ručně pouštěný běh proto projde
+    /// celý diff — což je to, co si člověk u `Zkopírovat příkaz` přeje: podívat se na to znovu celé.
     static func shellCommand(
         promptTemplate: String,
         skillID: String,
@@ -114,7 +122,8 @@ enum ClaudeCommand {
             template: promptTemplate,
             skillID: skillID,
             baseSha: baseSha,
-            intent: intentFile
+            intent: intentFile,
+            increment: nil
         )
         let arguments = ["claude"] + arguments(prompt: prompt, model: model)
         let command = arguments.map(quoted(_:)).joined(separator: " ")

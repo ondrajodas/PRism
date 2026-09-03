@@ -118,7 +118,13 @@ struct ReviewPromptEditor: View {
             // připojuje, by čtení konstanty znamenalo druhou pravdu o jednom textu — náhled by
             // ukazoval jádro bez věty o zadání a nikdo by si toho nevšiml. Ukázková cesta je
             // pevná, jako `sampleSkillID` a `sampleBaseSha`.
-            Text(verbatim: Policy.reviewPromptCore(intentPath: ReviewPromptTemplate.sampleIntentPath))
+            // **A od #517 i s přírůstkem**, ze stejného důvodu: věty, které rozhodují, nad čím
+            // reviewer běží, se v náhledu ukázat musí — jinak by se dalo přečíst, že po pushi
+            // dostane totéž zadání jako v prvním kole.
+            Text(verbatim: Policy.reviewPromptCore(
+                intentPath: ReviewPromptTemplate.sampleIntentPath,
+                increment: ReviewPromptTemplate.sampleIncrement
+            ))
                 .textSelection(.enabled)
                 .font(.system(size: 11, design: .monospaced))
                 .lineSpacing(5)
@@ -135,8 +141,9 @@ struct ReviewPromptEditor: View {
             // Bez téhle věty by odznak se zámkem výš tvrdil, že se **celý** blok připojí vždycky
             // — a to o poslední větě neplatí: PR bez popisu a bez odkazu žádné zadání nemá, takže
             // se nepřipojí nic. Cesta v náhledu je navíc ukázková, ne cesta konkrétního běhu.
-            hint("Poslední věta je o zadání PR — připojí se jen u PR, ke kterému se zadání "
-                + "sehnalo, a cesta v ní je ukázková.")
+            hint("Věta o zadání PR se připojí jen u PR, ke kterému se zadání sehnalo. Věty "
+                + "o přírůstku jen po pushi, když je zapnuté `Po pushi review jen přírůstku` — "
+                + "v prvním kole reviewer prochází celý diff. Cesty v obojím jsou ukázkové.")
         }
     }
 

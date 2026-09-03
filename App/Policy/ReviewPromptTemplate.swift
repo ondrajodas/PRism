@@ -87,6 +87,16 @@ enum ReviewPromptTemplate {
     static let sampleIntentPath = NSHomeDirectory()
         + "/Library/Application Support/PRism/worktrees/cli/cli/42-\(sampleBaseSha).md"
 
+    /// Ukázkový přírůstek do náhledu (#517). Pevný ze stejného důvodu jako ukázky výš: náhled
+    /// odpovídá na „jak bude text vypadat“, ne na „co se zrovna děje na tomhle PR“.
+    static let sampleIncrement = IncrementalPromptScope(
+        range: IncrementalDiffRange(seen: "4f2ac91", head: "9c1de02"),
+        baseSha: sampleBaseSha,
+        previousFindingsPath: NSHomeDirectory()
+            + "/Library/Application Support/PRism/worktrees/cli/cli/42-9c1de02-prev.md",
+        reviewer: sampleSkillID
+    )
+
     /// Co v šabloně chybí.
     ///
     /// Vlastní typ, ne pole řetězců: text u pole a text v hlášce o nespuštěném review mají být
@@ -164,9 +174,26 @@ extension Policy {
     ///
     /// - Parameter intentPath: cesta k souboru se zadáním, nebo `nil`, když se nic nesehnalo.
     ///   Prompt nesmí ukazovat na soubor, který neexistuje, takže věta se tehdy nepřipojí.
-    static func reviewPromptCore(intentPath: String?) -> String {
-        guard let intentPath else { return ReviewPromptTemplate.core }
-        return ReviewPromptTemplate.core + " " + ReviewPromptTemplate.intent(at: intentPath)
+    /// - Parameter increment: rozsah přírůstku a materiál k němu (#517), nebo `nil` u běhu nad
+    ///   celým diffem. Věty o přírůstku jdou **za** větu o zadání, protože zadání mluví o celém
+    ///   PR a přírůstek zužuje, nad čím se ptá — a poslední věta promptu je ta, která platí.
+    static func reviewPromptCore(
+        intentPath: String?,
+        increment: IncrementalPromptScope?
+    ) -> String {
+        var core = ReviewPromptTemplate.core
+        if let intentPath {
+            core += " " + ReviewPromptTemplate.intent(at: intentPath)
+        }
+        if let increment {
+            core += " " + IncrementalCommand.instruction(
+                range: increment.range,
+                baseSha: increment.baseSha,
+                previousFindings: increment.previousFindingsPath,
+                reviewer: increment.reviewer
+            )
+        }
+        return core
     }
 
     /// Poskládaný prompt: šablona s dosazenými hodnotami a za ní jádro.
@@ -182,13 +209,39 @@ extension Policy {
     ///   **Bez výchozí hodnoty schválně**: s `= nil` by obě dnešní volání
     ///   (`ClaudeCommand.prompt(for:)` i `shellCommand(...)`) zůstala zelená a věta by se
     ///   nepřipojila nikdy. Bez defaultu to překladač vynutí na každém volajícím.
+    /// - Parameter increment: přírůstek (#517), nebo `nil` u běhu nad celým diffem. **Bez výchozí
+    ///   hodnoty schválně**, ze stejného důvodu jako `intent`: s `= nil` by obě dnešní volání
+    ///   zůstala zelená a věty o přírůstku by se nepřipojily nikdy.
     static func reviewPrompt(
         template configured: String,
         skillID: String,
         baseSha: String,
-        intent: URL?
+        intent: URL?,
+        increment: IncrementalReviewRequest?
     ) -> String {
         reviewPromptBody(template: configured, skillID: skillID, baseSha: baseSha)
-            + " " + reviewPromptCore(intentPath: intent?.path(percentEncoded: false))
+            + " " + reviewPromptCore(
+                intentPath: intent?.path(percentEncoded: false),
+                increment: increment.map {
+                    IncrementalPromptScope(
+                        range: $0.range,
+                        baseSha: baseSha,
+                        previousFindingsPath: $0.previousFindings?.path(percentEncoded: false),
+                        reviewer: skillID
+                    )
+                }
+            )
     }
+}
+
+/// Co potřebují věty o přírůstku (#517) — dosazené hodnoty, ne požadavek.
+///
+/// **Vlastní typ, ne `IncrementalReviewRequest`**: náhled v nastavení skládá připojovanou půlku
+/// promptu bez jakéhokoli běhu, takže by mu požadavek nebyl k čemu — a `URL` v něm by nutilo
+/// náhled vymýšlet cestu, která na disku není.
+struct IncrementalPromptScope: Hashable, Sendable {
+    let range: IncrementalDiffRange
+    let baseSha: String
+    let previousFindingsPath: String?
+    let reviewer: String
 }

@@ -36,7 +36,8 @@ func makeFinding(
     shortSummary: String? = nil,
     reviewer: String = "code-review",
     headSha: String = "aaaa1111",
-    translation: FindingTranslation? = nil
+    translation: FindingTranslation? = nil,
+    carriedFrom: String? = nil
 ) -> Finding {
     Finding(
         reported: makeReported(
@@ -50,7 +51,8 @@ func makeFinding(
         ),
         reviewer: reviewer,
         headSha: headSha,
-        translation: translation
+        translation: translation,
+        carriedFrom: carriedFrom
     )
 }
 
@@ -79,15 +81,18 @@ func makeStoredRun(
     headSha: String = "aaaa1111",
     finishedAt: Date = Date(timeIntervalSince1970: 1_000_000),
     timeline: StoredTimeline? = nil,
-    sessionID: String? = nil
+    sessionID: String? = nil,
+    usage: RunUsage? = nil,
+    increment: IncrementalReviewOutcome? = nil
 ) -> StoredReviewRun {
     var summary = StreamSummary()
     summary.sessionID = sessionID
     summary.findings = findings
     summary.calledReportFindings = calledReportFindings
     summary.droppedFindings = droppedFindings
+    summary.usage = usage
 
-    let run = ReviewRun(
+    var run = ReviewRun(
         key: ReviewRunKey(
             pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42),
             headSha: headSha,
@@ -96,6 +101,9 @@ func makeStoredRun(
         summary: summary,
         outcome: outcome
     )
+    // Přírůstek (#517) jde do běhu **tou cestou, jakou vzniká doopravdy** — přes `ReviewRun`,
+    // takže se přenesené nálezy do uloženého běhu složí `StoredReviewRun.init`, ne test.
+    run.increment = increment
     return StoredReviewRun(run, finishedAt: finishedAt, timeline: timeline)
 }
 

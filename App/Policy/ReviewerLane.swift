@@ -105,6 +105,14 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
     /// Celá osa. Dráha ji nese, aby view mělo **jeden** vstup — jinak by si lane a osu muselo
     /// párovat podle jména skillu a při přejmenování by se tiše rozešly.
     let entries: [ReviewerTimeline.Entry]
+    /// Nad jakým přírůstkem běh běžel a jak to dopadlo (#517). `nil` = nad celým diffem PR,
+    /// tedy jako do #517 — a **u syntetických drah taky `nil`**: dráha bez osy a bez uloženého
+    /// běhu o rozsahu nic neví, takže o něm nic netvrdí.
+    let increment: Increment?
+    /// Proč běh šel nad **celým** diffem, i když by se od něj čekal přírůstek (#517). `nil` = jel
+    /// nad přírůstkem, nebo není co vysvětlovat (první kolo, vypnuté nastavení, tatáž hlava) —
+    /// rozhoduje o tom `ReviewScope.saysWhyWhole`, ne `if` ve view.
+    let wholeReason: ReviewScope.WholeReason?
     /// Je skill v **dnešní** nastavené sadě pro repo? `false` u osy po skillu, který se z nastavení
     /// odebral nebo přejmenoval (#242).
     ///
@@ -112,6 +120,16 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
     /// v tabu `Nálezy` vidět. Musí ale být poznat, že není z dnešního nastavení, jinak by tab
     /// tvrdil, že tenhle reviewer patří do sady, ze které se review pouští.
     let isConfigured: Bool
+
+    /// Přírůstek na dráze: rozsah a — u doběhlého běhu — jeho souhrn (#517).
+    ///
+    /// **Dvě části, a `tally` je volitelná schválně.** Rozsah je znám od začátku (nese ho osa),
+    /// kdežto „3 staré trvají, 1 nový“ se dá spočítat teprve z uloženého běhu. Kapsli `přírůstek`
+    /// je tedy vidět hned, věta pod dráhou až po konci — a dokud tam není, netvrdí se nic.
+    struct Increment: Equatable, Sendable {
+        let range: IncrementalDiffRange
+        let tally: Policy.IncrementalTally?
+    }
 
     var id: String { skill }
 
@@ -160,11 +178,23 @@ extension Policy {
 
         return order(skills: skills, timelines: timelines, recorded: recorded, running: running).map { skill in
             let isConfigured = configured.contains(skill)
+            let increment = increment(of: skill, timeline: bySkill[skill], record: record)
             if let timeline = bySkill[skill] {
-                return lane(of: timeline, isRunning: running.contains(skill), isConfigured: isConfigured)
+                return lane(
+                    of: timeline,
+                    isRunning: running.contains(skill),
+                    isConfigured: isConfigured,
+                    increment: increment
+                )
             }
             if running.contains(skill) { return queuedLane(of: skill, isConfigured: isConfigured) }
-            if hasRun.contains(skill) { return missingProgressLane(of: skill, isConfigured: isConfigured) }
+            if hasRun.contains(skill) {
+                return missingProgressLane(
+                    of: skill,
+                    isConfigured: isConfigured,
+                    increment: increment
+                )
+            }
             return notStartedLane(of: skill, isConfigured: isConfigured)
         }
     }
@@ -222,6 +252,8 @@ extension Policy {
             loadedSkill: nil,
             intentGap: nil,
             entries: [],
+            increment: nil,
+            wholeReason: nil,
             // Dnes je to vždycky `true` — co v sadě není a nemá ani osu, ani běh, se do pořadí
             // drah nedostane. Předává se přesto: ta pravda drží jen pořadím větví ve `lanes`,
             // a to je slabší záruka než parametr.
@@ -235,7 +267,11 @@ extension Policy {
     /// takže by ho čtyři vyšisované kapsle jen předstíraly. `unknown`, ne `idle`: „nedošlo na ni“ by
     /// o proběhlém běhu lhalo. Jak to dopadlo, se čte z chipu revieweera a z tabu `Nálezy` — tam ta
     /// data jsou, jen k nim chybí průběh.
-    private static func missingProgressLane(of skill: String, isConfigured: Bool) -> ReviewerLane {
+    private static func missingProgressLane(
+        of skill: String,
+        isConfigured: Bool,
+        increment: ReviewerLane.Increment? = nil
+    ) -> ReviewerLane {
         ReviewerLane(
             skill: skill,
             state: .missingProgress,
@@ -250,6 +286,12 @@ extension Policy {
             loadedSkill: nil,
             intentGap: nil,
             entries: [],
+            // **Tady `increment` být může**, na rozdíl od ostatních syntetických drah: dráha bez osy
+            // je doběhlý běh, jehož průběh se neuložil (#242) — a rozsah přírůstku nese uložený
+            // běh, ne osa. Kapsle `přírůstek` a věta o starých nálezech tedy stojí i u něj.
+            increment: increment,
+            // **Proč se šlo na celý diff, dráha bez osy neví**: ten důvod nese osa, ne uložený běh.
+            wholeReason: nil,
             isConfigured: isConfigured
         )
     }
@@ -269,6 +311,8 @@ extension Policy {
             loadedSkill: nil,
             intentGap: nil,
             entries: [],
+            increment: nil,
+            wholeReason: nil,
             isConfigured: isConfigured
         )
     }
@@ -279,7 +323,8 @@ extension Policy {
     private static func lane(
         of timeline: ReviewerTimeline,
         isRunning: Bool,
-        isConfigured: Bool
+        isConfigured: Bool,
+        increment: ReviewerLane.Increment?
     ) -> ReviewerLane {
         let digest = timeline.digest
         let state = laneState(of: digest, isRunning: isRunning)
@@ -299,8 +344,34 @@ extension Policy {
             loadedSkill: timeline.loadedADifferentSkill ? timeline.loadedSkill : nil,
             intentGap: timeline.intentGap,
             entries: timeline.entries,
+            increment: increment,
+            wholeReason: timeline.scope?.saysWhyWhole == true ? timeline.scope?.wholeReason : nil,
             isConfigured: isConfigured
         )
+    }
+
+    /// Přírůstek na dráhu (#517) — **rozsah z osy, souhrn z uloženého běhu**.
+    ///
+    /// Dva zdroje jsou tu proto, že každý ví něco jiného, a **pořadí mezi nimi rozhoduje osa**:
+    /// je to záznam toho běhu, který na dráze stojí. Uložený běh může být z **minulého kola nad
+    /// touž hlavou** (ruční `Pustit znovu` nad celým diffem), takže by souhrn přírůstku visel nad
+    /// během, který přírůstkový nebyl — proto se souhrn bere jedině tehdy, když se **na rozsahu
+    /// shodnou**.
+    ///
+    /// Bez osy (dráha z doby před #203) rozhoduje uložený běh sám: jinou pravdu o tom kole nemáme.
+    private static func increment(
+        of skill: String,
+        timeline: ReviewerTimeline?,
+        record: ReviewRecord?
+    ) -> ReviewerLane.Increment? {
+        let tally = record.flatMap { record in
+            record.runs.first { $0.skillID == skill }.flatMap { incrementalTally(of: $0, in: record) }
+        }
+        guard let timeline else {
+            return tally.map { ReviewerLane.Increment(range: $0.range, tally: $0) }
+        }
+        guard let range = timeline.scope?.increment else { return nil }
+        return ReviewerLane.Increment(range: range, tally: tally?.range == range ? tally : nil)
     }
 
     /// Kam se běh dostal, drží **souhrn osy** — fáze se z toho odvozují jedním číslem, aby nemohly

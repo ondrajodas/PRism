@@ -45,6 +45,13 @@ struct ReviewerLaneView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
             }
+            // Jak přírůstek dopadl (#517) — **pod větou o běhu, ne místo ní**: „doběhlo“ je
+            // o session, tohle o nálezech. Cena stojí na vlastním řádku, protože srovnání
+            // s prvním kolem je druhá věc, ne pokračování věty o nálezech.
+            if let increment = lane.increment?.tally,
+               let summary = ReviewerLaneText.increment(increment) {
+                incrementLine(summary, saving: ReviewerLaneText.incrementSaving(of: lane))
+            }
             if let failure = lane.failure { failureBlock(failure) }
             if feed != .none {
                 StepFeedView(
@@ -71,6 +78,34 @@ struct ReviewerLaneView: View {
                 .lineLimit(1)
                 .help(lane.skill)
             statePill
+            // Přírůstek (#517) — kapsle a za ní rozsah. **Vedle stavu, ne místo něj**: `doběhlo`
+            // a `přírůstek` odpovídají na jiné otázky (jak to skončilo × nad čím to běželo)
+            // a slít je do jedné kapsle by znamenalo, že se jedna z nich nedozví.
+            if let increment = lane.increment {
+                Text(verbatim: ReviewerLaneText.incrementLabel)
+                    .font(.system(.caption2, design: .monospaced))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Palette.accent.opacity(0.15), in: .capsule)
+                    .foregroundStyle(Palette.accent)
+                    .help(ReviewerLaneText.incrementHelp(increment.range))
+                Text(verbatim: ReviewerLaneText.incrementRange(increment.range))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
+                    .help(ReviewerLaneText.incrementHelp(increment.range))
+            }
+            // Proč se šlo na **celý** diff, i když by se čekal přírůstek (#517). Bez téhle věty
+            // by se rozhodnutí `Policy` nikde nečetlo — a to je stav, který `CLAUDE.md` zakazuje:
+            // buď to zobraz, nebo nedrž. Kapsli to nedostává schválně: není to stav běhu, ale
+            // vysvětlení, a `celý diff` je navíc to, co bylo do #517 normální.
+            if let reason = lane.wholeReason {
+                Text(verbatim: "celý diff — \(ReviewerLaneText.wholeReason(reason))")
+                    .font(.caption)
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
+                    .help(ReviewerLaneText.wholeReasonHelp(reason))
+            }
             // Dráha po skillu, který v nastavené sadě není. Nezmizí (to by zahodilo doběhlé
             // review), ale nesmí se tvářit, že do dnešní sady patří.
             if !lane.isConfigured {
@@ -119,6 +154,27 @@ struct ReviewerLaneView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// Souhrn přírůstku a k němu cena proti prvnímu kolu (#517).
+    ///
+    /// Cena je **volitelná a `nil` se nedoplňuje**: `RunUsage` má všechna pole volitelná, protože
+    /// zabitá session `result` event nepošle — nula by tvrdila, že běh byl zdarma.
+    private func incrementLine(_ summary: String, saving: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: summary)
+                .font(.callout)
+                .foregroundStyle(Palette.ink2)
+            if let saving {
+                Text(verbatim: saving)
+                    .font(.caption)
+                    .foregroundStyle(Palette.ink3)
+                    .monospacedDigit()
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
     }
 
     private var statePill: some View {

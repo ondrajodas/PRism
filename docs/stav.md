@@ -7222,3 +7222,64 @@ v `SelectableCodeView` a `DiffToolbar` může nulu pořád zapamatovat na celý 
 a **dvanáct dalších stráží porovnává surový text dál** — u nich to není přehození jedné vlastnosti,
 protože hledané vzory samy obsahují mezery a zalomení, takže se musí přepsat literál po literálu
 (nejbolavější je `SingleWayOutTests`, hlídá tvrdou podmínku č. 1).
+
+## #517 — po pushi review jen přírůstku, se starými nálezy jako kontextem (M16)
+
+První issue skupiny automatu (#517, #518, #519). Do #517 pouštěl automat po každém pushi **celé
+review znovu**: reviewer prošel tentýž diff podruhé, staré nálezy nahlásil jako nové a odpověď na
+„spravily to nové commity?“ se musela koupit zvlášť — vlastní session kontroly nálezů (#150).
+
+**Po pushi teď reviewer dostane rozsah `<minulá hlava>…<hlava>` a k němu nálezy z minula jako
+materiál v souboru** (cestou k souboru, precedens #120), takže z jednoho běhu vypadne obojí: nové
+nálezy v přírůstku a verdikt o starých. Sada povolení se **nemění ani o položku** (tvrdá podmínka
+č. 2) — je to rozsah v promptu a soubor, který si session přečte `Read`em.
+
+**Rozhoduje se to na skill, ne na review** (`Policy.reviewScope`), a je to podmínka, ne
+zjednodušení: dva reviewery nad jedním PR mohou být v jiném stavu a ten, který minule nedoběhl, kód
+nad předchozí hlavou nepřečetl — přírůstek by ten zbytek přeskočil **potichu**. Na celý diff se
+proto jde v šesti případech a každý je jiná věta v okně: vypnuté nastavení, první kolo, tatáž hlava,
+reviewer bez doběhlého běhu, **přepsaná historie** a **nezjištěná** příbuznost.
+
+**Společnou historii ověřuje `git`, ne časová osa PR.** `RepoCheckout.ancestry(of:in:)` je
+`git merge-base --is-ancestor` v pracovní kopii a odpovídá **návratovým kódem** (0/1/jinak), takže
+`rewritten` a `unknown` jsou dvě různé věty — tvrdit force push tam, kde `git` neodpověděl, by
+tvrdilo víc, než data unesou. Cesta review konverzaci načtenou nemá, takže se `Policy.incrementalDiff`
+z #284 použít nedá; je to **vědomě druhá cesta k téže otázce**, protože každá se ptá jiného zdroje.
+Běží s `GIT_NO_LAZY_FETCH=1`, aby se odpověď nešla na partial klonu hledat po síti.
+
+**Tvrdá podmínka č. 5 platí, jen se u přeneseného nálezu ptá dvou sha.** `Finding.headSha` se
+přepíše na dnešní hlavu (běh nad dnešním kódem řekl, že nález trvá), `Finding.carriedFrom` nese,
+odkud přišel — bez toho by nešlo poznat, že tu větu napsal reviewer o starším commitu a že číslo
+řádku v ní může být z jiné verze souboru. Do **klíče** nálezu `carriedFrom` nepatří, jinak by
+přenesení nález rozdvojilo a rozpáralo se s ním i odmítnutí (#113).
+
+**Nic se neztrácí, a to je celý důvod, proč je nastavení výchozí zapnuté.** Přenášejí se **všechny**
+staré nálezy — včetně vyřešených (`vyřešeno` je tvrzení modelu, ne fakt; sundat nález smí jedině
+odmítnutí člověkem) i těch, ke kterým se běh nevyjádřil (v okně `bez odpovědi`). Odmítnutý se
+neposílá ani nepřenáší: poslat ho zpátky do dalšího kola by ho vzkřísilo. **Rozbitá hodnota
+v `config.json` se sráží na `false`**, tedy na celé review — na bezpečnou stranu, která je tady
+opačná než default.
+
+**Odznaky u nálezů skládá od #517 jedno místo** (`Policy.findingStatuses`): verdikt umí přinést
+dvojí běh — kontrola (u nálezů starší hlavy) a přírůstek (u běhu na dnešní hlavě) —, a odznak
+v okně je jeden. Dvě čtení by znamenala, že u nálezu stojí jeden a ve větě nad diffem druhý.
+
+**V `Průběhu` k tomu přibyla kapsle `přírůstek` s rozsahem, souhrn pod dráhou** (`1 nový nález
+v přírůstku · 2 starých trvá · 1 vyřešených pushem · 1 bez odpovědi`) **a cena přírůstku vedle ceny
+celého běhu z prvního kola**. Ta cena se **nese s přírůstkem** a přes kola se řetězí: dohledávat ji
+ze staršího záznamu by znamenalo, že po eviction věta tiše ztratí druhou polovinu. Rozsah jde do osy
+jako událost, takže kapsle přežije restart; souhrn se bere z uloženého běhu, a jen když se
+**na rozsahu shodnou** (uložený běh může být z minulého kola nad touž hlavou).
+
+Testů **5177** v 507 suitách, plný běh zelený (109,5 s, jedno známé `theWaitGivesUpLoudly`). Nové
+sady jsou čtyři: `IncrementalReviewScopeTests` (výčet rozhodnutí, párování, přenášení),
+`IncrementalReportTests` (souhrn a platnost odznaků), `IncrementalCommandTests` (prompt, soubor,
+jedna konstanta tvaru verdiktů) a `AppStoreIncrementalTests` (celá cesta, včetně toho, že se
+`git` v prvním kole vůbec neptá). `SessionToolSetsTests` prošly **beze změny**.
+
+**Zapsané mezery**: nálezy revieweera, který v tomhle kole **neběžel** (odebral se ze sady, nebo se
+opakuje jen podmnožina, #149), se nepřenesou — nemá je kdo odnést; je to totéž, co se dnes děje po
+pushi u celého review. A **kvalita odpovědi na verdikty se v harnessu neměří**: že model v jednom
+běhu doopravdy zavolá `ReportFindings` **a** ke všem starým nálezům se vyjádří, se pozná jedině na
+skutečných bězích — dokud se to nepotvrdí, je vidět `N bez odpovědi`, což je záměrně to, co se
+nedá přečíst jako „čisto“.

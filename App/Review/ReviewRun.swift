@@ -12,6 +12,13 @@ struct ReviewRun: Sendable, Equatable {
     /// Sedí tady, ne v `StreamSummary`: ta je obrazem toho, co reviewer poslal, a překlad
     /// vzniká až po něm.
     var translations: [FindingTranslation?] = []
+    /// Že běh jel **jen nad přírůstkem**, a co si z minula odnesl (#517). `nil` = běžel nad celým
+    /// diffem PR.
+    ///
+    /// Sedí tady, ne ve `StreamSummary`: ta je obrazem toho, co reviewer poslal streamem, kdežto
+    /// tohle skládá aplikace z materiálu, se kterým běh pustila, a z jeho posledního sdělení —
+    /// tedy dvě věci, o kterých `StreamParser` nic neví.
+    var increment: IncrementalReviewOutcome? = nil
 
     /// Nálezy doplněné o to, co ví jen aplikace: **kdo** je našel, **proti čemu** a jak se
     /// jejich texty čtou v nastaveném jazyce.

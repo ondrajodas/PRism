@@ -41,6 +41,8 @@ struct TimelineDigestTests {
                 digest.reportedFindings = count
             case .intentGap(let gap):
                 if digest.intentGap == nil { digest.intentGap = gap }
+            case .scope(let scope):
+                if digest.scope == nil { digest.scope = scope }
             case .finished(let outcome):
                 digest.finish = .init(outcome: outcome, at: entry.at)
             }
@@ -54,6 +56,10 @@ struct TimelineDigestTests {
         var timeline = ReviewerTimeline(skill: "code-review", worktree: URL(filePath: "/tmp/wt"))
         timeline.record(.queued, at: start)
         timeline.record(.intentGap(.toolNotConfigured), at: start + 1)
+        timeline.record(
+            .scope(.increment(IncrementalDiffRange(seen: "4f2ac91", head: "9c1de02"))),
+            at: start + 1.5
+        )
         timeline.record(.started(sessionID: "abc123"), at: start + 2)
         timeline.record(.attemptedTool(ToolAttempt(name: "Skill", detail: "code-review", id: "t0")), at: start + 3)
         timeline.record(.resolvedTool(ToolResolution(id: "t0", outcome: .init(kind: .passed))), at: start + 3.2)

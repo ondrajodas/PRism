@@ -430,6 +430,38 @@ struct GitRepoCheckout: RepoCheckout {
         return TextLines.nonEmpty(output).map(String.init)
     }
 
+    /// Odpověď nese **návratový kód**, ne výstup: `git merge-base --is-ancestor` nic nevypisuje
+    /// a odpovídá `0` (je předkem), `1` (není) a čímkoli jiným (neznámý commit, rozbitý strom).
+    ///
+    /// **Nedá se to složit ze `succeeds`**, které druhé dva případy slévá do `false`: `rewritten`
+    /// je věta o přepsané historii a nad chybějícím objektem by tvrdila něco, co se nezjistilo.
+    /// Proto se `runner` volá přímo — `run(_:)` by nenulový kód proměnil ve výjimku a informace,
+    /// **který** to byl, by se cestou ztratila.
+    func ancestry(of sha: String, in worktree: URL) async -> BranchAncestry {
+        // Prázdné sha by `git` vzal jako chybějící argument a odpověděl chybou syntaxe, tedy
+        // `unknown` — jen o timeout později. Rozhoduje se to tady, ať je to z kódu vidět.
+        guard !sha.isEmpty else { return .unknown }
+        let result = try? await runner.run(
+            git,
+            arguments: [
+                "-C", worktree.path(percentEncoded: false),
+                "merge-base", "--is-ancestor", sha, "HEAD",
+            ],
+            // `GIT_NO_LAZY_FETCH=1` ze stejného důvodu jako u `hasCommit`: na partial klonu by si
+            // `git` chybějící commit tiše dotáhl z promisor remote, takže by tenhle levný dotaz
+            // chodil na síť — a to zrovna v případě, který nás zajímá (commit po force pushi
+            // v cache není). Odpověď má být **lokální**: co v cache není, se nemá jak ohraničit.
+            environment: environment.merging(["GIT_NO_LAZY_FETCH": "1"]) { _, new in new },
+            timeout: timeout
+        )
+        guard let result else { return .unknown }
+        return switch result.exitCode {
+        case 0: .ancestor
+        case 1: .rewritten
+        default: .unknown
+        }
+    }
+
     func existingClone(for repo: RepoID) async -> URL? {
         hasUsableClone(for: repo) ? layout.bareClone(for: repo) : nil
     }

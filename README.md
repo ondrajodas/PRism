@@ -2047,13 +2047,30 @@ zastaral hned další verzí.
    nestáhl“ —, a v tabu `Průběh` je u dráhy odznak `zadání není celé` s důvodem v nápovědě.
    Rozhoduje se přitom podle stavu MCP serveru v `init` eventu session, **ne podle toho, co model
    napsal**: dva ze tří tvarů selhání skončí nulovým kódem a hlásí se jako úspěch.
-5. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
+5. **Po pushi jen přírůstek** (#517) — druhé a další kolo review nad týmž PR se neptá na celý
+   diff znovu. Reviewer dostane **rozsah `<minulá hlava>…<hlava>`** a k němu **nálezy z minula
+   jako materiál v souboru** (tou samou cestou jako zadání, takže se sada nástrojů nemění), a
+   z jednoho běhu vypadne obojí: nové nálezy v přírůstku a **verdikt o starých**
+   (`pořád platí` / `vyřešeno` / `nejasné`). Staré nálezy se **neztrácejí** — přepíšou se na
+   novou hlavu s odznakem a s tím, odkud přišly; sundat nález smí dál jedině odmítnutí.
+
+   **Rozhoduje se to na reviewera**, ne na review, a na celý diff se jde v šesti případech:
+   vypnuté nastavení, první kolo, tatáž hlava, reviewer, který minule **nedoběhl** (kód
+   nepřečetl, takže by přírůstek přeskočil něco, o čem nikdo nic neřekl), **přepsaná historie**
+   a **nezjištěná** společná historie. Poslední dva se poznají od sebe, protože tvrdit force push
+   tam, kde `git` neodpověděl, by tvrdilo víc, než data unesou. V tabu `Průběh` je u dráhy kapsle
+   `přírůstek` s rozsahem, souhrn `1 nový nález v přírůstku · 2 starých trvá · 1 vyřešených
+   pushem` a cena přírůstku vedle ceny celého běhu z prvního kola.
+
+   Přepínač `Po pushi review jen přírůstku` je na stránce `Review a skilly`, **výchozí zapnuto**
+   (přírůstek nic neztrácí) a repo si ho smí přebít.
+6. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
-6. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
+7. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
    řaditelná tabulka pro nálezy, které ke konkrétnímu řádku nepatří (chybějící testy,
    architektonické poznámky).
 
-7. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
+8. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci **otevře záložku** toho pull requestu (na tabu, kde jsi
    v něm skončil) a dá okno dopředu. PR, který se mezitím ze seznamu odklidil, se neotevírá —
    a filtr, který ho schoval, klik zruší.
@@ -2609,7 +2626,9 @@ App/                      zdrojáky aplikace — target PRism
                           na hlavy kterých PR se tik zeptá a čím se datuje zastarání nálezů (#420);
                           jestli se z dotazu nabídne založení nového labelu a jakou dostane barvu (#413);
                           co je adresa pull requestu, odkud se ta záložka vzala a co má ukázat, dokud
-                          o PR mimo zdroje známe jen adresu (#531)
+                          o PR mimo zdroje známe jen adresu (#531);
+                          nad čím poběží který reviewer po pushi a proč (#517 — přírůstek nebo celý
+                          diff, přenesené nálezy a souhrn na dráze)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), založení nového labelu
                           v repozitáři (#413 — sedmá a jediná metoda, která píše mimo PR), brána z nastavení
@@ -2617,7 +2636,9 @@ App/                      zdrojáky aplikace — target PRism
                           zadání PR pro reviewera vedle pracovního stromu (#120),
                           dotažení textu issue vlastní krátkou session (#345)
                           a rozhovor nad PR (#452 — třetí vyjmenovaná session, užší sada
-                          nástrojů, --resume a materiál v souboru vedle stromu)
+                          nástrojů, --resume a materiál v souboru vedle stromu);
+                          review jen přírůstku po pushi (#517 — rozsah v promptu, nálezy z minula
+                          v souboru vedle stromu, sada nástrojů beze změny)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;

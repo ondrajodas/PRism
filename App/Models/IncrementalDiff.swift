@@ -5,8 +5,11 @@ import Foundation
  Vlastní typ, ne dva `String`y: obojí je sha a záměna by znamenala diff naruby, což z podpisu
  `(String, String)` nikdo nepozná.
  */
-struct IncrementalDiffRange: Hashable, Sendable {
-    /// Hlava, kterou jsem naposledy viděl.
+/// **`Codable` od #517**, protože se rozsah zapisuje do osy běhu (`ReviewerTimeline.Entry`)
+/// i do uloženého běhu: pilulka `přírůstek` má v `Průběhu` stát i po restartu.
+struct IncrementalDiffRange: Hashable, Codable, Sendable {
+    /// Hlava, kterou jsem naposledy viděl. U přírůstkového review (#517) je to hlava, proti
+    /// které běželo review minule — tedy commit, na kterém vznikly nálezy z minula.
     let seen: String
     /// Hlava, na které PR stojí teď.
     let head: String

@@ -218,6 +218,8 @@ struct StepFeedWindowTests {
                 loadedSkill: lane.loadedSkill,
                 intentGap: lane.intentGap,
                 entries: lane.entries,
+                increment: lane.increment,
+                wholeReason: lane.wholeReason,
                 isConfigured: lane.isConfigured
             )
         }

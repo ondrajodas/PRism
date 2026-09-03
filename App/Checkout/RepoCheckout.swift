@@ -94,6 +94,20 @@ protocol RepoCheckout: Sendable {
     /// buildy) jsou zrovna ty, kterých je nejvíc, takže by odhad převážily.
     func trackedFiles(in worktree: URL) async throws -> [String]
 
+    /// Je commit předkem hlavy pracovního stromu? (#517)
+    ///
+    /// Odpovídá na jedinou otázku: **dá se přírůstek ohraničit**. Dokud je dnešní hlava potomkem
+    /// té z minulého review, je `git diff <minulá>...HEAD` přesně to, co se pushlo; po přepsané
+    /// historii spadne společný předek k místu, kde větev vznikla, a „co přibylo“ vyjde na víc než
+    /// celý diff PR (změřeno u #284: 102 kB ve 22 souborech proti 15 kB ve třech).
+    ///
+    /// **Nevyhazuje, vrací `unknown`** — a je to výjimka z pravidla „selhání se hlásí“, ne jeho
+    /// obcházení: commit z minulého kola v cache být nemusí (po force pushi je nedosažitelný,
+    /// takže ho `fetch` nemusel přinést) a to není porucha, jen odpověď „nevím“. Rozhodnutí i věta
+    /// v okně z toho vyjdou stejně bezpečně jako u `rewritten`, jen se netvrdí přepsaná historie
+    /// tam, kde se `git` jen nedostal k odpovědi.
+    func ancestry(of sha: String, in worktree: URL) async -> BranchAncestry
+
     /// Uklidí pracovní strom. Chybějící strom není chyba.
     func removeWorktree(for pr: PRIdentifier, at headSha: String) async throws
 

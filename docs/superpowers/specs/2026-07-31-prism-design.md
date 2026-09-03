@@ -5738,3 +5738,39 @@ a nikdo si toho nevšimne, protože stráž bude zelená.
 **Co se z toho nezmenšilo, a je to zapsané**: čtyři stráže mají čtyři kopie `Source`/`condensed`.
 Zdrojáky si v `Tests/` čte dvacet jeden soubor a svést je do jednoho čtení je vlastní úklid
 (zapsaný už u #490), ne tohle issue.
+
+### Záznam rozhodnutí — review jen přírůstku po pushi (#517)
+
+Zákres odsouhlasený 2. 9. 2026 (deck *Směry pro PRism*, stránka *Za mě › Z6 Chytřejší automat*),
+přenesený do `docs/navrh.html` jako **sekce 46**. Kresba říkala *co*; tohle je *jak* a **co se
+cestou rozhodlo jinak**.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Rozhoduje se na skill, ne na review** (`Policy.reviewScope(record:head:skill:ancestry:enabled:)`) | Jedno rozhodnutí pro celý běh | Dva reviewery nad jedním PR mohou být v jiném stavu: jeden minule doběhl, druhý spadl. Ten druhý nad předchozí hlavou kód **nepřečetl**, takže by přírůstek jeho zbytek přeskočil — a potichu, protože běh doběhne a nálezy nahlásí |
+| **Přírůstek se pouští i u ručního spuštění**, ne jen v automatu | Vázat to na automat jako denní limit (`autoRunsPerDay`) | Rozhodující fakt je **„po pushi“**, ne „kdo zmáčkl“. Přírůstek je navíc **informativnější** než celé review: to by staré nálezy nahlásilo znovu jako nové a odpověď „co ze starých trvá“ by se ztratila. Dvě pravidla by k tomu byla dvě odpovědi na jednu otázku. Kdo chce projít celý diff, přepne nastavení — a `Zkopírovat příkaz` (#242) o přírůstku **mlčí** schválně |
+| **Společnou historii ověřuje `git`** (`merge-base --is-ancestor` v pracovní kopii) | `Policy.incrementalDiff(from:to:rewroteHistory:)` z #284 nad načtenou konverzací | Cesta review konverzaci načtenou **nemá** (načítá ji okno, ne běh) a dotahovat ji kvůli tomu je dotaz navíc při každém review. `git` je na tuhle otázku přímá odpověď a strom už stojí. Je to vědomě druhá cesta k téže otázce, protože každá se ptá **jiného zdroje** |
+| **`ReviewScope` je model, ne typ v `Policy`** | Nechat ho nested v `Policy` jako `RecheckReport` | Jde do **osy běhu**, takže musí být `Codable` a přežít restart — tentýž důvod, proč je v Models `IntentGap` (#345). `RecheckReport` do osy nejde, proto zůstává v `Policy` |
+| **Do osy jde jen rozhodnutí, které má co říct** (přírůstek + tři vysvětlované důvody) | Hlásit rozsah u každého běhu | „Celý diff, protože je to první kolo“ je stav, ve kterém aplikace běžela do #517; řádek o něm by přidal šum do každé osy každého prvního review a ty tři důležité důvody by se v něm ztratily. Zároveň to zavírá druhou stranu: **rozhodnutí, které se nikde nečte, by byla mrtvá váha** |
+| **Tři odpovědi na příbuznost** (`ancestor` / `rewritten` / `unknown`) | Dvě (`Bool`) | Obojí vede na celé review, ale **jinou větou v okně**. Tvrdit přepsanou historii tam, kde se `git` k odpovědi nedostal (commit po force pushi v cache není), je text, který tvrdí víc, než data unesou — tatáž úvaha jako `unclear` u `RecheckStatus` |
+| **Přenášejí se všechny staré nálezy, včetně vyřešených** | Vyřešené zahodit (nebo označit jako odmítnuté) | „Vyřešeno“ je tvrzení modelu, ne fakt. Sundat nález smí jedině odmítnutí člověkem (#113) — schovaný nález se od neexistujícího nedá odlišit. Nezodpovězený se přenáší ze stejného důvodu: je to pořád platný nález |
+| **`Finding.carriedFrom` vedle `headSha`**, `headSha` se přepíše na dnešní hlavu | Nechat přenesenému nálezu starou `headSha` | Nález s cizí hlavou by v záznamu dnešní hlavy byl trvale „zastaralý“ a tvrdá podmínka č. 5 by se z něj nedala přečíst. Přepis je pravda o tom, co se stalo: běh nad dnešním kódem řekl, že nález **trvá**. Původ se ale ztratit nesmí — číslo řádku v té větě může být z jiné verze souboru |
+| **`carriedFrom` do klíče nálezu nepatří** | Zahrnout ho, aby byl klíč úplný | Klíč páruje **týž** nález napříč běhy. S původem v klíči by přenesení nález rozdvojilo a rozpáralo by se s ním odmítnutí (#113) i verdikty — tedy zmizel by bit, který nikdo neklikl |
+| **Nálezy z minula jdou cestou k souboru** (#120) | Vložit je do promptu jako u kontroly (#150) | Kontrola má v promptu **jen** ten seznam, kdežto tady se k němu přidává celé zadání review. Kilobajt cizího textu v promptu znamená, že každý běh jede na jiném zadání (u #52 změřeno: tři běhy nad týmž commitem, 1, 2 a 3 nálezy) |
+| **V souboru jsou nálezy všech reviewerů**, posoudit má běh jen ty své | Soubor na skill | Běh, který nevidí, co už na PR stojí, ohlásí cizí nález jako svůj nový. Soubor na skill by navíc znamenal jméno skillu v cestě (`code-review:code-review` obsahuje `:`), tedy sanitizaci, po které se dvě různá id můžou potkat. Že si odnese jen ty své, drží **filtr při ukládání**, ne prosba v promptu |
+| **Verdikty čte `RecheckCommand.parse`, tvar popisuje jedna konstanta** (`verdictFormat`) | Vlastní parser a vlastní formulace pro přírůstek | Dvě formulace téhož tvaru znamenají, že se úpravou jedné rozbije čtení u druhé — a **potichu**: nepřečtená odpověď vypadá jako nález, na který se běh nevyjádřil |
+| **Výchozí zapnuto** | Výchozí vypnuto, jak je zvykem u nových přepínačů v tomhle repu | Vypnuté brány (`allowsPublishing`, `mode`) chrání před tím, aby něco **odešlo** nebo se **spustilo**. Tady je to naopak: přírůstek nic neztrácí (staré nálezy se přenášejí s odznakem), kdežto vypnuto znamená platit za druhé přečtení celého diffu **a přijít** o odpověď na „co ze starých trvá“ |
+| **Rozbitá hodnota v souboru se sráží na `false`**, tedy jinam než na default | Srazit na výchozí, jako u ostatních klíčů | Pravidlo v tomhle repu není „sráží se na default“, ale **„sráží se na bezpečnou stranu“** — u režimu a odesílání to náhodou splývá. Tady je bezpečná strana celé review, protože přečte víc kódu |
+| **Cena celého běhu se nese s přírůstkem** (`StoredIncrementalReview.wholeUsage`), a přes kola se řetězí | Dohledat ji v záznamu předchozí hlavy | Ten záznam z cache odejde (eviction, úklid po zavřeném PR) a věta „0,12 $ proti 0,82 $“ by tiše ztratila druhou polovinu. Řetězení je proto, aby druhý přírůstek srovnával pořád s **celým** během, ne s předchozím přírůstkem |
+| **Rozsah jde do osy jako událost**, souhrn se bere z uloženého běhu | Držet obojí na jednom místě | Rozsah je znám před spuštěním (kapsle má stát od chvíle, kdy se dráha objeví) a v ose **přežije restart**; souhrn se dá spočítat teprve z uloženého běhu. Souhrn se přitom bere jen tehdy, když se **na rozsahu shodnou** — uložený běh může být z minulého kola nad touž hlavou (ruční `Pustit znovu` nad celým diffem) |
+| **`askedForVerdicts` se drží, ne odvozuje** z prázdné mapy verdiktů | Poznat „nezeptali jsme se“ podle toho, že `statuses` je prázdná | Prázdná mapa vznikne **i tak**, že běh odpověděl nečitelně. Slít to znamená, že se selhání našeho zápisu čte jako mlčení modelu — a to je věta o někom jiném |
+| **Selhání zápisu souboru běh nepoloží** | Padnout na celé review | Rozsah platí dál a staré nálezy se přenesou; jen se jich nikdo nezeptal, takže vyjdou jako `bez odpovědi` — a to je **jiná** věta než „minule bylo čisto“ (tam je přenesených nula), takže se ty dva stavy dají rozeznat. Padnout na celý diff by znamenalo znovu zaplatit celé review kvůli nezapsanému kilobajtu |
+
+**Co se z kresby nepřeneslo**: fáze `čte přírůstek ✓` a `prochází 4 soubory ✓` z decku. Platí pro
+ně totéž, co je u sekce 07 napsané od začátku — fáze se berou **z dat, ne z návrhu**, a o tom,
+kolik souborů si reviewer předsevzal, session neříká nic. Kapsle `přírůstek` a rozsah v hlavičce
+nesou přesně to, co se ví.
+
+**Co v tomhle issue vědomě není**: routing reviewerů podle změněných cest a odklad velkých PR do
+tichých hodin. Jsou v témže zákresu (a v sekci 46 zakreslené jsou), ale mají vlastní issues
+(#518, #519) — dráha je pro všechny tři totéž místo, proto stojí v jednom obrázku.

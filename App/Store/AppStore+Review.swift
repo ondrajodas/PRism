@@ -224,6 +224,23 @@ extension AppStore {
             // kvůli které se rozpočet strhává až v `runSkills`.
             let intent = try await prepareIntent(for: pr, of: detail)
 
+            // Nad čím se poběží (#517). Skládá se to **tady**, po checkoutu: rozhodnutí stojí na
+            // tom, jestli je společná historie, a to je otázka na `git` v pracovní kopii.
+            // Záznam se bere z paměti (`reviewRecords`), tedy ten, který je vidět v okně — a to
+            // je ten samý, ze kterého se v panelu kreslí nálezy z minula.
+            let previous = reviewRecords[pr]
+            let ancestry = await incrementalAncestry(
+                of: previous,
+                head: detail.headSha,
+                in: worktree,
+                using: checkout,
+                enabled: resolved(for: pr.repo).incrementalAfterPush
+            )
+            // `ancestry` zrušení **nevyhazuje** (nemá jak — nevrací chybu), takže se na něj musí
+            // zeptat tady: bez toho by zrušené review ještě zaplatilo session, o kterou si nikdo
+            // neřekl. Tatáž kontrola, jakou má cesta po odhadu jazyka repa a po zadání.
+            try Task.checkCancellation()
+
             try await runSkills(
                 for: pr,
                 of: detail,
@@ -232,7 +249,9 @@ extension AppStore {
                 saving: reviews,
                 only: subset,
                 intent: intent.file,
-                gap: intent.gap
+                gap: intent.gap,
+                previous: previous,
+                ancestry: ancestry
             )
             reviewPhases[pr] = nil
             await notifyAboutFinishedReview(of: pr)
@@ -424,12 +443,23 @@ extension AppStore {
         saving reviews: ReviewStore,
         only subset: [String]? = nil,
         intent intentFile: URL?,
-        gap: IntentGap?
+        gap: IntentGap?,
+        previous: ReviewRecord?,
+        ancestry: BranchAncestry
     ) async throws {
         // Sada se čte **až tady**, po odhadu jazyka repa — proto se podmnožina předává jako
         // parametr a ne jako snímek pořízený při spuštění.
         let skills = subset ?? reviewSkills(for: pr.repo)
         reviewPhases[pr] = .running(finished: 0, total: skills.count)
+        // Rozhodnutí na skill (#517), a **jednou pro celý běh**: sada je v tuhle chvíli hotová
+        // a rozsah se nesmí změnit pod rukama běhu, který už jede.
+        let increments = await incrementalRun(
+            for: pr,
+            at: detail.headSha,
+            skills: skills,
+            previous: previous,
+            ancestry: ancestry
+        )
 
         // Průběh teče přes proud, ne přímo do store: hlásí se ze session, která běží mimo
         // hlavní vlákno, a **pořadí událostí je to hlavní, co časová osa říká**. Proud ho
@@ -446,7 +476,8 @@ extension AppStore {
             for: pr,
             at: detail.headSha,
             in: worktree,
-            saving: reviews
+            saving: reviews,
+            increments: increments
         )
         // Příznak zadání jde do osy **jako první událost každé dráhy** (#345), ne po konci běhu.
         // Odpověď je v tuhle chvíli hotová (zadání se připravilo před `runSkills`), takže s ní není
@@ -456,6 +487,14 @@ extension AppStore {
         if let gap {
             for skill in skills { reporter.yield(.progress(skill: skill, .intentGap(gap))) }
         }
+        // Nad čím se běží, jde do osy **taky jako první událost dráhy** (#517) a ze stejného
+        // důvodu jako příznak zadání: rozhodnutí je hotové, než se session pustí, a kapsle
+        // `přírůstek` má v `Průběhu` stát od chvíle, kdy se dráha objeví. **Jen když je co říct**
+        // — o tom rozhoduje `ReviewScope`, ne `if` tady.
+        for skill in skills {
+            guard let scope = increments.reportableScope(of: skill) else { continue }
+            reporter.yield(.progress(skill: skill, .scope(scope)))
+        }
         await runSkills(
             for: pr,
             of: detail,
@@ -463,7 +502,8 @@ extension AppStore {
             using: reviewer,
             skills: skills,
             reporting: reporter,
-            intent: intentFile
+            intent: intentFile,
+            increments: increments
         )
         reporter.finish()
         let failure = await drained
@@ -506,7 +546,8 @@ extension AppStore {
         for pr: PRIdentifier,
         at headSha: String,
         in worktree: URL,
-        saving reviews: ReviewStore
+        saving reviews: ReviewStore,
+        increments: IncrementalRun
     ) async -> (any Error)? {
         var saveFailure: (any Error)?
         for await event in events {
@@ -523,7 +564,10 @@ extension AppStore {
             case .finished(let run):
                 finish(run.outcome, usage: run.summary.usage, of: run.key.skillID, for: pr)
                 do {
-                    try await store(run, for: pr, saving: reviews)
+                    // Výsledek přírůstku se skládá **tady, z materiálu toho běhu** (#517), ne
+                    // v runneru: verdikty jsou v posledním sdělení session a spárovat je umí
+                    // jedině ten, kdo drží seznam, na který se ptalo.
+                    try await store(increments.completing(run), for: pr, saving: reviews)
                 } catch {
                     // Nezapsaný nález je ztracený nález. Spolknout to by znamenalo, že řádek
                     // po doběhlém review ukazuje „neběželo“ — tedy přesně to, čemu se celý ten
@@ -639,7 +683,8 @@ extension AppStore {
         using reviewer: any ReviewRunning,
         skills: [String],
         reporting reporter: AsyncStream<ReviewEvent>.Continuation,
-        intent intentFile: URL?
+        intent intentFile: URL?,
+        increments: IncrementalRun
     ) async {
         // Limit se bere **tady a jednou** (#320), ze stejného důvodu jako šablona o pár řádků níž:
         // všechny session tohohle běhu poběží s tímtéž limitem, i kdyby se mezitím uložilo
@@ -659,7 +704,10 @@ extension AppStore {
                     timeout: timeout,
                     // Jeden soubor pro celý běh (#120): zadání se váže na `(PR, headSha)`, takže
                     // ho všechny skilly sdílejí — připravuje se jednou, ne na každou session.
-                    intentFile: intentFile
+                    intentFile: intentFile,
+                    // Přírůstek je **na skill** (#517): jeden reviewer může jít nad tím, co
+                    // přibylo, a druhý — ten, který minule nedoběhl — nad celým diffem.
+                    increment: increments.request(for: skill)
                 )
                 // Protokol slibuje, že selhání session se vrací jako výsledek a vyhodí se
                 // jen zrušení — ale spolehnout se na to znamená, že jakákoli jiná chyba
