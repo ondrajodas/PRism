@@ -16,11 +16,11 @@ import Testing
 
 /// Název je jeden napříč vším — hlídá, že se v bundlu neobjeví jiný než `PRism` a jeho slot.
 ///
-/// **Od #421 má i hostitel svůj slot** (`PRism-testhost`), takže se tady netvrdí rovnost, ale
-/// tvar: `PRism` plus přípona slotu. Důvod je v `ProcessPreferencesTests` — `CFBundleName` určuje
-/// kořen cache, takže hostitel s holým `PRism` pracoval nad cache hlavní instance. Rovnost by tedy
-/// tvrdila zrovna to, co se opravovalo; co má platit dál, je že jméno **začíná** na `PRism` a že se
-/// obě klíče shodují (do menu baru a do Docku nesmí jít dvě různá jména).
+/// **Od #421 má i hostitel svůj slot** (`PRism-testhost`), takže se tady netvrdí rovnost
+/// s `PRism`. Důvod je v `ProcessPreferencesTests` — `CFBundleName` určuje kořen cache, takže
+/// hostitel s holým `PRism` pracoval nad cache hlavní instance; rovnost by tvrdila zrovna to, co
+/// se opravovalo. Tvrdí se tedy tři věci: že se **oba klíče shodují** (do menu baru a do Docku
+/// nesmí jít dvě různá jména), že jméno **začíná** na `PRism`, a jaké je jméno hostitele.
 @Test func appPresentsItselfAsPRism() {
     let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
     let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String

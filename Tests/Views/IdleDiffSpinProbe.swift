@@ -549,24 +549,39 @@ struct IdleDiffSpinProbe {
     /// view, které si z ní čte — a `DiffView` si čte dvě. Bez tohohle počitadla se ta hypotéza od
     /// „tělo se zašpinilo neznámo čím“ nedá odlišit: v ablaci u #421 vyšlo, že se v každém
     /// průchodu tělem **všechny** vstupy shodují.
+    /// **Uzávěr chytá počitadlo, ne `self`, a je to podmínka, ne styl** (nález Copilota na #553).
+    /// Blokový observer drží notifikační centrum, takže `{ [self] … }` uzavře kruh
+    /// (centrum → uzávěr → `self` → `token`), `deinit` se nikdy nespustí a observer přežije
+    /// v procesu do konce běhu — v `.serialized` sadě, která si počitadlo zakládá dvakrát, by po
+    /// každém běhu zůstal jeden živý. Jinde v repu se proto blokové observery nepoužívají vůbec
+    /// (`DiffPairBlockView` a `SpinningRingView` berou selektorovou podobu, u které token není);
+    /// tady je potřeba **cizí** notifikace bez `NSObject`u, takže zbývá odregistrovat ho ručně —
+    /// a to jde jedině tehdy, když `deinit` doopravdy přijde.
     private final class DefaultsChanges: @unchecked Sendable {
-        private let lock = NSLock()
-        private var count = 0
-        private var token: (any NSObjectProtocol)?
+        private let counter = Counter()
+        private let token: any NSObjectProtocol
 
         init() {
+            let counter = counter
             token = NotificationCenter.default.addObserver(
                 forName: UserDefaults.didChangeNotification,
                 object: nil,
                 queue: nil
-            ) { [self] _ in lock.withLock { count += 1 } }
+            ) { _ in counter.bump() }
         }
 
-        deinit {
-            if let token { NotificationCenter.default.removeObserver(token) }
-        }
+        deinit { NotificationCenter.default.removeObserver(token) }
 
-        var total: Int { lock.withLock { count } }
+        var total: Int { counter.total }
+
+        private final class Counter: @unchecked Sendable {
+            private let lock = NSLock()
+            private var count = 0
+
+            func bump() { lock.withLock { count += 1 } }
+
+            var total: Int { lock.withLock { count } }
+        }
     }
 
     private static func tally(_ counts: [String: Int]) -> String {
