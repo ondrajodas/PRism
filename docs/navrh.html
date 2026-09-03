@@ -13536,7 +13536,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
         <div class="sheet-head">
           <span class="t">Force push?</span>
           <span class="slug">keboola/vault #85</span>
-          <span class="sub">Rebase je hotový v kopii repa. Přetlačení je druhý krok.</span>
+          <span class="sub">Rebase je hotový v kopii repa. Force push je druhý krok.</span>
         </div>
         <div class="sheet-body">
           <div class="pl-sec">
@@ -13646,7 +13646,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
         <div class="sheet-head">
           <span class="t">Srovnáno s <code>main</code> — 2 konflikty vyřešeny</span>
           <span class="slug">odinuv:chore/deps · 4 commity přehrány</span>
-          <span class="sub">Konflikty jsou vyřešené v kopii repa. Přetlačení je druhý krok.</span>
+          <span class="sub">Konflikty jsou vyřešené v kopii repa. Force push je druhý krok.</span>
         </div>
         <div class="sheet-body">
           <div class="pl-sec">
@@ -13657,6 +13657,11 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <div class="rv-row"><span class="rv-av wait">—</span><span class="who">tests/VaultTest.php</span><span class="ans">beze změny</span></div>
             </div>
           </div>
+          <div class="warnbox">
+            <span class="i">▲</span>
+            <span>Přetlačí se <b>tvoje</b> větev přes <code>--force-with-lease</code>. Když se
+            mezitím pohnul remote, push <b>selže</b> a nic se nepřepíše.</span>
+          </div>
           <div class="frame flat">
             <table class="diff">
               <tr class="hunk"><td colspan="3">src/Vault/SecretClient.php @@ -112,7 +112,7 @@</td></tr>
@@ -13664,15 +13669,10 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <tr class="add"><td class="ln">112</td><td class="sg">+</td><td class="code">        $timeout = $<span class="vr">this</span>-&gt;<span class="fn">config</span>-&gt;<span class="fn">timeout</span>();</td></tr>
             </table>
           </div>
-          <div class="warnbox">
-            <span class="i">▲</span>
-            <span>Přetlačí se <b>tvoje</b> větev přes <code>--force-with-lease</code>. Když se
-            mezitím pohnul remote, push <b>selže</b> a nic se nepřepíše.</span>
-          </div>
         </div>
         <div class="sheet-foot">
           <span class="mini">Zahodit rebase</span>
-          <span class="mini">Otevřít v terminálu</span>
+          <span class="mini">Terminál</span>
           <span class="sp"></span>
           <span class="mini pri">Force push</span>
         </div>
@@ -13796,12 +13796,15 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
       Výřez sekce <em>Větev</em> v panelu širokém <b>300 bodů</b>
       (<code>ReviewPanel.defaultWidth</code>). Vlevo dnešní podoba, vpravo návrh. Mění se dvě věci:
       z výstrahy zmizí věta, která posílá do prohlížeče, a <b>pod ní</b> přibude jedno pojmenované
-      tlačítko přes celou šířku. Do řady s <code>Mergnout…</code> nejde, a je to změřené — jenom
-      těsněji, než by se čekalo: tři tlačítka <code>.mini</code> vedle sebe
-      (<code>Připravit k review</code> 98 b, <code>Mergnout…</code> 82 b, tehdejší
-      <code>Srovnat s main</code> 87 b a dvě mezery po 6) potřebují <b>279 bodů</b> z 278, které
-      mezi okraji panelu zbývají. <b>O jediný bod</b> — takže je flexbox srazí, popisky se uvnitř
-      tlačítek zalomí a řádek naroste z 26 bodů na 45.
+      tlačítko přes celou šířku. Do řady s <code>Mergnout…</code> nejde, a je to změřené — ale
+      <b>jinak, než se v tomhle zákresu původně psalo</b>: šlo se z odsazení <b>11 na stranu</b>
+      podle CSS výš, kdežto panel v aplikaci paduje <b>13</b>, takže na obsah zbývá
+      <b>274 b</b> (<code>contentWidth(inPanelOf:)</code>), ne 278. Tři tlačítka
+      <code>.mini</code> vedle sebe (<code>Připravit k review</code>, <code>Mergnout…</code>,
+      <code>Rebase</code> a dvě mezery po 6) vyjdou podle <code>TextWidth.miniButton</code> na
+      <b>273–274 b</b> — tedy ve výchozí šířce panelu <b>přesně na hranu, s rezervou 0 až 1 bod</b>,
+      ne o bod přes. Nosný argument je proto <b>podlaha</b> panelu, ne výchozí šířka; viz odstavec
+      pod tímhle.
       <b>Tohle měření je i důvod, proč se popisek jmenuje jen <code>Rebase</code></b>: jméno
       základu z něj zmizelo, protože ho nese řádek stavu <code>head → base</code> nad tlačítky
       i nápověda pod kurzorem — kdežto <code>Rebase na master</code> by bylo <b>delší</b> než ta
@@ -13809,8 +13812,8 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
     </p>
     <p class="muted">
       <b>Zkrátit popisku by to nespravilo, jen odsunulo.</b> Panel se tahá <b>od 240 bodů</b>
-      (<code>ReviewPanel.minimumWidth</code>) a tam zbývá 218; samotná tři tlačítka jsou 267, takže
-      přetečou i po sražení — změřeno o 3 body ven z panelu. Vlastní řádek je tedy jediné místo,
+      (<code>ReviewPanel.minimumWidth</code>) a tam zbývá na obsah <b>214 b</b>, kdežto ta tři
+      tlačítka potřebují 273–274 — přetečou tedy o <b>~60 bodů</b> a nespraví to ani sražení. Vlastní řádek je tedy jediné místo,
       kde se akce vejde celá <b>při každé šířce</b>, a shodou okolností to je i to správné místo:
       sedí u důvodu, který odklízí.
     </p>
