@@ -5,7 +5,7 @@ import Testing
 
 @testable import PRism
 
-/// Dělící čáry v bloku dashboardu (#371) — a hlavně **ta jedna nad patkou**.
+/// Dělící čáry v pruhu desky (#371, přeneseno na desku #515) — a hlavně **ta jedna nad patkou**.
 ///
 /// Patka stojí za posledním řádkem, takže se na něj přestane vztahovat „poslední řádek čáru nemá“.
 /// Kdyby si patka nakreslila vlastní horní linku, sečetly by se: v mockupu z toho bylo 1 px + 1 px
@@ -24,22 +24,26 @@ import Testing
 ///
 /// **Vyzkoušené vložením regrese**: s `overlay(alignment: .top)` navíc nad patkou vyjde jedna čára
 /// 4 px vedle deseti dvoupixelových a test spadne na obojím — na počtu i na síle.
-@Suite("Dělící čáry bloku dashboardu")
+@Suite("Dělící čáry pruhu na desce")
 @MainActor
-struct DashboardFooterSeparatorTests {
-    /// Kolik vodorovných čar má levý sloupec dashboardu v tomhle scénáři.
+struct BoardSeparatorTests {
+    /// Kolik vodorovných čar má levý sloupec desky v tomhle scénáři.
     ///
-    /// Blok `Čeká na moje review`: obrys nahoře, spodní linka hlavičky, čtyři mezi pěti řádky,
-    /// **jedna nad patkou** a obrys dole — tedy osm. Blok `Moje PR` je prázdný (vlastní PR ve
-    /// scénáři žádné nejsou), takže z něj jsou tři: obrys, hlavička, obrys. Celkem jedenáct.
+    /// Pruh `Přečíst` (sedm cizích PR, na kterých review neběželo): obrys nahoře, spodní linka
+    /// hlavičky, čtyři mezi pěti řádky, **jedna nad patkou** a obrys dole — tedy osm. Zbylých
+    /// **pět pruhů je prázdných** (ve scénáři není vlastní PR, draft ani doběhlé review), takže
+    /// z každého jsou tři: obrys, hlavička, obrys. Celkem 8 + 5 × 3 = **23**.
     ///
-    /// **Blok `Dění` (#443) se do toho počtu nepromítá**, a je to schválně: stojí v **pravém**
-    /// sloupci pod `Co teď`, kdežto vzorek jde přes levý (viz `bands(in:)`). Kdyby ho tenhle počet
-    /// zahrnoval, znamenalo by to, že se blok kreslí jinam, než kam ho návrh dal.
+    /// **Prázdné pruhy se do počtu promítají schválně** — od #515 se kreslí i s nulou, protože
+    /// mizející pruh by desku při každém tiku přeskládal. Kdyby se přestaly kreslit, spadne test
+    /// tady, a to je správně.
+    ///
+    /// **Blok `Dění` (#443) se do počtu nepromítá**: stojí v **pravém** sloupci, kdežto vzorek
+    /// jde přes levý (viz `bands(in:)`).
     ///
     /// Počet je v tvrzení schválně: bez něj by test prošel i tehdy, kdyby se patka nenakreslila
-    /// vůbec — deset stejně silných čar je taky „všechny stejně silné“.
-    private static let expectedLines = 11
+    /// vůbec — dvaadvacet stejně silných čar je taky „všechny stejně silné“.
+    private static let expectedLines = 23
 
     @Test("Nad patkou je jedna čára, ne dvě")
     func drawsASingleHairlineAboveTheFooter() async throws {
@@ -89,7 +93,7 @@ struct DashboardFooterSeparatorTests {
     /// kdyby se uvolnil, `cacheDisplay` by měřil view mimo okno a `orderOut` by tiše nedělal nic.
     /// Ostatní sondy v repu (`ChecksTabRenderProbe`, `SidebarRailTests`) ho drží stejně.
     private func horizontalLines(of store: AppStore) throws -> [Line] {
-        let scene = DashboardView(store: store, open: { _ in })
+        let scene = BoardView(store: store, open: { _ in })
             .frame(width: Self.width, height: Self.height)
             .environment(\.colorScheme, .light)
             .tint(Palette.accent)
@@ -182,9 +186,10 @@ struct DashboardFooterSeparatorTests {
         }
     }
 
-    /// Dashboard se sedmi PR ve frontě — pět řádků a patka `+2`.
+    /// Deska se sedmi cizími PR, na kterých review neběželo — pruh `Přečíst` má pět řádků
+    /// a patku `+2`, ostatních pět pruhů je prázdných.
     ///
-    /// Kreslí se přes `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: dashboard je `ScrollView`
+    /// Kreslí se přes `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: deska je `ScrollView`
     /// a ten se offscreen nerasterizuje (změřeno u #237).
     private func store() async -> AppStore {
         let queue = (1...7).map { number in
@@ -208,5 +213,5 @@ struct DashboardFooterSeparatorTests {
     private static let hairline = 6
     private static let tolerance = 2.0 / 255
     private static let width = 900.0
-    private static let height = 1000.0
+    private static let height = 1400.0
 }

@@ -145,12 +145,12 @@ struct AppStoreExternalTabTests {
     // MARK: - Co se nestalo
 
     /// **Nejcennější test sady.** Frontu definují zdroje: PR otevřený odkazem není v seznamu,
-    /// takže se nemá kde objevit — ani v odznaku, ani na kartách, ani v souhrnu.
-    @Test("PR mimo zdroje není ve frontě, na kartách ani v odznaku")
+    /// takže se nemá kde objevit — ani v odznaku, ani na desce, ani v souhrnu.
+    @Test("PR mimo zdroje není ve frontě, na desce ani v odznaku")
     func staysOutOfTheQueue() async {
         let (store, _) = await loaded([summary(listed)])
         let badge = store.railQueueCount
-        let cards = store.dashboard
+        let board = store.board
 
         store.openPullRequest(vault)
         await settle(store)
@@ -159,7 +159,7 @@ struct AppStoreExternalTabTests {
         #expect(store.visiblePullRequests.map(\.id) == [listed])
         #expect(store.queuePullRequests.map(\.id) == [listed])
         #expect(store.railQueueCount == badge)
-        #expect(store.dashboard == cards)
+        #expect(store.board == board)
     }
 
     @Test("Automat na PR mimo zdroje nesáhne")

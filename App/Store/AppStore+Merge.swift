@@ -36,6 +36,30 @@ extension AppStore {
         )
     }
 
+    /// Je vlastní PR **bez známé překážky k merge** (#515)? Čte to deska na domácí záložce.
+    ///
+    /// **Předfiltr, ne úplný `branchSection`.** Deska se na to ptá u **každého** vlastního PR při
+    /// každém průchodu tělem, kdežto `branchSection(for:)` k tomu skládá i řádky stavu, plán
+    /// merge a nabídku rebase — tedy práci za odpověď, kterou tady nikdo nepřečte. Bez načteného
+    /// detailu se `mergeOffer` neskládá vůbec: bez plánu by z něj vyšlo `factsMissing`, což je
+    /// totéž `false`, jen po dvou průchodech mapami.
+    ///
+    /// Že brána odesílání není překážka **pull requestu**, rozhoduje `Policy.isMergeReady(_:)` —
+    /// s výchozím (vypnutým) odesíláním by jinak byl pruh `K merge` navždycky prázdný.
+    func isMergeReadyForLane(_ pr: PRIdentifier) -> Bool {
+        guard let detail = detail(of: pr) else { return false }
+        return Policy.isMergeReady(
+            Policy.mergeOffer(
+                editing: metadataEditing(for: pr),
+                plan: Policy.mergePlan(of: detail, commits: commits[pr]),
+                state: detail.state,
+                status: branchStatusState(for: pr),
+                checks: checks[pr],
+                blockingFindings: blockingFindingCount(for: pr)
+            )
+        )
+    }
+
     /// Načtený detail PR, nebo `nil`. Zvlášť proto, že `detailStates` drží i „načítá se“
     /// a „nepovedlo se“ — a z obojího plyne pro sekci `Větev` totéž: plán se nesestaví.
     ///
@@ -50,9 +74,9 @@ extension AppStore {
     /// Kolik platných nálezů na tomhle PR blokuje.
     ///
     /// **Sada kategorií per repo**, ne globální: mluví se o jednom pull requestu, tak jako
-    /// v řádku fronty (`queueRow(for:)`) a v panelu — kdežto karta `Blokuje` na dashboardu
-    /// počítá celou frontu, a proto bere globální.
-    private func blockingFindingCount(for pr: PRIdentifier) -> Int {
+    /// v řádku fronty (`queueRow(for:)`) a v panelu — kdežto souhrn ve stavovém řádku
+    /// (`Policy.summary`, do #515 i karta `Blokuje`) počítá celou frontu, a proto bere globální.
+    func blockingFindingCount(for pr: PRIdentifier) -> Int {
         guard let record = reviewRecords[pr] else { return 0 }
         return Policy.blockingCount(in: record, categories: resolved(for: pr.repo).blockingCategories)
     }

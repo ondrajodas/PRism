@@ -63,7 +63,7 @@ z nich. Žádné I/O, jen data. Všechny jsou `Codable`, `Hashable` a `Sendable`
 | `SubmittedReview` | Hotové review od někoho jiného; stav je vnořený `SubmittedReview.State` |
 | `DiffSide` | `left`/`right` — ke které straně diffu se vlákno nebo komentář váže |
 | `QueueSummary` | Souhrn fronty: počet PR, PR s blokujícím nálezem a PR s rozdělaným review (#155) |
-| `PullRequestFilter`, `PullRequestFilterOptions`, `PullRequestFilterOption`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), od #371 i na **PR s blokujícím nálezem** (`onlyBlocking`, třetí osa — zapíná ji karta `Blokuje` na dashboardu), nabídka hodnot **s počtem PR u každé** (#199) a důvod prázdna — od #331 **jeden typ pro obě sekce se seznamem**, tedy i tři prázdna, která umí jen `Moje PR`. **Není `Codable`** — nepřežije restart |
+| `PullRequestFilter`, `PullRequestFilterOptions`, `PullRequestFilterOption`, `ListEmptyReason` | Zúžení seznamu na repa a autory (#117), od #371 i na **PR s blokujícím nálezem** (`onlyBlocking`, třetí osa — do #515 ji zapínala karta `Blokuje` na dashboardu, od #515 se odškrtává jedině v nabídce filtru), nabídka hodnot **s počtem PR u každé** (#199) a důvod prázdna — od #331 **jeden typ pro obě sekce se seznamem**, tedy i tři prázdna, která umí jen `Moje PR`. **Není `Codable`** — nepřežije restart |
 | `DiffBlock`, `DiffPairBlock` | Souvislý úsek řádků jako jeden text (#157) — kvůli výběru přes víc řádků. **Není `Codable`**, je to věc vykreslení |
 | `ReviewDraft` | Rozdělané review: PR, `headSha`, tělo, verdikt, komentáře. Verdikt je vnořený `ReviewDraft.Verdict` |
 | `ReviewDraftComment` | Řádkový komentář draftu: kotva (`path` + `DraftAnchor`), tělo, `Origin`. Kotva nese **rozsah** (#110) a komentář **snímek kódu** (#69) |
@@ -4190,7 +4190,7 @@ o 2508 řádcích a patnácti `MARK` sekcích, tedy tomtéž rozdělení, jen za
 | `AppStore+Automatic.swift` | Automatický režim a denní rozpočet (#25) | 89 |
 | `AppStore+Findings.swift` | Zahození záznamu (#81) a odmítnutí nálezu (#113) | 70 |
 | `AppStore+Appearance.swift` | Přepnutí vzhledu okna z railu (#278) | 26 |
-| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, `dashboardOwnPullRequests`, a od #333 i `ownership(of pr:)` s `author(of:)`. Od #332 tu leží i druhá strana rozřazení — `queuePullRequests`, `visibleQueuePullRequests`, `hiddenQueuePullRequestCount`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
+| `AppStore+Ownership.swift` | Čí jsou PR v seznamu (#330) — `ownLogins`, `ownership(of:)`, `tracksOwnPullRequests` —, od #331 celá sekce `Moje PR`: `visibleOwnPullRequests`, `hiddenOwnPullRequestCount`, `railMineCount`, `ownListEmptyReason`, a od #333 i `ownership(of pr:)` s `author(of:)`. Od #332 tu leží i druhá strana rozřazení — `queuePullRequests`, `visibleQueuePullRequests`, `hiddenQueuePullRequestCount`. **Dotažení loginu je v `AppStore.swift`**, u ostatních věcí, které se načítají při startu, a taky proto, že `viewer` je `private(set)` | 132 |
 | `AppStore+AgentPrompt.swift` | Zadání pro agenta na vlastním PR (#333) — `agentPrompt(for:only:)`, od #377 `agentPromptSelection(for:only:toggled:)` (zadání **i seznam položek** pro sheet; výběr si store **nedrží**, bere ho parametrem), předfiltr `hasAgentPromptItems(for:)` bez sazby textu (ptá se tou samou funkcí jako text, tedy i s předvybráním), přepnutí volby, `revealAgentPrompt(in:)` a `openAgentPrompt(in:)` (akce `Prompt →` z řádku: otevřít PR **a** panel). **Nedrží cestu ven**: prompt končí ve schránce nebo v souboru | 116 |
 | `AppStore+Handoff.swift` | Razítko předání (#334) — `loadStoredHandoffs()` při startu, `handoff(for:)`, `handoffReport(for:)` (od #335 si volající bere **celý report**, ne jedno číslo — pilulka i text novinek se ptají téže funkce), `noteHandoff(of:)` (zapisuje **zkopírování a uložení**, ne otevření sheetu) a `freshAgentPromptSelection(for:)` pro `Sestavit i tak` (od #377 vrací i seznam, protože sheet z něj kreslí zaškrtávátka). Do paměti hned, na disk asynchronně | 78 |
 | `AppStore+Detail.swift` | Detail PR a jeho záložky | 59 |
@@ -4258,17 +4258,18 @@ Věci, které se u toho nemají rozbít:
   blokující“ nestojí na `PullRequestSummary`, ale na uloženém záznamu, takže si ji `filter.matches`
   nemá kde vzít sám — a tři místa, která počítají schované PR (`hiddenQueuePullRequestCount`,
   `hiddenOwnPullRequestCount`, `ownListEmptyReason`), by si tu odpověď složila každé po svém. Sada
-  blokujících kategorií je u toho **globální, ne per repo** (`hasBlockingFinding(_:)`), tedy tatáž,
-  s jakou počítá kartu `Blokuje` getter `dashboard`: filtr, který ta karta zapíná, musí ukázat právě
-  ta PR, která napočítala — s per-repo sadou by šlo kliknout na `Blokuje 1` a dostat prázdný seznam.
-  Řádek seznamu si dál bere tu svoji (`queueRow(for:)`), protože mluví o jednom repu, ne o frontě.
+  blokujících kategorií je u toho **globální, ne per repo** (`hasBlockingFinding(_:)`), a bylo to
+  do #515 tatáž sada, s jakou počítala kartu `Blokuje` getter `dashboard`: filtr, který ta karta
+  zapínala, musel ukázat právě ta PR, která napočítala. Karta s #515 odešla, sada zůstává globální
+  — je to tvrzení o **frontě**, ne o jednom repu. Řádek seznamu si dál bere tu svoji
+  (`queueRow(for:)`), protože mluví o jednom repu.
 - **Na sekci railu se přepíná `show(_:)`**, ne dvěma přiřazeními u volajícího (#371). Sekce je obsah
   **domácí** záložky, takže bez `activeTab = .home` by se nad otevřeným PR nestalo nic viditelného —
-  a od #371 tam chodí dvě věci (paleta ⌘K a karty i patky dashboardu), takže by se to zapomnělo
-  v jedné z nich. Druhé přetížení bere `DashboardDestination`, tedy i `blockingQueue`: filtr se u něj
-  nastavuje **tou samou cestou jako filtrovací tlačítko** (`setFilter`, #117), protože ta srovnává
-  i výběr, a **ostatní osy zůstávají, jak si je člověk nastavil** — karta zapíná jednu osu, ne nový
-  filtr.
+  a chodí tam víc věcí (paleta ⌘K, odkaz `celé dění →` a patka bloku `Dění`), takže by se to
+  zapomnělo v jedné z nich. **Druhé přetížení odešlo s #515** (`DashboardDestination`,
+  `blockingQueue`): jediné, co jím chodilo, byla karta `Blokuje`, a ta odešla s kartami. Zapnout
+  osu „jen blokující“ jde odteď jedině v nabídce filtru — nápovědu k přepnutí nese
+  `RailSection.switchHelp`, protože dvě cesty do jedné sekce mají říkat totéž.
 - **Zapsat filtr jde jedině `setFilter(_:)`**, protože se s ním musí srovnat výběr: vybraný PR mimo
   filtr výběr **ztrácí** (detail PR, který v seznamu není, se nedá zavřít ani znovu vybrat).
   Nic se tím neztrácí — draft leží na disku a běžící review běží dál. Ruší se to **jen tam**, ne
@@ -4481,12 +4482,12 @@ na `.task` okna, takže zavření okna ji zruší.
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit`. Od #309 `mint` — **dvojice k akcentu**: akcent je to, co se nabízí udělat nebo co běží, mint to, co se jen konstatuje (`2×`, `✓ v mém review`, `odmítnuto`). Světlá větev je **vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`), protože hodnota z mockupu byla jediný stavový token pod AA — čísla u `Palette.mint` a v `MintTokenTests` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`) a uvnitř rámu ikony**, jak ho kreslí návrh — viz *Odznak v railu* |
-| `HomeView` | Obsah domácí záložky podle railu. Nad dashboardem **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
-| `DashboardView` | Startovní obrazovka (#181): pozdrav, **pět karet** (#331), **dvě fronty pod sebou** (`Čeká na moje review` a `Moje PR`), legenda reviewerů a `Co teď`. Věta pod pozdravem je od #332 **dvojitá** (fronta + „na kolika vlastních je co předat agentovi“), jak ji kreslí návrh; nenačtená fronta druhou větu nedostane a číslo se píše **číslicí**, ne slovem jako v mockupu — zbytek okna to dělá stejně. Akcentový proužek nese od #331 karta `Moje PR`, ne `Rozdělaná review` — dva proužky vedle sebe by přestaly znamenat, která karta je ta o mně. Od #371 kreslí blok **nejvýš pět řádků** a pod nimi patku se zbytkem (`Policy.dashboardBlock`), a **čtyři karty z pěti vedou do své sekce** — šipka vpravo nahoře, rámeček v akcentu na hover, ukazováček; `Dneska stálo` nedostane nic z toho, protože nemá kam vést. Popisek karty se šipce **uhýbá odsazením** (`arrowRoom`) a je na jeden řádek: v úzkém okně by se pod ni zalomil a s ním by narostla výška celé řady karet. Od #443 stojí v **pravém sloupci pod `Co teď`** blok `Dění` (`DashboardActivity`) — pět nejnovějších řádků, `celé dění →` v hlavičce a patka `Zobrazit celé dění +N →`; řádek je **týž `ActivityRowView`** jako v sekci, jen v úzkém tvaru (`ActivityRowPlace.dashboard`) |
+| `HomeView` | Obsah domácí záložky podle railu. Nad deskou **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
+| `BoardView` | Domácí záložka (#515) — **deska pruhů podle mého tahu**. Nahradila `DashboardView` z #181: karty odešly celé (`Policy.board`, `WorkLane`), věta pod pozdravem mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a levý sloupec drží **šest pruhů, vždycky všechny** — mizející pruh by desku při každém tiku přeskládal. Řádek je **týž `PullRequestRow`** jako v seznamu (#172), ne třetí podoba; vlastní PR pozná šipka v mintu a `Prompt →`. Vpravo v hlavičce pruhu je **akce nad celým pruhem** (`LaneAction`) — potvrzení si nechává jedině `Pustit review na N`, protože je to jediná, která utratí víc než jednu session. Tichý pruh (`Čeká na ostatní`) je ztlumený na 0,7, má strop **dva** řádky místo pěti a místo akce popisek `nic k udělání`; patka pruhu **rozbaluje na místě**, nepřepíná do sekce (pruh míchá cizí a vlastní PR, takže žádná sekce nemá tutéž množinu). Pravý sloupec drží od #515 **dva** bloky: `Dění` (#443, od #515 **osm** řádků — `Policy.activityRowLimit`) a `Dneska stálo` jako malý blok s částkou v hlavičce; legenda reviewerů odešla s kartami a `Reviewery` postaví #514 |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
 | `DashboardCountdown` | Samotný odpočet — `za 43s znovu`, **bez mezery mezi číslem a jednotkou** (#260). Formát je náš (systémový mezeru má a nejde vyndat), takt dává `TimelineView`, takže se přepočítává jen tenhle `Text`. Text i rozvrh jsou statické funkce, aby se daly otestovat |
-| `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181) |
-| `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181) |
+| `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181). Od #515 **vlastní soubor** — `DashboardView` odešel a graf kreslí blok `Dneska stálo` |
+| `ProportionalColumns` | `Layout` pro sloupce v poměru z návrhu (`1.45fr 1fr`) — `HStack` umí jen rovným dílem (#181). Od #515 ho dělí deska: vlevo šest pruhů, vpravo dění a útrata |
 | `StatusBarView` | Stavový řádek na spodku **okna**: vlevo hlášky a stav pracovní kopie, vpravo puntíky služeb |
 | `WorkingCopyStatusView` | `Pracovní kopie připravená · HEAD 4f2ac91` ve stavovém řádku (#218) — přestěhováno z hlavičky PR, protože je to **stav prostředí**, ne údaj o PR. Selhaný checkout se sem nekreslí |
 | `ServiceHealthDot` | Puntík jedné služby; po hoveru důvod a čas poslední kontroly |
@@ -4505,7 +4506,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `DiffGutterGeometry`, `DiffBlockPlacement` | Aritmetika gutteru (#252) — kde leží plochy na tažení a pilulka, a poloha bloku v prostoru obsahu **mimo observable stav**. Čistý typ, aby se dal změřit i otestovat bez okna |
 | `CodeText`, `CodeTextSheet`, `CodeSheetText`, `SelectableCodeView` | Hunk jako jeden text mimo diff (#157) — vybrat jde i přes bubliny — a od #417 týmž sheetem i **celý log jobu**: druh nese `CodeText.Kind`, velikost `Policy.codeSheetSizing`, věty hlavičky a patičky `CodeSheetText`. Viz *Sheet s kódem a s logem* |
 | `PullRequestListView` | Seznam, prázdný stav, úvodní loading, tlačítko obnovit (⌘R). Od #331 kreslí **obě sekce se seznamem** (`PullRequestListScope`: `queue` / `mine`) — jeden řádek, jeden filtr, jedno řazení; liší se jen množina a věty nad prázdnem. Od #332 stojí **obě** na zúžených getterech (`visibleQueuePullRequests` / `visibleOwnPullRequests`); `PullRequestListScope` zůstává vyjmenovaný typ, ne `PullRequestOwnership`, protože nese i to, mezi kolika prázdny se rozhoduje a jak se mluví o schovaných řádcích |
-| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu zapíná karta `Blokuje` na dashboardu, takže musí být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
+| `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu do #515 zapínala karta `Blokuje` na dashboardu, takže musela být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. **Od #515 je odškrtávátko jediná cesta, jak tu osu zapnout** (karty odešly s deskou), takže je to důvod ještě silnější, ne slabší. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh` ‖ `Zeptat se`) — podtržené, s odznakem **u každé** (#218; typy od #242) a děličem před výstupem reviewerů. **Rozsah změny v něm od #501 není** — `+X −Y` se čtverečky poměru nahradila mapa PR pod hlavičkou. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Podob má **tři** (`ViewThatFits`, `Layout`): s popisky, s ikonami a popiskem jen u aktivní (#318) a jen s ikonami (#452) — díky nim se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
 | `PullRequestMapView`, `PullRequestMapGeometry`, `PullRequestMapProbe`, `PullRequestMapHoverLayer`, `PullRequestMapLegendButton` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem označený. **Pás je jedna kresba** (`Canvas`), ne řada tlačítek — u 158 souborů to byla přes tisíc views v hlavičce a přerovnání okna stálo 70 ms místo 14 (#252, #501). Šířky počítá `Policy`, polohy `PullRequestMapGeometry`. **Kolem kresby stojí tři malá views a všechna z téhož důvodu**: co se mění jinak často, nesmí přeložit tělo pásu — `PullRequestMapHoverLayer` drží nápovědu, hover a klik, `PullRequestMapLegendButton` popisek s legendou a `PullRequestMapProbe` čte výřez a zapisuje do `DiffFileCursor` (#469). Viz *Mapa PR — pás pod hlavičkou* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
@@ -5036,7 +5037,7 @@ Co katalog drží a co se u něj nemá rozbít:
   Katalog na jednom místě proto **je** ta kontrola: `WindowShortcutsTests` ho projdou
   vyčerpávajícím výčtem a tvrdí, že se žádná kombinace neopakuje. Ověřeno vloženou regresí.
 - **Popiska je odvozená, ne opsaná.** `Combination.display` skládá glyfy z modifikátorů a klávesy,
-  takže paleta ⌘K, chip v panelu zadání, řádky dashboardu i nápovědy tlačítek kreslí vždycky to,
+  takže paleta ⌘K, chip v panelu zadání, hlavičky pruhů desky i nápovědy tlačítek kreslí vždycky to,
   co je pod klávesou. Pořadí glyfů je `⌘⌃⌥⇧` — **z návrhu** (`⌘⇧P`, `⌘⌥S` v `docs/navrh.html`),
   ne z menu macOS, které píše `⌃⌥⇧⌘`.
 - **Nápovědu skládá `Policy.shortcutHelp`** (`Obnovit seznam (⌘R)`), a je to jedno místo z téhož
@@ -5048,7 +5049,8 @@ Co katalog drží a co se u něj nemá rozbít:
   jako primární — je to tentýž hmat na jiné mapě, ne druhá zkratka.
 - **`View.windowShortcut(_:)` bere jen primární kombinaci**, protože na jedno tlačítko se
   `keyboardShortcut` pověsí jednou. Akce, které visí na **viditelném** tlačítku (`⌘1` strom
-  souborů, `⌘⇧R` a `⌘⇧D` na dashboardu), proto alternativu mít nesmí — je na to tvrzení.
+  souborů, `⌘⇧R` a `⌘⇧D` v hlavičkách pruhů desky, `⏎` u pruhu `Rozhodnout` od #515), proto
+  alternativu mít nesmí — je na to tvrzení.
 - **`.cancelAction` je role, ne klávesa s maskou.** Modifikátory u ní `Combination.keyboardShortcut`
   zahodí, takže je katalog nesmí psát; hlídá to test. Zapisuje se takhle schválně (#317) — `⎋`
   v tomhle okně berou i sheety a paleta, a míchat `.escape` s `.cancelAction` znamená hádat, který
@@ -5082,7 +5084,8 @@ Co v okně je (od #500 pětadvacet akcí; tabulka níž vypisuje ty, u kterých 
 | `⌘⏎` / `⌃⏎` | **potvrzení** odeslání review (#151) | `Policy.canOpenSubmission`, otevřený sheet, otevřená paleta |
 | `⌘⇧P` | zadání pro agenta (#333) | cizí PR, prázdné zadání, otevřený sheet, otevřená paleta |
 | `⌘.` | zastavit běžící review | když na tom PR nic neběží |
-| `⌘⇧R` / `⌘⇧D` | dashboard: pustit vše, dopsat rozdělané (#181) | — |
+| `⌘⇧R` / `⌘⇧D` | deska: pustit review na pruh `Přečíst`, dopsat rozdělané (#181, přeneseno na pruhy #515) | — |
+| `⏎` | deska: otevřít první PR pruhu `Rozhodnout` (#515) — **jediná kombinace v katalogu bez modifikátoru**; nad otevřenou paletou se zakazuje | — |
 | `⌥V` | značka `Prošlo` u souboru pod ukotvenou hlavičkou (#500) | dokud se rozsahy souborů nezměří (nemá na co mířit) |
 
 **`⌃W`, ne `⌘W`**, a sekce railu na `Control`u: `⌘W` patří systému (zavře okno) a `⌘1`/`⌘2` jsou
@@ -8637,10 +8640,11 @@ Věci, které se u toho nemají rozbít:
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
-| `Policy.dashboard(pullRequests:records:drafts:categories:since:mine:conversation:handoff:head:tracksOwnSource:activity:lastVisit:activityEmpty:)` | Podklad startovní obrazovky (#181): **pět** karet od #331 (`Dashboard.MineCard` nese počet, „čeká na tah“ a `isTracked`) a rozpad nálezů podle revieweera (`Dashboard`, `ReviewerShareOfFindings`). Karta `Moje PR` se počítá **tady, ne vedle** — dashboard je jeden snímek, který si view bere jednou za překreslení. `ReviewerShareOfFindings` nese od #383 i `isConclusive`: **nula v legendě není čisto**, takže puntík zezelená jedině tehdy, když měl reviewer v okně aspoň jeden průkazný běh — jinak je šedý jako díl proužku u řádku. Od #443 nese snímek i blok `Dění` (`Dashboard.activity`) — tentýž důvod: druhý getter na jednu buňku by znamenal druhý průchod záznamem při každém průchodu tělem |
-| `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí obou front na dashboardu (#181, #331) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první |
-| `Policy.dashboardBlock(_:of:)`, `Policy.destination(of:)`, `Policy.dashboardRowLimit` | Strop **pěti řádků** na blok dashboardu i text patky (`DashboardBlock`, #371) a kam vede která karta (`DashboardCard` → `DashboardDestination`). Strop je **řez, ne řazení** a **o kresbě, ne o množině** — karta nad blokem dál počítá celou frontu. Rozřazení bloku dělá `PullRequestOwnership`, tedy tentýž typ jako obě fronty; `destination(of: .spend)` je **`nil`**, protože útrata není seznam, na který by se dalo přepnout |
-| `Policy.dashboardActivity(_:since:empty:)` | Blok `Dění` na dashboardu (#443, `DashboardActivity`): nadpis s počtem **nepřečtených z celého záznamu**, pět nejnovějších řádků, patka `Zobrazit celé dění +37 →` a jedna věta místo řádků, když je prázdno. Strop je tentýž `dashboardRowLimit` jako u front a patku nese **týž `DashboardBlock.Footer`** — druhá kresba patky by se s tou první rozešla. Značka poslední návštěvy jde dovnitř jako **vstup**, blok ji nikdy neposouvá |
+| `Policy.board(entries:mine:pending:isMergeReady:activity:lastVisit:activityEmpty:)`, `Policy.boardSentence(_:)` | Podklad domácí záložky (#515, `Board`) — **šest pruhů podle mého tahu** a v témže snímku blok `Dění`. Nahradilo `Policy.dashboard` z #181: karty odešly, a s nimi `Dashboard`, `Dashboard.*Card`, `ReviewerShareOfFindings` i `reviewerShares`. **Jeden snímek na překreslení** (týž důvod jako u #331 a #443): deska prochází celý seznam a u vlastních PR se ptá na předání i na merge, takže getter na jeden pruh by tu práci udělal šestkrát. `pending` a `isMergeReady` jsou **uzávěry, ne mapy** — čtou se jen u vlastních PR. `boardSentence` mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a **nuly nepíše**; nad prázdnou deskou řekne slovem, že je čisto |
+| `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí řádků na domácí záložce (#181, #331, od #515 uvnitř pruhů) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první. Od #515 se řadí **jednou nad celým seznamem** a pruhy si z něj berou pořadí — řez nad špatně seřazeným vstupem by tiše ukázal jiných pět |
+| `Policy.lane(of:ownership:pending:isMergeReady:)`, `Policy.isMergeReady(_:)` | Do kterého pruhu pull request patří (#515, `WorkLane`). **Právě jeden pruh na PR** — `switch` je vyčerpávající a návrat není optional; testuje se **vyčerpávajícím výčtem** (13 stavů × 2 × 2 × 2 × 2), protože rozřazení je věc, kterou se dá pokazit potichu. Pořadí priorit: draft přebíjí všechno (ručně psaná práce), běžící review je `waiting` (jinak by pruh `Přečíst` hlásil víc, než co jeho akce pustí), cizí PR se dělí na `notStarted → read` a zbytek `→ decide`, vlastní na `pending > 0 → handOff`, `isMergeReady → merge`, zbytek `waiting`. `isMergeReady(_:)` staví na `mergeOffer(…)` a bere z něj jednu výjimku: **zavřená brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`) — s výchozím vypnutým odesíláním by jinak byl pruh `K merge` navždycky prázdný |
+| `Policy.laneAction(of:count:)`, `Policy.laneRowLimit(_:)`, `Policy.laneSlice(_:of:expanded:)`, `Policy.canOpenFirstOnBoard(count:isPaletteOpen:)` | Akce nad pruhem a strop na řádky (#515, `LaneAction`, `LaneSlice`). Akce nese **počet z vlastního pruhu**, takže se to, co je na tlačítku, nemá čím rozejít s tím, co akce udělá; **potvrzení má jedině `runReviews`** (jediná, která utratí víc než jednu session) a **prázdný pruh akci nedostane vůbec**. Zkratky jsou rozdané tak, aby na jednu kombinaci byla nejvýš jedna akce (#151, #184): `⏎` pruhu `Rozhodnout` (`isPrimary`), `⌘⇧R` review, `⌘⇧D` draftu — `K merge` má tutéž akci bez klávesy. Strop je **pět, tichý pruh dva**, a je to strop **o kresbě, ne o množině** (#371); patka **rozbaluje na místě**, protože žádná sekce railu nemá tutéž množinu jako pruh |
+| `Policy.dashboardActivity(_:since:empty:)`, `Policy.activityRowLimit` | Blok `Dění` na domácí záložce (#443, `DashboardActivity`): nadpis s počtem **nepřečtených z celého záznamu**, osm nejnovějších řádků, patka `Zobrazit celé dění +122 →` a jedna věta místo řádků, když je prázdno. Strop byl do #515 tentýž jako u front (pět); od #515 je **osm** a vlastní — pravý sloupec drží dva bloky místo tří, kdežto levý šest pruhů místo dvou bloků. Patku nese **`BlockFooter`** (do #515 `DashboardBlock.Footer`, který odešel s kartami) — druhá kresba patky by se s tou první rozešla. Značka poslední návštěvy jde dovnitř jako **vstup**, blok ji nikdy neposouvá |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.resumeCommand(sessionID:)`, `Policy.terminalSession(of:)` | Čím se session obnoví a jestli ji dráha umí pustit v Terminálu (#453) → `TerminalSession`. **Jeden příkaz pro obojí** — `⧉` ho kopíruje, `▶` pouští. `nil` = tlačítko se **nekreslí**, a podmínkou je `session_id` **i pracovní strom**: `claude --resume` hledá vlákno podle adresáře, takže bez něj by okno jen oznámilo, že takové vlákno nezná |
 | `Policy.timelines(of:)` | Osy běhů z uloženého záznamu (#203); běh bez uložené osy se vynechá |
@@ -9176,15 +9180,90 @@ je proto přepsaný i s důvodem.
   právě v tom, co je vidět jeden den v roce. **Jeden příznak, ne dva** — úzký tvar i den plynou
   z místa, ne z události, takže je nese `ActivityRowPlace`; dva booleany by šly nastavit křížem
   a vznikla by z toho třetí podoba, kterou návrh nekreslí.
-- **Bez pruhu `Tady jsem skončil` a bez dělení po dnech.** Nad pěti řádky by pruh dělil pět řádků na
-  dvě hromádky a hlavička dne by přidala šestý řádek textu. Nepřečtené nese **počet v nadpisu**
+- **Bez pruhu `Tady jsem skončil` a bez dělení po dnech.** Nad osmi řádky by pruh dělil osm řádků na
+  dvě hromádky a hlavička dne by přidala další řádek textu. Nepřečtené nese **počet v nadpisu**
   (`Dění · 3 nové`, totéž číslo jako odznak v railu) a den čas u řádku. **`LazyVStack` sem taky
-  nepatří** — pět řádků je strop z `Policy`, ne odhad.
+  nepatří** — osm řádků je strop z `Policy`, ne odhad.
+- **Strop se u #515 zvedl z pěti na osm** (`Policy.activityRowLimit`, do té doby `dashboardRowLimit`
+  společný s bloky front). #443 blok postavilo proto, aby **zaplnil díru** pod `Co teď` — pravý
+  sloupec byl o 425 bodů kratší než levý. Od #515 je ta nerovnost obrácená: levý sloupec drží **šest
+  pruhů**, pravý **dva** bloky (legenda reviewerů odešla s kartami, `Co teď` se rozpadlo do akcí nad
+  pruhy). Pět řádků by v tom sloupci nechalo prázdno, které #443 zavíralo z druhé strany.
 
 Prázdný blok je **jedna věta**, ne díra a ne obrazovka ze sekce: `ActivityEmptyState` má u sebe
 tlačítka (zapnout hlášení, otevřít Nastavení systému) a ta patří tam, kam jsem přišel schválně. Na
 dashboardu z nich zbude důvod a cesta odkazem `celé dění →` v hlavičce. Věty jsou proto kratší, ale
 **pořád čtyři** — klid, ztracená historie a dvě mlčení se nesmí slít ani tady.
+
+### Deska podle mého tahu (#515)
+
+**Domov odpovídal na jinou otázku, než jakou si člověk kladl.** Do #515 byl uspořádaný podle
+**autora** (cizí fronta, moje PR — #331) a podle **počtů** (pět karet — #181, #371). Otázka, se
+kterou se aplikace otevírá, je ale „co udělám teď“, a na tu odpovídalo jedině řazení podle
+závažnosti **uvnitř** jedné z těch dvou front. `Čeká na mě 13` je počet, ne tah.
+
+Deska proto skládá **tytéž řádky** podle toho, čí je tah: `Rozhodnout`, `Přečíst`, `Předat
+agentovi`, `K merge`, `Čeká na ostatní`, `Dopsat a odeslat` (návrh, sekce 45). **Je to pohled, ne
+množina** — rozřazení podle autora platí dál a drží ho rail (`RailSection.queue`,
+`RailSection.mine`) i všechno, co čte jen cizí PR (#332): hromadné spuštění review, notifikace,
+automat.
+
+**Pruh je tah, ne stav** (`Policy.lane`), a pořadí priorit není libovolné:
+
+1. **Rozdělané review přebíjí všechno**, i běžící review a i vlastní PR s předáním. Je to ručně
+   psaná práce a ta se za stav review ani za autora neztrácí — tatáž úvaha, kvůli které karta
+   `Rozdělaná review` počítala celý seznam, ne jen frontu (#332).
+2. **Běžící review je čekání.** Kdyby zůstalo v `Přečíst`, hlásil by pruh víc, než co jeho akce
+   pustí — a poznalo by se to jedině účtem za session.
+3. **Cizí PR se dělí jedinou otázkou: běželo, nebo neběželo.** `notStarted` je `Přečíst`, což je
+   **přesně** množina `AppStore.pullRequestsNotReviewed`; všechno ostatní je `Rozhodnout`, včetně
+   čistého review (schválit je taky rozhodnutí) i selhání a zastaralých nálezů (tahem je podívat se
+   a rozhodnout, co dál).
+4. **Vlastní PR se dělí podle toho, co se dá udělat**: co zbývá předat (`HandoffReport.pending`,
+   tedy tatáž otázka jako odznak v railu), pak co se dá mergnout, zbytek čeká.
+
+**Vypnutá brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`). Pruh
+`K merge` se ptá „jak stojí PR“, kdežto `MergeObstacle.notAllowed` odpovídá na „smí aplikace
+odeslat“ — a odesílání je ve výchozím stavu **vypnuté** (tvrdá podmínka č. 1, bod 6), takže by ten
+pruh byl navždycky prázdný, tedy tvrzení o nastavení, ne o práci. Sekce `Větev` v panelu je
+nerozlišuje schválně: tam se vypisují všechny důvody, proč tlačítko nejde zmáčknout.
+
+**Nad nenačtenými daty je „nevím“ vždycky `Čeká na ostatní`.** Slévatelnost stojí na načteném
+detailu, hlavě, checkech a stavu větve — a to se dotahuje **při otevření PR**, ne tikem (#306).
+Vlastní PR, do kterého se ještě nekliklo, tedy do `K merge` nespadne; předfiltr
+(`AppStore.isMergeReadyForLane`) na to odpoví `false` bez skládání `mergeOffer`, protože se deska
+ptá u každého vlastního PR při každém průchodu tělem. **Cena je zapsaná odchylka od návrhu**: deck
+kreslí v tichém pruhu kapsle jako `Copilot · za mainem o 3`, které se z nenačteného PR nemají kde
+vzít — řádek proto nese to, co nese `PullRequestRow` všude jinde.
+
+**Akce nad pruhem je nová věc, strop není.** Do #515 byla jediná hromadná akce v okně
+`Pustit review na vše, co neběželo` v bloku `Co teď`; od #515 ji má **pruh sám**, a to je celý
+rozdíl: `Přečíst` má počet v popisku (`Pustit review na 2`), takže se to, co je na tlačítku, nemá
+čím rozejít s tím, co se stane. **Potvrzení si nechává jedině ona** — je to jediná akce desky, která
+utratí víc než jednu session; otevřít záložku nestojí nic a jde to vzít zpátky.
+
+**Patka pruhu rozbaluje na místě, nepřepíná do sekce.** `BlockFooter` má cíl (`RailSection`) a to je
+pro pruh špatně: pruh míchá cizí a vlastní PR, takže žádná sekce railu nemá tutéž množinu a odkaz by
+vedl někam jinam, než co je nad ním. Rozbalené pruhy jsou `@State` view — je to stav pohledu
+v jednom běhu, takže se nikam neukládá (tatáž úvaha jako u sledování konce ve výpisu kroků, #325).
+
+**Prázdný pruh se kreslí.** Šest pruhů je vidět vždycky, i s nulou: mizející pruh by desku při
+každém tiku přeskládal a `Rozhodnout` by pod rukou skočilo tam, kde bylo `Přečíst`. Prázdno je navíc
+odpověď, a **na pruh jiná** (`WorkLane.emptyExplanation`) — jako u prázdných sekcí railu.
+
+**Co #515 zrušilo, a proč:**
+
+| Co odešlo | Proč |
+|---|---|
+| `Dashboard`, `Dashboard.QueueCard/BlockingCard/MineCard/DraftsCard`, `Policy.dashboard`, `DashboardCard`, `Policy.destination(of:)` | Karty počítaly, deska rozhoduje. Čísla zůstávají v railu a ve stavovém řádku — tedy tam, kde jsou vidět **ze všech obrazovek** |
+| `DashboardDestination`, `AppStore.show(_ destination:)`, osa filtru zapínaná kartou | Jediné, co tím přetížením chodilo, byla karta `Blokuje`. Osa `onlyBlocking` **zůstává** a odškrtává se v nabídce filtru; nápovědu k přepnutí nese `RailSection.switchHelp` |
+| `ReviewerShareOfFindings`, `Policy.reviewerShares`, blok `Nálezy podle reviewera` | Pravý sloupec drží dění a útratu; blok `Reviewery` postaví #514 a bude to jiný tvar (podíl v čase, ne sedmidenní součet) |
+| `DashboardBlock`, `Policy.dashboardBlock(_:of:)`, `dashboardRowLimit` | Bloky front se rozpadly do pruhů. Z typu zůstala jedině patka, a ta je od #515 `BlockFooter` — prázdný obal kolem jedné vnořené struktury by byl mrtvá váha |
+| `dashboardQueue`, `dashboardOwnPullRequests` | Dva gettery podle autora vystřídal jeden (`boardEntries`); rozřazení proběhne uvnitř `Policy.board` jednou na řádek |
+
+**Šířku deska nevyjednává o nic víc než dashboard** (#220, #546): není to líný seznam ani hluboká
+kaskáda, takže do řetězce `availableWidth` nevstupuje — tak to bylo i u `DashboardView`. Pružná výška
+v řádku (#375) se jí netýká z téhož důvodu: pruh je pevný `VStack`.
 
 ### Zastaralé nálezy z tiku (#420)
 

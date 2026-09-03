@@ -300,10 +300,10 @@ struct AppStoreOwnershipTests {
         #expect(store.ownListEmptyReason == nil)
     }
 
-    /// Dashboard bere **plný** seznam, ne zúžený filtrem — tvrdí o tom, co venku mám, ne o tom,
-    /// co je zrovna vidět.
-    @Test("Moje PR na dashboardu se filtrem neschovají")
-    func keepsTheDashboardBlockIntact() async {
+    /// Deska bere **plný** seznam, ne zúžený filtrem — tvrdí o tom, co je na tahu, ne o tom,
+    /// co je zrovna vidět v seznamu.
+    @Test("Moje PR na desce se filtrem neschovají")
+    func keepsTheBoardIntact() async {
         let store = await loaded([
             summary(author: "ondrajodas", "cli/cli#1"),
             summary(author: "ondrajodas", "ondrajodas/PRism#2"),
@@ -311,7 +311,7 @@ struct AppStoreOwnershipTests {
 
         store.setFilter(PullRequestFilter(repositories: [RepoID("cli/cli")!]))
 
-        #expect(store.dashboardOwnPullRequests.count == 2)
+        #expect(store.boardEntries.count == 2)
         #expect(store.visibleOwnPullRequests.count == 1)
     }
 }

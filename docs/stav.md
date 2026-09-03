@@ -7418,3 +7418,32 @@ pushi u celého review. A **kvalita odpovědi na verdikty se v harnessu neměř�
 běhu doopravdy zavolá `ReportFindings` **a** ke všem starým nálezům se vyjádří, se pozná jedině na
 skutečných bězích — dokud se to nepotvrdí, je vidět `N bez odpovědi`, což je záměrně to, co se
 nedá přečíst jako „čisto“.
+
+## #515 — deska podle mého tahu (M16)
+
+**Domov se přeskládal podle tahu, ne podle autora.** Karty (#181, #371) a dvě fronty podle autora
+(#331) vystřídalo **šest pruhů**: `Rozhodnout`, `Přečíst`, `Předat agentovi`, `K merge`,
+`Čeká na ostatní`, `Dopsat a odeslat` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
+**vyčerpávajícím výčtem** — 208 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
+
+**Deska je pohled, ne množina.** Rail dál nabízí `Frontu` a `Moje PR` jako seznamy podle autora
+a #332 platí beze změny: hromadné spuštění review, notifikace i automat čtou dál jen cizí PR. Akce
+nad pruhem `Přečíst` je `startReviewsForNotReviewed()`, tedy tatáž množina, jakou store spouštěl
+odjakživa — a je na to tvrzení z obou stran (co pruh ukazuje i co akce pustí).
+
+**Co se rozhodlo jinak než v kresbě** (podrobně v záznamu rozhodnutí): `Sestavit N zadání` otevře
+N záložek s rozloženým panelem `Zadání`, ne N sheetů za sebou (sheet, ve kterém se prompt skládá,
+aplikace nemá); kapsle jako `Copilot · za mainem o 3` v tichém pruhu se nekreslí, protože se
+z nenačteného PR nemají kde vzít; a `⏎` má jedině pruh `Rozhodnout` — `K merge` má tutéž akci bez
+klávesy, aby na jedné kombinaci nebyly dvě.
+
+**Co odešlo**: `Dashboard` a všechny čtyři karty, `DashboardCard`, `DashboardDestination`
+(a s ním osa filtru zapínaná kartou `Blokuje` — odškrtává se v nabídce filtru dál),
+`ReviewerShareOfFindings` s legendou reviewerů (blok `Reviewery` postaví #514), `DashboardBlock`
+(z něj zbyla patka jako `BlockFooter`) a dva gettery podle autora. Blok `Dění` zůstal a strop se mu
+zvedl z pěti na **osm** řádků, protože pravý sloupec drží dva bloky místo tří.
+
+**Brief nahoře dodá #516** — do té doby je nad deskou dnešní pozdrav a věta o pruzích
+(`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`).
+
+**Otevírá** #181 (karty), #331 (dvě fronty na domově — v railu platí dál) a #443 (bloky).

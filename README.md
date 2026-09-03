@@ -82,42 +82,51 @@ to, co se jen konstatuje — odznak shody `2×`, `✓ v mém review`, počet roz
 `.tint()` z kořene okna se na `Color.accentColor` nevztahuje, takže tam, kde ho někdo použil, byl
 akcent okna jen zamýšlený.
 
-Obsahem domácí záložky je **dashboard** (#181), ne prázdné „Vyber pull request“. Odpovídá na čtyři
-otázky, na které se do té doby muselo hledat po okně: **kolik toho čeká**, **co z toho blokuje**,
-**co mám venku vlastního** (#331) a **co mám rozdělané** — plus co mě dneska stálo review, i s grafem
-za posledních sedm dní. Pod kartami jsou **dvě fronty pod sebou** (#331): `Čeká na moje review`
-seřazené **podle závažnosti**, ne podle času, a pod ní `Moje PR`; vedle nich rozpad nálezů podle
-revieweera za týden a blok `Co teď` s akcemi: pustit review na všechno, co neběželo (ptá se na
-potvrzení — je to jediné kliknutí v aplikaci, které utratí víc než jednu session), nebo se vrátit
-k nejstaršímu rozdělanému review. **Pod `Co teď` je od #443 třetí blok pravého sloupce, `Dění`** —
-pět nejnovějších řádků toho, co se na pull requestech stalo, a cesta do celé sekce. Nic se pro to
-nedotahuje; všechna ta čísla už v aplikaci byla, jen roztroušená.
+Obsahem domácí záložky je od #515 **deska pruhů podle mého tahu**, ne karty a dvě fronty podle
+autora. Otázka, se kterou se aplikace otevírá, je „co udělám teď“ — a na tu karty neodpovídaly:
+`Čeká na mě 13` je počet, ne tah. Deska proto skládá tytéž řádky do **šesti pruhů**:
+`Rozhodnout` (cizí PR, na kterém review doběhlo — i to čisté, protože schválit je taky rozhodnutí),
+`Přečíst` (na čem review neběželo), `Předat agentovi` (vlastní PR s něčím k předání), `K merge`
+(vlastní bez známé překážky), `Čeká na ostatní` (tichý pruh, ve kterém se nic nedělá) a
+`Dopsat a odeslat` (rozdělané review). Uvnitř pruhu se řadí **podle závažnosti**, ne podle času.
 
-**Karta `Čeká na mě` a blok `Čeká na moje review` počítají od #332 jen cizí PR**, karta a blok
-`Moje PR` jen vlastní; `Rozdělaná review` počítá dál obojí. Podrobně je to níž, u sekce `Moje PR`.
+**Vpravo v hlavičce pruhu je akce nad celým pruhem**: `Otevřít první ⏎`, `Pustit review na 2 ⌘⇧R`,
+`Sestavit 2 zadání`, `Dopsat ⌘⇧D`. Potvrzení si nechává jedině spuštění review — je to jediná akce
+v aplikaci, která z jednoho kliknutí utratí víc než jednu session; otevřít záložky nestojí nic a jde
+to vzít zpátky. **Tichý pruh akci nemá vůbec**, místo ní stojí popisek `nic k udělání`.
 
-**Blok kreslí od #371 nejvýš pět řádků** a pod nimi patku se zbytkem — `Zobrazit všech 13 ve frontě
-+8 →`, kterou stačí kliknout, aby se okno přepnulo do plné fronty. Bez stropu roste blok s frontou
-a ten druhý skončí pod hranou okna: u třinácti cizích PR o půl obrazovky, před #332 (kdy se do fronty
-počítala i vlastní) o celou. **Karta nad blokem přitom počítá dál celou frontu** — `Čeká na mě`
-ukazuje 13, i když je pod ní pět řádků; strop je o kresbě, ne o množině. Blok pod stropem patku nemá,
-protože „zobrazit všechny“ nad seznamem, který je celý vidět, je akce, po které se nic nezmění.
+**Pruh kreslí nejvýš pět řádků** (tichý dva) a pod nimi patku `Zobrazit všechny +8`, která pruh
+**rozbalí na místě** — do sekce railu nevede, protože pruh míchá cizí a vlastní PR a žádná sekce
+nemá tutéž množinu. **Počet v hlavičce přitom zůstává celý**: strop je o kresbě, ne o množině.
+Prázdný pruh se **kreslí i s nulou** a má vlastní větu (`Nic rozepsaného.`) — mizející pruh by desku
+při každém tiku přeskládal.
 
-**Čtyři karty z pěti vedou do své sekce** (#371): `Čeká na mě` a `Blokuje` do `Fronty`, `Moje PR`
-a `Rozdělaná review` do svých. Pozná se to šipkou vpravo nahoře a rámečkem v akcentu na hover.
-`Blokuje` u toho zapne filtr **„jen blokující“** — bez něj by skákala na totéž místo jako `Čeká na
-mě` — a ostatní volby filtru nechá, jak si je člověk nastavil. **`Dneska stálo` klikatelná není**:
-nemá kam vést, a karta, po které se nic nestane, je lež o tom, co okno umí; nemá proto ani ukazováček
+**Pravý sloupec drží dva bloky**: `Dění` (#443 — od #515 osm nejnovějších řádků toho, co se na pull
+requestech stalo, a cesta do celé sekce) a `Dneska stálo` s grafem útraty za posledních sedm dní.
+Věta pod pozdravem mluví o pruzích — `8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`.
+Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla.
+
+**Deska je pohled, ne množina.** Rail dál nabízí `Frontu` a `Moje PR` jako seznamy podle autora
+a #332 platí beze změny: hromadné spuštění review, notifikace i automat čtou dál **jen cizí** PR.
+Akce nad pruhem `Přečíst` je tatáž věc, jakou store spouštěl odjakživa, takže se vlastní PR odsud
+nepustí ani tehdy, když na něm review neběželo.
+
+**Co #515 zrušilo**: pět karet (`Čeká na mě`, `Blokuje`, `Moje PR`, `Rozdělaná review`,
+`Dneska stálo` jako karta), blok `Nálezy podle reviewera` (`Reviewery` postaví #514) a blok
+`Co teď`, jehož akce se přestěhovaly nad pruhy. **Čísla z karet zůstávají v railu a ve stavovém
+řádku**, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z domácí záložky. Osa filtru
+`Jen s blokujícím nálezem`, kterou zapínala karta `Blokuje`, zůstává — odškrtává se v nabídce
+filtru. **Brief ve třech větách nad deskou dodá #516**; do té doby je tam pozdrav.
 kurzoru, ani hover stav.
 
-**Karta `Ve frontě` se od #331 jmenuje `Čeká na mě`** a přibyla vedle ní `Moje PR`. Staré jméno
-mluvilo o dvou různých druzích práce naráz: u cizího PR je moje úloha *přečíst a odpovědět*,
-u vlastního *opravit a pushnout*. Velké číslo na kartě `Moje PR` je **kolik jich mám otevřených**,
-věta pod ním **na kolika z nich leží tah** — šest PR, ze kterých pět čeká na CI, není šest věcí
-k práci. Když mezi zdroji chybí `author:@me is:open`, řekne to ta věta místo nuly: nula bez zdroje
-je údaj o nastavení, ne o mojí práci. Akcentový proužek nahoře se z karty `Rozdělaná review`
-přestěhoval sem, jak to má návrh — dva proužky vedle sebe by přestaly znamenat, která karta je ta
-o mně.
+**Karty odešly s #515** (do té doby jich bylo pět, viz výš) a rozdíl, který nesly, drží od #515
+pruhy: u cizího PR je moje úloha *přečíst a odpovědět* (`Přečíst`, `Rozhodnout`), u vlastního
+*opravit a pushnout* (`Předat agentovi`, `K merge`). Ta úvaha vznikla u #331, když se karta
+`Ve frontě` přejmenovala na `Čeká na mě` a přibyla vedle ní `Moje PR` — jedno jméno mluvilo o dvou
+různých druzích práce naráz. Zůstalo z toho i pravidlo, že **počet otevřených PR není počet věcí
+k práci**: šest vlastních PR, ze kterých pět čeká na CI, je na desce jeden řádek v `K merge`
+a pět v `Čeká na ostatní`. A když mezi zdroji chybí `author:@me is:open`, je prázdný pruh údaj
+o nastavení, ne o mojí práci — proto to říká i okno nastavení.
 
 V pravém horním koutu stojí, kdy se seznam naposledy načetl a **kolik zbývá do příštího dotazu** —
 `poslední tik 09:41 · za 43s znovu` (#237). Poslední tik je hodina, protože je to bod
@@ -146,8 +155,8 @@ aktuální; při rate limitu pruh říká, kdy to zkusí znovu.
 **Seznam se dá zúžit filtrem** (#117) — ikona vpravo v liště nad frontou, a jen tam: nad
 rozdělanými review není co zúžit. Odškrtávají se v ní repozitáře a autoři (uvnitř osy „nebo“, mezi
 osami „a“: dvě repa znamenají obojí, repo + autor jeho PR v tom repu), a od #371 je nad nimi třetí
-osa **`Jen s blokujícím nálezem`** — tu zapíná i karta `Blokuje` na dashboardu, takže musí být vidět
-a vypnutelná tam, kde se filtr nastavuje. U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
+osa **`Jen s blokujícím nálezem`** — do #515 ji zapínala karta `Blokuje` na dashboardu, od #515 se
+odškrtává jedině tady. U každé položky je **počet PR, kterých se týká** (#199), takže je před kliknutím vidět, co
 se za ní schová; počítá se z **plného** seznamu, takže se odškrtáváním nemění — jinak by číslo
 říkalo něco o pohledu místo o tom, co zapnutí položky udělá. Že je filtr zapnutý a kolik schovává,
 je vidět na ikoně **bez otevírání nabídky**, protože skrytý filtr je způsob, jak přijít o review;
@@ -185,20 +194,20 @@ je podle autora všechno cizí. A teprve když je zdroj i login, znamená prázd
 otevřeného“.
 
 **Fronta jsou od #332 cizí PR, ne všechno, co přišlo.** Do té doby se vlastní PR počítal na obě
-strany naráz: karta `Čeká na mě` tvrdila 32 (13 cizích a 19 vlastních) a tentýž řádek byl
-na dashboardu vidět v obou blocích. Rozřazení podle autora je tedy vidět všude, kde se o **frontě**
-něco tvrdí — v seznamu sekce `Fronta` a jejím odznaku, na kartách `Čeká na mě` a `Blokuje`, v bloku
-`Čeká na moje review`, v souhrnu ve stavovém řádku, v hromadné akci `Pustit review na vše, co
-neběželo` a v notifikacích. Blokující nález na vlastním PR se do karty `Blokuje` **nepočítá**: je to
-seznam toho, co mám opravit, ne toho, co mi stojí v cestě. Věta pod pozdravem je proto od #332
-**dvojitá** — „Pět pull requestů čeká na review, jeden z nich blokuje. Na 2 vlastních je co předat
-agentovi.“ —, jak ji kreslí návrh; dřív by mluvila o týchž pull requestech dvakrát.
+strany naráz: karta `Čeká na mě` tvrdila 32 (13 cizích a 19 vlastních) a tentýž řádek byl na
+dashboardu vidět v obou blocích. Rozřazení podle autora je tedy vidět všude, kde se o **frontě**
+něco tvrdí — v seznamu sekce `Fronta` a jejím odznaku, v souhrnu ve stavovém řádku, v hromadné akci
+`Pustit review na vše, co neběželo` a v notifikacích. **Od #515 to na domácí záložce nesou pruhy
+místo karet**: cizí PR jde do `Přečíst` nebo `Rozhodnout`, vlastní do `Předat agentovi`, `K merge`,
+`Čeká na ostatní` nebo `Dopsat a odeslat`. Blokující nález na vlastním PR mě dál **neblokuje** —
+vlastní PR se do `Rozhodnout` nedostane ani s nálezy: je to seznam toho, co mám opravit, ne toho, co
+mi stojí v cestě.
 
 **Co se naopak řídí celým seznamem**: úklid cache, eviction a úklid nálezů (klon vlastního PR
 zabírá místo stejně jako cizí, takže navázat je na frontu znamená cache, která tiše roste), okno
-nastavení se seznamem repozitářů, nabídka filtru, sekce `Rozdělaná` a karta `Rozdělaná review`
-(draft je ručně psaná práce a od #333 na vlastním PR nevznikne — ten z doby předtím se nesmí
-ztratit) a klik na notifikaci.
+nastavení se seznamem repozitářů, nabídka filtru, sekce `Rozdělaná` a pruh `Dopsat a odeslat`
+(do #515 karta `Rozdělaná review` — draft je ručně psaná práce a od #333 na vlastním PR nevznikne,
+ten z doby předtím se nesmí ztratit) a klik na notifikaci.
 
 **Automat vlastní PR nepustí nikdy, a není to volba** (#332) — ani při globálním
 `mode: automatic`, ani když si o automat řekne repo svým nastavením. Přepínač se zvažoval
@@ -272,13 +281,13 @@ a **vypnutý přepínač** (jde se do nastavení aplikace). Klid a mlčící apl
 stejného důvodu jako `čisté review` a `review se nepovedlo` — a nad ztracenou historií by klidné
 „nic se nestalo“ tvrdilo víc, než data unesou.
 
-**Na dashboardu je z toho vidět pět nejnovějších řádků** (#443) — třetí blok pravého sloupce, pod
-`Co teď`. Do té doby se do sekce muselo napřed **přepnout**, aby se zjistilo, jestli je do čeho
+**Na domácí záložce je z toho vidět osm nejnovějších řádků** (#443, do #515 pět) — od #515 první
+z **dvou** bloků pravého sloupce. Do té doby se do sekce muselo napřed **přepnout**, aby se zjistilo, jestli je do čeho
 koukat: odznak v railu říká počet, ne co se stalo. Blok je **ukázka a rozcestník**, ne druhé místo,
 kde se dá v dění zůstat: nemá vlastní pruh `Tady jsem skončil`, nekreslí se v něm hlavičky dní
 a z prázdných obrazovek sekce v něm zbude **jedna věta** (tlačítka, kterými se mlčení spraví, patří
 do sekce). Nadpis nese počet nepřečtených — `Dění · 3 nové` —, patka zbytek záznamu
-(`Zobrazit celé dění +37 →`) a `celé dění →` v hlavičce i patka vedou do páté sekce railu.
+(`Zobrazit celé dění +122 →`) a `celé dění →` v hlavičce i patka vedou do páté sekce railu.
 **Značku poslední návštěvy blok neposouvá**, jinak by se nepřečtené vynulovalo tím, že jsem se
 podíval na domácí záložku.
 
@@ -1776,7 +1785,8 @@ zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, kt
 | `⌘.` | zastavit běžící review na PR v okně |
 | `` ⌃` `` | zásuvka s terminálem (na české mapě i `⌃;`) |
 | `⎋` | zavřít pruh hledání, jinak zpět na seznam commitů |
-| `⌘⇧R` / `⌘⇧D` | z dashboardu: pustit review na vše, co neběželo / dopsat rozdělané |
+| `⌘⇧R` / `⌘⇧D` | z desky: pustit review na pruh `Přečíst` / dopsat rozdělané |
+| `⏎` | z desky: otevřít první pull request pruhu `Rozhodnout` (#515) |
 | `⌘,` | nastavení |
 
 **`⌃W`, ne `⌘W`** — `⌘W` patří systému (zavře okno). Ze stejného důvodu jsou na `Control`u i sekce
@@ -1865,7 +1875,7 @@ nastavení. Nabízí se **jen to, co by něco udělalo** — bez otevřeného PR
 Kreslená zkratka je **vždycky ta skutečná** — od #441 se **nekreslí opsaná, ale odvozená**
 z katalogu zkratek, takže se s klávesou nedá rozejít: `⌘2` u panelu, `⌃1`–`⌃5` u sekcí railu,
 `⌘R` u obnovení, `⌘.` u zrušení běžícího review a `⌘,` u nastavení. Návrh měl u „pustit review“
-`⌘⇧R`, což v aplikaci dělá něco jiného (pustit review na vše, co neběželo, z dashboardu), takže se
+`⌘⇧R`, což v aplikaci dělá něco jiného (pustit review na pruh `Přečíst` z desky), takže se
 nenakreslila. U sekcí se kreslí **číslicová** varianta (`⌃1`); česká (`⌃+`) je druhé tlačítko na
 tutéž akci a v jednom řádku by z jedné kapsle udělala dvě.
 
@@ -1887,7 +1897,7 @@ poznámky, `open` z terminálu). Aplikaci to umí i spustit — žádost přečk
 otevře, jak se okno objeví.
 
 **Takový PR není ve zdrojích, a to není porucha.** Frontu definují zdroje (#4), takže se
-nedostane do fronty, na karty, do odznaku ani do automatu — a hlavička to říká pilulkou
+nedostane do fronty, na desku, do odznaku ani do automatu — a hlavička to říká pilulkou
 `mimo zdroje · jen ke čtení`. Review na něm jde pustit **ručně jako na každém jiném**; jak se na
 něm review vyžádá, přijde do fronty normálně přes zdroje a pilulka zmizí. Záložka **přežije
 načítání seznamu**: PR, který v žádném zdroji není, se z pruhu nemá čím vytratit, dokud ji člověk

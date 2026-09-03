@@ -287,124 +287,93 @@ struct OwnPullRequestsTests {
         )
     }
 
-    // MARK: - Karta na dashboardu
+    // MARK: - Deska (#515)
 
-    @Test("Karta počítá moje PR a z nich ty, na kterých leží tah")
-    func fillsTheCard() {
-        let list = [
-            pullRequest(1, author: "ondrajodas"),
-            pullRequest(2, author: "ondrajodas"),
-            pullRequest(3, author: "kolega"),
-        ]
-        let records = [list[0].id: record(findings: [makeReported()])]
-
-        let card = Policy.dashboard(
-            pullRequests: list,
-            records: records,
-            drafts: [:],
-            mine: ["ondrajodas"],
-            tracksOwnSource: true
-        ).mine
-
-        #expect(card.pullRequests == 2)
-        #expect(card.awaitingMove == 1)
-        #expect(card.isTracked)
-    }
-
-    /// Nula bez zdroje je údaj o **nastavení**, ne o mojí práci — a karta to musí rozlišit,
-    /// jinak nad nenastavenou aplikací vypadá jako uklizený stůl.
-    @Test("Karta bez zdroje se pozná od karty s nulou")
-    func distinguishesTheMissingSource() {
-        let card = Policy.dashboard(
-            pullRequests: [pullRequest(1)],
-            records: [:],
-            drafts: [:],
-            mine: ["ondrajodas"],
-            tracksOwnSource: false
-        ).mine
-
-        #expect(card.pullRequests == 0)
-        #expect(!card.isTracked)
-    }
-
-    /// **Vlastní PR je na dashboardu v jednom bloku, ne ve dvou** (#332). Do #332 se počítal do
-    /// obou a karta `Čeká na mě` tvrdila víc práce, než je (nahlášeno z provozu: 32 = 13 cizích
-    /// + 19 vlastních).
-    @Test("Karta Čeká na mě počítá jen cizí PR")
-    func countsOnlyTheirPullRequestsInTheQueueCard() {
-        let list = [pullRequest(1, author: "ondrajodas"), pullRequest(2, author: "kolega")]
-
-        let dashboard = Policy.dashboard(
-            pullRequests: list,
-            records: [:],
-            drafts: [:],
-            mine: ["ondrajodas"],
-            tracksOwnSource: true
+    /// Řádek desky z jednoho PR. Stav se dopočítá ze záznamu tou samou cestou, jakou ho skládá
+    /// store — jinak by test tvrdil o pruzích něco, co v okně neplatí.
+    private func entry(
+        _ summary: PullRequestSummary,
+        record: ReviewRecord? = nil,
+        hasDraft: Bool = false
+    ) -> QueueEntry {
+        QueueEntry(
+            pullRequest: summary,
+            state: record.map { Policy.reviewState(for: $0) } ?? .notStarted,
+            row: Policy.queueRow(for: record),
+            hasDraft: hasDraft
         )
-
-        #expect(dashboard.queue.pullRequests == 1)
-        #expect(dashboard.mine.pullRequests == 1)
     }
 
-    /// Popisek pod číslem počítá **repozitáře z fronty**, ne ze seznamu — jinak by u jediného
-    /// cizího PR stálo „napříč 2 repozitáři“.
-    @Test("Repozitáře v kartě Čeká na mě jsou jen z fronty")
-    func countsOnlyTheirRepositoriesInTheQueueCard() {
-        let dashboard = Policy.dashboard(
-            pullRequests: [
-                pullRequest(1, author: "ondrajodas", repo: "ondrajodas/PRism"),
-                pullRequest(2, author: "kolega", repo: "cli/cli"),
-            ],
-            records: [:],
-            drafts: [:],
-            mine: ["ondrajodas"],
-            tracksOwnSource: true
-        )
-
-        #expect(dashboard.queue.repositories == 1)
+    private func rows(_ lane: WorkLane, in board: Board) -> [Int] {
+        board.lanes.first { $0.lane == lane }?.rows.map(\.pullRequest.number) ?? []
     }
 
-    /// Blokující nález na vlastním PR **mě neblokuje** (#332) — je to seznam toho, co mám opravit,
-    /// ne toho, co mi stojí v cestě k odeslání review. Karta `Blokuje` je navíc červená, takže by
-    /// z vlastní práce dělala poplach.
-    @Test("Karta Blokuje nepočítá vlastní PR")
-    func countsOnlyTheirPullRequestsInTheBlockingCard() {
+    /// **Cizí a vlastní PR jsou v jedné desce, ale ne v jednom pruhu** (#515). Rozřazení podle
+    /// autora tím nezmizelo — přestěhovalo se z bloků do `Policy.lane`.
+    @Test("Cizí PR jde do Přečíst, vlastní do svého pruhu")
+    func splitsByOwnershipIntoLanes() {
         let own = pullRequest(1, author: "ondrajodas")
         let theirs = pullRequest(2, author: "kolega")
 
-        let dashboard = Policy.dashboard(
-            pullRequests: [own, theirs],
-            records: [
-                own.id: record(findings: [makeReported(category: "correctness")]),
-                theirs.id: record(findings: [makeReported(category: "style")]),
-            ],
-            drafts: [:],
-            categories: ["correctness"],
-            mine: ["ondrajodas"],
-            tracksOwnSource: true
-        )
+        let board = Policy.board(entries: [entry(own), entry(theirs)], mine: ["ondrajodas"])
 
-        #expect(dashboard.blocking.pullRequests == 0)
-        // A ani v detailu pod číslem nesmí zbýt kategorie z vlastního PR.
-        #expect(dashboard.blocking.detail == nil)
+        #expect(rows(.read, in: board) == [2])
+        #expect(rows(.waiting, in: board) == [1])
     }
 
-    /// **Karta `Rozdělaná review` se naopak nezmenšuje** (#332). Draft je ručně psaná práce a od
-    /// #333 na vlastním PR nevznikne — ten z doby předtím se ale nesmí ztratit, protože karta je
-    /// jediná cesta, jak se k němu z dashboardu dostat.
-    @Test("Karta Rozdělaná review počítá i draft na vlastním PR")
-    func countsDraftsOnOwnPullRequestsToo() {
+    /// Vlastní PR s něčím k předání jde do `Předat agentovi` — a je to **tatáž otázka**, jakou
+    /// odpovídá odznak v railu (`ownPullRequestsAwaitingMove`), takže se nemají čím rozejít.
+    @Test("Co zbývá předat, jde do pruhu Předat agentovi")
+    func putsPendingHandoffsIntoTheirLane() {
         let own = pullRequest(1, author: "ondrajodas")
+        let quiet = pullRequest(2, author: "ondrajodas")
 
-        let dashboard = Policy.dashboard(
-            pullRequests: [own],
-            records: [:],
-            drafts: [own.id: ReviewDraft(pullRequest: own.id, headSha: "aaaa1111", body: "rozepsané")],
+        let board = Policy.board(
+            entries: [entry(own), entry(quiet)],
             mine: ["ondrajodas"],
-            tracksOwnSource: true
+            pending: { $0 == own.id ? 3 : 0 }
         )
 
-        #expect(dashboard.drafts.pullRequests == 1)
-        #expect(dashboard.drafts.pullRequest == own.id)
+        #expect(rows(.handOff, in: board) == [1])
+        #expect(rows(.waiting, in: board) == [2])
+    }
+
+    /// **Blokující nález na vlastním PR mě neblokuje** (#332 platí dál): je to seznam toho, co
+    /// mám opravit, ne toho, co mi stojí v cestě k odeslání review. Na desce se proto vlastní PR
+    /// do `Rozhodnout` nedostane **nikdy** — ten pruh je o cizí frontě.
+    @Test("Vlastní PR se do pruhu Rozhodnout nedostane ani s nálezy")
+    func neverPutsOwnPullRequestsIntoDecide() {
+        let own = pullRequest(1, author: "ondrajodas")
+
+        let board = Policy.board(
+            entries: [entry(own, record: record(findings: [makeReported(category: "correctness")]))],
+            mine: ["ondrajodas"]
+        )
+
+        #expect(rows(.decide, in: board).isEmpty)
+        #expect(rows(.waiting, in: board) == [1])
+    }
+
+    /// **Rozdělané review se nezmenšuje** (#332). Draft je ručně psaná práce a od #333 na
+    /// vlastním PR nevznikne — ten z doby předtím se ale nesmí ztratit, protože pruh
+    /// `Dopsat a odeslat` je jediná cesta, jak se k němu z domova dostat.
+    @Test("Draft na vlastním PR jde do pruhu Dopsat a odeslat")
+    func keepsDraftsOnOwnPullRequests() {
+        let own = pullRequest(1, author: "ondrajodas")
+
+        let board = Policy.board(entries: [entry(own, hasDraft: true)], mine: ["ondrajodas"])
+
+        #expect(rows(.finishReview, in: board) == [1])
+        #expect(rows(.waiting, in: board).isEmpty)
+    }
+
+    /// Bez loginů je **všechno cizí** (`ownership(ofAuthor:mine:)`), takže vlastní PR spadne do
+    /// fronty — a je to ta bezpečná strana: „nevím, kdo jsem“ nesmí znamenat „to je moje“.
+    @Test("Bez loginů jde i vlastní PR do Přečíst")
+    func treatsEverythingAsForeignWithoutLogins() {
+        let board = Policy.board(entries: [entry(pullRequest(1, author: "ondrajodas"))])
+
+        #expect(rows(.read, in: board) == [1])
+        #expect(rows(.waiting, in: board).isEmpty)
     }
 }

@@ -139,7 +139,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `AppStore` proti fake gateway (`AppStoreOwnershipTests`): rozřazení **nezmenší plný ani zúžený
   seznam** (na plném visí úklid a nastavení), filtr se s rozřazením **skládá**
   a schované vlastní PR se počítají zvlášť od schovaných cizích, odznak je `nil` do prvního tiku,
-  a blok na dashboardu se filtrem **neschová** (dashboard tvrdí o tom, co venku mám).
+  a deska se filtrem **neschová** (deska tvrdí o tom, co je na tahu).
 
   `PullRequestRow` (`PullRequestRowPromptTests`): `Prompt →` se u cizího PR **nekreslí** a výchozí
   hodnota je `theirs`, takže řádek bez informace o autorovi tlačítko nemá. Že se doopravdy nakreslí,
@@ -156,19 +156,23 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   testech, `activeFindings → findings` (tedy „odmítnutý nález pořád čeká na tah“) jeden a
   `showsPromptAction → true` tři včetně toho na výšku řádku.
 
-  Vedle toho je `Tests/Views/OwnPullRequestsRenderProbe.swift` — **sonda, ne test**: dashboard se
-  dvěma frontami a čtyři podoby sekce, protože „nevypadá prázdno jako hotová práce?“ je otázka na
-  obrázek. Ke dvěma z těch stavů se v aplikaci klikáním nedostaneš (musel by spadnout `gh api user`,
-  resp. chybět zdroj v konfiguraci) a dashboard se **screenshotem běžícího okna nevyfotí celý**:
-  je to jeden `ScrollView`, takže s třiceti PR ve frontě spadne blok `Moje PR` pod dolní hranu.
+  Vedle toho je `Tests/Views/OwnPullRequestsRenderProbe.swift` — **sonda, ne test**: domácí záložka
+  a čtyři podoby sekce, protože „nevypadá prázdno jako hotová práce?“ je otázka na obrázek. Ke dvěma
+  z těch stavů se v aplikaci klikáním nedostaneš (musel by spadnout `gh api user`, resp. chybět zdroj
+  v konfiguraci) a domácí záložka se **screenshotem běžícího okna nevyfotí celá**: je to jeden
+  `ScrollView`, takže od #515 spadne šestý pruh pod dolní hranu.
 - **Fronta jsou cizí PR (#332)** — celá oblast je o tvrzeních, že se něco **nestalo**, protože
   všechno tady se rozbije potichu: čísla by jen ukázala jinou hodnotu a úklid by tiše přestal
   uklízet.
 
   `Policy` výčtem (`OwnPullRequestsTests`, `AutomaticReviewTests`, `ReviewNotificationTests`,
-  `PullRequestFilterTests`): karta `Čeká na mě` počítá **jen cizí** PR a **repozitáře taky z fronty**
-  (jinak by u jediného cizího PR stálo „napříč 2 repozitáři“); karta `Blokuje` vlastní PR nepočítá
-  **ani v detailu pod číslem**; karta `Rozdělaná review` se naopak **nezmenšuje**. Automat nevydá
+  `PullRequestFilterTests`). **Od #515 to tvrdí pruhy desky, ne karty** — karta `Čeká na mě`
+  počítala jen cizí PR, kdežto od #515 se totéž pozná z toho, že cizí PR jde do `Přečíst` nebo
+  `Rozhodnout` a vlastní do `Předat agentovi`, `K merge`, `Čeká na ostatní` nebo
+  `Dopsat a odeslat`. **Blokující nález na vlastním PR mě dál neblokuje**, jen se to tvrdí jinak:
+  vlastní PR se do `Rozhodnout` nedostane ani s nálezy (do #515 to říkala karta `Blokuje`, která ho
+  nepočítala ani v detailu pod číslem). **Rozdělané review se naopak nezmenšuje** — draft na
+  vlastním PR jde do pruhu `Dopsat a odeslat`, tak jako se do #515 počítal do karty. Automat nevydá
   vlastní PR **ani při globálním `mode: automatic`, ani když si o automat řekne repo** — a k tomu
   dvě věty, bez kterých by ta tvrzení platila i nad vypnutým automatem: cizí PR v témže seznamu
   **projde dál** a bez známého loginu se **nevyřazuje nic**. Notifikace o doběhlém review se
@@ -190,7 +194,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `automaticallyReviewable`, vrácený `listEmptyReason`, sundaná brána v `reviewNotification`,
   `railQueueCount` zpátky na celý pohled, souhrn a nová PR zpátky na celý seznam, úklid navázaný na
   frontu — a v druhé dávce `Policy.dashboard`, `dashboardQueue`, `hiddenQueuePullRequestCount`
-  a `pullRequestsNotReviewed`. Každá z nich shodila právě ten test, který ji má chytat; **u notifikace
+  a `pullRequestsNotReviewed`. (První dvě jména odešla s #515; tvrzení, která tehdy padla, drží od
+  #515 pruhy — `Policy.board` a `Policy.lane`.) Každá z nich shodila právě ten test, který ji má chytat; **u notifikace
   o vlastním PR přitom potřebuje test tik pollingu**, protože čí je PR se bere ze seznamu — bez něj
   vyjde `.theirs` a test by byl zeleně z jiného důvodu, než tvrdí.
 
@@ -443,26 +448,27 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   soubor **není** porucha, nečitelný je) a store ten příznak musí donést až do prázdného stavu
   (`AppStoreFeedTests`), protože jinak by zůstal ležet ve storu a nikdo by ho nečetl.
 
-  **Blok na dashboardu (#443)** — `DashboardActivityTests` výčtem a tři tvrzení ve store
-  (`AppStoreFeedTests`). To nejcennější je zase negativní: **dashboard značku poslední návštěvy
+  **Blok `Dění` na domácí záložce (#443, strop zvednut #515)** — `DashboardActivityTests` výčtem a tři tvrzení ve store
+  (`AppStoreFeedTests`). To nejcennější je zase negativní: **domácí záložka značku poslední návštěvy
   neposune**. Čte se u toho i klik na řádek, protože ten jde přes store (`show(_ event:)`) a je to
   jediné místo v tom bloku, které se storu dotýká; kdyby značku posunul, vynulovalo by se nepřečtené
   pohledem na domácí záložku a odznak v railu by zmizel, aniž bych něco přečetl — proto se v tomtéž
   testu tvrdí i to, že odznak dál svítí.
 
-  V `Policy`: strop pěti řádků, patka `+37` a to, že se **nekreslí ani při přesně pěti** (tam se
-  pozná `>=` proti `>`), že se **rozházené pořadí srovná před řezem** (jinak by řez ukázal pět jiných
-  položek a pět řádků vypadá platně, ať v nich stojí cokoli) a že duplicita nezabere řádek ani se
-  nepočítá do patky. Nadpis počítá **nepřečtené z celého záznamu**, ne z nakreslených řádků (dvacet
-  položek, jedenáct nových, pět řádků), nula se nepíše a počet se skloňuje. **Den u času** se ověřuje
-  z obou stran: na dashboardu `včera v 7:58`, v sekci `v 7:58`, dnešek den nedostane ani na
-  dashboardu, starší dostane datum a čerstvá událost zůstane relativní **na obou obrazovkách** —
+  V `Policy`: strop **osmi** řádků (do #515 pěti — `Policy.activityRowLimit`), patka `+34` a to, že
+  se **nekreslí ani při přesně osmi** (tam se pozná `>=` proti `>`), že se **rozházené pořadí srovná
+  před řezem** (jinak by řez ukázal osm jiných položek a osm řádků vypadá platně, ať v nich stojí
+  cokoli) a že duplicita nezabere řádek ani se nepočítá do patky. Nadpis počítá **nepřečtené z celého
+  záznamu**, ne z nakreslených řádků (dvacet položek, jedenáct nových, osm řádků), nula se nepíše
+  a počet se skloňuje. **Den u času** se ověřuje z obou stran: na domácí záložce `včera v 7:58`,
+  v sekci `v 7:58`, dnešek den nedostane ani tam, starší dostane datum a čerstvá událost zůstane
+  relativní **na obou obrazovkách** —
   a hranice okna se porovnává přímo se `showsRelativeTime`, aby se ty dvě obrazovky nemohly rozejít
   v tom, odkdy se píše hodinami. **Čtyři prázdna, čtyři různé věty** (tvrdí se, že je jich tolik,
   kolik je případů `allCases`), ztracená historie o klidu nemluví a zakázané se pozná od vypnutého.
 
-  Ve store: strop je **o kresbě, ne o množině** (sedm položek → pět řádků, patka `+2`, nadpis
-  i odznak sedm) a blok kreslí **tytéž položky** jako sekce, jen useknuté.
+  Ve store: strop je **o kresbě, ne o množině** (deset položek → osm řádků, patka `+2`, nadpis
+  i odznak deset) a blok kreslí **tytéž položky** jako sekce, jen useknuté.
 
   **Úzký tvar řádku** (`ActivityRowShapeTests`) se měří **dvěma různými měřidly, a to schválně** —
   jedno bez druhého by prošlo i nad rozbitou verzí:
@@ -487,9 +493,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   tvrzení z pěti (výška 32 až 80 bodů místo 24), a se zahozeným `lineLimit(1)` u titulku spadla
   výška u nejdelší položky (45 b) — tedy přesně ten stav, kdy se řádek místo ořezu zalomí.
 
-  Čar v levém sloupci dashboardu zůstává **jedenáct** (`DashboardFooterSeparatorTests`) a je to
-  tvrzení, ne opomenutí: blok `Dění` stojí v **pravém** sloupci, kdežto vzorek jde přes levý. Kdyby
-  se do počtu promítl, znamenalo by to, že se kreslí jinam, než kam ho návrh dal.
+  Čar v levém sloupci je od #515 **třiadvacet** (`BoardSeparatorTests`, do té doby jedenáct)
+  a je to tvrzení, ne opomenutí: osm z pruhu `Přečíst` (obrys, hlavička, čtyři mezi pěti řádky, jedna
+  nad patkou, obrys) a po třech z **pěti prázdných pruhů**, které se od #515 kreslí i s nulou. Blok
+  `Dění` v tom není — stojí v **pravém** sloupci, kdežto vzorek jde přes levý. Okno je u toho vyšší
+  (1400 místo 1000 bodů): šest pruhů pod sebou je vyšší než dva bloky, a čára pod hranou okna se
+  nenakreslí, takže by test hlásil menší počet, ne dvojitou čáru.
 
   **Ověřeno vložením regrese, dvakrát:** posun značky při vstupu (`guard visible || wasActivityVisible`)
   shodil dva testy — `Vstup do sekce značku neposune` i `Klik na tutéž sekci značku nehýbe` —,
@@ -1515,10 +1524,13 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     ne na řádku. Plus přednosti důvodů a tvrzení, že je `byPrecedence` vyjmenovává **všechny**
     (čtvrtý zapomenutý důvod by tiše spadl na nejslabší tvrzení).
 
-  K tomu jedno tvrzení v `DashboardTests`: **nula v legendě reviewerů není čisto**. Reviewer, který
-  v okně sedmi dnů neotevřel jediný soubor, má nulu stejně jako ten čistý, takže se u něj hlídá
-  `isConclusive` **i barva puntíku** (`DashboardView.legendOutcome`) — a v témže testu vedle něj
-  stojí reviewer, který kód přečetl, aby bylo vidět, že šedá není plošná.
+  K tomu bylo do #515 jedno tvrzení v `DashboardTests`: **nula v legendě reviewerů není čisto**.
+  Reviewer, který v okně sedmi dnů neotevřel jediný soubor, měl nulu stejně jako ten čistý, takže se
+  u něj hlídal `isConclusive` **i barva puntíku** (`DashboardView.legendOutcome`). **Legenda odešla
+  s kartami** (#515) a s ní i to tvrzení; `ReviewerShare.Outcome.inconclusive` a rozhodnutí
+  `Policy.inconclusiveReason(of:)` platí dál a hlídají je sady výš. **Zapsaná mezera pro #514**:
+  až blok `Reviewery` vznikne, patří tohle tvrzení zpátky — nula vedle zeleného puntíku je falešné
+  čisto bez ohledu na to, kdo ji kreslí.
 
   **Ověřeno vloženou regresí v obou směrech**, ne jen zeleným během. Bez podmínky na čtení kódu
   padne **8 tvrzení v 6 testech** (falešné čisto). Když se naopak z `unknown` udělá `unread`
@@ -2905,7 +2917,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 - **`AppStore` — PR mimo zdroje (#531)** — `AppStoreExternalTabTests` proti fake gateway. Půlka
   sady tvrdí, že se něco **nestalo**, protože přesně to se rozbije potichu: PR otevřený odkazem
   není v `pullRequests`, `visiblePullRequests`, `queuePullRequests`, nezvedne odznak fronty,
-  **nezmění dashboard** (srovnává se celý, ne jedno číslo) a **automat na něj nesáhne**, ani když
+  **nezmění desku** (srovnává se celá, ne jedno číslo) a **automat na něj nesáhne**, ani když
   je zapnutý globálně. K tomu, že PR **ze seznamu** se otevře bez jediného dotazu navíc, takže se
   na `openPullRequest(_:)` nedá zdražit klik v seznamu.
 
@@ -3936,48 +3948,77 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   na #168; při opravě se tentýž vzor našel ještě na **dvou starších místech** (useknuté vlákno
   a nevešlá konverzace nad diffem). Neosobní konstrukce („2 řádky diffu se nepodařilo přečíst“)
   je naopak správná a zůstává.
-- **Dashboard (#181)** — `Policy` výčtem, protože je to čistá funkce nad tím, co store drží
-  v paměti. Tři věci se dají pokazit potichu:
-  - **Počítat drafty jinak než stavový řádek.** První verze počítala všechny drafty na disku
-    a karta ukazovala trojku vedle jedničky ve stavovém řádku; test proto sype dohromady prázdný
-    draft, draft PR mimo frontu a jeden platný.
-  - **Vymyslet stáří draftu, který razítko nemá** (z doby před #181). Karta o něm musí mlčet,
-    ale **cíl akce `Dopsat review` zůstává vyplněný** — pokračovat se v něm dá.
-  - **Počítat nálezy z běhů mimo sedmidenní okno.** Reviewer, který v okně neběžel, v legendě
-    nemá co dělat; ten, který běžel a nic nenašel, v ní naopak **zůstává s nulou**.
+- **Deska podle mého tahu (#515)** — `Policy` výčtem, protože je to čistá funkce nad tím, co store
+  drží v paměti. Nahradilo to sadu o dashboardu z #181 a #371; co z ní odešlo a proč, je v seznamu
+  na konci téhle odrážky.
 
-  **Pořadí fronty** (`Policy.byUrgency`) má vlastní sadu: celá škála naráz z obráceného vstupu,
-  blokující nad pěti kosmetickými nálezy, nedoběhlý běh nahoru **jen** s blokujícím nálezem,
-  determinismus při shodě času — a hlavně, že **zastaralé nahoru nejde ani s blokujícím nálezem**
-  (nálezy patří ke staršímu `headSha`).
+  **Rozřazení do pruhů je to nejcennější a testuje se vyčerpávajícím výčtem** (`WorkLaneTests`).
+  `Policy.lane` má čtyři vstupní osy — čí PR to je, v jakém stavu je review, leží tu draft, dá se to
+  mergnout — a projdou se **všechny kombinace** (13 stavů × 2 × 2 × 2 × 2 = 208). Tvrdí se u nich
+  trojice, protože každý sám by prošel naprázdno:
 
-  Ve store: fronta dashboardu je seřazená **jinak než `pullRequests`** (obojí v jednom tvrzení,
-  jinak by se dalo splést getter), **filtr seznamu ji nezúží** a hromadné spuštění bez revieweera
-  **nespustí nic**. Sedmidenní historie útraty se ověřuje proti skutečné dočasné složce: přesun
-  včerejška po půlnoci, prázdný den, který v řadě zůstává, a ořez na sedm dní.
+  - **totalita** — nad každou kombinací vyjde pruh, a všech šest je z nich **dosažitelných**: pruh,
+    do kterého se nedá dostat, by byl mrtvá kresba;
+  - **disjunktnost** — nad `Policy.board` se tvrdí, že součet pruhů je počet PR **a** že sjednocení
+    identit je přesně vstup. Kdyby se řádek zařadil dvakrát, počty by se nadsadily; kdyby vypadl,
+    zmizel by z desky beze slova a šest platně vypadajících počtů by o tom nic neřeklo;
+  - **pravidla jmenovitě** — draft přebíjí každý jiný pruh (a to **přes celý výčet stavů**, ne na
+    jednom příkladu), běžící review je tichý pruh, cizí PR se nikdy nedostane do vlastních pruhů
+    a vlastní nikdy do cizích. Ty dvě posledně jmenované jsou negativní a drží #332.
 
-  **Strop pěti řádků a klikatelné karty (#371)** — `DashboardBlockTests` výčtem a `AppStoreDashboardTests`
-  proti fakes. Čtyři tvrzení nesou celé issue a všechna říkají, že se něco **ne**stalo:
-  - **Strop nezmění čísla na kartách.** Nad třinácti PR kreslí blok pět řádků a patka hlásí `+8`,
-    kdežto `dashboard.queue.pullRequests`, `dashboardQueue.count` i odznak v railu zůstávají na
-    třinácti. Kdyby strop sestoupil do počítání, dashboard by začal lhát a poznalo by se to až za
-    týden.
-  - **Patka se u bloku pod stropem nekreslí** — a **ani při přesně pěti řádcích**, což je ten případ,
-    na kterém se `>=` proti `>` pozná. Šestý řádek ji vyvolá s `+1`.
-  - **Karta `Dneska stálo` nevede nikam.** Vedle přímého tvrzení je test přes `allCases`: cíl nemá
-    **právě jedna** karta, takže nová karta se musí rozhodnout, a žádná nevede na `Přehled` (dashboard
-    je `Přehled` sám). Že to view dodržuje, je vidět v renderu — karta bez cíle nedostane tlačítko,
-    šipku ani hover.
-  - **Karta `Blokuje` nezapne filtr dvakrát a ostatní osy nechá být.** Klik nastaví `onlyBlocking`,
-    nechá odškrtnutá repa i autory a druhý klik už filtr nezmění. K tomu tvrzení, že **co karta
-    napočítá, to filtr ukáže** (`visibleQueuePullRequests.count == dashboard.blocking.pullRequests`) —
-    tam se pozná, kdyby se sada blokujících kategorií rozešla mezi kartou a filtrem.
+  **Že je stavů třináct, je taky tvrzení.** `ReviewState` má asociované hodnoty, takže nemůže být
+  `CaseIterable` a výčet je ruční — bez tvrzení o počtu by přidaný stav z celého testu vypadl
+  a nikdo by si toho nevšiml.
 
-  A počet nakreslených řádků ověřuje `Policy.dashboardBlock` **přes pásmo** (1 až 20 PR): nakreslené
-  plus shrnuté musí dát celou frontu. Rozejít se to umí jen v pásmu, takže u jednoho počtu by test
-  prošel.
+  **Brána odesílání není překážka pull requestu** (`Policy.isMergeReady`). Testuje se z obou stran:
+  `notAllowed` sama pruh `K merge` **nezavře** (jinak by byl při výchozím vypnutém odesílání
+  navždycky prázdný), kdežto **jedenáct** ostatních překážek ho zavře — každá zvlášť **a** ve dvojici
+  s branou, takže se nedá projít omylem, který by bránu bral jako povolení. Počet jedenáct je v
+  tvrzení, aby si nová překážka vynutila rozhodnutí.
 
-  **Dělící čára nad patkou** má vlastní sadu z bitmapy (`DashboardFooterSeparatorTests`) — z kódu to
+  **Strop, akce a věta** (`BoardTests`):
+
+  - **Strop je o kresbě, ne o množině** (#371 platí dál): pruh hlásí třináct, kreslí pět, patka
+    `+8`. **Tichý pruh má dva** — a je to tvrzení nad výčtem pruhů, ne nad jedním.
+  - **Nic se neschovává pod stropem ani přesně na stropu**, což je ten případ, na kterém se `>=`
+    proti `>` pozná; šestý řádek vyvolá `+1`. Rozbalený pruh ukáže všechno a `hidden` je nula.
+  - **Potvrzení má jedině `runReviews`.** Tvrdí se to filtrem přes výčet všech šesti akcí, ne
+    jedním případem — kdyby potvrzení přibylo jinde, spadne to tady.
+  - **Zkratky si deska nerozdala dvakrát.** `⏎` má jedině pruh `Rozhodnout`; `K merge` má tutéž
+    akci **bez klávesy**, a bylo to naměřeno testem: první verze dávala `openFirst` oběma a test
+    hlásil čtyři zkratky ve třech kombinacích. Kolize se totiž neprojeví chybou — vyhraje ta
+    zaregistrovaná později (#151, #184).
+  - **Věta pod pozdravem nezmiňuje nuly** a nad prázdnou deskou mluví slovem, ne nulou. Vedle toho
+    případ „nic na tahu, ale něco čeká“, kde musí říct **obojí**.
+
+  Ve store (`AppStoreBoardTests`): pruhy jsou seřazené **jinak než `pullRequests`** (obojí v jednom
+  tvrzení, jinak by se dalo splést getter), **filtr seznamu desku nezúží** a vlastní PR bez
+  načteného detailu **není k merge** (`isMergeReadyForLane` i pruh, tedy z obou stran).
+
+  **Hromadná akce pruhu nepustí vlastní PR** (#512, #332) — a je to nejcennější tvrzení téhle sady,
+  protože se rozbije potichu: `Přečíst` je vázané na `notStarted`, akce je
+  `startReviewsForNotReviewed()` a ta čte **jen cizí** PR. Tvrdí se to **z obou stran** (co pruh
+  ukazuje i co akce pustí) — samotné „počet se rovná“ by prošlo i tehdy, kdyby v obou stálo prázdno.
+  K tomu druhé tvrzení o **odloženém** PR: zapnutý filtr počet u akce **nezmění**, protože akce
+  stojí na plném seznamu cizích PR, ne na zúženém pohledu.
+
+  Sedmidenní historie útraty se ověřuje proti skutečné dočasné složce: přesun včerejška po
+  půlnoci, prázdný den, který v řadě zůstává, a ořez na sedm dní.
+
+  **Pořadí uvnitř pruhu** (`Policy.byUrgency`) má vlastní sadu a nemění se: celá škála naráz
+  z obráceného vstupu, blokující nad pěti kosmetickými nálezy, nedoběhlý běh nahoru **jen**
+  s blokujícím nálezem, determinismus při shodě času — a hlavně, že **zastaralé nahoru nejde ani
+  s blokujícím nálezem** (nálezy patří ke staršímu `headSha`).
+
+  **Co z testů odešlo a proč:** `DashboardTests` a `DashboardBlockTests` celé (karty,
+  `DashboardCard`, `DashboardDestination`, legenda reviewerů — všechno to, co #515 zrušilo),
+  `AppStoreDashboardTests` se přejmenovaly na `AppStoreBoardTests` a čtyři tvrzení o kartě `Blokuje`
+  z nich vypadla s tou kartou. **Zapsaná mezera**: osa `onlyBlocking` tím ztratila test „co karta
+  napočítá, to filtr ukáže“, který hlídal, aby se sada blokujících kategorií nerozešla mezi kartou
+  a filtrem. Sadu čte od #515 jedině filtr (`passesFilter`), takže se s ničím rozejít nemůže — kdyby
+  ji začalo číst druhé místo, tenhle test tam patří zpátky.
+
+  **Dělící čára nad patkou** má vlastní sadu z bitmapy (`BoardSeparatorTests`) — z kódu to
   vidět není, dvě jednobodové čáry pod sebou vypadají v obou souborech správně. Měří se **všechny**
   vodorovné čáry v levém sloupci naráz (v tomhle návrhu je každá jednobodová), takže tvrzení „všechny
   stejně silné“ chytí dvojitou čáru bez ohledu na to, kolikátá zhora patka je; k němu jde počet čar,
@@ -3988,9 +4029,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     liší od pásů nad ním i pod ním. Ta podmínka na okolí je tam kvůli mezerám v textu: mezi titulkem
     a souřadnicemi řádku je taky tenký jednolitý pás, jen v barvě plochy kolem.
   - **Vyzkoušené vložením regrese**: s `overlay(alignment: .top)` navíc nad patkou vyjde jedna čára
-    4 px vedle deseti dvoupixelových a test spadne (`Set(thickness).count → 2`).
+    4 px vedle ostatních dvoupixelových a test spadne (`Set(thickness).count → 2`).
 
-  Do renderu se u toho **nesmí věřit `ImageRenderer`u** (dashboard je `ScrollView`, ten se offscreen
+  Do renderu se u toho **nesmí věřit `ImageRenderer`u** (deska je `ScrollView`, ten se offscreen
   nerasterizuje) a na hotovou kresbu se **čeká se stropem**, ne pevnou odmlkou: kolik kol smyčky
   hierarchie potřebuje, rozhoduje zátěž stroje.
 

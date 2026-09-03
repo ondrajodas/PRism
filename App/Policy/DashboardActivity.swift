@@ -17,7 +17,7 @@ struct DashboardActivity: Hashable, Sendable {
     /// jaké nese odznak sekce v railu (`Policy.activityBadge`), takže by dvě čísla o jedné věci
     /// stála vedle sebe a lišila se.
     let title: String
-    /// Řádky, které se doopravdy nakreslí — nejvýš `Policy.dashboardRowLimit`, od nejnovějšího.
+    /// Řádky, které se doopravdy nakreslí — nejvýš `Policy.activityRowLimit`, od nejnovějšího.
     let rows: [ActivityEvent]
     /// Věta místo řádků. `nil` = řádky jsou.
     ///
@@ -26,14 +26,15 @@ struct DashboardActivity: Hashable, Sendable {
     /// schválně.
     let emptyExplanation: String?
     /// Patka se zbytkem záznamu. `nil` = pod pěti řádky už nic neleží, takže „zobrazit celé“ je
-    /// akce, po které se nic nezmění — tatáž úvaha jako u `DashboardBlock`.
-    let footer: DashboardBlock.Footer?
+    /// akce, po které se nic nezmění — tatáž úvaha jako u pruhů desky.
+    let footer: BlockFooter?
 }
 
 extension Policy {
     /// Blok `Dění` na dashboardu (#443) — nadpis s počtem nepřečtených, pět řádků a patka.
     ///
-    /// **Strop je tentýž jako u front** (`dashboardRowLimit`), a schválně: dashboard je jedna
+    /// **Strop je `activityRowLimit`, od #515 osm řádků** (do té doby pět, tehdy tolik co bloky
+    /// front): domov je jedna
     /// obrazovka bez rolování, takže blok, který roste s daty, položí ten pod sebou pod hranu okna.
     /// Co se nevešlo, nese patka **číslem**, ne mlčením — bez ní je to useknutý seznam, ze kterého
     /// se nepozná, jestli se za posledním řádkem nic nestalo, nebo se to tam jen nevešlo.
@@ -54,7 +55,7 @@ extension Policy {
         empty: ActivityEmptyState?
     ) -> DashboardActivity {
         let ordered = activityLog([], adding: events, limit: max(events.count, 1))
-        let rows = Array(ordered.prefix(dashboardRowLimit))
+        let rows = Array(ordered.prefix(activityRowLimit))
         return DashboardActivity(
             title: dashboardActivityTitle(unread: unreadActivity(ordered, since: since)),
             rows: rows,
@@ -73,9 +74,9 @@ extension Policy {
     }
 
     /// `Zobrazit celé dění +37 →`. `nil`, když se celý záznam vešel do bloku.
-    private static func dashboardActivityFooter(rest: Int) -> DashboardBlock.Footer? {
+    private static func dashboardActivityFooter(rest: Int) -> BlockFooter? {
         guard rest > 0 else { return nil }
-        return DashboardBlock.Footer(
+        return BlockFooter(
             title: "Zobrazit celé dění",
             rest: "+\(rest)",
             section: .activity

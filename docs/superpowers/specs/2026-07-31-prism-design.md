@@ -5815,3 +5815,68 @@ nesou přesně to, co se ví.
 **Co v tomhle issue vědomě není**: routing reviewerů podle změněných cest a odklad velkých PR do
 tichých hodin. Jsou v témže zákresu (a v sekci 46 zakreslené jsou), ale mají vlastní issues
 (#518, #519) — dráha je pro všechny tři totéž místo, proto stojí v jednom obrázku.
+
+### Záznam rozhodnutí — deska podle mého tahu (#515)
+
+**Tah je osa práce, autor osa dat.** Domov byl do #515 uspořádaný podle autora (cizí fronta, moje
+PR — #331) a podle počtů (pět karet — #181, #371). Otázka, se kterou se aplikace otevírá, je ale
+„co udělám teď“, a na tu odpovídalo jedině řazení podle závažnosti **uvnitř** jedné z těch dvou
+front. `Čeká na mě 13` je počet, ne tah.
+
+**Rozřazení podle autora se tím neruší** — přestává být *osou obrazovky*. Zůstává tam, kde je
+osou **dat**: v railu (`Fronta`, `Moje PR`) a ve všem, co čte jen cizí PR (#332). Deska je proto
+**třetí pohled, ne třetí množina**: bere tytéž řádky (`QueueEntry`) a skládá je podle
+`Policy.lane`.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Šest pruhů podle tahu**, autora nese šipka v mintu | Nechat dvě fronty a v každé řadit podle tahu | Řazení uvnitř množiny odpovídá na „co první z těchhle“, ne na „co teď“. Cizí PR s hotovým review a vlastní PR k merge jsou dva **různé tahy**, které se v jedné frontě nedají oddělit, a naopak cizí `neběželo` a vlastní `čeká na CI` jsou tentýž *nic teď*, i když jsou od různých autorů |
+| **Prázdný pruh se kreslí, i s nulou** | Vypustit prázdné pruhy a šetřit výšku | Mizející pruh by desku při každém tiku přeskládal a `Rozhodnout` by pod rukou skočilo tam, kde bylo `Přečíst`. Prázdno je navíc **odpověď** a je na pruh jiná (`Nic nedoběhlo` proti `Nic rozepsaného`) — jedna společná věta by u některého lhala |
+| **Draft přebíjí všechny ostatní pruhy** | Nechat draft jako tužku v řádku a zařadit PR podle stavu review | Rozdělané review je ručně psaná práce, tedy můj tah bez ohledu na to, co se na PR stalo. Je to tatáž úvaha, kvůli které karta `Rozdělaná review` počítala celý seznam, ne jen frontu (#332) |
+| **Běžící review je `Čeká na ostatní`** | Nechat ho v `Přečíst` (je to pořád „k přečtení“) | Pruh `Přečíst` má akci `Pustit review na N`, a ta pouští `notStarted`. Kdyby v pruhu leželo i běžící review, hlásil by víc, než co akce udělá — a poznalo by se to jedině účtem za session |
+| **Selhání, neprůkazný běh a zastaralé nálezy jdou do `Rozhodnout`** | Vrátit je do `Přečíst`, protože tahem je pustit znovu | To by rozvázalo počet v hlavičce od akce (viz řádek výš). „Podívat se a rozhodnout, co dál“ je navíc pravdivější popis: u zastaralých nálezů se rozhoduje mezi *pustit znovu* a *nechat to tak* |
+| **Zavřená brána odesílání není překážka merge** (`MergeObstacle.isPublishingGate`) | Brát `mergeOffer` doslova | Odesílání je ve výchozím stavu **vypnuté** (tvrdá podmínka č. 1, bod 6), takže by pruh `K merge` byl u každého, kdo si ho nezapnul, navždycky prázdný — tedy tvrzení o nastavení, ne o práci. Brána mluví o tom, co smí *aplikace*; pruh se ptá, jak stojí *pull request* |
+| **Vlastní PR bez načteného detailu jde do `Čeká na ostatní`** | Prefetchovat slévatelnost při tiku, ať je pruh `K merge` úplný | Detail, checky a stav větve se tahají **při otevření PR** (#306); prefetch by znamenal N volání `gh` na tik, což je vzor, který tenhle repo opakovaně zamítá. „Nevím“ je proto `waiting` — deska nabídne o jeden tah **méně**, ne o jeden neexistující víc |
+| **Akce je nad pruhem, ne v bloku `Co teď`** | Nechat `Co teď` a pruhy jen jako seznamy | `Co teď` byl seznam možností odtržený od toho, na co se vztahují: `Pustit review na vše, co neběželo` stálo v pravém sloupci, kdežto ta PR ležela v levém. U pruhu je počet v popisku (`Pustit review na 2`) **totéž číslo** jako v hlavičce, takže se nemají čím rozejít |
+| **Potvrzení si nechává jedině `Pustit review na N`** | Potvrzovat každou hromadnou akci | Hranice je **vratnost**, ne počet dotčených PR: otevřít pět záložek jde vzít zpátky jedním kliknutím, utratit pět session ne. Je to tatáž hranice, podle které má sheet merge a nemá ho label (#392, #465) |
+| **`⏎` má jedině pruh `Rozhodnout`** | Dát `openFirst` obě klávesy (`Rozhodnout` i `K merge`) | První verze to tak měla a **test to naměřil**: čtyři zkratky ve třech kombinacích. Dvě tlačítka s jednou kombinací znamenají, že vyhraje to zaregistrované později (#151, #184), a poznalo by se to jedině tím, že jedna „nefunguje“ |
+| **Patka pruhu rozbaluje na místě** | Přepnout do sekce railu jako patka bloku (`BlockFooter`) | Pruh míchá cizí a vlastní PR, takže **žádná sekce railu nemá tutéž množinu**. Odkaz, který vede někam jinam, než co je nad ním, je horší než rozbalení — a rozbalený stav je stav pohledu v jednom běhu, takže se nikam neukládá (jako sledování konce, #325) |
+| **Tichý pruh: strop dva, ztlumení 0,7, místo akce popisek** | Kreslit ho jako ostatní | Je to jediný pruh, ve kterém se **nic nedělá**, takže se nemá o pozornost přetahovat s tím, co na tahu je — a na obrazovce, kde je šest pruhů pod sebou, je výška to jediné, co se dá rozdat. Zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“, což u tichého pruhu není pravda nikdy |
+| **Blok `Dění` má od #515 osm řádků** | Nechat pět (společný strop s bloky front) | #443 blok postavilo, aby **zaplnil díru** v pravém sloupci (byl o 425 bodů kratší než levý). Od #515 je to obrácené: levý drží šest pruhů, pravý dva bloky. Pět řádků by tam nechalo prázdno, které #443 zavíralo z druhé strany |
+
+**Čtyři odchylky od kresby, každá s důvodem.** Deck (*Směry › C*) je zadání, ale čtyři věci v něm
+popisují flow, které aplikace nemá:
+
+1. **`Sestavit N zadání` otevře N záložek, ne N sheetů za sebou.** Prompt se v aplikaci skládá
+   v **panelu `Zadání` uvnitř záložky** (`AppStore.openAgentPrompt`), ne v sheetu — a je to tak
+   schválně (#333): `Conversation` se nepersistuje a tahá se při zobrazení PR, takže z řádku, do
+   kterého se nekliklo, by v textu nebyla vlákna ani komentáře. Otevřít PR je proto **součástí**
+   akce, ne krok před ní. Sheet, který by prompt skládal, by musel to otevírání dělat taky, jen by
+   ho schoval.
+2. **Kapsle `Copilot · za mainem o 3` a `čeká na CI` v tichém pruhu se nekreslí.** Řádek je **týž
+   `PullRequestRow`** jako v seznamu (tak to zadání i chce), a ten kreslí stav review, pilulku
+   předání a novinky — kdežto „Copilot chce dvě změny“ a „za mainem o 3“ jsou data z **načteného**
+   detailu a konverzace. U PR, do kterého se nekliklo, se nemají kde vzít, takže by ta kapsle byla
+   prázdná u většiny řádků. Zapsané jako mezera, ne jako hotové.
+3. **`↵` se kreslí jako `⏎`.** Katalog zkratek kreslí `WindowShortcut.Key.return.glyph`, a to je
+   `⏎` — je to změřené (#441: monospace systémové písmo ten glyf **má**, kdežto `⇥` a `⎋` ne).
+   Dvě podoby jedné klávesy v jednom okně jsou horší než odchylka od kresby o jeden znak.
+4. **Patka pruhu má stříšku, ne šipku.** Návrh (sekce 45) kreslí `Zobrazit všechny +2 →`, tedy
+   týž tvar jako patka bloku, která **vede do sekce**. Patka pruhu ale rozbaluje na místě (viz
+   tabulka výš), takže by šipka slibovala přepnutí okna — kreslí se proto `⌄`, a po rozbalení
+   `Zobrazit méně ⌃`. Sekce v mockupu zůstává, jak ji kreslí deck: je to **záznam schválené
+   kresby**, ne popis kódu, a rozdíl je zapsaný tady.
+
+**Brief nahoře nedodává #515, ale #516.** Do té doby zůstává dnešní pozdrav a věta o pruzích
+(`Policy.boardSentence`). Tři věty složené session bez nástrojů jsou šestá session v tabulce
+u tvrdé podmínky č. 2 — vlastní rozhodnutí a vlastní issue.
+
+**Co #515 zrušilo, a co z toho zbylo jako mezera:**
+
+| Zrušeno | Zbylá mezera |
+|---|---|
+| **Karty** (`Dashboard`, čtyři `*Card`, `DashboardCard`, `Policy.destination`) | Žádná: čísla nese rail (`railQueueCount`, `railMineCount`, odznak dění) a stavový řádek (`Policy.summary`), tedy místa, která jsou vidět **ze všech** obrazovek |
+| **`DashboardDestination`, `AppStore.show(_ destination:)`** | Osa filtru `onlyBlocking` **zůstává**, ale zapíná se jedině odškrtnutím v nabídce filtru — jedno kliknutí navíc proti kartě `Blokuje`. Zapsané jako cena, ne jako opomenutí |
+| **Legenda `Nálezy podle reviewera`** (`ReviewerShareOfFindings`, `Policy.reviewerShares`) | Blok `Reviewery` postaví #514 a bude to **jiný tvar** (podíl v čase, ne sedmidenní součet), takže se nemá cenu držet téhož typu. **Tvrzení „nula v legendě není čisto“ (#383) odešlo s legendou** a patří zpátky, jak blok vznikne |
+| **`DashboardBlock`, `Policy.dashboardBlock`** | Z typu zbyla patka jako `BlockFooter` — prázdný obal kolem jedné vnořené struktury by byl mrtvá váha |
+| **`dashboardQueue`, `dashboardOwnPullRequests`** | Jeden getter (`boardEntries`) nad plným seznamem; rozřazení proběhne uvnitř `Policy.board` jednou na řádek |

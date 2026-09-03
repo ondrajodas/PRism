@@ -65,6 +65,9 @@ struct WindowShortcut: Equatable, Sendable {
         case fileTree
         case runAllReviews
         case openDraft
+        /// Otevřít první pull request v prvním pruhu desky (#515) — jediná zkratka okna
+        /// **bez modifikátoru**, takže nad otevřenou paletou se zakazuje.
+        case openFirstOnBoard
         /// Hledání v diffu (#152). `findInDiff` platí, kdykoli je diff na obrazovce; skákání mezi
         /// výskyty registruje **pruh sám**, takže existuje jedině otevřené.
         case findInDiff
@@ -271,6 +274,17 @@ extension Policy {
                 title: "Dopsat rozdělané review",
                 primary: .init(key: .character("d"), modifiers: [.command, .shift])
             )
+        // Holé `⏎` (#515) — deska otevře první pull request pruhu `Rozhodnout`. Je to **jediná
+        // kombinace v katalogu bez modifikátoru**, a smí to být proto, že domácí záložka žádné
+        // textové pole nemá; `⌘⏎` a `⌃⏎` zůstávají potvrzení odeslání v detailu PR, se kterým se
+        // deska na obrazovce nepotká. Nad otevřenou paletou ⌘K se zakazuje
+        // (`Policy.canOpenFirstOnBoard`) — zakázaná zkratka klávesu nebere a propadne dál, tentýž
+        // vzorec jako u `⌘⏎` v tabu `Zeptat se`.
+        case .openFirstOnBoard:
+            return WindowShortcut(
+                title: "Otevřít první na desce",
+                primary: .init(key: .return)
+            )
         // `⌘F` a `⌘G`/`⌘⇧G` jsou zkratky, které má na hledání celý systém, takže se nevymýšlejí.
         // `⌥↓` zůstává **nálezům** (#187): jedna klávesa na dvě věci znamená, že vyhraje ta
         // zaregistrovaná později, a poznalo by se to jedině tím, že jedna z nich „nefunguje“.
@@ -349,7 +363,7 @@ extension Policy {
         + [
             .nextFinding, .previousFinding, .reviewPanel, .backFromCommit,
             .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
-            .fileTree, .runAllReviews, .openDraft,
+            .fileTree, .runAllReviews, .openDraft, .openFirstOnBoard,
             .findInDiff, .nextSearchHit, .previousSearchHit,
             .toggleFileRead, .previousFile, .nextFile,
         ]

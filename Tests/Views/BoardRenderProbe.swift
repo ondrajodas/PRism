@@ -4,30 +4,32 @@ import Testing
 
 @testable import PRism
 
-/// Sonda, ne test (#291): vykreslí dashboard s blokem `Dění` (#443), aby se dal **vidět** a položit
-/// vedle sekce 31 návrhu.
+/// Sonda, ne test (#291): vykreslí **desku** (#515) s blokem `Dění` (#443), aby se dala
+/// **vidět** a položit vedle sekce 45 návrhu.
 ///
-/// Existuje proto, že `DashboardFooterSeparatorTests` odpovídá na „kolik je čar a jsou stejně
-/// silné“ a `ActivityRowShapeTests` na „vejde se úzký řádek na jednu řádku a co v něm není“,
-/// kdežto otázka *jak to vedle sebe vypadá* se z čísla nepozná. Zvlášť u téhle změny: blok stojí
-/// v **pravém sloupci pod `Co teď`**, tedy v 456 bodech, a jestli je useknutý titulek pořád
-/// k něčemu — a jestli `repo#číslo` s časem opravdu ustoupily jemu, ne naopak — se dá posoudit
-/// jedině okem.
+/// Existuje proto, že `BoardSeparatorTests` odpovídá na „kolik je čar a jsou stejně silné“
+/// a `ActivityRowShapeTests` na „vejde se úzký řádek na jednu řádku a co v něm není“, kdežto
+/// otázka *jak to vedle sebe vypadá* se z čísla nepozná. Od #515 je ta otázka ostřejší: vpravo
+/// v hlavičce pruhu stojí **akce s počtem a kapslí klávesy**, a to je první věc, která se do
+/// zúženého pruhu nevejde.
 ///
-/// **`NSHostingView` a `cacheDisplay`, ne `ImageRenderer`**: dashboard je `ScrollView` a ten se
+/// **`NSHostingView` a `cacheDisplay`, ne `ImageRenderer`**: deska je `ScrollView` a ten se
 /// offscreen nerasterizuje (změřeno u #237).
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes `TEST_RUNNER_PRISM_RENDER_DIR`.
 @MainActor
 @Suite(
-    "Sonda bloku dění na dashboardu (#443)",
+    "Sonda desky podle mého tahu (#515)",
     .enabled(if: ProcessInfo.processInfo.environment["PRISM_MEASURE"] != nil)
 )
-struct DashboardActivityRenderProbe {
-    /// Šířka okna z návrhu (dashboard má v mockupu 1134 bodů obsahu) a k ní užší okno, ve kterém
+struct BoardRenderProbe {
+    /// Šířka okna z návrhu (deska má v mockupu 1134 bodů obsahu), k ní užší okno, ve kterém
     /// pravý sloupec spadne pod 456 bodů — právě tam se pozná, jestli se ořezává titulek, nebo
-    /// souřadnice.
-    private let widths: [CGFloat] = [1240, 900]
+    /// souřadnice — a od #515 **nejužší povolené okno**: podlaha je 700 bodů (`RootView`)
+    /// a rail z ní ubere 64, takže na desku zbývá kolem 636. Akce v hlavičce pruhu
+    /// (`Pustit review na 6 ⌘⇧R`) je nejdelší prvek desky, takže se právě tady pozná, jestli
+    /// z ní ustoupí nadpis, počet, nebo ona sama.
+    private let widths: [CGFloat] = [1240, 900, 636]
 
     /// Prázdný blok se posuzuje taky: je to jediné místo, kde z celé sekce zbude jedna věta, a věta
     /// pod hlavičkou vypadá jinak než nakreslený seznam.
@@ -36,15 +38,15 @@ struct DashboardActivityRenderProbe {
         case empty = "prazdny"
     }
 
-    @Test("Vyrendrovat dashboard s blokem dění do PNG")
-    func rendersTheActivityBlock() async throws {
+    @Test("Vyrendrovat desku do PNG")
+    func rendersTheBoard() async throws {
         let directory = URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())
         for width in widths {
             for dark in [false, true] {
                 for scenario in Scenario.allCases {
                     let store = await store(scenario)
                     let url = directory.appending(
-                        path: "deni-\(Int(width))-\(dark ? "tmavy" : "svetly")-\(scenario.rawValue).png"
+                        path: "deska-\(Int(width))-\(dark ? "tmavy" : "svetly")-\(scenario.rawValue).png"
                     )
                     try write(store: store, width: width, dark: dark, to: url)
                     print("SONDA \(url.path)")
@@ -58,7 +60,7 @@ struct DashboardActivityRenderProbe {
     /// **Barevný režim se nastavuje dvakrát**: `NSAppearance` kvůli paletě (dynamické `NSColor`)
     /// a `colorScheme` kvůli `.primary`/`.secondary`. S jedním z toho vyjde tmavý text na tmavém.
     private func write(store: AppStore, width: CGFloat, dark: Bool, to url: URL) throws {
-        let scene = DashboardView(store: store, open: { _ in })
+        let scene = BoardView(store: store, open: { _ in })
             .frame(width: width, height: Self.height)
             .environment(\.colorScheme, dark ? .dark : .light)
             .tint(Palette.accent)

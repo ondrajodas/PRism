@@ -39,18 +39,18 @@ struct DashboardActivityTests {
 // MARK: - Strop a patka
 
 extension DashboardActivityTests {
-    /// **Tentýž strop jako u front** (#371), a je to celý důvod, proč blok na dashboardu nemá
-    /// vlastní číslo: dashboard je jedna obrazovka bez rolování.
-    @Test("Nad stropem kreslí pět nejnovějších a zbytek shrne patka")
+    /// **Osm od #515** (do té doby pět, tolik co bloky front): pravý sloupec drží od #515 dva
+    /// bloky místo tří, kdežto levý šest pruhů místo dvou bloků.
+    @Test("Nad stropem kreslí osm nejnovějších a zbytek shrne patka")
     func capsRowsAndSumsUpTheRest() {
         let block = Policy.dashboardActivity(events(42), since: nil, empty: nil)
 
-        #expect(block.rows.count == Policy.dashboardRowLimit)
+        #expect(block.rows.count == Policy.activityRowLimit)
         // Nejnovější nahoře: první řádek je ten s časem `now`, pátý o čtyři minuty starší.
         #expect(block.rows.first?.at == now)
-        #expect(block.rows.last?.at == now.addingTimeInterval(-4 * 60))
+        #expect(block.rows.last?.at == now.addingTimeInterval(-7 * 60))
         #expect(block.footer?.title == "Zobrazit celé dění")
-        #expect(block.footer?.rest == "+37")
+        #expect(block.footer?.rest == "+34")
         #expect(block.footer?.section == .activity)
     }
 
@@ -61,13 +61,13 @@ extension DashboardActivityTests {
         #expect(Policy.dashboardActivity(events(3), since: nil, empty: nil).footer == nil)
     }
 
-    /// **Ani při přesně pěti**: strop je „nejvýš pět“, ne „pět a pak patka“. Tady se to rozhoduje
+    /// **Ani při přesně osmi**: strop je „nejvýš osm“, ne „osm a pak patka“. Tady se to rozhoduje
     /// o jedničku, takže je to ten případ, na kterém se `>=` proti `>` pozná.
-    @Test("Přesně pět řádků patku nedostane")
+    @Test("Přesně osm řádků patku nedostane")
     func hasNoFooterAtExactlyTheLimit() {
-        let block = Policy.dashboardActivity(events(Policy.dashboardRowLimit), since: nil, empty: nil)
+        let block = Policy.dashboardActivity(events(Policy.activityRowLimit), since: nil, empty: nil)
 
-        #expect(block.rows.count == Policy.dashboardRowLimit)
+        #expect(block.rows.count == Policy.activityRowLimit)
         #expect(block.footer == nil)
     }
 
@@ -75,7 +75,7 @@ extension DashboardActivityTests {
     /// by si toho nevšiml: pět řádků vypadá platně, ať v nich stojí cokoli.
     @Test("Rozházené pořadí se srovná před řezem")
     func reordersBeforeCutting() {
-        let block = Policy.dashboardActivity(Array(events(9).reversed()), since: nil, empty: nil)
+        let block = Policy.dashboardActivity(Array(events(12).reversed()), since: nil, empty: nil)
 
         #expect(block.rows.first?.at == now)
         #expect(block.footer?.rest == "+4")
@@ -85,9 +85,9 @@ extension DashboardActivityTests {
     /// v patce — je to totéž slití, jaké dělá `Policy.activityLog` při zápisu.
     @Test("Duplicitní položka nezabere řádek ani se nepočítá do patky")
     func mergesDuplicates() {
-        let block = Policy.dashboardActivity(events(6) + events(6), since: nil, empty: nil)
+        let block = Policy.dashboardActivity(events(9) + events(9), since: nil, empty: nil)
 
-        #expect(block.rows.count == Policy.dashboardRowLimit)
+        #expect(block.rows.count == Policy.activityRowLimit)
         #expect(block.footer?.rest == "+1")
     }
 }
@@ -97,7 +97,7 @@ extension DashboardActivityTests {
 extension DashboardActivityTests {
     /// Nadpis nese **nepřečtené z celého záznamu**, ne z nakreslených řádků: je to totéž číslo,
     /// jaké nese odznak sekce v railu, a dvě čísla o jedné věci vedle sebe by se lišila.
-    @Test("Nadpis počítá nepřečtené z celého záznamu, ne z pěti řádků")
+    @Test("Nadpis počítá nepřečtené z celého záznamu, ne z osmi řádků")
     func countsUnreadAcrossTheWholeLog() {
         let block = Policy.dashboardActivity(
             events(20),
@@ -105,9 +105,9 @@ extension DashboardActivityTests {
             empty: nil
         )
 
-        // Jedenáct položek je novějších než značka, i když se nakreslí pět.
+        // Jedenáct položek je novějších než značka, i když se nakreslí osm.
         #expect(block.title == "Dění · 11 nových")
-        #expect(block.rows.count == Policy.dashboardRowLimit)
+        #expect(block.rows.count == Policy.activityRowLimit)
     }
 
     /// **Bez značky je nové všechno** — tatáž volba jako u odznaku (`Policy.unreadActivity`):
@@ -261,21 +261,20 @@ extension DashboardActivityTests {
 // MARK: - Blok je součástí jednoho snímku
 
 extension DashboardActivityTests {
-    /// **Jedno volání za překreslení** (#443): blok je v témže `Dashboard`, který si view bere
-    /// jednou — ne vlastní getter, který by při každém průchodu tělem prošel záznam podruhé.
-    @Test("Dashboard nese blok dění v témže snímku")
+    /// **Jedno volání za překreslení** (#443, od #515 v `Board`): blok je v témže snímku, který
+    /// si view bere jednou — ne vlastní getter, který by při každém průchodu tělem prošel záznam
+    /// podruhé.
+    @Test("Deska nese blok dění v témže snímku")
     func carriesTheBlockInTheSnapshot() {
-        let dashboard = Policy.dashboard(
-            pullRequests: [],
-            records: [:],
-            drafts: [:],
-            activity: events(8),
+        let board = Policy.board(
+            entries: [],
+            activity: events(11),
             lastVisit: now.addingTimeInterval(-90),
             activityEmpty: nil
         )
 
-        #expect(dashboard.activity.rows.count == Policy.dashboardRowLimit)
-        #expect(dashboard.activity.footer?.rest == "+3")
-        #expect(dashboard.activity.title == "Dění · 2 nové")
+        #expect(board.activity.rows.count == Policy.activityRowLimit)
+        #expect(board.activity.footer?.rest == "+3")
+        #expect(board.activity.title == "Dění · 2 nové")
     }
 }
