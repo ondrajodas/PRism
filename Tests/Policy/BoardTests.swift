@@ -250,22 +250,30 @@ extension BoardTests {
         )
     }
 
-    /// **`K merge` je první a `Dopsat a odeslat` druhé** — z proklikání #515, tedy změna proti
-    /// kresbě z decku (*rozhodnout · přečíst · předat · k merge · čeká · dopsat*). Osa je
-    /// „jak blízko je řádek k tomu, aby míč nebyl u mě“, takže první jsou dva pruhy, ve kterých
-    /// je práce hotová a chybí ji odeslat.
+    /// **`K merge` je první, `Dopsat a odeslat` druhé a `Předat agentovi` poslední** — všechno tři
+    /// z proklikání #515, tedy změna proti kresbě z decku (*rozhodnout · přečíst · předat ·
+    /// k merge · čeká · dopsat*).
+    ///
+    /// Dvě rozhodnutí, ne jedno, a je to podstatné: první dvě položky plynou z **osy** („jak
+    /// blízko je řádek k tomu, aby míč nebyl u mě“), kdežto poslední místo pro `handOff` je
+    /// **pokyn člověka** — v té ose by vycházel pátý, nad tichým pruhem. Zapsané je to
+    /// u `WorkLane.order`; kdo bude pořadí posuzovat podle osy, nesmí ho podle ní „opravit“.
     ///
     /// Tvrdí se tu **celé pořadí literálem**, ne jen první položka: kdyby se osa změnila znovu,
     /// má spadnout tenhle test a ne render.
-    @Test("Pořadí pruhů začíná tím, co je hotové")
+    @Test("Pořadí pruhů začíná tím, co je hotové, a končí předáním")
     func putsTheFinishedWorkFirst() {
-        #expect(WorkLane.order == [.merge, .finishReview, .decide, .read, .handOff, .waiting])
+        #expect(WorkLane.order == [.merge, .finishReview, .decide, .read, .waiting, .handOff])
         #expect(Set(WorkLane.order) == Set(WorkLane.allCases))
         #expect(WorkLane.order.count == WorkLane.allCases.count)
-        // Zbylé čtyři si drží **relativní** pořadí z kresby, `merge` a `finishReview` se jen
-        // předsunuly. Kdyby se přeskládaly i ty, je to jiné rozhodnutí a chce vlastní záznam.
-        #expect(WorkLane.order.filter { $0 != .merge && $0 != .finishReview }
-            == [.decide, .read, .handOff, .waiting])
+        // `Předat agentovi` je **poslední**, a tvrdí se to zvlášť: je to jediná položka pořadí,
+        // která neplyne z osy, takže se nemá ztratit v literálu výš.
+        #expect(WorkLane.order.last == .handOff)
+        // Zbylé tři si drží **relativní** pořadí z kresby; přesunuly se jedině `merge`,
+        // `finishReview` a `handOff`. Kdyby se přeskládaly i ty tři, je to jiné rozhodnutí
+        // a chce vlastní záznam.
+        #expect(WorkLane.order.filter { $0 != .merge && $0 != .finishReview && $0 != .handOff }
+            == [.decide, .read, .waiting])
         // Deska pořadí **nepřeskládává** — bere ho z `WorkLane.order`.
         #expect(Policy.board(entries: entries(2)).lanes.map(\.lane) == WorkLane.order)
     }
@@ -388,10 +396,19 @@ extension BoardTests {
         #expect(row.showsPromptAction == false)  // bez `openPrompt` se tlačítko nekreslí
     }
 
-    /// **Cizí odpověď v předaném vlákně merge přebíjí** — `changed` je jediný stav předání, který
-    /// mluví o něčem nevyřízeném, a odpověď kolegy chci vidět **než** mergnu.
-    @Test("Nevyřízené předání (changed) drží PR v Předat agentovi i nad mergnutelnou větví")
-    func keepsAChangedHandoffInItsLane() {
+    /// **Ani nevyřízené předání merge nepřebíjí** (druhé proklikání #515 — ruší výjimku, kterou
+    /// tady stálo tvrzení přesně naopak).
+    ///
+    /// `changed` je stav, ve kterém je něco **nevyřízeného** — nepředaná položka, nová položka,
+    /// nebo cizí odpověď v předaném vlákně. Po prvním proklikání to PR drželo v `Předat agentovi`
+    /// i nad slévatelnou větví; pokyn zní, že **mergnutelný PR patří do `K merge`, tečka**.
+    ///
+    /// Tvrdí se to **s obsahem řádku v jednom testu**, a je to ta cennější polovina: kdyby se
+    /// s přesunem ztratila zmínka o předání, byla by to horší vada než špatný pruh. Pilulka
+    /// `1 k předání` na stavu předání **nezávisí vůbec** (`PullRequestRow.pendingHandoff` se ptá
+    /// jedině na autora a na počet), takže `changed` je v `K merge` vidět stejně jako `never`.
+    @Test("Nevyřízené předání (changed) jde do K merge a pilulku si nese")
+    func putsAChangedHandoffIntoMergeToo() {
         let board = Policy.board(
             entries: [own(1)],
             mine: ["ondrajodas"],
@@ -399,8 +416,27 @@ extension BoardTests {
             isMergeReady: { _ in true }
         )
 
-        #expect(lane(.handOff, in: board).rows.map(\.pullRequest.number) == [1])
-        #expect(lane(.merge, in: board).rows.isEmpty)
+        #expect(lane(.merge, in: board).rows.map(\.pullRequest.number) == [1])
+        #expect(lane(.handOff, in: board).rows.isEmpty)
+        #expect(board.visibleLanes.map(\.lane) == [.merge])
+
+        let row = PullRequestRow(
+            pullRequest: own(1).pullRequest,
+            reviewState: .clean,
+            ownership: .mine,
+            pending: 1
+        )
+        #expect(row.pendingHandoff == 1)
+
+        // A **nemergnutelný `changed` zůstává v `Předat agentovi`** — je to ta polovina pravidla,
+        // kterou by plošné „merge vyhrává“ rozbilo potichu.
+        let blocked = Policy.board(
+            entries: [own(1)],
+            mine: ["ondrajodas"],
+            handoff: { _ in WorkLaneTests.handoff(pending: 1, stage: .changed) },
+            isMergeReady: { _ in false }
+        )
+        #expect(lane(.handOff, in: blocked).rows.map(\.pullRequest.number) == [1])
     }
 
     /// A **akce nad `K merge` se tím nezměnila**: `Otevřít` bez klávesy, protože `⏎` patří

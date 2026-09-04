@@ -8642,7 +8642,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
 | `Policy.board(entries:mine:pending:isMergeReady:activity:lastVisit:activityEmpty:)`, `Policy.boardSentence(_:)` | Podklad domácí záložky (#515, `Board`) — **šest pruhů podle mého tahu** (kreslí se z nich jen neprázdné, `Board.visibleLanes`) a v témže snímku blok `Dění`. Nahradilo `Policy.dashboard` z #181: karty odešly, a s nimi `Dashboard`, `Dashboard.*Card`, `ReviewerShareOfFindings` i `reviewerShares`. **Jeden snímek na překreslení** (týž důvod jako u #331 a #443): deska prochází celý seznam a u vlastních PR se ptá na předání i na merge, takže getter na jeden pruh by tu práci udělal šestkrát. `pending` a `isMergeReady` jsou **uzávěry, ne mapy** — čtou se jen u vlastních PR. `boardSentence` mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a **nuly nepíše**; nad prázdnou deskou řekne slovem, že je čisto |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí řádků na domácí záložce (#181, #331, od #515 uvnitř pruhů) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první. Od #515 se řadí **jednou nad celým seznamem** a pruhy si z něj berou pořadí — řez nad špatně seřazeným vstupem by tiše ukázal jiných pět |
-| `Policy.lane(of:ownership:handoff:isMergeReady:)`, `Policy.isMergeReady(_:)`, `HandoffReport.outranksMerge` | Do kterého pruhu pull request patří (#515, `WorkLane`). **Právě jeden pruh na PR** — `switch` je vyčerpávající a návrat není optional; testuje se **vyčerpávajícím výčtem** (13 stavů × 2 × 2 × 2 × **5 stavů předání** × 2), protože rozřazení je věc, kterou se dá pokazit potichu. Pořadí priorit: draft přebíjí všechno (ručně psaná práce), běžící review je `waiting` (jinak by pruh `Přečíst` hlásil víc, než co jeho akce pustí), cizí PR se dělí na `notStarted → read` a zbytek `→ decide`, vlastní **na `isMergeReady → merge`** a teprve pak `pending > 0 → handOff`, zbytek `waiting`. **Slévatelnost přebíjí předání** (z proklikání #515, opačně proti první verzi) a jedinou výjimkou je `HandoffReport.Stage.changed` — jediný stav předání, který mluví o něčem **nevyřízeném** (typicky cizí odpověď v předaném vlákně). Rozhoduje o tom `HandoffReport.outranksMerge`, tedy vlastnost stavu předání, ne `if` uvnitř `lane`. Bere se proto **celý report, ne jen `pending`**: dvě čísla ze dvou volání téhož výpočtu by se dala rozejít. `isMergeReady(_:)` staví na `mergeOffer(…)` a bere z něj jednu výjimku: **zavřená brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`) — s výchozím vypnutým odesíláním by jinak byl pruh `K merge` navždycky prázdný |
+| `Policy.lane(of:ownership:handoff:isMergeReady:)`, `Policy.isMergeReady(_:)` | Do kterého pruhu pull request patří (#515, `WorkLane`). **Právě jeden pruh na PR** — `switch` je vyčerpávající a návrat není optional; testuje se **vyčerpávajícím výčtem** (13 stavů × 2 × 2 × 2 × **5 stavů předání** × 2 = 1 040), protože rozřazení je věc, kterou se dá pokazit potichu. Pořadí priorit: draft přebíjí všechno (ručně psaná práce), běžící review je `waiting` (jinak by pruh `Přečíst` hlásil víc, než co jeho akce pustí), cizí PR se dělí na `notStarted → read` a zbytek `→ decide`, vlastní **na `isMergeReady → merge`** a teprve pak `awaitsMove → handOff`, zbytek `waiting`. **Slévatelnost přebíjí předání vždycky** (druhé proklikání #515 — ruší výjimku pro `HandoffReport.Stage.changed`, kterou tu měla první oprava, a s ní `HandoffReport.outranksMerge`): stav předání se do rozřazování **nedostane vůbec** a je na to tvrzení nad celou mřížkou vstupů. Z reportu se čte jedině `awaitsMove`, tedy **tatáž otázka jako odznak `Moje PR` v railu**. `isMergeReady(_:)` staví na `mergeOffer(…)` a bere z něj jednu výjimku: **zavřená brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`) — s výchozím vypnutým odesíláním by jinak byl pruh `K merge` navždycky prázdný |
 | `Policy.laneAction(of:count:)`, `Policy.laneRowLimit(_:)`, `Policy.laneSlice(_:of:expanded:)`, `Policy.canOpenFirstOnBoard(count:isPaletteOpen:)` | Akce nad pruhem a strop na řádky (#515, `LaneAction`, `LaneSlice`). Akce nese **počet z vlastního pruhu**, takže se to, co je na tlačítku, nemá čím rozejít s tím, co akce udělá; **potvrzení má jedině `runReviews`** (jediná, která utratí víc než jednu session) a **prázdný pruh akci nedostane vůbec**. Zkratky jsou rozdané tak, aby na jednu kombinaci byla nejvýš jedna akce (#151, #184): `⏎` pruhu `Rozhodnout` (`isPrimary`), `⌘⇧R` review, `⌘⇧D` draftu — `K merge` má tutéž akci bez klávesy. Strop je **pět, tichý pruh dva**, a je to strop **o kresbě, ne o množině** (#371); patka **rozbaluje na místě**, protože žádná sekce railu nemá tutéž množinu jako pruh |
 | `Policy.dashboardActivity(_:since:empty:)`, `Policy.activityRowLimit` | Blok `Dění` na domácí záložce (#443, `DashboardActivity`): nadpis s počtem **nepřečtených z celého záznamu**, osm nejnovějších řádků, patka `Zobrazit celé dění +122 →` a jedna věta místo řádků, když je prázdno. Strop byl do #515 tentýž jako u front (pět); od #515 je **osm** a vlastní — pravý sloupec drží dva bloky místo tří, kdežto levý šest pruhů místo dvou bloků. Patku nese **`BlockFooter`** (do #515 `DashboardBlock.Footer`, který odešel s kartami) — druhá kresba patky by se s tou první rozešla. Značka poslední návštěvy jde dovnitř jako **vstup**, blok ji nikdy neposouvá |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
@@ -9203,7 +9203,7 @@ kterou se aplikace otevírá, je ale „co udělám teď“, a na tu odpovídalo
 závažnosti **uvnitř** jedné z těch dvou front. `Čeká na mě 13` je počet, ne tah.
 
 Deska proto skládá **tytéž řádky** podle toho, čí je tah: `K merge`, `Dopsat a odeslat`,
-`Rozhodnout`, `Přečíst`, `Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45; pořadí změnilo
+`Rozhodnout`, `Přečíst`, `Čeká na ostatní`, `Předat agentovi` (návrh, sekce 45; pořadí změnilo
 proklikání — viz níž). **Je to pohled, ne
 množina** — rozřazení podle autora platí dál a drží ho rail (`RailSection.queue`,
 `RailSection.mine`) i všechno, co čte jen cizí PR (#332): hromadné spuštění review, notifikace,
@@ -9220,10 +9220,11 @@ automat.
    **přesně** množina `AppStore.pullRequestsNotReviewed`; všechno ostatní je `Rozhodnout`, včetně
    čistého review (schválit je taky rozhodnutí) i selhání a zastaralých nálezů (tahem je podívat se
    a rozhodnout, co dál).
-4. **Vlastní PR se dělí podle toho, co se dá udělat — a slévatelnost je z toho nejsilnější
-   signál** (z proklikání #515; do té doby to bylo obráceně). Mergnutelný PR je `K merge`, i když
-   na něm něco zbývá předat; nemergnutelný se dělí jako dřív (`HandoffReport.pending > 0` je
-   `Předat agentovi`, tedy tatáž otázka jako odznak v railu, zbytek čeká).
+4. **Vlastní PR se dělí podle toho, co se dá udělat — a slévatelnost vyhrává vždycky**
+   (proklikání #515; do prvního kola to bylo obráceně, po prvním kole s jednou výjimkou).
+   Mergnutelný PR je `K merge`, i když na něm něco zbývá předat, a **výjimka z toho žádná není**;
+   nemergnutelný se dělí jako dřív (`HandoffReport.awaitsMove` je `Předat agentovi`, tedy tatáž
+   otázka jako odznak v railu, zbytek čeká).
 
    **Projevilo se to na schváleném PR se všemi osmi checky zelenými**
    ([`keboola/job-queue-daemon#934`](https://github.com/keboola/job-queue-daemon/pull/934)), který
@@ -9231,31 +9232,30 @@ automat.
    přitom **dobu trvanlivosti** — zelené CI a slévatelná větev zítra platit nemusí —, kdežto
    nepředaná položka počká.
 
-   **Jedinou výjimkou je `HandoffReport.Stage.changed`** (`HandoffReport.outranksMerge`), a je to
-   rozhodnutí **po případech, ne plošné**, protože „něco zbývá předat“ znamená u každého stavu
-   jinou věc:
-
-   | Stav předání | Přebíjí merge? | Proč |
-   |---|---|---|
-   | `changed` | **ano** | Jediný stav, který mluví o něčem **nevyřízeném**: nepředaná položka, nová položka, nebo **cizí odpověď v předaném vlákně**. Ta poslední je důvod celé výjimky — odpověď kolegy ve vlákně, které jsem předal agentovi, chci vidět **než** mergnu |
-   | `never` | ne | Nic se nepředávalo, takže nic není „v letu“. Položky k předání jsou nabídka, ne rozdělaná práce |
-   | `unverified` | ne | „Neví se, proti čemu se předávalo“ je tvrzení o minulosti, ne úkol |
-   | `outdated` | ne | „Zadání mluví o kódu, který na PR není“ je taky o minulosti — a nad PR, který je **teď** slévatelný, je to informace |
-   | `delivered` | ne | Předáno a nic nového; `pending` je u něj nula, takže by se do `handOff` nedostal ani předtím |
+   **Zrušená výjimka pro `HandoffReport.Stage.changed`.** První oprava nechala jeden stav předání
+   merge přebíjet: `changed` je jediný, který mluví o něčem **nevyřízeném** (nepředaná položka,
+   nová položka, nebo cizí odpověď v předaném vlákně), a taková odpověď se má vidět **než** se
+   mergne. Druhé proklikání to zrušilo celé: **když je PR mergnutelný, patří do `K merge`,
+   tečka.** S výjimkou odešel i `HandoffReport.outranksMerge` — vlastnost, kterou by po zrušení
+   nikdo nečetl, je mrtvá váha, která svádí spolehnout se na ni. `stage` se od té doby do
+   rozřazování **nedostane vůbec** a `lane` čte z reportu jedině `awaitsMove`.
 
    **Informace o předání se přesunem neztrácí, a nebylo pro to potřeba nic přidávat**: pilulka
    `N k předání` i `Prompt →` visí na **řádku** (`PullRequestRow.pendingHandoff`,
-   `showsPromptAction`), ne na pruhu — obojí se řídí jedině tím, že je PR můj a že něco zbývá.
-   Jedna podoba řádku, ne třetí (#172). Zvažovalo se přidat do řádku v `K merge` vlastní značku;
-   **zamítnuto**, protože by to byla druhá kresba jedné informace a rozešla by se s tou první.
+   `showsPromptAction`), ne na pruhu — obojí se řídí jedině tím, že je PR můj a že něco zbývá,
+   takže **na stavu předání nezávisí ani jedna z nich** a `changed` je v `K merge` vidět stejně
+   jako kdekoli jinde. Jedna podoba řádku, ne třetí (#172). Zvažovalo se přidat do řádku
+   v `K merge` vlastní značku; **zamítnuto**, protože by to byla druhá kresba jedné informace
+   a rozešla by se s tou první.
 
-   Rozhoduje o tom vlastnost `HandoffReportu`, ne `if` uvnitř `lane`, a `lane` bere **celý
-   report**: dvě čísla ze dvou volání téhož výpočtu (`pending` zvlášť a `stage` zvlášť) by se
-   dala rozejít.
+   **Co se tím platí, a je to zapsané, ne přehlédnuté**: pilulka nese **počet**, ne stav, takže
+   z řádku není poznat, že to nevyřízené je zrovna cizí odpověď ve vlákně. Nebylo to poznat ani
+   v `Předat agentovi` — tam tu informaci nesl jedině **pruh**, a ten teď mluví o merge. Zapsané
+   jako cena rozhodnutí; kdyby začala chybět, je to nová kresba, ne návrat výjimky.
 
    **A jedna hranice, která se snadno splete se změněným pravidlem: blokující nález je skutečná
    překážka merge** (`MergeObstacle.blockingFindings`), takže PR s blokujícím nálezem zůstává
-   v `Předat agentovi` — a rozhoduje o tom `mergeOffer`, ne `outranksMerge`. Vypadá to jako
+   v `Předat agentovi` — a rozhoduje o tom `mergeOffer`, ne pravidlo o předání. Vypadá to jako
    „předání zase přebilo merge“, ale je to jiná věta: takový PR **není mergnutelný**. Na PR
    z proklikání to bylo poznat i v řádku — `2 k předání` **bez** odznaku `blokuje`. Vyšlo to
    najevo při stavbě sondy: s nálezy kategorie `correctness` scéna ukazovala `Předat agentovi`,
@@ -9312,12 +9312,22 @@ Platí se za to třemi věcmi a každá z nich má vlastní stráž:
   věta o celé desce (`Policy.boardEmpty`).
 
 **Pořadí pruhů je od proklikání jiné** (`WorkLane.order` = `merge`, `finishReview`, `decide`, `read`,
-`handOff`, `waiting`), a je to změna osy: deck kreslil pořadí od cizí práce k vlastní, kdežto teď
+`waiting`, `handOff`), a je to změna osy: deck kreslil pořadí od cizí práce k vlastní, kdežto teď
 jde o to, **jak blízko je řádek k tomu, aby míč nebyl u mě**. `K merge` je první, protože mergnout je
 nejlevnější tah a jediný, po kterém řádek z desky rovnou zmizí; `Dopsat a odeslat` jde z konce na
-druhé místo, protože je to tentýž druh „skoro hotovo“. Zbylé čtyři si **relativní pořadí drží beze
-změny**. A pozor na jednu záměnu: že `finishReview` „přebíjí všechno“, je věta o **rozřazení**
-(`Policy.lane`), ne o pořadí kresby.
+druhé místo, protože je to tentýž druh „skoro hotovo“.
+
+**`Předat agentovi` je poslední, a to z osy neplyne** (druhé proklikání #515 — ruší jeho páté místo
+z prvního kola). V ose vycházel **nad** tichým pruhem: je to vlastní práce, na kterou nikdo nečeká.
+Rozhodlo, že **návrhy od agenta jsou nejnižší priorita** — je to nabídka, kterou si můžu vzít,
+kdežto v tichém pruhu se aspoň dozvím, na co se čeká. **Osu to nemění**, a je to napsané i u
+`WorkLane.order`: kdo bude pořadí posuzovat podle osy, dostane u `handOff` páté místo a **nesmí ho
+podle toho „opravit“**. Zbylé tři (`decide`, `read`, `waiting`) si relativní pořadí z kresby drží
+beze změny.
+
+A pozor na jednu záměnu: že `finishReview` „přebíjí všechno“, je věta o **rozřazení**
+(`Policy.lane`), ne o pořadí kresby. Stejně tak `⏎` patří `Rozhodnout` proto, že na něj klávesu
+kreslí návrh — **ne proto, že by byl první pruh**.
 
 **Co #515 zrušilo, a proč:**
 

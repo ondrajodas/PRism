@@ -4187,7 +4187,9 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <p class="muted">
         Domov jsou proto <b>pruhy podle mého tahu</b>, a to <b>v pořadí od hotového k rozdělanému</b>
         (z proklikání, mění pořadí z decku): <em>K merge</em>, <em>Dopsat a odeslat</em>,
-        <em>Rozhodnout</em>, <em>Přečíst</em>, <em>Předat agentovi</em>, <em>Čeká na ostatní</em>.
+        <em>Rozhodnout</em>, <em>Přečíst</em>, <em>Čeká na ostatní</em>, <em>Předat agentovi</em>.
+        <b>Návrhy od agenta jsou nejnižší priorita</b>, takže <em>Předat agentovi</em> stojí až za
+        tichým pruhem — z osy pořadí to neplyne, je to rozhodnutí z druhého proklikání.
         <b>Prázdný pruh se nekreslí vůbec</b> — na obrázku proto chybí <em>Dopsat a odeslat</em>.
         Cizí a vlastní PR leží v jedné desce, protože tah je osa práce; autor
         zůstává poznat šipkou <code>↑</code> v mintu a v railu zůstávají <em>Fronta</em>
@@ -4388,8 +4390,47 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                   </div>
                 </div>
 
+                <!-- Čeká na ostatní: tichý pruh. Ztlumený, nejvýš dva řádky, bez akce —
+                     je to jediný pruh, ve kterém nic nedělám. -->
+                <div class="block brd-quiet">
+                  <header>
+                    <span>Čeká na ostatní <span class="cnt">4</span></span>
+                    <span class="more">nic k udělání</span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">chore: conflict probe for 467</span>
+                      </div>
+                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #9</span></div>
+                    </div>
+                    <div class="right"><span class="pill idle">čeká na CI</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico draft">◑</span>
+                        <span class="title">chore: rebase probe for 466</span>
+                      </div>
+                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #8</span></div>
+                    </div>
+                    <div class="right"><span class="pill idle">draft</span></div>
+                  </div>
+
+                  <div class="more-rows">Zobrazit všechny <span class="count">+2</span> →</div>
+                </div>
+
                 <!-- Předat agentovi: vlastní PR, na kterém něco zbývá předat. Šipka `↑`
-                     v mintu je jediné, co v desce drží autora poznat. -->
+                     v mintu je jediné, co v desce drží autora poznat.
+
+                     **Je to poslední pruh** (z druhého proklikání, mění pořadí z prvního):
+                     návrhy od agenta jsou nejnižší priorita, protože je nikdo nečeká. Z osy
+                     pořadí to neplyne — v ní vycházel nad tichým pruhem. -->
                 <div class="block">
                   <header>
                     <span>Předat agentovi <span class="cnt">2</span></span>
@@ -4432,40 +4473,6 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                   </div>
                 </div>
 
-                <!-- Čeká na ostatní: tichý pruh. Ztlumený, nejvýš dva řádky, bez akce —
-                     je to jediný pruh, ve kterém nic nedělám. -->
-                <div class="block brd-quiet">
-                  <header>
-                    <span>Čeká na ostatní <span class="cnt">4</span></span>
-                    <span class="more">nic k udělání</span>
-                  </header>
-
-                  <div class="qrow">
-                    <div class="stripe" style="background: var(--line);"></div>
-                    <div class="mid">
-                      <div class="t1">
-                        <span class="pr-ico" style="color: var(--mint);">↑</span>
-                        <span class="title">chore: conflict probe for 467</span>
-                      </div>
-                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #9</span></div>
-                    </div>
-                    <div class="right"><span class="pill idle">čeká na CI</span></div>
-                  </div>
-
-                  <div class="qrow">
-                    <div class="stripe" style="background: var(--line);"></div>
-                    <div class="mid">
-                      <div class="t1">
-                        <span class="pr-ico draft">◑</span>
-                        <span class="title">chore: rebase probe for 466</span>
-                      </div>
-                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #8</span></div>
-                    </div>
-                    <div class="right"><span class="pill idle">draft</span></div>
-                  </div>
-
-                  <div class="more-rows">Zobrazit všechny <span class="count">+2</span> →</div>
-                </div>
               </div>
 
               <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0;">
@@ -4583,12 +4590,13 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           tahem podívat se a rozhodnout, co dál. <em>Přečíst</em> je to, na čem review
           <b>neběželo</b>. <em>Předat agentovi</em> je vlastní PR s něčím k předání, <em>K
           merge</em> vlastní bez známé překážky. <em>Čeká na ostatní</em> je zbytek — běžící
-          review i vlastní PR, o kterém se nic z toho tvrdit nedá. <b>Slévatelnost přebíjí
-          předání</b> (viz poznámka 159), takže mergnutelný PR je <em>K merge</em>, i když na něm
-          něco zbývá. <em>Dopsat a odeslat</em>
+          review i vlastní PR, o kterém se nic z toho tvrdit nedá. <b>Slévatelnost vyhrává
+          vždycky</b> (viz poznámka 159), takže mergnutelný PR je <em>K merge</em>, i když na něm
+          něco zbývá, a <b>výjimka z toho žádná není</b>. <em>Dopsat a odeslat</em>
           <b>přebíjí všechno</b>: rozdělané review je ručně psaná práce a ta má přednost —
           a je to věta o tom, do <b>kterého pruhu</b> PR spadne, ne o tom, kolikátý ten pruh
-          na obrazovce stojí (kreslí se druhý, za <em>K merge</em>).</span>
+          na obrazovce stojí (kreslí se druhý, za <em>K merge</em>). Stejně tak
+          <em>Předat agentovi</em> stojí <b>poslední</b> kvůli prioritě, ne kvůli rozřazení.</span>
         </span>
       </div>
       <div class="note">
@@ -4662,17 +4670,18 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <div class="note">
         <span class="num">159</span>
         <span class="body">
-          <b>Slévatelnost přebíjí předání</b>
-          <span><b>Změna proti kresbě, z proklikání</b>: do té doby rozhodovalo „něco zbývá
+          <b>Mergnutelnost vyhrává vždycky</b>
+          <span><b>Změna proti kresbě, ze dvou kol proklikání</b>: nejdřív rozhodovalo „něco zbývá
           předat“ dřív než merge, takže schválený PR se všemi checky zelenými ležel
           v <em>Předat agentovi</em>. Slévatelnost je ale nejsilnější signál, jaký vlastní PR má,
-          a tah <em>mergni to</em> má <b>dobu trvanlivosti</b>. Rozhoduje se to <b>po případech</b>:
-          přebít merge smí jedině stav <code>changed</code>, tedy „něco je nevyřízené“ — typicky
-          cizí odpověď v předaném vlákně, a tu chci vidět <b>než</b> mergnu. „Nepředáno“,
-          „neví se, proti čemu“ a „zadání zastaralo“ jsou tvrzení o minulosti, ne úkoly.
-          Informace se přesunem <b>neztrácí</b>: pilulka <code>2 k předání</code> i
-          <code>Prompt →</code> visí na <b>řádku</b>, ne na pruhu — viz druhý řádek
-          <em>K merge</em>.</span>
+          a tah <em>mergni to</em> má <b>dobu trvanlivosti</b>. První oprava z toho nechala jednu
+          výjimku (stav <code>changed</code>, tedy „něco je nevyřízené“ — typicky cizí odpověď
+          v předaném vlákně); <b>druhé kolo ji zrušilo</b>: když je PR mergnutelný, patří do
+          <em>K merge</em>, tečka. Informace se přesunem <b>neztrácí</b>: pilulka
+          <code>2 k předání</code> i <code>Prompt →</code> visí na <b>řádku</b>, ne na pruhu, a na
+          stavu předání nezávisí — viz druhý řádek <em>K merge</em>. <b>Skutečná překážka se tím
+          neobchází</b>: PR s blokujícím nálezem mergnutelný není, takže v <em>Předat agentovi</em>
+          zůstane.</span>
         </span>
       </div>
     </div>

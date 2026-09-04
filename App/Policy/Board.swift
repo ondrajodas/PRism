@@ -73,9 +73,9 @@ enum LaneAction: Hashable, Sendable {
     ///
     /// **`isPrimary` rozhoduje o klávese, ne o kresbě.** `⏎` smí patřit **jedinému** pruhu —
     /// dvě tlačítka s jednou kombinací znamenají, že vyhraje to zaregistrované později (#151,
-    /// #184), a poznalo by se to tím, že jedna „nefunguje“. Dostane ji `Rozhodnout`, protože je
-    /// první a je to ten pruh, na který návrh (sekce 45) klávesu kreslí; `K merge` má tutéž akci
-    /// bez klávesy.
+    /// #184), a poznalo by se to tím, že jedna „nefunguje“. Dostane ji `Rozhodnout`, protože je to
+    /// ten pruh, na který návrh (sekce 45) klávesu kreslí — **ne proto, že by byl první**; první je
+    /// od prvního proklikání #515 `K merge` a má tutéž akci **bez** klávesy.
     case openFirst(count: Int, isPrimary: Bool)
     /// Pustit review na všechno, co v pruhu leží (`read`).
     ///
@@ -206,8 +206,8 @@ extension Policy {
     ///   - handoff: v jakém stavu je předání na vlastním PR. Uzávěrem, ne mapou: čte se jen
     ///     u vlastních PR a skládat pro desku kopii všech načtených konverzací při každém průchodu
     ///     tělem by byla práce za odpověď, kterou nikdo nepřečte (tatáž úvaha jako
-    ///     u `ownPullRequestsAwaitingMove`). Od proklikání #515 se bere **celý report**, ne jen
-    ///     `pending` — o tom, jestli předání přebije merge, rozhoduje `stage`.
+    ///     u `ownPullRequestsAwaitingMove`). Rozřazení z něj čte **jedině `awaitsMove`**
+    ///     (`Policy.lane`) — `stage` se do něj od druhého proklikání #515 nedostane vůbec.
     ///   - isMergeReady: je vlastní PR bez známé překážky? Taky uzávěrem, a s předfiltrem na
     ///     straně storu — bez načteného detailu se `mergeOffer` neskládá vůbec.
     static func board(

@@ -87,17 +87,19 @@ autora. Otázka, se kterou se aplikace otevírá, je „co udělám teď“ — 
 `Čeká na mě 13` je počet, ne tah. Deska proto skládá tytéž řádky do **šesti pruhů**, a to
 v pořadí **od hotového k rozdělanému**: `K merge` (vlastní PR bez známé překážky),
 `Dopsat a odeslat` (rozdělané review), `Rozhodnout` (cizí PR, na kterém review doběhlo — i to čisté,
-protože schválit je taky rozhodnutí), `Přečíst` (na čem review neběželo), `Předat agentovi`
-(vlastní PR s něčím k předání) a `Čeká na ostatní` (tichý pruh, ve kterém se nic nedělá).
+protože schválit je taky rozhodnutí), `Přečíst` (na čem review neběželo), `Čeká na ostatní` (tichý
+pruh, ve kterém se nic nedělá) a `Předat agentovi` (vlastní PR s něčím k předání).
 Osa toho pořadí je **jak blízko je řádek k tomu, aby míč nebyl u mě** — mergnout je nejlevnější tah
-a jediný, po kterém řádek z desky rovnou zmizí. Uvnitř pruhu se řadí **podle závažnosti**, ne podle
-času.
+a jediný, po kterém řádek z desky rovnou zmizí. `Předat agentovi` je **poslední**, a to z osy
+neplyne: návrhy od agenta jsou nejnižší priorita, protože je nikdo nečeká. Uvnitř pruhu se řadí
+**podle závažnosti**, ne podle času.
 
-**Slévatelnost je z vlastního PR nejsilnější signál**, takže mergnutelný PR je `K merge`, i když na
-něm něco zbývá předat agentovi. Jedinou výjimkou je stav předání, ve kterém je něco
-**nevyřízeného** — typicky cizí odpověď v předaném vlákně, a tu je potřeba vidět **než** se mergne.
-Informace o předání se přesunem neztrácí: pilulka `N k předání` i `Prompt →` visí na **řádku**, ne
-na pruhu, takže jdou s PR do kteréhokoli z nich.
+**Slévatelnost je z vlastního PR nejsilnější signál, a vyhrává vždycky**: mergnutelný PR je
+`K merge`, i když na něm něco zbývá předat agentovi, a **výjimka z toho žádná není** — když je PR
+mergnutelný, patří do `K merge`. Informace o předání se přesunem neztrácí: pilulka `N k předání`
+i `Prompt →` visí na **řádku**, ne na pruhu, takže jdou s PR do kteréhokoli z nich. **Skutečná
+překážka merge se tím neobchází** — PR s blokujícím nálezem mergnutelný není, takže v `Předat
+agentovi` zůstane.
 
 **Vpravo v hlavičce pruhu je akce nad celým pruhem**: `Otevřít první ⏎`, `Pustit review na 2 ⌘⇧R`,
 `Sestavit 2 zadání`, `Dopsat ⌘⇧D`. Potvrzení si nechává jedině spuštění review — je to jediná akce

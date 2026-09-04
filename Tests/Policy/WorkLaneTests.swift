@@ -6,15 +6,19 @@ import Testing
 /// Rozřazení pull requestu do pruhu desky (#515).
 ///
 /// **Testuje se vyčerpávajícím výčtem**, a je to jediný způsob, jak to udělat: `Policy.lane` má
-/// čtyři vstupní osy (čí PR to je, v jakém stavu je review, leží tu draft, dá se to mergnout)
-/// a **každá kombinace musí vyjít do právě jednoho pruhu**. Rozřazení je věc, kterou se dá
-/// pokazit potichu — vypadne-li PR z desky, na obrazovce po něm nezbude nic a počty pruhů budou
-/// dál vypadat platně.
+/// **pět** vstupních os (čí PR to je, v jakém stavu je review, leží tu draft, co zbývá předat
+/// a v jakém stavu to předání je, dá se to mergnout) a **každá kombinace musí vyjít do právě
+/// jednoho pruhu**. Rozřazení je věc, kterou se dá pokazit potichu — vypadne-li PR z desky, na
+/// obrazovce po něm nezbude nic a počty pruhů budou dál vypadat platně.
+///
+/// **Osa `Stage` v rozhodování od druhého proklikání #515 nehraje roli, a právě proto ve výčtu
+/// zůstává**: je to stráž, která nepustí `stage` do `Policy.lane` zpátky (viz
+/// `handoffStageChangesNothing`).
 ///
 /// Tvrdí se tedy trojice, ne jeden příklad:
 ///
-/// 1. **totalita** — nad každou kombinací vyjde pruh (drží `switch` a nevoliteľný návrat, ale
-///    kombinací je 13 × 2 × 2 × 2 × 2 a rozhodování má priority, takže se to prochází);
+/// 1. **totalita** — nad každou kombinací vyjde pruh (drží `switch` a nevolitelný návrat, ale
+///    kombinací je 13 × 2 × 2 × 2 × 5 × 2 a rozhodování má priority, takže se to prochází);
 /// 2. **disjunktnost** — `Policy.board` každý řádek zařadí právě jednou, takže součet pruhů je
 ///    počet PR;
 /// 3. **pravidla jmenovitě** — u každé priority jeden případ, který se dá přečíst jako věta.
@@ -77,8 +81,9 @@ struct WorkLaneTests {
         )
     }
 
-    /// Report s **jedním** rozhodujícím obsahem: kolik zbývá předat a v jakém stavu to je.
-    /// Zbytek polí se do rozřazování nedostane a je na to tvrzení (`ignoresTheRestOfTheReport`).
+    /// Report se **dvěma** osami výčtu: kolik zbývá předat a v jakém stavu to je. Do rozřazování
+    /// se dostane jedině to první (`awaitsMove`) a je na to dvojice tvrzení
+    /// (`handoffStageChangesNothing`, `ignoresTheRestOfTheReport`).
     static func handoff(pending: Int, stage: HandoffReport.Stage) -> HandoffReport {
         HandoffReport(
             stage: stage,
@@ -105,7 +110,15 @@ extension WorkLaneTests {
         #expect(Self.states.count == 13)
     }
 
-    /// **Nad každou kombinací vyjde pruh** — a je to 208 kombinací, ne jeden příklad.
+    /// A totéž o **stavech předání**: `Stage` má asociovaný typ, takže `CaseIterable` být nemůže
+    /// a výčet je ruční. Vlastní tvrzení má proto, že se na tu osu ptá **celý výčet** níž —
+    /// přidaný stav by z něj bez tohohle čísla vypadl beze slova.
+    @Test("Výčet stavů předání je úplný")
+    func coversEveryHandoffStage() {
+        #expect(Self.stages.count == 5)
+    }
+
+    /// **Nad každou kombinací vyjde pruh** — a je to 1 040 kombinací, ne jeden příklad.
     ///
     /// Tvrzení je zdánlivě prázdné (návratový typ není optional), ale prázdné není: prochází se
     /// jím **pořadí priorit**, a to je to jediné, co se v téhle funkci dá pokazit. Kdyby se
@@ -211,21 +224,21 @@ extension WorkLaneTests {
         }
     }
 
-    /// Vlastní PR: **merge přebíjí předání** (z proklikání #515, mění pravidlo přesně naopak).
+    /// Vlastní PR: **slévatelnost vyhrává vždycky** (druhé proklikání #515 — ruší výjimku pro
+    /// `changed`, kterou tady stálo po prvním).
     ///
     /// Vzniklo z toho, že schválený PR se všemi checky zelenými ležel v `Předat agentovi`
     /// (`keboola/job-queue-daemon#934`): `pending > 0` rozhodovalo dřív než merge. Slévatelnost je
-    /// ale nejsilnější signál, jaký vlastní PR má, a tah „mergni to“ má **dobu trvanlivosti**.
+    /// ale nejsilnější signál, jaký vlastní PR má, a tah „mergni to“ má **dobu trvanlivosti** —
+    /// takže mergnutelný PR patří do `K merge`, tečka.
     ///
-    /// **Jedinou výjimkou je `changed`** — jediný stav předání, který mluví o něčem
-    /// **nevyřízeném** (typicky o cizí odpovědi v předaném vlákně, a tu chci vidět **než** mergnu).
-    /// Rozhoduje se po případech, ne plošně, takže se to tvrdí **přes všech pět stavů**.
-    @Test("Vlastní PR: merge přebíjí předání, jedině changed ne")
+    /// Tvrdí se to **přes všech pět stavů předání**, protože přesně tady se lišila předchozí verze:
+    /// plošné „přebíjí vždycky“ i výjimka pro jeden stav by prošly jedním příkladem.
+    @Test("Vlastní PR: merge přebíjí předání ve všech pěti stavech")
     func mergeBeatsHandoff() {
         for stage in Self.stages {
-            let expected: WorkLane = stage == .changed ? .handOff : .merge
             #expect(
-                lane(.clean, ownership: .mine, pending: 2, stage: stage, isMergeReady: true) == expected,
+                lane(.clean, ownership: .mine, pending: 2, stage: stage, isMergeReady: true) == .merge,
                 "\(stage)"
             )
         }
@@ -239,22 +252,59 @@ extension WorkLaneTests {
         }
         #expect(lane(.clean, ownership: .mine, pending: 0, stage: .delivered, isMergeReady: true) == .merge)
         #expect(lane(.clean, ownership: .mine, pending: 0, stage: .delivered, isMergeReady: false) == .waiting)
-        // A `changed` bez čeho předat je taky `merge`: přebíjí **nevyřízené položky**, ne sám sebe.
-        #expect(lane(.clean, ownership: .mine, pending: 0, stage: .changed, isMergeReady: true) == .merge)
+        // A nemergnutelný PR **bez** čeho předat čeká, ať je stav předání jaký chce: `handOff`
+        // rozhoduje počet, ne razítko.
+        for stage in Self.stages {
+            #expect(
+                lane(.clean, ownership: .mine, pending: 0, stage: stage, isMergeReady: false) == .waiting,
+                "\(stage)"
+            )
+        }
     }
 
-    /// **`outranksMerge` je vlastnost stavu předání, a tvrdí se výčtem** — plošné „předání přebíjí
-    /// merge“ i plošné „nepřebíjí nikdy“ by prošly jedním příkladem.
-    @Test("Merge přebíjí čtyři stavy předání z pěti")
-    func outranksMergeOnlyWhenSomethingIsUnresolved() {
-        let outranking = Self.stages.filter { Self.handoff(pending: 1, stage: $0).outranksMerge }
-
-        #expect(outranking == [.changed])
-        #expect(Self.stages.count == 5)
+    /// **Stav předání na pruh nemá vliv, a je to stráž, ne poznámka** (druhé proklikání #515).
+    ///
+    /// Po prvním proklikání tu byla výjimka: `changed` držel PR v `Předat agentovi` i nad
+    /// slévatelnou větví. Pokyn ji zrušil celou, takže `HandoffReport.outranksMerge` zanikl — a to
+    /// se dá tvrdit jedině takhle: nad **celou mřížkou** vstupů musí `stage` vyjít nerozlišitelně.
+    /// Kdyby se vrátila jakákoli podmínka na `stage`, spadne to tady, ne v renderu.
+    @Test("Stav předání pruhem nehýbe v žádné kombinaci")
+    func handoffStageChangesNothing() {
+        for state in Self.states {
+            for ownership in [PullRequestOwnership.theirs, .mine] {
+                for hasDraft in [false, true] {
+                    for pending in [0, 3] {
+                        for ready in [false, true] {
+                            let reference = lane(
+                                state,
+                                ownership: ownership,
+                                hasDraft: hasDraft,
+                                pending: pending,
+                                stage: .never,
+                                isMergeReady: ready
+                            )
+                            for stage in Self.stages {
+                                #expect(
+                                    lane(
+                                        state,
+                                        ownership: ownership,
+                                        hasDraft: hasDraft,
+                                        pending: pending,
+                                        stage: stage,
+                                        isMergeReady: ready
+                                    ) == reference,
+                                    "\(state) \(ownership) draft=\(hasDraft) pending=\(pending) \(stage)"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    /// Do rozřazování jde z reportu **`pending` a `stage`, nic jiného**. Kdyby se opřelo
-    /// o `staleFindings` nebo o razítko, začal by pruh záležet na tom, jestli se načetla
+    /// Do rozřazování jde z reportu **jedině `pending`** (přes `awaitsMove`), nic jiného. Kdyby se
+    /// opřelo o `staleFindings` nebo o razítko, začal by pruh záležet na tom, jestli se načetla
     /// konverzace — a to je stav, který se mění pod rukou.
     @Test("Zbytek reportu na pruh nemá vliv")
     func ignoresTheRestOfTheReport() {

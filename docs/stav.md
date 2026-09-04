@@ -7423,24 +7423,27 @@ nedá přečíst jako „čisto“.
 
 **Domov se přeskládal podle tahu, ne podle autora.** Karty (#181, #371) a dvě fronty podle autora
 (#331) vystřídalo **šest pruhů**: `K merge`, `Dopsat a odeslat`, `Rozhodnout`, `Přečíst`,
-`Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
-**vyčerpávajícím výčtem** — 208 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
+`Čeká na ostatní`, `Předat agentovi` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
+**vyčerpávajícím výčtem** — 1 040 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
 
-**Tři věci se změnily z proklikání, tedy proti odsouhlasené kresbě.** Třetí je **rozřazení**:
-mergnutelný vlastní PR je `K merge`, i když na něm něco zbývá předat — projevilo se to na
-schváleném PR se všemi osmi checky zelenými (`keboola/job-queue-daemon#934`), který ležel
-v `Předat agentovi`, protože `pending > 0` rozhodovalo dřív než merge. Rozhoduje se to **po
-případech**: přebít merge smí jedině `HandoffReport.Stage.changed`, tedy jediný stav, který mluví
-o něčem **nevyřízeném** (typicky cizí odpověď v předaném vlákně, a tu chci vidět **než** mergnu);
-„nepředáno“, „neví se, proti čemu“ a „zadání zastaralo“ jsou tvrzení o minulosti. **Informace se
-tím neztrácí a nebylo pro to potřeba nic přidávat** — pilulka `N k předání` i `Prompt →` visí na
-řádku, ne na pruhu.
+**Z proklikání se změnily čtyři věci, tedy proti odsouhlasené kresbě.** Nejsilnější je
+**rozřazení**: mergnutelný vlastní PR je `K merge`, i když na něm něco zbývá předat — projevilo se
+to na schváleném PR se všemi osmi checky zelenými (`keboola/job-queue-daemon#934`), který ležel
+v `Předat agentovi`, protože `pending > 0` rozhodovalo dřív než merge. **Výjimka z toho žádná
+není**: první oprava nechala merge přebíjet stav `changed` (nevyřízená položka, typicky cizí
+odpověď v předaném vlákně), druhé proklikání to zrušilo celé — **když je PR mergnutelný, patří do
+`K merge`, tečka** —, a s tou výjimkou zanikl i `HandoffReport.outranksMerge`. **Informace se tím
+neztrácí a nebylo pro to potřeba nic přidávat** — pilulka `N k předání` i `Prompt →` visí na řádku,
+ne na pruhu, a na stavu předání nezávisí. **Blokující nález zůstává skutečnou překážkou**
+(rozhoduje `mergeOffer`), takže s ním PR mergnutelný není.
 
-**Zbylé dvě věci z proklikání:** `K merge` šlo z čtvrtého
+**Zbylé tři věci z proklikání:** `K merge` šlo z čtvrtého
 místa **na první** (a s ním `Dopsat a odeslat` z konce na druhé): osa pořadí přestala být „od cizí
 práce k vlastní“ a je „jak blízko je řádek k tomu, aby míč nebyl u mě“ — mergnout je nejlevnější tah
-a jediný, po kterém řádek z desky rovnou zmizí. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
-i první verze měly všech šest, i s nulou. Zbylé čtyři pruhy si relativní pořadí drží beze změny.
+a jediný, po kterém řádek z desky rovnou zmizí. **`Předat agentovi` je poslední**, a to z té osy
+neplyne (v ní vycházel pátý, nad tichým pruhem) — je to pokyn: návrhy od agenta jsou nejnižší
+priorita, protože je nikdo nečeká. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
+i první verze měly všech šest, i s nulou. Zbylé tři pruhy si relativní pořadí drží beze změny.
 
 **Skrývání zaplatilo tři věci a každá má stráž.** Deska přestala být stabilní, takže „první pruh“
 je pokaždé jiný — proto **zkratka visí na pruhu, ne na pozici** (`⏎` u skrytého `Rozhodnout`

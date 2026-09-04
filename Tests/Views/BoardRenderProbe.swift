@@ -47,11 +47,22 @@ struct BoardRenderProbe {
         /// Prázdný blok `Dění`: jediné místo, kde z celé sekce zbude jedna věta, a věta pod
         /// hlavičkou vypadá jinak než nakreslený seznam.
         case activityEmpty = "prazdne-deni"
-        /// **Vlastní PR, který je slévatelný a přitom na něm něco zbývá předat** — přesně ten
-        /// případ z proklikání (`keboola/job-queue-daemon#934`). Otázka, na kterou scéna
-        /// odpovídá, je „je v `K merge` pořád vidět, že něco zbývá?“; klikáním se k ní člověk
-        /// dostane jedině nad vlastním PR se zeleným CI.
+        /// **Vlastní PR, který je slévatelný a přitom na něm zbývá něco nevyřízeného předat** —
+        /// tedy stav předání `changed`. Otázka, na kterou scéna odpovídá, je „je v `K merge`
+        /// pořád vidět, že něco zbývá?“; klikáním se k ní člověk dostane jedině nad vlastním PR
+        /// se zeleným CI.
+        ///
+        /// **Právě `changed`, ne `never`** (druhé proklikání #515): `never` byl případ z prvního
+        /// proklikání a do `K merge` chodil i předtím, kdežto `changed` je ten, který v pruhu
+        /// `Předat agentovi` **zůstával** — takže je to jediná scéna, na které je změna vidět.
         case mergeWithHandoff = "k-merge-s-predanim"
+        /// **Všech šest pruhů neprázdných** — jediná scéna, na které je vidět **pořadí**.
+        ///
+        /// Přidaná u druhého proklikání #515, a je to odpověď na druhou otázku z #478: scéna
+        /// `pruhy` má `Předat agentovi` i `Čeká na ostatní` prázdné, takže by jeho přesun na
+        /// konec **nenaměřila** — vypadala by stejně před i po. Tady se `Předat agentovi` musí
+        /// kreslit **pod** tichým pruhem, tedy jako poslední.
+        case allLanes = "vsechny-pruhy"
     }
 
     @Test("Vyrendrovat desku do PNG")
@@ -122,6 +133,7 @@ struct BoardRenderProbe {
         let count = switch scenario {
         case .everythingDone: 0
         case .single, .mergeWithHandoff: 1
+        case .allLanes: 6
         case .lanes, .activityEmpty: 7
         }
         let queue = (1..<(1 + count)).map { number in
@@ -129,8 +141,10 @@ struct BoardRenderProbe {
                 id: PRIdentifier(repo: RepoID("keboola/vault")!, number: number),
                 title: "chore: modernize dependencies (Symfony 8-ready)",
                 // U scény `k-merge-s-predanim` musí být PR **můj**, jinak se do vlastních pruhů
-                // nedostane vůbec (#332).
-                author: scenario == .mergeWithHandoff ? "ondrajodas" : "odinuv",
+                // nedostane vůbec (#332). U `vsechny-pruhy` je vlastní **první, pátý a šestý**
+                // (`K merge`, `Čeká na ostatní`, `Předat agentovi`) — kdo je čí, rozhoduje
+                // o polovině pruhů.
+                author: Self.author(of: number, in: scenario),
                 url: URL(string: "https://github.com/keboola/vault/pull/\(number)")!,
                 updatedAt: Date(timeIntervalSince1970: Double(number) * 100),
                 state: .open
@@ -180,8 +194,11 @@ struct BoardRenderProbe {
             )
             store.checks[id] = []
             store.commits[id] = []
-            // Dva aktivní nálezy udělají `2 k předání` bez razítka, tedy `stage == .never` —
-            // ten stav merge **nepřebíjí**, takže PR skončí v `K merge` a pilulka mu zůstane.
+            // Dva aktivní nálezy a k nim razítko **proti dnešní hlavě, ale bez předaných
+            // identit** — z toho `Policy.handoff` složí `2 k předání` ve stavu `changed`, tedy
+            // „něco je nevyřízené“. Ten stav do druhého proklikání #515 držel PR v `Předat
+            // agentovi` i nad slévatelnou větví; od té doby vyhrává merge a pilulka řádku
+            // zůstane, protože visí na autorovi a počtu, ne na stavu předání.
             //
             // **Ani jeden z nich nesmí být blokující** (`Policy.defaultBlockingCategories`:
             // `correctness`, `security`, `data-loss`) — blokující nález je **skutečná** překážka
@@ -198,10 +215,67 @@ struct BoardRenderProbe {
                     headSha: Self.mergeableHead
                 )]
             )
+            // **Razítko se sází přímo do `handoffStamps`**, ne přes `noteHandoff(of:)`: ta cesta
+            // si bere hlavu i identity ze složeného zadání, a sonda žádné neskládá. `handed: []`
+            // je záměr — kdyby v něm ty dvě položky byly, vyšel by z toho `delivered`, tedy
+            // „předáno a nic nového“, a scéna by ukazovala prázdnou pilulku.
+            store.handoffStamps[id] = Handoff(at: Date(), headSha: Self.mergeableHead, handed: [])
+        }
+        if scenario == .allLanes {
+            setUpAllLanes(in: store, ids: queue.map(\.id))
         }
         guard scenario != .activityEmpty else { return store }
         store.activityEvents = Self.events
         return store
+    }
+
+    /// Autor pull requestu ve scéně. **U `vsechny-pruhy` rozhoduje o polovině pruhů**, protože
+    /// vlastní PR se do `Rozhodnout` ani `Přečíst` nedostane a cizí do zbylých tří ne (#332).
+    private static func author(of number: Int, in scenario: Scenario) -> String {
+        switch scenario {
+        case .mergeWithHandoff: "ondrajodas"
+        case .allLanes: [1, 5, 6].contains(number) ? "ondrajodas" : "odinuv"
+        case .lanes, .single, .everythingDone, .activityEmpty: "odinuv"
+        }
+    }
+
+    /// Šest PR do šesti pruhů, po jednom řádku — scéna, na které je vidět **pořadí**.
+    ///
+    /// Rozřazuje je `Policy.lane`, ne sonda, takže se sází jedině vstupy: (1) můj PR se vším,
+    /// co si žádá slévatelnost → `K merge`; (2) cizí s draftem → `Dopsat a odeslat` (draft
+    /// přebíjí všechno); (3) cizí s uloženým čistým během → `Rozhodnout`; (4) cizí, na kterém se
+    /// nic nestalo → `Přečíst`; (5) můj **bez načteného detailu** → `Čeká na ostatní` („nevím“ je
+    /// `waiting`); (6) můj s aktivním nálezem a taky bez detailu → `Předat agentovi`.
+    private func setUpAllLanes(in store: AppStore, ids: [PRIdentifier]) {
+        store.detailStates[ids[0]] = .loaded(Self.mergeableDetail(ids[0]), updatedAt: Date())
+        store.branchStatuses[ids[0]] = .loaded(
+            BranchStatus(mergeability: .mergeable, mergeState: .clean),
+            updatedAt: Date()
+        )
+        store.checks[ids[0]] = []
+        store.commits[ids[0]] = []
+        // **Draft se sází přímo do `drafts`** — `setDraftBody` si bere `headSha` z načteného
+        // detailu a ten scéna u tohohle PR nemá.
+        store.drafts[ids[1]] = ReviewDraft(
+            pullRequest: ids[1],
+            headSha: Self.mergeableHead,
+            body: "Zbytek vypadá dobře, jen ta jedna kontrola."
+        )
+        store.reviewRecords[ids[2]] = ReviewRecord(
+            pullRequest: ids[2],
+            headSha: Self.mergeableHead,
+            runs: [makeStoredRun(findings: [], headSha: Self.mergeableHead)]
+        )
+        // ids[3] zůstává, jak přišel z fronty: `neběželo`, tedy `Přečíst`.
+        // ids[4] je můj PR, o kterém se nedá tvrdit ani předání, ani merge — tichý pruh.
+        store.reviewRecords[ids[5]] = ReviewRecord(
+            pullRequest: ids[5],
+            headSha: Self.mergeableHead,
+            runs: [makeStoredRun(
+                findings: [makeReported(category: "clarity", summary: "Ten komentář mluví o starém názvu.")],
+                headSha: Self.mergeableHead
+            )]
+        )
     }
 
     private static let mergeableHead = "aaaa1111"
