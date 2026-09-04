@@ -63,13 +63,46 @@ nálezy** pod hlavičkou, že nové komentáře nejsou.
 ### Když nedoběhne vůbec
 
 Do review napíše jen „Copilot encountered an error and was unable to review this pull request“
-a příčina je vidět **jen v logu akce**. Jsou na to dvě známé příčiny a **pozná se to podle toho,
-jestli job vůbec běžel**:
+a příčina je vidět **jen v logu akce**. Jsou na to **tři** známé příčiny a první dělení je podle
+toho, **jestli job vůbec běžel**:
 
-- **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
-  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
+- **Job běžel a spadl** → buď velikost `CLAUDE.md` ([záznam
+  rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)),
+  nebo **oprávnění integrace** (#491, hned níž). Rozliší je log: `HttpError` u čtení metadat PR
+  během desítek sekund je to druhé.
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
+
+### Když spadne na oprávnění integrace (#491)
+
+**Třetí příčina, a poznat se dá jen z logu** — zvenčí vypadá stejně jako obě předchozí („Copilot
+encountered an error and was unable to review this pull request“). Job **běží**, ale spadne za
+**32 sekund**, tedy dřív, než se vůbec podívá do repa:
+
+```
+COPILOT_PERMISSION_GATE_REASON: ineligible_app
+Analyzing ondrajodas/PRism PR #567 …
+Fetching PR metadata for ondrajodas/PRism#567
+HttpError: Resource not accessible by integration - .../rest/pulls/pulls#get-a-pull-request
+```
+
+**Nesmí se to splést s velikostí `CLAUDE.md`.** Ta je ta druhá příčina „job běžel a spadl“ a rozliší
+se dvěma věcmi: tahle padá **na `HttpError` u čtení metadat PR** (ne uvnitř review) a **za desítky
+sekund**, ne po delší práci. U #491 měl `CLAUDE.md` 99 047 B, tedy pod stropem, a přesto to padalo.
+
+**Pozná se to podle toho, že padá i cizím PR.** Výpis runů ukázal **osm** kol `Running Copilot Code
+Review` za pětatřicet minut, všechna `failure`, napříč PR z různých slotů — takže to není o diffu ani
+o jednom PR. Job přitom má správné jméno (`Running Copilot Code Review`, ne `dynamic`)
+a `requested_reviewers` je prázdné, protože request se **spotřeboval doběhnutím**, ne zaseknutím.
+
+**Vyžádat znovu nepomůže a resetovat sadu taky ne** — na rozdíl od zaseknutého jobu výš. Změřeno:
+`bin/copilot-review.sh` vyrobil nový run (`33921009691`), který spadl stejně. Není to stav sady na
+GitHubu, ale oprávnění aplikace, a na to se z repa nedosáhne.
+
+**Cesta ven vede mimo repo:** je to entitlement Copilotu na účtu / v nastavení repozitáře, ne nic,
+co by šlo z branche opravit. Do té doby zůstává **vlastní revize diffu**, která je stejně ta
+podmínka pushnutí (Copilot je kontrola, ne hledání) — a v popisu PR se to napíše jako **neověřená
+mezera**, ne jako „Copilot nic nenašel“.
 
 ### Když se request spotřebuje mrtvým jobem
 

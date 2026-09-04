@@ -8113,3 +8113,13 @@ jenže 1 080 byla šířka, kterou ta obrazovka **ani jednou neměla**. Zbylo 84
 **Zobecnitelné pravidlo:** *pravidlo zapsané o jedné ose neplatí automaticky o druhé* — a když se
 zadání odvolává na starší měření, patří k práci ověřit, že to měření tvrdí zrovna to, co se z něj
 cituje.
+
+**Copilot na tomhle PR nedoběhl, a je to neověřená mezera.** Job běžel, ale spadl za 32 sekund na
+`Resource not accessible by integration` při čtení metadat PR (`COPILOT_PERMISSION_GATE_REASON:
+ineligible_app`) — tedy **ne** na velikosti `CLAUDE.md` (99 047 B, pod stropem) ani na spotřebovaném
+requestu (job má správné jméno a doběhl). Padalo to na **osmi** kolech za pětatřicet minut napříč PR
+z různých slotů a druhé vyžádání vyrobilo nový run, který spadl stejně, takže to není o téhle
+změně. Je to třetí, do té doby nezapsaná příčina; postup, jak ji odlišit od zbylých dvou, je
+v [`docs/github-cli.md`](github-cli.md#když-spadne-na-oprávnění-integrace-491). Vlastní revize diffu
+proběhla (grepy z `CLAUDE.md` plus čtení diffu) a našla v ní dvě věci: přehnané tvrzení v komentáři
+u sondy (`ideal*` místo „ideální šířka“) a dvě smyčky přes jednoprvkové pole.
