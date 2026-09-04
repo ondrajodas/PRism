@@ -173,6 +173,9 @@ struct SettingsView: View {
                 loadMergeSettings: { await store.loadMergeSettings(for: $0) }
             )
         case .runtime: RuntimeSettingsView(settings: settings)
+        // `Systém` (#529) je vedle `Repozitářů` druhá stránka, která nečte jen konfiguraci:
+        // přihlašovací položka je **stav systému**, takže se čte a zapisuje přes store.
+        case .system: SystemSettingsView(settings: settings, store: store)
         }
     }
 

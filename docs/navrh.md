@@ -39,7 +39,7 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **47** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **48** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo) a u #515 tu stálo 45 nad šestačtyřiceti, protože sekci 46
@@ -95,6 +95,9 @@ jedna z nich zatím není záznamem dneška. A **41 vedle 02** je zase případ 
 **jediný výřez hlavičky** s pilulkou `mimo zdroje` a dva stavy záložky, o které se ví jen adresa
 (#531) — celá hlavička ani celé okno se nepřekresluje. Tentýž vztah má **42** (mapa PR, #501):
 kreslí zvětšený pás s legendou a k tomu jeden výřez „jak to leží v okně“, ne celé okno znovu.
+A **49 vedle 10** je totéž ještě o krok dál (#529): 10 je záznam dnešního okna nastavení se sedmi
+stránkami, 49 kreslí **jen tu osmou** (*Systém*) a k tomu dlaždici Docku — a ta je jediná věc
+v celém dokumentu, která **není v okně**, takže se na ni nedal vzít žádný existující kus.
 
 **Výřez nemusí ležet na stránce té sekce, kterou nepřekresluje** (#527). Sekce **44** kreslí pruh
 záložek před ukončením a po startu, tedy tentýž pruh jako **02** — a leží přesto na stránce

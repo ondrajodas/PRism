@@ -10194,3 +10194,243 @@ Zpátky opravené prochází obojí (22 testů ve dvou sadách).
 a tlačítko `Pustit přesto` mají v hlavičce dráhy **jeden řádek**, takže se v úzkém panelu ořezávají
 — a to se pozná jedině z kresby (offscreen render podle *Jak si zkontrolovat, jak view vypadá*,
 nebo proklikáním). Texty samotné se tvrdí nad `ReviewerLaneText`, tedy bez kreslení.
+
+## Odznak v Docku a spuštění po přihlášení (#529)
+
+Sedm sad, a **z většiny jsou to tvrzení, že se něco NEstalo**. Obojí se rozbije potichu a ani jedno
+se nedá zkontrolovat pohledem do okna: dlaždice v Docku je vidět zrovna tehdy, když se do aplikace
+nikdo nedívá, a přihlašovací položku vypíná systém někde jinde.
+
+- **`Policy.dockBadge` výčtem** (`DockBadgeTests`): tři volby × prázdná / plná / nenačtená fronta.
+  Nejcennější jsou čtyři negativní: **nula se nekreslí** (u všech tří voleb), **nenačtená fronta se
+  nekreslí** (u všech tří), **`nic` nekreslí nic ani nad plnou frontou** a fronta bez blokujícího
+  nálezu je u volby `blokující` **taky prázdná**, tedy tentýž stav jako prázdná fronta.
+
+  K tomu dvě věci, které se z jednoho případu nepoznají. **Invariant `blokující ≤ čekající`** se
+  tvrdí **přes pásmo podmnožin** (žádná, jedna, dvě, všechny, a jedna mimo frontu) — kdyby se ta
+  dvě čísla brala ze dvou různých množin, jeden případ by prošel shodou okolností. A **na uložené
+  nálezy se u `čekající` a `nic` vůbec nesáhne**: uzávěr `isBlocking` si počítá volání a u těch
+  dvou voleb musí být **nula**, kdežto u `blokující` **právě jedno na každý PR ve frontě**. Bez
+  toho by odznak sledoval mapu `reviewRecords` a probouzel se na každém uloženém nálezu i ve
+  výchozí volbě, ve které o nálezech nemluví.
+
+  Tolerantní čtení konfigurace je tam taky (rozbitá hodnota → `čekající`, chybějící klíč →
+  `čekající`), protože volba, která se ztratí překlepem v souboru, znamená jiné číslo v Docku.
+- **`Policy.loginItem` a `loginItemAvailability` výčtem** (`LoginItemPolicyTests`): čtyři stavy
+  systému × tři instalace × selhání. **Věta pod přepínačem není nikdy prázdná** — to je tvrzení
+  přes všechny kombinace, protože přepínač, který nejde cvaknout a neřekne proč, je k nerozeznání
+  od rozbité aplikace. Dál: slot to nesmí **i když leží v `/Applications`**, slot mimo
+  `/Applications` hlásí **slot, ne cestu** (zákaz, který se nedá spravit, vyhrává nad pokynem, po
+  kterém to půjde), prázdné `CFBundleName` je taky ne, a **odskok do Nastavení systému se nabízí
+  jedině u `requiresApproval`** — u zašedlého přepínače by tam nikdo nic neudělal.
+
+  Nepovedený zápis má tři případy a každý je vlastní věta: přepínač **zůstane v požadované poloze**
+  (a to obojím směrem — nepovedené odebrání ho skokem nezapne), **stará chyba se zahodí**, jak jí
+  stav systému přestane odporovat, a **nedostupnost vyhrává nad selháním** (nad zašedlým řádkem je
+  věta o tom, proč s ním nejde cvaknout, jediná, po které jde něco udělat).
+- **`AppStore` proti fakům** (`AppStoreSystemTests`): že odznak nese **totéž číslo jako
+  `railQueueCount`**, že vlastní PR ho nezvednou (#332), že se **před prvním úspěšným tikem
+  nenasadí vůbec** (fake dlaždice si pamatuje i `nil`, takže „nasadilo se prázdno“ je odpověď, ne
+  „nesáhlo se“), že prázdná fronta nekreslí nic, a že **co schová filtr, schová i odznak**.
+
+  Na straně přihlašovací položky je nejcennější tvrzení celého issue: **slotová instance do systému
+  nezapíše** — fake počítá pokusy o `register` i `unregister` a oba musí být nula. K tomu store bez
+  cíle (tak ho staví většina testů) nezapíše nic a **netváří se, že se něco povedlo**; povedený
+  zápis, po kterém systém chce schválení, **není chyba** (`loginItemFailure == nil`) a nabídne
+  odskok; a **stav se čte zpátky ze systému** — po vypnutí zvenčí jde přepínač do vypnuté polohy
+  a `Configuration` u toho zůstane **nedotčená**, což je celý smysl toho, že se položka do configu
+  nepíše.
+- **Kresba odznaku** (`DockBadgeTileRenderTests`): **tuhle sadu si vynutila vada, kterou #529
+  v prvním kole minulo** — viz *Šest zelených sad a v Docku nic* níž. Bitmapa `DockBadgeTileView`
+  se porovnává ve třech třídách, a každá chytá jinou vadu: **odznak je vidět** (červené pixely
+  systémové `#FF3B30`, u prázdné dlaždice jich musí být **nula**, jinak tvrzení nic neznamená),
+  **stojí na něm to číslo** (bitmapy `6` a `9`, `1` a `7` se musí lišit — jinak by prošel i pouhý
+  puntík, a odznak bez číslice říká „něco čeká“, ne „tolik jich čeká“) a **dvojciferný počet
+  odznak roztáhne** (červených pixelů je víc u `12` než u `6` a víc u `123` než u `12`).
+
+  **Ikona se do view předává**, ne bere z `NSApp` — jinak by bitmapa závisela na ikoně hostitele
+  testů. Je to plná plocha jedné barvy, aby se dalo tvrdit, že všechno, co se od ní liší, nakreslil
+  odznak; a **ne bílá ani červená**, na těch by nebyl vidět text, respektive výplň. Prázdný řetězec
+  se u toho tvrdí zvlášť, protože `badgeLabel = ""` kreslil prázdný puntík.
+- **Stráž nad zdrojáky** (`DockBadgeWiringTests`): tatáž konstrukce jako `GlobalAppearanceTests`,
+  protože odznak i položka jsou **globální stav procesu** — šestá podoba téhož kořene (#367, #411,
+  #421, #462, #490). A horší než těch pět: stopa **přežije běh**. Odznak zůstane v Docku hostitele
+  testů, přihlašovací položka v systému toho, kdo suitu pustil — a odregistrovat by ji už neumělo
+  nic, protože bundle hostitele zmizí s `build.noindex/`.
+
+  Tvrdí se pět věcí: `App/Store/` neobsahuje `dockTile` ani `SMAppService` a **importuje jedině
+  `Foundation` a `Observation`** (výčet povolených, ne zákaz jmen — `import AppKit` obchází
+  `import Cocoa`); živé cíle (`DockBadgeTile.application`, `LoginItemService.live`) se v aplikaci
+  jmenují **jednou** a není k nim `??` fallback; `applyBadge` znají **dva** soubory, `dockTile`
+  a `SMAppService` **jeden každý**, a `loginItems.register`/`unregister` volá **jedno místo**;
+  **`DockBadgeTile.swift` neobsahuje `badgeLabel`**, protože to je změřená slepá ulička (a je to
+  zákaz **na ten jeden soubor**, ne na celé `App/` — `badgeLabel` je běžné jméno a v okně už
+  dvakrát legitimně je, kdežto `dockTile` zná jediný soubor); a **žádný test nesahá na dlaždici
+  procesu ani na systémovou položku**. Šestý test je pojistka
+  proti stráži, která přestane hledat: vzory musí sedět na jejím vlastním souboru a v `condensed`
+  nesmí zůstat mezery (#550).
+- **Render stránky `Systém`** (`SystemSettingsRenderTests`): zavírá tutéž mezeru jako
+  `SettingsFieldsRenderTests` u #389 — sady výš by prošly i nad stránkou, na které přepínač vůbec
+  není nakreslený. `NSHostingView` v okně bez animace (#462), ne `ImageRenderer`: `Form` je
+  `ScrollView`. Rozdíl bitmap, protože accessibility tree se v hostovaném okně nenaplní.
+
+  **Zašedlý řádek má vlastní tvrzení a porovnává se jen pás s tím řádkem.** Věta pod přepínačem se
+  u slotu liší, takže rozdíl bitmap celé stránky by prošel i tehdy, kdyby řádek vypadal jako
+  povolený — pás (450…540 px odshora) obsahuje jen ten řádek a nad ním je v obou renderech všechno
+  stejné. Bez toho by tvrzení nic neznamenalo.
+
+  **A k tomu kontrola měřidla** (#478, z nálezu Copilota): dva stavy se **stejnou polohou přepínače
+  a jinou větou** (`notRegistered` a `notFound`) se v tom pásu lišit **nesmí**. Kdyby se lišily,
+  pás by tu větu obsahoval a tvrzení o zašednutí by procházelo z rozdílu textu. Ověřeno vložením
+  regrese: pás rozšířený na 450…600 px tenhle test **položí** (29 866 proti 27 942 B).
+
+  **Že `CGImage.cropping(to:)` počítá `y` odshora, je změřené, ne odvozené.** Řádek leží 497 px pod
+  horní hranou a v pásu `450…540` v cropu doopravdy je; odspodu by tentýž pás padl na
+  1 260…1 350 px odshora, tedy do prázdné plochy pod obsahem. **Prázdný pás test položí sám**,
+  protože prázdno se rovná prázdnu — na blbě zvolený pás se tedy nedá projít potichu.
+- **Nepovedený zápis se do renderu dostane kliknutím**, ne přiřazením do pole
+  (`store.setLoginItem(true)` nad fakem, který vyhodí chybu). Render nad stavem, který v provozu
+  nevznikne, netvrdí nic.
+
+### Proč `.disabled(_:)` v tomhle okně nestačí — změřeno
+
+Zašednutí řádku dělá `SystemSettingsView.disabledOpacity` (0,55 ze zákresu), ne samotné
+`.disabled(_:)`, a je to výsledek měření, ne opatrnost. Dvě bitmapy **téhož** řádku (`Toggle`
+v `Form`u, jedna zakázaná a jedna ne, stejná věta pod ním, `NSHostingView` v borderless okně) se
+liší **jen odstínem přepínače** — popiska zůstane plná bílá. Ověřeno v obou variantách okna, key
+i nekey, tedy nejde o to, že okno není aktivní.
+
+Zašedlý řádek, který vypadá jako povolený, je horší než chybějící: člověk klikne a nic se nestane.
+Vzor s opacitou je v okně už dvakrát (`FindingTableRowView.dismissedOpacity`, `ReviewerChipsView`).
+
+### Šest zelených sad a v Docku nic — jak se to našlo (#529)
+
+**Tohle je ten nejdražší případ pravidla z #478 v tomhle repu**: měřidlo vydávalo tutéž hodnotu
+pro „funguje“ i „nefunguje“, všech šest sad výš bylo zelených, plná suita hlásila `TEST
+SUCCEEDED` — a v Docku nebylo žádné číslo. Připomínka od uživatele zněla *„nic neukazuje… ikonka
+je bez čísla“*.
+
+Odznak se tehdy nasazoval jako `dockTile.badgeLabel = label`. O tom se dá tvrdit, že **se
+nasadil** (`FakeDockTile` si pamatuje, co po něm kdo chtěl) a že na dlaždici **nesahá nikdo
+jiný** (stráž nad zdrojáky). Ani jedno netvrdí nic o tom, jestli Dock to číslo nakreslí — a
+nenakreslil.
+
+**Postup měření, protože z aplikace samotné se to poznat nedá.** Osm kroků, každý zúžil možnosti:
+
+1. **Vyloučit prázdnou frontu.** Screenshot okna `PRism-d` vedle Docku: rail hlásí `6` u fronty
+   i u blokujících, stavový řádek `6 PR`, dlaždice prázdná. Fronta tedy je, odznak není.
+   Okno se snímá přes `CGWindowList` na id okna a `screencapture -l <id>` — bez asistenčního
+   přístupu (ten proces `claude` nemá, `AXIsProcessTrusted()` vydá `false`, takže se dlaždice
+   accessibility API vyčíst **nedá**).
+2. **Vyloučit výchozí hodnotu.** V `~/Library/Application Support/PRism-d/config.json` klíč
+   `dockBadge` **není**, takže platí `standard.dockBadge`, tedy `waiting`. `bin/slot-config.sh`
+   čistí odesílání, notifikace a automat — **zdroje ne**, proto ve slotu fronta je.
+3. **Zjistit, kam se to nasazuje.** Dočasné `NSLog` v `trackDockBadge()` a v `applyBadge`.
+   **Do unified logu se z GUI aplikace nedostane** (`log show --predicate 'process == "PRism"'`
+   vydá nula řádků), takže se aplikace spustí **binárkou přímo** a stderr se přesměruje:
+   `nohup /Applications/PRism-d.app/Contents/MacOS/PRism > /tmp/out 2>&1 &`. Log:
+   `apply=6 readback=6`, a `late readback=6` i po pěti sekundách. **Hodnota na dlaždici je,
+   kresba není.**
+4. **Vyloučit chybějící překreslení.** `dockTile.display()` za přiřazením (přes proměnnou
+   v prostředí, ať se to dá pustit obojím způsobem z jednoho buildu): **beze změny.**
+5. **Vyloučit Dock.** `killall Dock`, a pak i obráceně (napřed Dock, potom aplikace, ať se odznak
+   nasazuje do svěžího Docku): **beze změny.** Badge v tom Docku přitom svítí u Mailu a dalších
+   pěti aplikací, takže odznaky jako takové fungují.
+6. **Rozdělit „bundle“ a „kód“.** Minimální AppKitová aplikace s vlastním bundlem odznak
+   nakreslí. Tentýž kód **zkopírovaný do bundlu `PRism-d.app`** (jen s vyměněnou binárkou)
+   **nenakreslí**. Není to tedy kód a není to SwiftUI (SwiftUI varianta téhož taky kreslí).
+7. **Najít, co v bundlu rozhoduje.** Tentýž bundle a tentýž kód s **jiným
+   `CFBundleIdentifier`** (`com.ondrajodas.freshprobe17`, i `com.ondrajodas.prism.dd` — tedy
+   pod týmž prefixem) odznak **nakreslí**. Rozhoduje **identita aplikace**, ne kód ani ikona ani
+   cesta. Duplicitní záznam v LaunchServices to není (`lsregister -dump` vydal pro
+   `com.ondrajodas.prism.d` v době selhání **jednu** cestu, stejně jako pro `.c` a pro hlavní
+   instanci) a v Docku ta aplikace připíchnutá není (`defaults export com.apple.dock`
+   nemá o PRismu ani slovo).
+8. **Zjistit, který stav to je.** `UNUserNotificationCenter.current().notificationSettings()`
+   z běžící aplikace: **`authorizationStatus = 2` (authorized), `alertSetting = 2` (enabled),
+   `badgeSetting = 0` (notSupported)**. `badgeLabel` je pod tím přepínačem `Odznaky` a `PRism`
+   si žádá `[.alert, .sound]` (#88), tedy o badge ne. Aplikace z kroků 6 a 7 o notifikace
+   nepožádaly nikdy, takže je systém negatuje — proto jim odznak kreslí.
+
+**Kolik měří systémový odznak, se změřilo z bitmapy Docku**, ne odhadem: červené pixely
+(`r > 190 && g < 110 && b < 100`) se seskupí po sloupcích a vypíšou jako klastry. Systémové
+odznaky pěti aplikací mají **17 × 17 px** na dlaždici 45 px, tedy **0,38 krátké strany**, a horní
+hranu na horní hraně ikony. Náš kreslený odznak vyšel po opravě **18 × 17 px** — proto v `Policy`
+stojí `0.38` a ne `22/72` ze CSS sekce 49 (tam odznak leží půlkou venku).
+
+**Co se ověřilo o opravě, a čím.** Vlastní kresba do `dockTile.contentView` se zkoušela **na
+tomtéž bundle ID, kterému `badgeLabel` nekreslí** — nakreslila se, a **přežila `killall Dock`**.
+Po zabudování do aplikace hlásí Dock u `PRism-d` **`6`**, tedy tutéž šestku, jakou má odznak
+fronty v railu.
+
+**A druhá cesta, která se změřila a zamítla**: `requestAuthorization([.alert, .sound, .badge])`
+u aplikace, která už autorizovaná je, projde **bez dotazu** (`ok=true`) a `badgeSetting` přeskočí
+z `notSupported` na **`disabled` (1)** — přepínač v Nastavení systému tedy **vznikne vypnutý**.
+Odznak zapnutý v aplikaci a vypnutý v systému je horší než žádný, a na čistém stroji by k tomu
+přibyl dotaz na notifikace hned při startu (#88 ho schválně odkládá). Kresba nepotřebuje
+**žádné** povolení.
+
+**Regrese se ověřila vložením regrese, dvakrát:**
+
+1. **Kresba odznaku zmizí** (`draw(_:)` se po nakreslení ikony vrátí) → spadnou **tři** testy
+   v `DockBadgeTileRenderTests` s pěti tvrzeními: *Odznak s číslem je na dlaždici vidět*
+   (`badged == 0`), *Jiné číslo je jiná kresba* (bitmapy `6` a `9` se rovnají) a *Víc číslic
+   odznak roztáhne* (`0 > 0`).
+2. **`applyBadge` se vrátí k `badgeLabel`** → spadne *Zápis na dlaždici a do systému má
+   vyjmenovaná místa* ve `DockBadgeWiringTests`.
+
+A **strop na šířku pilulky nevymyslel návrh, našel ho test**: `staysInsideTheTile` nad počty znaků
+`0…6` položil původní vzorec u pěti a šesti znaků (`x = -1,02`, resp. `-20,48` na dlaždici 128),
+protože `contentView` je dlaždicí ořezaný a odznak by se nenakreslil celý.
+
+### Neověřené mezery (#529)
+
+Tři, a u každé je napsané, co je doložené a co ne:
+
+1. **Zápis do systému se nezkoušel naostro.** `SMAppService.mainApp.register()` se v žádném testu
+   ani ručně nepustil — zapsaná položka by zůstala v Nastavení systému a odregistrovat by ji už
+   neumělo nic. Doložené je **čtení**: `SMAppService.mainApp.status` se pustilo ve `swift` skriptu
+   a odpovědělo `notFound` (`rawValue=3`) pro nebundlovaný proces, takže volání je průchodné a
+   překlad všech čtyř případů sedí. Jak se položka chová po skutečném zápisu, `requiresApproval`
+   ani odregistrování, ověřené **není**.
+2. **„Mimo `/Applications` to nejde“ je cizí tvrzení, ne měření.** Je z decku *Směry pro PRism*;
+   #88 měřilo tuhle mez u **notifikací**, ne u přihlašovací položky. Brána v aplikaci je proto
+   zdůvodněná jinak: položka mířící na cestu, která zmizí s dalším buildem, je nesmysl bez ohledu
+   na to, jak se k ní systém staví.
+3. **Adresa panelu `Položky při přihlášení` se neotevřela.** Tvrdí se jen tvar
+   (`x-apple.systempreferences:com.apple.LoginItems-Settings.extension`, bez parametru), tedy
+   totéž, co u #414 s panelem `Oznámení`. Že systém tu adresu přijme, ověří člověk kliknutím.
+
+K tomu **zapsaná mez, ne mezera**: s úplně zavřeným oknem odznak zmrzne na poslední hodnotě
+(`keepFresh()` visí na `ContentView.task`). Je to vlastnost životnosti pollingu, ne odznaku, a na
+běžný případ — aplikace na pozadí s otevřeným oknem — nesahá.
+
+### Za jakých podmínek se měřilo (#529)
+
+Plná suita **5298 testů v 517 suitách, `TEST SUCCEEDED`**, 113,3 s (v prvním kole 5286 v 516
+za 117 s). Po slití `mainu` s #502 a #556 je to **5351 v 523** za 133,0 s — čísla #529 se čtou
+z prvního, ne z druhého. Měřeno na stroji, na kterém **běžely souběžně další sloty** paralelního vývoje — tedy
+ne na volném stroji. Pád na čase je za těchhle podmínek zátěž, ne logika; suita jede blízko 120s
+stropu `waitUntil`.
+
+Regrese se ověřila **vložením regrese**, šestkrát — první tři v prvním kole, čtvrtá až šestá
+u opravy kresby (rozbor je v *Šest zelených sad a v Docku nic* výš):
+
+1. **Odznak čte nefiltrovanou frontu** (`queuePullRequests` místo `visibleQueuePullRequests`) →
+   spadne *Co schová filtr, schová i odznak* (a trvá to 120 s, protože se čeká na jev, který
+   nenastane).
+2. **Brána v `setLoginItem` zmizí** → spadne *Slotová instance do systému nezapíše*, a hlásí
+   `registered == 1` i `unregistered == 1`, tedy dva zápisy do systému ze slotu.
+3. **`App/Store/AppStore+System.swift` sáhne na `SMAppService`** (import + jedno volání) → spadnou
+   **dva** testy stráže se třemi tvrzeními: zakázané jméno, zakázaný import a výčet souborů, které
+   `SMAppService` znají.
+4. **Kresba odznaku zmizí** → spadnou **tři** testy v `DockBadgeTileRenderTests` s pěti tvrzeními.
+5. **`applyBadge` se vrátí k `badgeLabel`** → spadne stráž nad `DockBadgeTile.swift`.
+6. **Číslo se do pilulky nezmenšuje** → spadne *Číslo, které se nevejde, se zmenší*, a hlásí **76**
+   bílých pixelů mimo odznak. **Tohle měření si vynutilo samo sebe**: první verze toho testu brala
+   pět číslic, které se do pilulky vejdou i bez zmenšování, takže by prošla i nad rozbitou kresbou
+   (opět #478). Přeteče až sedm — a to je vypočítané, ne vyzkoušené naslepo: pilulka narazí na
+   strop u pěti znaků (122,9 b na dlaždici 128), místa v ní je 108,3 b a číslice v tom písmu má
+   ~16,5 b. K tomu se cestou ukázalo, že **bitmapa je v pixelech a `pill` v bodech**: bez převodu
+   podílem z `pixelsWide` hlásil test 3218 „přetečených“ pixelů nad kresbou, která nikam
+   nepřetéká.

@@ -7744,6 +7744,74 @@ firemním repu. **Naostro se nemergovalo** — merge je nevratný a brána je ve
 vypnutá; ověřené je to, co odejde v payloadu (na hotových bajtech) a co repozitáře doopravdy
 vracejí.
 
+## #529 — Odznak v Docku a spuštění po přihlášení (zákres 49)
+
+O frontě se dřív dalo dozvědět jen z otevřeného okna nebo z notifikace, která přijde jednou
+a zmizí. **Dlaždice v Docku je proti tomu stav, který zůstane**, a **spuštění po přihlášení** je
+jeden přepínač, ne launch agent v `~/Library`. Obojí sahá mimo okno, takže obojí dostalo novou
+stránku `Systém` ve skupině `Prostředí` — osmou v okně nastavení.
+
+**Odznak je rail v Docku, ne druhý výpočet.** `Policy.dockBadge` bere tutéž množinu jako odznak
+fronty v railu (cizí PR **po filtru**) a totéž pravidlo o nule i o nenačteném seznamu. Volba je
+`čekající / blokující / nic`, výchozí `čekající` — a **`blokující` je ta množina jen zúžená**, ne
+`queueSummary.blocking`. Souhrn fronty totiž filtr ignoruje, takže by přepnutí volby umělo nad
+zapnutým filtrem ukázat **větší** číslo; invariant `blokující ≤ čekající` drží jedině nad jedním
+polem, a proto ho drží tvar té funkce.
+
+**Prázdno, nula a „nevím“ kreslí totéž (nic), a je to rozhodnutí.** Dlaždice má jeden kanál, takže
+se do ní věta o nenačtené frontě nedá napsat a `0` by v systémové červené hlásila poplach nad
+ničím. Rozlišuje se to v okně: rail má nulu bez odznaku, nenačtený seznam pozná stavový řádek.
+
+**Nasazuje se sledováním, ne rozesetým `refresh()`.** Rozeseté volání by bylo jedenáct míst (sedm
+přiřazení `reviewRecords`, tik, filtr, konfigurace, obnova po startu) a dvanácté by chybělo;
+`withObservationTracking`, které se z `onChange` přihlásí znovu, zapomenout nejde. Je to **první
+výskyt toho vzoru v `App/`**, takže je u něj zapsané, proč nevyrábí smyčku, proč v něm není mezera
+na ztracenou změnu a proč se ve výchozí volbě nesleduje ani mapa nálezů.
+
+**Přihlašovací položka se nepíše do `config.json`** — je to stav systému, takže se **čte zpátky** ze
+`SMAppService`, a to při každém zobrazení stránky. Přepínač se po nepovedeném zápisu **tiše
+nevrátí** do vypnuté polohy (drží se i poloha, o kterou si člověk řekl), věta zmizí sama, jak jí
+stav systému přestane odporovat, a u zákazu v Nastavení systému je pod přepínačem **odskok**
+(vzor z #414). **Slotová instance položku nenabízí** — zašedlá s důvodem, protože
+`bin/slot-cleanup.sh` ji sundat neumí; brána je v `AppStore.setLoginItem`, ne v zašedlém přepínači,
+a do `bin/slot-config.sh` se nesahalo.
+
+**Zašednutí se kreslí opacitou (0,55 ze zákresu), a je to změřené**: samotné `.disabled(_:)` se
+v tomhle okně projeví jen odstínem přepínače a popiska zůstane plná — v key i nekey okně.
+
+**Co se neověřilo a je to napsané**: do systému se **nezapsalo ani jednou** (ověřilo se jen čtení
+`status`, které pro nebundlovaný proces vydá `notFound`), věta „mimo `/Applications` to nejde“
+zůstává **cizím tvrzením z decku** (#88 měřilo tu mez u notifikací) a adresa panelu `Položky při
+přihlášení` se neotevřela — tvrdí se jen tvar, jako u #414. K tomu **zapsaná mez**: s úplně
+zavřeným oknem odznak zmrzne na poslední hodnotě, protože polling žije s hlavním oknem.
+
+**Odznak si aplikace kreslí sama, a je to oprava po proklikání.** V prvním kole bylo všech šest
+sad zelených, plná suita hlásila `TEST SUCCEEDED` — a v Docku nebylo číslo. `dockTile.badgeLabel`
+je pod přepínačem `Odznaky` v Oznámeních a u aplikace, která si o `.badge` v `requestAuthorization`
+neřekla (`PRism` žádá `[.alert, .sound]`, #88), ho Dock **potichu zahodí**: hodnota se nasadí,
+přečte se zpátky, `display()` ani restart Docku nepomůže — a **týž kód v témže bundlu s jiným
+`CFBundleIdentifier` odznak nakreslí**. Odznak proto kreslí `DockBadgeTileView` do
+`dockTile.contentView`, což **nepotřebuje žádné povolení** a **přežije restart Docku**. Požádat
+o `.badge` je **změřená a zamítnutá** varianta: u autorizované aplikace přeskočí `badgeSetting`
+z `notSupported` na `disabled`, tedy přepínač v Nastavení systému **vznikne vypnutý**.
+
+Zákres 49 se u toho **opravil**: `contentView` je plochou dlaždice ořezaný, takže odznak
+dlaždici **nepřesahuje** a **nemá obtah**; velikost 0,38 krátké strany je **naměřená na
+systémových odznacích v živém Docku** (17 px na dlaždici 45 px), ne 22/72 z CSS. Geometrii vydává
+`Policy.dockBadgeLayout` a **strop na šířku pilulky našel test**, ne návrh — od pěti znaků odznak
+jednou hranou vylézal.
+
+Sedm sad testů, z většiny tvrzení o tom, co se **nestalo** — nula se nekreslí, nenačtená fronta se
+nekreslí, ve výchozí volbě se na uložené nálezy vůbec nesáhne, slotová instance do systému
+nezapíše. K tomu stráž nad zdrojáky (`DockBadgeWiringTests`, šestá podoba téhož kořene po #367,
+#411, #421, #462 a #490), render stránky, ve kterém se zašedlý řádek porovnává **jen v pásu s tím
+řádkem**, aby rozdíl nemohl přijít z věty pod ním, a **`DockBadgeTileRenderTests`** — sada, kterou
+si vynutila právě ta vada z prvního kola: porovnává **bitmapu odznaku**, takže padne, když se
+odznak nenakreslí. Celkem **5298 testů v 517 suitách** (proti 5228 v 511 před #529, tedy 70 nových
+v šesti sadách), `TEST SUCCEEDED` za 113,3 s — měřeno se **souběžně běžícími sloty**, ne na volném
+stroji; nad slitým `mainem` s #502 a #556 je to 5351 v 523 za 133,0 s. Regrese ověřená vložením regrese **šestkrát** (nefiltrovaná fronta, chybějící brána
+u slotu, `SMAppService` ve storu, vynechaná kresba odznaku, návrat k `badgeLabel`).
+
 ## #506 — itinerář review místo stromu souborů (M14)
 
 Levý sloupec záložky PR přestal být strom cest a stal se **dráhou se zastávkami**: *Od minule →
@@ -7865,8 +7933,8 @@ a `scrollTarget`; odtud dva průchody s přeměřenými rozměry a bez animace.
 - **Opravilo to i mapu PR** (#501): mířila na `file.id` s druhem `.bubble`, takže u velkého souboru
   přeletěla stovky bodů do jeho vnitřku. Tatáž třída, jedna oprava v `Policy`.
 
-Testů **5354** v 523 suitách (+88), plný běh zelený nad stavem slitým s `main`em
-(142,8 s, jedno známé `theWaitGivesUpLoudly`).
+Testů **5424** v 529 suitách (+88 proti `main`u), plný běh zelený nad stavem slitým s `main`em
+(153,3 s, jedno známé `theWaitGivesUpLoudly`).
 Nová sada je jedna — `ItineraryEveryTabTests` (cena, kruh společné šířky a stráže nad zdrojáky:
 sloupec mimo `switch tab`, jedno místo, které ho kreslí, klik přes `jump(toFile:)`) — a k tomu tři
 tvrzení o `.fileHeader` v `DiffJumpAnchorTests`. Přizpůsobené: `DiffColumnFitTests`

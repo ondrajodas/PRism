@@ -6284,6 +6284,113 @@ v pořadí — `loadDetail` si příznaky dotáhne sám, takže odpověď fake g
 **před** ním. `PollObservationTests` vzrostly na **čtyřicet** map. Celý běh:
 `5266 tests in 513 suites passed`, 1 known issue.
 
+### Záznam rozhodnutí — odznak v Docku a spuštění po přihlášení (#529)
+
+Zákres je sekce **49** návrhu (poznámky 178–182), odsouhlasený. Tady je jen to, co z kresby
+neplyne, a co se cestou rozhodlo jinak.
+
+**`blokující` je `čekající` zúžená, ne `queueSummary.blocking`.** Zadání říkalo „tatáž hodnota jako
+odznak fronty v railu, nebo jen blokující“ a nabízela se hotová cesta: souhrn fronty
+(`queueSummary`) blokující počet už má. Je to past, kterou by nikdo neodhalil pohledem: souhrn se
+počítá z **nefiltrované** fronty (`queuePullRequests`), kdežto odznak railu z filtrované
+(`visibleQueuePullRequests`). Přepnutí volby ze `čekající` na `blokující` by tedy nad zapnutým
+filtrem umělo ukázat **větší** číslo. `Policy.dockBadge` proto bere **jedno pole** a blokující
+počítá z něj (`queue.count { isBlocking($0.id) }`) — invariant `blokující ≤ čekající` drží tvar té
+funkce, ne dohoda mezi dvěma gettery.
+
+**Prázdno, nula a „nevím“ vydávají totéž, a je to odpověď, ne zjednodušení.** Dlaždice má jeden
+kanál: řetězec, nebo nic. Zvažovalo se odlišit nenačtený seznam (třeba `…`), a zahodilo: odznak
+je systémový červený puntík, ve kterém `…` znamená „něco se děje“, ne „nevím“ — a `0` v něm hlásí
+poplach nad ničím. Všechny tři stavy proto kreslí prázdno a **rozlišují se v okně**, kde na to je
+místo. Rail to dneska dělá stejně, takže se tím nezavádí druhé pravidlo.
+
+**Odznak se nasazuje sledováním, ne rozesetým `refreshDockBadge()`.** Zvažovaly se tři cesty:
+
+1. **`refresh()` na každém místě, které tu hodnotu mění.** Jedenáct volání — sedm přiřazení
+   `reviewRecords`, tik pollingu, filtr, konfigurace, obnova po startu. Zamítnuto: je to přesně
+   ta *„kontrola, která jinde v repu je, a tady chybí“* z tabulky vzorů v `CLAUDE.md`, a chybět
+   bude v tom dvanáctém místě, které někdo přidá.
+2. **Modifikátor ve view.** Zamítnuto ze stejného důvodu jako u vzhledu (#278), jen naléhavěji:
+   odznak je vidět zrovna tehdy, když okno není vpředu, takže by se uplatňoval právě tehdy, kdy
+   ho nikdo nepotřebuje.
+3. **`withObservationTracking`, které se z `onChange` přihlásí znovu.** Vybráno. Je to první výskyt
+   toho vzoru v `App/` (do #529 stál jen v testech #421), takže k němu patří tři věci, které nejsou
+   zjevné a jsou zapsané v [`architektura.md`](../../architektura.md): nevyrábí to smyčku (zápis
+   téže hodnoty toolchain nehlásí, `PollObservationTests`), není v tom mezera na ztracenou změnu
+   (nové kolo se přihlásí synchronně v tomtéž úseku hlavního actoru) a **ve výchozí volbě se
+   nesleduje mapa nálezů**, protože `Policy.dockBadge` se u `waiting` na `isBlocking` nezavolá.
+
+**Přihlašovací položka se nepíše do `config.json`, a je to změna proti tomu, jak se v tomhle repu
+řeší všechny ostatní volby.** Je to **stav systému**, ne preference: vypnout ji jde v Nastavení
+systému a druhá kopie v konfiguraci by pak v okně ukazovala opak toho, co platí. Volba odznaku
+naopak do configu patří (`GlobalConfig.dockBadge`, výchozí `waiting`) — a je to **druhá výchozí
+hodnota v tom souboru, která přidává chování** (první je `incrementalAfterPush` z #517), takže se
+u ní opravil komentář, který tvrdil, že je jediná.
+
+**Brána na instalaci je v aplikaci, ne v `bin/slot-config.sh`.** Slot-config čistí odesílání,
+notifikace a automat, tedy klíče v `config.json`; přihlašovací položka v configu není. Rozhoduje
+proto `Policy.loginItemAvailability` nad `CFBundleName` — a **posuzuje se dřív než cesta**, protože
+slot se spravit nedá (zmizí s worktree), kdežto „nainstaluj to do `/Applications`“ je pokyn, po
+kterém to půjde. Do `slot-config.sh` se nesahalo.
+
+**Zašednutí se kreslí opacitou, a je to změna proti prvnímu návrhu implementace.** `.disabled(_:)`
+samotné v tomhle okně **vidět není** — změřeno na dvou bitmapách téhož řádku, které se liší jen
+odstínem přepínače a popiska zůstane plná (v key i nekey okně). Řádek proto dostává 0,55 ze
+zákresu, což je i to, co kresba doslova ukazuje. Zašedlý řádek, který vypadá jako povolený, je
+horší než chybějící.
+
+**Do systému se v rámci #529 nezapsalo ani jednou, a je to vědomé.** Ověřilo se **čtení**
+(`SMAppService.mainApp.status` → `notFound` pro nebundlovaný proces) a rozhodovací funkce výčtem;
+zápis naostro by nechal položku v Nastavení systému člověka a odregistrovat by ji už neumělo nic,
+protože bundle hostitele testů zmizí s `build.noindex/`. Věta „mimo `/Applications` to nejde“
+zůstává **cizím tvrzením z decku**, ne měřením — #88 měřilo tuhle mez u notifikací, ne u
+přihlašovací položky. Obojí je zapsané v [`testovani.md`](../../testovani.md) jako neověřená
+mezera.
+
+**Zapsaná mez: s úplně zavřeným oknem odznak zmrzne.** `keepFresh()` visí na `ContentView.task`,
+takže po zavření posledního okna polling stojí. Není to výjimka z pravidla „má být vidět i
+zavřená“ — dlaždice zůstane, jen se přestane přepočítávat —, a životnost pollingu je vlastní
+otázka, ne součást #529.
+
+#### Změna rozhodnutí — odznak si aplikace kreslí sama, `badgeLabel` je zamítnutý (#529, druhé kolo)
+
+**Rozhodnutí výš — „aplikace si z toho odznaku vybírá jediné: ten řetězec“ — bylo špatné, a stálo
+to celou funkci.** V prvním kole bylo všech šest sad zelených, plná suita hlásila `TEST SUCCEEDED`
+a v Docku nebylo číslo; připomínka zněla *„nic neukazuje… ikonka je bez čísla“*. Postup měření
+i všechna čísla jsou v [`testovani.md`, *Šest zelených sad a v Docku
+nic*](../../testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529); tady je to, co se
+z toho rozhodlo jinak.
+
+**Co se změřilo.** `dockTile.badgeLabel` je na macOS pod přepínačem `Odznaky` v Oznámeních. `PRism`
+si žádá `[.alert, .sound]` (#88), takže `badgeSetting` stojí na `notSupported` a Dock odznak
+**potichu zahodí**: hodnota se nasadí, přečte se zpátky, `display()` nepomůže, restart Docku
+nepomůže — a **týž kód v témže bundlu s jiným `CFBundleIdentifier` odznak nakreslí**.
+
+**Zamítnutá varianta: požádat o `.badge`.** Vyzkoušeno naostro. U aplikace, která už autorizovaná
+je, `requestAuthorization([.alert, .sound, .badge])` projde **bez dotazu** a `badgeSetting`
+přeskočí z `notSupported` na **`disabled`** — přepínač v Nastavení systému tedy **vznikne
+vypnutý** a musel by ho člověk najít a zapnout. Odznak, který je v aplikaci výchozí zapnutý
+a v systému vypnutý, je přesně ta „kontrola, po které se nic nestane a nic se neřekne“; a na
+čistém stroji by k tomu přibyl dotaz na notifikace hned při startu, což #88 schválně odkládá.
+
+**Přijatá varianta: vlastní kresba do `dockTile.contentView`** (`DockBadgeTileView`). Nepotřebuje
+**žádné** povolení, vyzkoušená **na tomtéž bundle ID, kterému `badgeLabel` nekreslí**, a **přežije
+restart Docku** — což u `badgeLabel` nešlo ověřit vůbec. A hlavně: **dá se o ní tvrdit test**,
+protože bitmapa se porovnat dá, kdežto „Dock to zahodil“ se z procesu nepozná. To je ta část, kvůli
+které je tohle rozhodnutí lepší, ne jen funkční.
+
+**Cena, kterou to má, je zapsaná, ne zamlčená.** `contentView` **nahrazuje** kresbu dlaždice, takže
+si aplikace kreslí i ikonu (`applicationIconImage`) a bere na sebe cokoli, čím by dlaždici jinak
+kreslil systém. A je **plochou dlaždice ořezaný**, takže odznak nemůže přesahovat za roh ikony, jak
+byl v sekci 49 zakreslený — zákres se proto **opravil**: odznak přiléhá k pravému hornímu rohu
+zevnitř, je 0,38 strany (**naměřeno na systémových odznacích v živém Docku**, 17 px na dlaždici
+45 px, ne 22/72 z CSS) a **bez obtahu**, protože ten v zákresu zastupoval pozadí Docku, které
+kresba uvnitř dlaždice nemá čím vzorkovat.
+
+**Věta „aplikace si vybírá jediné: ten řetězec“ v komentáři sekce 49 tedy padla.** Zůstává z ní to
+podstatné — odznak není `.rail .ri .badge`, je to jiná komponenta se systémovou červenou
+a systémovou polohou. Nově je ale ta systémová podoba **naše kresba**, ne systémová služba.
+
 ### Záznam rozhodnutí — itinerář review místo stromu souborů (#506)
 
 Levý sloupec záložky PR přestal být strom cest a stal se dráhou se zastávkami (sekce 47 návrhu).

@@ -12852,6 +12852,7 @@ v domény review, jen drží to, čím se s systémem mluví.
 | `ProcessIdentity` | `(pid, startedAt)` — dvojice, kterou nejde splést s recyklovaným PID (#351) |
 | `ProcessInspecting` | Protokol: co jádro ví o procesu a `SIGKILL` **na identitu, ne na PID**. `SystemProcessInspector` nad `sysctl(KERN_PROC_PID)` |
 | `WorkspaceTrusting` | Protokol: zapiš důvěru ke složce do `~/.claude.json` (#460). `ClaudeWorkspaceTrust` — **jediné místo, kde aplikace píše mimo svoji cache**. Na soubor, kterému nerozumí, **nesáhne**; zapisuje **atomicky** (`replaceItemAt`, přenese `0600`) a **jen když je to potřeba** — zapsané `true` se nepřepisuje, takže běžný případ je čisté čtení. Zapsané `false` na naší cestě se naopak přepsat **smí** (#479): zakládá si ho `claude` sám, není to odpověď člověka. Složek je od #479 víc než jedna, výčet vydá `Policy.workspacesToTrust(root:shell:)` |
+| `LoginItemControlling` | Protokol: přečti, zapiš a odeber **systémovou přihlašovací položku** (#529). `SMAppServiceLoginItem` nad `SMAppService.mainApp` — **druhé místo, kde aplikace píše mimo svoji cache**, a jediné, které nechá stopu i po smazání bundlu. Za protokolem proto, že test, který by ji zapsal doopravdy, ji nechá v Nastavení systému toho, kdo suitu pustil, a odregistrovat by ji už neumělo nic (bundle hostitele zmizí s `build.noindex/`). Živý cíl vydává `LoginItemService.live`, aby `App/Store/` nemuselo na `ServiceManagement` vidět |
 | `TerminalOpening` | Protokol: pusť řádku v novém okně terminálu (#453). `AppleScriptTerminal` nad `/usr/bin/osascript` — **není to druhá cesta ven**, terminál je mimo aplikaci. Příkaz jde do skriptu jako `argv`, ne vlepený do jeho zdrojáku, a selhání se **vrací jako chyba** (`TerminalError`), ne mlčí. **Od #460 to nikdo nevolá** — drží se jako záloha i s `NSAppleEventsUsageDescription`, viz specifikace |
 
 Nad notifikacemi (#88) platí:
@@ -13081,3 +13082,194 @@ Nad `HTTPGetting` (#31) platí:
 - **Zrušení se překládá na `CancellationError`.** `URLSession` ho hlásí jako
   `URLError(.cancelled)`; vydávat ho za výpadek sítě by po zavření okna probleskovalo
   hláškou o nedostupné službě. Totéž pravidlo drží `ReviewRunner` i `GhReviewPublisher`.
+
+## Systém kolem okna — odznak v Docku a spuštění po přihlášení (#529)
+
+Dvě věci, které sahají **mimo okno**: dlaždice v Docku a systémová přihlašovací položka. Zákres
+je sekce **49** návrhu (poznámky 178–182). Obojí je proto ve storu a ne ve view — odznak je vidět
+zrovna tehdy, když se do aplikace nikdo nedívá, a položka žije v systému i po zavření okna.
+Kreslení ani zápis do systému ale store nedělá sám: obojí jde přes protokol, jako vzhled od #278.
+
+### Odznak je rail v Docku, ne druhý výpočet
+
+`Policy.dockBadge(_:queue:isBlocking:)` je jedna čistá funkce a **bere tutéž množinu jako odznak
+fronty v railu** — `visibleQueuePullRequests`, tedy cizí PR **po filtru** (#117, #332). Kdyby si
+počet skládala sama, byla by to druhá pravda o jednom čísle, a rozešly by se **potichu**: v Docku
+a v railu se nikdo nekouká naráz.
+
+**`blokující` je tatáž množina, jen zúžená, a drží to tvar té funkce.** Počítá se z toho samého
+pole (`queue.count { isBlocking($0.id) }`), takže **nemůže vyjít větší než `čekající`**. Vzít
+blokující ze souhrnu fronty (`queueSummary.blocking`) je změřená past: souhrn filtr **ignoruje**,
+takže by přepnutí volby ze `čekající` na `blokující` umělo ukázat **větší** číslo. Invariant
+`blokující ≤ čekající` drží jedině nad jednou množinou — je na to test přes pásmo podmnožin.
+
+**Prázdno, nula a „nevím“ vydávají totéž (nic), a je to rozhodnutí, ne opomenutí** (poznámka 179).
+Dlaždice má **jeden kanál**: řetězec, nebo nic. Věta „fronta ještě nedorazila“ se do ní napsat
+nedá a odznak `0` by v systémové červené hlásil poplach nad ničím — prázdná fronta je dobrá
+zpráva, ne položka k vyřízení. Všechny tři stavy proto kreslí prázdno a **rozlišují se v okně**:
+rail má nulu bez odznaku, nenačtený seznam pozná stavový řádek. Rail to dneska dělá stejně
+(`railQueueCount` je `nil` do prvního úspěšného tiku).
+
+**Vlastní PR se do odznaku nepočítají** (#332): odznak fronty znamená „tolik lidí čeká na moje
+review“ a vlastní PR má v railu svůj, který navíc počítá **tahy**, ne pull requesty.
+
+### Odznak se nasazuje sledováním, ne rozesetým `refresh()`
+
+`AppStore.trackDockBadge()` se volá **jednou, na konci složení storu**, a dál se drží sám:
+
+```swift
+let label = withObservationTracking { dockBadgeLabel } onChange: { [weak self] in
+    Task { @MainActor in self?.trackDockBadge() }
+}
+dock.applyBadge(label)
+```
+
+**Proč takhle a ne `refreshDockBadge()` na každém místě, které tu hodnotu mění.** Těch míst je
+sedm jen u uložených nálezů (`reviewRecords` se přiřazuje v `AppStore+Findings`, `+Recheck`,
+`+Review` a v obnově po startu), k tomu tik pollingu, filtr a konfigurace. Jedenáct volání, ze
+kterých se jedno časem zapomene — a je to přesně ta *„kontrola, která jinde v repu je, a tady
+chybí“* z tabulky vzorů v `CLAUDE.md`. Sledování se zapomenout nedá.
+
+Tři věci u toho nejsou zjevné:
+
+- **Nevyrábí to smyčku.** `applyBadge` zapisuje do dlaždice, ne do sledovaného stavu. A zápis téže
+  hodnoty toolchain nehlásí (pinuje to `PollObservationTests`), takže tichý tik odznak neprobudí.
+- **Není tam mezera, ve které by se změna ztratila.** `onChange` chodí synchronně uvnitř mutace
+  a přeplánovaný `Task` čte **až po ní**; celé přihlášení nového kola (čtení, nasazení, `withObservationTracking`)
+  je jeden synchronní úsek na hlavním actoru, takže mezi nasazením a novým přihlášením nemůže
+  proběhnout další mutace.
+- **Ve výchozí volbě se nesleduje ani mapa nálezů.** `Policy.dockBadge` se u `waiting` a `off` na
+  `isBlocking` **nezavolá**, takže se `reviewRecords` v tom průchodu nepřečtou — a odznak se tedy
+  neprobouzí na každém uloženém nálezu. Je na to test, který počítá dotazy na ten uzávěr.
+
+**Odznak je globální stav procesu**, tedy ta třída, která v tomhle repu pětkrát vyrobila falešný
+test (#367 vzhled, #411 `UserDefaults`, #421 cache hostitele, #462 okno s animací, #490 `CGEvent`).
+Cíl je proto **nepovinný** (`dock == nil` v testech, které si o odznak neřekly) a hlídá to
+`DockBadgeWiringTests` nad zdrojáky: `App/Store/` nesmí obsahovat `dockTile` ani importovat AppKit,
+živý cíl (`DockBadgeTile.application`) se v aplikaci jmenuje **jednou** a `applyBadge` znají
+**dva** soubory.
+
+### Odznak si aplikace kreslí sama — `badgeLabel` je změřená slepá ulička
+
+**Tohle je oprava po proklikání a je to ta podstatná část #529: v prvním kole bylo všech šest sad
+zelených a v Docku nebylo nic.** Odznak se tehdy nasazoval jediným přiřazením:
+
+```swift
+dockTile.badgeLabel = label      // nasadí se, přečte zpátky — a Dock ho zahodí
+```
+
+Co se změřilo (čísla a postup v [`docs/testovani.md`](testovani.md)): hodnota se nasadí, přečte se
+zpátky jako `6`, `dockTile.display()` nepomůže, restart Docku nepomůže — a **týž kód v témže
+bundlu s jiným `CFBundleIdentifier` odznak nakreslí**. Rozhoduje tedy identita aplikace, ne kód:
+`badgeLabel` je na macOS pod přepínačem **`Odznaky`** v Oznámeních a u aplikace, která si
+o `.badge` v `requestAuthorization` nikdy neřekla, stojí `badgeSetting` na `notSupported`, takže
+Dock odznak **potichu zahodí**. `PRism` si žádá `[.alert, .sound]` (#88), tedy o badge ne — a to
+je celý ten příběh.
+
+**Cesta, kterou to jde, je vlastní kresba do `dockTile.contentView`** (`DockBadgeTileView`).
+Vyzkoušená **na tomtéž bundle ID, kterému `badgeLabel` nekreslí**, takže pod ten přepínač
+nespadá; a **přežije i restart Docku**, což u `badgeLabel` nešlo ověřit vůbec. Cenu za to platíme
+dvě: `contentView` **nahrazuje** kresbu dlaždice (takže si musíme nakreslit i ikonu,
+`applicationIconImage`) a je **plochou dlaždice ořezaný**, takže odznak nemůže za roh ikony
+přesahovat, jak ho kreslí systém a jak byl v sekci 49 návrhu zakreslený.
+
+**Proč se místo toho nežádá o `.badge`.** Vyzkoušeno: `requestAuthorization([.alert, .sound,
+.badge])` u aplikace, která už autorizovaná je, projde bez dotazu a `badgeSetting` přeskočí
+z `notSupported` na **`disabled`** — tedy přepínač v Nastavení systému **vznikne vypnutý** a musel
+by ho člověk zapnout ručně. Odznak, který je v aplikaci výchozí zapnutý a v systému vypnutý, je
+ta „kontrola, po které se nic nestane a nic se neřekne“; a k tomu by na čistém stroji přibyl dotaz
+na notifikace hned při startu, což #88 schválně odkládá. Vlastní kresba nepotřebuje **žádné**
+povolení.
+
+**Geometrie je v `Policy.dockBadgeLayout(characters:in:)`**, protože je to aritmetika nad rozměrem
+— ve `draw(_:)` by se ověřovala jedině bitmapou. Rozměry jsou **naměřené v živém Docku**, ne
+odvozené z CSS: systémový odznak má na dlaždici 45 px průměr **17 px** (0,38 krátké strany) a horní
+hranu na horní hraně ikony. Všechno je proto podíl strany, ne body — dlaždice má podle nastavení
+systému 32 až 128 bodů. Šířka roste s počtem znaků do pilulky a je **zastropovaná plochou
+dlaždice**: strop přišel z testu, protože od pěti znaků odznak jednou hranou vylezl a nenakreslil
+se celý. Text se do sražené pilulky **doměří a zmenší** — sazbu zná jedině kresba (pravidlo od
+#236).
+
+Hlídají to dvě věci a **každá chytá jinou třídu vady**: `DockBadgeTileRenderTests` porovnává
+bitmapu (odznak je vidět, stojí na něm to číslo, dvojciferný počet ho roztáhne) a
+`DockBadgeWiringTests` tvrdí nad zdrojáky, že se `badgeLabel` do `DockBadgeTile.swift` nevrátí.
+Zákaz je **na ten jeden soubor, ne na celé `App/`**: `badgeLabel` je běžné jméno a v okně už
+dvakrát legitimně je (`DiffFileHeaderView`, `SinceLastVisitView`), kdežto `dockTile` zná jediný
+soubor — kdo se chce vrátit, musí to napsat právě tam.
+
+**Zapsaná mez: s úplně zavřeným oknem odznak zmrzne.** `keepFresh()` visí na `ContentView.task`,
+takže po zavření posledního okna polling stojí a na dlaždici zůstane poslední spočítaná hodnota.
+Nezmizí a nelže o čase, jen nepřičte PR, který přišel potom. Běžný případ (aplikace na pozadí,
+okno otevřené) tím zasažený **není** — a životnost pollingu je vlastní otázka, ne součást #529.
+
+### Přihlašovací položka se čte zpátky, ne zapisuje do configu
+
+`config.json` ji **nedrží** (poznámka 180): je to stav systému, takže druhá kopie v konfiguraci by
+po ručním vypnutí v Nastavení systému ukazovala v okně opak toho, co platí. Volba odznaku naopak do
+konfigurace patří (`GlobalConfig.dockBadge`) — to je preference. Poloha přepínače se tedy bere
+z `SMAppService.mainApp.status` a čte se **při každém zobrazení stránky**, ne jednou při startu.
+
+Rozhoduje o celém řádku jedna čistá funkce, `Policy.loginItem(availability:status:failure:)` →
+`LoginItemRow` (poloha, zašednutí, věta, odskok). Čtyři stavy se totiž kříží se dvěma důvody
+nedostupnosti a s nepovedeným zápisem; ve view by z toho byly čtyři `if`y a pátý případ by se
+zapomněl.
+
+**Která instalace to smí, rozhoduje `Policy.loginItemAvailability(_:)` nad `AppInstallation`
+(`CFBundleName` + cesta k bundlu):**
+
+- **slotová instance ne** (`CFBundleName != MainWindow.title`, tedy `PRism-d` a spol.) — poznámka
+  182. `bin/slot-config.sh` čistí odesílání, notifikace a automat, ale tohle by očistit **neumělo**:
+  není to v `config.json`, ale v systému. Po slotu by tedy zůstala položka mířící na bundle, který
+  zmizel s worktree. **Do `slot-config.sh` se nesahá** — brána je v aplikaci;
+- **bundle mimo `/Applications` ne** — cesta zmizí s dalším buildem. **Tvrzení, že tam
+  `SMAppService` nefunguje, je cizí (z decku), ne změřené**; brána je v aplikaci proto, že položka
+  na zmizelou cestu je nesmysl bez ohledu na to, jak se k ní systém staví;
+- **slot se posuzuje první**, i když by padl i na cestě: je to zákaz, který se nedá spravit, kdežto
+  „nainstaluj to do `/Applications`“ je pokyn, po kterém to půjde. Věta má odpovídat tomu, co je
+  s tím k dělání;
+- **prázdné `CFBundleName`** (rozbitý plist) je taky ne. `CacheLayout` na chybějícím jménu
+  **shazuje aplikaci**, protože je to kořen cache; tady je nejhorší následek zašedlý přepínač
+  s větou, tedy bezpečná strana sama.
+
+**Brána je v `AppStore.setLoginItem(_:)`, ne v zašedlém přepínači.** Zašednutí je popis, ne stráž:
+view je jedna cesta a stačí přidat druhou (zkratka, paleta, test), aby ochrana zmizela. Nejcennější
+test celého issue tvrdí, že se **nestalo nic** — slotová instance nezapsala ani neodebrala.
+
+**Zašednutí se kreslí opacitou, a je to změřené.** Samotné `.disabled(_:)` v tomhle okně vidět
+**není**: dvě bitmapy téhož řádku, jedna zakázaná a jedna ne, se liší jen odstínem přepínače
+a popiska zůstane plná. Řádek proto dostává `SystemSettingsView.disabledOpacity` (0.55, číslo ze
+zákresu) — zašedlý řádek, který vypadá jako povolený, je horší než chybějící: člověk klikne a nic
+se nestane. Vzor je `FindingTableRowView.dismissedOpacity`.
+
+### Selhání se řekne, přepínač se sám nevrátí
+
+Zápis do systému umí selhat (bez práv, po zákazu v Nastavení systému). **Přepínač, který se tiše
+vrátí do vypnuté polohy, je horší než chybová věta** (poznámka 181): vypadá to, jako by kliknutí
+nedošlo. Drží se proto `LoginItemFailure(requested:message:)` — tedy i **poloha, o kterou si člověk
+řekl** — a věta pod přepínačem je ta ze systému, jak přišla.
+
+**Věta zmizí sama, jak jí stav systému přestane odporovat**, a rozhoduje o tom `Policy.loginItem`,
+ne store: `(status == .enabled) == failure.requested` znamená, že se to napodruhé povedlo, a stará
+chyba se zahodí. Nechat ji viset je tentýž druh lži jako tiše vrácený přepínač, jen obrácený.
+
+**Povedený zápis, po kterém systém chce schválení** (`requiresApproval`), **není selhání** — takže
+se nehlásí jako chyba. Přepínač jde do vypnuté polohy (aplikace se po přihlášení doopravdy
+nespustí), k tomu je věta a **odskok do Nastavení systému** (`SystemSettings.openLoginItems`,
+vzor z #414): `register()` znovu ten zákaz nezvrátí, takže je odskok jediný další krok. Nabízí se
+**jen v tomhle stavu** — u zašedlého přepínače by v Nastavení systému nikdo nic neudělal.
+
+Věta je pod přepínačem **vždycky**, i když je všechno v pořádku: u zašedlého říká proč, u
+zapnutelného kam se to vlastně zapisuje. Přepínač, který nejde cvaknout a neřekne proč, je
+k nerozeznání od rozbité aplikace.
+
+### Stránka `Systém` v nastavení
+
+Osmá stránka, ve skupině **Prostředí** (`SettingsSection.system`). **Vlastní stránka, ne řádek
+v `Běhu`**: `Běh` je hrst čísel o tom, jak se aplikace chová dovnitř (interval, rozpočet cache,
+souběh), kdežto tady je obojí o tom, co je z aplikace vidět **venku**. Dělení stránek je podle
+otázky, na kterou odpovídají (#177).
+
+Je to vedle `Repozitářů` druhá stránka, která nečte jen konfiguraci — dostává `store`, protože
+přihlašovací položka se čte a zapisuje přes něj. Volba odznaku jde do `config.json` odloženě jako
+zbytek formuláře (`SettingsModel`); segmentovaný přepínač, ne `radioGroup`, protože jsou to tři
+krátká slova na jedné ose od „nejvíc“ k „nic“ — tak je to i v zákresu.
