@@ -38,6 +38,11 @@ struct ContentView: View {
     /// merge: sheet je to jediné místo, kde je vidět, jak push dopadl, a nesmí zmizet s tabem.
     @State private var branchPush: BranchPushSubmission?
 
+    /// Píše se někde v okně do pole? (#507) Drží to okno, protože pole jsou v detailu PR,
+    /// v paletě ⌘K i v popoverech nad hlavičkou — a odpověď potřebuje mezerník, který je jedna
+    /// ze dvou zkratek okna bez modifikátoru.
+    @State private var textFieldFocus = TextFieldFocus()
+
     var body: some View {
         // Průchod tělem se počítá, jen když je zapnutá diagnostika (#361) — jinak je to načtení
         // jednoho statického `Optional`u. Viz `RenderDiagnostics`.
@@ -93,6 +98,9 @@ struct ContentView: View {
         // **jednou, na kořen okna** — zkratky se registrují na čtyřech místech a předávat příznak
         // argumentem by znamenalo na jedno z nich zapomenout.
         .environment(\.terminalFocused, store.isTerminalFocused)
+        // Píše se někde v okně do pole? (#507) Nasazuje se **jednou, na kořen okna**, ze stejného
+        // důvodu jako příznak zásuvky nad tím: polí je v okně sedm na čtyřech úrovních zanoření.
+        .environment(\.textFieldFocus, textFieldFocus)
         .fullSizeContentWindow()
         // Potvrzení odeslání. `item:`, ne `isPresented:`: sheet nemá co ukazovat bez snímku
         // draftu, takže `nil` je zavřený stav i zdroj dat naráz.

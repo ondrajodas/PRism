@@ -63,10 +63,14 @@ struct WindowShortcut: Equatable, Sendable {
         case toggleTerminal
         // Obsah detailu a domácí záložky.
         case itinerary
+        /// Další zastávka itineráře (#507) — **druhá zkratka okna bez modifikátoru**. S `⏎` se
+        /// nepotká: to platí jedině na domácí záložce, mezerník jedině v detailu PR.
+        case nextItineraryStop
         case runAllReviews
         case openDraft
-        /// Otevřít první pull request v prvním pruhu desky (#515) — jediná zkratka okna
-        /// **bez modifikátoru**, takže nad otevřenou paletou se zakazuje.
+        /// Otevřít první pull request v prvním pruhu desky (#515) — jedna ze **dvou** zkratek
+        /// okna bez modifikátoru (od #507 je druhá mezerník), takže nad otevřenou paletou se
+        /// zakazuje.
         case openFirstOnBoard
         /// Hledání v diffu (#152). `findInDiff` platí, kdykoli je diff na obrazovce; skákání mezi
         /// výskyty registruje **pruh sám**, takže existuje jedině otevřené.
@@ -96,6 +100,9 @@ struct WindowShortcut: Equatable, Sendable {
         /// stejně jako u těch svislých (`CTFontGetGlyphsForCharacters`: `←` 1312, `→` 1314).
         case leftArrow
         case rightArrow
+        /// Mezerník (#507). **Vlastní případ, ne `character(" ")`**: znak mezery se v popisce
+        /// nekreslí vůbec, takže by kapsle byla prázdná a zkratka „nebyla vidět“.
+        case space
 
         /// Jak se klávesa kreslí v paletě a v nápovědě.
         ///
@@ -105,6 +112,11 @@ struct WindowShortcut: Equatable, Sendable {
         /// náhradního písma, tedy do jiné šířky i kresby než zbytek kapsle. `⌘`, `⌃`, `⌥`, `⇧`,
         /// `⏎`, `↑` a `↓` v něm jsou, takže se kreslí glyfem. Aplikace to tak psala i před #441
         /// (`⌃Tab` v nápovědě pruhu, `esc zavřít` v patce palety), takže se tím nic nemění.
+        ///
+        /// **`␣` (U+2423) je v tom písmu taky** (změřeno u #507 — glyf 1330), takže se mezerník
+        /// kreslí glyfem, jak ho má návrh. V **neproporcionálním** systémovém písmu ale není
+        /// a padá tam do `HelveticaNeue` (změřeno `CTFontCreateForString`) — týká se to jedině
+        /// nápovědy tlačítka, kde je jeden znak v jiném řezu, ne kapsle.
         var glyph: String {
             switch self {
             case .character(let character): String(character).uppercased()
@@ -115,6 +127,7 @@ struct WindowShortcut: Equatable, Sendable {
             case .downArrow: "↓"
             case .leftArrow: "←"
             case .rightArrow: "→"
+            case .space: "␣"
             }
         }
     }
@@ -264,6 +277,19 @@ extension Policy {
                 title: "Itinerář review",
                 primary: .init(key: .character("1"), modifiers: .command)
             )
+        // Mezerník (#507) — návrh z decku *Směry › A Itinerář review*. Klávesa, kterou se
+        // v prohlížeči stránkuje dolů, tady posune po dráze; `⌥↓` zůstává **nálezům** (#187)
+        // a `⌥V` značce `Prošlo` (#500), takže se nic nepřebíjí.
+        //
+        // **Holá klávesa se bere jedině tehdy, když se jí nic nesebere** (`Policy.itineraryStep`):
+        // ne v poli s textem a ne dřív, než výřez dojede na konec obsahu. Zakázané tlačítko
+        // klávesu nebere, takže mezerník propadne scrollu — tentýž vzorec jako `⏎` nad otevřenou
+        // paletou (#515).
+        case .nextItineraryStop:
+            return WindowShortcut(
+                title: "Další zastávka",
+                primary: .init(key: .space)
+            )
         case .runAllReviews:
             return WindowShortcut(
                 title: "Pustit review na vše, co neběželo",
@@ -363,7 +389,7 @@ extension Policy {
         + [
             .nextFinding, .previousFinding, .reviewPanel, .backFromCommit,
             .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
-            .itinerary, .runAllReviews, .openDraft, .openFirstOnBoard,
+            .itinerary, .nextItineraryStop, .runAllReviews, .openDraft, .openFirstOnBoard,
             .findInDiff, .nextSearchHit, .previousSearchHit,
             .toggleFileRead, .previousFile, .nextFile,
         ]

@@ -8063,6 +8063,65 @@ byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnit�
 počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
 nepatří — je to živý přepínač, ne jednosměrná značka.
 
+## #507 — mezerník jako další zastávka a průběh ve stavovém řádku (M14)
+
+Itinerář (#506) říká, **kde jsem**; #507 přidává **pohyb jednou klávesou** a větu, podle které se
+dá rozhodnout, jestli review dodělat teď, nebo zítra. Tři věci: **mezerník** na další zastávku,
+**`Krok 4 z 9 · 12 min`** ve stavovém řádku (`.sitem plain`, vedle stavu pracovní kopie) a **patka
+sloupce** s klávesami `␣ další zastávka · ⌥↓ další nález · ⌥V prošlo`. Zákres přenesla #506,
+sekce 47 se nemění.
+
+**Mezerník normálně scrolluje, a proto o něm rozhoduje `Policy`, ne `if` ve view.**
+`Policy.itineraryStep` má tři vstupy a klávesu vydá v **jediné kombinaci ze šesti**: mimo textové
+pole, s výřezem na konci obsahu a jen když je kam jít. Zakázané tlačítko klávesu nebere, takže se
+ve všech ostatních případech propadne scrollu — tentýž vzorec jako `⌘⏎` v tabu `Zeptat se` (#452)
+a `⏎` nad otevřenou paletou (#515).
+
+**Že se do pole píše, se nedalo odvodit z tabu** (jako `Policy.claimsReturnShortcut`, #452):
+composer rozdělaného review stojí v panelu vedle `Přehledu` i `Změněných souborů`, tedy zrovna
+v tabech, o kterých itinerář mluví nejvíc. Vznikl proto `TextFieldFocus` — **množina, ne `Bool`**,
+protože pořadí dvou hlášení při přeskoku fokusu není zaručené —, hlásí do něj **čtyři** místa
+(`DraftTextField` za všechny čtyři composery naráz, `DiffSearchBar`, `PickerSearchField`,
+`CommandPaletteView`) a podává se prostředím jako `terminalFocused` (#459).
+
+**Konec obsahu se měří přesně v těch třech tabech, do kterých vedou zastávky** (`Přehled`,
+`Změněné soubory`, `Kontroly` — obor hodnot `ItineraryStop.tab`); jinde mezerník zůstává klávesou
+scrollu, a je to odpověď, ne mezera. Hlášení nese, **odkud je** (pull request a tab): hodnota
+z minulého tabu je v tom novém k nerozeznání od čerstvé, a nulovat ji úlohou při přepnutí nejde
+spolehlivě, protože pořadí nulování a prvního hlášení nové geometrie nikdo negarantuje.
+
+**Kurzor je „kde jsem v procházení“, ne „co je hotové“** (tatáž věc jako `FindingCursor`, #187,
+včetně toho, že nepřetéká mezi PR). Bez kurzoru jde první stisk na **aktuální** zastávku, ne na
+začátek dráhy; klik na zastávku ho posouvá **toutéž cestou**, jinak by mezerník po kliknutí
+pokračoval odjinud, než kam člověk klikl. **Mezerníkem se nic neodškrtává** — hotovo se pozná
+z dat.
+
+**V pruhu jsou minuty uplynulé, v hlavičce sloupce zbývající**, a je to vědomý rozdíl: pruh říká,
+jak dlouho je záložka otevřená (od otevření, **bez odečítání nečinnosti** — je to orientace, ne
+měření práce), hlavička odhaduje, co zbývá. Počítadlo je přitom **jedno**
+(`AppStore.itineraryProgress`). Čas drží `tabOpenTimes`, obnovená záložka (#527) se počítá od
+restartu a uklízí to **zavření záložky**, ne tik — záložka mimo seznam z pollingu je normální stav
+(#527, #531). Odtikává to `TimelineView` ukotvený v otevření záložky, takže se překreslí jeden
+`Text`, ne stavový řádek (tatáž konstrukce jako `DashboardCountdown`, #260).
+
+**Mezerník je druhá zkratka okna bez modifikátoru** (po `⏎` na desce, #515) a s tou první se
+nepotká: `⏎` platí jedině na domácí záložce, mezerník jedině v detailu PR. Kreslí se glyfem `␣`,
+protože ho monospace systémové písmo **má** (glyf 1330, změřeno); v proporcionálním chybí a padá
+do `HelveticaNeue`, což se týká jedině nápovědy tlačítka. Patka sloupce je jedna řádka, jak ji má
+návrh, a **vešla se až napodruhé**: k textu patří i mezery mezi osmi prvky `HStack`u, takže při
+mezeře 5 b vyjde 236,5 b proti 234 b — a přetečení se projeví **oříznutým prvním popiskem**, ne
+přetečením. S mezerou 3 b je to 222,5 b; našel to render, ne měřidlo.
+
+Nová tvrzení: sedmnáct v `ItineraryWalkTests` (matice tří vstupů, kurzor mimo dráhu, hotová dráha,
+vůle u konce obsahu, text pruhu i patky) a sedm v `ItinerarySpacebarWiringTests` (hlášení konce
+podle tabu i PR, pořadí fokusu dvou polí a dvě stráže nad zdrojáky z obou stran). **Regrese
+ověřená vložením regrese čtyřikrát** — vypnutý `isEditing`, `nil` brané jako „na konci“, pole bez
+hlášení fokusu a tab bez hlášení konce.
+
+**Neověřená mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, ověří jedině člověk
+na běžící aplikaci — testovací host nedostane aktivaci, takže nemá key okno (tatáž mezera jako
+u celého katalogu, #441).
+
 ## #526 — odznak v railu do rohu a pruh aktivní položky (zákres 50)
 
 **„Uvnitř rámu“ z #366 znamenalo „přes ikonu“.** Odznak je 24 × 18 na rámu 34 × 30, takže zakryje
@@ -8106,9 +8165,9 @@ i oddělovač a rám vycházel přes celou výšku railu.
 **Copilot k tomuhle PR nedoběhl a je to neověřená mezera** (2026-09-04). Job běžel, ale spadl na
 **prvním** volání API — `Resource not accessible by integration` při `Fetching PR metadata` — a bylo
 to tak u **čtyř různých větví** (#526, #542, #491 dvakrát), tedy repo-wide, ne na tomhle diffu.
-Vyžádání se opakovalo třikrát, pokaždé stejně. Je to **třetí** známá příčina „Copilot encountered
-an error“ vedle velikosti `CLAUDE.md` a spotřebovaného requestu, a nově zapsaná
-v [`docs/github-cli.md`](github-cli.md).
+Vyžádání se opakovalo třikrát, pokaždé stejně. Je to **tatáž třetí příčina, kterou o hodinu dřív
+popsalo #507**; tenhle záznam k ní přidal jen čtvrtou větev a příkaz na čtení logu
+([`docs/github-cli.md`](github-cli.md)).
 
 **Místo něj proběhla druhá vlastní revize** (subagent nad `git diff main...HEAD`) a našla čtyři
 reálné věci, které do PR přišly opravené:

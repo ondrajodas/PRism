@@ -38,6 +38,26 @@ extension AppStore {
         )
     }
 
+    /// Počítadlo dráhy (#507) — **tentýž počet, jaký stojí v hlavičce sloupce**.
+    ///
+    /// Existuje proto, že se na ně ptají dvě místa: sloupec (`ItineraryColumnView`) a stavový
+    /// řádek (`ItineraryStatusView`). Dvě složení téhož počítadla by se rozešla při první úpravě
+    /// zastávek — tatáž úvaha jako u značek souborů v detailu PR.
+    func itineraryProgress(for pr: PRIdentifier) -> ItineraryProgress {
+        let facts = itineraryFacts(for: pr)
+        return Policy.itineraryProgress(of: Policy.itinerary(facts), facts: facts)
+    }
+
+    /// Zapíše, kdy se záložka otevřela (#507). **Druhé otevření čas nenuluje** — viz
+    /// `AppStore.tabOpenTimes`.
+    func noteTabOpened(_ pr: PRIdentifier) {
+        guard tabOpenTimes[pr] == nil else { return }
+        tabOpenTimes[pr] = time.now
+    }
+
+    /// Od kdy je záložka otevřená. `nil` = neví se (záložka, kterou nikdo neotevřel).
+    func tabOpenedAt(_ pr: PRIdentifier) -> Date? { tabOpenTimes[pr] }
+
     /// Odeslal jsem na tenhle PR review s verdiktem?
     ///
     /// **Čte se z GitHubu, ne z draftu**: draft je rozmyšlené, ne odeslané, a zastávka `Verdikt`
