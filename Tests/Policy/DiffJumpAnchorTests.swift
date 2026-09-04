@@ -59,6 +59,85 @@ struct DiffJumpAnchorTests {
         }
     }
 
+    // MARK: - Hlavička souboru (#506)
+
+    /// **Klik na soubor sedne hlavičkou na hranu výřezu** — a je to jediný druh cíle, u kterého
+    /// vzorec z #152 nic nepočítá.
+    ///
+    /// Cílem je totiž **celá sekce souboru**, tedy přímo to, co má být vidět, ne řádek uvnitř
+    /// bloku. Podíl je proto nula **bez ohledu na výřez i na výšku sekce**, a ta nezávislost je
+    /// podmínka, ne úspora: sekce je vysoká tisíce bodů, takže by z ní podíl 0,12 (co by vyšlo
+    /// s odstupem `bubbleContextAbove`) udělal skok o stovky bodů **do** souboru.
+    @Test("Hlavička souboru přistane na hraně, ať je sekce jak vysoká chce")
+    func theFileHeaderLandsOnTheEdge() throws {
+        #expect(Policy.jumpOffset(of: .fileHeader, viewport: Self.viewport) == 0)
+        // Nula i v nízkém okně, kde je u ostatních cílů stropem střed.
+        #expect(Policy.jumpOffset(of: .fileHeader, viewport: 100) == 0)
+        for height in [16.0, 200, Self.viewport, 3_000, 40_000] {
+            for viewport in [0.0, 100, Self.viewport] {
+                let y = try #require(Policy.jumpAnchorY(
+                    of: .fileHeader,
+                    viewport: viewport,
+                    metrics: DiffJumpMetrics(above: 0, height: height)
+                ))
+                #expect(y == 0, "sekce \(height) b ve výřezu \(viewport): podíl \(y)")
+            }
+        }
+    }
+
+    /// **A bez změřeného výřezu se nesahá po středu** — u ostatních cílů je `nil` odpověď „nevím,
+    /// vezmi si střed“, u hlavičky by z toho byl skok do půlky souboru.
+    @Test("Hlavička souboru nepotřebuje změřený výřez")
+    func theFileHeaderNeedsNoViewport() {
+        #expect(Policy.jumpAnchorY(
+            of: .fileHeader,
+            viewport: 0,
+            metrics: DiffJumpMetrics(above: 0, height: 3_000)
+        ) == 0)
+        // Protějšek: u výskytu hledání `nil` být **musí**, jinak by se z něj tohle tvrzení stalo
+        // slepým (tatáž hodnota pro obojí, #478).
+        #expect(Policy.jumpAnchorY(
+            of: .searchHit,
+            viewport: 0,
+            metrics: DiffJumpMetrics(above: 0, height: 3_000)
+        ) == nil)
+    }
+
+    /// **Druh cíle se pozná z cíle, ne z toho, kdo ho nastavil** (#506) — bez toho by sloupec
+    /// s itinerářem, který stojí mimo `DiffView`, druh předat nemohl.
+    @Test("Kotva na `file.id` je hlavička, kotva na řádek ne")
+    func theTargetIdentityDecidesTheKind() {
+        let files = [Self.file("src/A.php"), Self.file("src/A.php.bak")]
+        for requested in [DiffJumpTarget.bubble, .searchHit] {
+            for file in files {
+                #expect(
+                    Policy.jumpTarget(of: file.id, files: files, requested: requested) == .fileHeader
+                )
+                // Řádek téhož souboru **hlavička není** — a `src/A.php` je prefixem
+                // `src/A.php.bak`, takže se tady zároveň tvrdí, že se porovnává celé `id`.
+                #expect(
+                    Policy.jumpTarget(of: "\(file.id)|h0l0", files: files, requested: requested)
+                        == requested
+                )
+            }
+            // Soubor, který v diffu není (přišel commit, který ho smazal): druh se nemění.
+            #expect(
+                Policy.jumpTarget(of: "src/Gone.php", files: files, requested: requested) == requested
+            )
+        }
+    }
+
+    private static func file(_ path: String) -> FileDiff {
+        FileDiff(
+            oldPath: path,
+            newPath: path,
+            change: .modified,
+            isBinary: false,
+            hunks: [],
+            blobs: nil
+        )
+    }
+
     // MARK: - Podíl výšky
 
     /// **Tohle je celá oprava #152, vyjádřená invariantem:** podíl je správný právě tehdy, když

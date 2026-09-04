@@ -190,7 +190,9 @@ extension Policy {
     /// vznikl jedině tehdy, kdyby zahození okraje šířku zvětšilo — a to se stát nemůže, protože
     /// složený proužek je vždycky užší než rozložený panel.
     ///
-    /// - Parameter available: šířka, kterou dostal **diff**, tedy okno bez railu a bez panelu.
+    /// - Parameter available: šířka, o kterou se dělí **sloupec, kód a okraj** — tedy okno bez
+    ///   railu a bez panelu. **Od #506 to není štěrbina diffu**: sloupec odečítá rozvržení detailu
+    ///   PR, takže si ji `DiffView` dopočítává `Policy.widthWithItinerary(slot:expanded:)`.
     ///   `nil` znamená „nikdo ji nezměřil“ a chová se jako dřív (rozhoduje jen pohled) — bez toho
     ///   by se kolony složily každému, kdo `DiffView` hostuje mimo okno.
     static func diffSideColumns(
@@ -228,9 +230,14 @@ extension Policy {
     /// Šířka kolony kódu — **plocha, na které se doopravdy sází** (#546).
     ///
     /// Je to tatáž aritmetika, jakou provádí `HStack` v `DiffView`: od štěrbiny diffu se odečte
-    /// strom, okraj a **mezera před tím, co stojí vpravo** (`codeColumnTrailingGap`, #503 — ta je
+    /// okraj a **mezera před tím, co stojí vpravo** (`codeColumnTrailingGap`, #503 — ta je
     /// mimo `fillingSlot` schválně, takže od štěrbiny ubývá). Odsud se šířka **předává** obsahu
     /// i ukazateli `N znaků na stranu`; do #546 si ji obsah měřil sám a měřil něco jiného.
+    ///
+    /// **Levý sloupec se odsud od #506 neodečítá.** Itinerář stojí vedle **všech** tabů, takže ho
+    /// odečítá rozvržení detailu PR a `available` je štěrbina, ve které už není. Kdo ho odečte
+    /// znovu, dostane kolonu o 260 (respektive 34) bodů užší, než jakou `HStack` doopravdy dá —
+    /// a to je přesně ta třída vady, kterou řešilo #546, jen v druhém směru.
     ///
     /// **Proč to není další pole `DiffSideColumns`.** Ta struktura je identita `task(id:)`
     /// v `DiffView` — rozhodnutí o kolonách se má uplatnit jednou —, kdežto tohle je číslo, které se
@@ -245,10 +252,29 @@ extension Policy {
     /// zahodí — tahle podlaha je druhá pojistka, ne to rozhodnutí.
     static func diffCodeColumnWidth(available: Double?, columns: DiffSideColumns) -> Double? {
         guard let available else { return nil }
-        let sides = treeColumnWidth(expanded: columns.tree)
-            + marginColumnWidth(shown: columns.margin)
-            + codeColumnTrailingGap
+        let sides = marginColumnWidth(shown: columns.margin) + codeColumnTrailingGap
         return max(available - sides, 0)
+    }
+
+    /// Šířka, o kterou se dělí **sloupec, kód a okraj** — spočítaná ze štěrbiny, kterou dostal
+    /// obsah tabu (#506).
+    ///
+    /// Od #506 stojí itinerář vedle všech tabů, takže ho odečítá `HStack` v detailu PR a `slot`
+    /// je to, co po něm zbylo. Rozhodnutí o kolonách (`diffSideColumns`) se ale musí ptát na tu
+    /// **společnou** šířku — jinak by se sloupec skládal podle toho, co po něm zbylo, tedy sám
+    /// podle sebe.
+    ///
+    /// **Přičtení je přesné, ne odhad**: sloupec má právě dvě šířky (`treeColumnWidth`) a která
+    /// z nich zrovna platí, ví ten, kdo ho kreslí. Zpětná vazba se tím nerozkmitá: složení
+    /// sloupce štěrbinu zvětší přesně o tolik, o kolik se přičítalo méně, takže z obojího vyjde
+    /// tatáž společná šířka a tedy totéž rozhodnutí.
+    ///
+    /// `nil` = **štěrbinu nikdo nezměřil** (nulová plocha při prvním průchodu, náhled mimo okno),
+    /// a `diffSideColumns` se pak rozhoduje jen podle pohledu — jako do #503. Bez toho by se
+    /// v prvním průchodu složilo všechno a vzápětí rozložilo zpátky.
+    static func widthWithItinerary(slot: Double, expanded: Bool) -> Double? {
+        guard slot > 0 else { return nil }
+        return slot + treeColumnWidth(expanded: expanded)
     }
 
     /// Kolik musí zbýt na kód, aby to k něčemu bylo.

@@ -46,12 +46,13 @@ struct ItineraryColumnRoomTests {
 
     /// Kolona kódu **produkční funkcí**, ne odečítáním v testu: `diffCodeColumnWidth` odečítá
     /// i mezeru před tím, co stojí vpravo (#503), a dvě aritmetiky by se rozešly.
+    ///
+    /// **Od #506/2 se sloupec odečítá tady**, ne ve `diffCodeColumnWidth`: sloupec stojí vedle
+    /// všech tabů, takže ho odečítá rozvržení detailu a diff dostane štěrbinu, ve které už není.
+    /// Odečtení `tree` na téhle řádce je tedy to, co v okně dělá `HStack` v `content`.
     private func codeWidth(tree: Double, margin: Bool) -> Double {
-        // Sloupec se do funkce nedá zadat číslem — čte si ho z `treeColumnWidth`. Šířka „do #506“
-        // se proto dopočítá z dnešní: rozdíl je právě těch padesát bodů.
         let columns = DiffSideColumns(tree: true, panel: false, margin: margin)
-        let today = Policy.diffCodeColumnWidth(available: tabWidth, columns: columns) ?? 0
-        return today + (Policy.treeColumnWidth(expanded: true) - tree)
+        return Policy.diffCodeColumnWidth(available: tabWidth - tree, columns: columns) ?? 0
     }
 
     @Test("Sloupec je 260 bodů, složený 34")

@@ -6153,7 +6153,8 @@ tvrzeními. Celý běh: `5199 tests in 508 suites passed`, 1 known issue.
 ### Záznam rozhodnutí — itinerář review místo stromu souborů (#506)
 
 Levý sloupec záložky PR přestal být strom cest a stal se dráhou se zastávkami (sekce 47 návrhu).
-Šest rozhodnutí, u kterých se dá později vrátit:
+Šest rozhodnutí z prvního kola a **čtyři z druhého** (připomínky z proklikání, na konci sekce),
+u kterých se dá později vrátit:
 
 1. **Strom podle cesty se zahodil, ne schoval za přepínač.** `FileTreeView` a `FileTree.swift`
    odešly i s testy. Alternativa „nechat strom jako druhý pohled sloupce“ se **zamítla**: dva
@@ -6200,3 +6201,59 @@ Levý sloupec záložky PR přestal být strom cest a stal se dráhou se zastáv
 toho, jak dlouho dvěstěřádkový soubor v tomhle okně doopravdy zabere, ne z naměřených sezení. Když
 se ukáže systematicky mimo, mění se ta jedna hodnota a nic jiného — proto je to konstanta
 v `Policy` a ne rozeseté aritmetika.
+
+#### Druhé kolo z proklikání (#506): sloupec vedle všech tabů a klik na soubor
+
+Z proklikání přišly dvě připomínky a obojí bylo **věcně proti tomu, k čemu itinerář je**. Čtyři
+další rozhodnutí, u kterých se dá vrátit:
+
+7. **Sloupec se přestěhoval o úroveň výš, ne zduplikoval.** První kolo ho mělo uvnitř obsahu tabu
+   `Změněné soubory`, takže překliknutím na `Kontroly` zmizel — mizel právě tehdy, kdy podle něj
+   člověk někam odešel. Zvažovalo se **kreslit ho v každém tabu zvlášť** (menší zásah do rozvržení)
+   a **zamítlo se**: byla by z toho osmá kopie téže kompozice a osm míst, kde se dá zapomenout na
+   jednu. Sloupec proto hostí `PullRequestDetailView` a stojí vlevo od obsahu záložky.
+
+8. **„Ve všech tabech“ je rozhodnutí, ne převzatý pokyn.** Precedens mluví pro výběr: panel vpravo
+   se ve třech tabech schovává (#294), protože je v nich vedle něj duplikát dat nebo obsah, který
+   šířku potřebuje. U sloupce ani jedno neplatí — nic neduplikuje a v každém tabu vede **jinam**
+   (soubory do diffu, zastávky do `Přehledu`, `Kontrol` a panelu). Tab, ve kterém by zmizel, je
+   tab, ze kterého se nedá vrátit, tedy zrovna ta vada. **Cena je jedno číslo pro všech osm**
+   (260 b rozložený, 34 složený, tedy 787 z 1 047 na výchozím okně) a jedna šířka je podmínka:
+   sloupec, který by se s tabem měnil, přeskládá okno při každém přepnutí záložky.
+
+9. **Společná šířka se předává, nedopočítává, a je to zamítnutá varianta s důvodem.** Rozhodnutí
+   `Policy.diffSideColumns` se musí ptát na šířku, o kterou se sloupec, kód a okraj **dělí**;
+   `DiffView` ale od druhého kola dostane štěrbinu, ve které sloupec **není**. První podoba si ji
+   dopočítávala uvnitř diffu (`slot + treeColumnWidth(expanded:)`) a v okně to sedělo přesně —
+   **zamítlo se** proto, že kdokoli, kdo `DiffView` hostuje bez sloupce vedle sebe (diff commitu
+   mimo záložku, náhledy, sondy), by dostal šířku o 260 bodů větší, a protože ta hodnota vstupuje
+   do rozhodnutí, které pak mění samo sebe, umí to v takovém hostu **kmitat**: rozložený sloupec
+   pošle kolonu pod podlahu a složí ho, složený kolonu rozloží a sloupec se otevře. Šířku proto
+   počítá ten, kdo sloupec kreslí, a podává ji prostředím (`sideColumnsWidth`); `nil` znamená
+   „sloupec vedle téhle plochy nestojí“.
+
+   **O skládání ale rozhoduje dál `DiffView`, a je to zapsaná mezera.** Podlaha, kvůli které se
+   sloupec skládá, je podlaha **kolony kódu** — v `Kontrolách` není co chránit. Přestěhovat
+   rozhodnutí do detailu se **zamítlo**: potřebovalo by to znát karty v okraji (`hasMargin`), tedy
+   druhé složení téže odpovědi v tabu, ve kterém se okraj nekreslí. Mezera: v tabu bez diffu se
+   nerozhoduje vůbec, takže zúžení okna nad `Kontrolami` sloupec nesloží — složí ho první průchod
+   diffem. Posouzeno jako přijatelné, protože ostatní taby podlahu nemají.
+
+10. **Klik na soubor jde hotovou cestou, a hlavička sedne na hranu.** Sloupec měl vlastní skok
+    (`withAnimation { proxy.scrollTo(file.id, anchor: .top) }`) a ten byl vadný na dvou ze tří
+    příčin míjení, které vyjmenovalo #152: animovaný a v jediném průchodu. Od druhého kola vede
+    jediná cesta — tatáž, jakou skáče mapa PR (#501). **Kam soubor přistane, je vlastní
+    rozhodnutí**: offset **0**, tedy hlavička na hraně výřezu. Devadesát bodů jako u nálezu se
+    **zamítlo** (nad hlavičkou je konec předchozího souboru, tedy kód, který se nečte, a ukotvená
+    hlavička s týmž obsahem ji tam překryje) a **třetina shora** jako u hledání taky. Nula je navíc
+    jediná hodnota **nezávislá na výšce sekce**, a to je ta podstatná část: sekce souboru má tisíce
+    bodů, takže by z podílu 0,12 byl skok o stovky bodů **do** souboru — přesně to, co #152 měřilo
+    u bloků. Druh cíle se pozná z **identity cíle**, ne od volajícího, protože sloupec stojí mimo
+    `DiffView`. **Opravilo to i mapu PR** (#501), která na `file.id` mířila s druhem `.bubble`:
+    tatáž třída, jedna oprava v `Policy`.
+
+**Co u druhého kola zaniklo.** Sloupec **bez zastávek** (podoba pro diff commitu a rozsah od
+minule) a s ním `Policy.readFileShare` a `Policy.fileTreeSummary` z #500: od druhého kola sloupec
+mluví vždycky o celém pull requestu, takže nepovinné `itinerary` neměl kdo nastavit na `nil`
+a hlavička je vždycky `ITINERÁŘ · 4 Z 11 · 10 MIN`. Držet nepovinnou hodnotu, kterou nikdo
+nenastaví, je to, na co Copilot v tomhle repu opakovaně upozorňuje.

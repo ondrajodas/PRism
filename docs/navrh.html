@@ -9068,8 +9068,8 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
        ==================================================================================== -->
   <section class="section" id="s47">
     <div class="section-head">
-      <div class="eyebrow">47 — Změněné soubory · itinerář review</div>
-      <h2>Levý sloupec přestane být strom a stane se itinerářem</h2>
+      <div class="eyebrow">47 — Záložka s review · itinerář review</div>
+      <h2>Levý sloupec přestane být strom a stane se itinerářem — vedle všech tabů</h2>
       <p class="muted">
         <b>Dneska</b> má okno osm záložek a strom souborů, ale <b>žádné pořadí</b>: co číst první,
         kde jsem skončil a co zbývá, si člověk drží v hlavě. Reviewer má dráhu s fázemi
@@ -9096,10 +9096,19 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
         souboru</b> v diffu, kde na ni je místo. Strom podle cesty se tím otevírá zpátky jako
         vlastní issue.
       </p>
+      <p class="muted">
+        <b>A stojí vedle <em>všech</em> tabů, ne uvnitř <em>Změněných souborů</em></b> — přepsáno
+        proti prvnímu zákresu z proklikání. V něm byl sloupec součástí obsahu tabu, takže
+        překliknutím na <em>Kontroly</em> zmizel: itinerář mizel právě ve chvíli, kdy podle něj
+        člověk někam odešel, a cesta zpátky vedla přes pruh záložek. Sloupec je proto o úroveň výš,
+        vlevo od obsahu záložky, a <code>⌘1</code> ho skládá do proužku 34 bodů kdekoli.
+        <b>Klik na soubor k tomu přepne na <em>Změněné soubory</em> a odscrolluje na jeho
+        hlavičku</b> — do té doby se po kliknutí nestalo nic.
+      </p>
     </div>
 
     <div class="pane new">
-      <div class="tag"><i></i>Návrh · výřez plochy diffu (itinerář 260 b + diff) — dvě zastávky hotové, aktuální jsou soubory</div>
+      <div class="tag"><i></i>Návrh · itinerář 260 b vedle tabu <em>Změněné soubory</em> — dvě zastávky hotové, aktuální jsou soubory</div>
       <div class="frame flat">
         <div class="work itin">
           <div class="tree">
@@ -9167,21 +9176,62 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
     </div>
 
     <div class="pane new">
-      <div class="tag"><i></i>Návrh · tentýž sloupec v diffu commitu a v rozsahu od minule — zastávky nejsou, pořadí zůstává</div>
-      <div class="frame flat" style="max-width: 261px;">
-        <div class="tree">
-          <div class="th">7 souborů · 2 prošlé</div>
-          <div class="rv-prog"><i style="width: 29%;"></i></div>
-          <div class="itin-grp">Blokující</div>
-          <div class="tnode file"><span class="nm">SecretClient.php</span><span class="mk crit">●</span></div>
-          <div class="itin-grp">S nálezem</div>
-          <div class="tnode file"><span class="nm">Encryptor.php</span><span class="mk find">●</span></div>
-          <div class="itin-grp">Nové</div>
-          <div class="tnode file rv-done"><span class="nm">SecretNotFound.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
-          <div class="itin-grp">Ostatní</div>
-          <div class="tnode file rv-done"><span class="nm">SecretClientTest.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
-          <div class="itin-grp">Konfigurace a locky</div>
-          <div class="tnode file itin-bundle">▸ <span class="nm">3 konfigurace a locky</span></div>
+      <div class="tag"><i></i>Návrh · tentýž sloupec vedle tabu <em>Kontroly</em> — zastávka <em>Kontroly</em> je aktuální, soubory zůstávají po ruce</div>
+      <div class="frame flat">
+        <div class="work itin">
+          <div class="tree">
+            <div class="th">Itinerář · 4 z 11 · 10 min</div>
+            <div class="rv-prog"><i style="width: 36%;"></i></div>
+
+            <div class="itin done"><span class="st">✓</span>Od minule<span class="val">3 commity</span></div>
+            <div class="itin done"><span class="st">✓</span>Popis a záměr</div>
+            <div class="itin"><span class="st">○</span>Soubory podle rizika<span class="val">2 ze 7</span></div>
+
+            <div class="itin-grp">Blokující</div>
+            <div class="tnode file"><span class="nm">SecretClient.php</span><span class="mk crit">●</span></div>
+            <div class="itin-grp">S nálezem</div>
+            <div class="tnode file"><span class="nm">Encryptor.php</span><span class="mk find">●</span></div>
+            <div class="itin-grp">S vláknem</div>
+            <div class="tnode file rv-done"><span class="nm">SecretClientTest.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="itin-grp">Nové</div>
+            <div class="tnode file rv-done"><span class="nm">SecretNotFound.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="itin-grp">Konfigurace a locky</div>
+            <div class="tnode file itin-bundle">▸ <span class="nm">3 konfigurace a locky</span></div>
+
+            <div class="itin now"><span class="st">●</span>Kontroly<span class="val">1 spadl</span></div>
+            <div class="itin"><span class="st">○</span>Verdikt<span class="val">návrh: vyžádat změny</span></div>
+          </div>
+
+          <div class="diffpane">
+            <div class="checks" style="margin: 12px;">
+              <header>
+                <span>Kontroly na GitHubu</span>
+                <span class="sum">1 selhala · 2 běží · 12 prošlo</span>
+              </header>
+              <div class="chk open">
+                <span class="i" style="color: var(--crit);">✕</span>
+                <span class="nm" style="color: var(--ink); font-weight: 560;">phpstan (level 8)</span>
+                <span class="t">selhalo · 2 m 14 s</span>
+              </div>
+              <div class="anns">
+                <div class="ann">
+                  <span class="lvl err">error</span>
+                  <span class="msg">Call to an undefined method Cart::assertItems().</span>
+                  <span class="loc">src/Cart.php:26 ↗</span>
+                </div>
+              </div>
+              <div class="chk">
+                <span class="i" style="color: var(--accent);">⟳</span>
+                <span class="nm">phpunit / 8.4</span>
+                <span class="t">běží · 4 min</span>
+              </div>
+              <div class="chk">
+                <span class="i" style="color: var(--ok);">✓</span>
+                <span class="nm">phpcs</span>
+                <span class="t">prošlo · 41 s</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -9275,14 +9325,20 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <div class="note">
         <span class="num">166</span>
         <span class="body">
-          <b>Kde zastávky nejsou</b>
-          <span>V <em>diffu commitu</em> (<a class="jump" href="#s30">sekce 30</a>) ani v rozsahu
-          <em>Od tvé poslední návštěvy</em> (<a class="jump" href="#s29">sekce 29</a>): o celém
-          review nemluví, takže by zastávky <em>Kontroly</em> a <em>Verdikt</em> odkazovaly mimo
-          to, co je vidět. Sloupec tam kreslí <b>jen soubory podle rizika</b> a v hlavičce zůstává
-          <code>7 souborů · 2 prošlé</code> — tedy věta o souborech, ne o review. Je to tatáž
-          hranice, na které tam nemá co dělat ani zaškrtávátko <em>Prošlo</em>
-          (<a class="jump" href="#s40">poznámka 138</a>).</span>
+          <b>Sloupec je ve všech osmi tabech, a je to rozhodnutí</b>
+          <span>První zákres ho měl uvnitř <em>Změněných souborů</em>, a to bylo věcně proti tomu,
+          k čemu je: přepnutím na <em>Kontroly</em> zmizel, tedy právě tehdy, když podle něj člověk
+          někam odešel. <b>Plošné „všude“ je odpověď, ne převzatý pokyn</b>: sloupec nikde neduplikuje
+          obsah tabu (na rozdíl od panelu vpravo, který se ve třech tabech schovává,
+          <a class="jump" href="#s41">sekce 41</a>) a v každém z nich vede jinam — proto se
+          neschovává v žádném. <b>Cena je jedno číslo pro všech osm</b>: 260 bodů rozložený, 34
+          složený, tedy 787 b místo 1 047 na výchozím okně. Jedna šířka je přitom podmínka: sloupec,
+          který by se s tabem měnil, by okno přeskládal při každém přepnutí záložky — zrovna při tom
+          pohybu, kvůli kterému tahle úprava vznikla. A <b>zastávky má vždycky</b>, protože mluví
+          o celém pull requestu; v <em>diffu commitu</em>
+          (<a class="jump" href="#s30">sekce 30</a>) a v rozsahu <em>Od tvé poslední návštěvy</em>
+          (<a class="jump" href="#s29">sekce 29</a>) proto sloupec zůstává týž — to jsou pohledy na
+          diff, ne jiné review.</span>
         </span>
       </div>
       <div class="note">
@@ -9292,9 +9348,9 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           <span><em>Od minule</em> a <em>Popis</em> vedou do <em>Přehledu</em>, <em>Kontroly</em>
           do <em>Kontrol</em>, <em>Verdikt</em> do <em>Změněných souborů</em> <b>a rozloží panel
           vpravo</b> — verdikt se vybírá v něm, takže samotné <em>Změněné soubory</em> na tu
-          zastávku neodpoví. Že se obrazovka přepne, stojí i v nápovědě: sloupec je u diffu
-          a <em>Kontroly</em> jsou na druhém konci pruhu záložek, takže je poctivé to říct dřív než
-          po kliknutí.</span>
+          zastávku neodpoví. Že se obrazovka přepne, stojí i v nápovědě: sloupec stojí vedle všech
+          tabů, takže se z něj kliká i z tabu, ve kterém ten obsah není, a je poctivé to říct dřív
+          než po kliknutí.</span>
         </span>
       </div>
       <div class="note">
@@ -9306,6 +9362,51 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           zůstane ✓, když je hotová jako data (zelené CI uprostřed nedočteného diffu), protože
           hotová je hotová. Hotový itinerář aktuální zastávku <b>nemá vůbec</b>: dráha došla do
           konce a nemá kde stát.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">169</span>
+        <span class="body">
+          <b>Klik na soubor přepne na <em>Změněné soubory</em> a posadí jeho hlavičku na hranu</b>
+          <span>Do téhle úpravy se po kliknutí <b>nestalo nic</b>. Skok jde tou hotovou cestou,
+          kterou skáče <em>mapa PR</em> (<a class="jump" href="#s42">sekce 42</a>): sbalený soubor
+          se <b>napřed rozbalí</b> (a od značky <em>Prošlo</em> je sbalený každý prošlý, tedy běžný
+          stav), pak se nastaví kotva a diff ji doskočí <b>ve dvou průchodech a bez animace</b> —
+          přesně to jsou dvě z těch tří příčin míjení, kvůli kterých se skok na nález přepisoval
+          (<a class="jump" href="#s39">sekce 39</a>). Vlastní <code>scrollTo</code> ve sloupci byl
+          animovaný a jediný, takže ho druhý posun utínal a skok skončil pár bodů od místa, kde
+          začal. <b>Hlavička sedne na hranu výřezu</b>, ne s odstupem devadesáti bodů jako nález:
+          nad hlavičkou je předchozí soubor, tedy kód, který se nečte — a ukotvená hlavička s týmž
+          obsahem ji tam překryje. U celé sekce souboru je to navíc jediná hodnota, která
+          nezávisí na její výšce; sekce má tisíce bodů, takže by z jakéhokoli odstupu byl skok
+          o stovky bodů <b>do</b> souboru.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">170</span>
+        <span class="body">
+          <b>Skládání zůstává a <code>⌘1</code> platí v každém tabu</b>
+          <span>Složený sloupec je pruh <b>34 bodů</b> s počtem souborů, ne zmizelý sloupec: kolik
+          souborů PR mění, je ta první otázka nad diffem. V pohledu <em>Vedle sebe</em> se skládá
+          sám (<a class="jump" href="#s41">sekce 41</a>) a v úzkém okně ho složí podlaha kolony
+          kódu — o té se rozhoduje <b>podle nároků diffu, i když je vidět jiný tab</b>, protože
+          podlaha, kvůli které se skládá, je podlaha kódu; v <em>Kontrolách</em> není co chránit.
+          <b>Zapsaná mezera</b>: v tabu bez diffu se tím pádem nerozhoduje vůbec, takže zúžení okna
+          nad <em>Kontrolami</em> sloupec nesloží — složí ho první průchod diffem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">171</span>
+        <span class="body">
+          <b>Šířku obsahu tabu měří rozvržení, nedopočítává se</b>
+          <span>Sloupec stojí vedle obsahu jako sourozenec s pevným rámcem, takže <b>měřidlo obsahu
+          rovnou vidí, co po něm zbylo</b> — žádné odečítání, které by se dalo splést. Naopak
+          rozhodnutí o kolonách se musí ptát na tu <b>společnou</b> šířku (sloupec + kód + okraj),
+          jinak by se sloupec skládal podle toho, co po něm zbylo, tedy sám podle sebe. Tu společnou
+          proto počítá <b>ten, kdo sloupec kreslí</b>, a podává ji dolů; dopočítávat ji uvnitř diffu
+          by v okně sedělo, ale kdekoli, kde sloupec vedle diffu nestojí, by rozhodnutí měnilo svůj
+          vlastní vstup — a to umí <b>kmitat</b> (rozložený sloupec kolonu složí, složený ji
+          rozloží).</span>
         </span>
       </div>
     </div>

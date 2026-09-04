@@ -28,11 +28,43 @@ extension EnvironmentValues {
     }
 }
 
+/// Šířka, o kterou se dělí **levý sloupec, kolona kódu a okraj s kartami** (#506).
+///
+/// Vlastní hodnota, a ne `availableWidth`, protože se ptá na jinou plochu: `availableWidth` je to,
+/// co podstrom **dostal**, kdežto tohle je to, o co se dělí — a od #506 to není totéž. Itinerář
+/// stojí vedle **všech** tabů, takže ho odečítá rozvržení detailu PR a `DiffView` dostane
+/// štěrbinu, ve které už není. Rozhodnutí `Policy.diffSideColumns` se ale musí ptát na tu
+/// společnou šířku, jinak by se sloupec skládal podle toho, co po něm zbylo, tedy sám podle sebe.
+///
+/// **Předává se, nedopočítává.** Přičtení `treeColumnWidth` v `DiffView`u by v okně sedělo (sloupec
+/// tam doopravdy stojí), ale kdokoli, kdo `DiffView` hostuje **bez** sloupce vedle sebe, by dostal
+/// šířku o 260 bodů větší, než jakou má — a protože ta hodnota vstupuje do rozhodnutí, které pak
+/// mění samo sebe, umí to v takovém hostu **kmitat** (rozložený sloupec složí kolonu, složený ji
+/// rozloží). Odsud to nekmitá: hodnotu měří ten, kdo sloupec kreslí.
+///
+/// `nil` = **sloupec vedle téhle plochy nestojí** (diff commitu mimo záložku PR, náhledy, sondy),
+/// takže se dělí jen tím, co dostala.
+private struct SideColumnsWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var sideColumnsWidth: CGFloat? {
+        get { self[SideColumnsWidthKey.self] }
+        set { self[SideColumnsWidthKey.self] = newValue }
+    }
+}
+
 extension View {
     /// Ustaví konkrétní šířku pro celý podstrom. Patří na **hranici obsahu**, kde se šířka dá
     /// změřit jednou — ne dovnitř seznamu, kde by `GeometryReader` byl na každé položce.
     func availableWidth(_ width: CGFloat?) -> some View {
         environment(\.availableWidth, width)
+    }
+
+    /// Ustaví šířku, o kterou se dělí postranní kolony (#506) — viz `SideColumnsWidthKey`.
+    func sideColumnsWidth(_ width: CGFloat?) -> some View {
+        environment(\.sideColumnsWidth, width)
     }
 
     /// Zúží šířku pro děti o vlastní odsazení. Bez toho by dítě dostalo šířku rodiče a přeteklo

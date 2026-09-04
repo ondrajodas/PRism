@@ -14,14 +14,21 @@ struct DiffJumpMetrics: Equatable, Sendable {
 
 /// Co je cílem skoku v diffu (#152). Rozhoduje o tom, **kolik místa nad cílem zůstane**.
 ///
-/// Dva případy, ne jeden, a je to rozdíl v tom, co ten cíl je — ne v tom, odkud se na něj kliklo.
+/// **Tři případy, a je to rozdíl v tom, co ten cíl je** — ne v tom, odkud se na něj kliklo. Právě
+/// proto se od #506 dvě z nich poznají z **identity** cíle (`Policy.jumpTarget(of:files:requested:)`)
+/// a nemusí se předávat druhým kanálem.
 enum DiffJumpTarget: Equatable, Sendable {
-    /// Nález, moje rozdělaná poznámka, soubor ze stromu. Co je pro ně společné: **kontext si nesou
-    /// s sebou** a visí **pod** svým řádkem, takže se pod cílem musí vejít bublina.
+    /// Nález a moje rozdělaná poznámka. Co je pro ně společné: **kontext si nesou s sebou** a visí
+    /// **pod** svým řádkem, takže se pod cílem musí vejít bublina.
     case bubble
     /// Výskyt hledání. Kontext má jedině v kódu okolo, a hlavně v tom **nad** ním: bez něj se z něj
     /// nepozná, ve které funkci vlastně je.
     case searchHit
+    /// **Celý soubor** — klik na soubor v itineráři (#506) nebo v mapě PR (#501). Cílem je sekce
+    /// souboru, tedy přímo to, co má být vidět; kontext nad ní je předchozí soubor, a ten k ničemu
+    /// není. Hlavička proto sedne **na hranu výřezu**, kde ji překryje ta ukotvená se stejným
+    /// obsahem.
+    case fileHeader
 }
 
 extension Policy {
@@ -47,6 +54,10 @@ extension Policy {
         // textem, takže si o místo pod řádkem říká sám; výskyt hledání je jen místo v kódu a to,
         // co je nad ním, je polovina odpovědi na „kde to je“.
         case .searchHit: max(viewport / 3, bubbleContextAbove)
+        // **Nula, a je to rozhodnutí, ne zapomenutá hodnota** (#506). Nad hlavičkou souboru je
+        // předchozí soubor, takže odstup na kontext by ukazoval kód, který se nečte — a devadesát
+        // bodů by navíc znamenalo, že ukotvená hlavička visí nad koncem předchozího souboru.
+        case .fileHeader: 0.0
         }
         return min(wanted, viewport / 2)
     }
@@ -100,6 +111,13 @@ extension Policy {
         viewport: Double,
         metrics: DiffJumpMetrics
     ) -> Double? {
+        // **Hlavička souboru se nepočítá, ta se přibije na hranu** (#506). Cílem je celá sekce
+        // souboru, tedy přímo to, co má být vidět — ne řádek uvnitř bloku. Aritmetika níž řeší
+        // právě to, že se cíl `scrollTo` a chtěné místo rozcházejí; u hlavičky se nerozcházejí,
+        // takže je podíl nula **bez ohledu na výřez i na výšku sekce**. A ta nezávislost je
+        // podmínka, ne úspora: sekce souboru je vysoká tisíce bodů, takže by z ní jakýkoli
+        // nenulový podíl udělal skok o stovky bodů vedle — přesně to, co #152 měřilo u bloků.
+        if target == .fileHeader { return 0 }
         guard let offset = jumpOffset(of: target, viewport: viewport) else { return nil }
         let slack = viewport - metrics.height
         // Blok přesně tak vysoký jako výřez: podíl výšky s ním nehýbe (`a × 0`), takže není co
@@ -121,6 +139,24 @@ extension Policy {
             above: Double(max(row.above, 0)) * rowHeight,
             height: Double(max(row.rows, 1)) * rowHeight + blockInset
         )
+    }
+
+    /// Co je cílem skoku — poznané **z identity cíle**, ne z toho, odkud se kliklo (#506).
+    ///
+    /// Kotva na hlavičku souboru je `file.id` **sám** (tak ji vrací `DiffRow.anchor` u skoku bez
+    /// řádku), kdežto kotva na řádek nese `file.id|…`. Rozdíl se tedy pozná z cíle a nemusí se
+    /// předávat druhým kanálem — a **to je podmínka, ne pohodlí**: od #506 nastavuje cíl i sloupec
+    /// s itinerářem, který stojí mimo `DiffView`, takže by mu vlastní `@State` diffu nebyl k ničemu.
+    /// Tatáž úvaha, na které stojí `blockedRows(covering:)`.
+    ///
+    /// - Parameter requested: co si přál volající — `.searchHit` u pruhu hledání, jinak `.bubble`.
+    ///   Hlavička souboru ho **přebije**, protože o cíli rozhoduje cíl, ne přání.
+    static func jumpTarget(
+        of target: String,
+        files: [FileDiff],
+        requested: DiffJumpTarget
+    ) -> DiffJumpTarget {
+        files.contains { $0.id == target } ? .fileHeader : requested
     }
 
     /// Svislý inset bloku kódu — `DiffTextView` ho má na obou stranách, takže se do výšky započítá

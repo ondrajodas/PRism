@@ -302,6 +302,9 @@ struct DiffCodeColumnWidthTests {
 
         /// Kolona kódu, jak ji spočítá `Policy` — tedy **totéž číslo, jaké si předává aplikace**.
         /// Skládat ji tady z konstant by znamenalo druhou pravdu o jedné šířce (#236).
+        /// **Scéna hostí `DiffView` samotný, takže sloupec vedle něj nestojí** (#506): společnou
+        /// šířku nikdo nedodá (`sideColumnsWidth`) a `DiffView` se dělí tím, co dostal — tedy
+        /// `slot`. Odsud se proto počítá stejně.
         func codeColumn(hasFindings: Bool) -> Double? {
             let columns = Policy.diffSideColumns(
                 layout: layout,

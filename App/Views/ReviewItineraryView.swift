@@ -22,9 +22,14 @@ import SwiftUI
 struct ReviewItineraryView: View {
     /// Položky seznamu souborů — `Policy.filesByRisk`. Konfigurace a locky jsou složené do jedné.
     let items: [ItineraryFileItem]
-    /// Zastávky. `nil` = tahle obrazovka itinerář nemá (diff commitu, rozsah od minule) a kreslí
-    /// se **jen** seznam souborů podle rizika.
-    var itinerary: ItineraryActions?
+    /// Zastávky — `Policy.itinerary`, složené volajícím.
+    ///
+    /// **Nepovinné to od #506/2 není, a je to změna proti prvnímu kolu**: sloupec tehdy stál
+    /// uvnitř `Změněných souborů`, takže ho dostal i diff commitu (#317) a rozsah od minule
+    /// (#284) — a tam zastávky nebyly. Od druhého kola sloupec hostí detail PR a mluví vždycky
+    /// o celém pull requestu, takže „sloupec bez zastávek“ nemá kdo vyrobit; nepovinná hodnota
+    /// by byla větev, kterou nikdo neprojde.
+    let itinerary: ItineraryActions
     /// Které soubory nesou nález (#197) — puntík za jménem.
     var markers: [String: FileMarker] = [:]
     /// Stav značky `Prošlo` (#500). Prázdné = nic prošlého, tedy ani ✓, ani ↻.
@@ -40,16 +45,12 @@ struct ReviewItineraryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if let itinerary {
-                    ForEach(itinerary.stops) { stop in
-                        stopRow(stop, in: itinerary)
-                        // Soubory visí **pod svou zastávkou**, ne pod celým seznamem: zastávka
-                        // `Soubory podle rizika` je jediná, jejíž práce se dělí na položky, a
-                        // počítadlo v hlavičce (`4 z 11`) je počítá.
-                        if stop.kind == .files { fileList }
-                    }
-                } else {
-                    fileList
+                ForEach(itinerary.stops) { stop in
+                    stopRow(stop, in: itinerary)
+                    // Soubory visí **pod svou zastávkou**, ne pod celým seznamem: zastávka
+                    // `Soubory podle rizika` je jediná, jejíž práce se dělí na položky, a
+                    // počítadlo v hlavičce (`4 z 11`) je počítá.
+                    if stop.kind == .files { fileList }
                 }
             }
             .padding(.vertical, 6)
@@ -118,7 +119,6 @@ struct ReviewItineraryView: View {
     /// a padesát řádků o jednom `Text`u je proti bloku kódu nic. Odsazení je jedna úroveň, ne
     /// hloubka složek — sloupec neřadí podle cesty.
     @ViewBuilder private var fileList: some View {
-        let indent = itinerary == nil ? 0.0 : Self.fileIndent
         ForEach(Policy.itineraryGroups(items)) { group in
             Text(verbatim: group.risk.groupTitle.uppercased())
                 .font(.system(size: 9, design: .monospaced))
@@ -126,11 +126,11 @@ struct ReviewItineraryView: View {
                 .foregroundStyle(Palette.ink3)
                 .lineLimit(1)
                 .padding(.horizontal, 13)
-                .padding(.leading, indent)
+                .padding(.leading, Self.fileIndent)
                 .padding(.top, 8)
                 .padding(.bottom, 2)
             ForEach(group.items) { item in
-                itemRow(item, indent: indent)
+                itemRow(item, indent: Self.fileIndent)
             }
         }
     }

@@ -99,19 +99,38 @@ struct DiffColumnFitTests {
     /// **Kolona kódu je štěrbina bez toho, co v ní stojí** — a je to tatáž aritmetika, jakou
     /// provádí `HStack` v `DiffView`. Kdyby se rozešly, předaná šířka by mluvila o jiné ploše než
     /// ta, na které se doopravdy sází, a byla by z toho #546 v jiné podobě.
-    @Test("Kolona kódu je štěrbina bez stromu, okraje a mezery", arguments: widths,
+    ///
+    /// **Od #506 v ní levý sloupec není**: itinerář stojí vedle všech tabů, takže ho odečítá
+    /// `HStack` v detailu PR a `available` je štěrbina, ve které už není. Odečítá se tedy jedině
+    /// okraj a mezera — a tvrzení níž je právě o tom, že se sloupec neodečítá **dvakrát**.
+    @Test("Kolona kódu je štěrbina bez okraje a bez mezery", arguments: widths,
           [DiffLayout.unified, .split])
     func theCodeColumnIsWhatTheStackLeaves(width: Double, layout: DiffLayout) throws {
         for hasMargin in [true, false] {
             let columns = Policy.diffSideColumns(layout: layout, hasMargin: hasMargin, available: width)
             let column = try #require(Policy.diffCodeColumnWidth(available: width, columns: columns))
-            let sides = Policy.treeColumnWidth(expanded: columns.tree)
-                + Policy.marginColumnWidth(shown: columns.margin)
+            let sides = Policy.marginColumnWidth(shown: columns.margin)
                 + Policy.codeColumnTrailingGap
             #expect(column == max(width - sides, 0), """
                 Šířka \(width), \(layout), okraj \(hasMargin): kolona \(column), \
                 ale po kolonách zbývá \(width - sides)
                 """)
+        }
+    }
+
+    /// **Sloupec se ze štěrbiny diffu neodečítá** (#506) — a `tree: false` u toho **není** nula:
+    /// složený sloupec je pruh 34 bodů, kdežto na ploše bez sloupce se neodečítá nic.
+    ///
+    /// Je to to nejsnáz zaměnitelné místo celé změny: kdo `treeColumnWidth` vrátí do
+    /// `diffCodeColumnWidth`, dostane kolonu o 34 (respektive 260) bodů užší, než jakou `HStack`
+    /// doopravdy dá — tedy #546 v druhém směru, a tam se vada projeví ořezaným kódem, ne
+    /// přeteklým.
+    @Test("Levý sloupec se od kolony neodečítá")
+    func theItineraryColumnIsNotSubtractedTwice() throws {
+        for columns in [DiffSideColumns(tree: false, panel: false, margin: false),
+                        DiffSideColumns(tree: true, panel: false, margin: false)] {
+            let column = try #require(Policy.diffCodeColumnWidth(available: 1_010, columns: columns))
+            #expect(column == 1_004, "kolony \(columns): kolona \(column)")
         }
     }
 
@@ -121,9 +140,10 @@ struct DiffColumnFitTests {
     func theTrailingGapIsSubtracted() throws {
         let columns = Policy.diffSideColumns(layout: .split, hasMargin: false, available: 1_010)
         let column = try #require(Policy.diffCodeColumnWidth(available: 1_010, columns: columns))
-        // Štěrbina 1010, složený strom 34, žádný okraj → 1010 − 34 − 6 = 970. To je číslo
-        // změřené na živém okně 1100 × 700 u #546.
-        #expect(column == 970)
+        // Štěrbina 1010 (od #506 už bez sloupce), žádný okraj → 1010 − 6 = 1004. Do #506 se
+        // odsud odečítal ještě složený strom (34) a vycházelo 970 — číslo změřené na živém okně
+        // 1100 × 700 u #546, kde sloupec ještě stál uvnitř diffu.
+        #expect(column == 1_004)
     }
 
     /// **Nikdy záporná, a nikdy `nil` u změřené štěrbiny.** `frame` se zápornou šířkou je
@@ -150,7 +170,10 @@ struct DiffColumnFitTests {
     func widthsComeFromPolicy() {
         // Rozhodnutí i kresba musí čísla brát z jednoho místa — dvě pravdy o jedné šířce se
         // rozejdou při první úpravě a přesně tím vada vznikla.
-        #expect(DiffView.treeWidth == Policy.treeColumnWidth(expanded: true))
+        // Od #506 kreslí sloupec `ItineraryColumnView` v detailu PR, ne `DiffView` — obě šířky
+        // (rozložený sloupec i složený proužek) se pořád berou z `Policy`.
+        #expect(ItineraryColumnView.width == Policy.treeColumnWidth(expanded: true))
+        #expect(ItineraryRailView.width == Policy.treeColumnWidth(expanded: false))
         #expect(DiffMarginView.width == Policy.marginColumnWidth(shown: true))
     }
 }

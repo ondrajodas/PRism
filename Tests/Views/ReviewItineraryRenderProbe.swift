@@ -10,8 +10,9 @@ import Testing
 /// Kreslí se v **okně bez animace** (#462) přes `NSHostingView`, ne `ImageRenderer`em: sloupec
 /// je `ScrollView` a ten se offscreen nevykreslí vůbec.
 ///
-/// Hlavička a proužek podílu jsou v `DiffView` privátní, takže se tu skládají **týmiž hodnotami
-/// z `Policy`**, jaké čte okno — sonda tvrdí kresbu, ne to, kdo ji v okně staví.
+/// Kreslí se **produkčním sloupcem** (`ItineraryColumnView`, od #506/2 vlastní typ v detailu PR),
+/// takže se sonda s oknem rozejde jedině tehdy, když se rozejde kresba: do #506/2 si tu hlavičku
+/// i proužek skládala sama, protože byly v `DiffView` privátní.
 ///
 /// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes
 /// `TEST_RUNNER_PRISM_RENDER_DIR` — `xcodebuild` předá do testovacího procesu jen proměnné s tím
@@ -80,65 +81,54 @@ struct ReviewItineraryRenderProbe {
     /// rizika a tři konfigurace složené do jedné položky.
     @Test("Vyrendrovat itinerář s pěti zastávkami")
     func rendersTheFullItinerary() throws {
+        try render(actions, expanded: true, named: "itinerar-plny", height: 400)
+    }
+
+    /// **Složený proužek** (`⌘1`) — 34 bodů s počtem souborů. Od #506/2 je vidět **ve všech
+    /// tabech**, takže je to podoba, na kterou se kouká nejčastěji: v pohledu vedle sebe se
+    /// sloupec skládá sám (#188).
+    @Test("Vyrendrovat složený proužek sloupce")
+    func rendersTheCollapsedRail() throws {
+        try render(actions, expanded: false, named: "itinerar-slozeny", height: 200)
+    }
+
+    /// Zastávky a počítadlo z `Policy` — jedno místo pro obě kresby.
+    private var actions: ItineraryActions {
         let stops = Policy.itinerary(facts)
-        let actions = ItineraryActions(
+        return ItineraryActions(
             stops: stops,
             progress: Policy.itineraryProgress(of: stops, facts: facts),
             select: { _ in }
         )
-        try render(actions, named: "itinerar-plny", height: 400)
     }
 
-    /// **Sloupec bez zastávek** — tak vypadá v diffu commitu (#317) a v rozsahu od minule (#284).
-    /// Soubory podle rizika zůstávají, zastávky ne.
-    @Test("Vyrendrovat sloupec bez zastávek")
-    func rendersTheFileListWithoutStops() throws {
-        try render(nil, named: "itinerar-bez-zastavek", height: 300)
-    }
-
-    private func render(_ actions: ItineraryActions?, named name: String, height: CGFloat) throws {
-        let heading = actions.map { Policy.itineraryHeading($0.progress) }
-            ?? Policy.fileTreeSummary(files: files.count, read: Policy.readFileCount(in: readStates))
-        let share = actions?.progress.share
-            ?? Policy.readFileShare(read: Policy.readFileCount(in: readStates), of: files.count)
-        let width = Policy.treeColumnWidth(expanded: true)
-
-        let scene = VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text(verbatim: heading.uppercased())
-                    .font(.system(size: 10, design: .monospaced))
-                    .tracking(1)
-                    .foregroundStyle(Palette.ink3)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.left").font(.caption).foregroundStyle(Palette.ink3)
-            }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
-
-            if let share {
-                HStack(spacing: 0) {
-                    Rectangle().fill(Palette.ok).frame(width: (width - 26) * share)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 3)
-                .background(Palette.raised)
-                .clipShape(.rect(cornerRadius: 2))
-                .padding(.horizontal, 13)
-                .padding(.top, 7)
-            }
-
-            ReviewItineraryView(
-                items: Policy.filesByRisk(
-                    files,
-                    markers: markers,
-                    threadPaths: ["tests/SecretClientTest.php"]
-                ),
-                itinerary: actions,
+    private func render(
+        _ actions: ItineraryActions,
+        expanded: Bool,
+        named name: String,
+        height: CGFloat
+    ) throws {
+        // **Šířka z produkční funkce, ne konstanta**: sonda se má s oknem rozejít jedině tehdy,
+        // když se rozejde kresba.
+        let width = expanded ? ItineraryColumnView.width : ItineraryRailView.width
+        let column = ItineraryColumnView(
+            items: Policy.filesByRisk(
+                files,
                 markers: markers,
-                readStates: readStates
-            ) { _ in }
+                threadPaths: ["tests/SecretClientTest.php"]
+            ),
+            itinerary: actions,
+            markers: markers,
+            readStates: readStates,
+            collapse: {},
+            jump: { _ in }
+        )
+        let scene = Group {
+            if expanded {
+                column
+            } else {
+                ItineraryRailView(files: files.count) {}
+            }
         }
         .frame(width: width, height: height, alignment: .topLeading)
         .background(Palette.chrome)

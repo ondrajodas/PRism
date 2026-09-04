@@ -8656,6 +8656,35 @@ rozdíl, který ta šířka na obrazovce udělala, a hlídá ho vlastní tvrzen�
 (odečítá ji až `diffCodeColumnWidth`), takže hranice je `podlaha + sloupec`. Kdo tu šestku přičte,
 dostane číslo o šest bodů vedle; první podoba testu to tak měla a spadla.
 
+### Co sloupec ubere ostatním tabům (#506, druhé kolo)
+
+Od druhého kola stojí sloupec vedle **všech osmi tabů**, ne jen vedle diffu, takže se ta cena platí
+osmkrát. Čísla jsou v `ItineraryEveryTabTests` a počítá je produkční funkce (`treeColumnWidth`), ne
+odečítání v testu:
+
+| Stav sloupce | Zbude tabu ze štěrbiny 1 047 b | |
+|---|---|---|
+| rozložený (260 b) | **787 b** | 75 % |
+| složený (34 b) | **1 013 b** | 97 % |
+
+**Dál než k těmhle bodům se to změřit nedá, a je to poctivější než falešné číslo.** U diffu se cena
+dá vyjádřit ve znacích, protože se tam sází mono písmem na známou šířku (tabulka výš). Ostatní taby
+jsou **řádky a próza s pružnou sazbou**: `Kontroly` jsou seznam řádků s popiskem vlevo a časem
+vpravo, `Konverzace` je osa bublin, `Průběh` výpis kroků. Ve všech se zúžení projeví **jinou pozicí
+zalomení**, ne ořezáním — a „o kolik slov se to přelilo“ není číslo, které by o něčem rozhodovalo.
+Co rozhodnout jde, je otázka „vejde se to?“, a ta je na **obrázek**: rendery vedle `Kontrol`
+a `Konverzace` jsou v sondách (`ChecksTabRenderProbe`, `DetailTabRenderProbe`).
+
+**Jedna šířka pro všech osm je přitom podmínka, ne zjednodušení.** Sloupec, který by se s tabem
+měnil, přeskládá okno při každém přepnutí záložky — tedy zrovna při tom pohybu, kvůli kterému
+druhé kolo #506 vzniklo. Proto se o skládání rozhoduje **podle nároků diffu**, i když je vidět jiný
+tab; zapsaná mezera je, že v tabu bez diffu se nerozhoduje vůbec (viz
+[`docs/architektura.md`](architektura.md#sloupec-stojí-vedle-všech-tabů-506-druhé-kolo)).
+
+**A co se změřit nedá vůbec**: že `⌘1` doopravdy zabere ve všech tabech. Testovací host nedostane
+aktivaci (viz [*Jak změřit fokus a klávesy*](#jak-změřit-fokus-a-klávesy-184)), takže to zkouší
+člověk.
+
 ### Kolik stojí otevřená záložka (#274)
 
 **Posuvník se řídí přímo přes `AXUIElementSetAttributeValue`, ne přes `System Events`** — a je to

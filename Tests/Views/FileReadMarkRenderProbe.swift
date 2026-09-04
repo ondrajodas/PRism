@@ -6,8 +6,8 @@ import Testing
 @testable import PRism
 
 /// Sonda, ne test (#500): vyrendruje **hlavičku souboru se značkou `Prošlo`** ve všech třech
-/// stavech a k tomu **strom souborů** s ✓, ↻ a ztlumeným jménem — tedy to, co kreslí sekce 40
-/// návrhu.
+/// stavech — tedy to, co kreslí sekce 40 návrhu. Seznam souborů s ✓ a ↻ se od #506 rendruje
+/// v `ReviewItineraryRenderProbe`, protože tam patří i hlavička sloupce a proužek podílu.
 ///
 /// Proč sonda: „sedí to se sekcí 40?“ je otázka na obrázek. Co se **dá** tvrdit číslem, je
 /// v `FileReviewStateTests` (stavy a popisky) a v `AppStoreReadMarkTests` (co se stane po pushi).
@@ -67,78 +67,10 @@ struct FileReadMarkRenderProbe {
         print("SONDA \(url.path)")
     }
 
-    /// Sloupec bez zastávek (#506): hlavička `7 souborů · 3 prošlé`, proužek podílu, ✓ u prošlých,
-    /// ↻ u změněného a puntíky nálezů u prvních dvou. Tohle je ta podoba, kterou má sloupec v diffu
-    /// commitu a v rozsahu od minule — tedy tam, kde itinerář není. Hlavička i proužek jsou
-    /// v `DiffView` privátní, takže se tu skládají **týmiž hodnotami z `Policy`**, jaké čte okno.
-    @Test("Vyrendrovat seznam souborů se značkami")
-    func rendersFileList() throws {
-        let files = [
-            file("src/Vault/SecretClient.php"),
-            file("src/Vault/Encryptor.php"),
-            file("src/Vault/SecretNotFound.php", change: .added),
-            file("tests/SecretClientTest.php"),
-            file("composer.json"),
-            file("composer.lock"),
-            file("phpunit.xml.dist"),
-        ]
-        let states: [String: FileReviewState] = [
-            "src/Vault/SecretNotFound.php": .read(at: Self.at),
-            "tests/SecretClientTest.php": .read(at: Self.at),
-            "composer.json": .read(at: Self.at),
-            "composer.lock": .changed(readAt: Self.at),
-        ]
-        let markers: [String: FileMarker] = [
-            "src/Vault/SecretClient.php": .blocking,
-            "src/Vault/Encryptor.php": .findings,
-        ]
-        let read = Policy.readFileCount(in: states)
-        let share = Policy.readFileShare(read: read, of: files.count)
-        // **Šířka z produkční funkce, ne konstanta** (nález Copilota na PR #558): sonda se má
-        // s oknem rozejít jedině tehdy, když se rozejde kresba — a hodnota přepsaná ručně na dvou
-        // místech se rozejde už při příští změně `Policy.treeColumnWidth`.
-        let width = Policy.treeColumnWidth(expanded: true)
-
-        let scene = VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text(verbatim: Policy.fileTreeSummary(files: files.count, read: read).uppercased())
-                    .font(.system(size: 10, design: .monospaced))
-                    .tracking(1)
-                    .foregroundStyle(Palette.ink3)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.left").font(.caption).foregroundStyle(Palette.ink3)
-            }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
-
-            if let share {
-                HStack(spacing: 0) {
-                    Rectangle().fill(Palette.ok).frame(width: (width - 26) * share)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 3)
-                .background(Palette.raised)
-                .clipShape(.rect(cornerRadius: 2))
-                .padding(.horizontal, 13)
-                .padding(.top, 7)
-            }
-
-            ReviewItineraryView(
-                items: Policy.filesByRisk(files, markers: markers),
-                markers: markers,
-                readStates: states
-            ) { _ in }
-        }
-        .frame(width: width, height: Self.fileListHeight, alignment: .topLeading)
-        .background(Palette.chrome)
-
-        // **Render má rozměr scény, ne o kus větší** (nález Copilota na PR #558): prázdný okraj
-        // kolem obrázku zhoršuje srovnání s mockupem a je to druhé místo, kde se šířka píše.
-        let url = Self.outputDirectory.appending(path: "proslo-seznam.png")
-        try Self.render(AnyView(scene), width: width, height: Self.fileListHeight, to: url)
-        print("SONDA \(url.path)")
-    }
+    // **Třetí render (sloupec bez zastávek) tady od #506/2 není.** Kreslil tu podobu, kterou měl
+    // sloupec v diffu commitu a v rozsahu od minule — a ta zanikla: sloupec od #506/2 stojí vedle
+    // všech tabů, hostí ho detail PR a zastávky má vždycky. Seznam souborů s ✓, ↻ a puntíky nálezů
+    // se rendruje v `ReviewItineraryRenderProbe`, kde je i s hlavičkou a proužkem podílu.
 
     // MARK: - Scéna
 
@@ -192,9 +124,6 @@ struct FileReadMarkRenderProbe {
             toggleRead: {}
         )
     }
-
-    /// Výška sloupce v sondě — sedm souborů s nadpisy skupin (#506) se do 320 bodů vejde.
-    private static let fileListHeight = 320.0
 
     private static var outputDirectory: URL {
         URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())

@@ -7614,12 +7614,76 @@ ji neodečítá, odečítá ji až `diffCodeColumnWidth`.
 **Zkratka `⌘1` se přejmenovala** ze `Strom souborů` na `Itinerář review` (i případ v katalogu:
 `WindowShortcut.Action.itinerary`). Kombinace se nemění.
 
-Testů **5236** v 511 suitách, plný běh zelený (108,5 s, jedno známé `theWaitGivesUpLoudly`). Nové sady jsou tři: `ReviewItineraryTests` (matice vstupů —
+Nové sady jsou tři: `ReviewItineraryTests` (matice vstupů —
 přítomnost zastávky odděleně od hotovosti), `FileRiskTests` (pořadí nad daty ze sekce 03 návrhu
 a co je konfigurace) a `ItineraryColumnRoomTests` (to měření šířky); k tomu ruční sonda
-`ReviewItineraryRenderProbe` — plný itinerář a sloupec bez zastávek.
+`ReviewItineraryRenderProbe`.
 
 **Zapsané mezery**: odhad času je **odhad**, ne měření — 30 řádků za minutu je odvozené z toho,
 jak dlouho dvěstěřádkový soubor v tomhle okně doopravdy zabere, ne naměřené nad sezeními. A že
 `⌘1` po přejmenování pořád zabere, se v harnessu ověřit nedá (testovací host nedostane aktivaci),
 takže to zkouší člověk.
+
+### Druhé kolo z proklikání: sloupec vedle všech tabů a klik na soubor
+
+Z proklikání přišly **dvě připomínky** a obojí bylo věcně proti tomu, k čemu itinerář je.
+
+**1. „Když se z něj překliknu na kontroly, tak to celý zmizí.“** Sloupec byl součástí obsahu tabu
+`Změněné soubory`, takže mizel právě ve chvíli, kdy podle něj člověk někam odešel — a cesta zpátky
+vedla přes pruh záložek. Sloupec je proto **o úroveň výš**: hostí ho `PullRequestDetailView`
+(nový `ItineraryColumnView`) a stojí vlevo od obsahu záložky, tedy **vedle všech osmi tabů**.
+`⌘1` ho skládá do proužku 34 bodů kdekoli.
+
+Rozhodnutí, která u toho padla:
+
+- **Plošné „ve všech tabech“, ne výběr.** Panel vpravo se ve třech tabech schovává (#294), protože
+  je v nich vedle něj duplikát dat nebo obsah, který šířku potřebuje; u sloupce ani jedno neplatí —
+  nic neduplikuje a v každém tabu vede **jinam**. Tab, ve kterém by zmizel, je tab, ze kterého se
+  nedá vrátit.
+- **Cena: 260 bodů rozložený, 34 složený**, tedy **787 b** místo 1 047 na výchozím okně. Jedna
+  šířka pro všech osm je podmínka, ne zjednodušení: sloupec, který by se s tabem měnil, přeskládá
+  okno při každém přepnutí. U diffu je ta cena změřená ve znacích (3 na stranu vedle sebe, 6 pod
+  sebou — beze změny proti prvnímu kolu); u ostatních tabů se dál než k bodům měřit nedá, protože
+  jsou to řádky a próza s pružnou sazbou, takže se zúžení projeví jinou pozicí zalomení.
+- **Šířku obsahu měří rozvržení, společnou se předává.** Sloupec je sourozenec s pevným rámcem,
+  takže `GeometryReader` obsahu tabu rovnou vidí, co po něm zbylo — žádné odečítání, které by se
+  dalo splést (#546). Rozhodnutí o kolonách se ale ptá na tu **společnou** šířku, a tu počítá
+  `Policy.widthWithItinerary` **tam, kde sloupec stojí**, a podává ji prostředím
+  (`sideColumnsWidth`). Dopočítávat ji uvnitř `DiffView`u je **zamítnutá varianta**: v okně by
+  seděla, ale v hostu bez sloupce vedle sebe by rozhodnutí měnilo svůj vlastní vstup a umělo by
+  **kmitat**. `Policy.diffCodeColumnWidth` proto sloupec **neodečítá**.
+- **O skládání rozhoduje dál `DiffView`, a je to zapsaná mezera.** Podlaha, kvůli které se sloupec
+  skládá, je podlaha kolony kódu — v `Kontrolách` není co chránit. Mezera: v tabu bez diffu se
+  nerozhoduje vůbec, takže zúžení okna nad `Kontrolami` sloupec nesloží; složí ho první průchod
+  diffem.
+- **Sloupec bez zastávek zanikl** a s ním `Policy.readFileShare` i `Policy.fileTreeSummary`
+  (obojí #500): v prvním kole ho dostal diff commitu a rozsah od minule, protože byl součástí
+  tabu; od druhého kola mluví vždycky o celém PR, takže nepovinné `itinerary` neměl kdo nastavit
+  na `nil`.
+
+**2. „Když kliknu na soubor tak se nic nestane.“** Sloupec měl vlastní skok
+(`withAnimation { proxy.scrollTo(file.id, anchor: .top) }`) a ten byl vadný na dvou ze tří příčin
+míjení, které vyjmenovalo #152: **animovaný** a **v jediném průchodu**. Od druhého kola jde klik
+tou hotovou cestou, kterou skáče **mapa PR** (#501): `jump(toFile:)` → `anchor(inFile:line: nil)`
+(rozbalí sbalený soubor, vrátí `file.id`) → `scroll(to:)`, tedy **přepnutí na `Změněné soubory`**
+a `scrollTarget`; odtud dva průchody s přeměřenými rozměry a bez animace.
+
+- **Kam soubor přistane**: hlavičkou **na hranu výřezu** (`DiffJumpTarget.fileHeader`, offset 0).
+  Devadesát bodů jako u nálezu by ukazovalo konec předchozího souboru a ukotvená hlavička s týmž
+  obsahem ji tam překryje. Nula je navíc **jediná hodnota nezávislá na výšce sekce**, a to je ta
+  podstatná část: sekce souboru má tisíce bodů, takže by z podílu 0,12 byl skok o stovky bodů
+  **do** souboru.
+- **Druh cíle se pozná z identity cíle** (`Policy.jumpTarget(of:files:requested:)`), ne od
+  volajícího — sloupec stojí mimo `DiffView`, takže by mu jeho `@State` nebyl k ničemu.
+- **Opravilo to i mapu PR** (#501): mířila na `file.id` s druhem `.bubble`, takže u velkého souboru
+  přeletěla stovky bodů do jeho vnitřku. Tatáž třída, jedna oprava v `Policy`.
+
+Testů **5283** v 515 suitách, plný běh zelený (117,2 s, jedno známé `theWaitGivesUpLoudly`).
+Nová sada je jedna — `ItineraryEveryTabTests` (cena, kruh společné šířky a stráže nad zdrojáky:
+sloupec mimo `switch tab`, jedno místo, které ho kreslí, klik přes `jump(toFile:)`) — a k tomu tři
+tvrzení o `.fileHeader` v `DiffJumpAnchorTests`. Přizpůsobené: `DiffColumnFitTests`
+a `DiffCodeColumnWidthTests` (sloupec se od kolony neodečítá), `DiffColumnFitTests` u šířek kolon
+(`ItineraryColumnView.width`), `ItineraryColumnRoomTests` a dvě sondy. **Zapsaná mezera**: že je sloupec vidět v každém tabu, se tvrdí
+**strukturálně** — kolony jsou SwiftUI a v hostovaném okně se z accessibility tree přečíst nedají
+(změřeno u #546), takže jak vypadá vedle `Kontrol` a `Konverzace`, ukazují rendery a posoudí to
+člověk. Totéž u `⌘1`: testovací host nedostane aktivaci.
