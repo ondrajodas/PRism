@@ -6604,3 +6604,53 @@ detail** (takže cestu přes `Přehled` neměla kde vyrobit) a nálezy v ní mí
 fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzala
 z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
 scéna vyrostla na celé `ContentView`.
+
+### Záznam rozhodnutí — `idealWidth` odchází, `idealHeight` zůstává (#491)
+
+**Rozhodnutí:** u `ReviewSubmissionSheet`, `MergeSheet` a `AgentPromptSheet` se z rámce odebrala
+`idealWidth` a **`idealHeight` zůstala**; u okna nastavení (`SettingsView`) se odebralo obojí.
+`presentationSizing(.fitted)` se nikam nepřidalo.
+
+**Proč zrovna takhle, u každého místa zvlášť:**
+
+- **`MergeSheet`** — tentýž případ jako `BranchPushSheet` u #466, který si tehdy do komentáře
+  napsal, že „sahat na velikost cizí hotové obrazovky sem nepatří“. Tohle je to místo, kde se na ni
+  sahá — a odpověď je táž: `.fitted` by sheet rozšířilo z 507 na 520 a udělalo ho roztahovatelným,
+  což je změna velikosti obrazovky, kterou člověk takhle proklikal.
+- **`ReviewSubmissionSheet`** — totéž, o stupeň důrazněji: je to poslední obrazovka před tím, než
+  něco opustí stroj, a celý její smysl je, že je na ní vidět to, co odejde. Změnit jí šířku znamená
+  přesázet ten výpis.
+- **`AgentPromptSheet`** — v komentáři u něj stála úvaha, že se u #333 musel posunout **celý** rozsah
+  (560 → 840, 720 → 1 080), protože „kdyby se zvedl jen `idealWidth`, zmenšené okno by spadlo zpátky“.
+  Měření tu úvahu **potvrdilo tvrději, než se tehdy vědělo**: rozhoduje `minWidth` a jenom on, takže
+  ideál 1 080 nebyl slabší mez, ale žádná. Závěr té úvahy se tím nemění, jen se z něj stává důvod,
+  proč ideál odejít může.
+- **`SettingsView`** — jiný případ, ne sheet. `presentationSizing` je modifikátor prezentace, takže
+  na okno `Settings` scény nedosáhne a ideál oživit **nejde**; okno si bere systémovou výchozí
+  velikost a jen ji zvedne na obsahové minimum. Odebralo se proto obojí.
+
+**Co se změnilo proti zadání issue, a proč.** Issue nabídlo dvě cesty a odebrání `ideal*` popsalo
+jako „změnu bez vizuálního projevu (mrtvá hodnota)“. To platí jen o šířce: `idealHeight` si sheet
+vezme i bez `.fitted` (změřeno, tabulky v `docs/testovani.md`). Odebrat celý zápis by tedy tři hotové
+obrazovky srazilo o 140, 80 a 200 bodů — pod hlavičkou úklidu. Zůstala proto polovina, která funguje.
+
+**Zamítnuté varianty:**
+
+1. **Přidat `.fitted`** — u všech tří. Byla by to nezměřená změna velikosti hotové obrazovky a spadá
+   pod jedinou schvalovací bránu v repu (zákres do návrhu a souhlas), ne pod opravu rozvržení.
+2. **Odebrat `ideal*` celé** — to, co issue navrhovalo. Zamítnuto měřením, viz výš.
+3. **Přestěhovat podlahy do `Policy`** — `Policy.rawSessionSheet*` a `Policy.codeSheetSizing` tam
+   jsou proto, že se z nich **počítá** (ořez uložené velikosti o okraje obrazovky, výběr profilu
+   podle druhu obsahu). Tyhle tři sheety nic neukládají a nic z obrazovky neberou, takže konstanta by
+   jen přestěhovala literál — a testu, který ji hlídá, by vzala možnost spadnout, protože by
+   porovnával view sám se sebou. V téhle změně tedy žádná rozhodovací logika do `Policy` nepřibyla,
+   protože žádná nevznikla.
+4. **Udělat z grepu v `CLAUDE.md` „musí vyjít prázdný“** — nejde: mimo sheety je `idealWidth`
+   v obyčejném pružném rámci (`DiffSearchBar`) v pořádku. Zbývá tedy výčet k posouzení, ale ta část,
+   která se tvrdit dá, se přesunula do testu (`SheetSizingTests`: sheet s `idealWidth` musí mít
+   `presentationSizing`, roster sheetů je uzavřený).
+
+**Zobecnitelné pravidlo:** *pravidlo zapsané o jedné ose neplatí automaticky o druhé.* #327 změřilo
+a zapsalo šířku; čtyři místa v repu si to přečetla jako pravidlo o `ideal*` a jedno issue z toho
+udělalo zadání. Když se zadání odvolává na starší měření, patří k práci ověřit, že to měření tvrdí
+zrovna to, co se z něj cituje — a ne to, co z něj plyne „přece“.

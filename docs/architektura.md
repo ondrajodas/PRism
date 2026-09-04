@@ -3060,6 +3060,54 @@ transcriptem (2,8 MB, 432 189 znaků, 5 236 logických řádků) **15 % řádků
 každý bod šířky; dál je to 0,8 (do 1 600) a 0,37 (do 2 400). Celá tabulka je u
 `Policy.rawSessionSheetIdealWidth`, měřidlo v `RawSessionMeasurement.wrappingByWidth`.
 
+#### Ideální šířka a ideální výška nejsou totéž (#491)
+
+Pravidlo z #327 mluví **jen o šířce**, a to doslova: sheet bez `presentationSizing(.fitted)` zahodí
+`idealWidth`, ale `idealHeight` si vezme. Čtyři obrazovky v repu z toho pravidla přesto četly
+`ideal*` jako celek a nesly obojí — `ReviewSubmissionSheet` (#68), `MergeSheet` (#465),
+`AgentPromptSheet` (#333) a okno nastavení (`SettingsView`). #491 tu asymetrii **změřilo**
+([tabulky](testovani.md#co-dělá-ideal-u-sheetu-a-v-okně-settings-491)) a nechalo v každé z nich
+jenom to, co se doopravdy uplatní:
+
+| Obrazovka | Do #491 | Od #491 | Změřená velikost (před = po) |
+|---|---|---|---|
+| `ReviewSubmissionSheet` | `min 560×420`, `ideal 620×560` | `min 560×420`, `idealHeight 560` | 560 × 560 |
+| `MergeSheet` | `min 460×300`, `ideal 520×380` | `min 460×300`, `idealHeight 380` | 507 × 380 |
+| `AgentPromptSheet` | `min 840×420`, `ideal 1080×620` | `min 840×420`, `idealHeight 620` | 840 × 620 |
+| `SettingsView` (okno, ne sheet) | `min 720×420`, `ideal 880×560` | `min 720×420` | 900 × 420 |
+
+**Odebrat `idealHeight` by nebyla oprava, ale zmenšení** — o 140, 80 a 200 bodů. Právě tohle je na
+téhle změně to podstatné: „mrtvá hodnota“ platila o polovině toho zápisu, a kdyby se odebral celý
+(jak zadání #491 předpokládalo), tři hotové obrazovky by se potichu srazily. Šířka se naproti tomu
+nezměnila ani o bod, což je změřené na skutečném okně sheetu **před i po** (`SheetSizingTests`).
+
+**`MergeSheet` je 507, ne 460, a je to v pořádku**: šířku sheetu zvedá i vlastní ideál obsahu, takže
+podlaha je spodní mez, ne rovnost. Proto se na šířku v testu tvrdí `>= podlaha` a `< zahozený ideál`
+— rovnost by tvrdila něco o délce textu ve fixture.
+
+**U okna `Settings` scény je mrtvé obojí a `presentationSizing` na to nedosáhne** — je to modifikátor
+*prezentace* (sheet, popover), ne scény. Okno si bere systémovou výchozí velikost a jen ji zvedne na
+obsahové minimum; sedí to i s tím, co si uložilo v ostré aplikaci (`NSWindow Frame
+com_apple_SwiftUI_Settings_window = 900 452`, tedy obsah 900 × 420 — a protože rámec nemá `max`,
+okno není roztahovatelné, takže to číslo nikdo nenatáhl rukou).
+
+**`.fitted` se u těch tří sheetů zamítlo, ne opomnělo** — tatáž odpověď jako u #466: rozšířit hotovou
+obrazovku (a udělat ji roztahovatelnou) je změna vzhledu, a ta jde přes zákres do návrhu a souhlas.
+Zbývá podlaha, která platí, místo ideálu, který ne.
+
+**Hlídá to test, ne jen grep z `CLAUDE.md`.** `SheetSizingTests` měří všechny tři sheety nad
+skutečným oknem a k tomu drží dvě stráže nad zdrojáky: sheet s `idealWidth` musí mít
+`presentationSizing`, a roster sheetů (`App/Views/*Sheet.swift`) je uzavřený, aby to nešlo obejít
+souborem s jiným jménem. `idealHeight` se schválně **nehlídá** — funguje. Grep v `CLAUDE.md` proto
+zůstává výčtem k posouzení: mimo sheety je `idealWidth` v obyčejném pružném rámci (`DiffSearchBar`)
+v pořádku.
+
+**Do `Policy` se ta velikost nestěhovala, a je to rozhodnutí.** `Policy.rawSessionSheet*`
+a `Policy.codeSheetSizing` tam jsou proto, že se z nich **počítá** (ořez uložené velikosti o okraje
+obrazovky, výběr profilu podle druhu obsahu); tyhle tři sheety nic neukládají a nic z obrazovky
+neberou, takže konstanta by jen přestěhovala literál — a testu, který ji má hlídat, by vzala možnost
+spadnout, protože by porovnával view sám se sebou.
+
 #### Cena, změřená (`RawSessionMeasurement`)
 
 Debug build, syntetický transcript podle skutečného rozdělení. **Otevření je konstantní ve velikosti

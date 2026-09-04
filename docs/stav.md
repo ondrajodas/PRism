@@ -8062,3 +8062,54 @@ byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnit�
 `description != nil`, ne „je neprázdný“: PR bez popisu se odškrtnout **musí**, jinak by u něj
 počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
 nepatří — je to živý přepínač, ne jednosměrná značka.
+
+## #491 — `idealWidth` bez `.fitted` na třech sheetech a v okně nastavení
+
+**Zadání předpokládalo něco, co měření vyvrátilo, a to je na téhle změně to hlavní.** #327 zapsalo,
+že sheet bez `presentationSizing(.fitted)` `idealWidth` **zahodí**; issue z toho udělalo pravidlo
+o `ideal*` celém a nabídlo dvě cesty — přidat `.fitted` (změna vzhledu, tedy brána na návrh), nebo
+`ideal*` odebrat jako mrtvou hodnotu (změna bez vizuálního projevu). Ta druhá by ale **zmenšila tři
+hotové obrazovky**: `idealHeight` si sheet vezme i bez `.fitted`. Kdyby se šlo podle zadání,
+`ReviewSubmissionSheet` by přišel o 140 bodů výšky, `MergeSheet` o 80 a `AgentPromptSheet` o 200 —
+a vypadalo by to jako úklid.
+
+**Výčet se potvrdil grepem nad dnešním `main`em**, ne převzal z issue (tabulka v něm je z doby před
+#488 a `MergeSheet.swift` se u #556 hodně změnil). Sedí: `App/Views/AgentPromptSheet.swift`,
+`MergeSheet.swift`, `ReviewSubmissionSheet.swift` a `Settings/SettingsView.swift`. K tomu je
+v grepu ještě `App/Views/DiffSearchBar.swift`, a ten je **v pořádku** — obyčejný pružný rámec
+(`minWidth: 160, idealWidth: 220, maxWidth: 260`), ne sheet.
+
+**Změřeno dvěma nástroji.** Samostatný `swiftc` skript nad prázdným obsahem oddělil chování šířky od
+výšky (šířka je vždycky `max(minWidth, 470)`, ideál se neuplatní ani nahoru, ani dolů; výška ideál
+bere až po strop obrazovky) a druhý, zabalený do minimálního `.app`, změřil okno `Settings` scény —
+tam je **mrtvé obojí** a oživit to nejde, `presentationSizing` je modifikátor prezentace, ne scény.
+Nad skutečnými obrazovkami pak měří `SheetSizingTests`. Celé tabulky jsou v
+[`docs/testovani.md`](testovani.md#co-dělá-ideal-u-sheetu-a-v-okně-settings-491), rozbor
+v [`docs/architektura.md`](architektura.md#ideální-šířka-a-ideální-výška-nejsou-totéž-491).
+
+**Výsledek: odešla jen ta šířka, která nikdy nic neznamenala.** U tří sheetů zůstal `idealHeight`,
+u okna nastavení nezůstalo nic (obojí bylo mrtvé). Že je to neviditelné, se tvrdí **dvěma běhy téže
+suity** — jednou s `idealWidth` v rámci a jednou bez něj — a vyšlo u obou totéž: 560 × 560,
+507 × 380, 840 × 620.
+
+**`.fitted` se u všech tří zamítlo**, tatáž odpověď jako u #466: rozšířit hotovou obrazovku a udělat
+ji roztahovatelnou je změna vzhledu, a ta jde přes zákres do návrhu a souhlas — což tahle oprava
+rozvržení není. `docs/navrh.html` se proto nezměnil.
+
+**Do `Policy` se nic nestěhovalo, a je to zapsané rozhodnutí**: `Policy.rawSessionSheet*`
+a `Policy.codeSheetSizing` existují proto, že se z nich **počítá**, kdežto tyhle tři sheety nic
+neukládají a nic z obrazovky neberou — konstanta by jen přestěhovala literál a testu by vzala
+možnost spadnout.
+
+**Grep z `CLAUDE.md` zůstal výčtem k posouzení, ale ubyla mu ta část, kterou umí tvrdit test.**
+`SheetSizingTests` drží dvě stráže nad zdrojáky: sheet s `idealWidth` musí mít `presentationSizing`,
+a roster sheetů (`App/Views/*Sheet.swift`) je uzavřený, aby to nešlo obejít souborem s jiným jménem.
+`idealHeight` se schválně nehlídá — funguje.
+
+**Cestou se opravilo tvrzení v sondě.** `AgentPromptRenderProbe` rendrovala sheet a seznam ve dvou
+šířkách (1 080 a 840) s odůvodněním, že se sheet otevře na ideálu a dá se stáhnout na podlahu —
+jenže 1 080 byla šířka, kterou ta obrazovka **ani jednou neměla**. Zbylo 840.
+
+**Zobecnitelné pravidlo:** *pravidlo zapsané o jedné ose neplatí automaticky o druhé* — a když se
+zadání odvolává na starší měření, patří k práci ověřit, že to měření tvrdí zrovna to, co se z něj
+cituje.
