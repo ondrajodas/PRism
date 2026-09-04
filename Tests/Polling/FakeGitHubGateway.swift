@@ -411,6 +411,29 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return repositoryPullRequests[repo] ?? []
     }
 
+    // MARK: - Co repozitář o mergi říká (#556)
+
+    /// Co vrátí `mergeSettings(repo:)`. **Chybějící klíč = všechny tři metody `nil`**, tedy
+    /// „nevím“ — a to je platná odpověď, ne selhání: nad repem bez práva zápisu (`cli/cli`) tak
+    /// odpovídá i živé API. Testy, které o metodě merge nejdou, tím dostanou stav, ve kterém se
+    /// nabídnou všechny tři a nic se netvrdí.
+    var repositoryMergeSettings: [RepoID: RepositoryMergeSettings] = [:]
+    /// Čím `mergeSettings(repo:)` spadne. Klíčem je repo, aby šlo mít jedno funkční a jedno
+    /// nedostupné naráz.
+    var repositoryMergeSettingsFailures: [RepoID: any Error] = [:]
+    /// Na co se kdo ptal, **v pořadí**. Na počtu stojí test, že je to **jedno volání za repo**,
+    /// ne dotaz na každé PR nebo na tik pollingu — jinak by tenhle typ o téhle vlastnosti
+    /// netvrdil nic.
+    var mergeSettingsRequests: [RepoID] { lock.withLock { mergeSettingsAsked } }
+
+    private var mergeSettingsAsked: [RepoID] = []
+
+    func mergeSettings(repo: RepoID) async throws -> RepositoryMergeSettings {
+        lock.withLock { mergeSettingsAsked.append(repo) }
+        if let failure = repositoryMergeSettingsFailures[repo] { throw failure }
+        return repositoryMergeSettings[repo] ?? RepositoryMergeSettings()
+    }
+
     /// Labely, které zná repo. Prázdno je platná odpověď — a hlavně: z prázdné nabídky nejde
     /// vyrobit label.
     var repositoryLabels: [PullRequestLabel] = []

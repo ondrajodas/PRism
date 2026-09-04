@@ -163,6 +163,11 @@ struct PullRequestListView: View {
                 state: store.reviewState(for: summary.id),
                 hasDraft: store.hasDraft(summary.id),
                 summary: store.queueRow(for: summary.id),
+                // Mapa PR do mini pásu (#502) — **čte se tady, ne v řádku**, ze stejného důvodu
+                // jako stavy: `List` staví řádky líně a mimo sledování závislostí rodiče, takže
+                // by se pás po doběhnutí review nemusel překreslit. `nil` u PR, o kterém se pás
+                // nemá z čeho složit; rozhoduje o tom store, protože jedině on ví, co je načtené.
+                map: store.queueMap(for: summary.id),
                 ownership: ownership,
                 pending: handoff.pending,
                 activity: handoff.activity
@@ -177,6 +182,7 @@ struct PullRequestListView: View {
                 reviewState: row.state,
                 hasDraft: row.hasDraft,
                 row: row.summary,
+                map: row.map,
                 ownership: row.ownership,
                 // `Prompt →` (#333) — otevře PR a v něm panel `Zadání`. Store se tady drží, takže
                 // uzávěr nese jen identitu řádku; skládání textu je věc panelu, ne seznamu.
@@ -216,6 +222,8 @@ struct PullRequestListView: View {
         let state: ReviewState
         let hasDraft: Bool
         let summary: QueueRow
+        /// Mapa PR do mini pásu (#502). `nil` = pás se nekreslí.
+        let map: PullRequestMap?
         /// Čí PR to je (#331) — u vlastního má řádek vpravo `Prompt →` místo verdiktu. Čte se
         /// **tady**, ne v řádku: řádek nemá store a `List` ho staví líně.
         let ownership: PullRequestOwnership

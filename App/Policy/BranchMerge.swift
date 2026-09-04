@@ -145,9 +145,13 @@ extension Policy {
     struct BranchSection: Hashable, Sendable {
         let facts: [BranchFact]
         let merge: MergeOffer
-        /// Co se potvrzuje. `nil` = není z čeho ho složit; pak je `merge` vždycky `blocked`
-        /// s `factsMissing`.
-        let plan: MergePlan?
+        /// S čím se otevře potvrzení. `nil` = není z čeho ho složit; pak je `merge` vždycky
+        /// `blocked` s `factsMissing`.
+        ///
+        /// **Návrh, ne payload** (#556): metoda se vybírá až v potvrzení, takže z jednoho návrhu
+        /// jdou složit tři různé payloady. Panel z něj kreslí jedině řádek `větev → základ`
+        /// a počet commitů — o metodě **mlčí**, viz `mergeOffer`.
+        let proposal: MergeProposal?
         /// Druhá akce sekce — `Rebase` (#466).
         let sync: SyncOffer
         /// Co se přehraje a přes co se přetlačí. `nil` = není z čeho to složit.
@@ -182,13 +186,24 @@ extension Policy {
         // Stav odesílání metadat (#482) — přepnutí z draftu jde touž branou jako labely, takže
         // se druhé odeslání nemá nabízet. Výchozí `nil` proto, že testy sekce, které o tuhle
         // akci nejdou, o ní nemají muset vědět.
-        action: MetadataActionState? = nil
+        action: MetadataActionState? = nil,
+        /// Výchozí metoda merge z nastavení (#556). Výchozí `.squash` proto, že tak se aplikace
+        /// chovala do #556 — testy sekce, které o metodě nejdou, o ní nemají muset vědět.
+        defaultMethod: MergeMethod = .squash,
+        /// Co repozitář o mergi říká (#556). `nil` = **nezjistilo se**, tedy stav, ve kterém se
+        /// v potvrzení nabídnou všechny tři metody a nic se o nich netvrdí.
+        repository: RepositoryMergeSettings? = nil
     ) -> BranchSection? {
         guard editing.isVisible else { return nil }
-        let plan = mergePlan(of: detail, commits: commits)
+        let proposal = mergeProposal(
+            of: detail,
+            commits: commits,
+            defaultMethod: defaultMethod,
+            repository: repository
+        )
         let merge = mergeOffer(
             editing: editing,
-            plan: plan,
+            proposal: proposal,
             state: detail?.state,
             status: status,
             checks: checks,
@@ -196,9 +211,9 @@ extension Policy {
         )
         let syncPlan = branchSyncPlan(of: detail, status: status)
         return BranchSection(
-            facts: branchFacts(plan: plan, commits: commits, status: status, checks: checks),
+            facts: branchFacts(proposal: proposal, commits: commits, status: status, checks: checks),
             merge: merge,
-            plan: plan,
+            proposal: proposal,
             sync: branchSyncOffer(
                 editing: editing,
                 plan: syncPlan,
@@ -216,17 +231,17 @@ extension Policy {
 
     /// Dva řádky stavu z návrhu: kam se to slévá a co je na tom hotové.
     static func branchFacts(
-        plan: MergePlan?,
+        proposal: MergeProposal?,
         commits: [PullRequestCommit]?,
         status: BranchStatusState?,
         checks: [PullRequestCheck]?
     ) -> [BranchFact] {
-        [syncFact(plan: plan, status: status), checksFact(commits: commits, checks: checks)]
+        [syncFact(proposal: proposal, status: status), checksFact(commits: commits, checks: checks)]
     }
 
     /// Řádek „kam se to slévá a jestli je větev srovnaná“.
-    private static func syncFact(plan: MergePlan?, status: BranchStatusState?) -> BranchFact {
-        let route = plan.map { "\($0.head) → \($0.base)" } ?? "větev se načítá"
+    private static func syncFact(proposal: MergeProposal?, status: BranchStatusState?) -> BranchFact {
+        let route = proposal.map { "\($0.head) → \($0.base)" } ?? "větev se načítá"
         let answer: (String, BranchFact.Tone) = switch status {
         case .loaded(let status, _): syncAnswer(of: status)
         case .loading, .none: ("zjišťuju", .neutral)
@@ -302,7 +317,7 @@ extension Policy {
     /// (brána, stav PR), pak to, co ještě nevíme, a nakonec to, co se opravuje prací na ní.
     static func mergeOffer(
         editing: MetadataEditing,
-        plan: MergePlan?,
+        proposal: MergeProposal?,
         state: PullRequestState?,
         status: BranchStatusState?,
         checks: [PullRequestCheck]?,
@@ -324,7 +339,7 @@ extension Policy {
             case .open: break
             }
         }
-        guard let plan else {
+        guard let proposal else {
             obstacles.append(.factsMissing)
             return .blocked(obstacles)
         }
@@ -332,7 +347,7 @@ extension Policy {
         switch status {
         case .none, .loading: obstacles.append(.statusLoading)
         case .failed(let reason): obstacles.append(.statusFailed(reason))
-        case .loaded(let status, _): obstacles += branchObstacles(of: status, base: plan.base)
+        case .loaded(let status, _): obstacles += branchObstacles(of: status, base: proposal.base)
         }
 
         obstacles += checkObstacles(status: status?.status, checks: checks)
@@ -422,11 +437,16 @@ extension Policy {
     /// commitů jsou to, co potvrzení vypisuje — a potvrzení, ve kterém kterákoli z těch hodnot
     /// chybí, není potvrzení. Prázdný seznam commitů je přitom platná odpověď jedině teoreticky
     /// (PR bez commitu nevznikne), takže se `nil` a `[]` schválně liší: `nil` je „nevíme“.
-    static func mergePlan(of detail: PullRequest?, commits: [PullRequestCommit]?) -> MergePlan? {
+    static func mergeProposal(
+        of detail: PullRequest?,
+        commits: [PullRequestCommit]?,
+        defaultMethod: MergeMethod = .squash,
+        repository: RepositoryMergeSettings? = nil
+    ) -> MergeProposal? {
         guard let detail, let commits, !detail.headRef.isEmpty, !detail.baseRef.isEmpty else {
             return nil
         }
-        return MergePlan(
+        return MergeProposal(
             pullRequest: detail.id,
             headSha: detail.headSha,
             head: detail.headRef,
@@ -435,7 +455,13 @@ extension Policy {
             // vrací celá těla zpráv (změřeno na `PRism#470`: dva commity, 1,4 kB), takže druhý
             // dotaz by za jedno číslo platil velikost, kterou tab `Commity` už jednou zaplatil.
             commits: commits.count,
-            commitTitle: squashTitle(of: detail.title, number: detail.number)
+            // **Titulek pull requestu, ne titulek commitu** (#556): ten se skládá až podle
+            // metody (`Policy.mergeCommitTitle`), a u rebase žádný není.
+            title: detail.title,
+            defaultMethod: defaultMethod,
+            // **Chybějící příznaky nejsou překážka merge**, viz `mergeOffer`: metoda se vybírá
+            // v potvrzení, takže je to otázka payloadu, ne stavu větve.
+            repository: repository
         )
     }
 }

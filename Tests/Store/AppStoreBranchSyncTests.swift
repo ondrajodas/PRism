@@ -545,7 +545,7 @@ struct AppStoreBranchSyncTests {
         #expect(gateway.detailRequests.count > before, "detail se po pushi musí načíst znovu")
         #expect(store.detail(of: pr)?.headSha == "cccc3333")
         // A to je zrovna ta hodnota, kterou merge posílá v payloadu.
-        #expect(Policy.mergePlan(of: store.detail(of: pr), commits: [])?.headSha == "cccc3333")
+        #expect(Policy.mergeProposal(of: store.detail(of: pr), commits: [])?.headSha == "cccc3333")
     }
 
     /// **Druhý směr: po neúspěšném pushi se hlava nemění.** Tohle je ta cennější polovina —

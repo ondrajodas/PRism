@@ -162,7 +162,16 @@ struct SettingsView: View {
         case .diff: DiffSettingsView(settings: settings)
         case .publishing: PublishingSettingsView(settings: settings)
         case .notifications: NotificationSettingsView(settings: settings)
-        case .repositories: RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
+        case .repositories:
+            RepositorySettingsView(
+                settings: settings,
+                repositories: store.knownRepositories,
+                // Příznaky merge (#556) jsou ve storu, ne v `@State` tohohle okna: čtou je dvě
+                // obrazovky (tahle a potvrzení merge), a dvě cache téhož by znamenaly dvě volání
+                // a dvě různé odpovědi. `nil` = ještě se to nezjistilo, tedy „nevím“.
+                mergeSettings: { store.repositoryMergeSettings[$0] },
+                loadMergeSettings: { await store.loadMergeSettings(for: $0) }
+            )
         case .runtime: RuntimeSettingsView(settings: settings)
         // `Systém` (#529) je vedle `Repozitářů` druhá stránka, která nečte jen konfiguraci:
         // přihlašovací položka je **stav systému**, takže se čte a zapisuje přes store.

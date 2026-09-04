@@ -7609,6 +7609,141 @@ Na obrazovce se nemění nic a kód se nedotkl — sekce o slotech, o rozvrhu a 
 byly, protože jsou proměřené provozem. Měnilo se jedině to, co bylo nepravdivé. Testů dál **5228**
 v 511 suitách, beze změny.
 
+## #502 — mapa PR v řádku fronty místo spektra reviewerů
+
+Druhé issue směru E z milníku **M14**. V řádku fronty stál od #172 **proužek s podílem reviewerů**
+na výsledku — odpovídal na „odkud ty nálezy jsou“. Od #502 je na jeho místě **mini pás mapy PR**
+(110 × 6 bodů, `QueueMapStrip`): tentýž pás, jaký #501 postavilo pod hlavičku, jen v jiném měřítku.
+Odpovídá na jinou a užitečnější otázku — **kde v PR to je a jak zle** —, a hlavně tím v okně zůstává
+**jedno kódování: barva je závažnost**, ať se kreslí v řádku, pod hlavičkou nebo v okraji diffu.
+**Nekreslilo se nic**: zákres té skupiny přenesl #501 jako sekci 42 a tohle issue se na ni odkazuje.
+
+**Mini pás je velký pás v jiném měřítku, ne druhá mapa.** Data skládá `Policy.pullRequestMap`
+a plochy kreslí `PullRequestMapView.drawSegments` — obojí **tatáž funkce**; odsud je jen geometrie.
+Nad referenčním rozložením ze sekce 42 (sedm souborů, `composer.lock` 2 790 řádků z 2 952) vyjdou
+**podíly na milióntinu stejné** ve 110 i v 800 bodech: lock 30,8 %, `composer.json` 6,2 %, tedy
+**6,1 bodu** — nad minimem tří. Mezery ustupují tou samou nerovností (`Policy.mapSpacing`): ve 110
+bodech od dvaceti tří souborů, a nad šestatřiceti nestačí ani minima, takže se dělí rovným dílem
+(u 158 souborů po 0,7 bodu). To je zapsaná spodní hranice, ne vada: pás pak přestává mluvit
+o velikosti, ale pořád říká, kolik červené v tom PR je.
+
+**Co se o PR ve frontě doopravdy ví — a proto se pás u části řádků nekreslí.** Pás stojí na
+seznamu souborů a jejich objemu, a to je jediný vstup, který ve frontě **není**: diff se dotahuje
+až při otevření PR (#306), polling přinese jen shrnutí (`PullRequestSummary` nemá ani `headSha`,
+natož soubory) a záznam review si seznam souborů neukládá. Dotáhnout ho pro každý řádek by bylo
+N volání `gh` na tik — zamítnutá cesta, naposledy u #515. `AppStore.queueMap(for:)` proto vrací
+`nil` ze **dvou** důvodů: (1) **na PR nic neběželo** — barva je závažnost, takže neutrální pás by
+byl k nerozeznání od čistého review, což je tatáž úvaha, kvůli které se do #502 nekreslilo
+spektrum u řádku bez běhu; (2) **diff se ještě nenačetl**. Druhá podmínka v zadání není, protože
+předpokládalo, že soubory k dispozici jsou; **nejsou**, a je to zapsané rozhodnutí. Prakticky
+tedy pás mají řádky PR, které už byly v tomhle spuštění otevřené, a ostatní vypadají jako řádek
+do #502 bez spektra: odznak stavu, nic víc. **Prázdný obdélník se nekreslí nikdy** — tvářil by se
+jako údaj. Posunout se to dá jedině tím, že by si aplikace seznam souborů **ukládala** (kandidát je
+záznam review, který diff v ruce má); zapsáno jako mez, ne jako plán.
+
+**Čárka vlákna ani jezdec v řádku nejsou, a je to důsledek téhož.** Konverzace se stejně jako diff
+tahá až v detailu, takže by chybějící čárka u zavřeného PR neznamenala „žádná diskuze“, ale
+„nevíme“; jezdec navíc ukazuje soubor pod výřezem, který u zavřeného PR neexistuje. Popisek mapy
+proto v řádku o vláknech **mlčí** (`Policy.mapSummary` části bez obsahu vynechává) a nese ho
+nápověda a `accessibilityValue`, ne řádka — v ní na něj místo není.
+
+**Cache s otiskem vstupů, ne s ručním zneplatňováním** (#224). Pás by se jinak skládal při každém
+průchodu tělem seznamu **u každého řádku**, tedy prací lineární v počtu souborů. Ruční
+zneplatňování by znamenalo pět volajících (načtení diffu, doběhlé review, odmítnutí, značka,
+změna konfigurace) a stačilo by zapomenout jedno, aby řádek kreslil pás z minula — **potichu**,
+protože pás z minula vypadá jako pás. `QueueMapStamp` se proto skládá při každém dotazu a je v něm
+všechno, co ta funkce čte (#153), a nic, co roste s počtem souborů: razítko diffu s počtem souborů,
+z každého platného nálezu čtveřice *(soubor, řádek, kategorie, verdikt)*, značky `Prošlo`
+a **blokující kategorie z konfigurace**. `@ObservationIgnored` je u té mapy podmínka, ne úspora —
+zapisuje se do ní z průchodu tělem, takže sledovaná vlastnost by ten průchod zneplatnila sama
+sebou; uklízí se v `forget(whatIsNotIn:)` spolu s diffem.
+
+**`SpectrumBar` odešel celý**, a s ním `QueueRow.spectrum`, typ `ReviewerShare`
+a `ReviewStateAppearance.color(of: ReviewerShare.Outcome)` — pole bez čtenáře je mrtvá váha, která
+svádí spolehnout se na ni. `QueueRow` **zůstává** s jedním polem (`blocking`): je to pořád údaj
+o výsledku a čte ho hrana řádku i odznak, kdežto holé `Int` by z `PullRequestRow(row:)` udělalo
+nepojmenované číslo na čtyřech místech. Rozhodnutí *čisto versus nemám co říct*, které si proužek
+počítal **znovu** (a #383 proto tutéž vadu opravovalo na dvou místech), zůstalo v `Policy.chips`,
+kde se v okně doopravdy čte.
+
+**Výška řádku se nemění** — měřeno `fittingSize` mimo obrazovku: 41 bodů s pásem i bez něj, a to
+i v 636 bodech, tedy v obsahu nejužšího povoleného okna. **Tři inserted regrese** to potvrdily:
+bez podmínky na běh spadne test „PR, na kterém nic neběželo, pás nedostane“; bez kategorií v otisku
+spadne „blokující sada pás přebarví, i když už je v cache“; a pás vysoký 40 bodů shodí obě měření
+výšky (41 proti 64). Čtvrtá ověřila stráž nad zdrojáky: `Policy.mapFill(` dosazený do
+`QueueMapStrip` shodí tvrzení „barvu segmentu rozhoduje jediné místo“.
+
+Testů **5239** v 514 suitách (proti 5228 v 511 na `main`u před tímhle PR); nové jsou dvě sady
+(`AppStoreQueueMapTests`, `QueueMapStripTests`) a jedna sonda (`QueueRowRenderProbe` — řádek fronty
+ve dvou šířkách a v obou režimech, pouští se ručně jako ostatní sondy). Naopak **ubylo** devět
+tvrzení o proužku reviewerů; co z nich zůstalo a kde, je
+v [`docs/testovani.md`](testovani.md).
+
+**Mockup na to čeká.** `docs/navrh.html` kreslí v řádcích fronty pořád `.spectrum` (tři místa) —
+tohle issue se do něj **nekreslilo schválně**: souběžně s ním běžela dvě jiná, která do téhož HTML
+sahají, a třetí konflikt v jednom souboru je horší než den nesouladu. Je to **zapsaná mezera**:
+`.spectrum` v sekcích s frontou má vystřídat mini pás.
+
+## #556 — metoda merge je volba, ne konstanta
+
+Merge vlastního PR posílal `merge_method: "squash"` z **konstanty** `MergeRequest.method`, a u té
+konstanty stálo zdůvodnění, že volba mezi metodami by byla „třetí věc na potvrzení, kterou člověk
+projde jednou za rok, a přepnout ji jde na GitHubu“. **Praxe to vyvrátila ze dvou stran**: odejít
+z okna kvůli jedné hodnotě je dražší než ta hodnota, a squash není to, co se hodí ve všech repech.
+Zdůvodnění se proto **přepsalo, ne smazalo** — a ten argument padl i sám o sobě: mluvil o světě,
+ve kterém **žádná výchozí hodnota nebyla**, takže se rozhodoval každý merge.
+
+**Výchozí hodnota je v nastavení, globálně i per repo.** Globální default (`squash`, tedy chování
+do #556) leží na stránce `Odesílání` **pod** bránou — brána rozhoduje, jestli se dá mergnout vůbec,
+tahle sekce jenom čím. Per repo to je čtyřhodnotový picker na `Repozitáře`, vedle ostatních
+override: metoda merge je **zvyk repozitáře**, ne člověka, takže je to tatáž třída jako `mode`
+nebo `incrementalAfterPush`, a ne jako `diffLayout` a vzhled okna, které override schválně nemají.
+
+**Potvrzení metodu vypisuje a dovolí ji přebít pro jeden merge.** Picker leží **uvnitř výpisu
+payloadu** — je to řádek payloadu, ve kterém se dá kliknout, ne krok před potvrzením —, takže
+zamítnutí z #465 („druhá věc na potvrzení“) neplatí: mergne se pořád jedním kliknutím na
+pojmenované tlačítko. **S metodou se přepíše celý výpis**: `commitů 3 → 1` je věta o squashi, u
+merge commitu je to `3 + merge commit` a u rebase `3 přehrané`; titulek je u squashe `titulek PR
+(#číslo)`, u merge commitu `Merge pull request #N from <větev>` a **u rebase žádný** (nevzniká tam
+commit, takže by GitHub pole zahodil). Že přepnutí platí **jen pro tenhle merge**, stojí pod
+výpisem — bez té věty by picker vypadal jako zkratka do nastavení.
+
+**Věta o těle se přestala hádat.** Do #556 stálo v potvrzení „Tělo squash commitu složí GitHub ze
+zpráv N commitů“, což je pravda jedině v repu se `squash_merge_commit_message = COMMIT_MESSAGES` —
+tenhle repo ho má (změřeno), ale záruka to není. Zdroje těla přijdou **týmž voláním** jako povolené
+metody, takže věta řekne, co v tom těle bude; kde se to zjistit nepodařilo, zůstává přiznání
+„složí GitHub podle nastavení repozitáře“, a u rebase se o těle nemluví vůbec.
+
+**Nové čtení je jedno volání za repo, a „nevím“ je třetí odpověď.**
+`GitHubGateway.mergeSettings(repo:)` (šestadvacátá čtecí metoda; gateway zůstává bez zápisu) čte
+`GET /repos/{o}/{r}` a drží se v cache klíčované **repem**; ptá se při otevření vlastního PR a při
+výběru repa v nastavení, **ne na tik pollingu**. Změřeno: `ondrajodas/PRism` 0,62 s a všechny tři
+`true`, `keboola/job-queue-daemon` `allow_rebase_merge: false`, a `cli/cli` — repo **bez práva
+zápisu** — **všech pět polí GitHub vůbec nepošle**. To poslední je „nevím“, ne „nepovoluje“: nabídnou se všechny
+tři metody a nic se netvrdí. Nepovolená metoda se z nabídky **neztratí**, jen se nedá vybrat
+(zašedlá, přeškrtnutá, `nejde`) — zmizet nesmí, jinak se nedá poznat „repo to nepustí“ od „tuhle
+metodu GitHub nemá“.
+
+**A nepovolená výchozí metoda se nepodstrčí jinou.** Sheet se v tom stavu otevře **bez vybrané
+metody**, `Mergnout` je zakázané, řádky `commitů` a `titulek` píšou ztlumeně `podle metody` a pod
+výpisem stojí výstraha s tím, co repo povoluje. **Panel o tom mlčí** a `Mergnout…` v něm zůstává
+povolené: mergnout jde, jen zbývá vybrat čím — a to je otázka payloadu, ne stavu větve.
+
+**Tvrdá podmínka č. 1 se nezměnila ani o položku.** `ReviewPublishing` má pořád **devět** metod,
+merge je pořád osmá, brána, potvrzení i dvojí ověření hlavy platí — `SingleWayOutTests` prošly
+**nedotčené** a grep vydává týchž **sedm** souborů (`BranchPushing` tři). Co se změnilo, je obsah
+payloadu, ne cesta ven. Rozdělilo se u toho jedno místo na dvě: `MergeProposal` je to, s čím se
+sheet otevřel, `MergePlan` je **payload** — a `plan == nil` je platný stav („nic není vybráno“),
+ne nedodělek.
+
+Testů **5266** v 513 suitách (+38), z toho nové `MergeMethodChoiceTests` a
+`GhRepositoryMergeSettingsTests`; fixtures jsou skutečné odpovědi `gh api` (`ondrajodas/PRism` a veřejné `cli/cli`), **zkrácené
+o pole, která se nedekódují** — plná odpověď nese `temp_clone_token`, tedy krátkodobý credential
+(nález Copilota na PR #560). `allow_rebase_merge: false` je inline JSONem, protože změřené je na
+firemním repu. **Naostro se nemergovalo** — merge je nevratný a brána je ve slotové konfiguraci
+vypnutá; ověřené je to, co odejde v payloadu (na hotových bajtech) a co repozitáře doopravdy
+vracejí.
+
 ## #529 — Odznak v Docku a spuštění po přihlášení (zákres 49)
 
 O frontě se dřív dalo dozvědět jen z otevřeného okna nebo z notifikace, která přijde jednou

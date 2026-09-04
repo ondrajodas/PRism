@@ -4,6 +4,15 @@ import SwiftUI
 struct RepositorySettingsView: View {
     @Bindable var settings: SettingsModel
     let repositories: [RepoID]
+    /// Co repozitář o mergi říká (#556). `nil` = ještě se to nezjistilo, takže se nepovolená
+    /// metoda **nezašedne** a nabídnou se všechny tři — „nevím“ se chová jako „ano“.
+    ///
+    /// **Uzávěr, ne `AppStore`.** Stránka `Repozitáře` dostává i seznam rep zvlášť, ze stejného
+    /// důvodu: views se musí dát složit bez storu (offscreen render, náhled).
+    var mergeSettings: (RepoID) -> RepositoryMergeSettings? = { _ in nil }
+    /// Dotáhne příznaky pro vybrané repo. **Na výběr repa, ne na tik** — je to výslovné gesto
+    /// člověka a jedno volání za repo, které se drží v cache (0,62 s).
+    var loadMergeSettings: (RepoID) async -> Void = { _ in }
     @State private var selection: RepoID?
 
     var body: some View {
@@ -23,6 +32,13 @@ struct RepositorySettingsView: View {
         // by seznam vlevo naskočil, ale vpravo by zůstalo „Vyber repozitář“, dokud si
         // uživatel neklikne.
         .task(id: repositories) { selection = selection ?? repositories.first }
+        // **Až po výběru, a jen pro to jedno repo** (#556): výpis rep má desítky řádků a dotáhnout
+        // příznaky pro všechna by bylo desítky volání za obrazovku, na které je vidět jedno.
+        // Volání samo má stráž na cache, takže překliknutí sem a zpátky nestojí nic.
+        .task(id: selection) {
+            guard let repo = selection else { return }
+            await loadMergeSettings(repo)
+        }
     }
 
     @ViewBuilder private var list: some View {
@@ -58,7 +74,7 @@ struct RepositorySettingsView: View {
 
     @ViewBuilder private var detail: some View {
         if let repo = selection, repositories.contains(repo) {
-            RepositoryDetailView(settings: settings, repo: repo)
+            RepositoryDetailView(settings: settings, repo: repo, merge: mergeSettings(repo))
         } else {
             EmptyStateView(
                 nature: .waiting,
@@ -74,6 +90,8 @@ struct RepositorySettingsView: View {
 private struct RepositoryDetailView: View {
     @Bindable var settings: SettingsModel
     let repo: RepoID
+    /// Co tenhle repozitář o mergi říká (#556). `nil` = nevím.
+    let merge: RepositoryMergeSettings?
 
     var body: some View {
         Form {
@@ -100,6 +118,8 @@ private struct RepositoryDetailView: View {
                 }
                 .pickerStyle(.radioGroup)
 
+                mergeMethodPicker
+
                 // Tříhodnotový jako odesílání (#517), a ze stejného důvodu: `false` u repa není
                 // totéž jako `nil` — repo, u kterého chci po pushi vždycky celé review, si to
                 // podrží i po přepnutí globálního defaultu.
@@ -124,7 +144,7 @@ private struct RepositoryDetailView: View {
                 Text(verbatim: repo.description)
                     .font(.headline)
             } footer: {
-                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou. Přírůstek platí až od druhého kola — v prvním se čte celý diff tak jako tak, a stejně tak u revieweera, který nad předchozí hlavou nedoběhl.")
+                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Metoda merge je výchozí hodnota pro potvrzení, ve kterém se dá přebít pro jeden merge; přeškrtnutá metoda je ta, kterou tenhle repozitář nepovoluje — přečteno z GitHubu. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou. Přírůstek platí až od druhého kola — v prvním se čte celý diff tak jako tak, a stejně tak u revieweera, který nad předchozí hlavou nedoběhl.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -154,6 +174,74 @@ private struct RepositoryDetailView: View {
             timeoutOverride
         }
         .formStyle(.grouped)
+    }
+
+    /// Výchozí metoda merge pro tohle repo (#556).
+    ///
+    /// **Čtyřhodnotový, ne tříhodnotový**: `Podle globálního (squash)` plus tři metody. „Ber
+    /// globální“ se musí dát vybrat zpátky **i s tou hodnotou**, jinak není poznat, co se stane —
+    /// tatáž úmluva jako u režimu a odesílání.
+    ///
+    /// **Nepovolená metoda se nedá vybrat, ale z nabídky nezmizí.** Zmizet nesmí, jinak se nedá
+    /// poznat rozdíl mezi „repo to nepustí“ a „tuhle metodu GitHub nemá“; kreslí se proto
+    /// přeškrtnutá a se slovem `nejde`. Uložit se tím do souboru nedá hodnota, se kterou by merge
+    /// skončil chybou z API.
+    ///
+    /// **Vybraná hodnota, kterou repo přestalo povolovat, se nepřepisuje.** Když se povolení na
+    /// GitHubu změní až potom, uložená hodnota v souboru zůstane — přepsat ji za člověka by
+    /// znamenalo tiše změnit metodu nevratné akce. Pozná se to **v potvrzení**, které se v tom
+    /// stavu otevře bez vybrané metody a řekne, co repo povoluje.
+    private var mergeMethodPicker: some View {
+        Picker("Metoda merge", selection: selectableMergeMethod) {
+            Text("Podle globálního nastavení (\(settings.draft.global.mergeMethod.displayName))")
+                .tag(MergeMethod?.none)
+            ForEach(Policy.mergeMethodOptions(in: merge)) { option in
+                // **`.tag` má i nevybratelná položka, a je to podmínka, ne nedůslednost.** Bez
+                // něj by se hodnota, kterou repo přestalo povolovat, v nabídce nezobrazila jako
+                // vybraná — a picker by tvrdil „ber globální“ nad souborem, ve kterém stojí
+                // `rebase`. Zašedlá vybraná položka je pravda; tichý návrat na globální by nebyl.
+                if option.isSelectable {
+                    Text(verbatim: option.method.displayName).tag(MergeMethod?.some(option.method))
+                } else {
+                    // **Přeškrtnutí je z návrhu**, ne ozdoba: zašedlá položka sama vypadá jako
+                    // „zatím nedostupné“, kdežto tady jde o „tohle repo to nepustí“. Věta za
+                    // pomlčkou to říká slovy, protože ze škrtu neplyne **proč** — a škrt patří
+                    // jedině na jméno metody, ne na tu větu (jinak by přeškrtnutý byl i důvod).
+                    (
+                        Text(verbatim: option.method.displayName).strikethrough()
+                            + Text(verbatim: " — nejde, repozitář ji nepovoluje")
+                    )
+                    .tag(MergeMethod?.some(option.method))
+                    .disabled(true)
+                }
+            }
+        }
+        .pickerStyle(.radioGroup)
+    }
+
+    /// Binding, který **nepovolenou metodu neuloží** — a je to stráž nad daty, ne nad kresbou.
+    ///
+    /// `.disabled(true)` na položce `Pickeru` je věc **vzhledu a myši**; jestli ji zavře i průchod
+    /// klávesnicí, není nikde zaručené, a „nastavení nemá jak uložit hodnotu, se kterou by merge
+    /// spadl“ je tvrzení o **souboru**, ne o tom, co se dá kliknout. Zápis se proto zahazuje tady,
+    /// na jednom místě a podle **téže** funkce, ze které se kreslí nabídka.
+    ///
+    /// **Čtení se nefiltruje.** Hodnota, kterou repo přestalo povolovat (nebo která je v souboru
+    /// napsaná ručně), se ukazuje **tak, jak je** — přepsat ji za člověka by znamenalo tiše změnit
+    /// metodu nevratné akce. Pozná se to v potvrzení.
+    private var selectableMergeMethod: Binding<MergeMethod?> {
+        Binding(
+            get: { config.mergeMethod.wrappedValue },
+            set: { chosen in
+                guard let chosen else {
+                    // `nil` je „ber globální“, tedy vlastní volba — ta se nefiltruje.
+                    config.mergeMethod.wrappedValue = nil
+                    return
+                }
+                guard Policy.isMergeMethodSelectable(chosen, in: merge) else { return }
+                config.mergeMethod.wrappedValue = chosen
+            }
+        )
     }
 
     /// Routing reviewerů (#518) — na kterých cestách se který reviewer pouští.

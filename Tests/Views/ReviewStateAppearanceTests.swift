@@ -123,33 +123,11 @@ struct ReviewStateAppearanceTests {
         }
     }
 
-    @Test("Díl proužku má barvu podle výsledku")
-    func everyShareHasItsColour() {
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.blocking) == Palette.crit)
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.findings) == Palette.find)
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.clean) == Palette.ok)
-        // Odmítnuté má stejnou barvu jako `ReviewState.dismissed` — řádek a odznak nesmí
-        // o tomtéž říkat každý něco jiného.
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed) == Palette.mint)
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.dismissed)
-            == ReviewStateAppearance.color(of: .dismissed(findings: 1)))
-        #expect(ReviewStateAppearance.color(of: ReviewerShare.Outcome.inconclusive) == .secondary)
-    }
-
-    /// **Proužek a odznak berou tutéž škálu, a od #432 je celá z palety** — proužek na hraně řádku
-    /// je plná plocha, takže tam kontrast textu nehrozí; kdyby ale zůstal systémový, řekly by dvě
-    /// kresby jednoho běhu barvou něco jiného. To je ta vada, kterou #383 našlo u `inconclusive`.
-    ///
-    /// `.secondary` u `inconclusive` v proužku **není výjimka z toho pravidla**: není to barva ze
-    /// škály, ale „nemám co říct“ — a proto se drží kontrastem okolí, ne tokenem.
-    @Test("Proužek nebere ze systému nic ze škály")
-    func theShareKeepsAwayFromTheSystemScale() {
-        for outcome in [ReviewerShare.Outcome.blocking, .findings, .clean, .dismissed] {
-            let color = ReviewStateAppearance.color(of: outcome)
-            #expect(color != .red)
-            #expect(color != .orange)
-            #expect(color != .green)
-            #expect(color != .yellow)
-        }
-    }
+    // **Proužek reviewerů odešel s #502** — v řádku fronty je na jeho místě mapa PR, takže
+    // `ReviewStateAppearance.color(of: ReviewerShare.Outcome)` už nikdo nekreslí a spolu s ním
+    // odsud odešla dvě tvrzení: barvy jednotlivých dílů a to, že díl nebere nic ze systémové
+    // škály (#432). **Není to ztráta pokrytí:** obojí se nad `ReviewState` tvrdí v testech výš
+    // (u každého stavu je vedle barvy z palety i nerovnost proti té systémové) a rozhodnutí
+    // „čisto versus nemám co říct“, na kterém proužek stál, drží `Policy.chips`
+    // (`UnreadCodeStateTests.theChipSaysWhatIsMissing`).
 }

@@ -20,9 +20,33 @@ final class MergeSubmission: Identifiable {
     let id = UUID()
 
     let pullRequest: PullRequestSummary
-    /// Co se stane. **Snímek pořízený při otevření sheetu**, ne odkaz do storu: co je v potvrzení
-    /// vidět, to odejde, i kdyby mezitím dorazil polling s jiným počtem commitů.
-    let plan: MergePlan
+    /// S čím se sheet otevřel. **Snímek pořízený při otevření**, ne odkaz do storu: co je
+    /// v potvrzení vidět, to odejde, i kdyby mezitím dorazil polling s jiným počtem commitů.
+    ///
+    /// Nese i **výchozí metodu z nastavení** a **co repozitář povoluje** (#556) — obojí jako
+    /// snímek, ze stejného důvodu jako brána: co je předvybrané, je to, co v nastavení stálo, když
+    /// se sheet otvíral.
+    let proposal: MergeProposal
+
+    /// Vybraná metoda. `nil` = **nic není vybráno**, tedy stav, ve kterém se merge zastaví.
+    ///
+    /// Do `nil` se dostane jedině tak, že **výchozí metodu repozitář nepovoluje**
+    /// (`Policy.initialMergeMethod`): tiše podstrčit první povolenou by znamenalo, že u nevratné
+    /// akce odejde něco, o co nikdo nepožádal. Ze sheetu se `nil` nastavit nedá — pilulka se
+    /// nepřepíná zpátky na „nic“.
+    ///
+    /// **`var`, ne `let`, a je to jediný proměnný vstup téhle třídy.** Přepnutí platí pro tenhle
+    /// jeden merge a s objektem zaniká; nastavení se z něj **nezapisuje** (věta o tom stojí
+    /// v sheetu pod výpisem, `Policy.mergeMethodOverrideNote`).
+    var method: MergeMethod?
+
+    /// Co odejde. `nil`, dokud není vybraná metoda — a právě proto je `canMerge` v tom stavu
+    /// nepravda: payload, ze kterého se nedá složit `merge_method`, se nemá jak potvrdit.
+    ///
+    /// **Skládá se z návrhu, ne drží zvlášť**, aby se nedalo přepnout metodu a nechat řádky
+    /// výpisu od té předchozí: sheet kreslí `commitů`, `titulek` i větu o těle **z tohohle
+    /// plánu**, takže se s payloadem nemají jak rozejít.
+    var plan: MergePlan? { method.map { proposal.plan(with: $0) } }
 
     private(set) var state: State
 
@@ -44,14 +68,20 @@ final class MergeSubmission: Identifiable {
 
     init(
         pullRequest: PullRequestSummary,
-        plan: MergePlan,
+        proposal: MergeProposal,
         publisher: @escaping @MainActor () -> any ReviewPublishing,
         afterSuccess: @escaping @MainActor () async -> Void
     ) {
         self.pullRequest = pullRequest
-        self.plan = plan
+        self.proposal = proposal
         self.publisher = publisher
         self.afterSuccess = afterSuccess
+        // **Rozhoduje `Policy`, ne tenhle init.** Je to ta samá funkce, kterou se ptá nabídka
+        // v sheetu — dvě místa by uměla vybrat metodu, kterou nabídka nedovolí vybrat.
+        method = Policy.initialMergeMethod(
+            default: proposal.defaultMethod,
+            in: proposal.repository
+        )
         state = .ready
     }
 
@@ -59,7 +89,7 @@ final class MergeSubmission: Identifiable {
     /// se **až** ve chvíli odesílání.
     convenience init(
         pullRequest: PullRequestSummary,
-        plan: MergePlan,
+        proposal: MergeProposal,
         gh: URL,
         gateway: any GitHubGateway,
         scope: PublishScope,
@@ -67,7 +97,7 @@ final class MergeSubmission: Identifiable {
     ) {
         self.init(
             pullRequest: pullRequest,
-            plan: plan,
+            proposal: proposal,
             // Brána je snímek konfigurace z okamžiku kliknutí — stejně jako plán.
             publisher: {
                 GhReviewPublisher(gh: gh, runner: SubprocessRunner(), gateway: gateway, scope: scope)
@@ -83,10 +113,14 @@ final class MergeSubmission: Identifiable {
     /// pozvánka ke druhému pokusu, ze kterého v lepším případě vyleze chyba a v horším zmatek.
     /// Tatáž úvaha jako u review, jen o stupeň dražší.
     var canMerge: Bool {
+        // **Bez vybrané metody se nemerguje** (#556) — a je to podmínka nad stavem, ne kontrola ve
+        // view: sheet se v tom stavu otevře schválně (aby řekl, co repo povoluje), takže tlačítko
+        // musí být zakázané z dat, ne z toho, že si to view pohlídá.
+        guard plan != nil else { return false }
         switch state {
-        case .ready: true
-        case .failed(let error): !error.mightHaveReachedGitHub
-        case .merging, .merged: false
+        case .ready: return true
+        case .failed(let error): return !error.mightHaveReachedGitHub
+        case .merging, .merged: return false
         }
     }
 
@@ -103,7 +137,9 @@ final class MergeSubmission: Identifiable {
 
     /// Mergne. **Jediné místo v aplikaci, které volá `ReviewPublishing.merge`.**
     func merge() async {
-        guard canMerge else { return }
+        // Plán je tady **podmínka, ne údaj**: `canMerge` na něj sahá taky, ale bez vybrané metody
+        // není co poslat — a `merge_method` si publisher nedomýšlí.
+        guard canMerge, let plan else { return }
         state = .merging
         do {
             let merged = try await publisher().merge(plan)

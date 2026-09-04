@@ -84,6 +84,54 @@ struct PullRequestMapTests {
         }
     }
 
+    /// **Mini pás v řádku fronty vzniká z týchž segmentů jako velký** (#502) — jeden `map`, dvě
+    /// šířky. Je to celý obsah toho issue na straně `Policy`: v řádku se nekreslí druhá mapa, jen
+    /// se ta jedna vykreslí na 110 bodů místo osmi set.
+    ///
+    /// Tvrdí se čtyři věci, které by druhá implementace rozešla, a **žádná z nich není rovnost
+    /// šířek** — ty se s dostupným místem měnit mají:
+    ///
+    /// 1. **stejné segmenty** (počet, cesty, barvy) — pás v řádku nesmí soubor vynechat ani přidat;
+    /// 2. **stejné pořadí podle objemu**: lock je nejširší v obou;
+    /// 3. **součet je přesně dostupná šířka** v obou, takže ani v úzkém pásu nezbývá prázdno;
+    /// 4. **minimum platí i tam**, kde je místa devětkrát méně.
+    @Test("Mini pás v řádku má tytéž segmenty jako velký, jen jinou šířku")
+    func theRowStripSharesTheSegmentsWithTheBigOne() {
+        let map = Policy.pullRequestMap(files: realistic.map(file(_:)))
+        let row = Policy.mapWidths(of: map.segments, in: QueueMapStrip.width, spacing: QueueMapStrip.spacing)
+        let header = Policy.mapWidths(of: map.segments, in: 800)
+
+        // 1 — jedna mapa, tedy jedny segmenty. Kresba z nich bere barvu, tlumení i cestu.
+        #expect(row.count == map.segments.count)
+        #expect(header.count == map.segments.count)
+        #expect(map.segments.map(\.path) == realistic.map(\.path))
+
+        // 2 — **podíly jsou v obou totožné**, ne jen pořadí: nad tímhle rozložením nesáhne ani
+        // nejmenší segment na minimum, takže mini pás je velký pás v jiném měřítku. Lock má
+        // 30,8 % v obou, `composer.json` 6,2 %.
+        let rowAvailable = QueueMapStrip.width - QueueMapStrip.spacing * Double(row.count - 1)
+        let headerAvailable = 800 - 2 * Double(header.count - 1)
+        for index in row.indices {
+            let mini = row[index] / rowAvailable
+            let big = header[index] / headerAvailable
+            #expect(abs(mini - big) < 0.000_001, "segment \(index): \(mini) proti \(big)")
+        }
+        #expect(abs(row[5] / rowAvailable - 0.308) < 0.001)
+        #expect(row.firstIndex(of: row.max() ?? 0) == 5)
+
+        // 3 — součet je dostupná šířka. V řádku se sedm segmentů s dvoubodovými mezerami vejde
+        // (3 × 7 + 2 × 6 = 33 ≤ 110), takže se mezery odečítají v obou.
+        for (widths, total) in [(row, QueueMapStrip.width), (header, 800.0)] {
+            let available = total - 2 * Double(map.segments.count - 1)
+            #expect(abs(widths.reduce(0, +) - available) < 0.001,
+                    "v \(total) b vyšel součet \(widths.reduce(0, +)) místo \(available)")
+        }
+
+        // 4 — a minimum drží i ve 110 bodech: nejmenší soubor (`composer.json`, 4 řádky) tam
+        // vyjde na **6,1 bodu**, tedy nad třemi. Kdyby ne, pás v řádku by soubor **schoval**.
+        #expect(row.allSatisfy { $0 >= Policy.mapSegmentMinimum - 0.001 }, "v řádku vyšlo \(row)")
+    }
+
     /// **Nejmíň tři body na segment.** Jedno velké a šest malých je právě ten případ, kvůli
     /// kterému logaritmus existuje — a zároveň ten, ve kterém by podíl bez minima vydal segmenty
     /// pod bod.
