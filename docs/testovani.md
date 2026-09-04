@@ -9879,3 +9879,125 @@ Zpátky opravené prochází obojí (22 testů ve dvou sadách).
 a tlačítko `Pustit přesto` mají v hlavičce dráhy **jeden řádek**, takže se v úzkém panelu ořezávají
 — a to se pozná jedině z kresby (offscreen render podle *Jak si zkontrolovat, jak view vypadá*,
 nebo proklikáním). Texty samotné se tvrdí nad `ReviewerLaneText`, tedy bez kreslení.
+
+## Odznak v Docku a spuštění po přihlášení (#529)
+
+Šest sad, a **z většiny jsou to tvrzení, že se něco NEstalo**. Obojí se rozbije potichu a ani jedno
+se nedá zkontrolovat pohledem do okna: dlaždice v Docku je vidět zrovna tehdy, když se do aplikace
+nikdo nedívá, a přihlašovací položku vypíná systém někde jinde.
+
+- **`Policy.dockBadge` výčtem** (`DockBadgeTests`): tři volby × prázdná / plná / nenačtená fronta.
+  Nejcennější jsou čtyři negativní: **nula se nekreslí** (u všech tří voleb), **nenačtená fronta se
+  nekreslí** (u všech tří), **`nic` nekreslí nic ani nad plnou frontou** a fronta bez blokujícího
+  nálezu je u volby `blokující` **taky prázdná**, tedy tentýž stav jako prázdná fronta.
+
+  K tomu dvě věci, které se z jednoho případu nepoznají. **Invariant `blokující ≤ čekající`** se
+  tvrdí **přes pásmo podmnožin** (žádná, jedna, dvě, všechny, a jedna mimo frontu) — kdyby se ta
+  dvě čísla brala ze dvou různých množin, jeden případ by prošel shodou okolností. A **na uložené
+  nálezy se u `čekající` a `nic` vůbec nesáhne**: uzávěr `isBlocking` si počítá volání a u těch
+  dvou voleb musí být **nula**, kdežto u `blokující` **právě jedno na každý PR ve frontě**. Bez
+  toho by odznak sledoval mapu `reviewRecords` a probouzel se na každém uloženém nálezu i ve
+  výchozí volbě, ve které o nálezech nemluví.
+
+  Tolerantní čtení konfigurace je tam taky (rozbitá hodnota → `čekající`, chybějící klíč →
+  `čekající`), protože volba, která se ztratí překlepem v souboru, znamená jiné číslo v Docku.
+- **`Policy.loginItem` a `loginItemAvailability` výčtem** (`LoginItemPolicyTests`): čtyři stavy
+  systému × tři instalace × selhání. **Věta pod přepínačem není nikdy prázdná** — to je tvrzení
+  přes všechny kombinace, protože přepínač, který nejde cvaknout a neřekne proč, je k nerozeznání
+  od rozbité aplikace. Dál: slot to nesmí **i když leží v `/Applications`**, slot mimo
+  `/Applications` hlásí **slot, ne cestu** (zákaz, který se nedá spravit, vyhrává nad pokynem, po
+  kterém to půjde), prázdné `CFBundleName` je taky ne, a **odskok do Nastavení systému se nabízí
+  jedině u `requiresApproval`** — u zašedlého přepínače by tam nikdo nic neudělal.
+
+  Nepovedený zápis má tři případy a každý je vlastní věta: přepínač **zůstane v požadované poloze**
+  (a to obojím směrem — nepovedené odebrání ho skokem nezapne), **stará chyba se zahodí**, jak jí
+  stav systému přestane odporovat, a **nedostupnost vyhrává nad selháním** (nad zašedlým řádkem je
+  věta o tom, proč s ním nejde cvaknout, jediná, po které jde něco udělat).
+- **`AppStore` proti fakům** (`AppStoreSystemTests`): že odznak nese **totéž číslo jako
+  `railQueueCount`**, že vlastní PR ho nezvednou (#332), že se **před prvním úspěšným tikem
+  nenasadí vůbec** (fake dlaždice si pamatuje i `nil`, takže „nasadilo se prázdno“ je odpověď, ne
+  „nesáhlo se“), že prázdná fronta nekreslí nic, a že **co schová filtr, schová i odznak**.
+
+  Na straně přihlašovací položky je nejcennější tvrzení celého issue: **slotová instance do systému
+  nezapíše** — fake počítá pokusy o `register` i `unregister` a oba musí být nula. K tomu store bez
+  cíle (tak ho staví většina testů) nezapíše nic a **netváří se, že se něco povedlo**; povedený
+  zápis, po kterém systém chce schválení, **není chyba** (`loginItemFailure == nil`) a nabídne
+  odskok; a **stav se čte zpátky ze systému** — po vypnutí zvenčí jde přepínač do vypnuté polohy
+  a `Configuration` u toho zůstane **nedotčená**, což je celý smysl toho, že se položka do configu
+  nepíše.
+- **Stráž nad zdrojáky** (`DockBadgeWiringTests`): tatáž konstrukce jako `GlobalAppearanceTests`,
+  protože odznak i položka jsou **globální stav procesu** — šestá podoba téhož kořene (#367, #411,
+  #421, #462, #490). A horší než těch pět: stopa **přežije běh**. Odznak zůstane v Docku hostitele
+  testů, přihlašovací položka v systému toho, kdo suitu pustil — a odregistrovat by ji už neumělo
+  nic, protože bundle hostitele zmizí s `build.noindex/`.
+
+  Tvrdí se čtyři věci: `App/Store/` neobsahuje `dockTile` ani `SMAppService` a **importuje jedině
+  `Foundation` a `Observation`** (výčet povolených, ne zákaz jmen — `import AppKit` obchází
+  `import Cocoa`); živé cíle (`DockBadgeTile.application`, `LoginItemService.live`) se v aplikaci
+  jmenují **jednou** a není k nim `??` fallback; `applyBadge` znají **dva** soubory, `dockTile`
+  a `SMAppService` **jeden každý**, a `loginItems.register`/`unregister` volá **jedno místo**;
+  a **žádný test nesahá na dlaždici procesu ani na systémovou položku**. Pátý test je pojistka
+  proti stráži, která přestane hledat: vzory musí sedět na jejím vlastním souboru a v `condensed`
+  nesmí zůstat mezery (#550).
+- **Render stránky `Systém`** (`SystemSettingsRenderTests`): zavírá tutéž mezeru jako
+  `SettingsFieldsRenderTests` u #389 — sady výš by prošly i nad stránkou, na které přepínač vůbec
+  není nakreslený. `NSHostingView` v okně bez animace (#462), ne `ImageRenderer`: `Form` je
+  `ScrollView`. Rozdíl bitmap, protože accessibility tree se v hostovaném okně nenaplní.
+
+  **Zašedlý řádek má vlastní tvrzení a porovnává se jen pás s tím řádkem.** Věta pod přepínačem se
+  u slotu liší, takže rozdíl bitmap celé stránky by prošel i tehdy, kdyby řádek vypadal jako
+  povolený — pás (450…540 px odshora) obsahuje jen ten řádek a nad ním je v obou renderech všechno
+  stejné. Bez toho by tvrzení nic neznamenalo.
+- **Nepovedený zápis se do renderu dostane kliknutím**, ne přiřazením do pole
+  (`store.setLoginItem(true)` nad fakem, který vyhodí chybu). Render nad stavem, který v provozu
+  nevznikne, netvrdí nic.
+
+### Proč `.disabled(_:)` v tomhle okně nestačí — změřeno
+
+Zašednutí řádku dělá `SystemSettingsView.disabledOpacity` (0,55 ze zákresu), ne samotné
+`.disabled(_:)`, a je to výsledek měření, ne opatrnost. Dvě bitmapy **téhož** řádku (`Toggle`
+v `Form`u, jedna zakázaná a jedna ne, stejná věta pod ním, `NSHostingView` v borderless okně) se
+liší **jen odstínem přepínače** — popiska zůstane plná bílá. Ověřeno v obou variantách okna, key
+i nekey, tedy nejde o to, že okno není aktivní.
+
+Zašedlý řádek, který vypadá jako povolený, je horší než chybějící: člověk klikne a nic se nestane.
+Vzor s opacitou je v okně už dvakrát (`FindingTableRowView.dismissedOpacity`, `ReviewerChipsView`).
+
+### Neověřené mezery (#529)
+
+Tři, a u každé je napsané, co je doložené a co ne:
+
+1. **Zápis do systému se nezkoušel naostro.** `SMAppService.mainApp.register()` se v žádném testu
+   ani ručně nepustil — zapsaná položka by zůstala v Nastavení systému a odregistrovat by ji už
+   neumělo nic. Doložené je **čtení**: `SMAppService.mainApp.status` se pustilo ve `swift` skriptu
+   a odpovědělo `notFound` (`rawValue=3`) pro nebundlovaný proces, takže volání je průchodné a
+   překlad všech čtyř případů sedí. Jak se položka chová po skutečném zápisu, `requiresApproval`
+   ani odregistrování, ověřené **není**.
+2. **„Mimo `/Applications` to nejde“ je cizí tvrzení, ne měření.** Je z decku *Směry pro PRism*;
+   #88 měřilo tuhle mez u **notifikací**, ne u přihlašovací položky. Brána v aplikaci je proto
+   zdůvodněná jinak: položka mířící na cestu, která zmizí s dalším buildem, je nesmysl bez ohledu
+   na to, jak se k ní systém staví.
+3. **Adresa panelu `Položky při přihlášení` se neotevřela.** Tvrdí se jen tvar
+   (`x-apple.systempreferences:com.apple.LoginItems-Settings.extension`, bez parametru), tedy
+   totéž, co u #414 s panelem `Oznámení`. Že systém tu adresu přijme, ověří člověk kliknutím.
+
+K tomu **zapsaná mez, ne mezera**: s úplně zavřeným oknem odznak zmrzne na poslední hodnotě
+(`keepFresh()` visí na `ContentView.task`). Je to vlastnost životnosti pollingu, ne odznaku, a na
+běžný případ — aplikace na pozadí s otevřeným oknem — nesahá.
+
+### Za jakých podmínek se měřilo (#529)
+
+Plná suita **5285 testů v 516 suitách, `TEST SUCCEEDED`**, 115 s. Měřeno na stroji, na kterém
+**běžely souběžně další tři sloty** paralelního vývoje — tedy ne na volném stroji. Pád na čase je
+za těchhle podmínek zátěž, ne logika; suita jede blízko 120s stropu `waitUntil`.
+
+Regrese se ověřila **vložením regrese**, třikrát:
+
+1. **Odznak čte nefiltrovanou frontu** (`queuePullRequests` místo `visibleQueuePullRequests`) →
+   spadne *Co schová filtr, schová i odznak* (a trvá to 120 s, protože se čeká na jev, který
+   nenastane).
+2. **Brána v `setLoginItem` zmizí** → spadne *Slotová instance do systému nezapíše*, a hlásí
+   `registered == 1` i `unregistered == 1`, tedy dva zápisy do systému ze slotu.
+3. **`App/Store/AppStore+System.swift` sáhne na `SMAppService`** (import + jedno volání) → spadnou
+   **dva** testy stráže se třemi tvrzeními: zakázané jméno, zakázaný import a výčet souborů, které
+   `SMAppService` znají.

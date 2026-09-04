@@ -1,12 +1,13 @@
 import AppKit
 import Foundation
 
-/// Odskok do Nastavení systému (#414).
+/// Odskok do Nastavení systému (#414, druhý panel #529).
 ///
-/// Existuje kvůli jedinému místu: prázdný stav sekce `Dění`, když systém notifikace **zakázal**.
-/// Aplikace tam sama nedosáhne (`UNUserNotificationCenter` povolení znovu vyžádat neumí, jednou
-/// odmítnuté zůstává odmítnuté), takže otevřít ten panel je jediný další krok, který se dá
-/// nabídnout — a stav bez dalšího kroku je hláška, u které se nedá nic dělat.
+/// Existuje kvůli místům, kde aplikace **sama nedosáhne** a stav bez dalšího kroku by byl hláška,
+/// u které se nedá nic dělat: prázdný stav sekce `Dění`, když systém notifikace **zakázal**
+/// (`UNUserNotificationCenter` povolení znovu vyžádat neumí, jednou odmítnuté zůstává odmítnuté),
+/// a od #529 přihlašovací položka **vypnutá v Nastavení systému** (`requiresApproval` —
+/// `SMAppService.register()` ten zákaz nezvrátí).
 ///
 /// **Vlastní typ, ne `NSWorkspace` ve view.** Adresa je jediné, co se na tom dá pokazit, a takhle
 /// se dá zkontrolovat testem, aniž by se v něm otevíralo okno systému.
@@ -24,5 +25,21 @@ enum SystemSettings {
     static func openNotifications() {
         guard let notifications else { return }
         NSWorkspace.shared.open(notifications)
+    }
+
+    /// Panel `Položky při přihlášení` v Nastavení systému (#529).
+    ///
+    /// Tentýž tvar jako u `notifications`, tedy schéma s identifikátorem panelu a **bez
+    /// parametru s aplikací**: seznam si systém řídí sám a parametr, který se změní s verzí
+    /// systému, znamená odkaz, který jednoho dne otevře prázdno.
+    static let loginItems = URL(
+        string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+    )
+
+    /// Otevře panel `Položky při přihlášení`. Selhání se **nehlásí**, ze stejného důvodu jako
+    /// u notifikací: je to odskok, ne operace s následkem.
+    static func openLoginItems() {
+        guard let loginItems else { return }
+        NSWorkspace.shared.open(loginItems)
     }
 }

@@ -2230,6 +2230,43 @@ tam byla, než začala hlídat, za nová nepovažuje. Ohlásí se až devátý.
 Notifikace fungují jedině z `/Applications` — `bin/run.sh` tam aplikaci instaluje sám, viz
 *Build*.
 
+### Odznak v Docku a spuštění po přihlášení (#529)
+
+O frontě se dřív dalo dozvědět jen z otevřeného okna nebo z notifikace, která přijde jednou
+a zmizí. **Odznak v Docku je proti tomu stav, který zůstane** — a nastavuje se na stránce `Systém`
+v okně nastavení (skupina `Prostředí`).
+
+| Volba | Co je na dlaždici |
+|---|---|
+| `čekající` (výchozí) | Počet **cizích PR ve frontě** — totéž číslo, co má odznak fronty v railu, včetně toho, že se schová, co schoval filtr |
+| `blokující` | Z těch samých PR jen ta, na kterých leží platný blokující nález. Nikdy nevyjde větší než `čekající` |
+| `nic` | Prázdná dlaždice |
+
+**Nula se nekreslí, a prázdná dlaždice znamená tři různé věci** — prázdnou frontu, vypnutý odznak
+a „seznam ještě nedorazil“. Je to vědomé: dlaždice má jeden kanál, takže se do ní věta o nenačtené
+frontě napsat nedá, a odznak `0` by v systémové červené hlásil poplach nad ničím. Rozliší se to
+**v okně**: rail má nulu bez odznaku, nenačtený seznam pozná stavový řádek. **Vlastní PR se do
+odznaku nepočítají** — ty mají v railu svůj odznak a ten navíc počítá tahy, ne pull requesty.
+
+**Se zavřeným oknem odznak zmrzne na poslední hodnotě** — polling žije s hlavním oknem. Nezmizí
+a nelže o čase, jen nepřičte PR, který přišel potom; s oknem otevřeným na pozadí (tedy ten případ,
+kvůli kterému odznak je) se nic takového nestane.
+
+**Spuštění po přihlášení** je jeden přepínač na téže stránce a jde přes **systémovou přihlašovací
+položku** (`SMAppService`), ne přes vlastní launch agent v `~/Library`. Tři věci u něj stojí za
+zmínku:
+
+- **Poloha se čte ze systému, ne z `config.json`.** Kdo si položku vypne v Nastavení systému, vidí
+  to v okně. Druhá kopie v konfiguraci by po ručním vypnutí ukazovala opak toho, co platí.
+- **Přepínač se po nepovedeném zápisu tiše nevrátí** do vypnuté polohy — zůstane tam, kam se
+  cvakl, a pod ním je věta se hláškou ze systému. Ta zmizí sama, jak jí stav systému přestane
+  odporovat. Když je položka zapsaná, ale **vypnutá v Nastavení systému**, je pod přepínačem věta
+  a k ní odskok `Otevřít Nastavení systému`: `SMAppService` ten zákaz nezvrátí.
+- **Slotová instance přepínač nenabízí** — je zašedlý s důvodem. `bin/slot-cleanup.sh` po sobě
+  uklidí bundle, cache i předvolby, ale přihlašovací položku ne (není v `config.json`, ale
+  v systému), takže by po slotu zůstala v systému věc mířící na bundle, který zmizel s worktree.
+  Zašedlý je i mimo `/Applications`, protože cesta zmizí s dalším buildem.
+
 ## Novinky
 
 Okno `Novinky v PRism` (menu aplikace hned pod `O aplikaci PRism`, nebo ✨ v hlavičce okna)
@@ -2664,6 +2701,8 @@ PRism.xcodeproj/          Xcode projekt (shared scheme je verzovaný)
 App/                      zdrojáky aplikace — target PRism
   Models/                 doménové modely: PR, identifikátory, stav review
   Environment/            přístup ke stroji: hledání binárek, podprocesy, preflight, notifikace, předvolby
+                          a systémová přihlašovací položka (#529 — druhé místo, kde aplikace píše
+                          mimo svoji cache, za protokolem a s bránou na instalaci)
   GitHub/                 čtení PR a konverzace přes gh CLI: gateway, typované chyby, tvar výstupu;
                           labely a vyžádaní reviewery i nabídky k nim (#392), hlavy víc PR jedním
                           dávkovým dotazem (#420) a repozitáře organizace (#532 — nejdražší čtení,
@@ -2707,7 +2746,9 @@ App/                      zdrojáky aplikace — target PRism
                           a značka poslední návštěvy té sekce (#414);
                           AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452);
                           RepositoryCatalog a RepositoryCatalogStore — seznamy repozitářů organizací
-                          v cache s denní obnovou (#532)
+                          v cache s denní obnovou (#532);
+                          odznak v Docku a přihlašovací položka (#529 — obojí za protokolem,
+                          odznak se nasazuje sledováním jedné čisté funkce)
   Syntax/                 obarvení kódu: jazyky, tokenizace, paleta, zapamatování výsledků
   Terminal/               vestavěný terminál (#459): plocha SwiftTermu obarvená paletou, hlášení fokusu
                           a zabití popředí pty; hostitel drží od #460 víc relací na pull request
@@ -2717,7 +2758,8 @@ App/                      zdrojáky aplikace — target PRism
                           včetně rotace jejího záznamu při startu sezení (#412)
   Views/                  SwiftUI obrazovky
     ReleaseNotes/         okno s novinkami — historie vydání a release notes vybrané verze
-    Settings/             okno nastavení (⌘,) — sedm stránek v boční navigaci (#177)
+    Settings/             okno nastavení (⌘,) — osm stránek v boční navigaci (#177),
+                          od #529 včetně stránky Systém (odznak v Docku, spuštění po přihlášení)
   Assets.xcassets/        ikona aplikace (generovaná, viz bin/make-icon.swift)
 Tests/                    unit testy — target PRismTests
   Models/                 testy modelů + pomocníci na Codable round-trip

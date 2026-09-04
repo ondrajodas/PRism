@@ -500,6 +500,20 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
+
+   **Mimo cache aplikace zapisuje na dvě místa a obojí je vyjmenované** — `~/.claude.json`
+   (`WorkspaceTrusting`, viz podmínka č. 2) a od #529 **systémovou přihlašovací položku**
+   (`LoginItemControlling` nad `SMAppService`). Ta druhá je jediný zápis, který přežije smazání
+   bundlu, takže má tři meze: jde **jedině z přepínače na stránce `Systém`**, brána je
+   `Policy.loginItemAvailability` **ve storu, ne zašedlý přepínač ve view** (slotová instance ani
+   bundle mimo `/Applications` se k zápisu nedostanou) a **stav se čte zpátky ze systému**, ne
+   z `config.json` — do konfigurace se o položce nezapisuje nic. Hlídá to `DockBadgeWiringTests`
+   spolu s odznakem v Docku: `App/Store/` nesmí znát `SMAppService` ani `dockTile`.
+
+   ```bash
+   grep -rn 'SMAppService\|dockTile' App | grep -vE ':[0-9]+: *///?' |
+       cut -d: -f1 | sort -u    # dva soubory: Environment/LoginItemControl, Views/DockBadgeTile
+   ```
 4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.

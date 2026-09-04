@@ -1849,6 +1849,76 @@ footer.end {
 .tmpl-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .tmpl-foot .sp { flex: 1; }
 
+/* --- Systém: odznak v Docku a spuštění po přihlášení (sekce 49) -----------------------
+   Odznak v Docku je jediná věc v tomhle dokumentu, která **není v okně** — takže na ni
+   v návrhu nebyl kus, ze kterého by se dala složit. `.rail .ri .badge` se na ni vzít nedá
+   a není to lakota: ten je 14 bodů na tiché ploše railu, obtahuje se **barvou railu**
+   (`--panel-2`) a text má v barvě plochy okna, protože se kontrast měřil na `--crit`.
+   Dlaždice Docku má proti tomu **systémovou** červenou, systémové písmo a systémovou polohu
+   za rohem ikony — aplikace si z toho odznaku vybírá **jediné: ten řetězec**. Vlastní třídy
+   proto nejsou varianta, je to jiná komponenta, a přesně tenhle rozdíl má být na kresbě vidět.
+
+   Hexy jsou tady **data, ne tokeny palety**, tatáž úmluva jako u barev labelů GitHubu
+   v `.lchip`: dok si podklad i odznak kreslí sám a v obou motivech stejně, takže tokeny by
+   o systémové ploše tvrdily něco, co o ní neplatí. `#FF3B30` je systémová červená odznaků,
+   `#1C1F2E → #0B0D14` je ikona aplikace (`bin/make-icon.swift`) a `#8B7CFF` je její
+   trojúhelník, tedy `--accent` **tmavé** větve — v ikoně je pevný, protože ikona motiv nemá.
+
+   Trojúhelník je týž tvar jako `.prism-mark i` v hlavičce dokumentu, jen větší; přebít mu
+   rozměry uvnitř `.dock-tile` by znamenalo dvě podoby jedné značky, takže má vlastní `i`. */
+.dock-cases {
+  display: flex; flex-wrap: wrap; gap: 26px;
+  align-items: flex-start; padding: 24px 20px 16px;
+}
+.dock-case { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 104px; }
+/* Popisek pod dlaždicí **zalomí, neořeže**: je to jediné, čím se čtyři jinak stejné dlaždice
+   od sebe liší (u dvou z nich je odznak prázdný, takže na nich není co porovnat). */
+.dock-case > .cap {
+  font-size: 11px; color: var(--ink-2); text-align: center; line-height: 1.4;
+}
+.dock-case > .cap b { display: block; font-weight: 620; color: var(--ink); }
+.dock-tile {
+  /* `border-box` z téhož důvodu jako u `.rv-av` a `.lchip`: dokument `box-sizing` nikde
+     nepřepisuje, takže by dlaždice s obtahem vyšla 74 bodů proti 72 v CSS — a rozměry
+     z tohohle souboru se berou jako body 1 : 1. */
+  box-sizing: border-box;
+  width: 72px; height: 72px; flex: none; border-radius: 17px;
+  background: linear-gradient(135deg, #1C1F2E, #0B0D14);
+  display: grid; place-items: center; position: relative;
+  box-shadow: var(--shadow-sm); border: 1px solid var(--line);
+}
+.dock-tile > i {
+  width: 0; height: 0; border-style: solid;
+  border-width: 0 19px 33px 19px;
+  border-color: transparent transparent #8B7CFF transparent;
+  display: block;
+}
+/* Odznak **přesahuje** dlaždici, protože ho tak kreslí systém — zarovnat ho dovnitř rámu
+   (jako `.rail .ri .badge` po #366) by byla kresba něčeho, co takhle nikdy nevypadá. Obtah je
+   `--bg`, tedy plocha stránky za dlaždicí: v Docku ho systém obtahuje pozadím Docku a to je
+   to nejbližší, co dokument má. */
+.dock-badge {
+  position: absolute; top: -7px; right: -7px;
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+  background: #FF3B30; color: #FFFFFF;
+  font-family: var(--ui); font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: grid; place-items: center;
+  border: 2px solid var(--bg);
+}
+/* Rail a dok vedle sebe: celá věta téhle sekce je „jedno číslo, dvě místa“, a tu nejde
+   napsat popiskem — musí být vidět, že v obou stojí táž pětka. Rail je **výřez**, ne celé
+   okno: kreslí se jedině proto, aby se dalo porovnat, takže z něj zbývají tři ikony. */
+.dock-mirror {
+  display: flex; align-items: center; gap: 16px;
+  padding: 4px 20px 20px; font-size: 12px; color: var(--ink-2); line-height: 1.5;
+}
+.dock-mirror > .rail {
+  width: 52px; flex: none; border: 1px solid var(--line);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+.dock-mirror > p { max-width: 46ch; }
+
 /* ============================================================
    PRÁZDNÉ STAVY A PORUCHY
    ============================================================ */
@@ -16212,6 +16282,253 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
           <span>U jména nástroje je prázdno <strong>rozhodnutí „netahat“</strong>, tedy stav, který
           se musí umět napsat pod polem; u loginů je to <strong>běžný stav</strong>, o kterém není
           co říkat. Nakreslit obojí stejně by z jednoho udělalo poruchu a z druhého nedodělek.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================================
+       SEKCE 49 — Systém: odznak v Docku a spuštění po přihlášení (#529)
+
+       Leží na stránce `Nastavení`, protože obojí se **zapíná v nastavení** a jinde v okně to
+       ovládat nejde. Odznak sám je v Docku, tedy mimo okno — a to je právě důvod, proč sekce
+       vzniká: v dokumentu nebyla dlaždice Docku ani řádek, který sahá do systému.
+
+       Sekce 10 se **nepřekresluje** (pravidlo z `docs/navrh.md`): je záznam dneška a stránka
+       `Systém` v ní dneska není. Kreslí se tedy jen ten jeden nový list nastavení plus dlaždice,
+       ne celé okno znovu — tentýž vztah jako 26 k 24 nebo 38 k 04.
+       ==================================================================================== -->
+  <section class="section" id="s49">
+    <div class="section-head">
+      <div class="eyebrow">49 — Odznak v Docku a spuštění po přihlášení</div>
+      <h2>Systém: co aplikace hlídá, má být vidět i se zavřeným oknem</h2>
+      <p class="muted">
+        O frontě se dneska dozvíš jen z otevřeného okna nebo z notifikace, která přijde jednou
+        a zmizí. <strong>Odznak v Docku</strong> je proti tomu stav, který zůstane: číslo, které
+        má odznak fronty v railu, nebo jen počet blokujících, nebo nic — volba je v nastavení.
+        A <strong>spuštění po přihlášení</strong> je jeden přepínač, ne launch agent někde
+        v <code>~/Library</code>. Obojí sahá mimo okno, takže obojí dostává novou stránku
+        <em>Systém</em> ve skupině <em>Prostředí</em>.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · dlaždice v Docku, čtyři stavy</div>
+        <div class="frame flat">
+          <div class="dock-cases">
+            <div class="dock-case">
+              <div class="dock-tile"><i></i><span class="dock-badge">5</span></div>
+              <span class="cap"><b>čekající</b>pět cizích PR ve frontě</span>
+            </div>
+            <div class="dock-case">
+              <div class="dock-tile"><i></i><span class="dock-badge">2</span></div>
+              <span class="cap"><b>blokující</b>z těch pěti mají dva blokující nález</span>
+            </div>
+            <div class="dock-case">
+              <div class="dock-tile"><i></i></div>
+              <span class="cap"><b>prázdná fronta</b>nula se nekreslí, jako v railu</span>
+            </div>
+            <div class="dock-case">
+              <div class="dock-tile"><i></i></div>
+              <span class="cap"><b>nic</b>volba <code>nic</code>, a totéž před prvním tikem</span>
+            </div>
+          </div>
+          <div class="dock-mirror">
+            <div class="rail">
+              <div class="ri">⌂</div>
+              <div class="ri on">☰<span class="badge">5</span></div>
+              <div class="ri">⎇</div>
+            </div>
+            <p>Pětka je <strong>tatáž hodnota</strong>, jakou má odznak fronty v railu — počet
+            cizích PR po filtru, a <code>nic</code>, dokud se seznam nenačetl. Dvě čísla by se
+            rozešla a nikdo by si toho nevšiml.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · stránka Systém v nastavení</div>
+        <div class="frame flat">
+          <div class="set-grid" style="min-height: 0;">
+            <nav class="set-nav">
+              <div class="hd">Co se hlídá</div>
+              <div class="set-item"><span class="ico">▽</span>Zdroje PR</div>
+              <div class="set-item"><span class="ico">✦</span>Review a skilly</div>
+              <div class="set-item"><span class="ico">◫</span>Diff</div>
+              <div class="gap"></div>
+              <div class="hd">Co jde ven</div>
+              <div class="set-item"><span class="ico">↥</span>Odesílání</div>
+              <div class="set-item"><span class="ico">🔔</span>Notifikace</div>
+              <div class="gap"></div>
+              <div class="hd">Prostředí</div>
+              <div class="set-item"><span class="ico">▤</span>Repozitáře</div>
+              <div class="set-item"><span class="ico">◐</span>Běh</div>
+              <div class="set-item on"><span class="ico">▣</span>Systém</div>
+            </nav>
+
+            <div class="set-body">
+              <div class="set-sec">
+                <span class="t">Odznak v Docku</span>
+                <div class="set-card">
+                  <div class="set-row">
+                    <span class="lbl">Co se počítá</span>
+                    <span class="val">
+                      <span class="segbtn">
+                        <span class="on">čekající</span>
+                        <span>blokující</span>
+                        <span>nic</span>
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <span class="note">
+                  <code>čekající</code> je počet cizích PR ve frontě, tedy <strong>totéž číslo,
+                  co má rail</strong> — včetně toho, že se schová, co schoval filtr.
+                  <code>blokující</code> počítá z těch samých PR jen ta, na kterých leží platný
+                  blokující nález. <strong>Vypnuto znamená prázdný odznak, ne nulu</strong>
+                  — a nula se nekreslí ani u zapnutého: prázdná fronta je dobrá zpráva, ne
+                  položka k vyřízení.
+                </span>
+              </div>
+
+              <div class="set-sec">
+                <span class="t">Spuštění</span>
+                <div class="set-card">
+                  <div class="set-row">
+                    <span class="lbl">Spustit po přihlášení</span>
+                    <span class="val"><span class="sw-toggle on"><i></i></span></span>
+                  </div>
+                </div>
+                <span class="note">
+                  Přes <code>SMAppService</code>, tedy systémovou přihlašovací položku — žádný
+                  vlastní launch agent. Přepínač <strong>čte stav ze systému</strong>, ne
+                  z <code>config.json</code>: kdo si položku vypne v Nastavení systému, má to
+                  vidět tady.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Poruchy · přepínač, který nemá jak zabrat</div>
+        <div class="frame flat">
+          <div class="set-body">
+            <div class="set-sec">
+              <span class="t">Aplikace neběží z <code>/Applications</code></span>
+              <div class="set-card">
+                <div class="set-row" style="opacity: 0.55;">
+                  <span class="lbl">Spustit po přihlášení</span>
+                  <span class="val"><span class="sw-toggle"><i></i></span></span>
+                </div>
+              </div>
+              <span class="note">Aplikace běží z <code>~/Projects/PRism/build.noindex</code>.
+              Přihlašovací položka by ukazovala na cestu, která zmizí s dalším buildem —
+              nainstaluj ji do <code>/Applications</code> (dělá to <code>bin/run.sh</code>).</span>
+            </div>
+
+            <div class="set-sec">
+              <span class="t">Slotová instance</span>
+              <div class="set-card">
+                <div class="set-row" style="opacity: 0.55;">
+                  <span class="lbl">Spustit po přihlášení</span>
+                  <span class="val"><span class="sw-toggle"><i></i></span></span>
+                </div>
+              </div>
+              <span class="note">Tohle je <code>PRism-d</code>, tedy instance pro paralelní
+              vývoj. Přihlašovací položku zakládá jedině <code>PRism</code> — jinak by po slotu
+              zůstala v systému věc, kterou <code>bin/slot-cleanup.sh</code> neumí sundat.</span>
+            </div>
+
+            <div class="set-sec">
+              <span class="t">Systém ji zakázal</span>
+              <div class="set-card">
+                <div class="set-row">
+                  <span class="lbl">Spustit po přihlášení</span>
+                  <span class="val"><span class="sw-toggle"><i></i></span></span>
+                </div>
+              </div>
+              <span class="note">Položka je zapsaná, ale <strong>vypnutá v Nastavení systému</strong>
+              — aplikace tam nedosáhne. <span class="mini">Otevřít Nastavení systému ↗</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Co se nemění</div>
+        <div class="frame">
+          <div class="warnbox">
+            <span class="i">△</span>
+            <span>Odznak je <strong>jedno číslo z <code>Policy</code></strong> a nic
+            nespouští. Nekreslí se z něj notifikace, nezakládá review, nesahá na frontu —
+            je to jen tvar té hodnoty, kterou už rail ukazuje. Kdyby se počítal zvlášť,
+            byla by to druhá pravda o jednom čísle.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span>Vlastní PR se do odznaku <strong>nepočítají</strong> (#332). Odznak fronty
+            znamená „tolik lidí čeká na moje review“; vlastní PR má v railu svůj vlastní
+            odznak, a ten navíc počítá <em>tahy</em>, ne pull requesty. Slít je do jednoho čísla
+            v Docku by znamenalo hlásit víc práce, než je.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">178</span>
+        <span class="body">
+          <b>Jedno číslo, dvě místa</b>
+          <span>Odznak v Docku je <strong>rail v Docku</strong>, ne nový výpočet: bere tutéž
+          množinu (cizí PR po filtru) a totéž pravidlo o nule i o nenačteném seznamu.
+          Rozhoduje jedna čistá funkce, takže se ta dvě místa nemají čím rozejít.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">179</span>
+        <span class="body">
+          <b>Prázdno, nula a „nevím“ kreslí totéž — schválně</b>
+          <span>Dlaždice Docku má <strong>jeden kanál</strong>: řetězec, nebo nic. Věta
+          „nevím, fronta ještě nedorazila“ se do ní nedá napsat, a odznak <code>0</code> by
+          v systémové červené hlásil poplach nad ničím. Všechny tři stavy proto kreslí prázdno
+          a rozlišují se <strong>v okně</strong> — rail má nulu bez odznaku, nenačtený seznam
+          pozná stavový řádek. Odznak tvrdí jednu věc: <em>tolik jich čeká</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">180</span>
+        <span class="body">
+          <b>Systémový stav se čte zpátky, ne zapisuje do configu</b>
+          <span>Přihlašovací položka žije v systému, takže <code>config.json</code> ji
+          <strong>nedrží</strong> — druhá kopie by po ručním vypnutí v Nastavení systému
+          ukazovala v okně opak toho, co platí. Volba odznaku naopak <strong>do configu
+          patří</strong>: to je preference, ne stav systému.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">181</span>
+        <span class="body">
+          <b>Selhání se řekne, přepínač se sám nevrátí</b>
+          <span>Zápis do systému <strong>umí selhat</strong> — bez práv, mimo
+          <code>/Applications</code>, po zákazu v Nastavení systému. Přepínač, který se tiše
+          vrátí do vypnuté polohy, je horší než chybová věta: vypadá jako by kliknutí
+          nedošlo. Proto tři různé věty a u té poslední i další krok.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">182</span>
+        <span class="body">
+          <b>Slot přihlašovací položku nenabízí</b>
+          <span><code>bin/slot-config.sh</code> čistí odesílání, notifikace a automat — tohle
+          by očistit <strong>neumělo</strong>, protože to není v <code>config.json</code>, ale
+          v systému. Řádek proto ve slotu zůstává, ale zašedlý a s důvodem: chybějící řádek by
+          tvrdil, že to nastavení neexistuje, kdežto ono jen není pro tento bundle.</span>
         </span>
       </div>
     </div>

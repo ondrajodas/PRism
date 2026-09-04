@@ -561,6 +561,45 @@ final class AppStore {
     /// aplikace. Kreslí to `AppNoticesView`.
     var appearanceFailure: String?
 
+    /// Komu se nasazuje odznak v Docku (#529). `nil` = odsud se nenasazuje (testy).
+    ///
+    /// Nepovinné z **téhož** důvodu jako `appearance`: živý cíl je dlaždice procesu, tedy
+    /// v testech dlaždice hostitele testů — odznak z jednoho testu by přetekl do všech ostatních
+    /// a po skončení běhu zůstal viset v Docku.
+    ///
+    /// **`internal`, protože na něj sahá `AppStore+System`** — tatáž cena, jakou zaplatilo
+    /// rozdělení storu na extensiony (#154), a nic se tím neotevírá ven z aplikace (jeden modul).
+    let dock: (any DockBadgeApplying)?
+
+    /// Kdo umí zapsat přihlašovací položku (#529). `nil` = odsud se nezapisuje (testy).
+    ///
+    /// Nepovinné o důvod naléhavěji než `dock`: zapsanou položku by po sobě testovací host
+    /// **neuklidil** — bundle zmizí s `build.noindex/`, kdežto záznam v systému zůstane.
+    ///
+    /// **`internal`** ze stejného důvodu jako `dock` výš.
+    let loginItems: (any LoginItemControlling)?
+
+    /// O které instalaci se rozhoduje (#529) — jméno z `CFBundleName` a cesta k bundlu.
+    ///
+    /// Hodnota, ne dotaz na `Bundle.main` uvnitř `Policy`: rozhodnutí „smí tahle instalace
+    /// zakládat přihlašovací položku“ se pak dá projít výčtem. Výchozí `.main` je ta běžící
+    /// aplikace, takže v testech je to **hostitel testů** — a ten má vlastní `CFBundleName`
+    /// (#421), tedy stejnou odpověď jako slot: nesmí.
+    let installation: AppInstallation
+
+    /// Co o přihlašovací položce říká systém (#529). Čte to `refreshLoginItem()`.
+    ///
+    /// Výchozí `notRegistered`, dokud se nezeptáme — je to tatáž věta jako „nespustí se po
+    /// přihlášení“, tedy ta z těch čtyř, po které nikdo nezůstane oklamaný.
+    var loginItemStatus: LoginItemStatus = .notRegistered
+
+    /// Nepovedený zápis přihlašovací položky (#529), **s polohou, o kterou si člověk řekl**.
+    ///
+    /// Musí být vidět, ze stejného důvodu jako `appearanceFailure`: přepínač, po kterém se nic
+    /// nestane a nic se neřekne, vypadá jako rozbitá aplikace. A drží se **i ta poloha**, aby se
+    /// přepínač tiše nevrátil do vypnuté — kreslí to stránka `Systém` přes `Policy.loginItem`.
+    var loginItemFailure: LoginItemFailure?
+
     /// Rozdělané běhy (#97). `nil` = odsud se nedotahuje (testy).
     let interrupted: InterruptedRuns?
 
@@ -932,6 +971,9 @@ final class AppStore {
         transcripts: (any TranscriptReading)? = nil,
         terminal: (any TerminalOpening)? = nil,
         appearance: (any AppearanceApplying)? = nil,
+        dock: (any DockBadgeApplying)? = nil,
+        loginItems: (any LoginItemControlling)? = nil,
+        installation: AppInstallation = .main,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil,
@@ -944,6 +986,9 @@ final class AppStore {
         self.activityLog = activityLog
         self.activityVisits = activityVisits
         self.appearance = appearance
+        self.dock = dock
+        self.loginItems = loginItems
+        self.installation = installation
         self.time = time
         self.gh = gh
         self.git = git
@@ -1047,6 +1092,14 @@ final class AppStore {
         self.terminals?.focusChanged = { [weak self] hasFocus in
             self?.isTerminalFocused = hasFocus
         }
+        // Odznak v Docku (#529) — nasadí prázdnou dlaždici a přihlásí se o změny. **Až na konci
+        // initu**, protože čte konfiguraci i frontu, a **jen s injektovaným cílem**: bez něj se
+        // nestane nic (viz `trackDockBadge()`).
+        //
+        // Přihlašovací položka ze stejného issue se tady naopak **nečte**: ukazuje se na jednom
+        // místě (stránka `Systém`) a stav se mění zvenčí, takže by snímek ze startu do večera
+        // zestaral. Čte ji `refreshLoginItem()` při každém zobrazení té stránky.
+        trackDockBadge()
     }
 
     /// Sestavení z toho, co našel preflight. Absolutní cesta k `gh` je jediné, co gateway
@@ -1133,6 +1186,10 @@ final class AppStore {
             // okno založí, a to okno pak žije mimo aplikaci.
             terminal: AppleScriptTerminal(runner: runner),
             appearance: AppAppearance.application,
+            // Odznak v Docku (#529) a přihlašovací položka. Živé jedině tady — testy sahají na
+            // dlaždici i na systém jedině fakem, viz `dock` a `loginItems`.
+            dock: DockBadgeTile.application,
+            loginItems: LoginItemService.live,
             handoffs: HandoffLedger(),
             // Záznam dění (#414). Živý jedině tady — testy ho nedostanou, takže nesahají do cache.
             activityLog: ActivityLog()

@@ -7608,3 +7608,52 @@ velikost `CLAUDE.md` po tom je **93,2 kB** proti stropu ~100 kB (+58 B).
 Na obrazovce se nemění nic a kód se nedotkl — sekce o slotech, o rozvrhu a o úklidu zůstaly, jak
 byly, protože jsou proměřené provozem. Měnilo se jedině to, co bylo nepravdivé. Testů dál **5228**
 v 511 suitách, beze změny.
+
+## #529 — Odznak v Docku a spuštění po přihlášení (zákres 49)
+
+O frontě se dřív dalo dozvědět jen z otevřeného okna nebo z notifikace, která přijde jednou
+a zmizí. **Dlaždice v Docku je proti tomu stav, který zůstane**, a **spuštění po přihlášení** je
+jeden přepínač, ne launch agent v `~/Library`. Obojí sahá mimo okno, takže obojí dostalo novou
+stránku `Systém` ve skupině `Prostředí` — osmou v okně nastavení.
+
+**Odznak je rail v Docku, ne druhý výpočet.** `Policy.dockBadge` bere tutéž množinu jako odznak
+fronty v railu (cizí PR **po filtru**) a totéž pravidlo o nule i o nenačteném seznamu. Volba je
+`čekající / blokující / nic`, výchozí `čekající` — a **`blokující` je ta množina jen zúžená**, ne
+`queueSummary.blocking`. Souhrn fronty totiž filtr ignoruje, takže by přepnutí volby umělo nad
+zapnutým filtrem ukázat **větší** číslo; invariant `blokující ≤ čekající` drží jedině nad jedním
+polem, a proto ho drží tvar té funkce.
+
+**Prázdno, nula a „nevím“ kreslí totéž (nic), a je to rozhodnutí.** Dlaždice má jeden kanál, takže
+se do ní věta o nenačtené frontě nedá napsat a `0` by v systémové červené hlásila poplach nad
+ničím. Rozlišuje se to v okně: rail má nulu bez odznaku, nenačtený seznam pozná stavový řádek.
+
+**Nasazuje se sledováním, ne rozesetým `refresh()`.** Rozeseté volání by bylo jedenáct míst (sedm
+přiřazení `reviewRecords`, tik, filtr, konfigurace, obnova po startu) a dvanácté by chybělo;
+`withObservationTracking`, které se z `onChange` přihlásí znovu, zapomenout nejde. Je to **první
+výskyt toho vzoru v `App/`**, takže je u něj zapsané, proč nevyrábí smyčku, proč v něm není mezera
+na ztracenou změnu a proč se ve výchozí volbě nesleduje ani mapa nálezů.
+
+**Přihlašovací položka se nepíše do `config.json`** — je to stav systému, takže se **čte zpátky** ze
+`SMAppService`, a to při každém zobrazení stránky. Přepínač se po nepovedeném zápisu **tiše
+nevrátí** do vypnuté polohy (drží se i poloha, o kterou si člověk řekl), věta zmizí sama, jak jí
+stav systému přestane odporovat, a u zákazu v Nastavení systému je pod přepínačem **odskok**
+(vzor z #414). **Slotová instance položku nenabízí** — zašedlá s důvodem, protože
+`bin/slot-cleanup.sh` ji sundat neumí; brána je v `AppStore.setLoginItem`, ne v zašedlém přepínači,
+a do `bin/slot-config.sh` se nesahalo.
+
+**Zašednutí se kreslí opacitou (0,55 ze zákresu), a je to změřené**: samotné `.disabled(_:)` se
+v tomhle okně projeví jen odstínem přepínače a popiska zůstane plná — v key i nekey okně.
+
+**Co se neověřilo a je to napsané**: do systému se **nezapsalo ani jednou** (ověřilo se jen čtení
+`status`, které pro nebundlovaný proces vydá `notFound`), věta „mimo `/Applications` to nejde“
+zůstává **cizím tvrzením z decku** (#88 měřilo tu mez u notifikací) a adresa panelu `Položky při
+přihlášení` se neotevřela — tvrdí se jen tvar, jako u #414. K tomu **zapsaná mez**: s úplně
+zavřeným oknem odznak zmrzne na poslední hodnotě, protože polling žije s hlavním oknem.
+
+Šest sad testů, z většiny tvrzení o tom, co se **nestalo** — nula se nekreslí, nenačtená fronta se
+nekreslí, ve výchozí volbě se na uložené nálezy vůbec nesáhne, slotová instance do systému
+nezapíše. K tomu stráž nad zdrojáky (`DockBadgeWiringTests`, šestá podoba téhož kořene po #367,
+#411, #421, #462 a #490) a render stránky, ve kterém se zašedlý řádek porovnává **jen v pásu s tím
+řádkem**, aby rozdíl nemohl přijít z věty pod ním. Celkem **5285 testů v 516 suitách** (proti 5228 v 511 před #529, tedy 57 nových v pěti sadách), `TEST
+SUCCEEDED` — měřeno se **třemi souběžně běžícími sloty**, ne na volném stroji. Regrese ověřená
+vložením regrese třikrát (nefiltrovaná fronta, chybějící brána u slotu, `SMAppService` ve storu).

@@ -164,6 +164,9 @@ struct SettingsView: View {
         case .notifications: NotificationSettingsView(settings: settings)
         case .repositories: RepositorySettingsView(settings: settings, repositories: store.knownRepositories)
         case .runtime: RuntimeSettingsView(settings: settings)
+        // `Systém` (#529) je vedle `Repozitářů` druhá stránka, která nečte jen konfiguraci:
+        // přihlašovací položka je **stav systému**, takže se čte a zapisuje přes store.
+        case .system: SystemSettingsView(settings: settings, store: store)
         }
     }
 
