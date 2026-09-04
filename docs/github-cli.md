@@ -134,8 +134,9 @@ mechaniky nestojí; ruční postup výš je pět řádků a je vidět, co dělá
 ## Merge z worktree
 
 `gh pr merge` v pracovním stromě hlásí `fatal: 'main' is already used by worktree` — **merge na
-GitHubu přesto proběhne**. Ověřuje se to zpětným čtením, ne návratovým kódem, a větev se pak
-smaže přes REST:
+GitHubu přesto proběhne**. Padá na tom **lokální** krok za mergem (typicky `--delete-branch`),
+který si chce přepnout na základní větev, a tu drží hlavní strom; vzdálená část je v tu chvíli
+hotová. Ověřuje se to zpětným čtením, ne návratovým kódem, a větev se pak smaže přes REST:
 
 ```bash
 gh api repos/{owner}/{repo}/pulls/<n> --jq '.merged'

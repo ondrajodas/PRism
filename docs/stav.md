@@ -7557,3 +7557,54 @@ zvedl z pěti na **osm** řádků, protože pravý sloupec drží dva bloky mís
 (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`).
 
 **Otevírá** #181 (karty), #331 (dvě fronty na domově — v railu platí dál) a #443 (bloky).
+
+## #545 — do rozdělaného stromu se vstupuje `git -C`, ne `EnterWorktree`
+
+Pravidlo z opakované srážky, v aplikaci nic. `docs/paralelni-vyvoj.md` v sekci *Strom po skončené
+session* předepisovala agentovi, který jde do existujícího stromu, `EnterWorktree` s `path`. Ten
+nástroj to **odmítne**: pustí cestu jedině ze session, která **už v nějakém worktree stojí**, kdežto
+takový agent se pouští schválně **bez** `isolation: "worktree"`, tedy stojí v kořeni repa. Doslovná
+odpověď je *„Cannot enter worktree: the current working directory … is the repository root, not an
+isolated worktree“*. Ty dvě věty postupu si tedy odporovaly — první říkala „bez izolace“, druhá
+předepisovala nástroj, který bez izolace použít nejde.
+
+**Šest agentů, ne dva.** Issue popisovalo #501 a #503; do dne, kdy se vyřizovalo, k tomu přibyly
+**#482, #152, #421 a #515**. Každý z nich dostal odmítnutí jako **první krok** a každý improvizoval
+— a všech šest doplulo k témuž: **`git -C <absolutní cesta>`** v `Bash`i, což je i to, čím do stromu
+sahá orchestrátor sám. Tak je to teď v postupu napsané, i s tím, **proč** `EnterWorktree` neprojde:
+pravidlo bez důvodu příští session obejde, a tady ho šestkrát obešla. **Izolace se nevrací** —
+založila by nový strom, tedy vzala větev, rozdělanou práci i otevřený PR.
+
+**Chybějící polovina byl kontext předchůdce.** Cesta ke stromu v zadání stačí na to, aby se agent
+dostal dovnitř, ne na to, aby věděl, co v něm leží. Do zadání proto patří **jméno větve, HEAD, počet
+necommitnutých souborů, číslo existujícího PR a stav Copilota na něm**, a k tomu **pokyn přečíst si
+`git log`, `git diff` a popis PR celé**, než na cokoli sáhne — jinak si to doplní domněnkou.
+Slot se dál **nepřepisuje**: strom ho má v `.prism-slot` z minula a je gitignorovaný, takže
+`git status --porcelain` ten počet nezkreslí. **Zákaz zakládat novou větev a nový PR** platí beze
+změny a je u něj doplněné, že platí i tehdy, když by se z čisté větve psalo pohodlněji — nová větev
+znamená nový PR a s ním zahozené kolo Copilota.
+
+**A u toho se našla dvě další místa, kde postup předepisoval něco nefunkčního.**
+
+1. **`SendMessage` subagent mít nemusí.** §4 tvrdila, že pauzu ohlásí `SendMessage`m na `main`;
+   agent na tomhle issue ho neměl ani načtený, ani mezi odloženými (`ToolSearch select:SendMessage`
+   nevydal nic). Premisa #256 platí dál — cesta k člověku vede přes orchestrátora a čeká se u ní
+   pasivně —, mění se jen **kdo tu zprávu posílá**: subagent skončí turn s pauzou **ve svém
+   hlášení**, orchestrátor ho dostane jako výsledek běhu, zeptá se a odpověď pošle zpátky.
+   `SendMessage` je nástroj **orchestrátora**. Je to tatáž třída jako `EnterWorktree`: pokyn, který
+   se dá vyplnit jedině nedostupným nástrojem, je pokyn k improvizaci.
+2. **`gh pr merge` z pracovního stromu skončí nenulově a přesto mergne.** Padá na tom lokální krok
+   za mergem (typicky `--delete-branch`), který si chce přepnout na základní větev — a tu drží
+   hlavní strom. V [`github-cli.md`](github-cli.md#merge-z-worktree) to popsané bylo, jenže postup
+   pro dávku na to neodkazoval, takže to agenti zjišťovali znovu; nejhorší, co si z toho můžou
+   odnést, je „merge selhal“ a druhý pokus nad už mergnutým PR. §5 na to teď odkazuje a
+   `github-cli.md` k tomu má větu o tom, **která** část příkazu padá.
+
+Zapsané je to do [`docs/paralelni-vyvoj.md`](paralelni-vyvoj.md#strom-po-skončené-session) (§*Strom
+po skončené session*, §4 a §5), do [`docs/github-cli.md`](github-cli.md#merge-z-worktree), dvěma
+řádky do záznamu rozhodnutí ve specifikaci a **jednou půlvětou** do `CLAUDE.md` u pauzy v dávce;
+velikost `CLAUDE.md` po tom je **93,2 kB** proti stropu ~100 kB (+58 B).
+
+Na obrazovce se nemění nic a kód se nedotkl — sekce o slotech, o rozvrhu a o úklidu zůstaly, jak
+byly, protože jsou proměřené provozem. Měnilo se jedině to, co bylo nepravdivé. Testů dál **5228**
+v 511 suitách, beze změny.
