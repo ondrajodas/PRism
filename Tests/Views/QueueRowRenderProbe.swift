@@ -19,7 +19,9 @@ import Testing
 /// **`NSHostingView`, ne `ImageRenderer`** — tatáž cesta jako `PillRenderProbe`, viz
 /// `docs/testovani.md`.
 ///
-/// **Pouští se ručně**: `PRISM_MEASURE=1`, cesta ven přes `PRISM_RENDER_DIR`.
+/// **Pouští se ručně**: `TEST_RUNNER_PRISM_MEASURE=1`, cesta ven přes
+/// `TEST_RUNNER_PRISM_RENDER_DIR` — **prefix `TEST_RUNNER_` je povinný**, `xcodebuild` posílá do
+/// testovacího procesu jen proměnné s ním. Bez něj se sonda tiše přeskočí a vypadá to, že prošla.
 @MainActor
 @Suite(
     "Sonda řádku fronty s mapou PR (#502)",
