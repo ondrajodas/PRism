@@ -3023,7 +3023,7 @@ o implementaci, tedy to, co zákres nechal na ní.
 | **Identita položky je deterministická, u zastaralých nálezů klíčovaná hlavou** | `UUID` na položku | Téhož rozchodu si aplikace všimne při **každém** dotažení detailu, takže by z jednoho stavu byla stránka řádků. U ostatních druhů nese identita okamžik — PR se do fronty umí vrátit, a to je novinka; proto se řádky o nových PR zapisují až za `isWorthRetrying`, ve stejné chvíli jako snímek |
 | **Značka poslední návštěvy, posunutá při odchodu** | Příznak `přečteno` u položky; nebo posun při vstupu | Příznak je druhá odpověď na tutéž otázku a zápis na každý řádek. Posun při vstupu by přepsal zrovna to, na co koukám — tatáž nesymetrie jako `seedVisitBaseline(for:)` (#335). Rozhoduje **změna viditelnosti** (`syncActivityVisit`), ne to, které tlačítko ji způsobilo, takže je jedno, kolikrát se to zavolá |
 | **Bez značky je nové všechno** | Nic (jako `Policy.changes(in:since:)`, kde `nil` znamená prázdno) | Záznam vzniká teprve za běhu aplikace, takže „nikdy jsem tu nebyl“ znamená, že jsem opravdu nic z toho neviděl. U PR by to naopak znamenalo vypsat celou jeho historii |
-| **Odznak se na aktivní sekci nekreslí** | Kreslit ho vždycky; nebo bledší barvu | V tomhle railu odznak ikonu **překryje** (změřeno na dvoumístných počtech fronty), takže by na položce, ve které stojím, zbyl červený puntík bez identity. Počet je proto v nadpisu bloku. Bledší červená by z railu udělala legendu — a počítadlo, které otravuje, se spravuje posunem značky |
+| **Odznak se na aktivní sekci nekreslí** — **zrušeno v #526**, viz [záznam rozhodnutí](#záznam-rozhodnutí--odznak-v-railu-do-rohu-a-pruh-aktivní-sekce-526-mění-366-a-414) | Kreslit ho vždycky; nebo bledší barvu | V tomhle railu odznak ikonu **překryl** (změřeno na dvoumístných počtech fronty), takže by na položce, ve které stojím, zbyl červený puntík bez identity. Bledší červená by z railu udělala legendu — a počítadlo, které otravuje, se spravuje posunem značky. **#526 to obrátilo**: odznak jde do rohu a aktivní sekci značí pruh na hraně railu, takže důvod odpadl a `Dění` počet ukazuje i zevnitř. Nadpis dne zůstává, ale je to **jiné číslo** (den proti celému záznamu) |
 | **Čtyři prázdna, ne dvě** | Nechat jen klid a zakázané oprávnění (jak kreslí zákres) | Vypnutý přepínač by pak vypadal jako odmítnuté oprávnění a posílal člověka do Nastavení systému, kde s tím nic neudělá. Každý stav se spravuje jinde, takže má vlastní východ |
 | **Ztracený záznam je vlastní prázdno a přebíjí ostatní** | Prázdno jako u prvního spuštění (rozbitý soubor → prázdný seznam → klid); nebo hlášku do stavového řádku k `unreadableReviewFiles` | Klidné *Za poslední dny se nic nestalo* by nad ztracenou historií tvrdilo víc, než data unesou — je to přesně ten vzor, na který si `CLAUDE.md` stěžuje. Stavový řádek je od té otázky daleko: člověk se ptá **nad tou obrazovkou**, proč je prázdná. Chybějící soubor se proto od nečitelného odlišuje dřív než dekódováním, protože první spuštění je normální stav |
 | **Klik jde vstupním bodem z #409 a tab jmenuje** | Vlastní `openTab` + `setDetailTab`; nebo tab nejmenovat jako klik na notifikaci | Dvě cesty k témuž skoku se rozejdou v tom, na co se zapomene (u #409 to byl `activeTab`). Tab se jmenuje proto, že řádek dění **ví, o čem je** — „tam, kde jsi skončil“ by poslalo jinam, než na co člověk klikl |
@@ -6143,10 +6143,13 @@ se s tou první rozejde (tatáž úvaha jako u `designPill`, #348). Je na to tvr
 v jednom testu — pruh **a** obsah řádku —, protože samotný přesun by tu informaci ztratil a to je
 horší vada než špatný pruh.
 
-**Hranice, kterou to nemění: blokující nález je skutečná překážka merge.** PR s blokujícím
-nálezem (`correctness`, `security`, `data-loss` — `Policy.defaultBlockingCategories`) není
-mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje o tom `mergeOffer`, ne
-`outranksMerge`. Zvenčí to vypadá jako „předání zase přebilo merge“, ale je to jiná věta.
+**~~Hranice, kterou to nemění: blokující nález je skutečná překážka merge.~~ — ZRUŠENO #563.**
+Platilo to takhle: PR s blokujícím nálezem (`correctness`, `security`, `data-loss` —
+`Policy.defaultBlockingCategories`) není mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje
+o tom `mergeOffer`, ne `outranksMerge`. Od #563 nález překážka **není**, takže mergnutelný PR patří
+do `K merge` i s ním — a je to dopočítání téhož pokynu, ne obrat (viz [záznam rozhodnutí
+u #563](#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563)). Zvenčí to vypadalo jako
+„předání zase přebilo merge“, ale byla to jiná věta.
 **Našlo se to při stavbě sondy** — první verze scény měla nálezy kategorie `correctness`
 a vyrendrovala `Předat agentovi`, tedy přesně to, co se opravovalo; sonda by tak tvrdila
 opak toho, co měla ukázat. Že tohle nebyl případ z proklikání, je vidět v jeho řádku:
@@ -6182,10 +6185,12 @@ není poznat, že to nevyřízené je zrovna cizí odpověď ve vlákně. Nebylo
 tuhle informaci nesl jedině **pruh** —, takže je to cena rozhodnutí, ne nová vada. Kdyby začala
 chybět, je to **nová kresba** (značka v řádku, nebo tvar pilulky), ne návrat výjimky.
 
-**Hranice, kterou to nemění (a je to tatáž jako v prvním kole): blokující nález je skutečná
-překážka merge.** PR s blokujícím nálezem není mergnutelný, takže zůstává v `Předat agentovi`;
-rozhoduje o tom `mergeOffer`. Ověřeno v testu z obou stran, včetně toho, že **nemergnutelný**
-`changed` v `Předat agentovi` zůstává.
+**~~Hranice, kterou to nemění (a je to tatáž jako v prvním kole): blokující nález je skutečná
+překážka merge.~~ — ZRUŠENO #563.** Platilo to takhle: PR s blokujícím nálezem není mergnutelný,
+takže zůstává v `Předat agentovi`; rozhoduje o tom `mergeOffer`. Ověřeno bylo v testu z obou stran,
+včetně toho, že **nemergnutelný** `changed` v `Předat agentovi` zůstává — a **ta druhá polovina
+platí dál**, jen se „nemergnutelný“ přestal skládat z nálezů (viz [záznam rozhodnutí
+u #563](#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563)).
 
 **5. ~~`Předat agentovi` jde na poslední místo~~ — ZRUŠENO třetím kolem.** Zapsané tady zůstává
 proto, že jinak by z historie vypadl commit, který pořadí přeskládal, a příští session by ho
@@ -6835,3 +6840,121 @@ obrazovky srazilo o 140, 80 a 200 bodů — pod hlavičkou úklidu. Zůstala pro
 a zapsalo šířku; čtyři místa v repu si to přečetla jako pravidlo o `ideal*` a jedno issue z toho
 udělalo zadání. Když se zadání odvolává na starší měření, patří k práci ověřit, že to měření tvrdí
 zrovna to, co se z něj cituje — a ne to, co z něj plyne „přece“.
+
+### Záznam rozhodnutí — odznak v railu do rohu a pruh aktivní sekce (#526, mění #366 a #414)
+
+Zákres je sekce **50** návrhu (poznámky 183–186), odsouhlasený. Tady je jen to, co z kresby
+neplyne, a **co se cestou rozhodlo jinak, než bylo zapsáno dřív**.
+
+**Odznak jde ven z rámu ikony, a je to obrácení druhé poloviny #366.** #366 řešilo dvě věci naráz:
+barvu (fialový akcent → `--crit`) a polohu (šest bodů za rámem → dovnitř). Barva platí dál, poloha
+ne — uvnitř rámu 34 × 30 nemá odznak 24 × 18 kam sednout, takže „uvnitř rámu“ znamenalo „přes
+ikonu“: v běžícím okně byla pod `5`, `3` a `30` vidět jen spodní hrana glyfu a položky railu se
+poznávaly podle **pořadí**. Nové `top: −5, right: −7` je proti #366 posun o sedm doprava místo šesti;
+rozdíl proti tehdejšímu stavu není v tom čísle, ale v tom, že **odznak je červený a identitu aktivní
+sekce mezitím převzal pruh**. Šířka railu 52 bodů se nemění a je to podmínka: ikona je vystředěná,
+takže po stranách zbývá devět, a odznak i s obtahem končí na 49.
+
+**Aktivní sekci značí pruh na hraně, ne barva ikony — a je to výpůjčka, ne nový prvek.** Zvažovaly
+se tři cesty:
+
+1. **Nechat identitu na ikoně a odznak na aktivní položce vynechat** (stav do #526). Zamítnuto: je
+   to zrovna ta věta, kvůli které v `Dění` nebylo vidět, kolik nepřečtených tam je — tedy počet
+   chybí právě na obrazovce, kde se na něj člověk dívá.
+2. **Zvýraznit rám položky výrazněji** (silnější wash, obrys). Zamítnuto: pořád je to plocha **pod**
+   odznakem, takže dvoumístný počet ji zase zakryje; a druhá intenzita washe by v railu zavedla
+   škálu, kterou paleta nemá.
+3. **Pruh na hraně railu.** Přijato. Je vidět vždycky, s odznakem i bez něj, a je to **tentýž
+   prvek, kterým `PullRequestRow` značí stav na hraně řádku fronty** — okno tím nezískává nový
+   slovník, jen ho použije svisle.
+
+**Řádek položky si bere celou šířku railu, tlačítko zůstává 34 bodů, a to pořadí je podstatné.**
+Pruh visí devět bodů nalevo od rámu ikony, takže `overlay` na tlačítku by mířil mimo plochu rodiče
+(#483). Nabízelo se rám tlačítka rozšířit na 52 — zamítnuto: klikací plocha by se nafoukla na celou
+šířku railu a **klik do prázdna vedle ikony by přepínal sekci**. `frame(width:)` nasazený **za**
+`buttonStyle` tlačítko jen vystředí, takže zbytek řádku zůstane netečný. Šířku drží
+`SidebarRail.width`, protože si ji od #526 berou dvě místa a dvě čísla by se rozešla.
+
+**`Policy.activityBadge` přišla o parametr, ne o rozhodnutí** (mění #414). Zapsané rozhodnutí z #414
+znělo: *na aktivní sekci se odznak nekreslí, protože by v tomhle railu ikonu překryl a zbyl by
+červený puntík bez identity*. Ta věta byla pravdivá **kvůli poloze odznaku**, ne kvůli tomu, že by
+počet na aktivní položce nebyl zajímavý. S odznakem v rohu a pruhem na hraně obojí odpadá, takže
+`isActive` z funkce zmizel **celý**. Zvažovalo se parametr nechat a ignorovat ho (menší diff,
+snadnější návrat) — zamítnuto: parametr, o kterém se nerozhoduje, je mrtvá váha a zároveň místo,
+kam se dá omylem sáhnout; je to tatáž třída jako *stav, který se drží, ale nikdo ho nečte*.
+
+**Značka poslední návštěvy se nemění, a je to hranice, ne opomenutí.** Posouvá ji dál až **odchod**
+ze sekce (#414), takže počet uvnitř `Dění` na nulu nespadne. Nabízelo se ji posunout vstupem, když
+už se odznak uvnitř kreslí — zamítnuto ze stejného důvodu jako v #414: zmizel by zrovna ve chvíli,
+kdy jsem si ještě nic nepřečetl.
+
+**Zákres je jedno pravidlo v CSS railu, takže se překreslily i starší sekce.** Rail je **chrom
+okna, ne obrazovka**, takže pravidlo *novější sekce se do starší nepřekresluje* na něj nesedí —
+sedí na něj to druhé, *záznam dneška se překreslit musí*. Sekce 50 proto drží jen zvětšený výřez,
+srovnání s dneškem a důvody; jediné místo v dokumentu, kde se stará poloha kreslí dál, je levý
+sloupec toho srovnání (`.s50-old`).
+
+### Záznam rozhodnutí — blokující nález není překážka merge (#563)
+
+**Ruší zapsané rozhodnutí z #465** — to, podle kterého `Policy.mergeOffer` vydávalo dvanáctý
+případ `MergeObstacle.blockingFindings(N)` (*„Reviewer hlásí blokující nález.“*). Staré zůstává
+v záznamech u #465 i u #515 přeškrtnuté, protože podle něj je postavená scéna sondy desky
+a v obou kolech #515 se o něj opíralo tvrzení „tohle se nemění“.
+
+**Co to vyrobilo.** [`keboola/platform-libraries#566`](https://github.com/keboola/platform-libraries/pull/566)
+ležel v `Předat agentovi` s `mergeable: true`, `mergeable_state: clean`, bez draftu a s checky
+22 pass / 22 skipping / 0 fail. Držel ho tam **jeden** potvrzený nález kategorie `correctness`
+z `code-review:code-review` (`libs/input-mapping/src/Table/Strategy/Local.php:22`), který nikdo
+neodmítl.
+
+**Proč se pokyn z #515 splnil jen napůl.** Třetí proklikání #515 znělo *„co je mergeable, tak by
+mělo být k mergnutí“*. Implementace z toho vzala jedině to, že slévatelnost přebíjí předání
+(`Policy.lane`), ale `isMergeReady(_:)` se dál ptalo `mergeOffer` — a ta mezi překážky počítala
+**náš vlastní názor na kód**, ne stav pull requestu na GitHubu.
+
+**Rozhodnutí (4. 9. 2026, uživatel).** Blokující nález přestává být překážkou merge **úplně**:
+mizí z `Policy.mergeOffer`, ne jen z `isMergeReady`. Je to tatáž třída, kterou `isMergeReady` už
+jednou vyřešilo pro `notAllowed` — brána odesílání mluví o tom, co smí *aplikace* —, jen o úroveň
+dál: nález mluví o tom, co si o kódu myslí *reviewer*.
+
+**Zamítnutá varianta: „jen pruh, tlačítko blokuje dál“.** Tedy nechat překážku ve výčtu a vyřadit ji
+jenom z `isMergeReady`, jako druhou výjimku vedle `isPublishingGate`. Zamítnuto, protože **pruh
+a tlačítko musí odpovídat stejně**: PR v `K merge` se zašedlým `Mergnout` jsou dvě odpovědi na jednu
+otázku, a to je v tomhle repu zakázaný vzor (tatáž úvaha jako u „řádek stavu a zašednutí skládá
+jedno místo“ v #465). Nález je vidět jako nález — v panelu, na řádku a v okraji —, ne jako zámek na
+nevratné akci.
+
+**Případ se ruší i s větou.** Držet `blockingFindings` v enumu bez volajícího by byl přesně ten
+vzor, na který Copilot v tomhle repu chodí (*stav, který se drží, ale nikdo ho nečte*). Mrtvá větev
+v kreslení po něm nezbyla: výstraha v `PanelBranchView` skládá `obstacles.map(\.sentence)`, takže se
+nikdy nekreslila podle případů. Odešel s ním i parametr `blockingFindings:` ze `branchSection(…)`
+a `mergeOffer(…)` a privátní `AppStore.blockingFindingCount(for:)`.
+
+**Druhé rozhodnutí (tamtéž): spadlý check blokuje dál.** `mergeable: true` je věta o konfliktu, ne
+o zelené CI. Nabídnout nevratnou akci nad rozbitým buildem je jiná třída než nabídnout ji nad
+nálezem, o kterém člověk ví — nález je věta, kterou si člověk přečte a rozhodne se; červený check je
+stav, o kterém se rozhodovat nedá. Přísnost vůči `UNSTABLE` z #465 tedy zůstává, a protože se ty dvě
+věty rozejít nesmí, stojí obě v **jednom** testu.
+
+**Co se tím nemění.** Blokující nález se dál počítá do odznaku na řádku (`QueueRow.blocking`), do
+osy filtru *jen blokující*, do souhrnu fronty (`Policy.summary`), do notifikace o doběhlém review
+a do pořadí řádků (`Policy.urgency`). Mění se **jedině** jeho role v `mergeOffer`. Vzhled se nemění
+vůbec — mění se, do kterého pruhu řádek spadne —, takže `docs/navrh.html` zůstal beze změny.
+
+**Co to udělalo s testy.** `WorkLaneTests.respectsEveryRealObstacle` prochází **deset** překážek
+místo jedenácti; `BranchMergeTests.doesNotBlockOnABlockingFinding` drží obě věty z rozhodnutí nad
+scénou z #566 a `neverSpeaksAboutFindings` prochází výčet všech jedenácti případů (včetně
+`notAllowed`) s vyčerpávajícím `switch`em, který novou překážku nepustí přeložit. Nejcennější je
+`AppStoreMergeTests.keepsTheBlockingFindingVisible`: tvrdí, že se **nic neztratilo** — pruh
+`K merge`, nabídka `allowed`, odznak na řádku, osa filtru i souhrn —, protože přesun do `K merge` se
+dá udělat i tak, že nález cestou zmizí, a prázdný odznak vypadá jako „čisto“. Sonda sekce `Větev`
+přišla o scénu `vetev-blokujici-nalez`: od #563 by se nakreslila stejně jako `vetev-zeleno`, a dvě
+kopie jednoho snímku tvrdí, že je co srovnávat.
+
+**Ověřeno vložením regrese, a chytla se dvakrát.** Vrácení případu do enumu položí
+`neverSpeaksAboutFindings` **při překladu** (`switch must be exhaustive`); s doplněným `case`
+v tom `switch`i pak vrácení `blockingFindings` do `mergeOffer` shodí
+`keepsTheBlockingFindingVisible` **čtyřmi** tvrzeními (nabídka, prázdný výčet, předfiltr desky
+a chybějící řádek v pruhu `K merge`). `WorkLaneTests` v tom **nefigurují** — jejich výčet je
+literál v testu, takže o novém případu enumu nevědí; hlídají, co `isMergeReady` s překážkou udělá,
+ne jaké překážky existují.

@@ -5259,7 +5259,8 @@ v potvrzení**, jinak by věta „vypsané je všechno, co se stane“ slibovala
 
 **O tom, jestli se akce nabídne, rozhoduje `Policy` výčtem.** Na cizím PR se sekce nekreslí vůbec;
 na vlastním je tlačítko zašedlé s **vypsanými** důvody (každý vede jinam) — vypnutá brána,
-nenačtený stav, konflikt, větev pozadu, chráněná větev, červený check a **vlastní blokující nález**.
+nenačtený stav, konflikt, větev pozadu, chráněná větev, červený check a **vlastní blokující nález**
+(ten poslední **od #563 mezi překážkami není**, viz jeho záznam níž).
 Červený check merge zakazuje, i když by ho GitHub u nepovinných pustil: zeleno je jediný stav, ve
 kterém se dá mergnout bez čtení. Běžící check naopak nebrání.
 
@@ -8214,6 +8215,143 @@ o diff ani o jedno PR nejde. `CLAUDE.md` měla 99 047 B, o 339 B víc než u #50
 v [`docs/github-cli.md`](github-cli.md#třetí-příčina-resource-not-accessible-by-integration-507). Vlastní revize diffu
 proběhla (grepy z `CLAUDE.md` plus čtení diffu) a našla v ní dvě věci: přehnané tvrzení v komentáři
 u sondy (`ideal*` místo „ideální šířka“) a dvě smyčky přes jednoprvkové pole.
+
+## #526 — odznak v railu do rohu a pruh aktivní položky (zákres 50)
+
+**„Uvnitř rámu“ z #366 znamenalo „přes ikonu“.** Odznak je 24 × 18 na rámu 34 × 30, takže zakryje
+jeho pravou horní čtvrtinu, ať je posazený kamkoli — v běžícím okně byla pod `5`, `3` a `30` vidět
+jen spodní hrana glyfu a položky railu se poznávaly podle pořadí, ne podle ikony. Odznak proto jde
+**do rohu** (`offset(x: 7, y: -5)`), tedy zase ven z rámu. Není to návrat před #366: tehdy vadila
+**barva** (fialový akcent, tedy „tady jsi“) a šest bodů doprava bez protiváhy; teď jde ven o sedm,
+je červený a identitu aktivní sekce mezitím převzal pruh. **Šířka railu 52 bodů se nemění** —
+červená plocha končí na 47, obtah na 49 a obrys railu je na 51.
+
+**Aktivní sekci značí pruh na hraně railu, ne barva ikony.** 2 × 18 bodů v akcentu, poloměr 1,
+a je to **tentýž prvek, kterým `PullRequestRow` značí stav na hraně řádku fronty** — jen svisle.
+Osmnáctka se počítá z **výšky řádku** (`top: 6`, `bottom: 6` v rámu vysokém 30), ne z ikony.
+Aby se měl pruh kam pověsit, bere si **řádek položky celou šířku railu** (`SidebarRail.width`)
+a tlačítko v něm zůstává 34 bodů: rozšířit rám tlačítka **nešlo**, klikací plocha by se nafoukla
+na celou šířku a klik do prázdna vedle ikony by přepínal sekci.
+
+**Změna zapsaného rozhodnutí z #414**: `Policy.activityBadge(unread:isActive:)` → `activityBadge(unread:)`.
+`isActive` rozhodoval právě proto, že odznak ikonu překryl a na aktivní položce by zbyl červený
+puntík bez identity (poznámka 95 v návrhu). S pruhem ten důvod odpadl, takže `Dění` ukazuje počet
+nepřečtených **i zevnitř**. Parametr **zmizel celý**, ne že by se ignoroval — parametr, o kterém se
+nerozhoduje, je jen místo, kam se dá omylem sáhnout. Značka poslední návštěvy se u toho nemění:
+posouvá ji dál až **odchod** ze sekce, takže počet uvnitř `Dění` na nulu nespadne.
+
+**Zákres je jedno pravidlo v CSS railu, ne komponenta.** Rail je chrom okna, takže se změna projeví
+ve všech sekcích, které ho kreslí; sekce 50 drží jen zvětšený výřez, srovnání s dneškem a důvody.
+Sekce 27 (`Dění`) je záznam dneška, takže se překreslila s ním — aktivní položka v ní má odznak.
+
+Nová tvrzení: `RailBadgeTests` (poloha proti **změřenému** rámu ikony, ne proti konstantě; že odznak
+nic neořezává — #483 —, poznáno z tvaru pravé hrany; pruh na hraně railu a to, že ho má **jedna**
+položka) a výčet `Policy.activityBadge` nad jedním vstupem. **Regrese ověřena vložením regrese**:
+s vráceným `offset(y: 1)` padne poloha, s vynechaným pruhem obě tvrzení o aktivní sekci — a barevná
+tvrzení u obojího zůstanou zelená, takže se ty věci pořád měří zvlášť.
+
+**Měřidlo pásů v `SidebarRailTests` přestalo brát vzorek pozadí z prvního bodu**: na hraně railu
+teď leží pruh, takže by vzorek na řádcích aktivní položky vydal akcent a proti němu by se jako
+„obsah“ jevil celý zbytek řádku. A **tolerance u washe aktivní položky je poloviční** — ve světlém
+režimu je od `Palette.line` jen 0,032 daleko, takže se do měřeného rámu připočítával obrys railu
+i oddělovač a rám vycházel přes celou výšku railu.
+
+**Copilot k tomuhle PR nedoběhl a je to neověřená mezera** (2026-09-04). Job běžel, ale spadl na
+**prvním** volání API — `Resource not accessible by integration` při `Fetching PR metadata` — a bylo
+to tak u **čtyř různých větví** (#526, #542, #491 dvakrát), tedy repo-wide, ne na tomhle diffu.
+Vyžádání se opakovalo třikrát, pokaždé stejně. Je to **tatáž třetí příčina, kterou o hodinu dřív
+popsalo #507**; tenhle záznam k ní přidal jen čtvrtou větev a příkaz na čtení logu
+([`docs/github-cli.md`](github-cli.md)).
+
+**Místo něj proběhla druhá vlastní revize** (subagent nad `git diff main...HEAD`) a našla čtyři
+reálné věci, které do PR přišly opravené:
+
+- **Nadpis dne a odznak v railu nejsou totéž číslo.** README i komentář v sekci 27 tvrdily, že jsou —
+  nadpis počítá nepřečtené **za ten den** (`Policy.dayNote`), odznak za **celý záznam**
+  (`Policy.unreadActivity`). Přes půlnoc se rozejdou. Do #526 to nevadilo, protože ta dvě čísla
+  nestála vedle sebe; tenhle diff je poprvé postavil na jednu obrazovku.
+- **Sedm míst v repu pořád tvrdilo „odznak se na aktivní sekci nekreslí“** — včetně tabulky `Policy`
+  v `architektura.md`, kde stála **neexistující signatura** `activityBadge(unread:isActive:)`.
+  Opraveno jako třída, ne výskyt.
+- **„Rail se kreslí ve dvaceti sekcích“ byl odhad**; grepem je jich **jedenáct**.
+- **Dvě tvrzení v `RailBadgeTests` nemohla spadnout** (`rightmost.count == box.height` je identita,
+  `touching > 0` tautologie nad maximem). Zůstalo to jediné nosné, `touching < box.height − 2`.
+
+A jedna mezera se zavřela testem: tvrzení **„klikací plocha se rozšířit nesmí“** stálo jen
+v komentáři, přitom visí na **pořadí modifikátorů** (`.frame` za `.buttonStyle`). Hlídá ho teď stráž
+nad zdrojákem (`SidebarRailTests.widensTheRowButNotTheButton`, kód bez mezer podle #490/#550);
+ověřená vložením regrese — s rámem 52 uvnitř labelu padne i test o šířce ikon.
+
+**Vyčnívající roh odznaku už není klikatelný**, a je to důsledek, ne opomenutí: klikací plocha
+zůstává rám tlačítka, protože jinak by sekci přepínal klik do prázdna vedle ikony. Odznak je údaj,
+ne ovládání.
+
+## #563 — mergnutelný PR patří do `K merge` i s blokujícím nálezem
+
+Vyšlo to z proklikání na ostrých datech:
+[`keboola/platform-libraries#566`](https://github.com/keboola/platform-libraries/pull/566) ležel
+v `Předat agentovi`, přestože GitHub o něm hlásil `mergeable: true` a `mergeable_state: clean`, PR
+nebyl draft a checky stály 22 pass / 22 skipping / 0 fail. Držel ho tam **jeden nález** z
+`code-review:code-review` (`CONFIRMED`, `correctness`, `libs/input-mapping/src/Table/Strategy/Local.php:22`),
+který nikdo neodmítl: `correctness` je ve výchozí sadě `Policy.defaultBlockingCategories`, takže
+z něj vyšla překážka `MergeObstacle.blockingFindings(1)` → `MergeOffer.blocked` →
+`isMergeReady == false` → pruh `handOff`.
+
+**Pokyn z #515 se tím splnil jen napůl.** Třetí proklikání znělo *„co je mergeable, tak by mělo být
+k mergnutí“*, a implementace z něj vzala jedině to, že slévatelnost přebíjí předání. `isMergeReady`
+se ale pořád ptalo `mergeOffer`, a ta mezi překážky počítala **náš vlastní názor na kód**.
+
+**Blokující nález přestal být překážkou merge úplně** — mizí z `Policy.mergeOffer`, ne jen
+z `isMergeReady`. Je to tatáž třída, kterou `isMergeReady` už jednou vyřešilo pro `notAllowed`
+(brána odesílání mluví o tom, co smí *aplikace*), jen o úroveň dál: nález mluví o tom, co si o kódu
+myslí *reviewer*. Ani jedno není věta o tom, jak stojí *pull request*.
+
+**Zamítnutá varianta: „jen pruh, tlačítko blokuje dál“.** Nechat překážku ve výčtu a obejít ji
+v desce by dalo PR v `K merge` se **zakázaným** `Mergnout` — dvě odpovědi na jednu otázku.
+`isPublishingGate` proto zůstává **jediná** výjimka. Případ i s jeho větou se ruší celý: stav, který
+nikdo nečte, svádí spolehnout se na něj; v panelu po něm mrtvá větev nezbyla, protože se výstraha
+skládá `obstacles.map(\.sentence)`.
+
+**Spadlý check blokuje dál.** `mergeable: true` je věta o konfliktu, ne o zelené CI, takže přísnost
+vůči `UNSTABLE` z #465 platí beze změny — nabídnout nevratnou akci nad rozbitým buildem je jiná
+třída než nabídnout ji nad nálezem, o kterém člověk ví.
+
+**Nic jiného se nemění.** Nález se dál počítá do odznaku na řádku, do osy filtru *jen blokující*, do
+souhrnu fronty, do notifikace o doběhlém review i do pořadí řádků. Vidět je jako nález — v panelu,
+na řádku a v okraji —, ne jako zámek na nevratné akci. Ruší se tím zapsané rozhodnutí z #465;
+v záznamu zůstalo i s důvodem, proč přestalo platit.
+
+**Testy.** Dvě věty, které se nesmí rozejít (nález nezakazuje, červený check zakazuje), stojí
+v **jednom** testu nad scénou z #566; k tomu výčet všech jedenácti překážek, ve kterém žádná
+nemluví o nálezu, a uvnitř vyčerpávající `switch`, který novou překážku nepustí přeložit.
+Nejcennější je `AppStoreMergeTests.keepsTheBlockingFindingVisible` — tvrdí, že se **nic
+neztratilo**: pruh `K merge`, `Mergnout` povolené, odznak na řádku, osa filtru i souhrn pořád
+počítají ten nález. **Regrese ověřená vložením regrese** — chytla se dvakrát: vrácení případu do
+enumu položí výčet **při překladu**, a doplněný `case` v něm pak shodí
+`keepsTheBlockingFindingVisible` čtyřmi tvrzeními. Sonda sekce přišla o scénu
+`vetev-blokujici-nalez`: nakreslila by se stejně jako `vetev-zeleno`, a dvě kopie jednoho snímku
+tvrdí, že je co srovnávat.
+
+**Na obrazovce se nemění vzhled, mění se, kam řádek spadne** — `docs/navrh.html` proto zůstal
+beze změny.
+
+**Ověřeno na ostrých datech.** Slot dostal do své cache **kopii** záznamu review k `#566` (nález
+o `verifyToken()`, `CONFIRMED`, `correctness`) a PR se v něm otevřel přes `prism://open?url=…`.
+V sekci `Větev` stojí `ondra/AJDA-3148 → main`, `1 commit · 44 checků · zeleno`, `o 21 commitů
+vzadu` — a ve výstraze **jediná** věta, ta o vypnutém odesílání ve slotu. Do #563 by tam byla
+druhá (*„Reviewer hlásí blokující nález.“*), takže je z toho poznat přesně ta změna: `notAllowed`
+je jediná zbylá překážka, tedy `Policy.isMergeReady` vydá `true` a řádek patří do `K merge`.
+Nález se přitom **neztratil** — `Nálezy 1`, pilulka `code-review 1` v hlavičce, `blokuje
+correctness` v okraji a červená tečka u `Local.php` v itineráři.
+
+**Neověřená mezera: pruh `K merge` na desce se ve slotu nafotit nepodařilo.** Stav větve se dotahuje
+teprve při otevření PR (`loadBranchStatus` visí na `loadDetail`), takže deska ho před otevřením
+záložky nezná a `#566` na ní do té doby leží v `Předat agentovi` kvůli `statusLoading` — tedy z jiného
+důvodu, než o kterém #563 je. Přepnout zpátky na `Přehled` s už načteným stavem by chtělo klik do
+okna a session neměla **povolený asistenční přístup** (`osascript` skončil na *„nemá povoleno
+posílání stisknutí kláves“*, klik nedělal nic). Neobcházelo se to: pruh tvrdí
+`AppStoreMergeTests.keepsTheBlockingFindingVisible` (řádek **v** pruhu `K merge`) a na obrazovce si
+ho proklikne člověk.
 
 ## #570 — `CLAUDE.md` počtvrté pod hranici: stěhují se odstavce, ne se zkracují věty
 

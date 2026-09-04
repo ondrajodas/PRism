@@ -321,9 +321,17 @@ extension AppStoreFeedTests {
 // MARK: - Odznak a prázdný stav
 
 extension AppStoreFeedTests {
-    /// Odznak **počítá nepřečtené** a na aktivní sekci se nekreslí (v tomhle railu by překryl
-    /// ikonu, poznámka 95 v návrhu).
-    @Test("Odznak počítá nepřečtené a na aktivní sekci mlčí")
+    /// Odznak **počítá nepřečtené** — a od #526 svítí **i uvnitř `Dění`**.
+    ///
+    /// Do #526 tady stálo, že po `show(.activity)` je odznak `nil`: seděl na ikoně a překryl ji,
+    /// takže by na aktivní položce zbyl červený puntík bez identity (poznámka 95 v návrhu). Od #526
+    /// je odznak v rohu a aktivní sekci značí pruh na hraně railu, takže ten důvod odpadl.
+    ///
+    /// Značka poslední návštěvy se přitom posouvá **při odchodu**, ne při vstupu (#414) — proto
+    /// počet po vstupu do sekce **nespadne na nulu**, a je to tvrzení o tom pravidle, ne vedlejší
+    /// efekt: dokud v `Dění` stojím, je nové pořád to, na co koukám. Že značku posune až odchod,
+    /// měří `countsOpeningATabAsALeave` výš.
+    @Test("Odznak počítá nepřečtené a svítí i uvnitř Dění")
     func countsUnreadInTheBadge() async {
         let center = FakeNotificationCenter()
         let gateway = FakeGitHubGateway([
@@ -338,7 +346,7 @@ extension AppStoreFeedTests {
 
         #expect(store.railActivityCount == 1)
         store.show(.activity)
-        #expect(store.railActivityCount == nil)
+        #expect(store.railActivityCount == 1)
     }
 
     /// Prázdný stav jde do bloku na desce **tou samou cestou** (#443) — jedno rozhodnutí, dvě

@@ -158,8 +158,7 @@ struct ReadyForReviewTests {
                     BranchStatus(mergeability: .mergeable, mergeState: .draft),
                     updatedAt: Date(timeIntervalSince1970: 100)
                 ),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             )
         )
 
@@ -180,8 +179,7 @@ struct ReadyForReviewTests {
                     BranchStatus(mergeability: .mergeable, mergeState: .clean),
                     updatedAt: Date(timeIntervalSince1970: 100)
                 ),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             )
         )
 
@@ -199,7 +197,6 @@ struct ReadyForReviewTests {
                 commits: [],
                 status: nil,
                 checks: nil,
-                blockingFindings: 0,
                 action: .settingLabels
             )
         )

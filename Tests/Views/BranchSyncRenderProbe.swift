@@ -99,7 +99,6 @@ struct BranchSyncRenderProbe {
                 commits: Self.commits(),
                 status: Self.status(behind: scene.behind),
                 checks: Self.checks(failed: scene.checkFailed),
-                blockingFindings: 0,
                 sync: scene.sync,
                 // #467: nad konfliktní větví je akce povolená jedině tehdy, když ji má kdo slít.
                 resolvesConflicts: true

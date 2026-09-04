@@ -425,7 +425,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Nepřečtené a bloky: **bez značky je nepřečtené všechno** (opačně než u konverzace — je u toho
   napsané proč), pruh `Tady jsem skončil` se kreslí před **první už viděnou** položkou a bez novinek
   se nekreslí vůbec, den se jmenuje `Dnes` / `Včera` / datem a počet v nadpisu je **za ten den**, ne
-  za celý záznam. Odznak sekce mlčí nad nulou **i na aktivní sekci**.
+  za celý záznam. Odznak sekce mlčí nad nulou — a od #526 už **ne** na aktivní sekci: tam svítí,
+  takže nadpis dne a odznak v railu jsou **dvě různá čísla** (den proti celému záznamu).
 
   `AppStore` proti skutečnému `ActivityLog`u a `AnnouncedPullRequests` nad dočasnou složkou
   (`AppStoreFeedTests`, 18 testů): že **vypnuté notifikace zápis nezastaví** (banner nedorazí, řádek
@@ -887,10 +888,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **`BranchMergeTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve kterých
     se merge **nenabídne**: cizí PR (tam se nekreslí ani nadpis sekce), vypnutá brána, **nenačtený
     stav větve** (`nil` i `.loading` i `.failed` — u nevratné akce je „nevím“ vlastní odpověď, ne
-    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev,
-    **červený check** a **vlastní blokující nález**. K tomu dvě rozhodnutí, která se dají potichu
-    obrátit: **běžící a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem**
-    (nad větou „je konflikt“ by věta „nevím“ nedávala smysl).
+    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev
+    a **červený check**. K tomu dvě rozhodnutí, která se dají potichu obrátit: **běžící
+    a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem** (nad větou „je
+    konflikt“ by věta „nevím“ nedávala smysl).
+
+    **Vlastní blokující nález v tom výčtu od #563 není** a jsou na to dvě tvrzení, která se nesmí
+    rozejít, proto stojí v **jednom** testu (`doesNotBlockOnABlockingFinding`): scéna
+    z `keboola/platform-libraries#566` (slévatelná, čistá, 22 zelených a 22 přeskočených checků)
+    vyjde `allowed`, a tatáž scéna s jedním **červeným** checkem `blocked`. K tomu je
+    `neverSpeaksAboutFindings` — **výčet všech jedenácti překážek**, ve kterém žádná věta nemluví
+    o nálezu, a uvnitř **vyčerpávající `switch`**, který nová překážka nepustí přeložit. Že se
+    nález cestou **neztratil**, tvrdí `AppStoreMergeTests.keepsTheBlockingFindingVisible` nad celým
+    řetězcem (pruh `K merge`, tlačítko `allowed`, odznak na řádku, osa filtru, souhrn) — a je to
+    z celé té sady nejcennější tvrzení: přesun do `K merge` se dá udělat i tak, že nález zmizí,
+    a prázdný odznak vypadá jako „čisto“.
+
+    **Ověřeno vložením regrese, a chytla se dvakrát na dvou různých místech.** Vrácení případu do
+    enumu položí `neverSpeaksAboutFindings` **při překladu** (`switch must be exhaustive`), takže se
+    do běhu ani nedojde; s doplněným `case` v tom `switch`i pak vrácení `blockingFindings` do
+    `mergeOffer` shodí `keepsTheBlockingFindingVisible` **čtyřmi** tvrzeními — nabídka, prázdnota
+    výčtu, předfiltr desky i to, že řádek v pruhu `K merge` **není**. **`WorkLaneTests` v tom
+    nefigurují**, a je dobré to vědět: jejich výčet je literál v testu, takže o novém případu enumu
+    nevědí — hlídají, co `isMergeReady` s překážkou udělá, ne jaké překážky existují.
 
     Řádky stavu se tvrdí **textem, ne strukturou**: `3 commity · 2 checky` / `zeleno` proti
     `1 commit · 2 checky` / `1 neprošel` — skloňování je v nich to, co se rozbije nejtišeji. A
@@ -3459,13 +3479,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   místě, takže větší rozdíl znamená tlačítko, které při cyklení poskakuje. Rámečky by na tyhle chyby
   neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně mimo obrazovku
   nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25 a test spadne.
-- **Odznak v railu (#366)** — `RailBadgeTests`, tři třídy tvrzení nad **bitmapou**: kde odznak leží
-  (nesmí opustit rám ikony 9–43 ani vyčnívat nad jeho horní hranu), jakou má barvu (`crit`, **žádný
-  akcent**, a číslo v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že
-  s počtem 1 se nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
+
+  **Měřidlo pásů přeskakuje první čtyři sloupce, a od #526 je to podmínka, ne rezerva.** Pozadí se
+  bere z **levého okraje téhož řádku** (rail má v každém režimu jinou plochu, takže konstanta by
+  našla „obsah“ všude) — jenže na hraně railu leží od #526 pruh aktivní sekce, takže vzorek
+  z prvního bodu vydá na řádcích aktivní položky **akcent** a proti němu se jako obsah jeví celý
+  zbytek řádku. Tahle sada měří **ikony**; pruh měří `RailBadgeTests` na vlastním výřezu hrany.
+- **Odznak v railu (#366, přesunutý do rohu #526)** — `RailBadgeTests`, čtyři třídy tvrzení nad
+  **bitmapou**: kde odznak leží (od #526 **v rohu** — o 5 bodů nad rámem ikony a o 7 vpravo od něj,
+  a pořád uvnitř railu), že ho **nic neořezává**, jakou má barvu (`crit`, **žádný akcent**, a číslo
+  v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že s počtem 1 se
+  nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
   K tomu rozměr červené plochy (20 × 14, tolerance bod na stranu kvůli vyhlazeným krajům) a kontrast
   **tokenů** v obou režimech (5,36 a 5,50 při hranici 4,5), včetně tvrzení, že bílá by v tmavém
   režimu byla **horší** — to je záznam rozhodnutí, ne kontrola.
+
+  **Od #526 k tomu pruh aktivní sekce**: leží na hraně railu (sloupec 0), je 2 × 18 bodů a je
+  **vystředěný na rám aktivní položky**. A má ho **jedna** položka, ne každá — měří se to počtem
+  akcentových bodů v celém sloupci hrany, ne okolím té aktivní: kdyby ho dostaly všechny, vyjde
+  jich pětkrát tolik a v okně by byla svislá čára přes celý rail.
+
+  **Rám ikony se neopisuje, měří se** — z akcentového washe aktivní položky (`.ri.on`), který leží
+  přesně na jejích 34 × 30. Každé tvrzení je pak rozdíl proti rámu, který v tomtéž snímku doopravdy
+  je, ne proti konstantě, která by po posunu odznaku tvrdila jen sama sebe. **Tolerance u washe je
+  poloviční (0,02), a je to změřené**: ve světlém režimu je wash (`0.90/0.90/0.97`) od `Palette.line`
+  (`0.90/0.91/0.94`) jen **0,032** daleko, takže se do obálky připočítal obrys railu i oddělovač pod
+  sekcemi a rám vyšel `0…259` místo `44…73`.
+
+  **Ořezání se pozná z tvaru pravé hrany, ne z šířky řádků** (#483). Zaoblená kapsle dosáhne na svůj
+  nejpravější sloupec **8 řádky ze 14**, uříznutá všemi čtrnácti — práh je proto o dva řádky pod
+  výškou, tedy mezera 8 proti 12. Šířka řádku na to neodpoví: číslo uvnitř odznaku z něj bere červené
+  body uprostřed, takže by nejužší řádek měřil písmo.
 
   **Barva se porovnává s nakreslenou, ne s tokenem, a je to změřené**: bitmapa
   z `bitmapImageRepForCachingDisplay` je v profilu displeje (`Barevný LCD`), takže `crit` v ní vyjde
@@ -3478,7 +3522,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Vyzkoušené vložením regrese ze dvou stran.** Se starým odznakem (akcent + `offset(x: 6, y: -2)`)
   padne 5 testů ze 6 — barevná tvrzení na tom, že v railu není ani jeden červený pixel. Se **samotným**
   `offset(x: 6, y: -2)` a ponechanou červenou padne právě tvrzení o poloze (`46 > 43`), takže je
-  vidět, že poloha se měří nezávisle na barvě.
+  vidět, že poloha se měří nezávisle na barvě. **U #526 znovu**: s vráceným `offset(y: 1)` padne
+  poloha (odznak nevyjde z rámu ani nahoru, ani doprava) a s vynechaným pruhem padnou obě tvrzení
+  o aktivní sekci — barevná tvrzení přitom zůstanou zelená, takže se ty dvě věci pořád měří zvlášť.
 - **Kapsle stavu z návrhu (#348)** — `DesignPillTests`. Že je to **mono**, se pozná na tom, že
   `TextWidth.pill("iii") == TextWidth.pill("WWW")` — a měřidlo to umí rozlišit, protože v UI fontu
   téže velikosti se ta dvě slova liší. Metrika se měří na `fittingSize` hostované kapsle proti sazbě
@@ -4201,10 +4247,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `changed`** shodí 16 tvrzení ve čtyřech testech — z toho deset v té mřížkové stráži.
 
   **Sonda k tomu má vlastní scénu** (`BoardRenderProbe`, `k-merge-s-predanim`) a při její stavbě
-  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález je skutečná překážka
-  merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` — tedy
-  přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho napsané
-  proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
+  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález byl do #563 skutečná
+  překážka merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` —
+  tedy přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho
+  napsané proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
+  **Od #563 už by scéna s blokujícím nálezem vyšla stejně** (nález překážka není), ale kategorie
+  se **nemění**: takhle vypadal PR z proklikání #515, a scéna má fotit ten.
 
   **Tatáž otázka scénu u druhého proklikání překlopila na `changed`.** S razítkem `never` byla
   vidět jedině oprava z prvního kola — do `K merge` takový PR chodil i před druhou změnou, takže

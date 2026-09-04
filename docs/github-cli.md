@@ -128,10 +128,18 @@ o spotřebovaný request z odstavce níž nejde a `union: false` na tom nic nezm
 straně GitHubu trvá, **hlásí se to jako neověřená mezera** — nemergne s tím, že „Copilot nic
 nenašel“: nic nepřečetl.
 
+**A není to jedno PR, je to celé repo** (#526, PR #566, runy `33920187418`, `33920459855`,
+`33920609845`): tatáž chyba na **čtvrté** větvi v tomtéž okně, jen na jiném diffu. Dohromady se to
+v jedné hodině potkalo na **#507, #542, #491 a #526** — takže se u téhle příčiny nemá cenu ptát,
+co je jiného na tom mém diffu.
+
 ```bash
 # Rozpoznání: běžel job, a proč spadl.
 gh api repos/{owner}/{repo}/actions/runs/{id}/jobs --jq '.jobs[] | "\(.name) \(.conclusion)"'
 gh run view {id} --log-failed | grep -E "HttpError|PRism#[0-9]+"
+# Nebo z logu, když `gh run view` na stažení nestačí:
+gh api repos/{owner}/{repo}/actions/runs/{id}/logs > /tmp/copilot.zip
+unzip -o -q /tmp/copilot.zip -d /tmp/copilotlog && grep -h 'HttpError' /tmp/copilotlog/*/*.txt
 ```
 **Počtvrté u #491 / PR #567, a nejostřejší doklad, že to není o diffu, je časový.** Tři kola nad
 **třemi různými PR** (`33923112018` → #567, `33923128007` → #569, `33922924268` → #568) vznikla
@@ -140,6 +148,12 @@ napříč větvemi čtyř slotů. Diff, velikost ani stav jednoho PR tedy nerozh
 tentokrát **99 047 B** — pořád pod stropem, o 339 B blíž než u #507, takže ani rostoucí soubor tu
 příčinu nevysvětluje. Vyžádání znovu (`33921009691`, o hodinu později znovu `33923112018`) spadlo
 pokaždé stejně, takže **odstup ani opakování nepomáhá**: pravidlo *zkus jednou, víc ne* platí i tady.
+
+**Přežilo to i do dalšího dne a padá celé repo naráz** (#563, PR #568, run `33922924268`): týž
+`ineligible_app`, týž `HttpError`, a ve stejné hodině spadla stejně kola na **třech** dalších
+větvích jiných slotů. To „naráz“ je nejrychlejší způsob, jak tuhle příčinu odlišit od té první —
+velikost `CLAUDE.md` by shodila jedině tu větev, na které se soubor nafoukl. A **na délku jobu se
+u rozpoznání nespoléhej**: tenhle běžel 24 s a padl až v poslední z nich.
 
 ### Když se request spotřebuje mrtvým jobem
 

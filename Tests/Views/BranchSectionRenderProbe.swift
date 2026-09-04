@@ -22,7 +22,11 @@ import Testing
 )
 struct BranchSectionRenderProbe {
     /// Podoby sekce — přesně ty dvě, které kreslí zákres, a k nim ty, které v něm nejsou,
-    /// ale v aplikaci nastanou (načítá se, vypnutá brána, blokující nález).
+    /// ale v aplikaci nastanou (načítá se, vypnutá brána, konflikt).
+    ///
+    /// **Scéna `vetev-blokujici-nalez` odešla s #563**: blokující nález přestal být překážkou
+    /// merge, takže by se nakreslila jako `vetev-zeleno` — a druhá kopie téhož snímku by tvrdila,
+    /// že je co srovnávat.
     ///
     /// **Co z téhle sondy vyčíst nejde: barvu `Připravit k review`** (#482). Plná plocha
     /// `borderedProminent` se v **neaktivním** okně kreslí systémově šedá, ať je `tint` jakýkoli —
@@ -41,7 +45,6 @@ struct BranchSectionRenderProbe {
             ("vetev-brana-vypnuta", section(
                 editing: .blocked(PublishError.publishingNotAllowed(Self.repo).userDescription)
             ), nil),
-            ("vetev-blokujici-nalez", section(blocking: 2), nil),
             ("vetev-konflikt", section(status: status(.conflicting, .dirty)), nil),
             // Sekce 37 (#482) — tři podoby, které zákres kreslí: draft s tlačítkem, draft
             // s chybou pod ním a **draft s vypnutou branou**, kde je tlačítko zašedlé a důvod
@@ -173,8 +176,7 @@ struct BranchSectionRenderProbe {
             BranchStatus(mergeability: .mergeable, mergeState: .clean),
             updatedAt: Date(timeIntervalSince1970: 100)
         ),
-        checks: [PullRequestCheck]? = nil,
-        blocking: Int = 0
+        checks: [PullRequestCheck]? = nil
     ) -> Policy.BranchSection? {
         let detail = PullRequest(
             id: Self.pr,
@@ -208,8 +210,7 @@ struct BranchSectionRenderProbe {
                 )
             },
             status: status,
-            checks: checks ?? green,
-            blockingFindings: blocking
+            checks: checks ?? green
         )
     }
 
