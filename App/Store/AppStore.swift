@@ -145,6 +145,24 @@ final class AppStore {
     /// přitom to nejdražší, co tady umí zmizet.
     var isReviewPanelExpanded = true
 
+    /// Jak `Policy.diffSideColumns` naposledy rozhodla — **stráž proti druhému uplatnění téhož
+    /// rozhodnutí** (#188, #503), a od #506/4 tady, ne ve `@State` view.
+    ///
+    /// **Ve store, protože stav, který hlídá, přežívá celé okno.** Sloupec s itinerářem si volbu
+    /// drží v `UserDefaults` (`diffTreeExpanded`) a panel v `isReviewPanelExpanded` o řádek výš,
+    /// kdežto každý uzel okna se cestou přestavuje: třetí kolo #506 stráž přestěhovalo z `DiffView`u
+    /// (zaniká přepnutím tabu detailu) do `@State` `PullRequestDetailView`u — a ten zaniká
+    /// **kliknutím na `Přehled`**, protože `switch store.activeTab` v `ContentView` vybere jinou
+    /// větev. Návrat na záložku PR byl tedy nový detail s prázdnou stráží, který rozhodnutí uplatnil
+    /// podruhé a přepsal tím `⌘1`. Naměřeno v okně 1 512 × 882; ve `Vedle sebe` se sloupec zavřel,
+    /// v `Pod sebou` sám otevřel.
+    ///
+    /// **Globálně, ne per PR** — ze stejného důvodu jako `isReviewPanelExpanded` a `diffLayout`:
+    /// rozhodnutí je funkce pohledu, šířky okna a toho, jestli jsou karty v okraji, a stav, který
+    /// mění, je taky globální. `nil` znamená **„ještě se neuplatnilo“**, tedy první průchod diffem
+    /// po startu aplikace — tam se #188 uplatnit má.
+    var appliedSideColumns: DiffSideColumns?
+
     /// Co je v panelu vidět. Ze stejného důvodu tady, ne ve view: doručení poznámky panel
     /// **přepne** na rozdělané review, a to se musí dát otestovat.
     ///
@@ -1655,6 +1673,35 @@ final class AppStore {
     /// předvolba, která by si zasloužila řádek v nastavení.
     var isCommitMessageExpanded = true
 
+    /// Které **spadlé** checky jsem u PR aspoň jednou rozbalil (#506).
+    ///
+    /// Z toho se rozhoduje, jestli je zastávka `Kontroly` v itineráři hotová: červené CI se
+    /// odškrtne, teprve když se člověk podíval do logu. **Nestačí `expandedChecks`** — ten drží
+    /// nejvýš jeden rozbalený check a sbalením se vyprázdní, takže by zastávka po zavření logu
+    /// zhasla zpátky na nehotovou.
+    ///
+    /// Sada zůstává **v paměti**, na disk nejde: je to záznam o tom, kde jsem byl v tomhle sezení,
+    /// a po restartu je poctivější zeptat se znovu než tvrdit, že jsem log viděl někdy v pátek.
+    var openedFailedChecks: [PRIdentifier: Set<String>] = [:]
+
+    /// U kterých PR jsem v `Přehledu` doroloval popis na konec (#506) — zastávka `Popis a záměr`.
+    ///
+    /// Zapisuje `Policy.overviewAtEnd` z geometrie scrollu. **Nemaže se odrolováním nahoru**:
+    /// otázka je „přečetl jsem popis“, ne „kde je scroll teď“.
+    var overviewReadToEnd: Set<PRIdentifier> = []
+
+    /// U kterých PR jsem viděl, co od minule přibylo (#506) — zastávka `Od minule`.
+    ///
+    /// Zapisuje se ze dvou míst: otevření rozsahu `Od tvé poslední návštěvy` (#284) a `Přečteno`
+    /// (#173). Obojí je záznam o tom, že ta data byla na obrazovce.
+    var seenSinceLastVisit: Set<PRIdentifier> = []
+
+    /// U kterých PR je zaznamenaná **předchozí** návštěva (#506) — podmínka zastávky `Od minule`.
+    ///
+    /// Zapisuje se v `seedVisitBaseline`, tedy **než** se dnešní návštěva zapíše do ledgeru. Po
+    /// tom zápisu už se to z ledgeru poznat nedá: `lastVisit` je od té chvíle dnešní.
+    var previouslyVisited: Set<PRIdentifier> = []
+
     /// Který check je v tabu `Kontroly` rozbalený (#214), na PR nejvýš jeden.
     ///
     /// Dva otevřené konce logu pod sebou znamenají scrollování přes to, co se zrovna nečte — a dvě
@@ -2224,7 +2271,7 @@ final class AppStore {
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         //
         // **Tady se zapisuje jedině při změně, a je to výjimka z pravidla, ne nedůslednost**
-        // (#421). Zbylých osmatřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
+        // (#421). Zbylých třiačtyřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
         // hodnoty `@Observable` nehlásí, takže je `if` navíc jen mrtvá váha
         // (`PollObservationTests`). Jenže suprese stojí na tom, že se ty dvě hodnoty dají
         // **porovnat** — a `DiffSearchState` je `@Observable` **třída**, takže
@@ -2361,6 +2408,14 @@ final class AppStore {
         }
         expandedChecks = expandedChecks.filter { wantedPullRequests.contains($0.key) }
         checkDetails = checkDetails.filter { wantedPullRequests.contains($0.key.pullRequest) }
+
+        // Záznamy, ze kterých se skládá itinerář (#506). Jsou to údaje o **tomhle** PR, takže
+        // s ním odcházejí — jinak by po znovuotevření tvrdily hotovou práci nad daty, která se
+        // mezitím načetla znovu.
+        openedFailedChecks = openedFailedChecks.filter { wantedPullRequests.contains($0.key) }
+        overviewReadToEnd = overviewReadToEnd.filter { wantedPullRequests.contains($0) }
+        seenSinceLastVisit = seenSinceLastVisit.filter { wantedPullRequests.contains($0) }
+        previouslyVisited = previouslyVisited.filter { wantedPullRequests.contains($0) }
 
         // Zavřený nebo mergnutý PR nemá co blokovat slot. Ruší se **jen automatická**
         // review: to ruční si vyžádal člověk a zrušit mu ho pod rukama proto, že PR mezitím

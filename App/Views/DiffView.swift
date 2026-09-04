@@ -64,6 +64,15 @@ struct DiffView: View {
     /// `nil` = automatika se panelu nedotkne. Stav drží detail PR, protože panel je vidět
     /// i v tabu, kde diff není.
     var panelExpanded: Binding<Bool>?
+    /// Levý sloupec s itinerářem, jak ho automatika pohledu (#188) smí přepnout — **od toho, kdo
+    /// ho kreslí** (#506, třetí kolo). `nil` = vedle téhle plochy sloupec nestojí, takže se ho
+    /// automatika nedotkne; tatáž hranice jako u `panelExpanded` o řádku výš.
+    ///
+    /// **Rozhodnutí zůstává tady, stav i stráž jsou venku.** Podlaha, kvůli které se sloupec
+    /// skládá, je podlaha **kolony kódu** (`Policy.minimumCodeWidth`), a ta existuje jedině
+    /// v diffu — kdežto stav sloupec přežívá v `UserDefaults` a stráž proti druhému uplatnění
+    /// musí přežít stejně dlouho. Proč, je u `DiffColumnActions`.
+    var columnActions: DiffColumnActions?
     var stepFinding: ((NavigationStep) -> Void)?
     /// Hledání v diffu (#152). Stav drží store (musí přežít přepnutí tabu i složení panelu), tudy
     /// jdou akce. **Prázdné znamená „tady se nehledá“** — tak to má náhled i sonda.
@@ -89,10 +98,14 @@ struct DiffView: View {
     /// rozsahový diff (#284) ani náhled o pull requestu nic neukládají.
     var reportScrollAnchor: ((DiffScrollAnchor?) -> Void)?
 
-    /// Šířka, kterou diff dostal — okno bez railu a bez panelu vpravo (#220). Rozhoduje se z ní
-    /// o kolonách: bez ní se strom a okraj skládají jen podle pohledu a v úzkém okně přetečou
-    /// pod proužek panelu (změřeno u opravy #503, 35 bodů v okně 700).
+    /// Šířka, kterou diff dostal — okno bez railu, **bez levého sloupce** a bez panelu vpravo
+    /// (#220, od #506 bez sloupce). Odsud se počítá kolona kódu; o kolonách samotných rozhoduje
+    /// ten, kdo je kreslí (detail PR).
     @Environment(\.availableWidth) private var slotWidth
+    /// Šířka, o kterou se dělí levý sloupec, kolona kódu a okraj (#506) — **od toho, kdo sloupec
+    /// kreslí**, tedy od detailu PR. `nil` = vedle téhle plochy sloupec nestojí, takže se dělí
+    /// tím, co dostala. Proč se to nedopočítává tady, je u `SideColumnsWidthKey`.
+    @Environment(\.sideColumnsWidth) private var sharedWidth
     /// Kreslit nálezy jako bubliny **pod** jejich řádkem? **Od #548 zapnuto**, tedy zpátky to, co
     /// platilo do #503: okraj vpravo si bere 300 bodů natrvalo — i v souboru bez nálezu, což je
     /// skoro pořád —, kdežto bublina zabere místo jen tam, kde nález doopravdy je, a svisle, kde
@@ -107,9 +120,6 @@ struct DiffView: View {
     ///
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showInlineFindingBubbles") private var showBubbles = true
-    /// Rozložený strom v levém sloupci (#197). Předvolba pohledu napříč PR, takže `UserDefaults`
-    /// — a ne stav ve store, ze stejného důvodu jako u bublin.
-    @AppStorage("diffTreeExpanded") private var isTreeExpanded = true
     /// Výška viditelné části diffu — z ní se počítá, kam skočí nález. Čte se jen měřením
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
@@ -120,9 +130,13 @@ struct DiffView: View {
     /// píše i panel nálezů, a ten o hledání nic neví. Kdo cíl nastaví odjinud, dostane tedy
     /// `.bubble`, protože se hodnota po každém skoku vrací.
     @State private var jumpTarget = DiffJumpTarget.bubble
-    /// Které rozhodnutí o postranních sloupcích už automatika provedla (#188, od #503 i okraj).
-    /// Bez toho by se opakovalo při každém vzniku view a přebíjelo ruční `⌘1`/`⌘2`.
-    @State private var appliedColumns: DiffSideColumns?
+    /// Které rozhodnutí o postranních kolonách už automatika provedla (#188, od #503 i okraj),
+    /// **když si tu stráž nikdo nedrží zvenku** (#506/3). Bez ní by se rozhodnutí opakovalo při
+    /// každém vzniku view a přebíjelo ruční `⌘1`/`⌘2`.
+    ///
+    /// Vzniká jednou na identitu view — tedy `columnActions == nil` znamená přesně to, co platilo
+    /// do #506/3: diff si stráž drží sám a s ním zaniká. Tentýž vzorec jako `ownTracking` (#501).
+    @State private var ownAppliedColumns: DiffSideColumns?
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
     /// mimo observable stav, takže se jimi diff nepřekresluje — viz `DiffRowFrames`.
     @State private var rowFrames = DiffRowFrames()
@@ -140,6 +154,11 @@ struct DiffView: View {
     /// Kde v obsahu leží který soubor (#469). Krabice mimo observable stav; plní ji sekce, čte ji
     /// ukotvená hlavička.
     private var fileExtents: DiffFileExtents { (tracking ?? ownTracking).extents }
+    /// Stráž proti druhému uplatnění rozhodnutí o kolonách — **od toho, kdo sloupec kreslí**, a jen
+    /// když tam takový někdo je (#506/3). Viz `ownAppliedColumns`.
+    private var appliedColumns: Binding<DiffSideColumns?> {
+        columnActions?.applied ?? $ownAppliedColumns
+    }
     /// Kde v obsahu leží řádky s kartou v okraji (#503). **Jediná sledovaná krabice v diffu** —
     /// z téhle se kreslí, viz `DiffMarginAnchors`.
     @State private var marginAnchors = DiffMarginAnchors()
@@ -154,15 +173,20 @@ struct DiffView: View {
         // vybírají se hledáním řádku v hunkách, takže dvě složení znamenají dvojí průchod diffem
         // — a hlavně dvě odpovědi na to, které karty v okraji jsou.
         let cards = marginCards
-        // Rozhodnutí o postranních sloupcích se skládá **jednou** a slouží dvakrát: je to identita
+        // Rozhodnutí o postranních kolonách se skládá **jednou** a slouží dvakrát: je to identita
         // `task`u níž **i** hodnota, kterou uplatní. Dvě složení jedné odpovědi jsou dvě odpovědi.
+        //
+        // **Ptá se na společnou šířku, ne na tu svoji** (#506): sloupec od #506 odečítá rozvržení
+        // detailu PR, takže `slotWidth` je štěrbina, ve které už není — a rozhodnutí o sloupci by
+        // se jinak dělalo podle toho, co po sloupci zbylo, tedy samo podle sebe. Kdo sloupec vedle
+        // sebe nemá, `sharedWidth` nedodá a dělí se tím, co dostal.
         let columns = Policy.diffSideColumns(
             layout: layout,
             hasMargin: !cards.isEmpty,
-            available: slotWidth.map(Double.init)
+            available: (sharedWidth ?? slotWidth).map(Double.init)
         )
         // Šířka kolony kódu se **předává** (#546, pravidlo #220): plocha, na kterou se sází, je
-        // štěrbina bez stromu, bez okraje a bez mezery před nimi — a ta se dá spočítat, takže se
+        // štěrbina bez okraje a bez mezery před ním — a ta se dá spočítat, takže se
         // nemá co měřit. Do #546 si ji obsah bral z `onGeometryChange` a měřil něco jiného.
         let code = Policy.diffCodeColumnWidth(available: slotWidth.map(Double.init), columns: columns)
         // Diagnostika kreslení (#546): na čem scéna doopravdy stojí. Vypnutá stojí jeden load
@@ -183,11 +207,11 @@ struct DiffView: View {
                         step(search: direction)
                     }
                 }
-                // Strom vlevo, diff vedle něj (#197). Do té doby byl strom jen v popoveru,
-                // takže u PR o padesáti souborech nešlo poznat, kde v něm člověk je, aniž by
-                // ho otevřel.
+                // Kód a vedle něj okraj s kartami (#503). **Levý sloupec tady od #506 není** —
+                // itinerář stojí vedle všech tabů, takže ho hostí detail PR a diff dostane
+                // štěrbinu, ve které už není. Do té doby byl součástí tohohle `HStack`u a mizel
+                // s přepnutím tabu.
                 HStack(spacing: 0) {
-                    tree(jumpingWith: proxy)
                     // **Rozměr se měří, nevyjednává** (#361) — jinak `HStack` posílá líným
                     // seznamem diffu svoje průzkumné dotazy na pružnost a `LazyVStack` na každý
                     // z nich odpovídá zápisem do svého stavu.
@@ -217,7 +241,6 @@ struct DiffView: View {
                     margin(cards: columns.margin ? cards : [])
                 }
             }
-            .background(alignment: .topLeading) { treeShortcut }
             .background(alignment: .topLeading) { searchShortcut }
             .background(alignment: .topLeading) { readShortcut }
             .background(alignment: .topLeading) { anchorReporter }
@@ -226,7 +249,7 @@ struct DiffView: View {
             // nemění, takže tělo diffu se tím nepřekresluje — sledují se jeho **vlastnosti**, každou
             // čte někdo jiný (viz `DiffSearchState`). Tentýž vzorec jako u `DiffViewport`.
             .environment(search.state)
-            // **Pohled vedle sebe složí postranní sloupce** (#188). Řádek se v něm dělí na dvě
+            // **Pohled vedle sebe složí postranní kolony** (#188). Řádek se v něm dělí na dvě
             // strany, takže na 14" nezbude ani 100 znaků; pod sebou je zase rozbalí. Ruční
             // `⌘1`/`⌘2` to přebijí jednoduše tím, že platí až do **další** změny pohledu.
             //
@@ -237,16 +260,41 @@ struct DiffView: View {
             // **Identita je samo rozhodnutí, ne jeho vstupy** (#503): `task` má běžet tehdy, když
             // z `Policy` vyjde něco jiného než minule — a to je od #503 i tím, že se objevil
             // okraj s kartami.
+            //
+            // **Sloupec se odsud pořád přepíná, i když ho kreslí detail** (#506) — ale stav i stráž
+            // jsou od #506/3 **jeho** (`columnActions`), ne diffu. Do té doby tady stál druhý
+            // `@AppStorage` nad klíčem `diffTreeExpanded` a stráž ve `@State`, kterou přepnutí tabu
+            // zahodilo: každý návrat do `Změněných souborů` byl nový `DiffView`, který uplatnil
+            // rozhodnutí podruhé a přepsal tím volbu člověka. Viz `DiffColumnActions`.
+            //
+            // **A od #506/4 se uplatňuje jen to pole, které se změnilo** (`Policy.sideColumnsToApply`).
+            // Do té doby se zapisovalo obojí, jakmile se rozhodnutí změnilo v čemkoli — a `margin`
+            // se mění při kliknutí na `Nálezy pod řádky`, při sbalení souboru i při odkrytí kontextu,
+            // takže tyhle kliky přepisovaly uloženou volbu u sloupce. Změřeno v uživatelově okně,
+            // kde se žádná šířková mez nepřekračuje.
             .task(id: columns) {
                 // **Jen jednou na rozhodnutí.** `task(id:)` se spustí i při novém vzniku view —
-                // a to nastane pokaždé, když se přepne panel vpravo, protože se tím přestaví
-                // `HStack` v detailu PR. Bez téhle stráže se ručně otevřený strom hned zase
-                // složil a nešel otevřít vůbec.
-                guard appliedColumns != columns else { return }
-                appliedColumns = columns
+                // a to nastane pokaždé, když se přepne panel vpravo (přestaví se `HStack` v detailu
+                // PR) i při každém návratu do tabu s diffem. Bez téhle stráže se ručně otevřený
+                // sloupec hned zase složil a nešel otevřít vůbec.
+                // **Kdo nemá co přepnout, nezapisuje ani stráž** (#506/3): diff commitu (#317)
+                // a náhledy nedostanou ani sloupec, ani panel, takže by tady jinak vznikl zápis do
+                // `@State`, který nikdo nepřečte — a s ním průchod tělem při každé změně šířky.
+                guard columnActions != nil || panelExpanded != nil else { return }
+                guard appliedColumns.wrappedValue != columns else { return }
+                // **Stráž se posune i tehdy, když se neuplatní nic** — je to záznam „takhle
+                // `Policy` rozhodla naposledy“, ne „takhle jsem naposledy zapsal“. Bez toho by
+                // se změna v `margin` porovnávala proti zastaralému základu a příští skutečná
+                // změna `tree` by se od něj spočítala špatně.
+                let update = Policy.sideColumnsToApply(
+                    applied: appliedColumns.wrappedValue,
+                    columns: columns
+                )
+                appliedColumns.wrappedValue = columns
+                guard !update.isEmpty else { return }
                 withAnimation(.snappy(duration: 0.15)) {
-                    isTreeExpanded = columns.tree
-                    panelExpanded?.wrappedValue = columns.panel
+                    if let tree = update.tree { columnActions?.expanded.wrappedValue = tree }
+                    if let panel = update.panel { panelExpanded?.wrappedValue = panel }
                 }
             }
             // Kam cíl skočí, řeší `jumpAnchor`: **k vršku, ale s odstupem**. Na vrch samotný
@@ -264,7 +312,11 @@ struct DiffView: View {
                 // bere i to, **kolikátý** ten řádek v bloku je: podíl výšky platí pro blok, takže
                 // bez toho míří skok na blok a řádek v něm leží, kde leží.
                 let spot = DiffRow.blockSpot(of: target, in: blockedRows(covering: target))
-                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
+                // **Druh cíle se pozná z cíle, ne z toho, kdo ho nastavil** (#506). Od #506
+                // nastavuje cíl i sloupec s itinerářem, který stojí mimo `DiffView` — takže by mu
+                // `jumpTarget` v `@State` diffu nebyl k ničemu.
+                let kind = Policy.jumpTarget(of: target, files: diff.files, requested: jumpTarget)
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, kind: kind, metrics: measured(spot)))
                 // **Podruhé o průchod později** (#469), a od #152 s **přeměřenými** rozměry.
                 //
                 // Ten první skok se totiž počítá z ploch, které bloky nahlásily **dosud** — a to
@@ -282,7 +334,7 @@ struct DiffView: View {
                 // starý průchod při změně cíle zruší, jenže `Task.yield()` z něj nevyskočí — takže
                 // by ten starý dokončil posun na **svůj** cíl a nový by vzápětí **vynuloval**.
                 guard !Task.isCancelled else { return }
-                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, metrics: measured(spot)))
+                proxy.scrollTo(spot.id, anchor: jumpAnchor(of: spot, kind: kind, metrics: measured(spot)))
                 scrollTarget = nil
                 // Zpátky na výchozí druh cíle: příští skok může přijít z panelu nálezů, který
                 // `jumpTarget` nenastavuje.
@@ -373,9 +425,13 @@ struct DiffView: View {
     ///
     /// Dokud výška výřezu nedorazí, platí střed — je to jediná hodnota, která nezávisí na tom, co
     /// ještě nevíme.
-    private func jumpAnchor(of spot: DiffJumpSpot, metrics: DiffJumpMetrics?) -> UnitPoint {
+    private func jumpAnchor(
+        of spot: DiffJumpSpot,
+        kind: DiffJumpTarget,
+        metrics: DiffJumpMetrics?
+    ) -> UnitPoint {
         let size = metrics ?? Policy.jumpMetrics(of: spot, rowHeight: DiffTextView.rowHeight)
-        guard let y = Policy.jumpAnchorY(of: jumpTarget, viewport: viewportHeight, metrics: size)
+        guard let y = Policy.jumpAnchorY(of: kind, viewport: viewportHeight, metrics: size)
         else { return .center }
         return UnitPoint(x: 0, y: y)
     }
@@ -679,187 +735,6 @@ struct DiffView: View {
             // aby otevíral pruh, který nemá kde vzniknout.
             openSearch: search.open,
             isSearching: search.isOpen
-        )
-    }
-
-    /// ⌘1 na složení stromu. Bydlí **mimo lištu**, protože v ní od #219 žádné tlačítko na sloupce
-    /// není — skládají se u sebe, tlačítkem v hlavičce sloupce a proužkem, kterým se zase otevřou.
-    /// Zkratka tedy nemá na čem viset a musí být samostatně. Průhledné tlačítko, ne `.hidden()`:
-    /// skryté view z hierarchie zmizí i se zkratkou. Tentýž vzorec jako ⌘2 v detailu PR.
-    private var treeShortcut: some View {
-        Button("Strom souborů") {
-            withAnimation(.snappy(duration: 0.15)) { isTreeExpanded.toggle() }
-        }
-        .windowShortcut(.fileTree)
-        .opacity(0)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    /// Levý sloupec se stromem souborů (#197), nebo proužek, když je složený.
-    ///
-    /// Šířka 210 bodů je z návrhu (`grid-template-columns: 210px 1fr 300px`). Složený je proužek
-    /// 34 bodů — **ne zmizelý sloupec**: kolik souborů PR mění, je ta první otázka nad diffem
-    /// a bez čísla na hraně se na ni po složení nedá odpovědět.
-    @ViewBuilder private func tree(jumpingWith proxy: ScrollViewProxy) -> some View {
-        if isTreeExpanded {
-            VStack(spacing: 0) {
-                // Hlavička jako u panelu vpravo: popisek z návrhu (`7 SOUBORŮ`) a šipka, kterou
-                // se sloupec zavře. Zavírat jedině z lišty nad diffem znamená hledat tlačítko
-                // na druhém konci okna, než u kterého člověk zrovna je.
-                HStack(spacing: 8) {
-                    // `7 SOUBORŮ · 3 PROŠLÉ` (#500) — druhá polovina se objeví, teprve když má
-                    // co říct. Skládá ji `Policy`, ať se počet v hlavičce nemůže rozejít s tím,
-                    // co je v seznamu pod ní.
-                    Text(verbatim: Policy.fileTreeSummary(
-                        files: diff.files.count,
-                        read: readFileCount
-                    ).uppercased())
-                        .font(.system(size: 10, design: .monospaced))
-                        .tracking(1)
-                        .foregroundStyle(Palette.ink3)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Button {
-                        withAnimation(.snappy(duration: 0.15)) { isTreeExpanded = false }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.caption)
-                            .foregroundStyle(Palette.ink3)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .help(Policy.shortcutHelp("Složit strom souborů", .fileTree))
-                    .accessibilityLabel("Složit strom souborů")
-                }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 9)
-                .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
-
-                readProgress
-
-                FileTreeView(
-                    files: diff.files,
-                    markers: fileMarkers,
-                    readStates: read?.states ?? [:]
-                ) { file in
-                    jump(to: file, with: proxy)
-                }
-            }
-            .frame(width: Self.treeWidth)
-            .background(Palette.chrome)
-            .overlay(alignment: .trailing) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
-        } else {
-            Button {
-                withAnimation(.snappy(duration: 0.15)) { isTreeExpanded = true }
-            } label: {
-                VStack(spacing: 9) {
-                    Image(systemName: "sidebar.left")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Palette.ink3)
-                    Text(verbatim: "\(diff.files.count)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .monospacedDigit()
-                        .foregroundStyle(Palette.ink2)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(Palette.raised, in: .rect(cornerRadius: 4))
-                    // Svislý popisek: **`fixedSize` a pak výška**, ne šířka. Otočený text má
-                    // pořád vodorovný rámeček, takže omezením šířky se ořízne — a delší
-                    // popisek pak leze přes odznak nad sebou.
-                    Text(verbatim: Plural.word(
-                        diff.files.count,
-                        one: "soubor",
-                        few: "soubory",
-                        many: "souborů"
-                    ))
-                        .font(.system(size: 10.5))
-                        .tracking(0.6)
-                        .foregroundStyle(Palette.ink3)
-                        .fixedSize()
-                        .rotationEffect(.degrees(90))
-                        // Otočení **nemění rozvržení** — rámeček zůstává vodorovný. Bez rámečku
-                        // po otočení si tedy proužek vezme šířku nenatočeného textu a roztáhne
-                        // se; proto se tady zadává **otočený otisk** (úzký a vysoký).
-                        .frame(width: 13, height: 62)
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 10)
-                .frame(width: Self.collapsedTreeWidth, alignment: .top)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .background(Palette.chrome)
-            .overlay(alignment: .trailing) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
-            .help(Policy.shortcutHelp("Rozložit strom souborů", .fileTree))
-            .accessibilityLabel("Rozložit strom souborů")
-        }
-    }
-
-    /// Kolik souborů je prošlých (#500). Nula, když značky tahle obrazovka nemá.
-    private var readFileCount: Int {
-        Policy.readFileCount(in: read?.states ?? [:])
-    }
-
-    /// Tenký proužek podílu pod hlavičkou stromu (#500) — 3 body, `--ok` na `--panel-3`, jak ho
-    /// má návrh (sekce 40).
-    ///
-    /// **Nekreslí se, dokud není zaškrtnuté nic**: prázdná linka nad nezapočatým PR je stálý prvek
-    /// bez informace. `Policy` na to odpovídá `nil`em, ne nulou — tady se jen rozhoduje, co to
-    /// znamená v kresbě.
-    @ViewBuilder private var readProgress: some View {
-        if let share = Policy.readFileShare(read: readFileCount, of: diff.files.count) {
-            // **Šířka se počítá, nevyjednává** (#220): proužek zná šířku sloupce, takže se podíl
-            // dá vyjádřit rámečkem, ne pružností.
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(Palette.ok)
-                    .frame(width: (Self.treeWidth - 26) * share)
-                Spacer(minLength: 0)
-            }
-            .frame(height: 3)
-            .background(Palette.raised)
-            .clipShape(.rect(cornerRadius: 2))
-            .padding(.horizontal, 13)
-            .padding(.top, 7)
-            .accessibilityLabel(Text(verbatim: Policy.fileTreeSummary(
-                files: diff.files.count,
-                read: readFileCount
-            )))
-        }
-    }
-
-    /// Skok na soubor ze stromu. Sbalený soubor se **nejdřív rozbalí** — jinak by se ukázala
-    /// jen jeho hlavička.
-    private func jump(to file: FileDiff, with proxy: ScrollViewProxy) {
-        // Skočit na sbalený soubor jde — hlavička zůstává — ale ukázala by se jen ona.
-        // Kdo si ho ze stromu vybral, chce ho vidět.
-        if folding.isFolded(file) { folding.toggle(file) }
-        withAnimation { proxy.scrollTo(file.id, anchor: .top) }
-    }
-
-    /// **Čte se z `Policy`**, protože podle týchž čísel se rozhoduje, jestli se kolona vejde
-    /// (`Policy.diffSideColumns`) — dvě pravdy o jedné šířce by se rozešly při první úpravě.
-    static let treeWidth = Policy.treeColumnWidth(expanded: true)
-    private static let collapsedTreeWidth = Policy.treeColumnWidth(expanded: false)
-
-    /// Které soubory nesou nález (#197). Počítá `Policy`, ať strom a panel neříkají o téže věci
-    /// každý něco jiného.
-    private var fileMarkers: [String: FileMarker] {
-        // `findings` jsou **skupiny** (shoda reviewerů na `file:line`), takže se rozbalí zpátky
-        // na platné nálezy — značka mluví o souboru, ne o skupině.
-        let markers = Policy.fileMarkers(of: findings.flatMap(\.activeFindings), categories: blockingCategories)
-        // **Přejmenovaný soubor má dvě cesty.** Reviewer umí nález nahlásit pod tou starou,
-        // kdežto strom kreslí `displayPath` (novou) — bez překladu by se u přejmenovaného
-        // souboru značka nezobrazila vůbec. `Diff.file(at:)` hledá po obou stranách, takže
-        // je to tentýž překlad, jaký dělá skok na nález.
-        return Dictionary(
-            markers.compactMap { path, marker in
-                diff.file(at: path).map { ($0.displayPath, marker) }
-            },
-            // Když se stará i nová cesta potkají na témž souboru, blokující vyhrává — stejné
-            // pravidlo jako uvnitř `Policy.fileMarkers`.
-            uniquingKeysWith: { left, right in left == .blocking || right == .blocking ? .blocking : left }
         )
     }
 

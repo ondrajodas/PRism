@@ -553,8 +553,9 @@ nechat zprávě“ znamená u každého commitu totéž; výchozí stav je rozba
 se přepínač nekreslí vůbec.
 
 Pod hlavičkou je **týž diff jako ve `Změněných souborech`**: pohled pod sebou i vedle sebe,
-zvýraznění změněných slov, sbalování souborů, rozbalování kontextu, kopírování i strom souborů
-vlevo (`⌘1`) — commit s třiceti soubory ho potřebuje.
+zvýraznění změněných slov, sbalování souborů, rozbalování kontextu i kopírování. **Vlastní levý
+sloupec v něm není**, a od #506 to není mezera: itinerář stojí vedle **všech** tabů, tedy i vedle
+`Commitů`, takže druhý sloupec uvnitř by byl týž seznam na obrazovce dvakrát.
 
 **Nejsou tam ale bubliny nálezů ani rozdělaný komentář a do řádků se nedá klikat.** Není to
 zjednodušení: komentář k řádku commitu by se musel klíčovat i sha (dnešní draft se váže na
@@ -839,14 +840,45 @@ ta zaregistrovaná později. `⌥↓` tedy dělalo „další blokující“ —
 jeden, druhé zmáčknutí nikam neskočilo. Obojí je proto **jedno tlačítko** a shift se čte z události,
 která akci spustila.
 
-**Vlevo od diffu je strom souborů** (#197): cesty, u souboru s nálezem puntík (červený, když
-blokuje). Skládá se na `⌘1` na proužek s počtem souborů, a týmž kliknutím se zase rozloží.
-Popover `Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je
-na dosah jedním kliknutím a v liště bral místo, kvůli kterému se v užším okně nevešla.
+**Vlevo od obsahu záložky je itinerář review** (#506, do té doby strom souborů podle cesty, #197).
+Je to dráha se zastávkami v pořadí *Od minule → Popis a záměr → Soubory podle rizika → Kontroly →
+Verdikt*, u každé stav (✓ hotovo / ● aktuální / ○ zbývá) a údaj vpravo; v hlavičce
+`Itinerář · 4 z 11 · 10 min` a pod ní proužek podílu. Sloupec je **260 bodů** široký, skládá se na
+`⌘1` na proužek s počtem souborů a týmž kliknutím se zase rozloží.
+
+**Pohled *Vedle sebe* ho složí sám** (#188 — na dvě strany řádku by jinak nezbylo místo), a **`⌘1`
+to přebije až do další změny pohledu**: přepnutí tabu, klik na soubor ani vybrání commitu už tu
+volbu nepřepíšou, a od čtvrtého kola #506 ani **odchod na `Přehled` a návrat**. Stejně tak ne klik
+na `Nálezy pod řádky`, sbalení souboru ani odkrytí kontextu —
+to všechno mění, jestli se kreslí okraj s kartami, a **z rozhodnutí o kolonách se uplatní jedině to,
+o čem se rozhodlo jinak než minule**. Sloupec se tedy skládá sám jen tehdy, když se změnil pohled
+nebo když se do okna přestala vejít kolona kódu.
+
+**Stojí vedle všech osmi tabů**, ne uvnitř `Změněných souborů`: je to průvodce review, takže tab,
+ve kterém by zmizel, je tab, ze kterého se nedá vrátit. Klik na zastávku **přepne tab** — `Od
+minule` a `Popis` do `Přehledu`, `Kontroly` do `Kontrol`, `Verdikt` do `Změněných souborů`
+s rozloženým panelem — a **klik na soubor** přepne na `Změněné soubory` a odscrolluje tak, aby
+jeho hlavička sedla na horní hranu; sbalený soubor se u toho rozbalí. Ostatním tabům to ubere
+260 bodů (složený 34), tedy 787 z 1 047 na výchozím okně; u diffu je ta cena 3 znaky na stranu
+vedle sebe a 6 pod sebou.
+
+**Které zastávky v seznamu jsou, plyne z dat**: `Od minule` jen když je záznam předchozí návštěvy
+**a** přišly commity, `Kontroly` jen když PR má CI, zbylé tři vždycky. A **hotovo se pozná z dat**
+— soubor prošlý, popis odscrollovaný na konec (a **jedině načtený** popis: ve stavu
+`Načítám popis…` se obsah vejde do výřezu, takže by se zastávka odškrtla nad popisem, který nikdo
+neviděl), spadlý check rozbalený, verdikt odeslaný. **Ručně
+se zaškrtne jedině soubor**: itinerář, který si člověk odškrtává sám, je druhý seznam úkolů.
+
+**Soubory se řadí podle rizika**, ne podle cesty: blokující → nález → vlákno → nový → ostatní →
+konfigurace a locky (ty složené do jedné rozbalovací položky). Cesta se čte v **hlavičce souboru**
+v diffu, kde na ni je místo. U souboru s nálezem je puntík (červený, když blokuje). Popover
+`Přejít na soubor` odešel z lišty u #219 — byla to druhá dveře do téhož: sloupec je na dosah jedním
+kliknutím a v liště bral místo, kvůli kterému se v užším okně nevešla.
 
 **Hlavička každého souboru má zaškrtávátko `Prošlo`** (#500) — vpravo za počty `+18 −6`, klávesou
-`⌥V` na soubor, jehož hlavička je zrovna ukotvená nahoře. Prošlý soubor se **sbalí**, ve stromu
-dostane ✓ a hlavička stromu počítá `7 souborů · 3 prošlé` s tenkým proužkem podílu pod ní.
+`⌥V` na soubor, jehož hlavička je zrovna ukotvená nahoře. Prošlý soubor se **sbalí**, v levém
+sloupci dostane ✓ a počítá se do zastávky `Soubory podle rizika` (`2 ze 7`) i do počítadla
+v hlavičce sloupce.
 `Rozbalit vše` prošlé soubory otevře a značku nechá — je to pokyn o tom, co je vidět, ne o tom,
 co je přečtené.
 
@@ -881,9 +913,9 @@ celý pull request, takže panel, který se tam nekreslí, schová i to, co v n�
 důvod — nálezy jsou klíčované `headSha`, takže u staršího commitu mluví o jiném kódu — se **neobešel**:
 nad seznamem commitů je u nálezů věta *Nálezy jsou proti hlavě e8d4a60.*, u rozkliknutého **staršího**
 commitu **výstraha** (*… Tenhle commit je 5e2b1aa, takže o kódu na obrazovce nemluví.*) a karty jsou
-ztlumené. Šířku to bere **obsahu**, ne pruhu záložek: se stromem souborů a rozloženým panelem zbude
-na diff commitu 531 bodů, tedy 22 znaků na stranu ve pohledu *Vedle sebe* a 49 pod sebou. Nevynucuje
-se nic — strom se složí `⌘1`, panel `⌘2`, a se složeným proužkem je to ve splitu 39 znaků.
+ztlumené. Šířku to bere **obsahu**, ne pruhu záložek: s itinerářem a rozloženým panelem zbude
+na diff commitu 481 bodů (od #506, do té doby 531 se sloupcem 210). Nevynucuje se nic — sloupec se
+složí `⌘1`, panel `⌘2`.
 
 **Nad segmenty stojí labely a vyžádaní reviewery** (#392) — dvě sekce, které platí pro celý PR, ne
 pro vybraný segment. Labely jsou chipy s **puntíkem v barvě z repozitáře** (plná výplň by u každé
@@ -1812,7 +1844,7 @@ zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, kt
 | `⌘R` | obnovit seznam |
 | `⌃1`–`⌃5` | sekce railu: `Přehled`, `Fronta`, `Moje PR`, `Rozdělaná`, `Dění` |
 | `⌥↓` / `⌥↑` | další / předchozí nález, `⌥⇧↓` další blokující |
-| `⌘1` / `⌘2` | strom souborů u diffu / panel s mým review |
+| `⌘1` / `⌘2` | itinerář review (v každém tabu) / panel s mým review |
 | `⌘F` | hledat v diffu (podruhé vrátí fokus do pole) |
 | `⌘G` / `⌘⇧G` | další / předchozí výskyt; v poli i `⏎` / `⇧⏎` |
 | `⌥V` | značka `Prošlo` u souboru pod ukotvenou hlavičkou |
@@ -1826,7 +1858,7 @@ zavřít dočtený PR, obnovit seznam, přepnout sekci railu a zastavit běh, kt
 | `⌘,` | nastavení |
 
 **`⌃W`, ne `⌘W`** — `⌘W` patří systému (zavře okno). Ze stejného důvodu jsou na `Control`u i sekce
-railu: `⌘1` a `⌘2` jsou uvnitř PR strom souborů a panel.
+railu: `⌘1` a `⌘2` jsou uvnitř PR itinerář review a panel.
 
 **Na české klávesnici mají sekce railu druhou klávesu.** `keyboardShortcut` páruje na **znak**,
 a pod `1`–`5` je v české mapě `+ ě š č ř` — samotné `⌃1` na ní tedy nezabere vůbec. Aplikace proto

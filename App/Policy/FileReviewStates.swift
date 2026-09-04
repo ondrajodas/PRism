@@ -67,29 +67,15 @@ extension Policy {
         return states
     }
 
-    /// Kolik souborů je prošlých — číslo do hlavičky stromu a do proužku pod ní.
+    /// Kolik souborů je prošlých — číslo, ze kterého se počítá zastávka `Soubory podle rizika`
+    /// (`ItineraryFacts.readFileCount`) a `x/y` u složené položky konfigurací.
+    ///
+    /// **Popisek `7 souborů · 3 prošlé` a podíl do proužku od #506 nejsou** (`fileTreeSummary`
+    /// a `readFileShare`, obojí #500): hlavička sloupce od #506 vždycky mluví o celém itineráři
+    /// (`ITINERÁŘ · 4 Z 11 · 10 MIN`) a proužek pod ní počítá jeho položky, ne jen soubory —
+    /// takže po sloupci bez zastávek nezůstal volající ani jedné z těch dvou funkcí.
     static func readFileCount(in states: [String: FileReviewState]) -> Int {
         states.count(where: { $0.value.isRead })
-    }
-
-    /// Podíl prošlých souborů pro proužek (`0…1`). `nil` = **proužek se nekreslí**: nad PR bez
-    /// souborů, i když je to jen prázdný diff, by prázdná linka tvrdila „nic hotovo“ o práci,
-    /// která žádná není.
-    static func readFileShare(read: Int, of total: Int) -> Double? {
-        guard total > 0, read > 0 else { return nil }
-        return min(1, Double(read) / Double(total))
-    }
-
-    /// Popisek hlavičky stromu: `7 souborů · 3 prošlé`, nebo jen `7 souborů`, dokud není
-    /// zaškrtnuté nic.
-    ///
-    /// Druhá polovina se **připojuje, až když má co říct** — `7 souborů · 0 prošlých` je
-    /// v hlavičce stálý řádek o tom, že se nic nestalo, a ve sloupci 210 bodů širokém by ukrojil
-    /// z počtu souborů.
-    static func fileTreeSummary(files: Int, read: Int) -> String {
-        let all = Plural.czech(files, one: "soubor", few: "soubory", many: "souborů")
-        guard read > 0 else { return all }
-        return "\(all) · \(Plural.czech(read, one: "prošlý", few: "prošlé", many: "prošlých"))"
     }
 
     /// Je soubor sbalený? **Rozhoduje značka, dokud si člověk neřekne jinak** (#500).

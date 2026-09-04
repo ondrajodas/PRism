@@ -62,7 +62,7 @@ struct WindowShortcut: Equatable, Sendable {
         /// Zásuvka s terminálem (#459) — **jediná zkratka, která terminálu neustupuje.**
         case toggleTerminal
         // Obsah detailu a domácí záložky.
-        case fileTree
+        case itinerary
         case runAllReviews
         case openDraft
         /// Otevřít první pull request v prvním pruhu desky (#515) — jediná zkratka okna
@@ -259,9 +259,9 @@ extension Policy {
                 primary: .init(key: .character("`"), modifiers: .control),
                 alternates: [.init(key: .character(";"), modifiers: .control)]
             )
-        case .fileTree:
+        case .itinerary:
             return WindowShortcut(
-                title: "Strom souborů",
+                title: "Itinerář review",
                 primary: .init(key: .character("1"), modifiers: .command)
             )
         case .runAllReviews:
@@ -363,7 +363,7 @@ extension Policy {
         + [
             .nextFinding, .previousFinding, .reviewPanel, .backFromCommit,
             .openSubmission, .agentPrompt, .cancelReview, .toggleTerminal,
-            .fileTree, .runAllReviews, .openDraft, .openFirstOnBoard,
+            .itinerary, .runAllReviews, .openDraft, .openFirstOnBoard,
             .findInDiff, .nextSearchHit, .previousSearchHit,
             .toggleFileRead, .previousFile, .nextFile,
         ]

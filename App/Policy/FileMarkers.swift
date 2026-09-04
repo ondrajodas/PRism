@@ -36,6 +36,31 @@ extension Policy {
         return markers
     }
 
+    /// Značky přeložené na **cestu, pod kterou se soubor v okně kreslí** (`displayPath`).
+    ///
+    /// **Přejmenovaný soubor má dvě cesty.** Reviewer umí nález nahlásit pod tou starou, kdežto
+    /// sloupec i hlavička kreslí novou — bez překladu by se u přejmenovaného souboru značka
+    /// nezobrazila vůbec. `Diff.file(at:)` hledá po obou stranách, takže je to tentýž překlad,
+    /// jaký dělá skok na nález.
+    ///
+    /// **Vlastní funkce, ne `if` ve view** (#506): značky čte sloupec (puntíky u jmen) i pořadí
+    /// souborů podle rizika (`filesByRisk`), takže dvě složení by byla dvě odpovědi na jednu
+    /// otázku — a pořadí v itineráři by se pak mohlo rozejít s puntíky v něm.
+    static func fileMarkers(
+        of findings: [Finding],
+        in diff: Diff,
+        categories: Set<String> = defaultBlockingCategories
+    ) -> [String: FileMarker] {
+        Dictionary(
+            fileMarkers(of: findings, categories: categories).compactMap { path, marker in
+                diff.file(at: path).map { ($0.displayPath, marker) }
+            },
+            // Když se stará i nová cesta potkají na témž souboru, blokující vyhrává — stejné
+            // pravidlo jako uvnitř `fileMarkers(of:categories:)`.
+            uniquingKeysWith: { left, right in left == .blocking || right == .blocking ? .blocking : left }
+        )
+    }
+
     /// Co je v souboru k vyřízení — pro kapsli v hlavičce souboru v diffu (#219).
     ///
     /// Počítá se po **skupinách**, ne po nálezech: skupina je jedno místo v kódu, a tři reviewery,

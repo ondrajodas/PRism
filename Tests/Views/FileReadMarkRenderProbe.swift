@@ -6,8 +6,8 @@ import Testing
 @testable import PRism
 
 /// Sonda, ne test (#500): vyrendruje **hlavičku souboru se značkou `Prošlo`** ve všech třech
-/// stavech a k tomu **strom souborů** s ✓, ↻ a ztlumeným jménem — tedy to, co kreslí sekce 40
-/// návrhu.
+/// stavech — tedy to, co kreslí sekce 40 návrhu. Seznam souborů s ✓ a ↻ se od #506 rendruje
+/// v `ReviewItineraryRenderProbe`, protože tam patří i hlavička sloupce a proužek podílu.
 ///
 /// Proč sonda: „sedí to se sekcí 40?“ je otázka na obrázek. Co se **dá** tvrdit číslem, je
 /// v `FileReviewStateTests` (stavy a popisky) a v `AppStoreReadMarkTests` (co se stane po pushi).
@@ -67,68 +67,10 @@ struct FileReadMarkRenderProbe {
         print("SONDA \(url.path)")
     }
 
-    /// Strom souborů: hlavička `7 souborů · 3 prošlé`, proužek podílu, ✓ u prošlých, ↻ u změněného
-    /// a puntíky nálezů u prvních dvou. Hlavička i proužek jsou v `DiffView` privátní, takže se tu
-    /// skládají **týmiž hodnotami z `Policy`**, jaké čte okno — sonda tvrdí kresbu, ne to, kdo ji
-    /// v okně staví.
-    @Test("Vyrendrovat strom souborů se značkami")
-    func rendersFileTree() throws {
-        let files = [
-            file("src/Vault/SecretClient.php"),
-            file("src/Vault/Encryptor.php"),
-            file("src/Vault/SecretNotFound.php", change: .added),
-            file("tests/SecretClientTest.php"),
-            file("composer.json"),
-            file("composer.lock"),
-            file("phpunit.xml.dist"),
-        ]
-        let states: [String: FileReviewState] = [
-            "src/Vault/SecretNotFound.php": .read(at: Self.at),
-            "tests/SecretClientTest.php": .read(at: Self.at),
-            "composer.json": .read(at: Self.at),
-            "composer.lock": .changed(readAt: Self.at),
-        ]
-        let markers: [String: FileMarker] = [
-            "src/Vault/SecretClient.php": .blocking,
-            "src/Vault/Encryptor.php": .findings,
-        ]
-        let read = Policy.readFileCount(in: states)
-        let share = Policy.readFileShare(read: read, of: files.count)
-
-        let scene = VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text(verbatim: Policy.fileTreeSummary(files: files.count, read: read).uppercased())
-                    .font(.system(size: 10, design: .monospaced))
-                    .tracking(1)
-                    .foregroundStyle(Palette.ink3)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.left").font(.caption).foregroundStyle(Palette.ink3)
-            }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
-
-            if let share {
-                HStack(spacing: 0) {
-                    Rectangle().fill(Palette.ok).frame(width: (210 - 26) * share)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 3)
-                .background(Palette.raised)
-                .clipShape(.rect(cornerRadius: 2))
-                .padding(.horizontal, 13)
-                .padding(.top, 7)
-            }
-
-            FileTreeView(files: files, markers: markers, readStates: states) { _ in }
-        }
-        .frame(width: 210, height: 260, alignment: .topLeading)
-        .background(Palette.chrome)
-
-        let url = Self.outputDirectory.appending(path: "proslo-strom.png")
-        try Self.render(AnyView(scene), width: 240, height: 280, to: url)
-        print("SONDA \(url.path)")
-    }
+    // **Třetí render (sloupec bez zastávek) tady od #506/2 není.** Kreslil tu podobu, kterou měl
+    // sloupec v diffu commitu a v rozsahu od minule — a ta zanikla: sloupec od #506/2 stojí vedle
+    // všech tabů, hostí ho detail PR a zastávky má vždycky. Seznam souborů s ✓, ↻ a puntíky nálezů
+    // se rendruje v `ReviewItineraryRenderProbe`, kde je i s hlavičkou a proužkem podílu.
 
     // MARK: - Scéna
 

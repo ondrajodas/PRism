@@ -71,16 +71,21 @@ struct LazyIdealSizeTests {
     /// si test postaví sám; že modifikátor doopravdy sedí tam, kde má, je vlastnost **struktury
     /// kódu** — a ta se tvrdí nad zdrojáky, jako u `SingleWayOutTests` a `GraphSiteWiringTests`.
     ///
-    /// Výčet je šest líných seznamů ve `ScrollView`u, které stojí v `VStack`u nebo `HStack`u.
-    /// Zbylé tři (`CommitListView`, `ReviewProgressView`, `StepFeedView`) v něm **nejsou
-    /// schválně**: jejich `ScrollView` je korunou svého view a rozměr dostává rámcem, takže se
-    /// nikdo na ideál neptá. Kdyby nad ně někdo vložil stack, patří tam modifikátor taky.
-    @Test("Líné seznamy ve stacku mají fillingSlot()")
+    /// Výčet je šest `ScrollView`ů, které stojí v `VStack`u nebo `HStack`u. Zbylé tři
+    /// (`CommitListView`, `ReviewProgressView`, `StepFeedView`) v něm **nejsou schválně**: jejich
+    /// `ScrollView` je korunou svého view a rozměr dostává rámcem, takže se nikdo na ideál neptá.
+    /// Kdyby nad ně někdo vložil stack, patří tam modifikátor taky.
+    ///
+    /// **`ReviewItineraryView` (#506) líný seznam nemá a v seznamu přesto je**, protože o průzkumné
+    /// dotazy nerozhoduje laznost seznamu, ale `ScrollView` v pružném rámci nad stackem: pevný
+    /// `VStack` na `∞` odpoví celou výškou obsahu a sloupec pak roste přes okno. Do #506 tady
+    /// stálo `FileTreeView`, které líné bylo.
+    @Test("Seznamy ve stacku mají fillingSlot()")
     func lazyListsInStacksCarryTheModifier() throws {
         let views = [
             "ConversationView",
             "DiffView",
-            "FileTreeView",
+            "ReviewItineraryView",
             "ActivityFeedView",
             "ReviewPanel",
             "FindingsTableView",

@@ -117,15 +117,32 @@ struct DiffBubbleDefaultTests {
             (štěrbina \(slot), \(layout)).
             """
         )
-        // Že se ty dva stavy liší, je ta polovina, která z tvrzení výš dělá tvrzení.
-        #expect(
-            abs(unset.area - margin.area) > Self.scrollerReserve + 0.5,
-            """
-            Výchozí stav a okraj vyšly na stejné šířce (\(unset.area) proti \(margin.area), \
-            štěrbina \(slot), \(layout)) — měřidlo ty dva stavy nerozliší, takže tvrzení výš \
-            neplatí ani jedno.
-            """
-        )
+        // Že se ty dva stavy liší, je ta polovina, která z tvrzení výš dělá tvrzení — **ale jen
+        // tam, kde se lišit mají**. Na štěrbině, ve které automatika složí sloupec i okraj, vyjde
+        // kolona stejná v obou stavech a je to správná odpověď, ne slepé měřidlo: od #506 (sloupec
+        // 260 místo 210) se to děje na podlaze okna v `Pod sebou`. Rozhoduje proto `Policy`, ne
+        // šířka okna — a tatáž úvaha už je o kus níž u `theCodeColumnIsWiderByTheMargin`.
+        let expectedUnset = try #require(Self.column(slot: slot, layout: layout, margin: false))
+        let expectedMargin = try #require(Self.column(slot: slot, layout: layout, margin: true))
+        if abs(expectedUnset - expectedMargin) > 0.5 {
+            #expect(
+                abs(unset.area - margin.area) > Self.scrollerReserve + 0.5,
+                """
+                Výchozí stav a okraj vyšly na stejné šířce (\(unset.area) proti \(margin.area), \
+                štěrbina \(slot), \(layout)) — měřidlo ty dva stavy nerozliší, takže tvrzení výš \
+                neplatí ani jedno.
+                """
+            )
+        } else {
+            // A když se lišit nemají, tvrdí se **to**: naměřeno stejně, jak `Policy` slibuje.
+            #expect(
+                abs(unset.area - margin.area) <= Self.scrollerReserve + 0.5,
+                """
+                `Policy` slibuje na štěrbině \(slot) \(layout) v obou stavech touž kolonu \
+                (\(expectedUnset) b), ale naměřilo se \(unset.area) proti \(margin.area).
+                """
+            )
+        }
     }
 
     /// **Kolona kódu je s bublinami o 300 b širší než s okrajem — tam, kde se okraj kreslí.**

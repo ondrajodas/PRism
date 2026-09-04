@@ -66,7 +66,61 @@ struct DiffSideColumns: Hashable, Sendable {
     let margin: Bool
 }
 
+/// Co z rozhodnutí o kolonách se má **doopravdy uplatnit** (#506, čtvrté kolo).
+///
+/// `nil` u pole znamená **„nechat být“** — ne „složit“. Automatika totiž sahá na dvě věci, které
+/// si člověk přebíjí ručně (`⌘1` u sloupce, `⌘2` u panelu), a `DiffSideColumns` má **tři** pole:
+/// kdyby se uplatňovala celá vždycky, když se změní kterékoli z nich, přepsala by volbu u sloupce
+/// i tehdy, když se o sloupci rozhodlo úplně stejně jako minule.
+struct DiffSideColumnsUpdate: Hashable, Sendable {
+    var tree: Bool?
+    var panel: Bool?
+
+    /// Není co uplatnit — rozhodnutí se změnilo, ale ne v ničem, na co automatika sahá.
+    var isEmpty: Bool { tree == nil && panel == nil }
+}
+
 extension Policy {
+    /// Které části rozhodnutí o kolonách se mají uplatnit — **jen ty, které se od minula
+    /// změnily** (#506, čtvrté kolo).
+    ///
+    /// ## Čím to bylo
+    ///
+    /// Do čtvrtého kola se rozhodnutí uplatňovalo **celé**, jakmile se od minule změnilo
+    /// v čemkoli. `DiffSideColumns` má ale tři pole a `margin` závisí na věcech, které člověk
+    /// překlikává úplně běžně: `Nálezy pod řádky` v liště (`showInlineFindingBubbles` — karty
+    /// v okraji existují jedině s vypnutými bublinami), sbalení souboru, odkrytí kontextu,
+    /// dorazivší nálezy. Každá taková změna přepsala i `tree`, tedy **uloženou volbu u itineráře**
+    /// — a přepsala ji na hodnotu, kterou `Policy` chtěla už předtím, takže z pohledu člověka
+    /// „se to zavřelo samo“.
+    ///
+    /// Naměřeno v uživatelově okně (1 512 b, tedy 1 460 b na detail — tam, kde se **žádná**
+    /// šířková mez nepřekračuje): *Vedle sebe*, sloupec otevřený `⌘1`, klik na `Nálezy pod řádky`
+    /// → sloupec **zavřený**. *Pod sebou*, sloupec složený `⌘1`, tentýž klik → sloupec
+    /// **otevřený**. Podrobněji v `docs/testovani.md`.
+    ///
+    /// ## Proč per pole a ne „nikdy nepřepisovat“
+    ///
+    /// Rozhodnutí #188 (*pohled vedle sebe složí postranní kolony*) a #503 (*karty rozhodují víc
+    /// než pohled*) přepsat volbu **musí** — jinak by `⌘2` nechalo sloupec 260 bodů široký
+    /// v pohledu, ve kterém na řádek zbývá polovina. Uplatní se tedy dál, ale jedině to pole,
+    /// o kterém se rozhodlo jinak než minule.
+    ///
+    /// `applied == nil` je **první průchod**, tedy „uplatni obojí“: to je ten okamžik, kdy PR
+    /// otevřený rovnou ve `split`u dostane složený sloupec.
+    static func sideColumnsToApply(
+        applied: DiffSideColumns?,
+        columns: DiffSideColumns
+    ) -> DiffSideColumnsUpdate {
+        guard let applied else {
+            return DiffSideColumnsUpdate(tree: columns.tree, panel: columns.panel)
+        }
+        return DiffSideColumnsUpdate(
+            tree: applied.tree == columns.tree ? nil : columns.tree,
+            panel: applied.panel == columns.panel ? nil : columns.panel
+        )
+    }
+
     /// Karty do okraje vpravo (#503) — v pořadí obsahu, tedy po souborech a v nich po řádcích.
     ///
     /// Karta vznikne jedině tam, kde má **co k čemu zarovnat**: soubor je rozbalený a jeho řádek
@@ -190,16 +244,23 @@ extension Policy {
     /// vznikl jedině tehdy, kdyby zahození okraje šířku zvětšilo — a to se stát nemůže, protože
     /// složený proužek je vždycky užší než rozložený panel.
     ///
-    /// - Parameter available: šířka, kterou dostal **diff**, tedy okno bez railu a bez panelu.
+    /// - Parameter available: šířka, o kterou se dělí **sloupec, kód a okraj** — tedy okno bez
+    ///   railu a bez panelu. **Od #506 to není štěrbina diffu**: sloupec odečítá rozvržení detailu
+    ///   PR, takže si ji `DiffView` bere z prostředí (`sideColumnsWidth`).
     ///   `nil` znamená „nikdo ji nezměřil“ a chová se jako dřív (rozhoduje jen pohled) — bez toho
-    ///   by se kolony složily každému, kdo `DiffView` hostuje mimo okno.
+    ///   by se kolony složily každému, kdo `DiffView` hostuje mimo okno. **A nula je totéž co
+    ///   `nil`, ne nejužší možné okno** (#506/3): první průchod `GeometryReaderem` vydá nulu, ze
+    ///   které by vyšlo „složit všechno“ — a protože se to rozhodnutí od #506 ukládá do volby
+    ///   člověka, nebyl by to jen problém jednoho snímku. Je to tatáž hranice, na které mlčí
+    ///   `widthWithItinerary`, jen z druhé strany: ta vydá `nil`, kdežto fallback na vlastní
+    ///   štěrbinu diffu nulu propustí.
     static func diffSideColumns(
         layout: DiffLayout,
         hasMargin: Bool,
         available: Double? = nil
     ) -> DiffSideColumns {
         let wide = layout != .split
-        guard let available else {
+        guard let available, available > 0 else {
             return DiffSideColumns(tree: wide, panel: wide && !hasMargin, margin: hasMargin)
         }
         let floor = minimumCodeWidth(layout: layout)
@@ -228,9 +289,14 @@ extension Policy {
     /// Šířka kolony kódu — **plocha, na které se doopravdy sází** (#546).
     ///
     /// Je to tatáž aritmetika, jakou provádí `HStack` v `DiffView`: od štěrbiny diffu se odečte
-    /// strom, okraj a **mezera před tím, co stojí vpravo** (`codeColumnTrailingGap`, #503 — ta je
+    /// okraj a **mezera před tím, co stojí vpravo** (`codeColumnTrailingGap`, #503 — ta je
     /// mimo `fillingSlot` schválně, takže od štěrbiny ubývá). Odsud se šířka **předává** obsahu
     /// i ukazateli `N znaků na stranu`; do #546 si ji obsah měřil sám a měřil něco jiného.
+    ///
+    /// **Levý sloupec se odsud od #506 neodečítá.** Itinerář stojí vedle **všech** tabů, takže ho
+    /// odečítá rozvržení detailu PR a `available` je štěrbina, ve které už není. Kdo ho odečte
+    /// znovu, dostane kolonu o 260 (respektive 34) bodů užší, než jakou `HStack` doopravdy dá —
+    /// a to je přesně ta třída vady, kterou řešilo #546, jen v druhém směru.
     ///
     /// **Proč to není další pole `DiffSideColumns`.** Ta struktura je identita `task(id:)`
     /// v `DiffView` — rozhodnutí o kolonách se má uplatnit jednou —, kdežto tohle je číslo, které se
@@ -245,10 +311,29 @@ extension Policy {
     /// zahodí — tahle podlaha je druhá pojistka, ne to rozhodnutí.
     static func diffCodeColumnWidth(available: Double?, columns: DiffSideColumns) -> Double? {
         guard let available else { return nil }
-        let sides = treeColumnWidth(expanded: columns.tree)
-            + marginColumnWidth(shown: columns.margin)
-            + codeColumnTrailingGap
+        let sides = marginColumnWidth(shown: columns.margin) + codeColumnTrailingGap
         return max(available - sides, 0)
+    }
+
+    /// Šířka, o kterou se dělí **sloupec, kód a okraj** — spočítaná ze štěrbiny, kterou dostal
+    /// obsah tabu (#506).
+    ///
+    /// Od #506 stojí itinerář vedle všech tabů, takže ho odečítá `HStack` v detailu PR a `slot`
+    /// je to, co po něm zbylo. Rozhodnutí o kolonách (`diffSideColumns`) se ale musí ptát na tu
+    /// **společnou** šířku — jinak by se sloupec skládal podle toho, co po něm zbylo, tedy sám
+    /// podle sebe.
+    ///
+    /// **Přičtení je přesné, ne odhad**: sloupec má právě dvě šířky (`treeColumnWidth`) a která
+    /// z nich zrovna platí, ví ten, kdo ho kreslí. Zpětná vazba se tím nerozkmitá: složení
+    /// sloupce štěrbinu zvětší přesně o tolik, o kolik se přičítalo méně, takže z obojího vyjde
+    /// tatáž společná šířka a tedy totéž rozhodnutí.
+    ///
+    /// `nil` = **štěrbinu nikdo nezměřil** (nulová plocha při prvním průchodu, náhled mimo okno),
+    /// a `diffSideColumns` se pak rozhoduje jen podle pohledu — jako do #503. Bez toho by se
+    /// v prvním průchodu složilo všechno a vzápětí rozložilo zpátky.
+    static func widthWithItinerary(slot: Double, expanded: Bool) -> Double? {
+        guard slot > 0 else { return nil }
+        return slot + treeColumnWidth(expanded: expanded)
     }
 
     /// Kolik musí zbýt na kód, aby to k něčemu bylo.
@@ -264,10 +349,23 @@ extension Policy {
         layout == .split ? 2 * 180 : 360
     }
 
-    /// Šířka sloupce se stromem — rozložený z návrhu (`210px`), složený jako pruh s ikonou.
+    /// Šířka levého sloupce — rozložený z návrhu (`260px`, sekce 47), složený jako pruh s ikonou.
     /// Konstanty jsou tady schválně: rozhoduje se podle nich, takže view je čte odsud, ne naopak.
+    ///
+    /// **Od #506 je to 260, ne 210** (návrh sekce 47). Sloupec přestal být strom cest a stal se
+    /// itinerářem: na řádce vedle sebe stojí glyf stavu, nadpis zastávky a údaj vpravo
+    /// (`3 commity`, `návrh: schválit`), a to se do 210 bodů nevejde — nejdelší z těch údajů má
+    /// 18 znaků, tedy ~100 bodů, a na nadpis `Soubory podle rizika` by zbylo ~70.
+    ///
+    /// **Změřeno, ne odhadnuto** (`ItineraryColumnRoomTests`, štěrbina 1 047 b, znak 8,036 b):
+    /// *Vedle sebe* **3 znaky na stranu** (41 → 38), *Pod sebou* **6 znaků** (86 → 80). A ve
+    /// `split`u se za to neplatí ani tou trojkou: kolonu kódu tam neurčuje šířka sloupce, ale
+    /// `diffSideColumns` — sloupec se ve `split`u **skládá** (#188), takže je z něj pruh 34 bodů
+    /// v obou případech; ta trojka je cena za to, když si ho tam člověk otevře `⌘1`. Hranice, pod
+    /// kterou se sloupec skládá, se posunula o týchž **50 bodů** (570 → 620 bez okraje karet,
+    /// 870 → 920 s ním). Čísla jsou v `docs/testovani.md`.
     static func treeColumnWidth(expanded: Bool) -> Double {
-        expanded ? 210 : 34
+        expanded ? 260 : 34
     }
 
     /// Šířka okraje s kartami z návrhu (`300px`), nebo nula, když se nekreslí.

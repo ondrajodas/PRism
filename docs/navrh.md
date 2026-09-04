@@ -43,7 +43,9 @@ Je to jedna HTML stránka: tokeny v `:root` a pod nimi **48** sekcí. To číslo
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo) a u #515 tu stálo 45 nad šestačtyřiceti, protože sekci 46
-přidalo #517 a číslo nezvedlo (nález Copilota):
+přidalo #517 a číslo nezvedlo (nález Copilota). **Sekci 47 přidalo #506** (itinerář review)
+a číslo zvedlo v témže commitu — o číslo se u dávky nehádá, přiděluje ho orchestrátor
+(#537):
 
 ```bash
 grep -c '<section class="section" id="s' docs/navrh.html

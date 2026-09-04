@@ -124,31 +124,9 @@ struct FileReviewStateTests {
 
     // MARK: - Popisky
 
-    @Test("Hlavička stromu mlčí, dokud není zaškrtnuté nic")
-    func summaryWithoutMarks() {
-        #expect(Policy.fileTreeSummary(files: 7, read: 0) == "7 souborů")
-    }
-
-    @Test("Hlavička stromu skloňuje obě poloviny")
-    func summaryDeclinesBothHalves() {
-        #expect(Policy.fileTreeSummary(files: 7, read: 3) == "7 souborů · 3 prošlé")
-        #expect(Policy.fileTreeSummary(files: 1, read: 1) == "1 soubor · 1 prošlý")
-        #expect(Policy.fileTreeSummary(files: 9, read: 5) == "9 souborů · 5 prošlých")
-    }
-
-    /// Proužek nad nezapočatým PR **není** — prázdná linka je stálý prvek bez informace.
-    @Test("Podíl se nekreslí, dokud není co ukázat")
-    func shareIsNilWithoutProgress() {
-        #expect(Policy.readFileShare(read: 0, of: 7) == nil)
-        #expect(Policy.readFileShare(read: 0, of: 0) == nil)
-        #expect(Policy.readFileShare(read: 3, of: 0) == nil)
-    }
-
-    @Test("Podíl se počítá z počtu souborů a nepřeteče")
-    func shareIsBounded() {
-        #expect(Policy.readFileShare(read: 3, of: 6) == 0.5)
-        #expect(Policy.readFileShare(read: 9, of: 7) == 1)
-    }
+    // **Hlavička sloupce a proužek podílu se odsud od #506 netvrdí** (`fileTreeSummary`
+    // a `readFileShare`): sloupec od #506 vždycky mluví o celém itineráři, takže obě funkce
+    // zanikly i s těmi čtyřmi tvrzeními. Počítadlo a proužek se tvrdí v `ReviewItineraryTests`.
 
     /// U změněného souboru tlačítko neříká stav, ale co udělá.
     @Test("Popisek zaškrtávátka")

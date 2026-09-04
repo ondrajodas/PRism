@@ -7811,3 +7811,254 @@ odznak nenakreslí. Celkem **5298 testů v 517 suitách** (proti 5228 v 511 pře
 v šesti sadách), `TEST SUCCEEDED` za 113,3 s — měřeno se **souběžně běžícími sloty**, ne na volném
 stroji; nad slitým `mainem` s #502 a #556 je to 5351 v 523 za 133,0 s. Regrese ověřená vložením regrese **šestkrát** (nefiltrovaná fronta, chybějící brána
 u slotu, `SMAppService` ve storu, vynechaná kresba odznaku, návrat k `badgeLabel`).
+
+## #506 — itinerář review místo stromu souborů (M14)
+
+Levý sloupec záložky PR přestal být strom cest a stal se **dráhou se zastávkami**: *Od minule →
+Popis a záměr → Soubory podle rizika → Kontroly → Verdikt*, u každé stav (✓ hotovo / ● aktuální /
+○ zbývá) a údaj vpravo, v hlavičce `Itinerář · 4 z 11 · 10 min` a pod ní proužek podílu. Zákres
+je v `docs/navrh.html` jako **sekce 47**. Důvod: okno mělo osm záložek a strom, ale **žádné
+pořadí** — co číst první, kde jsem skončil a co zbývá, si člověk držel v hlavě. Reviewer má dráhu
+s fázemi; člověk, který review dělá, neměl nic.
+
+**Zastávky skládá `Policy` z dat, ne šablona**, a to je jádro toho issue: `Od minule` vznikne jen
+se **záznamem předchozí návštěvy a commity** (#171), `Kontroly` jen s CI (#306), zbylé tři vždycky.
+**Hotovo se pozná z dat** — soubor prošlý (#500), popis odscrollovaný na konec, spadlý check
+rozbalený, verdikt odeslaný na GitHub. **Ručně se zaškrtne jedině soubor**: itinerář, který si
+člověk odškrtává sám, je druhý seznam úkolů a přestane se udržovat po druhém PR.
+
+Dvě odvození stála za novou stopu ve store, protože se nedala vyčíst z toho, co už bylo:
+`overviewReadToEnd` (`OverviewView` hlásí `Policy.overviewAtEnd` přes `onScrollGeometryChange` —
+akce jen při změně hodnoty, a jednosměrně: otázka je „přečetl jsem popis“, ne „kde je scroll teď“)
+a `openedFailedChecks` (`expandedChecks` drží nejvýš **jeden** rozbalený check a sbalením se
+vyprázdní, takže by zastávka po zavření logu zhasla zpátky na nehotovou). K tomu
+`previouslyVisited`, a to z nutnosti: `noteVisit` zapíše dnešní návštěvu hned za
+`seedVisitBaseline`, takže od té chvíle je `lastVisit` dnešní a „byl jsem tu už dřív“ se z ledgeru
+poznat nedá. Všechny čtyři prořezává tik a všechny čtyři jsou ve výčtu
+`PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` — od #506 je jich **dvaačtyřicet**.
+
+**Jednotkou počítadla je soubor, ne zastávka.** `4 z 11` má být počet věcí, které se doopravdy
+čtou (sedm souborů plus čtyři zastávky); s jednotkou „zastávka“ by proužek u PR o padesáti
+souborech skočil z pětiny na dvě pětiny jedním zaškrtnutím. **Odhad času** je z neprošlých řádků
+(30 řádků za minutu) plus minuta za nehotovou zastávku, která soubory nečte; nad nenačteným diffem
+i nad hotovým itinerářem se **nepíše nic** — `0 min` by nad nehotovou prací lhalo a nad hotovou
+bylo šum.
+
+**Strom podle cesty zanikl a otevírá se zpátky jako #197.** `FileTreeView` a `FileTree.swift`
+odešly i s testy: cesta se od #219 píše v **hlavičce souboru** v diffu, takže ve sloupci nechybí, a
+pořadí podle rizika odpovídá na otázku, na kterou hloubka složek odpovědět neumí — čím začít.
+Držet mrtvý strom vedle itineráře by byl přesně ten vzor, na který Copilot v tomhle repu opakovaně
+upozorňuje.
+
+**Soubory podle rizika: klasifikace a kresba jsou dvě různá pořadí**, a je to vědomá odchylka od
+zadání. Kreslí se blokující → nález → vlákno → nový → ostatní → konfigurace a locky (ty složené do
+jedné položky), ale **rozhoduje** se konfigurací **dřív** než `nový`: nový `composer.lock` je pořád
+tisíc řádků, které nikdo nepíše rukou. Nález a vlákno konfiguraci naopak **přebijí**, takže
+`composer.json` s blokujícím nálezem je blokující soubor a neschová se. Konfigurace se pozná
+z **výčtu jmen a přípon**, ne heuristikou — `.xml` v něm schválně není (Android layouty, XSLT).
+
+**Šířka 260 místo 210 je změřená cena.** `ItineraryColumnRoomTests` na štěrbině 1 047 b a znaku
+8,036 b: *Vedle sebe* **3 znaky na stranu** (41 → 38), *Pod sebou* **6 znaků** (86 → 80). Ve
+`split`u se neplatí ani tou trojkou, protože se sloupec skládá (#188) — je to cena za to, když si
+ho tam člověk otevře `⌘1`. Hranice, pod kterou se skládá, se posunula o týchž 50 bodů: 570 → 620
+bez okraje karet a 870 → **920** s ním; ta druhá je nad podlahou `RootView`u (700), takže je to
+jediná změna chování, kterou ta šířka na obrazovce udělala. První podoba toho testu měřila
+o **šest bodů** vedle, protože do hranice přičítala mezeru před kolonou (#503) — `diffSideColumns`
+ji neodečítá, odečítá ji až `diffCodeColumnWidth`.
+
+**Zkratka `⌘1` se přejmenovala** ze `Strom souborů` na `Itinerář review` (i případ v katalogu:
+`WindowShortcut.Action.itinerary`). Kombinace se nemění.
+
+Nové sady jsou tři: `ReviewItineraryTests` (matice vstupů —
+přítomnost zastávky odděleně od hotovosti), `FileRiskTests` (pořadí nad daty ze sekce 03 návrhu
+a co je konfigurace) a `ItineraryColumnRoomTests` (to měření šířky); k tomu ruční sonda
+`ReviewItineraryRenderProbe`.
+
+**Zapsané mezery**: odhad času je **odhad**, ne měření — 30 řádků za minutu je odvozené z toho,
+jak dlouho dvěstěřádkový soubor v tomhle okně doopravdy zabere, ne naměřené nad sezeními. A že
+`⌘1` po přejmenování pořád zabere, se v harnessu ověřit nedá (testovací host nedostane aktivaci),
+takže to zkouší člověk.
+
+### Druhé kolo z proklikání: sloupec vedle všech tabů a klik na soubor
+
+Z proklikání přišly **dvě připomínky** a obojí bylo věcně proti tomu, k čemu itinerář je.
+
+**1. „Když se z něj překliknu na kontroly, tak to celý zmizí.“** Sloupec byl součástí obsahu tabu
+`Změněné soubory`, takže mizel právě ve chvíli, kdy podle něj člověk někam odešel — a cesta zpátky
+vedla přes pruh záložek. Sloupec je proto **o úroveň výš**: hostí ho `PullRequestDetailView`
+(nový `ItineraryColumnView`) a stojí vlevo od obsahu záložky, tedy **vedle všech osmi tabů**.
+`⌘1` ho skládá do proužku 34 bodů kdekoli.
+
+Rozhodnutí, která u toho padla:
+
+- **Plošné „ve všech tabech“, ne výběr.** Panel vpravo se ve třech tabech schovává (#294), protože
+  je v nich vedle něj duplikát dat nebo obsah, který šířku potřebuje; u sloupce ani jedno neplatí —
+  nic neduplikuje a v každém tabu vede **jinam**. Tab, ve kterém by zmizel, je tab, ze kterého se
+  nedá vrátit.
+- **Cena: 260 bodů rozložený, 34 složený**, tedy **787 b** místo 1 047 na výchozím okně. Jedna
+  šířka pro všech osm je podmínka, ne zjednodušení: sloupec, který by se s tabem měnil, přeskládá
+  okno při každém přepnutí. U diffu je ta cena změřená ve znacích (3 na stranu vedle sebe, 6 pod
+  sebou — beze změny proti prvnímu kolu); u ostatních tabů se dál než k bodům měřit nedá, protože
+  jsou to řádky a próza s pružnou sazbou, takže se zúžení projeví jinou pozicí zalomení.
+- **Šířku obsahu měří rozvržení, společnou se předává.** Sloupec je sourozenec s pevným rámcem,
+  takže `GeometryReader` obsahu tabu rovnou vidí, co po něm zbylo — žádné odečítání, které by se
+  dalo splést (#546). Rozhodnutí o kolonách se ale ptá na tu **společnou** šířku, a tu počítá
+  `Policy.widthWithItinerary` **tam, kde sloupec stojí**, a podává ji prostředím
+  (`sideColumnsWidth`). Dopočítávat ji uvnitř `DiffView`u je **zamítnutá varianta**: v okně by
+  seděla, ale v hostu bez sloupce vedle sebe by rozhodnutí měnilo svůj vlastní vstup a umělo by
+  **kmitat**. `Policy.diffCodeColumnWidth` proto sloupec **neodečítá**.
+- **O skládání rozhoduje dál `DiffView`, a je to zapsaná mezera.** Podlaha, kvůli které se sloupec
+  skládá, je podlaha kolony kódu — v `Kontrolách` není co chránit. Mezera: v tabu bez diffu se
+  nerozhoduje vůbec, takže zúžení okna nad `Kontrolami` sloupec nesloží; složí ho první průchod
+  diffem.
+- **Sloupec bez zastávek zanikl** a s ním `Policy.readFileShare` i `Policy.fileTreeSummary`
+  (obojí #500): v prvním kole ho dostal diff commitu a rozsah od minule, protože byl součástí
+  tabu; od druhého kola mluví vždycky o celém PR, takže nepovinné `itinerary` neměl kdo nastavit
+  na `nil`.
+
+**2. „Když kliknu na soubor tak se nic nestane.“** Sloupec měl vlastní skok
+(`withAnimation { proxy.scrollTo(file.id, anchor: .top) }`) a ten byl vadný na dvou ze tří příčin
+míjení, které vyjmenovalo #152: **animovaný** a **v jediném průchodu**. Od druhého kola jde klik
+tou hotovou cestou, kterou skáče **mapa PR** (#501): `jump(toFile:)` → `anchor(inFile:line: nil)`
+(rozbalí sbalený soubor, vrátí `file.id`) → `scroll(to:)`, tedy **přepnutí na `Změněné soubory`**
+a `scrollTarget`; odtud dva průchody s přeměřenými rozměry a bez animace.
+
+- **Kam soubor přistane**: hlavičkou **na hranu výřezu** (`DiffJumpTarget.fileHeader`, offset 0).
+  Devadesát bodů jako u nálezu by ukazovalo konec předchozího souboru a ukotvená hlavička s týmž
+  obsahem ji tam překryje. Nula je navíc **jediná hodnota nezávislá na výšce sekce**, a to je ta
+  podstatná část: sekce souboru má tisíce bodů, takže by z podílu 0,12 byl skok o stovky bodů
+  **do** souboru.
+- **Druh cíle se pozná z identity cíle** (`Policy.jumpTarget(of:files:requested:)`), ne od
+  volajícího — sloupec stojí mimo `DiffView`, takže by mu jeho `@State` nebyl k ničemu.
+- **Opravilo to i mapu PR** (#501): mířila na `file.id` s druhem `.bubble`, takže u velkého souboru
+  přeletěla stovky bodů do jeho vnitřku. Tatáž třída, jedna oprava v `Policy`.
+
+Testů **5424** v 529 suitách (+88 proti `main`u), plný běh zelený nad stavem slitým s `main`em
+(153,3 s, jedno známé `theWaitGivesUpLoudly`).
+Nová sada je jedna — `ItineraryEveryTabTests` (cena, kruh společné šířky a stráže nad zdrojáky:
+sloupec mimo `switch tab`, jedno místo, které ho kreslí, klik přes `jump(toFile:)`) — a k tomu tři
+tvrzení o `.fileHeader` v `DiffJumpAnchorTests`. Přizpůsobené: `DiffColumnFitTests`
+a `DiffCodeColumnWidthTests` (sloupec se od kolony neodečítá), `DiffColumnFitTests` u šířek kolon
+(`ItineraryColumnView.width`), `ItineraryColumnRoomTests` a dvě sondy. **Zapsaná mezera**: že je sloupec vidět v každém tabu, se tvrdí
+**strukturálně** — kolony jsou SwiftUI a v hostovaném okně se z accessibility tree přečíst nedají
+(změřeno u #546), takže jak vypadá vedle `Kontrol` a `Konverzace`, ukazují rendery a posoudí to
+člověk. Totéž u `⌘1`: testovací host nedostane aktivaci.
+
+### Třetí kolo z proklikání: „někdy se ten levý panel zavře“
+
+**Nález:** *„PRism-c — někdy se ten levý panel zavře když na něco kliknu…ale jen někdy.“*
+
+**Příčina je následek druhého kola.** Sloupec se přestěhoval o úroveň výš, ale automatika #188
+(*pohled vedle sebe složí postranní kolony*) zůstala v `DiffView`u — i se stráží proti druhému
+uplatnění, kterou drží `@State appliedColumns`. Tím vznikl stav, který **přežívá**
+(`diffTreeExpanded` v `UserDefaults`), hlídaný stráží, která **nepřežívá**: `switch tab` v detailu
+diff při odchodu ze `Změněných souborů` zahodí, takže každý návrat byl nová instance s prázdnou
+stráží, uplatnil rozhodnutí podruhé a **přepsal tím `⌘1`** — a protože se to ukládá, i pro příště.
+
+**Změřeno, ne přečteno** (`ItineraryChoiceTests` nad hostovaným detailem, uložená hodnota klíče):
+
+| Krok | *Vedle sebe*, `⌘1` otevřel | *Pod sebou*, `⌘1` složil |
+|---|---|---|
+| po prvním průchodu diffem | `false` (#188, záměr) | `true` |
+| po `⌘1` | `true` | `false` |
+| odchod do `Kontrol` / `Přehledu` | `true` | `false` |
+| **návrat do `Změněných souborů`** | **`false`** | **`true`** |
+
+**Odchod volbu nezmění, návrat ji přepíše** — to je celá vada. „Jen někdy“ znamená „jen když se
+rozhodnutí od uložené hodnoty liší“: ve `Vedle sebe` se sloupec zavírá, v `Pod sebou` se naopak sám
+otevírá (a to si člověk vysvětlí jako „nezabralo to“, takže se to v hlášení neobjevilo).
+
+**Co je záměr a co vada.** Záměr je **první** uplatnění: ve `split`u se sloupec skládá od #188 a je
+to změřené (34 bodů místo 260), takže PR otevřený *Vedle sebe* má sloupec složený a `⌘1` to přebije
+„až do další změny pohledu“. Vada je, že „další změna pohledu“ nastala i tehdy, když se pohled
+nezměnil a jen zanikl a znovu vznikl diff.
+
+**Oprava: stav i stráž chodí do diffu parametrem** (`DiffColumnActions` — `expanded` a `applied`),
+drží je `PullRequestDetailView`, jehož `@State` přepnutí tabu i složení panelu přežije. Rozhodnutí
+zůstalo v `DiffView`u, protože podlaha, na kterou se ptá, je podlaha **kolony kódu**; přestěhovat ho
+celé do detailu se **zamítlo** — `hasMargin` je funkce diff-interního stavu a diff commitu má
+vlastní karty, takže by jedno rozhodnutí v detailu bylo pro dva různé diffy. `nil` znamená totéž
+jako u `panelExpanded`: **kdo ho nedodá, tomu se nic nepřepíše**.
+
+**Vedlejší nález, tatáž třída:** diff commitu měl vlastní `@AppStorage("diffTreeExpanded")`, takže
+vybrání commitu v tabu `Commity` sloupec ve `Vedle sebe` taky zavřelo. Od třetího kola nemá
+`DiffView` ten klíč vůbec.
+
+**A nula z `GeometryReaderu` není nejužší okno**: `Policy.diffSideColumns` bere nekladné `available`
+jako „nikdo to nezměřil“. `widthWithItinerary` to dělalo od druhého kola, ale fallback
+`sharedWidth ?? slotWidth` nulu z prvního průchodu propustil — do #506 by to byl blik jednoho
+snímku, od #506 zápis do volby člověka.
+
+**Zobecnitelné pravidlo:** *stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav,
+který mění.* `@State` uzlu, který se přestavuje častěji než ten stav, je stráž, která „jen někdy“
+neplatí.
+
+Nová sada je `ItineraryChoiceTests` (čtyři scény, obě strany vady, a k tomu druhá polovina: přepnutí
+pohledu volbu přebít **smí**), k tomu dvě stráže nad zdrojáky v `ItineraryEveryTabTests` (klíč čte
+jeden uzel; do stavu sloupce píšou vyjmenovaná místa a diff commitu mezi nimi není) a tvrzení
+o nulové šířce. **Zapsaná mezera zůstává a je z ní tvrzení**: v tabu bez diffu se stavem sloupce
+nehýbe nic — v aplikaci se do ní ani nedá dostat, protože pohled přepíná lišta nad diffem.
+
+### Čtvrté kolo z proklikání: dvě cesty, kterými se volba přepisovala dál
+
+Připomínka přišla **podruhé** (*„pořád se ten itinerář zavírá“*), takže třetí kolo opravilo jen
+část. **První hypotéza byla správná, ale nebyla úplná** — zůstaly dvě nezávislé cesty a obě se
+změřily v uživatelově okně (1 512 × 882 → 1 460 b na detail, tedy tam, kde se **nepřekračuje žádná
+šířková mez**).
+
+**První: stráž nepřežila ani `@State` detailu.** `ContentView` vybírá obsah okna
+`switch store.activeTab`, a to je `@ViewBuilder` — jiná větev je jiná identita, takže kliknutí na
+`Přehled` zahodí celý `PullRequestDetailView` i s jeho `@State`. Návrat na záložku PR byl nová
+instance s prázdnou stráží, která #188 uplatnila jako první průchod a přepsala tím `⌘1`. Stráž proto
+bydlí ve store (`AppStore.appliedSideColumns`), vedle `isReviewPanelExpanded` (#242) — tam, kde
+přežije celé okno. **Lekce navíc proti třetímu kolu:** pravidlo *„stráž musí žít aspoň tak dlouho
+jako stav, který mění“* se dá splnit **napůl** — `@State` detailu je delší život než `@State` diffu,
+ale pořád ne život toho stavu, který je v `UserDefaults`. Otázka je *kde stav končí*, ne *kdo je
+nejbližší rodič*.
+
+**Druhá: uplatňovalo se celé rozhodnutí.** `DiffSideColumns` má tři pole a automatika sahá na dvě (`tree`, `panel`), zapisovala ale obě, jakmile
+se rozhodnutí od minule změnilo **v čemkoli**. Třetí pole (`margin`) přitom závisí na
+`showInlineFindingBubbles`, na sbalení souboru a na odkrytém kontextu — na věcech, které se
+překlikávají běžně a se šířkou okna nemají nic společného. Klik, který v okraji vyrobil první kartu
+nebo sundal poslední, tím přepsal `tree`, tedy **uloženou volbu u itineráře**.
+
+**Naměřeno**: *Vedle sebe* + `⌘1` + klik na `Nálezy pod řádky` → sloupec zavřený; *Pod sebou* +
+`⌘1` + tentýž klik → sloupec otevřený. Šířka se vzala z `CGWindowListCopyWindowInfo` nad běžící
+aplikací, ne z 1 048, ze kterých počítá zákres — na těch vada nenastává a měřidlo třetího kola ji
+proto nevidělo; a scéna vyrostla na celé `ContentView`, protože jen detail cestu přes `Přehled`
+nemá kde vyrobit.
+
+**Oprava: `Policy.sideColumnsToApply(applied:columns:)`** vrací `DiffSideColumnsUpdate` s dvěma
+`Optional<Bool>`, kde `nil` znamená **„nechat být“**, ne „složit“. `applied` tím změnil význam: z „co
+jsem naposledy zapsal“ na **„jak `Policy` naposledy rozhodla“** — posouvá se i tehdy, když se
+neuplatnilo nic. #188 i #503 dál platí: přepnutí pohledu mění `tree` a uplatní se, zúžení okna pod
+podlahu kolony kódu taky, a panel se za kartami dál srovná.
+
+**Zamítnuté varianty dvě**: *„nepřepisuj volbu nikdy“* (nález v úzkém okně by zmizel z obrazovky,
+#503 by přestalo platit) a *„odvoď efektivní stav z volby, bez zápisu“* (`available` se skládá
+z měřené štěrbiny plus šířky toho, co se **kreslí**, takže by se přání a kresba rozešly
+a rozhodnutí by se rozkmitalo).
+
+**Zapsaná mezera:** šířka panelu do `available` pořád vstupuje, takže v okně natolik úzkém, že
+složení panelu přehodí verdikt o podlaze kolony kódu, se sloupec za panelem pohne. V uživatelově
+okně to nenastává a **je to změřené**.
+
+**Zobecnitelné pravidlo:** *automatika, která rozhoduje o víc věcech naráz, smí uplatnit jen tu část,
+o které rozhodla jinak než minule.* A druhé, o měření: *když připomínka přijde podruhé, měřidlo
+z prvního kola tu druhou příčinu nevidělo.*
+
+Nová tvrzení: čtyři v `DiffColumnFitTests` nad `Policy` (vyčerpávající výčet 8 × 8 dvojic; změna
+jedině v `margin` neuplatní nic; první průchod uplatní obojí; přepnutí pohledu se uplatní), tři
+v `ItineraryChoiceTests` na 1 460 bodech (dvě o tom, že se volba nepřepsala, a jedno o tom, že se
+panel za kartami dál srovná — to poslední je proti variantě „nezapisuj nikdy“ schválně), dvě
+v nové `ItineraryHomeReturnTests` nad hostovaným celým `ContentView`em a stráž nad zdrojáky
+v `ItineraryEveryTabTests` (stráž deklaruje `Store/AppStore.swift`, detail se jí ptá storu).
+**Regrese se ověřila vložením regrese u každé příčiny zvlášť** — a všech pět tvrzení zčervenalo.
+
+**Z Copilotova kola k tomu přišel třetí nález, tatáž třída na jiném místě:** `reportReadToEnd`
+se hlásilo i ve stavu `Načítám popis…`, protože `Policy.overviewAtEnd` odpovídá `true`, když se
+obsah vejde do výřezu — a store tu značku ukládá **jednosměrně**, takže zastávka `Popis a záměr`
+byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnitř té funkce, a je to
+`description != nil`, ne „je neprázdný“: PR bez popisu se odškrtnout **musí**, jinak by u něj
+počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
+nepatří — je to živý přepínač, ne jednosměrná značka.

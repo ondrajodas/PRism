@@ -8,7 +8,7 @@ import Testing
 /// snese pohled *Vedle sebe*.
 ///
 /// Zadání #392 to žádá změřit, protože na tom stojí jediné rozhodnutí: **vynucovat se nebude nic.**
-/// Strom souborů se složí ⌘1, panel ⌘2 — ale kdyby se ukázalo, že se do rozloženého panelu vejde
+/// Itinerář review se složí ⌘1, panel ⌘2 — ale kdyby se ukázalo, že se do rozloženého panelu vejde
 /// i split se slibem 120 znaků, nebylo by o čem mluvit.
 ///
 /// Počítá se **produkční funkcí** (`Policy.charactersPerSide`) a **skutečnými** rozměry: šířka
@@ -18,8 +18,8 @@ import Testing
 struct CommitPanelRoomTests {
     /// Plocha tabu na výchozím okně: 1100 minus rail 52. Tatáž hodnota, ze které počítá zákres.
     private let tabWidth = 1047.0
-    /// Strom souborů, když je rozložený (`FileTreeView`).
-    private let tree = 210.0
+    /// Levý sloupec, když je rozložený (`ReviewItineraryView`) — od #506 260 bodů, ne 210.
+    private let tree = 260.0
     /// Panel: proužek, výchozí a strop. Rozložený si bere i šestibodový úchyt.
     private let strip = 38.0
     private let panelDefault = 306.0
@@ -61,14 +61,20 @@ struct CommitPanelRoomTests {
         )
     }
 
-    /// **Se stromem i rozloženým panelem zbude na diff ~531 bodů** — zákres mluví o ~537, rozdíl je
-    /// šestibodový úchyt panelu. To je to číslo, na kterém stojí zbytek suity.
-    @Test("Se stromem a panelem zbude na diff kolem 530 bodů")
+    /// **S levým sloupcem i rozloženým panelem zbude na diff ~481 bodů.** To je to číslo, na kterém
+    /// stojí zbytek suity — a **od #506 je o 50 bodů menší** (do té doby 531, se sloupcem 210
+    /// z #197; zákres tehdy mluvil o ~537, rozdíl byl šestibodový úchyt panelu).
+    @Test("Se sloupcem a panelem zbude na diff kolem 480 bodů")
     func measuresWhatIsLeftForTheDiff() {
-        #expect(tabWidth - tree - panelDefault == 531)
-        // Se složeným proužkem je to 799, bez stromu a s proužkem 1009 — čísla, na kterých stojí
-        // tvrzení níž.
-        #expect(tabWidth - tree - strip == 799)
+        // **Ruční šířka se pinuje produkční funkcí** (tatáž oprava jako v render sondě, nález
+        // Copilota na PR #558): čísla níž jsou napsaná ručně schválně (jsou to čísla do
+        // dokumentace), ale rozejít se s aplikací potichu nesmí — po #506 by jinak celá suita
+        // měřila sloupec, který v okně není.
+        #expect(tree == Policy.treeColumnWidth(expanded: true))
+        #expect(tabWidth - tree - panelDefault == 481)
+        // Se složeným proužkem je to 749, bez sloupce a s proužkem 1009 — čísla, na kterých stojí
+        // tvrzení níž. To poslední se #506 **nedotklo**: sloupec v něm složený není.
+        #expect(tabWidth - tree - strip == 749)
         #expect(tabWidth - strip == 1009)
     }
 
@@ -121,7 +127,7 @@ struct CommitPanelRoomTests {
         #expect(DiffLineView.contentInset(for: .unified) == 136)
     }
 
-    /// **Složený proužek je ta odpověď na úzké okno**: 799 bodů místo 531, tedy skoro dvojnásobek
+    /// **Složený proužek je ta odpověď na úzké okno**: 749 bodů místo 481, tedy skoro dvojnásobek
     /// znaků na stranu ve splitu. Kdyby proužek nepomohl, nestačilo by u commitu složit panel a #392
     /// by musela panel v `Commitech` schovávat podle šířky.
     @Test("Složený proužek přidá skoro dvojnásobek znaků na stranu")
@@ -132,7 +138,8 @@ struct CommitPanelRoomTests {
         #expect(collapsed > expanded * 3 / 2, "proužek: \(collapsed), panel: \(expanded)")
     }
 
-    /// A druhá cesta: **složit strom** (⌘1) přidá 210 bodů. Obojí naráz (strom i panel složené) dá
+    /// A druhá cesta: **složit levý sloupec** (⌘1) přidá 260 bodů (do #506 jich bylo 210). Obojí
+    /// naráz (sloupec i panel složené) dá
     /// 1009 bodů, tedy při změřené šířce znaku **52** na stranu ve splitu — pořád méně než slíbených
     /// 120. Tvrdí se ta nerovnost a to, že je toho víc než při složeném stromu samotném.
     @Test("Složení stromu i panelu dá nejvíc místa")
@@ -145,7 +152,7 @@ struct CommitPanelRoomTests {
     }
 
     /// Jak široké okno by slib 120 znaků na stranu **doopravdy** uneslo se stromem i panelem. Není to
-    /// mez v aplikaci, je to číslo do dokumentace: `2 × (120 × 8,04 + 84) + 210 + 306 + 52`.
+    /// mez v aplikaci, je to číslo do dokumentace: `2 × (120 × 8,04 + 84) + 260 + 306 + 52`.
     @Test("Slib 120 znaků na stranu chce okno kolem 2700 bodů")
     func measuresTheWindowThePromiseWouldNeed() {
         let perSide = Double(Policy.promisedCharactersPerSide) * characterWidth

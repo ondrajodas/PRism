@@ -32,6 +32,10 @@ extension AppStore {
     func seedVisitBaseline(for pullRequest: PRIdentifier) {
         guard visitSnapshots[pullRequest] == nil else { return }
         let previous = visits.lastVisit(to: pullRequest)
+        // **Zapisuje se tady, ne se čte z ledgeru** (#506): `noteVisit` hned za tímhle voláním
+        // zapíše dnešní návštěvu, takže od té chvíle je `lastVisit` dnešní a „byl jsem tu už
+        // dřív“ se z ledgeru nepozná. Je to podmínka zastávky `Od minule` v itineráři.
+        if previous != nil { previouslyVisited.insert(pullRequest) }
         // `Date.distantPast` u PR, který jsem nikdy neviděl, **nepoužíváme** — `nil` z
         // ledgeru propadne do snapshotu jako „nevím“ a změny pak vyjdou prázdné.
         // Ukázat při prvním otevření celou historii PR by nebylo „co je nového“.
@@ -121,5 +125,8 @@ extension AppStore {
     /// potom, se objeví znovu.
     func markChangesAsSeen(for pullRequest: PRIdentifier) {
         moveBaseline(for: pullRequest)
+        // Zastávka `Od minule` v itineráři (#506) — „přečteno“ je právě ten záznam, že ta data
+        // byla na obrazovce.
+        noteSawChangesSinceLastVisit(for: pullRequest)
     }
 }

@@ -407,6 +407,11 @@ poznámky k architektuře. Právě kvůli nim nestačí bubliny.
 
 ### Strom souborů (#51)
 
+> **Od #506 už to strom není.** Levý sloupec se stal itinerářem review a soubory se v něm řadí
+> podle rizika, ne podle cesty; `FileTreeView` i `FileTree.swift` zanikly. Všechno níž je záznam
+> toho, co platilo do #506 — strom podle cesty se otevírá zpátky jako #197, viz *Záznam
+> rozhodnutí — itinerář review místo stromu souborů (#506)*.
+
 Navigace po souborech diffu. Plochý seznam cest se u PR přes víc adresářů čte špatně —
 společné prefixy zaberou většinu šířky.
 
@@ -6185,7 +6190,6 @@ se 67 chybami. `BoardSeparatorTests` počítá **pořád čtrnáct** čar a je t
 odhadnuto — sada prošla i s vloženým starým pořadím, kdežto `BoardTests` na něm spadly třemi
 tvrzeními. Celý běh: `5199 tests in 508 suites passed`, 1 known issue.
 
-
 ### Záznam rozhodnutí — metoda merge je volba, ne konstanta (#556)
 
 **Korekce zapsaného rozhodnutí z #465.** U konstanty `MergeRequest.method` stálo doslova:
@@ -6386,3 +6390,217 @@ kresba uvnitř dlaždice nemá čím vzorkovat.
 **Věta „aplikace si vybírá jediné: ten řetězec“ v komentáři sekce 49 tedy padla.** Zůstává z ní to
 podstatné — odznak není `.rail .ri .badge`, je to jiná komponenta se systémovou červenou
 a systémovou polohou. Nově je ale ta systémová podoba **naše kresba**, ne systémová služba.
+
+### Záznam rozhodnutí — itinerář review místo stromu souborů (#506)
+
+Levý sloupec záložky PR přestal být strom cest a stal se dráhou se zastávkami (sekce 47 návrhu).
+Šest rozhodnutí z prvního kola a **čtyři z druhého** (připomínky z proklikání, na konci sekce),
+u kterých se dá později vrátit:
+
+1. **Strom podle cesty se zahodil, ne schoval za přepínač.** `FileTreeView` a `FileTree.swift`
+   odešly i s testy. Alternativa „nechat strom jako druhý pohled sloupce“ se **zamítla**: dva
+   pohledy na jeden sloupec znamenají přepínač, který se musí někam nakreslit, a hlavně dvě
+   odpovědi na otázku „kolik souborů je prošlých“ — hlavička sloupce nese počet a ten se v jednom
+   pohledu počítá z položek, ve druhém z listů stromu. Strom podle cesty se otevírá zpátky jako
+   **#197**; kdyby se ukázal chybět, vrátí se z gitu.
+
+2. **Zastávky jsou pořadí čtení, ne důležitosti.** *Od minule* je první ne proto, že by byla
+   nejdůležitější, ale protože bez ní člověk čte podruhé to, co už viděl. *Verdikt* je poslední ne
+   proto, že by byl nejmenší, ale protože je to jediná zastávka, po které se odsud odchází.
+
+3. **Hotovo se odvozuje, nikdy neklikne.** Zvažovalo se zaškrtávátko u zastávky (jednodušší
+   implementace, žádná nová stopa ve store) a **zamítlo se**: itinerář, který si člověk odškrtává
+   sám, je druhý seznam úkolů a přestane se udržovat po druhém PR. Výjimkou zůstává **soubor**
+   (#500), a to proto, že u něj „přečetl jsem to“ odvodit nejde — scroll přes soubor neznamená,
+   že jsem ho přečetl. Zvažovalo se i odvodit soubor ze scrollu a **zamítlo** ze stejného důvodu.
+
+4. **Konfigurace se klasifikuje dřív než `nový`, a je to odchylka od zadání.** Zadání vypisuje
+   pořadí *blokující → nález → vlákno → nový → ostatní → konfigurace a locky*, což při doslovném
+   čtení znamená, že nový `composer.lock` vyjde jako `nový` a stojí v seznamu nad testem, který se
+   doopravdy čte. Rozhodlo se to rozdělit: `FileRisk.rawValue` je pořadí klasifikace (konfigurace
+   je čtvrtá), `FileRisk.drawingOrder` pořadí kresby (konfigurace je poslední). **Nález a vlákno
+   konfiguraci přebijí**, takže se `composer.json` s blokujícím nálezem neschová do složené
+   položky — bez toho by se dal nález utopit v šumu, což je ta nejdražší chyba, kterou sloupec umí
+   udělat.
+
+5. **Konfigurace se pozná z výčtu, ne heuristikou.** „Vypadá to na konfiguraci“ se zkusilo napsat
+   jako pravidlo nad cestou (`config/` v cestě, přípona bez kódu) a **zamítlo se**:
+   `config/routes.php` je kód, `res/layout/activity_main.xml` je kód a `docs/navrh.html` je
+   dokument, který se čte. Výčet jmen a přípon je delší, ale dá se přečíst a dá se do něj sáhnout,
+   když se objeví ekosystém, na který se nemyslelo. `.xml` v něm **není** schválně.
+
+6. **Šířka 260 se zaplatila třemi znaky na stranu, a to se změřilo dřív, než se rozhodlo.** Zadání
+   dávalo dvě možnosti: sloupec 260, nebo itinerář v pohledu vedle sebe složit jako dnes strom.
+   Ukázalo se, že se **neplatí nic**: ve `split`u se sloupec skládá už od #188, takže je z něj pruh
+   34 bodů bez ohledu na to, kolik má rozložený. Cena existuje jen v `unified` (6 znaků z 86 na
+   80) a v tom, že se **hranice skládání** posunula o padesát bodů — 870 → 920 s okrajem karet,
+   tedy nad podlahou `RootView`u. To je jediný rozdíl, který se v okně dá vidět, a bylo to
+   posouzeno jako přijatelné: nad štěrbinou 900 se s okrajem karet složí sloupec, ne kód.
+
+**Co se u toho zapsalo jako mezera.** Odhad `10 min` stojí na jedné konstantě
+(`Policy.reviewLinesPerMinute`, 30 řádků za minutu) a je to **odhad, ne měření**: odvodil se z
+toho, jak dlouho dvěstěřádkový soubor v tomhle okně doopravdy zabere, ne z naměřených sezení. Když
+se ukáže systematicky mimo, mění se ta jedna hodnota a nic jiného — proto je to konstanta
+v `Policy` a ne rozeseté aritmetika.
+
+#### Druhé kolo z proklikání (#506): sloupec vedle všech tabů a klik na soubor
+
+Z proklikání přišly dvě připomínky a obojí bylo **věcně proti tomu, k čemu itinerář je**. Čtyři
+další rozhodnutí, u kterých se dá vrátit:
+
+7. **Sloupec se přestěhoval o úroveň výš, ne zduplikoval.** První kolo ho mělo uvnitř obsahu tabu
+   `Změněné soubory`, takže překliknutím na `Kontroly` zmizel — mizel právě tehdy, kdy podle něj
+   člověk někam odešel. Zvažovalo se **kreslit ho v každém tabu zvlášť** (menší zásah do rozvržení)
+   a **zamítlo se**: byla by z toho osmá kopie téže kompozice a osm míst, kde se dá zapomenout na
+   jednu. Sloupec proto hostí `PullRequestDetailView` a stojí vlevo od obsahu záložky.
+
+8. **„Ve všech tabech“ je rozhodnutí, ne převzatý pokyn.** Precedens mluví pro výběr: panel vpravo
+   se ve třech tabech schovává (#294), protože je v nich vedle něj duplikát dat nebo obsah, který
+   šířku potřebuje. U sloupce ani jedno neplatí — nic neduplikuje a v každém tabu vede **jinam**
+   (soubory do diffu, zastávky do `Přehledu`, `Kontrol` a panelu). Tab, ve kterém by zmizel, je
+   tab, ze kterého se nedá vrátit, tedy zrovna ta vada. **Cena je jedno číslo pro všech osm**
+   (260 b rozložený, 34 složený, tedy 787 z 1 047 na výchozím okně) a jedna šířka je podmínka:
+   sloupec, který by se s tabem měnil, přeskládá okno při každém přepnutí záložky.
+
+9. **Společná šířka se předává, nedopočítává, a je to zamítnutá varianta s důvodem.** Rozhodnutí
+   `Policy.diffSideColumns` se musí ptát na šířku, o kterou se sloupec, kód a okraj **dělí**;
+   `DiffView` ale od druhého kola dostane štěrbinu, ve které sloupec **není**. První podoba si ji
+   dopočítávala uvnitř diffu (`slot + treeColumnWidth(expanded:)`) a v okně to sedělo přesně —
+   **zamítlo se** proto, že kdokoli, kdo `DiffView` hostuje bez sloupce vedle sebe (diff commitu
+   mimo záložku, náhledy, sondy), by dostal šířku o 260 bodů větší, a protože ta hodnota vstupuje
+   do rozhodnutí, které pak mění samo sebe, umí to v takovém hostu **kmitat**: rozložený sloupec
+   pošle kolonu pod podlahu a složí ho, složený kolonu rozloží a sloupec se otevře. Šířku proto
+   počítá ten, kdo sloupec kreslí, a podává ji prostředím (`sideColumnsWidth`); `nil` znamená
+   „sloupec vedle téhle plochy nestojí“.
+
+   **O skládání ale rozhoduje dál `DiffView`, a je to zapsaná mezera.** Podlaha, kvůli které se
+   sloupec skládá, je podlaha **kolony kódu** — v `Kontrolách` není co chránit. Přestěhovat
+   rozhodnutí do detailu se **zamítlo**: potřebovalo by to znát karty v okraji (`hasMargin`), tedy
+   druhé složení téže odpovědi v tabu, ve kterém se okraj nekreslí. Mezera: v tabu bez diffu se
+   nerozhoduje vůbec, takže zúžení okna nad `Kontrolami` sloupec nesloží — složí ho první průchod
+   diffem. Posouzeno jako přijatelné, protože ostatní taby podlahu nemají.
+
+10. **Klik na soubor jde hotovou cestou, a hlavička sedne na hranu.** Sloupec měl vlastní skok
+    (`withAnimation { proxy.scrollTo(file.id, anchor: .top) }`) a ten byl vadný na dvou ze tří
+    příčin míjení, které vyjmenovalo #152: animovaný a v jediném průchodu. Od druhého kola vede
+    jediná cesta — tatáž, jakou skáče mapa PR (#501). **Kam soubor přistane, je vlastní
+    rozhodnutí**: offset **0**, tedy hlavička na hraně výřezu. Devadesát bodů jako u nálezu se
+    **zamítlo** (nad hlavičkou je konec předchozího souboru, tedy kód, který se nečte, a ukotvená
+    hlavička s týmž obsahem ji tam překryje) a **třetina shora** jako u hledání taky. Nula je navíc
+    jediná hodnota **nezávislá na výšce sekce**, a to je ta podstatná část: sekce souboru má tisíce
+    bodů, takže by z podílu 0,12 byl skok o stovky bodů **do** souboru — přesně to, co #152 měřilo
+    u bloků. Druh cíle se pozná z **identity cíle**, ne od volajícího, protože sloupec stojí mimo
+    `DiffView`. **Opravilo to i mapu PR** (#501), která na `file.id` mířila s druhem `.bubble`:
+    tatáž třída, jedna oprava v `Policy`.
+
+**Co u druhého kola zaniklo.** Sloupec **bez zastávek** (podoba pro diff commitu a rozsah od
+minule) a s ním `Policy.readFileShare` a `Policy.fileTreeSummary` z #500: od druhého kola sloupec
+mluví vždycky o celém pull requestu, takže nepovinné `itinerary` neměl kdo nastavit na `nil`
+a hlavička je vždycky `ITINERÁŘ · 4 Z 11 · 10 MIN`. Držet nepovinnou hodnotu, kterou nikdo
+nenastaví, je to, na co Copilot v tomhle repu opakovaně upozorňuje.
+
+#### Třetí kolo z proklikání (#506): stráž automatiky patří ke stavu, ne k diffu
+
+Nález zněl *„někdy se ten levý panel zavře když na něco kliknu…ale jen někdy“* a je to **následek
+rozhodnutí 7**: sloupec se přestěhoval o úroveň výš, ale automatika #188 zůstala v `DiffView`u
+i se stráží, kterou proti druhému uplatnění drží `@State`. Tím vznikl stav, který **přežívá**
+(`diffTreeExpanded` v `UserDefaults`), hlídaný stráží, která **nepřežívá** — `switch tab` v detailu
+diff při odchodu ze `Změněných souborů` zahodí, takže každý návrat byl nová instance s prázdnou
+stráží a uplatnil rozhodnutí podruhé, přes `⌘1`.
+
+11. **Stráž se přestěhovala za stavem, rozhodnutí zůstalo u diffu.** Zvažovalo se **přestěhovat
+    i rozhodnutí** do detailu (zavřelo by to zapsanou mezeru z bodu 9) a **zamítlo se ze dvou
+    důvodů**: `hasMargin` je funkce diff-interního stavu (odkryté úseky, sbalené soubory), takže by
+    to znamenalo druhé složení téže odpovědi — a diff commitu v tabu `Commity` má **vlastní** karty,
+    takže by jedno rozhodnutí v detailu bylo pro dva různé diffy. Rozdělit `diffSideColumns` na dvě
+    poloviny (sloupec v detailu, okraj v diffu) se zamítlo taky: to rozhodnutí je **odečítání
+    v pořadí podle ceny zahození**, a dvě místa, která je počítají, se rozejdou. Stav i stráž tedy
+    chodí do diffu **parametrem** (`DiffColumnActions`), tentýž vzorec jako `panelExpanded` (#242)
+    a `tracking` (#501) — a jeho `nil` znamená totéž: **kdo ho nedodá, tomu se nic nepřepíše**.
+
+    Zapsaná mezera z bodu 9 tím **zůstává, a je z ní tvrzení**: v tabu bez diffu se stavem sloupce
+    nehýbe nic. V aplikaci se do ní ani nedá dostat — pohled přepíná lišta nad diffem.
+
+12. **Vedlejší nález: diff commitu přepisoval cizí stav.** Do třetího kola měl `DiffView` vlastní
+    `@AppStorage("diffTreeExpanded")`, takže sloupcem hýbal i ten `DiffView`, který kreslí diff
+    commitu — vybrání commitu v tabu `Commity` sloupec ve `Vedle sebe` zavřelo. Panel vpravo tuhle
+    vadu neměl, protože `panelExpanded` je od začátku **nepovinný parametr** a diff commitu ho
+    nedostává; sloupec tu asymetrii jen zdědil tím, že se ke stavu dostal přes `UserDefaults`.
+    Od třetího kola je to symetrické a hlídá to stráž nad zdrojáky.
+
+13. **Nula z `GeometryReaderu` není nejužší okno.** `Policy.diffSideColumns` bere nekladné
+    `available` jako `nil`, tedy „nikdo to nezměřil“. `widthWithItinerary` to dělalo od druhého
+    kola, ale `DiffView` má fallback `sharedWidth ?? slotWidth` a ten nulu z prvního průchodu
+    propustil. Do #506 by to byl blik jednoho snímku; od #506 se to zapisuje **do volby člověka**,
+    takže se to opravuje.
+
+**Zobecnitelné pravidlo:** *stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav,
+který mění.* `@State` uzlu, který se přestavuje častěji než ten stav, je stráž, která „jen někdy“
+neplatí — a taková vada se pozná až v provozu, protože v harnessu se scéna staví jednou.
+
+#### Čtvrté kolo z proklikání (#506): dvě cesty, kterými se volba přepisovala dál
+
+Připomínka přišla **podruhé** — *„pořád se ten itinerář zavírá“* —, takže třetí kolo opravilo jen
+část. **První hypotéza byla správná, ale nebyla úplná**, a to je na tomhle kole to podstatné
+k zapsání. Zůstaly **dvě nezávislé cesty**:
+
+14. **Stráž nepřežila ani `@State` detailu.** `ContentView` vybírá obsah okna
+    `switch store.activeTab`, a to je `@ViewBuilder` — jiná větev je jiná identita, takže kliknutí
+    na `Přehled` zahodí celý `PullRequestDetailView` i s jeho `@State`. Návrat na záložku PR byl
+    nová instance s prázdnou stráží, která rozhodnutí #188 uplatnila jako první průchod, tedy přes
+    `⌘1`. Změřeno v okně 1 512 × 882: *Vedle sebe* sloupec zavřený, *Pod sebou* otevřený.
+
+    **Stráž se proto přestěhovala do store** (`AppStore.appliedSideColumns`), vedle
+    `isReviewPanelExpanded` (#242). Zvažovalo se **per PR** a **zamítlo**: stav, který stráž hlídá,
+    je globální (jeden klíč v `UserDefaults`, jeden `diffLayout`, jeden panel), takže per-PR stráž
+    nad globálním stavem je tatáž nesouměrnost v jiné podobě.
+
+    **Lekce, která z toho je navíc proti třetímu kolu:** pravidlo *„stráž musí žít aspoň tak dlouho
+    jako stav, který mění“* se dá splnit **napůl**. `@State` detailu je delší život než `@State`
+    diffu, ale pořád ne život toho stavu — ten je v `UserDefaults`, takže správná odpověď je
+    „store“, ne „o jednu úroveň výš“. Kdo příště bude stráž přesouvat, ať se ptá **kde stav
+    končí**, ne kdo je nejbližší rodič.
+
+15. **A uplatňovalo se celé rozhodnutí.** `DiffSideColumns` má tři pole a automatika sahá na dvě z nich (`tree`, `panel`), zapisovala ale obě,
+jakmile se rozhodnutí od minule změnilo **v čemkoli**. Třetí pole (`margin`) přitom závisí na
+`showInlineFindingBubbles`, na sbalení souboru a na odkrytém kontextu — tedy na věcech, které se
+překlikávají běžně a se šířkou okna nemají nic společného. Když takový klik vyrobil v okraji první
+kartu (nebo sundal poslední), přepsal se s ním `tree`, tedy uložená volba u itineráře.
+
+    **Uplatní se proto jen to pole, o kterém se rozhodlo jinak než minule**
+    (`Policy.sideColumnsToApply`, `DiffSideColumnsUpdate` s `nil` = *nechat být*). Zvažovaly se tři
+    varianty a dvě se **zamítly**:
+
+    - **„Automatika nepřepisuje volbu nikdy, `Policy` vydá jen doporučení“** — zamítnuto: `⌘1` by
+      pak ve `Vedle sebe` nechalo sloupec 260 bodů široký v pohledu, ve kterém na řádek zbývá
+      polovina, a nález v úzkém okně by zmizel z obrazovky (#503 by přestalo platit). Drží to
+      tvrzení `thePanelStillFollowsTheCards`, které je proti té variantě schválně.
+    - **„Odvodit efektivní stav z volby a z místa, bez zápisu“** (volba jako přání, kresba jako
+      `přání && vejde se`) — zamítnuto: `available` se skládá z měřené štěrbiny **plus šířky toho,
+      co se kreslí**, takže by se přání a kresba rozešly a rozhodnutí by se rozkmitalo mezi dvěma
+      hodnotami. Dnešní tvar je konzistentní právě tím, že se přičítá to, co je doopravdy
+      nakreslené.
+    - **Per pole** — přijato. Je to nejmenší změna, která odpovídá na otázku „změnilo se to, na co
+      sahám?“, a nechává #188 i #503 platit beze změny.
+
+    `applied` tím **změnil význam**: z „co jsem naposledy zapsal“ na „jak `Policy` naposledy
+    rozhodla“. Posouvá se i tehdy, když se neuplatnilo nic — jinak by se změna v `margin` měřila
+    proti zastaralému základu.
+
+16. **Zapsaná mezera: šířka panelu do `available` pořád vstupuje.** V okně natolik úzkém, že
+    složení nebo rozložení panelu přehodí verdikt o podlaze kolony kódu, se sloupec za panelem
+    pohne. **Je to změřené, ne odhadnuté**: v uživatelově okně (1 460 b na detail) je `available`
+    1 154 nebo 1 422 a obě čísla jsou nad mezí 920, takže tam ta cesta nefiguruje. A kdyby
+    figurovala, je to automatika, která dělá svou práci („není místo“), ne přepis volby bez důvodu.
+
+**Zobecnitelné pravidlo:** *automatika, která rozhoduje o víc věcech naráz, smí uplatnit jen tu
+část, o které rozhodla jinak než minule.* Rozhodnutí složené z několika polí, uplatňované celé, je
+přepis stavu, o který nikdo nežádal — a pozná se to až v provozu, protože změnu spouští to pole,
+kterého si nikdo nevšímá.
+
+**A jedno pravidlo o měření:** *když připomínka přijde podruhé, měřidlo z prvního kola tu druhou
+příčinu nevidělo.* Scéna třetího kola stála na 1 048 bodech, kde vada nenastává, hostovala **jen
+detail** (takže cestu přes `Přehled` neměla kde vyrobit) a nálezy v ní mířily na cesty, které
+fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzala
+z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
+scéna vyrostla na celé `ContentView`.

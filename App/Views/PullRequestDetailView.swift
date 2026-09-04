@@ -81,6 +81,34 @@ struct PullRequestDetailView: View {
     /// záložek** i `DiffView` pod ním. Do #501 si obojí držel diff sám; viz `DiffTracking`.
     @State private var tracking = DiffTracking()
 
+    /// Rozložený levý sloupec — itinerář review (#506). Předvolba pohledu napříč PR, takže
+    /// `UserDefaults` a ne stav ve store; **klíč zůstává `diffTreeExpanded`** z #197, protože
+    /// význam hodnoty se nezměnil (rozložený sloupec) a přejmenováním by se zahodilo `⌘1`, které
+    /// si člověk vědomě složil.
+    ///
+    /// **Od #506, druhého kola, patří detailu, ne `DiffView`u**: sloupec stojí vedle všech tabů,
+    /// takže o něm musí rozhodovat i tab, ve kterém žádný diff není.
+    @AppStorage("diffTreeExpanded") private var isColumnExpanded = true
+
+    /// Které rozhodnutí `Policy.diffSideColumns` už automatika pohledu (#188) uplatnila — **stráž,
+    /// která musí žít tak dlouho jako stav, který hlídá** (#506, třetí kolo).
+    ///
+    /// Rozhoduje dál `DiffView` (podlaha, kvůli které se sloupec skládá, je podlaha kolony kódu),
+    /// ale stráž patří jinam: ta v diffu zanikla s každým odchodem ze `Změněných souborů`, po
+    /// návratu se rozhodnutí uplatnilo podruhé a přepsalo tím `⌘1` — a protože se přepisuje jen na
+    /// hodnotu, která se od uložené liší, dělo se to „jen někdy“.
+    ///
+    /// **Od #506, čtvrtého kola, žije ve store, ne tady** (`AppStore.appliedSideColumns`): `@State`
+    /// detailu nepřežije kliknutí na `Přehled` — `switch store.activeTab` v `ContentView` vybere
+    /// jinou větev a celý detail zahodí. Podrobněji u `DiffColumnActions`.
+    ///
+    /// A je to „jak `Policy` naposledy rozhodla“, ne „co jsem naposledy zapsal“: uplatňuje se
+    /// jedině změněné pole (`Policy.sideColumnsToApply`), takže se sem zapisuje i rozhodnutí,
+    /// ze kterého nic nevyplynulo.
+    private var appliedColumns: Binding<DiffSideColumns?> {
+        Binding(get: { store.appliedSideColumns }, set: { store.appliedSideColumns = $0 })
+    }
+
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
         VStack(alignment: .leading, spacing: 0) {
@@ -483,6 +511,10 @@ struct PullRequestDetailView: View {
         // **Vedle sebe, ne pod sebou** (#182). Panel dole si bral výšku, které je v diffu
         // nejmíň; napravo bere šířku, které je v okně přes celou obrazovku dost.
         HStack(spacing: 0) {
+            // **Itinerář vedle všech tabů, ne uvnitř `Změněných souborů`** (#506, druhé kolo).
+            // Do té doby byl součástí obsahu tabu, takže překliknutím na `Kontroly` zmizel —
+            // a mizel právě ve chvíli, kdy podle něj člověk někam odešel.
+            itineraryColumn
             // **Plocha tabu je `surface` ve všech třech** (#216) — návrh má `.ovpane`,
             // `.diffpane` i `.convpane` na `--panel`. Bez toho prosvítalo `background`
             // (skoro černá) a obsah plaval v prázdnu. Panel vedle si maluje `chrome` sám,
@@ -508,6 +540,18 @@ struct PullRequestDetailView: View {
                     }
                 }
                 .availableWidth(proxy.size.width)
+                // **Společná šířka postranních kolon** (#506): `GeometryReader` měří štěrbinu
+                // **bez** sloupce, protože ten stojí vedle něj jako sourozenec s pevným rámcem —
+                // takže se šířka obsahu neodečítá aritmetikou, která by se dala splést (#546).
+                // Rozhodnutí o kolonách se ale ptá na tu společnou, a tu zná jedině tenhle uzel:
+                // sloupec je právě tady a jeho šířka je jedna ze dvou hodnot `treeColumnWidth`.
+                .sideColumnsWidth(
+                    Policy.widthWithItinerary(
+                        slot: Double(proxy.size.width),
+                        expanded: isColumnExpanded
+                    )
+                    .map { CGFloat($0) }
+                )
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1238,7 +1282,98 @@ struct PullRequestDetailView: View {
             rerun: { store.startReview(for: pullRequest.id) },
             showAdded: showAdded,
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
-            pullRequest: pullRequest
+            pullRequest: pullRequest,
+            // Zastávka `Popis a záměr` v itineráři (#506). Zapisuje store, protože `@State`
+            // detailu by přetekl na jiný pull request — tentýž důvod jako u sbalování a značek.
+            reportReadToEnd: { store.noteOverviewReadToEnd($0, for: pullRequest.id) }
+        )
+    }
+
+    /// Levý sloupec záložky — **itinerář review vedle všech tabů** (#506, druhé kolo).
+    ///
+    /// Skládá se tady, protože zastávky ukazují do tří různých tabů a soubory do čtvrtého: uvnitř
+    /// obsahu tabu by mizel právě tehdy, když si na něj člověk klikl a odešel jinam.
+    ///
+    /// **Mluví o celém pull requestu, ne o tom, co je zrovna v tabu vidět.** Nad rozsahem
+    /// `Od tvé poslední návštěvy` (#284) tedy zůstává seznam celého diffu — je to průvodce
+    /// review, a review se dělá nad hlavou PR.
+    @ViewBuilder private var itineraryColumn: some View {
+        Group {
+            // **Složený proužek si zastávky ani soubory nesloží** — a je to předfiltr, ne úspora:
+            // tenhle uzel se od #506/2 skládá v **každém** tabu a při každém průchodu tělem
+            // detailu, kdežto proužek kreslí jedinou hodnotu. Proto jsou to dva typy a ne jedno
+            // tělo s `if`em; podrobněji u `ItineraryColumnView`.
+            if isColumnExpanded {
+                expandedItineraryColumn
+            } else {
+                // **`nil`, dokud se diff nenačte**: `0 souborů` na proužku by tvrdilo, že PR nic
+                // nemění, o PR, u kterého se to zatím neví. V tabu s diffem to nenastalo (proužek
+                // se kreslil pod načteným diffem), od #506/2 nastat umí — sloupec stojí i tam, kde
+                // se diff nenačítá.
+                ItineraryRailView(files: loadedDiff?.files.count) {
+                    withAnimation(.snappy(duration: 0.15)) { isColumnExpanded = true }
+                }
+            }
+        }
+        // ⌘1 na složení sloupce. Bydlí **mimo lištu**, protože v ní od #219 žádné tlačítko na
+        // kolony není — skládají se u sebe, tlačítkem v hlavičce a proužkem, kterým se zase
+        // otevřou. Zkratka tedy nemá na čem viset a musí být samostatně. Průhledné tlačítko,
+        // ne `.hidden()`: skryté view z hierarchie zmizí i se zkratkou. Tentýž vzorec jako ⌘2.
+        .background(alignment: .topLeading) { columnShortcut }
+    }
+
+    private var expandedItineraryColumn: some View {
+        // **Značky se skládají jednou** a slouží dvakrát: puntíky u jmen a pořadí podle rizika.
+        // Dvě složení jedné odpovědi by znamenala, že pořadí v itineráři nesouhlasí s puntíky
+        // v něm — tatáž úvaha jako u `marginCards`.
+        let markers = loadedDiff.map {
+            Policy.fileMarkers(
+                of: findingGroups.flatMap(\.activeFindings),
+                in: $0,
+                categories: blockingCategories
+            )
+        } ?? [:]
+        return ItineraryColumnView(
+            items: Policy.filesByRisk(
+                loadedDiff?.files ?? [],
+                markers: markers,
+                // Vlákna s kotvou v diffu — vlákno na zmizelém řádku patří do `Konverzace`,
+                // ne do pořadí čtení souborů.
+                threadPaths: Set(store.anchoredThreads(for: pullRequest.id).map(\.path))
+            ),
+            itinerary: itinerary,
+            markers: markers,
+            readStates: store.fileReviewStates(in: pullRequest.id),
+            collapse: { withAnimation(.snappy(duration: 0.15)) { isColumnExpanded = false } },
+            jump: { jump(toFile: $0.displayPath) }
+        )
+    }
+
+    private var columnShortcut: some View {
+        Button("Itinerář review") {
+            withAnimation(.snappy(duration: 0.15)) { isColumnExpanded.toggle() }
+        }
+        .windowShortcut(.itinerary)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Zastávky itineráře (#506) — **o celém pull requestu, ne o vybraném tabu**.
+    ///
+    /// Skládá je `Policy` z faktů, které nasbíral store; tady se rozhoduje jedině to, **co klik na
+    /// zastávku udělá s oknem**: přepne tab a u `Verdiktu` k tomu rozloží panel, protože verdikt se
+    /// vybírá v něm a `Změněné soubory` samy o sobě na tu zastávku neodpoví.
+    private var itinerary: ItineraryActions {
+        let facts = store.itineraryFacts(for: pullRequest.id)
+        let stops = Policy.itinerary(facts)
+        return ItineraryActions(
+            stops: stops,
+            progress: Policy.itineraryProgress(of: stops, facts: facts),
+            select: { stop in
+                store.setDetailTab(stop.tab, for: pullRequest.id)
+                if stop.kind == .verdict { panelExpanded.wrappedValue = true }
+            }
         )
     }
 
@@ -1820,6 +1955,11 @@ struct PullRequestDetailView: View {
             // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
             // panel je vidět i v tabu `Přehled`, kde lišta není.
             panelExpanded: panelExpanded,
+            // Levý sloupec (#506/3) — **stav i stráž jsou detailu**, protože sloupec stojí vedle
+            // všech osmi tabů a diff zaniká s odchodem z toho svého. Diff commitu (#317) tenhle
+            // parametr **nedostane**, takže sloupcem nehýbe: do #506/3 ho přepisoval taky, protože
+            // si ten klíč držel vlastním `@AppStorage`.
+            columnActions: DiffColumnActions(expanded: $isColumnExpanded, applied: appliedColumns),
             stepFinding: { step($0) },
             search: searchActions,
             read: read,

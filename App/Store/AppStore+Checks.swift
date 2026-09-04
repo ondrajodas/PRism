@@ -38,6 +38,11 @@ extension AppStore {
         guard let jobID = check.jobID else { return }
 
         expandedChecks[pr] = check.name
+        // Zastávka `Kontroly` v itineráři (#506): spadlý check je hotový, teprve když se otevřel.
+        // **Zapisuje se tady, ne v `collapseCheck`** — sbalení je konec čtení, ne jeho začátek,
+        // a zápis do sady, která si to pamatuje, znamená, že se zastávka po zavření logu nevrátí
+        // na nehotovou.
+        noteOpenedCheck(check, in: pr)
         checkDetails[key] = CheckDetailState()
         checkTasks[key] = Task { [weak self] in
             await self?.loadCheckDetail(key: key, repo: pr.repo, jobID: jobID)

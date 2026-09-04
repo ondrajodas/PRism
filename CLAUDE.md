@@ -770,6 +770,29 @@ protože většina z nich se v harnessu neprojeví.
   „změřeno a nic tu není“, takže by si blok při každém přestavění přepsal platnou polohu na nic
   (tatáž lekce jako „prázdná plocha se ignoruje“ u #252). A **rámečky řádků se předávají
   argumentem, ne přes `@State`** — zápis do `@State` je vidět až v dalším průchodu tělem.
+- **Stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav, který mění** (#506).
+  `@State` uzlu, který se přestavuje **častěji** než ten stav, je stráž, která „jen někdy“ neplatí:
+  automatika kolon diffu (#188) přepisovala `⌘1` u sloupce, který od #506 stojí vedle **všech**
+  tabů, protože `switch tab` diff zahodí a nová instance rozhodnutí uplatní znovu. Stav i stráž
+  proto chodí **parametrem** od toho, kdo je kreslí (`DiffColumnActions`, `panelExpanded`), a jejich
+  `nil` znamená **„nic nepřepisuj“**. V harnessu se to neprojeví — scéna se staví jednou
+  ([rozbor](docs/architektura.md#stráž-automatiky-patří-ke-stavu-ne-k-diffu-506-třetí-kolo),
+  [měření](docs/testovani.md#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506)).
+- **To pravidlo se dá splnit napůl, a pak se ptej „kde stav končí“, ne „kdo je nejbližší rodič“**
+  (#506, čtvrté kolo). `@State` detailu **nepřežije** kliknutí na `Přehled` (`switch
+  store.activeTab` v `ContentView` je `@ViewBuilder`, tedy jiná identita), kdežto stav sloupce žije
+  v `UserDefaults` — stráž proto bydlí ve store (`AppStore.appliedSideColumns`), jako
+  `isReviewPanelExpanded`.
+- **A uplatnit se smí jen to pole, o kterém se rozhodlo jinak než minule** (#506, čtvrté kolo).
+  `DiffSideColumns` má tři pole a automatika sahá na dvě — zapisovala ale obě, jakmile se rozhodnutí
+  změnilo v čemkoli, takže volbu u itineráře přepsal i klik na `Nálezy pod řádky`, sbalení souboru
+  nebo odkrytí kontextu (mění `margin`). Rozhoduje `Policy.sideColumnsToApply`, kde `nil` u pole je
+  **„nechat být“**, ne „složit“. **A když připomínka přijde podruhé, měřidlo z prvního kola tu
+  druhou příčinu nevidělo** — šířka scény se bere z běžícího okna
+  (`CGWindowListCopyWindowInfo`), ne z čísla, ze kterého počítá zákres, a scéna hostí **celé
+  `ContentView`**, protože jen detail tu cestu nemá kde vyrobit
+  ([rozbor](docs/architektura.md#dvě-cesty-kterými-se-volba-přepisovala-dál-506-čtvrté-kolo),
+  [měření](docs/testovani.md#pořád-se-ten-itinerář-zavírá--čtvrté-kolo-506)).
 - **V líném seznamu se neiteruje pole tuplů** (#361): `ForEach(Array(x.enumerated()),
   id: \.element.id)` čte identitu **přes tuple**, takže u enumu s asociovanými hodnotami
   **kopíruje** payload při každém dotazu. Identita patří do **uloženého pole**
@@ -799,7 +822,8 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   **Neplatí to ale u hodnoty, kterou nejde porovnat** (#421) — mapa s hodnotou, která `Equatable`
   není (typicky `@Observable` **třída**), se neporovnává, takže ji bezpodmínečný zápis hlásí **i
   když je prázdná**. Tam se zapisuje jen při změně, a je to výjimka, ne nový vzor: `forget(whatIsNotIn:)`
-  přiřazuje čtyřicet map a jedině `diffSearches` má tuhle podmínku. Hlídá to
+  prořezává čtyřiačtyřicet map, z toho třiačtyřicet přiřazuje bezpodmínečně a jedině `diffSearches`
+  má tuhle podmínku. Hlídá to
   `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** z nich
   ([čím to bylo v okně](docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
   **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421) — kdo to zkusí
