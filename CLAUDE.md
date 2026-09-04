@@ -252,59 +252,44 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    1. **`GitHubGateway` zůstává bez zápisových metod.** Polling, diff, checkout ani reviewer
       tedy nemají čím něco odeslat — read-only je pořád vidět z typu.
    2. **Grep vyjmenuje všechna místa, odkud to jde.** Mají to být **sedm souborů a pět
-      volajících**: protokol, `GhReviewPublisher` (implementace), `ReviewSubmission.send()`
-      (review), `ThreadSubmission` (odpověď a vyřešení vlákna), `CommentSubmission` (komentář pod
-      PR), `MetadataSubmission` (labely, vyžádání reviewera, založení labelu a přepnutí draftu na
-      *ready for review*) a `MergeSubmission` (merge). Všechny leží v `App/Publish/`; volající
-      **mimo** tu složku by znamenal, že cesta ven vede odjinud než z jednoho místa.
-
-      **Komentáře se musí odečíst, jinak ten grep tvrdí něco jiného, než co hlídá test** (#496):
-      `ReviewPublishing` je jméno, na které se v repu odkazuje z **dvaadvaceti** souborů, protože
-      se o téhle podmínce píše i v `///` komentářích u `GitHubGateway`, `AppStore` nebo views.
-      `SingleWayOutTests` proto srovnává **kód bez komentářových řádků** a grep musí dělat totéž
-      — až s tím filtrem vydá těch sedm, respektive tři:
-
-      ```bash
-      grep -rn 'ReviewPublishing' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u
-      grep -rn 'BranchPushing' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u
-      ```
-
-      Protokol má **devět vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
-      `setLabels`, `requestReviewers`, `createLabel`, `merge`, `markReadyForReview`. **Každá si
-      sama ověří bránu z bodu 6**, proto všechny berou adresu, ze které se pozná repo.
-
-      **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**, **`deleteLabel`**
-      (mazat i přebarvovat se chodí na GitHub) a **návrat do draftu**
-      (`convertPullRequestToDraft`) — devátá metoda je jednosměrná schválně.
-
-      **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests` — sedm souborů, devět
-      metod, jmenovitě i to zakázané, a že soubory zadání pro agenta nezná publisher, payload,
-      API ani podproces). **Měnit se smí jedině na vlastním PR** (`Policy.metadataEditing`,
-      u merge `Policy.mergeOffer`); na cizím se akce **nekreslí vůbec**, ne zašedle — zašedlá
-      s důvodem **napsaným v panelu** patří jedině tam, kde se stav **mění** (vypnutá brána,
-      červený check, větev pozadu).
-   3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká s ní.
-      `AppStore` si kvůli odesílání drží **jen cestu ke `gh`** (proto ho ten grep z bodu 2
-      nevypíše — v `AppStore+Submission.swift` stojí to jméno jedině v komentáři)
-      a u vláken, komentářů a labelů **stav**, ne cestu ven. **Merge stav ve store nemá vůbec**
-      — sheet ho drží celý (`MergeSubmission` v `@State` okna).
+      volajících**, všechny v `App/Publish/`: protokol, `GhReviewPublisher`,
+      `ReviewSubmission.send()`, `ThreadSubmission`, `CommentSubmission`, `MetadataSubmission`
+      a `MergeSubmission`. Volající **mimo** tu složku by znamenal, že cesta ven vede odjinud
+      než z jednoho místa.
+   3. **Publisher není pole `AppStore`.** Vzniká uvnitř té cesty, která odesílá, a zaniká s ní;
+      store si drží **jen cestu ke `gh`** a stav, ne cestu ven. **Merge stav ve store nemá
+      vůbec.**
    4. **Odeslání review si žádá hotový draft s `headSha`** a pre-flight ověří, že je to pořád
       hlava PR. **U odpovědi do vlákna, u komentáře pod PR a u labelů s reviewery se `headSha`
-      neověřuje** (#73, #216, #392) — váže se to na PR nebo na diskuzi, ne na commit; ověřuje se
-      **stav PR**, a to i **striktněji než GitHub**. **U merge se hlava ověřuje dvakrát** (#465):
-      v pre-flightu, a k tomu se posílá **v payloadu** (`sha`), na který GitHub odpoví `409`.
-   5. **Jedno atomické volání.** Buď odejde všechno, nebo nic. **U labelů to drží tvar payloadu**
-      (#392) — `PUT /issues/{n}/labels` sadu **nahrazuje**, takže se posílá celá a jedním
-      voláním a skládá ji `Policy.toggledLabels`, ne publisher. **Pro `Založit a přidat` to
-      neplatí, a je to vědomá výjimka** (#413): dvě volání, mezi nimi stav *label v repozitáři
-      je, na PR není*, a platí se za to **viditelností** toho mezistavu
-      ([čím](docs/architektura.md#založení-labelu-413--sedmá-metoda-a-první-která-píše-do-repozitáře)).
-   6. **Jen tam, kde se to povolilo** — `PublishScope`, složený z `Configuration`
-      (`allowsPublishing` globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží
-      vlastnost „samo nic neodejde“. Sandbox v tom **není výjimka v kódu**.
+      neověřuje** (#73, #216, #392) — ověřuje se **stav PR**, a to **striktněji než GitHub**.
+      **U merge se hlava ověřuje dvakrát** (#465): v pre-flightu a **v payloadu** (`sha`).
+   5. **Jedno atomické volání.** Buď odejde všechno, nebo nic; sadu labelů skládá
+      `Policy.toggledLabels`, ne publisher. **Pro `Založit a přidat` to neplatí, a je to vědomá
+      výjimka** (#413).
+   6. **Jen tam, kde se to povolilo** — `PublishScope` z `Configuration` (`allowsPublishing`
+      globálně i per repo). **Výchozí stav je vypnuto**, a právě to drží vlastnost „samo nic
+      neodejde“. Sandbox v tom **není výjimka v kódu**.
 
-   Proč se ten výčet rozšiřoval, co se u které metody platí navíc a čím se která z nich měřila,
-   je v [`docs/architektura.md`](docs/architektura.md#reviewpublisher-apppublish) —
+   **Komentáře se musí odečíst, jinak ten grep tvrdí něco jiného, než co hlídá test** (#496)
+   — až s tím filtrem vydá těch sedm, respektive tři:
+
+   ```bash
+   grep -rn 'ReviewPublishing' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u
+   grep -rn 'BranchPushing' App | grep -vE ':[0-9]+: *///?' | cut -d: -f1 | sort -u
+   ```
+
+   Protokol má **devět vyjmenovaných metod** — `submit`, `reply`, `setResolved`, `comment`,
+   `setLabels`, `requestReviewers`, `createLabel`, `merge`, `markReadyForReview`. **Každá si
+   sama ověří bránu z bodu 6**, proto všechny berou adresu, ze které se pozná repo.
+
+   **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**, **`deleteLabel`**
+   a **návrat do draftu** (`convertPullRequestToDraft`) — devátá metoda je jednosměrná schválně.
+
+   **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests` — sedm souborů, devět
+   metod a jmenovitě i to zakázané). **Měnit se smí jedině na vlastním PR**
+   (`Policy.metadataEditing`, u merge `Policy.mergeOffer`); na cizím se akce **nekreslí vůbec**,
+   ne zašedle. Proč se výčet rozšiřoval a čím se která metoda měřila, je
+   v [`docs/architektura.md`](docs/architektura.md#reviewpublisher-apppublish) —
    [#392](docs/architektura.md#labely-a-vyžádání-reviewera-392--pátá-a-šestá-metoda),
    [#413](docs/architektura.md#založení-labelu-413--sedmá-metoda-a-první-která-píše-do-repozitáře),
    [#465](docs/architektura.md#merge-vlastního-pr-465--osmá-metoda-a-první-která-mění-main),
@@ -320,57 +305,40 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
      pod ním** (`Policy.readyForReviewNote`);
    - **u vyžádání reviewera je potvrzení v nadpisu nabídky** (`Vyžádat review od`);
    - **založení labelu potvrzení má** (#413) na **druhé obrazovce téhož popoveru, ne v sheetu**;
-   - **žádná z těchhle akcí nemá výchozí akci**, takže se nic z toho nespustí `Enterem` při
-     průchodu klávesnicí — a **po úspěchu se zavře sheet i záložka toho PR**, jedině po úspěchu
-     ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--po-mergi-se-zavírá-záložka-465));
-   - **u merge je metoda od #556 volba, ne konstanta** — výchozí hodnota je v nastavení (globálně
-     i per repo) a potvrzení ji **vypisuje a dovolí přebít pro jeden merge**. Protokol se tím
-     nemění ani o položku (devět metod, `merge` pořád jediná, která merguje); mění se **obsah
-     payloadu**. Drží to čtyři věci: picker leží **uvnitř výpisu payloadu**, takže to není druhý
-     krok; **s metodou se přepíše celý výpis** (počet commitů, titulek, věta o těle), aby žádný
-     řádek nad jinou metodou nelhal; **nepovolená metoda se nedá vybrat, ale z nabídky nezmizí**
-     (zašedlá, přeškrtnutá, `nejde`); a **nepovolená výchozí metoda se nepodstrčí jinou** — sheet
-     se otevře bez vybrané, `Mergnout` je zakázané a řekne se, co repo povoluje. Co repozitář
-     pustí, je **čtení** (`GitHubGateway.mergeSettings(repo:)`, jedno volání za repo), a chybějící
-     příznak je **„nevím“, ne „nepovoluje“**
+   - **žádná z těchhle akcí nemá výchozí akci**, takže se nic z toho nespustí `Enterem` —
+     a **po úspěchu se zavře sheet i záložka toho PR**, jedině po
+     úspěchu ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--po-mergi-se-zavírá-záložka-465));
+   - **u merge je metoda od #556 volba, ne konstanta** — výchozí hodnota je v nastavení,
+     potvrzení ji **vypisuje a dovolí přebít pro jeden merge**, a protokol se tím nemění ani
+     o položku. Co repozitář pustí, je **čtení** (`GitHubGateway.mergeSettings(repo:)`),
+     a chybějící příznak je **„nevím“, ne „nepovoluje“**
      ([rozbor](docs/architektura.md#metoda-merge-je-volba-ne-konstanta-556), [záznam
      rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--metoda-merge-je-volba-ne-konstanta-556)).
 
    **Uzavřený je `seznam`** — hledání **filtruje, nezakládá**; zakládání je **akce pod děličem**
    se zkratkou **`⌥↵`** na poli, barvu vybírá aplikace (`Policy.labelColor`) a **přebarvit ani
-   smazat label odsud nejde**.
-   A composer komentáře **nesmí splynout s tabem `Moje review`**
+   smazat label odsud nejde**. A composer komentáře **nesmí splynout s tabem `Moje review`**
    ([proč zrovna takhle](docs/architektura.md#labely-a-reviewery-v-panelu-392)).
    **`ReviewVerdict` je pořád jen návrh a sám nic neodesílá** (od #114 se jím **předvyplňuje**
    verdikt v panelu). A pravidlo, že **mergnutý PR jde ještě dočíst a zavřít ho má člověk, ne tik
    pollingu**, se **neruší** — mluví o pollingu, kdežto záložku zavírá klik na `Mergnout`.
 
    **Terminál pod tuhle podmínku nespadá, a je to hranice, ne výjimka** (#453, #459, #460).
-   Zásuvka je plnohodnotný shell, takže **plnou moc v něm má člověk**, ne aplikace: ze shellu jde
-   `gh pr merge` i `git push` a žádná stráž na to nedosáhne. **Padá tedy jen to, že se ta záruka
-   dá dokázat testem**; zbytek platí:
+   Zásuvka je plnohodnotný shell, takže **plnou moc v něm má člověk**, ne aplikace; **padá tedy
+   jen to, že se ta záruka dá dokázat testem**. Zbytek platí:
 
    - aplikace **sama** nic neodesílá — grep z bodu 2 vypisuje **týž seznam sedmi souborů**,
-     `SingleWayOutTests` prochází **beze změny**, `TerminalHosting` nemá zápisovou metodu a nezná
-     `gh` a `TerminalOpening` (#453) se drží **bez volajícího, jako záloha**;
-   - **musí to být vidět na obrazovce, ne jen tady**: v hlavičce zásuvky stojí kapsle
-     `plná práva`, protějšek `čte · neodesílá` z tabu `Zeptat se`;
-   - **tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache aplikace (pracovní strom
-     review, nebo bare klon), nikdy v uživatelově klonu;
-   - **aplikace do toho shellu píše dvě věci a nic jiného poslat neumí**: (1) **jednu řádku**
-     (`TerminalHosting.run`, `▶` v tabu `Průběh`) — `cd '<strom>' && claude --resume <id>
-     --permission-mode auto`, skládá ji `Policy.drawerResumeCommand(sessionID:)` a `ShellQuoting`;
-     do běžícího jobu se **nepíše vůbec** (`hasForegroundJob`), místo toho se na tu relaci
-     **přepne**; (2) **hlášení myši** (#478) — `ESC[<64;<sloupec>;<řádek>M`, jen číslo tlačítka
-     a buňka pod kurzorem, a jedině tehdy, když si o hlášení řekla aplikace v terminálu
-     (`mouseMode != .off`) **a** člověk otočil kolečkem;
-   - **relací je v zásuvce víc než jedna** (#460), takže úklid platí **pro každou**:
-     `stopTerminals(for:)` při zavření záložky, `stopAllTerminals()` při ukončení aplikace
-     a značka v `sessions.json` u každé zvlášť. Počet je **omezený** (`Policy.maxTerminalSlots`,
-     pět) a vytlačuje se jedině **neběžící** relace; když všechny běží, nová **nevznikne**.
+     `SingleWayOutTests` prochází **beze změny** a `TerminalHosting` nezná `gh`;
+   - **musí to být vidět na obrazovce, ne jen tady**: kapsle `plná práva` v hlavičce zásuvky;
+   - **tvrdá podmínka č. 3 platí beze změny**: shell startuje v cache, ne v uživatelově klonu;
+   - **aplikace do toho shellu píše dvě věci a nic jiného poslat neumí**: **jednu řádku**
+     (`Policy.drawerResumeCommand(sessionID:)`, `▶`; do běžícího jobu se nepíše vůbec) a
+     **hlášení myši** (#478, jen když si o ně terminálová aplikace řekla);
+   - **relací je v zásuvce víc než jedna** (#460), takže úklid platí **pro každou**, počet je
+     **omezený** (`Policy.maxTerminalSlots`, pět) a vytlačuje se jedině **neběžící** relace.
 
-   Co se u #459 vyměnilo za jakou záruku, proč zásuvka a ne záložka a jak se ten proces zabíjí,
-   je v [`docs/architektura.md`](docs/architektura.md#vestavěný-terminál-459) a v záznamech
+   Co se u #459 vyměnilo za jakou záruku a jak se ten proces zabíjí, je
+   v [`docs/architektura.md`](docs/architektura.md#vestavěný-terminál-459) a v záznamech
    rozhodnutí o
    [zásuvce](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--vestavěný-terminál-jako-zásuvka-459),
    o [`▶`](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí---pouští-session-v-zásuvce-460)
@@ -381,56 +349,47 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
 
    **Zápis do remote (#466) je druhý protokol, ne další metoda toho prvního.** `BranchPushing` má
    **jedinou metodu `push`** a přetlačí jedině větev **vlastního** PR. Grep z bodu 2 má u něj
-   vypsat **tři soubory**: protokol, `GitBranchPush` (implementace) a `BranchPushSubmission`
-   (jediný volající, s potvrzovacím sheetem), všechny v `App/Publish/`. **Zakázané je** `commit`,
-   `deleteBranch`, `pushTag`, `createBranch` — a **push do základní větve** (cílem je vždycky
-   `plan.branch`). Brána je **tatáž** (`PublishScope`, `allowsPublishing`), ne druhý přepínač,
-   a **pusher není pole `AppStore`** — store si drží jen cestu ke `gitu` a stav
-   (`BranchSyncState`). `GitHubGateway` je dál bez zápisu a **`RepoCheckout` do remote
-   nezapisuje**. **Podmínky č. 2 a 3 platí beze změny**: `Bash(git push:*)` zůstává
-   v `ClaudeCommand.disallowedTools` (tvrdí to test literálem) a rebase běží ve **vlastním**
-   stromě v cache (`CacheLayout.syncWorktree`, ne ten od review) za **tou samou kontrolou jako
-   jinde v repu** (`CacheFile.refusal`; layout se pusherovi **předává**, ne bere z výchozí
-   hodnoty). Zbytek jsou tři výčty:
+   vypsat **tři soubory** z `App/Publish/`: protokol, `GitBranchPush` a `BranchPushSubmission`.
+   **Zakázané je** `commit`, `deleteBranch`, `pushTag`, `createBranch` — a **push do základní
+   větve**. Brána je **tatáž** (`PublishScope`, `allowsPublishing`), **pusher není pole
+   `AppStore`**, `GitHubGateway` je dál bez zápisu a **`RepoCheckout` do remote nezapisuje**.
+   **Podmínky č. 2 a 3 platí beze změny**: `Bash(git push:*)` zůstává
+   v `ClaudeCommand.disallowedTools` a rebase běží ve **vlastním** stromě v cache
+   (`CacheLayout.syncWorktree`) za `CacheFile.refusal`. Zbytek jsou tři výčty:
 
    - **Dva guardy, oba povinné a nezávislé.** (1) Cílem smí být jedině **hlava vlastního PR**,
-     posuzováno proti **datům pull requestu** — pre-flight ověří autora, fork, stav PR, jméno
-     větve i hlavu; `isCrossRepository == nil` je **zákaz, ne povolení**. (2)
-     **`--force-with-lease` s vypsanou hodnotou, nikdy holé `--force`** — a **holý lease taky
-     ne**, v bare partial klonu selže vždycky.
+     posuzováno proti **datům pull requestu**; `isCrossRepository == nil` je **zákaz, ne
+     povolení**. (2) **`--force-with-lease` s vypsanou hodnotou, nikdy holé `--force`** — a
+     **holý lease taky ne**.
    - **Dva kroky, dělené podle vratnosti, ne podle složitosti.** **Rebase** jde vzít zpět, takže
-     stojí na jedno kliknutí. **Force push je nevratný**, takže má **potvrzovací sheet s úplným
-     výpisem** (`BranchPushSheet`) a `Force push` **bez výchozí akce**. Mezi kroky je stav
-     *přerovnáno, nepřetlačeno* (`BranchSyncState.rebased`) — **normální stav, ne porucha**: je
-     vidět v panelu, jde zahodit jedním tlačítkem a **hledá se v cache při každém otevření
-     vlastního PR**. **Lease se skládá z hlavy, ze které se rebasovalo**
-     (`RebasedBranch.rebasedFrom`), ne z té, kterou má detail v okamžiku potvrzení.
+     stojí na jedno kliknutí; **force push je nevratný**, takže má **potvrzovací sheet s úplným
+     výpisem** (`BranchPushSheet`) **bez výchozí akce**. Mezi kroky je stav *přerovnáno,
+     nepřetlačeno* (`BranchSyncState.rebased`) — **normální stav, ne porucha**. **Lease se
+     skládá z hlavy, ze které se rebasovalo** (`RebasedBranch.rebasedFrom`).
    - **Hlídá to test, ne jen grep** (`SingleWayOutTests` — tři soubory, jedna metoda, jmenovitě
      zakázané čtyři, `"push"` **jen** v `GitBranchPush`, holé `--force` nikde a čistý `Checkout/`
      i `GitHub/`).
 
    Rozbor je v [`docs/architektura.md`](docs/architektura.md#zápis-do-remote--branchpushing-466),
    měření obou guardů v [`docs/testovani.md`](docs/testovani.md#jak-se-změřil---force-with-lease-466)
-   a zdůvodnění včetně toho, co se cestou změnilo z proklikání, v [záznamu
+   a zdůvodnění v [záznamu
    rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--zápis-do-remote-466).
 
    **Konflikty slévá session, která smí měnit soubory** (#467) — a je to změna **tvrdé podmínky
-   č. 2**, ne téhle: do remote se pořád píše jedině přes `BranchPushing`, s bránou, dvěma guardy
-   a potvrzením, a **session na to nesahá**. `Rebase` nad konfliktní větví **jde** a rebase
-   zůstane v cache stát, dokud ho session slévá. Nerozřešený konflikt se **přiznává**: rebase
-   zůstane rozdělaný, je to vidět v panelu a nabídne se zahodit i **terminál**.
+   č. 2**, ne téhle: do remote se pořád píše jedině přes `BranchPushing`, a **session na to
+   nesahá**. Nerozřešený konflikt se **přiznává**: rebase zůstane rozdělaný, je to vidět
+   v panelu a nabídne se zahodit i **terminál**.
 2. **Reviewer je read-only.** V `--allowedTools` není `Write` ani `Edit`, u `Bash` se uvádí
    jen `git` — a v `--disallowedTools` jsou `Bash(gh:*)` a `Bash(git push:*)`. `Skill` mezi
    povolenými je (#78); sám o sobě nic nespouští, ale skill, který se přes něj načte, si
    o odeslání na GitHub umí říct — proto ten zákaz.
 
-   Tři věci, na kterých to stojí, jsou **ověřené spuštěním** (#12, opraveno u #17; čísla
-   v [`docs/claude-cli.md`](docs/claude-cli.md)): co je **mimo** povolený vzor, se odmítne,
-   pokud to není na vestavěném seznamu čtecích příkazů (`ls` a `cat` projdou, `gh` ne); co je
-   **uvnitř** vzoru, projde celé — `Bash(git:*)` tedy pouští i `git push` a **zavírá to až
+   Tři věci, na kterých to stojí, jsou **ověřené spuštěním** (#12, opraveno u #17): co je
+   **mimo** povolený vzor, se odmítne, pokud to není na vestavěném seznamu čtecích příkazů; co
+   je **uvnitř** vzoru, projde celé — `Bash(git:*)` tedy pouští i `git push` a **zavírá to až
    `--disallowedTools`**; a **seznam nástrojů z init eventu není obraz oprávnění**. Odmítnutý
-   nástroj **není chyba běhu**: session pokračuje a skončí `success`, odmítnutí je vidět
-   v `permission_denials`.
+   nástroj **není chyba běhu**. Čísla jsou
+   v [`docs/claude-cli.md`](docs/claude-cli.md#--allowedtools-co-doopravdy-dělá).
 
    **Aplikace pouští čtyři vyjmenované sady a jednu prázdnou. Všechny čtyři tvrdí test literálem
    na jednom místě** (`SessionToolSetsTests`, od #467) — rozdíly mezi nimi se ze čtyř souborů
@@ -445,12 +404,9 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    | překlad nálezů | prázdná |
 
    `--disallowedTools` je u **všech** tatáž konstanta `ClaudeCommand.disallowedTools`, takže `gh`
-   ani `git push` nemá **žádná**. U #345 není v povoleních `Write`, `Edit`, `Bash`,
-   `ReportFindings` ani `Skill`. **Materiál jde do promptu cestou k souboru, ne jako nástroj**
-   (precedens #120): zadání pro reviewera, předchozí nálezy, konverzace i checky — diff si
-   session přečte `git diff <base>...HEAD`. A **editovatelný prompt review** (#281) otevřel
-   **prompt, ne povolení**: šablona skončí v jednom argumentu za `-p` a nic v ní nedokáže nástroj
-   povolit (je na to test). Rozbory: [kontrola
+   ani `git push` nemá **žádná**. **Materiál jde do promptu cestou k souboru, ne jako nástroj**
+   (precedens #120) — diff si session přečte `git diff <base>...HEAD`. A **editovatelný prompt
+   review** (#281) otevřel **prompt, ne povolení** (je na to test). Rozbory: [kontrola
    nálezů](docs/architektura.md#kontrola-nálezů-z-minula-150), [zadání pro
    reviewera](docs/architektura.md#zadání-pro-reviewera-120), [text
    issue](docs/architektura.md#text-issue-a-komentáře-pod-pr-345), [rozhovor nad
@@ -463,9 +419,7 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
      **není** ([čísla](docs/claude-cli.md#write-a-edit-jen-ve-svém-stromě-467)). Že strom leží
      v cache, ověřuje **tatáž kontrola jako jinde v repu** (`CacheFile.refusal`, podmínka č. 3).
    - **`Bash` v té sadě není vůbec.** Session **necommituje** (to dělá aplikace: `git add`
-     a `git rebase --continue`), a bez `Bash`e je to **vlastnost sady**, ne délka seznamu zákazů:
-     `Bash(git commit:*)` by se dalo obejít `git -C <strom> commit`. Chybějící `git` nahrazuje
-     `merge.conflictStyle=zdiff3` u rebase — ve značce je pak i **základ**.
+     a `git rebase --continue`), a bez `Bash`e je to **vlastnost sady**, ne délka seznamu zákazů.
    - **Žádné `gh` a `git push` dál v zákazu.**
    - **Druhá vrstva: co session zkusila zapsat mimo strom, se čte ze streamu** — a když se něco
      najde, výsledek se **nepřijme** (`git add` ani `--continue` neproběhnou) a řekne se to.
@@ -490,23 +444,20 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
 
    **Session z `▶` v zásuvce pod tuhle podmínku nespadá, a je to hranice, ne výjimka** (#460).
    Podmínka mluví o session, které **pouští aplikace** — o těch pěti z tabulky výš. `claude
-   --resume` v zásuvce **řídí člověk ve svém shellu** a běží s `--permission-mode auto`, aby
-   nepřerušovala práci dotazem u každého kroku; **nová práva to nedává**, odpadají **dotazy**, ne
-   hranice. **`bypassPermissions` ani `--dangerously-skip-permissions` v tomhle repu nemají co
-   dělat** a `⧉` režim povolení **nedostane** — kdo si příkaz kopíruje jinam, dostane ho tak, jak
-   by ho psal. Rozhoduje `Policy.drawerResumeCommand(sessionID:)`; proč zrovna `auto`, je
-   v [záznamu
+   --resume` v zásuvce **řídí člověk ve svém shellu** a běží s `--permission-mode auto`;
+   **nová práva to nedává**, odpadají **dotazy**, ne hranice.
+   **`bypassPermissions` ani `--dangerously-skip-permissions` v tomhle repu nemají co dělat**
+   a `⧉` režim povolení **nedostane**. Rozhoduje `Policy.drawerResumeCommand(sessionID:)`; proč
+   zrovna `auto`, je v [záznamu
    rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#auto-mode-v-zásuvce-460).
 
    **A aplikace zapisuje do konfigurace cizího nástroje** (`~/.claude.json`,
    `WorkspaceTrusting`) — jedinou hodnotu, **důvěru ke složkám vlastní cache**. Hranici u toho
    drží čtyři věci: **na soubor, kterému nerozumí, nesáhne**; **zapisuje atomicky a zachová, co
-   v souboru je**; **zapisuje jen když je potřeba** (zapsané `true` se nepřepisuje, takže běžný
-   případ je čisté čtení); a **hranici cache drží od #479 kontrola, ne konstanta**
-   (`CacheFile.isInsideCache`), protože se od #479 zapisuje i ta složka, ve které shell doopravdy
-   stojí (výčet vydá `Policy.workspacesToTrust`). Zapsané `false` **na naší cestě** se přepsat
-   **smí**: zakládá si ho `claude` sám, není to odpověď člověka. Co se u toho změřilo, je
-   v [`docs/claude-cli.md`](docs/claude-cli.md)
+   v souboru je**; **zapisuje jen když je potřeba**; a **hranici cache drží od #479 kontrola, ne
+   konstanta** (`CacheFile.isInsideCache`; výčet vydá `Policy.workspacesToTrust`). Zapsané
+   `false` **na naší cestě** se přepsat **smí**: zakládá si ho `claude` sám, není to odpověď
+   člověka. Změřeno je to v [`docs/claude-cli.md`](docs/claude-cli.md#důvěra-ke-složce-a-režimy-povolení-460)
    a v [`docs/architektura.md`](docs/architektura.md#důvěra-ke-složce-a-auto-mode-460-oprava-479).
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
@@ -516,10 +467,10 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    (`WorkspaceTrusting`, viz podmínka č. 2) a od #529 **systémovou přihlašovací položku**
    (`LoginItemControlling` nad `SMAppService`). Ta druhá je jediný zápis, který přežije smazání
    bundlu, takže má tři meze: jde **jedině z přepínače na stránce `Systém`**, brána je
-   `Policy.loginItemAvailability` **ve storu, ne zašedlý přepínač ve view** (slotová instance ani
-   bundle mimo `/Applications` se k zápisu nedostanou) a **stav se čte zpátky ze systému**, ne
-   z `config.json` — do konfigurace se o položce nezapisuje nic. Hlídá to `DockBadgeWiringTests`
-   spolu s odznakem v Docku: `App/Store/` nesmí znát `SMAppService` ani `dockTile`.
+   `Policy.loginItemAvailability` **ve storu, ne zašedlý přepínač ve view** a **stav se čte
+   zpátky ze systému**, ne z `config.json`. Hlídá to `DockBadgeWiringTests` spolu s odznakem
+   v Docku: `App/Store/` nesmí znát `SMAppService` ani `dockTile`
+   ([rozbor](docs/architektura.md#systém-kolem-okna--odznak-v-docku-a-spuštění-po-přihlášení-529)).
 
    ```bash
    grep -rn 'SMAppService\|dockTile' App | grep -vE ':[0-9]+: *///?' |
@@ -530,33 +481,26 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
 
    **Rozhovor nad PR (#452) se tomuhle netýká, a je to zapsaná výjimka**: ukládá se **k PR, ne
-   k `headSha`**, protože rozhovor není nález. Podmínka mluví o nálezech, tedy o tvrzení proti
-   kódu.
+   k `headSha`**, protože rozhovor není nález.
 
    **Značka `Prošlo` u souboru (#500) je ta podmínka nad souborem, ne výjimka z ní.** Ukládá se
-   **k PR** (jako rozhovor), ale nese **otisk obsahu** — sha z `index` řádky diffu, celou dvojici
-   `<základ>..<hlava>`. Commit, který soubor nemění, ji nechá; commit, který ho mění, ji přepne na
-   `změněno od prošlého`, takže nikdy netvrdí „prošlo“ nad kódem, který už není. Tři stavy, ne dva
-   — „četl jsem starou verzi“ je jiná informace než „nečetl jsem“ —, rozhoduje o nich
-   `Policy.fileReviewState(mark:blobs:)` a **`nil == nil` je `prošlo`**, protože otisk chybí jedině
-   u přejmenování beze změny obsahu. Sbalení se z toho **odvozuje**
-   ([proč](docs/architektura.md#značka-prošlo-u-souboru-500)).
+   **k PR** (jako rozhovor), ale nese **otisk obsahu** — sha z `index` řádky diffu, celou
+   dvojici `<základ>..<hlava>`. Tři stavy, ne dva, rozhoduje o nich
+   `Policy.fileReviewState(mark:blobs:)` a **`nil == nil` je `prošlo`**; sbalení se z toho
+   **odvozuje** ([proč](docs/architektura.md#značka-prošlo-u-souboru-500)).
 
    **Přírůstkové review (#517) tu podmínku drží nad dvěma sha, ne obchází ji.** Nález přenesený
-   z minulého kola se na dnešní hlavu **přepíše** (`Finding.headSha`) — běh nad dnešním kódem řekl,
-   že trvá —, a k tomu si nese **odkud přišel** (`Finding.carriedFrom`): tu větu napsal reviewer
-   o starším commitu a číslo řádku v ní může být z jiné verze souboru. **Do klíče nálezu původ
-   nepatří** (`Policy.key(of:)`), jinak by přenesení nález rozdvojilo a rozpáralo se s ním
-   odmítnutí. Přenášejí se **všechny** staré nálezy včetně vyřešených a nezodpovězených; odmítnutý
-   se **neposílá ani nepřenáší**. Kdy se jde na celé review, rozhoduje `Policy.reviewScope` —
-   a **force push bez společné historie i nezjištěná příbuznost jsou dvě různé věty**; v `Průběhu`
-   je u dráhy vidět, **proč** se šlo na celý diff
+   z minulého kola se na dnešní hlavu **přepíše** (`Finding.headSha`) a nese **odkud přišel**
+   (`Finding.carriedFrom`); **do klíče nálezu původ nepatří** (`Policy.key(of:)`). Přenášejí se
+   **všechny** staré nálezy včetně vyřešených a nezodpovězených; odmítnutý se **neposílá ani
+   nepřenáší**. Kdy se jde na celé review, rozhoduje `Policy.reviewScope` — a **force push bez
+   společné historie i nezjištěná příbuznost jsou dvě různé věty**
    ([rozbor](docs/architektura.md#review-jen-přírůstku-517)).
 
-   **Kontrola nálezů (#150) na tom stojí, ne obchází to**: nese `againstHeadSha` — hlavu, proti
-   které běžela —, a jak se hlava posune, `Policy.recheck(of:head:)` odznaky nevydá. „Vyřešeno“
-   přitom nikdy nález nesundá, to smí jedině odmítnutí (#113) — a od odmítnutí se musí poznat
-   **i pohledem**: přeškrtne se jen text nálezu (ne celý řádek) a `blokuje` u něj zůstává
+   **Kontrola nálezů (#150) na tom stojí, ne obchází to**: nese `againstHeadSha`, a jak se hlava
+   posune, `Policy.recheck(of:head:)` odznaky nevydá. „Vyřešeno“ přitom nikdy nález nesundá, to
+   smí jedině odmítnutí (#113) — a od odmítnutí se musí poznat **i pohledem**: přeškrtne se jen
+   text nálezu (ne celý řádek) a `blokuje` u něj zůstává
    ([rozbor](docs/architektura.md#kontrola-nálezů-z-minula-150)).
 
 ## Architektura
