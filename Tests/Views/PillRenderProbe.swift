@@ -184,24 +184,24 @@ struct PillRenderProbe {
         QueueEntry(
             summary: summary(3, "fix: nesahat na secret, když ve Vaultu není"),
             state: .completed(findings: 3),
-            row: QueueRow(blocking: 1, spectrum: [])
+            row: QueueRow(blocking: 1)
         ),
         QueueEntry(
             summary: summary(4, "feat: přepsat frontu tak, aby snesla tři sloty naráz"),
             state: .timedOut(findings: 2),
-            row: QueueRow(blocking: 1, spectrum: [])
+            row: QueueRow(blocking: 1)
         ),
         QueueEntry(
             summary: summary(5, "chore: bump phpunit to 11.4"),
             state: .running(finished: 2, total: 3),
-            row: QueueRow(blocking: 0, spectrum: [])
+            row: QueueRow(blocking: 0)
         ),
-        QueueEntry(summary: summary(6, "docs: doplnit README"), state: .clean, row: QueueRow(blocking: 0, spectrum: [])),
-        QueueEntry(summary: summary(7, "refactor: rozdělit store"), state: .stale, row: QueueRow(blocking: 0, spectrum: [])),
+        QueueEntry(summary: summary(6, "docs: doplnit README"), state: .clean, row: QueueRow(blocking: 0)),
+        QueueEntry(summary: summary(7, "refactor: rozdělit store"), state: .stale, row: QueueRow(blocking: 0)),
         QueueEntry(
             summary: summary(8, "test: pokrýt překlad nálezů"),
             state: .inconclusive(reason: .droppedFindings),
-            row: QueueRow(blocking: 0, spectrum: [])
+            row: QueueRow(blocking: 0)
         ),
     ]
 
