@@ -5610,6 +5610,44 @@ záruku** — kolik průchodů to sedne, se řídit nedá, a měřit se to musí
 [`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)).
 
 
+### Záznam rozhodnutí — mapa PR v řádku fronty (#502)
+
+Druhé issue směru E z milníku M14. **Novou sekci nekreslí**: zákres té skupiny přenesl #501 jako
+sekci 42 a #502 se na ni odkazuje.
+
+**Do mockupu se přesto sáhlo, a je to oprava mezery po #501.** Sekce 42 nakreslila pás pod
+hlavičkou, ale v **řádcích fronty** zůstalo na třech místech staré spektrum (sekce 03 dvakrát
+a srovnání *Dnes / Návrh* v sekci 14) — dokument tedy kreslil obrazovku, kterou aplikace po tomhle
+PR nemá. `.spectrum` odešlo z CSS **celé**, protože ho nekreslilo nic jiného; není to případ
+`.diffstat`, které po #501 zůstalo kvůli záznamu měření v sekci 19. Mini pás si vzal jméno `.qmap`
+a **barvy bere z `.rv-prmap .seg`** — jedna selektorová řádka na segment i vzorek v legendě, tedy
+totéž, co v okně drží `PullRequestMapView.drawSegments`. Přidává jedině rozměr z návrhu
+(110 × 6 b, mezera 2) a **popisek nemá**: v řádku na něj vedle titulku a odznaku není místo.
+
+**Ruší zapsané rozhodnutí #172** — spektrum reviewerů v řádku fronty. Platilo, dokud byla otázka
+„odkud ty nálezy jsou“ ta jediná, na kterou v řádku vedle odznaku zbylo místo; od #501 je vedle ní
+druhá a lepší (**kde v PR a jak zle**), a obě naráz se do jedné řádky nevejdou. `SpectrumBar`
+odešel celý, a s ním `QueueRow.spectrum`, `ReviewerShare`
+a `ReviewStateAppearance.color(of: ReviewerShare.Outcome)`.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Mapa místo spektra, ne vedle něj** | Nechat spektrum a mapu přidat; nebo je prohodit podle šířky okna | Dva barevné pásy v jedné řádce vedle sebe jsou dvě škály na jednom místě a **obě z týchž nálezů** — u jedné je barva reviewer, u druhé závažnost. Jedno kódování v celém okně je celý smysl #502: barva je závažnost, ať se kreslí v řádku, pod hlavičkou nebo v okraji diffu. „Kdo našel“ zůstalo v chipech runbaru a v dráhách `Průběhu`, tedy tam, kde na to je místo i text |
+| **Pás se nekreslí, když se o PR nedost ví** | Nakreslit ho z toho, co je (nálezy znají svoje soubory, značky `Prošlo` svoje cesty) a šířku segmentu odhadnout | Z nálezů se dá poskládat pás **jen ze souborů, ve kterých nález je** — u PR o čtyřiceti souborech se třemi nálezy by to byl třísegmentový pás tvářící se jako celý PR. To je ten vzor „text (a kresba), který tvrdí víc, než data unesou“. Prázdno o velikosti PR je čitelnější než smyšlená mapa |
+| **Podmínky jsou dvě, ne jedna** (běh **a** načtený diff), i když zadání jmenuje jen běh | Kreslit pás všude, kde je diff — tedy i u PR bez review | Neutrální pás nad PR, na kterém nic neběželo, je k nerozeznání od PR, na kterém review doběhlo a nic nenašlo. Barva segmentu je závažnost nálezu, takže „šedý pás“ znamená „nic se nenašlo“ — a to je zrovna ten nebezpečný směr. Zadání tuhle druhou podmínku nemá, protože předpokládalo, že soubory ve frontě k dispozici jsou; **nejsou** (viz řádek níž) |
+| **Diff se pro řádek nedotahuje** | Prefetch diffu (nebo `gh pr view --json files`) pro řádky fronty na tiku | N volání `gh` na tik, tedy tatáž zamítnutá cesta jako u #515 — a u `--json files` navíc **strop sta souborů**, změřený u #518. Pás tím mají řádky PR, které už byly v tomhle spuštění otevřené; je to zapsaná mez, ne záměr, a dá se posunout jedině tím, že by si aplikace seznam souborů **ukládala** (kandidát: záznam review, který diff v ruce má) |
+| **Vlákna ani jezdec v řádku nejsou** | Předat `anchoredThreads` a kreslit čárky i v mini pásu | Konverzace se stejně jako diff tahá až v detailu, takže by chybějící čárka u zavřeného PR neznamenala „žádná diskuze“, ale „nevíme“ — a to je tatáž lež v menším. Jezdec navíc ukazuje soubor pod výřezem, který u zavřeného PR neexistuje. Popisek mapy tím v řádku o vláknech **mlčí**, což `Policy.mapSummary` umí (části bez obsahu vynechává) |
+| **Tatáž `Policy.pullRequestMap` a tatáž kresba, jen jiná geometrie** | Vlastní, levnější funkce pro mini pás (bez jmen segmentů, bez popisku) | Dvě funkce znamenají dvě pravdy o jednom PR a rozdíl by se poznal jedině tak, že by si někdo všiml obojího naráz. Sdílená kresba je `PullRequestMapView.drawSegments` a velký pás si nad ní **druhým průchodem** dokresluje značky; průchod polem nic nestojí, kdežto druhý výklad toho, co je červený segment, stojí důvěru v pás. Hlídají to tři stráže nad zdrojáky |
+| **Cache s otiskem vstupů, ne s ručním zneplatňováním** | Přepočítávat pás při každém dotazu; nebo držet odvozenou mapu jako `readStates` a volat `refresh…` z míst, která vstupy mění | Přepočítávat je práce lineární v počtu souborů **u každého řádku a průchodu tělem** (#224). Ruční zneplatňování by znamenalo pět volajících (načtení diffu, doběhlé review, odmítnutí, značka, změna konfigurace) a **stačí zapomenout jedno**, aby řádek kreslil pás z minula — potichu, protože pás z minula vypadá jako pás. Otisk se skládá při každém dotazu, takže není kde zapomenout; je v něm všechno, co ta funkce čte (#153), a nic, co roste s počtem souborů |
+| **`QueueRow` zůstává s jedním polem** | Zrušit ho a předávat `blocking: Int`; nebo tam spektrum nechat ležet | Ležící pole bez čtenáře je mrtvá váha, která svádí spolehnout se na ni — to je důvod, proč spektrum odešlo celé. Holé `Int` by ale z `PullRequestRow(row:)` udělalo nepojmenované číslo na čtyřech místech (řádek, deska, seznam, testy), a „kolik nálezů blokuje“ je pojmenovaný údaj o výsledku, ne délka pole |
+
+**Co odešlo z testů, a proč to není ztráta pokrytí.** Se spektrem odsud odešlo rozhodnutí *čisto
+versus nemám co říct* (`clean` / `dismissed` / `inconclusive`), které si proužek počítal **znovu** —
+a právě proto muselo #383 tutéž vadu opravovat na dvou místech. Zůstalo v `Policy.chips`, kde se
+v okně doopravdy čte, a testuje se u chipu revieweera (`ReviewerChipTests`, `UnreadCodeStateTests`)
+a u prázdného tabu nálezů. Tvrzení „díl proužku nebere nic ze systémové škály“ (#432) má protějšek
+u každého stavu v `ReviewStateAppearanceTests`.
+
 ### Záznam rozhodnutí — mezera mezi kódem a pravou kolonou (#503)
 
 Naměřeno na **živém** okně (1 303 × 860, `Vedle sebe`, strom i panel složené): kolona kódu končí

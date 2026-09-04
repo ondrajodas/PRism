@@ -14,9 +14,12 @@ struct PullRequestRow: View {
     /// Leží na tomhle PR rozdělané review? Ukazuje se ikonou, ne slovem: „draft“ je vedle
     /// v řádku obsazený **rozpracovaným pull requestem**, což je něco jiného.
     var hasDraft = false
-    /// Odvozená čísla k výsledku — kolik blokuje a jak se nálezy rozdělily mezi reviewery.
-    /// Prázdné u PR, na kterém nic neběželo.
+    /// Odvozená čísla k výsledku — kolik nálezů blokuje. Prázdné u PR, na kterém nic neběželo.
     var row: QueueRow = .empty
+    /// Mapa PR do mini pásu (#502) — **místo spektra reviewerů**. `nil` = pás se **nekreslí**:
+    /// buď na PR nic neběželo, nebo aplikace jeho diff ještě neviděla. Rozhoduje o tom
+    /// `AppStore.queueMap(for:)`, a tam je i vysvětlení, proč se nekreslí nic místo prázdna.
+    var map: PullRequestMap?
     /// Čí PR to je (#331). U vlastního má řádek vpravo `Prompt →`, protože sestavit z nálezů
     /// a konverzace zadání pro agenta je jediné, co s ním okno umí udělat — verdikt na vlastní PR
     /// GitHub odmítá.
@@ -61,8 +64,12 @@ struct PullRequestRow: View {
                 .font(.body)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            if !row.spectrum.isEmpty {
-                SpectrumBar(shares: row.spectrum)
+            // **Mapa PR místo spektra reviewerů** (#502, mění #172): barva je závažnost, tedy
+            // totéž kódování jako u pásu pod hlavičkou a v okraji diffu. Bez mapy se nekreslí
+            // **nic** — prázdný obdélník by se tvářil jako údaj, tatáž úvaha, kvůli které
+            // se do #502 nekreslilo spektrum u řádku bez běhu.
+            if let map, !map.isEmpty {
+                QueueMapStrip(map: map)
             }
             // **Na vlastním PR pilulka `N k předání` místo odznaku stavu** (#334, návrh sekce 21).
             // Do #334 tady stál odznak review i na vlastním řádku — a byla to jediná věta, kterou
@@ -213,13 +220,23 @@ struct PullRequestRow: View {
                 state: .open
             ),
             reviewState: .completed(findings: 3),
-            row: QueueRow(
-                blocking: 1,
-                spectrum: [
-                    ReviewerShare(reviewer: "php-review", outcome: .blocking, weight: 2),
-                    ReviewerShare(reviewer: "security-review", outcome: .findings, weight: 1),
-                    ReviewerShare(reviewer: "docs", outcome: .clean, weight: 1),
-                ]
+            row: QueueRow(blocking: 1),
+            map: PullRequestMap(
+                segments: [4, 64, 12, 240, 8, 2790, 30].enumerated().map { index, lines in
+                    PullRequestMapSegment(
+                        path: "src/File\(index).php",
+                        name: "File\(index).php",
+                        changedLines: lines,
+                        additions: lines,
+                        deletions: 0,
+                        marker: index == 3 ? .blocking : (index == 1 ? .findings : nil),
+                        isNew: index == 5,
+                        readState: index < 2 ? .read(at: Date(timeIntervalSince1970: 1_000_000)) : .unread,
+                        findings: index == 3 ? 2 : (index == 1 ? 1 : 0),
+                        threads: []
+                    )
+                },
+                summary: "7 souborů · 2 prošlé · 3 nálezy"
             )
         )
         PullRequestRow(

@@ -310,6 +310,21 @@ final class AppStore {
     /// `Policy.fileReviewStates` vrací jen to, co značku má.
     var readStates: [PRIdentifier: [String: FileReviewState]] = [:]
 
+    /// Mapa PR pro **řádek fronty** (#502) — mini pás místo spektra reviewerů.
+    ///
+    /// **Cache, a co ji vyprazdňuje, je vypsané v `QueueMapStamp`** (#224): otisk vstupů se skládá
+    /// při každém dotazu a jeho změna mapu přepočítá, takže není žádné místo, ze kterého by se
+    /// dalo zapomenout na neplatnost upozornit. Bez cache by se pás skládal při každém průchodu
+    /// tělem seznamu u každého řádku, tedy prací lineární v počtu souborů — u `cli/cli#14320`
+    /// sto padesát osm segmentů na řádek a tik.
+    ///
+    /// Velikost drží **počet PR v chtěné množině**: uklízí ji `forget(whatIsNotIn:)` spolu
+    /// s diffem, ze kterého mapa vzniká. `@ObservationIgnored` schválně a je to podmínka, ne
+    /// úspora — zapisuje se do ní **z průchodu tělem** seznamu, takže sledovaná vlastnost by ten
+    /// průchod zneplatnila sama sebou. Čtenáře budí vstupy (`diffStates`, `reviewRecords`,
+    /// `readStates`), které si `queueMap(for:)` přečte cestou k otisku.
+    @ObservationIgnored var queueMapCache: [PRIdentifier: (stamp: QueueMapStamp, map: PullRequestMap)] = [:]
+
     /// Proč se značky nepodařilo přečíst nebo uložit. Musí být vidět: tichá nula by v okně
     /// vypadala jako nezaškrtnutý diff.
     var readMarkFailure: String?
@@ -2143,6 +2158,11 @@ final class AppStore {
         // **spolu**, jinak by po vypadlém PR zbyly stavy odvozené z mapy, která už není.
         readMarks = readMarks.filter { wantedPullRequests.contains($0.key) }
         readStates = readStates.filter { wantedPullRequests.contains($0.key) }
+        // Mapa PR pro řádek fronty (#502) jde tou samou cestou a ze stejného důvodu jako diff,
+        // ze kterého vzniká: u PR mimo chtěnou množinu ji nikdo nekreslí. Je to
+        // `@ObservationIgnored` cache, takže tenhle zápis nikoho nebudí — na rozdíl od map výš
+        // se tedy nemusí ptát, jestli se něco změnilo.
+        queueMapCache = queueMapCache.filter { wantedPullRequests.contains($0.key) }
         // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         //

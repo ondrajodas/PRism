@@ -4590,6 +4590,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestFilterButton` | Filtr seznamu v toolbaru (#117) — ikona se stavem a počtem schovaných, popover s odškrtávátky a **počtem PR u každé položky** (#199). Od #371 je nad nabídkou os odškrtávátko `Jen s blokujícím nálezem`: tu osu do #515 zapínala karta `Blokuje` na dashboardu, takže musela být **vidět a vypnutelná tam, kde se filtr nastavuje** — jinak by nabídka nad zapnutým filtrem ukazovala samá neodškrtnutá repa vedle ikony, která hlásí dvanáct schovaných PR. **Od #515 je odškrtávátko jediná cesta, jak tu osu zapnout** (karty odešly s deskou), takže je to důvod ještě silnější, ne slabší. Kreslí se **i nad prázdnou nabídkou**, protože právě tam umí být zapnutá jako jediná |
 | `PullRequestTabBar` | Záložky PR (`Přehled` / `Změněné soubory` / `Commity` / `Konverzace` / `Kontroly` ‖ `Nálezy` / `Průběh` ‖ `Zeptat se`) — podtržené, s odznakem **u každé** (#218; typy od #242) a děličem před výstupem reviewerů. **Rozsah změny v něm od #501 není** — `+X −Y` se čtverečky poměru nahradila mapa PR pod hlavičkou. **Kreslí `PullRequestTab.allCases` a nedá se to zvenku nastavit** (#306): do #306 byl seznam parametrem, protože `Kontroly` u PR bez CI odpadly — a pruh se tím při každém otevření PR přeskládal z pěti na šest. Zmizení parametru je ta podstatná část opravy; dokud existoval, dal se počet záložek znovu udělat funkcí dat. Podob má **tři** (`ViewThatFits`, `Layout`): s popisky, s ikonami a popiskem jen u aktivní (#318) a jen s ikonami (#452) — díky nim se pruh nezalomí ani v nejužším povoleném okně. Viz *Pruh záložek — tři podoby podle šířky* |
 | `PullRequestMapView`, `PullRequestMapGeometry`, `PullRequestMapProbe`, `PullRequestMapHoverLayer`, `PullRequestMapLegendButton` | Mapa PR — pás pod hlavičkou (#501, návrh sekce 42): segment na soubor, šířka podle `log₂(řádků + 1)`, barva podle nejhoršího nálezu, prošlý tlumeně, vlákno svislou čárkou, soubor pod výřezem označený. **Pás je jedna kresba** (`Canvas`), ne řada tlačítek — u 158 souborů to byla přes tisíc views v hlavičce a přerovnání okna stálo 70 ms místo 14 (#252, #501). Šířky počítá `Policy`, polohy `PullRequestMapGeometry`. **Kolem kresby stojí tři malá views a všechna z téhož důvodu**: co se mění jinak často, nesmí přeložit tělo pásu — `PullRequestMapHoverLayer` drží nápovědu, hover a klik, `PullRequestMapLegendButton` popisek s legendou a `PullRequestMapProbe` čte výřez a zapisuje do `DiffFileCursor` (#469). Viz *Mapa PR — pás pod hlavičkou* |
+| `QueueMapStrip` | Mini pás mapy PR v **řádku fronty** (#502) — 110 × 6 bodů, **místo spektra reviewerů** z #172. Data skládá `Policy.pullRequestMap` a plochy kreslí `PullRequestMapView.drawSegments`, tedy obojí **tatáž funkce jako u velkého pásu**; odsud je jen geometrie. Pevná šířka i výška (#375, #220) a **bez značek**: čárka vlákna ani jezdec se v řádku nekreslí. `nil` mapa = pás se nekreslí vůbec, rozhoduje `AppStore.queueMap(for:)`. Viz *Mini pás v řádku fronty* |
 | `StaleNoticeView` | Okrová věta „tohle je poslední známý stav“ nad seznamem, který se nepovedlo načíst **znovu** — jedno místo pro `Kontroly` (#215) i `Commity` (#316). Sedí **nad `ScrollView`em**, aby neodscrollovala pryč od obsahu, o kterém mluví |
 | `CommitListView` | Seznam commitů v tabu `Commity` (#316): pruh s počtem a hlavou, řádek na commit (obrázek autora, první řádka zprávy, jméno, relativní čas, sha) a pilulky `sloučení` a `hlava`. `content` je `internal` kvůli měření přesahu — `NSScrollView` by přesah ukrojil |
 | `CommitDiffView` | Diff jednoho commitu (#317) — hlavička a pod ní `DiffView`. **Nedostane `AppStore` ani identifikátor PR**, takže nemá čím vyrobit bublinu nálezu ani rozdělaný komentář; `reading(_:)` je `internal` kvůli testu, který tvrdí právě to, co `DiffView` **nedostane** |
@@ -4608,7 +4609,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ConversationComposerView`, `ConversationComposer` | Psaní komentáře pod PR (#216) a akce k němu |
 | `TimelineEventRow` | Událost převedená na řádek — symbol, věta **s tučnými jmény**, barva uzlu (`tint: Color?`), sha po jednom (#171, sazba #216). Mimo view a testovatelné, jako `FindingRow` |
 | `AvatarView`, `AvatarLoader` | Obrázek uživatele u události a jeho cache nad `HTTPGetting` (#171) |
-| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, odznak stavu, ikona rozdělaného review — a u **vlastního PR** `Prompt →` (#331, `showsPromptAction`) a od #334 pilulka `N k předání` **místo odznaku stavu** (obě čísla mluví o týchž nálezech, takže by se vedle sebe pralo „3 nálezy“ s „6 k předání“; když nezbývá nic, odznak zůstává). Od #333 nese tlačítko akci (`openPrompt`) a **není zakázané**: otevře PR a v něm panel `Zadání`. **Bez akce se nekreslí** — `showsPromptAction` se ptá i na uzávěr, takže řádek bez storu (náhled, test) tlačítko nemá; nakreslit ho naprázdno je zrovna ta lež, kvůli které se do #333 kreslilo ztlumené |
+| `PullRequestRow` | Repo + číslo + `draft` chip, titulek, autor a relativní čas, **mini pás mapy PR** (#502, `QueueMapStrip` — místo spektra reviewerů z #172), odznak stavu, ikona rozdělaného review — a u **vlastního PR** `Prompt →` (#331, `showsPromptAction`) a od #334 pilulka `N k předání` **místo odznaku stavu** (obě čísla mluví o týchž nálezech, takže by se vedle sebe pralo „3 nálezy“ s „6 k předání“; když nezbývá nic, odznak zůstává). Od #333 nese tlačítko akci (`openPrompt`) a **není zakázané**: otevře PR a v něm panel `Zadání`. **Bez akce se nekreslí** — `showsPromptAction` se ptá i na uzávěr, takže řádek bez storu (náhled, test) tlačítko nemá; nakreslit ho naprázdno je zrovna ta lež, kvůli které se do #333 kreslilo ztlumené |
 | `PollStatusBanner` | Pruh nad seznamem — **jen když data nejsou čerstvá** |
 | `PullRequestDetailView` | Pravý panel: hlavička ve třech řádcích (titulek s číslem, souřadnice PR, pruh běhu), pod ní záložky, diff a nálezy. **Bez pravého sloupce** (#218) — zbylo v něm jediné akcentové místo, `Spustit review` |
 | `PullRequestHeaderView` | Souřadnice PR: kapsle stavu (plná, s puntíkem), od #334 za ní pilulka `moje PR` (mint, jen na vlastním) a od #531 pilulka `mimo zdroje · jen ke čtení` (tlumená, jen na záložce otevřené odkazem), autor, větev → base, repo, souhrn checků a odkaz na GitHub. `StaleHeadView` vedle něj mluví jen tehdy, když se hlava rozešla se sha nálezů |
@@ -4863,6 +4864,70 @@ Co se nemá rozbít:
 - **`⌥←`/`⌥→` visí na jednom průhledném tlačítku** v mapě, ne v detailu PR — a je to výkonová
   podmínka, viz `DiffFileCursor` níž. Na krajích pásu je tlačítko **zakázané**, takže klávesu
   nebere a propadne dál; zacyklit se skok nemá (`Policy.mapStep(from:_:count:)`).
+
+#### Mini pás v řádku fronty (#502)
+
+Od #502 stojí **tentýž pás i v řádku fronty**, 110 × 6 bodů, **místo spektra reviewerů** z #172
+(`QueueMapStrip`). Rozdíl proti spektru je věcný, ne v umístění: spektrum říkalo, **kdo** nálezy
+nechal, pás říká **kde v PR** jsou a **jak zle** — a to je otázka, na kterou se odpovídá dřív, než
+se PR otevře. V okně tím zůstává jedno kódování, **barva je závažnost**, ať se kreslí v řádku, pod
+hlavičkou nebo v okraji diffu; „odkud ty nálezy jsou“ zůstalo runbaru po otevření.
+
+**Mini pás je velký pás v jiném měřítku, ne druhá mapa.** Skládá ho `Policy.pullRequestMap`
+a plochy kreslí `PullRequestMapView.drawSegments` — obojí tatáž funkce, tvrdí to
+`QueueMapStripTests` nad zdrojáky (`Policy.mapFill(` smí stát jedině v `PullRequestMapView.swift`,
+`Policy.pullRequestMap(` jedině v detailu PR a v `AppStore+QueueMap.swift`). Nad referenčním
+rozložením ze sekce 42 vyjdou **podíly na tisícinu stejné** ve 110 i v 800 bodech (lock 30,8 %,
+`composer.json` 6,2 %), protože ani nejmenší segment na minimum nedosáhne: ve 110 bodech má
+**6,1 bodu**, nejmenší jsou tři. Mezery ustupují **tou samou nerovností** (`Policy.mapSpacing`) —
+ve 110 bodech od dvaceti tří souborů; nad šestatřiceti nestačí ani minima a pás se dělí rovným
+dílem, takže u 158 souborů z něj zbude barevný pruh po 0,7 bodu. To je vědomá spodní hranice: pás
+pak přestává mluvit o velikosti, ale pořád říká, kolik červené v tom PR je.
+
+**Čárka vlákna ani jezdec se v řádku nekreslí**, a je to důsledek toho, co se o PR ve frontě ví —
+ne úspora místa. Jezdec ukazuje soubor pod výřezem, a ten u zavřeného PR není; vlákna leží
+v konverzaci, která se stejně jako diff tahá až v detailu, takže by chybějící čárka neznamenala
+„žádná diskuze“, ale „nevíme“. Popisek mapy (`map.summary`) proto v řádku o vláknech **mlčí** —
+`Policy.mapSummary` části bez obsahu vynechává — a nese ho nápověda a `accessibilityValue`, ne
+řádka (v ní na něj místo není).
+
+**Co se o PR ve frontě doopravdy ví, a proč se pás u většiny řádků nenakreslí.** Rozhoduje
+`AppStore.queueMap(for:)` a odpověď je `nil` ze **dvou** důvodů, obojí s vlastním testem:
+
+- **na PR nic neběželo** (žádný záznam, nebo záznam bez běhů). Barva segmentu je závažnost, takže
+  neutrální pás by byl k nerozeznání od PR, na kterém review doběhlo čisté — tatáž úvaha, kvůli
+  které se do #502 nekreslilo spektrum u řádku bez běhu;
+- **diff se ještě nenačetl.** A to je ta podstatná mez: pás stojí na seznamu souborů a jejich
+  objemu, a ten se ve frontě nemá odkud vzít. Diff se dotahuje **až při otevření PR** (#306),
+  polling přinese jen shrnutí (`PullRequestSummary` nemá ani `headSha`, natož soubory) a záznam
+  review si seznam souborů neukládá. Dotáhnout ho pro každý řádek by bylo N volání `gh` na tik —
+  **zamítnutá cesta**, naposledy u #515. Pás tedy mají řádky PR, které už byly v tomhle spuštění
+  otevřené (diff se drží, dokud je PR v chtěné množině); ostatní vypadají jako řádek do #502 bez
+  spektra: odznak stavu, nic víc. **Prázdný obdélník se nekreslí nikdy** — tvářil by se jako údaj.
+
+**Cache, a co ji vyprazdňuje, je vypsané v `QueueMapStamp`** (#224). Pás se skládá při každém
+průchodu tělem seznamu **u každého řádku**, tedy prací lineární v počtu souborů; otisk vstupů se
+proto skládá při každém dotazu a jeho změna mapu přepočítá — není žádné místo, ze kterého by se
+dalo zapomenout na neplatnost upozornit. Do otisku patří **všechno, co `Policy.pullRequestMap`
+čte** (#153), a přitom nic, co roste s počtem souborů: razítko diffu (`updatedAt`, tatáž smlouva
+jako u `hasCurrentDiff`) s počtem souborů, z každého platného nálezu čtveřice
+*(soubor, řádek, kategorie, verdikt)*, značky `Prošlo` a **blokující kategorie z konfigurace**.
+Poslední dvě jsou ta místa, na kterých se cache umí rozejít potichu: značka pás ztlumí a přepnutá
+sada ho přebarví, aniž by se nález změnil. Uklízí se v `forget(whatIsNotIn:)` spolu s diffem;
+`@ObservationIgnored` je u ní **podmínka, ne úspora** — zapisuje se do ní z průchodu tělem, takže
+sledovaná vlastnost by ten průchod zneplatnila sama sebou. Čtenáře budí vstupy, které si
+`queueMap(for:)` cestou k otisku přečte.
+
+**Výška řádku fronty se nemění** (#325): pás má šest bodů a řádek dvě řádky textu, takže se do
+nich vejde — měřeno `fittingSize` mimo obrazovku, i v nejužším okně (636 b obsahu), kde řádek
+zůstává na jedné řádce vedle titulku a odznaku.
+
+**`SpectrumBar` odešel celý**, a s ním `QueueRow.spectrum`, typ `ReviewerShare`
+a `ReviewStateAppearance.color(of: ReviewerShare.Outcome)` — nikdo je nečetl a stav, který se drží
+bez čtenáře, svádí spolehnout se na něj. `QueueRow` **zůstává** s jedním polem (`blocking`): je to
+pořád údaj o výsledku a čte ho hrana řádku i odznak, kdežto holé `Int` by z `PullRequestRow(row:)`
+udělalo nepojmenované číslo. Rozhodnutí „čisto versus nemám co říct“, které si proužek počítal
+**znovu** (a #383 ho proto muselo opravovat na dvou místech), zůstalo v `Policy.chips`.
 
 #### Legenda k pásu — na vyžádání z popisku (#501)
 
@@ -8720,7 +8785,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.summary(of:records:drafts:categories:)` | Souhrn fronty (#155) — počítá **PR, ne nálezy**, a blokující bere z `blockingCount`, tedy bez odmítnutých. Volající mu od #332 posílá **frontu** (`queuePullRequests`), ne celý seznam |
 | `Policy.blockingCount(in:categories:)` | Kolik **platných** nálezů záznamu blokuje. Bydlí u `isBlocking`, protože se na to ptají dvě místa — notifikace a řádek seznamu |
 | `Policy.mostSevereFinding(in:categories:)` | Nález, kterým se začíná (#200) — první ze `sorted`, tedy ten nahoře v panelu. Vlastní škála závažnosti z toho nevzniká |
-| `Policy.queueRow(for:categories:)` | Odvozená čísla pro řádek seznamu (#172): kolik blokuje a jak se nálezy rozdělily mezi reviewery (`QueueRow`, `ReviewerShare`) |
+| `Policy.queueRow(for:categories:)` | Odvozené číslo pro řádek seznamu (#172): kolik nálezů blokuje (`QueueRow`). **Od #502 jedno, ne dvě** — druhým byl podíl reviewerů (`ReviewerShare`) a odešel spolu se `SpectrumBar`em; v řádku je na jeho místě mapa PR |
 | `Policy.board(entries:mine:pending:isMergeReady:activity:lastVisit:activityEmpty:)`, `Policy.boardSentence(_:)` | Podklad domácí záložky (#515, `Board`) — **šest pruhů podle mého tahu** (kreslí se z nich jen neprázdné, `Board.visibleLanes`) a v témže snímku blok `Dění`. Nahradilo `Policy.dashboard` z #181: karty odešly, a s nimi `Dashboard`, `Dashboard.*Card`, `ReviewerShareOfFindings` i `reviewerShares`. **Jeden snímek na překreslení** (týž důvod jako u #331 a #443): deska prochází celý seznam a u vlastních PR se ptá na předání i na merge, takže getter na jeden pruh by tu práci udělal šestkrát. `pending` a `isMergeReady` jsou **uzávěry, ne mapy** — čtou se jen u vlastních PR. `boardSentence` mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a **nuly nepíše**; nad prázdnou deskou řekne slovem, že je čisto |
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí řádků na domácí záložce (#181, #331, od #515 uvnitř pruhů) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první. Od #515 se řadí **jednou nad celým seznamem** a pruhy si z něj berou pořadí — řez nad špatně seřazeným vstupem by tiše ukázal jiných pět |
 | `Policy.lane(of:ownership:handoff:isMergeReady:)`, `Policy.isMergeReady(_:)` | Do kterého pruhu pull request patří (#515, `WorkLane`). **Právě jeden pruh na PR** — `switch` je vyčerpávající a návrat není optional; testuje se **vyčerpávajícím výčtem** (13 stavů × 2 × 2 × 2 × **5 stavů předání** × 2 = 1 040), protože rozřazení je věc, kterou se dá pokazit potichu. Pořadí priorit: draft přebíjí všechno (ručně psaná práce), běžící review je `waiting` (jinak by pruh `Přečíst` hlásil víc, než co jeho akce pustí), cizí PR se dělí na `notStarted → read` a zbytek `→ decide`, vlastní **na `isMergeReady → merge`** a teprve pak `awaitsMove → handOff`, zbytek `waiting`. **Slévatelnost přebíjí předání vždycky** (druhé proklikání #515 — ruší výjimku pro `HandoffReport.Stage.changed`, kterou tu měla první oprava, a s ní `HandoffReport.outranksMerge`): stav předání se do rozřazování **nedostane vůbec** a je na to tvrzení nad celou mřížkou vstupů. Z reportu se čte jedině `awaitsMove`, tedy **tatáž otázka jako odznak `Moje PR` v railu**. `isMergeReady(_:)` staví na `mergeOffer(…)` a bere z něj jednu výjimku: **zavřená brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`) — s výchozím vypnutým odesíláním by jinak byl pruh `K merge` navždycky prázdný |
@@ -9609,8 +9674,9 @@ Nad nálezy platí navíc:
     **za běhu**; dvě konstanty s `@Environment(\.colorScheme)` by znamenaly, že barvu řeší každé
     view samo.
   - **Akcent je fialový z návrhu, ne systémový.** Je to jediná barva, kterou si okno drží samo:
-    stojí na ní identita aplikace (hranol, spektrum reviewerů), a spektrum by se systémovým
-    akcentem měnilo význam podle nastavení systému. Nasazuje se `tint`em **na kořen okna**, takže
+    stojí na ní identita aplikace (hranol) a **znamená něco v datech** — čárka vlákna a jezdec
+    v mapě PR, běžící review v odznaku —, takže by se systémovým akcentem měnil význam podle
+    nastavení systému. (Do #502 se tady jmenovalo spektrum reviewerů; to odešlo, důvod platí dál.) Nasazuje se `tint`em **na kořen okna**, takže
     ho dědí odznaky i tlačítka uvnitř a nikde jinde se fialová nezadrátovává.
   - **Sémantická škála jde celá z palety** (#432): `ok`, `find`, `crit`, `stale` — nikde v `App/`
     se nekreslí systémová `.green`, `.red`, `.orange` ani `.yellow`. Do #432 to bylo naopak
