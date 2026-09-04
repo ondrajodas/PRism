@@ -9676,6 +9676,24 @@ což je přesně ten druh tichého odhadu, kterým se rozhoduje o chybějícím 
 `RepoCheckout.changedFiles(in:since:)` — lokální dotaz, který odpovídá úplně, a v cestě review
 navíc **zdarma** (pracovní kopie v tu chvíli existuje).
 
+### Že přejmenování schová původní cestu, se taky změřilo
+
+`--no-renames` u výpisu cest není opatrnost, ale odpověď na měření. Nad čerstvým repem, ve kterém
+se soubor **přesunul z hlídané složky**:
+
+```bash
+git mv src/Auth/User.php src/Legacy/User.php && git commit -qm move
+git diff --name-only HEAD~1...HEAD
+#  → src/Legacy/User.php                    ← původní cesta v seznamu **není**
+git diff --name-only --no-renames HEAD~1...HEAD
+#  → src/Auth/User.php
+#    src/Legacy/User.php
+```
+
+S detekcí přejmenování (výchozí stav) by tedy pravidlo `src/Auth/**` svého revieweera
+**nevzbudilo**, přestože se ta složka změnila — a byl by to zrovna ten druh změny, kvůli kterému
+takové pravidlo existuje.
+
 ### Kde se u #518 ověřila regrese vložením regrese
 
 Dvě věci, na kterých issue stojí, a obě se rozbijí potichu. Regrese se vložila zvlášť, aby bylo
