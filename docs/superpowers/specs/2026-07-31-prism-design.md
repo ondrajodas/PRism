@@ -5612,8 +5612,17 @@ záruku** — kolik průchodů to sedne, se řídit nedá, a měřit se to musí
 
 ### Záznam rozhodnutí — mapa PR v řádku fronty (#502)
 
-Druhé issue směru E z milníku M14. **Nekreslilo se nic**: zákres té skupiny přenesl #501 jako
+Druhé issue směru E z milníku M14. **Novou sekci nekreslí**: zákres té skupiny přenesl #501 jako
 sekci 42 a #502 se na ni odkazuje.
+
+**Do mockupu se přesto sáhlo, a je to oprava mezery po #501.** Sekce 42 nakreslila pás pod
+hlavičkou, ale v **řádcích fronty** zůstalo na třech místech staré spektrum (sekce 03 dvakrát
+a srovnání *Dnes / Návrh* v sekci 14) — dokument tedy kreslil obrazovku, kterou aplikace po tomhle
+PR nemá. `.spectrum` odešlo z CSS **celé**, protože ho nekreslilo nic jiného; není to případ
+`.diffstat`, které po #501 zůstalo kvůli záznamu měření v sekci 19. Mini pás si vzal jméno `.qmap`
+a **barvy bere z `.rv-prmap .seg`** — jedna selektorová řádka na segment i vzorek v legendě, tedy
+totéž, co v okně drží `PullRequestMapView.drawSegments`. Přidává jedině rozměr z návrhu
+(110 × 6 b, mezera 2) a **popisek nemá**: v řádku na něj vedle titulku a odznaku není místo.
 
 **Ruší zapsané rozhodnutí #172** — spektrum reviewerů v řádku fronty. Platilo, dokud byla otázka
 „odkud ty nálezy jsou“ ta jediná, na kterou v řádku vedle odznaku zbylo místo; od #501 je vedle ní
