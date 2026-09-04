@@ -89,8 +89,9 @@ minutě spadlo se stejnou hláškou i kolo nad `PRism#565` z cizí větve. Bot v
 přečíst si `GET /pulls/{n}`, tedy potíž instalace GitHub Appky, na kterou z repa nedosáhneme.
 
 **Vyžádat znovu pomůže jedině tehdy, když výpadek mezitím skončil.** U #542 se to zkusilo
-**třikrát** (20:46, 20:48, 20:56) a pokaždé to spadlo stejně; run přitom pokaždé **vznikl a běžel**,
-takže to není spotřebovaný request z odstavce níž a `union: false` na tom nic nezmění. Cesta ven je
+**čtyřikrát** (20:46, 20:48, 20:56 a 23:16) a pokaždé to spadlo stejně; run přitom pokaždé
+**vznikl a běžel**, takže to není spotřebovaný request z odstavce níž a `union: false` na tom nic
+nezmění. Cesta ven je
 počkat a zkusit to znovu později — a do té doby to **hlásit jako neověřenou mezeru**, ne mergovat
 s tím, že „Copilot nic nenašel“: nic nepřečetl.
 
