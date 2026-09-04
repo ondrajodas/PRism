@@ -81,6 +81,24 @@ struct PullRequestDetailView: View {
     /// záložek** i `DiffView` pod ním. Do #501 si obojí držel diff sám; viz `DiffTracking`.
     @State private var tracking = DiffTracking()
 
+    /// Kde jsem v procházení itineráře (#507) — **kurzor, ne hotovo**.
+    ///
+    /// Tatáž úvaha jako u `cursor` (#187), a stejně jako on **nesmí přetéct mezi pull requesty**:
+    /// zastávka `Kontroly` z předchozího PR je na tomhle náhodná shoda. `nil` = ještě nikde,
+    /// takže první stisk mezerníku jde na aktuální zastávku (tu, na které dráha podle **dat**
+    /// stojí).
+    ///
+    /// **Nic se jím neodškrtává.** Hotovo se pozná z dat (#506) a projít dráhu mezerníkem
+    /// s tím nehne.
+    @State private var itineraryCursor: ItineraryStop.Kind?
+
+    /// Jestli výřez obsahu záložky dojel na konec (#507) — vstup mezerníku.
+    ///
+    /// **Třída, ne `@State` hodnota**, a je to výkonová podmínka (#503): mění se při
+    /// scrollování, kdežto `@State` detailu by za každou takovou změnu zaplatil průchodem tělem
+    /// celého detailu i s diffem. Čte to jediné view (`ItineraryStepShortcut`).
+    @State private var contentEnd = ContentEndState()
+
     /// Rozložený levý sloupec — itinerář review (#506). Předvolba pohledu napříč PR, takže
     /// `UserDefaults` a ne stav ve store; **klíč zůstává `diffTreeExpanded`** z #197, protože
     /// význam hodnoty se nezměnil (rozložený sloupec) a přejmenováním by se zahodilo `⌘1`, které
@@ -111,6 +129,10 @@ struct PullRequestDetailView: View {
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
+        // **Jedno složení zastávek na průchod tělem** (#507): čte je sloupec i zkratka mezerníku,
+        // a `itineraryFacts` sahá do pěti map ve store a projde hlavičky hunků. Dvě složení by
+        // navíc znamenala dvě odpovědi na jednu otázku — tatáž úvaha jako u značek souborů.
+        let itinerary = itineraryActions
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 controls
@@ -128,7 +150,7 @@ struct PullRequestDetailView: View {
             // stojí obsah pod ním.
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Palette.surface)
-            content
+            content(itinerary)
             terminalDrawer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -167,7 +189,7 @@ struct PullRequestDetailView: View {
                 handoff: { store.noteHandoff(of: $0) }
             )
         }
-        .hiddenShortcuts { shortcuts }
+        .hiddenShortcuts { shortcuts(itinerary) }
         .task(id: highlighted) {
             guard highlighted != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
@@ -183,6 +205,9 @@ struct PullRequestDetailView: View {
         .task(id: pullRequest.id) { store.noteVisit(to: pullRequest.id) }
         // Kurzor procházení patří k tomuhle diffu, ne k oknu — viz `cursor`.
         .task(id: pullRequest.id) { cursor = FindingCursor(onlyBlocking: cursor.onlyBlocking) }
+        // Kurzor itineráře (#507) patří k tomuhle PR ze stejného důvodu: `Kontroly` na
+        // předchozím PR jsou tady náhodná shoda jména zastávky.
+        .task(id: pullRequest.id) { itineraryCursor = nil }
         // Log jobu patří k jednomu checku jednoho PR (#214), takže při přepnutí PR **nesmí**
         // přetéct — ani obsahem, ani tou pamětí, kterou drží.
         .task(id: pullRequest.id) { logSheet = nil }
@@ -506,7 +531,7 @@ struct PullRequestDetailView: View {
     /// **Šířku si tab nepočítá, dostane ji změřenou.** `GeometryReader` níž měří to, co po panelu
     /// zbylo, takže se zmizením panelu roztáhne sám a není tu žádné odečítání, které by se dalo
     /// splést — právě na takovém odečítání se rozbila #291.
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private func content(_ itinerary: ItineraryActions) -> some View {
         let tab = store.detailTab(for: pullRequest.id)
         // **Vedle sebe, ne pod sebou** (#182). Panel dole si bral výšku, které je v diffu
         // nejmíň; napravo bere šířku, které je v okně přes celou obrazovku dost.
@@ -514,7 +539,7 @@ struct PullRequestDetailView: View {
             // **Itinerář vedle všech tabů, ne uvnitř `Změněných souborů`** (#506, druhé kolo).
             // Do té doby byl součástí obsahu tabu, takže překliknutím na `Kontroly` zmizel —
             // a mizel právě ve chvíli, kdy podle něj člověk někam odešel.
-            itineraryColumn
+            itineraryColumn(itinerary)
             // **Plocha tabu je `surface` ve všech třech** (#216) — návrh má `.ovpane`,
             // `.diffpane` i `.convpane` na `--panel`. Bez toho prosvítalo `background`
             // (skoro černá) a obsah plaval v prázdnu. Panel vedle si maluje `chrome` sám,
@@ -1009,7 +1034,7 @@ struct PullRequestDetailView: View {
     /// nemělo kde zaregistrovat.
     ///
     /// Jak se schovávají, ví `hiddenShortcuts` — je to jedno místo pro celou aplikaci.
-    @ViewBuilder private var shortcuts: some View {
+    @ViewBuilder private func shortcuts(_ itinerary: ItineraryActions) -> some View {
         // `⌥⇧↓` je pro SwiftUI **tatáž zkratka** jako `⌥↓`, proto jedno tlačítko a shift až
         // v akci — viz `isShiftDown`.
         WindowShortcutButtons(action: .nextFinding) {
@@ -1036,6 +1061,17 @@ struct PullRequestDetailView: View {
         submitShortcut
         agentPromptShortcut
         cancelReviewShortcut
+        // Mezerník na další zastávku (#507). **Vlastní view**, protože čte polohu výřezu — kdyby
+        // se to čtení odehrálo tady, překládalo by se tělo detailu při každém otočení kolečka
+        // (tatáž podmínka jako u `DiffReadShortcut`).
+        ItineraryStepShortcut(
+            stops: itinerary.stops,
+            cursor: itineraryCursor,
+            pullRequest: pullRequest.id,
+            tab: store.detailTab(for: pullRequest.id),
+            content: contentEnd,
+            select: itinerary.select
+        )
     }
 
     /// `⌘.` zastaví běžící review na PR, který je v okně (#441).
@@ -1285,7 +1321,13 @@ struct PullRequestDetailView: View {
             pullRequest: pullRequest,
             // Zastávka `Popis a záměr` v itineráři (#506). Zapisuje store, protože `@State`
             // detailu by přetekl na jiný pull request — tentýž důvod jako u sbalování a značek.
-            reportReadToEnd: { store.noteOverviewReadToEnd($0, for: pullRequest.id) }
+            reportReadToEnd: { store.noteOverviewReadToEnd($0, for: pullRequest.id) },
+            // Konec obsahu pro mezerník (#507). **Druhé hlášení vedle toho nad ním**, i když
+            // obojí mluví o dolní hraně: `reportReadToEnd` odškrtává zastávku, takže se ptá
+            // i na to, jestli je popis načtený (`Policy.overviewAtEnd`), kdežto tohle rozhoduje
+            // jen o klávese. Jedna hodnota na dvě otázky by znamenala, že se mezerník nechytne
+            // v `Přehledu`, dokud se nedotáhne detail.
+            reportContentEnd: { contentEnd.note($0, of: pullRequest.id, in: .overview) }
         )
     }
 
@@ -1297,14 +1339,14 @@ struct PullRequestDetailView: View {
     /// **Mluví o celém pull requestu, ne o tom, co je zrovna v tabu vidět.** Nad rozsahem
     /// `Od tvé poslední návštěvy` (#284) tedy zůstává seznam celého diffu — je to průvodce
     /// review, a review se dělá nad hlavou PR.
-    @ViewBuilder private var itineraryColumn: some View {
+    @ViewBuilder private func itineraryColumn(_ itinerary: ItineraryActions) -> some View {
         Group {
             // **Složený proužek si zastávky ani soubory nesloží** — a je to předfiltr, ne úspora:
             // tenhle uzel se od #506/2 skládá v **každém** tabu a při každém průchodu tělem
             // detailu, kdežto proužek kreslí jedinou hodnotu. Proto jsou to dva typy a ne jedno
             // tělo s `if`em; podrobněji u `ItineraryColumnView`.
             if isColumnExpanded {
-                expandedItineraryColumn
+                expandedItineraryColumn(itinerary)
             } else {
                 // **`nil`, dokud se diff nenačte**: `0 souborů` na proužku by tvrdilo, že PR nic
                 // nemění, o PR, u kterého se to zatím neví. V tabu s diffem to nenastalo (proužek
@@ -1322,7 +1364,7 @@ struct PullRequestDetailView: View {
         .background(alignment: .topLeading) { columnShortcut }
     }
 
-    private var expandedItineraryColumn: some View {
+    private func expandedItineraryColumn(_ itinerary: ItineraryActions) -> some View {
         // **Značky se skládají jednou** a slouží dvakrát: puntíky u jmen a pořadí podle rizika.
         // Dvě složení jedné odpovědi by znamenala, že pořadí v itineráři nesouhlasí s puntíky
         // v něm — tatáž úvaha jako u `marginCards`.
@@ -1364,7 +1406,11 @@ struct PullRequestDetailView: View {
     /// Skládá je `Policy` z faktů, které nasbíral store; tady se rozhoduje jedině to, **co klik na
     /// zastávku udělá s oknem**: přepne tab a u `Verdiktu` k tomu rozloží panel, protože verdikt se
     /// vybírá v něm a `Změněné soubory` samy o sobě na tu zastávku neodpoví.
-    private var itinerary: ItineraryActions {
+    ///
+    /// **Od #507 se u toho posune kurzor** — a je to jedno místo pro klik i pro mezerník. Kdyby si
+    /// klávesa vedla vlastní pozici, mezerník po kliknutí na zastávku by pokračoval odjinud, než
+    /// kam člověk klikl.
+    private var itineraryActions: ItineraryActions {
         let facts = store.itineraryFacts(for: pullRequest.id)
         let stops = Policy.itinerary(facts)
         return ItineraryActions(
@@ -1373,6 +1419,7 @@ struct PullRequestDetailView: View {
             select: { stop in
                 store.setDetailTab(stop.tab, for: pullRequest.id)
                 if stop.kind == .verdict { panelExpanded.wrappedValue = true }
+                itineraryCursor = stop.kind
             }
         )
     }
@@ -1501,7 +1548,11 @@ struct PullRequestDetailView: View {
                     // odkaz nemá (bors odkazuje mimo GitHub, viz `PullRequestCheck.jobID`).
                     link: check.link
                 )
-            }
+            },
+            // Konec obsahu pro mezerník (#507) — `Kontroly` jsou třetí a poslední tab, do kterého
+            // itinerář ukazuje (`ItineraryStop.tab`). Jinde se konec neměří, takže tam mezerník
+            // zůstává klávesou scrollu.
+            reportContentEnd: { contentEnd.note($0, of: pullRequest.id, in: .checks) }
         )
     }
 
@@ -1923,6 +1974,11 @@ struct PullRequestDetailView: View {
     /// Jeden diff se všemi bublinami. Bere ho **celý diff i rozsah** — nálezy, vlákna
     /// i rozdělané komentáře se kotví na `soubor:řádek` dnešní hlavy, takže se v obou pohledech
     /// pověsí na totéž místo; co v rozsahu není vidět, se chová stejně jako soubor mimo diff.
+    ///
+    /// **`reportsScrollAnchor` a `reportsContentEnd` jdou spolu, ale nejsou totéž**: kotva se
+    /// obnovuje po restartu, kdežto konec obsahu rozhoduje o klávese. Oboje má jen celý diff —
+    /// rozsah `Od tvé poslední návštěvy` (#284) je jiný seznam souborů, takže by o dráze
+    /// itineráře tvrdil něco, co se nad ním neděje.
     private func diffView(
         of diff: Diff,
         read: DiffReadActions? = nil,
@@ -1974,6 +2030,9 @@ struct PullRequestDetailView: View {
             // někam jinam — a obnovit se má to, co je v tabu vidět po otevření, tedy celý diff.
             reportScrollAnchor: reportsScrollAnchor
                 ? { store.noteDiffScrollAnchor($0, for: pullRequest.id) }
+                : nil,
+            reportContentEnd: reportsScrollAnchor
+                ? { contentEnd.note($0, of: pullRequest.id, in: .filesChanged) }
                 : nil
         )
     }
@@ -2036,16 +2095,34 @@ struct PullRequestDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func diffFailure(_ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Diff se nepodařilo načíst", systemImage: "exclamationmark.triangle")
+    /// Místo diffu, když se nedotáhl. **Text i nabídku skládá `Policy`** (#542) — strop GitHubu
+    /// na počet souborů je jiná zpráva než výpadek sítě a `if` nad odpovědí od `gh` sem nepatří.
+    private func diffFailure(_ failure: DiffFailure) -> some View {
+        let notice = Policy.diffFailureNotice(failure)
+        return VStack(alignment: .leading, spacing: 10) {
+            Label(notice.title, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(Palette.find)
-            Text(detail)
+            if let message = notice.message {
+                Text(verbatim: message)
+                    .font(.callout)
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(verbatim: notice.detail)
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Zkusit znovu", systemImage: "arrow.clockwise") {
-                Task { await store.loadDiff(for: pullRequest) }
+            switch notice.action {
+            case .retry:
+                Button("Zkusit znovu", systemImage: "arrow.clockwise") {
+                    Task { await store.loadDiff(for: pullRequest) }
+                }
+            case .openOnGitHub:
+                // **Ne `Zkusit znovu`.** Nad stropem vrátí druhý pokus tutéž odpověď, takže by
+                // to bylo tlačítko, které slibuje, co splnit nemůže.
+                Link(destination: pullRequest.url) {
+                    Label("Otevřít na GitHubu", systemImage: "arrow.up.right.square")
+                }
             }
         }
         .padding(20)

@@ -8063,6 +8063,95 @@ byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnit�
 počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
 nepatří — je to živý přepínač, ne jednosměrná značka.
 
+## #507 — mezerník jako další zastávka a průběh ve stavovém řádku (M14)
+
+Itinerář (#506) říká, **kde jsem**; #507 přidává **pohyb jednou klávesou** a větu, podle které se
+dá rozhodnout, jestli review dodělat teď, nebo zítra. Tři věci: **mezerník** na další zastávku,
+**`Krok 4 z 9 · 12 min`** ve stavovém řádku (`.sitem plain`, vedle stavu pracovní kopie) a **patka
+sloupce** s klávesami `␣ další zastávka · ⌥↓ další nález · ⌥V prošlo`. Zákres přenesla #506,
+sekce 47 se nemění.
+
+**Mezerník normálně scrolluje, a proto o něm rozhoduje `Policy`, ne `if` ve view.**
+`Policy.itineraryStep` má tři vstupy a klávesu vydá v **jediné kombinaci ze šesti**: mimo textové
+pole, s výřezem na konci obsahu a jen když je kam jít. Zakázané tlačítko klávesu nebere, takže se
+ve všech ostatních případech propadne scrollu — tentýž vzorec jako `⌘⏎` v tabu `Zeptat se` (#452)
+a `⏎` nad otevřenou paletou (#515).
+
+**Že se do pole píše, se nedalo odvodit z tabu** (jako `Policy.claimsReturnShortcut`, #452):
+composer rozdělaného review stojí v panelu vedle `Přehledu` i `Změněných souborů`, tedy zrovna
+v tabech, o kterých itinerář mluví nejvíc. Vznikl proto `TextFieldFocus` — **množina, ne `Bool`**,
+protože pořadí dvou hlášení při přeskoku fokusu není zaručené —, hlásí do něj **čtyři** místa
+(`DraftTextField` za všechny čtyři composery naráz, `DiffSearchBar`, `PickerSearchField`,
+`CommandPaletteView`) a podává se prostředím jako `terminalFocused` (#459).
+
+**Konec obsahu se měří přesně v těch třech tabech, do kterých vedou zastávky** (`Přehled`,
+`Změněné soubory`, `Kontroly` — obor hodnot `ItineraryStop.tab`); jinde mezerník zůstává klávesou
+scrollu, a je to odpověď, ne mezera. Hlášení nese, **odkud je** (pull request a tab): hodnota
+z minulého tabu je v tom novém k nerozeznání od čerstvé, a nulovat ji úlohou při přepnutí nejde
+spolehlivě, protože pořadí nulování a prvního hlášení nové geometrie nikdo negarantuje.
+
+**Kurzor je „kde jsem v procházení“, ne „co je hotové“** (tatáž věc jako `FindingCursor`, #187,
+včetně toho, že nepřetéká mezi PR). Bez kurzoru jde první stisk na **aktuální** zastávku, ne na
+začátek dráhy; klik na zastávku ho posouvá **toutéž cestou**, jinak by mezerník po kliknutí
+pokračoval odjinud, než kam člověk klikl. **Mezerníkem se nic neodškrtává** — hotovo se pozná
+z dat.
+
+**V pruhu jsou minuty uplynulé, v hlavičce sloupce zbývající**, a je to vědomý rozdíl: pruh říká,
+jak dlouho je záložka otevřená (od otevření, **bez odečítání nečinnosti** — je to orientace, ne
+měření práce), hlavička odhaduje, co zbývá. Počítadlo je přitom **jedno**
+(`AppStore.itineraryProgress`). Čas drží `tabOpenTimes`, obnovená záložka (#527) se počítá od
+restartu a uklízí to **zavření záložky**, ne tik — záložka mimo seznam z pollingu je normální stav
+(#527, #531). Odtikává to `TimelineView` ukotvený v otevření záložky, takže se překreslí jeden
+`Text`, ne stavový řádek (tatáž konstrukce jako `DashboardCountdown`, #260).
+
+**Mezerník je druhá zkratka okna bez modifikátoru** (po `⏎` na desce, #515) a s tou první se
+nepotká: `⏎` platí jedině na domácí záložce, mezerník jedině v detailu PR. Kreslí se glyfem `␣`,
+protože ho monospace systémové písmo **má** (glyf 1330, změřeno); v proporcionálním chybí a padá
+do `HelveticaNeue`, což se týká jedině nápovědy tlačítka. Patka sloupce je jedna řádka, jak ji má
+návrh, a **vešla se až napodruhé**: k textu patří i mezery mezi osmi prvky `HStack`u, takže při
+mezeře 5 b vyjde 236,5 b proti 234 b — a přetečení se projeví **oříznutým prvním popiskem**, ne
+přetečením. S mezerou 3 b je to 222,5 b; našel to render, ne měřidlo.
+
+Nová tvrzení: sedmnáct v `ItineraryWalkTests` (matice tří vstupů, kurzor mimo dráhu, hotová dráha,
+vůle u konce obsahu, text pruhu i patky) a sedm v `ItinerarySpacebarWiringTests` (hlášení konce
+podle tabu i PR, pořadí fokusu dvou polí a dvě stráže nad zdrojáky z obou stran). **Regrese
+ověřená vložením regrese čtyřikrát** — vypnutý `isEditing`, `nil` brané jako „na konci“, pole bez
+hlášení fokusu a tab bez hlášení konce.
+
+**Neověřená mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, ověří jedině člověk
+na běžící aplikaci — testovací host nedostane aktivaci, takže nemá key okno (tatáž mezera jako
+u celého katalogu, #441).
+
+## #542 — pull request nad stropem souborů řekne proč
+
+`gh pr diff` vrací nad 300 souborů `HTTP 406` (*„the diff exceeded the maximum number of files
+(300)“*) a `home-assistant/core#181088` (3 632 souborů) se tím pádem v okně **nedal otevřít
+k ničemu**: diff spadl do obecné cesty „Diff se nepodařilo načíst“ se syrovou odpovědí, tedy tam,
+kde končí i vypršelý token a nedostupné repo. Tři různé příčiny, jeden text.
+
+**Rozhoduje `Policy` výčtem** (`DiffFailure`: `tooManyFiles(limit:response:)` / `other`,
+`Policy.diffFailure(_:)` a `diffFailureNotice(_:)`), ne `if` ve view. `DiffState.failed` proto
+nese příčinu, ne hotovou větu. **Strop se pozná z odpovědi, ne z počtu souborů** — ten aplikace
+v tu chvíli nezná —, **číslo ve větě je přečtené, nikdy dosazené**, a rozpoznání se **neváže na
+třídu chyby** (`GitHubError.responseText`), protože `gh` znění hlášek měnit může. U stropu se
+nenabízí `Zkusit znovu` (druhý pokus vrátí totéž), ale `Otevřít na GitHubu`.
+
+**Zbytek okna zůstává k užitku**: přehled, commity, kontroly ani konverzace na diffu nestojí,
+takže je záložka dál `PullRequestTabContent.detail` — rozdíl mezi „nemám diff, tady je proč“
+a „nemám nic“ je vidět ze stavu. Review se tím neblokuje (reviewer čte diff z pracovní kopie),
+ale nedoručený diff sám nespustí nic; tvrdí to test se zapnutým automatickým režimem.
+
+**Zamítnuté varianty dvě.** Stránkovat `/pulls/{n}/files` (jiný formát, druhý rozbor vedle
+`DiffParseru`, a review nad třemi tisíci soubory nemá smysl) a dotáhnout diff přes
+`compare/<base>...<head>` — ten strop **nemá** a vrátil 14,8 MB unified diffu s kódem 0, jenže
+tím se problém jen posune do kresby. **Užitečné je na tom měření**: rozsahový diff (#284) ani
+diff commitu (#317) tuhle třídu selhání nemají.
+
+Fixture je skutečná odpověď `gh pr diff` (`Tests/Fixtures/gh/pr-diff-too-large.txt`). Nová
+tvrzení: devět v `DiffFailureTests` a tři v `AppStoreDiffCapTests`; **regrese ověřena vložením
+regrese třikrát** (vypnuté rozpoznání, dosazený strop místo čteného, vyndaná kontrola číslic).
+Mockup se nekreslil — mění se věta ve stavu, který v návrhu je.
+
 ## #491 — `idealWidth` bez `.fitted` na třech sheetech a v okně nastavení
 
 **Zadání předpokládalo něco, co měření vyvrátilo, a to je na téhle změně to hlavní.** #327 zapsalo,
@@ -8119,7 +8208,9 @@ cituje.
 ineligible_app`) — tedy **ne** na velikosti `CLAUDE.md` (99 047 B, pod stropem) ani na spotřebovaném
 requestu (job má správné jméno a doběhl). Padalo to na **osmi** kolech za pětatřicet minut napříč PR
 z různých slotů a druhé vyžádání vyrobilo nový run, který spadl stejně, takže to není o téhle
-změně. Je to třetí, do té doby nezapsaná příčina; postup, jak ji odlišit od zbylých dvou, je
-v [`docs/github-cli.md`](github-cli.md#když-spadne-na-oprávnění-integrace-491). Vlastní revize diffu
+změně. Je to **tatáž třetí příčina, kterou zapsalo #507 a doplnilo #542** — tady počtvrté a se dvěma
+údaji navíc (kola napříč PR různých slotů ve stejné minutě; `CLAUDE.md` o 339 B větší než u #507,
+a pořád pod stropem). Postup, jak ji odlišit od zbylých dvou, je
+v [`docs/github-cli.md`](github-cli.md#třetí-příčina-resource-not-accessible-by-integration-507). Vlastní revize diffu
 proběhla (grepy z `CLAUDE.md` plus čtení diffu) a našla v ní dvě věci: přehnané tvrzení v komentáři
 u sondy (`ideal*` místo „ideální šířka“) a dvě smyčky přes jednoprvkové pole.

@@ -6605,6 +6605,121 @@ fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzal
 z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
 scéna vyrostla na celé `ContentView`.
 
+### Záznam rozhodnutí — mezerník jako další zastávka (#507)
+
+Zadání znělo: *mezerník = další zastávka, `Krok 4 z 9 · 12 min` ve stavovém řádku, patka itineráře
+s klávesami*. Nejtěžší na tom není žádná z těch tří věcí, ale to, že **mezerník normálně
+scrolluje** — vzít si ho znamená vzít ho někomu, kdo ho zrovna potřebuje.
+
+1. **Rozhoduje `Policy`, ne view, a rozhoduje o třech vstupech naráz.** `Policy.itineraryStep`
+   dostane fokus v poli, polohu výřezu a kurzor a vydá klávesu v **jediné kombinaci ze šesti**.
+   Kdyby to byl `if` ve view, nešlo by se na to zeptat vyčerpávající maticí — a chyba by se
+   projevila jako „scroll občas přeskočí“, ne jako rozbitá zkratka.
+
+2. **Neměřený konec obsahu je `nil`, ne `false`, a přesto se rozhodne stejně.** Zamítnutá varianta
+   byla `Bool` s výchozím `false`: chová se stejně, ale zahazuje rozdíl mezi „změřeno, není na
+   konci“ a „nikdo se neptal“ — a ten rozdíl je odpověď na otázku, proč mezerník v `Konverzaci`
+   nedělá nic. Je to tatáž úvaha jako `unknown` u `Policy.codeReading` (#383).
+
+3. **Konec se měří jen ve třech tabech, a je to hranice, ne mezera.** Zamítnuto bylo připojit
+   měření na obsah detailu jedním modifikátorem: `onScrollGeometryChange` platí na **všechny**
+   scroll views v podstromu, takže by v diffu hlásily i vnořené vodorovné scrollery a bloky kódu.
+   Zamítnuto bylo i vyjmenovat všech osm tabů: v pěti z nich dráha nemá zastávku, takže o „dočteno“
+   nemají co říct. Zbyly tři, a **je to obor hodnot `ItineraryStop.tab`** — tvrdí se to stráží,
+   která zdroják detailu srovnává s tím výčtem, ne seznamem napsaným do testu.
+
+4. **Fokus v poli se nedal odvodit z tabu.** `Policy.claimsReturnShortcut` (#452) je precedens,
+   který **nefunguje**: composer rozdělaného review stojí v panelu vedle `Přehledu` i `Změněných
+   souborů`, takže by odpověď „podle tabu“ byla vedle přesně tam, kde na ní záleží nejvíc. Vznikl
+   proto `TextFieldFocus`, hlásí do něj čtyři místa a podává se prostředím — jednou, na kořen okna,
+   ze stejného důvodu jako `terminalFocused` (#459): předávat to argumentem znamená na jedno pole
+   zapomenout. **Množina, ne `Bool`**, protože pořadí hlášení při přeskoku fokusu není zaručené.
+
+5. **Kurzor procházení je stav pohledu, ne odškrtnutí.** Tvrdá podmínka #506 („hotovo se pozná
+   z dat“) platí beze změny: mezerník **nic neodškrtává**, jen posouvá pohled. Precedens je
+   `FindingCursor` (#187) a bere se z něj i to, že **nesmí přetéct mezi pull requesty**. Zamítnuta
+   byla varianta odvodit pozici z aktivního tabu bez stavu: tab a zastávka nejsou jedna ku jedné
+   (`Přehled` má dvě zastávky, `Změněné soubory` taky), takže by se z toho dala poskládat buď
+   nekonečná smyčka, nebo dráha, která se zasekne.
+
+6. **`Krok` v pruhu a `Itinerář` v hlavičce mají stejné počítadlo a jiné minuty.** Bylo by
+   pohodlnější psát na obou místech totéž číslo, jenže pruh má odpovědět na „dodělám to dneska?“ —
+   a na to odpovídá **uplynulý** čas, ne odhad zbývajícího. Rozlišuje se slovem `Krok` a větou
+   v nápovědě; počítadlo zůstává jedno (`AppStore.itineraryProgress`), aby se ta dvě místa
+   nerozešla.
+
+7. **Nečinnost se neodečítá, a je to rozhodnutí, ne zjednodušení.** Odečítat by znamenalo
+   rozhodovat, co je práce — a aplikace by odpovídala špatně v obou směrech (čtení diffu bez
+   jediného kliknutí prací je, otevřená záložka přes oběd ne). `12 min` je orientace; že čas běží
+   i vleže, stojí v nápovědě, aby to číslo nikdo nečetl jako výkaz.
+
+8. **Mezerník je druhá holá klávesa v katalogu a je to vědomé.** #515 si u `⏎` zapsalo, že smí být
+   bez modifikátoru proto, že domácí záložka nemá textové pole; tady je polí sedm, takže si klávesu
+   hlídá `itineraryStep`. Ty dvě se nepotkají — `⏎` platí jedině na desce, `␣` jedině v detailu PR.
+   `␣` (U+2423) se kreslí glyfem, protože ho monospace písmo kapslí **má** (glyf 1330); `⎵`
+   (U+23B5) nemá ani jedno z písem, takže se do katalogu nedostal.
+
+**Zapsaná mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, se v harnessu ověřit
+nedá — testovací host nedostane aktivaci, takže nemá key okno. Poslední kolo dělá člověk na běžící
+aplikaci, jako u celého katalogu zkratek (#441).
+
+### Záznam rozhodnutí — pull request nad stropem souborů (#542)
+
+`gh pr diff` odpoví nad 300 souborů `HTTP 406` (*„the diff exceeded the maximum number of files
+(300)“*), a do #542 z toho v okně byla věta `gh skončil s kódem 1.` se syrovou odpovědí pod ní.
+Tedy **tatáž cesta jako u vypršelého tokenu a nedostupného repa**: tři různé příčiny, jeden text.
+Vyšlo to z ostrých dat u #501 — `home-assistant/core#181088` (3 632 souborů).
+
+Rozhodnutí je jedna věta: **tuhle jednu příčinu rozpoznat a pojmenovat, a zbytek okna nechat
+k užitku**. Co se u toho rozhodlo jinak, než jak by to šlo napsat nejrychleji:
+
+1. **Rozhoduje `Policy` výčtem, ne `if` ve view.** `DiffState.failed` nese `DiffFailure`
+   (`tooManyFiles(limit:response:)` / `other`) místo hotové věty, protože **věta se z příčiny
+   odvodit dá, kdežto příčina z věty ne** — a `if` nad textem od `gh` ve `PullRequestDetailView`
+   je zrovna ten tvar, který se v tomhle repu stěhuje do `Policy`.
+
+2. **Strop se pozná z odpovědi, ne z počtu souborů.** Kolik souborů pull request mění, aplikace
+   v tu chvíli neví: dozvěděla by se to z toho diffu, který nedorazil. Signál je proto věta
+   z odpovědi GitHub API a **číslo v ní se čte**, nikdy nedosazuje — `Policy.diffFileCap`
+   vydá `nil`, když v odpovědi číslo nestojí, a věta pak žádné netvrdí. Tři sta je dnešní hodnota
+   GitHubu, ne naše rozhodnutí.
+
+3. **Rozpoznání se neváže na třídu chyby.** `GitHubError` třídí podle znění a `gh` ho měnit může,
+   takže se text bere přes `GitHubError.responseText`. Kdyby GitHub jednou napsal `not found` do
+   téže věty, byl by z toho `notFound` a rozpoznání vázané na `commandFailed` by **tiše** přestalo
+   platit — a tichých selhání je tohle issue plné bez toho, abychom si přidávali další.
+
+4. **U stropu se nenabízí `Zkusit znovu`.** Druhý pokus vrátí totéž, dokud se nepřepíše historie.
+   Místo něj stojí `Otevřít na GitHubu`; rozhoduje o tom `DiffFailureAction`, tedy zase `Policy`.
+
+5. **Zamítnuto: stránkovat `/pulls/{n}/files`.** Je to jiná cesta, jiný formát než unified diff
+   a znamenalo by to **druhý rozbor vedle `DiffParseru`** — dva parsery na jednu obrazovku se
+   rozejdou při první úpravě. Navíc: review na pull requestu o třech tisících souborech nemá
+   smysl pouštět, takže by ta práce vydala obrazovku, kterou nikdo nedočte. Kdyby to někdo chtěl,
+   je to **vlastní issue s vlastním měřením**, ne součást tohohle.
+
+6. **Zamítnuto i to druhé, a je to změřené: dotáhnout diff přes `compare/<base>...<head>`.**
+   Ten endpoint strop **nemá** — `gh api repos/home-assistant/core/compare/759e4658…29f9b353
+   --header "Accept: application/vnd.github.diff"` vrátil **14,8 MB** unified diffu s kódem 0.
+   Jenže tím se problém jen posune o jedno místo dál: 14,8 MB je rozbor a kresba 3 632 souborů
+   v okně, které se na velkém pull requestu už jednou zaseklo (#220), a **žádné měření o tom, že
+   to projde, nemáme**. Zároveň je to užitečná informace, ne slepá ulička: znamená, že rozsahový
+   diff (#284) ani diff commitu (#317) tuhle třídu selhání nemají, takže klasifikace patří jen
+   na cestu `loadDiff`.
+
+7. **Review se neblokuje.** Reviewer čte diff z pracovní kopie (`git diff <base>...HEAD`), kam
+   strop GitHub API nedosáhne, takže „nad tímhle nejde spustit review“ by bylo tvrzení, které
+   neplatí. Co se **nestane**, je že by nedoručený diff cokoli spustil — a nad záložkou otevřenou
+   odkazem automat neběží (#531). Tvrdí to test se **zapnutým** automatickým režimem.
+
+8. **Mockup se nekreslí a brána na tohle nepadá.** Nová obrazovka ani nový prvek to není: mění se
+   věta v chybovém stavu, který v návrhu je, a tlačítko pod ní. Schvaluje se **obrázek**, a ten
+   se nemění.
+
+**Zobecnitelné pravidlo:** *chybový stav, do kterého padá víc příčin, je stav bez informace.*
+Jakmile se do jedné věty slijí tři různé odpovědi na otázku „co s tím mám dělat“, přestane ta věta
+odpovídat na cokoli — a pozná se to až tehdy, když na ni někdo narazí v provozu.
+
 ### Záznam rozhodnutí — `idealWidth` odchází, `idealHeight` zůstává (#491)
 
 **Rozhodnutí:** u `ReviewSubmissionSheet`, `MergeSheet` a `AgentPromptSheet` se z rámce odebrala

@@ -39,8 +39,8 @@ struct WindowShortcutsTests {
     /// nakreslí tam, kde se na ni přijde.
     @Test("Katalog má právě osmadvacet akcí")
     func catalogHasExactlyTwentyEightActions() {
-        #expect(Policy.windowShortcutActions.count == 28)
-        #expect(Policy.windowShortcuts.count == 28)
+        #expect(Policy.windowShortcutActions.count == 29)
+        #expect(Policy.windowShortcuts.count == 29)
     }
 
     /// Kombinace, které patří systému nebo scéně nastavení, si okno **nesmí vzít**. `⌘W` je zrovna
@@ -197,10 +197,14 @@ struct WindowShortcutsTests {
             (.cancelReview, "⌘."),
             (.toggleTerminal, "⌃`"),
             (.itinerary, "⌘1"),
+            // Mezerník (#507) — **druhá a poslední kombinace v katalogu bez modifikátoru**.
+            // S `⏎` se nepotká: to platí jedině na domácí záložce, mezerník jedině v detailu PR,
+            // a bere se tam jen tehdy, když se jím nic nesebere (`Policy.itineraryStep`).
+            (.nextItineraryStop, "␣"),
             (.runAllReviews, "⌘⇧R"),
             (.openDraft, "⌘⇧D"),
-            // Holé `⏎` (#515) — deska otevře první PR pruhu `Rozhodnout`. **Jediná kombinace
-            // v katalogu bez modifikátoru**: domácí záložka žádné textové pole nemá, a nad
+            // Holé `⏎` (#515) — deska otevře první PR pruhu `Rozhodnout`. Jedna ze **dvou**
+            // kombinací v katalogu bez modifikátoru: domácí záložka žádné textové pole nemá, a nad
             // otevřenou paletou se zkratka zakazuje (`Policy.canOpenFirstOnBoard`).
             (.openFirstOnBoard, "⏎"),
             (.findInDiff, "⌘F"),
@@ -220,7 +224,7 @@ struct WindowShortcutsTests {
     /// **Kapsli sází monospace systémové písmo a dva glyfy v něm nejsou** — `⇥` (U+21E5)
     /// a `⎋` (U+238B). Změřeno `CTFontGetGlyphsForCharacters` nad
     /// `.AppleSystemUIFontMonospaced-Regular`: `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` v něm **jsou**
-    /// a od #501 se ověřilo i `←` (glyf 1312) a `→` (1314), ty dva ne. Text s nimi by se propadl do náhradního písma, tedy do jiné šířky i kresby než
+    /// a od #501 se ověřilo i `←` (glyf 1312) a `→` (1314), od #507 `␣` (1330), ty dva ne. Text s nimi by se propadl do náhradního písma, tedy do jiné šířky i kresby než
     /// zbytek kapsle — proto se `Tab` a `esc` píšou slovem, jak je aplikace psala i před #441.
     ///
     /// Tvrdí se to nad **výčtem**, ne měřením písma za běhu: `NSFont` v testovacím hostu pod
@@ -229,7 +233,7 @@ struct WindowShortcutsTests {
     /// zopakovat.
     @Test("Kreslená zkratka nesahá po glyfu, který písmo kapsle nemá")
     func drawnShortcutsStayInsideTheMonospacedFont() {
-        let drawable: Set<Character> = ["⌘", "⌃", "⌥", "⇧", "⏎", "↑", "↓", "←", "→"]
+        let drawable: Set<Character> = ["⌘", "⌃", "⌥", "⇧", "⏎", "↑", "↓", "←", "→", "␣"]
 
         for shortcut in Policy.windowShortcuts {
             for character in shortcut.display where !character.isASCII {

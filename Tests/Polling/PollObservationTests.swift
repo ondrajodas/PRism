@@ -247,7 +247,7 @@ struct PollObservationTests {
         // **Mapy musí být neprázdné**, jinak by test procházel nad ničím: `filter` nad prázdnou
         // mapou nic neubere ani s vadou. Tentýž důvod jako u `quietTickDoesNotWakeTheDiffReader`.
         store.fileFolding[FileExpansionKey(pullRequest: pr, path: path, commit: nil)] = true
-        store.diffStates[pr] = .failed("nezáleží na tom, co v tom stavu je")
+        store.diffStates[pr] = .failed(.other("nezáleží na tom, co v tom stavu je"))
 
         let reads: [(name: String, read: @MainActor () -> Void)] = [
             ("diffState(for:)", { _ = store.diffState(for: pr) }),

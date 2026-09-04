@@ -288,7 +288,8 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů a **dvojic** pro pohled vedle sebe, + `anchor(in:file:line:)` pro skok z nálezu |
 | `DiffRow.paired(_:)` | Slití hotových řádků do dvojic (`App/Diff/DiffPairing.swift`) — čistá funkce, celý pohled `split` stojí na ní |
 | `WordDiff` | Co se uvnitř přepsané dvojice změnilo (#153): rozsahy na staré a nové straně, práh podobnosti, párování pro oba pohledy. Čistá funkce |
-| `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
+| `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed(DiffFailure)` |
+| `DiffFailure` | **Proč** diff není (#542): `tooManyFiles(limit:response:)` = strop GitHub API na počet souborů, `other` = cokoli jiného. Do #542 to byla hotová věta — viz [*Když diff nedorazí*](#když-diff-nedorazí-542) |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
 | `FileExpansion`, `FileExpansionKey` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba. Klíč je `(PR, cesta, commit)` — `commit: nil` je hlava PR, jinak konkrétní commit (#317). **Ze které verze souboru obsah je, říká klíč, ne hodnota**: týž soubor má v `Změněných souborech` a v diffu commitu jiná čísla řádků, takže sdílený záznam by u staršího commitu odkryl řádky z dnešní hlavy. Tentýž klíč drží **odchylky sbalení** (`AppStore.fileFolding`, do #500 množina `foldedFiles`), takže se ani sbalení mezi těmi dvěma diffy nesdílí |
@@ -682,6 +683,59 @@ přidalo #428; číslo v téhle větě bylo do té doby o jedenáct pastí pozad
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
 že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
+
+### Když diff nedorazí (#542)
+
+Vyšlo to z měření na ostrých datech u #501: `home-assistant/core#181088` mění **3 632 souborů**
+a `gh pr diff` na něj odpoví `HTTP 406`:
+
+```
+could not find pull request diff: HTTP 406: Sorry, the diff exceeded the maximum number of files
+(300). Consider using 'List pull requests files' API or locally cloning the repository instead.
+(https://api.github.com/repos/home-assistant/core/pulls/181088)
+PullRequest.diff too_large
+```
+
+Do #542 z toho v okně byla věta `gh skončil s kódem 1.` a pod ní ta odpověď — tedy **tatáž cesta
+jako u vypršelého tokenu a nedostupného repa**. Tři různé příčiny, jeden text; přesně ta třída,
+kterou tady Copilot chytá opakovaně (*text v UI, který tvrdí míň, než data unesou*).
+
+**Rozhoduje `Policy` výčtem, ne `if` ve view.** `Policy.diffFailure(_:)` vydá `DiffFailure`
+a `Policy.diffFailureNotice(_:)` z něj složí, co se napíše a co se nabídne
+(`App/Policy/DiffFailureNotice.swift`). Pět věcí, na kterých to stojí:
+
+- **Strop se pozná z odpovědi, ne z počtu souborů.** Kolik jich pull request mění, aplikace v tu
+  chvíli **neví** — dozvěděla by se to z toho diffu, který nedorazil. Signál je věta
+  `diff exceeded the maximum number of files`, **bez čísla**: číslo je hodnota, která se může
+  změnit, kdežto věta kolem ní je to, co příčinu odlišuje.
+- **Číslo ve větě je přečtené, nikdy dosazené.** `Policy.diffFileCap(inResponse:)` bere závorku
+  hned za tou větou a **trvá na samých číslicích**: v téže hlášce stojí i
+  `(https://api.github.com/…)`, kterou by odmítl i `Int`, ale znaménko ne — a ze `(-5)` by vyšla
+  věta „GitHub vydá diff nejvýš pro −5 souborů“. Odpověď bez čísla je pořád strop, jen se v ní
+  žádné číslo netvrdí.
+- **Nevěší se to na třídu chyby.** `GitHubError` třídí podle znění a `gh` ho měnit může, takže
+  se text bere přes `GitHubError.responseText` — kdyby GitHub jednou napsal `not found` do téže
+  věty, byl by z toho `notFound` a rozpoznání vázané na `commandFailed` by tiše přestalo platit.
+- **U stropu se nenabízí `Zkusit znovu`.** Druhý pokus vrátí totéž, dokud se nepřepíše historie;
+  tlačítko, které slibuje, co splnit nemůže, je horší než žádné. Místo něj stojí
+  `Otevřít na GitHubu` — rozhoduje o tom `DiffFailureAction`, tedy zase `Policy`.
+- **Zbytek okna zůstává k užitku, a je to půlka té zprávy.** Přehled, commity, kontroly ani
+  konverzace na diffu nestojí, takže se záložka kreslí jako **detail**, ne jako porucha
+  (`PullRequestTabContent.detail`) — rozdíl mezi „nemám diff, tady je proč“ a „nemám nic“ musí
+  být vidět ze stavu, ne až z toho, co si člověk domyslí z prázdné plochy. Věta to říká
+  výslovně, protože prázdná plocha svádí ke čtení „tenhle pull request se nedá otevřít“.
+
+**Netýká se to rozsahového diffu ani diffu commitu, a je to změřené.** `fetchDiff(repo:from:to:)`
+(#284) a `fetchDiff(repo:commit:)` (#317) jdou na `compare`, resp. `commits`, a **ty ten strop
+nemají**: `gh api repos/home-assistant/core/compare/759e4658…29f9b353 --header
+"Accept: application/vnd.github.diff"` nad týmž pull requestem vrátil **14,8 MB** unified diffu
+s návratovým kódem 0. Klasifikace proto sedí jen u `loadDiff`; kdyby se strop někdy objevil
+i tam, je to jedna funkce navíc, ne druhý rozbor.
+
+**Review se tím neblokuje.** Reviewer čte diff z pracovní kopie (`git diff <base>...HEAD`), takže
+strop GitHub API na něj nedosáhne — to, co se nad takovým pull requestem **nestane**, je že by
+cokoli spustilo *nedoručení diffu*. Nad záložkou otevřenou odkazem navíc automat neběží (#531),
+a `AppStoreDiffCapTests` to tvrdí se zapnutým automatickým režimem.
 
 ### Co z diffu doopravdy dojde ke kreslení (#446)
 
@@ -2050,6 +2104,95 @@ hostovaným **celým `ContentView`em** — scéna, která hostuje jen detail, tu
 vyrobit — a stráž nad zdrojáky v `ItineraryEveryTabTests` (stráž deklaruje `Store/AppStore.swift`
 a detail se jí ptá storu). Jak se to změřilo, je
 v [`docs/testovani.md`](testovani.md#pořád-se-ten-itinerář-zavírá--čtvrté-kolo-506).
+
+#### Mezerník jako další zastávka (#507)
+
+Itinerář říká, **kde jsem**; #507 přidává **pohyb jednou klávesou** a větu, podle které se dá
+rozhodnout, jestli review dodělat teď, nebo zítra. Tři věci: mezerník na další zastávku,
+`Krok 4 z 9 · 12 min` ve stavovém řádku a patka sloupce s klávesami.
+
+**Kde to bydlí.** `App/Policy/ItineraryWalk.swift` (všechna rozhodnutí a `ShortcutHint`),
+`App/Views/ItineraryStepShortcut.swift` (zkratka), `App/Views/ContentEndState.swift` (kde stojí
+výřez), `App/Views/TextFieldFocus.swift` (píše se někde do pole?),
+`App/Views/ItineraryStatusView.swift` (pruh), patka je v `ItineraryColumnView`.
+
+**Holá klávesa se bere jedině tehdy, když se jí nic nesebere — a rozhoduje o tom `Policy`, ne
+`if` ve view.** `Policy.itineraryStep` má tři vstupy a klávesu vydá v **jediné kombinaci ze šesti**:
+
+- **fokus v poli** — do textu patří mezera; odpověď dává `TextFieldFocus`, ne to, který tab je
+  vidět. `Policy.claimsReturnShortcut` (#452) sem nestačí: composer rozdělaného review stojí
+  v panelu vedle `Přehledu` i `Změněných souborů`, tedy právě v tabech, o kterých itinerář mluví
+  nejvíc;
+- **výřez na konci obsahu** — dokud je kam scrollovat, mezerník scrolluje. **Neměřeno (`nil`) je
+  totéž rozhodnutí jako „není na konci“**, protože tvrdit něco o obsahu, který nikdo nezměřil,
+  nese víc, než data unesou;
+- **je kam jít** — na poslední zastávce se klávesa nebere a propadne dál. Zakázané tlačítko
+  klávesu nebere, tentýž vzorec jako `⌘⏎` v tabu `Zeptat se`.
+
+**Kurzor je „kde jsem v procházení“, ne „co je hotové“** — tatáž věc jako `FindingCursor` (#187),
+včetně toho, že **nesmí přetéct mezi pull requesty**. Bez kurzoru jde první stisk na **aktuální**
+zastávku (první nehotovou podle dat), ne na začátek dráhy; kurzor, který v seznamu není (zastávky
+se skládají z dat, takže `Kontroly` umí zmizet), se bere jako žádný. **Mezerníkem se nic
+neodškrtává**: hotovo se pozná z dat (#506) a projití dráhy s tím nehne. Klik na zastávku kurzor
+posouvá taky — je to **jedna cesta** (`ItineraryActions.select`), jinak by mezerník po kliknutí
+pokračoval odjinud, než kam člověk klikl.
+
+**Konec obsahu se měří přesně v těch třech tabech, do kterých vedou zastávky** (`Přehled`,
+`Změněné soubory`, `Kontroly` — obor hodnot `ItineraryStop.tab`). Jinde mezerník zůstává klávesou
+scrollu, a je to odpověď, ne mezera: v `Konverzaci` ani `Zeptat se` dráha nemá zastávku, takže
+o „dočteno“ nemá co říct. Hlídá to stráž nad zdrojáky (`ItinerarySpacebarWiringTests`), která
+srovnává tři místa v detailu s tím, kam ukazují zastávky.
+
+**Hlášení nese, odkud je** (pull request a tab) — a to je celý důvod, proč je `ContentEndState`
+třída se čtyřmi řádky logiky a ne `Bool`. Hodnota z minulého tabu je v tom novém k nerozeznání od
+čerstvé, takže by mezerník po přepnutí odskočil podle obsahu, který na obrazovce není; nulovat to
+úlohou při přepnutí tabu nejde spolehlivě, protože pořadí nulování a prvního hlášení nové
+geometrie nikdo negarantuje.
+
+**`@Observable` třídy, ne `@State` v detailu, a je to výkonová podmínka** (#503, #469). `isAtEnd`
+se mění při scrollování a `isEditing` při každém kliknutí do pole; `@State` detailu by za obojí
+platil průchodem tělem celého detailu i s diffem. Čtenářem je **jediné view** —
+`ItineraryStepShortcut`, tedy jedno průhledné tlačítko. Tatáž konstrukce jako `DiffReadShortcut`
+(#500) a `DiffViewport` (#469).
+
+**Fokus se hlásí jako množina, ne jako `Bool`.** Fokus přeskakuje z pole do pole a pořadí dvou
+hlášení (staré ztratilo, nové získalo) není zaručené — s jedním příznakem by se dalo skončit
+v `false` uprostřed psaní. Hlásí **čtyři místa** a jmenovitě: `DraftTextField` (za všechny čtyři
+composery naráz, rámeček je společný), `DiffSearchBar`, `PickerSearchField` a `CommandPaletteView`
+(paleta leží **nad** detailem, jehož zkratky v hierarchii zůstávají). Že žádné páté pole
+`@FocusState` nedrží bez hlášení, tvrdí druhá stráž nad zdrojáky.
+
+**Ve stavovém řádku jsou minuty uplynulé, v hlavičce sloupce zbývající — a je to vědomý rozdíl.**
+Pruh říká `Krok 4 z 9 · 12 min` (jak dlouho je záložka otevřená), hlavička `Itinerář · 4 z 11 ·
+10 min` (odhad z neprošlých řádků, #506). Počítadlo je přitom **jedno** (`itineraryProgress`
+ve store, ptají se na ně obě místa), rozlišuje se slovem `Krok` a celou větou v nápovědě. **Čas
+běží od otevření záložky a nečinnost se neodečítá**: je to orientace, ne měření práce — kdyby se
+odečítala, musela by aplikace rozhodovat, co je práce, a odpovídala by špatně (čtení diffu bez
+jediného kliknutí prací je, otevřená záložka přes oběd ne). Čas drží `AppStore.tabOpenTimes`,
+zapisuje ho `openTab` i obnovení záložek (#527 — obnovená se počítá **od restartu**, dřív aplikace
+neběžela) a uklízí ho **zavření záložky**, ne tik: záložka mimo seznam z pollingu je normální stav
+(#527, #531), takže by ji úklid po tiku vyprázdnil zrovna u těch nejdéle otevřených.
+
+**Odtikává to `TimelineView`, ne přepočet okna** (tatáž úvaha jako `DashboardCountdown`, #260):
+překreslí se jeden `Text`, ne stavový řádek s frontou a puntíky. Rozvrh je ukotvený v otevření
+záložky, takže minuta přeskočí na celé minutě otevřeného tabu.
+
+**Patka sloupce kreslí `␣ další zastávka · ⌥↓ další nález · ⌥V prošlo` z katalogu** (#441):
+`Policy.itineraryKeyHints` skládá kapsli z `WindowShortcut.display` a popisku z `title`, takže
+klávesu a text nejde napsat vedle sebe nesouhlasně. `⌘1` v patce **není** — složení sloupce je
+šipka v jeho hlavičce i s nápovědou. Jedna řádka je **změřená a napodruhé**: k textu (197,2 b) patří
+odsazení kapslí i **mezery mezi osmi prvky**, takže při mezeře 5 b vyjde 236,5 b proti 234 b, které
+ve sloupci zbývají — a přetečení se projeví **oříznutým prvním popiskem**, ne přetečením. V repu je
+mezera 3 b a 222,5 b.
+
+**Mezerník je druhá zkratka okna bez modifikátoru** (po `⏎` na desce, #515) a s tou první se
+nepotká: `⏎` platí jedině na domácí záložce, mezerník jedině v detailu PR. Kreslí se glyfem `␣`,
+protože **monospace systémové písmo ho má** (`CTFontGetGlyphsForCharacters`, glyf 1330); v běžném (proporcionálním)
+systémovém písmu chybí a padá do `HelveticaNeue` — týká se to jedině nápovědy tlačítka, ne kapsle.
+
+**Co se u toho nemá rozbít:** mezerník se nesmí vzít s fokusem v poli (sebral by psaní), nad
+nezměřeným koncem obsahu (uteklo by scrollování) ani na poslední zastávce (klávesa bez následku);
+hlášení konce z jednoho tabu nesmí platit v druhém; a **nic se mezerníkem nesmí odškrtnout**.
 
 ### Nálezy v okraji (#503)
 
@@ -5101,7 +5244,9 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
 | `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
-| `ItineraryColumnView`, `ReviewItineraryView`, `ItineraryActions` | **Itinerář review** v levém sloupci záložky PR (#506): sloupec (hlavička s počítadlem, proužek podílu, složený pruh 34 b) a v něm zastávky se stavem a údajem vpravo, pod zastávkou `Soubory podle rizika` skupiny souborů. Klik na zastávku přepíná tab, klik na soubor přepne na `Změněné soubory` a doskočí na jeho hlavičku. **Od druhého kola #506 stojí vedle všech osmi tabů** a hostí ho `PullRequestDetailView`, ne `DiffView`; zastávky má vždycky. **Od třetího kola drží detail i stav sloupce a stráž automatiky kolon** (`DiffColumnActions`), takže ho `DiffView` nepřepisuje. Do #506 tu byl `FileTreeView` (strom podle cesty, #197) |
+| `ItineraryColumnView`, `ReviewItineraryView`, `ItineraryActions` | **Itinerář review** v levém sloupci záložky PR (#506): sloupec (hlavička s počítadlem, proužek podílu, složený pruh 34 b) a v něm zastávky se stavem a údajem vpravo, pod zastávkou `Soubory podle rizika` skupiny souborů. Klik na zastávku přepíná tab, klik na soubor přepne na `Změněné soubory` a doskočí na jeho hlavičku. **Od druhého kola #506 stojí vedle všech osmi tabů** a hostí ho `PullRequestDetailView`, ne `DiffView`; zastávky má vždycky. **Od třetího kola drží detail i stav sloupce a stráž automatiky kolon** (`DiffColumnActions`), takže ho `DiffView` nepřepisuje. Do #506 tu byl `FileTreeView` (strom podle cesty, #197). **Od #507 má sloupec patku s klávesami** (`Policy.itineraryKeyHints`) |
+| `ItineraryStepShortcut`, `ContentEndState`, `TextFieldFocus` | **Mezerník jako další zastávka** (#507). Zkratka je vlastní view, protože čte polohu výřezu — v těle detailu by se za to platilo průchodem celého diffu (tatáž podmínka jako `DiffReadShortcut`). `ContentEndState` drží, jestli výřez dojel na konec, **i s tím, ze kterého tabu a PR to hlášení je**; `TextFieldFocus` drží, jestli se někde v okně píše do pole (množina identit, ne `Bool`) a podává se prostředím jako `terminalFocused` |
+| `ItineraryStatusView` | **Průběh review ve stavovém řádku** (#507) — `Krok 4 z 9 · 12 min`, tiché `.sitem plain` vedle stavu pracovní kopie. Počítadlo je totéž jako v hlavičce sloupce, **minuty jsou uplynulé, ne zbývající**; odtikává je `TimelineView` ukotvený v otevření záložky |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace. Sazba je od #404 `designPill` (mono 10,5) a k ní `lineLimit(1)` **i** `fixedSize()` — v řádku fronty se odznak pere o místo s titulkem PR a mono je tam o 10 až 48 bodů širší |
 | `hiddenShortcuts(_:)`, `KeyEquivalent.backTab` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek, paletu i přepínání záložek (#245). `backTab` je tam proto, že `⌃⇧⇥` doručí `U+0019`, tedy jinou klávesu než `⇥` |
 | `WindowShortcutButtons`, `View.windowShortcut(_:)` | Překlad katalogu zkratek (#441) do SwiftUI — **jediné místo v `App/`, kde se `keyboardShortcut` píše nad kombinací**. Kombinací může být víc, každá dostane vlastní tlačítko (česká klávesnice); viditelné tlačítko bere jen tu primární |
@@ -5670,6 +5815,7 @@ Co v okně je (od #500 pětadvacet akcí; tabulka níž vypisuje ty, u kterých 
 | `⌃1`–`⌃5` (+ `⌃+ ě š č ř`) | sekce railu | — |
 | `⌥↓` / `⌥↑` | další / předchozí nález (#151) | — |
 | `⌘1` | itinerář review — **v každém tabu** (#506; do druhého kola jen u diffu, do #506 strom souborů) | — |
+| `␣` | další zastávka itineráře (#507) — **jen mimo textové pole, jen s výřezem na konci obsahu a jen když je kam jít** (`Policy.itineraryStep`); jinak klávesa propadne scrollu | — |
 | `⌘2` | panel s mým review (#182) | v tabech bez panelu (#294) |
 | `⎋` | zpět na seznam commitů (#317) | mimo tab `Commity`, nad paletou a nad potvrzením |
 | `⌘⏎` / `⌃⏎` | **potvrzení** odeslání review (#151) | `Policy.canOpenSubmission`, otevřený sheet, otevřená paleta |
@@ -9285,6 +9431,10 @@ Věci, které se u toho nemají rozbít:
 | `Policy.readFileCount(in:)` | Kolik souborů je prošlých (#500) — vstup pro zastávku `Soubory podle rizika` a `x/y` u složené položky konfigurací. **`readFileShare` a `fileTreeSummary` zanikly** s druhým kolem #506: sloupec od té doby vždycky mluví o celém itineráři (`itineraryHeading`, `ItineraryProgress.share`), takže po „sloupci bez zastávek“ nezbyl volající ani jedné z nich |
 | `Policy.itinerary(_:)` | Zastávky itineráře review z faktů (#506) — `Od minule` jen se **záznamem návštěvy a commity** (#171), `Kontroly` jen s CI (#306), zbylé tři vždycky. `current` je **první nehotová**, ostatní nehotové `todo` |
 | `Policy.itineraryProgress(of:facts:)`, `Policy.itineraryMinutes(of:facts:)`, `Policy.itineraryHeading(_:)` | Počítadlo `4 z 11` a odhad času (#506) — jednotkou je **soubor**, ne zastávka; `nil` minut znamená „nemám z čeho odhadovat“ nebo „hotovo“, nikdy nulu |
+| `Policy.itineraryStep(stops:cursor:isEditing:atEnd:)`, `Policy.nextItineraryStop(after:in:)` | Kam posune mezerník (#507) — `nil` znamená **nikam, klávesa patří scrollu**. Bere se v jediné kombinaci ze šesti: mimo pole, na konci obsahu a jen když je kam jít; **neměřený konec (`nil`) je totéž rozhodnutí jako „není na konci“**. Bez kurzoru se jde na **aktuální** zastávku, kurzor mimo dráhu se bere jako žádný |
+| `Policy.contentAtEnd(offset:visible:content:)` | Je výřez na konci obsahu (#507)? **Třetí funkce téhle rodiny** vedle `stepFeedAtEnd` (#325, odečítá odsazení výpisu) a `overviewAtEnd` (#506, přidává „popis je načtený“) — tady se nic neodškrtává, jen rozhoduje o klávese. Obsah, který se vejde celý, je na konci |
+| `Policy.itineraryStatus(progress:openedAt:now:)`, `Policy.minutesInTab(openedAt:now:)` | `Krok 4 z 9 · 12 min` do stavového řádku (#507). Počítadlo je totéž jako v hlavičce, **minuty jsou uplynulé** (od otevření záložky, bez odečítání nečinnosti); `nil` u počítadla i do první minuty — `Krok 0 z 0` ani `0 min` se nepíšou |
+| `Policy.itineraryKeyHints`, `Policy.shortcutHint(_:)` | Patka itineráře (#507) — `␣ další zastávka · ⌥↓ další nález · ⌥V prošlo`. Kapsle i popiska se **odvozují z katalogu** (#441), takže je nejde napsat vedle sebe nesouhlasně |
 | `Policy.fileStopDetail(read:of:)`, `Policy.checksStopIsDone(_:)`, `Policy.checksStopDetail(_:)`, `Policy.verdictStopDetail(_:)`, `Policy.itineraryStopHelp(_:)` | Údaje vpravo u zastávek (#506) — spadlý check je hotový až po rozbalení, nula se nepíše jako podíl, u verdiktu bez návrhu se **nepíše nic** |
 | `Policy.unreadLineCount(of:states:)`, `Policy.overviewAtEnd(offset:visible:content:)` | Vstupy pro itinerář z jiných obrazovek (#506) — neprošlé řádky (`changed` je **neprošlý**) a „doroloval se popis na konec“ (obsah, který se vejde, je přečtený rovnou) |
 | `Policy.risk(of:markers:threadPaths:)`, `Policy.filesByRisk(_:markers:threadPaths:)`, `Policy.itineraryGroups(_:)` | Soubory podle rizika a skupiny s nadpisem (#506) — klasifikace jde konfigurací **dřív** než `nový`, kresba **později**; uvnitř skupiny se řadí podle cesty |

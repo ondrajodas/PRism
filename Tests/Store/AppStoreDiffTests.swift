@@ -85,12 +85,16 @@ struct AppStoreDiffTests {
 
         await store.loadDiff(for: summary())
 
-        guard case .failed(let detail) = store.diffState(for: pr) else {
+        guard case .failed(let failure) = store.diffState(for: pr) else {
             Issue.record("Čekal jsem selhání, přišlo \(String(describing: store.diffState(for: pr)))")
             return
         }
-        // Text od `gh` musí projít až do UI — z něj se pozná, co se stalo.
-        #expect(detail.contains("bez sítě"))
+        // Text od `gh` musí projít až do UI — z něj se pozná, co se stalo. Výpadek sítě je
+        // od #542 `other`, tedy to selhání, u kterého **má** smysl nabídnout druhý pokus.
+        #expect(failure == .other(GitHubError.network("bez sítě").userDescription))
+        let notice = Policy.diffFailureNotice(failure)
+        #expect(notice.detail.contains("bez sítě"))
+        #expect(notice.action == .retry)
 
         // Selhaný diff se necachuje — opakování je totéž volání, ne zvláštní cesta.
         await store.loadDiff(for: summary())
