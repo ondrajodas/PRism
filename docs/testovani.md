@@ -9948,6 +9948,16 @@ nikdo nedívá, a přihlašovací položku vypíná systém někde jinde.
   u slotu liší, takže rozdíl bitmap celé stránky by prošel i tehdy, kdyby řádek vypadal jako
   povolený — pás (450…540 px odshora) obsahuje jen ten řádek a nad ním je v obou renderech všechno
   stejné. Bez toho by tvrzení nic neznamenalo.
+
+  **A k tomu kontrola měřidla** (#478, z nálezu Copilota): dva stavy se **stejnou polohou přepínače
+  a jinou větou** (`notRegistered` a `notFound`) se v tom pásu lišit **nesmí**. Kdyby se lišily,
+  pás by tu větu obsahoval a tvrzení o zašednutí by procházelo z rozdílu textu. Ověřeno vložením
+  regrese: pás rozšířený na 450…600 px tenhle test **položí** (29 866 proti 27 942 B).
+
+  **Že `CGImage.cropping(to:)` počítá `y` odshora, je změřené, ne odvozené.** Řádek leží 497 px pod
+  horní hranou a v pásu `450…540` v cropu doopravdy je; odspodu by tentýž pás padl na
+  1 260…1 350 px odshora, tedy do prázdné plochy pod obsahem. **Prázdný pás test položí sám**,
+  protože prázdno se rovná prázdnu — na blbě zvolený pás se tedy nedá projít potichu.
 - **Nepovedený zápis se do renderu dostane kliknutím**, ne přiřazením do pole
   (`store.setLoginItem(true)` nad fakem, který vyhodí chybu). Render nad stavem, který v provozu
   nevznikne, netvrdí nic.
@@ -9987,7 +9997,7 @@ běžný případ — aplikace na pozadí s otevřeným oknem — nesahá.
 
 ### Za jakých podmínek se měřilo (#529)
 
-Plná suita **5285 testů v 516 suitách, `TEST SUCCEEDED`**, 115 s. Měřeno na stroji, na kterém
+Plná suita **5286 testů v 516 suitách, `TEST SUCCEEDED`**, 117 s. Měřeno na stroji, na kterém
 **běžely souběžně další tři sloty** paralelního vývoje — tedy ne na volném stroji. Pád na čase je
 za těchhle podmínek zátěž, ne logika; suita jede blízko 120s stropu `waitUntil`.
 

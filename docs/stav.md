@@ -7654,6 +7654,6 @@ zavřeným oknem odznak zmrzne na poslední hodnotě, protože polling žije s h
 nekreslí, ve výchozí volbě se na uložené nálezy vůbec nesáhne, slotová instance do systému
 nezapíše. K tomu stráž nad zdrojáky (`DockBadgeWiringTests`, šestá podoba téhož kořene po #367,
 #411, #421, #462 a #490) a render stránky, ve kterém se zašedlý řádek porovnává **jen v pásu s tím
-řádkem**, aby rozdíl nemohl přijít z věty pod ním. Celkem **5285 testů v 516 suitách** (proti 5228 v 511 před #529, tedy 57 nových v pěti sadách), `TEST
+řádkem**, aby rozdíl nemohl přijít z věty pod ním. Celkem **5286 testů v 516 suitách** (proti 5228 v 511 před #529, tedy 58 nových v pěti sadách), `TEST
 SUCCEEDED` — měřeno se **třemi souběžně běžícími sloty**, ne na volném stroji. Regrese ověřená
 vložením regrese třikrát (nefiltrovaná fronta, chybějící brána u slotu, `SMAppService` ve storu).

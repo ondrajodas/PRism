@@ -25,9 +25,15 @@ struct SystemSettingsRenderTests {
     private static let width: CGFloat = 509
     /// Vyšší než okno: obě sekce plus věty pod nimi.
     private static let height: CGFloat = 900
-    /// Pás s řádkem `Spustit po přihlášení`, v pixelech bitmapy (odshora). Sekce nad ním je
+    /// Pás s řádkem `Spustit po přihlášení`, v pixelech bitmapy, **odshora**. Sekce nad ním je
     /// v obou renderech totožná, takže se do pásu nedostane věta, která se u slotu liší — a věta
     /// **pod** řádkem začíná až za jeho spodní hranou.
+    ///
+    /// **Že se `cropping(to:)` počítá odshora, je změřené, ne odvozené** (nález Copilota na #529):
+    /// řádek leží 497 px pod horní hranou a v pásu `450…540` v crop doopravdy je. Odspodu by
+    /// tentýž pás padl na 1 260…1 350 px odshora, tedy do prázdné plochy pod obsahem — a prázdný
+    /// pás test **položí**, protože prázdno se rovná prázdnu. Že v pásu není nic jiného než ten
+    /// řádek, tvrdí `theBandHoldsNothingButTheRow()`.
     private static let toggleBand = 450...540
 
     /// Hlavní instalace. Cesta se skládá z `MainWindow.title` — viz `LoginItemPolicyTests`.
@@ -82,6 +88,20 @@ struct SystemSettingsRenderTests {
         let disabled = try render("spusteni-pas-slot", installation: slot, band: Self.toggleBand)
 
         #expect(available != disabled)
+    }
+
+    /// **Kontrola měřidla** (#478): dva stavy, které mají **stejnou polohu přepínače a jinou větu
+    /// pod ním**, se v tom pásu lišit **nesmí**. Kdyby se lišily, znamenalo by to, že pás tu větu
+    /// obsahuje — a tvrzení o zašedlém řádku by pak procházelo z rozdílu textu, ne ze zašednutí.
+    ///
+    /// `notRegistered` a `notFound` jsou k tomu ta správná dvojice: obojí kreslí přepínač vypnutý,
+    /// obojí je povolené, ani jedno nenabízí odskok — a věta je u každého jiná.
+    @Test("V pásu s řádkem není nic než ten řádek")
+    func theBandHoldsNothingButTheRow() throws {
+        let missing = try render("spusteni-pas-nezapsano", status: .notRegistered, band: Self.toggleBand)
+        let notFound = try render("spusteni-pas-nenalezeno", status: .notFound, band: Self.toggleBand)
+
+        #expect(missing == notFound)
     }
 
     /// Zapnutá položka se musí poznat od nezapsané, jinak by přepínač, který se nenapojil na stav
@@ -151,9 +171,10 @@ struct SystemSettingsRenderTests {
     ///
     /// - Parameter name: jméno souboru, když je nastavené `PRISM_RENDER_DIR`. Bitmapy jsou tady
     ///   **tvrzení**, ale koukat se na ně je pořád ta jediná cesta, jak si zkontrolovat sazbu.
-    /// - Parameter band: svislý výřez v **pixelech** bitmapy. `nil` = celá stránka. Existuje kvůli
-    ///   tvrzení o zašedlém řádku: v pásu je nad porovnávaným řádkem všechno stejné, takže rozdíl
-    ///   nemůže přijít z věty, která se u slotu liší.
+    /// - Parameter band: svislý výřez v **pixelech** bitmapy, **odshora** (`cropping(to:)` počítá
+    ///   `y` od horní hrany obrázku, změřeno — viz `toggleBand`). `nil` = celá stránka. Existuje
+    ///   kvůli tvrzení o zašedlém řádku: v pásu je nad porovnávaným řádkem všechno stejné, takže
+    ///   rozdíl nemůže přijít z věty, která se u slotu liší.
     private func bitmap<Content: View>(
         _ name: String,
         band: ClosedRange<Int>? = nil,
@@ -198,7 +219,11 @@ struct SystemSettingsRenderTests {
         return try #require(result).get()
     }
 
-    /// Bitmapa jako PNG, případně jen její svislý pás.
+    /// Bitmapa jako PNG, případně jen její svislý pás **odshora**.
+    ///
+    /// `CGRect` se skládá z `Int`ů schválně — přetížení `init(x:y:width:height:)` pro `Int`
+    /// existuje a pás je v celých pixelech, takže převod na `CGFloat` by tady jen zamlčel, že se
+    /// nezaokrouhluje.
     private static func png(of rep: NSBitmapImageRep, band: ClosedRange<Int>?) throws -> Data? {
         guard let band else { return rep.representation(using: .png, properties: [:]) }
         let image = try #require(rep.cgImage)
