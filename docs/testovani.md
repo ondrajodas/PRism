@@ -2239,6 +2239,36 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   kontrola meze shodí test na strop (`count` vyjde 200 místo 10).
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
+- **PR nad stropem souborů (#542)** — `DiffFailureTests` (`Policy`) a `AppStoreDiffCapTests`
+  (store). Fixture je **skutečná odpověď** `gh pr diff` nad `home-assistant/core#181088`
+  (`Tests/Fixtures/gh/pr-diff-too-large.txt`, 3 632 souborů, `HTTP 406`) — vymyšlený literál by
+  tady netvrdil nic, protože celé rozpoznání stojí na znění, které píše GitHub. `Policy` se pouští
+  **výčtem**: strop se pozná ze skutečné odpovědi; číslo se z ní **čte** (odpověď s `(500)` vydá
+  500, odpověď bez čísla vydá `nil` a věta pak žádné číslo netvrdí); `(-5)`, `(+300)` ani
+  `(https://api.github.com/…)` za strop neprojdou; strop se pozná **i** tehdy, když chyba spadne
+  do jiné třídy (`notFound`, `rateLimited`, `malformedOutput`) — a všech osm ostatních chyb
+  `GitHubError` projde beze změny do věty s nabídkou `Zkusit znovu`. Ve storu je **to nejcennější
+  negativní**: nad pull requestem, ke kterému diff nedorazil, se **nespustí review** — a to se
+  zapnutým automatickým režimem, aby test tvrdil něco i tehdy, kdyby plánovač na přijatou záložku
+  jednou sáhl. K tomu, že se **zbytek okna dá číst**: záložka je `PullRequestTabContent.detail`
+  (ne porucha), konverzace se načte a všechny taby jdou přepnout. **Ověřeno vložením regrese**
+  třikrát: vypnuté rozpoznání shodí devět tvrzení v `Policy` a obě tvrzení ve storu; dosazený
+  strop `300` místo čteného shodí test na odpověď bez čísla; vyndaná kontrola číslic vydá ze
+  `(-5)` záporný strop.
+
+  **Jak to vypadá, ukazuje sonda** `DiffFailureRenderProbe` (`PRISM_MEASURE=1`, výstup do
+  `PRISM_RENDER_DIR`) — obě podoby selhání ve dvou šířkách, aby se strop a obyčejné selhání daly
+  přečíst vedle sebe. **Klikáním v běžící aplikaci to nešlo**: přepnout na `Změněné soubory` je
+  klik a `osascript` v té session neměl asistenční přístup (`-25211`); synteticky poslaný
+  `CGEvent` se taky nedoručil. Sonda má u sebe **tři kroky v pořadí, které je podmínka**: kolo
+  smyčky (ať se `.task` rozjede), **čekání na jev** (#296 — smyčka drží hlavní actor, takže se
+  stav v ní nehne ani po 1,5 s, změřeno) a druhé kolo na překreslení. Bez toho prvního se čekání
+  vrátí hned nad **starým** `.failed` a vyfotí se `Načítám diff…`.
+
+  **Že se strop týká jen `gh pr diff`, je změřené, ne odhadnuté**: `gh api
+  repos/home-assistant/core/compare/759e4658…29f9b353 --header "Accept:
+  application/vnd.github.diff"` nad týmž pull requestem vrátil **14,8 MB** unified diffu
+  s návratovým kódem 0, takže rozsahový diff (#284) ani diff commitu (#317) tuhle třídu nemají.
 - **`AppStore` — zahození nálezů** — proti **skutečnému** `ReviewStore`: že to zmizí
   z panelu, z řádku i z disku a přežije restart, že další běh začíná načisto, že druhé
   zmáčknutí nic nerozbije, že starší záznamy zůstanou a že se na automatickém repu review

@@ -33,9 +33,12 @@ extension AppStore {
             // spuštěné načtení už mohlo doběhnout a to se přepsat nesmí.
             if diffStates[id] == .loading { diffStates[id] = nil }
         } catch let error as GitHubError {
-            diffStates[id] = .failed(error.userDescription)
+            // **Příčinu třídí `Policy`, ne tenhle `catch`** (#542): strop GitHubu na počet souborů
+            // se pozná z odpovědi a v okně vede jinam než výpadek sítě — jinou větou i jinou
+            // nabídkou, protože druhý pokus u něj vrátí totéž.
+            diffStates[id] = .failed(Policy.diffFailure(error))
         } catch {
-            diffStates[id] = .failed(error.localizedDescription)
+            diffStates[id] = .failed(.other(error.localizedDescription))
         }
     }
 
