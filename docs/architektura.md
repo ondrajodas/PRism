@@ -289,7 +289,6 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `DiffRow.paired(_:)` | Slití hotových řádků do dvojic (`App/Diff/DiffPairing.swift`) — čistá funkce, celý pohled `split` stojí na ní |
 | `WordDiff` | Co se uvnitř přepsané dvojice změnilo (#153): rozsahy na staré a nové straně, práh podobnosti, párování pro oba pohledy. Čistá funkce |
 | `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
-| `FileTreeNode` | Soubory diffu jako strom pro navigaci; slévá složky s jediným potomkem |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
 | `FileExpansion`, `FileExpansionKey` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba. Klíč je `(PR, cesta, commit)` — `commit: nil` je hlava PR, jinak konkrétní commit (#317). **Ze které verze souboru obsah je, říká klíč, ne hodnota**: týž soubor má v `Změněných souborech` a v diffu commitu jiná čísla řádků, takže sdílený záznam by u staršího commitu odkryl řádky z dnešní hlavy. Tentýž klíč drží **odchylky sbalení** (`AppStore.fileFolding`, do #500 množina `foldedFiles`), takže se ani sbalení mezi těmi dvěma diffy nesdílí |
@@ -844,9 +843,10 @@ souboru, který je někde jinde.
 
 #### Co zůstalo v aplikaci líné
 
-`grep -rn 'LazyVStack\|LazyVGrid' App` vypíše po #469 osm míst: strom souborů, tabulka nálezů, fakta
-o PR, průběh review, dění, seznam commitů, panel a živý výpis kroků. **Všechna mají strop** (dění
-200 položek, výpis kroků taky, commity a soubory jsou z jednoho PR, nálezy z jednoho běhu), takže
+`grep -rn 'LazyVStack\|LazyVGrid' App` vypíše po #506 **sedm** míst: tabulka nálezů, fakta o PR,
+průběh review, dění, seznam commitů, panel a živý výpis kroků. (Osmým býval **strom souborů**;
+zanikl s #506 a itinerář, který ho vystřídal, kreslí pevný `VStack`.) **Všechna mají strop** (dění
+200 položek, výpis kroků taky, commity jsou z jednoho PR, nálezy z jednoho běhu), takže
 u nich platí pravidlo z #361 nezměněné. Že by se kolo utvořilo tam, **vyloučené není** — je to
 vlastnost vzoru, ne délky seznamu —, ale ani jednou se to nestalo a cena pevného stacku by tam byla
 zbytečná.
@@ -1582,8 +1582,9 @@ Zákres je v [`docs/navrh.html`, sekce 40](navrh.html) (stránka *Změněné sou
 **Kde to bydlí.** `App/Models/ReadMark.swift` (`ReadMark`, `ReadMarks`),
 `App/Policy/FileReviewStates.swift` (`FileReviewState` a všechna rozhodnutí),
 `App/Store/ReadMarkStore.swift` (persistence) a `App/Store/AppStore+ReadMarks.swift` (stav
-a akce). Kreslí to `DiffFileReadToggle`, `FileTreeView` (glyf), `DiffView` (hlavička stromu
-a proužek) a `DiffReadShortcut` (`⌥V`); tudy jdou akce jako `DiffReadActions`.
+a akce). Kreslí to `DiffFileReadToggle`, `ReviewItineraryView` (glyf — do #506 `FileTreeView`),
+`DiffView` (hlavička sloupce a proužek) a `DiffReadShortcut` (`⌥V`); tudy jdou akce jako
+`DiffReadActions`.
 
 **Otisk se bere z diffu, který už je načtený.** `FileDiff.blobs` je sha z řádky
 `index <základ>..<hlava>` **doslova tak, jak ji poslal git**, jen bez módu. Do #500 byl
@@ -1659,6 +1660,122 @@ vůbec**, ne zašedle, a rozhoduje o tom `read: nil` v jednom volání (`DiffRea
 pozná tím, že zaškrtnutý soubor se nesbalí, nebo že ho `Rozbalit vše` neotevře);
 `readFileCount` nesmí počítat `changed`; a otisk musí zůstat **celou** dvojicí — kdo z něj
 vezme jen hlavu, přestane vidět rebase, který změnil základ.
+
+### Itinerář review místo stromu souborů (#506)
+
+Levý sloupec záložky PR přestal být strom cest a stal se **dráhou se zastávkami**. Zákres je
+v [`docs/navrh.html`, sekce 47](navrh.html) (stránka *Změněné soubory*).
+
+**Kde to bydlí.** `App/Policy/ReviewItinerary.swift` (`ItineraryFacts`, `ItineraryStop`,
+`ItineraryProgress` a všechna rozhodnutí), `App/Policy/FileRisk.swift` (`FileRisk`,
+`ItineraryFileItem`, `ItineraryFileGroup`, řazení a co je konfigurace),
+`App/Store/AppStore+Itinerary.swift` (sběr faktů), `App/Views/ReviewItineraryView.swift` (kresba)
+a `App/Views/ItineraryActions.swift` (zastávky a klik). Šířku sloupce drží dál
+`Policy.treeColumnWidth(expanded:)`, jen je to **260, ne 210**.
+
+**`FileTreeView` a `FileTree.swift` zanikly** i s testy — strom podle cesty se otevírá zpátky
+jako #197 a v gitu zůstává. Držet mrtvý strom vedle itineráře by bylo přesně to, na co Copilot
+v tomhle repu opakovaně upozorňuje: stav, který se drží, ale nikdo ho nečte.
+
+**Zastávky skládá `Policy` z faktů, ne šablona.** `ItineraryFacts` je schválně jedna struktura
+hodnot a ne devět argumentů: přítomnost i hotovost zastávky se rozhoduje **maticí** a tu se nad
+argumenty napsat nedá. Přítomnost má tři pravidla:
+
+| Zastávka | V seznamu je, když | Hotová je, když | Údaj vpravo |
+|---|---|---|---|
+| `Od minule` | je **záznam předchozí návštěvy** a přišly commity (#171) | rozsah `Od tvé poslední návštěvy` se otevřel, nebo se posunula značka `Přečteno` | `3 commity` |
+| `Popis a záměr` | vždycky | popis **existuje** a doroloval se na konec | `bez popisu`, jinak nic |
+| `Soubory podle rizika` | vždycky | diff je načtený a všechny soubory jsou prošlé (#500) | `2 ze 7`, jinak `7 souborů` |
+| `Kontroly` | PR má CI (#306) | nic neběží a **každý spadlý check se rozbalil** | `1 spadl` / `2 běží` / `12 prošlo` / `přeskočeno` |
+| `Verdikt` | vždycky | je odeslané moje review s verdiktem | `odesláno`, jinak `návrh: schválit` |
+
+**Hotovo se pozná z dat, ne z odklikání**, a je to jádro toho issue: itinerář, který si člověk
+odškrtává sám, je druhý seznam úkolů a přestane se udržovat po druhém PR. Ručně se zaškrtne
+**jedině soubor** (#500) — u něj „přečetl jsem to“ odvodit nejde.
+
+Dvě z těch odvození stála za novou stopu ve store, protože se nedala vyčíst z toho, co už
+existovalo:
+
+- **`overviewReadToEnd`** — `OverviewView` hlásí `Policy.overviewAtEnd(offset:visible:content:)`
+  přes `onScrollGeometryChange`. Transformace běží při každém přepočtu geometrie, **akce jen při
+  změně hodnoty** (#361), a zápis je navíc jednosměrný: otázka je „přečetl jsem popis“, ne „kde
+  je scroll teď“. Obsah, který se vejde celý, je přečtený **rovnou** — neviditelný konec nemá.
+- **`openedFailedChecks`** — `expandedChecks` drží nejvýš **jeden** rozbalený check a sbalením se
+  vyprázdní, takže by zastávka po zavření logu zhasla zpátky na nehotovou. Sada si to pamatuje,
+  a jen u **spadlých**: zelený check nemá co číst, takže dvanáct zelených nesmí odškrtnout
+  kontrolu, ve které je jeden červený.
+
+K tomu **`previouslyVisited`**, a je to nutnost, ne pohodlí: `noteVisit` zapíše dnešní návštěvu
+hned za `seedVisitBaseline`, takže od té chvíle je `lastVisit` dnešní a „byl jsem tu už dřív“ se
+z ledgeru poznat nedá. Zapisuje se proto v `seedVisitBaseline`, tedy **než** se ten zápis stane.
+A `seenSinceLastVisit`, do které píše `showIncrementalDiff` i `markChangesAsSeen`. Všechny čtyři
+prořezává tik (`forget(whatIsNotIn:)`) a všechny čtyři jsou ve výčtu
+`PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` — od #506 je jich **dvaačtyřicet**.
+
+**Jednotkou počítadla je soubor, ne zastávka.** `Itinerář · 4 z 11` má být počet věcí, které se
+doopravdy čtou: sedm souborů plus čtyři zastávky. S jednotkou „zastávka“ by proužek u PR
+o padesáti souborech skočil z pětiny na dvě pětiny jedním zaškrtnutím posledního souboru.
+Nenačtený diff do počítadla nepřináší nic — počet, který se teprve načítá, nemá co tvrdit.
+
+**Odhad času je z neprošlých řádků** (`Policy.reviewLinesPerMinute`, 30 řádků za minutu) plus
+minuta za každou nehotovou zastávku, která soubory nečte. `nil` znamená **nemám z čeho
+odhadovat** (nenačtený diff) nebo **hotovo**; nula se nevrací nikdy, protože by nad nehotovou
+prací lhala a nad hotovou byla šum.
+
+**Aktuální zastávka je právě jedna — první nehotová v pořadí.** Itinerář je dráha, takže „kde
+jsem“ má jednu odpověď. Zastávka **za** ní zůstane ✓, když je hotová jako data (zelené CI
+uprostřed nedočteného diffu): hotová je hotová, a právě proto se `current` počítá z pořadí a ne
+z „poslední hotové“. Hotový itinerář aktuální zastávku **nemá vůbec**.
+
+**Soubory podle rizika: klasifikace a kresba jsou dvě různá pořadí.** `FileRisk.rawValue` je
+pořadí, ve kterém se rozhoduje (`blocking`, `finding`, `thread`, `configuration`, `added`,
+`other`), kdežto `FileRisk.drawingOrder` je pořadí, ve kterém se kreslí — tam je konfigurace
+**poslední** a složená do jedné položky. Rozdíl je vědomá odchylka od doslovného čtení zadání:
+pořadí v issue má `nový` před konfigurací, takže by nový `composer.lock` vyšel jako `nový`, jenže
+to je pořád tisíc řádků, které nikdo nepíše rukou. **Nález a vlákno ale konfiguraci přebijí**,
+takže `composer.json` s blokujícím nálezem je blokující soubor a neschová se.
+
+**Konfigurace se pozná z výčtu jmen a přípon, ne heuristikou** (`Policy.isConfigurationPath`).
+„Vypadá to na konfiguraci“ se nedá napsat tak, aby to nesnědlo `config/routes.php` nebo
+`docs/navrh.html`; rozhoduje **poslední složka cesty**, ne prefix, a `.xml` ve výčtu **není**
+schválně (píšou se v něm Android layouty a XSLT — `phpunit.xml.dist` chytí `.dist`). Skládaná
+položka vznikne až od dvou konfigurací (`configurationBundleFloor`): nad jediným `composer.lock`
+by rozbalovací řádek byl klik navíc k témuž souboru.
+
+**Uvnitř skupiny se řadí podle cesty, ne podle velikosti změny.** Pořadí se nemá měnit tím, že do
+souboru přijde commit — hledá se v tom seznamu očima a stěhující se řádky jsou horší než
+neoptimální pořadí. A `ItineraryFileGroup.id` je **riziko**, `ItineraryFileItem.bundle`
+má **pevný klíč**: klíč z obsahu by se při každém pushi měnil, tedy nová identita a zavřené
+rozbalení.
+
+**Klik na zastávku přepíná tab** (`ItineraryStop.tab`), a u `Verdiktu` k tomu rozloží panel
+vpravo — verdikt se vybírá v něm, takže samotné `Změněné soubory` na tu zastávku neodpoví. Co ten
+klik udělá s oknem, rozhoduje `PullRequestDetailView`, ne `DiffView`: sloupec vede do tří tabů,
+o kterých diff nic neví.
+
+**Kde zastávky nejsou.** V diffu commitu (#317) ani v rozsahu `Od tvé poslední návštěvy` (#284) —
+`itinerary: nil`, takže sloupec kreslí **jen soubory podle rizika** a v hlavičce zůstává
+`7 souborů · 3 prošlé` jako do #506. Je to tatáž hranice, na které tam nemá co dělat ani
+zaškrtávátko `Prošlo`.
+
+**Kresba: pevný `VStack`, ne líný seznam** (#469). Laznost je vlastnost layoutu, ne délky
+seznamu, a padesát řádků o jednom `Text`u je proti bloku kódu nic. `.fillingSlot()` na
+`ScrollView`u zůstává, a je to podmínka, ne úspora — pevný `VStack` by na `∞` odpověděl celou
+výškou obsahu a sloupec by rostl přes okno; hlídá to `LazyIdealSizeTests`. Odsazení je **jedna
+úroveň**, ne hloubka složek.
+
+**Šířka 260 místo 210 je změřená cena, ne kulaté číslo.** `ItineraryColumnRoomTests`:
+*Vedle sebe* **3 znaky na stranu** (41 → 38), *Pod sebou* **6 znaků** (86 → 80), a ve `split`u se
+neplatí ani tou trojkou, protože se sloupec skládá (#188). Hranice, pod kterou se skládá, se
+posunula o týchž 50 bodů — 570 → 620 bez okraje karet a 870 → 920 s ním; ta druhá je nad podlahou
+`RootView`u (700), takže je rozdíl v okně doopravdy vidět. Čísla jsou
+v [`docs/testovani.md`](testovani.md#kolik-ubere-širší-levý-sloupec-506).
+
+**Co se u toho nemá rozbít:** `Policy.itinerary` nesmí vydat zastávku `Od minule` bez záznamu
+návštěvy (bez toho by „od tvé poslední návštěvy“ nad prvním otevřením znamenalo „od začátku
+věků“); `Kontroly` nesmí vzniknout nad PR bez CI (zvedly by jmenovatele počítadla o práci, která
+tam není); `current` musí zůstat právě jedna; a **nic kromě souboru se nesmí dát odškrtnout
+klikem** — první ruční zaškrtávátko na zastávce z itineráře udělá druhý seznam úkolů.
 
 ### Nálezy v okraji (#503)
 
@@ -1941,7 +2058,7 @@ uvnitř odsazení — ne odsazení samo.
 
 **Zúžení dostane jen kolona kódu, ne strom a okraj, a je to rozhodnutí.** Obě zbylé kolony mají
 `frame(width:)` z `Policy`, takže se jejich obsah nemá jak roztáhnout přes ně — a nic uvnitř nich
-si šířku z prostředí nebere (`FileTreeView` používá `fillingSlot()`, karta v okraji
+si šířku z prostředí nebere (`ReviewItineraryView` používá `fillingSlot()`, karta v okraji
 `frame(maxWidth: .infinity)`). Kdyby si vzalo, projeví se to **stejně** jako #546 a najde se to
 týmž sweepem; předávat tam šířku „pro jistotu“ by znamenalo dvě další místa, která se s `HStack`em
 umí rozejít.
@@ -4573,7 +4690,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
 | `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
-| `FileTreeView` | Strom souborů v levém sloupci u diffu; odsazení a sbalování si řídí sám |
+| `ReviewItineraryView`, `ItineraryActions` | **Itinerář review** v levém sloupci u diffu (#506): zastávky se stavem a údajem vpravo, pod zastávkou `Soubory podle rizika` skupiny souborů; klik na zastávku přepíná tab. Bez zastávek (`itinerary: nil`) je z toho jen seznam souborů podle rizika — tak vypadá sloupec v diffu commitu a v rozsahu od minule. Do #506 tu byl `FileTreeView` (strom podle cesty, #197) |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace. Sazba je od #404 `designPill` (mono 10,5) a k ní `lineLimit(1)` **i** `fixedSize()` — v řádku fronty se odznak pere o místo s titulkem PR a mono je tam o 10 až 48 bodů širší |
 | `hiddenShortcuts(_:)`, `KeyEquivalent.backTab` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek, paletu i přepínání záložek (#245). `backTab` je tam proto, že `⌃⇧⇥` doručí `U+0019`, tedy jinou klávesu než `⇥` |
 | `WindowShortcutButtons`, `View.windowShortcut(_:)` | Překlad katalogu zkratek (#441) do SwiftUI — **jediné místo v `App/`, kde se `keyboardShortcut` píše nad kombinací**. Kombinací může být víc, každá dostane vlastní tlačítko (česká klávesnice); viditelné tlačítko bere jen tu primární |
@@ -5076,7 +5193,7 @@ Co v okně je (od #500 pětadvacet akcí; tabulka níž vypisuje ty, u kterých 
 | `⌘R` | obnovit seznam | dokud běží dotaz (`Policy.refreshControl`, #442) |
 | `⌃1`–`⌃5` (+ `⌃+ ě š č ř`) | sekce railu | — |
 | `⌥↓` / `⌥↑` | další / předchozí nález (#151) | — |
-| `⌘1` | strom souborů u diffu | — |
+| `⌘1` | itinerář review u diffu (#506; do té doby strom souborů) | — |
 | `⌘2` | panel s mým review (#182) | v tabech bez panelu (#294) |
 | `⎋` | zpět na seznam commitů (#317) | mimo tab `Commity`, nad paletou a nad potvrzením |
 | `⌘⏎` / `⌃⏎` | **potvrzení** odeslání review (#151) | `Policy.canOpenSubmission`, otevřený sheet, otevřená paleta |
@@ -5897,8 +6014,8 @@ sonda ten scénář **měří dál** (`TimelineShape.declaredIdeal`), aby to neb
 | Místo | Který stack se ptal |
 |---|---|
 | `ConversationView.timeline` | `VStack` osy (lišta / osa / composer) |
-| `DiffView.files` | `HStack` (strom souborů / diff) |
-| `FileTreeView` | `VStack` sloupce se stromem |
+| `DiffView.files` | `HStack` (itinerář / diff) |
+| `ReviewItineraryView` | `VStack` levého sloupce |
 | `ActivityFeedView` | `VStack` okna v `HomeView` |
 | `ReviewPanel.cards` | `VStack` (věta o hlavě / karty) |
 | `FindingsTableView` | `VStack` tabu `Nálezy` |
@@ -7605,7 +7722,12 @@ Taby PR (#72) drží `AppStore` v `detailTabs` (per PR) a platí u nich:
 
   Selhaný checkout zůstává **banner v hlavičce PR**, ne karta: je to porucha na obrazovce, která
   je jinak plná, kdežto tenhle vzor je pro prázdnou plochu.
-- **Strom souborů je trvalý levý sloupec** (#197), ne jen popover. U PR o padesáti souborech
+- **Strom souborů je trvalý levý sloupec** (#197), ne jen popover. **Od #506 už to strom není**
+  — sloupec se stal itinerářem review (260 bodů, zastávky, soubory podle rizika) a `FileTreeView`
+  s `FileTree.swift` zanikly; strom podle cesty se otevírá zpátky jako #197. Všechno níž je proto
+  **záznam toho, co platilo do #506** — kromě posledních dvou odrážek (obarvená ikona a skok na
+  sbalený soubor), které platí dál. Šířka 210 se změnila na 260 a ořezání složky zezadu odešlo
+  s hloubkou složek. U PR o padesáti souborech
   nešlo poznat, kde v něm člověk je, aniž by ho otevřel. Šířka 210 z návrhu, složený je proužek
   34 bodů s počtem souborů. Skládá se **u sebe** — šipkou v hlavičce sloupce, otevírá se kliknutím
   na proužek — a `⌘1` dělá totéž; v liště nad diffem tlačítko **není** (do #219 bylo, viz výš).
@@ -8163,8 +8285,8 @@ Věci, na které se u okna naráží:
   ztracený údaj a `Table` nemá kam rozbalit druhý řádek — a protože se každým sloupcem dá
   táhnout až na jeho `min`, umí se ořezat každý. Zadání #60 jmenovalo `Nález` a `Místo`,
   ale `Kategorie` na svém minimu neuveze „bez kategorie“ s výstražnou ikonou. `Místo` se
-  přitom ořezává **zepředu** (`.truncationMode(.head)`, stejně jako cesty ve `FileTreeView`
-  a v hlavičkách `DiffView`), aby zůstalo jméno souboru a číslo řádku; společný prefix
+  přitom ořezává **zepředu** (`.truncationMode(.head)`, stejně jako cesty v hlavičkách
+  `DiffView`), aby zůstalo jméno souboru a číslo řádku; společný prefix
   `App/Views/…` o nálezu neříká nic.
 - **Nápověda u nálezu bez místa je věta, ne pomlčka.** Sloupec ukazuje `—`, ale tooltip
   s pomlčkou nevysvětluje nic. Skládá se ve `FindingRow`, ne ve view — je to text a ten se
@@ -8678,7 +8800,13 @@ Věci, které se u toho nemají rozbít:
 | `Policy.fileMarkers(of:categories:)` | Které soubory nesou nález a jak vážný (#197) — blokující přebíjí a nedá se přebít zpátky |
 | `Policy.fileFindings(in:categories:)` | Co je v souboru k vyřízení pro kapsli v hlavičce diffu (#219) — počítá **místa**, ne nálezy, a odmítnuté vynechá |
 | `Policy.fileReviewState(mark:blobs:)`, `Policy.fileReviewStates(of:marks:)` | Stav značky `Prošlo` ze tří vstupů (#500) — jedna rovnost otisků, `nil == nil` je `read`. Mapa vrací **jen soubory se značkou** |
-| `Policy.readFileCount(in:)`, `Policy.readFileShare(read:of:)`, `Policy.fileTreeSummary(files:read:)` | Počet prošlých, podíl pro proužek (`nil` = nekreslí se) a popisek hlavičky stromu (#500) — druhá polovina se připojí, teprve když má co říct |
+| `Policy.readFileCount(in:)`, `Policy.readFileShare(read:of:)`, `Policy.fileTreeSummary(files:read:)` | Počet prošlých, podíl pro proužek (`nil` = nekreslí se) a popisek hlavičky sloupce (#500) — druhá polovina se připojí, teprve když má co říct. **Od #506 už to není hlavička itineráře**: ta je `itineraryHeading`, a tenhle popisek zůstává tam, kde zastávky nejsou (diff commitu, rozsah od minule) |
+| `Policy.itinerary(_:)` | Zastávky itineráře review z faktů (#506) — `Od minule` jen se **záznamem návštěvy a commity** (#171), `Kontroly` jen s CI (#306), zbylé tři vždycky. `current` je **první nehotová**, ostatní nehotové `todo` |
+| `Policy.itineraryProgress(of:facts:)`, `Policy.itineraryMinutes(of:facts:)`, `Policy.itineraryHeading(_:)` | Počítadlo `4 z 11` a odhad času (#506) — jednotkou je **soubor**, ne zastávka; `nil` minut znamená „nemám z čeho odhadovat“ nebo „hotovo“, nikdy nulu |
+| `Policy.fileStopDetail(read:of:)`, `Policy.checksStopIsDone(_:)`, `Policy.checksStopDetail(_:)`, `Policy.verdictStopDetail(_:)`, `Policy.itineraryStopHelp(_:)` | Údaje vpravo u zastávek (#506) — spadlý check je hotový až po rozbalení, nula se nepíše jako podíl, u verdiktu bez návrhu se **nepíše nic** |
+| `Policy.unreadLineCount(of:states:)`, `Policy.overviewAtEnd(offset:visible:content:)` | Vstupy pro itinerář z jiných obrazovek (#506) — neprošlé řádky (`changed` je **neprošlý**) a „doroloval se popis na konec“ (obsah, který se vejde, je přečtený rovnou) |
+| `Policy.risk(of:markers:threadPaths:)`, `Policy.filesByRisk(_:markers:threadPaths:)`, `Policy.itineraryGroups(_:)` | Soubory podle rizika a skupiny s nadpisem (#506) — klasifikace jde konfigurací **dřív** než `nový`, kresba **později**; uvnitř skupiny se řadí podle cesty |
+| `Policy.isConfigurationPath(_:)`, `Policy.configurationBundleLabel(count:)` | Co je konfigurace nebo lock (#506) — **výčet jmen a přípon**, rozhoduje poslední složka cesty a `.xml` ve výčtu schválně není |
 | `Policy.isFileFolded(state:override:)` | Je soubor sbalený (#500) — **odvozeno ze značky**, odchylka z okna přebíjí v obou směrech |
 | `Policy.readToggleTitle(of:)`, `Policy.changedSinceReadLabel(of:)`, `Policy.readToggleHelp(of:)` | Co je u zaškrtávátka napsané (#500) — `Prošlo znovu` u změněného, kapsle `změněno od prošlého` jedině u něj, nápověda s klávesou z katalogu |
 | `Policy.charactersPerSide(contentWidth:characterWidth:layout:gutter:)` | Kolik znaků kódu se vejde na stranu (#188); vedle sebe se šířka dělí na dvě. Gutter odečítá **jednou** — což od #236 odpovídá i tomu, kde se kód opravdu zalomí; do té doby byl ukazatel v pohledu pod sebou o 17 znaků optimističtější než skutečnost |

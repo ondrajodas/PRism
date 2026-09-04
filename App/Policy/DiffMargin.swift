@@ -264,10 +264,23 @@ extension Policy {
         layout == .split ? 2 * 180 : 360
     }
 
-    /// Šířka sloupce se stromem — rozložený z návrhu (`210px`), složený jako pruh s ikonou.
+    /// Šířka levého sloupce — rozložený z návrhu (`260px`, sekce 47), složený jako pruh s ikonou.
     /// Konstanty jsou tady schválně: rozhoduje se podle nich, takže view je čte odsud, ne naopak.
+    ///
+    /// **Od #506 je to 260, ne 210** (návrh sekce 47). Sloupec přestal být strom cest a stal se
+    /// itinerářem: na řádce vedle sebe stojí glyf stavu, nadpis zastávky a údaj vpravo
+    /// (`3 commity`, `návrh: schválit`), a to se do 210 bodů nevejde — nejdelší z těch údajů má
+    /// 18 znaků, tedy ~100 bodů, a na nadpis `Soubory podle rizika` by zbylo ~70.
+    ///
+    /// **Změřeno, ne odhadnuto** (`ItineraryColumnRoomTests`, štěrbina 1 047 b, znak 8,036 b):
+    /// *Vedle sebe* **3 znaky na stranu** (41 → 38), *Pod sebou* **6 znaků** (86 → 80). A ve
+    /// `split`u se za to neplatí ani tou trojkou: kolonu kódu tam neurčuje šířka sloupce, ale
+    /// `diffSideColumns` — sloupec se ve `split`u **skládá** (#188), takže je z něj pruh 34 bodů
+    /// v obou případech; ta trojka je cena za to, když si ho tam člověk otevře `⌘1`. Hranice, pod
+    /// kterou se sloupec skládá, se posunula o týchž **50 bodů** (570 → 620 bez okraje karet,
+    /// 870 → 920 s ním). Čísla jsou v `docs/testovani.md`.
     static func treeColumnWidth(expanded: Bool) -> Double {
-        expanded ? 210 : 34
+        expanded ? 260 : 34
     }
 
     /// Šířka okraje s kartami z návrhu (`300px`), nebo nula, když se nekreslí.

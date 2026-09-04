@@ -145,7 +145,7 @@ struct WindowShortcutsTests {
     /// bere jen primární kombinaci, takže by se ta druhá nikde nezaregistrovala.
     @Test("Akce na viditelném tlačítku nemají alternativu")
     func visibleButtonActionsHaveNoAlternates() {
-        for action in [WindowShortcut.Action.fileTree, .runAllReviews, .openDraft] {
+        for action in [WindowShortcut.Action.itinerary, .runAllReviews, .openDraft] {
             #expect(Policy.windowShortcut(action).alternates.isEmpty)
         }
     }
@@ -196,7 +196,7 @@ struct WindowShortcutsTests {
             (.agentPrompt, "⌘⇧P"),
             (.cancelReview, "⌘."),
             (.toggleTerminal, "⌃`"),
-            (.fileTree, "⌘1"),
+            (.itinerary, "⌘1"),
             (.runAllReviews, "⌘⇧R"),
             (.openDraft, "⌘⇧D"),
             (.findInDiff, "⌘F"),

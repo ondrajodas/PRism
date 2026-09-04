@@ -67,12 +67,12 @@ struct FileReadMarkRenderProbe {
         print("SONDA \(url.path)")
     }
 
-    /// Strom souborů: hlavička `7 souborů · 3 prošlé`, proužek podílu, ✓ u prošlých, ↻ u změněného
-    /// a puntíky nálezů u prvních dvou. Hlavička i proužek jsou v `DiffView` privátní, takže se tu
-    /// skládají **týmiž hodnotami z `Policy`**, jaké čte okno — sonda tvrdí kresbu, ne to, kdo ji
-    /// v okně staví.
-    @Test("Vyrendrovat strom souborů se značkami")
-    func rendersFileTree() throws {
+    /// Sloupec bez zastávek (#506): hlavička `7 souborů · 3 prošlé`, proužek podílu, ✓ u prošlých,
+    /// ↻ u změněného a puntíky nálezů u prvních dvou. Tohle je ta podoba, kterou má sloupec v diffu
+    /// commitu a v rozsahu od minule — tedy tam, kde itinerář není. Hlavička i proužek jsou
+    /// v `DiffView` privátní, takže se tu skládají **týmiž hodnotami z `Policy`**, jaké čte okno.
+    @Test("Vyrendrovat seznam souborů se značkami")
+    func rendersFileList() throws {
         let files = [
             file("src/Vault/SecretClient.php"),
             file("src/Vault/Encryptor.php"),
@@ -110,7 +110,7 @@ struct FileReadMarkRenderProbe {
 
             if let share {
                 HStack(spacing: 0) {
-                    Rectangle().fill(Palette.ok).frame(width: (210 - 26) * share)
+                    Rectangle().fill(Palette.ok).frame(width: (260 - 26) * share)
                     Spacer(minLength: 0)
                 }
                 .frame(height: 3)
@@ -120,13 +120,17 @@ struct FileReadMarkRenderProbe {
                 .padding(.top, 7)
             }
 
-            FileTreeView(files: files, markers: markers, readStates: states) { _ in }
+            ReviewItineraryView(
+                items: Policy.filesByRisk(files, markers: markers),
+                markers: markers,
+                readStates: states
+            ) { _ in }
         }
-        .frame(width: 210, height: 260, alignment: .topLeading)
+        .frame(width: 260, height: 320, alignment: .topLeading)
         .background(Palette.chrome)
 
-        let url = Self.outputDirectory.appending(path: "proslo-strom.png")
-        try Self.render(AnyView(scene), width: 240, height: 280, to: url)
+        let url = Self.outputDirectory.appending(path: "proslo-seznam.png")
+        try Self.render(AnyView(scene), width: 290, height: 340, to: url)
         print("SONDA \(url.path)")
     }
 

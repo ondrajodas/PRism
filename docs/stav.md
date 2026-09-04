@@ -7418,3 +7418,70 @@ pushi u celého review. A **kvalita odpovědi na verdikty se v harnessu neměř�
 běhu doopravdy zavolá `ReportFindings` **a** ke všem starým nálezům se vyjádří, se pozná jedině na
 skutečných bězích — dokud se to nepotvrdí, je vidět `N bez odpovědi`, což je záměrně to, co se
 nedá přečíst jako „čisto“.
+
+## #506 — itinerář review místo stromu souborů (M14)
+
+Levý sloupec záložky PR přestal být strom cest a stal se **dráhou se zastávkami**: *Od minule →
+Popis a záměr → Soubory podle rizika → Kontroly → Verdikt*, u každé stav (✓ hotovo / ● aktuální /
+○ zbývá) a údaj vpravo, v hlavičce `Itinerář · 4 z 11 · 10 min` a pod ní proužek podílu. Zákres
+je v `docs/navrh.html` jako **sekce 47**. Důvod: okno mělo osm záložek a strom, ale **žádné
+pořadí** — co číst první, kde jsem skončil a co zbývá, si člověk držel v hlavě. Reviewer má dráhu
+s fázemi; člověk, který review dělá, neměl nic.
+
+**Zastávky skládá `Policy` z dat, ne šablona**, a to je jádro toho issue: `Od minule` vznikne jen
+se **záznamem předchozí návštěvy a commity** (#171), `Kontroly` jen s CI (#306), zbylé tři vždycky.
+**Hotovo se pozná z dat** — soubor prošlý (#500), popis odscrollovaný na konec, spadlý check
+rozbalený, verdikt odeslaný na GitHub. **Ručně se zaškrtne jedině soubor**: itinerář, který si
+člověk odškrtává sám, je druhý seznam úkolů a přestane se udržovat po druhém PR.
+
+Dvě odvození stála za novou stopu ve store, protože se nedala vyčíst z toho, co už bylo:
+`overviewReadToEnd` (`OverviewView` hlásí `Policy.overviewAtEnd` přes `onScrollGeometryChange` —
+akce jen při změně hodnoty, a jednosměrně: otázka je „přečetl jsem popis“, ne „kde je scroll teď“)
+a `openedFailedChecks` (`expandedChecks` drží nejvýš **jeden** rozbalený check a sbalením se
+vyprázdní, takže by zastávka po zavření logu zhasla zpátky na nehotovou). K tomu
+`previouslyVisited`, a to z nutnosti: `noteVisit` zapíše dnešní návštěvu hned za
+`seedVisitBaseline`, takže od té chvíle je `lastVisit` dnešní a „byl jsem tu už dřív“ se z ledgeru
+poznat nedá. Všechny čtyři prořezává tik a všechny čtyři jsou ve výčtu
+`PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` — od #506 je jich **dvaačtyřicet**.
+
+**Jednotkou počítadla je soubor, ne zastávka.** `4 z 11` má být počet věcí, které se doopravdy
+čtou (sedm souborů plus čtyři zastávky); s jednotkou „zastávka“ by proužek u PR o padesáti
+souborech skočil z pětiny na dvě pětiny jedním zaškrtnutím. **Odhad času** je z neprošlých řádků
+(30 řádků za minutu) plus minuta za nehotovou zastávku, která soubory nečte; nad nenačteným diffem
+i nad hotovým itinerářem se **nepíše nic** — `0 min` by nad nehotovou prací lhalo a nad hotovou
+bylo šum.
+
+**Strom podle cesty zanikl a otevírá se zpátky jako #197.** `FileTreeView` a `FileTree.swift`
+odešly i s testy: cesta se od #219 píše v **hlavičce souboru** v diffu, takže ve sloupci nechybí, a
+pořadí podle rizika odpovídá na otázku, na kterou hloubka složek odpovědět neumí — čím začít.
+Držet mrtvý strom vedle itineráře by byl přesně ten vzor, na který Copilot v tomhle repu opakovaně
+upozorňuje.
+
+**Soubory podle rizika: klasifikace a kresba jsou dvě různá pořadí**, a je to vědomá odchylka od
+zadání. Kreslí se blokující → nález → vlákno → nový → ostatní → konfigurace a locky (ty složené do
+jedné položky), ale **rozhoduje** se konfigurací **dřív** než `nový`: nový `composer.lock` je pořád
+tisíc řádků, které nikdo nepíše rukou. Nález a vlákno konfiguraci naopak **přebijí**, takže
+`composer.json` s blokujícím nálezem je blokující soubor a neschová se. Konfigurace se pozná
+z **výčtu jmen a přípon**, ne heuristikou — `.xml` v něm schválně není (Android layouty, XSLT).
+
+**Šířka 260 místo 210 je změřená cena.** `ItineraryColumnRoomTests` na štěrbině 1 047 b a znaku
+8,036 b: *Vedle sebe* **3 znaky na stranu** (41 → 38), *Pod sebou* **6 znaků** (86 → 80). Ve
+`split`u se neplatí ani tou trojkou, protože se sloupec skládá (#188) — je to cena za to, když si
+ho tam člověk otevře `⌘1`. Hranice, pod kterou se skládá, se posunula o týchž 50 bodů: 570 → 620
+bez okraje karet a 870 → **920** s ním; ta druhá je nad podlahou `RootView`u (700), takže je to
+jediná změna chování, kterou ta šířka na obrazovce udělala. První podoba toho testu měřila
+o **šest bodů** vedle, protože do hranice přičítala mezeru před kolonou (#503) — `diffSideColumns`
+ji neodečítá, odečítá ji až `diffCodeColumnWidth`.
+
+**Zkratka `⌘1` se přejmenovala** ze `Strom souborů` na `Itinerář review` (i případ v katalogu:
+`WindowShortcut.Action.itinerary`). Kombinace se nemění.
+
+Testů **5236** v 511 suitách, plný běh zelený (108,5 s, jedno známé `theWaitGivesUpLoudly`). Nové sady jsou tři: `ReviewItineraryTests` (matice vstupů —
+přítomnost zastávky odděleně od hotovosti), `FileRiskTests` (pořadí nad daty ze sekce 03 návrhu
+a co je konfigurace) a `ItineraryColumnRoomTests` (to měření šířky); k tomu ruční sonda
+`ReviewItineraryRenderProbe` — plný itinerář a sloupec bez zastávek.
+
+**Zapsané mezery**: odhad času je **odhad**, ne měření — 30 řádků za minutu je odvozené z toho,
+jak dlouho dvěstěřádkový soubor v tomhle okně doopravdy zabere, ne naměřené nad sezeními. A že
+`⌘1` po přejmenování pořád zabere, se v harnessu ověřit nedá (testovací host nedostane aktivaci),
+takže to zkouší člověk.

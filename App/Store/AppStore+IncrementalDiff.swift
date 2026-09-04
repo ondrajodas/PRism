@@ -48,6 +48,10 @@ extension AppStore {
             }
         }
         incrementalDiffs[id] = IncrementalDiff(range: range, content: .loading)
+        // Zastávka `Od minule` v itineráři (#506): otevření rozsahu je záznam o tom, že jsem se
+        // na přírůstek podíval. Zapisuje se **při vyžádání, ne po načtení** — kdo si o rozsah
+        // řekl, ten si ho vyžádal, a selhání načtení je vidět na obrazovce zvlášť.
+        noteSawChangesSinceLastVisit(for: id)
 
         do {
             let text = try await gateway.fetchDiff(repo: id.repo, from: range.seen, to: range.head)

@@ -84,6 +84,11 @@ struct DiffView: View {
     /// takže okraj a lišta ukazují **totéž** — bez toho by po `⌥↓` nebylo poznat, o které kartě
     /// lišta mluví. Do #503 to potřeboval jen panel, protože v diffu se o kurzoru dozvěděl skok.
     var current: FindingPlace?
+    /// Zastávky itineráře (#506). `nil` = **tahle obrazovka itinerář nemá** — diff commitu (#317)
+    /// ani rozsah `Od tvé poslední návštěvy` (#284) nemluví o celém review, takže by zastávky
+    /// `Kontroly` a `Verdikt` odkazovaly mimo to, co je vidět. Sloupec pak kreslí **jen soubory
+    /// podle rizika** a v hlavičce zůstává počet souborů jako do #506.
+    var itinerary: ItineraryActions?
     /// Kam hlásit, kde stojí výřez (#527) — z toho se skládá kotva scrollu v `tabs.json`.
     /// `nil` = **tuhle obrazovku nikdo neobnovuje**, takže se ani nepočítá: diff commitu (#317),
     /// rozsahový diff (#284) ani náhled o pull requestu nic neukládají.
@@ -687,34 +692,31 @@ struct DiffView: View {
     /// Zkratka tedy nemá na čem viset a musí být samostatně. Průhledné tlačítko, ne `.hidden()`:
     /// skryté view z hierarchie zmizí i se zkratkou. Tentýž vzorec jako ⌘2 v detailu PR.
     private var treeShortcut: some View {
-        Button("Strom souborů") {
+        Button("Itinerář review") {
             withAnimation(.snappy(duration: 0.15)) { isTreeExpanded.toggle() }
         }
-        .windowShortcut(.fileTree)
+        .windowShortcut(.itinerary)
         .opacity(0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    /// Levý sloupec se stromem souborů (#197), nebo proužek, když je složený.
+    /// Levý sloupec — **itinerář review** (#506), nebo proužek, když je složený.
     ///
-    /// Šířka 210 bodů je z návrhu (`grid-template-columns: 210px 1fr 300px`). Složený je proužek
+    /// Šířka 260 bodů je z návrhu (sekce 47; do #506 to bylo 210 podle #197). Složený je proužek
     /// 34 bodů — **ne zmizelý sloupec**: kolik souborů PR mění, je ta první otázka nad diffem
     /// a bez čísla na hraně se na ni po složení nedá odpovědět.
     @ViewBuilder private func tree(jumpingWith proxy: ScrollViewProxy) -> some View {
         if isTreeExpanded {
             VStack(spacing: 0) {
-                // Hlavička jako u panelu vpravo: popisek z návrhu (`7 SOUBORŮ`) a šipka, kterou
-                // se sloupec zavře. Zavírat jedině z lišty nad diffem znamená hledat tlačítko
-                // na druhém konci okna, než u kterého člověk zrovna je.
+                // Hlavička jako u panelu vpravo: popisek z návrhu a šipka, kterou se sloupec
+                // zavře. Zavírat jedině z lišty nad diffem znamená hledat tlačítko na druhém
+                // konci okna, než u kterého člověk zrovna je.
                 HStack(spacing: 8) {
-                    // `7 SOUBORŮ · 3 PROŠLÉ` (#500) — druhá polovina se objeví, teprve když má
-                    // co říct. Skládá ji `Policy`, ať se počet v hlavičce nemůže rozejít s tím,
-                    // co je v seznamu pod ní.
-                    Text(verbatim: Policy.fileTreeSummary(
-                        files: diff.files.count,
-                        read: readFileCount
-                    ).uppercased())
+                    // `ITINERÁŘ · 4 Z 9 · 12 MIN` (#506), nebo `7 SOUBORŮ · 3 PROŠLÉ` (#500) tam,
+                    // kde itinerář není (diff commitu, rozsah od minule). Skládá to `Policy`, ať
+                    // se počet v hlavičce nemůže rozejít s tím, co je v seznamu pod ní.
+                    Text(verbatim: columnHeading.uppercased())
                         .font(.system(size: 10, design: .monospaced))
                         .tracking(1)
                         .foregroundStyle(Palette.ink3)
@@ -729,8 +731,8 @@ struct DiffView: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .help(Policy.shortcutHelp("Složit strom souborů", .fileTree))
-                    .accessibilityLabel("Složit strom souborů")
+                    .help(Policy.shortcutHelp("Složit itinerář", .itinerary))
+                    .accessibilityLabel("Složit itinerář")
                 }
                 .padding(.horizontal, 13)
                 .padding(.vertical, 9)
@@ -738,9 +740,15 @@ struct DiffView: View {
 
                 readProgress
 
-                FileTreeView(
-                    files: diff.files,
-                    markers: fileMarkers,
+                // **Značky se skládají jednou za průchod** (tatáž úvaha jako u `marginCards`
+                // v `body`): rozbalují se z nálezů a překládají po obou cestách přejmenovaného
+                // souboru, takže dvě složení znamenají dvě odpovědi na to, které soubory nesou
+                // nález — a pořadí v itineráři by se pak mohlo rozejít s puntíky v něm.
+                let markers = fileMarkers
+                ReviewItineraryView(
+                    items: itineraryItems(markers: markers),
+                    itinerary: itinerary,
+                    markers: markers,
                     readStates: read?.states ?? [:]
                 ) { file in
                     jump(to: file, with: proxy)
@@ -791,8 +799,8 @@ struct DiffView: View {
             .buttonStyle(.plain)
             .background(Palette.chrome)
             .overlay(alignment: .trailing) { Rectangle().fill(Palette.lineSoft).frame(width: 1) }
-            .help(Policy.shortcutHelp("Rozložit strom souborů", .fileTree))
-            .accessibilityLabel("Rozložit strom souborů")
+            .help(Policy.shortcutHelp("Rozložit itinerář", .itinerary))
+            .accessibilityLabel("Rozložit itinerář")
         }
     }
 
@@ -801,14 +809,34 @@ struct DiffView: View {
         Policy.readFileCount(in: read?.states ?? [:])
     }
 
-    /// Tenký proužek podílu pod hlavičkou stromu (#500) — 3 body, `--ok` na `--panel-3`, jak ho
-    /// má návrh (sekce 40).
+    /// Popisek hlavičky sloupce. **Itinerář, když je čím**; jinak počet souborů jako do #506.
     ///
-    /// **Nekreslí se, dokud není zaškrtnuté nic**: prázdná linka nad nezapočatým PR je stálý prvek
+    /// Dvě věty a ne jedna, protože se ptají na různé věci: `4 z 9` mluví o **celém review**
+    /// (popis, kontroly, verdikt), kdežto `7 souborů · 3 prošlé` jen o souborech — a v diffu
+    /// commitu ani v rozsahu od minule žádné review není.
+    private var columnHeading: String {
+        guard let itinerary else {
+            return Policy.fileTreeSummary(files: diff.files.count, read: readFileCount)
+        }
+        return Policy.itineraryHeading(itinerary.progress)
+    }
+
+    /// Podíl do proužku pod hlavičkou. Itinerář počítá **všechny** položky, ne jen soubory.
+    private var columnShare: Double? {
+        guard let itinerary else {
+            return Policy.readFileShare(read: readFileCount, of: diff.files.count)
+        }
+        return itinerary.progress.share
+    }
+
+    /// Tenký proužek podílu pod hlavičkou (#500, od #506 nad celým itinerářem) — 3 body,
+    /// `--ok` na `--panel-3`, jak ho má návrh.
+    ///
+    /// **Nekreslí se, dokud není hotové nic**: prázdná linka nad nezapočatým PR je stálý prvek
     /// bez informace. `Policy` na to odpovídá `nil`em, ne nulou — tady se jen rozhoduje, co to
     /// znamená v kresbě.
     @ViewBuilder private var readProgress: some View {
-        if let share = Policy.readFileShare(read: readFileCount, of: diff.files.count) {
+        if let share = columnShare {
             // **Šířka se počítá, nevyjednává** (#220): proužek zná šířku sloupce, takže se podíl
             // dá vyjádřit rámečkem, ne pružností.
             HStack(spacing: 0) {
@@ -822,11 +850,24 @@ struct DiffView: View {
             .clipShape(.rect(cornerRadius: 2))
             .padding(.horizontal, 13)
             .padding(.top, 7)
-            .accessibilityLabel(Text(verbatim: Policy.fileTreeSummary(
-                files: diff.files.count,
-                read: readFileCount
-            )))
+            .accessibilityLabel(Text(verbatim: columnHeading))
         }
+    }
+
+    /// Soubory seřazené podle rizika (#506) — **jedno místo, ze kterého čte sloupec**.
+    ///
+    /// **Značky přicházejí parametrem, ne z počítané vlastnosti**: skládají se jednou za průchod
+    /// a čte je i sloupec sám (puntíky u jmen), takže dvě složení by byla dvě odpovědi na jednu
+    /// otázku — tentýž důvod, jaký má `toolbar(codeWidth:)` u šířky kolony (#546).
+    ///
+    /// Vlákna se berou z těch, která v diffu mají kotvu (`threads`, vybral je volající): vlákno
+    /// na zmizelém řádku patří do `Konverzace`, ne do pořadí čtení souborů.
+    private func itineraryItems(markers: [String: FileMarker]) -> [ItineraryFileItem] {
+        Policy.filesByRisk(
+            diff.files,
+            markers: markers,
+            threadPaths: Set(threads.map(\.path))
+        )
     }
 
     /// Skok na soubor ze stromu. Sbalený soubor se **nejdřív rozbalí** — jinak by se ukázala

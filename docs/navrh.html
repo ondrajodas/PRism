@@ -2778,6 +2778,49 @@ tr.mgn-crit td.code { border-right: 3px solid var(--crit); }
 tr.mgn-find td.code { border-right: 3px solid var(--find); }
 tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 
+/* ---- sekce 47: itinerář review --------------------------------------------------
+   Levý sloupec přestal být strom cest a stal se dráhou se zastávkami (#506). Zákres přišel
+   z decku „Směry pro PRism“ (stránka *Směry › A Itinerář review*) a tady jsou jen ty čtyři
+   třídy, které se nedaly složit z existujících:
+
+   1. `.work.itin` — mřížka se sloupcem **260 bodů** místo 210. Vlastní varianta, ne přepsané
+      `.work`: starší zákresy ukazují strom, jak byl, a přebarvit je zpětně by znamenalo, že
+      dokument tvrdí o minulosti něco, co v ní nebylo.
+   2. `.itin` — řádek zastávky. **Ne `.tnode`**: `.tnode` je soubor (mono jméno, značka vpravo
+      pod `margin-left: auto`), kdežto zastávka je věta v proporcionálním písmu, glyf stavu
+      v pevné koloně vlevo a **údaj vpravo v mono** (`3 commity`, `návrh: schválit`). Tři stavy
+      jsou `.done`, `.now` a nic: `.now` má `--accent-weak` jako `.tnode.on`, protože je to táž
+      informace („tady jsem“) — a proto se ta podbarvení nesmí objevit obě zároveň.
+   3. `.itin-grp` — nadpis skupiny rizika (`BLOKUJÍCÍ`, `S NÁLEZEM`, …). Je to sazba
+      `.tree .th`, ale **nemůže to být ona**: hlavička stromu je jedna na sloupec a má vlastní
+      `padding-bottom`, na kterém sedí záporný okraj proužku podílu (`.rv-prog`, sekce 40).
+   4. `.itin-bundle` — složená položka `4 konfigurace a locky`. `.tnode` s šipkou místo ikony
+      a bez mono jména: nekliká se na soubor, ale na skupinu.
+
+   Proužek podílu **vlastní třídu nedostal** — je to `.rv-prog` ze sekce 40. Je to týž prvek,
+   jen se nad ním od #506 počítá celý itinerář místo prošlých souborů; dvě třídy pro jeden
+   proužek by se rozešly první úpravou. */
+.work.itin { grid-template-columns: 260px 1fr; }
+.itin {
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 5px 13px; font-size: 11.5px; color: var(--ink);
+}
+.itin .st { width: 11px; flex: 0 0 11px; font-size: 10px; color: var(--ink-3); text-align: center; }
+.itin.done { color: var(--ink-3); }
+.itin.done .st { color: var(--ok); }
+.itin.now { background: var(--accent-weak); font-weight: 600; }
+.itin.now .st { color: var(--accent); }
+.itin .val {
+  margin-left: auto; font-family: var(--mono); font-size: 10px;
+  color: var(--ink-3); white-space: nowrap;
+}
+.itin-grp {
+  padding: 8px 13px 2px 25px; font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3);
+}
+.itin-bundle { padding-left: 25px; color: var(--ink-3); }
+.itin-bundle .nm { font-family: inherit; font-size: 12px; }
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -8455,6 +8498,254 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           drží, takže se karta po návratu do pásu neobjeví někde na nule. Změřeno, že to není
           ozdoba: bez pásu stálo projíždění 1,65 s CPU proti 1,47 s nad tímtéž diffem bez nálezů,
           s pásem 1,56 s.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================================
+       SEKCE 47 — ITINERÁŘ REVIEW (#506)
+       ==================================================================================== -->
+  <section class="section" id="s47">
+    <div class="section-head">
+      <div class="eyebrow">47 — Změněné soubory · itinerář review</div>
+      <h2>Levý sloupec přestane být strom a stane se itinerářem</h2>
+      <p class="muted">
+        <b>Dneska</b> má okno osm záložek a strom souborů, ale <b>žádné pořadí</b>: co číst první,
+        kde jsem skončil a co zbývá, si člověk drží v hlavě. Reviewer má dráhu s fázemi
+        (<a class="jump" href="#s07">sekce 07</a>); člověk, který review dělá, nemá nic.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: levý sloupec (nově <b>260 bodů</b>) je <b>dráha se zastávkami</b> v pevném
+        pořadí <em>Od minule → Popis a záměr → Soubory podle rizika → Kontroly → Verdikt</em>,
+        u každé stav (✓ hotovo / ● aktuální / ○ zbývá) a údaj vpravo. V hlavičce
+        <code>Itinerář · 4 z 11 · 10 min</code> a pod ní proužek podílu — tentýž, jaký přišel se
+        značkou <em>Prošlo</em> (<a class="jump" href="#s40">sekce 40</a>), jen se nad ním počítá
+        celé review.
+      </p>
+      <p class="muted">
+        <b>Které zastávky v seznamu jsou, plyne z dat</b>, ne ze šablony: <em>Od minule</em> jen
+        když je záznam návštěvy <b>a</b> přišly commity, <em>Kontroly</em> jen když PR má CI,
+        zbylé tři vždycky. A <b>hotovo se pozná z dat</b> — soubor prošlý, popis odscrollovaný,
+        spadlý check rozbalený, verdikt odeslaný. <b>Ručně se nezaškrtne nic kromě souboru</b>:
+        itinerář, který si člověk odškrtává sám, je druhý seznam úkolů.
+      </p>
+      <p class="muted">
+        <b>Strom se nezahazuje, dostává pořadí.</b> Soubory se řadí podle rizika (blokující →
+        nález → vlákno → nový → ostatní → konfigurace a locky) a cesta se čte v <b>hlavičce
+        souboru</b> v diffu, kde na ni je místo. Strom podle cesty se tím otevírá zpátky jako
+        vlastní issue.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Návrh · výřez plochy diffu (itinerář 260 b + diff) — dvě zastávky hotové, aktuální jsou soubory</div>
+      <div class="frame flat">
+        <div class="work itin">
+          <div class="tree">
+            <div class="th">Itinerář · 4 z 11 · 10 min</div>
+            <div class="rv-prog"><i style="width: 36%;"></i></div>
+
+            <div class="itin done"><span class="st">✓</span>Od minule<span class="val">3 commity</span></div>
+            <div class="itin done"><span class="st">✓</span>Popis a záměr</div>
+            <div class="itin now"><span class="st">●</span>Soubory podle rizika<span class="val">2 ze 7</span></div>
+
+            <div class="itin-grp">Blokující</div>
+            <div class="tnode file on"><span class="nm">SecretClient.php</span><span class="mk crit">●</span></div>
+            <div class="itin-grp">S nálezem</div>
+            <div class="tnode file"><span class="nm">Encryptor.php</span><span class="mk find">●</span></div>
+            <div class="itin-grp">S vláknem</div>
+            <div class="tnode file rv-done"><span class="nm">SecretClientTest.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="itin-grp">Nové</div>
+            <div class="tnode file rv-done"><span class="nm">SecretNotFound.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+            <div class="itin-grp">Konfigurace a locky</div>
+            <div class="tnode file itin-bundle">▸ <span class="nm">3 konfigurace a locky</span></div>
+
+            <div class="itin"><span class="st">○</span>Kontroly<span class="val">1 spadl</span></div>
+            <div class="itin"><span class="st">○</span>Verdikt<span class="val">návrh: vyžádat změny</span></div>
+          </div>
+
+          <div class="diffpane">
+            <div class="fhead">
+              <span>▾</span>
+              <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+              <span class="pill crit">1 blokuje</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+18</span>
+              <span class="rv-num" style="color: var(--crit);">−6</span>
+              <span class="rv-viewed"><span class="box"></span>Prošlo</span>
+            </div>
+            <table class="diff">
+              <tr class="hunk"><td colspan="3">@@ -78,9 +78,21 @@ final class SecretClient</td></tr>
+              <tr><td class="ln">78</td><td class="sg"></td><td class="code">    <span class="k">public function</span> <span class="fn">getSecret</span>(<span class="k">string</span> $key): <span class="k">string</span></td></tr>
+              <tr class="del"><td class="ln">80</td><td class="sg">−</td><td class="code">        $row = <mark class="w">$<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key)</mark>;</td></tr>
+              <tr class="add"><td class="ln">80</td><td class="sg">＋</td><td class="code">        $row = <mark class="w">$<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">get</span>($key) ?? $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key)</mark>;</td></tr>
+              <tr class="add flag"><td class="ln">81</td><td class="sg">＋</td><td class="code">        <span class="k">return</span> $row[<span class="st">'value'</span>] <mark class="w">?? <span class="st">''</span></mark>;</td></tr>
+              <tr><td class="ln">82</td><td class="sg"></td><td class="code">    }</td></tr>
+            </table>
+
+            <div class="fhead" style="border-top: 1px solid var(--line);">
+              <span>▸</span>
+              <span class="path"><span>src/Vault/</span><b>Encryptor.php</b></span>
+              <span class="pill find">1 nález</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+4</span>
+              <span class="rv-num" style="color: var(--crit);">−2</span>
+              <span class="rv-viewed"><span class="box"></span>Prošlo</span>
+            </div>
+            <div class="fhead rv-done" style="border-top: 1px solid var(--line-soft);">
+              <span>▸</span>
+              <span class="path"><span>tests/</span><b>SecretClientTest.php</b></span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+64</span>
+              <span class="rv-num" style="color: var(--crit);">−0</span>
+              <span class="rv-viewed on"><span class="box">✓</span>Prošlo · před 12 min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Návrh · tentýž sloupec v diffu commitu a v rozsahu od minule — zastávky nejsou, pořadí zůstává</div>
+      <div class="frame flat" style="max-width: 261px;">
+        <div class="tree">
+          <div class="th">7 souborů · 2 prošlé</div>
+          <div class="rv-prog"><i style="width: 29%;"></i></div>
+          <div class="itin-grp">Blokující</div>
+          <div class="tnode file"><span class="nm">SecretClient.php</span><span class="mk crit">●</span></div>
+          <div class="itin-grp">S nálezem</div>
+          <div class="tnode file"><span class="nm">Encryptor.php</span><span class="mk find">●</span></div>
+          <div class="itin-grp">Nové</div>
+          <div class="tnode file rv-done"><span class="nm">SecretNotFound.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+          <div class="itin-grp">Ostatní</div>
+          <div class="tnode file rv-done"><span class="nm">SecretClientTest.php</span><span class="mk" style="color: var(--ok);">✓</span></div>
+          <div class="itin-grp">Konfigurace a locky</div>
+          <div class="tnode file itin-bundle">▸ <span class="nm">3 konfigurace a locky</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">159</span>
+        <span class="body">
+          <b>Zastávky skládá <code>Policy</code> z dat, ne šablona</b>
+          <span>Pořadí je pevné, ale <em>které</em> zastávky v seznamu jsou, plyne z toho, co ten
+          PR má: <em>Od minule</em> potřebuje <b>záznam návštěvy a commity</b> (obojí naráz — bez
+          záznamu není proti čemu měřit, bez commitů není o čem mluvit), <em>Kontroly</em> potřebují
+          CI. Prázdná zastávka <code>Kontroly · 0 checků</code> není jen řádek o tom, že se nic
+          nestalo — <b>zvedla by jmenovatele počítadla</b> o práci, která na tomhle PR není.
+          Testuje se to vyčerpávající maticí vstupů.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">160</span>
+        <span class="body">
+          <b>Hotovo se pozná z dat, ne z odklikání</b>
+          <span>Soubor prošlý (<a class="jump" href="#s40">sekce 40</a>), popis odscrollovaný na
+          konec, <b>spadlý check rozbalený</b>, verdikt odeslaný na GitHub. Ručně se zaškrtne
+          <b>jedině soubor</b>, protože to je jediná věc, u které „přečetl jsem to“ nejde odvodit.
+          Itinerář, který si člověk odškrtává sám, je druhý seznam úkolů — a ten se přestane
+          udržovat po druhém PR. Zelené CI je proto hotové rovnou, kdežto červené se odškrtne
+          teprve po podívání do logu: to je přesně ta věc, kterou se u spadlého buildu
+          přeskakuje.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">161</span>
+        <span class="body">
+          <b>Jednotkou počítadla je soubor, ne zastávka</b>
+          <span><code>4 z 11</code> má být počet věcí, které se doopravdy čtou — sedm souborů plus
+          čtyři zastávky, ne pět nadpisů. S jednotkou „zastávka“ by proužek u PR o padesáti
+          souborech skočil z pětiny na dvě pětiny jedním zaškrtnutím posledního souboru. Nenačtený
+          diff do počítadla nepřináší nic: počet, který se teprve načítá, nemá co tvrdit.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">162</span>
+        <span class="body">
+          <b>Odhad času je z neprošlých řádků, a nikdy nula</b>
+          <span><code>10 min</code> se počítá ze změněných řádků v souborech, které prošlé nejsou
+          (30 řádků za minutu — čtení diffu je pomalejší než čtení prózy, protože se u každé změny
+          rozhoduje), plus minuta za každou nehotovou zastávku, která soubory nečte. Nad nenačteným
+          diffem se <b>nepíše nic</b> a nad hotovým itinerářem taky ne: <code>0 min</code> by nad
+          nehotovou prací lhalo a nad hotovou bylo šum.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">163</span>
+        <span class="body">
+          <b>Konfigurace se rozhoduje dřív než <em>nový</em>, ale kreslí se poslední</b>
+          <span>Pořadí v zadání má <em>nový</em> před konfigurací, takže by nový
+          <code>composer.lock</code> vyšel jako <em>nový</em> — jenže to je pořád tisíc řádků,
+          které nikdo nepíše rukou. Klasifikace jde proto konfigurací dřív; <b>nález nebo vlákno ji
+          ale přebijí</b>, takže <code>composer.json</code> s blokujícím nálezem je blokující
+          soubor a neschová se do složené položky. Konfigurace se poznává z <b>výčtu jmen a
+          přípon</b>, ne heuristikou: „vypadá to na konfiguraci“ se nedá napsat tak, aby to
+          nesnědlo <code>config/routes.php</code>. <code>.xml</code> ve výčtu schválně není — píšou
+          se v něm Android layouty a XSLT.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">164</span>
+        <span class="body">
+          <b>Cesta jde do hlavičky souboru, sloupec řadí podle rizika</b>
+          <span>Strom podle cesty existoval proto, že společné prefixy zabíraly v úzkém sloupci
+          většinu šířky. Od té doby se cesta píše v <b>hlavičce souboru</b> v diffu
+          (<code>src/Vault/</code><b>SecretClient.php</b>), takže ve sloupci nechybí — a pořadí
+          podle rizika odpovídá na otázku, na kterou hloubka složek odpovědět neumí: <b>čím
+          začít</b>. Strom podle cesty se tím otevírá zpátky, ne zahazuje.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">165</span>
+        <span class="body">
+          <b>260 bodů se v pohledu vedle sebe zaplatí třemi znaky, a ty se neplatí</b>
+          <span>Zastávka nese na řádce glyf stavu, nadpis a údaj vpravo
+          (<code>návrh: vyžádat změny</code> má 20 znaků, tedy ~100 bodů), takže se do 210 nevejde.
+          <b>Změřeno</b> na štěrbině 1 047 b a znaku 8,036 b: <em>Vedle sebe</em> <b>3 znaky na
+          stranu</b> (41 → 38), <em>Pod sebou</em> <b>6 znaků</b> (86 → 80). A ve <em>Vedle
+          sebe</em> se za to neplatí ani tou trojkou — sloupec se tam <b>skládá</b>
+          (<a class="jump" href="#s41">sekce 41</a>), takže je z něj pruh 34 bodů v obou případech.
+          Hranice, pod kterou se sloupec skládá, se posunula o týchž 50 bodů (570 → 620 bez okraje
+          karet, 870 → 920 s ním).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">166</span>
+        <span class="body">
+          <b>Kde zastávky nejsou</b>
+          <span>V <em>diffu commitu</em> (<a class="jump" href="#s30">sekce 30</a>) ani v rozsahu
+          <em>Od tvé poslední návštěvy</em> (<a class="jump" href="#s29">sekce 29</a>): o celém
+          review nemluví, takže by zastávky <em>Kontroly</em> a <em>Verdikt</em> odkazovaly mimo
+          to, co je vidět. Sloupec tam kreslí <b>jen soubory podle rizika</b> a v hlavičce zůstává
+          <code>7 souborů · 2 prošlé</code> — tedy věta o souborech, ne o review. Je to tatáž
+          hranice, na které tam nemá co dělat ani zaškrtávátko <em>Prošlo</em>
+          (<a class="jump" href="#s40">poznámka 138</a>).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">167</span>
+        <span class="body">
+          <b>Klik na zastávku přepne tab, ne jen odscrolluje</b>
+          <span><em>Od minule</em> a <em>Popis</em> vedou do <em>Přehledu</em>, <em>Kontroly</em>
+          do <em>Kontrol</em>, <em>Verdikt</em> do <em>Změněných souborů</em> <b>a rozloží panel
+          vpravo</b> — verdikt se vybírá v něm, takže samotné <em>Změněné soubory</em> na tu
+          zastávku neodpoví. Že se obrazovka přepne, stojí i v nápovědě: sloupec je u diffu
+          a <em>Kontroly</em> jsou na druhém konci pruhu záložek, takže je poctivé to říct dřív než
+          po kliknutí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">168</span>
+        <span class="body">
+          <b>Aktuální zastávka je právě jedna, a hotová za ní zůstane hotová</b>
+          <span><em>Aktuální</em> je <b>první nehotová v pořadí</b> — itinerář je dráha, ne seznam
+          nezávislých úkolů, takže „kde jsem“ má jednu odpověď. Zastávka <b>za</b> ní přitom
+          zůstane ✓, když je hotová jako data (zelené CI uprostřed nedočteného diffu), protože
+          hotová je hotová. Hotový itinerář aktuální zastávku <b>nemá vůbec</b>: dráha došla do
+          konce a nemá kde stát.</span>
         </span>
       </div>
     </div>

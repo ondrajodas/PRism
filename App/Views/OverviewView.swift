@@ -34,9 +34,26 @@ struct OverviewView: View {
 
     let pullRequest: PullRequestSummary
 
+    /// Doroloval se popis na konec? (#506) — z toho je hotová zastávka `Popis a záměr`
+    /// v itineráři. `nil` = tuhle obrazovku nikdo neposlouchá (náhledy, sondy).
+    var reportReadToEnd: ((Bool) -> Void)?
+
     var body: some View {
         ScrollView {
             content
+        }
+        // **Doroloval se popis na konec?** (#506) Transformace běží při každém přepočtu geometrie,
+        // **akce jen při změně hodnoty** (#361), takže se hlásí jedině na přechodu — bezpodmínečný
+        // zápis z každého snímku je zakázaná třída (#358). Rozhoduje `Policy.overviewAtEnd`, ať
+        // o „konci“ nerozhoduje kresba.
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            Policy.overviewAtEnd(
+                offset: geometry.contentOffset.y,
+                visible: geometry.containerSize.height,
+                content: geometry.contentSize.height
+            )
+        } action: { _, atEnd in
+            reportReadToEnd?(atEnd)
         }
         // Na rozdíl od diffu tady selekce **je**: není to líný seznam tisíců `Text`ů, ale
         // několik odstavců, a hlavní věc, kterou s cizím komentářem chci udělat, je zkopírovat

@@ -1238,7 +1238,28 @@ struct PullRequestDetailView: View {
             rerun: { store.startReview(for: pullRequest.id) },
             showAdded: showAdded,
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
-            pullRequest: pullRequest
+            pullRequest: pullRequest,
+            // Zastávka `Popis a záměr` v itineráři (#506). Zapisuje store, protože `@State`
+            // detailu by přetekl na jiný pull request — tentýž důvod jako u sbalování a značek.
+            reportReadToEnd: { store.noteOverviewReadToEnd($0, for: pullRequest.id) }
+        )
+    }
+
+    /// Itinerář review (#506) — **jen pro celý diff v `Změněných souborech`**.
+    ///
+    /// Zastávky skládá `Policy` z faktů, která nasbíral store; tady se rozhoduje jedině to, **co
+    /// klik na zastávku udělá s oknem**: přepne tab a u `Verdiktu` k tomu rozloží panel, protože
+    /// verdikt se vybírá v něm a `Změněné soubory` samy o sobě na tu zastávku neodpoví.
+    private var itinerary: ItineraryActions {
+        let facts = store.itineraryFacts(for: pullRequest.id)
+        let stops = Policy.itinerary(facts)
+        return ItineraryActions(
+            stops: stops,
+            progress: Policy.itineraryProgress(of: stops, facts: facts),
+            select: { stop in
+                store.setDetailTab(stop.tab, for: pullRequest.id)
+                if stop.kind == .verdict { panelExpanded.wrappedValue = true }
+            }
         )
     }
 
@@ -1735,7 +1756,7 @@ struct PullRequestDetailView: View {
         case .loaded(let diff, _) where diff.isEmpty:
             placeholder("Diff je prázdný — tenhle pull request nic nemění.")
         case .loaded(let diff, _):
-            diffView(of: diff, read: readActions, reportsScrollAnchor: true)
+            diffView(of: diff, read: readActions, reportsScrollAnchor: true, itinerary: itinerary)
                 // Kotva z minulého běhu (#527). **Až tady, nad načteným diffem**: dřív se nemá
                 // na co skákat, protože řádky v seznamu ještě nejsou. `task(id:)` se spustí
                 // i při vzniku, takže přepnutí z `.loading` na `.loaded` stačí.
@@ -1788,7 +1809,8 @@ struct PullRequestDetailView: View {
     private func diffView(
         of diff: Diff,
         read: DiffReadActions? = nil,
-        reportsScrollAnchor: Bool = false
+        reportsScrollAnchor: Bool = false,
+        itinerary: ItineraryActions? = nil
     ) -> some View {
         DiffView(
             diff: diff,
@@ -1826,6 +1848,11 @@ struct PullRequestDetailView: View {
             // Kurzor procházení (#187) — od #503 ho potřebuje i diff: karta v okraji na tom místě
             // dostane rámeček. Do té doby stačil panelu, protože v diffu kurzor ukázal skok.
             current: cursor.current,
+            // Itinerář (#506) — **jen u celého diffu**: rozsah `Od tvé poslední návštěvy` (#284)
+            // ani diff commitu (#317) o celém review nemluví, takže by zastávky `Kontroly`
+            // a `Verdikt` odkazovaly mimo to, co je vidět. Sloupec pak kreslí jen soubory podle
+            // rizika.
+            itinerary: itinerary,
             // **Jen celý diff hlásí kotvu** (#527). Rozsah „co od minule přibylo“ (#284) je
             // pohled na **jiný** seznam souborů, takže by jeho poloha po restartu ukazovala
             // někam jinam — a obnovit se má to, co je v tabu vidět po otevření, tedy celý diff.

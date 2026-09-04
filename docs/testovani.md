@@ -1392,8 +1392,6 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a komentář na kontextovém řádku, které **nesmí vzniknout dvakrát**, a kotvy — nálezová platí
   v obou pohledech (i po rozbalení kontextu), kdežto ta na komentář k odebranému řádku míří ve
   split pohledu na dvojici.
-- **`FileTreeNode`** — slévání složek s jediným potomkem, větvení, pořadí podle diffu,
-  součty na složkách a unikátní identity (`a/x.swift` vs `b/x.swift`).
 - **`AppStore` — dotažení kódu k nálezům** — že se tahá jen u nálezu mimo hunky, že se
   nesahá na soubor mimo diff ani na nález bez řádku, a že se druhý rozsah vyžádaný během
   načítání neztratí.
@@ -2535,7 +2533,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     proti odvozenému, ne proti prázdné mapě); a že značka z disku sbalí soubor **i bez
     kliknutí** — na tom stojí celé to, proč se sbalení odvozuje.
   - **Sonda `FileReadMarkRenderProbe`** — obrázek, protože „sedí to se sekcí 40?“ je otázka na
-    obrázek: hlavičky ve všech třech stavech, strom s ✓, ↻ a ztlumeným jménem, a **tytéž hlavičky
+    obrázek: hlavičky ve všech třech stavech, **seznam souborů** s ✓, ↻ a ztlumeným jménem (do #506
+    to byl strom), a **tytéž hlavičky
     na 420 bodech** (diff vedle sebe na podlaze okna). Z toho posledního je vidět, co v úzkém místě
     ustoupí: cesta se ořeže zepředu a kapsle `změněno od prošlého` se zkrátí, **zaškrtávátko
     zůstane celé** — akce se neschovává. Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`).
@@ -2544,6 +2543,30 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     `změněno od prošlého`); prázdné značky soubor mažou; cizí PR v souboru se odmítne; a celá
     trojice hranic cache (symlink na souboru, symlink v rodičovské složce u čtení, zápisu
     i mazání) — tatáž sada jako u `AskStore`.
+- **Itinerář review (#506)** — tři sady a jedna sonda:
+  - **`Policy`** (`ReviewItineraryTests`) — **matice vstupů**, a testuje se v ní **přítomnost**
+    zastávky odděleně od **hotovosti**: zastávka může být v seznamu a nehotová, ale nikdy hotová
+    a mimo seznam — a to druhé by tiše snížilo jmenovatele počítadla. Nejcennější jsou tvrzení
+    o tom, že se něco **NEstane**: bez záznamu návštěvy `Od minule` v itineráři **není** (to je
+    tvrzení ze zadání), bez commitů taky ne, PR bez CI nemá `Kontroly`, PR bez popisu má zastávku
+    nehotovou **i po odscrollování** (prázdná karta se doroluje hned, takže by se bez té podmínky
+    odškrtla sama), nenačtený detail `bez popisu` **nenapíše** a verdikt bez návrhu **mlčí**. Dál
+    spadlý check hotový až po rozbalení (a jeden ze dvou nestačí), běžící CI zastávku neuzavře,
+    `current` je právě jedna a hotový itinerář ji nemá vůbec, počítadlo počítá **soubory**
+    a odhad času vychází z neprošlých řádků (a nikdy nevyjde nula).
+  - **`Policy`** (`FileRiskTests`) — pořadí nad **daty ze sekce 03 návrhu**, tedy nad tou sadou
+    souborů, u které se o pořadí rozhodovalo. Vedle pořadí samotného tvrdí tři neintuitivní věci:
+    nález **vytáhne konfiguraci nahoru** (`composer.json` s blokujícím nálezem se nesmí schovat do
+    složené položky), nová konfigurace **zůstane v konfiguracích** (klasifikace jde konfigurací
+    dřív než `nový`, i když zadání má obrácené pořadí) a jedna konfigurace **se neskládá**. K tomu
+    výčet toho, co konfigurace je a co ne — `config/routes.php`, `res/layout/activity_main.xml`
+    a `docs/navrh.html` konfigurace **nejsou**, `.github/workflows/push.yml` je.
+  - **`ItineraryColumnRoomTests`** — [kolik ubere širší sloupec](#kolik-ubere-širší-levý-sloupec-506).
+  - **Sonda `ReviewItineraryRenderProbe`** — obrázek, protože „sedí to se sekcí 47?“ je otázka na
+    obrázek: plný itinerář s pěti zastávkami (dvě hotové, aktuální jsou soubory, spadlý check)
+    **a** sloupec bez zastávek, tedy ta podoba, kterou má v diffu commitu a v rozsahu od minule.
+    Kreslí se v **okně bez animace** (#462) přes `NSHostingView`, ne `ImageRenderer`em — sloupec je
+    `ScrollView` a ten se offscreen nevykreslí vůbec.
 - **Mapa PR — pás pod hlavičkou (#501)** — dvě sady a jedna sonda:
   - **`Policy`** (`PullRequestMapTests`) — šířky, barvy, popisek a krok. Nejcennější je dvojice
     o **logaritmu**: nad rozložením ze sekce 03 návrhu (sedm souborů, `composer.lock` 2 790 řádků
@@ -8398,6 +8421,46 @@ poctivý závěr, ne měření navíc: zbytek tiku není v tělech. Kde je, je b
 - **Rozměr se předepisuje scéně**, ne oknu (past ze `IdleDiffSpinProbe.show(store:full:)`).
 - **`FakeTimeSource` nespí**, takže `ContentView` se svým `.task { keepFresh() }` roztočí polling
   naplno; sonda ho zastaví `stopAfter: 1`.
+
+### Kolik ubere širší levý sloupec (#506)
+
+Zadání #506 to žádá změřit, protože z toho plyne jediné rozhodnutí: buď se v pohledu *Vedle sebe*
+itinerář skládá jako dnes strom, nebo se za těch padesát bodů platí kódem.
+
+**Měří se produkční funkcí, ne aritmetikou v testu** (`ItineraryColumnRoomTests`) —
+`Policy.charactersPerSide` a `Policy.diffCodeColumnWidth`, k tomu šířka znaku z `FontMetric` (#407,
+**dočkaná** podle #550) a `gutter` z `DiffLineView.contentInset(for:)`. Vlastní odečítání by měřilo
+svoji kopii pravidla; `diffCodeColumnWidth` navíc odečítá i mezeru před kolonou (#503) a dvě
+aritmetiky by se rozešly.
+
+Štěrbina 1 047 b (okno 1 100 minus rail 52 — tatáž hodnota, ze které počítá zákres), znak 8,036 b:
+
+| Pohled | Sloupec 210 | Sloupec 260 | Ubralo |
+|---|---|---|---|
+| *Vedle sebe* (`split`) | 41 znaků na stranu | 38 | **3** |
+| *Pod sebou* (`unified`) | 86 znaků | 80 | **6** |
+
+**Ve `split`u se přitom neplatí ani tou trojkou**, a rozhoduje o tom `Policy.diffSideColumns`, ne
+šířka: sloupec se tam **skládá** (#188), takže je z něj pruh 34 bodů v obou případech — i v okně
+přes celou 3 440b obrazovku. Ta trojka je cena za to, když si ho tam člověk otevře `⌘1`. Slib 120
+znaků se ve `split`u na tomhle okně neplnil ani do #506 (41), takže se o nic ze slibu nejedná;
+*Pod sebou* se slib plní na obrazovce, na které se dělá (3 388 b štěrbiny → **371 znaků**).
+
+**Jedna změna chování ale je, a ta se dá vidět.** Hranice, pod kterou `diffSideColumns` sloupec
+složí, se posunula o týchž 50 bodů:
+
+| | Sloupec 210 | Sloupec 260 |
+|---|---|---|
+| bez okraje karet | 570 b | **620 b** |
+| s okrajem karet (#503) | 870 b | **920 b** |
+
+Ta první je pod podlahou `RootView`u (700), takže na ni nikdo nedosáhne. Ta druhá **nad** ní je:
+v okně o štěrbině 900 se sloupec do #506 vešel a od #506 se s okrajem karet složí. Je to jediný
+rozdíl, který ta šířka na obrazovce udělala, a hlídá ho vlastní tvrzení.
+
+**Mezera před kolonou (#503) se do hranice nepočítá schválně** — `diffSideColumns` ji neodečítá
+(odečítá ji až `diffCodeColumnWidth`), takže hranice je `podlaha + sloupec`. Kdo tu šestku přičte,
+dostane číslo o šest bodů vedle; první podoba testu to tak měla a spadla.
 
 ### Kolik stojí otevřená záložka (#274)
 

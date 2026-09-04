@@ -407,6 +407,11 @@ poznámky k architektuře. Právě kvůli nim nestačí bubliny.
 
 ### Strom souborů (#51)
 
+> **Od #506 už to strom není.** Levý sloupec se stal itinerářem review a soubory se v něm řadí
+> podle rizika, ne podle cesty; `FileTreeView` i `FileTree.swift` zanikly. Všechno níž je záznam
+> toho, co platilo do #506 — strom podle cesty se otevírá zpátky jako #197, viz *Záznam
+> rozhodnutí — itinerář review místo stromu souborů (#506)*.
+
 Navigace po souborech diffu. Plochý seznam cest se u PR přes víc adresářů čte špatně —
 společné prefixy zaberou většinu šířky.
 
@@ -5815,3 +5820,54 @@ nesou přesně to, co se ví.
 **Co v tomhle issue vědomě není**: routing reviewerů podle změněných cest a odklad velkých PR do
 tichých hodin. Jsou v témže zákresu (a v sekci 46 zakreslené jsou), ale mají vlastní issues
 (#518, #519) — dráha je pro všechny tři totéž místo, proto stojí v jednom obrázku.
+
+### Záznam rozhodnutí — itinerář review místo stromu souborů (#506)
+
+Levý sloupec záložky PR přestal být strom cest a stal se dráhou se zastávkami (sekce 47 návrhu).
+Šest rozhodnutí, u kterých se dá později vrátit:
+
+1. **Strom podle cesty se zahodil, ne schoval za přepínač.** `FileTreeView` a `FileTree.swift`
+   odešly i s testy. Alternativa „nechat strom jako druhý pohled sloupce“ se **zamítla**: dva
+   pohledy na jeden sloupec znamenají přepínač, který se musí někam nakreslit, a hlavně dvě
+   odpovědi na otázku „kolik souborů je prošlých“ — hlavička sloupce nese počet a ten se v jednom
+   pohledu počítá z položek, ve druhém z listů stromu. Strom podle cesty se otevírá zpátky jako
+   **#197**; kdyby se ukázal chybět, vrátí se z gitu.
+
+2. **Zastávky jsou pořadí čtení, ne důležitosti.** *Od minule* je první ne proto, že by byla
+   nejdůležitější, ale protože bez ní člověk čte podruhé to, co už viděl. *Verdikt* je poslední ne
+   proto, že by byl nejmenší, ale protože je to jediná zastávka, po které se odsud odchází.
+
+3. **Hotovo se odvozuje, nikdy neklikne.** Zvažovalo se zaškrtávátko u zastávky (jednodušší
+   implementace, žádná nová stopa ve store) a **zamítlo se**: itinerář, který si člověk odškrtává
+   sám, je druhý seznam úkolů a přestane se udržovat po druhém PR. Výjimkou zůstává **soubor**
+   (#500), a to proto, že u něj „přečetl jsem to“ odvodit nejde — scroll přes soubor neznamená,
+   že jsem ho přečetl. Zvažovalo se i odvodit soubor ze scrollu a **zamítlo** ze stejného důvodu.
+
+4. **Konfigurace se klasifikuje dřív než `nový`, a je to odchylka od zadání.** Zadání vypisuje
+   pořadí *blokující → nález → vlákno → nový → ostatní → konfigurace a locky*, což při doslovném
+   čtení znamená, že nový `composer.lock` vyjde jako `nový` a stojí v seznamu nad testem, který se
+   doopravdy čte. Rozhodlo se to rozdělit: `FileRisk.rawValue` je pořadí klasifikace (konfigurace
+   je čtvrtá), `FileRisk.drawingOrder` pořadí kresby (konfigurace je poslední). **Nález a vlákno
+   konfiguraci přebijí**, takže se `composer.json` s blokujícím nálezem neschová do složené
+   položky — bez toho by se dal nález utopit v šumu, což je ta nejdražší chyba, kterou sloupec umí
+   udělat.
+
+5. **Konfigurace se pozná z výčtu, ne heuristikou.** „Vypadá to na konfiguraci“ se zkusilo napsat
+   jako pravidlo nad cestou (`config/` v cestě, přípona bez kódu) a **zamítlo se**:
+   `config/routes.php` je kód, `res/layout/activity_main.xml` je kód a `docs/navrh.html` je
+   dokument, který se čte. Výčet jmen a přípon je delší, ale dá se přečíst a dá se do něj sáhnout,
+   když se objeví ekosystém, na který se nemyslelo. `.xml` v něm **není** schválně.
+
+6. **Šířka 260 se zaplatila třemi znaky na stranu, a to se změřilo dřív, než se rozhodlo.** Zadání
+   dávalo dvě možnosti: sloupec 260, nebo itinerář v pohledu vedle sebe složit jako dnes strom.
+   Ukázalo se, že se **neplatí nic**: ve `split`u se sloupec skládá už od #188, takže je z něj pruh
+   34 bodů bez ohledu na to, kolik má rozložený. Cena existuje jen v `unified` (6 znaků z 86 na
+   80) a v tom, že se **hranice skládání** posunula o padesát bodů — 870 → 920 s okrajem karet,
+   tedy nad podlahou `RootView`u. To je jediný rozdíl, který se v okně dá vidět, a bylo to
+   posouzeno jako přijatelné: nad štěrbinou 900 se s okrajem karet složí sloupec, ne kód.
+
+**Co se u toho zapsalo jako mezera.** Odhad `10 min` stojí na jedné konstantě
+(`Policy.reviewLinesPerMinute`, 30 řádků za minutu) a je to **odhad, ne měření**: odvodil se z
+toho, jak dlouho dvěstěřádkový soubor v tomhle okně doopravdy zabere, ne z naměřených sezení. Když
+se ukáže systematicky mimo, mění se ta jedna hodnota a nic jiného — proto je to konstanta
+v `Policy` a ne rozeseté aritmetika.
