@@ -149,9 +149,44 @@ private struct RepositoryDetailView: View {
                 emptyMeaning: "Prázdný seznam znamená, že tady nic neblokuje."
             )
 
+            routing
+
             timeoutOverride
         }
         .formStyle(.grouped)
+    }
+
+    /// Routing reviewerů (#518) — na kterých cestách se který reviewer pouští.
+    ///
+    /// **Bez přepínače „vlastní sada“**, na rozdíl od skillů a kategorií: routing globální úroveň
+    /// nemá (proč, je u `RepositoryConfig.reviewerPaths`), takže není co dědit — prázdná tabulka
+    /// **je** ten výchozí stav a znamená „pouštěj všechny“. Přepínač by nabízel volbu mezi dvěma
+    /// stavy, které se nijak neliší.
+    private var routing: some View {
+        Section {
+            ReviewerRoutingEditor(
+                reviewerPaths: unwrappedRouting,
+                // **Sražená sada, ne to, co je zapsané u repa**: nabídka má vypsat reviewery,
+                // kteří se tady doopravdy pouštějí — u repa bez override jsou to ti globální.
+                skills: settings.draft.resolved(for: repo).skills
+            )
+        } header: {
+            Text("Routing reviewerů")
+        } footer: {
+            Text("Reviewer s pravidlem se pustí jen tehdy, když aspoň jeden změněný soubor sedí na aspoň jeden jeho vzor; reviewer bez pravidla se pouští vždycky. Vzor bez lomítka platí na jméno souboru kdekoli v repu (`composer.lock`, `*.env*`), vzor s lomítkem se čte od korene repa (`src/Auth/**`); `**` přeskočí i podsložky, `*` zůstane v jedné. Přeskočený reviewer je vidět v tabu Průběh i s důvodem a dá se pustit ručně — pravidlo tím zůstane, jak je.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Mapa bez `nil`: prázdná tabulka a chybějící klíč znamenají totéž, takže se `nil` **zapisuje
+    /// zpátky** místo prázdné mapy — jinak by v `config.json` po každém proklikání zůstal prázdný
+    /// objekt a `setRepository(_:for:)` by záznam nesmazal.
+    private var unwrappedRouting: Binding<[String: [String]]> {
+        Binding(
+            get: { config.reviewerPaths.wrappedValue ?? [:] },
+            set: { config.reviewerPaths.wrappedValue = $0.isEmpty ? nil : $0 }
+        )
     }
 
     /// Vlastní časový limit běhu (#320).

@@ -52,6 +52,9 @@ struct ReviewerLaneView: View {
                let summary = ReviewerLaneText.increment(increment) {
                 incrementLine(summary, saving: ReviewerLaneText.incrementSaving(of: lane))
             }
+            // Přeskočeno routingem (#518) — věta a tlačítko, ne jen kapsle v hlavičce: kdyby
+            // tady nic nebylo, přeskočená dráha by vypadala jako porucha, ze které není cesta ven.
+            if case .skipped(let patterns) = lane.state { skippedBlock(patterns) }
             if let failure = lane.failure { failureBlock(failure) }
             if feed != .none {
                 StepFeedView(
@@ -115,6 +118,16 @@ struct ReviewerLaneView: View {
                     .lineLimit(1)
                     .help("Tenhle skill není v nastavené sadě pro tohle repo — dráha je ze zaznamenaného běhu, ne z dnešního nastavení.")
             }
+            // Proč se nepustil (#518). **Vedle kapsle, ne pod dráhou**: `přeskočeno` bez vzorů
+            // je stav bez důvodu a v tabu s pěti dráhami se nedá poznat, které pravidlo to bylo.
+            // Nápověda nese totéž doslova, protože v úzkém panelu se řádek ořeže.
+            if case .skipped(let patterns) = lane.state {
+                Text(verbatim: ReviewerLaneText.routingSkip(patterns: patterns))
+                    .font(.caption)
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
+                    .help(ReviewerLaneText.routingSkip(patterns: patterns))
+            }
             // Zadání, které nedorazilo celé (#345). Musí to být poznat **na dráze**, ne až
             // v souboru: review bez textu issue vypadá v okně stejně jako to s ním, a nález,
             // který se váže k zadání, se tak nemá čím nestat. Popisek je krátký schválně —
@@ -137,6 +150,15 @@ struct ReviewerLaneView: View {
                     .help("Session si načetla jiný skill, než je nastavený (`\(lane.skill)`).")
             }
             Spacer(minLength: 8)
+            // Přeskočený běh nic nestál (#518), a je to **jistota, ne odhad** — session se
+            // nespustila. `RunUsage` na to není: tam nula znamená „tolik nahlásila session“.
+            if case .skipped = lane.state {
+                Text(verbatim: ReviewerLaneText.freeRun)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Palette.ink3)
+                    .monospacedDigit()
+                    .help("Session se nespustila, takže tenhle reviewer nic nestál.")
+            }
             if let usage = ReviewerLaneText.usage(of: lane) {
                 Text(verbatim: usage)
                     .font(.system(.caption, design: .monospaced))
@@ -177,6 +199,32 @@ struct ReviewerLaneView: View {
         .padding(.bottom, 10)
     }
 
+    /// Věta a `Pustit přesto` pod přeskočenou dráhou (#518).
+    ///
+    /// **Bez vlastního podkladu**, na rozdíl od bloku spadlé session: přeskočení není porucha, tak
+    /// nemá co svítit. Tlačítko je `.bordered`, ne `.borderedProminent` — hlavní akce v tabu to
+    /// není, jen cesta ven z rozhodnutí, které padlo správně.
+    ///
+    /// `rerun == nil` znamená „něco běží“, takže se tlačítko nekreslí — a **věta se s ním mění**:
+    /// dvojtečka, za kterou nic nestojí, vypadá jako nedopsaný text (změřeno offscreen renderem).
+    @ViewBuilder private func skippedBlock(_ patterns: [String]) -> some View {
+        HStack(spacing: 8) {
+            Text(verbatim: ReviewerLaneText.runAnywayNote(hasButton: rerun != nil))
+                .font(.callout)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let rerun {
+                Button(ReviewerLaneText.runAnyway, systemImage: "play.circle", action: rerun)
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    .help(ReviewerLaneText.runAnywayHelp(patterns: patterns))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
+    }
+
     private var statePill: some View {
         Text(verbatim: ReviewerLaneText.state(lane.state))
             .font(.system(.caption2, design: .monospaced))
@@ -191,6 +239,10 @@ struct ReviewerLaneView: View {
         // Nejtišší z odznaků: nic se nestalo, takže nemá co přitahovat oko. `ink2` u `queued` je
         // proti tomu o odstín víc — tam se něco děje, jen ne tady.
         case .notStarted, .missingProgress: Palette.ink3
+        // `ink2` jako `queued`, tedy neutrální kapsle `.pill.idle` z návrhu (sekce 46): není to
+        // porucha ani výsledek. O odstín silnější než `nespuštěno` schválně — o tomhle
+        // revieweerovi se **rozhodlo**, kdežto na ten druhý jen nedošlo.
+        case .skipped: Palette.ink2
         case .queued, .stopped: Palette.ink2
         case .running: Palette.accent
         case .finished: Palette.ok

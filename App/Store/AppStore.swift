@@ -347,6 +347,14 @@ final class AppStore {
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
+    /// Koho routing na posledním průchodu **nepustil** a proč (#518), per PR.
+    ///
+    /// Žije stejně dlouho jako živá osa vedle: přeskočení je odpověď na dnešní pravidlo a dnešní
+    /// diff, takže na disk nepatří (proč, je u `ReviewerRoutingPass`). Čtou to **dvě** místa —
+    /// dráhy v tabu `Průběh` (`Policy.lanes`) a brána, která automatu brání pustit hotové review
+    /// podruhé (`hasCurrentReview`).
+    var routingSkips: [PRIdentifier: ReviewerRoutingPass] = [:]
+
     /// Je otevřená command palette ⌘K (#184)?
     ///
     /// **Ve store, ne v `@State` okna**, a je to podmínka, ne úklid: detail PR podle toho vypíná
@@ -2185,6 +2193,12 @@ final class AppStore {
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {
+            wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
+        }
+        // Přeskočení routingem (#518) se uklízí **s osou**, ne zvlášť: je to druhá polovina téže
+        // pravdy o posledním průchodu („tenhle běžel, tenhle se nepustil“). Kdyby zbylo jen jedno
+        // z toho, tvrdil by tab `Průběh` o vypadlém PR polovinu.
+        routingSkips = routingSkips.filter {
             wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
 

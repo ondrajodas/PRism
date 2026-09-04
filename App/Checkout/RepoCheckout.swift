@@ -94,6 +94,20 @@ protocol RepoCheckout: Sendable {
     /// buildy) jsou zrovna ty, kterých je nejvíc, takže by odhad převážily.
     func trackedFiles(in worktree: URL) async throws -> [String]
 
+    /// Cesty souborů, které pull request mění — podklad pro routing reviewerů (#518).
+    ///
+    /// **Ptá se `gitu` v pracovní kopii, ne GitHubu**, a je to změřené: `gh pr view --json files`
+    /// vydá **prvních sto** souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes`
+    /// #141772 — 591 změněných souborů, v odpovědi 100). Routing nad zkráceným seznamem by tiše
+    /// přeskočil revieweera, jehož soubor stojí na sto prvním místě, a to je ta nejhorší podoba
+    /// chybějícího review. `git` odpovídá **úplně** a lokálně, tedy zdarma.
+    ///
+    /// **Přejmenování se nepárují** (`--no-renames`), takže soubor přesunutý **z** hlídané složky
+    /// je v seznamu i pod původní cestou. Se zapnutou detekcí by z něj byla jedině cesta nová —
+    /// a `src/Auth/User.php` přesunutý do `src/Legacy/` by revieweera bezpečnostních cest
+    /// nevzbudil, přestože se ta složka změnila.
+    func changedFiles(in worktree: URL, since base: String) async throws -> [String]
+
     /// Je commit předkem hlavy pracovního stromu? (#517)
     ///
     /// Odpovídá na jedinou otázku: **dá se přírůstek ohraničit**. Dokud je dnešní hlava potomkem
