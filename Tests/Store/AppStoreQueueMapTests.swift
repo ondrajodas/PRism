@@ -49,7 +49,7 @@ struct AppStoreQueueMapTests {
         #expect(store.queueMap(for: pr) == nil)
         store.diffStates[pr] = .loading
         #expect(store.queueMap(for: pr) == nil)
-        store.diffStates[pr] = .failed("gh spadl")
+        store.diffStates[pr] = .failed(.other("gh spadl"))
         #expect(store.queueMap(for: pr) == nil)
         // A prázdný diff (PR beze změn) taky ne — pás o nula segmentech je prázdný obdélník.
         store.diffStates[pr] = .loaded(Diff(files: [], unrecognizedLines: 0), updatedAt: updatedAt)

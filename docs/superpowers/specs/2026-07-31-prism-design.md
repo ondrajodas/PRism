@@ -6662,3 +6662,60 @@ scrolluje** — vzít si ho znamená vzít ho někomu, kdo ho zrovna potřebuje.
 **Zapsaná mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, se v harnessu ověřit
 nedá — testovací host nedostane aktivaci, takže nemá key okno. Poslední kolo dělá člověk na běžící
 aplikaci, jako u celého katalogu zkratek (#441).
+
+### Záznam rozhodnutí — pull request nad stropem souborů (#542)
+
+`gh pr diff` odpoví nad 300 souborů `HTTP 406` (*„the diff exceeded the maximum number of files
+(300)“*), a do #542 z toho v okně byla věta `gh skončil s kódem 1.` se syrovou odpovědí pod ní.
+Tedy **tatáž cesta jako u vypršelého tokenu a nedostupného repa**: tři různé příčiny, jeden text.
+Vyšlo to z ostrých dat u #501 — `home-assistant/core#181088` (3 632 souborů).
+
+Rozhodnutí je jedna věta: **tuhle jednu příčinu rozpoznat a pojmenovat, a zbytek okna nechat
+k užitku**. Co se u toho rozhodlo jinak, než jak by to šlo napsat nejrychleji:
+
+1. **Rozhoduje `Policy` výčtem, ne `if` ve view.** `DiffState.failed` nese `DiffFailure`
+   (`tooManyFiles(limit:response:)` / `other`) místo hotové věty, protože **věta se z příčiny
+   odvodit dá, kdežto příčina z věty ne** — a `if` nad textem od `gh` ve `PullRequestDetailView`
+   je zrovna ten tvar, který se v tomhle repu stěhuje do `Policy`.
+
+2. **Strop se pozná z odpovědi, ne z počtu souborů.** Kolik souborů pull request mění, aplikace
+   v tu chvíli neví: dozvěděla by se to z toho diffu, který nedorazil. Signál je proto věta
+   z odpovědi GitHub API a **číslo v ní se čte**, nikdy nedosazuje — `Policy.diffFileCap`
+   vydá `nil`, když v odpovědi číslo nestojí, a věta pak žádné netvrdí. Tři sta je dnešní hodnota
+   GitHubu, ne naše rozhodnutí.
+
+3. **Rozpoznání se neváže na třídu chyby.** `GitHubError` třídí podle znění a `gh` ho měnit může,
+   takže se text bere přes `GitHubError.responseText`. Kdyby GitHub jednou napsal `not found` do
+   téže věty, byl by z toho `notFound` a rozpoznání vázané na `commandFailed` by **tiše** přestalo
+   platit — a tichých selhání je tohle issue plné bez toho, abychom si přidávali další.
+
+4. **U stropu se nenabízí `Zkusit znovu`.** Druhý pokus vrátí totéž, dokud se nepřepíše historie.
+   Místo něj stojí `Otevřít na GitHubu`; rozhoduje o tom `DiffFailureAction`, tedy zase `Policy`.
+
+5. **Zamítnuto: stránkovat `/pulls/{n}/files`.** Je to jiná cesta, jiný formát než unified diff
+   a znamenalo by to **druhý rozbor vedle `DiffParseru`** — dva parsery na jednu obrazovku se
+   rozejdou při první úpravě. Navíc: review na pull requestu o třech tisících souborech nemá
+   smysl pouštět, takže by ta práce vydala obrazovku, kterou nikdo nedočte. Kdyby to někdo chtěl,
+   je to **vlastní issue s vlastním měřením**, ne součást tohohle.
+
+6. **Zamítnuto i to druhé, a je to změřené: dotáhnout diff přes `compare/<base>...<head>`.**
+   Ten endpoint strop **nemá** — `gh api repos/home-assistant/core/compare/759e4658…29f9b353
+   --header "Accept: application/vnd.github.diff"` vrátil **14,8 MB** unified diffu s kódem 0.
+   Jenže tím se problém jen posune o jedno místo dál: 14,8 MB je rozbor a kresba 3 632 souborů
+   v okně, které se na velkém pull requestu už jednou zaseklo (#220), a **žádné měření o tom, že
+   to projde, nemáme**. Zároveň je to užitečná informace, ne slepá ulička: znamená, že rozsahový
+   diff (#284) ani diff commitu (#317) tuhle třídu selhání nemají, takže klasifikace patří jen
+   na cestu `loadDiff`.
+
+7. **Review se neblokuje.** Reviewer čte diff z pracovní kopie (`git diff <base>...HEAD`), kam
+   strop GitHub API nedosáhne, takže „nad tímhle nejde spustit review“ by bylo tvrzení, které
+   neplatí. Co se **nestane**, je že by nedoručený diff cokoli spustil — a nad záložkou otevřenou
+   odkazem automat neběží (#531). Tvrdí to test se **zapnutým** automatickým režimem.
+
+8. **Mockup se nekreslí a brána na tohle nepadá.** Nová obrazovka ani nový prvek to není: mění se
+   věta v chybovém stavu, který v návrhu je, a tlačítko pod ní. Schvaluje se **obrázek**, a ten
+   se nemění.
+
+**Zobecnitelné pravidlo:** *chybový stav, do kterého padá víc příčin, je stav bez informace.*
+Jakmile se do jedné věty slijí tři různé odpovědi na otázku „co s tím mám dělat“, přestane ta věta
+odpovídat na cokoli — a pozná se to až tehdy, když na ni někdo narazí v provozu.

@@ -8121,3 +8121,33 @@ hlášení fokusu a tab bez hlášení konce.
 **Neověřená mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, ověří jedině člověk
 na běžící aplikaci — testovací host nedostane aktivaci, takže nemá key okno (tatáž mezera jako
 u celého katalogu, #441).
+
+## #542 — pull request nad stropem souborů řekne proč
+
+`gh pr diff` vrací nad 300 souborů `HTTP 406` (*„the diff exceeded the maximum number of files
+(300)“*) a `home-assistant/core#181088` (3 632 souborů) se tím pádem v okně **nedal otevřít
+k ničemu**: diff spadl do obecné cesty „Diff se nepodařilo načíst“ se syrovou odpovědí, tedy tam,
+kde končí i vypršelý token a nedostupné repo. Tři různé příčiny, jeden text.
+
+**Rozhoduje `Policy` výčtem** (`DiffFailure`: `tooManyFiles(limit:response:)` / `other`,
+`Policy.diffFailure(_:)` a `diffFailureNotice(_:)`), ne `if` ve view. `DiffState.failed` proto
+nese příčinu, ne hotovou větu. **Strop se pozná z odpovědi, ne z počtu souborů** — ten aplikace
+v tu chvíli nezná —, **číslo ve větě je přečtené, nikdy dosazené**, a rozpoznání se **neváže na
+třídu chyby** (`GitHubError.responseText`), protože `gh` znění hlášek měnit může. U stropu se
+nenabízí `Zkusit znovu` (druhý pokus vrátí totéž), ale `Otevřít na GitHubu`.
+
+**Zbytek okna zůstává k užitku**: přehled, commity, kontroly ani konverzace na diffu nestojí,
+takže je záložka dál `PullRequestTabContent.detail` — rozdíl mezi „nemám diff, tady je proč“
+a „nemám nic“ je vidět ze stavu. Review se tím neblokuje (reviewer čte diff z pracovní kopie),
+ale nedoručený diff sám nespustí nic; tvrdí to test se zapnutým automatickým režimem.
+
+**Zamítnuté varianty dvě.** Stránkovat `/pulls/{n}/files` (jiný formát, druhý rozbor vedle
+`DiffParseru`, a review nad třemi tisíci soubory nemá smysl) a dotáhnout diff přes
+`compare/<base>...<head>` — ten strop **nemá** a vrátil 14,8 MB unified diffu s kódem 0, jenže
+tím se problém jen posune do kresby. **Užitečné je na tom měření**: rozsahový diff (#284) ani
+diff commitu (#317) tuhle třídu selhání nemají.
+
+Fixture je skutečná odpověď `gh pr diff` (`Tests/Fixtures/gh/pr-diff-too-large.txt`). Nová
+tvrzení: devět v `DiffFailureTests` a tři v `AppStoreDiffCapTests`; **regrese ověřena vložením
+regrese třikrát** (vypnuté rozpoznání, dosazený strop místo čteného, vyndaná kontrola číslic).
+Mockup se nekreslil — mění se věta ve stavu, který v návrhu je.

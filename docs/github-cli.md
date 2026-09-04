@@ -102,6 +102,20 @@ se z něj dá tahle příčina poznat dřív než z `HttpError` — a potvrzuje,
 integrace na straně GitHubu, ne o stav repa. **Odstup mezi pokusy nepomohl**: tři kola v rozmezí
 osmnácti minut skončila týmž řádkem, takže se u téhle příčiny nevyplatí čekat a zkoušet znovu.
 
+**A trvá to přes hodiny, ne přes minuty** (#542, PR #564). Tam se to zkusilo **pětkrát** za necelé
+tři hodiny (20:46, 20:48, 20:56, 23:16 a 23:31) a pokaždé to spadlo stejně: `Processing Request`
+vypsal `COPILOT_PERMISSION_GATE_REASON: ineligible_app` a hned nato `HttpError` nad
+`GET /pulls/564`. Run přitom pokaždé **vznikl a běžel** (poslední `33921491420`), takže
+o spotřebovaný request z odstavce níž nejde a `union: false` na tom nic nezmění. Dokud výpadek na
+straně GitHubu trvá, **hlásí se to jako neověřená mezera** — nemergne s tím, že „Copilot nic
+nenašel“: nic nepřečetl.
+
+```bash
+# Rozpoznání: běžel job, a proč spadl.
+gh api repos/{owner}/{repo}/actions/runs/{id}/jobs --jq '.jobs[] | "\(.name) \(.conclusion)"'
+gh run view {id} --log-failed | grep -E "HttpError|PRism#[0-9]+"
+```
+
 ### Když se request spotřebuje mrtvým jobem
 
 Narazilo se na to u **#452 / PR #458** a stálo to čtyři a půl hodiny ticha. Rozpoznává se
