@@ -937,15 +937,18 @@ grep -rnE '\.(green|red|yellow|orange)([^A-Za-z0-9_]|$)' App | grep -vE ':[0-9]+
   — u emotikonů `EmojiSuggestionBox`, jeden na majitele. `popover` to neřeší: bere fokus, takže by
   v poli přestalo jít psát ([rozbor](docs/architektura.md#našeptávání-emotikonů-483), [jak se
   zjistí, co ořezává](docs/testovani.md#jak-zjistit-co-ořezává-483)).
-- **Sheet dostane `idealWidth` jedině s `presentationSizing(.fitted)`** (#327) — bez toho
-  modifikátoru je široký jako `minWidth`, a nerozhoduje o tom okno za ním. S `.fitted` a pružným
-  rámcem navíc dostane `.resizable` do `styleMask`u, takže se dá **roztáhnout myší**. Kdo si
-  velikost pamatuje, musí vědět, že se **sheet rozvrhuje dvakrát a v prvním průchodu má
-  podlahu** — zápis bez odmlky uloží podlahu
-  ([rozbor](docs/architektura.md#sheet-se-dá-roztáhnout-a-velikost-si-pamatuje)).
+- **Sheet dostane `idealWidth` jedině s `presentationSizing(.fitted)`; `idealHeight` si vezme i bez
+  něj** (#327, ta asymetrie změřená u #491) — bez toho modifikátoru je široký jako `minWidth`,
+  a nerozhoduje o tom okno za ním. **V okně `Settings` scény je mrtvé obojí** a oživit to nejde,
+  `presentationSizing` je modifikátor prezentace. S `.fitted` a pružným rámcem sheet navíc dostane
+  `.resizable` do `styleMask`u, takže se dá **roztáhnout myší**. Kdo si velikost pamatuje, musí
+  vědět, že se **sheet rozvrhuje dvakrát a v prvním průchodu má podlahu** — zápis bez odmlky uloží
+  podlahu ([rozbor](docs/architektura.md#sheet-se-dá-roztáhnout-a-velikost-si-pamatuje),
+  [čísla](docs/testovani.md#co-dělá-ideal-u-sheetu-a-v-okně-settings-491)).
 
   ```bash
-  grep -rln 'idealWidth' App/Views    # výčet k posouzení, ne prázdný
+  # Sheety hlídá `SheetSizingTests`, tomuhle grepu zbývá zbytek — výčet k posouzení, ne prázdný.
+  grep -rln 'idealWidth' App/Views
   ```
 
 ## Testování

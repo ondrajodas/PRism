@@ -84,38 +84,40 @@ struct AgentPromptRenderProbe {
         // Sheet zvlášť, ne přes `.sheet`: offscreen se modální okno nevykreslí, takže se rendruje
         // to, co je v něm — tedy tentýž `View`, jaký uvidí člověk.
         //
-        // **V obou mezích šířky**, ne v jedné: sheet se otevře na `idealWidth` (1080 b), ale dá se
-        // stáhnout na `minWidth` (840 b) — a odznaky „co je v textu“ i zalomení markdownu jsou na
-        // šířce závislé, takže jedno číslo by o druhém stavu netvrdilo nic. Rozsah se posunul u #333
-        // po proklikání (720 → 1080), protože na 720 zalamoval skoro každý řádek fenced diffu.
+        // **V jedné šířce, a je to oprava proti tomu, co tu stálo do #491.** Sonda rendrovala 1080
+        // i 840 s odůvodněním, že se sheet otevře na `idealWidth` a dá se stáhnout na `minWidth` —
+        // jenže sheet bez `presentationSizing(.fitted)` ideální **šířku** nedostane a roztáhnout se
+        // nedá (změřeno u #327, nad tímhle sheetem v `SheetSizingTests`). Snímek na 1080 tedy fotil
+        // šířku, kterou tahle obrazovka ani jednou neměla. Zbývá **840**, tedy podlaha — a ta je
+        // od #333 zvednutá z 560 právě proto, že se na 720 zalamoval skoro každý řádek fenced diffu.
         let selection = store.agentPromptSelection(for: pr)
-        for width in [1080.0, 840.0] as [CGFloat] {
-            let sheet = directory.appending(path: "zadani-sheet-\(Int(width)).png")
-            // Pozadí i režim se sondě musí nasadit: sheet si plochu nemaluje (v aplikaci ji dává okno
-            // sheetu), takže by v borderless okně vyšel titulek světle na světlém.
-            try render(
-                AgentPromptSheet(selection: selection, rebuild: { store.agentPromptSelection(for: pr, toggled: $0) })
-                    .frame(width: width, height: 1100)
-                    .background(Palette.surface),
-                width: width,
-                height: 1100,
-                to: sheet
-            )
-            print("SONDA \(sheet.path) — sheet \(Int(width)) b, vybráno \(selection.selected) "
-                + "z \(selection.available), \(selection.prompt.sizeText)")
-        }
+        let width: CGFloat = 840
+        let sheet = directory.appending(path: "zadani-sheet-\(Int(width)).png")
+        // Pozadí i režim se sondě musí nasadit: sheet si plochu nemaluje (v aplikaci ji dává okno
+        // sheetu), takže by v borderless okně vyšel titulek světle na světlém.
+        try render(
+            AgentPromptSheet(selection: selection, rebuild: { store.agentPromptSelection(for: pr, toggled: $0) })
+                .frame(width: width, height: 1100)
+                .background(Palette.surface),
+            width: width,
+            height: 1100,
+            to: sheet
+        )
+        print("SONDA \(sheet.path) — sheet \(Int(width)) b, vybráno \(selection.selected) "
+            + "z \(selection.available), \(selection.prompt.sizeText)")
         print("SONDA text:\n\(selection.prompt.text)")
     }
 
-    /// Seznam položek (#377) — **v obou mezích šířky a s rozbalenou položkou**.
+    /// Seznam položek (#377) — **s rozbalenou položkou**.
     ///
     /// Proč zvlášť a ne přes sheet: co je rozbalené, drží `@State` sheetu, takže offscreen se
     /// v něm rozbalit nedá. A rozbalený řádek je zrovna to, co je potřeba vidět — hlavička
     /// `druh · autor · čas · velikost` a **dlouhý text, který se roluje** (strop 168 bodů z návrhu,
     /// sekce 23). Rozbalí se nejdelší položka, tedy ta, u které se strop pozná.
     ///
-    /// Šířka je vnitřek sheetu (840 a 1080 minus `padding(16)` po obou stranách), protože seznam
-    /// tam doopravdy leží — jiná šířka je jiný design.
+    /// Šířka je vnitřek sheetu (840 minus `padding(16)` po obou stranách), protože seznam tam
+    /// doopravdy leží — jiná šířka je jiný design. **Jedna, ne dvě**: 1080 byla šířka, kterou sheet
+    /// nikdy neměl (viz sonda výš a `SheetSizingTests`, #491).
     @Test("Vyrendrovat seznam položek s rozbalenou položkou")
     func rendersThePickListWithAnExpandedItem() async throws {
         let directory = Self.outputDirectory
@@ -126,20 +128,19 @@ struct AgentPromptRenderProbe {
         let picks = selection.groups.flatMap(\.picks)
         let longest = try #require(picks.max { $0.text.utf8.count < $1.text.utf8.count })
 
-        for width in [1080.0, 840.0] as [CGFloat] {
-            let url = directory.appending(path: "zadani-seznam-\(Int(width)).png")
-            try render(
-                AgentPromptPickList(groups: selection.groups, expanded: [longest.id])
-                    .padding(16)
-                    .frame(width: width, alignment: .topLeading)
-                    .background(Palette.surface),
-                width: width,
-                height: 720,
-                to: url
-            )
-            print("SONDA \(url.path) — seznam \(Int(width)) b, \(picks.count) položek, "
-                + "rozbalená \(longest.id) (\(longest.text.utf8.count) B)")
-        }
+        let width: CGFloat = 840
+        let url = directory.appending(path: "zadani-seznam-\(Int(width)).png")
+        try render(
+            AgentPromptPickList(groups: selection.groups, expanded: [longest.id])
+                .padding(16)
+                .frame(width: width, alignment: .topLeading)
+                .background(Palette.surface),
+            width: width,
+            height: 720,
+            to: url
+        )
+        print("SONDA \(url.path) — seznam \(Int(width)) b, \(picks.count) položek, "
+            + "rozbalená \(longest.id) (\(longest.text.utf8.count) B)")
         for group in selection.groups {
             print("SONDA grupa \(group.kind.title): \(group.countLabel)")
         }

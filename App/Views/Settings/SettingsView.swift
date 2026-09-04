@@ -29,8 +29,25 @@ struct SettingsView: View {
         content
             // **Ne pevná velikost.** `frame(width:height:)` uvnitř `Settings` scény se pere
             // s tím, jak si okno řídí velikost samo — okno pak umí zmizet při tažení za
-            // hlavičku. `ideal` mu velikost navrhne a `min` ji drží v použitelných mezích.
-            .frame(minWidth: 720, idealWidth: 880, minHeight: 420, idealHeight: 560)
+            // hlavičku. Zůstává tedy `min`, který drží použitelné meze.
+            //
+            // **`ideal*` tady do #491 stálo, a bylo mrtvé — obojí, na rozdíl od sheetů.** Sheet
+            // zahodí ideální **šířku**, dokud nedostane `presentationSizing(.fitted)` (#327), ale
+            // ideální **výšku** si vezme; okno `Settings` scény **ignoruje obě**, protože si
+            // velikost bere ze systémového výchozího okna a jen ji zvedne na obsahové minimum.
+            // Změřeno nad scénou `Settings` v samostatné aplikaci (`docs/testovani.md`, *Co dělá
+            // `ideal*` v okně `Settings`*): `min 720×420 / ideal 880×560`, `min 720×420 / ideal
+            // 1400×800` i `min 720×420` bez ideálu daly **shodně 900 × 420**, kdežto `min 1000`
+            // posunulo okno na 1 000 × 420. Rozhoduje tedy `min`, a nic jiného.
+            //
+            // Sedí to i s tím, co si okno uložilo v ostré aplikaci (`NSWindow Frame
+            // com_apple_SwiftUI_Settings_window = 900 452`, tedy obsah 900 × 420) — a protože rámec
+            // nemá `max`, není okno ani roztahovatelné, takže to číslo nikdo nenatáhl rukou.
+            //
+            // `presentationSizing` je modifikátor **prezentace** (sheet, popover), takže na okno
+            // scény neplatí a není čím ideál oživit. Zbývá `min`, a ten se nemění: 720 × 420 je
+            // podlaha, ve které se formulář ještě čte.
+            .frame(minWidth: 720, minHeight: 420)
             // Střed **hlavního okna**, ne obrazovky: na velkém monitoru s oknem u kraje by se
             // nastavení otevřelo o půl metru vedle. Od #164 to má na jednom místě
             // (`WindowCentering`) i okno s novinkami.

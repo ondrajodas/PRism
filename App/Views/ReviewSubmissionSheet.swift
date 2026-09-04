@@ -24,7 +24,16 @@ struct ReviewSubmissionSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 560, idealWidth: 620, minHeight: 420, idealHeight: 560)
+        // **Bez `idealWidth`, ale s `idealHeight`**, tentýž případ jako `MergeSheet` (#491). SwiftUI
+        // u sheetu bez `presentationSizing(.fitted)` zahodí ideální **šířku**, ne výšku, takže
+        // `idealWidth: 620` tvrdilo šířku, kterou tenhle sheet od #68 ani jednou nedostal — kdežto
+        // `idealHeight: 560` se uplatňuje a bez něj by se sheet otevíral o 140 bodů nižší.
+        //
+        // Přidat `.fitted` je **zamítnuté**, a tady o stupeň důrazněji než jinde: je to poslední
+        // obrazovka před tím, než něco opustí stroj, a její celý smysl je, že je na ní vidět to,
+        // co odejde. Změnit jí šířku znamená přesázet ten výpis — a to je změna vzhledu se
+        // zákresem a souhlasem, ne oprava rozvržení.
+        .frame(minWidth: 560, minHeight: 420, idealHeight: 560)
         // Zavřít okno uprostřed volání by znamenalo nevědět, jestli review odešlo. `gh` má
         // třicetivteřinový timeout, takže to čekání je ohraničené.
         .interactiveDismissDisabled(submission.state == .sending)
