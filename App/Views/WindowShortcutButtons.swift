@@ -29,6 +29,9 @@ extension WindowShortcut.Key {
         case .downArrow: .downArrow
         case .leftArrow: .leftArrow
         case .rightArrow: .rightArrow
+        // `.space` je pojmenovaná klávesa SwiftUI, ne `KeyEquivalent(" ")` — tentýž důvod jako
+        // u `.return`: jeden zápis klávesy v okně, ať se nemusí hádat, který AppKit spáruje dřív.
+        case .space: .space
         }
     }
 }

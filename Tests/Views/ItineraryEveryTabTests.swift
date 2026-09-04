@@ -316,7 +316,10 @@ struct ItineraryEveryTabTests {
     /// vlastnost, ve které se o rozvržení záložky rozhoduje.
     private static func detailContent() throws -> Substring {
         let source = try detailSource()
-        guard let start = source.condensed.range(of: "privatevarcontent:someView{"),
+        // **Od #507 je `content` funkce, ne vlastnost**: zastávky se skládají jednou v těle
+        // detailu (čte je sloupec i zkratka mezerníku) a předávají se dovnitř. Hledaný úsek je
+        // pořád tentýž.
+        guard let start = source.condensed.range(of: "privatefunccontent(_itinerary:ItineraryActions)->someView{"),
               let end = source.condensed.range(of: "privatevarterminalDrawer")
         else { throw SourceError.unreadable("content v PullRequestDetailView.swift") }
         return source.condensed[start.upperBound..<end.lowerBound]
