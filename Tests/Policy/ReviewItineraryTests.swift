@@ -353,22 +353,53 @@ struct ReviewItineraryTests {
     /// Krátký popis, který se vejde celý, je přečtený rovnou: neviditelný konec nemá.
     @Test("Obsah, který se vejde, je přečtený rovnou")
     func contentThatFitsIsReadImmediately() {
-        #expect(Policy.overviewAtEnd(offset: 0, visible: 800, content: 400))
-        #expect(Policy.overviewAtEnd(offset: 0, visible: 800, content: 800))
+        #expect(Policy.overviewAtEnd(offset: 0, visible: 800, content: 400, isLoaded: true))
+        #expect(Policy.overviewAtEnd(offset: 0, visible: 800, content: 800, isLoaded: true))
     }
 
     @Test("Nahoře nad dlouhým popisem to konec není")
     func topOfALongDescriptionIsNotTheEnd() {
-        #expect(!Policy.overviewAtEnd(offset: 0, visible: 800, content: 4_000))
+        #expect(!Policy.overviewAtEnd(offset: 0, visible: 800, content: 4_000, isLoaded: true))
     }
 
     /// Tolerance: pod dolní hranou je vnitřní odsazení karty, takže „poslední bod obsahu“
     /// a „poslední řádek je vidět“ nejsou totéž.
     @Test("Konec se pozná i s tolerancí od dolní hrany")
     func theEndIsRecognisedWithinTheSlack() {
-        #expect(Policy.overviewAtEnd(offset: 3_200, visible: 800, content: 4_000))
-        #expect(Policy.overviewAtEnd(offset: 3_180, visible: 800, content: 4_000))
-        #expect(!Policy.overviewAtEnd(offset: 3_100, visible: 800, content: 4_000))
+        #expect(Policy.overviewAtEnd(offset: 3_200, visible: 800, content: 4_000, isLoaded: true))
+        #expect(Policy.overviewAtEnd(offset: 3_180, visible: 800, content: 4_000, isLoaded: true))
+        #expect(!Policy.overviewAtEnd(offset: 3_100, visible: 800, content: 4_000, isLoaded: true))
+    }
+
+    /// **Nenačtený popis konec není, i když se obsah vejde** (nález Copilota na #506).
+    ///
+    /// Je to tvrzení o tom, že se něco **nestane**, a rozbije se potichu: ve stavu
+    /// `Načítám popis…` je obsah krátký, takže by `content <= visible` vydalo `true` — a store
+    /// tu značku ukládá **jednosměrně** (`noteOverviewReadToEnd` ji nikdy nesundá), takže by
+    /// zastávka `Popis a záměr` byla hotová u PR, jehož popis nikdo neviděl.
+    ///
+    /// Výčet je úplný: dvě šířky obsahu (vejde se / nevejde) a k tomu vršek i konec dlouhého,
+    /// protože nenačtený popis musí vydat `false` **ve všech** polohách scrollu.
+    @Test("Nenačtený popis není konec v žádné poloze")
+    func anUnloadedDescriptionIsNeverTheEnd() {
+        for content in [400.0, 800, 4_000] {
+            for offset in [0.0, 3_180, 3_200] {
+                #expect(
+                    !Policy.overviewAtEnd(
+                        offset: offset, visible: 800, content: content, isLoaded: false
+                    ),
+                    "obsah \(content), posun \(offset): nenačtený popis vyšel jako přečtený"
+                )
+            }
+        }
+    }
+
+    /// **A PR bez popisu se odškrtnout musí.** Kdyby rozhodovalo „je neprázdný“ místo
+    /// „je načtený“, počítadlo itineráře by u takového PR nikdy nedošlo na konec — proto je to
+    /// `description != nil`, ne `!description.isEmpty`.
+    @Test("PR bez popisu je přečtený, jakmile je načtený")
+    func aPullRequestWithoutADescriptionCountsAsRead() {
+        #expect(Policy.overviewAtEnd(offset: 0, visible: 800, content: 120, isLoaded: true))
     }
 
     /// Neprošlé řádky se počítají jen ze souborů, které prošlé nejsou — a `changed` (#500)

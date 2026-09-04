@@ -7850,3 +7850,11 @@ panel za kartami dál srovná — to poslední je proti variantě „nezapisuj n
 v nové `ItineraryHomeReturnTests` nad hostovaným celým `ContentView`em a stráž nad zdrojáky
 v `ItineraryEveryTabTests` (stráž deklaruje `Store/AppStore.swift`, detail se jí ptá storu).
 **Regrese se ověřila vložením regrese u každé příčiny zvlášť** — a všech pět tvrzení zčervenalo.
+
+**Z Copilotova kola k tomu přišel třetí nález, tatáž třída na jiném místě:** `reportReadToEnd`
+se hlásilo i ve stavu `Načítám popis…`, protože `Policy.overviewAtEnd` odpovídá `true`, když se
+obsah vejde do výřezu — a store tu značku ukládá **jednosměrně**, takže zastávka `Popis a záměr`
+byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnitř té funkce, a je to
+`description != nil`, ne „je neprázdný“: PR bez popisu se odškrtnout **musí**, jinak by u něj
+počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
+nepatří — je to živý přepínač, ne jednosměrná značka.

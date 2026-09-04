@@ -864,7 +864,9 @@ vedle sebe a 6 pod sebou.
 
 **Které zastávky v seznamu jsou, plyne z dat**: `Od minule` jen když je záznam předchozí návštěvy
 **a** přišly commity, `Kontroly` jen když PR má CI, zbylé tři vždycky. A **hotovo se pozná z dat**
-— soubor prošlý, popis odscrollovaný na konec, spadlý check rozbalený, verdikt odeslaný. **Ručně
+— soubor prošlý, popis odscrollovaný na konec (a **jedině načtený** popis: ve stavu
+`Načítám popis…` se obsah vejde do výřezu, takže by se zastávka odškrtla nad popisem, který nikdo
+neviděl), spadlý check rozbalený, verdikt odeslaný. **Ručně
 se zaškrtne jedině soubor**: itinerář, který si člověk odškrtává sám, je druhý seznam úkolů.
 
 **Soubory se řadí podle rizika**, ne podle cesty: blokující → nález → vlákno → nový → ostatní →

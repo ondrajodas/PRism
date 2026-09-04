@@ -113,6 +113,24 @@ struct ItineraryHomeReturnTests {
 
         /// **Jméno není `settle()`** schválně: `settle()` je globální odmlka
         /// z `Tests/Support/TestWaiting.swift` (#296) a metoda téhož jména by ji zastínila.
+        ///
+        /// **Proč rozpočet kol, a proč to není ten vzor, který #296 zakazuje** (nález Copilota na
+        /// #506, neopravený). Zákaz z #296 míří na čekání **odvozené od volného stroje** —
+        /// `Task.yield()` nebo vlastní smyčku se stropem —, protože takový strop je pod souběžným
+        /// buildem tří slotů falešně červený `main`. Tady je každé kolo **ta sdílená odmlka**
+        /// (`settle()`), takže je to dvanáct sankcionovaných pauz, ne domácí čekání.
+        ///
+        /// **`waitUntil` sem nejde a je to vlastnost tvrzení, ne pohodlí**: obě tvrzení níž jsou
+        /// o tom, že se něco **NEstalo** (uložená volba se nepřepsala), a na non-událost se čekat
+        /// nedá — není na co. Copilotova rada (jedna odmlka s konkrétním trváním) by scéně dala
+        /// **méně** času, tedy by tvrzení o non-události oslabila.
+        ///
+        /// **Že je ten rozpočet dost velký, je změřené, ne odhadnuté**: s vloženou regresí (stráž
+        /// zpátky ve `@State` detailu) obě tvrzení nad týmiž dvanácti koly **zčervenala**. Kdyby
+        /// scéna nestihla dojít do stavu, ve kterém se přepisuje, vyšla by zeleně — a to je přesně
+        /// ta past z #478, o kterou tady jde.
+        ///
+        /// Tentýž helper má i `ItineraryChoiceTests` (#506/3) a `DiffColumnFitProbe` (#503).
         func letItSettle() async {
             for _ in 0..<12 { await settle() }
         }

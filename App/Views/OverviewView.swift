@@ -45,12 +45,15 @@ struct OverviewView: View {
         // **Doroloval se popis na konec?** (#506) Transformace běží při každém přepočtu geometrie,
         // **akce jen při změně hodnoty** (#361), takže se hlásí jedině na přechodu — bezpodmínečný
         // zápis z každého snímku je zakázaná třída (#358). Rozhoduje `Policy.overviewAtEnd`, ať
-        // o „konci“ nerozhoduje kresba.
+        // o „konci“ nerozhoduje kresba — a **`isLoaded` do toho rozhodnutí patří** (nález Copilota
+        // na #506): ve stavu `Načítám popis…` se obsah vejde do výřezu, takže by se zastávka
+        // odškrtla nad popisem, který nikdo neviděl. Store tu značku nikdy nesundá.
         .onScrollGeometryChange(for: Bool.self) { geometry in
             Policy.overviewAtEnd(
                 offset: geometry.contentOffset.y,
                 visible: geometry.containerSize.height,
-                content: geometry.contentSize.height
+                content: geometry.contentSize.height,
+                isLoaded: description != nil
             )
         } action: { _, atEnd in
             reportReadToEnd?(atEnd)

@@ -314,7 +314,24 @@ extension Policy {
     /// Od dolní hrany se odečítá **tolerance** — tatáž úvaha jako u `stepFeedAtEnd`: `NSScrollView`
     /// dojede na poslední bod obsahu se subpixelovou odchylkou a pod ní má karta popisu vnitřní
     /// odsazení, takže „poslední bod obsahu“ a „poslední řádek textu je vidět“ nejsou totéž.
-    static func overviewAtEnd(offset: Double, visible: Double, content: Double) -> Bool {
+    ///
+    /// **Dokud se popis nenačetl, je odpověď `false`, ne „vejde se“** (nález Copilota na #506).
+    /// Ve stavu `Načítám popis…` je obsah krátký, takže by `content <= visible` vydalo `true`
+    /// a store si to uloží **jednosměrně** (`noteOverviewReadToEnd` značku nikdy nesundá) —
+    /// zastávka `Popis a záměr` by tím byla hotová u PR, jehož popis nikdo neviděl. Je to tatáž
+    /// třída jako *text v UI, který tvrdí víc, než data unesou*, jen zapsaná do stavu.
+    ///
+    /// **`isLoaded`, ne „je neprázdný“**, a je to rozdíl, na kterém záleží: PR **bez** popisu je
+    /// načtený a přečíst na něm není co, takže se zastávka odškrtnout **musí** — jinak by u něj
+    /// počítadlo itineráře nikdy nedošlo na konec. Ta hodnota je proto `description != nil`
+    /// (`nil` = detail se ještě nenačetl), ne `!description.isEmpty`.
+    static func overviewAtEnd(
+        offset: Double,
+        visible: Double,
+        content: Double,
+        isLoaded: Bool
+    ) -> Bool {
+        guard isLoaded else { return false }
         guard content > visible else { return true }
         return offset + visible >= content - overviewEndSlack
     }

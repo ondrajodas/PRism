@@ -1876,6 +1876,17 @@ posunula o týchž 50 bodů — 570 → 620 bez okraje karet a 870 → 920 s ní
 `RootView`u (700), takže je rozdíl v okně doopravdy vidět. Čísla jsou
 v [`docs/testovani.md`](testovani.md#kolik-ubere-širší-levý-sloupec-506).
 
+**Hotová zastávka `Popis a záměr` se nesmí zapsat nad nenačteným popisem** (nález Copilota na
+#506). `Policy.overviewAtEnd` odpovídá `true`, když se obsah vejde do výřezu (krátký popis
+neviditelný konec nemá) — a ve stavu `Načítám popis…` se vejde taky, takže by značka vznikla
+u PR, jehož popis nikdo neviděl. Store ji přitom ukládá **jednosměrně**
+(`noteOverviewReadToEnd` ji nikdy nesundá), tedy nejde o blik jednoho snímku. Rozhoduje proto
+`isLoaded` **uvnitř té funkce**, ne `if` ve view — a je to `description != nil`, ne
+„je neprázdný“: PR **bez** popisu je načtený a přečíst na něm není co, takže se odškrtnout musí,
+jinak by u něj počítadlo itineráře nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž
+tvar, ale **do téhle třídy nepatří**: je to živý přepínač `Sledovat konec`, ne jednosměrná značka,
+takže „krátký obsah je na konci“ je u něj záměr.
+
 **Co se u toho nemá rozbít:** `Policy.itinerary` nesmí vydat zastávku `Od minule` bez záznamu
 návštěvy (bez toho by „od tvé poslední návštěvy“ nad prvním otevřením znamenalo „od začátku
 věků“); `Kontroly` nesmí vzniknout nad PR bez CI (zvedly by jmenovatele počítadla o práci, která
