@@ -95,6 +95,13 @@ velikost prošla o šest hodin dřív třikrát za sebou.
 je jediné, co se dá udělat, **napsat to do popisu PR jako neověřenou mezeru** a spolehnout se na
 vlastní revizi diffu — ta je stejně **podmínka pushnutí**, ne náhrada za Copilota.
 
+**Třetí pokus na PR #565 dopadl stejně** (run `33919369283`, chyba v 21:05:06Z) a přinesl jeden
+údaj navíc: mezi proměnnými prostředí v kroku *Processing Request* stojí
+**`COPILOT_PERMISSION_GATE_REASON: ineligible_app`**. Vypisuje se **před** prvním voláním, takže
+se z něj dá tahle příčina poznat dřív než z `HttpError` — a potvrzuje, že jde o oprávnění
+integrace na straně GitHubu, ne o stav repa. **Odstup mezi pokusy nepomohl**: tři kola v rozmezí
+osmnácti minut skončila týmž řádkem, takže se u téhle příčiny nevyplatí čekat a zkoušet znovu.
+
 ### Když se request spotřebuje mrtvým jobem
 
 Narazilo se na to u **#452 / PR #458** a stálo to čtyři a půl hodiny ticha. Rozpoznává se
