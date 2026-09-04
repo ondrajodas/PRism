@@ -114,6 +114,15 @@ extension AppStore {
     /// Sada skillů pro repo. Chipy z ní berou pořadí i to, co ještě neběželo.
     func reviewSkills(for repo: RepoID) -> [String] { resolved(for: repo).skills }
 
+    /// Koho routing na tomhle PR nepustil a z jakých vzorů (#518). Prázdné = nic se nepřeskočilo.
+    ///
+    /// Getter, ne mapa napřímo, ze stejného důvodu jako `timelines(for:)`: rozhodnutí „záznam
+    /// z jiné hlavy se nepočítá“ nemá být `if` ve view. Hlavu k tomu drží `ReviewerRoutingPass`,
+    /// takže se hodí i tam, kde volající hlavu nezná — kdyby ji znal, ptá se `Policy.standingSkips`.
+    func skippedReviewers(for pr: PRIdentifier) -> [String: [String]] {
+        routingSkips[pr]?.skipped ?? [:]
+    }
+
     /// Reviewery, kteří na PR **právě běží**.
     ///
     /// Odvozeno, ne vedeno zvlášť: běh, který ještě nestihl poslat první událost, osu
@@ -193,6 +202,14 @@ extension AppStore {
                 reviewPhases[pr] = nil
                 return
             }
+            // Nový průchod začíná bez přeskočení z toho předchozího (#518) — stejně jako s čistou
+            // osou, a u opakování jednoho revieweera (#149) se maže **jen jeho** záznam, ze
+            // stejného důvodu jako u osy: ostatní se v tomhle průchodu nerozhodují, takže by po
+            // nich zůstalo prázdno a dráhy, kvůli kterým se do tabu chodí, by přišly o důvod.
+            //
+            // Maže se **až tady**, za bránou výš: kdyby se mazalo dřív, přišla by ta brána
+            // o odpověď „tenhle je přeskočený, review je hotové“ zrovna ve chvíli, kdy se ptá.
+            routingSkips[pr] = forgottenSkips(for: pr, running: subset)
 
             checkoutStates[pr.repo] = .preparing
             let worktree = try await checkout.worktree(for: pr, at: detail.headSha)
@@ -206,6 +223,24 @@ extension AppStore {
             // a obojí tam znamená „sadu neodvodíme“. Zrušené review by pak jelo dál, takže
             // se to musí zeptat znovu tady.
             try Task.checkCancellation()
+
+            // Routing (#518) — **před rozpočtem, zadáním i session**, protože rozhoduje o tom,
+            // jestli se vůbec bude co utrácet. Sada je v tuhle chvíli hotová (odhad jazyka je
+            // o řádek výš) a cesty se berou z pracovní kopie, takže dřív se to rozhodnout nedá.
+            let routed = await routedSkills(for: pr, of: detail, in: worktree, only: subset, using: checkout)
+            // Routing zrušení **nevyhazuje** (výpis cest se z něj vrací jako „cesty neznáme“),
+            // takže se na něj musí zeptat tady — jinak by zrušené review pokračovalo na rozpočet
+            // a na zadání, tedy zaplatilo za session, o kterou si nikdo neřekl. Tatáž kontrola,
+            // jakou má cesta po odhadu jazyka repa a po příbuznosti větví (#517).
+            try Task.checkCancellation()
+            // Nezůstalo koho pustit: **nic se neutrácí a nic se neukládá**. Není to porucha, takže
+            // se nehlásí chyba — jen se řekne v `Průběhu`, kde dráhy nesou kapsli `přeskočeno`
+            // i důvod. Uložený záznam by tu byl na škodu: běh, který se nestal, nemá co přepsat
+            // nálezy z předchozí hlavy.
+            guard !routed.isEmpty else {
+                reviewPhases[pr] = nil
+                return
+            }
 
             // Rozpočet **až tady**: `runSkills` je jediné místo, které session utrácí.
             // Cokoli dřív znamená platit i za běhy, které se nikdy nerozjely — selhal
@@ -247,7 +282,7 @@ extension AppStore {
                 in: worktree,
                 using: reviewer,
                 saving: reviews,
-                only: subset,
+                only: routed,
                 intent: intent.file,
                 gap: intent.gap,
                 previous: previous,
@@ -275,6 +310,94 @@ extension AppStore {
             reviewPhases[pr] = .failed(detail: error.localizedDescription)
             await notifyAboutFinishedReview(of: pr)
         }
+    }
+
+    /// Které reviewery tenhle běh doopravdy pustí (#518) — a co si o přeskočených zapamatuje.
+    ///
+    /// **Routing platí jedině na celou sadu, ne na vyžádanou podmnožinu** (#149, `Pustit přesto`),
+    /// a je to celá odpověď na otázku, jak se přeskočený reviewer pustí ručně: podmnožina je
+    /// výslovný pokyn člověka na konkrétního revieweera, takže se nefiltruje. Pravidlo tedy
+    /// rozhoduje o tom, co si vybírá **aplikace** — automat i tlačítko `Pustit review`.
+    ///
+    /// **Na cesty se ptá jedině repo, které si nějaké pravidlo napsalo.** Bez pravidel se `git`
+    /// nespouští vůbec, takže se repo bez routingu chová do posledního podprocesu jako do #518.
+    ///
+    /// **Selhání výpisu cest routing vypne, nepoloží review.** `git`, který neodpověděl, znamená
+    /// „cesty neznáme“ — a přeskočit revieweera kvůli tomu je tichá ztráta review, kdežto běh navíc
+    /// je jen běh navíc. Je to tatáž strana, jakou drží `Policy.reviewersToRun` u prázdného seznamu.
+    private func routedSkills(
+        for pr: PRIdentifier,
+        of detail: PullRequest,
+        in worktree: URL,
+        only subset: [String]?,
+        using checkout: any RepoCheckout
+    ) async -> [String] {
+        if let subset { return subset }
+        // Sada se čte **až tady**, po odhadu jazyka repa — tedy z téhož místa a v tomtéž okamžiku,
+        // jako by ji přečetl `runSkills`.
+        let skills = reviewSkills(for: pr.repo)
+        let rules = Policy.routingRules(of: skills, paths: resolved(for: pr.repo).reviewerPaths)
+        guard rules.contains(where: { !$0.paths.isEmpty }) else { return skills }
+        // Bez základu není proti čemu diffovat. Nesmí to být **tichý** pád zpátky na celou sadu:
+        // pravidlo, které v tomhle běhu nikoho neovlivnilo, se z okna jinak nepozná.
+        guard !detail.baseSha.isEmpty else {
+            reportRoutingGap(for: pr, reason: "PR nemá základní commit.")
+            return skills
+        }
+
+        let files: [String]
+        do {
+            files = try await checkout.changedFiles(in: worktree, since: detail.baseSha)
+        } catch {
+            // **Zrušení není porucha routingu.** Běh se o pár řádků dál stejně zastaví
+            // (`checkCancellation` za tímhle voláním), takže by hláška mluvila o review, které si
+            // nikdo nevyžádal — a zůstala by ležet ve stavovém řádku. Ptáme se na stav tasku, ne na
+            // `CancellationError`: `git` zabitý zrušením ohlásí selhání podprocesu.
+            guard !Task.isCancelled else { return skills }
+            reportRoutingGap(for: pr, reason: Self.routingFailureText(error))
+            return skills
+        }
+
+        let plan = Policy.reviewersToRun(files: files, rules: rules)
+        // Zapisuje se **i prázdné přeskočení**, protože nese hlavu: bez ní by brána proti druhému
+        // běhu (`hasCurrentReview`) nepoznala rozhodnutí o dnešní hlavě od toho o včerejší.
+        routingSkips[pr] = ReviewerRoutingPass(headSha: detail.headSha, skipped: plan.skipped)
+        return plan.skills
+    }
+
+    /// Že routing v tomhle běhu **nerozhodoval** — a proč (#518).
+    ///
+    /// Jedna věta na jednom místě, protože důvody jsou dva (chybějící základ a `git`, který
+    /// neodpověděl) a vedou na totéž: review poběží celé, jako by pravidlo nastavené nebylo.
+    /// **Hlásí se jmenovitě k PR**, protože `configurationFailure` je jeden řetězec pro celou
+    /// aplikaci — bez subjektu je ve frontě dvaceti PR nepoužitelný (tatáž úvaha jako
+    /// u `intentFailure`).
+    private func reportRoutingGap(for pr: PRIdentifier, reason: String) {
+        configurationFailure = "Změněné cesty \(pr.repo)#\(pr.number) se nepodařilo zjistit, "
+            + "review běží celé bez routingu. " + reason
+    }
+
+    /// Co z chyby výpisu cest ukázat člověku (nález Copilota na #518).
+    ///
+    /// **`CheckoutError` není `LocalizedError`**, takže `localizedDescription` u něj vydá
+    /// `The operation couldn’t be completed. (PRism.CheckoutError error 5.)` — anglickou větu
+    /// o interním čísle případu. Věta pro člověka je `userDescription` a nese i to, co řekl `git`;
+    /// je to tentýž vzor, jakým se hlásí selhání checků (`AppStore+Checks.reason`).
+    ///
+    /// Fallback zůstává, protože `changedFiles` je za protokolem: fake i budoucí implementace
+    /// můžou vyhodit cokoli, a „chyba, o které se nic neřekne“ je horší než anglická věta.
+    private static func routingFailureText(_ error: any Error) -> String {
+        (error as? CheckoutError)?.userDescription ?? error.localizedDescription
+    }
+
+    /// Co si z přeskočení nechat, když se pouští další průchod (#518).
+    ///
+    /// Celá sada zahodí všechno, podmnožina jen to své — tatáž úvaha jako u osy: rozhodnutí
+    /// o revieweerovi, který v tomhle průchodu nefiguruje, pořád platí.
+    private func forgottenSkips(for pr: PRIdentifier, running subset: [String]?) -> ReviewerRoutingPass? {
+        guard let subset, let pass = routingSkips[pr] else { return nil }
+        let kept = pass.skipped.filter { !subset.contains($0.key) }
+        return kept.isEmpty ? nil : ReviewerRoutingPass(headSha: pass.headSha, skipped: kept)
     }
 
     /// Uloží zadání PR vedle pracovního stromu a vrátí cestu k němu (#120).
@@ -789,12 +912,30 @@ extension AppStore {
     ///
     /// Chybějící skill znamená, že se sada mezitím rozšířila nebo že běh nedoběhl celý —
     /// a to je důvod pustit ho znovu. Zastaralý záznam se nepočítá vůbec.
+    ///
+    /// **Za hotové se počítá i to, co routing přeskočil** (#518), a bez toho by ta brána na repu
+    /// s routingem přestala platit: přeskočený reviewer doběhlý běh nemá a nikdy mít nebude, takže
+    /// by hotové review vypadalo jako nedokončené a stačil by komentář pod PR (mění `updatedAt`),
+    /// aby si automat zaplatil celé review znovu. Rozhoduje o tom `Policy.standingSkips`, tedy
+    /// **dnešní** pravidlo nad **dnešní** hlavou — po změně vzorů se review pustí, jak se čeká
+    /// od úpravy nastavení.
     private func hasCurrentReview(of pr: PRIdentifier, at headSha: String) -> Bool {
+        let skills = reviewSkills(for: pr.repo)
+        let skipped = Policy.standingSkips(
+            routingSkips[pr],
+            head: headSha,
+            rules: Policy.routingRules(of: skills, paths: resolved(for: pr.repo).reviewerPaths)
+        )
+        // **Sada přeskočená celá se počítá za hotovou i bez záznamu** (#518): není co pustit, takže
+        // není co ukládat — a bez tohohle by se PR, který se nikoho netýká, klonoval po každém
+        // komentáři znovu. Ptát se na `record` tady nejde: běh, který se nestal, žádný nezaložil.
+        // Prázdná sada sem **nespadá** (`!skills.isEmpty`): „nemám žádného revieweera“ není hotové
+        // review, je to nenastavené repo — a odpovídá na to `canSpendSession`, ne tahle brána.
+        if !skills.isEmpty, Set(skills).isSubset(of: skipped) { return true }
         guard let record = reviewRecords[pr], record.headSha == headSha, !record.isStale else {
             return false
         }
-        let finished = Set(record.runs.map(\.skillID))
-        return Set(reviewSkills(for: pr.repo)).isSubset(of: finished)
+        return Set(skills).isSubset(of: Set(record.runs.map(\.skillID)).union(skipped))
     }
 
     /// Nový head commit zneplatní i to, co držíme v paměti — jinak by řádek do konce běhu

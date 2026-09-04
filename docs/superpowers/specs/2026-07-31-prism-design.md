@@ -5815,3 +5815,34 @@ nesou přesně to, co se ví.
 **Co v tomhle issue vědomě není**: routing reviewerů podle změněných cest a odklad velkých PR do
 tichých hodin. Jsou v témže zákresu (a v sekci 46 zakreslené jsou), ale mají vlastní issues
 (#518, #519) — dráha je pro všechny tři totéž místo, proto stojí v jednom obrázku.
+
+### Záznam rozhodnutí — routing reviewerů podle změněných cest (#518)
+
+Zákres odsouhlasený 2. 9. 2026 (deck *Směry pro PRism*, stránka *Za mě › Z6 Chytřejší automat*);
+do `docs/navrh.html` ho jako **sekci 46** přenesla první issue skupiny (#517), tady se na ni jen
+odkazuje. Kresba říkala *co* — kapsle `přeskočeno`, důvod, `Pustit přesto`; tohle je *jak*
+a **co se cestou rozhodlo jinak**.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Rozhoduje čistá funkce nad seznamem souborů** (`Policy.reviewersToRun(files:rules:)`) | `if` nad cestami v runneru nebo ve store | Je to rozhodnutí nad daty, takže se dá vyzkoušet výčtem — a výčet je tady jediná pojistka: každá odpověď „nesedí“ je reviewer, který o kódu neřekne nic |
+| **Cesty vydává `git` v pracovní kopii** (`RepoCheckout.changedFiles(in:since:)`) | Přidat `files` do `gh pr view`, které v cestě review už běží (nula podprocesů navíc) | **Změřeno**: `gh pr view --json files` vydá **prvních sto** souborů a o zkrácení nic neřekne (`kubernetes/kubernetes` #141772 — 591 změněných, v odpovědi 100). Routing nad zkráceným seznamem přeskočí revieweera, jehož soubor stojí na sto prvním místě, a nikdo se to nedozví. `git` odpovídá úplně, lokálně a v tu chvíli už strom stojí |
+| **`--no-renames`** | Nechat detekci přejmenování (výchozí) | Se zapnutou detekcí je v seznamu jedině **nová** cesta, takže soubor přesunutý **z** `src/Auth/` by revieweera té složky nevzbudil — přestože se ta složka změnila |
+| **Vzory jsou gitignore** (`Policy.pathMatches`) | `fnmatch(3)` z libc | `fnmatch` `**` nezná: s `FNM_PATHNAME` se zastaví na prvním lomítku a bez něj by `*` přeskakovalo hranice složek (`src/*` by sedělo na celý podstrom). Do konfigurace navíc píše člověk, který má v ruce zkušenost z `.gitignore`, ne z `man 3 fnmatch` |
+| **Prázdné pravidlo se pouští** | Prázdný seznam vzorů = „nikdy nepouštěj“, symetricky k `skills: []` | Řádek v tabulce nastavení vzniká **prázdný** (tentýž mezistav jako u `Configuration.activeSources`), takže by jedno kliknutí revieweera tiše vypnulo. Nic se tím neztrácí: odpovědí na „tady tenhle reviewer běžet nemá“ je odebrání ze **sady skillů** |
+| **Prázdný seznam souborů nepřeskočí nikoho** | Brát ho jako „nic nesedí“ | Diff bez cest znamená „nezjistilo se to“ stejně jako „nic se nezměnilo“. Bezpečná strana je pustit: běh navíc je jen běh navíc, kdežto přeskočený reviewer je chybějící review |
+| **Routing nemá globální úroveň** | Mapa i v `GlobalConfig`, jako u všech ostatních override | Cesty popisují **rozvržení jednoho repa**: `src/Auth/**` v jednom repu neznamená nic v druhém, takže globální mapa by byla pravidlo, které je skoro všude vedle. Je to první klíč u repa bez globálního dvojčete a v `resolved(for:)` se proto nic nepřebíjí |
+| **Rozhoduje se před rozpočtem, zadáním i session** | Zúžit sadu v `runSkills`, kde se sada čte | V `runSkills` už je zaplacené zadání (#345 — jedna `claude -p` session, ~$0,2) a stržený denní rozpočet, takže by přeskočené PR platilo za obojí. Je to tatáž lekce, kvůli které se rozpočet strhává až tam, kde se utrácí |
+| **Ruční spuštění routing nefiltruje** | Filtrovat i vyžádanou podmnožinu | `Pustit přesto` na dráze by pak nedělalo nic a nebylo by z čeho poznat proč. Podmnožina je **výslovný pokyn na konkrétního revieweera**, takže je to tatáž cesta jako `Pustit znovu` u spadlé session — jedna closure, žádné druhé pravidlo |
+| **Přeskočení se pamatuje jen v paměti** (`AppStore.routingSkips`) | Uložit ho do `ReviewRecord` vedle běhů | Je to odpověď na **dnešní** pravidlo nad **dnešním** diffem: uložené by po změně vzorů tvrdilo něco, co neplatí, a nikdo by se to nedozvěděl. Odvodit ho znovu přitom nic nestojí. Cena je restart, po kterém z dráhy zbude `nespuštěno` — a to je pravda, ne ztráta: co se nestalo, po sobě nic nenechalo |
+| **Když se nepustí nikdo, nevznikne záznam** | Uložit záznam s prázdnými běhy, ať má dráha kde přežít | Prázdný záznam pro dnešní hlavu **vyhrává** v `Policy.currentRecords` nad tím zastaralým, takže by nálezy z předchozí hlavy z okna zmizely právě ve chvíli, kdy se na ně ptám. Řádek zůstane `neběželo`, což není ani `čisté`, ani `selhalo` |
+| **`hasCurrentReview` počítá přeskočené za hotové** (`Policy.standingSkips`, jen týmiž vzory a nad touž hlavou) | Nechat bránu, jak byla | Přeskočený reviewer doběhlý běh **nemá a nikdy mít nebude**, takže by hotové review vypadalo jako nedokončené a stačil by komentář pod PR (mění `updatedAt`), aby automat zaplatil celé review znovu. Vázat to na hlavu **a** na vzory je podmínka: po pushi ani po úpravě pravidla přeskočení neplatí, což je zrovna to, co člověk od změny nastavení čeká |
+| **Dráha je čtvrtý stav** (`ReviewerLane.State.skipped`) | Použít `notStarted` a důvod dopsat větou | `nespuštěno` znamená „ještě na něj nedošlo, pusť ho“, tohle „nedošlo na něj schválně“ — a od `čisto` je to nejdál, protože přeskočený reviewer o kódu neřekl **nic**. Tatáž hranice, jakou #383 zavedlo u `inconclusive` |
+| **Jedna fáze, ne tři `idle`** | Kreslit tvar běhu jako u `notStarted` | U `notStarted` fáze říkají „nedošlo na ně“, tedy stav, který se ještě změní. Tady se nezmění, dokud se nezmění pravidlo nebo diff, takže tvar běhu předstírat nemá co — a je to i zákres z návrhu (`nepustilo se — pravidlo repa` přes celou šířku) |
+| **Cena `0,00 $`, ne prázdno** | Nechat cenu prázdnou jako u zabité session | Tady se **ví**, že to nestálo nic, protože se session nespustila. `RunUsage` na to není: v něm nula znamená „tolik nahlásila session“ — a `nil` znamená „nevíme“, což je věta o něčem jiném |
+| **Selhání výpisu cest routing vypne a řekne to** | Padnout na review, nebo mlčet | `git`, který neodpověděl, znamená „cesty neznáme“; přeskočit kvůli tomu revieweera je tichá ztráta review a položit celé review je horší než běh navíc. Mlčet ale nejde: nastavené pravidlo, které v tomhle běhu nikoho neovlivnilo, se z okna jinak nepozná — proto věta ve stavovém řádku |
+| **Pravidlo po skillu mimo sadu se nemaže**, jen dostane odznak `mimo sadu` | Uklidit ho při ukládání nastavení | Je to zápis, který napsal člověk, takže ho má smazat člověk — tatáž úvaha jako u dráhy po odebraném revieweerovi (#242). Musí být ale poznat, že dnes o ničem nerozhoduje |
+
+**Co se z kresby nepřeneslo**: nic. Sekce 46 kreslí přeskočenou dráhu se čtyřmi věcmi (kapsle,
+důvod, cena, tlačítko) a všechny čtyři v okně jsou; kapsle `odloženo na noc` ze stejného obrázku
+patří #519.

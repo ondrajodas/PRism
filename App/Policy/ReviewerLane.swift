@@ -23,6 +23,15 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         /// u `čisté` vs. `failed` — jeden z nich je stav běhu, druhý jeho absence. Stejný fakt
         /// pojmenovává `ReviewerChip.State.notStarted`, proto stejné jméno.
         case notStarted
+        /// Routing ho na tomhle diffu nepustil (#518) — `patterns` jsou vzory, ze kterých nesedělo
+        /// nic.
+        ///
+        /// **Čtvrtý stav vedle `notStarted`, `finished` a `failed`, a nesmí se slít ani s jedním.**
+        /// `nespuštěno` mluví o revieweerovi, na kterého ještě nedošlo („pusť ho“), tohle o tom, na
+        /// kterého se schválně nedošlo („nemá tu co dělat“). A `čisto` je z toho nejdál: přeskočený
+        /// reviewer o kódu neřekl **nic** — je to tatáž hranice, kterou `CLAUDE.md` hlídá
+        /// u `clean` vs. `failed` a #383 u `inconclusive`.
+        case skipped(patterns: [String])
         /// Běh v záznamu **je**, ale jeho osa ne (#242). Tak vypadají soubory z doby před #203.
         ///
         /// Třetí stav, který se nesmí slít s předchozími dvěma: `nespuštěno` by o doběhlém běhu
@@ -79,6 +88,9 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         static let code = "prochází kód"
         static let findings = "hlásí nálezy"
         static let missing = "průběh se neuložil"
+        /// Jediná fáze přeskočené dráhy (#518). Věta z návrhu, sekce 46, doslova — a říká **čí to
+        /// rozhodnutí bylo**: „nepustilo se“ samotné by znělo jako porucha.
+        static let routed = "nepustilo se — pravidlo repa"
     }
 
     let skill: String
@@ -164,11 +176,16 @@ extension Policy {
     ///   - running: reviewery, které právě běží. Ty, které osu ještě nemají, dostanou dráhu ve
     ///     stavu `queued` — bez toho by běžící review ukazovalo prázdný tab, tedy přesně ten stav,
     ///     který vypadá jako porucha.
+    ///   - skipped: koho routing na posledním průchodu nepustil a z jakých vzorů (#518). Bere se
+    ///     z `AppStore.routingSkips`, tedy z paměti — přeskočení se na disk neukládá (proč, je
+    ///     u `ReviewerRoutingPass`), takže po restartu z dráhy zbude `nespuštěno`. Je to ta
+    ///     pravda: co se nestalo, po sobě nic nenechalo, a příští běh rozhodne znovu.
     static func lanes(
         of timelines: [ReviewerTimeline],
         skills: [String],
         record: ReviewRecord? = nil,
-        running: Set<String> = []
+        running: Set<String> = [],
+        skipped: [String: [String]] = [:]
     ) -> [ReviewerLane] {
         let configured = Set(skills)
         let recorded = record?.runs.map(\.skillID) ?? []
@@ -188,6 +205,13 @@ extension Policy {
                 )
             }
             if running.contains(skill) { return queuedLane(of: skill, isConfigured: isConfigured) }
+            // Přeskočení stojí **před** dráhou bez osy (#518), protože je to fakt o **posledním**
+            // průchodu, kdežto běh bez osy je záznam z doby před ním. V praxi se ty dva nesejdou:
+            // přeskočení žije jen v paměti a běh, který v témhle sezení doběhl, si osu drží taky —
+            // pořadí je tu proto, aby o tom rozhodovalo pravidlo, ne to, co zbylo.
+            if let patterns = skipped[skill] {
+                return skippedLane(of: skill, patterns: patterns, isConfigured: isConfigured)
+            }
             if hasRun.contains(skill) {
                 return missingProgressLane(
                     of: skill,
@@ -257,6 +281,42 @@ extension Policy {
             // Dnes je to vždycky `true` — co v sadě není a nemá ani osu, ani běh, se do pořadí
             // drah nedostane. Předává se přesto: ta pravda drží jen pořadím větví ve `lanes`,
             // a to je slabší záruka než parametr.
+            isConfigured: isConfigured
+        )
+    }
+
+    /// Reviewer, kterého routing na tomhle diffu nepustil (#518).
+    ///
+    /// **Jedna fáze, ne tři vyšisované** — a je to opačné rozhodnutí než u `notStartedLane`
+    /// schválně: tam fáze říkají „nedošlo na ně“, tedy stav, který se ještě změní. Tady se
+    /// nezmění, dokud se nezmění pravidlo nebo diff, takže tvar běhu předstírat nemá co. Je to
+    /// tatáž úvaha jako u `queued` a `missingProgress` a je to i zákres z návrhu (sekce 46).
+    ///
+    /// **`nil` u nálezů a u ceny**: přeskočený reviewer nenahlásil nic (`nil`, ne nula — nula je
+    /// prázdný seznam, tedy tvrzení o kódu) a osu ani session nemá, takže mu nemá kdo nabídnout
+    /// `⧉` ani `▶`. Že běh **nic nestál**, se do hlavičky píše zvlášť; `RunUsage` na to není,
+    /// protože tam nula znamená „nahlásila to session“, a žádná nebyla.
+    private static func skippedLane(
+        of skill: String,
+        patterns: [String],
+        isConfigured: Bool
+    ) -> ReviewerLane {
+        ReviewerLane(
+            skill: skill,
+            state: .skipped(patterns: patterns),
+            phases: [ReviewerLane.Phase(title: ReviewerLane.Title.routed, detail: nil, state: .idle)],
+            lastTool: nil,
+            finishedAt: nil,
+            reportedFindings: nil,
+            usage: nil,
+            sessionID: nil,
+            worktree: nil,
+            droppedEntries: 0,
+            loadedSkill: nil,
+            intentGap: nil,
+            entries: [],
+            increment: nil,
+            wholeReason: nil,
             isConfigured: isConfigured
         )
     }
@@ -406,10 +466,10 @@ extension Policy {
         // vypadala k nerozeznání od té, co ještě nezačala.
         let marked = switch state {
         case .failed, .stopped, .timedOut, .interrupted: max(reached, 1)
-        // `notStarted` ani `missingProgress` sem nedojdou — dráha bez osy se skládá vlastní cestou
-        // (`notStartedLane`, `missingProgressLane`). Stojí u `queued`, protože kdyby došly, není
-        // v ose co značit.
-        case .running, .finished, .queued, .notStarted, .missingProgress: reached
+        // `notStarted`, `skipped` ani `missingProgress` sem nedojdou — dráha bez osy se skládá
+        // vlastní cestou (`notStartedLane`, `skippedLane`, `missingProgressLane`). Stojí
+        // u `queued`, protože kdyby došly, není v ose co značit.
+        case .running, .finished, .queued, .notStarted, .skipped, .missingProgress: reached
         }
 
         var phases: [ReviewerLane.Phase] = []
@@ -453,9 +513,9 @@ extension Policy {
         case .running: .running
         case .failed: .failed
         case .timedOut, .interrupted, .stopped: .stopped
-        // `notStarted` ani `missingProgress` sem nedojdou (viz `marked` výš); jsou u `queued`
-        // ze stejného důvodu.
-        case .finished, .queued, .notStarted, .missingProgress: .done
+        // `notStarted`, `skipped` ani `missingProgress` sem nedojdou (viz `marked` výš); jsou
+        // u `queued` ze stejného důvodu.
+        case .finished, .queued, .notStarted, .skipped, .missingProgress: .done
         }
     }
 }

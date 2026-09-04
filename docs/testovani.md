@@ -1322,6 +1322,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Fake `RepoCheckout` odpovídá na příbuznost `unknown`, ne `ancestor`**, a je to schválně: fake
   `git` nemá, takže nic neví — a `ancestor` by znamenal, že každý existující test, který o přírůstek
   nestojí, začne mít review nad přírůstkem. Bezpečná strana je v testech tatáž jako v aplikaci.
+- **Routing reviewerů (#518)** — čtyři oblasti, a **nejcennější tvrzení jsou zase negativní**,
+  jen obráceně než u přírůstku: tady se hlídá hlavně to, že se reviewer **pustí**, protože
+  přeskočení je platba chybějícím review.
+  - **`Policy.reviewersToRun`** — výčtem: bez pravidla, pravidlo bez použitelného vzoru (prázdný
+    seznam i samé mezery), **prázdný seznam souborů** (nezjištěné cesty se nesmí splést s „nic se
+    nezměnilo“), shoda na jediném souboru, žádná shoda (a že si přeskočení odnese **vzory**, bez
+    kterých se důvod nedá napsat) a víc reviewerů, kde každý odpovídá sám za sebe **v pořadí sady**.
+  - **`Policy.pathMatches`** — vzory obojí stranou, protože každá „nesedí“ je přeskočený reviewer:
+    jméno souboru u vzoru bez lomítka (`*.env*` **nesmí** sednout na složku `env/`), zakotvení od
+    korene (`Auth/**` na `src/Auth/…` nesedí), `*` v jedné složce proti `**` přes ně, `**/` i přes
+    **žádnou** složku, `?` jako právě jeden znak, zakončení lomítkem jako složka, velikost písmen
+    a prázdný vzor, který nesedí na nic.
+  - **`Policy.standingSkips`** — že přeskočení platí jen nad **touž hlavou** a **týmiž vzory**;
+    po pushi, po úpravě i po zrušení pravidla neplatí. Tohle drží bránu proti druhému běhu, takže
+    kdyby platilo víc, než má, automat by po pushi mlčel — a kdyby méně, platil by review dvakrát.
+  - **`AppStore`** — celá cesta: že přeskočený reviewer **nespustil session** (a ten druhý ano),
+    že jeho dráha **není čistá ani spadlá** a nic netvrdí o nálezech ani o ceně, že repo **bez
+    pravidla** pustí celou sadu a **na změněné cesty se vůbec nezeptá**
+    (`FakeRepoCheckout.askedChangedFilesSince` je prázdné), že selhání výpisu cest pustí celou sadu
+    a **řekne to** do stavového řádku, že **vyžádaný** běh routing nefiltruje, že sada přeskočená
+    celá **neutratí session ani nevytvoří záznam** (řádek zůstane `neběželo`, ne `čisté`) a že
+    **komentář nad touž hlavou nezaplatí review podruhé** — to je ta drahá chyba, kvůli které se
+    přeskočení vůbec pamatuje.
+  - **`Policy.lanes`** — že přeskočená dráha má **jednu** fázi (`nepustilo se — pravidlo repa`) ve
+    stavu `idle` a že **osa přebíjí přeskočení**, aby dráha po `Pustit přesto` ukázala běh.
+
+  **Fake `RepoCheckout` odpovídá na změněné cesty prázdným seznamem**, ze stejného důvodu jako
+  `unknown` u příbuznosti: fake `git` nemá, takže nic neví — a prázdný seznam nepřeskočí nikoho,
+  tedy tatáž bezpečná strana jako v aplikaci.
+
+  **Ověřeno vložením regrese** (dvakrát, viz *Kde se u #518 ověřila regrese vložením regrese* níž).
 
   **A `SettingsFieldsRenderTests` musely dostat vyšší okno** (1600 → 1800 bodů). `Form` je
   `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — nový přepínač s vysvětlením
@@ -9083,9 +9114,9 @@ téže hodnoty — a to je stav, na který se `withObservationTracking` po tiku 
 > každém tichém tiku, a i tehdy, když je mapa prázdná** — tedy i u člověka, který v diffu nikdy
 > nehledal.
 
-Z osmatřiceti map, které tik prořezává, je to **jediná** taková; ostatních sedmatřicet má hodnotu
-`Equatable`, takže se jejich zápis doopravdy nehlásí. Změřeno jednorázovým odběrem nad všemi
-osmatřiceti naráz nad **prázdným** storem — probudila se právě jedna, a jmenovala se.
+Z map, které tik prořezává, je to **jediná** taková; ostatní mají hodnotu `Equatable`, takže se
+jejich zápis doopravdy nehlásí. Změřeno jednorázovým odběrem nad všemi (v době #421 osmatřicet,
+od #518 devětatřicet) naráz nad **prázdným** storem — probudila se právě jedna, a jmenovala se.
 
 **Postup, který na to dosáhl** (pro příště, protože předchozí dvě kola na to nedosáhla):
 
@@ -9233,7 +9264,7 @@ mezi nimi rozdíl, na kterém #421 stálo pět kol:
   přes uzávěry z detailu, a tvrdí, že je tichý tik neprobudí. Ověřeno vložením regrese
   (`fileFolding = fileFolding.filter { _ in false }` ve `forget(whatIsNotIn:)` → `tichý tik probudil
   isFolded(_:in:)`; do #500 se ta mapa jmenovala `foldedFiles` a byla to množina).
-- **`quietTickWakesNoneOfTheMapsTheTickPrunes`** (#421) vyjmenuje naopak **všech osmatřicet map,
+- **`quietTickWakesNoneOfTheMapsTheTickPrunes`** (#421) vyjmenuje naopak **všech devětatřicet map,
   které tik prořezává** — tedy i ty, ze kterých diff nekreslí. To je ta strana, na které vada byla:
   první tvrzení bylo celou dobu zelené a **pravdivé**, protože `DiffView.body` `diffSearches` doopravdy
   nečte; čte je `searchActions` při skládání jeho hodnoty. Store je u toho **prázdný schválně**, protože
@@ -9620,3 +9651,68 @@ v testovacím hostu ověřit nedá (viz *Jak změřit fokus a klávesy*), takže
 **rozhodnutí** (`paletteBackspaceGoesBack(level:query:)`) a to, jestli se tlačítko se zkratkou
 doopravdy neobjeví, zkouší člověk v pauze na proklikání. Je to ta nejdražší chyba, kterou tady jde
 udělat — kdyby zkratka platila i nad napsaným dotazem, v paletě by přestalo jít mazat.
+
+## Routing reviewerů (#518)
+
+### Že `gh` vydá jen prvních sto souborů, se muselo změřit
+
+Routing potřebuje **úplný** seznam změněných cest: soubor, který se do odpovědi nevejde, znamená
+revieweera, který se nepustí — a nikdo se to nedozví. Nabízela se cesta bez jediného podprocesu
+navíc (`gh pr view` už v cestě review běží, takže by stačilo přidat pole `files`), a padla na
+měření:
+
+```bash
+gh pr list --repo kubernetes/kubernetes --state all --limit 100 \
+    --json number,changedFiles | jq 'sort_by(-.changedFiles) | .[0:3]'
+# [{"changedFiles":591,"number":141772}, {"changedFiles":303,…}, {"changedFiles":167,…}]
+
+time gh pr view 141772 --repo kubernetes/kubernetes --json files | jq '.files | length'
+#  → 100          (za 0,8 s)
+```
+
+**591 změněných souborů, v odpovědi 100** — a o zkrácení odpověď neřekne nic (žádné `pageInfo`,
+žádné celkové číslo). Poznat by se to dalo jedině dohadem („přišlo přesně sto, asi je jich víc“),
+což je přesně ten druh tichého odhadu, kterým se rozhoduje o chybějícím review. Proto cesty vydává
+`RepoCheckout.changedFiles(in:since:)` — lokální dotaz, který odpovídá úplně, a v cestě review
+navíc **zdarma** (pracovní kopie v tu chvíli existuje).
+
+### Že přejmenování schová původní cestu, se taky změřilo
+
+`--no-renames` u výpisu cest není opatrnost, ale odpověď na měření. Nad čerstvým repem, ve kterém
+se soubor **přesunul z hlídané složky**:
+
+```bash
+git mv src/Auth/User.php src/Legacy/User.php && git commit -qm move
+git diff --name-only HEAD~1...HEAD
+#  → src/Legacy/User.php                    ← původní cesta v seznamu **není**
+git diff --name-only --no-renames HEAD~1...HEAD
+#  → src/Auth/User.php
+#    src/Legacy/User.php
+```
+
+S detekcí přejmenování (výchozí stav) by tedy pravidlo `src/Auth/**` svého revieweera
+**nevzbudilo**, přestože se ta složka změnila — a byl by to zrovna ten druh změny, kvůli kterému
+takové pravidlo existuje.
+
+### Kde se u #518 ověřila regrese vložením regrese
+
+Dvě věci, na kterých issue stojí, a obě se rozbijí potichu. Regrese se vložila zvlášť, aby bylo
+poznat, **který** test ji chytá:
+
+1. **Routing nefiltruje** (`routedSkills` vrátí celou sadu místo `plan.skills`) → spadnou **čtyři**
+   testy `AppStoreRoutingTests`, mezi nimi *Reviewer, jehož cesty se nezměnily, session nespustí*
+   (`["php-review", "security-review"] == ["php-review"]`) a *Přeskočená dráha není čistá ani
+   spadlá* (`.finished == .skipped(…)`, tedy zrovna ta záměna, kvůli které je stav vlastní).
+2. **Brána zapomene na přeskočení** (`hasCurrentReview` bez `union(skipped)`) → spadne **právě
+   jeden** test, *Komentář nad hlavou s přeskočeným revieweerem session neutratí*, a hlásí
+   `["php-review", "php-review"]`: dvakrát zaplacený týž reviewer nad tou samou hlavou. Tohle je ta
+   drahá chyba a v okně by se poznala jedině na účtu.
+
+Zpátky opravené prochází obojí (22 testů ve dvou sadách).
+
+### Co se v harnessu ověřit nedá
+
+**Jak vypadá přeskočená dráha na obrazovce.** Kapsle `přeskočeno`, důvod se vzory, cena `0,00 $`
+a tlačítko `Pustit přesto` mají v hlavičce dráhy **jeden řádek**, takže se v úzkém panelu ořezávají
+— a to se pozná jedině z kresby (offscreen render podle *Jak si zkontrolovat, jak view vypadá*,
+nebo proklikáním). Texty samotné se tvrdí nad `ReviewerLaneText`, tedy bez kreslení.

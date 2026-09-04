@@ -431,4 +431,49 @@ struct ReviewerLaneTests {
         #expect(missing.map(\.state) == [.missingProgress])
         #expect((notStarted + queued + missing).allSatisfy { $0.intentGap == nil })
     }
+
+    // MARK: - Routing (#518)
+
+    /// Přeskočená dráha má **jednu** fázi, ne tři vyšisované jako `nespuštěno`: rozhodlo se, že
+    /// tady tenhle reviewer běžet nemá, takže tvar běhu předstírat nemá co. A netvrdí nic o ceně
+    /// ani o nálezech — session se nespustila.
+    @Test("Přeskočená dráha má jednu fázi a nic netvrdí o výsledku")
+    func skippedLane() throws {
+        let lanes = Policy.lanes(
+            of: [],
+            skills: ["php-review", "security-review"],
+            skipped: ["security-review": ["src/Auth/**"]]
+        )
+
+        #expect(lanes.map(\.skill) == ["php-review", "security-review"])
+        #expect(lanes.first?.state == .notStarted)
+        let skipped = try #require(lanes.last)
+        #expect(skipped.state == .skipped(patterns: ["src/Auth/**"]))
+        #expect(skipped.phases.map(\.title) == [ReviewerLane.Title.routed])
+        #expect(skipped.phases.map(\.state) == [.idle])
+        #expect(skipped.reportedFindings == nil)
+        #expect(skipped.usage == nil)
+        #expect(skipped.sessionID == nil)
+        #expect(skipped.intentGap == nil)
+        #expect(skipped.increment == nil)
+    }
+
+    /// Osa přebíjí přeskočení: reviewer, který v tomhle sezení běžel, má dráhu z osy — jinak by
+    /// `Pustit přesto` doběhlo a dráha by dál tvrdila, že se nepustilo nic.
+    @Test("Osa přebíjí přeskočení")
+    func aTimelineWinsOverASkip() throws {
+        let saved = timeline(skill: "security-review") { timeline in
+            timeline.record(.started(sessionID: "abc"), at: clock)
+            timeline.record(.findings(count: 0), at: clock)
+            timeline.finish(.finished, at: clock)
+        }
+
+        let lanes = Policy.lanes(
+            of: [saved],
+            skills: ["security-review"],
+            skipped: ["security-review": ["src/Auth/**"]]
+        )
+
+        #expect(lanes.map(\.state) == [.finished])
+    }
 }
