@@ -94,6 +94,10 @@ struct FileReadMarkRenderProbe {
         ]
         let read = Policy.readFileCount(in: states)
         let share = Policy.readFileShare(read: read, of: files.count)
+        // **Šířka z produkční funkce, ne konstanta** (nález Copilota na PR #558): sonda se má
+        // s oknem rozejít jedině tehdy, když se rozejde kresba — a hodnota přepsaná ručně na dvou
+        // místech se rozejde už při příští změně `Policy.treeColumnWidth`.
+        let width = Policy.treeColumnWidth(expanded: true)
 
         let scene = VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -110,7 +114,7 @@ struct FileReadMarkRenderProbe {
 
             if let share {
                 HStack(spacing: 0) {
-                    Rectangle().fill(Palette.ok).frame(width: (260 - 26) * share)
+                    Rectangle().fill(Palette.ok).frame(width: (width - 26) * share)
                     Spacer(minLength: 0)
                 }
                 .frame(height: 3)
@@ -126,11 +130,13 @@ struct FileReadMarkRenderProbe {
                 readStates: states
             ) { _ in }
         }
-        .frame(width: 260, height: 320, alignment: .topLeading)
+        .frame(width: width, height: Self.fileListHeight, alignment: .topLeading)
         .background(Palette.chrome)
 
+        // **Render má rozměr scény, ne o kus větší** (nález Copilota na PR #558): prázdný okraj
+        // kolem obrázku zhoršuje srovnání s mockupem a je to druhé místo, kde se šířka píše.
         let url = Self.outputDirectory.appending(path: "proslo-seznam.png")
-        try Self.render(AnyView(scene), width: 290, height: 340, to: url)
+        try Self.render(AnyView(scene), width: width, height: Self.fileListHeight, to: url)
         print("SONDA \(url.path)")
     }
 
@@ -186,6 +192,9 @@ struct FileReadMarkRenderProbe {
             toggleRead: {}
         )
     }
+
+    /// Výška sloupce v sondě — sedm souborů s nadpisy skupin (#506) se do 320 bodů vejde.
+    private static let fileListHeight = 320.0
 
     private static var outputDirectory: URL {
         URL(filePath: ProcessInfo.processInfo.environment["PRISM_RENDER_DIR"] ?? NSTemporaryDirectory())

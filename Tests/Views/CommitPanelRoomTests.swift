@@ -66,6 +66,11 @@ struct CommitPanelRoomTests {
     /// z #197; zákres tehdy mluvil o ~537, rozdíl byl šestibodový úchyt panelu).
     @Test("Se sloupcem a panelem zbude na diff kolem 480 bodů")
     func measuresWhatIsLeftForTheDiff() {
+        // **Ruční šířka se pinuje produkční funkcí** (tatáž oprava jako v render sondě, nález
+        // Copilota na PR #558): čísla níž jsou napsaná ručně schválně (jsou to čísla do
+        // dokumentace), ale rozejít se s aplikací potichu nesmí — po #506 by jinak celá suita
+        // měřila sloupec, který v okně není.
+        #expect(tree == Policy.treeColumnWidth(expanded: true))
         #expect(tabWidth - tree - panelDefault == 481)
         // Se složeným proužkem je to 749, bez sloupce a s proužkem 1009 — čísla, na kterých stojí
         // tvrzení níž. To poslední se #506 **nedotklo**: sloupec v něm složený není.
