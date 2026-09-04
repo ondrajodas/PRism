@@ -7418,3 +7418,71 @@ pushi u celého review. A **kvalita odpovědi na verdikty se v harnessu neměř�
 běhu doopravdy zavolá `ReportFindings` **a** ke všem starým nálezům se vyjádří, se pozná jedině na
 skutečných bězích — dokud se to nepotvrdí, je vidět `N bez odpovědi`, což je záměrně to, co se
 nedá přečíst jako „čisto“.
+
+## #518 — routing reviewerů podle změněných cest (M16)
+
+Druhé issue skupiny automatu (#517, #518, #519). Do #518 dostal každý reviewer ze sady každý PR:
+`security-review` čítal i PR, který mění jen README, takže se za něj platila session a v okně z něj
+vyšlo `čisté` — tedy tvrzení o kódu, na který se nikdo nedíval z důvodu, kvůli kterému ten reviewer
+existuje.
+
+**Reviewer teď může mít v nastavení repa vzory cest** (tabulka `Routing reviewerů`, řádek
+reviewer → vzory) **a pustí se jen tehdy, když aspoň jeden změněný soubor sedí na aspoň jeden z
+nich**. Rozhoduje o tom `Policy.reviewersToRun(files:rules:)`, tedy čistá funkce nad seznamem
+souborů diffu — ne runner a ne store.
+
+**Reviewer bez pravidla se pouští vždycky**, a je to ta podmínka, na které stojí, že tohle issue
+nemění chování repa, které si routing nenastavilo: bez pravidel se na změněné cesty **ani
+neptáme**, takže se nespustí ani podproces navíc (tvrdí to test). Prázdné pravidlo je totéž jako
+žádné — řádek v tabulce vzniká prázdný, takže by jedno kliknutí revieweera tiše vypnulo; odpovědí
+na „tady tenhle reviewer běžet nemá“ zůstává odebrání ze sady skillů.
+
+**Cesty se berou z pracovní kopie, ne z GitHubu, a rozhodlo o tom měření**: `gh pr view --json
+files` vydá **prvních sto** souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes`
+#141772 — 591 změněných souborů, v odpovědi 100). Routing nad zkráceným seznamem by přeskočil
+revieweera, jehož soubor stojí na sto prvním místě, takže odpovídá nový lokální dotaz
+`RepoCheckout.changedFiles(in:since:)` — úplně, a v cestě review zdarma. `--no-renames` je tam
+schválně: soubor přesunutý **z** hlídané složky se pak v seznamu objeví i pod původní cestou.
+
+**Přeskočený běh je vidět a není čisto.** V tabu `Průběh` má dráhu s kapslí `přeskočeno`, s důvodem
+(`routing: žádný soubor z src/Auth/**, *.env*`), s cenou `0,00 $` (nula je tady fakt, ne odhad —
+session se nespustila) a s tlačítkem `Pustit přesto`. Je to **čtvrtý stav dráhy**, ne varianta
+`nespuštěno`: to mluví o revieweerovi, na kterého ještě nedošlo, kdežto tohle o tom, na kterého se
+nedošlo schválně — tatáž hranice, jakou #383 zavedlo u `inconclusive`. **Ruční spuštění routing
+nefiltruje**, takže `Pustit přesto` je tatáž cesta jako `Pustit znovu` u spadlé session; pravidlo
+v nastavení se tím neruší.
+
+**Rozhoduje se před rozpočtem, zadáním i session.** Routing stojí hned za odhadem jazyka repa (tedy
+tam, kde je sada hotová) a před `canSpendSession` i `prepareIntent` — kdyby stál až v `runSkills`,
+zaplatilo by se u přeskočeného PR zadání (#345, jedna `claude -p` session) a strhl denní rozpočet
+za běh, který se nikdy nerozjel.
+
+**Dvě rozhodnutí, která z zadání neplynula.** Přeskočení se pamatuje **jen v paměti**
+(`AppStore.routingSkips`): je to odpověď na dnešní pravidlo nad dnešním diffem, takže na disku by
+tichounce zestárla, a odvodit ji znovu nic nestojí — cena je restart, po kterém z dráhy zbude
+`nespuštěno`. A **když se nepustí nikdo, nevznikne záznam**: prázdný záznam pro dnešní hlavu
+vyhrává v `Policy.currentRecords` nad tím zastaralým, takže by nálezy z předchozí hlavy z okna
+zmizely právě ve chvíli, kdy se na ně ptám. Řádek zůstane `neběželo` — nic neběželo, takže se nemá
+co tvrdit.
+
+**A jedna brána se kvůli tomu musela rozšířit**, jinak by routing zdražil místo zlevnil:
+`hasCurrentReview` počítá za hotové i to, co routing přeskočil (`Policy.standingSkips`, jedině
+týmiž vzory a nad touž hlavou). Bez toho by přeskočený reviewer neměl nikdy doběhlý běh, hotové
+review by vypadalo jako nedokončené a stačil by komentář pod PR (mění `updatedAt`), aby si automat
+zaplatil celé review znovu.
+
+Testů **5214** v 510 suitách, plný běh zelený (110,4 s, jedno známé `FontMetric`). Nové sady jsou
+dvě: `ReviewerRoutingTests` (výčet rozhodnutí, vzory obojí stranou, platnost přeskočení)
+a `AppStoreRoutingTests` (celá cesta, včetně toho, že se bez pravidel na cesty vůbec neptá);
+k tomu ruční sonda `RoutingRenderProbe` — přeskočená dráha ve čtyřech stavech a tabulka routingu
+v nastavení, obojí ve dvou šířkách a v obou tématech. `SessionToolSetsTests` i `SingleWayOutTests`
+prošly **beze změny** — routing nesahá na povolení ani na cesty ven.
+
+**Z renderu vyšla jedna oprava**: bez tlačítka (běží jiné review) zůstávala pod dráhou věta
+`Pustit ručně jde vždycky:` s dvojtečkou, za kterou nic nestálo. Věta má proto dvě podoby a
+rozhoduje o tom, jestli je vedle ní tlačítko — netvrdí přitom **proč** tam není, to view neví.
+
+**Zapsané mezery**: po restartu z přeskočené dráhy zbude `nespuštěno` (viz výš — je to pravda, ne
+ztráta); PR, jehož se netýká nikdo, zůstává v seznamu „na čem ještě neběželo“, takže ho hromadná
+akce nabídne znovu (nic to neutratí, jen připraví pracovní kopii); a **jak dráha vypadá v úzkém
+panelu, se tvrdit nedá** — kapsle, důvod a cena mají jeden řádek, takže se to zkouší kresbou.

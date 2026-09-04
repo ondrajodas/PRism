@@ -20,6 +20,13 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     /// Co „leží v pracovním stromě“ — podklad pro detekci jazyka.
     private let files: Result<[String], CheckoutError>
 
+    /// Co pull request „mění“ — podklad pro routing reviewerů (#518).
+    ///
+    /// **Výchozí prázdno, ne pár cest**: fake nemá `git`, takže o změněných cestách nic neví —
+    /// a prázdný seznam nepřeskočí nikoho (`Policy.reviewersToRun`), tedy tatáž bezpečná strana
+    /// jako v aplikaci. Testy, které o routing nestojí, tím nic netvrdí.
+    private let changed: Result<[String], CheckoutError>
+
     /// Pracovní strom, který se vydá místo vymyšlené cesty. Potřebuje ho jediný test —
     /// ten, který pouští **skutečný** podproces (#264): `Process` složku, která neexistuje,
     /// odmítne, takže by se běh rozsypal na `launchFailed` místo aby se rozjel.
@@ -40,6 +47,7 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         outcome: Result<URL, CheckoutError> = .success(URL(filePath: "/tmp/klon")),
         existing: [RepoID: URL] = [:],
         files: Result<[String], CheckoutError> = .success([]),
+        changed: Result<[String], CheckoutError> = .success([]),
         worktree: URL? = nil,
         ancestry: BranchAncestry = .unknown,
         gate: AsyncGate? = nil
@@ -49,6 +57,7 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         self.outcome = outcome
         self.existing = existing
         self.files = files
+        self.changed = changed
         self.worktree = worktree
         self.gate = gate
     }
@@ -74,6 +83,17 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
     }
 
     func trackedFiles(in worktree: URL) async throws -> [String] { try files.get() }
+
+    func changedFiles(in worktree: URL, since base: String) async throws -> [String] {
+        lock.withLock { changedQueries.append(base) }
+        return try changed.get()
+    }
+
+    /// Proti čemu se kdo ptal na změněné cesty. **Na počtu stojí tvrzení, že se `git` nespouštěl**
+    /// tam, kde repo žádné pravidlo routingu nemá (#518).
+    var askedChangedFilesSince: [String] { lock.withLock { changedQueries } }
+
+    private var changedQueries: [String] = []
 
     func ancestry(of sha: String, in worktree: URL) async -> BranchAncestry {
         lock.withLock { ancestryQueries.append(sha) }

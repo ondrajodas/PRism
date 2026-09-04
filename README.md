@@ -2064,13 +2064,36 @@ zastaral hned další verzí.
 
    Přepínač `Po pushi review jen přírůstku` je na stránce `Review a skilly`, **výchozí zapnuto**
    (přírůstek nic neztrácí) a repo si ho smí přebít.
-6. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
+6. **Routing podle změněných cest** (#518) — reviewer, který hlídá konkrétní část repa, se nemá
+   pouštět na PR, který se jí netýká: `security-review` do #518 čítal i PR, který mění jen README.
+   V nastavení repa je proto tabulka `Routing reviewerů` — řádek **reviewer → vzory cest**
+   (`src/Auth/**`, `*.env*`, `composer.lock`) —, a reviewer s pravidlem se pustí jen tehdy, když
+   aspoň jeden změněný soubor sedí na aspoň jeden jeho vzor.
+
+   **Reviewer bez pravidla se pouští vždycky**, takže repo, které si routing nenastavilo, se chová
+   do posledního podprocesu jako do #518: bez pravidel se na změněné cesty **ani neptáme**. Vzory
+   se čtou jako v `.gitignore` (vzor bez lomítka platí na jméno souboru kdekoli, s lomítkem od
+   korene repa; `**` přeskočí i podsložky, `*` zůstane v jedné) a **prázdné pravidlo je totéž
+   jako žádné** — řádek v tabulce vzniká prázdný, takže by jedno kliknutí revieweera tiše vypnulo.
+
+   **Přeskočený reviewer není čisto**, a je to v okně vidět: v tabu `Průběh` mu zůstane dráha
+   s kapslí `přeskočeno`, s důvodem (`routing: žádný soubor z src/Auth/**, *.env*`), s cenou
+   `0,00 $` a s tlačítkem `Pustit přesto` — **ruční spuštění routing nefiltruje**, protože je to
+   výslovný pokyn na konkrétního revieweera. Když se PR netýká žádný z nastavených reviewerů,
+   neutratí se session ani nevznikne záznam a řádek zůstane `neběželo`: nic neběželo, takže se
+   nemá co tvrdit.
+
+   Změněné cesty se berou **lokálně z pracovní kopie**, ne z GitHubu — `gh pr view --json files`
+   vydá prvních sto souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes` #141772:
+   591 změněných souborů, v odpovědi 100), a routing nad zkráceným seznamem by přeskočil
+   revieweera, jehož soubor stojí na sto prvním místě.
+7. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
-7. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
+8. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
    řaditelná tabulka pro nálezy, které ke konkrétnímu řádku nepatří (chybějící testy,
    architektonické poznámky).
 
-8. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
+9. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci **otevře záložku** toho pull requestu (na tabu, kde jsi
    v něm skončil) a dá okno dopředu. PR, který se mezitím ze seznamu odklidil, se neotevírá —
    a filtr, který ho schoval, klik zruší.
@@ -2236,7 +2259,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Prompt review** | Psaná **šablona** se zástupnými texty a **jádro**, které se připojí vždycky. Dělí se to proto, že věta o `ReportFindings` není styl, ale kontrakt: bez ní reviewer nálezy napíše textem a rozbitý sběr vypadá jako čisté review. Výchozí šablona je doslova ten text, co byl v kódu, prázdná znamená „ber výchozí“ a chybějící zástupný text je chyba u pole — neplatná šablona se neuloží a review se s ní nespustí. Globálně, ne per repo: prompt je „jak vypadá review u mě“, ne vlastnost repozitáře. |
 | **Časový limit běhu** | V nastavení, globálně i per repo, s rozsahem 5–60 minut a **bez volby „bez limitu“**: timeout je jediná pojistka proti session, která se zacyklí, kdežto denní strop a limit souběhu omezují jen počet běhů. Horní mez je vazba na účet (strop krát denní limit je nejhorší den), dolní proti tomu, aby limit dělal `timedOut` z review, které fungovalo. Putuje s požadavkem, takže rozjetý běh doběhne s tím svým; ke staršímu výsledku se číslo nepíše, protože uložený běh limit nenese. Sdílí ho kontrola nálezů — tatáž session, tentýž strom, tytéž peníze. |
-| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit). Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
+| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit, přírůstek po pushi a od #518 **routing reviewerů podle cest**). Routing je jediný klíč, který globální dvojče **nemá**: cesty popisují rozvržení jednoho repa, takže globální mapa by byla pravidlo, které je skoro všude vedle — a přeskočený reviewer je nejtišší podoba chybějícího review. Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review, odpovědi do vláken, komentáře pod PR, labely s reviewery, od #465 **merge vlastního PR** a od #466 **přetlačení vlastní větve** (`git push --force-with-lease`, jediný zápis do remote v celé aplikaci). Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl — u merge navíc **hlava v payloadu**, na kterou GitHub odpoví `409` a nemergne nic. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
@@ -2636,7 +2659,9 @@ App/                      zdrojáky aplikace — target PRism
                           co je adresa pull requestu, odkud se ta záložka vzala a co má ukázat, dokud
                           o PR mimo zdroje známe jen adresu (#531);
                           nad čím poběží který reviewer po pushi a proč (#517 — přírůstek nebo celý
-                          diff, přenesené nálezy a souhrn na dráze)
+                          diff, přenesené nálezy a souhrn na dráze);
+                          a **který reviewer se na tomhle diffu vůbec pustí** (#518 — vzory cest
+                          per repo, gitignore sémantika, důvod přeskočení na dráze)
   Publish/                jediná cesta ven: odeslání review, odpovědi do vláken a jejich vyřešení, komentář pod PR,
                           labely a vyžádání reviewera na vlastním PR (#392), založení nového labelu
                           v repozitáři (#413 — sedmá a jediná metoda, která píše mimo PR), brána z nastavení

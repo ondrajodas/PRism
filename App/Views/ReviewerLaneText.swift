@@ -15,6 +15,9 @@ enum ReviewerLaneText {
     static func state(_ state: ReviewerLane.State) -> String {
         switch state {
         case .notStarted: "nespuštěno"
+        // `přeskočeno`, ne `nespuštěno` (#518): druhé slovo znamená „ještě na něj nedošlo“, tohle
+        // „nedošlo na něj schválně“. Kapsle z návrhu, sekce 46, doslova.
+        case .skipped: "přeskočeno"
         case .missingProgress: "bez průběhu"
         case .queued: "ve frontě"
         case .running: "běží"
@@ -72,9 +75,53 @@ enum ReviewerLaneText {
             return "Skončilo s aplikací; nálezy se dotáhly z transcriptu."
         case .stopped:
             return "Nedoběhlo — běh někdo zrušil. Co v ose je, je všechno, co dorazilo."
+        case .skipped:
+            // `nil` jako u spadlé session, a ze stejného důvodu: přeskočení má vlastní blok, ve
+            // kterém stojí věta **i tlačítko**, a dvě věty o tomtéž pod sebou se přestanou číst
+            // obě.
+            return nil
         case .failed:
             return nil
         }
+    }
+
+    // MARK: - Routing (#518)
+
+    /// Důvod v hlavičce dráhy: z jakých vzorů nesedělo nic.
+    ///
+    /// **Vypisuje vzory, ne počet souborů.** „Žádný z 12 souborů nesedí“ neřekne, co s tím —
+    /// kdežto vzory jsou zrovna to, co se dá v nastavení opravit. Pořadí je pořadí konfigurace,
+    /// takže je člověk najde v tabulce tam, kde je napsal.
+    ///
+    /// **Prázdný seznam sem nedojde**: dráha bez vzorů by se nepřeskočila (viz `ReviewerRouting`).
+    /// Kdyby dojel, věta se scvrkne na `routing: žádný soubor nesedí` — pořád pravda, jen bez
+    /// návodu.
+    static func routingSkip(patterns: [String]) -> String {
+        guard !patterns.isEmpty else { return "routing: žádný soubor nesedí" }
+        return "routing: žádný soubor z \(patterns.joined(separator: ", "))"
+    }
+
+    /// Cena přeskočeného běhu. **Nula, ne prázdno**, a je to rozdíl proti zabité session:
+    /// tam `nil` znamená „nevíme, co to stálo“, tady se **ví**, že to nestálo nic. Kapsle
+    /// z návrhu, sekce 46.
+    static let freeRun = "0,00 $"
+
+    /// Věta a tlačítko pod přeskočenou dráhou. Říkají to, co jinak není odkud vědět: **routing
+    /// filtruje jen to, co si vybírá aplikace** — vyžádaný běh se pustí vždycky.
+    ///
+    /// **Dvě podoby, a dvojtečka rozhoduje**: bez tlačítka (běží jiné review, takže se pustit nedá)
+    /// by za dvojtečkou nestálo nic a věta by vypadala nedopsaně — změřeno offscreen renderem.
+    /// Ta druhá podoba přitom **netvrdí, proč** tlačítko není: to view neví, dostává jen `nil`.
+    static func runAnywayNote(hasButton: Bool) -> String {
+        hasButton ? "Pustit ručně jde vždycky:" : "Pustit ručně jde vždycky."
+    }
+
+    static let runAnyway = "Pustit přesto"
+
+    /// Nápověda tlačítka. Musí říct, že se pravidlo **neruší** — jeden běh není změna nastavení.
+    static func runAnywayHelp(patterns: [String]) -> String {
+        "Pustí tohohle revieweera teď, i když na jeho vzory nesedí žádný změněný soubor "
+            + "(\(patterns.joined(separator: ", "))). Pravidlo v nastavení tím zůstává, jak je."
     }
 
     /// Doběhlá session. Rozlišuje **tři** stavy, ne dva: nahlásila nálezy, nahlásila prázdný

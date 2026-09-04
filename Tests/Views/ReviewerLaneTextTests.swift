@@ -271,6 +271,28 @@ struct ReviewerLaneTextTests {
         #expect(ReviewerLaneText.stepArrivals(3) == "↓ 3 nové")
     }
 
+    // MARK: - Routing (#518)
+
+    /// Věta u přeskočené dráhy má **dvě podoby** a rozhoduje o tom, jestli je vedle ní tlačítko:
+    /// dvojtečka, za kterou nic nestojí, vypadá jako nedopsaný text (nález z offscreen renderu).
+    /// Ani jedna podoba přitom netvrdí **proč** tlačítko není — to view neví.
+    @Test("Přeskočená dráha: důvod nese vzory a věta se mění s tlačítkem")
+    func routingTexts() {
+        #expect(ReviewerLaneText.state(.skipped(patterns: [])) == "přeskočeno")
+        #expect(
+            ReviewerLaneText.routingSkip(patterns: ["src/Auth/**", "*.env*"])
+                == "routing: žádný soubor z src/Auth/**, *.env*"
+        )
+        // Prázdný seznam se sem nedostane (pravidlo bez vzorů se pouští), ale kdyby, nesmí
+        // z věty vypadnout `z ` a zůstat viset.
+        #expect(ReviewerLaneText.routingSkip(patterns: []) == "routing: žádný soubor nesedí")
+        #expect(ReviewerLaneText.runAnywayNote(hasButton: true).hasSuffix(":"))
+        #expect(!ReviewerLaneText.runAnywayNote(hasButton: false).hasSuffix(":"))
+        // Nápověda musí říct, že se pravidlo **neruší** — jeden běh není změna nastavení.
+        #expect(ReviewerLaneText.runAnywayHelp(patterns: ["src/Auth/**"]).contains("zůstává"))
+        #expect(ReviewerLaneText.runAnywayHelp(patterns: ["src/Auth/**"]).contains("src/Auth/**"))
+    }
+
     /// Nápověda přepínače musí říct, že se **neukládá** — jinak vypadá jako nastavení, které se
     /// pamatuje, a #242 zrušilo `progressFollowsTail` zrovna proto, že se pamatovalo zbytečně.
     @Test("Nápověda přepínače říká, že se nic neukládá")
@@ -284,7 +306,7 @@ extension ReviewerLane.State {
     /// Výčet pro test úplnosti. **Není v produkčním kódu**: `State` nese u `failed` detail, takže
     /// `CaseIterable` se na něm nedá odvodit — a zástupná hodnota patří do testu, ne do modelu.
     static let allCasesForTest: [ReviewerLane.State] = [
-        .notStarted, .missingProgress, .queued, .running, .finished, .timedOut, .interrupted,
-        .failed(detail: "kód 1"), .stopped,
+        .notStarted, .skipped(patterns: ["src/Auth/**"]), .missingProgress, .queued, .running,
+        .finished, .timedOut, .interrupted, .failed(detail: "kód 1"), .stopped,
     ]
 }

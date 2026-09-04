@@ -3188,6 +3188,87 @@ se přenášejí s odznakem), kdežto vypnuto znamená platit za druhé přečte
 **Rozbitá hodnota v souboru se sráží na `false`**, tedy na celé review: sráží se na **bezpečnou
 stranu**, a ta je tady opačná než default, protože celý diff přečte víc kódu.
 
+### Routing reviewerů podle změněných cest (#518)
+
+Reviewer, který hlídá konkrétní část repa, se nemá pouštět na PR, který se jí netýká —
+`security-review` do #518 čítal i PR, který mění jen README. Pravidlo je **per repo**
+(`RepositoryConfig.reviewerPaths`, mapa `skill → vzory cest`) a rozhoduje o něm
+`Policy.reviewersToRun(files:rules:)`, tedy čistá funkce nad seznamem souborů diffu.
+
+**Není to nový druh běhu ani nová session.** Routing jen zužuje seznam skillů, se kterým `runSkills`
+pracuje; co se pustí, je běh jako každý jiný. Novým stavem je jedině **dráha** v tabu `Průběh`
+(`ReviewerLane.State.skipped`).
+
+- **Bez pravidla se pouští vždycky, a je to ta podmínka, na které stojí celé issue.** Repo, které si
+  routing nenastavilo, se má chovat **do posledního podprocesu** jako do #518: `AppStore` se na
+  změněné cesty ptá jedině tehdy, když aspoň jedno pravidlo aspoň jeden vzor má
+  (`FakeRepoCheckout.askedChangedFilesSince` je v testu prázdné). Prázdné pravidlo je totéž jako
+  žádné — proč, je o odstavec níž.
+- **Cesty se berou z `gitu`, ne z GitHubu, a je to změřené.** `gh pr view --json files` vydá
+  **prvních sto** souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes` #141772:
+  591 změněných souborů, v odpovědi 100). Routing nad zkráceným seznamem by přeskočil revieweera,
+  jehož soubor stojí na sto prvním místě — a to je ta nejtišší podoba chybějícího review.
+  `RepoCheckout.changedFiles(in:since:)` odpovídá **úplně a lokálně**, tedy i zdarma.
+  **`--no-renames`**: soubor přesunutý **z** hlídané složky je pak v seznamu i pod původní cestou,
+  takže hlídaná složka svého revieweera vzbudí, i když z ní věci odešly.
+- **Rozhoduje se před rozpočtem, zadáním i session** — routing stojí v `review()` hned za odhadem
+  jazyka repa (tedy tam, kde je sada hotová) a **před** `canSpendSession` a `prepareIntent`.
+  Kdyby stál až v `runSkills`, zaplatilo by se u přeskočeného PR zadání (#345 — jedna `claude -p`
+  session) a strhl denní rozpočet za běh, který se nikdy nerozjel; je to tatáž lekce, kvůli které
+  se rozpočet strhává až v `runSkills`.
+- **Prázdný seznam vzorů se pouští, ne přeskakuje**, a prázdný **seznam souborů** taky. Obojí míří
+  na tutéž bezpečnou stranu: řádek v tabulce nastavení vzniká prázdný (tentýž mezistav jako
+  u `Configuration.activeSources`), takže by jedno kliknutí revieweera tiše vypnulo — a diff bez
+  cest znamená „nezjistilo se to“ stejně jako „nic se nezměnilo“. Odpovědí na „tady tenhle reviewer
+  běžet nemá“ je **odebrání ze sady skillů**, ne pravidlo, které nikdy nesedí.
+- **Selhání výpisu cest routing vypne, nepoloží review** — a **řekne to** do stavového řádku
+  (`configurationFailure`, „review běží celé bez routingu“). Bez té věty by se z okna nedalo
+  poznat, že nastavené pravidlo v tomhle běhu nikoho neovlivnilo.
+- **Vzory jsou gitignore, ne `fnmatch`** (`Policy.pathMatches`). `fnmatch` `**` nezná: s
+  `FNM_PATHNAME` se zastaví na prvním lomítku a bez něj by `*` přeskakovalo hranice složek, takže
+  `src/*` by sedělo na celý podstrom. Vzor bez lomítka se srovnává **se jménem souboru**
+  (`composer.lock`, `*.env*`), s lomítkem od korene repa; `**` přeskočí i lomítka a `**/` i žádnou
+  složku, `*` a `?` zůstanou v jedné složce, zakončení lomítkem znamená složku a velikost písmen
+  rozhoduje (rozhoduje o ní `git`).
+- **Ruční spuštění routing nefiltruje** (`routedSkills(…, only:)` vrací podmnožinu nedotčenou).
+  Vyžádaný běh na konkrétního revieweera je **výslovný pokyn člověka**, takže `Pustit přesto` na
+  dráze je tatáž cesta jako `Pustit znovu` po spadlé session — jedna closure, žádné druhé pravidlo.
+  Pravidlo v nastavení se tím **neruší**, což je i v nápovědě tlačítka.
+- **Přeskočení se pamatuje jen v paměti** (`AppStore.routingSkips`, `ReviewerRoutingPass`), a to je
+  vědomé: je to odpověď na **dnešní** pravidlo nad **dnešním** diffem, takže uložená na disk by
+  tichounce zestárla — po změně vzorů by v souboru leželo tvrzení, které neplatí. Odvodit ji přitom
+  nic nestojí. **Cena je restart**: po něm z přeskočené dráhy zbude `nespuštěno`, což je pravda —
+  co se nestalo, po sobě nic nenechalo. Uklízí se **spolu s osou** (`forget(whatIsNotIn:)`), protože
+  je to druhá polovina téže pravdy o posledním průchodu.
+- **Brána proti druhému běhu na tom stojí** (`hasCurrentReview`, `Policy.standingSkips`).
+  Přeskočený reviewer doběhlý běh nemá a nikdy mít nebude, takže by hotové review vypadalo jako
+  nedokončené a stačil by **komentář** pod PR (mění `updatedAt`), aby automat zaplatil celé review
+  znovu nad tou samou hlavou. Počítá se proto za hotové to, co routing přeskočil — ale jedině
+  **týmiž vzory a nad touž hlavou**: po pushi ani po úpravě pravidla přeskočení neplatí, takže se
+  review pustí, jak to člověk od změny nastavení čeká. **Sada přeskočená celá se počítá za hotovou
+  i bez záznamu**, protože běh, který se nestal, žádný nezaložil.
+- **Když se nepustí nikdo, nevznikne záznam** — a je to rozhodnutí proti druhé možnosti (uložit
+  záznam s prázdnými běhy). Prázdný záznam pro dnešní hlavu totiž **vyhrává** v
+  `Policy.currentRecords` nad tím zastaralým, takže by nálezy z předchozí hlavy z okna zmizely
+  právě ve chvíli, kdy se na ně člověk ptá. Řádek zůstane `neběželo`: nic neběželo, takže se nemá
+  co tvrdit — a `neběželo` není ani `čisté`, ani `selhalo`.
+- **Dráha je čtvrtý stav, ne varianta `nespuštěno`.** `přeskočeno` mluví o revieweerovi, na kterého
+  se **schválně** nedošlo, kdežto `nespuštěno` o tom, na kterého ještě nedošlo; a od `čisto` je to
+  nejdál — přeskočený reviewer o kódu neřekl **nic**. Je to tatáž hranice, kterou #383 zavedlo
+  u `inconclusive`. Dráha má **jednu** fázi (`nepustilo se — pravidlo repa`, jako u `queued`
+  a `missingProgress`), v hlavičce vzory a cenu **`0,00 $`** — tady je nula fakt, ne odhad, protože
+  se session nespustila; `RunUsage` na to není, tam nula znamená „tolik nahlásila session“.
+- **Osa přebíjí přeskočení**, takže po `Pustit přesto` dráha ukáže běh. V `Policy.lanes` stojí
+  přeskočení **před** dráhou bez osy (`missingProgress`), protože je to fakt o posledním průchodu;
+  v praxi se ty dva nesejdou (přeskočení žije jen v paměti a běh z tohohle sezení si osu drží),
+  pořadí je tam proto, aby o tom rozhodovalo pravidlo, ne to, co zbylo.
+- **Nastavení nemá přepínač „vlastní sada“**, na rozdíl od skillů a kategorií: routing globální
+  úroveň **nemá** (cesty popisují rozvržení jednoho repa, takže globální mapa by byla pravidlo,
+  které je skoro všude vedle), takže není co dědit — prázdná tabulka **je** výchozí stav. Nabídka
+  `Přidat reviewera` vypisuje **sraženou sadu toho repa**; pravidlo po skillu, který ze sady vypadl,
+  se **nemaže**, jen dostane odznak `mimo sadu` — tatáž úvaha jako u dráhy po odebraném
+  revieweerovi.
+
 ### Rozhovor nad PR — tab `Zeptat se` (#452)
 
 **Třetí vyjmenovaná session** vedle revieweera a dotažení textu issue. Odpovídá na otázku, na
@@ -8403,8 +8484,8 @@ takže se skládá jen z nich a `isRefreshing` ani `nextPoll` do něj nepatří.
 polovina opravy a **není** — `@Observable` na tomhle toolchainu zápis téže hodnoty **nehlásí**
 (změřeno vloženou regresí; pinuje to `PollObservationTests.writingTheSameValueDoesNotWake`). Ten
 `if` by tedy byl porovnání navíc, které nic nemění. Z téhož důvodu se nesahalo ani na
-`forget(whatIsNotIn:)`, který po tiku přepisuje osmatřicet map výsledkem `filter`u: u sedmatřiceti
-z nich vychází tvrzení o nezneplatnění se stráží i bez ní stejně.
+`forget(whatIsNotIn:)`, který po tiku přepisuje devětatřicet map výsledkem `filter`u (osmatřicet
+do #518): u všech kromě jedné vychází tvrzení o nezneplatnění se stráží i bez ní stejně.
 
 **Ta osmatřicátá je `diffSearches`, a je to celé #421.** Suprese zápisu téže hodnoty stojí na tom,
 že se ty dvě hodnoty dají **porovnat** — a `DiffSearchState` je `@Observable` **třída** (schválně,
@@ -8414,7 +8495,7 @@ mapa prázdná, tedy u každého, kdo v diffu nikdy nehledal. V okně z toho byl
 `DiffView`u za tik, a s ním ~197 průchodů `DiffRowView`u a ~414 dotazů na `DiffRow.id`; nad stem
 souborů ~1 253, respektive 2 614. Od #421 se tam zapisuje jen při změně (`count` stačí — `filter`
 umí jedině ubrat) a hlídá to `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad
-**všemi** osmatřiceti, ne jen nad tou jednou: příště má taková mapa spadnout tam, ne v okně.
+**všemi** z nich, ne jen nad tou jednou: příště má taková mapa spadnout tam, ne v okně.
 
 Dvě věci u toho stojí za zapamatování, protože se z nich dá spočítat, kde hledat příště:
 

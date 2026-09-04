@@ -117,4 +117,44 @@ struct ConfigStoreTests {
         #expect(loaded.configuration.global.pollIntervalSeconds == 60)
         #expect(loaded.configuration.global.maxConcurrentReviews == 3)
     }
+
+    /// Routing (#518) je nejnovější klíč u repa, takže ho **žádný** existující soubor nemá —
+    /// a jeho chybění nesmí zahodit override, který v souboru je. Tolerantní čtení se tady platí
+    /// tím, že prázdno znamená „pouštěj všechny“, tedy chování do #518.
+    @Test("Nastavení repa bez routingu se přečte a routing zůstane prázdný")
+    func readsARepositoryWithoutRouting() async throws {
+        let workspace = try TemporaryDirectory()
+        try write(#"{"repositories": {"cli/cli": {"skills": ["security"]}}}"#, to: workspace)
+
+        let loaded = await store(workspace).load()
+        let resolved = loaded.configuration.resolved(for: RepoID(owner: "cli", name: "cli"))
+
+        #expect(loaded.failure == nil)
+        #expect(resolved.skills == ["security"])
+        #expect(resolved.reviewerPaths.isEmpty)
+    }
+
+    /// Vzory se čtou tak, jak jsou zapsané — a **rozbitá hodnota se bere jako „nic jsem neřekl“**,
+    /// ne jako pravidlo, které nikdy nesedí: reviewer, který se kvůli překlepu nikdy nepustí, je
+    /// tišší ztráta než běh, o který nikdo nežádal. Zbytek nastavení u toho musí zůstat.
+    @Test("Routing se přečte, a rozbitý se zahodí bez zbytku nastavení")
+    func readsRoutingAndDropsABrokenOne() async throws {
+        let workspace = try TemporaryDirectory()
+        try write(
+            #"{"repositories": {"cli/cli": {"reviewerPaths": {"security": ["src/Auth/**"]}},"#
+                + #" "cli/go-gh": {"skills": ["a"], "reviewerPaths": "src/Auth/**"}}}"#,
+            to: workspace
+        )
+
+        let loaded = await store(workspace).load()
+
+        #expect(loaded.failure == nil)
+        #expect(
+            loaded.configuration.resolved(for: RepoID(owner: "cli", name: "cli")).reviewerPaths
+                == ["security": ["src/Auth/**"]]
+        )
+        let broken = loaded.configuration.resolved(for: RepoID(owner: "cli", name: "go-gh"))
+        #expect(broken.reviewerPaths.isEmpty)
+        #expect(broken.skills == ["a"])
+    }
 }
