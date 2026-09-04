@@ -511,6 +511,20 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
 3. **Nikdy nesahat na uživatelovy klony.** Aplikace pracuje výhradně ve své cache
    (`~/Library/Application Support/PRism/`). Mohou být rozdělané, na jiné branchi,
    mít vlastní worktrees.
+
+   **Mimo cache aplikace zapisuje na dvě místa a obojí je vyjmenované** — `~/.claude.json`
+   (`WorkspaceTrusting`, viz podmínka č. 2) a od #529 **systémovou přihlašovací položku**
+   (`LoginItemControlling` nad `SMAppService`). Ta druhá je jediný zápis, který přežije smazání
+   bundlu, takže má tři meze: jde **jedině z přepínače na stránce `Systém`**, brána je
+   `Policy.loginItemAvailability` **ve storu, ne zašedlý přepínač ve view** (slotová instance ani
+   bundle mimo `/Applications` se k zápisu nedostanou) a **stav se čte zpátky ze systému**, ne
+   z `config.json` — do konfigurace se o položce nezapisuje nic. Hlídá to `DockBadgeWiringTests`
+   spolu s odznakem v Docku: `App/Store/` nesmí znát `SMAppService` ani `dockTile`.
+
+   ```bash
+   grep -rn 'SMAppService\|dockTile' App | grep -vE ':[0-9]+: *///?' |
+       cut -d: -f1 | sort -u    # dva soubory: Environment/LoginItemControl, Views/DockBadgeTile
+   ```
 4. **Aplikace nikdy nedrží GitHub token.** Autentizace je delegovaná na `gh`.
 5. **Nálezy jsou klíčované `headSha`.** Nové commity nálezy zneplatní (stav
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
@@ -824,6 +838,17 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   dědí). Barva se nasazuje **jako základní atribut celého řetězce** a syntaxe ji přepisuje;
   hodnota je `Palette.ink`, ne poloprůhledný `labelColor`. A **kontrast paletového tokenu netvrdí
   nic o kresbě** — k měření barvy patří i tvrzení, že se ta barva **do textu dostane**.
+- **Odznak v Docku si aplikace kreslí sama, `badgeLabel` je změřená slepá ulička** (#529) —
+  `dockTile.badgeLabel` je pod přepínačem `Odznaky` v Oznámeních a u aplikace, která si o `.badge`
+  neřekla, ho Dock **potichu zahodí**: nasadí se, přečte se zpátky, `display()` ani restart Docku
+  nepomůže. Kreslí to `DockBadgeTileView` do `dockTile.contentView` (bez povolení, a ořezaně
+  plochou dlaždice), geometrii vydává `Policy.dockBadgeLayout`. Hlídají to
+  `DockBadgeTileRenderTests` (bitmapa) a `DockBadgeWiringTests` (`badgeLabel` v
+  `DockBadgeTile.swift` nesmí být). **Je to nejdražší případ pravidla z #478 v tomhle repu** —
+  šest zelených sad a v Docku nic; než na to sáhneš, přečti si [postup
+  měření](docs/testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529)
+  a [zamítnutou variantu „požádat o
+  `.badge`“](docs/architektura.md#odznak-si-aplikace-kreslí-sama--badgelabel-je-změřená-slepá-ulička).
 - **Sémantická škála se kreslí z palety, nikdy ze systému** (#432) — systémová
   `.green`/`.red`/`.orange`/`.yellow` je navržená jako **výplň** s bílým textem, kdežto tady je
   barva ze škály skoro vždycky **text nebo glyf na tlumeném washi**. Ze systému **zůstávají tři

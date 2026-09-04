@@ -17,6 +17,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Sendable {
     case notifications
     case repositories
     case runtime
+    case system
 
     var id: String { rawValue }
 
@@ -29,6 +30,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Sendable {
         case .notifications: "Notifikace"
         case .repositories: "Repozitáře"
         case .runtime: "Běh"
+        case .system: "Systém"
         }
     }
 
@@ -41,16 +43,17 @@ enum SettingsSection: String, CaseIterable, Identifiable, Sendable {
         case .notifications: "bell"
         case .repositories: "folder"
         case .runtime: "gauge.with.dots.needle.33percent"
+        case .system: "desktopcomputer"
         }
     }
 
     /// Skupina v seznamu. Odděluje **co se hlídá** od **jak se to dělá** a od **provozu** —
-    /// bez nadpisů je sedm položek pod sebou jen seznam.
+    /// bez nadpisů je osm položek pod sebou jen seznam.
     var group: Group {
         switch self {
         case .sources, .review, .diff: .work
         case .publishing, .notifications: .output
-        case .repositories, .runtime: .setup
+        case .repositories, .runtime, .system: .setup
         }
     }
 

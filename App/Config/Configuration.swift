@@ -154,9 +154,10 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     var issueTextTool: String?
     /// Po pushi se reviewer ptá **jen na přírůstek** a staré nálezy dostane jako materiál (#517).
     ///
-    /// **Výchozí zapnuto**, a je to jediná výchozí hodnota v tomhle souboru, která přidává
-    /// chování — proto k ní patří důvod: přírůstek nic neztrácí. Nálezy z minula se přenášejí na
-    /// novou hlavu s odznakem `trvá / vyřešeno / nejasné`, a co běh neposoudil, zůstane v okně
+    /// **Výchozí zapnuto**, a je to jedna ze **dvou** výchozích hodnot v tomhle souboru, které
+    /// přidávají chování (druhá je `dockBadge` z #529) — proto k ní patří důvod: přírůstek nic
+    /// neztrácí. Nálezy z minula se přenášejí na novou hlavu s odznakem
+    /// `trvá / vyřešeno / nejasné`, a co běh neposoudil, zůstane v okně
     /// jako `bez odpovědi`. Vypnuto by proti tomu znamenalo platit za druhé přečtení celého diffu
     /// a k tomu **přijít** o odpověď na „co ze starých nálezů trvá“ — dnes ji dává až kontrola
     /// (#150), tedy další session.
@@ -167,6 +168,20 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// **Per repo se přebít dá** (jako režim nebo limit): velké repo s dlouhými PR z toho těží
     /// nejvíc, malé se v prvním kole přečte celé tak jako tak.
     var incrementalAfterPush: Bool
+    /// Co se počítá do odznaku v Docku (#529).
+    ///
+    /// **Výchozí `waiting`**, tedy druhá výchozí hodnota v tomhle souboru, která přidává chování
+    /// (první je `incrementalAfterPush` výš) — a důvod je celé zadání #529: o frontě se dneska
+    /// dozvím jen z otevřeného okna nebo z notifikace, která přijde jednou a zmizí. Vypnuté by to
+    /// znamenalo přidat přepínač, o kterém se nikdo nedozví.
+    ///
+    /// **Do konfigurace to patří, protože je to preference, ne stav systému** — na rozdíl od
+    /// přihlašovací položky ze stejného issue, kterou `config.json` **nedrží** a čte se zpátky ze
+    /// systému (`Policy.loginItem`). Druhá kopie systémového stavu by po ručním vypnutí v Nastavení
+    /// systému ukazovala v okně opak toho, co platí.
+    ///
+    /// **Globálně, ne per repo**: dlaždice je jedna a mluví o celé frontě.
+    var dockBadge: DockBadgeMode
     /// Co se má hlásit notifikací (#86). Jen globálně — viz `NotificationSettings`.
     var notifications: NotificationSettings
 
@@ -192,6 +207,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         model: String?,
         issueTextTool: String? = nil,
         incrementalAfterPush: Bool = true,
+        dockBadge: DockBadgeMode = .waiting,
         notifications: NotificationSettings = NotificationSettings()
     ) {
         self.sources = sources
@@ -215,6 +231,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.model = model
         self.issueTextTool = issueTextTool
         self.incrementalAfterPush = incrementalAfterPush
+        self.dockBadge = dockBadge
         self.notifications = notifications
     }
 
@@ -316,6 +333,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         incrementalAfterPush = container.contains(.incrementalAfterPush)
             ? ((try? container.decode(Bool.self, forKey: .incrementalAfterPush)) ?? false)
             : standard.incrementalAfterPush
+        // Tolerantně jako vzhled a pohled na diff, ne přísně jako režim nebo odesílání (#529):
+        // nejhorší následek překlepu je **jiné číslo v Docku**, které se přepne jedním kliknutím
+        // v nastavení — nespustí review, neodešle nic a nedá se z něj nic ztratit. Přísnost jako
+        // u `incrementalAfterPush` by tady nechránila nic: tam se sráží na `false`, protože
+        // bezpečná strana je „přečti víc kódu“, kdežto u odznaku žádná bezpečná strana není.
+        dockBadge = (try? container.decode(DockBadgeMode.self, forKey: .dockBadge)) ?? standard.dockBadge
         // Chybějící klíč = výchozí (všechno zapnuté). Rozbitý obsah řeší `NotificationSettings`
         // sám, po jednotlivých přepínačích — celá sekce se kvůli jednomu překlepu zahazovat
         // nemá, jinak by se s ním vypnulo i to, co je napsané správně.
