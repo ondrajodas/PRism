@@ -63,13 +63,42 @@ nálezy** pod hlavičkou, že nové komentáře nejsou.
 ### Když nedoběhne vůbec
 
 Do review napíše jen „Copilot encountered an error and was unable to review this pull request“
-a příčina je vidět **jen v logu akce**. Jsou na to dvě známé příčiny a **pozná se to podle toho,
-jestli job vůbec běžel**:
+a příčina je vidět **jen v logu akce**. Jsou na to **tři** známé příčiny; první dvě se poznají
+podle toho, **jestli job vůbec běžel**, tu třetí odliší až text chyby v logu:
 
 - **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
   rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
+- **Job běžel, spadl po dvou sekundách a v logu stojí `Resource not accessible by integration`**
+  → výpadek na straně GitHubu, ne nic u nás. Viz hned níž.
+
+### Když Copilot nevidí na pull request (#542, PR #564)
+
+Job se rozjede, po dvou sekundách skončí a v logu stojí:
+
+```
+Fetching PR metadata for ondrajodas/PRism#564
+HttpError: Resource not accessible by integration - .../rest/pulls/pulls#get-a-pull-request
+Error creating PR review request: … Failed to fetch PR metadata for ondrajodas/PRism#564
+```
+
+**Není to velikost `CLAUDE.md`** — ta se u #542 nezměnila a téhož dne ve 14:20 na ní jiné kolo
+doběhlo do `success`. Poznávací znamení je, že to **netrefuje jeden pull request**: ve stejné
+minutě spadlo se stejnou hláškou i kolo nad `PRism#565` z cizí větve. Bot v tu chvíli nemá právo
+přečíst si `GET /pulls/{n}`, tedy potíž instalace GitHub Appky, na kterou z repa nedosáhneme.
+
+**Vyžádat znovu pomůže jedině tehdy, když výpadek mezitím skončil.** U #542 se to zkusilo
+**třikrát** (20:46, 20:48, 20:56) a pokaždé to spadlo stejně; run přitom pokaždé **vznikl a běžel**,
+takže to není spotřebovaný request z odstavce níž a `union: false` na tom nic nezmění. Cesta ven je
+počkat a zkusit to znovu později — a do té doby to **hlásit jako neověřenou mezeru**, ne mergovat
+s tím, že „Copilot nic nenašel“: nic nepřečetl.
+
+```bash
+# Rozpoznání: běžel job, a proč spadl.
+gh api repos/{owner}/{repo}/actions/runs/{id}/jobs --jq '.jobs[] | "\(.name) \(.conclusion)"'
+gh run view {id} --log-failed | grep -E "HttpError|PRism#[0-9]+"
+```
 
 ### Když se request spotřebuje mrtvým jobem
 

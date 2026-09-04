@@ -72,8 +72,7 @@ extension Policy {
             DiffFailureNotice(
                 title: "Diff je nad stropem GitHubu",
                 // **Zbytek pull requestu na diffu nestojí**, a je to půlka té informace: bez téhle
-                // věty vypadá prázdná plocha jako „tenhle pull request se nedá otevřít“, kdežto
-                // přehled, commity, kontroly i konverzace jsou vedle v tabech k přečtení.
+                // věty vypadá prázdná plocha jako „tenhle pull request se nedá otevřít“.
                 message: diffFileCapNote(limit: limit),
                 detail: response,
                 action: .openOnGitHub
