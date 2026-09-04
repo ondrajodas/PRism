@@ -201,10 +201,11 @@ struct BoardRenderProbe {
             // agentovi` i nad slévatelnou větví; od té doby vyhrává merge a pilulka řádku
             // zůstane, protože visí na autorovi a počtu, ne na stavu předání.
             //
-            // **Ani jeden z nich nesmí být blokující** (`Policy.defaultBlockingCategories`:
-            // `correctness`, `security`, `data-loss`) — blokující nález je **skutečná** překážka
-            // merge (`MergeObstacle.blockingFindings`), takže by scéna neukázala nový případ, ale
-            // starý. Přesně tak vypadal i PR z proklikání: `2 k předání` bez odznaku `blokuje`.
+            // **Neblokující zůstávají i po #563**, ale z jiného důvodu než do něj. Do #563 byl
+            // blokující nález skutečná překážka merge, takže by scéna s ním ukázala `Předat
+            // agentovi`, tedy starý případ místo nového; od #563 překážka není a scéna by vyšla
+            // stejně. Kategorie se **nemění**, protože takhle vypadal i PR z proklikání #515:
+            // `2 k předání` bez odznaku `blokuje` — a scéna má fotit ten, ne vymyšlený.
             store.reviewRecords[id] = ReviewRecord(
                 pullRequest: id,
                 headSha: Self.mergeableHead,

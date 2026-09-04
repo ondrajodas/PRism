@@ -10053,13 +10053,17 @@ automat.
    v `Předat agentovi` — tam tu informaci nesl jedině **pruh**, a ten teď mluví o merge. Zapsané
    jako cena rozhodnutí; kdyby začala chybět, je to nová kresba, ne návrat výjimky.
 
-   **A jedna hranice, která se snadno splete se změněným pravidlem: blokující nález je skutečná
-   překážka merge** (`MergeObstacle.blockingFindings`), takže PR s blokujícím nálezem zůstává
-   v `Předat agentovi` — a rozhoduje o tom `mergeOffer`, ne pravidlo o předání. Vypadá to jako
-   „předání zase přebilo merge“, ale je to jiná věta: takový PR **není mergnutelný**. Na PR
-   z proklikání to bylo poznat i v řádku — `2 k předání` **bez** odznaku `blokuje`. Vyšlo to
-   najevo při stavbě sondy: s nálezy kategorie `correctness` scéna ukazovala `Předat agentovi`,
-   protože blokovaly, a bylo by to měřidlo, které tvrdí něco jiného, než co se opravovalo.
+   **~~A jedna hranice, která se snadno splete se změněným pravidlem: blokující nález je skutečná
+   překážka merge~~ — ZRUŠENO #563.** Do #563 to platilo takhle: PR s blokujícím nálezem nebyl
+   mergnutelný (`MergeObstacle.blockingFindings`), takže zůstával v `Předat agentovi`, a rozhodoval
+   o tom `mergeOffer`, ne pravidlo o předání. Od #563 blokující nález překážka **není** — je to
+   názor revieweera na kód, ne stav pull requestu —, takže mergnutelný PR patří do `K merge`
+   i s ním; rozbor je v [*Blokující nález není překážka
+   merge*](#blokující-nález-není-překážka-merge-563). Staré tvrzení tu zůstává proto, že podle něj
+   je postavená scéna sondy: s nálezy kategorie `correctness` ukazovala `Předat agentovi`, tedy
+   přesně to, co se opravovalo, a kategorie v ní proto zůstávají neblokující (dneska už ne kvůli
+   překážce, ale kvůli tomu, že takhle vypadal PR z proklikání — `2 k předání` **bez** odznaku
+   `blokuje`).
 5. **Tichý pruh je fallback, ne pravidlo** — a proto je `Předat agentovi` **poslední pravidlo,
    které něco tvrdí** (pokyn ze třetího proklikání #515). `waiting` znamená „o tomhle PR se nedá
    tvrdit nic“, takže kdyby se předání posunulo **za** něj, do `Předat agentovi` by nespadlo
@@ -10998,9 +11002,10 @@ je to ten nejdražší druh rozejití.
 - **`absent` na cizím PR** — akce se nekreslí **vůbec**, ani nadpis sekce. Mergnout frontu někoho
   jiného se odsud nedělá nikdy, takže zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“.
 - **`blocked([důvody])`** tam, kde se stav **mění**: vypnutá brána, červený check, větev pozadu,
-  konflikt, chráněná větev, vlastní blokující nález, nenačtený stav. Důvody jsou **vyjmenované, ne
-  jedna věta**, protože každý vede jinam — a jsou **v panelu**, ne jen v nápovědě pod kurzorem
-  (zašedlé tlačítko bez věty je otázka, na kterou okno neodpoví; tatáž úvaha jako u #392).
+  konflikt, chráněná větev, nenačtený stav. Důvody jsou **vyjmenované, ne jedna věta**, protože
+  každý vede jinam — a jsou **v panelu**, ne jen v nápovědě pod kurzorem (zašedlé tlačítko bez věty
+  je otázka, na kterou okno neodpoví; tatáž úvaha jako u #392). **Vlastní blokující nález mezi nimi
+  od #563 není** — viz [*Blokující nález není překážka merge*](#blokující-nález-není-překážka-merge-563).
 - **`allowed`** jedině tehdy, když nesvítí žádný z nich.
 
 Dvě rozhodnutí, která nejsou zjevná:
@@ -11033,7 +11038,7 @@ aniž by mergi vadil ([rozbor](#zápis-do-remote--branchpushing-466)).
 
 Co sekci skládá (`App/Policy/BranchMerge.swift` a `App/Policy/BranchSyncOffer.swift`):
 
-- **`Policy.branchSection(editing:detail:commits:status:checks:blockingFindings:sync:)`** — celá sekce,
+- **`Policy.branchSection(editing:detail:commits:status:checks:sync:)`** — celá sekce,
   nebo `nil` na cizím PR. Jediné místo, které skládá řádky stavu i obě nabídky.
 - **`Policy.mergeOffer(…)`**, **`Policy.mergePlan(of:commits:)`**, **`Policy.branchFacts(…)`** (#465).
 - **`Policy.branchSyncOffer(editing:plan:detail:status:sync:)`** — smí se srovnat, a když ne, proč.
@@ -11096,6 +11101,45 @@ nejsou zjevné:
   prošlo, a obě chyby to říkají samy. A *„se nepovedlo“* říká `PublishError.unknown` **taky**
   (*„Odeslání se nepovedlo: …“*), takže by to v panelu stálo dvakrát za sebou. Co se akce jmenuje,
   nese tlačítko o dva body výš — tatáž úmluva jako u chyby labelů.
+
+#### Blokující nález není překážka merge (#563)
+
+**Ruší rozhodnutí z #465.** Do #563 vydával `Policy.mergeOffer` dvanáctou překážku výčtu
+`MergeObstacle.blockingFindings(N)` — *„Reviewer hlásí blokující nález.“* — a to znamenalo, že se
+mergnutelný pull request s jedním potvrzeným nálezem kategorie `correctness` nedal mergnout
+a **na desce ležel v `Předat agentovi`**. Vyšlo to z proklikání na
+[`keboola/platform-libraries#566`](https://github.com/keboola/platform-libraries/pull/566):
+`mergeable: true`, `mergeable_state: clean`, není draft, checky 22 pass / 22 skipping / 0 fail —
+a přesto `handOff`, protože jeden nález o `verifyToken()` nikdo neodmítl.
+
+**Je to tatáž třída, kterou `isMergeReady(_:)` už jednou vyřešilo pro `notAllowed`, jen o úroveň
+dál.** Brána odesílání mluví o tom, co smí *aplikace*; blokující nález o tom, co si o kódu myslí
+*reviewer*. Ani jedno není věta o tom, jak stojí *pull request*, a `mergeOffer` odpovídá na to
+druhé.
+
+**Výjimka v desce se ale nepřidávala — překážka mizí z výčtu.** Nechat nález v `mergeOffer`
+a obejít ho v `isMergeReady` by dalo PR v `K merge` se **zakázaným** `Mergnout`: dvě odpovědi na
+jednu otázku, a to je v tomhle repu zakázaný vzor. `isPublishingGate` proto zůstává **jediná**
+výjimka a pruh s tlačítkem se nemají čím rozejít. S případem odešla i jeho věta — stav, který nikdo
+nečte, svádí spolehnout se na něj —, a v panelu tím nezbyla mrtvá větev: výstraha mapuje
+`obstacles.map(\.sentence)`, takže se nekreslila podle případů.
+
+**Co se tím nemění.** Blokující nález se dál počítá do odznaku na řádku (`QueueRow.blocking`,
+`Policy.queueRow`), do osy filtru *jen blokující* (`AppStore.hasBlockingFinding`), do souhrnu fronty
+(`Policy.summary`), do notifikace o doběhlém review a do pořadí řádků (`Policy.urgency`). Mění se
+**jedině** jeho role v `mergeOffer`. Nález je vidět jako nález — v panelu, na řádku a v okraji —,
+ne jako zámek na nevratné akci.
+
+**A jedna hranice zůstává: spadlý check blokuje dál.** `mergeable: true` je věta o konfliktu, ne
+o zelené CI, takže přísnost vůči `UNSTABLE` z #465 platí beze změny. Nabídnout nevratnou akci nad
+rozbitým buildem je jiná třída než nabídnout ji nad nálezem, o kterém člověk ví: nález je **věta**,
+kterou si člověk přečte a rozhodne se, kdežto červený check je stav, o kterém se rozhodovat nedá.
+Ty dvě věty se nesmí rozejít, a proto je na ně **jeden** test
+(`BranchMergeTests.doesNotBlockOnABlockingFinding`).
+
+**Zamítnutá varianta: „jen pruh, tlačítko blokuje dál“** — tedy nechat překážku v `mergeOffer`
+a vyřadit ji jenom z `isMergeReady`. Je v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563).
 
 ### Našeptávání emotikonů (#483)
 

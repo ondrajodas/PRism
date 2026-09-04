@@ -67,9 +67,14 @@ extension Policy {
         case notOpen(PullRequestState)
         /// Check neprošel. Prázdný seznam znamená „GitHub hlásí spadlý check, ale jména nemáme“ —
         /// checky se dotahují zvlášť a nemusí být načtené.
+        ///
+        /// **Zůstává i po #563, a je to hranice, ne přehlédnutí.** `mergeable: true` je věta
+        /// o konfliktu, ne o zelené CI, a nabídnout nevratnou akci nad rozbitým buildem je jiná
+        /// třída než nabídnout ji nad nálezem, o kterém člověk ví.
         case failingChecks([String])
-        /// Můj reviewer hlásí blokující nález.
-        case blockingFindings(Int)
+        // **`blockingFindings` tady od #563 není**, a je to zrušené rozhodnutí z #465, ne mezera
+        // ve výčtu — zdůvodnění je u `mergeOffer`. Zapsané je to tady proto, že jinak by ho příště
+        // někdo vrátil jako „chybějící“ případ.
 
         /// Věta do panelu. **Ke každé patří i další krok** tam, kde nějaký je — důvod, ze kterého
         /// nevyplývá, co s ním, je jen zpráva o smůle.
@@ -108,10 +113,6 @@ extension Policy {
                 "Pull request není otevřený — je \(state.czechLabel)."
             case .failingChecks(let names):
                 Policy.failingChecksSentence(names)
-            case .blockingFindings(let count):
-                count == 1
-                    ? "Reviewer hlásí blokující nález."
-                    : "Revieweři hlásí \(Plural.czech(count, one: "blokující nález", few: "blokující nálezy", many: "blokujících nálezů"))."
             }
         }
     }
@@ -177,7 +178,6 @@ extension Policy {
         commits: [PullRequestCommit]?,
         status: BranchStatusState?,
         checks: [PullRequestCheck]?,
-        blockingFindings: Int,
         sync: BranchSyncState? = nil,
         /// **Umí aplikace slít konflikt?** (#467) Prochází dál do `branchSyncOffer` a rozhoduje,
         /// jestli je konflikt překážka. Výchozí `false` proto, že testy sekce, které o slévání
@@ -206,8 +206,7 @@ extension Policy {
             proposal: proposal,
             state: detail?.state,
             status: status,
-            checks: checks,
-            blockingFindings: blockingFindings
+            checks: checks
         )
         let syncPlan = branchSyncPlan(of: detail, status: status)
         return BranchSection(
@@ -315,13 +314,24 @@ extension Policy {
     ///
     /// **Pořadí důvodů je pořadí, ve kterém se s nimi dá něco dělat**: napřed to, co je mimo větev
     /// (brána, stav PR), pak to, co ještě nevíme, a nakonec to, co se opravuje prací na ní.
+    ///
+    /// **Vlastní blokující nález mezi překážkami od #563 není** (ruší rozhodnutí z #465). Je to
+    /// **tatáž třída, kterou už jednou vyřešilo `isMergeReady(_:)` pro `notAllowed`**, jen o úroveň
+    /// dál: brána odesílání mluví o tom, co smí *aplikace*, kdežto nález o tom, co si o kódu myslí
+    /// *reviewer* — a ani jedno není věta o tom, jak stojí *pull request*. Odsud se vypisuje jedině
+    /// to druhé.
+    ///
+    /// Výjimka v desce (`isPublishingGate`) z toho ale **nevznikla** — překážka mizí rovnou
+    /// **z výčtu**, protože **pruh a tlačítko musí odpovídat stejně**: PR v `K merge` se zakázaným
+    /// `Mergnout` jsou dvě odpovědi na jednu otázku. Nález je vidět jako nález — v panelu, na řádku
+    /// a v okraji —, ne jako zámek na nevratné akci; do odznaku na řádku, do souhrnu, do filtru
+    /// i do notifikací se počítá dál (`Policy.blockingCount(in:categories:)`).
     static func mergeOffer(
         editing: MetadataEditing,
         proposal: MergeProposal?,
         state: PullRequestState?,
         status: BranchStatusState?,
-        checks: [PullRequestCheck]?,
-        blockingFindings: Int
+        checks: [PullRequestCheck]?
     ) -> MergeOffer {
         guard editing.isVisible else { return .absent }
 
@@ -351,7 +361,6 @@ extension Policy {
         }
 
         obstacles += checkObstacles(status: status?.status, checks: checks)
-        if blockingFindings > 0 { obstacles.append(.blockingFindings(blockingFindings)) }
 
         // **Sjednocuje se tady, ne při kreslení.** `draftPullRequest` umí přijít ze stavu PR
         // i z `mergeStateStatus`, a dvě stejné věty pod sebou vypadají jako dvě různé překážky.
