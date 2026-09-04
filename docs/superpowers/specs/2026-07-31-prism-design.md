@@ -6077,10 +6077,13 @@ se s tou první rozejde (tatáž úvaha jako u `designPill`, #348). Je na to tvr
 v jednom testu — pruh **a** obsah řádku —, protože samotný přesun by tu informaci ztratil a to je
 horší vada než špatný pruh.
 
-**Hranice, kterou to nemění: blokující nález je skutečná překážka merge.** PR s blokujícím
-nálezem (`correctness`, `security`, `data-loss` — `Policy.defaultBlockingCategories`) není
-mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje o tom `mergeOffer`, ne
-`outranksMerge`. Zvenčí to vypadá jako „předání zase přebilo merge“, ale je to jiná věta.
+**~~Hranice, kterou to nemění: blokující nález je skutečná překážka merge.~~ — ZRUŠENO #563.**
+Platilo to takhle: PR s blokujícím nálezem (`correctness`, `security`, `data-loss` —
+`Policy.defaultBlockingCategories`) není mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje
+o tom `mergeOffer`, ne `outranksMerge`. Od #563 nález překážka **není**, takže mergnutelný PR patří
+do `K merge` i s ním — a je to dopočítání téhož pokynu, ne obrat (viz [záznam rozhodnutí
+u #563](#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563)). Zvenčí to vypadalo jako
+„předání zase přebilo merge“, ale byla to jiná věta.
 **Našlo se to při stavbě sondy** — první verze scény měla nálezy kategorie `correctness`
 a vyrendrovala `Předat agentovi`, tedy přesně to, co se opravovalo; sonda by tak tvrdila
 opak toho, co měla ukázat. Že tohle nebyl případ z proklikání, je vidět v jeho řádku:
@@ -6116,10 +6119,12 @@ není poznat, že to nevyřízené je zrovna cizí odpověď ve vlákně. Nebylo
 tuhle informaci nesl jedině **pruh** —, takže je to cena rozhodnutí, ne nová vada. Kdyby začala
 chybět, je to **nová kresba** (značka v řádku, nebo tvar pilulky), ne návrat výjimky.
 
-**Hranice, kterou to nemění (a je to tatáž jako v prvním kole): blokující nález je skutečná
-překážka merge.** PR s blokujícím nálezem není mergnutelný, takže zůstává v `Předat agentovi`;
-rozhoduje o tom `mergeOffer`. Ověřeno v testu z obou stran, včetně toho, že **nemergnutelný**
-`changed` v `Předat agentovi` zůstává.
+**~~Hranice, kterou to nemění (a je to tatáž jako v prvním kole): blokující nález je skutečná
+překážka merge.~~ — ZRUŠENO #563.** Platilo to takhle: PR s blokujícím nálezem není mergnutelný,
+takže zůstává v `Předat agentovi`; rozhoduje o tom `mergeOffer`. Ověřeno bylo v testu z obou stran,
+včetně toho, že **nemergnutelný** `changed` v `Předat agentovi` zůstává — a **ta druhá polovina
+platí dál**, jen se „nemergnutelný“ přestal skládat z nálezů (viz [záznam rozhodnutí
+u #563](#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563)).
 
 **5. ~~`Předat agentovi` jde na poslední místo~~ — ZRUŠENO třetím kolem.** Zapsané tady zůstává
 proto, že jinak by z historie vypadl commit, který pořadí přeskládal, a příští session by ho
@@ -6769,3 +6774,68 @@ obrazovky srazilo o 140, 80 a 200 bodů — pod hlavičkou úklidu. Zůstala pro
 a zapsalo šířku; čtyři místa v repu si to přečetla jako pravidlo o `ideal*` a jedno issue z toho
 udělalo zadání. Když se zadání odvolává na starší měření, patří k práci ověřit, že to měření tvrdí
 zrovna to, co se z něj cituje — a ne to, co z něj plyne „přece“.
+
+### Záznam rozhodnutí — blokující nález není překážka merge (#563)
+
+**Ruší zapsané rozhodnutí z #465** — to, podle kterého `Policy.mergeOffer` vydávalo dvanáctý
+případ `MergeObstacle.blockingFindings(N)` (*„Reviewer hlásí blokující nález.“*). Staré zůstává
+v záznamech u #465 i u #515 přeškrtnuté, protože podle něj je postavená scéna sondy desky
+a v obou kolech #515 se o něj opíralo tvrzení „tohle se nemění“.
+
+**Co to vyrobilo.** [`keboola/platform-libraries#566`](https://github.com/keboola/platform-libraries/pull/566)
+ležel v `Předat agentovi` s `mergeable: true`, `mergeable_state: clean`, bez draftu a s checky
+22 pass / 22 skipping / 0 fail. Držel ho tam **jeden** potvrzený nález kategorie `correctness`
+z `code-review:code-review` (`libs/input-mapping/src/Table/Strategy/Local.php:22`), který nikdo
+neodmítl.
+
+**Proč se pokyn z #515 splnil jen napůl.** Třetí proklikání #515 znělo *„co je mergeable, tak by
+mělo být k mergnutí“*. Implementace z toho vzala jedině to, že slévatelnost přebíjí předání
+(`Policy.lane`), ale `isMergeReady(_:)` se dál ptalo `mergeOffer` — a ta mezi překážky počítala
+**náš vlastní názor na kód**, ne stav pull requestu na GitHubu.
+
+**Rozhodnutí (4. 9. 2026, uživatel).** Blokující nález přestává být překážkou merge **úplně**:
+mizí z `Policy.mergeOffer`, ne jen z `isMergeReady`. Je to tatáž třída, kterou `isMergeReady` už
+jednou vyřešilo pro `notAllowed` — brána odesílání mluví o tom, co smí *aplikace* —, jen o úroveň
+dál: nález mluví o tom, co si o kódu myslí *reviewer*.
+
+**Zamítnutá varianta: „jen pruh, tlačítko blokuje dál“.** Tedy nechat překážku ve výčtu a vyřadit ji
+jenom z `isMergeReady`, jako druhou výjimku vedle `isPublishingGate`. Zamítnuto, protože **pruh
+a tlačítko musí odpovídat stejně**: PR v `K merge` se zašedlým `Mergnout` jsou dvě odpovědi na jednu
+otázku, a to je v tomhle repu zakázaný vzor (tatáž úvaha jako u „řádek stavu a zašednutí skládá
+jedno místo“ v #465). Nález je vidět jako nález — v panelu, na řádku a v okraji —, ne jako zámek na
+nevratné akci.
+
+**Případ se ruší i s větou.** Držet `blockingFindings` v enumu bez volajícího by byl přesně ten
+vzor, na který Copilot v tomhle repu chodí (*stav, který se drží, ale nikdo ho nečte*). Mrtvá větev
+v kreslení po něm nezbyla: výstraha v `PanelBranchView` skládá `obstacles.map(\.sentence)`, takže se
+nikdy nekreslila podle případů. Odešel s ním i parametr `blockingFindings:` ze `branchSection(…)`
+a `mergeOffer(…)` a privátní `AppStore.blockingFindingCount(for:)`.
+
+**Druhé rozhodnutí (tamtéž): spadlý check blokuje dál.** `mergeable: true` je věta o konfliktu, ne
+o zelené CI. Nabídnout nevratnou akci nad rozbitým buildem je jiná třída než nabídnout ji nad
+nálezem, o kterém člověk ví — nález je věta, kterou si člověk přečte a rozhodne se; červený check je
+stav, o kterém se rozhodovat nedá. Přísnost vůči `UNSTABLE` z #465 tedy zůstává, a protože se ty dvě
+věty rozejít nesmí, stojí obě v **jednom** testu.
+
+**Co se tím nemění.** Blokující nález se dál počítá do odznaku na řádku (`QueueRow.blocking`), do
+osy filtru *jen blokující*, do souhrnu fronty (`Policy.summary`), do notifikace o doběhlém review
+a do pořadí řádků (`Policy.urgency`). Mění se **jedině** jeho role v `mergeOffer`. Vzhled se nemění
+vůbec — mění se, do kterého pruhu řádek spadne —, takže `docs/navrh.html` zůstal beze změny.
+
+**Co to udělalo s testy.** `WorkLaneTests.respectsEveryRealObstacle` prochází **deset** překážek
+místo jedenácti; `BranchMergeTests.doesNotBlockOnABlockingFinding` drží obě věty z rozhodnutí nad
+scénou z #566 a `neverSpeaksAboutFindings` prochází výčet všech jedenácti případů (včetně
+`notAllowed`) s vyčerpávajícím `switch`em, který novou překážku nepustí přeložit. Nejcennější je
+`AppStoreMergeTests.keepsTheBlockingFindingVisible`: tvrdí, že se **nic neztratilo** — pruh
+`K merge`, nabídka `allowed`, odznak na řádku, osa filtru i souhrn —, protože přesun do `K merge` se
+dá udělat i tak, že nález cestou zmizí, a prázdný odznak vypadá jako „čisto“. Sonda sekce `Větev`
+přišla o scénu `vetev-blokujici-nalez`: od #563 by se nakreslila stejně jako `vetev-zeleno`, a dvě
+kopie jednoho snímku tvrdí, že je co srovnávat.
+
+**Ověřeno vložením regrese, a chytla se dvakrát.** Vrácení případu do enumu položí
+`neverSpeaksAboutFindings` **při překladu** (`switch must be exhaustive`); s doplněným `case`
+v tom `switch`i pak vrácení `blockingFindings` do `mergeOffer` shodí
+`keepsTheBlockingFindingVisible` **čtyřmi** tvrzeními (nabídka, prázdný výčet, předfiltr desky
+a chybějící řádek v pruhu `K merge`). `WorkLaneTests` v tom **nefigurují** — jejich výčet je
+literál v testu, takže o novém případu enumu nevědí; hlídají, co `isMergeReady` s překážkou udělá,
+ne jaké překážky existují.

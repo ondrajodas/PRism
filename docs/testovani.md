@@ -887,10 +887,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **`BranchMergeTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve kterých
     se merge **nenabídne**: cizí PR (tam se nekreslí ani nadpis sekce), vypnutá brána, **nenačtený
     stav větve** (`nil` i `.loading` i `.failed` — u nevratné akce je „nevím“ vlastní odpověď, ne
-    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev,
-    **červený check** a **vlastní blokující nález**. K tomu dvě rozhodnutí, která se dají potichu
-    obrátit: **běžící a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem**
-    (nad větou „je konflikt“ by věta „nevím“ nedávala smysl).
+    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev
+    a **červený check**. K tomu dvě rozhodnutí, která se dají potichu obrátit: **běžící
+    a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem** (nad větou „je
+    konflikt“ by věta „nevím“ nedávala smysl).
+
+    **Vlastní blokující nález v tom výčtu od #563 není** a jsou na to dvě tvrzení, která se nesmí
+    rozejít, proto stojí v **jednom** testu (`doesNotBlockOnABlockingFinding`): scéna
+    z `keboola/platform-libraries#566` (slévatelná, čistá, 22 zelených a 22 přeskočených checků)
+    vyjde `allowed`, a tatáž scéna s jedním **červeným** checkem `blocked`. K tomu je
+    `neverSpeaksAboutFindings` — **výčet všech jedenácti překážek**, ve kterém žádná věta nemluví
+    o nálezu, a uvnitř **vyčerpávající `switch`**, který nová překážka nepustí přeložit. Že se
+    nález cestou **neztratil**, tvrdí `AppStoreMergeTests.keepsTheBlockingFindingVisible` nad celým
+    řetězcem (pruh `K merge`, tlačítko `allowed`, odznak na řádku, osa filtru, souhrn) — a je to
+    z celé té sady nejcennější tvrzení: přesun do `K merge` se dá udělat i tak, že nález zmizí,
+    a prázdný odznak vypadá jako „čisto“.
+
+    **Ověřeno vložením regrese, a chytla se dvakrát na dvou různých místech.** Vrácení případu do
+    enumu položí `neverSpeaksAboutFindings` **při překladu** (`switch must be exhaustive`), takže se
+    do běhu ani nedojde; s doplněným `case` v tom `switch`i pak vrácení `blockingFindings` do
+    `mergeOffer` shodí `keepsTheBlockingFindingVisible` **čtyřmi** tvrzeními — nabídka, prázdnota
+    výčtu, předfiltr desky i to, že řádek v pruhu `K merge` **není**. **`WorkLaneTests` v tom
+    nefigurují**, a je dobré to vědět: jejich výčet je literál v testu, takže o novém případu enumu
+    nevědí — hlídají, co `isMergeReady` s překážkou udělá, ne jaké překážky existují.
 
     Řádky stavu se tvrdí **textem, ne strukturou**: `3 commity · 2 checky` / `zeleno` proti
     `1 commit · 2 checky` / `1 neprošel` — skloňování je v nich to, co se rozbije nejtišeji. A
@@ -4201,10 +4220,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `changed`** shodí 16 tvrzení ve čtyřech testech — z toho deset v té mřížkové stráži.
 
   **Sonda k tomu má vlastní scénu** (`BoardRenderProbe`, `k-merge-s-predanim`) a při její stavbě
-  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález je skutečná překážka
-  merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` — tedy
-  přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho napsané
-  proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
+  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález byl do #563 skutečná
+  překážka merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` —
+  tedy přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho
+  napsané proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
+  **Od #563 už by scéna s blokujícím nálezem vyšla stejně** (nález překážka není), ale kategorie
+  se **nemění**: takhle vypadal PR z proklikání #515, a scéna má fotit ten.
 
   **Tatáž otázka scénu u druhého proklikání překlopila na `changed`.** S razítkem `never` byla
   vidět jedině oprava z prvního kola — do `K merge` takový PR chodil i před druhou změnou, takže

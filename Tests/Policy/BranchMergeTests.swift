@@ -68,8 +68,7 @@ struct BranchMergeTests {
         detail: PullRequest? = nil,
         commits count: Int? = 2,
         status: BranchStatusState? = nil,
-        checks: [PullRequestCheck]? = [],
-        blocking: Int = 0
+        checks: [PullRequestCheck]? = []
     ) -> Policy.MergeOffer {
         let detail = detail ?? self.detail()
         return Policy.mergeOffer(
@@ -77,8 +76,7 @@ struct BranchMergeTests {
             proposal: Policy.mergeProposal(of: detail, commits: count.map(commits)),
             state: detail.state,
             status: status ?? self.status(),
-            checks: checks,
-            blockingFindings: blocking
+            checks: checks
         )
     }
 
@@ -90,8 +88,7 @@ struct BranchMergeTests {
             proposal: Policy.mergeProposal(of: detail, commits: commits(2)),
             state: detail.state,
             status: nil,
-            checks: [],
-            blockingFindings: 0
+            checks: []
         )
     }
 
@@ -108,8 +105,7 @@ struct BranchMergeTests {
                 detail: detail(),
                 commits: commits(2),
                 status: status(),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             ) == nil
         )
     }
@@ -217,8 +213,7 @@ struct BranchMergeTests {
                 proposal: nil,
                 state: nil,
                 status: status(),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             ).obstacles == [.factsMissing]
         )
     }
@@ -248,16 +243,62 @@ struct BranchMergeTests {
         #expect(offer.obstacles == [.draftPullRequest, .failingChecks(["test"])])
     }
 
-    /// **Vlastní blokující nález merge zakáže.** Reviewer, kterého jsem si sám pustil, řekl, že je
-    /// v tom chyba — mergnout to jedním klikem je zrovna to, čemu má panel bránit.
-    @Test("Blokující nález merge zakáže")
-    func blocksOnABlockingFinding() {
-        #expect(offer(blocking: 1).obstacles == [.blockingFindings(1)])
-        #expect(Policy.MergeObstacle.blockingFindings(1).sentence == "Reviewer hlásí blokující nález.")
+    /// **Vlastní blokující nález merge nezakazuje** (#563, ruší rozhodnutí z #465) — a v jednom
+    /// testu k tomu druhá věta, která se s ní nesmí rozejít: **spadlý check zakazuje dál**.
+    ///
+    /// Nález je názor *revieweera* na kód, ne stav *pull requestu*; tatáž třída jako brána
+    /// odesílání (`isPublishingGate`), jen o úroveň dál. Do funkce se od #563 **nedostane vůbec**,
+    /// takže se to tvrdí přes výčet toho, co vydat umí: scéna z `keboola/platform-libraries#566`
+    /// (slévatelný, čistý, zelené i přeskočené checky) vyjde `allowed`, kdežto tatáž scéna
+    /// s červeným checkem `blocked`.
+    ///
+    /// Že se nález **neztratil**, tvrdí `AppStoreMergeTests.keepsTheBlockingFindingVisible` nad
+    /// celým řetězcem (řádek, filtr, souhrn).
+    @Test("Blokující nález merge nezakáže, spadlý check ano")
+    func doesNotBlockOnABlockingFinding() {
+        // Případ #566: 22 zelených, 22 přeskočených, žádný spadlý.
+        let clean = (0..<22).map { check("pass-\($0)", .passed) }
+            + (0..<22).map { check("skip-\($0)", .skipped) }
+        #expect(offer(checks: clean) == .allowed)
+        // A tatáž scéna s jedním spadlým checkem — jediná změna proti řádku výš.
         #expect(
-            Policy.MergeObstacle.blockingFindings(3).sentence
-                == "Revieweři hlásí 3 blokující nálezy."
+            offer(checks: clean + [check("test-php 8.3", .failed)]).obstacles
+                == [.failingChecks(["test-php 8.3"])]
         )
+    }
+
+    /// Výčet **všeho, co `mergeOffer` vydat umí**, a nic z toho nemluví o nálezech (#563).
+    ///
+    /// Tvrzení o tom, co se **nestalo**, takže z téhle sady nejcennější: kdyby se překážka
+    /// z nálezu vrátila, přibude sem věta, kterou tenhle výčet nezná. Jsou to **tytéž věty**,
+    /// jaké prochází `WorkLaneTests.respectsEveryRealObstacle` (deset překážek, ne jedenáct).
+    @Test("Ve výčtu překážek není žádná o nálezech")
+    func neverSpeaksAboutFindings() {
+        let every: [Policy.MergeObstacle] = [
+            .notAllowed("odesílání je vypnuté"),
+            .factsMissing,
+            .statusLoading,
+            .statusFailed("gh spadl"),
+            .statusUnknown,
+            .conflicting(base: "main"),
+            .behind(base: "main"),
+            .protected,
+            .draftPullRequest,
+            .notOpen(.merged),
+            .failingChecks(["test"]),
+        ]
+        #expect(every.count == 11)
+        for obstacle in every {
+            #expect(!obstacle.sentence.localizedCaseInsensitiveContains("nález"), "\(obstacle)")
+            // **Vyčerpávající `switch` je tu stráž, ne kosmetika**: nová překážka tenhle test
+            // nepustí přeložit, takže se u ní musí rozhodnout, jestli mluví o pull requestu, nebo
+            // o názoru na kód — a to druhé sem od #563 nepatří.
+            switch obstacle {
+            case .notAllowed, .factsMissing, .statusLoading, .statusFailed, .statusUnknown,
+                 .conflicting, .behind, .protected, .draftPullRequest, .notOpen, .failingChecks:
+                break
+            }
+        }
     }
 
     /// Důvodů může být víc a **každý vede jinam**, takže se nesčítají do jednoho. Pořadí je pořadí,
@@ -266,14 +307,12 @@ struct BranchMergeTests {
     func listsEveryObstacleInOrder() {
         let offer = offer(
             status: status(.mergeable, .behind),
-            checks: [check("test-php 8.3", .failed)],
-            blocking: 2
+            checks: [check("test-php 8.3", .failed)]
         )
 
         #expect(offer.obstacles == [
             .behind(base: "main"),
             .failingChecks(["test-php 8.3"]),
-            .blockingFindings(2),
         ])
     }
 
