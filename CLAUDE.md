@@ -78,9 +78,9 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   u orchestrátora. **Odepřené povolení se neobchází, hlásí se** (#273) jako neověřená mezera.
   **Orchestrátor v dávce neimplementuje, deleguje** (#259) — ani u issue, které je „jen
   dokumentace“; zůstává mu rozvrh, sloty, tlumočení připomínek, úklid stromů a **restart hlavní
-  aplikace** (sahá do hlavního stromu, což subagent nesmí). Co přesně dostane subagent do
-  zadání, je v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md#co-dělá-orchestrátor--a-co-ne),
-  sekce [*3. Zadání subagenta*](docs/paralelni-vyvoj.md#3-zadání-subagenta).
+  aplikace**. Co přesně dostane subagent do zadání, je
+  v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md#co-dělá-orchestrátor--a-co-ne), sekce
+  [*3. Zadání subagenta*](docs/paralelni-vyvoj.md#3-zadání-subagenta).
 - **Všechno jde přes PR.** Žádné přímé pushe do `main` — každá změna (kód i dokumentace)
   má vlastní branch a PR, i když je malá. PR odkazuje na issue, které řeší.
 - **Branch:** anglicky, krátce, s číslem issue — např. `issue-4-github-gateway`.
@@ -88,19 +88,17 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   když je na změně co vidět.** Platí pro první push branche, ne pro opravy po review.
 
   Pak **zastav a čekej.** Ne „spustil jsem a jde to“ a hned commit — smysl je, že si to
-  proklikám, dokud je změna ještě levná na přepsání; zelené testy nejsou důkaz, že se to
-  chová, jak jsem chtěl. Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
-  **V dávce se pauza nezruší, jen se posune před merge** (#256, mění #247): subagent zastaví
-  s hotovým PR a zavolá mě **přes orchestrátora** — hlášením, které ten předá dál (`SendMessage`
-  subagent mít nemusí, #545) — a čekáním neblokuje
+  proklikám, dokud je změna ještě levná na přepsání. Napiš, **na co se mám podívat** a co
+  v příslušné obrazovce uvidím. **V dávce se pauza nezruší, jen se posune před merge** (#256,
+  mění #247): subagent zastaví s hotovým PR a zavolá mě **přes orchestrátora** (`SendMessage`
+  subagent mít nemusí, #545) a čekáním neblokuje
   slot ([podrobnosti](docs/paralelni-vyvoj.md#4-pauza-na-proklikání--změna-pravidla)).
 
   **Napřed se na to ale podívej sám — screenshotem.** `screencapture -x -R<x,y,w,h>` funguje
   a mockup se dá vyrendrovat headless Chromem a položit vedle ([`docs/testovani.md`, *Jak si
   zkontrolovat, jak view vypadá*](docs/testovani.md#jak-si-zkontrolovat-jak-view-vypadá)).
   Platí to i pro komponentu, která se jen **přesunula do užšího místa**: jiná šířka je jiný
-  design a plné popisky, počty a odznaky se do ní obvykle nevejdou. A **nezapomeň před tou
-  pauzou rebuildnout**, ať nekoukám na starý build.
+  design. A **nezapomeň před tou pauzou rebuildnout**, ať nekoukám na starý build.
 
   **Když se změna v UI nijak neprojeví** (vrstva bez UI — modely, parser, protokol),
   **na pauzu mě netahej.** Napiš do shrnutí jednou větou, že vidět není nic a proč, dolož to
@@ -113,15 +111,12 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   z tabulky níž chytá, **revize neproběhla**. Subagent je fajn, ale **není podmínka**: projít
   `git diff main...HEAD` vlastníma očima plus grepy níž zabere minuty.
 
-  **Tohle Copilot v tomhle repu nachází opakovaně**, takže to projdi dřív, než ho pustíš:
-
-  | Vzor | Proč to bolí |
-  |---|---|
-  | `try?`, prázdný `catch`, `?? default` nad operací, která může selhat | Ztracená data vypadají v UI jako „nic tu nebylo“. Ptej se: pozná uživatel, že se to nepovedlo? Když ne, patří to do stavu |
-  | Text v UI, který tvrdí víc, než data unesou | „Reviewer nenahlásil žádný nález“ zní jako čisto i tehdy, když se nálezy nemají kde vzít |
-  | Stav, který se drží, ale nikdo ho nečte | Buď to zobraz, nebo nedrž — jinak je to mrtvá váha, která svádí spolehnout se na ni |
-  | Kontrola, která jinde v repu je, a tady chybí | Typicky ochrana proti mazání mimo cache. Když už někde existuje, patří na jedno místo |
-  | Čtení nebo dekódování všeho, když stačí předfiltr | U operací, které běží při každém uložení nebo tiku, to není detail |
+  **Tohle Copilot v tomhle repu nachází opakovaně**, takže to projdi dřív, než ho pustíš — pět
+  vzorů s tím, proč každý z nich bolí, je
+  v [`docs/github-cli.md`](docs/github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně):
+  `try?` a prázdný `catch` nad operací, která může selhat; text v UI, který tvrdí víc, než data
+  unesou; držený stav, který nikdo nečte; kontrola, která jinde v repu je a tady chybí; a čtení
+  všeho tam, kde stačí předfiltr.
 
   **Když nález přijde, oprav třídu, ne výskyt.** Copilot vidí vždycky jen nový diff, takže na
   druhý výskyt téhož vzoru upozorní až v dalším kole. Po každém reálném nálezu proto projdi
@@ -131,7 +126,8 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   edit` obecně a `gh issue view` na tomhle repu **padají** (deprecated Projects classic), takže
   se čte a edituje přes REST. Příkazy, dvě jména, pod kterými Copilot píše, a proč
   „generated no new comments“ neznamená, že nic nenašel, jsou
-  v [`docs/github-cli.md`](docs/github-cli.md) — **přečti si to, než výsledek budeš číst.**
+  v [`docs/github-cli.md`](docs/github-cli.md#copilot-jako-reviewer) — **přečti si to, než
+  výsledek budeš číst.**
 - **Copilot je kontrola, ne hledání — stačí jedno kolo.** Pusť ho jednou, nálezy projdi (řekni,
   co je reálné a co šum), reálné oprav a **mergni podle vlastního uvážení**. Další kolo si
   vyžádej jen tehdy, když ten první průchod odhalil něco **strukturálního** — vzor, který se
@@ -139,11 +135,12 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   vzniklo.](docs/superpowers/specs/2026-07-31-prism-design.md#vlastní-revize-diffu-je-podmínka-pushnutí-ne-doporučení-46))
 
   **Nemusíš vyhovět všem komentářům.** Rozhoduješ ty — u nálezu, který neopravíš, ale musí být
-  odpověď s důvodem. Když si radou nejsi jistý, ověř ji (spusť to, změř to); zamítnutí podložené
-  měřením je lepší než oprava naslepo. Když **nedoběhne vůbec** („Copilot encountered an
-  error…“), jsou příčiny dvě a poznají se podle toho, jestli job běžel: spadlý job = velikost
-  `CLAUDE.md` (viz *Údržba dokumentace* výš), **nespuštěný job = spotřebovaný request** (#452 —
-  vyžádat znovu **nepomůže**, postup je v [`docs/github-cli.md`](docs/github-cli.md)).
+  odpověď s důvodem. Když si radou nejsi jistý, ověř ji; zamítnutí podložené měřením je lepší
+  než oprava naslepo. Když **nedoběhne vůbec** („Copilot encountered an error…“), jsou příčiny
+  dvě a poznají se podle toho, jestli job běžel: spadlý job = velikost `CLAUDE.md` (viz *Údržba
+  dokumentace* výš), **nespuštěný job = spotřebovaný request** (#452 — vyžádat znovu
+  **nepomůže**, postup je
+  v [`docs/github-cli.md`](docs/github-cli.md#když-se-request-spotřebuje-mrtvým-jobem)).
 - **PR, který je v pořádku, mergni sám.** Nečekej na pokyn: zelené testy, vyřešené nálezy
   a hotové zadání issue stačí. Po mergi rovnou **zavři issue** a **vydej release**.
   Když si nejsi jistý, jestli je hotovo, tak hotovo není — dodělej to, neptej se.
@@ -152,24 +149,21 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   běžícím review se zeptá a bez odpovědi nespustí nic — to je záměr, nepřemlouvej to
   `killall`em. Když skript skončí nenulově, **řekni to** a nech starou instanci běžet.
 - **Po mergnutí PR se vydá nový tag a GitHub release.** Release notes píšeme česky
-  a popisují **jen to, co se v téhle verzi změnilo**: co přibylo, co se opravilo, co se
-  rozhodlo jinak a proč, co se změřilo, co se zamítlo. Patří tam i to, co se změnou
+  a popisují **jen to, co se v téhle verzi změnilo**. Patří tam i to, co se změnou
   souvisí — počet testů, věta „na tomhle není co vidět“ u vrstvy bez UI, známé omezení.
   **Stav projektu do nich nepatří** — žádná sekce `Kde jsme`, `Další krok` ani výčet toho, co
-  zbývá do milníku; release odpovídá jen na otázku „co je v téhle verzi jinak“. ([Proč se
-  formát „deník projektu“
+  zbývá do milníku. ([Proč se formát „deník projektu“
   zahodil.](docs/superpowers/specs/2026-07-31-prism-design.md#release-notes-jsou-záznam-jedné-změny-ne-deník-projektu-125))
 - **Větší objem práce dostane vlastní milník** (#340) — orientačně **tři a víc issues, které
   patří k sobě**. Nenechává se nasypaný v `Průběžné` a nečeká se, až o milník někdo požádá:
-  u tří issues je **rozvrh polovina zadání** a milník je jediné místo, kde ta informace přežije
-  napříč sessions. Jak takový milník vypadá, je v [`docs/paralelni-vyvoj.md`, *Rozvrh se zapisuje
-  do milníku*](docs/paralelni-vyvoj.md#rozvrh-se-zapisuje-do-milníku-ne-jen-do-kontextu) —
+  u tří issues je **rozvrh polovina zadání**. Jak takový milník vypadá, je
+  v [`docs/paralelni-vyvoj.md`, *Rozvrh se zapisuje do
+  milníku*](docs/paralelni-vyvoj.md#rozvrh-se-zapisuje-do-milníku-ne-jen-do-kontextu) —
   **přečti si to, než milník založíš.**
 - **Verzování:** `v0.<milník>.<pořadí PR v milníku>` — např. třetí mergnutý PR v milníku 1 je
   `v0.1.3`. Verze `v1.0.0` = dokončený rozsah v1 podle specifikace. **Milník `Průběžné` číslo
   nemá** a PR z něj **pokračuje v číslování běžící fáze**; stejně tak **nový milník novou řadu
-  verzí nezakládá** — od `v1.0.0` běží jedna řada (`v1.1.x`) a číslo milníku v ní roli nehraje.
-  Důvod je u obojího týž: verze je **značka na časové ose, ne štítek původu**.
+  verzí nezakládá**. Důvod je u obojího týž: verze je **značka na časové ose, ne štítek původu**.
 - Binárky se do release nepřikládají — buildujeme lokálně. Release slouží k záznamu
   změn, ne k distribuci.
 
@@ -513,16 +507,16 @@ tamtéž.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem, slévatelnost větve (líné pole, ptá se opakovaně), **repozitáře organizace** (#532 — nejdražší čtení v aplikaci, 46,8 s nad `keboola`, proto vlastní limit a cache), **otevřené PR jednoho repa** (#533 — 1,1 s, řadí `Policy`, protože `gh pr list` řadí podle čísla) a **co repozitář o mergi říká** (#556 — povolené metody a zdroje těla commitu, jedno volání za repo, 0,62 s, chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
-| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i zahození rozdělaného rebase, **zápis slitých souborů do indexu a dokončení rebase** (`git add`, `rebase --continue` — commituje aplikace, ne session) a **je předchozí hlava předkem té dnešní** (#517 — `merge-base --is-ancestor`, odpovídá `ancestor`/`rewritten`/`unknown`) a **cesty, které PR mění** (#518 — `diff --name-only --no-renames`, podklad routingu; `gh pr view --json files` vydá jen prvních sto, změřeno). **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem** s nálezy z minula jako materiálem) a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452, vlastní užší sada a `--resume`) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**. Umí transcript session i **přepsat k přečtení** | `claude` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem, slévatelnost větve (líné pole), **repozitáře organizace** (#532 — nejdražší čtení v aplikaci, proto vlastní limit a cache), **otevřené PR jednoho repa** (#533 — řadí `Policy`, protože `gh pr list` řadí podle čísla) a **co repozitář o mergi říká** (#556 — jedno volání za repo, chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
+| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i zahození rozdělaného rebase, **zápis slitých souborů do indexu a dokončení rebase** (commituje aplikace, ne session), **je předchozí hlava předkem té dnešní** (#517 — `merge-base --is-ancestor`) a **cesty, které PR mění** (#518 — `diff --name-only --no-renames`, podklad routingu). **Pořád bez zápisu do remote** | `git` |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**. Umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu i zadání pro agenta, obsah dashboardu a dění, geometrie, na kterou se ptá kresba, a **desítky dalších**. Úplný katalog s důvody je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej tam podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
 | `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
 | `ReviewPublisher` | **Jediná cesta na GitHub API**, devět metod — viz tvrdá podmínka č. 1 | `gh` CLI |
 | `BranchPushing` | **Jediná cesta do remote** (#466): přetlačit větev **vlastního** PR přes `--force-with-lease`, **jedině z potvrzení**. Jedna metoda, dva guardy, tatáž brána. Rebase v tom **není** — ten je lokální práce `RepoCheckoutu` | `git` |
-| `TerminalHost` | Vestavěný terminál (#459) — **víc relací na pull request** (`TerminalSlot`: holý shell a jedna na dráhu), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Do relace umí napsat **jednu řádku** (`▶`), a jen když v ní nic neběží; **předá kolečko** aplikaci, která si o hlášení myši řekla. Na GitHub nesahá a `gh` nezná | login shell přes pty |
+| `TerminalHost` | Vestavěný terminál (#459) — **víc relací na pull request** (`TerminalSlot`), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`), fokus pro ustupující zkratky a `SIGKILL` na popředí pty **u každé z nich**. Do relace umí napsat **jednu řádku** (`▶`), a jen když v ní nic neběží. Na GitHub nesahá a `gh` nezná | login shell přes pty |
 
 Nad tím SwiftUI views: `PRList`, `DiffView`, `ReviewPanel`. Mimo tuhle desítku stojí
 `App/Diff/` — překlad diffu na model a jeho řádky. Není to modul: v doméně review nemá
@@ -551,8 +545,8 @@ podrobnosti. Zvlášť stojí za přečtení, než sáhneš na:
   ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332)). **Od #531 k tomu stojí
   přijaté záložky** (`adoptedTabs`) — PR otevřený odkazem nebo `prism://` a **od #527 i záložka
   obnovená po restartu** (`TabAdoption`) **do fronty nepatří**, ale úklid po tiku ho zahodit
-  nesmí, jinak se otevřená záložka vyprázdní; obojí bere `pullRequestsInPlay(besides:)`
-  a `summary(for:)`. **Obnovení nic nespouští** (#527) — jen dotáhne detail, a to čtením
+  nesmí; obojí bere `pullRequestsInPlay(besides:)` a `summary(for:)`. **Obnovení nic nespouští**
+  (#527) — jen dotáhne detail, a to čtením
   ([#531](docs/architektura.md#otevřít-pr-mimo-zdroje-531),
   [#527](docs/architektura.md#záložky-přežijí-restart-527));
 - **[`Environment`](docs/architektura.md#vrstva-environment-appenvironment)** — podprocesy:
@@ -862,44 +856,36 @@ Zásady, které platí všude:
   u každé je helper nebo jedna hodnota v projektu, která se místo globálu bere:
 
   - **`UserDefaults`, a ten přežije běh** (#411) — výchozí `PRISM_SLOT` v projektu je
-    `.testhost`, takže `@AppStorage` ani `UserDefaults.standard` nepíšou do nastavení, které se
-    používá. Kdo potřebuje `UserDefaults`, bere si **`ScratchDefaults`** (jméno s `UUID`, protože
-    pojmenovaná doména je sdílená **napříč procesy**, a úklid po sobě); hlídají to
+    `.testhost`. Kdo potřebuje `UserDefaults`, bere si **`ScratchDefaults`** (jméno s `UUID`,
+    protože pojmenovaná doména je sdílená **napříč procesy**); hlídají to
     `ProcessPreferencesTests`
     ([podrobnosti](docs/testovani.md#userdefaults-je-tentýž-případ-a-měl-tři-projevy-411)).
   - **Cache hostitele, a #411 to nechalo otevřené** (#421) — identita hostitele stojí na **dvou**
-    hodnotách a #411 dalo výchozí jen jedné: `PRISM_SLOT` (bundle ID) měl `.testhost`, kdežto
-    `PRISM_SLOT_LABEL` (`CFBundleName`, tedy **kořen cache**) zůstal prázdný, takže `xcodebuild
-    test` pouštěl aplikaci nad cache hlavní instance. Od #527 to i **měřilo**: host si obnovil
-    záložky uživatele, dotáhl k nim diff skutečnými dotazy na `gh` a jeho průchody tělem se
-    přičetly k sondě #421 (`DiffView` 26 proti 14, a nereprodukovatelně). Hlídá to
-    `ProcessPreferencesTests` **dvěma** tvrzeními — kořen cache za běhu a `PRISM_SLOT_LABEL`
-    v `project.pbxproj` ([rozbor](docs/testovani.md#cache-hostitele-je-čtvrtý-projev-téhož-421)).
+    hodnotách a #411 dalo výchozí jen jedné: `PRISM_SLOT_LABEL` (`CFBundleName`, tedy **kořen
+    cache**) zůstal prázdný, takže `xcodebuild test` pouštěl aplikaci nad cache hlavní instance.
+    Hlídá to `ProcessPreferencesTests` **dvěma** tvrzeními — kořen cache za běhu
+    a `PRISM_SLOT_LABEL` v `project.pbxproj`
+    ([rozbor](docs/testovani.md#cache-hostitele-je-čtvrtý-projev-téhož-421)).
   - **Metrika písma se čte na jednom místě** (#407) — `NSFont` v testovacím hostu pod zátěží
-    vydá **přechodně nepoužitelnou metriku** a sazba tím písmem navíc **položí proces**. Vydává
-    ji proto **`FontMetric`**; hlídají to dvě tvrzení nad zdrojáky ve `FontMetricTests`
+    vydá **přechodně nepoužitelnou metriku**. Vydává ji proto **`FontMetric`**; hlídají to dvě
+    tvrzení nad zdrojáky ve `FontMetricTests`
     ([rozbor](docs/testovani.md#metrika-písma-je-tentýž-kořen-v-jiné-podobě-407)).
-    **A od #550 je nepovedené měření `nil`, ne nula**: nulu vydávají `characterWidth` a spol.,
-    protože z nich kreslí okno a to čekat nesmí — kdo se potřebuje **dočkat**, bere
+    **A od #550 je nepovedené měření `nil`, ne nula**: kdo se potřebuje **dočkat**, bere
     `TestWait.settledFontMetric(_:of:)`, a v `Tests/` je to podmínka, ne nabídka
     ([proč](docs/testovani.md#páté-kolo-stráž-nad-surovým-textem-a-nula-z-měřidla-550)).
   - **Událost skládaná pro test nesmí dědit živý stav procesu** (#490) —
     `CGEvent(scrollWheelEvent2Source: nil, …)` nese **modifikátory, které měl člověk zrovna
-    zmáčknuté**. Skládá se proto **jedině v `Tests/Support/WheelEvent.swift`** (privátní stav
-    zdroje **a** `flags` z argumentu) a **`waitUntil` ani `.disabled` to neřeší** — není na co
-    čekat. **Stráž nad zdrojáky porovnává text bez mezer** (`Source.condensed`), protože ve Swiftu
-    je mezera uvnitř volání volná — **od #550 to dělají všechny čtyři**, a mezerou se obejde jedině
-    vzor, ve kterém je hranice (tečka, závorka, operátor); jeden identifikátor rozdělit nejde.
-    Seznamy výjimek jsou přitom **cesty, ne text**, takže se nezhušťují. Explicitní továrny
-    AppKitu (`NSEvent.keyEvent(with:…)`) v zákazu nejsou — modifikátory berou z argumentu
+    zmáčknuté**. Skládá se proto **jedině v `Tests/Support/WheelEvent.swift`**, a **`waitUntil`
+    ani `.disabled` to neřeší**. **Stráž nad zdrojáky porovnává text bez mezer**
+    (`Source.condensed`) — **od #550 to dělají všechny čtyři**; seznamy výjimek jsou přitom
+    **cesty, ne text**, takže se nezhušťují
     ([měření](docs/testovani.md#událost-skládaná-pro-test-nesmí-dědit-živý-stav-procesu-490),
     [páté kolo](docs/testovani.md#páté-kolo-stráž-nad-surovým-textem-a-nula-z-měřidla-550)).
   - **Okno se v testu ukazuje bez animace** (#462) — `orderFront` na okně s výchozí
-    `animationBehavior` si drží **vlákno z globálního dispatch poolu** po celou dobu animace, a
-    `SubprocessRunner` z téhož poolu bere vlákna na blokující čtení pip. Ukazuje se proto přes
-    **`orderFrontUnanimated()`** z `Tests/Support/UnanimatedWindow.swift`; hlídá to
-    `UnanimatedWindowTests` ([rozbor i jak se zaseknutý běh pozná od `Early unexpected
-    exit`](docs/testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)).
+    `animationBehavior` si drží **vlákno z globálního dispatch poolu**, ze kterého bere vlákna
+    i `SubprocessRunner`. Ukazuje se proto přes **`orderFrontUnanimated()`**
+    z `Tests/Support/UnanimatedWindow.swift`; hlídá to `UnanimatedWindowTests`
+    ([rozbor](docs/testovani.md#zaseknutý-plný-běh-okno-které-se-objeví-s-animací-462)).
 
   Osm grepů. Pět **musí vyjít prázdných** (guard soubory se odečítají — hledané řetězce v nich
   stojí jako literály), šestý v `App/` **musí vypsat jen `FontMetric.swift`**, sedmý je **výčet
@@ -933,22 +919,20 @@ Zásady, které platí všude:
   měřit, přečti si to, protože každá z těch věcí už jednou vyrobila falešný výsledek: test, který
   čeká na jev, se **neváže na pevný okamžik** (#269,
   [*Čekání na jev*](docs/testovani.md#čekání-na-jev-296)); měřidlo **nesmí počítat přípravu**
-  a číslo z okna se bere **střídavě** A/B/A/B, protože drift sezení je větší než hledaný rozdíl
-  (#274, [*Kolik stojí otevřená
+  a číslo z okna se bere **střídavě** A/B/A/B (#274, [*Kolik stojí otevřená
   záložka*](docs/testovani.md#kolik-stojí-otevřená-záložka-274)); ve `sample`u se čte **podíl
-  největšího nezanořeného uzlu**, nikdy `grep -c`, a u víc vzorků ztuhlé aplikace se čte **kořen
-  u každého zvlášť** (#350, #361, [*Ve `sample`u se čte
+  největšího nezanořeného uzlu**, nikdy `grep -c`, a u víc vzorků se čte **kořen u každého
+  zvlášť** (#350, #361, [*Ve `sample`u se čte
   podíl*](docs/testovani.md#ve-sampleu-se-čte-podíl-ne-jen-vrcholy-zásobníku-350),
   [*`sample` je strom*](docs/testovani.md#sample-je-strom-takže-součet-řádků-není-podíl));
-  nástroj na **živý** záchvat nesmí měřit z runloopu hlavního vlákna, protože ten se do stavu
-  čekání nedostane (#391, [rozbor](docs/architektura.md#diagnostika-kreslení-361)); a u cizího
-  privátního API rozhoduje **pád v testu v hostu**, ne odhad z footprintu (#361).
+  nástroj na **živý** záchvat nesmí měřit z runloopu hlavního vlákna (#391,
+  [rozbor](docs/architektura.md#diagnostika-kreslení-361)); a u cizího privátního API rozhoduje
+  **pád v testu v hostu**, ne odhad z footprintu (#361).
 - **Usazení scény se pozná měřením, ne uplynulým časem** (#421, mění postup z #489) —
-  `spinMainRunLoop` je **synchronní smyčka držící hlavní actor**, takže rozvrhne okno, ale
-  rozdělanou práci scény (`.task`, dotažení, hodiny pollingu) k ní nepustí; ta se rozběhne teprve
-  v úseku, ve kterém sonda poprvé `await`ne, a **připíše se tomu úseku**. Čeká se proto na dvě tichá
-  kola počitadel (`settleUntilQuiet`), hodiny sondy musí **doopravdy spát** a k číslům patří **počet
-  dotazů na fake gateway**, aby se poznaly tiky, které si nikdo nevyžádal
+  `spinMainRunLoop` je **synchronní smyčka držící hlavní actor**, takže rozdělanou práci scény
+  k sobě nepustí a ta se připíše tomu úseku, ve kterém sonda poprvé `await`ne. Čeká se proto na
+  dvě tichá kola počitadel (`settleUntilQuiet`), hodiny sondy musí **doopravdy spát** a k číslům
+  patří **počet dotazů na fake gateway**
   ([rozbor](docs/testovani.md#dvě-věci-které-to-měřidlo-lhaly)).
 - **Měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“, netvrdí nic** (#478) — a vypadá
   u toho zeleně. Když měření končí větou „neopravovalo se nic“, patří k němu druhá otázka:
