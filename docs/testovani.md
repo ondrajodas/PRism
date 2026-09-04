@@ -6472,6 +6472,57 @@ se kotví na předkovi, který neořezává, a stav se k němu podává boxem.
 **`setActivationPolicy(.prohibited)`** k tomu patří: bez ní si skript vyskočí dopředu a přebere
 fokus, což při souběžné práci ve slotech není zdvořilé ani bezpečné.
 
+### Co dělá `ideal*` u sheetu a v okně `Settings` (#491)
+
+Pravidlo z #327 („bez `presentationSizing(.fitted)` se `idealWidth` zahodí“) se v repu četlo jako
+pravidlo o `ideal*` **celém**. Není: **zahazuje se šířka, výška se bere.** Rozdíl se dá změřit
+samostatným `swiftc` skriptem — sheet se otevře nad oknem mimo obrazovku a přečte se
+`window.attachedSheet.frame`. Obsah je `Color.clear`, tedy nic, co by si o velikost samo řeklo:
+
+| Rámec | Sheet |
+|---|---|
+| `min 460×300`, `ideal 520×380` | 470 × **380** |
+| `min 460×300`, `ideal 900×900` | 470 × **860** (strop obrazovky) |
+| `min 460×300`, bez ideálu | 470 × **300** |
+| bez `min`, `ideal 520×380` | **470** × 380 |
+| `min 600×300`, `ideal 520×380` | **600** × 380 |
+| `min 460×300`, `ideal 520×380` + `.fitted` + pružný rámec | **520 × 412**, `.resizable` |
+
+Šířka je tedy vždycky `max(minWidth, 470)` — ideál se neuplatní ani nahoru (520 → 470), ani dolů
+(min 600 s ideálem 520 → 600) —, kdežto výška ideál bere až po strop obrazovky. Ta poslední řádka je
+kontrola měřidla: kdyby ani s `.fitted` nevyšlo 520, neměří se ideál, ale něco jiného.
+
+**Okno `Settings` scény se měří jinak a vyjde z toho jiná odpověď: ignoruje obojí.** `Settings` scéna
+se v holém binárce nespustí, takže se skript zabalí do minimálního `.app` (`Info.plist` s vlastním
+`CFBundleIdentifier`, ať se nesahá na doménu ostré aplikace) a okno se otevře přes
+`@Environment(\.openSettings)` z `WindowGroup`u — `NSApp.sendAction(Selector(("showSettingsWindow:")))`
+vrátí `true`, ale okno nevznikne. **Doména se před každým během maže**, jinak se čte uložený rámec
+z minulého měření místo výchozí velikosti:
+
+| Rámec obsahu | Obsah okna |
+|---|---|
+| `min 720×420`, `ideal 880×560` | 900 × 420 |
+| `min 720×420`, `ideal 1400×800` | 900 × 420 |
+| `min 720×420`, bez ideálu | 900 × 420 |
+| `min 1000×420`, `ideal 880×560` | **1 000** × 420 |
+
+První tři řádky jsou shodné, tedy ideál neznamená nic; čtvrtá ukazuje, že `min` naopak platí. 900 je
+systémová výchozí šířka okna. Ověřit se to dá i **bez měření**, v ostré aplikaci:
+`defaults read com.ondrajodas.prism` má `NSWindow Frame com_apple_SwiftUI_Settings_window = 900 452`
+— tedy obsah 900 × 420, přesně to naměřené, a k tomu 420 = `minHeight`, ne `idealHeight` 560.
+
+**Nad skutečnými obrazovkami to pak měří `SheetSizingTests`** (tatáž scéna jako
+`RawSessionSheetSizingTests`: okno mimo obrazovku, `sheet(isPresented:)`, čekání na `attachedSheet`).
+Že je změna neviditelná, se tvrdí **dvěma běhy** — jednou s `idealWidth` v rámci a jednou bez něj —
+a vyšlo u obou totéž: `ReviewSubmissionSheet` 560 × 560, `MergeSheet` 507 × 380, `AgentPromptSheet`
+840 × 620. Suita sama tenhle rozdíl **rozlišit nemůže** (SwiftUI se v obou případech chová stejně),
+takže tvrzení o zdrojáku nese **stráž**, ne měření: sheet s `idealWidth` musí mít `presentationSizing`.
+Regrese se ověřila vložením — `idealWidth` zpátky do všech tří a stráž spadla na všech třech.
+
+Jedna past u té stráže se u toho ukázala hned: `#expect(file.condensed.contains(…))` vypíše při pádu
+**celý zhuštěný zdroják**, takže tři provinilci vydali desítky kilobajtů hlášky, ve které se jméno
+souboru ztratilo. Sbírá se proto seznam cest a tvrdí se **prázdnost**.
+
 ### Jak změřit pořadí a hladinu oken (#243)
 
 Chování oken — co je před čím, co je vidět a co se vrací — se nedá otestovat unit testem a nedá

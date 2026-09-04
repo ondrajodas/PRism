@@ -58,12 +58,26 @@ struct AgentPromptSheet: View {
             Divider()
             footer
         }
-        // **Širší než ostatní sheety, a je to celý rozsah, ne jedna mez.** Obsah je markdown se
-        // zanořenými nadpisy a fenced diffy, tedy text, kterému na 720 bodech zalamoval skoro každý
-        // řádek — a zalomený diff se přestane číst jako diff. Rozsah je proto posunutý celý
-        // (560 → 840, 720 → 1080): kdyby se zvedl jen `idealWidth`, zmenšené okno by spadlo zpátky
-        // na šířku, kvůli které se to měnilo.
-        .frame(minWidth: 840, idealWidth: 1080, minHeight: 420, idealHeight: 620)
+        // **Širší než ostatní sheety, a rozhoduje o tom podlaha.** Obsah je markdown se zanořenými
+        // nadpisy a fenced diffy, tedy text, kterému na 720 bodech zalamoval skoro každý řádek —
+        // a zalomený diff se přestane číst jako diff. Proto se u #333 zvedla **podlaha** z 560 na
+        // 840; ta jediná se totiž uplatní.
+        //
+        // **`idealWidth: 1080` tady do #491 stálo, a byla to mrtvá hodnota.** SwiftUI u sheetu bez
+        // `presentationSizing(.fitted)` ideální **šířku** zahodí (změřeno u #327, podruhé u #417,
+        // potřetí nad tímhle sheetem v `SheetSizingTests`) — sheet se tedy vždycky otevíral 840
+        // bodů široký, ne 1080, a roztáhnout se nedal. Úvaha o zmenšeném okně, která tu stála, tím
+        // platí **doslova**: rozhoduje `minWidth` a jenom on, takže její závěr — zvednout celý
+        // rozsah, ne jen ideál — byl správný, jen z ještě tvrdšího důvodu, než se tehdy vědělo.
+        //
+        // **`idealHeight` zůstává, a je to změřený rozdíl, ne nedůslednost**: ideální výška se
+        // u sheetu uplatňuje. Bez ní by se zadání otevíralo 420 bodů vysoké místo 620 — tedy
+        // změna vzhledu, ne oprava mrtvé hodnoty.
+        //
+        // **Zamítnuto přidat `.fitted`** (#491, tatáž odpověď jako u #466): sheet by se rozšířil
+        // o 240 bodů, což je změna velikosti hotové obrazovky — a ta jde přes zákres do návrhu
+        // a souhlas, ne přes opravu rozvržení.
+        .frame(minWidth: 840, minHeight: 420, idealHeight: 620)
     }
 
     // MARK: - Hlavička
