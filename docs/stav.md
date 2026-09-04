@@ -7482,6 +7482,13 @@ prošly **beze změny** — routing nesahá na povolení ani na cesty ven.
 `Pustit ručně jde vždycky:` s dvojtečkou, za kterou nic nestálo. Věta má proto dvě podoby a
 rozhoduje o tom, jestli je vedle ní tlačítko — netvrdí přitom **proč** tam není, to view neví.
 
+**Copilot našel jednu věc a byla reálná**: do stavového řádku šel `error.localizedDescription`,
+jenže `CheckoutError` není `LocalizedError`, takže by tam stálo `The operation couldn't be
+completed. (PRism.CheckoutError error 5.)` — anglická věta o interním čísle případu místo toho,
+co řekl `git`. Hlásí se proto `userDescription` s fallbackem (tentýž vzor jako
+`AppStore+Checks.reason`) a tvrdí to test **z obou stran**: že tam ta věta je a že tam ta
+systémová **není**. Ověřeno vložením regrese.
+
 **Zapsané mezery**: po restartu z přeskočené dráhy zbude `nespuštěno` (viz výš — je to pravda, ne
 ztráta); PR, jehož se netýká nikdo, zůstává v seznamu „na čem ještě neběželo“, takže ho hromadná
 akce nabídne znovu (nic to neutratí, jen připraví pracovní kopii); a **jak dráha vypadá v úzkém

@@ -354,7 +354,7 @@ extension AppStore {
             // nikdo nevyžádal — a zůstala by ležet ve stavovém řádku. Ptáme se na stav tasku, ne na
             // `CancellationError`: `git` zabitý zrušením ohlásí selhání podprocesu.
             guard !Task.isCancelled else { return skills }
-            reportRoutingGap(for: pr, reason: error.localizedDescription)
+            reportRoutingGap(for: pr, reason: Self.routingFailureText(error))
             return skills
         }
 
@@ -375,6 +375,19 @@ extension AppStore {
     private func reportRoutingGap(for pr: PRIdentifier, reason: String) {
         configurationFailure = "Změněné cesty \(pr.repo)#\(pr.number) se nepodařilo zjistit, "
             + "review běží celé bez routingu. " + reason
+    }
+
+    /// Co z chyby výpisu cest ukázat člověku (nález Copilota na #518).
+    ///
+    /// **`CheckoutError` není `LocalizedError`**, takže `localizedDescription` u něj vydá
+    /// `The operation couldn’t be completed. (PRism.CheckoutError error 5.)` — anglickou větu
+    /// o interním čísle případu. Věta pro člověka je `userDescription` a nese i to, co řekl `git`;
+    /// je to tentýž vzor, jakým se hlásí selhání checků (`AppStore+Checks.reason`).
+    ///
+    /// Fallback zůstává, protože `changedFiles` je za protokolem: fake i budoucí implementace
+    /// můžou vyhodit cokoli, a „chyba, o které se nic neřekne“ je horší než anglická věta.
+    private static func routingFailureText(_ error: any Error) -> String {
+        (error as? CheckoutError)?.userDescription ?? error.localizedDescription
     }
 
     /// Co si z přeskočení nechat, když se pouští další průchod (#518).

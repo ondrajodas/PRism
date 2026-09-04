@@ -178,6 +178,12 @@ struct AppStoreRoutingTests {
         #expect(Set(reviewer.requests.map(\.key.skillID)) == ["php-review", "security-review"])
         #expect(store.routingSkips[pr] == nil)
         #expect(store.configurationFailure?.contains("bez routingu") == true)
+        // **Věta pro člověka, ne `localizedDescription`** (nález Copilota): `CheckoutError` není
+        // `LocalizedError`, takže by v hlášce stálo `The operation couldn’t be completed.
+        // (PRism.CheckoutError error 5.)`. Tvrdí se to na obou stranách — že tam je věta z
+        // `userDescription` a že tam **není** ta systémová.
+        #expect(store.configurationFailure?.contains(CheckoutError.timedOut.userDescription) == true)
+        #expect(store.configurationFailure?.contains("couldn") != true)
     }
 
     // MARK: - Ruční spuštění routing nefiltruje
