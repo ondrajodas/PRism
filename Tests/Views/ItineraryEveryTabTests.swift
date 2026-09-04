@@ -87,7 +87,10 @@ struct ItineraryEveryTabTests {
         // nebyl problém jednoho snímku.
         for zero in [0.0, -1] {
             let columns = Policy.diffSideColumns(layout: .unified, hasMargin: false, available: zero)
-            #expect(columns.tree, "Šířka \(zero) se bere jako úzké okno, ne jako nezměřeno.")
+            #expect(columns.tree, """
+                Šířka \(zero) sloupec složila, tedy se vzala jako úzké okno — má se brát jako \
+                „nikdo to nezměřil“.
+                """)
         }
     }
 
@@ -197,7 +200,10 @@ struct ItineraryEveryTabTests {
         #expect(detail.condensed.ranges(of: "{isColumnExpanded=false}").count == 1, "`collapse` má být jeden.")
         // Binding pro automatiku — **jeden**, a jde do `DiffView`u pull requestu. Diff commitu ho
         // dostat nesmí: kreslí se v tabu `Commity`, kde sloupec stojí taky, a přepsal by ho.
-        #expect(detail.condensed.ranges(of: "expanded:$isColumnExpanded").count == 1)
+        #expect(
+            detail.condensed.ranges(of: "expanded:$isColumnExpanded").count == 1,
+            "Binding pro automatiku má být jeden — druhý znamená druhý `DiffView`, který stav mění."
+        )
         let commit = try #require(Self.sources(under: "App/Views").first { $0.path == "CommitDiffView.swift" })
         #expect(
             !commit.condensed.contains("columnActions"),
