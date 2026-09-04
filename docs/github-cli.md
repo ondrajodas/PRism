@@ -123,6 +123,12 @@ tentokrát **99 047 B** — pořád pod stropem, o 339 B blíž než u #507, tak
 příčinu nevysvětluje. Vyžádání znovu (`33921009691`, o hodinu později znovu `33923112018`) spadlo
 pokaždé stejně, takže **odstup ani opakování nepomáhá**: pravidlo *zkus jednou, víc ne* platí i tady.
 
+**Přežilo to i do dalšího dne a padá celé repo naráz** (#563, PR #568, run `33922924268`): týž
+`ineligible_app`, týž `HttpError`, a ve stejné hodině spadla stejně kola na **třech** dalších
+větvích jiných slotů. To „naráz“ je nejrychlejší způsob, jak tuhle příčinu odlišit od té první —
+velikost `CLAUDE.md` by shodila jedině tu větev, na které se soubor nafoukl. A **na délku jobu se
+u rozpoznání nespoléhej**: tenhle běžel 24 s a padl až v poslední z nich.
+
 ### Když se request spotřebuje mrtvým jobem
 
 Narazilo se na to u **#452 / PR #458** a stálo to čtyři a půl hodiny ticha. Rozpoznává se
