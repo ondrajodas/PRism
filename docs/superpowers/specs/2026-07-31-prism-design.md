@@ -5887,9 +5887,11 @@ Přišly **nad hotovou obrazovkou**, ne z rozboru, a všechny jsou **změna prot
 zákresu** z decku (*Směry › C*). Zapisuje se to tady i s tím, co se tím ruší, aby se k tomu příští
 session nevracela: kresba už neplatí ve třech věcech a v repu je proti ní překreslená sekce 45.
 
-Bylo to **na dvě kola**. Nejdřív tři věci najednou (*První kolo* níž), pak dvě, které přišly nad
-tou opravenou obrazovkou (*Druhé kolo*) — a jedna z nich ruší rozhodnutí z prvního kola, takže se
-oboje čte jako záznam v čase, ne jako jeden seznam.
+Bylo to **na tři kola**. Nejdřív tři věci najednou (*První kolo* níž), pak dvě, které přišly nad
+tou opravenou obrazovkou (*Druhé kolo*), a nakonec jedno vysvětlení (*Třetí kolo*), které ruší
+polovinu toho druhého. Každé kolo ruší něco z předchozího, takže se to čte jako záznam v čase, ne
+jako jeden seznam — a **jedna z těch změn nebyla rozhodnutí, ale špatně přeložený pokyn**, což je
+zapsané u ní, ne zameteno.
 
 ##### První kolo
 
@@ -5908,8 +5910,8 @@ Nová osa je **„jak blízko je řádek k tomu, aby míč nebyl u mě“**:
 | 2 | `Dopsat a odeslat` | Tentýž druh „skoro hotovo“ — text už je napsaný, chybí ho odeslat. Šlo z **konce** na druhé místo |
 | 3 | `Rozhodnout` | Review doběhlo a kolega čeká na verdikt; míč je u mě nejdéle ze zbytku |
 | 4 | `Přečíst` | Ještě to nezačalo |
-| 5 | ~~`Předat agentovi`~~ | Vlastní práce, na kterou nečeká nikdo než já. **Páté místo neplatí — ve druhém kole šel na konec**, viz níž |
-| 6 | `Čeká na ostatní` | Míč u mě **není vůbec** — tichý pruh zůstával poslední (od druhého kola je předposlední) |
+| 5 | `Předat agentovi` | Vlastní práce, na kterou nečeká nikdo než já. **Druhé kolo ho poslalo na konec, třetí ho vrátilo sem** — viz níž, byl to špatně přeložený pokyn |
+| 6 | `Čeká na ostatní` | Míč u mě **není vůbec** — tichý pruh je poslední (jedno kolo byl předposlední) |
 
 **Zbylé čtyři se přeskládat nemusely, a je to výsledek, ne opomenutí**: v nové ose vycházejí ve
 tomtéž pořadí jako ve staré. Přesunuly se tedy jedině dvě položky a je na to tvrzení
@@ -6043,30 +6045,72 @@ překážka merge.** PR s blokujícím nálezem není mergnutelný, takže zůst
 rozhoduje o tom `mergeOffer`. Ověřeno v testu z obou stran, včetně toho, že **nemergnutelný**
 `changed` v `Předat agentovi` zůstává.
 
-**5. `Předat agentovi` jde na poslední místo — a je to pokyn, ne výsledek osy.** V ose z prvního
-kola („jak blízko je řádek k tomu, aby míč nebyl u mě“) vycházel **pátý**, tedy nad tichým pruhem:
-je to vlastní práce, na kterou nikdo nečeká. Rozhodnutí ho posunulo **za** `Čeká na ostatní`
-s odůvodněním, že **návrhy od agenta jsou nejnižší priorita** — je to nabídka, kterou si můžu vzít,
-kdežto v tichém pruhu se aspoň dozvím, na co se čeká.
-
-**Osa se tím nemění, a to je to podstatné pro příští session.** Kdo bude pořadí posuzovat podle osy,
-dostane u `handOff` páté místo — a **nesmí ho podle toho „opravit“**. Z osy plyne jedině to, že
-`handOff` je za `read`; poslední místo je rozhodnutí člověka a mění se jedině dalším rozhodnutím
-člověka. Zapsané je to jak u `WorkLane.order`, tak v tvrzení
-(`BoardTests.putsTheFinishedWorkFirst` má na `order.last == .handOff` **vlastní** řádek, aby se ta
-položka neztratila v literálu celého pořadí).
-
-Nové pořadí je tedy `K merge` · `Dopsat a odeslat` · `Rozhodnout` · `Přečíst` · `Čeká na ostatní` ·
-`Předat agentovi`; **relativní pořadí zbylých tří** (`decide`, `read`, `waiting`) se od kresby
-z decku pořád nezměnilo.
+**5. ~~`Předat agentovi` jde na poslední místo~~ — ZRUŠENO třetím kolem.** Zapsané tady zůstává
+proto, že jinak by z historie vypadl commit, který pořadí přeskládal, a příští session by ho
+dohledala jako rozhodnutí, které se ztratilo. Bylo to takhle: v ose z prvního kola („jak blízko je
+řádek k tomu, aby míč nebyl u mě“) vycházel `handOff` **pátý**, tedy nad tichým pruhem, a tohle kolo
+ho posunulo **za** `Čeká na ostatní` s odůvodněním, že návrhy od agenta jsou nejnižší priorita.
+Proč to neplatí — a proč to nebylo rozhodnutí — je v *Třetím kole* níž.
 
 **Co to udělalo s testy:** výčet zůstal na 1 040 kombinacích a **osa `Stage` v něm zůstává
 schválně** — od téhle chvíle je to stráž, která nepustí `stage` do `Policy.lane` zpátky
 (`handoffStageChangesNothing` porovnává pruh nad celou mřížkou vstupů pro všech pět stavů).
-`BoardSeparatorTests` počítá **pořád čtrnáct** čar: přesun pruhu s počtem čar nehýbe a scéna má
-`Předat agentovi` prázdný — **změřeno, ne odhadnuto**. Sonda dostala **šestou** scénu
-`vsechny-pruhy`, a je to odpověď na druhou otázku z #478: v žádné z pěti dosavadních nebyly
-`Předat agentovi` a `Čeká na ostatní` naráz neprázdné, takže by přesun **nenaměřila ani jedna**.
+`BoardSeparatorTests` počítá **pořád čtrnáct** čar: **přesun pruhu s počtem čar nehýbe** a scéna má
+`Předat agentovi` i `Čeká na ostatní` prázdné — změřeno v obou kolech, a proto to číslo přežilo i to
+třetí. Sonda dostala **šestou** scénu `vsechny-pruhy`, a je to odpověď na druhou otázku z #478:
+v žádné z pěti dosavadních nebyly `Předat agentovi` a `Čeká na ostatní` naráz neprázdné, takže by
+přesun **nenaměřila ani jedna** — a bez ní by se nedalo doložit ani jeho **vrácení**.
 **Ověřeno vložením obou regresí**: vrácení výjimky pro `changed` a vrácení `handOff` před `waiting`
 shodí dohromady **16 tvrzení ve čtyřech testech**.
+
+##### Třetí kolo
+
+Přišlo jako **vysvětlení pokynu z druhého kola**, ne jako nová připomínka, a znělo doslova takhle:
+*„no ale předat agentovi poslední jsem myslel jako poslední pravidlo! ne poslední box; tzn že co je
+k mergnutí `mergeble` tak by mělo být k mergnutí“*.
+
+**6. Pokyn *„návrhy od agenta dej jako poslední“* mluvil o posledním pravidle v rozřazování, ne
+o posledním pruhu v kresbě.** Do zadání pro druhé kolo se dostal jako „poslední pruh na obrazovce“
+a podle toho se přeskládalo `WorkLane.order`. **Byl to špatný překlad, ne rozhodnutí** — a je to
+zapsané takhle výslovně proto, že v repu do třetího kola stálo, že poslední místo je pokyn člověka
+a **nesmí se podle osy „opravit“**. Ten zápis byl nepravdivý a opravou zaniká; co po něm zůstává, je
+věta, že se `handOff` jedno kolo kreslil na konci a proč se vrátil — jinak by ho někdo „opravil“
+zpátky.
+
+`handOff` je tedy zpátky na **pátém** místě, tedy tam, kam ho posadí osa, a nové pořadí je `K merge`
+· `Dopsat a odeslat` · `Rozhodnout` · `Přečíst` · `Předat agentovi` · `Čeká na ostatní`. **Pořadí
+kresby tím přestává mít výjimku**: plyne celé z osy a mění se jedině tím, že se změní osa. Relativní
+pořadí zbylých čtyř (`decide`, `read`, `handOff`, `waiting`) je zpátky na tom z decku, takže se proti
+kresbě přesunuly **jen dvě** položky — `merge` a `finishReview`.
+
+**Co ten pokyn doopravdy žádal, už hotové bylo, a je to změřené.** Řetěz podmínek v `Policy.lane` se
+ptá v tomhle pořadí: (1) rozdělané review, (2) běžící review, (3) cizí PR — běželo/neběželo, (4)
+slévatelnost, (5) předání, (6) tichý pruh jako **fallback**. `handOff` je tedy poslední pravidlo,
+které něco **tvrdí** — a to je celý obsah pokynu: `outranksMerge` zanikl už ve druhém kole, takže
+mergnutelný PR se z `K merge` nedostane ničím, co se předání týká.
+
+**Past, kterou to má:** „poslední pravidlo“ **není** poslední řádek `switch`e. `waiting` znamená
+„o tomhle PR se nedá tvrdit nic“, takže kdyby se `handOff` posunul za něj, **nespadlo by do něj
+nikdy nic** a všechny vlastní PR by se svezly na tichém pruhu — a deska by přitom vypadala platně,
+protože prázdný pruh se od prvního kola nekreslí. Hlídá to nové tvrzení
+(`WorkLaneTests.handOffIsTheLastRuleThatClaimsAnything`) nad **celou mřížkou** vlastních PR:
+dokud `awaitsMove` platí, `waiting` nesmí vyjít.
+
+**Co v rozřazování naopak zůstává, a je to zapsaná cena, ne mezera.** Mergnutelnost se posuzuje
+`Policy.isMergeReady(_:)` nad `mergeOffer`, tedy nad **načtenými** daty — takže PR, který je na
+GitHubu `MERGEABLE`, ale aplikace o něm ještě nic nestáhla (`detailStates` bez `loaded`, nebo
+`branchStatuses` v `loading`), do `K merge` **nespadne**: `isMergeReady` je `false` a rozhodne
+o něm až předání. To je ta bezpečná strana (nabídnout o jeden tah **méně**, ne o jeden neexistující
+víc), ale znamená to, že se stav *mergnutelný, a přesto v `Předat agentovi`* umí objevit znovu —
+tentokrát ne pravidlem, ale tím, že se **slévatelnost neprefetchuje** (N volání `gh` na tik).
+Nezměnilo se to a nemá to smysl řešit pravidlem: řeší to buď prefetch, nebo nic.
+
+**Co to udělalo s testy.** `BoardTests.putsTheFinishedWorkFirst` tvrdí pořadí **literálem**, takže
+vrácení `handOff` na páté místo je tři opravené řádky, ne přepsané jméno testu — a tvrzení
+`order.last` mluví od téhle chvíle o **tichém pruhu** (což je konec osy), ne o `handOff` (což byla ta
+výjimka). Přibylo `WorkLaneTests.handOffIsTheLastRuleThatClaimsAnything`; **ověřeno vložením
+regrese**: s `handOff` za fallbackem zapíše ten jeden test **60 chyb** a celkem spadnou čtyři testy
+se 67 chybami. `BoardSeparatorTests` počítá **pořád čtrnáct** čar a je to změřené i tady, ne
+odhadnuto — sada prošla i s vloženým starým pořadím, kdežto `BoardTests` na něm spadly třemi
+tvrzeními. Celý běh: `5199 tests in 508 suites passed`, 1 known issue.
 

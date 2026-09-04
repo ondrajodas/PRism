@@ -31,7 +31,7 @@ struct BoardRenderProbe {
     /// z ní ustoupí nadpis, počet, nebo ona sama.
     private let widths: [CGFloat] = [1240, 900, 636]
 
-    /// Čtyři scény, a **dvě z nich vyrábí až skrývání prázdných pruhů** (z proklikání #515):
+    /// Šest scén, a **dvě z nich vyrábí až skrývání prázdných pruhů** (z proklikání #515):
     /// ke stavu, na kterém není ani jeden pruh, ani k tomu s jediným se klikáním nedostaneš,
     /// protože fronta si o svůj obsah neřekne.
     private enum Scenario: String, CaseIterable {
@@ -59,9 +59,10 @@ struct BoardRenderProbe {
         /// **Všech šest pruhů neprázdných** — jediná scéna, na které je vidět **pořadí**.
         ///
         /// Přidaná u druhého proklikání #515, a je to odpověď na druhou otázku z #478: scéna
-        /// `pruhy` má `Předat agentovi` i `Čeká na ostatní` prázdné, takže by jeho přesun na
-        /// konec **nenaměřila** — vypadala by stejně před i po. Tady se `Předat agentovi` musí
-        /// kreslit **pod** tichým pruhem, tedy jako poslední.
+        /// `pruhy` má `Předat agentovi` i `Čeká na ostatní` prázdné, takže by přesunem jednoho
+        /// z nich **nenaměřila nic** — vypadala by stejně před i po. Tady se `Předat agentovi`
+        /// musí kreslit **nad** tichým pruhem, tedy jako **pátý** (třetí proklikání ho vrátilo
+        /// z konce; poslední místo bylo špatně přeložený pokyn o posledním *pravidle*).
         case allLanes = "vsechny-pruhy"
     }
 
@@ -142,7 +143,7 @@ struct BoardRenderProbe {
                 title: "chore: modernize dependencies (Symfony 8-ready)",
                 // U scény `k-merge-s-predanim` musí být PR **můj**, jinak se do vlastních pruhů
                 // nedostane vůbec (#332). U `vsechny-pruhy` je vlastní **první, pátý a šestý**
-                // (`K merge`, `Čeká na ostatní`, `Předat agentovi`) — kdo je čí, rozhoduje
+                // (`K merge`, `Předat agentovi`, `Čeká na ostatní`) — kdo je čí, rozhoduje
                 // o polovině pruhů.
                 author: Self.author(of: number, in: scenario),
                 url: URL(string: "https://github.com/keboola/vault/pull/\(number)")!,
@@ -244,8 +245,9 @@ struct BoardRenderProbe {
     /// Rozřazuje je `Policy.lane`, ne sonda, takže se sází jedině vstupy: (1) můj PR se vším,
     /// co si žádá slévatelnost → `K merge`; (2) cizí s draftem → `Dopsat a odeslat` (draft
     /// přebíjí všechno); (3) cizí s uloženým čistým během → `Rozhodnout`; (4) cizí, na kterém se
-    /// nic nestalo → `Přečíst`; (5) můj **bez načteného detailu** → `Čeká na ostatní` („nevím“ je
-    /// `waiting`); (6) můj s aktivním nálezem a taky bez detailu → `Předat agentovi`.
+    /// nic nestalo → `Přečíst`; (5) můj s aktivním nálezem a **bez načteného detailu** →
+    /// `Předat agentovi`; (6) můj bez detailu i bez nálezů → `Čeká na ostatní` („nevím“ je
+    /// `waiting`).
     private func setUpAllLanes(in store: AppStore, ids: [PRIdentifier]) {
         store.detailStates[ids[0]] = .loaded(Self.mergeableDetail(ids[0]), updatedAt: Date())
         store.branchStatuses[ids[0]] = .loaded(
@@ -267,9 +269,9 @@ struct BoardRenderProbe {
             runs: [makeStoredRun(findings: [], headSha: Self.mergeableHead)]
         )
         // ids[3] zůstává, jak přišel z fronty: `neběželo`, tedy `Přečíst`.
-        // ids[4] je můj PR, o kterém se nedá tvrdit ani předání, ani merge — tichý pruh.
-        store.reviewRecords[ids[5]] = ReviewRecord(
-            pullRequest: ids[5],
+        // ids[5] je můj PR, o kterém se nedá tvrdit ani předání, ani merge — tichý pruh.
+        store.reviewRecords[ids[4]] = ReviewRecord(
+            pullRequest: ids[4],
             headSha: Self.mergeableHead,
             runs: [makeStoredRun(
                 findings: [makeReported(category: "clarity", summary: "Ten komentář mluví o starém názvu.")],

@@ -7423,10 +7423,10 @@ nedá přečíst jako „čisto“.
 
 **Domov se přeskládal podle tahu, ne podle autora.** Karty (#181, #371) a dvě fronty podle autora
 (#331) vystřídalo **šest pruhů**: `K merge`, `Dopsat a odeslat`, `Rozhodnout`, `Přečíst`,
-`Čeká na ostatní`, `Předat agentovi` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
+`Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
 **vyčerpávajícím výčtem** — 1 040 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
 
-**Z proklikání se změnily čtyři věci, tedy proti odsouhlasené kresbě.** Nejsilnější je
+**Z proklikání se změnily tři věci, tedy proti odsouhlasené kresbě.** Nejsilnější je
 **rozřazení**: mergnutelný vlastní PR je `K merge`, i když na něm něco zbývá předat — projevilo se
 to na schváleném PR se všemi osmi checky zelenými (`keboola/job-queue-daemon#934`), který ležel
 v `Předat agentovi`, protože `pending > 0` rozhodovalo dřív než merge. **Výjimka z toho žádná
@@ -7437,13 +7437,21 @@ neztrácí a nebylo pro to potřeba nic přidávat** — pilulka `N k předání
 ne na pruhu, a na stavu předání nezávisí. **Blokující nález zůstává skutečnou překážkou**
 (rozhoduje `mergeOffer`), takže s ním PR mergnutelný není.
 
-**Zbylé tři věci z proklikání:** `K merge` šlo z čtvrtého
+**Zbylé věci z proklikání:** `K merge` šlo z čtvrtého
 místa **na první** (a s ním `Dopsat a odeslat` z konce na druhé): osa pořadí přestala být „od cizí
 práce k vlastní“ a je „jak blízko je řádek k tomu, aby míč nebyl u mě“ — mergnout je nejlevnější tah
-a jediný, po kterém řádek z desky rovnou zmizí. **`Předat agentovi` je poslední**, a to z té osy
-neplyne (v ní vycházel pátý, nad tichým pruhem) — je to pokyn: návrhy od agenta jsou nejnižší
-priorita, protože je nikdo nečeká. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
-i první verze měly všech šest, i s nulou. Zbylé tři pruhy si relativní pořadí drží beze změny.
+a jediný, po kterém řádek z desky rovnou zmizí. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
+i první verze měly všech šest, i s nulou. Zbylé čtyři pruhy si relativní pořadí drží beze změny,
+takže se proti kresbě přesunuly **jen dvě** položky.
+
+**A jedna oprava, která nebyla připomínka, ale špatný překlad pokynu.** Pokyn *„návrhy z průběhu od
+agenta dej jako poslední“* se do zadání dostal jako „poslední pruh na obrazovce“, takže `Předat
+agentovi` jedno kolo stálo na konci desky. Myšlené to bylo jako **poslední pravidlo v rozřazování** —
+tedy to, co už hotové bylo: `Policy.lane` se ptá v pořadí *draft · běžící review · cizí PR ·
+slévatelnost · předání*, a tichý pruh je za tím **fallback**, ne pravidlo. Pruh je proto zpátky na
+pátém místě a pořadí kresby už výjimku nemá. Že „poslední pravidlo“ **není** poslední řádek
+`switch`e, hlídá nové tvrzení: kdyby se předání posunulo za `Čeká na ostatní`, nespadlo by do něj
+nikdy nic.
 
 **Skrývání zaplatilo tři věci a každá má stráž.** Deska přestala být stabilní, takže „první pruh“
 je pokaždé jiný — proto **zkratka visí na pruhu, ne na pozici** (`⏎` u skrytého `Rozhodnout`

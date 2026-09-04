@@ -9203,7 +9203,7 @@ kterou se aplikace otevírá, je ale „co udělám teď“, a na tu odpovídalo
 závažnosti **uvnitř** jedné z těch dvou front. `Čeká na mě 13` je počet, ne tah.
 
 Deska proto skládá **tytéž řádky** podle toho, čí je tah: `K merge`, `Dopsat a odeslat`,
-`Rozhodnout`, `Přečíst`, `Čeká na ostatní`, `Předat agentovi` (návrh, sekce 45; pořadí změnilo
+`Rozhodnout`, `Přečíst`, `Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45; pořadí změnilo
 proklikání — viz níž). **Je to pohled, ne
 množina** — rozřazení podle autora platí dál a drží ho rail (`RailSection.queue`,
 `RailSection.mine`) i všechno, co čte jen cizí PR (#332): hromadné spuštění review, notifikace,
@@ -9260,6 +9260,16 @@ automat.
    z proklikání to bylo poznat i v řádku — `2 k předání` **bez** odznaku `blokuje`. Vyšlo to
    najevo při stavbě sondy: s nálezy kategorie `correctness` scéna ukazovala `Předat agentovi`,
    protože blokovaly, a bylo by to měřidlo, které tvrdí něco jiného, než co se opravovalo.
+5. **Tichý pruh je fallback, ne pravidlo** — a proto je `Předat agentovi` **poslední pravidlo,
+   které něco tvrdí** (pokyn ze třetího proklikání #515). `waiting` znamená „o tomhle PR se nedá
+   tvrdit nic“, takže kdyby se předání posunulo **za** něj, do `Předat agentovi` by nespadlo
+   **nikdy nic** a všechny vlastní PR by se svezly na tichém pruhu — a deska by přitom vypadala
+   platně, protože prázdný pruh se nekreslí. „Poslední“ tedy znamená *za všemi pravidly, která
+   odpovídají*, ne *na posledním řádku* `switch`e; hlídá to
+   `WorkLaneTests.handOffIsTheLastRuleThatClaimsAnything` nad celou mřížkou vlastních PR.
+
+   **Nesmí se to splést s pořadím kresby** (`WorkLane.order`, viz níž) — jednou už se to spletlo
+   a `handOff` se kvůli tomu na jedno kolo přesunul na konec desky.
 
 **Vypnutá brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`). Pruh
 `K merge` se ptá „jak stojí PR“, kdežto `MergeObstacle.notAllowed` odpovídá na „smí aplikace
@@ -9267,13 +9277,21 @@ odeslat“ — a odesílání je ve výchozím stavu **vypnuté** (tvrdá podmí
 pruh byl navždycky prázdný, tedy tvrzení o nastavení, ne o práci. Sekce `Větev` v panelu je
 nerozlišuje schválně: tam se vypisují všechny důvody, proč tlačítko nejde zmáčknout.
 
-**Nad nenačtenými daty je „nevím“ vždycky `Čeká na ostatní`.** Slévatelnost stojí na načteném
-detailu, hlavě, checkech a stavu větve — a to se dotahuje **při otevření PR**, ne tikem (#306).
-Vlastní PR, do kterého se ještě nekliklo, tedy do `K merge` nespadne; předfiltr
-(`AppStore.isMergeReadyForLane`) na to odpoví `false` bez skládání `mergeOffer`, protože se deska
-ptá u každého vlastního PR při každém průchodu tělem. **Cena je zapsaná odchylka od návrhu**: deck
-kreslí v tichém pruhu kapsle jako `Copilot · za mainem o 3`, které se z nenačteného PR nemají kde
-vzít — řádek proto nese to, co nese `PullRequestRow` všude jinde.
+**Nad nenačtenými daty je „nevím“ odpověď `ne`, a rozhodne až předání.** Slévatelnost stojí na
+načteném detailu, hlavě, checcích a stavu větve — a to se dotahuje **při otevření PR**, ne tikem
+(#306). Vlastní PR, do kterého se ještě nekliklo, tedy do `K merge` nespadne, i když je na GitHubu
+`MERGEABLE`; předfiltr (`AppStore.isMergeReadyForLane`) na to odpoví `false` bez skládání
+`mergeOffer`, protože se deska ptá u každého vlastního PR při každém průchodu tělem. **Skončí pak
+v `Předat agentovi`, když něco zbývá předat, a v `Čeká na ostatní`, když ne** — je to tedy druhá,
+docela jiná cesta k témuž nepříjemnému obrázku, kvůli kterému se u druhého proklikání #515 měnilo
+rozřazení (mergnutelný PR mimo `K merge`). **Pravidlem se to neřeší**: `handOff` je poslední
+pravidlo, které něco tvrdí, takže před ním se rozhodnout nedá, a za `waiting` by se umlčelo celé.
+Řeší to jedině prefetch slévatelnosti (N volání `gh` na tik), a ten se u #515 zamítl — **zapsaná
+mezera, ne mezera přehlédnutá**.
+
+**Druhá cena je zapsaná odchylka od návrhu**: deck kreslí v tichém pruhu kapsle jako
+`Copilot · za mainem o 3`, které se z nenačteného PR nemají kde vzít — řádek proto nese to, co nese
+`PullRequestRow` všude jinde.
 
 **Akce nad pruhem je nová věc, strop není.** Do #515 byla jediná hromadná akce v okně
 `Pustit review na vše, co neběželo` v bloku `Co teď`; od #515 ji má **pruh sám**, a to je celý
@@ -9312,18 +9330,19 @@ Platí se za to třemi věcmi a každá z nich má vlastní stráž:
   věta o celé desce (`Policy.boardEmpty`).
 
 **Pořadí pruhů je od proklikání jiné** (`WorkLane.order` = `merge`, `finishReview`, `decide`, `read`,
-`waiting`, `handOff`), a je to změna osy: deck kreslil pořadí od cizí práce k vlastní, kdežto teď
+`handOff`, `waiting`), a je to změna osy: deck kreslil pořadí od cizí práce k vlastní, kdežto teď
 jde o to, **jak blízko je řádek k tomu, aby míč nebyl u mě**. `K merge` je první, protože mergnout je
 nejlevnější tah a jediný, po kterém řádek z desky rovnou zmizí; `Dopsat a odeslat` jde z konce na
-druhé místo, protože je to tentýž druh „skoro hotovo“.
+druhé místo, protože je to tentýž druh „skoro hotovo“. Zbylé čtyři (`decide`, `read`, `handOff`,
+`waiting`) si relativní pořadí z kresby drží beze změny, takže se proti kresbě přesunuly **jen dvě**
+položky. **Pořadí plyne celé z osy a výjimku nemá.**
 
-**`Předat agentovi` je poslední, a to z osy neplyne** (druhé proklikání #515 — ruší jeho páté místo
-z prvního kola). V ose vycházel **nad** tichým pruhem: je to vlastní práce, na kterou nikdo nečeká.
-Rozhodlo, že **návrhy od agenta jsou nejnižší priorita** — je to nabídka, kterou si můžu vzít,
-kdežto v tichém pruhu se aspoň dozvím, na co se čeká. **Osu to nemění**, a je to napsané i u
-`WorkLane.order`: kdo bude pořadí posuzovat podle osy, dostane u `handOff` páté místo a **nesmí ho
-podle toho „opravit“**. Zbylé tři (`decide`, `read`, `waiting`) si relativní pořadí z kresby drží
-beze změny.
+**`Předat agentovi` jedno kolo stálo poslední, a byl to špatně přeložený pokyn** (druhé proklikání
+#515; třetí ho vrátilo na páté místo). Pokyn *„návrhy z průběhu od agenta dej jako poslední“* mluvil o **posledním
+pravidle v rozřazování** (bod 5 výš), ne o posledním pruhu v kresbě; do zadání se dostal jako
+„poslední pruh“ a `WorkLane.order` se podle toho přeskládalo. Napsané to tady zůstává schválně: kdo
+v historii narazí na commit, který `handOff` posouvá na konec, ať ho nečte jako rozhodnutí, které se
+cestou ztratilo.
 
 A pozor na jednu záměnu: že `finishReview` „přebíjí všechno“, je věta o **rozřazení**
 (`Policy.lane`), ne o pořadí kresby. Stejně tak `⏎` patří `Rozhodnout` proto, že na něj klávesu

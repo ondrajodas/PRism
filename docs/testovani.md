@@ -168,7 +168,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `Policy` výčtem (`OwnPullRequestsTests`, `AutomaticReviewTests`, `ReviewNotificationTests`,
   `PullRequestFilterTests`). **Od #515 to tvrdí pruhy desky, ne karty** — karta `Čeká na mě`
   počítala jen cizí PR, kdežto od #515 se totéž pozná z toho, že cizí PR jde do `Přečíst` nebo
-  `Rozhodnout` a vlastní do `Předat agentovi`, `K merge`, `Čeká na ostatní` nebo
+  `Rozhodnout` a vlastní do `K merge`, `Předat agentovi`, `Čeká na ostatní` nebo
   `Dopsat a odeslat`. **Blokující nález na vlastním PR mě dál neblokuje**, jen se to tvrdí jinak:
   vlastní PR se do `Rozhodnout` nedostane ani s nálezy (do #515 to říkala karta `Blokuje`, která ho
   nepočítala ani v detailu pod číslem). **Rozdělané review se naopak nezmenšuje** — draft na
@@ -4027,6 +4027,23 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **zůstával**; razítko se proto sází proti dnešní hlavě, ale **bez předaných identit** (s nimi by
   z toho vyšlo `delivered`, tedy prázdná pilulka).
 
+  **`Předat agentovi` je poslední pravidlo, které něco tvrdí** (třetí proklikání #515) — a je to
+  tvrzení o tom, co se **nestalo**, takže z celé sady nejcennější. `Čeká na ostatní` je za ním
+  **fallback**, ne šesté pravidlo, takže kdyby se předání posunulo za něj, do `Předat agentovi` by
+  nespadlo **nikdy nic** — a deska by přitom vypadala platně, protože prázdný pruh se nekreslí.
+  Tvrdí se to nad **celou mřížkou** vlastních PR (13 stavů × draft × 5 stavů předání ×
+  slévatelnost): dokud `awaitsMove` platí, `waiting` nesmí vyjít — leda že na PR běží review, což
+  je pravidlo výš; a z druhé strany, `waiting` u vlastního PR nastane jedině tehdy, když nezbývá
+  nic předat. **Ověřeno vložením regrese**:
+  s `handOff` za fallbackem (tedy nedosažitelným) zapíše tenhle jeden test **60 chyb** a celkem
+  spadnou **čtyři** testy se 67 chybami — vedle něj i výčet dosažitelnosti pruhů, `mergeBeatsHandoff`
+  a tvrzení o pilulce ve `K merge`.
+
+  **Pořadí kresby je jiná otázka než pořadí pravidel, a jednou se to spletlo** (`BoardTests`
+  tvrdí `WorkLane.order` **literálem**): `handOff` jedno kolo stál poslední, protože se pokyn
+  o posledním *pravidle* přeložil jako poslední *pruh*. Test proto tvrdí i to, že tichý pruh je
+  poslední a že se relativní pořadí zbylých čtyř od kresby z decku nezměnilo.
+
   **Brána odesílání není překážka pull requestu** (`Policy.isMergeReady`). Testuje se z obou stran:
   `notAllowed` sama pruh `K merge` **nezavře** (jinak by byl při výchozím vypnutém odesílání
   navždycky prázdný), kdežto **jedenáct** ostatních překážek ho zavře — každá zvlášť **a** ve dvojici
@@ -4096,10 +4113,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a `jediny-pruh`. Zbylé jsou `pruhy` (tři pruhy ze šesti, tedy skrývání naráz s pořadím prvních
   tří), `prazdne-deni`, `k-merge-s-predanim` (vlastní slévatelný PR s nevyřízeným předáním) a od
   druhého proklikání **`vsechny-pruhy`**. Ta poslední je odpověď na druhou otázku z #478:
-  `Předat agentovi` a `Čeká na ostatní` jsou v `pruhy` **prázdné**, takže by přesun `Předat
-  agentovi` na konec nenaměřila žádná scéna — vypadaly by stejně před i po. Tady je všech šest
+  `Předat agentovi` a `Čeká na ostatní` jsou v `pruhy` **prázdné**, takže by přesunem jednoho
+  z nich nenaměřila žádná scéna nic — vypadaly by stejně před i po. Tady je všech šest
   pruhů po jednom řádku, takže je pořadí vidět celé (naměřeno: `K merge` · `Dopsat a odeslat ⌘⇧D` ·
-  `Rozhodnout ⏎` · `Přečíst ⌘⇧R` · `Čeká na ostatní` · `Předat agentovi`).
+  `Rozhodnout ⏎` · `Přečíst ⌘⇧R` · `Předat agentovi` · `Čeká na ostatní`). **Ve třetím kole se na
+  ní změřilo i vrácení `Předat agentovi` z konce na páté místo** — bez téhle scény by ta změna
+  neměla v repu obrázek.
 
   Vedle pořadí odpovídá sonda na jednu otázku o šířce: **akce v hlavičce pruhu je nejdelší
   prvek desky**, takže se v 636 bodech pozná, jestli z ní ustoupí nadpis, počet, nebo ona sama

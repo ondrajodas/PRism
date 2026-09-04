@@ -250,30 +250,30 @@ extension BoardTests {
         )
     }
 
-    /// **`K merge` je první, `Dopsat a odeslat` druhé a `Předat agentovi` poslední** — všechno tři
-    /// z proklikání #515, tedy změna proti kresbě z decku (*rozhodnout · přečíst · předat ·
-    /// k merge · čeká · dopsat*).
+    /// **`K merge` je první a `Dopsat a odeslat` druhé** — obojí z prvního proklikání #515, tedy
+    /// změna proti kresbě z decku (*rozhodnout · přečíst · předat · k merge · čeká · dopsat*).
     ///
-    /// Dvě rozhodnutí, ne jedno, a je to podstatné: první dvě položky plynou z **osy** („jak
-    /// blízko je řádek k tomu, aby míč nebyl u mě“), kdežto poslední místo pro `handOff` je
-    /// **pokyn člověka** — v té ose by vycházel pátý, nad tichým pruhem. Zapsané je to
-    /// u `WorkLane.order`; kdo bude pořadí posuzovat podle osy, nesmí ho podle ní „opravit“.
+    /// **Celé pořadí plyne z osy** („jak blízko je řádek k tomu, aby míč nebyl u mě“), a je to
+    /// jediné rozhodnutí, které v něm je. Druhé proklikání z něj na jedno kolo `handOff` vyvázalo
+    /// a posadilo ho na konec desky; byl to ale **špatně přeložený pokyn** — mluvil o posledním
+    /// *pravidle* v `Policy.lane` (viz `WorkLaneTests.handOffIsTheLastRuleThatClaimsAnything`), ne
+    /// o posledním *pruhu* v kresbě —, takže je od třetího proklikání zpátky na **pátém** místě.
     ///
     /// Tvrdí se tu **celé pořadí literálem**, ne jen první položka: kdyby se osa změnila znovu,
     /// má spadnout tenhle test a ne render.
-    @Test("Pořadí pruhů začíná tím, co je hotové, a končí předáním")
+    @Test("Pořadí pruhů začíná tím, co je hotové, a končí tichým pruhem")
     func putsTheFinishedWorkFirst() {
-        #expect(WorkLane.order == [.merge, .finishReview, .decide, .read, .waiting, .handOff])
+        #expect(WorkLane.order == [.merge, .finishReview, .decide, .read, .handOff, .waiting])
         #expect(Set(WorkLane.order) == Set(WorkLane.allCases))
         #expect(WorkLane.order.count == WorkLane.allCases.count)
-        // `Předat agentovi` je **poslední**, a tvrdí se to zvlášť: je to jediná položka pořadí,
-        // která neplyne z osy, takže se nemá ztratit v literálu výš.
-        #expect(WorkLane.order.last == .handOff)
-        // Zbylé tři si drží **relativní** pořadí z kresby; přesunuly se jedině `merge`,
-        // `finishReview` a `handOff`. Kdyby se přeskládaly i ty tři, je to jiné rozhodnutí
-        // a chce vlastní záznam.
-        #expect(WorkLane.order.filter { $0 != .merge && $0 != .finishReview && $0 != .handOff }
-            == [.decide, .read, .waiting])
+        // Tichý pruh je **poslední**, a tvrdí se to zvlášť: je to konec osy — míč u mě není vůbec —,
+        // takže za něj nesmí spadnout pruh, ve kterém se něco dělá.
+        #expect(WorkLane.order.last == .waiting)
+        // Zbylé čtyři si drží **relativní** pořadí z kresby; přesunuly se jedině `merge`
+        // a `finishReview`. Kdyby se přeskládaly i ony, je to jiné rozhodnutí a chce vlastní
+        // záznam — `handOff` na konci už jedno takové mělo a byl to špatně přeložený pokyn.
+        #expect(WorkLane.order.filter { $0 != .merge && $0 != .finishReview }
+            == [.decide, .read, .handOff, .waiting])
         // Deska pořadí **nepřeskládává** — bere ho z `WorkLane.order`.
         #expect(Policy.board(entries: entries(2)).lanes.map(\.lane) == WorkLane.order)
     }

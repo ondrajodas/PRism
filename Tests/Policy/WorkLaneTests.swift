@@ -303,6 +303,49 @@ extension WorkLaneTests {
         }
     }
 
+    /// **`handOff` je poslední pravidlo, které něco tvrdí — a tichý pruh je fallback** (třetí
+    /// proklikání #515: *„předat agentovi poslední jsem myslel jako poslední pravidlo, ne poslední
+    /// box“*).
+    ///
+    /// Je to tvrzení o tom, co se **nestalo**, a proto je z téhle sady nejcennější: kdyby se
+    /// pravidlo o předání posunulo **za** `waiting`, do `Předat agentovi` by nespadlo **nikdy nic**
+    /// a všechny vlastní PR by se svezly na tichém pruhu. Deska by přitom vypadala platně — pruh se
+    /// při nule nekreslí, takže by po něm nezbylo ani prázdné okýnko.
+    ///
+    /// Tvrdí se to **z obou stran**: dokud něco zbývá předat, do tichého pruhu se PR nedostane
+    /// (leda že review běží — to je pravidlo výš), a naopak `waiting` u vlastního PR nastane jedině
+    /// tehdy, když nezbývá nic.
+    @Test("Předání je poslední pravidlo, které něco tvrdí")
+    func handOffIsTheLastRuleThatClaimsAnything() {
+        let running: [ReviewState] = [.queued, .cloning, .running(finished: 1, total: 3)]
+        for state in Self.states {
+            for hasDraft in [false, true] {
+                for stage in Self.stages {
+                    for ready in [false, true] {
+                        let lane = lane(
+                            state,
+                            ownership: .mine,
+                            hasDraft: hasDraft,
+                            pending: 3,
+                            stage: stage,
+                            isMergeReady: ready
+                        )
+                        #expect(
+                            lane != .waiting || running.contains(state),
+                            "\(state) draft=\(hasDraft) \(stage) ready=\(ready)"
+                        )
+                    }
+                }
+            }
+        }
+        // A z druhé strany: `waiting` je **konec výčtu**, ne pravidlo — u vlastního PR nastane
+        // jedině tehdy, když se nedá tvrdit ani předání, ani merge.
+        for state in Self.states where !running.contains(state) {
+            #expect(lane(state, ownership: .mine, pending: 0, isMergeReady: false) == .waiting, "\(state)")
+            #expect(lane(state, ownership: .mine, pending: 1, isMergeReady: false) == .handOff, "\(state)")
+        }
+    }
+
     /// Do rozřazování jde z reportu **jedině `pending`** (přes `awaitsMove`), nic jiného. Kdyby se
     /// opřelo o `staleFindings` nebo o razítko, začal by pruh záležet na tom, jestli se načetla
     /// konverzace — a to je stav, který se mění pod rukou.

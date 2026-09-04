@@ -56,27 +56,28 @@ enum WorkLane: String, CaseIterable, Hashable, Sendable {
     ///
     /// Tím se osa změnila, a s ní **jedna další věc, ne žádná**: `Dopsat a odeslat` jde z konce
     /// na druhé místo, protože je to tentýž druh „skoro hotovo“ — text už je napsaný, chybí ho
-    /// odeslat. Zbylé tři si **relativní pořadí drží beze změny** (`decide` → `read` →
-    /// `waiting`), protože v nové ose vycházejí stejně: u `Rozhodnout` už review doběhlo a kolega
-    /// čeká na verdikt, u `Přečíst` to ještě nezačalo a v tichém pruhu **míč u mě není vůbec**.
+    /// odeslat. Zbylé čtyři si **relativní pořadí drží beze změny** (`decide` → `read` →
+    /// `handOff` → `waiting`), protože v nové ose vycházejí stejně: u `Rozhodnout` už review
+    /// doběhlo a kolega čeká na verdikt, u `Přečíst` to ještě nezačalo, `Předat agentovi` je
+    /// vlastní práce, na kterou nečeká nikdo než já, a v tichém pruhu **míč u mě není vůbec**.
     ///
-    /// **`Předat agentovi` je poslední, a to je pokyn, ne výsledek té osy** (druhé proklikání
-    /// #515 — ruší jeho páté místo, které tu stálo předtím). V ose vycházel pátý, tedy **nad**
-    /// tichým pruhem: je to vlastní práce, na kterou nikdo nečeká. Nad hotovou obrazovkou ale
-    /// vyhrálo, že **návrhy od agenta jsou nejnižší priorita** — je to nabídka, kterou si můžu
-    /// vzít, kdežto v tichém pruhu se aspoň dozvím, na co se čeká.
+    /// **`Předat agentovi` tu jedno kolo stálo poslední — a byl to špatně přeložený pokyn, ne
+    /// rozhodnutí** (třetí proklikání #515, ruší druhé). Pokyn zněl *„návrhy z průběhu od agenta
+    /// dej jako poslední“* a mluvil o **posledním pravidle v rozřazování** (`lane(of:…)`, bod 5),
+    /// ne o posledním pruhu v kresbě; do zadání se dostal jako „poslední pruh“ a pořadí se podle
+    /// toho přeskládalo. Pruh je proto zpátky na **pátém** místě, tedy tam, kam ho posadí osa.
     ///
-    /// **Osa se tím nemění**, a je to tady napsané schválně: kdo bude příště pořadí posuzovat
-    /// podle osy, dostane u `handOff` páté místo — a **nesmí ho podle toho „opravit“**. Z osy
-    /// plyne jedině to, že `handOff` je za `read`; že je až za `waiting`, je rozhodnutí člověka
-    /// a mění se jedině dalším rozhodnutím člověka.
+    /// **Napsané je to tady schválně**: kdo v historii narazí na commit, který `handOff` posouvá
+    /// na konec, ať ho nečte jako rozhodnutí, které se cestou ztratilo. Pořadí se z osy odvozuje
+    /// **celé** a mění se jedině tím, že se změní osa — a záměna „pruh vlevo dole“ za „pravidlo
+    /// nakonec“ je přesně ten druh chyby, kvůli které tu stojí i odstavec o pořadí kresby níž.
     ///
     /// **Tohle je pořadí kresby, ne přednost při rozřazování.** Že `finishReview` „přebíjí
     /// všechno“ (viz `lane(of:…)`) je věta o tom, do kterého pruhu PR **spadne**; že se kreslí
     /// druhý, je věta o tom, kde ten pruh na obrazovce **stojí**. Kdyby se ty dvě věci spletly,
     /// bylo by to čtení pořadí jako přednosti — a to je přesně ten druh záměny, kvůli které tu
     /// stojí tenhle odstavec.
-    static let order: [WorkLane] = [.merge, .finishReview, .decide, .read, .waiting, .handOff]
+    static let order: [WorkLane] = [.merge, .finishReview, .decide, .read, .handOff, .waiting]
 
     /// Nadpis pruhu.
     var title: String {
@@ -139,6 +140,20 @@ extension Policy {
     ///    pruhu, takže jdou s PR do kteréhokoli pruhu — a **na stavu předání nezávisí ani jedna
     ///    z nich**, takže `changed` je v `K merge` vidět stejně jako kdekoli jinde. Jedna podoba
     ///    řádku, ne třetí (#172).
+    ///
+    /// 5. **`handOff` je poslední pravidlo, které něco tvrdí** — a je to pokyn (třetí proklikání
+    ///    #515: *„předat agentovi poslední jsem myslel jako poslední pravidlo, ne poslední box“*).
+    ///    Poslední **řádek** funkce je `waiting`, ale ten netvrdí nic: je to fallback pro „o tomhle
+    ///    PR se nedá tvrdit nic“. Kdyby se `handOff` posunul za něj, **nespadlo by do něj nikdy
+    ///    nic** — každý vlastní PR by se svezl na tichém pruhu. „Poslední“ tedy znamená *za všemi
+    ///    pravidly, která odpovídají*, ne *na posledním řádku* `switch`e, a hlídá to tvrzení, že
+    ///    vlastní PR s `awaitsMove` do `waiting` nespadne — leda že na něm běží review, což je
+    ///    pravidlo z bodu 2 (`WorkLaneTests.handOffIsTheLastRuleThatClaimsAnything`).
+    ///
+    ///    **S pořadím kresby to nemá nic společného** (`WorkLane.order`): tenhle bod je o tom, do
+    ///    kterého pruhu PR **spadne**, kdežto pořadí je o tom, kde ten pruh na obrazovce **stojí**.
+    ///    Právě tyhle dvě věty se u #515 jednou spletly a `handOff` se kvůli tomu na jedno kolo
+    ///    přesunul na konec desky.
     ///
     /// - Parameters:
     ///   - handoff: v jakém stavu je předání agentovi. Čte se z něj **jedině `awaitsMove`**, tedy

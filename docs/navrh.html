@@ -4187,10 +4187,11 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <p class="muted">
         Domov jsou proto <b>pruhy podle mého tahu</b>, a to <b>v pořadí od hotového k rozdělanému</b>
         (z proklikání, mění pořadí z decku): <em>K merge</em>, <em>Dopsat a odeslat</em>,
-        <em>Rozhodnout</em>, <em>Přečíst</em>, <em>Čeká na ostatní</em>, <em>Předat agentovi</em>.
-        <b>Návrhy od agenta jsou nejnižší priorita</b>, takže <em>Předat agentovi</em> stojí až za
-        tichým pruhem — z osy pořadí to neplyne, je to rozhodnutí z druhého proklikání.
-        <b>Prázdný pruh se nekreslí vůbec</b> — na obrázku proto chybí <em>Dopsat a odeslat</em>.
+        <em>Rozhodnout</em>, <em>Přečíst</em>, <em>Předat agentovi</em>, <em>Čeká na ostatní</em>.
+        Osa je <b>jak blízko je řádek k tomu, aby míč nebyl u mě</b>, a <b>pořadí z ní plyne celé</b>
+        — proti kresbě z decku se přesunuly jen dvě položky, <em>K merge</em> a <em>Dopsat
+        a odeslat</em>. <b>Prázdný pruh se nekreslí vůbec</b> — na obrázku proto chybí
+        <em>Dopsat a odeslat</em>.
         Cizí a vlastní PR leží v jedné desce, protože tah je osa práce; autor
         zůstává poznat šipkou <code>↑</code> v mintu a v railu zůstávají <em>Fronta</em>
         a <em>Moje PR</em> jako seznamy podle autora. <b>Karty odcházejí</b> — čísla zůstávají
@@ -4390,47 +4391,13 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                   </div>
                 </div>
 
-                <!-- Čeká na ostatní: tichý pruh. Ztlumený, nejvýš dva řádky, bez akce —
-                     je to jediný pruh, ve kterém nic nedělám. -->
-                <div class="block brd-quiet">
-                  <header>
-                    <span>Čeká na ostatní <span class="cnt">4</span></span>
-                    <span class="more">nic k udělání</span>
-                  </header>
-
-                  <div class="qrow">
-                    <div class="stripe" style="background: var(--line);"></div>
-                    <div class="mid">
-                      <div class="t1">
-                        <span class="pr-ico" style="color: var(--mint);">↑</span>
-                        <span class="title">chore: conflict probe for 467</span>
-                      </div>
-                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #9</span></div>
-                    </div>
-                    <div class="right"><span class="pill idle">čeká na CI</span></div>
-                  </div>
-
-                  <div class="qrow">
-                    <div class="stripe" style="background: var(--line);"></div>
-                    <div class="mid">
-                      <div class="t1">
-                        <span class="pr-ico draft">◑</span>
-                        <span class="title">chore: rebase probe for 466</span>
-                      </div>
-                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #8</span></div>
-                    </div>
-                    <div class="right"><span class="pill idle">draft</span></div>
-                  </div>
-
-                  <div class="more-rows">Zobrazit všechny <span class="count">+2</span> →</div>
-                </div>
-
                 <!-- Předat agentovi: vlastní PR, na kterém něco zbývá předat. Šipka `↑`
                      v mintu je jediné, co v desce drží autora poznat.
 
-                     **Je to poslední pruh** (z druhého proklikání, mění pořadí z prvního):
-                     návrhy od agenta jsou nejnižší priorita, protože je nikdo nečeká. Z osy
-                     pořadí to neplyne — v ní vycházel nad tichým pruhem. -->
+                     **Pátý pruh, tak jak ho posadí osa**: je to vlastní práce, na kterou nikdo
+                     nečeká, ale míč u mě pořád je — kdežto v tichém pruhu není vůbec. Jedno kolo
+                     stál poslední (druhé proklikání), a byl to špatně přeložený pokyn: mluvil
+                     o posledním *pravidle* v rozřazování, ne o posledním *pruhu*. -->
                 <div class="block">
                   <header>
                     <span>Předat agentovi <span class="cnt">2</span></span>
@@ -4471,6 +4438,42 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                       <span class="mini pri">Prompt →</span>
                     </div>
                   </div>
+                </div>
+
+                <!-- Čeká na ostatní: tichý pruh, a **poslední** — míč u mě není vůbec.
+                     Ztlumený, nejvýš dva řádky, bez akce; je to jediný pruh, ve kterém nic
+                     nedělám, a v rozřazování je to fallback, ne pravidlo. -->
+                <div class="block brd-quiet">
+                  <header>
+                    <span>Čeká na ostatní <span class="cnt">4</span></span>
+                    <span class="more">nic k udělání</span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">chore: conflict probe for 467</span>
+                      </div>
+                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #9</span></div>
+                    </div>
+                    <div class="right"><span class="pill idle">čeká na CI</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico draft">◑</span>
+                        <span class="title">chore: rebase probe for 466</span>
+                      </div>
+                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #8</span></div>
+                    </div>
+                    <div class="right"><span class="pill idle">draft</span></div>
+                  </div>
+
+                  <div class="more-rows">Zobrazit všechny <span class="count">+2</span> →</div>
                 </div>
 
               </div>
@@ -4595,8 +4598,10 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           něco zbývá, a <b>výjimka z toho žádná není</b>. <em>Dopsat a odeslat</em>
           <b>přebíjí všechno</b>: rozdělané review je ručně psaná práce a ta má přednost —
           a je to věta o tom, do <b>kterého pruhu</b> PR spadne, ne o tom, kolikátý ten pruh
-          na obrazovce stojí (kreslí se druhý, za <em>K merge</em>). Stejně tak
-          <em>Předat agentovi</em> stojí <b>poslední</b> kvůli prioritě, ne kvůli rozřazení.</span>
+          na obrazovce stojí (kreslí se druhý, za <em>K merge</em>). <em>Předat agentovi</em> je
+          naopak <b>poslední pravidlo, které něco tvrdí</b>: <em>Čeká na ostatní</em> za ním je
+          fallback pro „nedá se tvrdit nic“, ne šesté pravidlo — kdyby se předání rozhodovalo až za
+          ním, nespadlo by do něj nikdy nic.</span>
         </span>
       </div>
       <div class="note">
