@@ -5,7 +5,7 @@ import Testing
 
 @testable import PRism
 
-/// Dělící čáry v bloku dashboardu (#371) — a hlavně **ta jedna nad patkou**.
+/// Dělící čáry v pruhu desky (#371, přeneseno na desku #515) — a hlavně **ta jedna nad patkou**.
 ///
 /// Patka stojí za posledním řádkem, takže se na něj přestane vztahovat „poslední řádek čáru nemá“.
 /// Kdyby si patka nakreslila vlastní horní linku, sečetly by se: v mockupu z toho bylo 1 px + 1 px
@@ -24,22 +24,29 @@ import Testing
 ///
 /// **Vyzkoušené vložením regrese**: s `overlay(alignment: .top)` navíc nad patkou vyjde jedna čára
 /// 4 px vedle deseti dvoupixelových a test spadne na obojím — na počtu i na síle.
-@Suite("Dělící čáry bloku dashboardu")
+@Suite("Dělící čáry pruhu na desce")
 @MainActor
-struct DashboardFooterSeparatorTests {
-    /// Kolik vodorovných čar má levý sloupec dashboardu v tomhle scénáři.
+struct BoardSeparatorTests {
+    /// Kolik vodorovných čar má levý sloupec desky v tomhle scénáři.
     ///
-    /// Blok `Čeká na moje review`: obrys nahoře, spodní linka hlavičky, čtyři mezi pěti řádky,
-    /// **jedna nad patkou** a obrys dole — tedy osm. Blok `Moje PR` je prázdný (vlastní PR ve
-    /// scénáři žádné nejsou), takže z něj jsou tři: obrys, hlavička, obrys. Celkem jedenáct.
+    /// Scéna má **tři neprázdné pruhy ze šesti** (draft, doběhlé review, zbytek `neběželo`):
     ///
-    /// **Blok `Dění` (#443) se do toho počtu nepromítá**, a je to schválně: stojí v **pravém**
-    /// sloupci pod `Co teď`, kdežto vzorek jde přes levý (viz `bands(in:)`). Kdyby ho tenhle počet
-    /// zahrnoval, znamenalo by to, že se blok kreslí jinam, než kam ho návrh dal.
+    /// - `Dopsat a odeslat` s jedním řádkem: obrys, spodní linka hlavičky, obrys — **tři**;
+    /// - `Rozhodnout` s jedním řádkem — taky **tři**;
+    /// - `Přečíst` se sedmi v pruhu, z nichž se kreslí pět: obrys, hlavička, čtyři mezi řádky,
+    ///   **jedna nad patkou** a obrys — **osm**.
+    ///
+    /// Celkem **čtrnáct**. **Prázdné pruhy nepřidávají nic**, a je to to podstatné tvrzení
+    /// (z proklikání #515): kdyby se začaly kreslit i s nulou, jak to bylo do proklikání, přiskočí
+    /// tři × tři a vyjde třiadvacet — tedy přesně to číslo, které tu stálo předtím. Test tím drží
+    /// **obojí**: že se patka kreslí jednou čárou, i že se prázdný pruh nekreslí vůbec.
+    ///
+    /// **Blok `Dění` (#443) se do počtu nepromítá**: stojí v **pravém** sloupci, kdežto vzorek
+    /// jde přes levý (viz `bands(in:)`).
     ///
     /// Počet je v tvrzení schválně: bez něj by test prošel i tehdy, kdyby se patka nenakreslila
-    /// vůbec — deset stejně silných čar je taky „všechny stejně silné“.
-    private static let expectedLines = 11
+    /// vůbec — třináct stejně silných čar je taky „všechny stejně silné“.
+    private static let expectedLines = 14
 
     @Test("Nad patkou je jedna čára, ne dvě")
     func drawsASingleHairlineAboveTheFooter() async throws {
@@ -89,7 +96,7 @@ struct DashboardFooterSeparatorTests {
     /// kdyby se uvolnil, `cacheDisplay` by měřil view mimo okno a `orderOut` by tiše nedělal nic.
     /// Ostatní sondy v repu (`ChecksTabRenderProbe`, `SidebarRailTests`) ho drží stejně.
     private func horizontalLines(of store: AppStore) throws -> [Line] {
-        let scene = DashboardView(store: store, open: { _ in })
+        let scene = BoardView(store: store, open: { _ in })
             .frame(width: Self.width, height: Self.height)
             .environment(\.colorScheme, .light)
             .tint(Palette.accent)
@@ -182,12 +189,17 @@ struct DashboardFooterSeparatorTests {
         }
     }
 
-    /// Dashboard se sedmi PR ve frontě — pět řádků a patka `+2`.
+    /// Deska s devíti cizími PR: na jednom leží draft, na druhém doběhlé review, sedm zbylých
+    /// `neběželo` (z nich se kreslí pět a patka hlásí `+2`). Kreslí se tedy **tři pruhy ze šesti** a tři se skrývají — bez toho by scéna
+    /// o skrývání netvrdila nic (jeden pruh vypadá stejně, ať se prázdné kreslí, nebo ne).
     ///
-    /// Kreslí se přes `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: dashboard je `ScrollView`
+    /// Kreslí se přes `NSHostingView` a `cacheDisplay`, ne `ImageRenderer`: deska je `ScrollView`
     /// a ten se offscreen nerasterizuje (změřeno u #237).
     private func store() async -> AppStore {
-        let queue = (1...7).map { number in
+        // **Devět, ne sedm**: draft a doběhlé review si vezmou po jednom, takže na `Přečíst`
+        // zbude sedm — pět nakreslených a patka `+2`. Se sedmi v celku by v pruhu zbylo přesně
+        // pět, patka by odpadla a test by o čáře nad patkou netvrdil nic.
+        let queue = (1...9).map { number in
             PullRequestSummary(
                 id: PRIdentifier(repo: RepoID("cli/cli")!, number: number),
                 title: "titulek \(number)",
@@ -199,6 +211,18 @@ struct DashboardFooterSeparatorTests {
         }
         let store = AppStore(gateway: FakeGitHubGateway(always: .success(queue)), time: FakeTimeSource())
         await store.refresh()
+        // **Draft se sází přímo do `drafts`**: `setDraftBody` si bere `headSha` z načteného
+        // detailu, a ten scéna nenačítá.
+        store.drafts[queue[0].id] = ReviewDraft(
+            pullRequest: queue[0].id,
+            headSha: "aaaa1111",
+            body: "Zbytek vypadá dobře."
+        )
+        store.reviewRecords[queue[1].id] = ReviewRecord(
+            pullRequest: queue[1].id,
+            headSha: "aaaa1111",
+            runs: [makeStoredRun(findings: [], headSha: "aaaa1111")]
+        )
         return store
     }
 
@@ -208,5 +232,5 @@ struct DashboardFooterSeparatorTests {
     private static let hairline = 6
     private static let tolerance = 2.0 / 255
     private static let width = 900.0
-    private static let height = 1000.0
+    private static let height = 1400.0
 }

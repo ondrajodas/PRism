@@ -7493,3 +7493,67 @@ systémová **není**. Ověřeno vložením regrese.
 ztráta); PR, jehož se netýká nikdo, zůstává v seznamu „na čem ještě neběželo“, takže ho hromadná
 akce nabídne znovu (nic to neutratí, jen připraví pracovní kopii); a **jak dráha vypadá v úzkém
 panelu, se tvrdit nedá** — kapsle, důvod a cena mají jeden řádek, takže se to zkouší kresbou.
+
+## #515 — deska podle mého tahu (M16)
+
+**Domov se přeskládal podle tahu, ne podle autora.** Karty (#181, #371) a dvě fronty podle autora
+(#331) vystřídalo **šest pruhů**: `K merge`, `Dopsat a odeslat`, `Rozhodnout`, `Přečíst`,
+`Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
+**vyčerpávajícím výčtem** — 1 040 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
+
+**Z proklikání se změnily tři věci, tedy proti odsouhlasené kresbě.** Nejsilnější je
+**rozřazení**: mergnutelný vlastní PR je `K merge`, i když na něm něco zbývá předat — projevilo se
+to na schváleném PR se všemi osmi checky zelenými (`keboola/job-queue-daemon#934`), který ležel
+v `Předat agentovi`, protože `pending > 0` rozhodovalo dřív než merge. **Výjimka z toho žádná
+není**: první oprava nechala merge přebíjet stav `changed` (nevyřízená položka, typicky cizí
+odpověď v předaném vlákně), druhé proklikání to zrušilo celé — **když je PR mergnutelný, patří do
+`K merge`, tečka** —, a s tou výjimkou zanikl i `HandoffReport.outranksMerge`. **Informace se tím
+neztrácí a nebylo pro to potřeba nic přidávat** — pilulka `N k předání` i `Prompt →` visí na řádku,
+ne na pruhu, a na stavu předání nezávisí. **Blokující nález zůstává skutečnou překážkou**
+(rozhoduje `mergeOffer`), takže s ním PR mergnutelný není.
+
+**Zbylé věci z proklikání:** `K merge` šlo z čtvrtého
+místa **na první** (a s ním `Dopsat a odeslat` z konce na druhé): osa pořadí přestala být „od cizí
+práce k vlastní“ a je „jak blízko je řádek k tomu, aby míč nebyl u mě“ — mergnout je nejlevnější tah
+a jediný, po kterém řádek z desky rovnou zmizí. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
+i první verze měly všech šest, i s nulou. Zbylé čtyři pruhy si relativní pořadí drží beze změny,
+takže se proti kresbě přesunuly **jen dvě** položky.
+
+**A jedna oprava, která nebyla připomínka, ale špatný překlad pokynu.** Pokyn *„návrhy z průběhu od
+agenta dej jako poslední“* se do zadání dostal jako „poslední pruh na obrazovce“, takže `Předat
+agentovi` jedno kolo stálo na konci desky. Myšlené to bylo jako **poslední pravidlo v rozřazování** —
+tedy to, co už hotové bylo: `Policy.lane` se ptá v pořadí *draft · běžící review · cizí PR ·
+slévatelnost · předání*, a tichý pruh je za tím **fallback**, ne pravidlo. Pruh je proto zpátky na
+pátém místě a pořadí kresby už výjimku nemá. Že „poslední pravidlo“ **není** poslední řádek
+`switch`e, hlídá nové tvrzení: kdyby se předání posunulo za `Čeká na ostatní`, nespadlo by do něj
+nikdy nic.
+
+**Skrývání zaplatilo tři věci a každá má stráž.** Deska přestala být stabilní, takže „první pruh“
+je pokaždé jiný — proto **zkratka visí na pruhu, ne na pozici** (`⏎` u skrytého `Rozhodnout`
+nepřevezme soused; hlídá to výčet přes všech 64 podmnožin pruhů). Vznikl stav, na kterém není ani
+jeden pruh, a ten by jako prázdná plocha vypadal jako porucha — stojí v něm blok `Všechno vyřízené`,
+a **nenačtená fronta se od vyřízené pozná** (`Načítám frontu`). A věta pod pozdravem se s deskou
+nemá čím rozejít, protože skrytí pruhu i vypuštění části věty mají **tutéž podmínku**: nulu.
+
+**Deska je pohled, ne množina.** Rail dál nabízí `Frontu` a `Moje PR` jako seznamy podle autora
+a #332 platí beze změny: hromadné spuštění review, notifikace i automat čtou dál jen cizí PR. Akce
+nad pruhem `Přečíst` je `startReviewsForNotReviewed()`, tedy tatáž množina, jakou store spouštěl
+odjakživa — a je na to tvrzení z obou stran (co pruh ukazuje i co akce pustí).
+
+**Co se rozhodlo jinak než v kresbě** (podrobně v záznamu rozhodnutí): `Sestavit N zadání` otevře
+N záložek s rozloženým panelem `Zadání`, ne N sheetů za sebou (sheet, ve kterém se prompt skládá,
+aplikace nemá); kapsle jako `Copilot · za mainem o 3` v tichém pruhu se nekreslí, protože se
+z nenačteného PR nemají kde vzít; a `⏎` má jedině pruh `Rozhodnout` — `K merge` má tutéž akci bez
+klávesy, aby na jedné kombinaci nebyly dvě; a patka pruhu má stříšku, ne šipku, protože rozbaluje
+na místě.
+
+**Co odešlo**: `Dashboard` a všechny čtyři karty, `DashboardCard`, `DashboardDestination`
+(a s ním osa filtru zapínaná kartou `Blokuje` — odškrtává se v nabídce filtru dál),
+`ReviewerShareOfFindings` s legendou reviewerů (blok `Reviewery` postaví #514), `DashboardBlock`
+(z něj zbyla patka jako `BlockFooter`) a dva gettery podle autora. Blok `Dění` zůstal a strop se mu
+zvedl z pěti na **osm** řádků, protože pravý sloupec drží dva bloky místo tří.
+
+**Brief nahoře dodá #516** — do té doby je nad deskou dnešní pozdrav a věta o pruzích
+(`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`).
+
+**Otevírá** #181 (karty), #331 (dvě fronty na domově — v railu platí dál) a #443 (bloky).

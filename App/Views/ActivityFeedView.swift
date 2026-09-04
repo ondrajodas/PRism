@@ -127,12 +127,12 @@ struct ActivityFeedView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
-    /// Osa dne (`ActivityTimeline`, sdílená s dashboardem od #443). Sem se do ní vkládá i pruh
-    /// `Tady jsem skončil` — na dashboardu žádný není, protože pět řádků nemá co dělit na dvě
-    /// hromádky.
+    /// Osa dne (`ActivityTimeline`, sdílená s blokem na domácí záložce od #443). Sem se do ní
+    /// vkládá i pruh `Tady jsem skončil` — v bloku žádný není, protože osm řádků (do #515 pět)
+    /// nemá co dělit na dvě hromádky.
     ///
     /// **Den nese hlavička bloku a místo je tu na celou událost**, takže řádek zůstává
-    /// `ActivityRowPlace.section` — úzký tvar i den u času má jen dashboard.
+    /// `ActivityRowPlace.section` — úzký tvar i den u času má jen ten blok.
     private func timeline(_ day: ActivityFeedDay) -> some View {
         ActivityTimeline {
             ForEach(day.rows) { row in

@@ -98,7 +98,9 @@ struct HandoffReport: Equatable, Sendable {
         commits: nil
     )
 
-    /// Čeká na tomhle PR můj tah? **Obsah odznaku v railu** a jediné, co z reportu čte fronta.
+    /// Čeká na tomhle PR můj tah? **Obsah odznaku v railu** a jediné, co z reportu čte fronta —
+    /// a od #515 i **deska**: `Policy.lane` se ptá touhle vlastností, aby pruh `Předat agentovi`
+    /// a odznak `Moje PR` nemohly odpovědět každý jinak.
     ///
     /// Je to `pending > 0`, tedy „zbývá tu něco, co jsem nepředal?“ — ne „je tu něco?“. Po
     /// předání zhasne, i když nálezy dál existují; rozsvítí ho teprve nová položka, cizí odpověď

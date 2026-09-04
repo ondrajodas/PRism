@@ -107,20 +107,25 @@ struct AppStoreQueueScopeTests {
         #expect(store.emptyReason == nil)
     }
 
-    // MARK: - Dashboard a souhrn
+    // MARK: - Deska a souhrn
 
-    @Test("Karta Čeká na mě a blok fronty počítají jen cizí PR")
-    func countsOnlyTheirPullRequestsOnTheDashboard() async {
+    /// Deska je od #515 **jeden** seznam nad oběma množinami: rozřazení podle autora se v ní
+    /// projeví pruhem (`Policy.lane`), ne dvěma bloky. Že se cizí a vlastní PR pořád **rozlišují**,
+    /// se tvrdí nad pruhy — `Přečíst` je jen cizí, `Čeká na ostatní` u nenačteného vlastního PR.
+    @Test("Deska drží cizí i vlastní PR, každý ve svém pruhu")
+    func splitsOwnAndForeignIntoLanes() async {
         let store = await loaded([
             summary(author: "ondrajodas", "cli/cli#1"),
             summary(author: "kolega", "cli/cli#2"),
         ])
 
-        #expect(store.dashboard.queue.pullRequests == 1)
-        #expect(store.dashboardQueue.map(\.id.number) == [2])
-        // Vlastní PR z dashboardu nezmizel — má vedle vlastní kartu i blok.
-        #expect(store.dashboard.mine.pullRequests == 1)
-        #expect(store.dashboardOwnPullRequests.map(\.id.number) == [1])
+        let lanes = Dictionary(
+            uniqueKeysWithValues: store.board.lanes.map { ($0.lane, $0.rows.map(\.id.number)) }
+        )
+
+        #expect(store.boardEntries.count == 2)
+        #expect(lanes[.read] == [2])
+        #expect(lanes[.waiting] == [1])
     }
 
     @Test("Souhrn ve stavovém řádku sčítá jen frontu")
@@ -207,6 +212,10 @@ struct AppStoreQueueScopeTests {
         store.drafts[mine.id] = ReviewDraft(pullRequest: mine.id, headSha: "aaaa1111", body: "rozepsané")
 
         #expect(store.pullRequestsWithDraft.map(\.number) == [1])
-        #expect(store.dashboard.drafts.pullRequests == 1)
+        // A na desce spadne do pruhu `Dopsat a odeslat` — rozdělané review přebíjí i to, že je
+        // PR vlastní (#515).
+        #expect(
+            store.board.lanes.first { $0.lane == .finishReview }?.rows.map(\.id.number) == [1]
+        )
     }
 }

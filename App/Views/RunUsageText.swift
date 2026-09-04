@@ -40,7 +40,7 @@ enum RunUsageText {
     /// Útrata za den — cena a před ní `≥`, když se do součtu nepodařilo započítat všechno.
     ///
     /// Je to **dolní odhad**: zabitý běh peníze stál taky, jen jeho cenu nikdo nenahlásil.
-    /// Od #181 se na to ptají dvě místa (stavový řádek a karta v dashboardu) a druhá kopie by
+    /// Od #181 se na to ptají dvě místa (stavový řádek a blok `Dneska stálo` na desce) a druhá kopie by
     /// znamenala, že jedno z nich značku vynechá — tedy že součet vypadá jako úplný.
     static func spent(_ spend: DailySpend) -> String {
         (spend.unknown > 0 ? "≥ " : "") + cost(spend.cost)

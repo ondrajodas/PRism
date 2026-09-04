@@ -341,15 +341,15 @@ extension AppStoreFeedTests {
         #expect(store.railActivityCount == nil)
     }
 
-    /// Prázdný stav jde do bloku na dashboardu **tou samou cestou** (#443) — jedno rozhodnutí, dvě
+    /// Prázdný stav jde do bloku na desce **tou samou cestou** (#443) — jedno rozhodnutí, dvě
     /// obrazovky. Věta je kratší než ta v sekci, ale mluví o téže věci.
-    @Test("Prázdný stav se propíše i do bloku na dashboardu")
-    func explainsTheEmptyBlockOnTheDashboard() async {
+    @Test("Prázdný stav se propíše i do bloku na desce")
+    func explainsTheEmptyBlockOnTheBoard() async {
         let store = stored(InMemoryPreferences())
 
         #expect(store.activityEmptyState == .calm)
-        #expect(store.dashboard.activity.rows.isEmpty)
-        #expect(store.dashboard.activity.emptyExplanation?.contains("nic nestalo") == true)
+        #expect(store.board.activity.rows.isEmpty)
+        #expect(store.board.activity.emptyExplanation?.contains("nic nestalo") == true)
     }
 
     @Test("Prázdný záznam dá prázdný stav, plný ne")
@@ -418,8 +418,8 @@ extension AppStoreFeedTests {
     ///
     /// Čte se u toho **i klik na řádek**: jde přes store (`show(_ event:)`) a je to jediné místo
     /// v tom bloku, které se storu vůbec dotýká.
-    @Test("Dashboard značku poslední návštěvy neposune")
-    func doesNotMoveTheMarkFromTheDashboard() async {
+    @Test("Deska značku poslední návštěvy neposune")
+    func doesNotMoveTheMarkFromTheBoard() async {
         let preferences = InMemoryPreferences()
         let store = filled(3, preferences: preferences)
         await store.loadStoredActivity()
@@ -427,8 +427,8 @@ extension AppStoreFeedTests {
         await store.refresh()
 
         // Několik průchodů tělem: blok se čte pokaždé znovu a pokaždé musí značku nechat být.
-        let block = store.dashboard.activity
-        _ = store.dashboard
+        let block = store.board.activity
+        _ = store.board
         store.show(block.rows[0])
 
         #expect(block.rows.count == 3)
@@ -436,23 +436,23 @@ extension AppStoreFeedTests {
         #expect(ActivityVisitLedger(preferences: preferences).lastVisit() == nil)
         // A odznak v railu proto pořád svítí — je to ta škoda, kterou by posun značky napáchal.
         #expect(store.railActivityCount == 3)
-        #expect(store.dashboard.activity.title == "Dění · 3 nové")
+        #expect(store.board.activity.title == "Dění · 3 nové")
     }
 
-    /// Strop je **o kresbě, ne o množině**: v bloku pět řádků, v nadpisu i v odznaku celý záznam.
-    @Test("Blok kreslí pět řádků, nadpis a odznak počítají celý záznam")
+    /// Strop je **o kresbě, ne o množině**: v bloku osm řádků, v nadpisu i v odznaku celý záznam.
+    @Test("Blok kreslí osm řádků, nadpis a odznak počítají celý záznam")
     func capsTheBlockButNotTheCount() async {
-        let store = filled(7, preferences: InMemoryPreferences())
+        let store = filled(10, preferences: InMemoryPreferences())
         await store.loadStoredActivity()
         await store.refresh()
         await store.refresh()
 
-        #expect(store.activityEvents.count == 7)
-        #expect(store.dashboard.activity.rows.count == Policy.dashboardRowLimit)
-        #expect(store.dashboard.activity.footer?.rest == "+2")
-        #expect(store.dashboard.activity.footer?.section == .activity)
-        #expect(store.dashboard.activity.title == "Dění · 7 nových")
-        #expect(store.railActivityCount == 7)
+        #expect(store.activityEvents.count == 10)
+        #expect(store.board.activity.rows.count == Policy.activityRowLimit)
+        #expect(store.board.activity.footer?.rest == "+2")
+        #expect(store.board.activity.footer?.section == .activity)
+        #expect(store.board.activity.title == "Dění · 10 nových")
+        #expect(store.railActivityCount == 10)
     }
 
     /// Blok kreslí **tytéž položky** jako sekce, jen useknuté — dvě podoby jedné události by se
@@ -466,6 +466,6 @@ extension AppStoreFeedTests {
 
         let fromSection = store.activityFeed.flatMap { $0.rows.map(\.event) }
 
-        #expect(store.dashboard.activity.rows == Array(fromSection.prefix(Policy.dashboardRowLimit)))
+        #expect(store.board.activity.rows == Array(fromSection.prefix(Policy.activityRowLimit)))
     }
 }

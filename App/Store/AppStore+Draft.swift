@@ -213,7 +213,8 @@ extension AppStore {
         change(&draft)
         // Razítko se dává **na jednom místě**, protože tudy chodí každá změna draftu (#181).
         // Kdyby si ho nasazoval každý volající, jedna cesta by na něj časem zapomněla a draft
-        // by v dashboardu vypadal starší, než je.
+        // by v pruhu `Dopsat a odeslat` (do #515 na kartě `Rozdělaná review`) vypadal starší,
+        // než je.
         draft.updatedAt = time.now
         // Prázdný draft se maže — „draft existuje“ musí znamenat „je co poslat“.
         drafts[pr] = draft.isEmpty ? nil : draft

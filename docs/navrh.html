@@ -2778,6 +2778,35 @@ tr.mgn-crit td.code { border-right: 3px solid var(--crit); }
 tr.mgn-find td.code { border-right: 3px solid var(--find); }
 tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 
+/* ---- sekce 45: deska podle mého tahu --------------------------------------------
+   Domov přeskládaný na pruhy podle **tahu** (#515). Zákres přišel z decku „Směry pro PRism“
+   (stránka *Směry › C Deska podle mého tahu*) a jsou tu jen tři třídy, které se z existujících
+   složit nedaly: pruh sám je `.block` a řádek `.qrow`, tedy tatáž kresba, jakou měly do #515
+   oba bloky front.
+
+   1. `.brd` — deska. **Vlastní grid nedostává**: sloupce drží `.dash-cols` (`1.45fr 1fr`) beze
+      změny, takže `.brd` dodává jen to, co je na pruhu jiné než na bloku — počet v hlavičce
+      a kapsli klávesy v akci nad pruhem. Ani `.cnt`, ani `.kbd` se **naholo nedefinují**:
+      obojí je v tomhle dokumentu vnořený popisek ve třech jiných komponentách
+      (`.rchip .cnt`, `.stab .cnt`, `.pop-row .cnt`, `.act .kbd`, `.side > header .kbd`, …)
+      a naholo napsané pravidlo by se jim podstrčilo — přesně past z #390.
+   2. `.brd-quiet` — pruh `Čeká na ostatní`. Ztlumení je celá jeho kresba: je to pruh, ve kterém
+      **nic nedělám**, takže se nemá o pozornost přetahovat s tím, co na tahu je. Vlastní barvy
+      nedostává — `opacity` platí i na počet, kapsle a řádky, a to je právě to chtěné.
+   3. `.brd-empty` — věta v prázdném pruhu. Pruh **nemizí**: prázdno je odpověď („nic
+      rozepsaného“), a mizející pruhy by desku při každém tiku přeskládaly pod rukama. */
+.brd .block > header .cnt {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+  margin-left: 4px; font-weight: 500;
+}
+.brd .mini .kbd {
+  margin-left: 7px; font-family: var(--mono); font-size: 9.5px; padding: 0 4px;
+  border: 1px solid currentColor; border-radius: 4px; opacity: 0.7; font-weight: 500;
+}
+.brd-quiet { opacity: 0.7; }
+.brd-empty { padding: 12px 13px; font-size: 12px; color: var(--ink-3); }
+
+
 /* ============================================================
    KOSTRA DOKUMENTU — rozcestník, stránky, hledání
    Návrh se od téhle verze nečte jako jeden dlouhý svitek, ale po
@@ -3182,6 +3211,12 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <div class="eyebrow">01 — Startovní obrazovka</div>
       <h2>Dashboard: co dneska hoří</h2>
       <p class="muted">
+        <b>Karty a bloky front z téhle sekce odešly s #515</b> — dnešní <em>Přehled</em> kreslí
+        sekce 45 (deska podle mého tahu). Tady zůstávají jako <b>záznam toho, proti čemu #515
+        vzniklo</b>: bez něj se nedá přečíst, co se vlastně změnilo. Rail, hlavička okna
+        a stavový řádek platí dál.
+      </p>
+      <p class="muted">
         Dneska se po spuštění kouká na <em>„Vyber pull request“</em>. Fronta má přitom
         odpověď na tři otázky — kolik toho je, co z toho blokuje, a co běží — a ta se dá
         dát na první obrazovku. Přehled je vlastní záložka, takže se k ní jde vrátit,
@@ -3467,6 +3502,13 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
     <div class="section-head">
       <div class="eyebrow">21 — Moje pull requesty</div>
       <h2>Moje PR jsou druhá fronta, ne filtr v té první</h2>
+      <p class="muted">
+        <b>Dvě fronty na domově odešly s #515</b> — dnešní <em>Přehled</em> kreslí sekce 45
+        a řadí tytéž řádky podle <em>tahu</em>, ne podle autora. Rozřazení podle autora ale
+        <b>platí dál</b>: drží ho rail (<em>Fronta</em>, <em>Moje PR</em>) a všechno, co čte jen
+        cizí PR (#332). Sekce zůstává záznamem toho, kde se to rozhodlo, a rozřazení podle autora
+        v ní popisuje dnešní stav.
+      </p>
       <p class="muted">
         Dneska okno ukazuje jediný seznam: co po mně někdo chce zrevidovat. Vlastní PR se do něj
         dají přidat jedním zdrojem navíc (<code>author:@me is:open</code>) — jenže tím vznikne
@@ -4131,6 +4173,525 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       </div>
     </div>
   </section>
+
+  <section class="section" id="s45">
+    <div class="section-head">
+      <div class="eyebrow">45 — Přehled · deska podle mého tahu</div>
+      <h2>Domov se čte jako seznam úkolů, ne jako výpis dat</h2>
+      <p class="muted">
+        Do #515 byl domov uspořádaný podle <em>autora</em> (cizí fronta, moje PR) a podle
+        <em>počtů</em> (pět karet). Otázka, se kterou se aplikace otevírá, je ale <b>„co udělám
+        teď“</b> — a na tu odpovídalo jedině řazení podle závažnosti uvnitř jedné z těch dvou
+        front. Karty na ni neodpovídají vůbec: <code>Čeká na mě 13</code> je počet, ne tah.
+      </p>
+      <p class="muted">
+        Domov jsou proto <b>pruhy podle mého tahu</b>, a to <b>v pořadí od hotového k rozdělanému</b>
+        (z proklikání, mění pořadí z decku): <em>K merge</em>, <em>Dopsat a odeslat</em>,
+        <em>Rozhodnout</em>, <em>Přečíst</em>, <em>Předat agentovi</em>, <em>Čeká na ostatní</em>.
+        Osa je <b>jak blízko je řádek k tomu, aby míč nebyl u mě</b>, a <b>pořadí z ní plyne celé</b>
+        — proti kresbě z decku se přesunuly jen dvě položky, <em>K merge</em> a <em>Dopsat
+        a odeslat</em>. <b>Prázdný pruh se nekreslí vůbec</b> — na obrázku proto chybí
+        <em>Dopsat a odeslat</em>.
+        Cizí a vlastní PR leží v jedné desce, protože tah je osa práce; autor
+        zůstává poznat šipkou <code>↑</code> v mintu a v railu zůstávají <em>Fronta</em>
+        a <em>Moje PR</em> jako seznamy podle autora. <b>Karty odcházejí</b> — čísla zůstávají
+        v railu a ve stavovém řádku, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z téhle.
+      </p>
+      <p class="muted">
+        Řádek je <b>tentýž <code>.qrow</code></b> jako v obou frontách do #515 — jedna podoba
+        řádku, ne třetí. Co je nové, je <b>akce nad celým pruhem</b> vpravo v jeho hlavičce:
+        pustit review na všechno, co v pruhu leží, otevřít první, sestavit zadání. Věta pod
+        pozdravem mluví o pruzích (<code>9 věcí na tahu · 4 čekají na ostatní · 2 se dají
+        mergnout</code>); <b>brief ve třech větách</b> z decku sem přijde až s #516, do té doby
+        je nad deskou dnešní pozdrav.
+      </p>
+    </div>
+
+    <div class="scroller">
+      <div class="win tall">
+        <div class="titlebar">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="tabstrip">
+            <div class="tab home active"><span class="label">Přehled</span></div>
+            <div class="tab-add">+</div>
+          </div>
+          <div class="toolbtns">
+            <span class="tbtn key">⌘K</span>
+            <span class="tbtn">⟳</span>
+          </div>
+        </div>
+
+        <div class="body-grid">
+          <nav class="rail">
+            <div class="ri on">⌂</div>
+            <div class="ri">☰<span class="badge">5</span></div>
+            <div class="ri">↑<span class="badge">3</span></div>
+            <div class="ri">✎</div>
+            <div class="ri">◷<span class="badge">30</span></div>
+            <div class="sep"></div>
+            <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
+            <div class="grow"></div>
+            <div class="ri">⚙</div>
+          </nav>
+
+          <div class="dash">
+            <div class="dash-head">
+              <div>
+                <h4>Dobrý večer.</h4>
+                <div class="sub">9 věcí na tahu · 4 čekají na ostatní · 2 se dají mergnout</div>
+              </div>
+              <div class="when">poslední tik 21:48 · za 9s znovu</div>
+            </div>
+
+            <div class="dash-cols brd">
+              <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0;">
+                <!-- K merge je **první pruh desky** (z proklikání #515, mění pořadí z decku):
+                     mergnout je nejlevnější tah a jediný, po kterém řádek z desky rovnou
+                     zmizí. Zavřená brána odesílání překážka není — ta mluví o tom, co smí
+                     aplikace, ne o tom, jak stojí PR.
+
+                     Druhý řádek je ten, kvůli kterému se z proklikání změnilo i **rozřazení**:
+                     slévatelný PR, na kterém přitom něco zbývá předat. Pilulka `2 k předání`
+                     i `Prompt →` jdou s řádkem do kteréhokoli pruhu, takže se ta informace
+                     přesunem do `K merge` neztrácí. -->
+                <div class="block">
+                  <header>
+                    <span>K merge <span class="cnt">2</span></span>
+                    <span class="mini">Otevřít první</span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--mint);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">chore: ready probe for 482</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">ondrajodas/prism-review-sandbox #11</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill mint">k merge</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--mint);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">[AJDA-3077] Deduplicate shared logic across task-scoping operators</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/job-queue-daemon #934</span>
+                      </div>
+                    </div>
+                    <div class="right">
+                      <span class="pill find">2 k předání</span>
+                      <span class="mini pri">Prompt →</span>
+                    </div>
+                  </div>
+                </div>
+
+
+                <!-- Tady by stál pruh `Dopsat a odeslat` — a **není tu, protože je prázdný**
+                     (z proklikání #515). Do té doby na jeho místě byl rámeček s nulou a větou
+                     `Nic rozepsaného.`; v pořadí je **druhý**, hned za `K merge`, protože text
+                     už je napsaný a chybí ho odeslat. -->
+
+                <!-- Rozhodnout: cizí PR, na kterých review doběhlo — i to čisté, protože
+                     schválit je taky rozhodnutí. -->
+                <div class="block">
+                  <header>
+                    <span>Rozhodnout <span class="cnt">3</span></span>
+                    <span class="mini">Otevřít první <span class="kbd">⏎</span></span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--crit);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">Testovací PR pro ověření review API</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">ondrajodas/prism-review-sandbox #4</span><span>·</span>
+                        <span>github-actions[bot]</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill crit">5 nálezů · 5 blokuje</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--find);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">feat(flow-result): AJDA-563 read persisted requested job delay [3/3]</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/job-queue #727</span><span>·</span>
+                        <span>sykora-ji</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill find">1 nález</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--ok);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">Testovací PR pro ověření review API</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">ondrajodas/prism-review-sandbox #5</span><span>·</span>
+                        <span>github-actions[bot]</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill ok">čisté</span></div>
+                  </div>
+                </div>
+
+                <!-- Přečíst: review na tom **neběželo**. Počet v hlavičce je přesně to, co
+                     akce pustí — proto v pruhu nesmí být běžící ani doběhlé review. -->
+                <div class="block">
+                  <header>
+                    <span>Přečíst <span class="cnt">2</span></span>
+                    <span class="mini">Pustit review na 2 <span class="kbd">⌘⇧R</span></span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">feat(internal-api): AJDA-563 persist requested job delay to DB [2/3]</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/job-queue #726</span><span>·</span>
+                        <span>sykora-ji</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill idle">neběželo</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico open">⬤</span>
+                        <span class="title">C4 model update: sandboxes-service (2026-08-27)</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/platform-architecture-and-concepts #299</span><span>·</span>
+                        <span>c4-model-update-write[bot]</span>
+                      </div>
+                    </div>
+                    <div class="right"><span class="pill idle">neběželo</span></div>
+                  </div>
+                </div>
+
+                <!-- Předat agentovi: vlastní PR, na kterém něco zbývá předat. Šipka `↑`
+                     v mintu je jediné, co v desce drží autora poznat.
+
+                     **Pátý pruh, tak jak ho posadí osa**: je to vlastní práce, na kterou nikdo
+                     nečeká, ale míč u mě pořád je — kdežto v tichém pruhu není vůbec. Jedno kolo
+                     stál poslední (druhé proklikání), a byl to špatně přeložený pokyn: mluvil
+                     o posledním *pravidle* v rozřazování, ne o posledním *pruhu*. -->
+                <div class="block">
+                  <header>
+                    <span>Předat agentovi <span class="cnt">2</span></span>
+                    <span class="mini">Sestavit 2 zadání</span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--find);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">feat(diff): find in the diff with ⌘F (#152)</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">ondrajodas/PRism #499</span><span>·</span>
+                        <span style="color: var(--accent-2);">2 nové komentáře od minule</span>
+                      </div>
+                    </div>
+                    <div class="right">
+                      <span class="pill find">6 k předání</span>
+                      <span class="mini pri">Prompt →</span>
+                    </div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--find);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">[AJDA-3148] Add per-table and per-phase timing logs to input-mapping table strategies</span>
+                      </div>
+                      <div class="t2">
+                        <span class="slug">keboola/platform-libraries #566</span>
+                      </div>
+                    </div>
+                    <div class="right">
+                      <span class="pill find">1 k předání</span>
+                      <span class="mini pri">Prompt →</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Čeká na ostatní: tichý pruh, a **poslední** — míč u mě není vůbec.
+                     Ztlumený, nejvýš dva řádky, bez akce; je to jediný pruh, ve kterém nic
+                     nedělám, a v rozřazování je to fallback, ne pravidlo. -->
+                <div class="block brd-quiet">
+                  <header>
+                    <span>Čeká na ostatní <span class="cnt">4</span></span>
+                    <span class="more">nic k udělání</span>
+                  </header>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico" style="color: var(--mint);">↑</span>
+                        <span class="title">chore: conflict probe for 467</span>
+                      </div>
+                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #9</span></div>
+                    </div>
+                    <div class="right"><span class="pill idle">čeká na CI</span></div>
+                  </div>
+
+                  <div class="qrow">
+                    <div class="stripe" style="background: var(--line);"></div>
+                    <div class="mid">
+                      <div class="t1">
+                        <span class="pr-ico draft">◑</span>
+                        <span class="title">chore: rebase probe for 466</span>
+                      </div>
+                      <div class="t2"><span class="slug">ondrajodas/prism-review-sandbox #8</span></div>
+                    </div>
+                    <div class="right"><span class="pill idle">draft</span></div>
+                  </div>
+
+                  <div class="more-rows">Zobrazit všechny <span class="count">+2</span> →</div>
+                </div>
+
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0;">
+                <!-- Pravý sloupec: dění a útrata. Blok `Nálezy podle reviewera` z něj odchází
+                     s karty — `Reviewery` postaví #514. -->
+                <div class="block">
+                  <header>
+                    <span>Dění · 30 nových</span>
+                    <span class="more">celé dění →</span>
+                  </header>
+
+                  <div class="tl">
+                    <div class="tl-item">
+                      <span class="tl-dot acc">💬</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>copilot-pull-request-reviewer</b> · 3 komentáře</span>
+                        <span class="slug">ondrajodas/PRism#499</span>
+                        <span class="ago">v 18:24</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot acc">💬</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>copilot-pull-request-reviewer</b>: Komentář tvrdí, že…</span>
+                        <span class="slug">ondrajodas/PRism#498</span>
+                        <span class="ago">v 15:39</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot warn">⟲</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>Nálezy zastaraly</b></span>
+                        <span class="slug">keboola/job-queue#727</span>
+                        <span class="ago">v 15:01</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot acc">💬</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>copilot-pull-request-reviewer</b>: Tvrzení, že „grep…</span>
+                        <span class="slug">ondrajodas/PRism#497</span>
+                        <span class="ago">v 14:43</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot acc">↓</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>Nový PR k review</b></span>
+                        <span class="slug">keboola/job-queue#727</span>
+                        <span class="ago">v 12:10</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot acc">↓</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>Nový PR k review</b></span>
+                        <span class="slug">keboola/job-queue#726</span>
+                        <span class="ago">v 11:52</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot ok">✓</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>Čisté review</b></span>
+                        <span class="slug">ondrajodas/prism-review-sandbox#5</span>
+                        <span class="ago">včera v 19:02</span>
+                      </div>
+                    </div>
+                    <div class="tl-item">
+                      <span class="tl-dot crit">!</span>
+                      <div class="tl-line slim">
+                        <span class="who"><b>5 nálezů · 5 blokuje</b></span>
+                        <span class="slug">ondrajodas/prism-review-sandbox#4</span>
+                        <span class="ago">včera v 18:40</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="more-rows">Zobrazit celé dění <span class="count">+122</span> →</div>
+                </div>
+
+                <div class="block">
+                  <header><span>Dneska stálo</span><span class="more">3,70 $</span></header>
+                  <div style="padding: 10px 13px 12px;">
+                    <div class="spark" style="height: 34px;">
+                      <i style="height: 55%"></i><i style="height: 50%"></i><i style="height: 70%"></i>
+                      <i style="height: 8%"></i><i style="height: 8%"></i><i style="height: 8%"></i>
+                      <i class="hot" style="height: 22%"></i>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="statusbar">
+          <span class="sp"></span>
+          <span class="sitem">5 PR · 1 blokující</span>
+          <span class="sitem">≥ 3,70 $</span>
+          <span class="sitem">🔔 zatím nic</span>
+          <span class="sitem"><span class="d" style="background: var(--ok);"></span>GitHub</span>
+          <span class="sitem"><span class="d" style="background: var(--ok);"></span>Claude</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">152</span>
+        <span class="body">
+          <b>Pruh je tah, ne stav</b>
+          <span><em>Rozhodnout</em> je cizí PR, na kterém review <b>doběhlo</b> — i to čisté,
+          protože schválit je taky rozhodnutí; patří tam i selhání a zastaralé nálezy, kde je
+          tahem podívat se a rozhodnout, co dál. <em>Přečíst</em> je to, na čem review
+          <b>neběželo</b>. <em>Předat agentovi</em> je vlastní PR s něčím k předání, <em>K
+          merge</em> vlastní bez známé překážky. <em>Čeká na ostatní</em> je zbytek — běžící
+          review i vlastní PR, o kterém se nic z toho tvrdit nedá. <b>Slévatelnost vyhrává
+          vždycky</b> (viz poznámka 159), takže mergnutelný PR je <em>K merge</em>, i když na něm
+          něco zbývá, a <b>výjimka z toho žádná není</b>. <em>Dopsat a odeslat</em>
+          <b>přebíjí všechno</b>: rozdělané review je ručně psaná práce a ta má přednost —
+          a je to věta o tom, do <b>kterého pruhu</b> PR spadne, ne o tom, kolikátý ten pruh
+          na obrazovce stojí (kreslí se druhý, za <em>K merge</em>). <em>Předat agentovi</em> je
+          naopak <b>poslední pravidlo, které něco tvrdí</b>: <em>Čeká na ostatní</em> za ním je
+          fallback pro „nedá se tvrdit nic“, ne šesté pravidlo — kdyby se předání rozhodovalo až za
+          ním, nespadlo by do něj nikdy nic.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">153</span>
+        <span class="body">
+          <b>Počet v hlavičce je přesně to, co akce udělá</b>
+          <span><code>Pustit review na 2</code> pustí ta dvě a nic jiného — proto je
+          <em>Přečíst</em> vázané na <code>neběželo</code> a běžící review se z něj propadá do
+          tichého pruhu. Kdyby se ta dvě čísla rozešla, byla by z akce ruleta a poznalo by se to
+          jedině účtem za session. Potvrzení si nechávají jen akce, které utratí <b>víc než jednu
+          session</b>: <code>Pustit review na 2</code> ano, <code>Otevřít první</code>
+          a <code>Sestavit 2 zadání</code> ne — otevřít záložku nestojí nic a jde vzít zpátky.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">154</span>
+        <span class="body">
+          <b>Deska je pohled, ne množina</b>
+          <span>Dvě fronty podle autora zůstávají v railu jako seznamy a <b>#332 platí beze
+          změny</b>: hromadné spuštění review, notifikace i automat čtou dál jen cizí PR. Deska
+          jen skládá tytéž řádky podle jiné otázky. Odznaky v railu (<code>5</code>,
+          <code>3</code>, <code>30</code>) a souhrn ve stavovém řádku proto zůstávají — čísla,
+          která karty ukazovaly, jsou vidět odsud a ze všech ostatních obrazovek.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">155</span>
+        <span class="body">
+          <b>Tichý pruh je ztlumený a krátký</b>
+          <span><em>Čeká na ostatní</em> má strop <b>dva řádky</b> místo pěti a místo akce v něm
+          stojí <code>nic k udělání</code>. Je to jediný pruh, ve kterém se nic nedělá, takže
+          nemá plnit obrazovku — zbytek shrne patka a rozbalí se na místě. Do sekce se z ní
+          nepřepíná: pruh míchá cizí a vlastní PR, takže neexistuje sekce, která by měla tutéž
+          množinu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">156</span>
+        <span class="body">
+          <b>Prázdný pruh se nekreslí</b>
+          <span><b>Změna proti kresbě, z proklikání</b>: do té doby tu stálo, že šest pruhů je
+          vidět vždycky, i s nulou. Rámeček s nulou ale nese jedinou informaci — „tady nic
+          není“ —, a šest takových je pět šestin obrazovky za odpověď, o kterou se nikdo
+          neptal. <b>Šest vět na pruh</b> (<code>Nic rozepsaného.</code> a spol.) s tím odešlo
+          taky — nemají se kde ukázat. Co říct, když <b>není ani jeden</b> pruh, je poznámka
+          158.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">157</span>
+        <span class="body">
+          <b>Zkratka visí na pruhu, ne na pozici</b>
+          <span>Skrývání znamená, že <b>„první pruh“ je pokaždé jiný</b>. <code>⏎</code> proto
+          patří <em>Rozhodnout</em>, ne hornímu pruhu: když je <em>Rozhodnout</em> skryté,
+          klávesu <b>nevydá nikdo</b> a nepřevezme ji ani <em>K merge</em>, které má tutéž akci.
+          Jinak by to byla kolize dvou tlačítek na jedné klávese (#151, #184) — jen v čase,
+          takže by se z katalogu nepoznala.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">158</span>
+        <span class="body">
+          <b>Když není ani jeden pruh</b>
+          <span>Ten stav skrývání teprve <b>vyrábí</b>, a prázdná plocha by z něj udělala
+          poruchu. Místo šesti nul stojí na desce jeden blok: <code>Všechno vyřízené</code>
+          a pod ním věta o tom, co se stane dál. „Nic tu není“ a „všechno je hotové“ jsou dvě
+          různá tvrzení a pravdivé je to druhé — a <b>nenačtená fronta není vyřízená fronta</b>,
+          takže do stažení seznamu se říká <code>Načítám frontu</code>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">159</span>
+        <span class="body">
+          <b>Mergnutelnost vyhrává vždycky</b>
+          <span><b>Změna proti kresbě, ze dvou kol proklikání</b>: nejdřív rozhodovalo „něco zbývá
+          předat“ dřív než merge, takže schválený PR se všemi checky zelenými ležel
+          v <em>Předat agentovi</em>. Slévatelnost je ale nejsilnější signál, jaký vlastní PR má,
+          a tah <em>mergni to</em> má <b>dobu trvanlivosti</b>. První oprava z toho nechala jednu
+          výjimku (stav <code>changed</code>, tedy „něco je nevyřízené“ — typicky cizí odpověď
+          v předaném vlákně); <b>druhé kolo ji zrušilo</b>: když je PR mergnutelný, patří do
+          <em>K merge</em>, tečka. Informace se přesunem <b>neztrácí</b>: pilulka
+          <code>2 k předání</code> i <code>Prompt →</code> visí na <b>řádku</b>, ne na pruhu, a na
+          stavu předání nezávisí — viz druhý řádek <em>K merge</em>. <b>Skutečná překážka se tím
+          neobchází</b>: PR s blokujícím nálezem mergnutelný není, takže v <em>Předat agentovi</em>
+          zůstane.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
 
         <div class="doc-move">
           <a class="prev" href="#uvod"><span class="dir">← předchozí</span><span class="t">Úvod</span></a>

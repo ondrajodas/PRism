@@ -157,21 +157,4 @@ extension AppStore {
             hidden: hidden
         )
     }
-
-    /// Moje PR na dashboardu — tytéž řádky jako v sekci, jen seřazené podle závažnosti.
-    ///
-    /// **Plný seznam, ne zúžený filtrem**, ze stejného důvodu jako `dashboardQueue`: dashboard je
-    /// tvrzení o tom, co venku mám, ne o tom, co je zrovna vidět.
-    var dashboardOwnPullRequests: [QueueEntry] {
-        Policy.byUrgency(
-            Policy.pullRequests(pullRequests, ownedBy: .mine, mine: ownLogins).map {
-                QueueEntry(
-                    pullRequest: $0,
-                    state: reviewState(for: $0.id),
-                    row: queueRow(for: $0.id),
-                    hasDraft: hasDraft($0.id)
-                )
-            }
-        )
-    }
 }
