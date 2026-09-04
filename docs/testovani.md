@@ -2616,10 +2616,16 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     výčet toho, co konfigurace je a co ne — `config/routes.php`, `res/layout/activity_main.xml`
     a `docs/navrh.html` konfigurace **nejsou**, `.github/workflows/push.yml` je.
   - **`ItineraryColumnRoomTests`** — [kolik ubere širší sloupec](#kolik-ubere-širší-levý-sloupec-506).
+  - **`ItineraryChoiceTests`** (třetí kolo) — že **ruční volba přežije přepnutí tabu**, nad hostovaným
+    detailem a nad uloženou hodnotou. Nejcennější je ta dvojice směrů: `⌘1` ve `Vedle sebe` se nesmí
+    zavřít **a** `⌘1` v `Pod sebou` se nesmí otevřít — jeden směr sám by prošel i po opravě, která
+    platí jen na jednu stranu. K tomu druhá polovina, aby oprava nemohla znít „nikdy nezavírej“:
+    přepnutí pohledu volbu přebít **smí**. Jak se to našlo, je
+    [u měření](#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506).
   - **Sonda `ReviewItineraryRenderProbe`** — obrázek, protože „sedí to se sekcí 47?“ je otázka na
-    obrázek: plný itinerář s pěti zastávkami (dvě hotové, aktuální jsou soubory, spadlý check)
-    **a** sloupec bez zastávek, tedy ta podoba, kterou má v diffu commitu a v rozsahu od minule.
-    Kreslí se v **okně bez animace** (#462) přes `NSHostingView`, ne `ImageRenderer`em — sloupec je
+    obrázek: plný itinerář s pěti zastávkami (dvě hotové, aktuální jsou soubory, spadlý check).
+    **Sloupec bez zastávek už se nekreslí** — od druhého kola #506 mluví sloupec vždycky o celém
+    pull requestu, takže ta podoba zanikla. Kreslí se v **okně bez animace** (#462) přes `NSHostingView`, ne `ImageRenderer`em — sloupec je
     `ScrollView` a ten se offscreen nevykreslí vůbec.
 - **Mapa PR — pás pod hlavičkou (#501)** — dvě sady a jedna sonda:
   - **`Policy`** (`PullRequestMapTests`) — šířky, barvy, popisek a krok. Nejcennější je dvojice
@@ -8684,6 +8690,50 @@ tab; zapsaná mezera je, že v tabu bez diffu se nerozhoduje vůbec (viz
 **A co se změřit nedá vůbec**: že `⌘1` doopravdy zabere ve všech tabech. Testovací host nedostane
 aktivaci (viz [*Jak změřit fokus a klávesy*](#jak-změřit-fokus-a-klávesy-184)), takže to zkouší
 člověk.
+
+### Jak se našlo „někdy se ten levý panel zavře" (#506)
+
+Nález z proklikání: *„někdy se ten levý panel zavře když na něco kliknu…ale jen někdy.“* „Jen
+někdy“ je u takového hlášení ta podstatná část — a v tomhle případě to podmiňovaly **dvě věci
+naráz**, takže se to hádáním z kódu nedalo uzavřít.
+
+**Co se změřilo.** Scéna hostuje `PullRequestDetailView` (okno 1 048 × 860, vlastní doména
+`ScratchDefaults`) a čte **uloženou hodnotu** `diffTreeExpanded`, ne kresbu: kolony jsou SwiftUI
+a z accessibility tree se nepřečtou (změřeno u #546), kdežto klíč v `UserDefaults` je obyčejná
+hodnota — a právě ta byla předmětem vady, protože se přepisovala **volba**, ne jen to, co je zrovna
+vidět. Čte se `object(forKey:)`, ne `bool(forKey:)`, aby „nikdo nic nezapsal“ vyšlo `nil` a nespletlo
+se s „zapsalo se zavřeno“.
+
+Postup je čtyřkrokový a každý krok je jiná otázka: uplatní se rozhodnutí #188 → přebije ho `⌘1` →
+odejdi do jiného tabu → **vrať se**. Naměřeno nad kódem před opravou (`ItineraryChoiceTests`):
+
+| Krok | *Vedle sebe*, `⌘1` otevřel | *Pod sebou*, `⌘1` složil |
+|---|---|---|
+| po prvním průchodu diffem | `false` (#188, záměr) | `true` |
+| po `⌘1` | `true` | `false` |
+| odchod do `Kontrol` / `Přehledu` | `true` | `false` |
+| **návrat do `Změněných souborů`** | **`false`** | **`true`** |
+
+Ten poslední řádek je celá vada: **odchod volbu nezmění, návrat ji přepíše.** Příčina je vznik
+`DiffView`u — `switch tab` v detailu ho při odchodu zahodí, takže návrat je nová instance s prázdnou
+stráží `@State appliedColumns`, která rozhodnutí #188 uplatní podruhé. Rozbor je
+v [`docs/architektura.md`](architektura.md#stráž-automatiky-patří-ke-stavu-ne-k-diffu-506-třetí-kolo).
+
+**Proč „jen někdy“, a proč to hlášení nešlo přečíst jako „vždycky“.** Přepisuje se jedině na hodnotu,
+která se od uložené liší, takže se ve stavu, jaký `Policy` chce, nestane nic. Ve `Vedle sebe` se
+sloupec zavírá, v `Pod sebou` se naopak sám otevírá — a ta druhá polovina se z hlášení nedozvěděla,
+protože „otevřel se sám“ si člověk vysvětlí jako „nezabralo to“. Kdyby se měřil jen jeden pohled,
+vyšlo by měřidlo zeleně u opravy, která platí jen na jednu stranu (#478).
+
+**Reprodukce pro člověka**: `⌘2` (*Vedle sebe*), `⌘1` (sloupec se otevře), klik na `Kontroly`, klik
+na `Změněné soubory` — sloupec je zavřený. Cesty, které do toho vedou, jsou čtyři a všechny končí
+vznikem `DiffView`u: záložka, **zastávka nebo soubor** v itineráři (`jump(toFile:)` přepíná tab),
+`⌘2` (složení panelu přestaví `HStack` v detailu) a **vybrání commitu** v tabu `Commity` — ten měl
+vlastní `DiffView`, který týž klíč přepisoval taky.
+
+**Co měřidlo neumí**: jak sloupec při tom vypadá. Na to jsou rendery (`ChecksTabRenderProbe`,
+`DetailTabRenderProbe`) a `⌘1` v živém okně, protože testovací host nedostane aktivaci (viz [*Jak
+změřit fokus a klávesy*](#jak-změřit-fokus-a-klávesy-184)).
 
 ### Kolik stojí otevřená záložka (#274)
 

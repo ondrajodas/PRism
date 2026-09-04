@@ -81,6 +81,14 @@ struct ItineraryEveryTabTests {
         #expect(Policy.widthWithItinerary(slot: -10, expanded: false) == nil)
         let unmeasured = Policy.diffSideColumns(layout: .unified, hasMargin: false, available: nil)
         #expect(unmeasured.tree)
+        // **A nula je totéž co `nil`, ne nejužší okno** (#506/3). `DiffView` spadne na vlastní
+        // štěrbinu (`sharedWidth ?? slotWidth`) a ta v prvním průchodu **nulu propustí** — z ní by
+        // vyšlo „složit všechno“, a od #506 se to rozhodnutí ukládá do volby člověka, takže by to
+        // nebyl problém jednoho snímku.
+        for zero in [0.0, -1] {
+            let columns = Policy.diffSideColumns(layout: .unified, hasMargin: false, available: zero)
+            #expect(columns.tree, "Šířka \(zero) se bere jako úzké okno, ne jako nezměřeno.")
+        }
     }
 
     // MARK: - Stráž nad zdrojáky
@@ -150,6 +158,50 @@ struct ItineraryEveryTabTests {
         #expect(
             source.condensed.contains("ItineraryRailView(files:loadedDiff?.files.count)"),
             "Proužek dostává počet jinak než z nepovinného diffu — nad nenačteným pak vyjde nula."
+        )
+    }
+
+    /// **Uložený stav sloupce čte jediný uzel** (#506, třetí kolo).
+    ///
+    /// Do třetího kola visel `@AppStorage("diffTreeExpanded")` na `PullRequestDetailView` **i** na
+    /// `DiffView`. Dva uzly nad jedním klíčem nejsou samy o sobě vada (je to uložená předvolba),
+    /// ale byly to dvě místa, která o jedné hodnotě **rozhodují** — a rozešla se potichu: diff při
+    /// každém vzniku uplatnil rozhodnutí #188 na stav, který kreslí detail, a přepsal tím `⌘1`.
+    /// Od té doby chodí stav i stráž do diffu **parametrem** (`DiffColumnActions`).
+    @Test("Uložený stav sloupce čte jediný uzel")
+    func oneNodeOwnsTheStoredColumnState() throws {
+        let key = "@AppStorage(\"diffTreeExpanded\")"
+        let owners = try Self.sources(under: "App").filter { $0.condensed.contains(key) }
+        #expect(
+            owners.map(\.path) == ["Views/PullRequestDetailView.swift"],
+            """
+            Klíč `diffTreeExpanded` čte \(owners.map(\.path)) — má ho číst jedině ten, kdo sloupec \
+            kreslí. Druhý uzel nad tím klíčem je cesta, kterou se volba člověka přepíše.
+            """
+        )
+    }
+
+    /// **A do stavu sloupce se píše ze čtyř vyjmenovaných míst.**
+    ///
+    /// Tři jsou z kliknutí — `⌘1` (`columnShortcut`), `collapse` z hlavičky sloupce a proužek,
+    /// kterým se otevře zpátky — a čtvrté je binding pro automatiku. Pátý zapisovatel se pozná
+    /// jedině tím, že se sloupec „někdy“ zavře, takže je to přesně ten druh tvrzení, který se
+    /// rozbije potichu.
+    @Test("Do stavu sloupce píšou vyjmenovaná místa")
+    func onlyTheNamedPlacesWriteTheColumnState() throws {
+        let detail = try Self.detailSource()
+        #expect(detail.condensed.ranges(of: "isColumnExpanded.toggle()").count == 1, "`⌘1` má být jedno.")
+        // Ve složených závorkách, tedy **zápis z closury** — samotné `isColumnExpanded=true` je
+        // v souboru dvakrát a to druhé je výchozí hodnota `@AppStorage`, ne zápis.
+        #expect(detail.condensed.ranges(of: "{isColumnExpanded=true}").count == 1, "Proužek má být jeden.")
+        #expect(detail.condensed.ranges(of: "{isColumnExpanded=false}").count == 1, "`collapse` má být jeden.")
+        // Binding pro automatiku — **jeden**, a jde do `DiffView`u pull requestu. Diff commitu ho
+        // dostat nesmí: kreslí se v tabu `Commity`, kde sloupec stojí taky, a přepsal by ho.
+        #expect(detail.condensed.ranges(of: "expanded:$isColumnExpanded").count == 1)
+        let commit = try #require(Self.sources(under: "App/Views").first { $0.path == "CommitDiffView.swift" })
+        #expect(
+            !commit.condensed.contains("columnActions"),
+            "Diff commitu dostal `columnActions` — pak sloupcem hýbe i tab, ve kterém není o čem."
         )
     }
 

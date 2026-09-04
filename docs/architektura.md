@@ -1798,14 +1798,17 @@ a `DiffCodeColumnWidthTests` nad hostovaným oknem.
 
 **O skládání pořád rozhoduje `DiffView`, a je to zapsaná mezera.** Podlaha, kvůli které se sloupec
 skládá, je podlaha **kolony kódu** — v `Kontrolách` není co chránit. Rozhodnutí tedy zůstalo tam,
-kde ta podlaha je, a předvolba `diffTreeExpanded` je uložená hodnota, kterou obě strany čtou ze
-`UserDefaults` (tentýž vzorec jako `panelExpanded`). **Mezera**: v tabu bez diffu se nerozhoduje
-vůbec, takže zúžení okna nad `Kontrolami` sloupec nesloží — složí ho první průchod diffem. Posouzeno
-jako přijatelné, a **je to změřené, ne odhad**: hranice skládání je `360 + 260 = 620` bodů štěrbiny,
-kdežto podlaha `RootView`u dá štěrbinu **648**, takže na nejmenším okně, které se dá otevřít, sloupec
-nesloží ani diff. Bez okraje karet se tedy ta mezera **neprojeví vůbec**; s ním je hranice 920,
-a tam se pozná — okno se pod ni dá stáhnout a v `Kontrolách` sloupec zůstane rozložený, dokud se
-neklikne na diff.
+kde ta podlaha je; **stav sloupce a stráž proti druhému uplatnění jsou od třetího kola detailu**
+(o sekci níž — do té doby to byla uložená hodnota, kterou obě strany čtou ze `UserDefaults`, a stálo
+to vadu z proklikání). **Mezera**: v tabu bez diffu se nerozhoduje vůbec, takže zúžení okna nad
+`Kontrolami` sloupec nesloží — složí ho první průchod diffem. Posouzeno jako přijatelné, a **je to
+změřené, ne odhad**: hranice skládání je `360 + 260 = 620` bodů štěrbiny, kdežto podlaha `RootView`u
+dá štěrbinu **648**, takže na nejmenším okně, které se dá otevřít, sloupec nesloží ani diff. Bez
+okraje karet se tedy ta mezera **neprojeví vůbec**; s ním je hranice 920, a tam se pozná — okno se
+pod ni dá stáhnout a v `Kontrolách` sloupec zůstane rozložený, dokud se neklikne na diff. Od třetího
+kola je ta mezera navíc **tvrzením, ne jen poznámkou**: nad tabem bez diffu se stavem sloupce nehýbe
+nic (`ItineraryChoiceTests.nothingTouchesTheChoiceInATabWithoutADiff`), a v aplikaci se do ní ani
+nedá dostat — pohled přepíná lišta, která je vidět jedině v tabu s diffem.
 
 **Rozložený sloupec a složený proužek jsou dva typy, a je to předfiltr.** `ItineraryColumnView`
 a `ItineraryRailView`: uzel se od druhého kola skládá v **každém** tabu a při každém průchodu tělem
@@ -1878,6 +1881,64 @@ návštěvy (bez toho by „od tvé poslední návštěvy“ nad prvním otevře
 věků“); `Kontroly` nesmí vzniknout nad PR bez CI (zvedly by jmenovatele počítadla o práci, která
 tam není); `current` musí zůstat právě jedna; a **nic kromě souboru se nesmí dát odškrtnout
 klikem** — první ruční zaškrtávátko na zastávce z itineráře udělá druhý seznam úkolů.
+
+#### Stráž automatiky patří ke stavu, ne k diffu (#506, třetí kolo)
+
+**Nález z proklikání:** *„někdy se ten levý panel zavře když na něco kliknu…ale jen někdy.“*
+
+**Čím to bylo.** Rozhodnutí #188 (*pohled vedle sebe složí postranní kolony*) uplatňuje `DiffView`
+v `task(id: columns)` a stráž proti druhému uplatnění držel `@State appliedColumns`. Do #506 stál
+sloupec **uvnitř** diffu, takže ta stráž žila přesně tak dlouho jako on: zanikl diff, zanikl
+sloupec, a rozhodnutí se při novém vzniku uplatnilo na čistou plochu. Druhé kolo #506 sloupec
+vystěhovalo o úroveň výš a jeho stav nechalo v `UserDefaults` — tedy **stav, který přežívá, hlídaný
+stráží, která nepřežívá**. `switch tab` v `PullRequestDetailView` diff při odchodu ze `Změněných
+souborů` zahodí, takže každý návrat byl nový `DiffView` s prázdnou stráží, který uloženou volbu
+člověka **přepsal** hodnotou z `Policy`.
+
+**Proč „jen někdy“.** Přepisuje se jedině na hodnotu, která se od uložené liší:
+
+| Stav | Co `Policy` vydá | Co se stalo |
+|---|---|---|
+| *Vedle sebe* (`⌘2`), sloupec otevřený `⌘1` | `tree == false` | **zavřel se** |
+| *Pod sebou*, sloupec složený `⌘1` | `tree == true` | **otevřel se sám** |
+| Sloupec ve stavu, jaký `Policy` chce | totéž | nic |
+
+**Klik byl v tom nález jen prostředník.** Cesty, které se z proklikání trefí, jsou čtyři a všechny
+končí vznikem `DiffView`u: klik na **záložku** `Změněné soubory`, klik na **zastávku** nebo na
+**soubor** v itineráři (`jump(toFile:)` přepíná tab), `⌘2` (složení panelu přestaví `HStack`
+v detailu) a **vybrání commitu** v tabu `Commity` — ten měl vlastní `DiffView`, který týž klíč
+přepisoval taky.
+
+**Co je vada a co záměr.** Záměr je **první** uplatnění: sloupec se ve `split`u skládá od #188 a je
+to změřené (34 bodů místo 260), takže PR otevřený *Vedle sebe* má sloupec složený a `⌘1` to přebije
+„až do další změny pohledu“. Vada je, že „další změna pohledu“ nastala i tehdy, když se pohled
+nezměnil a jen zanikl a znovu vznikl diff — a že se tím přepsala **uložená volba**, tedy i pro
+příště.
+
+**Oprava: stráž se přestěhovala tam, kde žije stav.** Rozhodnutí zůstalo v `DiffView`u (podlaha, na
+kterou se ptá, je podlaha kolony kódu), ale stav i stráž mu chodí **parametrem** —
+`DiffColumnActions` s `expanded: Binding<Bool>` a `applied: Binding<DiffSideColumns?>`, drží je
+`PullRequestDetailView`, jehož `@State` přepnutí tabu i složení panelu přežije. Je to tentýž vzorec
+jako `panelExpanded` (#242) a `tracking` (#501), a jeho `nil` znamená totéž: **kdo ho nedodá, tomu se
+nic nepřepíše**. Diff commitu (#317) ho tedy nedostane a `DiffView` po sobě nemá **žádný**
+`@AppStorage` nad klíčem `diffTreeExpanded`; fallback `ownAppliedColumns` (`@State`) zůstává pro
+hosty bez sloupce vedle sebe, aby se u nich rozhodnutí chovalo jako do #506.
+
+**Zobecnitelné pravidlo, které z toho vzniklo:** *stráž proti opakovanému uplatnění musí žít aspoň
+tak dlouho jako stav, který mění*. `@State` uzlu, který se přestavuje častěji než ten stav, je
+stráž, která „jen někdy“ neplatí — a to je vada, která se pozná až v provozu.
+
+**Nula není nejužší okno, je to nezměřeno.** `Policy.diffSideColumns` bere od třetího kola
+nekladné `available` jako `nil`. `Policy.widthWithItinerary` to dělalo od druhého kola, ale
+`DiffView` má fallback `sharedWidth ?? slotWidth` a ten nulu z prvního průchodu `GeometryReaderem`
+propustil — vyšlo by z ní „složit všechno“ a od #506 by se to zapsalo do volby člověka, takže by to
+nebyl problém jednoho snímku.
+
+**Co to hlídá.** `ItineraryChoiceTests` nad hostovaným detailem (čtyři scény: `⌘1` ve `split`u
+přežije odchod a návrat, `⌘1` v `unified` taky, přepnutí pohledu volbu přebít **smí**, a v tabu bez
+diffu se nehýbe nic) a dvě stráže nad zdrojáky v `ItineraryEveryTabTests` (klíč čte **jeden** uzel;
+do stavu sloupce píšou **vyjmenovaná** místa a diff commitu mezi nimi není). Jak se to změřilo, je
+v [`docs/testovani.md`](testovani.md#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506).
 
 ### Nálezy v okraji (#503)
 
@@ -4838,6 +4899,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `PullRequestHeaderView` | Souřadnice PR: kapsle stavu (plná, s puntíkem), od #334 za ní pilulka `moje PR` (mint, jen na vlastním) a od #531 pilulka `mimo zdroje · jen ke čtení` (tlumená, jen na záložce otevřené odkazem), autor, větev → base, repo, souhrn checků a odkaz na GitHub. `StaleHeadView` vedle něj mluví jen tehdy, když se hlava rozešla se sha nálezů |
 | `ReviewRunbarView` | Pruh běhu (#218): chipy reviewerů, za nimi dráha průběhu a popisek `test-coverage · 2 z 3 hotovo · 1:12`. Bez běhu zbude jen řada chipů |
 | `DiffView` | Diff v plné šířce: lišta, strom vlevo a soubory s ukotvenou hlavičkou, kterou jde sbalit |
+| `DiffColumnActions` | Co smí automatika kolon (#188, #503) přepnout u **levého** sloupce a čím si pamatuje, že to už udělala (#506/3): `expanded` (stav sloupce) a `applied` (poslední uplatněné rozhodnutí). Drží obojí `PullRequestDetailView`, protože stav sloupce **přežívá** zánik diffu a stráž musí přežít stejně dlouho. `nil` = **vedle téhle plochy sloupec nestojí**, takže se nic nepřepíše (diff commitu, náhledy) |
 | `DiffToolbar` | Lišta nad diffem (#219): pohled, procházení nálezů, varování a `Rozbalit vše` s nabídkou. **Bez přepínačů sloupců** — ty se skládají u sebe |
 | `DiffLayoutPicker` | Přepínač pohledu — segment **s popisky** podle návrhu (`.segbtn`), ne `Picker(.segmented)` |
 | `DiffFileHeaderView`, `FilePathText` | Hlavička souboru (`.fhead`): celá cesta se **složkou tlumeně a jménem tučně**, odznak změny, kapsle s počtem nálezů, `+X −Y` |
@@ -4879,7 +4941,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `FindingsTabView`, `FindingsEmptyView` | Tab `Nálezy` (#242): souhrn počtů, `Zahodit nálezy`, tabulka — a věta, **proč** je prázdno (`Policy.findingsEmptyReason`), společná s panelem |
 | `FindingsTableView`, `FindingTableRowView`, `FindingTableRow` | Tabulka nálezů přes celou šířku: řazení kliknutím na hlavičku, řádek na **místo** (shoda dvou reviewerů je odznak `2×`), rozbalení kreslí tutéž `FindingBubbleView` jako diff. Akce (`Převzít`, `Vrátit`) jsou **barevný text z palety** (`AccentLinkButtonStyle`, #298), ne plocha jako v bublině a ne systémová modrá; krytí odmítnutého řádku drží `dismissedOpacity` (`.frow.done` z návrhu), ze kterého měří i sonda kontrastu |
 | `ReviewerChipsView` | Chipy reviewerů: **puntík, zkrácené jméno a počet** (#218); stav a filtr naráz, v kontextovém menu opakování jednoho revieweera (#149) |
-| `ItineraryColumnView`, `ReviewItineraryView`, `ItineraryActions` | **Itinerář review** v levém sloupci záložky PR (#506): sloupec (hlavička s počítadlem, proužek podílu, složený pruh 34 b) a v něm zastávky se stavem a údajem vpravo, pod zastávkou `Soubory podle rizika` skupiny souborů. Klik na zastávku přepíná tab, klik na soubor přepne na `Změněné soubory` a doskočí na jeho hlavičku. **Od druhého kola #506 stojí vedle všech osmi tabů** a hostí ho `PullRequestDetailView`, ne `DiffView`; zastávky má vždycky. Do #506 tu byl `FileTreeView` (strom podle cesty, #197) |
+| `ItineraryColumnView`, `ReviewItineraryView`, `ItineraryActions` | **Itinerář review** v levém sloupci záložky PR (#506): sloupec (hlavička s počítadlem, proužek podílu, složený pruh 34 b) a v něm zastávky se stavem a údajem vpravo, pod zastávkou `Soubory podle rizika` skupiny souborů. Klik na zastávku přepíná tab, klik na soubor přepne na `Změněné soubory` a doskočí na jeho hlavičku. **Od druhého kola #506 stojí vedle všech osmi tabů** a hostí ho `PullRequestDetailView`, ne `DiffView`; zastávky má vždycky. **Od třetího kola drží detail i stav sloupce a stráž automatiky kolon** (`DiffColumnActions`), takže ho `DiffView` nepřepisuje. Do #506 tu byl `FileTreeView` (strom podle cesty, #197) |
 | `ReviewStateBadge` | Odznak stavu review; texty podle specifikace. Sazba je od #404 `designPill` (mono 10,5) a k ní `lineLimit(1)` **i** `fixedSize()` — v řádku fronty se odznak pere o místo s titulkem PR a mono je tam o 10 až 48 bodů širší |
 | `hiddenShortcuts(_:)`, `KeyEquivalent.backTab` | Klávesové zkratky bez viditelného tlačítka (#151) — jedno místo pro detail PR, nastavení, okno novinek, paletu i přepínání záložek (#245). `backTab` je tam proto, že `⌃⇧⇥` doručí `U+0019`, tedy jinou klávesu než `⇥` |
 | `WindowShortcutButtons`, `View.windowShortcut(_:)` | Překlad katalogu zkratek (#441) do SwiftUI — **jediné místo v `App/`, kde se `keyboardShortcut` píše nad kombinací**. Kombinací může být víc, každá dostane vlastní tlačítko (česká klávesnice); viditelné tlačítko bere jen tu primární |
@@ -8936,7 +8998,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.projectLanguages(in:)` | Odhad jazyka projektu z výpisu verzovaných souborů |
 | `Policy.jumpOffset(of:viewport:)`, `Policy.jumpAnchorY(of:viewport:metrics:)`, `Policy.jumpTarget(of:files:requested:)`, `Policy.jumpMetrics(of:rowHeight:)` | Kam skok posadí cíl (#152, od #506 tři druhy cíle). `bubble` 90 b nad sebou, `searchHit` třetinu, **`fileHeader` nula** — a u něj se podíl vrací **před** guardem na výřez, protože cílem je celá sekce souboru a nula je jediná hodnota nezávislá na její výšce. Druh se pozná z **identity cíle** (`file.id` sám = hlavička, `file.id\|…` = řádek), takže ho nemusí předávat sloupec stojící mimo `DiffView` |
 | `Policy.mountBand(visible:)`, `Policy.isBlockMounted(_:band:)` | Ve kterém pásu obsahu má blok kódu živý `NSTextView` (#469) — laznost diffu, kterou do #469 dělal `LazyVStack`. Pás je **kvantovaný na násobky výřezu**, protože ho čte každý blok v seznamu, a je **nejmíň o výřez širší** na každou stranu. `nil` (blok se nikdy nekreslil) znamená **nasadit** |
-| `Policy.diffSideColumns(layout:hasMargin:available:)`, `Policy.diffCodeColumnWidth(available:columns:)`, `Policy.widthWithItinerary(slot:expanded:)`, `Policy.treeColumnWidth(expanded:)`, `Policy.marginColumnWidth(shown:)`, `Policy.minimumCodeWidth(layout:)` | Které postranní kolony stojí a jak široká je kolona kódu (#188, #503, #546, #506). `available` u rozhodnutí je šířka, o kterou se **dělí sloupec, kód a okraj** — počítá ji `widthWithItinerary` tam, kde sloupec stojí, a podává ji prostředím (`sideColumnsWidth`); `diffCodeColumnWidth` naopak od #506 sloupec **neodečítá**. `nil` znamená „nikdo to nezměřil“ |
+| `Policy.diffSideColumns(layout:hasMargin:available:)`, `Policy.diffCodeColumnWidth(available:columns:)`, `Policy.widthWithItinerary(slot:expanded:)`, `Policy.treeColumnWidth(expanded:)`, `Policy.marginColumnWidth(shown:)`, `Policy.minimumCodeWidth(layout:)` | Které postranní kolony stojí a jak široká je kolona kódu (#188, #503, #546, #506). `available` u rozhodnutí je šířka, o kterou se **dělí sloupec, kód a okraj** — počítá ji `widthWithItinerary` tam, kde sloupec stojí, a podává ji prostředím (`sideColumnsWidth`); `diffCodeColumnWidth` naopak od #506 sloupec **neodečítá**. `nil` **i nekladná hodnota** znamená „nikdo to nezměřil“ (#506/3 — nula z prvního průchodu `GeometryReaderem` není nejužší okno) |
 | `Policy.pinnedFileHeader(files:top:headerHeight:)` | Která hlavička souboru se drží u horní hrany výřezu a o kolik je vysunutá (#469) — náhrada za `LazyVStack(pinnedViews:)`. **Jedna hlavička přes výřez**, ne posun u každé; na konci souboru se vysune, aby ji hlavička dalšího vytlačila |
 | `Policy.hoverChange(from:to:)` | Jestli se hover má zapsat do `@State`, nebo se stav **nechá být** (#358). Generické nad `Equatable`, takže platí pro `HoveredCell?` (split) i `Int?` (pod sebou) — jedna podmínka, ne dvě kopie. Vrací hodnotu, **ne `inout`**: `@State` je počítaná vlastnost, takže `&hovered` by prošlo setterem i beze změny, a špiní právě setter |
 | `Policy.reviewPromptTemplate(from:)`, `.reviewPromptProblems(in:)`, `.reviewPromptBody(template:skillID:baseSha:)`, `.reviewPromptCore(intentPath:)`, `.reviewPrompt(template:skillID:baseSha:intent:)` | Prompt review ze šablony v nastavení (#281, `ReviewPromptTemplate`): prázdná šablona → výchozí, chybějící zástupný text → `Problem`, dosazení hodnot a **vždycky připojené jádro** — od #120 i s větou o souboru se zadáním. Skládá to **jedno místo**, protože týž text potřebuje běh, `Zkopírovat příkaz` i náhled v nastavení |

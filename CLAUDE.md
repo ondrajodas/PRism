@@ -745,6 +745,14 @@ protože většina z nich se v harnessu neprojeví.
   „změřeno a nic tu není“, takže by si blok při každém přestavění přepsal platnou polohu na nic
   (tatáž lekce jako „prázdná plocha se ignoruje“ u #252). A **rámečky řádků se předávají
   argumentem, ne přes `@State`** — zápis do `@State` je vidět až v dalším průchodu tělem.
+- **Stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav, který mění** (#506).
+  `@State` uzlu, který se přestavuje **častěji** než ten stav, je stráž, která „jen někdy“ neplatí:
+  automatika kolon diffu (#188) přepisovala `⌘1` u sloupce, který od #506 stojí vedle **všech**
+  tabů, protože `switch tab` diff zahodí a nová instance rozhodnutí uplatní znovu. Stav i stráž
+  proto chodí **parametrem** od toho, kdo je kreslí (`DiffColumnActions`, `panelExpanded`), a jejich
+  `nil` znamená **„nic nepřepisuj“**. V harnessu se to neprojeví — scéna se staví jednou
+  ([rozbor](docs/architektura.md#stráž-automatiky-patří-ke-stavu-ne-k-diffu-506-třetí-kolo),
+  [měření](docs/testovani.md#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506)).
 - **V líném seznamu se neiteruje pole tuplů** (#361): `ForEach(Array(x.enumerated()),
   id: \.element.id)` čte identitu **přes tuple**, takže u enumu s asociovanými hodnotami
   **kopíruje** payload při každém dotazu. Identita patří do **uloženého pole**

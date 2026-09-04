@@ -90,6 +90,16 @@ struct PullRequestDetailView: View {
     /// takže o něm musí rozhodovat i tab, ve kterém žádný diff není.
     @AppStorage("diffTreeExpanded") private var isColumnExpanded = true
 
+    /// Které rozhodnutí `Policy.diffSideColumns` už automatika pohledu (#188) uplatnila — **stráž,
+    /// která musí žít tak dlouho jako stav, který hlídá** (#506, třetí kolo).
+    ///
+    /// Rozhoduje dál `DiffView` (podlaha, kvůli které se sloupec skládá, je podlaha kolony kódu),
+    /// ale stráž patří sem: `@State` detailu přežije přepnutí tabu i složení panelu, kdežto ta
+    /// v diffu zanikla s každým odchodem ze `Změněných souborů`. Po návratu se pak rozhodnutí
+    /// uplatnilo podruhé a přepsalo tím `⌘1` — a protože se přepisuje jen na hodnotu, která se od
+    /// uložené liší, dělo se to „jen někdy“. Podrobněji u `DiffColumnActions`.
+    @State private var appliedColumns: DiffSideColumns?
+
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
         VStack(alignment: .leading, spacing: 0) {
@@ -1936,6 +1946,11 @@ struct PullRequestDetailView: View {
             // Tlačítko `Nálezy` v liště nad diffem (#197). Stav drží detail, protože
             // panel je vidět i v tabu `Přehled`, kde lišta není.
             panelExpanded: panelExpanded,
+            // Levý sloupec (#506/3) — **stav i stráž jsou detailu**, protože sloupec stojí vedle
+            // všech osmi tabů a diff zaniká s odchodem z toho svého. Diff commitu (#317) tenhle
+            // parametr **nedostane**, takže sloupcem nehýbe: do #506/3 ho přepisoval taky, protože
+            // si ten klíč držel vlastním `@AppStorage`.
+            columnActions: DiffColumnActions(expanded: $isColumnExpanded, applied: $appliedColumns),
             stepFinding: { step($0) },
             search: searchActions,
             read: read,

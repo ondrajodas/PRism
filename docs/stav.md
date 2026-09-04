@@ -7739,3 +7739,58 @@ a `DiffCodeColumnWidthTests` (sloupec se od kolony neodečítá), `DiffColumnFit
 **strukturálně** — kolony jsou SwiftUI a v hostovaném okně se z accessibility tree přečíst nedají
 (změřeno u #546), takže jak vypadá vedle `Kontrol` a `Konverzace`, ukazují rendery a posoudí to
 člověk. Totéž u `⌘1`: testovací host nedostane aktivaci.
+
+### Třetí kolo z proklikání: „někdy se ten levý panel zavře“
+
+**Nález:** *„PRism-c — někdy se ten levý panel zavře když na něco kliknu…ale jen někdy.“*
+
+**Příčina je následek druhého kola.** Sloupec se přestěhoval o úroveň výš, ale automatika #188
+(*pohled vedle sebe složí postranní kolony*) zůstala v `DiffView`u — i se stráží proti druhému
+uplatnění, kterou drží `@State appliedColumns`. Tím vznikl stav, který **přežívá**
+(`diffTreeExpanded` v `UserDefaults`), hlídaný stráží, která **nepřežívá**: `switch tab` v detailu
+diff při odchodu ze `Změněných souborů` zahodí, takže každý návrat byl nová instance s prázdnou
+stráží, uplatnil rozhodnutí podruhé a **přepsal tím `⌘1`** — a protože se to ukládá, i pro příště.
+
+**Změřeno, ne přečteno** (`ItineraryChoiceTests` nad hostovaným detailem, uložená hodnota klíče):
+
+| Krok | *Vedle sebe*, `⌘1` otevřel | *Pod sebou*, `⌘1` složil |
+|---|---|---|
+| po prvním průchodu diffem | `false` (#188, záměr) | `true` |
+| po `⌘1` | `true` | `false` |
+| odchod do `Kontrol` / `Přehledu` | `true` | `false` |
+| **návrat do `Změněných souborů`** | **`false`** | **`true`** |
+
+**Odchod volbu nezmění, návrat ji přepíše** — to je celá vada. „Jen někdy“ znamená „jen když se
+rozhodnutí od uložené hodnoty liší“: ve `Vedle sebe` se sloupec zavírá, v `Pod sebou` se naopak sám
+otevírá (a to si člověk vysvětlí jako „nezabralo to“, takže se to v hlášení neobjevilo).
+
+**Co je záměr a co vada.** Záměr je **první** uplatnění: ve `split`u se sloupec skládá od #188 a je
+to změřené (34 bodů místo 260), takže PR otevřený *Vedle sebe* má sloupec složený a `⌘1` to přebije
+„až do další změny pohledu“. Vada je, že „další změna pohledu“ nastala i tehdy, když se pohled
+nezměnil a jen zanikl a znovu vznikl diff.
+
+**Oprava: stav i stráž chodí do diffu parametrem** (`DiffColumnActions` — `expanded` a `applied`),
+drží je `PullRequestDetailView`, jehož `@State` přepnutí tabu i složení panelu přežije. Rozhodnutí
+zůstalo v `DiffView`u, protože podlaha, na kterou se ptá, je podlaha **kolony kódu**; přestěhovat ho
+celé do detailu se **zamítlo** — `hasMargin` je funkce diff-interního stavu a diff commitu má
+vlastní karty, takže by jedno rozhodnutí v detailu bylo pro dva různé diffy. `nil` znamená totéž
+jako u `panelExpanded`: **kdo ho nedodá, tomu se nic nepřepíše**.
+
+**Vedlejší nález, tatáž třída:** diff commitu měl vlastní `@AppStorage("diffTreeExpanded")`, takže
+vybrání commitu v tabu `Commity` sloupec ve `Vedle sebe` taky zavřelo. Od třetího kola nemá
+`DiffView` ten klíč vůbec.
+
+**A nula z `GeometryReaderu` není nejužší okno**: `Policy.diffSideColumns` bere nekladné `available`
+jako „nikdo to nezměřil“. `widthWithItinerary` to dělalo od druhého kola, ale fallback
+`sharedWidth ?? slotWidth` nulu z prvního průchodu propustil — do #506 by to byl blik jednoho
+snímku, od #506 zápis do volby člověka.
+
+**Zobecnitelné pravidlo:** *stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav,
+který mění.* `@State` uzlu, který se přestavuje častěji než ten stav, je stráž, která „jen někdy“
+neplatí.
+
+Nová sada je `ItineraryChoiceTests` (čtyři scény, obě strany vady, a k tomu druhá polovina: přepnutí
+pohledu volbu přebít **smí**), k tomu dvě stráže nad zdrojáky v `ItineraryEveryTabTests` (klíč čte
+jeden uzel; do stavu sloupce píšou vyjmenovaná místa a diff commitu mezi nimi není) a tvrzení
+o nulové šířce. **Zapsaná mezera zůstává a je z ní tvrzení**: v tabu bez diffu se stavem sloupce
+nehýbe nic — v aplikaci se do ní ani nedá dostat, protože pohled přepíná lišta nad diffem.

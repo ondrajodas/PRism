@@ -192,16 +192,21 @@ extension Policy {
     ///
     /// - Parameter available: šířka, o kterou se dělí **sloupec, kód a okraj** — tedy okno bez
     ///   railu a bez panelu. **Od #506 to není štěrbina diffu**: sloupec odečítá rozvržení detailu
-    ///   PR, takže si ji `DiffView` dopočítává `Policy.widthWithItinerary(slot:expanded:)`.
+    ///   PR, takže si ji `DiffView` bere z prostředí (`sideColumnsWidth`).
     ///   `nil` znamená „nikdo ji nezměřil“ a chová se jako dřív (rozhoduje jen pohled) — bez toho
-    ///   by se kolony složily každému, kdo `DiffView` hostuje mimo okno.
+    ///   by se kolony složily každému, kdo `DiffView` hostuje mimo okno. **A nula je totéž co
+    ///   `nil`, ne nejužší možné okno** (#506/3): první průchod `GeometryReaderem` vydá nulu, ze
+    ///   které by vyšlo „složit všechno“ — a protože se to rozhodnutí od #506 ukládá do volby
+    ///   člověka, nebyl by to jen problém jednoho snímku. Je to tatáž hranice, na které mlčí
+    ///   `widthWithItinerary`, jen z druhé strany: ta vydá `nil`, kdežto fallback na vlastní
+    ///   štěrbinu diffu nulu propustí.
     static func diffSideColumns(
         layout: DiffLayout,
         hasMargin: Bool,
         available: Double? = nil
     ) -> DiffSideColumns {
         let wide = layout != .split
-        guard let available else {
+        guard let available, available > 0 else {
             return DiffSideColumns(tree: wide, panel: wide && !hasMargin, margin: hasMargin)
         }
         let floor = minimumCodeWidth(layout: layout)

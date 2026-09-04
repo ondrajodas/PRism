@@ -6259,3 +6259,42 @@ minule) a s ním `Policy.readFileShare` a `Policy.fileTreeSummary` z #500: od dr
 mluví vždycky o celém pull requestu, takže nepovinné `itinerary` neměl kdo nastavit na `nil`
 a hlavička je vždycky `ITINERÁŘ · 4 Z 11 · 10 MIN`. Držet nepovinnou hodnotu, kterou nikdo
 nenastaví, je to, na co Copilot v tomhle repu opakovaně upozorňuje.
+
+#### Třetí kolo z proklikání (#506): stráž automatiky patří ke stavu, ne k diffu
+
+Nález zněl *„někdy se ten levý panel zavře když na něco kliknu…ale jen někdy“* a je to **následek
+rozhodnutí 7**: sloupec se přestěhoval o úroveň výš, ale automatika #188 zůstala v `DiffView`u
+i se stráží, kterou proti druhému uplatnění drží `@State`. Tím vznikl stav, který **přežívá**
+(`diffTreeExpanded` v `UserDefaults`), hlídaný stráží, která **nepřežívá** — `switch tab` v detailu
+diff při odchodu ze `Změněných souborů` zahodí, takže každý návrat byl nová instance s prázdnou
+stráží a uplatnil rozhodnutí podruhé, přes `⌘1`.
+
+11. **Stráž se přestěhovala za stavem, rozhodnutí zůstalo u diffu.** Zvažovalo se **přestěhovat
+    i rozhodnutí** do detailu (zavřelo by to zapsanou mezeru z bodu 9) a **zamítlo se ze dvou
+    důvodů**: `hasMargin` je funkce diff-interního stavu (odkryté úseky, sbalené soubory), takže by
+    to znamenalo druhé složení téže odpovědi — a diff commitu v tabu `Commity` má **vlastní** karty,
+    takže by jedno rozhodnutí v detailu bylo pro dva různé diffy. Rozdělit `diffSideColumns` na dvě
+    poloviny (sloupec v detailu, okraj v diffu) se zamítlo taky: to rozhodnutí je **odečítání
+    v pořadí podle ceny zahození**, a dvě místa, která je počítají, se rozejdou. Stav i stráž tedy
+    chodí do diffu **parametrem** (`DiffColumnActions`), tentýž vzorec jako `panelExpanded` (#242)
+    a `tracking` (#501) — a jeho `nil` znamená totéž: **kdo ho nedodá, tomu se nic nepřepíše**.
+
+    Zapsaná mezera z bodu 9 tím **zůstává, a je z ní tvrzení**: v tabu bez diffu se stavem sloupce
+    nehýbe nic. V aplikaci se do ní ani nedá dostat — pohled přepíná lišta nad diffem.
+
+12. **Vedlejší nález: diff commitu přepisoval cizí stav.** Do třetího kola měl `DiffView` vlastní
+    `@AppStorage("diffTreeExpanded")`, takže sloupcem hýbal i ten `DiffView`, který kreslí diff
+    commitu — vybrání commitu v tabu `Commity` sloupec ve `Vedle sebe` zavřelo. Panel vpravo tuhle
+    vadu neměl, protože `panelExpanded` je od začátku **nepovinný parametr** a diff commitu ho
+    nedostává; sloupec tu asymetrii jen zdědil tím, že se ke stavu dostal přes `UserDefaults`.
+    Od třetího kola je to symetrické a hlídá to stráž nad zdrojáky.
+
+13. **Nula z `GeometryReaderu` není nejužší okno.** `Policy.diffSideColumns` bere nekladné
+    `available` jako `nil`, tedy „nikdo to nezměřil“. `widthWithItinerary` to dělalo od druhého
+    kola, ale `DiffView` má fallback `sharedWidth ?? slotWidth` a ten nulu z prvního průchodu
+    propustil. Do #506 by to byl blik jednoho snímku; od #506 se to zapisuje **do volby člověka**,
+    takže se to opravuje.
+
+**Zobecnitelné pravidlo:** *stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav,
+který mění.* `@State` uzlu, který se přestavuje častěji než ten stav, je stráž, která „jen někdy“
+neplatí — a taková vada se pozná až v provozu, protože v harnessu se scéna staví jednou.

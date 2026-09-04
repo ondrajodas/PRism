@@ -64,6 +64,15 @@ struct DiffView: View {
     /// `nil` = automatika se panelu nedotkne. Stav drží detail PR, protože panel je vidět
     /// i v tabu, kde diff není.
     var panelExpanded: Binding<Bool>?
+    /// Levý sloupec s itinerářem, jak ho automatika pohledu (#188) smí přepnout — **od toho, kdo
+    /// ho kreslí** (#506, třetí kolo). `nil` = vedle téhle plochy sloupec nestojí, takže se ho
+    /// automatika nedotkne; tatáž hranice jako u `panelExpanded` o řádku výš.
+    ///
+    /// **Rozhodnutí zůstává tady, stav i stráž jsou venku.** Podlaha, kvůli které se sloupec
+    /// skládá, je podlaha **kolony kódu** (`Policy.minimumCodeWidth`), a ta existuje jedině
+    /// v diffu — kdežto stav sloupec přežívá v `UserDefaults` a stráž proti druhému uplatnění
+    /// musí přežít stejně dlouho. Proč, je u `DiffColumnActions`.
+    var columnActions: DiffColumnActions?
     var stepFinding: ((NavigationStep) -> Void)?
     /// Hledání v diffu (#152). Stav drží store (musí přežít přepnutí tabu i složení panelu), tudy
     /// jdou akce. **Prázdné znamená „tady se nehledá“** — tak to má náhled i sonda.
@@ -111,15 +120,6 @@ struct DiffView: View {
     ///
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showInlineFindingBubbles") private var showBubbles = true
-    /// Rozložený levý sloupec — itinerář review (#197, #506). Předvolba pohledu napříč PR, takže
-    /// `UserDefaults` a ne stav ve store, ze stejného důvodu jako u bublin.
-    ///
-    /// **Od #506 ho diff nekreslí, ale pořád o něm rozhoduje** — sloupec stojí vedle všech tabů
-    /// a hostí ho `PullRequestDetailView` (čte tutéž uloženou hodnotu). Rozhodnutí zůstalo tady,
-    /// protože podlaha, kvůli které se sloupec skládá, je podlaha **kolony kódu**: v tabu bez
-    /// diffu není co chránit. **Zapsaná mezera**: v tabu bez diffu se tím pádem nerozhoduje vůbec,
-    /// takže zúžení okna nad `Kontrolami` sloupec nesloží — složí ho první průchod diffem.
-    @AppStorage("diffTreeExpanded") private var isTreeExpanded = true
     /// Výška viditelné části diffu — z ní se počítá, kam skočí nález. Čte se jen měřením
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
@@ -130,9 +130,13 @@ struct DiffView: View {
     /// píše i panel nálezů, a ten o hledání nic neví. Kdo cíl nastaví odjinud, dostane tedy
     /// `.bubble`, protože se hodnota po každém skoku vrací.
     @State private var jumpTarget = DiffJumpTarget.bubble
-    /// Které rozhodnutí o postranních kolonách už automatika provedla (#188, od #503 i okraj).
-    /// Bez toho by se opakovalo při každém vzniku view a přebíjelo ruční `⌘1`/`⌘2`.
-    @State private var appliedColumns: DiffSideColumns?
+    /// Které rozhodnutí o postranních kolonách už automatika provedla (#188, od #503 i okraj),
+    /// **když si tu stráž nikdo nedrží zvenku** (#506/3). Bez ní by se rozhodnutí opakovalo při
+    /// každém vzniku view a přebíjelo ruční `⌘1`/`⌘2`.
+    ///
+    /// Vzniká jednou na identitu view — tedy `columnActions == nil` znamená přesně to, co platilo
+    /// do #506/3: diff si stráž drží sám a s ním zaniká. Tentýž vzorec jako `ownTracking` (#501).
+    @State private var ownAppliedColumns: DiffSideColumns?
     /// Rámečky řádků pro tažení rozsahu (#110). `@State`, aby přežily překreslení; obsah je
     /// mimo observable stav, takže se jimi diff nepřekresluje — viz `DiffRowFrames`.
     @State private var rowFrames = DiffRowFrames()
@@ -150,6 +154,11 @@ struct DiffView: View {
     /// Kde v obsahu leží který soubor (#469). Krabice mimo observable stav; plní ji sekce, čte ji
     /// ukotvená hlavička.
     private var fileExtents: DiffFileExtents { (tracking ?? ownTracking).extents }
+    /// Stráž proti druhému uplatnění rozhodnutí o kolonách — **od toho, kdo sloupec kreslí**, a jen
+    /// když tam takový někdo je (#506/3). Viz `ownAppliedColumns`.
+    private var appliedColumns: Binding<DiffSideColumns?> {
+        columnActions?.applied ?? $ownAppliedColumns
+    }
     /// Kde v obsahu leží řádky s kartou v okraji (#503). **Jediná sledovaná krabice v diffu** —
     /// z téhle se kreslí, viz `DiffMarginAnchors`.
     @State private var marginAnchors = DiffMarginAnchors()
@@ -252,18 +261,24 @@ struct DiffView: View {
             // z `Policy` vyjde něco jiného než minule — a to je od #503 i tím, že se objevil
             // okraj s kartami.
             //
-            // **Sloupec se odsud pořád přepíná, i když ho kreslí detail** (#506): je to uložená
-            // předvolba (`diffTreeExpanded`), kterou obě strany čtou ze `UserDefaults`, takže se
-            // nemá čím rozejít — tentýž vzorec jako `panelExpanded` o řádku níž.
+            // **Sloupec se odsud pořád přepíná, i když ho kreslí detail** (#506) — ale stav i stráž
+            // jsou od #506/3 **jeho** (`columnActions`), ne diffu. Do té doby tady stál druhý
+            // `@AppStorage` nad klíčem `diffTreeExpanded` a stráž ve `@State`, kterou přepnutí tabu
+            // zahodilo: každý návrat do `Změněných souborů` byl nový `DiffView`, který uplatnil
+            // rozhodnutí podruhé a přepsal tím volbu člověka. Viz `DiffColumnActions`.
             .task(id: columns) {
                 // **Jen jednou na rozhodnutí.** `task(id:)` se spustí i při novém vzniku view —
-                // a to nastane pokaždé, když se přepne panel vpravo, protože se tím přestaví
-                // `HStack` v detailu PR. Bez téhle stráže se ručně otevřený sloupec hned zase
-                // složil a nešel otevřít vůbec.
-                guard appliedColumns != columns else { return }
-                appliedColumns = columns
+                // a to nastane pokaždé, když se přepne panel vpravo (přestaví se `HStack` v detailu
+                // PR) i při každém návratu do tabu s diffem. Bez téhle stráže se ručně otevřený
+                // sloupec hned zase složil a nešel otevřít vůbec.
+                // **Kdo nemá co přepnout, nezapisuje ani stráž** (#506/3): diff commitu (#317)
+                // a náhledy nedostanou ani sloupec, ani panel, takže by tady jinak vznikl zápis do
+                // `@State`, který nikdo nepřečte — a s ním průchod tělem při každé změně šířky.
+                guard columnActions != nil || panelExpanded != nil else { return }
+                guard appliedColumns.wrappedValue != columns else { return }
+                appliedColumns.wrappedValue = columns
                 withAnimation(.snappy(duration: 0.15)) {
-                    isTreeExpanded = columns.tree
+                    columnActions?.expanded.wrappedValue = columns.tree
                     panelExpanded?.wrappedValue = columns.panel
                 }
             }

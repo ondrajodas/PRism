@@ -846,6 +846,10 @@ Verdikt*, u každé stav (✓ hotovo / ● aktuální / ○ zbývá) a údaj vpr
 `Itinerář · 4 z 11 · 10 min` a pod ní proužek podílu. Sloupec je **260 bodů** široký, skládá se na
 `⌘1` na proužek s počtem souborů a týmž kliknutím se zase rozloží.
 
+**Pohled *Vedle sebe* ho složí sám** (#188 — na dvě strany řádku by jinak nezbylo místo), a **`⌘1`
+to přebije až do další změny pohledu**: přepnutí tabu, klik na soubor ani vybrání commitu už tu
+volbu nepřepíšou.
+
 **Stojí vedle všech osmi tabů**, ne uvnitř `Změněných souborů`: je to průvodce review, takže tab,
 ve kterém by zmizel, je tab, ze kterého se nedá vrátit. Klik na zastávku **přepne tab** — `Od
 minule` a `Popis` do `Přehledu`, `Kontroly` do `Kontrol`, `Verdikt` do `Změněných souborů`
