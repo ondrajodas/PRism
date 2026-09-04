@@ -321,9 +321,20 @@ odkaz a čte se **dřív**, než se podmínka obchází, ne až potom.
    - **u vyžádání reviewera je potvrzení v nadpisu nabídky** (`Vyžádat review od`);
    - **založení labelu potvrzení má** (#413) na **druhé obrazovce téhož popoveru, ne v sheetu**;
    - **žádná z těchhle akcí nemá výchozí akci**, takže se nic z toho nespustí `Enterem` při
-     průchodu klávesnicí — a **u merge je metoda jedna** (`squash`, z jedné konstanty, kterou čte
-     payload i potvrzení) a **po úspěchu se zavře sheet i záložka toho PR**, jedině po úspěchu
-     ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--po-mergi-se-zavírá-záložka-465)).
+     průchodu klávesnicí — a **po úspěchu se zavře sheet i záložka toho PR**, jedině po úspěchu
+     ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--po-mergi-se-zavírá-záložka-465));
+   - **u merge je metoda od #556 volba, ne konstanta** — výchozí hodnota je v nastavení (globálně
+     i per repo) a potvrzení ji **vypisuje a dovolí přebít pro jeden merge**. Protokol se tím
+     nemění ani o položku (devět metod, `merge` pořád jediná, která merguje); mění se **obsah
+     payloadu**. Drží to čtyři věci: picker leží **uvnitř výpisu payloadu**, takže to není druhý
+     krok; **s metodou se přepíše celý výpis** (počet commitů, titulek, věta o těle), aby žádný
+     řádek nad jinou metodou nelhal; **nepovolená metoda se nedá vybrat, ale z nabídky nezmizí**
+     (zašedlá, přeškrtnutá, `nejde`); a **nepovolená výchozí metoda se nepodstrčí jinou** — sheet
+     se otevře bez vybrané, `Mergnout` je zakázané a řekne se, co repo povoluje. Co repozitář
+     pustí, je **čtení** (`GitHubGateway.mergeSettings(repo:)`, jedno volání za repo), a `null`
+     u příznaku je **„nevím“, ne „nepovoluje“**
+     ([rozbor](docs/architektura.md#metoda-merge-je-volba-ne-konstanta-556), [záznam
+     rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--metoda-merge-je-volba-ne-konstanta-556)).
 
    **Uzavřený je `seznam`** — hledání **filtruje, nezakládá**; zakládání je **akce pod děličem**
    se zkratkou **`⌥↵`** na poli, barvu vybírá aplikace (`Policy.labelColor`) a **přebarvit ani
@@ -544,7 +555,7 @@ tamtéž.
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem, slévatelnost větve (líné pole, ptá se opakovaně), **repozitáře organizace** (#532 — nejdražší čtení v aplikaci, 46,8 s nad `keboola`, proto vlastní limit a cache) a **otevřené PR jednoho repa** (#533 — 1,1 s, řadí `Policy`, protože `gh pr list` řadí podle čísla). **Pořád bez zápisu** | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů (search dotazů), sloučit a deduplikovat, načíst metadata a syrový diff (celý, nebo mezi dvěma commity), login přihlášeného účtu, labely s vyžádanými reviewery včetně týmů, hlavy víc PR jedním dotazem, slévatelnost větve (líné pole, ptá se opakovaně), **repozitáře organizace** (#532 — nejdražší čtení v aplikaci, 46,8 s nad `keboola`, proto vlastní limit a cache), **otevřené PR jednoho repa** (#533 — 1,1 s, řadí `Policy`, protože `gh pr list` řadí podle čísla) a **co repozitář o mergi říká** (#556 — povolené metody a zdroje těla commitu, jedno volání za repo, 0,62 s, `null` = „nevím“). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i zahození rozdělaného rebase, **zápis slitých souborů do indexu a dokončení rebase** (`git add`, `rebase --continue` — commituje aplikace, ne session) a **je předchozí hlava předkem té dnešní** (#517 — `merge-base --is-ancestor`, odpovídá `ancestor`/`rewritten`/`unknown`) a **cesty, které PR mění** (#518 — `diff --name-only --no-renames`, podklad routingu; `gh pr view --json files` vydá jen prvních sto, změřeno). **Pořád bez zápisu do remote** | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem** s nálezy z minula jako materiálem) a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, dotažení textu issue (#345), **rozhovor nad PR** (#452, vlastní užší sada a `--resume`) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**. Umí transcript session i **přepsat k přečtení** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
@@ -774,7 +785,7 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   **Neplatí to ale u hodnoty, kterou nejde porovnat** (#421) — mapa s hodnotou, která `Equatable`
   není (typicky `@Observable` **třída**), se neporovnává, takže ji bezpodmínečný zápis hlásí **i
   když je prázdná**. Tam se zapisuje jen při změně, a je to výjimka, ne nový vzor: `forget(whatIsNotIn:)`
-  přiřazuje devětatřicet map a jedině `diffSearches` má tuhle podmínku. Hlídá to
+  přiřazuje čtyřicet map a jedině `diffSearches` má tuhle podmínku. Hlídá to
   `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** z nich
   ([čím to bylo v okně](docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
   **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421) — kdo to zkusí

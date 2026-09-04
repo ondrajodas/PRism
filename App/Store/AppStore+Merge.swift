@@ -32,7 +32,14 @@ extension AppStore {
             resolvesConflicts: conflicts != nil,
             // Stav odesílání metadat (#482): `Připravit k review` jde touž branou jako labely,
             // takže se druhé odeslání nad jedním PR nenabízí.
-            action: metadataActionState(for: pr)
+            action: metadataActionState(for: pr),
+            // Výchozí metoda merge (#556) — **sražená konfigurace**, tedy globální default
+            // přebitý tím, co si řeklo repo. Sekce ji nekreslí; nese ji dál do návrhu, ze
+            // kterého se otevře potvrzení.
+            defaultMethod: resolved(for: pr.repo).mergeMethod,
+            // Co repozitář o mergi říká (#556). Chybějící klíč = ještě se neptalo, nebo se to
+            // nepodařilo — a to je „nevím“, ne „nepovoluje“.
+            repository: repositoryMergeSettings[pr.repo]
         )
     }
 
@@ -51,7 +58,11 @@ extension AppStore {
         return Policy.isMergeReady(
             Policy.mergeOffer(
                 editing: metadataEditing(for: pr),
-                plan: Policy.mergePlan(of: detail, commits: commits[pr]),
+                // **Bez metody a bez příznaků repa**, a je to schválně: deska se ptá jen na to,
+                // jestli něco merge **brání**, a metoda mezi překážky nepatří (viz `mergeOffer`).
+                // Číst k tomu konfiguraci u každého vlastního PR při každém průchodu tělem by byla
+                // práce za odpověď, kterou tady nikdo nepřečte.
+                proposal: Policy.mergeProposal(of: detail, commits: commits[pr]),
                 state: detail.state,
                 status: branchStatusState(for: pr),
                 checks: checks[pr],
@@ -106,6 +117,10 @@ extension AppStore {
         // mezi rebasem a potvrzením přetlačení — nemá kde nic zapsat, takže by o té práci okno po
         // restartu mlčelo a příští akce nad tím PR by se nad ní zachovala divně.
         await findUnfinishedSync(for: id)
+        // Co repozitář o mergi říká (#556) — **před** stráží na razítko níž, protože ta hlídá
+        // slevatelnost, tedy jinou cache s jiným důvodem k obnovení. Volání samo má vlastní
+        // stráž, takže druhé otevření téhož repa nestojí nic.
+        await loadMergeSettings(for: id.repo)
         guard !hasCurrentBranchStatus(for: pullRequest) else { return }
         branchStatuses[id] = .loading
 
@@ -142,10 +157,10 @@ extension AppStore {
         let id = pullRequest.id
         guard let gh else { return nil }
         guard let section = branchSection(for: id), section.merge.isAllowed else { return nil }
-        guard let plan = section.plan else { return nil }
+        guard let proposal = section.proposal else { return nil }
         return MergeSubmission(
             pullRequest: pullRequest,
-            plan: plan,
+            proposal: proposal,
             gh: gh,
             gateway: gateway,
             scope: publishScope,
@@ -194,6 +209,41 @@ extension AppStore {
         closeTab(pullRequest.id)
         detailStates[pullRequest.id] = nil
         await loadDetail(for: pullRequest)
+    }
+
+    /// Dotáhne, **co repozitář o mergi říká** (#556) — povolené metody a zdroje těla commitu.
+    ///
+    /// **Jedno volání za repo a drží se**, na rozdíl od slévatelnosti: příznaky jsou vlastnost
+    /// repozitáře, ne pull requestu, takže se mezi dvěma PR z téhož repa nemění. Změřeno 0,62 s.
+    /// Cache se **nezneplatňuje razítkem PR** — `updatedAt` mluví o pull requestu a přepnutí
+    /// povolených metod na GitHubu se v něm neprojeví; obnoví ji restart aplikace nebo vypadnutí
+    /// repa ze seznamu (`forget(whatIsNotIn:)`).
+    ///
+    /// **Ptá se jen na vlastním PR**, jako slévatelnost: na cizím se sekce `Větev` nekreslí a merge
+    /// se odsud nedělá nikdy, takže by to bylo volání za nic. Ptá se **i v nastavení**, na výběr
+    /// repa na stránce `Repozitáře` — je to výslovné gesto člověka, ne tik pollingu, a bez něj by
+    /// picker per repo nemohl nepovolenou metodu zašednout.
+    ///
+    /// **Selhání se nezapisuje a nikde se nehlásí**, a je to ta správná strana: „nezjistil jsem to“
+    /// je v téhle otázce **platná odpověď** (`nil`, tedy „nevím“) a potvrzení z ní udělá nabídku
+    /// všech tří metod bez jakéhokoli tvrzení. Vlastní hláška v okně by naopak z běžného stavu —
+    /// repo bez práva zápisu vrací všech pět polí jako `null` — udělala poruchu. **Zrušení jde
+    /// touž cestou** a je to schválně: odchod z obrazovky není odpověď, takže se nic nezapíše
+    /// a příští otevření se zeptá znovu (tatáž nesymetrie jako u `loadBranchStatus`, jen bez
+    /// rozdělaného stavu, který by se musel uklízet).
+    ///
+    /// **Zapsaná mezera: dvě souběžná volání nad tímtéž repem se nesloučí.** Stráž je na výsledku,
+    /// ne na rozdělaném volání, takže když se sejde otevření vlastního PR s výběrem téhož repa
+    /// v nastavení, odejdou dva dotazy místo jednoho. Nechává se to tak vědomě: čtení je
+    /// idempotentní, okno na ně nečeká a `loading` stav by se musel držet, uklízet a prořezávat
+    /// kvůli dvěma voláním za sezení. Co pravidlo o N+1 zakazuje, je dotaz **na tik** nebo **na
+    /// PR** — a to tady nehrozí ani v tom souběhu.
+    func loadMergeSettings(for repo: RepoID) async {
+        // **Druhý pokus nad tímtéž repem se nedělá**, dokud první leží v cache: nabídka se
+        // otevírá při každém otevření vlastního PR a bez téhle stráže by to bylo volání na klik.
+        guard repositoryMergeSettings[repo] == nil else { return }
+        guard let settings = try? await gateway.mergeSettings(repo: repo) else { return }
+        repositoryMergeSettings[repo] = settings
     }
 
     private func hasCurrentBranchStatus(for pullRequest: PullRequestSummary) -> Bool {

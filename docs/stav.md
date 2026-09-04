@@ -7608,3 +7608,62 @@ velikost `CLAUDE.md` po tom je **93,2 kB** proti stropu ~100 kB (+58 B).
 Na obrazovce se nemění nic a kód se nedotkl — sekce o slotech, o rozvrhu a o úklidu zůstaly, jak
 byly, protože jsou proměřené provozem. Měnilo se jedině to, co bylo nepravdivé. Testů dál **5228**
 v 511 suitách, beze změny.
+
+## #556 — metoda merge je volba, ne konstanta
+
+Merge vlastního PR posílal `merge_method: "squash"` z **konstanty** `MergeRequest.method`, a u té
+konstanty stálo zdůvodnění, že volba mezi metodami by byla „třetí věc na potvrzení, kterou člověk
+projde jednou za rok, a přepnout ji jde na GitHubu“. **Praxe to vyvrátila ze dvou stran**: odejít
+z okna kvůli jedné hodnotě je dražší než ta hodnota, a squash není to, co se hodí ve všech repech.
+Zdůvodnění se proto **přepsalo, ne smazalo** — a ten argument padl i sám o sobě: mluvil o světě,
+ve kterém **žádná výchozí hodnota nebyla**, takže se rozhodoval každý merge.
+
+**Výchozí hodnota je v nastavení, globálně i per repo.** Globální default (`squash`, tedy chování
+do #556) leží na stránce `Odesílání` **pod** bránou — brána rozhoduje, jestli se dá mergnout vůbec,
+tahle sekce jenom čím. Per repo to je čtyřhodnotový picker na `Repozitáře`, vedle ostatních
+override: metoda merge je **zvyk repozitáře**, ne člověka, takže je to tatáž třída jako `mode`
+nebo `incrementalAfterPush`, a ne jako `diffLayout` a vzhled okna, které override schválně nemají.
+
+**Potvrzení metodu vypisuje a dovolí ji přebít pro jeden merge.** Picker leží **uvnitř výpisu
+payloadu** — je to řádek payloadu, ve kterém se dá kliknout, ne krok před potvrzením —, takže
+zamítnutí z #465 („druhá věc na potvrzení“) neplatí: mergne se pořád jedním kliknutím na
+pojmenované tlačítko. **S metodou se přepíše celý výpis**: `commitů 3 → 1` je věta o squashi, u
+merge commitu je to `3 + merge commit` a u rebase `3 přehrané`; titulek je u squashe `titulek PR
+(#číslo)`, u merge commitu `Merge pull request #N from <větev>` a **u rebase žádný** (nevzniká tam
+commit, takže by GitHub pole zahodil). Že přepnutí platí **jen pro tenhle merge**, stojí pod
+výpisem — bez té věty by picker vypadal jako zkratka do nastavení.
+
+**Věta o těle se přestala hádat.** Do #556 stálo v potvrzení „Tělo squash commitu složí GitHub ze
+zpráv N commitů“, což je pravda jedině v repu se `squash_merge_commit_message = COMMIT_MESSAGES` —
+tenhle repo ho má (změřeno), ale záruka to není. Zdroje těla přijdou **týmž voláním** jako povolené
+metody, takže věta řekne, co v tom těle bude; kde se to zjistit nepodařilo, zůstává přiznání
+„složí GitHub podle nastavení repozitáře“, a u rebase se o těle nemluví vůbec.
+
+**Nové čtení je jedno volání za repo, a „nevím“ je třetí odpověď.**
+`GitHubGateway.mergeSettings(repo:)` (šestadvacátá čtecí metoda; gateway zůstává bez zápisu) čte
+`GET /repos/{o}/{r}` a drží se v cache klíčované **repem**; ptá se při otevření vlastního PR a při
+výběru repa v nastavení, **ne na tik pollingu**. Změřeno: `ondrajodas/PRism` 0,62 s a všechny tři
+`true`, `keboola/job-queue-daemon` `allow_rebase_merge: false`, a `cli/cli` — repo **bez práva
+zápisu** — **všech pět polí `null`**. To poslední je „nevím“, ne „nepovoluje“: nabídnou se všechny
+tři metody a nic se netvrdí. Nepovolená metoda se z nabídky **neztratí**, jen se nedá vybrat
+(zašedlá, přeškrtnutá, `nejde`) — zmizet nesmí, jinak se nedá poznat „repo to nepustí“ od „tuhle
+metodu GitHub nemá“.
+
+**A nepovolená výchozí metoda se nepodstrčí jinou.** Sheet se v tom stavu otevře **bez vybrané
+metody**, `Mergnout` je zakázané, řádky `commitů` a `titulek` píšou ztlumeně `podle metody` a pod
+výpisem stojí výstraha s tím, co repo povoluje. **Panel o tom mlčí** a `Mergnout…` v něm zůstává
+povolené: mergnout jde, jen zbývá vybrat čím — a to je otázka payloadu, ne stavu větve.
+
+**Tvrdá podmínka č. 1 se nezměnila ani o položku.** `ReviewPublishing` má pořád **devět** metod,
+merge je pořád osmá, brána, potvrzení i dvojí ověření hlavy platí — `SingleWayOutTests` prošly
+**nedotčené** a grep vydává týchž **sedm** souborů (`BranchPushing` tři). Co se změnilo, je obsah
+payloadu, ne cesta ven. Rozdělilo se u toho jedno místo na dvě: `MergeProposal` je to, s čím se
+sheet otevřel, `MergePlan` je **payload** — a `plan == nil` je platný stav („nic není vybráno“),
+ne nedodělek.
+
+Testů **5266** v 513 suitách (+38), z toho nové `MergeMethodChoiceTests` a
+`GhRepositoryMergeSettingsTests`; fixtures jsou skutečné odpovědi `gh api` ze **veřejných** repozitářů
+(`ondrajodas/PRism`, `cli/cli`), `allow_rebase_merge: false` je inline JSONem, protože změřené je
+na firemním repu. **Naostro se nemergovalo** — merge je nevratný a brána je ve slotové konfiguraci
+vypnutá; ověřené je to, co odejde v payloadu (na hotových bajtech) a co repozitáře doopravdy
+vracejí.

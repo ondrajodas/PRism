@@ -339,4 +339,27 @@ protocol GitHubGateway: Sendable {
     /// **Pětadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád nemá
     /// nic, čím by šlo něco odeslat, a výpis PR repa je čtení jako každé jiné.
     func pullRequests(in repo: RepoID) async throws -> [PullRequestSummary]
+
+    /// Co repozitář o mergi říká (#556) — povolené metody a to, odkud GitHub skládá tělo commitu.
+    ///
+    /// Existuje kvůli tomu, že metoda merge přestala být konstanta: nabídnout metodu, kterou repo
+    /// nepovoluje, znamená chybu z API **po** potvrzení, tedy na nejhorším možném místě.
+    ///
+    /// **Jedno volání za repo, a jedině při otevření vlastního PR** (změřeno **0,62 s** nad
+    /// `ondrajodas/PRism`). Není to dotaz na každé PR v tiku a nesmí jím být: příznaky jsou
+    /// vlastnost repozitáře, takže se mezi dvěma PR z téhož repa nemění a volající si je drží
+    /// v cache — tatáž hranice jako u `fetchRepositoryLabels`.
+    ///
+    /// **Povolené metody a zdroje těla přijdou týmž voláním, a je to podmínka, ne pohodlí.** Kdyby
+    /// to byla dvě volání, mohla by se rozejít a věta o těle by mluvila o jiném stavu než nabídka
+    /// metod.
+    ///
+    /// **`nil` u příznaku je „nevím“, ne „nepovoluje“**, a je to změřené: nad repem bez práva
+    /// zápisu (`cli/cli`) vrací GitHub všech pět polí jako `null`. Rozhodnout z toho, že metoda
+    /// nejde, je u nevratné akce tatáž chyba jako rozhodnout, že jde.
+    ///
+    /// **Šestadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád
+    /// nemá nic, čím by šlo něco odeslat, a příznaky repozitáře jsou čtení jako každé jiné.
+    /// Mergnout umí `ReviewPublishing`, a jedině on.
+    func mergeSettings(repo: RepoID) async throws -> RepositoryMergeSettings
 }

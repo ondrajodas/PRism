@@ -448,6 +448,32 @@ struct GhGateway: GitHubGateway {
         return try items.map { try $0.summary(in: repo) }
     }
 
+    // MARK: - Co repozitář o mergi říká (#556)
+
+    /// Povolené metody merge a to, odkud GitHub skládá tělo commitu. **Jedno volání za repo.**
+    ///
+    /// **`gh api repos/{o}/{r}`, ne `gh repo view --json`**, a je to rozhodnutí: `gh repo view` má
+    /// v JSONu `mergeCommitAllowed` a spol., ale **zdroje těla** (`squash_merge_commit_message`,
+    /// `merge_commit_message`) v jeho polích nejsou. Dvě volání by se přitom umělo rozejít — a věta
+    /// pod výpisem payloadu by mluvila o jiném stavu než nabídka metod nad ním.
+    ///
+    /// **Dekóduje se JSON, ne `--jq`**, ze stejného důvodu jako u `fetchViewer` (#330): `--jq` na
+    /// pole, které v odpovědi není, vypíše prázdný řádek s nulovým návratovým kódem — a tady je
+    /// „chybí“ a `null` **jedna a tatáž** platná odpověď, takže by se prázdný výstup nedal odlišit
+    /// od rozbitého volání.
+    ///
+    /// Změřeno **0,62 s** nad `ondrajodas/PRism` (všechny tři `true`), `allow_rebase_merge: false`
+    /// nad `keboola/job-queue-daemon` a **všech pět polí `null`** nad `cli/cli`, tedy nad repem bez
+    /// práva zápisu. To poslední je „nevím“ — rozhodnout z toho, že metoda nejde, patří
+    /// `Policy`, ne sem, a `Policy` v tom stavu netvrdí nic.
+    func mergeSettings(repo: RepoID) async throws -> RepositoryMergeSettings {
+        try await run(
+            ["api", "repos/\(repo)"],
+            phase: "Nastavení merge v repozitáři",
+            decodedAs: GhRepositoryMergeSettings.self
+        ).settings
+    }
+
     // MARK: - Slévatelnost větve (#465)
 
     /// Jestli se dá větev mergnout. **Ptá se opakovaně, dokud GitHub neodpoví jinak než `UNKNOWN`.**

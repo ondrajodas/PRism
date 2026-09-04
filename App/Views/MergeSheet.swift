@@ -8,8 +8,14 @@ import SwiftUI
 ///
 /// Ochrana stojí na **úplném výpisu toho, co se stane**, ne na opisování jména repa: co se do čeho
 /// slévá, jakou metodou, kolik commitů a s jakým titulkem. Kde ten výpis nemůže být úplný, je to
-/// napsané — tělo squash commitu skládá GitHub ze slévaných commitů, takže se **neslibuje**, že je
-/// tady vidět celé.
+/// napsané — tělo commitu skládá GitHub, takže se **neslibuje**, že je tady vidět celé; od #556 se
+/// ale říká **z přečteného nastavení repozitáře**, co v něm bude, ne z domněnky.
+///
+/// **Řádek `metoda` je od #556 nabídka, ne opsané slovo** — a leží **v tom výpisu**, ne v políčku
+/// nad ním. Je to součást payloadu: co je v tom řádku vybrané, to odejde. Zůstávají u toho dvě
+/// věci, na kterých #465 stálo: mergne se pořád **jedním** kliknutím na pojmenované tlačítko
+/// (picker není druhý krok) a **s metodou se přepíšou i ostatní řádky** — počet commitů, titulek
+/// i věta o těle —, takže se nedá vybrat metodu a přečíst si k ní čísla té předchozí.
 ///
 /// **Nebydlí v detailu PR, ale v `ContentView`** — tatáž past jako u `ReviewSubmission` a o stupeň
 /// horší: mergnutý PR ze zdroje `author:@me` na příštím tiku **vypadne**, takže by se sheet
@@ -28,7 +34,7 @@ struct MergeSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 300, idealHeight: 360)
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 300, idealHeight: 380)
         // Zavřít okno uprostřed volání by znamenalo nevědět, jestli se mergovalo. `gh` má
         // třicetivteřinový timeout, takže je to čekání ohraničené.
         .interactiveDismissDisabled(submission.state == .merging)
@@ -61,50 +67,198 @@ struct MergeSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 7) {
-                row("větev", "\(plan.head) → \(plan.base)")
-                // **Metoda z konstanty payloadu**, ne opsaná: kdyby to byl literál, dala by se
-                // změnit v payloadu a v potvrzení by zůstalo staré slovo.
-                row("metoda", MergeRequest.method)
-                row("commitů", "\(plan.commits) → 1")
-                row("titulek", plan.commitTitle)
+                row("větev", "\(proposal.head) → \(proposal.base)")
+                methodRow
+                // **Řádky, které se s metodou mění, se z ní taky skládají** (#556): počet commitů
+                // i titulek berou `plan`, tedy payload vybrané metody. Dokud vybraná není, není
+                // co vypsat — a nechat tam čísla od nevybrané metody by bylo tvrzení, které si
+                // nikdo nevyžádal.
+                // **Ztlumené je to, co není hodnota payloadu** — u obou řádků, ne jen u titulku:
+                // `podle metody` je věta o nevybrané metodě, ne číslo, které odejde. Zákres je
+                // kreslí oba v `--ink-3`.
+                row("commitů", commitsLine, muted: submission.method == nil)
+                row("titulek", titleLine, muted: plan?.commitTitle == nil)
                 // Hlava je **podmínka volání**, ne údaj: na commit pushnutý mezi otevřením sheetu
                 // a kliknutím odpoví GitHub `409` a nemergne nic. Patří to sem, protože je to
-                // jediné místo, kde se dá zkontrolovat, **co** se mergne.
-                row("hlava", String(plan.headSha.prefix(7)))
+                // jediné místo, kde se dá zkontrolovat, **co** se mergne. Na metodě nezávisí.
+                row("hlava", String(proposal.headSha.prefix(7)))
+            }
+            // **Když výchozí metoda tady nejde, stojí to nad tou větou a pod výpisem** — a je to
+            // výstraha, ne popisek: `Mergnout` je v tom stavu zakázané, takže bez ní by to bylo
+            // zašedlé tlačítko bez odpovědi (tatáž úvaha jako u výstrahy v panelu).
+            if let warning = Policy.mergeMethodWarning(
+                default: proposal.defaultMethod,
+                in: proposal.repository
+            ) {
+                warningBox(warning)
             }
             // **Co ve výpisu není, se přizná** — a stojí to **pod** celým výpisem, ne mezi jeho
-            // řádky: je to věta o něm, ne další řádek. `commit_message` se neposílá, takže tělo
-            // složí GitHub ze slévaných commitů, a věta „vypsané je všechno, co se stane“ by bez
-            // tohohle tvrdila víc, než co je vidět.
-            Text(verbatim: bodyNotice)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // řádky: je to věta o něm, ne další řádek. `commit_message` se neposílá u žádné
+            // metody, takže tělo složí GitHub — a od #556 se z přečteného nastavení repozitáře
+            // říká, **z čeho**. Věta „vypsané je všechno, co se stane“ by bez tohohle tvrdila víc,
+            // než co je vidět.
+            //
+            // Druhá věta (jen po přepnutí) říká, že přepnutí je **jednorázové**. Bez ní by picker
+            // vypadal jako zkratka do nastavení a člověk by čekal, že si to okno bude pamatovat.
+            if let notice = bodyNotice {
+                Text(verbatim: notice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(_ caption: String, _ value: String) -> some View {
+    // MARK: - Nabídka metod (#556)
+
+    /// Řádek `metoda` — **pilulky ve výpisu payloadu**, ne políčko ve formuláři nad ním.
+    ///
+    /// Nepovolená metoda **z nabídky nezmizí**, jen se nedá vybrat: zmizet by znamenalo, že se
+    /// nedá poznat rozdíl mezi „repo to nepustí“ a „tuhle metodu GitHub nemá“. Kreslí se zašedlá,
+    /// přeškrtnutá a s poznámkou `nejde` za řadou.
+    private var methodRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("metoda")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: Self.captionWidth, alignment: .leading)
+            // `HStack` s `wrap`em by v 520 bodech nebyl potřeba — tři pilulky se vejdou —, takže
+            // se sází řada. Kdyby metod přibylo, je to místo, kde se to pozná.
+            //
+            // **Nabídka se skládá jednou**, ne zvlášť pro řadu a zvlášť pro poznámku `nejde`: dvě
+            // volání téže funkce v jednom těle jsou dvě odpovědi na jednu otázku.
+            HStack(spacing: 6) {
+                let options = Policy.mergeMethodOptions(in: proposal.repository)
+                ForEach(options) { methodPill($0) }
+                // Slovo je za **celou řadou**, ne u každé pilulky: přeškrtnutí je vidět na té
+                // jedné, kdežto tohle je věta o nabídce.
+                if options.contains(where: { !$0.isSelectable }) {
+                    Text("nejde")
+                        .font(.caption2)
+                        .foregroundStyle(Palette.ink3)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Jedna pilulka. Vybraná je `.pill.run` z návrhu (akcent na slabém akcentu), nevybraná
+    /// `.pill.idle` — sazbu drží `designPill`, ne tohle view (#348).
+    ///
+    /// **Zakázaná pilulka není `Button` s `.disabled`**, ale text: tlačítko, na které se nedá
+    /// kliknout, hlásí čtečce akci, která neexistuje — a `nejde` je vedle řady napsané slovy.
+    @ViewBuilder private func methodPill(_ option: Policy.MergeMethodOption) -> some View {
+        if option.isSelectable {
+            Button {
+                submission.method = option.method
+            } label: {
+                Text(verbatim: option.method.displayName)
+                    .designPill(tint: pillTint(of: option.method), background: pillFill(of: option.method))
+            }
+            .buttonStyle(.plain)
+            // Ostatní řádky výpisu se přepnutím **změní**, takže to nesmí být tichá volba: bez
+            // téhle nápovědi by se dalo přepnout a nevšimnout si, že se s tím přepsal i titulek.
+            .help("Mergnout metodou \(option.method.displayName) — platí jen pro tenhle merge")
+        } else {
+            Text(verbatim: option.method.displayName)
+                .strikethrough()
+                .designPill(tint: Palette.ink3, background: Palette.raised)
+                .opacity(0.55)
+                .help("Repozitář tuhle metodu nepovoluje")
+        }
+    }
+
+    private func pillTint(of method: MergeMethod) -> Color {
+        submission.method == method ? Palette.accent : Palette.ink2
+    }
+
+    private func pillFill(of method: MergeMethod) -> Color {
+        submission.method == method ? Palette.accentWeak : Palette.raised
+    }
+
+    /// Výstraha z návrhu (`.warnbox`) — **tatáž sazba jako v panelu**, aby se nedaly rozeznat dva
+    /// druhy výstrahy nad jednou akcí.
+    private func warningBox(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // Ikona je jen vizuální, takže se z accessibility stromu schová — jinak ji čtečka
+            // přečte jako jméno symbolu před větou, která to samé říká slovy (nález z #465).
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(Palette.stale)
+                .accessibilityHidden(true)
+            Text(verbatim: text)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(Palette.stale.opacity(0.11), in: .rect(cornerRadius: 7))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7).strokeBorder(Palette.stale.opacity(0.4))
+        }
+    }
+
+    /// Šířka popisku řádku — **jedno místo**, protože ji vedle řádků payloadu bere i řádek
+    /// s nabídkou metod. Dvě čísla by znamenala nabídku odsazenou jinak než výpis nad ní.
+    private static let captionWidth: CGFloat = 66
+
+    private func row(_ caption: String, _ value: String, muted: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(verbatim: caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(width: 66, alignment: .leading)
+                .frame(width: Self.captionWidth, alignment: .leading)
             Text(verbatim: value)
                 .font(.system(.callout, design: .monospaced))
+                // Ztlumené je to, co **není hodnota payloadu**: `podle metody` (nic není vybráno)
+                // a `neposílá se` u rebase. Kdyby to bylo stejně černé jako titulek, čtlo by se to
+                // jako hodnota, která odejde.
+                .foregroundStyle(muted ? Palette.ink3 : Palette.ink)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
     }
 
-    private var plan: MergePlan { submission.plan }
+    private var proposal: MergeProposal { submission.proposal }
 
-    /// Věta o těle squash commitu. **Skloňuje se** — „ze zpráv 1 commitů“ je zrovna ta chyba,
-    /// kvůli které `Plural.czech` existuje.
-    private var bodyNotice: String {
-        let commits = Plural.czech(plan.commits, one: "commitu", few: "commitů", many: "commitů")
-        return "Tělo squash commitu složí GitHub ze zpráv \(commits)."
+    /// Payload vybrané metody. `nil` = **nic není vybráno** (výchozí metodu repo nepovoluje).
+    private var plan: MergePlan? { submission.plan }
+
+    /// Řádek `commitů`. **`podle metody` místo čísel**, dokud vybráno není: nechat tam číslo od
+    /// nevybrané metody by bylo tvrzení, které si nikdo nevyžádal.
+    private var commitsLine: String {
+        guard let method = submission.method else { return "podle metody" }
+        return Policy.mergeCommitsLine(method: method, commits: proposal.commits)
+    }
+
+    /// Řádek `titulek`. Tři různé odpovědi, a každá znamená něco jiného: hodnota, která odejde;
+    /// `neposílá se` u rebase (žádný commit tam nevzniká); `podle metody`, dokud není vybráno.
+    private var titleLine: String {
+        guard let plan else { return "podle metody" }
+        return plan.commitTitle ?? "neposílá se — rebase žádný commit nevytváří"
+    }
+
+    /// Věta o **těle** commitu, a po přepnutí i věta o tom, že přepnutí platí jen tady.
+    ///
+    /// `nil` = nic není vybráno, takže se o těle nedá říct nic — a co s tím, stojí ve výstraze nad
+    /// tím. Skládá to `Policy` z **přečteného nastavení repozitáře** (#556): do té doby tu stálo,
+    /// že tělo složí GitHub ze zpráv commitů, což je pravda jedině v repu s `COMMIT_MESSAGES`.
+    private var bodyNotice: String? {
+        guard let method = submission.method else { return nil }
+        let body = Policy.mergeBodyNotice(
+            method: method,
+            commits: proposal.commits,
+            base: proposal.base,
+            in: proposal.repository
+        )
+        guard let note = Policy.mergeMethodOverrideNote(
+            selected: method,
+            default: proposal.defaultMethod
+        ) else { return body }
+        return body + " " + note
     }
 
     // MARK: - Patička

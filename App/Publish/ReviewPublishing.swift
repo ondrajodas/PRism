@@ -185,8 +185,17 @@ protocol ReviewPublishing: Sendable {
     /// commit pushnutý mezi pre-flightem a voláním odpoví `409` a nemergne nic. U review taková
     /// možnost není (změřeno u #62, že review se zastaralým `commit_id` projde).
     ///
-    /// **Metodu si volající nevybírá.** Squash je jediná, kterou aplikace posílá, a je v jedné
-    /// konstantě (`MergeRequest.method`) — proto ji plán nenese jako pole.
+    /// **Metoda je od #556 v plánu, ne v konstantě — a protokol se tím nemění ani o položku.**
+    /// Do #556 posílala aplikace vždycky squash z jedné konstanty a plán metodu nenesl; teď je
+    /// výchozí hodnota v nastavení (globálně i per repo) a potvrzení ji dovolí přebít pro jeden
+    /// merge. **Metod protokolu je pořád devět** a `merge` je pořád jediná, která merguje: co se
+    /// změnilo, je **obsah payloadu**, ne cesta ven. Zdůvodnění té korekce je u `MergeRequest`.
+    ///
+    /// **Co repozitář povoluje, si publisher nezjišťuje.** Je to **čtení**, takže patří
+    /// `GitHubGateway` (`mergeSettings(repo:)`) — a rozhodnutí, co se z toho smí nabídnout, je
+    /// v `Policy`. Publisher pošle metodu, která je v plánu; že to je metoda, kterou repo pustí,
+    /// je zodpovědnost nabídky, ne poslední brány. Kdyby to publisher ověřoval sám, bylo by to
+    /// druhé místo, kde se ta otázka vyhodnocuje — a rozešla by se s tím, co má člověk před očima.
     func merge(_ plan: MergePlan) async throws -> MergedPullRequest
 
     /// Přepne vlastní draft na *ready for review* (#482).

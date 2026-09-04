@@ -11249,6 +11249,11 @@ Co je na téhle metodě jiné než na sedmi před ní:
   **i potvrzení** — jedno místo, takže se kresba a to, co odejde, nemůžou rozejít. Plán proto pole
   `method` nemá vůbec: bylo by to pole s jedinou dosažitelnou hodnotou, tedy mrtvá váha a druhé
   místo k rozejití. Kdo chce jinou metodu, jde na GitHub.
+
+  **Tenhle bod #556 přebilo** — viz [*Metoda merge je volba, ne
+  konstanta*](#metoda-merge-je-volba-ne-konstanta-556) níž. Zůstává tady schválně: záznam
+  rozhodnutí je to, co dovoluje pozdější korekci, a bez původní věty by nebylo poznat, co se
+  změnilo.
 - **`commit_title` se posílá, `commit_message` ne.** Bez `commit_title` si titulek skládá GitHub podle
   nastavení repozitáře (`Default to pull request title for squash merges`), do kterého aplikace
   nevidí — potvrzení by tedy ukazovalo titulek, který nemusí vzniknout. Skládá ho
@@ -11302,6 +11307,113 @@ Co je na téhle metodě jiné než na sedmi před ní:
   pokrývá i `Base branch was modified`, protože další krok je u obou tentýž.
 - **Co v zákazu zůstává**: approve mimo review, **zavření PR**, **milník** a `deleteLabel`.
   `SingleWayOutTests` je hlídají jmenovitě dál — jen bez `merge`.
+
+### Metoda merge je volba, ne konstanta (#556)
+
+**Korekce jednoho bodu #465, ne nová metoda protokolu.** `ReviewPublishing` má pořád **devět**
+metod, `merge` je pořád jediná, která merguje, brána i dvojí ověření hlavy platí beze změny
+a `SingleWayOutTests` prošly **nedotčené**. Co se změnilo, je **obsah payloadu**: `merge_method`
+už není konstanta, ale výchozí hodnota z nastavení, kterou potvrzení vypisuje a dovolí přebít pro
+jeden merge.
+
+**Proč se to změnilo.** U konstanty stálo, že volba by byla „třetí věc na potvrzení, kterou člověk
+projde jednou za rok, a přepnout ji jde na GitHubu“. Praxe to vyvrátila ze dvou stran naráz: odejít
+z okna kvůli jedné hodnotě je dražší než ta hodnota, a squash není to, co se hodí ve všech repech.
+A ten argument padl **i sám o sobě** — mluvil o světě, ve kterém **žádná výchozí hodnota nebyla**,
+takže picker byl jediná cesta, jak metodu určit, a rozhodoval se **každý** merge. S výchozí
+hodnotou v nastavení je předvybráno a přepnutí je **odchylka**: jeden pohled, ne jedno rozhodnutí.
+
+**Globálně i per repo, a per repo je ta důležitější polovina.** Metoda merge je **zvyk
+repozitáře**, ne člověka — tenhle repo squashuje, firemní repo s prořezanou historií chce merge
+commit. Je to tedy tatáž třída jako `mode`, `allowsPublishing` nebo `incrementalAfterPush`:
+globální default (`GlobalConfig.mergeMethod`, výchozí `squash`) plus volitelný override
+(`RepositoryConfig.mergeMethod`, `nil` = ber globální). A **ne** jako `diffLayout` a `appearance`,
+které override schválně nemají, protože jsou vlastností toho, kdo se kouká; tohle je vlastnost
+toho, **do čeho se merguje**.
+
+**Kde v nastavení leží.** Globální default je na stránce `Odesílání`, **pod** bránou: brána
+rozhoduje, jestli se dá mergnout **vůbec**, tahle sekce jenom **čím** — obráceně by to vypadalo,
+že se metodou odesílání zapíná. Vlastní stránka by k tomu znamenala jeden knoflík na stránku.
+Per repo to leží na `Repozitáře`, vedle ostatních override, jako čtyřhodnotový picker
+(`Podle globálního (squash)` plus tři metody).
+
+**Návrh a payload jsou od #556 dvojice typů**, a je to podstata té změny. Do #556 byl `MergePlan`
+obojí naráz: metoda byla konstanta, takže „fakta o PR“ a „co odejde“ byla jedna věc. Volbou metody
+se to rozdělilo — z jednoho snímku faktů jdou složit **tři různé payloady** a dva z nich mají jiný
+titulek i jiný počet commitů:
+
+- **`MergeProposal`** je to, s čím se sheet otevřel: PR, hlava, větev, základ, počet commitů,
+  **titulek pull requestu**, výchozí metoda a to, co repozitář povoluje. Nese ho
+  `BranchSection.proposal` (do #556 `plan`).
+- **`MergePlan`** je **payload** — má `method` a `commitTitle` (`nil` = neposílat). Skládá ho
+  `MergeProposal.plan(with:)` přes `Policy.mergeCommitTitle`, takže sheet **kreslí řádky z toho
+  samého plánu**, který kóduje `MergeRequest.Payload`. Rozhodnutí „jedno místo pro kresbu i pro
+  payload“ se tedy neruší, jen se přesouvá.
+- **`plan == nil` je platný stav**, ne nedodělek: znamená *nic není vybráno*.
+
+**Co repozitář povoluje, je nové čtení — a je to jedno volání za repo.**
+`GitHubGateway.mergeSettings(repo:)` (šestadvacátá čtecí metoda; gateway zůstává bez zápisu) čte
+`GET /repos/{o}/{r}` a vydá pět polí: tři příznaky a dva zdroje těla. Cache je
+`AppStore.repositoryMergeSettings`, klíčovaná **repem** jako nabídka labelů — příznaky jsou
+vlastnost repozitáře, takže se mezi dvěma PR z téhož repa nemění. Plní se při otevření
+**vlastního** PR (`loadBranchStatus`) a při výběru repa v nastavení; **není to dotaz na tik
+pollingu**. Změřeno **0,62 s**.
+
+**Tři odpovědi, ne dvě, a ta třetí je změřená.** Nad `ondrajodas/PRism` přijdou všechny tři jako
+`true`, nad `keboola/job-queue-daemon` je `allow_rebase_merge: false` — a nad `cli/cli`, tedy nad
+repem **bez práva zápisu**, přijdou **všechna pět polí jako `null`**. To je **„nevím“, ne
+„nepovoluje“**: v nabídce se chová jako „ano“ (nabídnou se všechny tři) a **netvrdí se nic**.
+Rozhodnout z chybějících dat, že něco nejde, je u nevratné akce tatáž chyba jako rozhodnout, že
+jde. Selhání čtení proto **nemá vlastní mapu poruch** (na rozdíl od labelů) a nikde se nehlásí:
+od `null` v odpovědi se nedá odlišit ani z dat, a vlastní hláška by z běžného stavu udělala
+poruchu.
+
+**Nepovolená metoda se z nabídky neztratí** (`Policy.mergeMethodOptions`) — jen se nedá vybrat
+a kreslí se zašedlá, přeškrtnutá a se slovem `nejde`. Zmizet nesmí, jinak se nedá poznat rozdíl
+mezi „repo to nepustí“ a „tuhle metodu GitHub nemá“.
+
+**A nepovolená výchozí metoda se nepodstrčí jinou** (`Policy.initialMergeMethod`). Sheet se otevře
+**bez vybrané metody**, `Mergnout` je zakázané a **pod výpisem** stojí `.warnbox` s tím, co repo
+povoluje a co s tím (`Policy.mergeMethodWarning`). Tiše přepnout na první povolenou by znamenalo,
+že u nevratné akce odejde něco, o co nikdo nepožádal — a řádky `commitů` a `titulek` by přitom
+vypadaly jako potvrzený payload. Proto v tom stavu vypisují `podle metody`, ztlumeně: dokud není
+vybráno, **není co vypsat**.
+
+**Panel o metodě mlčí** a `Mergnout…` v něm zůstává povolené. Sekce `Větev` odpovídá na „dá se to
+mergnout“, a to se nepovolenou metodou nemění: mergnout **jde**, jen zbývá vybrat čím — a to je
+otázka payloadu, tedy věc potvrzovací obrazovky. Udělat z toho překážku by znamenalo zašedlé
+tlačítko nad něčím, co projde dvěma kliknutími. `Policy.mergeOffer` proto příznaky repa **nezná**;
+`isMergeReadyForLane` (deska na domácí záložce) je z téhož důvodu nečte vůbec.
+
+**Titulek se posílá u dvou metod ze tří** (`Policy.mergeCommitTitle`). U squashe zůstává
+`titulek PR (#číslo)`, u merge commitu se posílá `Merge pull request #N from <větev>` (vlastní
+úmluva GitHubu, aby historie vypadala jako po mergi z webu) a **u rebase se neposílá vůbec** —
+žádný commit tam nevzniká, takže by to bylo pole, které GitHub zahodí. Že to `Encodable` doopravdy
+vynechá (`encodeIfPresent` u optionalu), tvrdí test nad JSONem, ne nad polem struktury: `""` by
+GitHub vzal jako titulek. Důvod „posílat vždycky“ z #465 platí dál — a nad repem bez práva zápisu
+se to nastavení **ani nedá přečíst**.
+
+**Věta o těle se přestala hádat** (`Policy.mergeBodyNotice`). `commit_message` zůstává neposlané
+u všech metod, ale do #556 stálo v potvrzení *„Tělo squash commitu složí GitHub ze zpráv N
+commitů“* — což je pravda jedině v repu se `squash_merge_commit_message = COMMIT_MESSAGES`. Tenhle
+repo ho má (změřeno), ale záruka to není: v repu s `PR_BODY` ta věta lhala. Zdroje těla přijdou
+**týmž voláním** jako povolené metody, takže věta umí říct, co v tom těle bude — zprávy commitů,
+popis PR, titulek PR, nebo prázdno. Kde se to zjistit nepodařilo, zůstává přiznání *„složí GitHub
+podle nastavení repozitáře“*, a **u rebase se o těle nemluví vůbec**.
+
+**Texty se přepsaly jako třída, ne po jednom výskytu.** Kromě věty o těle byl tvrzením o squashi
+i řádek `commitů 3 → 1`: u merge commitu je výsledek `3 + merge commit`, u rebase `3 přehrané`
+(skloňované). Rozhoduje o tom `Policy.mergeCommitsLine` a přepisuje se **s metodou celý výpis** —
+řádek payloadu, který nad jinou metodou lže, je horší než řádek, který tam není. To je zároveň
+důvod, proč picker leží **uvnitř** výpisu: nedá se vybrat metodu a přečíst si k ní čísla té
+předchozí.
+
+**Není to druhá věc na potvrzení**, a proto zamítnutí z #465 nezůstalo v platnosti: picker je
+**řádek payloadu, ve kterém se dá kliknout**, ne krok před ním, a mergne se pořád **jedním**
+kliknutím na pojmenované tlačítko. Kdyby to byl druhý krok („vyber metodu“ → „potvrď“), platilo by
+to zamítnutí dál. Že je přepnutí **jednorázové**, stojí pod výpisem
+(`Policy.mergeMethodOverrideNote`) — bez té věty by picker vypadal jako zkratka do nastavení
+a člověk by čekal, že si to okno bude pamatovat.
 
 ### Ready for review (#482) — devátá metoda, a nejmenší z nich
 

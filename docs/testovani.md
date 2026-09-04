@@ -899,9 +899,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **`MergePublishingTests`** — bez povolení, na zavřeném a mergnutém PR, na **posunuté hlavě**
     a s prázdnou hlavou je **`runner.invocations.isEmpty`**. Tři tvrzení jsou zvlášť pro tuhle metodu:
     **payload nese přesně tři pole** (`commit_title`, `merge_method`, `sha`) na hotových bajtech —
-    `commit_message` v něm schválně **není**, protože tělo squash commitu skládá GitHub ze zpráv
-    slévaných commitů; **metoda se čte z konstanty**, kterou používá i potvrzení; a **`merged: false`
-    se nebere jako úspěch**, i když návratový kód byl nula.
+    `commit_message` v něm schválně **není**, protože tělo commitu skládá GitHub; **metoda se čte
+    z plánu** (do #556 z konstanty), tedy z toho samého, ze kterého kreslí potvrzení; a
+    **`merged: false` se nebere jako úspěch**, i když návratový kód byl nula.
+
+    **Od #556 k tomu dvě tvrzení o metodě**, obojí na hotových bajtech: `merge_method` se posílá
+    **doslova** (`squash` / `merge` / `rebase`, porovnáno s literálem, ne s enumem — je to hodnota,
+    kterou bere GitHub) a u rebase se `commit_title` **vůbec nevyskytuje**. To druhé se dá tvrdit
+    jedině nad JSONem: v poli struktury je `nil`, ale rozhodující je, že synteticky generovaný
+    `encode(to:)` klíč vynechá — `""` by GitHub vzal jako titulek.
 
     Fixtures jsou **skutečné odpovědi**, změřené na `ondrajodas/prism-review-sandbox#8` — sonda tam
     byla pro tenhle účel založená, třikrát pushnutá a nakonec mergnutá. `409` (`Head branch was
@@ -913,7 +919,15 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     skutečnými fixtures.
   - **`AppStoreMergeTests`** — tady se hlídá, **kdy se aplikace vůbec ptá**: na cizí PR a na mergnutý
     se na slévatelnost **neptá vůbec** (`branchStatusRequests.isEmpty`), druhý příchod na PR se neptá
-    znovu a selhání se nezahodí do prázdna. K tomu nula spuštění `gh` bez brány, na cizím PR a nad
+    znovu a selhání se nezahodí do prázdna.
+
+    **Od #556 totéž o příznacích merge**, a je to tatáž třída: **jedno volání za repo** (tři další
+    pokusy nepřidají ani jeden dotaz), **na cizím PR se neptá vůbec** a **selhané čtení nechá
+    `nil`**, tedy „nevím“ — a zkusí to znovu, protože neúspěch se nezapamatoval. Pozor na pořadí:
+    `loadDetail` si na konci sám dotáhne stav větve a s ním i příznaky, takže **odpověď fake
+    gateway se musí nastavit před ním** (parametry `mergeSettings:` a `mergeSettingsFailure:`
+    v `prepared()`) — přiřazení po něm už zavřenou stráž na cache nedohoní a test by procházel nad
+    prázdnou hodnotou. K tomu nula spuštění `gh` bez brány, na cizím PR a nad
     červeným checkem — `mergeSubmission(for:)` vrátí `nil`, takže se sheet nad neproveditelným mergem
     neotevře ani tehdy, kdyby se na zakázané tlačítko nějak kliknout dalo. A po úspěchu **jedno**
     volání `gh` a **dvě čtení detailu navíc** (pre-flight a načtení stavu po mergi) — to druhé je to,
@@ -931,12 +945,48 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **`SingleWayOutTests`** — **sedm souborů, pět volajících, osm metod** jmenovitě, a `merge` z
     výčtu zakázaných **zmizel**; zůstává approve mimo review, `close`, milník a `deleteLabel`.
     Je to jediné místo v repu, kde se ta změna pravidla dá přečíst jako změna, ne jako díra.
+    **#556 tuhle sadu nezměnilo ani o řádek**, a je to součást tvrzení: volba metody mění obsah
+    payloadu, ne cestu ven.
   - **`WindowShortcutsTests`** — `Views/MergeSheet.swift` přibyl do jmenovitého výčtu souborů, které
     si klávesu berou samy (`⎋` na `Zrušit`). Tlačítko, které merguje, zkratku **nemá**.
 
   **Co testy neověří:** že `PUT /pulls/{n}/merge` projde z běžící aplikace — brána je ve slotové
   konfiguraci vypnutá schválně, takže se akce v proklikávané instanci nenabídne, dokud si ji člověk
   nezapne. Ověřené je to **mimo aplikaci**, tímtéž voláním na sondě.
+- **Volba metody merge (#556)** — **korekce jednoho rozhodnutí z #465**, ne nová cesta ven, takže
+  se u ní hlídají tři věci: co se **nabídne**, co se **předvybere**, a jaké **texty** z toho vyjdou.
+  - **`MergeMethodChoiceTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tři
+    tvrzení o tom, co se **NEstane**: nepovolená výchozí metoda **nevybere nic** (a jmenovitě ani
+    `squash`, ani `merge commit` — tiché podstrčení první povolené je zrovna ta chyba, kvůli které
+    funkce existuje), nepovolená metoda se z nabídky **neztratí** (jinak se nedá poznat „repo to
+    nepustí“ od „tuhle metodu GitHub nemá“) a věta o těle **není** dnešní věta o commitech, když
+    se nastavení nepodařilo přečíst.
+
+    Texty se tvrdí **doslova**, ne strukturou: skloňování (`1 přehraný` / `4 přehrané` /
+    `7 přehraných`, `ze zpráv 1 commitu`) a rozdíl mezi `Vyber jednu z nich` a `Vyber ji` nad
+    jedinou povolenou metodou jsou v nich to, co se rozbije nejtišeji. **Prázdný výčet povolených
+    metod je zvlášť**: GitHub aspoň jednu povolit musí, ale kdyby přišlo samé `false`, nesmí
+    vzniknout věta „repozitář povoluje“ s ničím za ní.
+  - **`GhRepositoryMergeSettingsTests`** — dekódování **skutečné odpovědi** `gh api repos/{o}/{r}`
+    ze dvou **veřejných** repozitářů. `ondrajodas/PRism` má všechny tři metody a
+    `squash_merge_commit_message = COMMIT_MESSAGES`; `cli/cli` je ten podstatnější případ — repo
+    **bez práva zápisu**, kde přijde všech pět polí jako `null`. Ruční literál by ho nedoložil:
+    ta pole v odpovědi **jsou**, jen s hodnotou `null`, takže se „nevím“ nedá vyrobit vynecháním
+    klíče. `allow_rebase_merge: false` je proti tomu **inline JSONem** a je u toho napsáno proč:
+    změřené je to na `keboola/job-queue-daemon`, což je firemní repozitář.
+  - **`ConfigurationTests`** (rozšířené) — výchozí `squash` se porovnává **s literálem**, ne
+    s konstantou (je to chování aplikace do #556, ne definice sama sebou), `rawValue` v souboru je
+    **ta samá hodnota, kterou bere GitHub**, a rozbitá hodnota se srazí na `squash` **na obou
+    úrovních** — u repa jmenovitě **ne na globální hodnotu**, protože překlep v repu, u kterého
+    jsem si squash řekl výslovně, ho nesmí přepnout na globální merge commit.
+  - **`PollObservationTests`** — nová mapa `repositoryMergeSettings` přibyla do výčtu, který
+    `forget(whatIsNotIn:)` prořezává, a **počet se zvedl na čtyřicet**. Bez toho by mapa v úklidu
+    chyběla a tichý tik by budil její čtenáře.
+
+  **Co testy neověří:** že merge doopravdy proběhne jinou metodou než squashem. Brána je ve
+  slotové konfiguraci vypnutá a merge je nevratný, takže se to **nemerguje naostro**; ověřené je
+  jen to, co odejde v payloadu (na hotových bajtech) a co repozitáře doopravdy vracejí (změřeno
+  přes `gh api` na třech repech).
 - **Přepnutí vlastního draftu na *ready for review* (#482)** — **devátá cesta ven a nejmenší z nich**
   (payload je jeden bit), takže se u ní hlídá totéž co u těch osmi, a k tomu dvě věci, které jinde
   nejsou: **že se akce nad nedraftem nekreslí vůbec** a **že se nepoužije `gh api`**.

@@ -36,14 +36,19 @@ struct MergePublishingTests {
         )
     }
 
-    private var plan: MergePlan {
-        MergePlan(
+    /// Payload té metody, kterou aplikace posílala do #556 — **jeden plán, ať se testy o metodě
+    /// nemusí ptát**. Skládá se z návrhu (`MergeProposal`) touž cestou jako v okně, takže se
+    /// titulek nemůže rozejít s tím, co vypisuje potvrzení.
+    private var plan: MergePlan { proposal.plan(with: .squash) }
+
+    private var proposal: MergeProposal {
+        MergeProposal(
             pullRequest: sandbox,
             headSha: head,
             head: "prism-merge-probe-465",
             base: "master",
             commits: 3,
-            commitTitle: "chore: merge probe for 465 (#8)"
+            title: "chore: merge probe for 465"
         )
     }
 
@@ -131,14 +136,14 @@ struct MergePublishingTests {
     func doesNotMergeWithoutAHead() async throws {
         let runner = try merged()
         let publisher = publisher(runner)
-        let blind = MergePlan(
+        let blind = MergeProposal(
             pullRequest: sandbox,
             headSha: "  ",
             head: "prism-merge-probe-465",
             base: "master",
             commits: 3,
-            commitTitle: "chore: merge probe for 465 (#8)"
-        )
+            title: "chore: merge probe for 465"
+        ).plan(with: .squash)
 
         await #expect(throws: PublishError.mergeWithoutHead) {
             try await publisher.merge(blind)
@@ -180,12 +185,35 @@ struct MergePublishingTests {
         """)
     }
 
-    /// **Metoda je jedna a na jednom místě.** Kdyby si ji payload skládal sám, dala by se změnit
-    /// tam a v potvrzení by zůstalo staré slovo.
-    @Test("Metoda je squash a bere se z konstanty")
-    func alwaysSquashes() {
-        #expect(MergeRequest.method == "squash")
-        #expect(MergeRequest.Payload(plan).mergeMethod == MergeRequest.method)
+    /// **Metoda je v plánu a payload ji jen opíše** (#556). Do #556 to byla konstanta; teď je
+    /// jedno místo `MergePlan`, ze kterého kreslí potvrzení **i** kóduje payload, takže se ta dvě
+    /// místa nemají jak rozejít.
+    ///
+    /// `rawValue` se porovnává s **literálem**, ne s enumem: je to hodnota, kterou bere GitHub,
+    /// takže přepsat ji v enumu musí spadnout tady, ne až u odmítnutého merge.
+    @Test("Metodu payload bere z plánu a posílá ji doslova")
+    func sendsTheMethodFromThePlan() {
+        #expect(MergeRequest.Payload(proposal.plan(with: .squash)).mergeMethod == "squash")
+        #expect(MergeRequest.Payload(proposal.plan(with: .mergeCommit)).mergeMethod == "merge")
+        #expect(MergeRequest.Payload(proposal.plan(with: .rebase)).mergeMethod == "rebase")
+    }
+
+    /// **U merge commitu odejde titulek úmluvou GitHubu, u rebase žádný.**
+    ///
+    /// `commit_title` se u rebase **vynechává celý**, ne posílá prázdný: `""` by GitHub vzal jako
+    /// titulek. Že to synteticky generovaný `encode(to:)` udělá (`encodeIfPresent`), tvrdí tenhle
+    /// test nad JSONem, ne nad polem struktury.
+    @Test("Payload u rebase titulek vůbec neposílá")
+    func omitsTheTitleForRebase() throws {
+        let commit = try MergeRequest.encoded(MergeRequest.Payload(proposal.plan(with: .mergeCommit)))
+        #expect(try #require(String(data: commit, encoding: .utf8)) == """
+        {"commit_title":"Merge pull request #8 from prism-merge-probe-465","merge_method":"merge","sha":"\(head)"}
+        """)
+
+        let rebase = try MergeRequest.encoded(MergeRequest.Payload(proposal.plan(with: .rebase)))
+        #expect(try #require(String(data: rebase, encoding: .utf8)) == """
+        {"merge_method":"rebase","sha":"\(head)"}
+        """)
     }
 
     /// Odpověď se čte **z toho, co potvrdil GitHub** — fixture je skutečný výstup mergnuté sondy.
