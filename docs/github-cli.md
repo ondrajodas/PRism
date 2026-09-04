@@ -63,13 +63,37 @@ nálezy** pod hlavičkou, že nové komentáře nejsou.
 ### Když nedoběhne vůbec
 
 Do review napíše jen „Copilot encountered an error and was unable to review this pull request“
-a příčina je vidět **jen v logu akce**. Jsou na to dvě známé příčiny a **pozná se to podle toho,
-jestli job vůbec běžel**:
+a příčina je vidět **jen v logu akce**. Jsou na to tři známé příčiny a **pozná se to podle toho,
+jestli job běžel a jak dlouho**:
 
-- **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
+- **Job běžel a spadl uprostřed** → velikost `CLAUDE.md` ([záznam
   rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
+- **Job spadl do čtyř vteřin na `Resource not accessible by integration`** → strana GitHubu,
+  viz níž (#507).
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
+
+### Třetí příčina: `Resource not accessible by integration` (#507)
+
+**Job běžel, ale spadl na první API volání** — a to znamená, že to velikost `CLAUDE.md` **není**:
+padá dřív, než se z repa cokoli přečte. V logu to vypadá takhle (čtvrtá vteřina jobu):
+
+```
+Analyzing ondrajodas/PRism PR #565 (autofind.js version: 0.1.124)
+Fetching PR metadata for ondrajodas/PRism#565
+HttpError: Resource not accessible by integration - .../rest/pulls/pulls#get-a-pull-request
+Error creating PR review request: … Failed to fetch PR metadata
+```
+
+Je to **strana GitHubu, ne stav repa**, a pozná se to podle dvou věcí: (1) job doběhne
+za **4 vteřiny** a jméno má normální (`Running Copilot Code Review`), takže o mrtvý request
+z předchozí sekce nejde; (2) **padá i na jiných PR téhož repa naráz** — u #507 spadla ve stejné
+minutě i kola na větvi jiného slotu. `CLAUDE.md` měla 98 708 B, tedy pod stropem, a ta samá
+velikost prošla o šest hodin dřív třikrát za sebou.
+
+**Vyžádat znovu zkus jednou; víc ne.** U #507 dalo druhé kolo tutéž chybu za stejnou dobu. Pak už
+je jediné, co se dá udělat, **napsat to do popisu PR jako neověřenou mezeru** a spolehnout se na
+vlastní revizi diffu — ta je stejně **podmínka pushnutí**, ne náhrada za Copilota.
 
 ### Když se request spotřebuje mrtvým jobem
 
