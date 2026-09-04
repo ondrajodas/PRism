@@ -102,13 +102,25 @@ se z něj dá tahle příčina poznat dřív než z `HttpError` — a potvrzuje,
 integrace na straně GitHubu, ne o stav repa. **Odstup mezi pokusy nepomohl**: tři kola v rozmezí
 osmnácti minut skončila týmž řádkem, takže se u téhle příčiny nevyplatí čekat a zkoušet znovu.
 
-**A potvrdilo se to na čtvrté větvi** (#526, PR #566, runy `33920187418`, `33920459855`,
-`33920609845`): tatáž chyba, tentýž řádek, jen o půl hodiny později a na jiném diffu — takže je to
-opravdu vlastnost repa v tu chvíli, ne jednoho PR. `CLAUDE.md` měla pořád **98 708 B**. Log se čte
-takhle (zip má u téhle příčiny normální velikost, na rozdíl od spotřebovaného requestu):
+**A trvá to přes hodiny, ne přes minuty** (#542, PR #564). Tam se to zkusilo **pětkrát** za necelé
+tři hodiny (20:46, 20:48, 20:56, 23:16 a 23:31) a pokaždé to spadlo stejně: `Processing Request`
+vypsal `COPILOT_PERMISSION_GATE_REASON: ineligible_app` a hned nato `HttpError` nad
+`GET /pulls/564`. Run přitom pokaždé **vznikl a běžel** (poslední `33921491420`), takže
+o spotřebovaný request z odstavce níž nejde a `union: false` na tom nic nezmění. Dokud výpadek na
+straně GitHubu trvá, **hlásí se to jako neověřená mezera** — nemergne s tím, že „Copilot nic
+nenašel“: nic nepřečetl.
+
+**A není to jedno PR, je to celé repo** (#526, PR #566, runy `33920187418`, `33920459855`,
+`33920609845`): tatáž chyba na **čtvrté** větvi v tomtéž okně, jen na jiném diffu. Dohromady se to
+v jedné hodině potkalo na **#507, #542, #491 a #526** — takže se u téhle příčiny nemá cenu ptát,
+co je jiného na tom mém diffu.
 
 ```bash
-gh api repos/{owner}/{repo}/actions/runs/<id>/logs > /tmp/copilot.zip
+# Rozpoznání: běžel job, a proč spadl.
+gh api repos/{owner}/{repo}/actions/runs/{id}/jobs --jq '.jobs[] | "\(.name) \(.conclusion)"'
+gh run view {id} --log-failed | grep -E "HttpError|PRism#[0-9]+"
+# Nebo z logu, když `gh run view` na stažení nestačí:
+gh api repos/{owner}/{repo}/actions/runs/{id}/logs > /tmp/copilot.zip
 unzip -o -q /tmp/copilot.zip -d /tmp/copilotlog && grep -h 'HttpError' /tmp/copilotlog/*/*.txt
 ```
 

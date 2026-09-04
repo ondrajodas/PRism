@@ -288,7 +288,8 @@ z `GitHubGateway`, tenhle kód mu jen rozumí.
 | `DiffRow` | Diff rozbalený na řádky pro vykreslení, včetně bublin nálezů a **dvojic** pro pohled vedle sebe, + `anchor(in:file:line:)` pro skok z nálezu |
 | `DiffRow.paired(_:)` | Slití hotových řádků do dvojic (`App/Diff/DiffPairing.swift`) — čistá funkce, celý pohled `split` stojí na ní |
 | `WordDiff` | Co se uvnitř přepsané dvojice změnilo (#153): rozsahy na staré a nové straně, práh podobnosti, párování pro oba pohledy. Čistá funkce |
-| `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed` |
+| `DiffState` | Stav načtení per PR: `loading` / `loaded(Diff, updatedAt:)` / `failed(DiffFailure)` |
+| `DiffFailure` | **Proč** diff není (#542): `tooManyFiles(limit:response:)` = strop GitHub API na počet souborů, `other` = cokoli jiného. Do #542 to byla hotová věta — viz [*Když diff nedorazí*](#když-diff-nedorazí-542) |
 | `DiffExpander` | Skrytý úsek mimo hunky a kroky, kterými se dá odkrýt |
 | `RevealedLines` | Které skryté řádky jsou odkryté; slučuje rozsahy a dělí jimi mezeru |
 | `FileExpansion`, `FileExpansionKey` | Rozbalování jednoho souboru: odkryté rozsahy, obsah, načítání, chyba. Klíč je `(PR, cesta, commit)` — `commit: nil` je hlava PR, jinak konkrétní commit (#317). **Ze které verze souboru obsah je, říká klíč, ne hodnota**: týž soubor má v `Změněných souborech` a v diffu commitu jiná čísla řádků, takže sdílený záznam by u staršího commitu odkryl řádky z dnešní hlavy. Tentýž klíč drží **odchylky sbalení** (`AppStore.fileFolding`, do #500 množina `foldedFiles`), takže se ani sbalení mezi těmi dvěma diffy nesdílí |
@@ -682,6 +683,59 @@ přidalo #428; číslo v téhle větě bylo do té doby o jedenáct pastí pozad
 **TextKit 1, ne 2.** Geometrie řádků se čte z `NSLayoutManager` (`boundingRect(forGlyphRange:)`) —
 podle ní se kreslí pozadí, čísla i pozice pilulek — a TextKit 2 layout manager nemá. Vynutí se tím,
 že se textové view vyrobí s ručně složeným `NSTextStorage`/`NSLayoutManager`/`NSTextContainer`.
+
+### Když diff nedorazí (#542)
+
+Vyšlo to z měření na ostrých datech u #501: `home-assistant/core#181088` mění **3 632 souborů**
+a `gh pr diff` na něj odpoví `HTTP 406`:
+
+```
+could not find pull request diff: HTTP 406: Sorry, the diff exceeded the maximum number of files
+(300). Consider using 'List pull requests files' API or locally cloning the repository instead.
+(https://api.github.com/repos/home-assistant/core/pulls/181088)
+PullRequest.diff too_large
+```
+
+Do #542 z toho v okně byla věta `gh skončil s kódem 1.` a pod ní ta odpověď — tedy **tatáž cesta
+jako u vypršelého tokenu a nedostupného repa**. Tři různé příčiny, jeden text; přesně ta třída,
+kterou tady Copilot chytá opakovaně (*text v UI, který tvrdí míň, než data unesou*).
+
+**Rozhoduje `Policy` výčtem, ne `if` ve view.** `Policy.diffFailure(_:)` vydá `DiffFailure`
+a `Policy.diffFailureNotice(_:)` z něj složí, co se napíše a co se nabídne
+(`App/Policy/DiffFailureNotice.swift`). Pět věcí, na kterých to stojí:
+
+- **Strop se pozná z odpovědi, ne z počtu souborů.** Kolik jich pull request mění, aplikace v tu
+  chvíli **neví** — dozvěděla by se to z toho diffu, který nedorazil. Signál je věta
+  `diff exceeded the maximum number of files`, **bez čísla**: číslo je hodnota, která se může
+  změnit, kdežto věta kolem ní je to, co příčinu odlišuje.
+- **Číslo ve větě je přečtené, nikdy dosazené.** `Policy.diffFileCap(inResponse:)` bere závorku
+  hned za tou větou a **trvá na samých číslicích**: v téže hlášce stojí i
+  `(https://api.github.com/…)`, kterou by odmítl i `Int`, ale znaménko ne — a ze `(-5)` by vyšla
+  věta „GitHub vydá diff nejvýš pro −5 souborů“. Odpověď bez čísla je pořád strop, jen se v ní
+  žádné číslo netvrdí.
+- **Nevěší se to na třídu chyby.** `GitHubError` třídí podle znění a `gh` ho měnit může, takže
+  se text bere přes `GitHubError.responseText` — kdyby GitHub jednou napsal `not found` do téže
+  věty, byl by z toho `notFound` a rozpoznání vázané na `commandFailed` by tiše přestalo platit.
+- **U stropu se nenabízí `Zkusit znovu`.** Druhý pokus vrátí totéž, dokud se nepřepíše historie;
+  tlačítko, které slibuje, co splnit nemůže, je horší než žádné. Místo něj stojí
+  `Otevřít na GitHubu` — rozhoduje o tom `DiffFailureAction`, tedy zase `Policy`.
+- **Zbytek okna zůstává k užitku, a je to půlka té zprávy.** Přehled, commity, kontroly ani
+  konverzace na diffu nestojí, takže se záložka kreslí jako **detail**, ne jako porucha
+  (`PullRequestTabContent.detail`) — rozdíl mezi „nemám diff, tady je proč“ a „nemám nic“ musí
+  být vidět ze stavu, ne až z toho, co si člověk domyslí z prázdné plochy. Věta to říká
+  výslovně, protože prázdná plocha svádí ke čtení „tenhle pull request se nedá otevřít“.
+
+**Netýká se to rozsahového diffu ani diffu commitu, a je to změřené.** `fetchDiff(repo:from:to:)`
+(#284) a `fetchDiff(repo:commit:)` (#317) jdou na `compare`, resp. `commits`, a **ty ten strop
+nemají**: `gh api repos/home-assistant/core/compare/759e4658…29f9b353 --header
+"Accept: application/vnd.github.diff"` nad týmž pull requestem vrátil **14,8 MB** unified diffu
+s návratovým kódem 0. Klasifikace proto sedí jen u `loadDiff`; kdyby se strop někdy objevil
+i tam, je to jedna funkce navíc, ne druhý rozbor.
+
+**Review se tím neblokuje.** Reviewer čte diff z pracovní kopie (`git diff <base>...HEAD`), takže
+strop GitHub API na něj nedosáhne — to, co se nad takovým pull requestem **nestane**, je že by
+cokoli spustilo *nedoručení diffu*. Nad záložkou otevřenou odkazem navíc automat neběží (#531),
+a `AppStoreDiffCapTests` to tvrdí se zapnutým automatickým režimem.
 
 ### Co z diffu doopravdy dojde ke kreslení (#446)
 

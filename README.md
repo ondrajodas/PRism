@@ -653,6 +653,13 @@ kreslila přes poslední řádky bloku. Počty `+X` a `−Y` jsou obarvené jako
 a červeně, v řadě záložek PR i v hlavičkách souborů, takže „velký přírůstek“ a „velké mazání“
 jsou poznat na první pohled.
 
+**Pull request nad 300 souborů diff nemá, a je to napsané** (#542). GitHub API ho nad tímhle
+stropem nevydá (`HTTP 406`), takže místo diffu stojí věta o stropu — **s číslem přečteným
+z odpovědi**, ne dosazeným — a `Otevřít na GitHubu` místo `Zkusit znovu`, protože druhý pokus
+vrátí totéž. **Zbytek pull requestu se čte dál**: přehled, commity, kontroly ani konverzace na
+diffu nestojí. Do #542 z toho byla obecná hláška „Diff se nepodařilo načíst“, tedy tatáž jako
+u vypršelého tokenu.
+
 **Hlavička souboru nese celou cestu** (#219) — složka tlumeně, jméno tučně (`src/Vault/`**`SecretClient.php`**).
 Do té doby tam bylo jen jméno, takže u dvou souborů, které se jmenují stejně, nešlo poznat, který
 je který. V úzkém sloupci ustupuje složka, ne jméno.

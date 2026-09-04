@@ -2095,16 +2095,34 @@ struct PullRequestDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func diffFailure(_ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Diff se nepodařilo načíst", systemImage: "exclamationmark.triangle")
+    /// Místo diffu, když se nedotáhl. **Text i nabídku skládá `Policy`** (#542) — strop GitHubu
+    /// na počet souborů je jiná zpráva než výpadek sítě a `if` nad odpovědí od `gh` sem nepatří.
+    private func diffFailure(_ failure: DiffFailure) -> some View {
+        let notice = Policy.diffFailureNotice(failure)
+        return VStack(alignment: .leading, spacing: 10) {
+            Label(notice.title, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(Palette.find)
-            Text(detail)
+            if let message = notice.message {
+                Text(verbatim: message)
+                    .font(.callout)
+                    .foregroundStyle(Palette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(verbatim: notice.detail)
                 .font(.system(.callout, design: .monospaced))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Zkusit znovu", systemImage: "arrow.clockwise") {
-                Task { await store.loadDiff(for: pullRequest) }
+            switch notice.action {
+            case .retry:
+                Button("Zkusit znovu", systemImage: "arrow.clockwise") {
+                    Task { await store.loadDiff(for: pullRequest) }
+                }
+            case .openOnGitHub:
+                // **Ne `Zkusit znovu`.** Nad stropem vrátí druhý pokus tutéž odpověď, takže by
+                // to bylo tlačítko, které slibuje, co splnit nemůže.
+                Link(destination: pullRequest.url) {
+                    Label("Otevřít na GitHubu", systemImage: "arrow.up.right.square")
+                }
             }
         }
         .padding(20)

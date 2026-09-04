@@ -43,6 +43,22 @@ extension GitHubError {
         }
     }
 
+    /// Syrový text, kterým to `gh` vysvětlil — `nil` u případů, které žádný nenesou.
+    ///
+    /// Je to jediné, z čeho se dá poznat příčina, kterou tenhle typ sám netřídí: strop na počet
+    /// souborů v diffu (#542) chodí jako `HTTP 406` uvnitř hlášky. **Bere se z odpovědi, ne z toho,
+    /// do které třídy chyba spadla** — třídí se totiž podle znění, a to `gh` měnit může: kdyby
+    /// GitHub jednou napsal `not found` do téže věty, byl by z toho `notFound` a rozpoznání
+    /// vázané na `commandFailed` by tiše přestalo platit.
+    var responseText: String? {
+        switch self {
+        case .notAuthenticated, .timedOut: nil
+        case .rateLimited(let text), .network(let text), .notFound(let text),
+             .toolUnavailable(let text), .malformedOutput(let text): text
+        case .commandFailed(_, let message): message
+        }
+    }
+
     /// Zařadí nenulový výsledek `gh` podle exit kódu a toho, co napsal na výstup.
     ///
     /// Exit kód rozliší jen chybějící přihlášení (`gh` na ně má vlastní čtyřku), zbytek se
