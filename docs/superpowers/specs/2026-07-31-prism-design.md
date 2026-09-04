@@ -3417,6 +3417,72 @@ byla **stráž, která tvrdila něco jiného než test, který ji hlídá**:
   systémový `grep` je `ugrep` bez `-P`. Pravidlo platí, jen se ten grep musí pustit jinak; #496
   na text pravidla **nesahalo**, aby se změna pravidla nepromíchala s přeskládáním souboru.
 
+#### Počtvrté (#570): stěhují se odstavce, ne se zkracují věty — a cíl je 70 kB, ne 40
+
+**Spouštěčem byla zase ta hranice, ne spadlý Copilot.** `CLAUDE.md` měl **99 047 B**, tedy
+necelý kilobajt pod ~100 kB, a příští issue, které do souboru sáhne, by ji překročilo. Dvě sekce
+dělaly **56 %** souboru: `## Konvence` 29 102 B a `## Tvrdé podmínky` 26 188 B.
+
+**Postup: stěhovat celé odstavce, ne zkracovat věty.** #447 i #496 zkracovaly formulace a obojí
+skončilo výš, než mířilo. Tady se rovina řezu položila jinam a **na jedno místo**: v odstavci,
+kde stojí věta pravidla a hned za ní jeho zdůvodnění, se řeže **za tou větou**. Věta pravidla,
+tvrdá čísla (sedm souborů, devět metod, tři soubory, jedna metoda), výčty zakázaného, grepy
+a odkaz zůstávají; „proč to bolí“, naměřená čísla a historie kol jdou za odkaz.
+
+**Nejdůležitější zjištění je, že se skoro nic nestěhovalo — protože už to v `docs/` bylo.**
+Před prací se pro každý odstavec, který měl odejít, pustil grep na jeho klíčové jméno
+(`Policy.metadataEditing`, `orderFrontUnanimated`, `Source.condensed`, `DiffMarginAnchors`,
+`badgeLabel`, `rebasedFrom`, `zdiff3`, …) přes `docs/`. Ze **zhruba padesáti** takových sond
+vyšly prázdné **tři**:
+
+- `| grep -q` s `pipefail` a `SIGPIPE` (#61) — nikde v `docs/`;
+- bundle konvence `CFBundleIconName`, `CFBundleDevelopmentRegion` a `stringsdata` (#83, #184);
+- tabulka pěti vzorů, které **Copilot v tomhle repu nachází opakovaně**.
+
+První dvě proto zůstaly v `CLAUDE.md` **beze změny** (nebylo kam je stěhovat a jsou krátké),
+třetí se **přestěhovala** do
+[`docs/github-cli.md`, *Co Copilot v tomhle repu nachází opakovaně*](../../github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně)
+a v `CLAUDE.md` po ní zbyla věta pravidla, jednořádkový výčet těch pěti vzorů a odkaz. Všechno
+ostatní byla **duplikace**: pravidlo si k sobě přitáhlo zdůvodnění, které vedle něj už stálo
+v `docs/` za odkazem. To je i vysvětlení, **proč soubor roste**, a je to zobecnitelné: růst
+nedělají nová pravidla, ale zdůvodnění dopisovaná ke starým.
+
+**Cíl 70 kB se nesplnil, vyšlo 74 329 B — a je to zapsané, ne zameteno.** Ze 99 047 B je to
+**−25,0 %** a ~26 kB pod hranicí, u které Copilot přestává doběhnout, takže praktický účel je
+splněný s rezervou. Poslední 4 kB se ale nedaly vzít jinak než mazáním pravidel, což zadání
+zakazovalo. Doloží to složení hotového souboru změřené na konci:
+
+| Co | Bajtů |
+|---|---|
+| tučný text (věty pravidel a zdůrazněné výčty) | 22 116 |
+| cíle odkazů do `docs/` | 5 919 |
+| tabulky (moduly, údržba dokumentace, sady nástrojů) | 5 618 |
+| bloky ```bash``` (grepy a příkazy) | 5 827 |
+| zbytek prózy, která ta pravidla drží pohromadě | ~34 850 |
+
+Každý další průchod už vydával **pod 500 B** a platilo se za něj čitelností. Kontrolní číslo
+v `CLAUDE.md` proto zůstává **hranice 100 kB**; 74 kB je od ní dost daleko.
+
+**Čtyři invarianty se ověřovaly měřením, ne okem** — skripty ve scratchpadu, jednorázově:
+
+1. **Inventář vět pravidel.** Mechanická definice: z textu složeného do logických řádek se bere
+   tučný úsek na začátku řádky (po volitelné odrážce), plus položky seznamu, které tučně
+   nezačínají. Před prací **159**, po ní **týchž 159** — porovnáno `diff`em nad seřazenými
+   seznamy, ne počtem.
+2. **Grepy.** Všech **32** příkazů z `CLAUDE.md` se pustilo před prací i po ní do souboru
+   a výstupy se porovnaly `diff`em: shodné do posledního řádku (kromě `wc -c < CLAUDE.md`,
+   který má měřit rozdíl).
+3. **Nic se neztratilo z repa.** Viz sondy výš.
+4. **Kotvy.** Skript nad slugy všech nadpisů v `docs/` a `README.md` (s pravidlem, že GitHub
+   mění **každou mezeru zvlášť** a k opakovanému slugu přidává `-1`): **116 odkazů s kotvou
+   před, 85 po, rozbitých 0 v obou případech**. Úbytek je slitím druhých a třetích odkazů
+   u téhož pravidla, ne zahozením cíle.
+
+**Dvě zjištění z #496 se potvrdila znovu a zůstávají mezerou:** `grep -nP` nad `bin/*.sh` na
+tomhle stroji **nejde spustit** (systémový `grep` je bez `-P`) a grep na systémové barvy v `App/`
+vychází dnes **prázdný**, ačkoli je u něj napsané, že je to výčet k posouzení. Ani na jedno se
+u #570 nesahalo — bylo by to změna pravidla promíchaná s přeskládáním souboru.
+
 ### Release notes jsou záznam jedné změny, ne deník projektu (#125)
 
 **Do #125** v `CLAUDE.md` stálo, že release je deník projektu a má popisovat progress. Deník

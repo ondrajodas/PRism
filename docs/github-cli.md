@@ -40,6 +40,24 @@ Funguje jedině GraphQL mutace `requestReviews` s `botIds`, kterou dělá
 ./bin/copilot-review.sh <číslo PR>
 ```
 
+### Co Copilot v tomhle repu nachází opakovaně
+
+Tohle je materiál k **vlastní revizi diffu**, která je podmínkou pushnutí (`CLAUDE.md`,
+*Pracovní postup*) — projde se **dřív**, než se Copilot pustí. Pět vzorů, na které v tomhle
+repu upozorňuje znovu a znovu; do #570 stály v `CLAUDE.md`, ale odpovídají na „proč to bolí“,
+takže patří sem:
+
+| Vzor | Proč to bolí |
+|---|---|
+| `try?`, prázdný `catch`, `?? default` nad operací, která může selhat | Ztracená data vypadají v UI jako „nic tu nebylo“. Ptej se: pozná uživatel, že se to nepovedlo? Když ne, patří to do stavu |
+| Text v UI, který tvrdí víc, než data unesou | „Reviewer nenahlásil žádný nález“ zní jako čisto i tehdy, když se nálezy nemají kde vzít |
+| Stav, který se drží, ale nikdo ho nečte | Buď to zobraz, nebo nedrž — jinak je to mrtvá váha, která svádí spolehnout se na ni |
+| Kontrola, která jinde v repu je, a tady chybí | Typicky ochrana proti mazání mimo cache. Když už někde existuje, patří na jedno místo |
+| Čtení nebo dekódování všeho, když stačí předfiltr | U operací, které běží při každém uložení nebo tiku, to není detail |
+
+**Když nález přijde, oprav třídu, ne výskyt** — Copilot vidí vždycky jen nový diff, takže na
+druhý výskyt téhož vzoru upozorní až v dalším kole.
+
 ### Výsledek se čte ze dvou míst a pod dvěma jmény
 
 Review píše `copilot-pull-request-reviewer[bot]`, ale inline komentáře **`Copilot`**. Filtr
