@@ -115,11 +115,13 @@ nenašel“: nic nepřečetl.
 gh api repos/{owner}/{repo}/actions/runs/{id}/jobs --jq '.jobs[] | "\(.name) \(.conclusion)"'
 gh run view {id} --log-failed | grep -E "HttpError|PRism#[0-9]+"
 ```
-**Počtvrté u #491 / PR #567, a přidalo to dva údaje.** Kola napříč **různými slotovými PR** padala
-ve stejné minutě — osm `failure` za pětatřicet minut —, takže to nezávisí ani na diffu, ani na
-jednom PR. A `CLAUDE.md` měla tentokrát **99 047 B**: pořád pod stropem, ale o 339 B blíž než při
-#507, takže ani rostoucí soubor tu příčinu nevysvětluje. Vyžádání znovu (`33921009691`) spadlo
-stejně.
+**Počtvrté u #491 / PR #567, a nejostřejší doklad, že to není o diffu, je časový.** Tři kola nad
+**třemi různými PR** (`33923112018` → #567, `33923128007` → #569, `33922924268` → #568) vznikla
+během **171 sekund** a spadla všechna na tomtéž řádku; dohromady jich za pětatřicet minut bylo osm,
+napříč větvemi čtyř slotů. Diff, velikost ani stav jednoho PR tedy nerozhodují. `CLAUDE.md` měla
+tentokrát **99 047 B** — pořád pod stropem, o 339 B blíž než u #507, takže ani rostoucí soubor tu
+příčinu nevysvětluje. Vyžádání znovu (`33921009691`, o hodinu později znovu `33923112018`) spadlo
+pokaždé stejně, takže **odstup ani opakování nepomáhá**: pravidlo *zkus jednou, víc ne* platí i tady.
 
 ### Když se request spotřebuje mrtvým jobem
 

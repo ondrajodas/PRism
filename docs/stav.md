@@ -8208,9 +8208,9 @@ cituje.
 ineligible_app`) — tedy **ne** na velikosti `CLAUDE.md` (99 047 B, pod stropem) ani na spotřebovaném
 requestu (job má správné jméno a doběhl). Padalo to na **osmi** kolech za pětatřicet minut napříč PR
 z různých slotů a druhé vyžádání vyrobilo nový run, který spadl stejně, takže to není o téhle
-změně. Je to **tatáž třetí příčina, kterou zapsalo #507 a doplnilo #542** — tady počtvrté a se dvěma
-údaji navíc (kola napříč PR různých slotů ve stejné minutě; `CLAUDE.md` o 339 B větší než u #507,
-a pořád pod stropem). Postup, jak ji odlišit od zbylých dvou, je
+změně. Je to **tatáž třetí příčina, kterou zapsalo #507 a doplnilo #542** — tady počtvrté a s údajem
+navíc: tři kola nad **třemi různými PR** vznikla během 171 sekund a spadla všechna stejně, takže
+o diff ani o jedno PR nejde. `CLAUDE.md` měla 99 047 B, o 339 B víc než u #507 a pořád pod stropem. Postup, jak ji odlišit od zbylých dvou, je
 v [`docs/github-cli.md`](github-cli.md#třetí-příčina-resource-not-accessible-by-integration-507). Vlastní revize diffu
 proběhla (grepy z `CLAUDE.md` plus čtení diffu) a našla v ní dvě věci: přehnané tvrzení v komentáři
 u sondy (`ideal*` místo „ideální šířka“) a dvě smyčky přes jednoprvkové pole.
