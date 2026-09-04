@@ -130,6 +130,9 @@ struct CommandPaletteView: View {
             .textFieldStyle(.plain)
             .font(.system(size: 14))
             .focused($isFieldFocused)
+            // Fokus se hlásí do okna (#507): paleta leží **nad** detailem PR, jehož zkratky
+            // v hierarchii zůstávají, takže mezerník do hledání se nesmí vzít na zastávku.
+            .reportsTextFieldFocus(isFieldFocused)
             // `↵` bere pole samo, ne zkratka: `keyboardShortcut(.defaultAction)` se v okně
             // s fokusem v textovém poli o tutéž klávesu přetahuje.
             .onSubmit(submit)

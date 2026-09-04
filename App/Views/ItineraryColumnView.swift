@@ -67,6 +67,8 @@ struct ItineraryColumnView: View {
                 readStates: readStates,
                 jump: jump
             )
+
+            keys
         }
         .frame(width: Self.width)
         .background(Palette.chrome)
@@ -75,6 +77,49 @@ struct ItineraryColumnView: View {
 
     /// Popisek hlavičky — `Policy` ho skládá z počítadla, sloupec ho jen sází.
     private var heading: String { Policy.itineraryHeading(itinerary.progress) }
+
+    /// Patka s klávesami (#507) — `␣ další zastávka · ⌥↓ další nález · ⌥V prošlo`.
+    ///
+    /// **Popisky se odvozují z katalogu** (`Policy.itineraryKeyHints`), nikdy se neopisují vedle
+    /// klávesy (#441). Sloupec z nich jen sází kapsle.
+    ///
+    /// **Jedna řádka, jak to má návrh, a vešla se až na druhý pokus** (#507). Sázka je 9,5 b
+    /// a mezera mezi prvky **3 body**: s pěti to dá 236,5 b proti 234 b, které ve sloupci po
+    /// odsazení zbývají — a přetečení se neprojeví přetékajícím textem, ale **oříznutým prvním
+    /// popiskem** (`další zast…`), takže se to pozná jedině z renderu. Se třemi je to 222,5 b,
+    /// tedy 11,5 b rezervy. Mezery mezi prvky (sedm) tady stojí víc než odsazení kapslí, takže
+    /// je to ta hodnota, kterou se platí.
+    private var keys: some View {
+        let hints = Policy.itineraryKeyHints
+        return HStack(spacing: 3) {
+            ForEach(hints) { hint in
+                // Oddělovač **mezi** dvojicemi, ne za každou: `·` na konci řádky je značka, po
+                // které nic nenásleduje. Rozhoduje o něm identita první položky, ne index —
+                // pole tuplů z `enumerated()` je v tomhle repu vzor, který se neopakuje (#361).
+                if hint.id != hints.first?.id {
+                    Text(verbatim: "·")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(Palette.ink3)
+                }
+                Text(verbatim: hint.key)
+                    .font(.system(size: 9.5, design: .monospaced))
+                    .foregroundStyle(Palette.ink3)
+                    .padding(.horizontal, 4)
+                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line, lineWidth: 1) }
+                Text(verbatim: hint.label)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 7)
+        .overlay(alignment: .top) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
+        // Je to legenda, ne ovládání — VoiceOver ji přečte jako jednu větu, ne jako šest útržků.
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Klávesy itineráře")
+    }
 
     /// Tenký proužek podílu pod hlavičkou (#500, od #506 nad celým itinerářem) — 3 body,
     /// `--ok` na `--panel-3`, jak ho má návrh.

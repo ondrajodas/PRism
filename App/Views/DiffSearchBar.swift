@@ -58,6 +58,8 @@ struct DiffSearchBar: View {
             .background(Palette.surface, in: .rect(cornerRadius: 6))
             .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Palette.line) }
             .focused($isFocused)
+            // Fokus se hlásí do okna (#507): mezerník patří tomu, kdo do pole píše.
+            .reportsTextFieldFocus(isFocused)
             // `↵` = další výskyt, `⇧↵` = předchozí. Na **poli**, ne jako zkratka okna: fokus je
             // v něm, takže by ho okno nedostalo. Jeden handler na obojí, protože
             // `onKeyPress(_:modifiers:)` bere `modifiers` jako množinu, ve které stisk **smí**

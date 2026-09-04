@@ -42,6 +42,9 @@ struct PickerSearchField: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .focused($isFocused)
+                // Fokus se hlásí do okna (#507): mezerník patří tomu, kdo do pole píše — a do
+                // hledání labelu se mezera píše běžně.
+                .reportsTextFieldFocus(isFocused)
                 // Šipky a `↵` se berou **na poli**, ne na kontejneru: fokus je v něm, takže
                 // kdekoli jinde by je nedostal. `.handled` je podmínka — bez něj si šipku vezme
                 // pole na posun kurzoru v textu a v seznamu se nestane nic.

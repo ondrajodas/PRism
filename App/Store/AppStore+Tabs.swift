@@ -90,6 +90,10 @@ extension AppStore {
             // `loading` místo věty „pull request zmizel“. `link` se u toho **nepřepisuje** —
             // pilulka `mimo zdroje` má přežít restart (#531).
             adoptedTabs[tab.pullRequest] = tab.openedByLink ? .link : .restored
+            // Čas otevření (#507) se u obnovené záložky počítá **od restartu**: aplikace předtím
+            // neběžela, takže se na ni dřív nikdo koukat nemohl. Do snímku se proto neukládá —
+            // `40 h` po víkendu je údaj, který o téhle práci neříká nic.
+            noteTabOpened(tab.pullRequest)
             setDetailTab(tab.tab, for: tab.pullRequest)
             if let anchor = tab.anchor { pendingScrollAnchors[tab.pullRequest] = anchor }
         }
