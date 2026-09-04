@@ -8233,10 +8233,10 @@ pravidla, jednořádkový výčet a odkaz. Všechno ostatní byla **duplikace**:
 přitáhlo zdůvodnění, které vedle něj už stálo za odkazem. To je i odpověď na otázku, **proč soubor
 roste** — nedělají to nová pravidla, ale zdůvodnění dopisovaná ke starým.
 
-**Cíl 70 kB se nesplnil, vyšlo 74 213 B, a je to zapsané rozhodnutí.** Ze 99 047 B je to −25,1 %
+**Cíl 70 kB se nesplnil, vyšlo 74 329 B, a je to zapsané rozhodnutí.** Ze 99 047 B je to −25,0 %
 a ~26 kB pod hranicí, u které Copilot přestává doběhnout. Poslední 4 kB se ale nedaly vzít jinak
-než mazáním pravidel, což zadání zakazovalo: v hotovém souboru je 21 764 B tučného textu (věty
-pravidel a zdůrazněné výčty), 6 022 B cílů odkazů, 5 819 B tabulek a 5 827 B `bash` bloků s grepy.
+než mazáním pravidel, což zadání zakazovalo: v hotovém souboru je 22 116 B tučného textu (věty
+pravidel a zdůrazněné výčty), 5 919 B cílů odkazů, 5 618 B tabulek a 5 827 B `bash` bloků s grepy.
 Každý další průchod už vydával pod 500 B a platilo se za něj čitelností. Rozbor je [v
 specifikaci](superpowers/specs/2026-07-31-prism-design.md#počtvrté-570-stěhují-se-odstavce-ne-se-zkracují-věty--a-cíl-je-70-kb-ne-40).
 

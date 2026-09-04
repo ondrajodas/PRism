@@ -39,7 +39,7 @@ se něco napíše; **podrobnost, měření a technika měření patří do `docs
 odstavce, nezkracují se věty**. Kontroluj to **měřením, ne odhadem**:
 
 ```bash
-wc -c < CLAUDE.md    # po #570 ~69 kB; nad ~100 kB je čas rozdělovat znovu
+wc -c < CLAUDE.md    # po #570 ~74 kB; nad ~100 kB je čas rozdělovat znovu
 ```
 
 Co se stalo při 315 kB, jak se pád pozná z logu akce, proč nerozhodovala velikost diffu, proč se
@@ -100,7 +100,8 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   na obrazovce, ne jestli je změna malá.
 - **Vlastní revize diffu je podmínka pushnutí, ne doporučení.** `copilot-review.sh` se smí
   pustit teprve po ní, a revize se musí někde **projevit** — buď opravou, nebo větou v popisu
-  PR o tom, co jsi hledal. Subagent je fajn, ale **není podmínka**: projít
+  PR o tom, co jsi hledal. Když po ní diff vypadá nedotčeně a Copilot pak najde některý z pěti
+  vzorů níž, **revize neproběhla**. Subagent je fajn, ale **není podmínka**: projít
   `git diff main...HEAD` vlastníma očima plus grepy níž zabere minuty.
 
   **Tohle Copilot v tomhle repu nachází opakovaně**, takže to projdi dřív, než ho pustíš — pět

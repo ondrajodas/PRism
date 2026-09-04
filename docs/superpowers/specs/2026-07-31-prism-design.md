@@ -3447,18 +3447,18 @@ ostatní byla **duplikace**: pravidlo si k sobě přitáhlo zdůvodnění, kter�
 v `docs/` za odkazem. To je i vysvětlení, **proč soubor roste**, a je to zobecnitelné: růst
 nedělají nová pravidla, ale zdůvodnění dopisovaná ke starým.
 
-**Cíl 70 kB se nesplnil, vyšlo 74 213 B — a je to zapsané, ne zameteno.** Ze 99 047 B je to
-**−25,1 %** a ~26 kB pod hranicí, u které Copilot přestává doběhnout, takže praktický účel je
+**Cíl 70 kB se nesplnil, vyšlo 74 329 B — a je to zapsané, ne zameteno.** Ze 99 047 B je to
+**−25,0 %** a ~26 kB pod hranicí, u které Copilot přestává doběhnout, takže praktický účel je
 splněný s rezervou. Poslední 4 kB se ale nedaly vzít jinak než mazáním pravidel, což zadání
 zakazovalo. Doloží to složení hotového souboru změřené na konci:
 
 | Co | Bajtů |
 |---|---|
-| tučný text (věty pravidel a zdůrazněné výčty) | 21 764 |
-| cíle odkazů do `docs/` | 6 022 |
-| tabulky (moduly, údržba dokumentace, sady nástrojů) | 5 819 |
+| tučný text (věty pravidel a zdůrazněné výčty) | 22 116 |
+| cíle odkazů do `docs/` | 5 919 |
+| tabulky (moduly, údržba dokumentace, sady nástrojů) | 5 618 |
 | bloky ```bash``` (grepy a příkazy) | 5 827 |
-| zbytek prózy, která ta pravidla drží pohromadě | ~34 800 |
+| zbytek prózy, která ta pravidla drží pohromadě | ~34 850 |
 
 Každý další průchod už vydával **pod 500 B** a platilo se za něj čitelností. Kontrolní číslo
 v `CLAUDE.md` proto zůstává **hranice 100 kB**; 74 kB je od ní dost daleko.
