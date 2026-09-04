@@ -8214,3 +8214,42 @@ o diff ani o jedno PR nejde. `CLAUDE.md` měla 99 047 B, o 339 B víc než u #50
 v [`docs/github-cli.md`](github-cli.md#třetí-příčina-resource-not-accessible-by-integration-507). Vlastní revize diffu
 proběhla (grepy z `CLAUDE.md` plus čtení diffu) a našla v ní dvě věci: přehnané tvrzení v komentáři
 u sondy (`ideal*` místo „ideální šířka“) a dvě smyčky přes jednoprvkové pole.
+
+## #570 — `CLAUDE.md` počtvrté pod hranici: stěhují se odstavce, ne se zkracují věty
+
+**Soubor měl 99 047 B a strop je ~100 kB**, takže by ho příští issue, které do něj sáhne,
+překročilo — a nad stropem 110 tisíc tokenů si ho Copilot bere jako custom instructions a review
+na PR **vůbec nedoběhne**. Dvě sekce dělaly 56 % souboru: `## Konvence` 29 102 B a `## Tvrdé
+podmínky` 26 188 B.
+
+**Nejzajímavější výsledek je negativní: skoro nic se nestěhovalo, protože to v `docs/` už bylo.**
+Před prací se pro každý odstavec, který měl odejít, pustil grep na jeho klíčové jméno přes `docs/`.
+Ze zhruba padesáti sond vyšly prázdné tři — `| grep -q` s `pipefail` (#61), bundle konvence
+(`CFBundleIconName`, `CFBundleDevelopmentRegion`, `stringsdata`) a tabulka pěti vzorů, které
+**Copilot v tomhle repu nachází opakovaně**. První dvě proto v `CLAUDE.md` zůstaly beze změny,
+třetí se přestěhovala do
+[`docs/github-cli.md`](github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně) a zbyla po ní věta
+pravidla, jednořádkový výčet a odkaz. Všechno ostatní byla **duplikace**: pravidlo si k sobě
+přitáhlo zdůvodnění, které vedle něj už stálo za odkazem. To je i odpověď na otázku, **proč soubor
+roste** — nedělají to nová pravidla, ale zdůvodnění dopisovaná ke starým.
+
+**Cíl 70 kB se nesplnil, vyšlo 74 213 B, a je to zapsané rozhodnutí.** Ze 99 047 B je to −25,1 %
+a ~26 kB pod hranicí, u které Copilot přestává doběhnout. Poslední 4 kB se ale nedaly vzít jinak
+než mazáním pravidel, což zadání zakazovalo: v hotovém souboru je 21 764 B tučného textu (věty
+pravidel a zdůrazněné výčty), 6 022 B cílů odkazů, 5 819 B tabulek a 5 827 B `bash` bloků s grepy.
+Každý další průchod už vydával pod 500 B a platilo se za něj čitelností. Rozbor je [v
+specifikaci](superpowers/specs/2026-07-31-prism-design.md#počtvrté-570-stěhují-se-odstavce-ne-se-zkracují-věty--a-cíl-je-70-kb-ne-40).
+
+**Čtyři invarianty se ověřovaly měřením, ne okem.** Inventář vět pravidel (mechanická definice:
+tučný úsek na začátku logické řádky, plus položky seznamu bez tučného začátku) vydal **159 před
+i po**, porovnáno `diff`em nad seřazenými seznamy. Všech **32 grepů** z `CLAUDE.md` se pustilo před
+prací i po ní do souboru a výstupy jsou shodné do posledního řádku. Kotvy: **116 odkazů před, 85 po,
+rozbitých 0** v obou případech — úbytek je slitím druhých a třetích odkazů u téhož pravidla.
+
+**Na obrazovce se nemění nic** — je to čistě dokumentace. Testy proto nemají co chytat; pustily se
+celé jen proto, aby stráže nad zdrojáky potvrdily, že se v `App/` ani `Tests/` nesáhlo na nic.
+
+**Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu
+(`COPILOT_PERMISSION_GATE_REASON: ineligible_app`, tatáž třetí příčina jako u #507, #542 a #491),
+který v ten den selhal na osmi kolech napříč čtyřmi větvemi. Je to **neověřená mezera**; vlastní
+revize diffu proběhla a je popsaná v PR.
