@@ -6215,3 +6215,42 @@ mezera.
 takže po zavření posledního okna polling stojí. Není to výjimka z pravidla „má být vidět i
 zavřená“ — dlaždice zůstane, jen se přestane přepočítávat —, a životnost pollingu je vlastní
 otázka, ne součást #529.
+
+#### Změna rozhodnutí — odznak si aplikace kreslí sama, `badgeLabel` je zamítnutý (#529, druhé kolo)
+
+**Rozhodnutí výš — „aplikace si z toho odznaku vybírá jediné: ten řetězec“ — bylo špatné, a stálo
+to celou funkci.** V prvním kole bylo všech šest sad zelených, plná suita hlásila `TEST SUCCEEDED`
+a v Docku nebylo číslo; připomínka zněla *„nic neukazuje… ikonka je bez čísla“*. Postup měření
+i všechna čísla jsou v [`testovani.md`, *Šest zelených sad a v Docku
+nic*](../../testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529); tady je to, co se
+z toho rozhodlo jinak.
+
+**Co se změřilo.** `dockTile.badgeLabel` je na macOS pod přepínačem `Odznaky` v Oznámeních. `PRism`
+si žádá `[.alert, .sound]` (#88), takže `badgeSetting` stojí na `notSupported` a Dock odznak
+**potichu zahodí**: hodnota se nasadí, přečte se zpátky, `display()` nepomůže, restart Docku
+nepomůže — a **týž kód v témže bundlu s jiným `CFBundleIdentifier` odznak nakreslí**.
+
+**Zamítnutá varianta: požádat o `.badge`.** Vyzkoušeno naostro. U aplikace, která už autorizovaná
+je, `requestAuthorization([.alert, .sound, .badge])` projde **bez dotazu** a `badgeSetting`
+přeskočí z `notSupported` na **`disabled`** — přepínač v Nastavení systému tedy **vznikne
+vypnutý** a musel by ho člověk najít a zapnout. Odznak, který je v aplikaci výchozí zapnutý
+a v systému vypnutý, je přesně ta „kontrola, po které se nic nestane a nic se neřekne“; a na
+čistém stroji by k tomu přibyl dotaz na notifikace hned při startu, což #88 schválně odkládá.
+
+**Přijatá varianta: vlastní kresba do `dockTile.contentView`** (`DockBadgeTileView`). Nepotřebuje
+**žádné** povolení, vyzkoušená **na tomtéž bundle ID, kterému `badgeLabel` nekreslí**, a **přežije
+restart Docku** — což u `badgeLabel` nešlo ověřit vůbec. A hlavně: **dá se o ní tvrdit test**,
+protože bitmapa se porovnat dá, kdežto „Dock to zahodil“ se z procesu nepozná. To je ta část, kvůli
+které je tohle rozhodnutí lepší, ne jen funkční.
+
+**Cena, kterou to má, je zapsaná, ne zamlčená.** `contentView` **nahrazuje** kresbu dlaždice, takže
+si aplikace kreslí i ikonu (`applicationIconImage`) a bere na sebe cokoli, čím by dlaždici jinak
+kreslil systém. A je **plochou dlaždice ořezaný**, takže odznak nemůže přesahovat za roh ikony, jak
+byl v sekci 49 zakreslený — zákres se proto **opravil**: odznak přiléhá k pravému hornímu rohu
+zevnitř, je 0,38 strany (**naměřeno na systémových odznacích v živém Docku**, 17 px na dlaždici
+45 px, ne 22/72 z CSS) a **bez obtahu**, protože ten v zákresu zastupoval pozadí Docku, které
+kresba uvnitř dlaždice nemá čím vzorkovat.
+
+**Věta „aplikace si vybírá jediné: ten řetězec“ v komentáři sekce 49 tedy padla.** Zůstává z ní to
+podstatné — odznak není `.rail .ri .badge`, je to jiná komponenta se systémovou červenou
+a systémovou polohou. Nově je ale ta systémová podoba **naše kresba**, ne systémová služba.

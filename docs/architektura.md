@@ -12557,6 +12557,54 @@ Cíl je proto **nepovinný** (`dock == nil` v testech, které si o odznak neřek
 živý cíl (`DockBadgeTile.application`) se v aplikaci jmenuje **jednou** a `applyBadge` znají
 **dva** soubory.
 
+### Odznak si aplikace kreslí sama — `badgeLabel` je změřená slepá ulička
+
+**Tohle je oprava po proklikání a je to ta podstatná část #529: v prvním kole bylo všech šest sad
+zelených a v Docku nebylo nic.** Odznak se tehdy nasazoval jediným přiřazením:
+
+```swift
+dockTile.badgeLabel = label      // nasadí se, přečte zpátky — a Dock ho zahodí
+```
+
+Co se změřilo (čísla a postup v [`docs/testovani.md`](testovani.md)): hodnota se nasadí, přečte se
+zpátky jako `6`, `dockTile.display()` nepomůže, restart Docku nepomůže — a **týž kód v témže
+bundlu s jiným `CFBundleIdentifier` odznak nakreslí**. Rozhoduje tedy identita aplikace, ne kód:
+`badgeLabel` je na macOS pod přepínačem **`Odznaky`** v Oznámeních a u aplikace, která si
+o `.badge` v `requestAuthorization` nikdy neřekla, stojí `badgeSetting` na `notSupported`, takže
+Dock odznak **potichu zahodí**. `PRism` si žádá `[.alert, .sound]` (#88), tedy o badge ne — a to
+je celý ten příběh.
+
+**Cesta, kterou to jde, je vlastní kresba do `dockTile.contentView`** (`DockBadgeTileView`).
+Vyzkoušená **na tomtéž bundle ID, kterému `badgeLabel` nekreslí**, takže pod ten přepínač
+nespadá; a **přežije i restart Docku**, což u `badgeLabel` nešlo ověřit vůbec. Cenu za to platíme
+dvě: `contentView` **nahrazuje** kresbu dlaždice (takže si musíme nakreslit i ikonu,
+`applicationIconImage`) a je **plochou dlaždice ořezaný**, takže odznak nemůže za roh ikony
+přesahovat, jak ho kreslí systém a jak byl v sekci 49 návrhu zakreslený.
+
+**Proč se místo toho nežádá o `.badge`.** Vyzkoušeno: `requestAuthorization([.alert, .sound,
+.badge])` u aplikace, která už autorizovaná je, projde bez dotazu a `badgeSetting` přeskočí
+z `notSupported` na **`disabled`** — tedy přepínač v Nastavení systému **vznikne vypnutý** a musel
+by ho člověk zapnout ručně. Odznak, který je v aplikaci výchozí zapnutý a v systému vypnutý, je
+ta „kontrola, po které se nic nestane a nic se neřekne“; a k tomu by na čistém stroji přibyl dotaz
+na notifikace hned při startu, což #88 schválně odkládá. Vlastní kresba nepotřebuje **žádné**
+povolení.
+
+**Geometrie je v `Policy.dockBadgeLayout(characters:in:)`**, protože je to aritmetika nad rozměrem
+— ve `draw(_:)` by se ověřovala jedině bitmapou. Rozměry jsou **naměřené v živém Docku**, ne
+odvozené z CSS: systémový odznak má na dlaždici 45 px průměr **17 px** (0,38 krátké strany) a horní
+hranu na horní hraně ikony. Všechno je proto podíl strany, ne body — dlaždice má podle nastavení
+systému 32 až 128 bodů. Šířka roste s počtem znaků do pilulky a je **zastropovaná plochou
+dlaždice**: strop přišel z testu, protože od pěti znaků odznak jednou hranou vylezl a nenakreslil
+se celý. Text se do sražené pilulky **doměří a zmenší** — sazbu zná jedině kresba (pravidlo od
+#236).
+
+Hlídají to dvě věci a **každá chytá jinou třídu vady**: `DockBadgeTileRenderTests` porovnává
+bitmapu (odznak je vidět, stojí na něm to číslo, dvojciferný počet ho roztáhne) a
+`DockBadgeWiringTests` tvrdí nad zdrojáky, že se `badgeLabel` do `DockBadgeTile.swift` nevrátí.
+Zákaz je **na ten jeden soubor, ne na celé `App/`**: `badgeLabel` je běžné jméno a v okně už
+dvakrát legitimně je (`DiffFileHeaderView`, `SinceLastVisitView`), kdežto `dockTile` zná jediný
+soubor — kdo se chce vrátit, musí to napsat právě tam.
+
 **Zapsaná mez: s úplně zavřeným oknem odznak zmrzne.** `keepFresh()` visí na `ContentView.task`,
 takže po zavření posledního okna polling stojí a na dlaždici zůstane poslední spočítaná hodnota.
 Nezmizí a nelže o čase, jen nepřičte PR, který přišel potom. Běžný případ (aplikace na pozadí,

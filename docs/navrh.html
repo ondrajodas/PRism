@@ -1854,9 +1854,19 @@ footer.end {
    v návrhu nebyl kus, ze kterého by se dala složit. `.rail .ri .badge` se na ni vzít nedá
    a není to lakota: ten je 14 bodů na tiché ploše railu, obtahuje se **barvou railu**
    (`--panel-2`) a text má v barvě plochy okna, protože se kontrast měřil na `--crit`.
-   Dlaždice Docku má proti tomu **systémovou** červenou, systémové písmo a systémovou polohu
-   za rohem ikony — aplikace si z toho odznaku vybírá **jediné: ten řetězec**. Vlastní třídy
-   proto nejsou varianta, je to jiná komponenta, a přesně tenhle rozdíl má být na kresbě vidět.
+   Dlaždice Docku má proti tomu **systémovou** červenou, systémové písmo a polohu v pravém
+   horním rohu ikony. Vlastní třídy proto nejsou varianta, je to jiná komponenta, a přesně
+   tenhle rozdíl má být na kresbě vidět.
+
+   **Tu systémovou podobu si ale aplikace kreslí sama, a proto se zákres u #529 opravil.**
+   `NSApp.dockTile.badgeLabel` je pod přepínačem `Odznaky` v Oznámeních a Dock ho u aplikace,
+   která si o `.badge` neřekla, potichu zahodí — změřeno, viz `docs/testovani.md`. Odznak jde
+   tedy do `dockTile.contentView`, a ten je **plochou dlaždice ořezaný**. Zákres proto **odznak
+   dlaždici nepřesahuje** (do #529 měl `top: -7px; right: -7px`) a **nemá obtah** (ten zastupoval
+   pozadí Docku, které kresba uvnitř dlaždice nemá čím vzorkovat). Rozměr je **naměřený na
+   systémových odznacích v živém Docku**: 17 px na dlaždici 45 px, tedy **0,38 krátké strany** —
+   na dlaždici 72 px v tomhle dokumentu 27 px. Ne 22 px, jak tu stálo dřív: ta hodnota platila pro
+   odznak ležící půlkou venku.
 
    Hexy jsou tady **data, ne tokeny palety**, tatáž úmluva jako u barev labelů GitHubu
    v `.lchip`: dok si podklad i odznak kreslí sám a v obou motivech stejně, takže tokeny by
@@ -1893,18 +1903,17 @@ footer.end {
   border-color: transparent transparent #8B7CFF transparent;
   display: block;
 }
-/* Odznak **přesahuje** dlaždici, protože ho tak kreslí systém — zarovnat ho dovnitř rámu
-   (jako `.rail .ri .badge` po #366) by byla kresba něčeho, co takhle nikdy nevypadá. Obtah je
-   `--bg`, tedy plocha stránky za dlaždicí: v Docku ho systém obtahuje pozadím Docku a to je
-   to nejbližší, co dokument má. */
+/* Odznak leží **uvnitř** dlaždice a přiléhá k pravému hornímu rohu — `contentView`, do kterého
+   ho aplikace kreslí, je plochou dlaždice ořezaný, takže přesah by se nenakreslil (změřeno
+   u #529). Vata od hrany je 2 % strany dlaždice, tedy 1,5 px na 72. Rozměr 27 px je 0,38 krátké
+   strany, což je naměřená velikost systémových odznaků v živém Docku; písmo je 0,62 z toho. */
 .dock-badge {
-  position: absolute; top: -7px; right: -7px;
-  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+  position: absolute; top: 1.5px; right: 1.5px;
+  min-width: 27px; height: 27px; padding: 0 5px; border-radius: 13.5px;
   background: #FF3B30; color: #FFFFFF;
-  font-family: var(--ui); font-size: 12.5px; font-weight: 600;
+  font-family: var(--ui); font-size: 16.7px; font-weight: 600;
   font-variant-numeric: tabular-nums;
   display: grid; place-items: center;
-  border: 2px solid var(--bg);
 }
 /* Rail a dok vedle sebe: celá věta téhle sekce je „jedno číslo, dvě místa“, a tu nejde
    napsat popiskem — musí být vidět, že v obou stojí táž pětka. Rail je **výřez**, ne celé
@@ -16475,6 +16484,16 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
             znamená „tolik lidí čeká na moje review“; vlastní PR má v railu svůj vlastní
             odznak, a ten navíc počítá <em>tahy</em>, ne pull requesty. Slít je do jednoho čísla
             v Docku by znamenalo hlásit víc práce, než je.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span>Ten odznak si <strong>aplikace kreslí sama</strong>, a proto se zákres u #529
+            opravil: <strong>nepřesahuje dlaždici a nemá obtah</strong>.
+            <code>dockTile.badgeLabel</code> je pod přepínačem <em>Odznaky</em> v Oznámeních
+            a Dock ho u aplikace, která si o něj nikdy neřekla, <strong>potichu zahodí</strong> —
+            změřeno. Kresba jde tedy do <code>dockTile.contentView</code>, a ten je plochou
+            dlaždice ořezaný. Rozměr 27 px je 0,38 krátké strany, což je <strong>naměřená</strong>
+            velikost systémových odznaků v živém Docku.</span>
           </div>
         </div>
       </div>

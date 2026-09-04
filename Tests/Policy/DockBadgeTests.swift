@@ -152,4 +152,102 @@ struct DockBadgeTests {
         #expect(DockBadgeMode.allCases.map(\.title) == ["čekající", "blokující", "nic"])
         #expect(DockBadgeMode.allCases.map(\.rawValue) == ["waiting", "blocking", "off"])
     }
+
+    // MARK: - Rozměry odznaku na dlaždici
+
+    /// Dlaždice o 128 bodech, tedy největší, jakou Dock kreslí. Poměry v `dockBadgeLayout` na
+    /// rozměru nezávisí — tvrdí to `scalesWithTheTile()`.
+    private let tile = CGRect(x: 0, y: 0, width: 128, height: 128)
+
+    /// **Nejcennější tvrzení téhle části**: odznak nesmí z dlaždice vylézt, protože `contentView`
+    /// je jí ořezaný a přesahující část se prostě nenakreslí. Platí to i pro počty, které v praxi
+    /// nenastanou — fronta o tisíci PR je nesmysl, ale ořezaný odznak by v ní lhal o čísle.
+    @Test("Odznak se vejde do dlaždice u každého počtu znaků")
+    func staysInsideTheTile() {
+        for characters in 0...6 {
+            let layout = Policy.dockBadgeLayout(characters: characters, in: tile)
+
+            #expect(tile.contains(layout.pill), "\(characters) znaků leze z dlaždice")
+            #expect(layout.pill.width > 0)
+            #expect(layout.pill.height > 0)
+        }
+    }
+
+    /// Jeden znak je **kruh**, další ho roztáhnou do pilulky — a výška se u toho nemění, jinak by
+    /// odznak při každém tiku poskočil nahoru a dolů.
+    @Test("Jeden znak je kruh, víc znaků pilulka téže výšky")
+    func growsSidewaysOnly() {
+        let one = Policy.dockBadgeLayout(characters: 1, in: tile)
+        let two = Policy.dockBadgeLayout(characters: 2, in: tile)
+        let three = Policy.dockBadgeLayout(characters: 3, in: tile)
+
+        #expect(one.pill.width == one.pill.height)
+        #expect(two.pill.width > one.pill.width)
+        #expect(three.pill.width > two.pill.width)
+        #expect(two.pill.height == one.pill.height)
+        #expect(three.pill.height == one.pill.height)
+        #expect(two.fontSize == one.fontSize)
+    }
+
+    /// **Nula a záporný počet znaků vydají kruh, ne prázdný ani obrácený obdélník.** Kresba na to
+    /// nesáhne (prázdný řetězec se zahodí dřív), ale funkce, která na takovém vstupu vrátí
+    /// negativní šířku, je past pro příštího volajícího.
+    @Test("Nula a záporný počet znaků vydají kruh")
+    func treatsEmptyLabelsAsACircle() {
+        for characters in [-3, 0, 1] {
+            let layout = Policy.dockBadgeLayout(characters: characters, in: tile)
+
+            #expect(layout.pill.width == layout.pill.height, "\(characters) znaků nevydalo kruh")
+        }
+    }
+
+    /// Odznak **přiléhá k pravému hornímu rohu** — tam ho kreslí systém a tam ho člověk hledá.
+    /// V `NSView` s neobrácenou osou je to `maxY`, tedy horní hrana; kdyby se to spletlo, odznak
+    /// by sedl dolů a testy na rozdíl bitmap by o tom nic neřekly.
+    @Test("Odznak sedí v pravém horním rohu")
+    func sitsInTheTopRightCorner() {
+        let layout = Policy.dockBadgeLayout(characters: 1, in: tile)
+
+        // Vata od hrany je 2 % strany, tedy nejvýš pár bodů — odznak se hrany drží, nesedí
+        // v prostředku.
+        #expect(tile.maxX - layout.pill.maxX < tile.width * 0.05)
+        #expect(tile.maxY - layout.pill.maxY < tile.height * 0.05)
+        #expect(layout.pill.minX > tile.midX)
+        #expect(layout.pill.minY > tile.midY)
+    }
+
+    /// Dlaždice má v Docku velikost podle nastavení systému, takže **všechno je podíl, ne body**.
+    /// Dvojnásobná dlaždice = dvojnásobný odznak i písmo.
+    @Test("Rozměry se odvozují od dlaždice, ne z bodů")
+    func scalesWithTheTile() {
+        let small = Policy.dockBadgeLayout(characters: 2, in: CGRect(x: 0, y: 0, width: 32, height: 32))
+        let large = Policy.dockBadgeLayout(characters: 2, in: CGRect(x: 0, y: 0, width: 64, height: 64))
+
+        #expect(large.pill.width == small.pill.width * 2)
+        #expect(large.pill.height == small.pill.height * 2)
+        #expect(large.fontSize == small.fontSize * 2)
+    }
+
+    /// **Rozhoduje kratší strana.** Dlaždice je čtverec, ale odznak odvozený od šířky by se
+    /// v nižší ploše svisle nevešel — a to je zrovna ten případ, kdy by vylezl z dlaždice.
+    @Test("U nečtvercové plochy rozhoduje kratší strana")
+    func usesTheShorterSide() {
+        let wide = CGRect(x: 0, y: 0, width: 128, height: 48)
+        let layout = Policy.dockBadgeLayout(characters: 1, in: wide)
+
+        #expect(layout.pill.height == 48 * 0.38)
+        #expect(wide.contains(layout.pill))
+    }
+
+    /// Písmo se odvozuje od výšky odznaku a **musí být menší než on** — text vyšší než pilulka by
+    /// z ní lezl a kresba ho zmenšuje jen po šířce.
+    @Test("Písmo je menší než odznak")
+    func keepsTheFontInsideTheBadge() {
+        for characters in 1...4 {
+            let layout = Policy.dockBadgeLayout(characters: characters, in: tile)
+
+            #expect(layout.fontSize > 0)
+            #expect(layout.fontSize < layout.pill.height)
+        }
+    }
 }

@@ -2252,6 +2252,15 @@ odznaku nepočítají** — ty mají v railu svůj odznak a ten navíc počítá
 a nelže o čase, jen nepřičte PR, který přišel potom; s oknem otevřeným na pozadí (tedy ten případ,
 kvůli kterému odznak je) se nic takového nestane.
 
+**Ten odznak si aplikace kreslí sama, a proto na něj nepotřebuje žádné povolení.** Vypadá jako
+systémový (červená `#FF3B30`, bílá číslice, pravý horní roh ikony), ale nejde přes
+`NSApp.dockTile.badgeLabel` — ten je na macOS pod přepínačem `Odznaky` v Nastavení systému →
+`Oznámení` a u aplikace, která si o něj v žádosti o notifikace neřekla, ho Dock **potichu zahodí**.
+V nastavení `Oznámení` tedy odznak PRismu **hledat nemusíš**: zapíná se jedině na stránce `Systém`
+v okně nastavení. Jediný viditelný rozdíl proti systémovému odznaku je, že **nepřesahuje za roh
+ikony**, protože kresba je plochou dlaždice ořezaná ([jak se to
+změřilo](docs/testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529)).
+
 **Spuštění po přihlášení** je jeden přepínač na téže stránce a jde přes **systémovou přihlašovací
 položku** (`SMAppService`), ne přes vlastní launch agent v `~/Library`. Tři věci u něj stojí za
 zmínku:

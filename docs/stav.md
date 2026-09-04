@@ -7650,10 +7650,29 @@ zůstává **cizím tvrzením z decku** (#88 měřilo tu mez u notifikací) a ad
 přihlášení` se neotevřela — tvrdí se jen tvar, jako u #414. K tomu **zapsaná mez**: s úplně
 zavřeným oknem odznak zmrzne na poslední hodnotě, protože polling žije s hlavním oknem.
 
-Šest sad testů, z většiny tvrzení o tom, co se **nestalo** — nula se nekreslí, nenačtená fronta se
+**Odznak si aplikace kreslí sama, a je to oprava po proklikání.** V prvním kole bylo všech šest
+sad zelených, plná suita hlásila `TEST SUCCEEDED` — a v Docku nebylo číslo. `dockTile.badgeLabel`
+je pod přepínačem `Odznaky` v Oznámeních a u aplikace, která si o `.badge` v `requestAuthorization`
+neřekla (`PRism` žádá `[.alert, .sound]`, #88), ho Dock **potichu zahodí**: hodnota se nasadí,
+přečte se zpátky, `display()` ani restart Docku nepomůže — a **týž kód v témže bundlu s jiným
+`CFBundleIdentifier` odznak nakreslí**. Odznak proto kreslí `DockBadgeTileView` do
+`dockTile.contentView`, což **nepotřebuje žádné povolení** a **přežije restart Docku**. Požádat
+o `.badge` je **změřená a zamítnutá** varianta: u autorizované aplikace přeskočí `badgeSetting`
+z `notSupported` na `disabled`, tedy přepínač v Nastavení systému **vznikne vypnutý**.
+
+Zákres 49 se u toho **opravil**: `contentView` je plochou dlaždice ořezaný, takže odznak
+dlaždici **nepřesahuje** a **nemá obtah**; velikost 0,38 krátké strany je **naměřená na
+systémových odznacích v živém Docku** (17 px na dlaždici 45 px), ne 22/72 z CSS. Geometrii vydává
+`Policy.dockBadgeLayout` a **strop na šířku pilulky našel test**, ne návrh — od pěti znaků odznak
+jednou hranou vylézal.
+
+Sedm sad testů, z většiny tvrzení o tom, co se **nestalo** — nula se nekreslí, nenačtená fronta se
 nekreslí, ve výchozí volbě se na uložené nálezy vůbec nesáhne, slotová instance do systému
 nezapíše. K tomu stráž nad zdrojáky (`DockBadgeWiringTests`, šestá podoba téhož kořene po #367,
-#411, #421, #462 a #490) a render stránky, ve kterém se zašedlý řádek porovnává **jen v pásu s tím
-řádkem**, aby rozdíl nemohl přijít z věty pod ním. Celkem **5286 testů v 516 suitách** (proti 5228 v 511 před #529, tedy 58 nových v pěti sadách), `TEST
-SUCCEEDED` — měřeno se **třemi souběžně běžícími sloty**, ne na volném stroji. Regrese ověřená
-vložením regrese třikrát (nefiltrovaná fronta, chybějící brána u slotu, `SMAppService` ve storu).
+#411, #421, #462 a #490), render stránky, ve kterém se zašedlý řádek porovnává **jen v pásu s tím
+řádkem**, aby rozdíl nemohl přijít z věty pod ním, a **`DockBadgeTileRenderTests`** — sada, kterou
+si vynutila právě ta vada z prvního kola: porovnává **bitmapu odznaku**, takže padne, když se
+odznak nenakreslí. Celkem **5298 testů v 517 suitách** (proti 5228 v 511 před #529, tedy 70 nových
+v šesti sadách), `TEST SUCCEEDED` za 113,3 s — měřeno se **souběžně běžícími sloty**, ne na volném
+stroji. Regrese ověřená vložením regrese **šestkrát** (nefiltrovaná fronta, chybějící brána
+u slotu, `SMAppService` ve storu, vynechaná kresba odznaku, návrat k `badgeLabel`).

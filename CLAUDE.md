@@ -827,6 +827,17 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   dědí). Barva se nasazuje **jako základní atribut celého řetězce** a syntaxe ji přepisuje;
   hodnota je `Palette.ink`, ne poloprůhledný `labelColor`. A **kontrast paletového tokenu netvrdí
   nic o kresbě** — k měření barvy patří i tvrzení, že se ta barva **do textu dostane**.
+- **Odznak v Docku si aplikace kreslí sama, `badgeLabel` je změřená slepá ulička** (#529) —
+  `dockTile.badgeLabel` je pod přepínačem `Odznaky` v Oznámeních a u aplikace, která si o `.badge`
+  neřekla, ho Dock **potichu zahodí**: nasadí se, přečte se zpátky, `display()` ani restart Docku
+  nepomůže. Kreslí to `DockBadgeTileView` do `dockTile.contentView` (bez povolení, a ořezaně
+  plochou dlaždice), geometrii vydává `Policy.dockBadgeLayout`. Hlídají to
+  `DockBadgeTileRenderTests` (bitmapa) a `DockBadgeWiringTests` (`badgeLabel` v
+  `DockBadgeTile.swift` nesmí být). **Je to nejdražší případ pravidla z #478 v tomhle repu** —
+  šest zelených sad a v Docku nic; než na to sáhneš, přečti si [postup
+  měření](docs/testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529)
+  a [zamítnutou variantu „požádat o
+  `.badge`“](docs/architektura.md#odznak-si-aplikace-kreslí-sama--badgelabel-je-změřená-slepá-ulička).
 - **Sémantická škála se kreslí z palety, nikdy ze systému** (#432) — systémová
   `.green`/`.red`/`.orange`/`.yellow` je navržená jako **výplň** s bílým textem, kdežto tady je
   barva ze škály skoro vždycky **text nebo glyf na tlumeném washi**. Ze systému **zůstávají tři

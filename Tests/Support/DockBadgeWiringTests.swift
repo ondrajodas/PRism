@@ -128,6 +128,20 @@ struct DockBadgeWiringTests {
         let dockTile = application.filter { $0.condensed.contains("dockTile") }.map(\.path).sorted()
         #expect(dockTile == ["Views/DockBadgeTile.swift"])
 
+        // **`badgeLabel` je změřená slepá ulička, ne opomenutí** (#529): nasadit ho jde a přečíst
+        // zpátky taky, jenže Dock ho u aplikace, která si o `.badge` v `requestAuthorization`
+        // neřekla, potichu zahodí — a tvrzení „nasadilo se“ je pak zeleně nad rozbitou funkcí
+        // (přesně měřidlo z #478). Odznak se proto kreslí sám a tenhle zákaz drží, aby se ta
+        // cesta nevrátila jako „zjednodušení“. Čísla jsou v `docs/testovani.md`.
+        //
+        // **Hlídá se ten jeden soubor, ne celé `App/`**, a je to nález z běhu téhle stráže:
+        // `badgeLabel` je běžné jméno a v okně už dvakrát je (`DiffFileHeaderView`,
+        // `SinceLastVisitView`) — o dlaždici netvrdí nic. Plošný zákaz by tedy zakazoval jméno,
+        // ne cestu. Sevřít to jde proto, že `dockTile` zná tenhle jediný soubor: kdo se chce
+        // vrátit k `badgeLabel`, musí ho napsat právě tady.
+        let tile = try #require(application.first { $0.path == "Views/DockBadgeTile.swift" })
+        #expect(!tile.condensed.contains("badgeLabel"), "odznak se vrátil k badgeLabel")
+
         let service = application.filter { $0.condensed.contains("SMAppService") }.map(\.path).sorted()
         #expect(service == ["Environment/LoginItemControl.swift"])
 
@@ -167,6 +181,7 @@ struct DockBadgeWiringTests {
 
         #expect(guardFile.condensed.contains("dockTile"))
         #expect(guardFile.condensed.contains("SMAppService"))
+        #expect(guardFile.condensed.contains("badgeLabel"))
         #expect(
             !guardFile.condensed.contains(where: { $0.isWhitespace }),
             "v `condensed` zůstaly mezery"
