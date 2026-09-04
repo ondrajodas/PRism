@@ -1968,6 +1968,11 @@ instance s prázdnou stráží, která rozhodnutí #188 uplatnila jako **první 
 okna na to nestačí; `DiffView.ownAppliedColumns` (`@State`) zůstává jen pro hosty, kterým sloupec
 vedle nestojí, a tam stráž nemá co přežít.
 
+**Vedlejší efekt, a je to zlevnění:** stráž se čte jedině uvnitř `task(id: columns)`, ne v žádném
+těle. `Binding(get:set:)` si drží closury, takže složení `DiffColumnActions` v těle detailu tu
+vlastnost **nepřečte** a zápis do ní nikoho neprobudí — kdežto `@State` detailu zápisem
+invalidoval celý detail (pravidlo o hrubých vlastnostech `@Observable`, #469/#472).
+
 **Je to tatáž lekce jako ve třetím kole, jen o úroveň výš** — a to je na tom to zajímavé
 k zapsání: pravidlo *„stráž musí žít aspoň tak dlouho jako stav, který mění“* se dá splnit **napůl**.
 `@State` detailu je delší život než `@State` diffu, ale pořád ne život toho stavu. Ten je
