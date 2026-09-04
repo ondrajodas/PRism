@@ -8062,3 +8062,43 @@ byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnit�
 `description != nil`, ne „je neprázdný“: PR bez popisu se odškrtnout **musí**, jinak by u něj
 počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
 nepatří — je to živý přepínač, ne jednosměrná značka.
+
+## #526 — odznak v railu do rohu a pruh aktivní položky (zákres 50)
+
+**„Uvnitř rámu“ z #366 znamenalo „přes ikonu“.** Odznak je 24 × 18 na rámu 34 × 30, takže zakryje
+jeho pravou horní čtvrtinu, ať je posazený kamkoli — v běžícím okně byla pod `5`, `3` a `30` vidět
+jen spodní hrana glyfu a položky railu se poznávaly podle pořadí, ne podle ikony. Odznak proto jde
+**do rohu** (`offset(x: 7, y: -5)`), tedy zase ven z rámu. Není to návrat před #366: tehdy vadila
+**barva** (fialový akcent, tedy „tady jsi“) a šest bodů doprava bez protiváhy; teď jde ven o sedm,
+je červený a identitu aktivní sekce mezitím převzal pruh. **Šířka railu 52 bodů se nemění** —
+červená plocha končí na 47, obtah na 49 a obrys railu je na 51.
+
+**Aktivní sekci značí pruh na hraně railu, ne barva ikony.** 2 × 18 bodů v akcentu, poloměr 1,
+a je to **tentýž prvek, kterým `PullRequestRow` značí stav na hraně řádku fronty** — jen svisle.
+Osmnáctka se počítá z **výšky řádku** (`top: 6`, `bottom: 6` v rámu vysokém 30), ne z ikony.
+Aby se měl pruh kam pověsit, bere si **řádek položky celou šířku railu** (`SidebarRail.width`)
+a tlačítko v něm zůstává 34 bodů: rozšířit rám tlačítka **nešlo**, klikací plocha by se nafoukla
+na celou šířku a klik do prázdna vedle ikony by přepínal sekci.
+
+**Změna zapsaného rozhodnutí z #414**: `Policy.activityBadge(unread:isActive:)` → `activityBadge(unread:)`.
+`isActive` rozhodoval právě proto, že odznak ikonu překryl a na aktivní položce by zbyl červený
+puntík bez identity (poznámka 95 v návrhu). S pruhem ten důvod odpadl, takže `Dění` ukazuje počet
+nepřečtených **i zevnitř**. Parametr **zmizel celý**, ne že by se ignoroval — parametr, o kterém se
+nerozhoduje, je jen místo, kam se dá omylem sáhnout. Značka poslední návštěvy se u toho nemění:
+posouvá ji dál až **odchod** ze sekce, takže počet uvnitř `Dění` na nulu nespadne.
+
+**Zákres je jedno pravidlo v CSS railu, ne komponenta.** Rail je chrom okna, takže se změna projeví
+ve všech sekcích, které ho kreslí; sekce 50 drží jen zvětšený výřez, srovnání s dneškem a důvody.
+Sekce 27 (`Dění`) je záznam dneška, takže se překreslila s ním — aktivní položka v ní má odznak.
+
+Nová tvrzení: `RailBadgeTests` (poloha proti **změřenému** rámu ikony, ne proti konstantě; že odznak
+nic neořezává — #483 —, poznáno z tvaru pravé hrany; pruh na hraně railu a to, že ho má **jedna**
+položka) a výčet `Policy.activityBadge` nad jedním vstupem. **Regrese ověřena vložením regrese**:
+s vráceným `offset(y: 1)` padne poloha, s vynechaným pruhem obě tvrzení o aktivní sekci — a barevná
+tvrzení u obojího zůstanou zelená, takže se ty věci pořád měří zvlášť.
+
+**Měřidlo pásů v `SidebarRailTests` přestalo brát vzorek pozadí z prvního bodu**: na hraně railu
+teď leží pruh, takže by vzorek na řádcích aktivní položky vydal akcent a proti němu by se jako
+„obsah“ jevil celý zbytek řádku. A **tolerance u washe aktivní položky je poloviční** — ve světlém
+režimu je od `Palette.line` jen 0,032 daleko, takže se do měřeného rámu připočítával obrys railu
+i oddělovač a rám vycházel přes celou výšku railu.

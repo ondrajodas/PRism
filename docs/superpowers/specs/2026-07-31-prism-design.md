@@ -6604,3 +6604,56 @@ detail** (takže cestu přes `Přehled` neměla kde vyrobit) a nálezy v ní mí
 fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzala
 z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
 scéna vyrostla na celé `ContentView`.
+
+### Záznam rozhodnutí — odznak v railu do rohu a pruh aktivní sekce (#526, mění #366 a #414)
+
+Zákres je sekce **50** návrhu (poznámky 183–186), odsouhlasený. Tady je jen to, co z kresby
+neplyne, a **co se cestou rozhodlo jinak, než bylo zapsáno dřív**.
+
+**Odznak jde ven z rámu ikony, a je to obrácení druhé poloviny #366.** #366 řešilo dvě věci naráz:
+barvu (fialový akcent → `--crit`) a polohu (šest bodů za rámem → dovnitř). Barva platí dál, poloha
+ne — uvnitř rámu 34 × 30 nemá odznak 24 × 18 kam sednout, takže „uvnitř rámu“ znamenalo „přes
+ikonu“: v běžícím okně byla pod `5`, `3` a `30` vidět jen spodní hrana glyfu a položky railu se
+poznávaly podle **pořadí**. Nové `top: −5, right: −7` je proti #366 posun o sedm doprava místo šesti;
+rozdíl proti tehdejšímu stavu není v tom čísle, ale v tom, že **odznak je červený a identitu aktivní
+sekce mezitím převzal pruh**. Šířka railu 52 bodů se nemění a je to podmínka: ikona je vystředěná,
+takže po stranách zbývá devět, a odznak i s obtahem končí na 49.
+
+**Aktivní sekci značí pruh na hraně, ne barva ikony — a je to výpůjčka, ne nový prvek.** Zvažovaly
+se tři cesty:
+
+1. **Nechat identitu na ikoně a odznak na aktivní položce vynechat** (stav do #526). Zamítnuto: je
+   to zrovna ta věta, kvůli které v `Dění` nebylo vidět, kolik nepřečtených tam je — tedy počet
+   chybí právě na obrazovce, kde se na něj člověk dívá.
+2. **Zvýraznit rám položky výrazněji** (silnější wash, obrys). Zamítnuto: pořád je to plocha **pod**
+   odznakem, takže dvoumístný počet ji zase zakryje; a druhá intenzita washe by v railu zavedla
+   škálu, kterou paleta nemá.
+3. **Pruh na hraně railu.** Přijato. Je vidět vždycky, s odznakem i bez něj, a je to **tentýž
+   prvek, kterým `PullRequestRow` značí stav na hraně řádku fronty** — okno tím nezískává nový
+   slovník, jen ho použije svisle.
+
+**Řádek položky si bere celou šířku railu, tlačítko zůstává 34 bodů, a to pořadí je podstatné.**
+Pruh visí devět bodů nalevo od rámu ikony, takže `overlay` na tlačítku by mířil mimo plochu rodiče
+(#483). Nabízelo se rám tlačítka rozšířit na 52 — zamítnuto: klikací plocha by se nafoukla na celou
+šířku railu a **klik do prázdna vedle ikony by přepínal sekci**. `frame(width:)` nasazený **za**
+`buttonStyle` tlačítko jen vystředí, takže zbytek řádku zůstane netečný. Šířku drží
+`SidebarRail.width`, protože si ji od #526 berou dvě místa a dvě čísla by se rozešla.
+
+**`Policy.activityBadge` přišla o parametr, ne o rozhodnutí** (mění #414). Zapsané rozhodnutí z #414
+znělo: *na aktivní sekci se odznak nekreslí, protože by v tomhle railu ikonu překryl a zbyl by
+červený puntík bez identity*. Ta věta byla pravdivá **kvůli poloze odznaku**, ne kvůli tomu, že by
+počet na aktivní položce nebyl zajímavý. S odznakem v rohu a pruhem na hraně obojí odpadá, takže
+`isActive` z funkce zmizel **celý**. Zvažovalo se parametr nechat a ignorovat ho (menší diff,
+snadnější návrat) — zamítnuto: parametr, o kterém se nerozhoduje, je mrtvá váha a zároveň místo,
+kam se dá omylem sáhnout; je to tatáž třída jako *stav, který se drží, ale nikdo ho nečte*.
+
+**Značka poslední návštěvy se nemění, a je to hranice, ne opomenutí.** Posouvá ji dál až **odchod**
+ze sekce (#414), takže počet uvnitř `Dění` na nulu nespadne. Nabízelo se ji posunout vstupem, když
+už se odznak uvnitř kreslí — zamítnuto ze stejného důvodu jako v #414: zmizel by zrovna ve chvíli,
+kdy jsem si ještě nic nepřečetl.
+
+**Zákres je jedno pravidlo v CSS railu, takže se překreslily i starší sekce.** Rail je **chrom
+okna, ne obrazovka**, takže pravidlo *novější sekce se do starší nepřekresluje* na něj nesedí —
+sedí na něj to druhé, *záznam dneška se překreslit musí*. Sekce 50 proto drží jen zvětšený výřez,
+srovnání s dneškem a důvody; jediné místo v dokumentu, kde se stará poloha kreslí dál, je levý
+sloupec toho srovnání (`.s50-old`).

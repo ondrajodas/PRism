@@ -281,8 +281,11 @@ nic.
 a nad ním pruh `Tady jsem skončil`, tedy tentýž mechanismus, jaký drží konverzaci. Značka se posouvá
 **až při odchodu ze sekce**: kdyby ji přepsal vstup, přestalo by být nové zrovna to, na co koukám.
 Řadí se **od nejnovějšího** jako commity, takže pruh stojí pod novinkami. Odznak v railu počítá
-**nepřečtené** a na aktivní sekci se nekreslí (odznak by v tom railu překryl ikonu, takže by z něj
-zbyl červený puntík bez identity); počet je proto v nadpisu bloku — `Dnes · 4 nové`.
+**nepřečtené**, a od #526 svítí **i uvnitř `Dění`**: do té doby se na aktivní sekci nekreslil,
+protože seděl na ikoně a překryl ji, takže by z něj zbyl červený puntík bez identity. Teď je
+v **rohu** ikony a aktivní sekci značí **pruh 2 body na hraně railu** — tentýž prvek, kterým okno
+značí stav na hraně řádku fronty —, takže ten důvod odpadl. Počet je dál i v nadpisu bloku
+(`Dnes · 4 nové`); je to tatáž hodnota, ne druhý výpočet.
 
 **Každý řádek někam vede a je to v něm napsané** (`→ Nálezy`, `→ Konverzace`, `→ Commity`,
 `→ Přehled`, `→ Průběh`), ne šipka bez obsahu — a jde to tou samou cestou jako klik na notifikaci

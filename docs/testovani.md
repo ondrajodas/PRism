@@ -3429,13 +3429,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   místě, takže větší rozdíl znamená tlačítko, které při cyklení poskakuje. Rámečky by na tyhle chyby
   neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně mimo obrazovku
   nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25 a test spadne.
-- **Odznak v railu (#366)** — `RailBadgeTests`, tři třídy tvrzení nad **bitmapou**: kde odznak leží
-  (nesmí opustit rám ikony 9–43 ani vyčnívat nad jeho horní hranu), jakou má barvu (`crit`, **žádný
-  akcent**, a číslo v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že
-  s počtem 1 se nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
+
+  **Měřidlo pásů přeskakuje první čtyři sloupce, a od #526 je to podmínka, ne rezerva.** Pozadí se
+  bere z **levého okraje téhož řádku** (rail má v každém režimu jinou plochu, takže konstanta by
+  našla „obsah“ všude) — jenže na hraně railu leží od #526 pruh aktivní sekce, takže vzorek
+  z prvního bodu vydá na řádcích aktivní položky **akcent** a proti němu se jako obsah jeví celý
+  zbytek řádku. Tahle sada měří **ikony**; pruh měří `RailBadgeTests` na vlastním výřezu hrany.
+- **Odznak v railu (#366, přesunutý do rohu #526)** — `RailBadgeTests`, čtyři třídy tvrzení nad
+  **bitmapou**: kde odznak leží (od #526 **v rohu** — o 5 bodů nad rámem ikony a o 7 vpravo od něj,
+  a pořád uvnitř railu), že ho **nic neořezává**, jakou má barvu (`crit`, **žádný akcent**, a číslo
+  v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že s počtem 1 se
+  nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
   K tomu rozměr červené plochy (20 × 14, tolerance bod na stranu kvůli vyhlazeným krajům) a kontrast
   **tokenů** v obou režimech (5,36 a 5,50 při hranici 4,5), včetně tvrzení, že bílá by v tmavém
   režimu byla **horší** — to je záznam rozhodnutí, ne kontrola.
+
+  **Od #526 k tomu pruh aktivní sekce**: leží na hraně railu (sloupec 0), je 2 × 18 bodů a je
+  **vystředěný na rám aktivní položky**. A má ho **jedna** položka, ne každá — měří se to počtem
+  akcentových bodů v celém sloupci hrany, ne okolím té aktivní: kdyby ho dostaly všechny, vyjde
+  jich pětkrát tolik a v okně by byla svislá čára přes celý rail.
+
+  **Rám ikony se neopisuje, měří se** — z akcentového washe aktivní položky (`.ri.on`), který leží
+  přesně na jejích 34 × 30. Každé tvrzení je pak rozdíl proti rámu, který v tomtéž snímku doopravdy
+  je, ne proti konstantě, která by po posunu odznaku tvrdila jen sama sebe. **Tolerance u washe je
+  poloviční (0,02), a je to změřené**: ve světlém režimu je wash (`0.90/0.90/0.97`) od `Palette.line`
+  (`0.90/0.91/0.94`) jen **0,032** daleko, takže se do obálky připočítal obrys railu i oddělovač pod
+  sekcemi a rám vyšel `0…259` místo `44…73`.
+
+  **Ořezání se pozná z tvaru pravé hrany, ne z šířky řádků** (#483). Zaoblená kapsle dosáhne na svůj
+  nejpravější sloupec **8 řádky ze 14**, uříznutá všemi čtrnácti — práh je proto o dva řádky pod
+  výškou, tedy mezera 8 proti 12. Šířka řádku na to neodpoví: číslo uvnitř odznaku z něj bere červené
+  body uprostřed, takže by nejužší řádek měřil písmo.
 
   **Barva se porovnává s nakreslenou, ne s tokenem, a je to změřené**: bitmapa
   z `bitmapImageRepForCachingDisplay` je v profilu displeje (`Barevný LCD`), takže `crit` v ní vyjde
@@ -3448,7 +3472,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Vyzkoušené vložením regrese ze dvou stran.** Se starým odznakem (akcent + `offset(x: 6, y: -2)`)
   padne 5 testů ze 6 — barevná tvrzení na tom, že v railu není ani jeden červený pixel. Se **samotným**
   `offset(x: 6, y: -2)` a ponechanou červenou padne právě tvrzení o poloze (`46 > 43`), takže je
-  vidět, že poloha se měří nezávisle na barvě.
+  vidět, že poloha se měří nezávisle na barvě. **U #526 znovu**: s vráceným `offset(y: 1)` padne
+  poloha (odznak nevyjde z rámu ani nahoru, ani doprava) a s vynechaným pruhem padnou obě tvrzení
+  o aktivní sekci — barevná tvrzení přitom zůstanou zelená, takže se ty dvě věci pořád měří zvlášť.
 - **Kapsle stavu z návrhu (#348)** — `DesignPillTests`. Že je to **mono**, se pozná na tom, že
   `TextWidth.pill("iii") == TextWidth.pill("WWW")` — a měřidlo to umí rozlišit, protože v UI fontu
   téže velikosti se ta dvě slova liší. Metrika se měří na `fittingSize` hostované kapsle proti sazbě

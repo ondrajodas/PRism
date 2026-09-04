@@ -31,10 +31,10 @@ struct SidebarRailTests {
     /// další sekce dostane sama, a v pruhu o 52 bodech se to dá pokazit potichu: ikona širší než
     /// rám (34 × 30, tedy 9–43) by se do svislice ostatních nevešla a rail by se rozjel.
     ///
-    /// Měří se **bez odznaků**, ale už ne proto, že by z rámu vyčnívaly: od #366 jsou uvnitř
-    /// (`RailBadgeTests` to tvrdí a měří k tomu i barvu). Bez nich se měří proto, že tady jde
-    /// o **ikony** — odznak je jen na dvou položkách ze čtyř, takže by rozhodoval o tom, která
-    /// vyjde širší. Pásy se u toho **nepočítají** — ikona s mezerou uprostřed (šipka nad
+    /// Měří se **bez odznaků**, a od #526 je to znovu podmínka: odznak od #526 z rámu **vyčnívá**
+    /// (roh, ne rám — `RailBadgeTests` to měří i s barvou), takže by rozhodoval o tom, která
+    /// položka vyjde širší, a tahle sada se ptá na **ikony**. Pásy se u toho **nepočítají** —
+    /// ikona s mezerou uprostřed (šipka nad
     /// vaničkou u `Moje PR`) se do bitmapy zapíše jako dva pásy, takže by počet měřil kresbu
     /// glyfu, ne počet položek. Kolik sekcí rail má, tvrdí test výš.
     @Test("Sekce se vejdou do railu i s pátou položkou")
@@ -181,6 +181,12 @@ struct SidebarRailTests {
     ///
     /// Pozadí se bere z **levého okraje téhož řádku**, ne z konstanty: rail má v každém režimu
     /// jinou plochu a zadrátovaná barva by našla „obsah“ všude.
+    ///
+    /// **První čtyři body zleva se přeskakují, a od #526 je to podmínka, ne rezerva.** Na hraně
+    /// railu leží pruh aktivní sekce (2 body akcentu), takže vzorek z prvního bodu by na řádcích
+    /// aktivní položky vydal **akcent** — a proti němu by se jako „obsah“ jevil celý zbytek řádku
+    /// včetně prázdné plochy. Tahle sada měří **ikony**: kde stojí a jak jsou velké. Kde leží pruh,
+    /// měří `RailBadgeTests` na vlastním výřezu hrany.
     private static func bands(in appearance: NSAppearance, rep: NSBitmapImageRep) -> [Band] {
         let scale = max(rep.pixelsWide / 52, 1)
         var pixels: [(top: Int, bottom: Int, left: Int, right: Int)] = []
@@ -188,11 +194,11 @@ struct SidebarRailTests {
 
         appearance.performAsCurrentDrawingAppearance {
             for y in 0..<rep.pixelsHigh {
-                let background = rep.colorAt(x: 1, y: y)
+                let background = rep.colorAt(x: 4 * scale, y: y)
                 var left: Int?
                 var right = 0
                 // Pravý okraj railu nese jeho obrys (1 bod), ten se do obsahu počítat nemá.
-                for x in 2..<(rep.pixelsWide - scale) where !matches(rep.colorAt(x: x, y: y), background) {
+                for x in (5 * scale)..<(rep.pixelsWide - scale) where !matches(rep.colorAt(x: x, y: y), background) {
                     if left == nil { left = x }
                     right = x
                 }
