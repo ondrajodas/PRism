@@ -328,6 +328,21 @@ final class AppStore {
     /// `Policy.fileReviewStates` vrací jen to, co značku má.
     var readStates: [PRIdentifier: [String: FileReviewState]] = [:]
 
+    /// Mapa PR pro **řádek fronty** (#502) — mini pás místo spektra reviewerů.
+    ///
+    /// **Cache, a co ji vyprazdňuje, je vypsané v `QueueMapStamp`** (#224): otisk vstupů se skládá
+    /// při každém dotazu a jeho změna mapu přepočítá, takže není žádné místo, ze kterého by se
+    /// dalo zapomenout na neplatnost upozornit. Bez cache by se pás skládal při každém průchodu
+    /// tělem seznamu u každého řádku, tedy prací lineární v počtu souborů — u `cli/cli#14320`
+    /// sto padesát osm segmentů na řádek a tik.
+    ///
+    /// Velikost drží **počet PR v chtěné množině**: uklízí ji `forget(whatIsNotIn:)` spolu
+    /// s diffem, ze kterého mapa vzniká. `@ObservationIgnored` schválně a je to podmínka, ne
+    /// úspora — zapisuje se do ní **z průchodu tělem** seznamu, takže sledovaná vlastnost by ten
+    /// průchod zneplatnila sama sebou. Čtenáře budí vstupy (`diffStates`, `reviewRecords`,
+    /// `readStates`), které si `queueMap(for:)` přečte cestou k otisku.
+    @ObservationIgnored var queueMapCache: [PRIdentifier: (stamp: QueueMapStamp, map: PullRequestMap)] = [:]
+
     /// Proč se značky nepodařilo přečíst nebo uložit. Musí být vidět: tichá nula by v okně
     /// vypadala jako nezaškrtnutý diff.
     var readMarkFailure: String?
@@ -1550,6 +1565,19 @@ final class AppStore {
     /// stejně byla `UNKNOWN`.
     var branchStatuses: [PRIdentifier: BranchStatusState] = [:]
 
+    /// Co repozitář o mergi říká (#556) — povolené metody a odkud GitHub skládá tělo commitu.
+    /// Chybějící klíč = **ještě se neptalo, nebo se to nepodařilo**.
+    ///
+    /// Klíčem je repo, ne PR, jako u nabídky labelů: jsou to příznaky repozitáře a mezi dvěma PR
+    /// z téhož repa se nemění. Na tom stojí, že je to **jedno volání za repo** (0,62 s), ne dotaz
+    /// na každé PR v tiku.
+    ///
+    /// **Bez mapy poruch, na rozdíl od labelů**, a je to rozhodnutí: „nezjistil jsem to“ je tady
+    /// **platná odpověď** — nad repem bez práva zápisu GitHub ta pole vůbec neposílá, takže se
+    /// „nevím“ od výpadku sítě nedá rozeznat ani z odpovědi. Potvrzení se v tom stavu chová
+    /// stejně: nabídne všechny tři metody a nic o nich netvrdí.
+    var repositoryMergeSettings: [RepoID: RepositoryMergeSettings] = [:]
+
     /// Co se právě děje se srovnáním větve (#466). Chybějící klíč = nic se neděje.
     ///
     /// **Stav, ne cesta ven** — tatáž konstrukce jako u `metadataActionStates`: akce se ovládá
@@ -2177,11 +2205,16 @@ final class AppStore {
         // **spolu**, jinak by po vypadlém PR zbyly stavy odvozené z mapy, která už není.
         readMarks = readMarks.filter { wantedPullRequests.contains($0.key) }
         readStates = readStates.filter { wantedPullRequests.contains($0.key) }
+        // Mapa PR pro řádek fronty (#502) jde tou samou cestou a ze stejného důvodu jako diff,
+        // ze kterého vzniká: u PR mimo chtěnou množinu ji nikdo nekreslí. Je to
+        // `@ObservationIgnored` cache, takže tenhle zápis nikoho nebudí — na rozdíl od map výš
+        // se tedy nemusí ptát, jestli se něco změnilo.
+        queueMapCache = queueMapCache.filter { wantedPullRequests.contains($0.key) }
         // Hledání v diffu (#152) drží **seznam výskytů**, tedy řádky kódu — u PR mimo seznam je to
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         //
         // **Tady se zapisuje jedině při změně, a je to výjimka z pravidla, ne nedůslednost**
-        // (#421). Zbylých dvaačtyřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
+        // (#421). Zbylých třiačtyřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
         // hodnoty `@Observable` nehlásí, takže je `if` navíc jen mrtvá váha
         // (`PollObservationTests`). Jenže suprese stojí na tom, že se ty dvě hodnoty dají
         // **porovnat** — a `DiffSearchState` je `@Observable` **třída**, takže
@@ -2295,6 +2328,10 @@ final class AppStore {
         assignableUsers = assignableUsers.filter { wanted.contains($0.key) }
         assignableTeams = assignableTeams.filter { wanted.contains($0.key) }
         assignableUserFailures = assignableUserFailures.filter { wanted.contains($0.key) }
+        // Příznaky merge (#556) jdou tou samou cestou a ze stejného důvodu: klíčem je repo, takže
+        // se uklízí podle rep v seznamu. **Vypadnutí repa je zároveň jediné, co tu cache
+        // zneplatní** — `updatedAt` mluví o pull requestu, ne o nastavení repozitáře.
+        repositoryMergeSettings = repositoryMergeSettings.filter { wanted.contains($0.key) }
 
         // Rozkliknutý commit a jeho diff (#317). Diff jsou megabajty, takže jde stejnou cestou
         // jako diff PR — a rozdělané stahování přežije ze stejného důvodu: doběhlé volání by si

@@ -144,10 +144,10 @@ struct PollObservationTests {
     }
 
     /// **A úklid po tiku taky nikoho nebudí** — což je tvrzení o `forget(whatIsNotIn:)`, který
-    /// po každém úspěšném tiku prořeže **třiačtyřicet** map. **Dvaačtyřicet z nich přepíše
+    /// po každém úspěšném tiku prořeže **čtyřiačtyřicet** map. **Třiačtyřicet z nich přepíše
     /// bezpodmínečně** (`x = x.filter { … }`), u `diffSearches` se zapisuje jen při změně počtu —
     /// a proč zrovna u ní, je o odstavec níž (#421). Ta dvě čísla nejsou v rozporu: prořezává se
-    /// třiačtyřicet, bezpodmínečně se přiřazuje dvaačtyřicet.
+    /// čtyřiačtyřicet, bezpodmínečně se přiřazuje třiačtyřicet.
     ///
     /// Vypadá to jako druhá polovina #472 a **není**: nabízelo se zapisovat jen tehdy, když
     /// z mapy opravdu ubylo, jenže s takovou úpravou i bez ní je tenhle test zelený — zápis téže
@@ -159,7 +159,7 @@ struct PollObservationTests {
     /// tom, že se ty dvě hodnoty dají **porovnat**, a `diffSearches` drží `@Observable` třídu, takže
     /// `Equatable` není. Věta „ten `if` nic nemění“ tedy platí o mapách s `Equatable` hodnotou, ne
     /// plošně — a která mapa to je, se z jednoho čtení nepozná. Proto je níž
-    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** třiačtyřiceti — tedy i nad tou
+    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** čtyřiačtyřiceti — tedy i nad tou
     /// jednou, která se nepřepisuje bezpodmínečně.
     @Test("Tichý tik nezneplatní ani rozbalení kontextu v diffu")
     func quietTickDoesNotWakeTheDiffReader() async throws {
@@ -351,6 +351,7 @@ struct PollObservationTests {
             ("assignableUsers", { _ = store.assignableUsers }),
             ("assignableTeams", { _ = store.assignableTeams }),
             ("assignableUserFailures", { _ = store.assignableUserFailures }),
+            ("repositoryMergeSettings", { _ = store.repositoryMergeSettings }),
             ("openCommits", { _ = store.openCommits }),
             ("commitDiffs", { _ = store.commitDiffs }),
             ("expandedChecks", { _ = store.expandedChecks }),
@@ -365,7 +366,7 @@ struct PollObservationTests {
         // nedopíše, projde s tímhle seznamem zeleně — což je ta chyba, kterou #421 hledalo pět
         // kol. Nedá se to spočítat z kódu, takže je to číslo napsané ručně, a rozejde-li se,
         // spadne to na tomhle řádku, ne o padesát řádků níž.
-        #expect(reads.count == 43, "forget(whatIsNotIn:) prořezává jiný počet map než tenhle výčet")
+        #expect(reads.count == 44, "forget(whatIsNotIn:) prořezává jiný počet map než tenhle výčet")
 
         let watchers = reads.map { entry -> (name: String, watcher: Watcher) in
             let watcher = Watcher()

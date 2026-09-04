@@ -86,25 +86,56 @@ struct BranchSectionRenderProbe {
         }
     }
 
-    /// Potvrzení merge — jedna obrazovka, ale ve třech stavech, protože patička je to, co se v ní
-    /// mění.
+    /// Potvrzení merge — jedna obrazovka, ale v šesti stavech: patička je to, co se v ní mění,
+    /// a od #556 k tomu **metoda**.
+    ///
+    /// Tři nové scény jsou přesně sekce 48 zákresu: výchozí metoda z nastavení, přebitá pro tenhle
+    /// jeden merge, a **repo, které výchozí metodu nepovoluje**. Do té třetí se v aplikaci
+    /// klikáním nedostaneš — je to stav, který nastane jedině nad konkrétním repem —, takže je to
+    /// jediné místo, kde se dá zkontrolovat, jak vypadá.
     @Test("Vyrendrovat potvrzení merge")
     func rendersTheMergeSheet() async throws {
-        let scenes: [(String, MergeSubmission.State?)] = [
-            ("merge-potvrzeni", nil),
-            ("merge-potvrzeni-hotovo", .merged(
-                MergedPullRequest(sha: "d5e454dd4838a98ce88339531517411941233813")
-            )),
-            ("merge-potvrzeni-selhalo", .failed(.branchMoved("Head branch was modified."))),
+        // Repo z měření: `keboola/job-queue-daemon` nemá `allow_rebase_merge`.
+        let withoutRebase = RepositoryMergeSettings(
+            allowsMergeCommit: true,
+            allowsSquash: true,
+            allowsRebase: false,
+            squashBody: .commitMessages,
+            mergeCommitBody: .pullRequestTitle
+        )
+        let scenes: [(String, () async -> MergeSubmission)] = [
+            ("merge-potvrzeni", { await Self.submission(state: nil) }),
+            ("merge-potvrzeni-hotovo", {
+                await Self.submission(state: .merged(
+                    MergedPullRequest(sha: "d5e454dd4838a98ce88339531517411941233813")
+                ))
+            }),
+            ("merge-potvrzeni-selhalo", {
+                await Self.submission(state: .failed(.branchMoved("Head branch was modified.")))
+            }),
+            // #556 — přebito pro tenhle jeden merge: s metodou se přepíšou i ostatní řádky.
+            ("merge-metoda-prebita", {
+                await Self.submission(state: nil, override: .mergeCommit)
+            }),
+            ("merge-metoda-rebase", { await Self.submission(state: nil, override: .rebase) }),
+            // #556 — výchozí metoda, kterou repo nepovoluje: nic není vybráno, `Mergnout` je
+            // zakázané a pod výpisem stojí výstraha.
+            ("merge-metoda-nejde", {
+                await Self.submission(
+                    state: nil,
+                    defaultMethod: .rebase,
+                    repository: withoutRebase
+                )
+            }),
         ]
 
-        for (name, state) in scenes {
+        for (name, make) in scenes {
             let url = Self.outputDirectory.appending(path: "\(name).png")
             // Podklad se nasazuje **tady, ne v sheetu**: v aplikaci ho kreslí okno sheetu, takže
             // by zadrátovaný v `MergeSheet` byl barva navíc, kterou tam nikdo nechce.
             try Self.render(
                 AnyView(
-                    MergeSheet(submission: await Self.submission(state: state), close: {})
+                    MergeSheet(submission: await make(), close: {})
                         .background(Palette.surface)
                 ),
                 width: 520,
@@ -187,14 +218,32 @@ struct BranchSectionRenderProbe {
     /// Stav se nastavuje **voláním `merge()` s fake publisherem**, ne přepsáním pole: `state` je
     /// `private(set)` schválně, a sonda, která by ho obcházela, by fotila stav, do kterého se
     /// aplikace nedostane.
-    @MainActor private static func submission(state: MergeSubmission.State?) async -> MergeSubmission {
-        let plan = MergePlan(
+    @MainActor private static func submission(
+        state: MergeSubmission.State?,
+        // Metoda merge (#556). `defaultMethod` je to, co stojí v nastavení; `repository` to, co
+        // repo pustí. Výchozí hodnoty jsou stav z návrhu: squash a repo se všemi třemi metodami.
+        defaultMethod: MergeMethod = .squash,
+        repository: RepositoryMergeSettings = RepositoryMergeSettings(
+            allowsMergeCommit: true,
+            allowsSquash: true,
+            allowsRebase: true,
+            squashBody: .commitMessages,
+            mergeCommitBody: .pullRequestTitle
+        ),
+        // Přebití metody pro tenhle jeden merge — tou samou cestou jako klik na pilulku.
+        override: MergeMethod? = nil
+    ) async -> MergeSubmission {
+        // Návrh, ne payload (#556): metoda se vybírá až v potvrzení, takže titulek commitu
+        // skládá `Policy` z titulku pull requestu podle vybrané metody.
+        let proposal = MergeProposal(
             pullRequest: pr,
             headSha: "9c1de02aa1b2c3d4e5f60718293a4b5c6d7e8f90",
             head: "odinuv:chore/deps",
             base: "main",
             commits: 3,
-            commitTitle: "chore: modernize dependencies (#85)"
+            title: "chore: modernize dependencies",
+            defaultMethod: defaultMethod,
+            repository: repository
         )
         let outcome: Result<MergedPullRequest, any Error> = switch state {
         case .merged(let merged): .success(merged)
@@ -210,13 +259,14 @@ struct BranchSectionRenderProbe {
                 updatedAt: Date(timeIntervalSince1970: 100),
                 state: .open
             ),
-            plan: plan,
+            proposal: proposal,
             publisher: { FakeReviewPublisher(merge: outcome) },
             afterSuccess: {}
         )
         // Do stavu se sonda dostane **tou samou cestou jako aplikace** — zavoláním `merge()`
         // s fake publisherem. `state` je `private(set)` schválně a sonda, která by to obcházela,
         // by fotila stav, do kterého se aplikace nedostane.
+        if let override { submission.method = override }
         if state != nil { await submission.merge() }
         return submission
     }

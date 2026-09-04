@@ -5615,6 +5615,44 @@ záruku** — kolik průchodů to sedne, se řídit nedá, a měřit se to musí
 [`docs/testovani.md`](../../testovani.md#jak-si-zkontrolovat-jak-view-vypadá)).
 
 
+### Záznam rozhodnutí — mapa PR v řádku fronty (#502)
+
+Druhé issue směru E z milníku M14. **Novou sekci nekreslí**: zákres té skupiny přenesl #501 jako
+sekci 42 a #502 se na ni odkazuje.
+
+**Do mockupu se přesto sáhlo, a je to oprava mezery po #501.** Sekce 42 nakreslila pás pod
+hlavičkou, ale v **řádcích fronty** zůstalo na třech místech staré spektrum (sekce 03 dvakrát
+a srovnání *Dnes / Návrh* v sekci 14) — dokument tedy kreslil obrazovku, kterou aplikace po tomhle
+PR nemá. `.spectrum` odešlo z CSS **celé**, protože ho nekreslilo nic jiného; není to případ
+`.diffstat`, které po #501 zůstalo kvůli záznamu měření v sekci 19. Mini pás si vzal jméno `.qmap`
+a **barvy bere z `.rv-prmap .seg`** — jedna selektorová řádka na segment i vzorek v legendě, tedy
+totéž, co v okně drží `PullRequestMapView.drawSegments`. Přidává jedině rozměr z návrhu
+(110 × 6 b, mezera 2) a **popisek nemá**: v řádku na něj vedle titulku a odznaku není místo.
+
+**Ruší zapsané rozhodnutí #172** — spektrum reviewerů v řádku fronty. Platilo, dokud byla otázka
+„odkud ty nálezy jsou“ ta jediná, na kterou v řádku vedle odznaku zbylo místo; od #501 je vedle ní
+druhá a lepší (**kde v PR a jak zle**), a obě naráz se do jedné řádky nevejdou. `SpectrumBar`
+odešel celý, a s ním `QueueRow.spectrum`, `ReviewerShare`
+a `ReviewStateAppearance.color(of: ReviewerShare.Outcome)`.
+
+| Rozhodnutí | Zamítnutá varianta | Proč |
+|---|---|---|
+| **Mapa místo spektra, ne vedle něj** | Nechat spektrum a mapu přidat; nebo je prohodit podle šířky okna | Dva barevné pásy v jedné řádce vedle sebe jsou dvě škály na jednom místě a **obě z týchž nálezů** — u jedné je barva reviewer, u druhé závažnost. Jedno kódování v celém okně je celý smysl #502: barva je závažnost, ať se kreslí v řádku, pod hlavičkou nebo v okraji diffu. „Kdo našel“ zůstalo v chipech runbaru a v dráhách `Průběhu`, tedy tam, kde na to je místo i text |
+| **Pás se nekreslí, když se o PR nedost ví** | Nakreslit ho z toho, co je (nálezy znají svoje soubory, značky `Prošlo` svoje cesty) a šířku segmentu odhadnout | Z nálezů se dá poskládat pás **jen ze souborů, ve kterých nález je** — u PR o čtyřiceti souborech se třemi nálezy by to byl třísegmentový pás tvářící se jako celý PR. To je ten vzor „text (a kresba), který tvrdí víc, než data unesou“. Prázdno o velikosti PR je čitelnější než smyšlená mapa |
+| **Podmínky jsou dvě, ne jedna** (běh **a** načtený diff), i když zadání jmenuje jen běh | Kreslit pás všude, kde je diff — tedy i u PR bez review | Neutrální pás nad PR, na kterém nic neběželo, je k nerozeznání od PR, na kterém review doběhlo a nic nenašlo. Barva segmentu je závažnost nálezu, takže „šedý pás“ znamená „nic se nenašlo“ — a to je zrovna ten nebezpečný směr. Zadání tuhle druhou podmínku nemá, protože předpokládalo, že soubory ve frontě k dispozici jsou; **nejsou** (viz řádek níž) |
+| **Diff se pro řádek nedotahuje** | Prefetch diffu (nebo `gh pr view --json files`) pro řádky fronty na tiku | N volání `gh` na tik, tedy tatáž zamítnutá cesta jako u #515 — a u `--json files` navíc **strop sta souborů**, změřený u #518. Pás tím mají řádky PR, které už byly v tomhle spuštění otevřené; je to zapsaná mez, ne záměr, a dá se posunout jedině tím, že by si aplikace seznam souborů **ukládala** (kandidát: záznam review, který diff v ruce má) |
+| **Vlákna ani jezdec v řádku nejsou** | Předat `anchoredThreads` a kreslit čárky i v mini pásu | Konverzace se stejně jako diff tahá až v detailu, takže by chybějící čárka u zavřeného PR neznamenala „žádná diskuze“, ale „nevíme“ — a to je tatáž lež v menším. Jezdec navíc ukazuje soubor pod výřezem, který u zavřeného PR neexistuje. Popisek mapy tím v řádku o vláknech **mlčí**, což `Policy.mapSummary` umí (části bez obsahu vynechává) |
+| **Tatáž `Policy.pullRequestMap` a tatáž kresba, jen jiná geometrie** | Vlastní, levnější funkce pro mini pás (bez jmen segmentů, bez popisku) | Dvě funkce znamenají dvě pravdy o jednom PR a rozdíl by se poznal jedině tak, že by si někdo všiml obojího naráz. Sdílená kresba je `PullRequestMapView.drawSegments` a velký pás si nad ní **druhým průchodem** dokresluje značky; průchod polem nic nestojí, kdežto druhý výklad toho, co je červený segment, stojí důvěru v pás. Hlídají to tři stráže nad zdrojáky |
+| **Cache s otiskem vstupů, ne s ručním zneplatňováním** | Přepočítávat pás při každém dotazu; nebo držet odvozenou mapu jako `readStates` a volat `refresh…` z míst, která vstupy mění | Přepočítávat je práce lineární v počtu souborů **u každého řádku a průchodu tělem** (#224). Ruční zneplatňování by znamenalo pět volajících (načtení diffu, doběhlé review, odmítnutí, značka, změna konfigurace) a **stačí zapomenout jedno**, aby řádek kreslil pás z minula — potichu, protože pás z minula vypadá jako pás. Otisk se skládá při každém dotazu, takže není kde zapomenout; je v něm všechno, co ta funkce čte (#153), a nic, co roste s počtem souborů |
+| **`QueueRow` zůstává s jedním polem** | Zrušit ho a předávat `blocking: Int`; nebo tam spektrum nechat ležet | Ležící pole bez čtenáře je mrtvá váha, která svádí spolehnout se na ni — to je důvod, proč spektrum odešlo celé. Holé `Int` by ale z `PullRequestRow(row:)` udělalo nepojmenované číslo na čtyřech místech (řádek, deska, seznam, testy), a „kolik nálezů blokuje“ je pojmenovaný údaj o výsledku, ne délka pole |
+
+**Co odešlo z testů, a proč to není ztráta pokrytí.** Se spektrem odsud odešlo rozhodnutí *čisto
+versus nemám co říct* (`clean` / `dismissed` / `inconclusive`), které si proužek počítal **znovu** —
+a právě proto muselo #383 tutéž vadu opravovat na dvou místech. Zůstalo v `Policy.chips`, kde se
+v okně doopravdy čte, a testuje se u chipu revieweera (`ReviewerChipTests`, `UnreadCodeStateTests`)
+a u prázdného tabu nálezů. Tvrzení „díl proužku nebere nic ze systémové škály“ (#432) má protějšek
+u každého stavu v `ReviewStateAppearanceTests`.
+
 ### Záznam rozhodnutí — mezera mezi kódem a pravou kolonou (#503)
 
 Naměřeno na **živém** okně (1 303 × 860, `Vedle sebe`, strom i panel složené): kolona kódu končí
@@ -6151,6 +6189,100 @@ regrese**: s `handOff` za fallbackem zapíše ten jeden test **60 chyb** a celke
 se 67 chybami. `BoardSeparatorTests` počítá **pořád čtrnáct** čar a je to změřené i tady, ne
 odhadnuto — sada prošla i s vloženým starým pořadím, kdežto `BoardTests` na něm spadly třemi
 tvrzeními. Celý běh: `5199 tests in 508 suites passed`, 1 known issue.
+
+### Záznam rozhodnutí — metoda merge je volba, ne konstanta (#556)
+
+**Korekce zapsaného rozhodnutí z #465.** U konstanty `MergeRequest.method` stálo doslova:
+
+> Volba mezi metodami tady **není**: byla by to třetí věc na potvrzení, kterou člověk projde jednou
+> za rok, a přepnout ji jde na GitHubu.
+
+Zůstává to v `MergeRequest` i v `docs/architektura.md` napsané — **záznam rozhodnutí je to, co
+dovoluje pozdější korekci**, a bez původní věty by se nedalo poznat, co se změnilo a proč. Padlo to
+ze dvou stran naráz:
+
+1. **Empiricky.** Odejít z okna kvůli jedné hodnotě je dražší než ta hodnota, a squash není to, co
+   se hodí ve všech repech: tenhle repo squashuje, firemní repo s prořezanou historií chce merge
+   commit.
+2. **Logicky, a to je ta podstatnější půlka.** Argument mluvil o světě, ve kterém **žádná výchozí
+   hodnota nebyla** — picker byl jediná cesta, jak metodu určit, takže se **každý** merge musel
+   rozhodovat. S výchozí hodnotou v nastavení je předvybráno a přepnutí je **odchylka**: jeden
+   pohled, ne jedno rozhodnutí. Slovo „výchozí“ navíc nic neznamená, když od něj není kam se
+   odchýlit.
+
+**Co se rozhodlo a co se zamítlo:**
+
+- **Varianta A (jen přepnout konstantu na merge commit) zamítnuta**, i když byla v zadání jako
+  rovnocenná. Přesunula by problém, ne vyřešila: v jednom repu by pak byla špatně ta druhá metoda.
+- **Globálně i per repo, ne jen globálně.** Kritérium je vyzkoušené: override má to, co je
+  vlastnost **repozitáře** (`mode`, `allowsPublishing`, `incrementalAfterPush`), a nemá to, co je
+  vlastnost **člověka, který se kouká** (`diffLayout`, `appearance`, notifikace). Metoda merge je
+  zvyk repa, takže override dostala. „Knoflík, který si nikdo nenastaví“ tady nehrozí — squash
+  a merge commit se v mých repech střídají.
+- **Sheet metodu dovolí přebít pro jeden merge**, což #465 u téže obrazovky zamítlo. Zamítnutí
+  neplatí, protože picker **není druhý krok**: leží **uvnitř výpisu payloadu**, který se u nevratné
+  akce čte tak jako tak, a mergne se pořád jedním kliknutím na pojmenované tlačítko. Kdyby to byl
+  postup („vyber metodu“ → „potvrď“), platilo by zamítnutí dál.
+- **S metodou se přepisuje celý výpis, ne jen řádek `metoda`.** Bez toho by se dala vybrat metoda
+  a přečíst si k ní čísla té předchozí — a `commitů 3 → 1` i titulek jsou **tvrzení o metodě**, ne
+  údaje o PR. Řádek payloadu, který nad jinou metodou lže, je horší než řádek, který tam není.
+- **Nepovolená metoda se z nabídky nemaže, jen zašedne** (přeškrtnutá, se slovem `nejde`). Zmizet
+  nesmí: pak by se nedal poznat rozdíl mezi „repo to nepustí“ a „tuhle metodu GitHub nemá“.
+- **Nepovolená výchozí metoda se nepodstrčí jinou.** Sheet se otevře **bez vybrané metody**,
+  `Mergnout` je zakázané a **pod výpisem** stojí výstraha s tím, co repo povoluje. Tiše přepnout na první povolenou by
+  znamenalo, že u nevratné akce odejde něco, o co nikdo nepožádal — a řádky `commitů` a `titulek`
+  by přitom vypadaly jako potvrzený payload. **Zamítnutá varianta** byla právě tohle: „vezmi první
+  povolenou“ je o jedno kliknutí méně a o jedno tiché rozhodnutí víc.
+- **Panel o metodě mlčí** a `Mergnout…` v něm zůstává povolené. Sekce `Větev` odpovídá na „dá se to
+  mergnout“, a to se nepovolenou metodou nemění. Zašedlé tlačítko nad něčím, co projde dvěma
+  kliknutími, by bylo tvrzení navíc; třetí řádek stavu by byl text o payloadu tam, kde payload není.
+- **Titulek se posílá u dvou metod ze tří.** U rebase nevzniká commit, takže by `commit_title` bylo
+  pole, které GitHub zahodí, a potvrzení by slibovalo titulek, který se nikde neobjeví. Důvod
+  „posílat vždycky“ z #465 platí dál — a nad repem bez práva zápisu se nastavení repozitáře **ani
+  nedá přečíst**.
+- **Věta o těle se přestala hádat.** `commit_message` se dál neposílá u žádné metody, ale zdroj
+  těla (`squash_merge_commit_message`, `merge_commit_message`) přijde **týmž voláním** jako povolené
+  metody, takže se dá říct, co v něm doopravdy bude. Dnešní věta o „zprávách N commitů“ byla pravdivá
+  jedině v repu s `COMMIT_MESSAGES`; **jedno volání, ne dvě** je u toho podmínka, ne pohodlí —
+  dvě by se umělo rozejít a věta by mluvila o jiném stavu než nabídka nad ní.
+
+**Co se u toho změřilo** (`gh api repos/{o}/{r}`, tři repa):
+
+| Repozitář | `allow_merge_commit` | `allow_squash_merge` | `allow_rebase_merge` | `squash_…_message` | `merge_commit_message` |
+|---|---|---|---|---|---|
+| `ondrajodas/PRism` | `true` | `true` | `true` | `COMMIT_MESSAGES` | `PR_TITLE` |
+| `keboola/job-queue-daemon` | `true` | `true` | **`false`** | `COMMIT_MESSAGES` | `PR_TITLE` |
+| `cli/cli` (bez zápisu) | **`null`** | **`null`** | **`null`** | **`null`** | **`null`** |
+
+0,62 s za volání. Ten třetí řádek je důvod, proč je „nevím“ **třetí odpověď**, ne synonymum pro
+„nepovoluje“: rozhodnout z chybějících dat, že něco nejde, je u nevratné akce tatáž chyba jako
+rozhodnout, že jde. A **klíče v odpovědi jsou** — jen s hodnotou `null` —, takže se ten stav nedá
+vyrobit ručním literálem s vynechaným klíčem; fixture musí být skutečný výstup.
+
+**Tvrdá podmínka č. 1 se nezměnila ani o položku**, a je to součást tvrzení, ne poznámka:
+`ReviewPublishing` má pořád devět metod, `merge` je pořád jediná, která merguje, brána i dvojí
+ověření hlavy platí, `SingleWayOutTests` prošly **nedotčené** a grep vydává týchž sedm souborů
+(`BranchPushing` tři). Změnil se **obsah payloadu**, ne cesta ven — a `mergeSettings(repo:)` je
+**čtení**, takže patří `GitHubGateway`, který zůstává bez zápisu.
+
+**Jedno místo se rozdělilo na dvě, a bez toho to nešlo.** Do #556 byl `MergePlan` „fakta o PR“
+i „co odejde“ naráz, protože metoda byla konstanta. Volbou metody jdou z jednoho snímku faktů složit
+**tři různé payloady** a dva z nich mají jiný titulek i jiný počet commitů, takže se to rozdělilo na
+`MergeProposal` (s čím se sheet otevřel) a `MergePlan` (payload). Rozhodnutí „jedno místo pro kresbu
+i pro payload“ se tím **neruší, jen přesouvá**: sheet vypisuje řádky z `MergePlan`u a
+`MergeRequest.Payload` ho kóduje. A `plan == nil` je **platný stav**, ne nedodělek — znamená „nic
+není vybráno“ a přímo z něj plyne, že `canMerge` je nepravda.
+
+**Co to udělalo s testy.** Přibyly `MergeMethodChoiceTests` (čistá funkce vyčerpávajícím výčtem —
+nabídka, předvybraná metoda, tři podoby výstrahy, řádky výpisu i věta o těle, s texty tvrzenými
+doslova kvůli skloňování) a `GhRepositoryMergeSettingsTests` (dekódování skutečných odpovědí ze
+dvou veřejných rep). `MergePublishingTests` mají dvě tvrzení navíc na hotových bajtech: `merge_method`
+doslova pro všechny tři metody a **`commit_title` u rebase vynechaný celý** — to druhé se dá tvrdit
+jedině nad JSONem, protože `""` by GitHub vzal jako titulek. `AppStoreMergeTests` hlídají, že je to
+**jedno volání za repo**, že se na cizím PR neptá vůbec a že selhání nechá `nil`; u nich je past
+v pořadí — `loadDetail` si příznaky dotáhne sám, takže odpověď fake gateway se musí nastavit
+**před** ním. `PollObservationTests` vzrostly na **čtyřicet** map. Celý běh:
+`5266 tests in 513 suites passed`, 1 known issue.
 
 ### Záznam rozhodnutí — itinerář review místo stromu souborů (#506)
 

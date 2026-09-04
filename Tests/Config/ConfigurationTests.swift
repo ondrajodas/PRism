@@ -874,4 +874,93 @@ struct RepositoryConfigDecodingTests {
         // Že zdroj chybí, se pozná z dotazů — a to je jediné, co s tím aplikace dělá.
         #expect(!Policy.tracksOwnPullRequests(in: configuration.activeSources, mine: []))
     }
+
+    // MARK: - Metoda merge (#556)
+
+    /// **Výchozí je squash, a porovnává se s literálem, ne s konstantou.** Do #556 posílala
+    /// aplikace `"squash"` z konstanty v `MergeRequest`; po zavedení pole se nesmí začít chovat
+    /// jinak, takže se tady tvrdí ta hodnota, ne to, že se rovná sama sobě.
+    @Test("Bez konfigurace se merguje squashem, jako do #556")
+    func defaultsToSquash() {
+        #expect(Configuration.standard.global.mergeMethod == .squash)
+        #expect(Configuration.standard.global.mergeMethod.rawValue == "squash")
+        #expect(Configuration.standard.resolved(for: RepoID("cli/cli")!).mergeMethod == .squash)
+    }
+
+    /// `rawValue` je **doslova to, co bere GitHub** — a je to tatáž hodnota, která leží v souboru.
+    /// Dvě tabulky (jedna pro API, druhá pro `config.json`) by se rozešly a rozdíl by se poznal až
+    /// z odmítnutého merge.
+    @Test("Metoda se v souboru píše tak, jak ji bere GitHub")
+    func usesTheApiSpellingInTheFile() throws {
+        let configuration = try self.configuration(#"{"global": {"mergeMethod": "merge"}}"#)
+
+        #expect(configuration.global.mergeMethod == .mergeCommit)
+        #expect(MergeMethod.rebase.rawValue == "rebase")
+        #expect(MergeMethod.mergeCommit.rawValue == "merge")
+    }
+
+    /// **Rozbitá hodnota se srazí na `squash`**, tedy na chování aplikace do #556. Metoda je
+    /// součást payloadu nevratné akce, takže překlep nesmí vyrobit jinou.
+    @Test("Rozbitá globální metoda se srazí na squash, nepoloží čtení")
+    func collapsesABrokenGlobalMethod() throws {
+        #expect(try self.configuration(#"{"global": {"mergeMethod": "octopus"}}"#)
+            .global.mergeMethod == .squash)
+        #expect(try self.configuration(#"{"global": {"mergeMethod": 7}}"#)
+            .global.mergeMethod == .squash)
+    }
+
+    /// **Chybějící klíč u repa je „ber globální“, vyplněný je „řekl jsem si o tohle“** — a tohle je
+    /// to tvrzení, které dělá override užitečným: repo si podrží svou metodu i po přepnutí
+    /// globálního defaultu.
+    @Test("Repo si metodu přebije a podrží ji i po změně globální")
+    func repositoryOverridesTheMethod() {
+        var configuration = Configuration.standard
+        let repo = RepoID("keboola/job-queue-daemon")!
+        configuration.setRepository(RepositoryConfig(mergeMethod: .mergeCommit), for: repo)
+
+        #expect(configuration.resolved(for: repo).mergeMethod == .mergeCommit)
+        #expect(configuration.resolved(for: RepoID("cli/cli")!).mergeMethod == .squash)
+
+        configuration.global.mergeMethod = .rebase
+        #expect(configuration.resolved(for: repo).mergeMethod == .mergeCommit)
+        #expect(configuration.resolved(for: RepoID("cli/cli")!).mergeMethod == .rebase)
+    }
+
+    /// Rozbitá hodnota u repa se srazí na `squash`, **ne na globální hodnotu**: vzít globální by
+    /// znamenalo, že překlep v repu, u kterého jsem si squash řekl výslovně, ho přepne na globální
+    /// merge commit — a to je metoda nevratné akce, ne popisek.
+    @Test("Rozbitá metoda u repa se srazí na squash, ne na globální")
+    func collapsesABrokenRepositoryMethod() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"mergeMethod": "merge"}, "repositories": {"cli/cli": {"mergeMethod": "octopus"}}}"#
+        )
+
+        #expect(configuration.repositories[RepoID("cli/cli")!]?.mergeMethod == .squash)
+        #expect(configuration.resolved(for: RepoID("cli/cli")!).mergeMethod == .squash)
+    }
+
+    /// Chybějící klíč u repa se od `squash` musí **poznat**: `nil` je „ber globální“, kdežto
+    /// zapsaný `squash` je vlastní odpověď.
+    @Test("Repo bez klíče bere globální metodu")
+    func repositoryWithoutTheKeyInherits() throws {
+        let configuration = try self.configuration(
+            #"{"global": {"mergeMethod": "rebase"}, "repositories": {"cli/cli": {"mode": "manual"}}}"#
+        )
+
+        #expect(configuration.repositories[RepoID("cli/cli")!]?.mergeMethod == nil)
+        #expect(configuration.resolved(for: RepoID("cli/cli")!).mergeMethod == .rebase)
+    }
+
+    @Test("Metoda přežije cestu na disk a zpátky")
+    func methodSurvivesARoundTrip() throws {
+        var original = Configuration.standard
+        original.global.mergeMethod = .mergeCommit
+        original.setRepository(RepositoryConfig(mergeMethod: .rebase), for: RepoID("cli/cli")!)
+
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(Configuration.self, from: encoded)
+
+        #expect(decoded.global.mergeMethod == .mergeCommit)
+        #expect(decoded.resolved(for: RepoID("cli/cli")!).mergeMethod == .rebase)
+    }
 }

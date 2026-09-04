@@ -97,12 +97,10 @@ struct UnreadCodeStateTests {
         #expect(text.contains("neotevřel"))
     }
 
-    @Test("Díl proužku u řádku není zelený")
-    func theSpectrumSegmentIsNotGreen() {
-        let row = Policy.queueRow(for: makeRecord(runs: [unreadRun()]))
-
-        #expect(row.spectrum.map(\.outcome) == [.inconclusive])
-    }
+    // **Proužek u řádku odešel s #502** — na jeho místě je mapa PR, která o „nepřečteném kódu“
+    // nemluví (barva segmentu je závažnost nálezu, ne stav běhu). Tvrzení „díl proužku není
+    // zelený“ tím odsud odpadlo; tutéž věc drží chip nad tímhle testem a věta v prázdném tabu
+    // nálezů pod ním, tedy obojí místo, kde se to v okně doopravdy čte.
 
     @Test("Prázdný tab nálezů to řekne větou, ne prázdnem")
     func theEmptyFindingsTabExplainsIt() {

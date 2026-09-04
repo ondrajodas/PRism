@@ -977,11 +977,27 @@ třetí**, `Připravit k review` (#482, viz níž).
 zeleno, jinak `Rebase`. Srovnat větev dává smysl i tehdy, když už mergnout jde, a schovávat
 akci podle stavu by znamenalo, že se tlačítko pod rukou stěhuje.
 
-**Potvrzení vypisuje, co se stane**, jako u odeslání review: větev → base, metoda (`squash`,
-jiná se odsud neposílá — kdo chce jinou, jde na GitHub), kolik commitů se slévá do jednoho, jaký
-bude titulek a proti které hlavě se merguje. **A hlavně píše i to, co v tom výpisu není**: tělo
-squash commitu skládá GitHub ze zpráv slévaných commitů, takže se neslibuje, že je v okně vidět
-celé. Tlačítko **není výchozí** — Enterem se nic nemergne.
+**Potvrzení vypisuje, co se stane**, jako u odeslání review: větev → base, metoda, kolik commitů
+se slévá, jaký bude titulek a proti které hlavě se merguje. **A hlavně píše i to, co v tom výpisu
+není**: tělo commitu skládá GitHub, takže se neslibuje, že je v okně vidět celé. Tlačítko **není
+výchozí** — Enterem se nic nemergne.
+
+**Metoda je od #556 nabídka, ne opsané slovo.** Řádek `metoda` ve výpisu má tři pilulky (`squash`,
+`merge commit`, `rebase`); předvybraná je ta z nastavení a **přepnout ji jde pro tenhle jeden
+merge** — do nastavení se tím nezapisuje a stojí to pod výpisem. Není to druhý krok: picker leží
+**v tom výpisu**, který se u nevratné akce čte tak jako tak, a mergne se pořád jedním kliknutím.
+**S metodou se přepíšou i ostatní řádky** — počet commitů (`3 → 1` / `3 + merge commit` /
+`3 přehrané`), titulek (u rebase žádný, protože tam nevzniká commit) i věta o těle —, takže se
+nedá vybrat metodu a přečíst si k ní čísla té předchozí.
+
+**Nabídne se jedině to, co repozitář povoluje.** Aplikace si při otevření vlastního PR jedním
+voláním přečte, které metody repo pustí (a odkud skládá tělo commitu); metoda, kterou nepovoluje,
+se kreslí zašedlá, přeškrtnutá a se slovem `nejde`. Nad repem, do kterého nemáš zápis, GitHub
+příznaky nevydá vůbec — pak se nabídnou všechny tři a **netvrdí se nic**. A když **výchozí metodu
+tohle repo nepovoluje**, otevře se potvrzení **bez vybrané metody**: `Mergnout` je zakázané a pod
+výpisem stojí, co repo povoluje. Tiše podstrčit jinou metodu by znamenalo, že se u nevratné akce
+stane něco, o co nikdo nepožádal. **Panel o tom mlčí** a `Mergnout…` v něm zůstává povolené —
+mergnout jde, jen zbývá vybrat čím.
 
 **Po úspěšném mergi se zavře potvrzení i záložka toho pull requestu.** Mergnutý PR je dočtený, tak
 se nemusí zavírat ručně; okno přeskočí na sousední záložku, a když žádná nezbyla, domů. Zavírá se
@@ -1693,9 +1709,13 @@ defaultech a je to vidět.
 Editovat ho jde ručně, nebo **oknem nastavení** (⌘, nebo ozubené kolo v hlavičce okna). Okno
 má **boční navigaci se sedmi stránkami** (#177, do té doby tři záložky): `Zdroje PR`,
 `Review a skilly`, `Diff`, `Odesílání`, `Notifikace`, `Repozitáře` a `Běh`, seskupené podle otázky,
-na kterou odpovídají (`Co se hlídá` / `Co jde ven` / `Prostředí`). Na stránce `Repozitáře` se
-u každého repa z posledního seznamu PR nastavuje režim, případný override skillů a kategorií
-a vlastní časový limit běhu.
+na kterou odpovídají (`Co se hlídá` / `Co jde ven` / `Prostředí`). Na stránce `Odesílání` je pod
+branou od #556 **výchozí metoda merge** vlastního PR (`squash` / `merge commit` / `rebase`); leží
+**pod** bránou schválně, protože brána rozhoduje, jestli se dá mergnout vůbec, a tahle sekce jenom
+čím. Na stránce `Repozitáře` se u každého repa z posledního seznamu PR nastavuje režim, případný
+override skillů a kategorií, vlastní časový limit běhu a **metoda merge** — tam se navíc kreslí
+přeškrtnutá ta, kterou repozitář nepovoluje, takže se do souboru nedá uložit hodnota, se kterou by
+merge skončil chybou z API.
 Ukládá se samo do téhož souboru, pár set milisekund po posledním úhozu, a změna se projeví bez
 restartu. Rozbitý soubor
 editor **nepřepíše** — místo formuláře ukáže chybu a nabídne soubor otevřít. Dokud je
@@ -2319,6 +2339,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Časový limit běhu** | V nastavení, globálně i per repo, s rozsahem 5–60 minut a **bez volby „bez limitu“**: timeout je jediná pojistka proti session, která se zacyklí, kdežto denní strop a limit souběhu omezují jen počet běhů. Horní mez je vazba na účet (strop krát denní limit je nejhorší den), dolní proti tomu, aby limit dělal `timedOut` z review, které fungovalo. Putuje s požadavkem, takže rozjetý běh doběhne s tím svým; ke staršímu výsledku se číslo nepíše, protože uložený běh limit nenese. Sdílí ho kontrola nálezů — tatáž session, tentýž strom, tytéž peníze. |
 | **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit, přírůstek po pushi a od #518 **routing reviewerů podle cest**). Routing je jediný klíč, který globální dvojče **nemá**: cesty popisují rozvržení jednoho repa, takže globální mapa by byla pravidlo, které je skoro všude vedle — a přeskočený reviewer je nejtišší podoba chybějícího review. Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review, odpovědi do vláken, komentáře pod PR, labely s reviewery, od #465 **merge vlastního PR** a od #466 **přetlačení vlastní větve** (`git push --force-with-lease`, jediný zápis do remote v celé aplikaci). Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl — u merge navíc **hlava v payloadu**, na kterou GitHub odpoví `409` a nemergne nic. |
+| **Metoda merge** (#556) | Do #556 konstanta `squash`, od #556 **výchozí hodnota v nastavení** — globálně i per repo, jako režim nebo přírůstek po pushi. Metoda merge je zvyk **repozitáře**, ne člověka, proto override per repo; `diffLayout` a vzhled okna ho z opačného důvodu nemají. Potvrzení metodu **vypisuje a dovolí přebít pro jeden merge**, a s ní se přepíšou i ostatní řádky payloadu — jinak by se dala vybrat metoda a přečíst k ní čísla té předchozí. Nabídne se jedině to, co repozitář povoluje (jedno čtení `GET /repos/{o}/{r}` za repo, 0,62 s, drží se v cache); chybějící příznak — nad repem bez práva zápisu GitHub ta pole neposílá — znamená **„nevím“, ne „nepovoluje“**, takže se v tom stavu nabídnou všechny tři a nic se netvrdí. Nepovolená **výchozí** metoda se nepodstrčí jinou — sheet se otevře bez vybrané a řekne, co repo povoluje. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
 | **Vzhled okna** | Tmavý, světlý, nebo podle systému — ovládá se **z levé lišty**, kde ho má návrh, a rozhoduje o tom jediný řádek (`NSApp.appearance`), ne větvení podle režimu. Barvy zůstávají v paletě, kde jednu hodnotu vybírá dynamická systémová barva podle vzhledu, ve kterém se zrovna kreslí; přepínač proto volí režim, ne paletu, a platí naráz pro všechna okna. Uplatňuje se na tom jednom místě, kterým konfigurace vchází do běžící aplikace — ve view by se minul okna, které zrovna není otevřené. |

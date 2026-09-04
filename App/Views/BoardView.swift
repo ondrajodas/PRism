@@ -342,6 +342,10 @@ struct BoardView: View {
                 reviewState: entry.state,
                 hasDraft: entry.hasDraft,
                 row: entry.row,
+                // Mapa PR do mini pásu (#502) — **ze storu, jako ostatní odvozená data řádku**:
+                // `QueueEntry` ji nenese schválně, protože pořadí v pruhu na ní nezávisí a fronta
+                // se řadí podle závažnosti, ne podle toho, co je načtené.
+                map: store.queueMap(for: entry.id),
                 ownership: ownership,
                 openPrompt: { store.openAgentPrompt(in: entry.id) },
                 pending: handoff.pending,

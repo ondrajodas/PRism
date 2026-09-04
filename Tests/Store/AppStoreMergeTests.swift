@@ -116,7 +116,13 @@ struct AppStoreMergeTests {
         state: PullRequestState = .open,
         status: BranchStatus = BranchStatus(mergeability: .mergeable, mergeState: .clean),
         statusFailure: (any Error)? = nil,
-        checks: [PullRequestCheck] = []
+        checks: [PullRequestCheck] = [],
+        // Příznaky merge (#556) se nastavují **před** `loadDetail`, ne po něm: `loadDetail` si na
+        // konci sám dotáhne stav větve a s ním i tohle, takže pozdější přiřazení už zavřenou
+        // stráž na cache nedohoní.
+        mergeSettings: RepositoryMergeSettings? = nil,
+        mergeSettingsFailure: (any Error)? = nil,
+        repo mergeSettingsRepo: RepoID? = nil
     ) async -> (AppStore, FakeGitHubGateway) {
         let gateway = FakeGitHubGateway(
             always: .success([summary()]),
@@ -126,6 +132,14 @@ struct AppStoreMergeTests {
         gateway.branchStatusFailure = statusFailure
         gateway.checks = checks
         gateway.commits = [commit()]
+        if let mergeSettings {
+            gateway.repositoryMergeSettings = [mergeSettingsRepo ?? pr.repo: mergeSettings]
+        }
+        if let mergeSettingsFailure {
+            gateway.repositoryMergeSettingsFailures = [
+                mergeSettingsRepo ?? pr.repo: mergeSettingsFailure
+            ]
+        }
         let store = AppStore(
             gateway: gateway,
             configuration: configuration(publishing: publishing, mine: mine),
@@ -340,11 +354,14 @@ struct AppStoreMergeTests {
 
         let submission = try #require(store.mergeSubmission(for: summary()))
 
-        #expect(submission.plan.head == "prism-merge-probe")
-        #expect(submission.plan.base == "master")
-        #expect(submission.plan.headSha == "aaaa1111")
-        #expect(submission.plan.commits == 1)
-        #expect(submission.plan.commitTitle == "chore: merge probe (#8)")
+        #expect(submission.proposal.head == "prism-merge-probe")
+        #expect(submission.proposal.base == "master")
+        #expect(submission.proposal.headSha == "aaaa1111")
+        #expect(submission.proposal.commits == 1)
+        // Payload vybrané metody (#556). Výchozí je squash, takže titulek zůstává ten, který
+        // aplikace posílala do #556.
+        #expect(submission.method == .squash)
+        #expect(try #require(submission.plan).commitTitle == "chore: merge probe (#8)")
     }
 
     /// **Po mergi se stav PR načte znovu**, takže panel nenabízí `Mergnout…` u něčeho, co je
@@ -444,5 +461,101 @@ struct AppStoreMergeTests {
 
         #expect(store.hasDraft(pr))
         #expect(store.draft(for: pr)?.body == "rozepsáno")
+    }
+
+    // MARK: - Co repozitář o mergi říká (#556)
+
+    /// **Jedno volání za repo, ne dotaz na PR ani na tik** — to je celý důvod, proč je to cache
+    /// klíčovaná repem. Bez tohohle tvrzení by se z toho stalo volání při každém otevření PR.
+    @Test("Příznaky merge se tahají jednou za repo")
+    func readsMergeSettingsOncePerRepository() async throws {
+        let (store, gateway) = await prepared(
+            mergeSettings: RepositoryMergeSettings(allowsRebase: false)
+        )
+
+        // Jednou už se to stalo v `loadDetail`; tři další pokusy nesmí přidat ani jeden dotaz.
+        await store.loadBranchStatus(for: summary())
+        await store.loadMergeSettings(for: pr.repo)
+        await store.loadMergeSettings(for: pr.repo)
+
+        #expect(gateway.mergeSettingsRequests == [pr.repo])
+        #expect(store.repositoryMergeSettings[pr.repo]?.allowsRebase == false)
+    }
+
+    /// **Selhání se nezapisuje a nikde se nehlásí**, a je to ta správná strana: „nezjistil jsem
+    /// to“ je v téhle otázce platná odpověď (`nil`), ze které potvrzení udělá nabídku všech tří
+    /// metod bez jakéhokoli tvrzení. Vlastní hláška v okně by z běžného stavu — repo bez práva
+    /// zápisu vrací všech pět polí jako `null` — udělala poruchu.
+    @Test("Selhané čtení příznaků nechá nevím, ne poruchu")
+    func leavesUnknownAfterAFailure() async throws {
+        let (store, gateway) = await prepared(
+            mergeSettingsFailure: GitHubError.malformedOutput("nic")
+        )
+
+        #expect(store.repositoryMergeSettings[pr.repo] == nil)
+        // A **zkusí se to znovu**: neúspěch se nezapamatoval, takže se stráž na cache nezavřela.
+        // Jeden dotaz padl už v `loadDetail`, tenhle je druhý.
+        await store.loadMergeSettings(for: pr.repo)
+        #expect(gateway.mergeSettingsRequests.count == 2)
+    }
+
+    /// **Na cizím PR se neptá vůbec** — sekce `Větev` se tam nekreslí a merge se odsud nedělá
+    /// nikdy, takže by to bylo volání za nic. Tatáž hranice jako u slévatelnosti.
+    @Test("Na cizím PR se příznaky merge nečtou")
+    func doesNotReadMergeSettingsOnSomeoneElsesPullRequest() async throws {
+        let (store, gateway) = await prepared(mine: false)
+
+        await store.loadBranchStatus(for: summary())
+
+        #expect(gateway.mergeSettingsRequests.isEmpty)
+        #expect(store.repositoryMergeSettings.isEmpty)
+    }
+
+    /// Návrh, ze kterého se otevře potvrzení, nese **sraženou** metodu z konfigurace i to, co repo
+    /// povoluje — a bez povolené výchozí metody se sheet otevře **bez vybrané**.
+    @Test("Návrh nese výchozí metodu z nastavení i příznaky repa")
+    func carriesTheMethodIntoTheProposal() async throws {
+        let (store, _) = await prepared(
+            gh: try fakeGh(mergedOutput),
+            mergeSettings: RepositoryMergeSettings(
+                allowsMergeCommit: true, allowsSquash: true, allowsRebase: false
+            )
+        )
+        var configuration = store.configuration
+        configuration.setRepository(
+            RepositoryConfig(allowsPublishing: true, mergeMethod: .rebase),
+            for: pr.repo
+        )
+        try await store.updateConfiguration(configuration)
+
+        let submission = try #require(store.mergeSubmission(for: summary()))
+
+        #expect(submission.proposal.defaultMethod == .rebase)
+        #expect(submission.proposal.repository?.allowsRebase == false)
+        // **Nic není vybráno a nic se nepodstrčilo.** Tohle je to tvrzení o tom, co se NEstalo.
+        #expect(submission.method == nil)
+        #expect(submission.plan == nil)
+        #expect(!submission.canMerge)
+
+        await submission.merge()
+
+        #expect(try ghCalls() == 0, "bez vybrané metody se nesmí volat nic")
+    }
+
+    /// **Přebitá metoda odejde v payloadu** — a nezapisuje se do nastavení: přepnutí platí pro
+    /// tenhle jeden merge.
+    @Test("Přebitá metoda odejde a nastavení nezmění")
+    func overriddenMethodReachesThePayload() async throws {
+        let (store, _) = await prepared(gh: try fakeGh(mergedOutput))
+        let submission = try #require(store.mergeSubmission(for: summary()))
+
+        submission.method = .mergeCommit
+
+        #expect(try #require(submission.plan).method == .mergeCommit)
+        #expect(
+            try #require(submission.plan).commitTitle
+                == "Merge pull request #8 from prism-merge-probe"
+        )
+        #expect(store.resolved(for: pr.repo).mergeMethod == .squash, "nastavení se nemá měnit")
     }
 }

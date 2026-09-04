@@ -74,7 +74,7 @@ struct BranchMergeTests {
         let detail = detail ?? self.detail()
         return Policy.mergeOffer(
             editing: editing,
-            plan: Policy.mergePlan(of: detail, commits: count.map(commits)),
+            proposal: Policy.mergeProposal(of: detail, commits: count.map(commits)),
             state: detail.state,
             status: status ?? self.status(),
             checks: checks,
@@ -87,7 +87,7 @@ struct BranchMergeTests {
         let detail = detail(state: state)
         return Policy.mergeOffer(
             editing: .allowed,
-            plan: Policy.mergePlan(of: detail, commits: commits(2)),
+            proposal: Policy.mergeProposal(of: detail, commits: commits(2)),
             state: detail.state,
             status: nil,
             checks: [],
@@ -214,7 +214,7 @@ struct BranchMergeTests {
         #expect(
             Policy.mergeOffer(
                 editing: .allowed,
-                plan: nil,
+                proposal: nil,
                 state: nil,
                 status: status(),
                 checks: [],
@@ -295,7 +295,7 @@ struct BranchMergeTests {
     @Test("Řádky stavu říkají, kam se to slévá a jak to dopadlo")
     func describesTheBranch() {
         let facts = Policy.branchFacts(
-            plan: Policy.mergePlan(of: detail(), commits: commits(3)),
+            proposal: Policy.mergeProposal(of: detail(), commits: commits(3)),
             commits: commits(3),
             status: status(),
             checks: [check("a", .passed), check("b", .passed)]
@@ -313,7 +313,7 @@ struct BranchMergeTests {
     @Test("Za základem a červený check se v řádcích poznají")
     func showsBlockedAnswers() {
         let facts = Policy.branchFacts(
-            plan: Policy.mergePlan(of: detail(), commits: commits(1)),
+            proposal: Policy.mergeProposal(of: detail(), commits: commits(1)),
             commits: commits(1),
             status: status(.mergeable, .behind),
             checks: [check("a", .failed), check("b", .passed)]
@@ -330,9 +330,9 @@ struct BranchMergeTests {
     /// nenačtené checky nejsou odpověď o PR.
     @Test("Bez checků a s nenačtenými checky jsou dvě různé odpovědi")
     func separatesEmptyFromUnknown() {
-        let plan = Policy.mergePlan(of: detail(), commits: commits(2))
-        let empty = Policy.branchFacts(plan: plan, commits: commits(2), status: status(), checks: [])
-        let unknown = Policy.branchFacts(plan: plan, commits: commits(2), status: status(), checks: nil)
+        let plan = Policy.mergeProposal(of: detail(), commits: commits(2))
+        let empty = Policy.branchFacts(proposal: plan, commits: commits(2), status: status(), checks: [])
+        let unknown = Policy.branchFacts(proposal: plan, commits: commits(2), status: status(), checks: nil)
 
         #expect(empty[1].answer == "bez checků")
         #expect(unknown[1].answer == "checky se načítají")
@@ -340,43 +340,62 @@ struct BranchMergeTests {
 
     @Test("Nenačtený stav větve řádek nezmate")
     func showsUnknownSyncHonestly() {
-        let plan = Policy.mergePlan(of: detail(), commits: commits(2))
-        #expect(Policy.branchFacts(plan: plan, commits: commits(2), status: nil, checks: []).first?.answer == "zjišťuju")
+        let plan = Policy.mergeProposal(of: detail(), commits: commits(2))
+        #expect(Policy.branchFacts(proposal: plan, commits: commits(2), status: nil, checks: []).first?.answer == "zjišťuju")
         #expect(
-            Policy.branchFacts(plan: plan, commits: commits(2), status: .failed("nic"), checks: [])
+            Policy.branchFacts(proposal: plan, commits: commits(2), status: .failed("nic"), checks: [])
                 .first?.answer == "nevím"
         )
         #expect(
-            Policy.branchFacts(plan: nil, commits: nil, status: nil, checks: nil).first?.text
+            Policy.branchFacts(proposal: nil, commits: nil, status: nil, checks: nil).first?.text
                 == "větev se načítá"
         )
     }
 
-    // MARK: - Plán
+    // MARK: - Návrh a plán
 
     /// Titulek squash commitu je `titulek PR (#číslo)` — **posílá se doslova**, protože bez
     /// `commit_title` si ho GitHub skládá podle nastavení repozitáře, do kterého aplikace nevidí.
     ///
     /// Ověřeno proti skutečnému mergi (`prism-review-sandbox#8`): titulek výsledného commitu byl
     /// přesně to, co šlo v `commit_title`.
-    @Test("Plán nese větev, hlavu, počet commitů i titulek")
+    ///
+    /// **Od #556 je návrh a payload dvojice**: návrh nese titulek **pull requestu**, payload
+    /// titulek **commitu** — a ten se skládá až podle metody. Tvrdí se proto obojí, jinak by se
+    /// dalo rozbít skládání a test by pořád zeleně kontroloval jen fakta o PR.
+    @Test("Návrh nese větev, hlavu a počet commitů, payload z něj titulek")
     func buildsThePlan() throws {
-        let plan = try #require(Policy.mergePlan(of: detail(), commits: commits(3)))
+        let proposal = try #require(Policy.mergeProposal(of: detail(), commits: commits(3)))
 
-        #expect(plan.pullRequest == mine)
-        #expect(plan.head == "issue-465-merge-from-panel")
-        #expect(plan.base == "main")
-        #expect(plan.commits == 3)
-        #expect(plan.headSha == "9c1de02aa1b2c3d4e5f60718293a4b5c6d7e8f90")
+        #expect(proposal.pullRequest == mine)
+        #expect(proposal.head == "issue-465-merge-from-panel")
+        #expect(proposal.base == "main")
+        #expect(proposal.commits == 3)
+        #expect(proposal.headSha == "9c1de02aa1b2c3d4e5f60718293a4b5c6d7e8f90")
+        #expect(proposal.title == "feat: merge own pull request from the panel")
+
+        let plan = proposal.plan(with: .squash)
+        #expect(plan.method == .squash)
         #expect(plan.commitTitle == "feat: merge own pull request from the panel (#465)")
+    }
+
+    /// **Výchozí metoda je squash, i když se o ni nikdo neřekne** (#556) — tak se aplikace chovala
+    /// do #556 a po zavedení pole se nesmí začít chovat jinak.
+    @Test("Návrh bez zadané metody nese squash a nic o repozitáři netvrdí")
+    func defaultsToSquash() throws {
+        let proposal = try #require(Policy.mergeProposal(of: detail(), commits: commits(1)))
+
+        #expect(proposal.defaultMethod == .squash)
+        // `nil` = **nevím**, tedy stav, ve kterém se nabídnou všechny tři metody.
+        #expect(proposal.repository == nil)
     }
 
     @Test("Bez jména větve nebo bez commitů plán nevznikne")
     func refusesToBuildAnIncompletePlan() {
-        #expect(Policy.mergePlan(of: nil, commits: commits(1)) == nil)
-        #expect(Policy.mergePlan(of: detail(), commits: nil) == nil)
-        #expect(Policy.mergePlan(of: detail(head: ""), commits: commits(1)) == nil)
-        #expect(Policy.mergePlan(of: detail(base: ""), commits: commits(1)) == nil)
+        #expect(Policy.mergeProposal(of: nil, commits: commits(1)) == nil)
+        #expect(Policy.mergeProposal(of: detail(), commits: nil) == nil)
+        #expect(Policy.mergeProposal(of: detail(head: ""), commits: commits(1)) == nil)
+        #expect(Policy.mergeProposal(of: detail(base: ""), commits: commits(1)) == nil)
     }
 
     /// Číslo PR se sází **ručně**, ne formátováním: `#4650` není množství a v české locale by

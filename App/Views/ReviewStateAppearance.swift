@@ -79,21 +79,6 @@ enum ReviewStateAppearance {
         }
     }
 
-    /// Barva jednoho dílu proužku reviewerů. Stejná škála jako u stavu, jen o jedno patro níž:
-    /// červená blokuje, oranžová našla, zelená je čistá, šedá nemá co říct.
-    ///
-    /// **Odmítnuté bere `Palette.mint` z téhož důvodu jako u stavu** (#309) — jsou to dvě kresby
-    /// jedné věci (odznak a díl proužku), takže se nesmí lišit ani o odstín.
-    static func color(of outcome: ReviewerShare.Outcome) -> Color {
-        switch outcome {
-        case .blocking: Palette.crit
-        case .findings: Palette.find
-        case .clean: Palette.ok
-        case .dismissed: Palette.mint
-        case .inconclusive: .secondary
-        }
-    }
-
     /// Text odznaku. U nálezů nese i to, kolik jich blokuje — samotné „3 nálezy“ neřeklo,
     /// jestli je mezi nimi ten, kvůli kterému se PR nemerguje.
     static func label(of state: ReviewState, blocking: Int = 0) -> String {
