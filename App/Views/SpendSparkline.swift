@@ -12,12 +12,17 @@ struct SpendSparkline: View {
     let days: [DaySpend]
 
     var body: some View {
+        // **Nejdražší den se hledá jednou, ne u každého sloupce** (nález Copilota): škála je
+        // vlastnost celé řady, ne jednotlivého dne, takže se předává argumentem. S dotazem uvnitř
+        // `height(of:)` to bylo kvadratické v počtu dní — u sedmi je to pár porovnání, ale kresba
+        // se počítá při **každém** průchodu tělem a řada se dá rozšířit jednou konstantou.
+        let peak = days.map(\.spend.cost).max() ?? 0
         HStack(alignment: .bottom, spacing: 3) {
             ForEach(days) { day in
                 UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2)
                     .fill(Palette.accent)
                     .opacity(day.id == days.last?.id ? 1 : 0.45)
-                    .frame(height: height(of: day))
+                    .frame(height: Self.height(of: day, peak: peak))
                     .frame(maxWidth: .infinity)
             }
         }
@@ -31,10 +36,11 @@ struct SpendSparkline: View {
     ///
     /// **Podlaha je jeden bod, ne nula** — i den, ve kterém se neutratilo nic, musí být v řadě
     /// vidět, jinak se nedá spočítat, kolikátý zleva je dnešek.
-    private func height(of day: DaySpend) -> Double {
-        let peak = days.map(\.spend.cost).max() ?? 0
-        guard peak > 0 else { return Self.floorHeight }
-        return max(Self.floorHeight, Self.fullHeight * day.spend.cost / peak)
+    ///
+    /// `peak` je **argument, ne dotaz na `days`**: viz `body`.
+    private static func height(of day: DaySpend, peak: Double) -> Double {
+        guard peak > 0 else { return floorHeight }
+        return max(floorHeight, fullHeight * day.spend.cost / peak)
     }
 
     private static let fullHeight = 26.0
