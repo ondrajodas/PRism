@@ -116,7 +116,11 @@ extension View {
     /// takže se jich netýká. Je to schválně: kdyby se pravidlo psalo jen do `WindowShortcutButtons`,
     /// porušila by ho první zkratka na `Control`u, která by dostala viditelné tlačítko — a poznalo
     /// by se to až tím, že `⌃W` zavře záložku uprostřed psaní.
-    func windowShortcut(_ action: WindowShortcut.Action) -> some View {
+    /// **Bere `nil`** (#515), a je to schválně jedna metoda místo dvou: akce nad pruhem desky
+    /// klávesu mít nemusí (`LaneAction.shortcut`), a `if let` kolem tlačítka by z něj udělal dva
+    /// různé pohledy — SwiftUI by mezi nimi ztratil identitu i fokus. Nulová kombinace je tentýž
+    /// zápis, jakým zkratka ustupuje terminálu o dva řádky níž.
+    func windowShortcut(_ action: WindowShortcut.Action?) -> some View {
         modifier(WindowShortcutModifier(action: action))
     }
 }
@@ -126,10 +130,11 @@ extension View {
 /// Vlastní `ViewModifier`, protože `View` extension se na prostředí zeptat nemůže — a příznak
 /// „terminál má fokus“ jde právě prostředím (viz `EnvironmentValues.terminalFocused`).
 private struct WindowShortcutModifier: ViewModifier {
-    let action: WindowShortcut.Action
+    let action: WindowShortcut.Action?
     @Environment(\.terminalFocused) private var terminalFocused
 
     func body(content: Content) -> some View {
+        guard let action else { return content.keyboardShortcut(nil) }
         let combination = Policy.windowShortcut(action).primary
         let yields = terminalFocused && Policy.shortcutYieldsToTerminal(action, combination)
         return content.keyboardShortcut(yields ? nil : combination.keyboardShortcut)

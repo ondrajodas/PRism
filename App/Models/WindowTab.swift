@@ -101,4 +101,11 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
         case .activity: "Nový PR, výsledek review nebo cizí komentář se objeví tady."
         }
     }
+
+    /// Nápověda u odkazu, který do sekce přepne — `Přepne do sekce Dění`.
+    ///
+    /// **Bydlí to na sekci, ne u odkazu** (dřív na `DashboardDestination`, který odešel s kartami
+    /// v #515): dvě cesty do téže sekce mají mít i stejnou nápovědu. Čte to hlavička bloku `Dění`
+    /// a jeho patka, tedy dvě místa nad jedním cílem.
+    var switchHelp: String { "Přepne do sekce \(title)" }
 }

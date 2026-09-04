@@ -1567,7 +1567,10 @@ struct PullRequestDetailView: View {
                 // Bez záznamu by běh, jehož osa se neuložila (soubory před #203), vypadal jako
                 // nespuštěný — a chip nad tabem by nad ním tvrdil `doběhlo`.
                 record: store.reviewRecord(for: pullRequest.id),
-                running: store.runningReviewers(for: pullRequest.id)
+                running: store.runningReviewers(for: pullRequest.id),
+                // Koho routing nepustil (#518). Bere se z paměti, ne z disku — přeskočení je
+                // odpověď na dnešní pravidlo a dnešní diff (proč, je u `ReviewerRoutingPass`).
+                skipped: store.skippedReviewers(for: pullRequest.id)
             ),
             rerun: store.isReviewing(pullRequest.id)
                 ? nil

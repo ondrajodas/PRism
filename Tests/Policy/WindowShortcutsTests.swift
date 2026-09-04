@@ -37,10 +37,10 @@ struct WindowShortcutsTests {
     /// Počet je **vyjmenovaný, ne „aspoň tolik“** — stejně jako u `SingleWayOutTests`. Nová zkratka
     /// v okně je rozhodnutí, ne přírůstek: má projít úvahou, jestli se s něčím nesrazí a jestli se
     /// nakreslí tam, kde se na ni přijde.
-    @Test("Katalog má právě sedmadvacet akcí")
-    func catalogHasExactlyTwentySevenActions() {
-        #expect(Policy.windowShortcutActions.count == 27)
-        #expect(Policy.windowShortcuts.count == 27)
+    @Test("Katalog má právě osmadvacet akcí")
+    func catalogHasExactlyTwentyEightActions() {
+        #expect(Policy.windowShortcutActions.count == 28)
+        #expect(Policy.windowShortcuts.count == 28)
     }
 
     /// Kombinace, které patří systému nebo scéně nastavení, si okno **nesmí vzít**. `⌘W` je zrovna
@@ -199,6 +199,10 @@ struct WindowShortcutsTests {
             (.itinerary, "⌘1"),
             (.runAllReviews, "⌘⇧R"),
             (.openDraft, "⌘⇧D"),
+            // Holé `⏎` (#515) — deska otevře první PR pruhu `Rozhodnout`. **Jediná kombinace
+            // v katalogu bez modifikátoru**: domácí záložka žádné textové pole nemá, a nad
+            // otevřenou paletou se zkratka zakazuje (`Policy.canOpenFirstOnBoard`).
+            (.openFirstOnBoard, "⏎"),
             (.findInDiff, "⌘F"),
             (.nextSearchHit, "⌘G"),
             (.previousSearchHit, "⌘⇧G"),

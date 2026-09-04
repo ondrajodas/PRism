@@ -1,0 +1,332 @@
+import Foundation
+
+/// Co domácí záložka ukazuje (#515) — **deska pruhů podle mého tahu**.
+///
+/// Nahradila `Dashboard` z #181, a je to výměna otázky, ne přeskládání týchž kusů: karty
+/// odpovídaly na „kolik toho je“, deska odpovídá na „co udělám teď“. Čísla, která nesly karty,
+/// zůstávají v railu (`AppStore.railQueueCount`, `railMineCount`, `activityBadge`) a ve stavovém
+/// řádku (`Policy.summary`) — tedy tam, kde jsou vidět **ze všech obrazovek**, ne jen z téhle.
+///
+/// **Jeden snímek na překreslení.** Deska prochází celý seznam a u vlastních PR se ptá na
+/// předání; getter na jeden pruh by tu práci udělal šestkrát za sebou a byl by to druhý zdroj
+/// pravdy o jedné obrazovce. Ze stejného důvodu je uvnitř i blok `Dění` — tak to bylo
+/// i u `Dashboard` (#443).
+struct Board: Hashable, Sendable {
+    /// Pruhy **v pořadí, ve kterém se kreslí** (`WorkLane.order`), a **všech šest, i prázdné**.
+    ///
+    /// Kreslí se z `visibleLanes`; tenhle úplný seznam zůstává proto, že o něm mluví věta pod
+    /// pozdravem (`Policy.boardSentence`) a počty v ní se **nesmí** řídit tím, co je zrovna
+    /// vidět. Rozřazení do pruhů je tedy pořád tvrzení o celém seznamu — skrývání je až kresba.
+    let lanes: [Lane]
+    /// Blok `Dění` v pravém sloupci. Součást téhož snímku — viz doc komentář typu.
+    let activity: DashboardActivity
+
+    /// Jeden pruh: co v něm leží a co se s tím dá udělat naráz.
+    struct Lane: Hashable, Sendable, Identifiable {
+        let lane: WorkLane
+        /// **Celý** pruh, seřazený podle závažnosti (`Policy.byUrgency`). Strop na kresbu řeší
+        /// `Policy.laneSlice(_:of:expanded:)` — strop je o kresbě, ne o množině (#371).
+        let rows: [QueueEntry]
+        /// Akce nad pruhem. Skládá ji `Policy.laneAction(of:count:)`, takže se počet v hlavičce
+        /// a to, co akce udělá, nemají čím rozejít.
+        let action: LaneAction
+
+        var id: WorkLane { lane }
+        var count: Int { rows.count }
+    }
+
+    /// Pruhy, které se **doopravdy kreslí** — prázdné se od proklikání #515 nezobrazují vůbec.
+    ///
+    /// **Změna proti kresbě**, a je to rozhodnutí nad hotovou obrazovkou: deck kreslil všech šest
+    /// pruhů i s nulou a v `lanes` je tak zapsané dodneška. Prázdný pruh ale nese jedinou
+    /// informaci — „tady nic není“ —, a šest takových rámečků s nulou je pět šestin obrazovky
+    /// utracených za odpověď, o kterou se nikdo neptal.
+    ///
+    /// **Co se tím platí, a je to zapsané, ne přehlédnuté**: deska přestává být stabilní, takže
+    /// „první pruh“ je pokaždé jiný. Proto **zkratka visí na pruhu, ne na pozici**
+    /// (`LaneAction.shortcut` se skládá z `WorkLane`, viz `Policy.laneAction(of:count:)`) — když
+    /// se pruh `Rozhodnout` skryje, `⏎` **nepřevezme** jeho soused; nezaregistruje ji nikdo.
+    /// Kdyby se vázala na pozici, byla by to kolize z #151 a #184, jen v čase.
+    ///
+    /// **A věta na prázdný pruh tím zanikla celá**: `WorkLane.emptyExplanation` odešel, protože
+    /// prázdný pruh se nekreslí, takže by ji nikdo nepřečetl. Co říct, když **není ani jeden**
+    /// pruh, skládá `Policy.boardEmpty(isLoaded:)` — jedna věta o celé desce místo šesti
+    /// o pruzích.
+    var visibleLanes: [Lane] { lanes.filter { $0.count > 0 } }
+
+    /// Není na desce **vůbec nic**?
+    ///
+    /// Vlastnost, ne `isEmpty` nad `visibleLanes` ve view: je to stav, který má **vlastní věty**
+    /// (`Policy.boardEmpty(isLoaded:)`), a ty musí být na jednom místě. „Nic tu není“ a „všechno
+    /// je vyřízené“ jsou dvě různá tvrzení a pravdivé je tady to druhé.
+    var isEverythingDone: Bool { visibleLanes.isEmpty }
+}
+
+/// Akce nad celým pruhem (#515).
+///
+/// **Výčet, ne uzávěr s popiskem**: rozhoduje se u ní trojice *co je na tlačítku · jakou má
+/// klávesu · ptá se potvrzení*, a všechny tři musí vyjít z jednoho místa. Do #515 byla jediná
+/// hromadná akce v okně `Pustit review na vše, co neběželo` v bloku `Co teď`; ta se sem
+/// přestěhovala k pruhu, kterého se týká.
+enum LaneAction: Hashable, Sendable {
+    /// Otevřít první řádek pruhu (`decide`, `merge`). Nic to neutratí a jde to vzít zpět.
+    ///
+    /// **`isPrimary` rozhoduje o klávese, ne o kresbě.** `⏎` smí patřit **jedinému** pruhu —
+    /// dvě tlačítka s jednou kombinací znamenají, že vyhraje to zaregistrované později (#151,
+    /// #184), a poznalo by se to tím, že jedna „nefunguje“. Dostane ji `Rozhodnout`, protože je to
+    /// ten pruh, na který návrh (sekce 45) klávesu kreslí — **ne proto, že by byl první**; první je
+    /// od prvního proklikání #515 `K merge` a má tutéž akci **bez** klávesy.
+    case openFirst(count: Int, isPrimary: Bool)
+    /// Pustit review na všechno, co v pruhu leží (`read`).
+    ///
+    /// **Jediná akce desky, která utratí víc než jednu session** — a proto jediná s potvrzením.
+    case runReviews(count: Int)
+    /// Otevřít každý PR pruhu s rozloženým panelem `Zadání` (`handOff`).
+    case buildPrompts(count: Int)
+    /// Dopsat rozdělané review (`finishReview`) — otevře to nejstarší.
+    case finishDraft(count: Int)
+    /// Tichý pruh: místo akce popisek `nic k udělání`.
+    case quiet
+    /// Prázdný pruh: v hlavičce nestojí nic, věta je v těle.
+    case none
+
+    /// Text tlačítka. `nil` = tlačítko se nekreslí.
+    ///
+    /// **Počet je v popisku u akcí, které pracují s celým pruhem** (`Pustit review na 2`,
+    /// `Sestavit 2 zadání`) — u nich je to to, co se stane. U `Otevřít` je počet naopak jen
+    /// v hlavičce: otevře se **jeden** PR, ať jich v pruhu leží kolik chce.
+    var title: String? {
+        switch self {
+        case .openFirst(let count, _): count == 1 ? "Otevřít" : "Otevřít první"
+        case .runReviews(let count): "Pustit review na \(count)"
+        case .buildPrompts(let count):
+            count == 1 ? "Sestavit zadání" : "Sestavit \(count) zadání"
+        case .finishDraft(let count): count == 1 ? "Dopsat" : "Dopsat nejstarší"
+        case .quiet, .none: nil
+        }
+    }
+
+    /// Popisek místo tlačítka. `nil` = v hlavičce nestojí nic.
+    var note: String? {
+        if case .quiet = self { return "nic k udělání" }
+        return nil
+    }
+
+    /// Klávesová zkratka z katalogu (#441). `nil` = akce klávesu nemá.
+    ///
+    /// **Nejvýš jedna akce na kombinaci**, protože dvě tlačítka s jednou klávesou znamenají, že
+    /// vyhraje to zaregistrované později (#151, #184). Deska proto rozdává tři různé:
+    /// `⏎` pruhu `Rozhodnout`, `⌘⇧R` review a `⌘⇧D` draftu — ty dvě posledně jmenované jsou
+    /// tytéž, jaké měly akce v bloku `Co teď`. `K merge` má `Otevřít` **bez klávesy**, protože
+    /// `⏎` je už rozdané.
+    var shortcut: WindowShortcut.Action? {
+        switch self {
+        case .openFirst(_, let isPrimary): isPrimary ? .openFirstOnBoard : nil
+        case .runReviews: .runAllReviews
+        case .finishDraft: .openDraft
+        case .buildPrompts, .quiet, .none: nil
+        }
+    }
+
+    /// Ptá se ta akce potvrzení?
+    ///
+    /// **Jedině tam, kde se utratí víc než jedna session.** Otevřít záložku nestojí nic a jde to
+    /// vzít zpátky; sestavit zadání taky ne (panel skládá text z toho, co store už má). Je to
+    /// tatáž hranice, podle které má sheet merge a nemá ho label — vratnost, ne složitost.
+    var needsConfirmation: Bool {
+        if case .runReviews = self { return true }
+        return false
+    }
+}
+
+/// Co se kreslí místo pruhů, když není ani jeden (#515).
+///
+/// **Dvě věty, ne jedna**: nadpis se sází jako hlavička bloku a čte se z odstupu, vysvětlení je
+/// pod ním. Skládá je `Policy.boardEmpty(isLoaded:)`, takže „vyřízeno“ a „ještě nenačteno“ mají
+/// jedno místo — a tady se jedině kreslí.
+struct BoardEmpty: Hashable, Sendable {
+    let title: String
+    let explanation: String
+}
+
+/// Kolik řádků pruhu se kreslí a kolik se nevešlo (#515).
+struct LaneSlice: Hashable, Sendable {
+    let rows: [QueueEntry]
+    /// Kolik řádků zbylo pod stropem. `0` = pruh je celý vidět, takže se patka **nekreslí**.
+    let hidden: Int
+}
+
+extension Policy {
+    /// Kolik řádků se z pruhu kreslí (#515).
+    ///
+    /// Pět je z #371 a je to horní hranice toho, co se dá přejet očima. **Tichý pruh má dva**, a
+    /// je to celá jeho kresba spolu se ztlumením: je to jediný pruh, ve kterém se nic nedělá,
+    /// takže nemá plnit obrazovku, na které je šest pruhů pod sebou. Návrh (sekce 45) ho kreslí
+    /// se dvěma řádky ze čtyř.
+    static func laneRowLimit(_ lane: WorkLane) -> Int {
+        lane.isQuiet ? 2 : 5
+    }
+
+    /// Řez pruhu na to, co se nakreslí (#515).
+    ///
+    /// **Rozbaluje se na místě, nepřepíná se do sekce.** Patka pruhu nemá kam vést: pruh míchá
+    /// cizí a vlastní PR, takže žádná sekce railu nemá tutéž množinu — a odkaz na sekci, ve které
+    /// leží něco jiného, je horší než rozbalení. Proto `expanded` a ne `BlockFooter`.
+    static func laneSlice(_ rows: [QueueEntry], of lane: WorkLane, expanded: Bool) -> LaneSlice {
+        let limit = laneRowLimit(lane)
+        guard !expanded, rows.count > limit else { return LaneSlice(rows: rows, hidden: 0) }
+        return LaneSlice(rows: Array(rows.prefix(limit)), hidden: rows.count - limit)
+    }
+
+    /// Akce nad pruhem podle toho, co v něm leží (#515).
+    ///
+    /// **Prázdný pruh akci nedostane** — otevřít první z ničeho ani pustit review na nic není
+    /// akce, je to tlačítko, po kterém se nic nestane. Tichý pruh ji nedostane nikdy.
+    static func laneAction(of lane: WorkLane, count: Int) -> LaneAction {
+        guard !lane.isQuiet else { return .quiet }
+        guard count > 0 else { return .none }
+        return switch lane {
+        case .decide: .openFirst(count: count, isPrimary: true)
+        case .merge: .openFirst(count: count, isPrimary: false)
+        case .read: .runReviews(count: count)
+        case .handOff: .buildPrompts(count: count)
+        case .finishReview: .finishDraft(count: count)
+        case .waiting: .quiet
+        }
+    }
+
+    /// Deska celá (#515) — všech šest pruhů a blok `Dění`.
+    ///
+    /// Bere **plný** seznam, ne zúžený filtrem (#117): domov je tvrzení o tom, co je na tahu, ne
+    /// o tom, co je zrovna vidět v seznamu — tatáž úvaha jako u souhrnu ve stavovém řádku.
+    /// Rozřazení podle autora se dělá **jednou** (`ownership(of:mine:)` na řádek), ne u každého
+    /// pruhu.
+    ///
+    /// - Parameters:
+    ///   - handoff: v jakém stavu je předání na vlastním PR. Uzávěrem, ne mapou: čte se jen
+    ///     u vlastních PR a skládat pro desku kopii všech načtených konverzací při každém průchodu
+    ///     tělem by byla práce za odpověď, kterou nikdo nepřečte (tatáž úvaha jako
+    ///     u `ownPullRequestsAwaitingMove`). Rozřazení z něj čte **jedině `awaitsMove`**
+    ///     (`Policy.lane`) — `stage` se do něj od druhého proklikání #515 nedostane vůbec.
+    ///   - isMergeReady: je vlastní PR bez známé překážky? Taky uzávěrem, a s předfiltrem na
+    ///     straně storu — bez načteného detailu se `mergeOffer` neskládá vůbec.
+    static func board(
+        entries: [QueueEntry],
+        mine: Set<String> = [],
+        handoff: (PRIdentifier) -> HandoffReport = { _ in .never },
+        isMergeReady: (PRIdentifier) -> Bool = { _ in false },
+        activity: [ActivityEvent] = [],
+        lastVisit: Date? = nil,
+        activityEmpty: ActivityEmptyState? = nil
+    ) -> Board {
+        var grouped: [WorkLane: [QueueEntry]] = [:]
+        for entry in byUrgency(entries) {
+            let ownership = self.ownership(of: entry.pullRequest, mine: mine)
+            // U cizího PR se na předání ani na merge neptáme — obojí je otázka o **mojí** větvi
+            // a uzávěr by kvůli ní sáhl na data, která se u cizího PR nenačítají.
+            let lane = lane(
+                of: entry,
+                ownership: ownership,
+                handoff: ownership == .mine ? handoff(entry.id) : .never,
+                isMergeReady: ownership == .mine && isMergeReady(entry.id)
+            )
+            grouped[lane, default: []].append(entry)
+        }
+        return Board(
+            lanes: WorkLane.order.map { lane in
+                let rows = grouped[lane] ?? []
+                return Board.Lane(lane: lane, rows: rows, action: laneAction(of: lane, count: rows.count))
+            },
+            activity: dashboardActivity(activity, since: lastVisit, empty: activityEmpty)
+        )
+    }
+
+    /// Věta pod pozdravem (#515) — `8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`.
+    ///
+    /// **Mluví o pruzích, ne o počtech PR**, protože o tom je celá deska: „osm věcí na tahu“ je
+    /// součet všech pruhů kromě tichého. Čísla, která nesly karty (kolik čeká ve frontě, kolik
+    /// blokuje), zůstávají v railu a ve stavovém řádku.
+    ///
+    /// **Části, které by byly nulou, se nepíšou** — „0 čeká na ostatní“ je hlášení o ničem a
+    /// pozdrav má být krátký. Když není na tahu nic, řekne se to slovem, ne nulou: prázdná deska
+    /// je nejlepší možný stav a nesmí vypadat jako porucha.
+    static func boardSentence(_ board: Board) -> String {
+        let counts = Dictionary(uniqueKeysWithValues: board.lanes.map { ($0.lane, $0.count) })
+        let onMove = board.lanes.filter { $0.lane.isOnMove }.reduce(0) { $0 + $1.count }
+        let waiting = counts[.waiting] ?? 0
+        let merge = counts[.merge] ?? 0
+
+        guard onMove > 0 || waiting > 0 else {
+            return "Nic na tahu — fronta je vyřízená a nic vlastního nečeká."
+        }
+        var parts: [String] = [
+            onMove > 0
+                ? Plural.czech(onMove, one: "věc na tahu", few: "věci na tahu", many: "věcí na tahu")
+                : "nic na tahu"
+        ]
+        if waiting > 0 {
+            parts.append(Plural.czech(
+                waiting,
+                one: "čeká na ostatní",
+                few: "čekají na ostatní",
+                many: "čeká na ostatní"
+            ))
+        }
+        if merge > 0 {
+            parts.append(Plural.czech(
+                merge,
+                one: "se dá mergnout",
+                few: "se dají mergnout",
+                many: "se dá mergnout"
+            ))
+        }
+        // První část začíná velkým písmenem, zbytek ne — je to jedna věta oddělená středníkovými
+        // tečkami, ne tři nadpisy.
+        return parts.joined(separator: " · ").capitalizedFirst
+    }
+
+    /// Co stojí na desce, na které **není ani jeden pruh** (#515).
+    ///
+    /// Prázdné pruhy se od proklikání #515 nekreslí, takže tenhle stav skrývání teprve
+    /// **vyrábí** — do té doby stálo na obrazovce šest rámečků s nulou. Prázdná plocha by z něj
+    /// udělala poruchu, a to je **opačná lež** než ta z tabulky vzorů v `CLAUDE.md`: tam text
+    /// tvrdí víc, než data unesou, tady by mlčení tvrdilo **méně**. „Nic tu není“ a „všechno je
+    /// vyřízené“ jsou dvě různé věty a pravdivá je ta druhá.
+    ///
+    /// **Nenačtená fronta se od vyřízené musí poznat**, a je to ta nebezpečnější strana:
+    /// „všechno vyřízené“ nad seznamem, který se ještě nestáhl, je tvrzení o ničem. Rozhoduje
+    /// o tom `isLoaded`, tedy `AppStore.lastSuccess != nil` — tentýž vstup, jakým se řídí věta
+    /// pod pozdravem (`boardSentence` se za ní vůbec nevolá).
+    static func boardEmpty(isLoaded: Bool) -> BoardEmpty {
+        guard isLoaded else {
+            return BoardEmpty(
+                title: "Načítám frontu",
+                explanation: "Než se seznam stáhne, nedá se o práci tvrdit nic — ani že žádná není."
+            )
+        }
+        return BoardEmpty(
+            title: "Všechno vyřízené",
+            // **Neopakuje větu pod pozdravem.** Ta říká, jak to stojí („nic na tahu“); tady se
+            // říká, co se stane dál — jinak by nad prázdnou deskou stály dvě věty o tomtéž.
+            explanation: "Nový PR k review, rozdělané review i vlastní větev bez překážky se tu objeví jako pruh samy. Zatím není co udělat."
+        )
+    }
+
+    /// Smí si deska vzít `⏎` (#515)?
+    ///
+    /// **Holá klávesa je jediná zkratka desky bez modifikátoru**, takže se musí ustupovat
+    /// překryvu, který si ji bere sám: nad otevřenou paletou ⌘K je zkratka **okna** zakázaná a
+    /// klávesa propadne dál — tentýž vzorec jako u `⌘⏎` v tabu `Zeptat se`
+    /// (`Policy.claimsReturnShortcut`) a u `⎋` nad rozkliknutým commitem (`Policy.canCloseCommit`).
+    static func canOpenFirstOnBoard(count: Int, isPaletteOpen: Bool) -> Bool {
+        count > 0 && !isPaletteOpen
+    }
+}
+
+private extension String {
+    /// Věta začíná velkým písmenem. `localizedCapitalized` by zvětšilo **každé** slovo.
+    var capitalizedFirst: String {
+        guard let first else { return self }
+        return first.uppercased() + dropFirst()
+    }
+}

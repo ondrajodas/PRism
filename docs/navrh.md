@@ -39,10 +39,13 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **44** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **47** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
-stálo 28, kdežto sekcí bylo 30, a u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
-#152, aniž by to číslo zvedlo):
+stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
+#152, aniž by to číslo zvedlo) a u #515 tu stálo 45 nad šestačtyřiceti, protože sekci 46
+přidalo #517 a číslo nezvedlo (nález Copilota). **Sekci 47 přidalo #506** (itinerář review)
+a číslo zvedlo v témže commitu — o číslo se u dávky nehádá, přiděluje ho orchestrátor
+(#537):
 
 ```bash
 grep -c '<section class="section" id="s' docs/navrh.html
@@ -77,9 +80,9 @@ zůstávají i starší popisky fází (`klon`, `čte diff`), které se při imp
 tedy dvě sekce ukazují totéž jinak, poznává se návrh podle toho, že k němu je záznam rozhodnutí
 ve [specifikaci](superpowers/specs/2026-07-31-prism-design.md).
 
-Totéž platí o **dashboardu**: 01 kreslí ten dnešní (`DashboardView` má opravdu kartu `Ve frontě`
-a jeden blok fronty), 21 ten se dvěma frontami podle #331. Obě jsou na stránce *Přehled* pod
-sebou. Stejné páry jsou **02 a 24** a **19 a 25** (#390): 02 a 19 kreslí dnešní obrazovky,
+Totéž platilo o **dashboardu**: 01 kreslila ten první (jedna karta `Ve frontě` a jeden blok
+fronty), 21 ten se dvěma frontami podle #331. Obě jsou na stránce *Přehled* pod sebou —
+a od #515 jsou obě záznamem toho, co v okně **není**, viz odstavec o zrušených obrazovkách níž. Stejné páry jsou **02 a 24** a **19 a 25** (#390): 02 a 19 kreslí dnešní obrazovky,
 24 přidává labely a vyžádané reviewery do pravého panelu a 25 ten panel do tabu *Commity*.
 Od zakreslení nového labelu z nabídky stojí vedle **24** ještě **26**, a je to tentýž vztah, jen
 o krok dál: 24 se mergnutím #392 stala záznamem dneška (nabídka labelů v panelu v okně opravdu
@@ -129,6 +132,16 @@ od #390 vedle sebe 24 a 19 má 25, a záznamem dneška jsou pořád dál — mí
 budoucího stavu neznamená, že se ta dnešní přestane udržovat. Zapsat to jako „vědomě
 zastaralé“ nestačí: zápis ve specifikaci nikdo nečte s obrázkem v ruce, a u #299 se
 takových zápisů sešlo pět.
+
+**Když nová sekce tu starou obrazovku zruší, přebírá po ní i roli záznamu dneška** (#515).
+Sekce **45** (deska podle mého tahu) nekreslí variantu domova vedle karet — karty
+a oba bloky front **odešly**, takže dashboard v sekcích **01** a **21** už v okně nikdo
+nenajde. Překreslit je nejde (obrazovka, kterou kreslily, neexistuje) a smazat je taky ne:
+bez nich se nedá přečíst, proti čemu #515 vzniklo, a #181 s #331 se na ně odkazují. Vyřešilo se
+to **jednou větou navrch v jejich hlavičce** — *tohle odešlo s #515, dnešní Přehled je sekce
+45* — a zbytek obou sekcí platí dál (rail, hlavička okna, stavový řádek, rozřazení podle
+autora). Je to třetí případ vedle „novější se do starší nepřekresluje“ a „záznam dneška se
+překreslit musí“: **zrušená obrazovka se označí, ne přepíše.**
 
 **Totéž platí o tokenech**, jen tam to nikdo neuvidí očima: `--mint` ve světlé větvi se u #309
 v aplikaci ztmavil kvůli kontrastu (`#0E8F80` → `#0C7E71`) a v mockupu zůstala stará hodnota, tedy

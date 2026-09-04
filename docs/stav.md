@@ -7419,6 +7419,144 @@ běhu doopravdy zavolá `ReportFindings` **a** ke všem starým nálezům se vyj
 skutečných bězích — dokud se to nepotvrdí, je vidět `N bez odpovědi`, což je záměrně to, co se
 nedá přečíst jako „čisto“.
 
+## #518 — routing reviewerů podle změněných cest (M16)
+
+Druhé issue skupiny automatu (#517, #518, #519). Do #518 dostal každý reviewer ze sady každý PR:
+`security-review` čítal i PR, který mění jen README, takže se za něj platila session a v okně z něj
+vyšlo `čisté` — tedy tvrzení o kódu, na který se nikdo nedíval z důvodu, kvůli kterému ten reviewer
+existuje.
+
+**Reviewer teď může mít v nastavení repa vzory cest** (tabulka `Routing reviewerů`, řádek
+reviewer → vzory) **a pustí se jen tehdy, když aspoň jeden změněný soubor sedí na aspoň jeden z
+nich**. Rozhoduje o tom `Policy.reviewersToRun(files:rules:)`, tedy čistá funkce nad seznamem
+souborů diffu — ne runner a ne store.
+
+**Reviewer bez pravidla se pouští vždycky**, a je to ta podmínka, na které stojí, že tohle issue
+nemění chování repa, které si routing nenastavilo: bez pravidel se na změněné cesty **ani
+neptáme**, takže se nespustí ani podproces navíc (tvrdí to test). Prázdné pravidlo je totéž jako
+žádné — řádek v tabulce vzniká prázdný, takže by jedno kliknutí revieweera tiše vypnulo; odpovědí
+na „tady tenhle reviewer běžet nemá“ zůstává odebrání ze sady skillů.
+
+**Cesty se berou z pracovní kopie, ne z GitHubu, a rozhodlo o tom měření**: `gh pr view --json
+files` vydá **prvních sto** souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes`
+#141772 — 591 změněných souborů, v odpovědi 100). Routing nad zkráceným seznamem by přeskočil
+revieweera, jehož soubor stojí na sto prvním místě, takže odpovídá nový lokální dotaz
+`RepoCheckout.changedFiles(in:since:)` — úplně, a v cestě review zdarma. `--no-renames` je tam
+schválně: soubor přesunutý **z** hlídané složky se pak v seznamu objeví i pod původní cestou.
+
+**Přeskočený běh je vidět a není čisto.** V tabu `Průběh` má dráhu s kapslí `přeskočeno`, s důvodem
+(`routing: žádný soubor z src/Auth/**, *.env*`), s cenou `0,00 $` (nula je tady fakt, ne odhad —
+session se nespustila) a s tlačítkem `Pustit přesto`. Je to **čtvrtý stav dráhy**, ne varianta
+`nespuštěno`: to mluví o revieweerovi, na kterého ještě nedošlo, kdežto tohle o tom, na kterého se
+nedošlo schválně — tatáž hranice, jakou #383 zavedlo u `inconclusive`. **Ruční spuštění routing
+nefiltruje**, takže `Pustit přesto` je tatáž cesta jako `Pustit znovu` u spadlé session; pravidlo
+v nastavení se tím neruší.
+
+**Rozhoduje se před rozpočtem, zadáním i session.** Routing stojí hned za odhadem jazyka repa (tedy
+tam, kde je sada hotová) a před `canSpendSession` i `prepareIntent` — kdyby stál až v `runSkills`,
+zaplatilo by se u přeskočeného PR zadání (#345, jedna `claude -p` session) a strhl denní rozpočet
+za běh, který se nikdy nerozjel.
+
+**Dvě rozhodnutí, která z zadání neplynula.** Přeskočení se pamatuje **jen v paměti**
+(`AppStore.routingSkips`): je to odpověď na dnešní pravidlo nad dnešním diffem, takže na disku by
+tichounce zestárla, a odvodit ji znovu nic nestojí — cena je restart, po kterém z dráhy zbude
+`nespuštěno`. A **když se nepustí nikdo, nevznikne záznam**: prázdný záznam pro dnešní hlavu
+vyhrává v `Policy.currentRecords` nad tím zastaralým, takže by nálezy z předchozí hlavy z okna
+zmizely právě ve chvíli, kdy se na ně ptám. Řádek zůstane `neběželo` — nic neběželo, takže se nemá
+co tvrdit.
+
+**A jedna brána se kvůli tomu musela rozšířit**, jinak by routing zdražil místo zlevnil:
+`hasCurrentReview` počítá za hotové i to, co routing přeskočil (`Policy.standingSkips`, jedině
+týmiž vzory a nad touž hlavou). Bez toho by přeskočený reviewer neměl nikdy doběhlý běh, hotové
+review by vypadalo jako nedokončené a stačil by komentář pod PR (mění `updatedAt`), aby si automat
+zaplatil celé review znovu.
+
+Testů **5214** v 510 suitách, plný běh zelený (110,4 s, jedno známé `FontMetric`). Nové sady jsou
+dvě: `ReviewerRoutingTests` (výčet rozhodnutí, vzory obojí stranou, platnost přeskočení)
+a `AppStoreRoutingTests` (celá cesta, včetně toho, že se bez pravidel na cesty vůbec neptá);
+k tomu ruční sonda `RoutingRenderProbe` — přeskočená dráha ve čtyřech stavech a tabulka routingu
+v nastavení, obojí ve dvou šířkách a v obou tématech. `SessionToolSetsTests` i `SingleWayOutTests`
+prošly **beze změny** — routing nesahá na povolení ani na cesty ven.
+
+**Z renderu vyšla jedna oprava**: bez tlačítka (běží jiné review) zůstávala pod dráhou věta
+`Pustit ručně jde vždycky:` s dvojtečkou, za kterou nic nestálo. Věta má proto dvě podoby a
+rozhoduje o tom, jestli je vedle ní tlačítko — netvrdí přitom **proč** tam není, to view neví.
+
+**Copilot našel jednu věc a byla reálná**: do stavového řádku šel `error.localizedDescription`,
+jenže `CheckoutError` není `LocalizedError`, takže by tam stálo `The operation couldn't be
+completed. (PRism.CheckoutError error 5.)` — anglická věta o interním čísle případu místo toho,
+co řekl `git`. Hlásí se proto `userDescription` s fallbackem (tentýž vzor jako
+`AppStore+Checks.reason`) a tvrdí to test **z obou stran**: že tam ta věta je a že tam ta
+systémová **není**. Ověřeno vložením regrese.
+
+**Zapsané mezery**: po restartu z přeskočené dráhy zbude `nespuštěno` (viz výš — je to pravda, ne
+ztráta); PR, jehož se netýká nikdo, zůstává v seznamu „na čem ještě neběželo“, takže ho hromadná
+akce nabídne znovu (nic to neutratí, jen připraví pracovní kopii); a **jak dráha vypadá v úzkém
+panelu, se tvrdit nedá** — kapsle, důvod a cena mají jeden řádek, takže se to zkouší kresbou.
+
+## #515 — deska podle mého tahu (M16)
+
+**Domov se přeskládal podle tahu, ne podle autora.** Karty (#181, #371) a dvě fronty podle autora
+(#331) vystřídalo **šest pruhů**: `K merge`, `Dopsat a odeslat`, `Rozhodnout`, `Přečíst`,
+`Předat agentovi`, `Čeká na ostatní` (návrh, sekce 45). Rozhoduje `Policy.lane` a testuje se to
+**vyčerpávajícím výčtem** — 1 040 kombinací a tvrzení, že každý PR skončí v **právě jednom** pruhu.
+
+**Z proklikání se změnily tři věci, tedy proti odsouhlasené kresbě.** Nejsilnější je
+**rozřazení**: mergnutelný vlastní PR je `K merge`, i když na něm něco zbývá předat — projevilo se
+to na schváleném PR se všemi osmi checky zelenými (`keboola/job-queue-daemon#934`), který ležel
+v `Předat agentovi`, protože `pending > 0` rozhodovalo dřív než merge. **Výjimka z toho žádná
+není**: první oprava nechala merge přebíjet stav `changed` (nevyřízená položka, typicky cizí
+odpověď v předaném vlákně), druhé proklikání to zrušilo celé — **když je PR mergnutelný, patří do
+`K merge`, tečka** —, a s tou výjimkou zanikl i `HandoffReport.outranksMerge`. **Informace se tím
+neztrácí a nebylo pro to potřeba nic přidávat** — pilulka `N k předání` i `Prompt →` visí na řádku,
+ne na pruhu, a na stavu předání nezávisí. **Blokující nález zůstává skutečnou překážkou**
+(rozhoduje `mergeOffer`), takže s ním PR mergnutelný není.
+
+**Zbylé věci z proklikání:** `K merge` šlo z čtvrtého
+místa **na první** (a s ním `Dopsat a odeslat` z konce na druhé): osa pořadí přestala být „od cizí
+práce k vlastní“ a je „jak blízko je řádek k tomu, aby míč nebyl u mě“ — mergnout je nejlevnější tah
+a jediný, po kterém řádek z desky rovnou zmizí. A **prázdný pruh se nekreslí vůbec**, kdežto kresba
+i první verze měly všech šest, i s nulou. Zbylé čtyři pruhy si relativní pořadí drží beze změny,
+takže se proti kresbě přesunuly **jen dvě** položky.
+
+**A jedna oprava, která nebyla připomínka, ale špatný překlad pokynu.** Pokyn *„návrhy z průběhu od
+agenta dej jako poslední“* se do zadání dostal jako „poslední pruh na obrazovce“, takže `Předat
+agentovi` jedno kolo stálo na konci desky. Myšlené to bylo jako **poslední pravidlo v rozřazování** —
+tedy to, co už hotové bylo: `Policy.lane` se ptá v pořadí *draft · běžící review · cizí PR ·
+slévatelnost · předání*, a tichý pruh je za tím **fallback**, ne pravidlo. Pruh je proto zpátky na
+pátém místě a pořadí kresby už výjimku nemá. Že „poslední pravidlo“ **není** poslední řádek
+`switch`e, hlídá nové tvrzení: kdyby se předání posunulo za `Čeká na ostatní`, nespadlo by do něj
+nikdy nic.
+
+**Skrývání zaplatilo tři věci a každá má stráž.** Deska přestala být stabilní, takže „první pruh“
+je pokaždé jiný — proto **zkratka visí na pruhu, ne na pozici** (`⏎` u skrytého `Rozhodnout`
+nepřevezme soused; hlídá to výčet přes všech 64 podmnožin pruhů). Vznikl stav, na kterém není ani
+jeden pruh, a ten by jako prázdná plocha vypadal jako porucha — stojí v něm blok `Všechno vyřízené`,
+a **nenačtená fronta se od vyřízené pozná** (`Načítám frontu`). A věta pod pozdravem se s deskou
+nemá čím rozejít, protože skrytí pruhu i vypuštění části věty mají **tutéž podmínku**: nulu.
+
+**Deska je pohled, ne množina.** Rail dál nabízí `Frontu` a `Moje PR` jako seznamy podle autora
+a #332 platí beze změny: hromadné spuštění review, notifikace i automat čtou dál jen cizí PR. Akce
+nad pruhem `Přečíst` je `startReviewsForNotReviewed()`, tedy tatáž množina, jakou store spouštěl
+odjakživa — a je na to tvrzení z obou stran (co pruh ukazuje i co akce pustí).
+
+**Co se rozhodlo jinak než v kresbě** (podrobně v záznamu rozhodnutí): `Sestavit N zadání` otevře
+N záložek s rozloženým panelem `Zadání`, ne N sheetů za sebou (sheet, ve kterém se prompt skládá,
+aplikace nemá); kapsle jako `Copilot · za mainem o 3` v tichém pruhu se nekreslí, protože se
+z nenačteného PR nemají kde vzít; a `⏎` má jedině pruh `Rozhodnout` — `K merge` má tutéž akci bez
+klávesy, aby na jedné kombinaci nebyly dvě; a patka pruhu má stříšku, ne šipku, protože rozbaluje
+na místě.
+
+**Co odešlo**: `Dashboard` a všechny čtyři karty, `DashboardCard`, `DashboardDestination`
+(a s ním osa filtru zapínaná kartou `Blokuje` — odškrtává se v nabídce filtru dál),
+`ReviewerShareOfFindings` s legendou reviewerů (blok `Reviewery` postaví #514), `DashboardBlock`
+(z něj zbyla patka jako `BlockFooter`) a dva gettery podle autora. Blok `Dění` zůstal a strop se mu
+zvedl z pěti na **osm** řádků, protože pravý sloupec drží dva bloky místo tří.
+
+**Brief nahoře dodá #516** — do té doby je nad deskou dnešní pozdrav a věta o pruzích
+(`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`).
+
+**Otevírá** #181 (karty), #331 (dvě fronty na domově — v railu platí dál) a #443 (bloky).
 ## #506 — itinerář review místo stromu souborů (M14)
 
 Levý sloupec záložky PR přestal být strom cest a stal se **dráhou se zastávkami**: *Od minule →

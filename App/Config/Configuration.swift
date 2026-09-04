@@ -326,6 +326,19 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// kterého chci po pushi vždycky celé review, si to má podržet i po přepnutí globálního
     /// defaultu.
     var incrementalAfterPush: Bool?
+    /// Na kterých cestách se který reviewer pouští (#518). Klíčem je skill, hodnotou vzory cest
+    /// (`src/Auth/**`, `*.env*`, `composer.lock`) — jejich význam je u `Policy.pathMatches`.
+    ///
+    /// **Jediný klíč, který globální dvojče nemá, a je to rozhodnutí.** Ostatní override odpovídají
+    /// na otázku, na kterou má smysl odpovědět i globálně („jak dlouho smí běh běžet“), kdežto
+    /// cesty popisují **rozvržení tohohle repa**: `src/Auth/**` v jednom repu neznamená nic
+    /// v druhém. Globální mapa by tedy byla pravidlo, které je skoro všude vedle — a přeskočený
+    /// reviewer je ta nejtišší podoba chybějícího review.
+    ///
+    /// Chybějící klíč a **prázdná mapa** jsou tady totéž („žádné pravidlo“), na rozdíl od `skills`,
+    /// kde je prázdný seznam vlastní odpověď. Důvod je u `ReviewerRouting`: pravidlo, ve kterém
+    /// nezůstal vzor, se pouští, protože prázdná tabulka nastavení je mezistav, ne pokyn.
+    var reviewerPaths: [String: [String]]?
 
     init(
         mode: ReviewMode? = nil,
@@ -334,7 +347,8 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         skills: [String]? = nil,
         blockingCategories: [String]? = nil,
         reviewTimeoutMinutes: Int? = nil,
-        incrementalAfterPush: Bool? = nil
+        incrementalAfterPush: Bool? = nil,
+        reviewerPaths: [String: [String]]? = nil
     ) {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
@@ -343,6 +357,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         self.blockingCategories = blockingCategories
         self.reviewTimeoutMinutes = reviewTimeoutMinutes
         self.incrementalAfterPush = incrementalAfterPush
+        self.reviewerPaths = reviewerPaths
     }
 
     /// Tolerantní ze stejného důvodu jako `GlobalConfig`, a tady na tom záleží nejvíc:
@@ -388,6 +403,11 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         } else {
             incrementalAfterPush = nil
         }
+        // Routing (#518) — **rozbitá hodnota se bere jako „nic jsem neřekl“**, tedy jako u jazyka
+        // nálezů a na opačnou stranu než u režimu. Tady je totiž bezpečná strana ta druhá: chybný
+        // zápis vzorů srazit na „mám pravidlo“ by znamenalo reviewera, který se nikdy nepustí,
+        // a chybějící review je tišší ztráta než review, o které nikdo nežádal.
+        reviewerPaths = try? container.decodeIfPresent([String: [String]].self, forKey: .reviewerPaths)
     }
 }
 
@@ -478,7 +498,11 @@ struct Configuration: Codable, Equatable, Sendable {
             reviewTimeout: Policy.reviewTimeout(
                 minutes: overrides?.reviewTimeoutMinutes ?? global.reviewTimeoutMinutes
             ),
-            incrementalAfterPush: overrides?.incrementalAfterPush ?? global.incrementalAfterPush
+            incrementalAfterPush: overrides?.incrementalAfterPush ?? global.incrementalAfterPush,
+            // Routing (#518) nemá globální úroveň, takže se nic nepřebíjí — prázdná mapa je
+            // „žádné pravidlo“, tedy stav, ve kterém se pouští celá sada jako do #518. Proč
+            // globální mapa nevznikla, je u `RepositoryConfig.reviewerPaths`.
+            reviewerPaths: overrides?.reviewerPaths ?? [:]
         )
     }
 
@@ -541,4 +565,8 @@ struct ResolvedConfig: Equatable, Sendable {
     /// Smí se po pushi ptát jen na přírůstek (#517)? Rozhodnutí z toho skládá
     /// `Policy.reviewScope` — tady je jen brána, kterou si repo přebít smí.
     let incrementalAfterPush: Bool
+    /// Na kterých cestách se který reviewer pouští (#518). Prázdná mapa = žádné pravidlo, tedy
+    /// celá sada jako do #518. Rozhodnutí z toho skládá `Policy.reviewersToRun(files:rules:)`
+    /// — tady je jen surová konfigurace, i s prázdnými řádky z tabulky nastavení.
+    let reviewerPaths: [String: [String]]
 }

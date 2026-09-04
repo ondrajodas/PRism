@@ -347,6 +347,14 @@ final class AppStore {
     /// vrací. Pořadí kopíruje pořadí, ve kterém běhy začaly.
     var reviewTimelines: [PRIdentifier: [ReviewerTimeline]] = [:]
 
+    /// Koho routing na posledním průchodu **nepustil** a proč (#518), per PR.
+    ///
+    /// Žije stejně dlouho jako živá osa vedle: přeskočení je odpověď na dnešní pravidlo a dnešní
+    /// diff, takže na disk nepatří (proč, je u `ReviewerRoutingPass`). Čtou to **dvě** místa —
+    /// dráhy v tabu `Průběh` (`Policy.lanes`) a brána, která automatu brání pustit hotové review
+    /// podruhé (`hasCurrentReview`).
+    var routingSkips: [PRIdentifier: ReviewerRoutingPass] = [:]
+
     /// Je otevřená command palette ⌘K (#184)?
     ///
     /// **Ve store, ne v `@State` okna**, a je to podmínka, ne úklid: detail PR podle toho vypíná
@@ -1279,28 +1287,6 @@ final class AppStore {
         syncActivityVisit()
     }
 
-    /// Klik na kartu nebo patku bloku na dashboardu (#371).
-    ///
-    /// Karta zná jen cíl (`DashboardDestination`), ne rail ani filtr — složit z toho přepnutí je
-    /// práce storu.
-    func show(_ destination: DashboardDestination) {
-        switch destination {
-        case .section(let section):
-            show(section)
-        case .blockingQueue:
-            // Filtr se nastavuje **tou samou cestou jako filtrovací tlačítko** (#117): `setFilter`
-            // srovnává s filtrem i výběr, takže druhá kopie by tuhle jednu věc zapomněla.
-            //
-            // **Ostatní osy zůstávají, jak si je člověk nastavil** — zapíná se jedna osa, ne nový
-            // filtr. Že se ta jedna přepíše, je vědomé: bez ní by karta `Blokuje` skákala na totéž
-            // místo jako `Čeká na mě`.
-            var updated = filter
-            updated.onlyBlocking = true
-            setFilter(updated)
-            show(.queue)
-        }
-    }
-
     // MARK: - Záložky (#180)
 
     /// Otevře PR jako záložku a přepne se na ni. Otevřený PR se **neotevírá podruhé** — kliknutí
@@ -1429,52 +1415,46 @@ final class AppStore {
         lastSuccess == nil ? nil : visibleQueuePullRequests.count
     }
 
-    /// Podklad pro dashboard (#181). Počítá se **z paměti store**, žádné nové čtení z disku.
+    /// Podklad pro **desku** na domácí záložce (#515, dřív `Dashboard` z #181). Počítá se
+    /// **z paměti store**, žádné nové čtení z disku.
     ///
-    /// Od #331 nese i kartu `Moje PR`, takže dovnitř jdou i moje loginy, cesta k načtené konverzaci
-    /// a to, jestli se vlastní PR vůbec sledují — a od #443 i blok `Dění` se záznamem, značkou
-    /// poslední návštěvy a důvodem prázdna. Všechno z paměti, jako zbytek.
-    var dashboard: Dashboard {
-        Policy.dashboard(
-            pullRequests: pullRequests,
-            records: reviewRecords,
-            drafts: drafts,
-            categories: Set(configuration.global.blockingCategories),
-            since: Calendar.current.date(byAdding: .day, value: -7, to: time.now),
+    /// Jeden snímek na překreslení: deska prochází celý seznam, u vlastních PR se ptá na předání
+    /// a na merge, a v témže snímku skládá blok `Dění`. Getter na jeden pruh by tu práci udělal
+    /// šestkrát za sebou a byl by to druhý zdroj pravdy o jedné obrazovce.
+    var board: Board {
+        Policy.board(
+            entries: boardEntries,
             mine: ownLogins,
-            // Uzávěr, ne mapa všech načtených konverzací: dashboard se ptá jen na vlastní PR
-            // a skládat pro něj kopii celé diskuze při každém překreslení je práce navíc.
-            conversation: conversation(for:),
-            // Razítka předání a hlavy PR (#334): karta `Moje PR` počítá totéž, co odznak v railu,
-            // takže musí dostat tytéž vstupy — jinak by nad jedním seznamem stála dvě čísla.
-            handoff: handoff(for:),
-            head: head(of:),
-            tracksOwnSource: tracksOwnPullRequests,
-            // Dění (#443) — pět nejnovějších řádků do bloku v pravém sloupci. Z **paměti** a v témže
-            // snímku: záznam i značka už v store leží kvůli sekci v railu, takže se pro dashboard
-            // nic nedotahuje. Značka jde dovnitř jako vstup — posouvá ji jedině `syncActivityVisit()`.
+            // Kolik zbývá předat (#334) — **tatáž funkce**, ze které čte odznak v railu, pilulka
+            // v řádku i panel `Zadání`. Uzávěrem, ne mapou: čte se jen u vlastních PR.
+            handoff: { self.handoffReport(for: $0) },
+            // Je vlastní PR bez známé překážky (#515)? Předfiltr je na straně storu — bez
+            // načteného detailu se `mergeOffer` neskládá vůbec.
+            isMergeReady: { self.isMergeReadyForLane($0) },
+            // Dění (#443) — osm nejnovějších řádků do bloku v pravém sloupci. Z **paměti**
+            // a v témže snímku: záznam i značka už v store leží kvůli sekci v railu. Značka jde
+            // dovnitř jako vstup — posouvá ji jedině `syncActivityVisit()`.
             activity: activityEvents,
             lastVisit: activityVisitSnapshot,
             activityEmpty: activityEmptyState
         )
     }
 
-    /// Fronta na dashboardu (#181) — **cizí PR** seřazené podle závažnosti (#332).
+    /// Řádky pro desku (#515) — **celý** seznam, cizí i vlastní, seřazený až v `Policy`.
     ///
-    /// Ne zúžené filtrem, ze stejného důvodu jako `dashboard` výš: dashboard je tvrzení o tom,
-    /// co ve frontě je, ne o tom, co je zrovna vidět. Vlastní PR má vedle vlastní blok
-    /// (`dashboardOwnPullRequests`) — do #332 byl v obou.
-    var dashboardQueue: [QueueEntry] {
-        Policy.byUrgency(
-            queuePullRequests.map {
-                QueueEntry(
-                    pullRequest: $0,
-                    state: reviewState(for: $0.id),
-                    row: queueRow(for: $0.id),
-                    hasDraft: hasDraft($0.id)
-                )
-            }
-        )
+    /// Ne zúžený filtrem (#117): domov je tvrzení o tom, co je na tahu, ne o tom, co je zrovna
+    /// vidět v seznamu. Do #515 to byly **dva** gettery podle autora (`dashboardQueue`,
+    /// `dashboardOwnPullRequests`); deska je skládá do pruhů, takže rozřazení podle autora
+    /// proběhne uvnitř `Policy.board` jednou na řádek.
+    var boardEntries: [QueueEntry] {
+        pullRequests.map {
+            QueueEntry(
+                pullRequest: $0,
+                state: reviewState(for: $0.id),
+                row: queueRow(for: $0.id),
+                hasDraft: hasDraft($0.id)
+            )
+        }
     }
 
     /// Checky na PR (#209), klíčované PR. Prázdné pole = načetlo se a žádné nejsou; chybějící
@@ -2183,7 +2163,7 @@ final class AppStore {
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         //
         // **Tady se zapisuje jedině při změně, a je to výjimka z pravidla, ne nedůslednost**
-        // (#421). Zbylých sedmatřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
+        // (#421). Zbylých dvaačtyřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
         // hodnoty `@Observable` nehlásí, takže je `if` navíc jen mrtvá váha
         // (`PollObservationTests`). Jenže suprese stojí na tom, že se ty dvě hodnoty dají
         // **porovnat** — a `DiffSearchState` je `@Observable` **třída**, takže
@@ -2242,6 +2222,12 @@ final class AppStore {
         // Běžící review si osu drží: `reviewTasks` je pravda o tom, co ještě běží, a jeho
         // události by se jinak zapisovaly do mapy, ze které je někdo právě vyhodil.
         reviewTimelines = reviewTimelines.filter {
+            wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
+        }
+        // Přeskočení routingem (#518) se uklízí **s osou**, ne zvlášť: je to druhá polovina téže
+        // pravdy o posledním průchodu („tenhle běžel, tenhle se nepustil“). Kdyby zbylo jen jedno
+        // z toho, tvrdil by tab `Průběh` o vypadlém PR polovinu.
+        routingSkips = routingSkips.filter {
             wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
 

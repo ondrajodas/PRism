@@ -430,6 +430,29 @@ struct GitRepoCheckout: RepoCheckout {
         return TextLines.nonEmpty(output).map(String.init)
     }
 
+    /// Cesty, které PR mění (#518). **Trojtečka**, jako všude jinde v repu: od společného předka,
+    /// takže se do seznamu nedostane to, co se mezitím slilo do základní větve.
+    ///
+    /// `--no-renames` a proč zrovna `git`, je u protokolu. Prázdný `base` se **neptá** — `git diff
+    /// ...HEAD` by porovnával s prázdným jménem, tedy se syntaktickou chybou, a routing by z toho
+    /// dostal prázdný seznam, který nepřeskočí nikoho jedině proto, že se selhání nepoznalo.
+    func changedFiles(in worktree: URL, since base: String) async throws -> [String] {
+        // **Prázdný základ vyhazuje, netváří se jako prázdný diff.** `git diff ...HEAD` je platný
+        // příkaz (prázdná strana rozsahu je `HEAD`), takže by odpověděl nulovým kódem a prázdným
+        // výpisem — tedy stavem, který routing bere jako „cesty neznáme, pusť všechno“. To je
+        // sice bezpečná strana, ale ze špatného důvodu: nevědět proti čemu diffovat je porucha,
+        // ne diff bez souborů. `commitNotFound` proto, že to je přesně ta věta — commit, který
+        // k odpovědi potřebujeme, nemáme.
+        guard !base.isEmpty else { throw CheckoutError.commitNotFound(base) }
+        let output = try await run([
+            "-C", worktree.path(percentEncoded: false),
+            "diff", "--name-only", "--no-renames", "\(base)...HEAD",
+        ])
+        // Tatáž úvaha jako u `trackedFiles`: `core.quotePath` řídicí znaky ve jménech odcituje,
+        // takže dělení po řádcích jméno souboru rozseknout nemůže.
+        return TextLines.nonEmpty(output).map(String.init)
+    }
+
     /// Odpověď nese **návratový kód**, ne výstup: `git merge-base --is-ancestor` nic nevypisuje
     /// a odpovídá `0` (je předkem), `1` (není) a čímkoli jiným (neznámý commit, rozbitý strom).
     ///

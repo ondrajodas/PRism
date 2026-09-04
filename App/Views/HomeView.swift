@@ -13,7 +13,7 @@ struct HomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Dashboard a dění si hlavičku kreslí samy, takže nad nadpisem nemá co stát prázdný
+            // Deska a dění si hlavičku kreslí samy, takže nad nadpisem nemá co stát prázdný
             // pruh s linkou. Návrh v nich žádný nemá a v okně to byl řádek, který nic neříkal.
             if !store.railSection.drawsOwnHeader {
                 toolbar
@@ -53,9 +53,9 @@ struct HomeView: View {
     @ViewBuilder private var content: some View {
         switch store.railSection {
         // Uzávěr, ne odkaz `store.openTab(_:)`: od #409 bere `openTab` i tab, na kterém se má PR
-        // otevřít, a odkaz na metodu s výchozím parametrem se ve Swiftu složit nedá. Dashboard tab
-        // nejmenuje — karta vede na PR, ne do jeho záložky.
-        case .overview: DashboardView(store: store, open: { store.openTab($0) })
+        // otevřít, a odkaz na metodu s výchozím parametrem se ve Swiftu složit nedá. Deska tab
+        // nejmenuje — řádek vede na PR, ne do jeho záložky.
+        case .overview: BoardView(store: store, open: { store.openTab($0) })
         case .queue: PullRequestListView(store: store, scope: .queue)
         // Tentýž seznam nad druhou množinou (#331) — filtr, řazení i detail se použijí beze
         // změny. Druhé view by znamenalo dvě podoby jednoho řádku.
