@@ -371,8 +371,9 @@ code {
    odznakem. Nese to proto pruh: **tentýž prvek, kterým se na hraně řádku fronty (`.qrow .stripe`)
    značí stav**, jen svisle a o bod užší, protože v railu se nekříží s ničím.
 
-   `::before` na `.ri.on`, ne vlastní element: rail se v dokumentu kreslí ve dvaceti sekcích,
-   takže by se element musel dopsat do všech — a je to dekorace jedné položky, ne kus obsahu.
+   `::before` na `.ri.on`, ne vlastní element: rail se v dokumentu kreslí v **jedenácti**
+   sekcích (změřeno grepem na `class="rail`, ne odhadnuto), takže by se element musel dopsat do
+   všech — a je to dekorace jedné položky, ne kus obsahu.
 
    **Půl bodu v `left` je počítané, ne roztřesené**: pruh má ležet na levé hraně railu, `.ri` je
    32 bodů vystředěných v **51** (52 minus pravý obrys railu), takže po stranách zbývá 9,5.
@@ -1964,8 +1965,9 @@ footer.end {
    nepozná — odznak je 24 × 18 na railu širokém 52.
 
    Vlastní třídy, ne `.dock-mirror > .rail`: ta kreslí rail jako **zrcadlo doku** vedle odstavce
-   a nese jeho odsazení i `overflow: hidden`; tady stojí rail sám za sebe a odznak z něj má
-   koukat ven. */
+   a nese jeho odsazení; tady stojí rail sám za sebe. Odsazení kolem výřezu je **rezerva, ne
+   nutnost** — odznak i s obtahem končí 2 body před hranou railu (poznámka 183), takže z něj
+   nekouká; s `zoom: 2` je ale rám o dva body od textu pod ním a to je málo. */
 .s50-zoom { zoom: 2; display: inline-block; padding: 7px 9px 7px 0; }
 .s50-rail {
   box-sizing: border-box; width: 52px; height: 200px;
@@ -4884,7 +4886,7 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
   <!-- ====================================================================================
        SEKCE 50 — Odznak v railu do rohu a pruh aktivní položky
        Rail je chrom okna, ne obrazovka, takže tahle sekce **nepřekresluje** žádnou z těch
-       předchozích: mění se jedno pravidlo v CSS railu a projeví se ve všech dvaceti sekcích,
+       předchozích: mění se jedno pravidlo v CSS railu a projeví se ve všech jedenácti sekcích,
        které rail kreslí. Sekce sama drží jen výřez, srovnání s dneškem a důvody.
        ==================================================================================== -->
   <section class="section" id="s50">
@@ -5060,8 +5062,9 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
             <!-- Odznak s počtem neviděných tady **je**, a je to změna proti prvnímu zákresu
                  téhle sekce (sekce 50). Do té doby se na aktivní sekci nekreslil, protože by
                  ikonu překryl (poznámka 95); s odznakem v rohu a pruhem na hraně railu ten důvod
-                 odpadl. Čtyřka je tatáž hodnota, jakou má nadpis bloku (`Dnes · 4 nové`) —
-                 nepřečtené v celém záznamu, ne v nakreslených řádcích. -->
+                 odpadl. Čtyřka tu sedí s nadpisem dne (`Dnes · 4 nové`) náhodou: nadpis počítá
+                 nepřečtené **v tom dni**, odznak v **celém záznamu**, takže přes půlnoc se ta dvě
+                 čísla rozejdou. -->
             <div class="ri on" title="Dění — co se stalo na pull requestech">◷<span class="badge">4</span></div>
             <div class="sep"></div>
             <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>

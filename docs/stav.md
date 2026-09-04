@@ -8102,3 +8102,33 @@ teď leží pruh, takže by vzorek na řádcích aktivní položky vydal akcent 
 „obsah“ jevil celý zbytek řádku. A **tolerance u washe aktivní položky je poloviční** — ve světlém
 režimu je od `Palette.line` jen 0,032 daleko, takže se do měřeného rámu připočítával obrys railu
 i oddělovač a rám vycházel přes celou výšku railu.
+
+**Copilot k tomuhle PR nedoběhl a je to neověřená mezera** (2026-09-04). Job běžel, ale spadl na
+**prvním** volání API — `Resource not accessible by integration` při `Fetching PR metadata` — a bylo
+to tak u **čtyř různých větví** (#526, #542, #491 dvakrát), tedy repo-wide, ne na tomhle diffu.
+Vyžádání se opakovalo třikrát, pokaždé stejně. Je to **třetí** známá příčina „Copilot encountered
+an error“ vedle velikosti `CLAUDE.md` a spotřebovaného requestu, a nově zapsaná
+v [`docs/github-cli.md`](github-cli.md).
+
+**Místo něj proběhla druhá vlastní revize** (subagent nad `git diff main...HEAD`) a našla čtyři
+reálné věci, které do PR přišly opravené:
+
+- **Nadpis dne a odznak v railu nejsou totéž číslo.** README i komentář v sekci 27 tvrdily, že jsou —
+  nadpis počítá nepřečtené **za ten den** (`Policy.dayNote`), odznak za **celý záznam**
+  (`Policy.unreadActivity`). Přes půlnoc se rozejdou. Do #526 to nevadilo, protože ta dvě čísla
+  nestála vedle sebe; tenhle diff je poprvé postavil na jednu obrazovku.
+- **Sedm míst v repu pořád tvrdilo „odznak se na aktivní sekci nekreslí“** — včetně tabulky `Policy`
+  v `architektura.md`, kde stála **neexistující signatura** `activityBadge(unread:isActive:)`.
+  Opraveno jako třída, ne výskyt.
+- **„Rail se kreslí ve dvaceti sekcích“ byl odhad**; grepem je jich **jedenáct**.
+- **Dvě tvrzení v `RailBadgeTests` nemohla spadnout** (`rightmost.count == box.height` je identita,
+  `touching > 0` tautologie nad maximem). Zůstalo to jediné nosné, `touching < box.height − 2`.
+
+A jedna mezera se zavřela testem: tvrzení **„klikací plocha se rozšířit nesmí“** stálo jen
+v komentáři, přitom visí na **pořadí modifikátorů** (`.frame` za `.buttonStyle`). Hlídá ho teď stráž
+nad zdrojákem (`SidebarRailTests.widensTheRowButNotTheButton`, kód bez mezer podle #490/#550);
+ověřená vložením regrese — s rámem 52 uvnitř labelu padne i test o šířce ikon.
+
+**Vyčnívající roh odznaku už není klikatelný**, a je to důsledek, ne opomenutí: klikací plocha
+zůstává rám tlačítka, protože jinak by sekci přepínal klik do prázdna vedle ikony. Odznak je údaj,
+ne ovládání.

@@ -522,8 +522,8 @@ extension ActivityFeedTests {
         #expect(days[2].note == nil)
     }
 
-    /// Počet nepřečtených patří do **nadpisu bloku**, protože na aktivní položce railu se odznak
-    /// nekreslí — a je to počet **za ten den**, ne za celý záznam.
+    /// Počet nepřečtených v nadpisu dne je **za ten den**, ne za celý záznam — a od #526 to je
+    /// jiné číslo než odznak v railu, který svítí i na aktivní sekci a počítá celý záznam.
     @Test("Nadpis bloku nese počet nepřečtených toho dne")
     func countsUnreadPerDay() {
         var calendar = Calendar(identifier: .gregorian)

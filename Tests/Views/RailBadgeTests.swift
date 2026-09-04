@@ -78,27 +78,31 @@ struct RailBadgeTests {
         #expect(box.right + 2 < railWidth - 1, "odznak sahá na \(box.right + 2)")
     }
 
-    /// **Nic ho neořezává** (#483). Rail není `ScrollView` ani `clipShape`, takže `overlay` mimo
-    /// plochu rodiče přežije — jenže to je vlastnost hierarchie kolem, ne tohohle view: kdyby se
-    /// nad rail dostal ořezávající předek, odznak by přišel o pravý sloupec a v kódu by se to
-    /// nezměnilo nikde.
+    /// **Nic ho neořezává na rámu tlačítka** (#483), a je to přesně to místo, kde by se to stalo:
+    /// řádek položky je 52 bodů, tlačítko v něm 34 a odznak z těch 34 od #526 **vyčnívá**. Kdyby
+    /// nad rám tlačítka přišel ořezávající předek (`clipShape`, `ScrollView`, `.clipped()`),
+    /// uřízne se odznak potichu a v kódu se nezmění nic.
+    ///
+    /// **Ořez na hraně railu tahle sada netvrdí, protože nastat nemůže** — odznak i s obtahem končí
+    /// na 49 z 52, viz test výš. Uřízl by se jedině na 43, tedy na rámu tlačítka.
     ///
     /// Pozná se to podle **pravé hrany**: kapsle s poloměrem 5 dosáhne na svůj nejpravější sloupec
-    /// jen kolem svislého středu, kdežto uříznutá kapsle má tu hranu svislou, takže na ni dosáhne
-    /// **každý** řádek. Šířka řádku na to neodpovídá — číslo uvnitř odznaku z něj bere červené body
-    /// uprostřed, takže by nejužší řádek měřilo písmo.
+    /// jen kolem svislého středu, kdežto uříznutá má tu hranu svislou, takže na ni dosáhne **každý**
+    /// řádek. Šířka řádku na to neodpovídá — číslo uvnitř odznaku z něj bere červené body uprostřed,
+    /// takže by nejužší řádek měřilo písmo.
     @Test("Odznak nikdo neořezává")
     func clipsNothingOffTheBadge() throws {
         let shot = try shot(dark: true, queueCount: 5)
         let box = try #require(shot.badgeBox, "odznak se nenakreslil")
         let rightmost = shot.rightmostColumns(matching: shot.tokens.crit, in: box)
 
-        #expect(rightmost.count == box.height, "řádků je \(rightmost.count), výška \(box.height)")
-        let touching = rightmost.count { $0 == box.right }
         // Naměřeno: **8 řádků ze 14** dosáhne na nejpravější sloupec (poloměr 5 nechá rovné 4 a
         // vyhlazení k nim přidá po dvou). Uříznutá hrana by dala všech 14, takže je práh
         // o dva řádky pod výškou — mezera je 8 proti 12, ne bod.
-        #expect(touching > 0, "na pravý okraj nedosáhl žádný řádek — \(rightmost)")
+        //
+        // `touching > 0` se netvrdí: `box.right` je z definice maximum přes shodné body, takže by
+        // to byla tautologie. Že se odznak vůbec nakreslil, tvrdí `#require` výš.
+        let touching = rightmost.count { $0 == box.right }
         #expect(touching < box.height - 2, "pravá hrana je svislá, tedy uříznutá — \(rightmost)")
     }
 
@@ -225,6 +229,9 @@ struct RailBadgeTests {
             let stripe = try #require(shot.stripeBox, "\(section): pruh se nenakreslil")
             let painted = shot.countInEdgeColumn(matching: shot.tokens.accent)
 
+            // Naměřeno **přesně** `2 × výška` (34 bodů na 17 řádcích): pruh má ostré svislé hrany,
+            // takže se na nich nic nevyhlazuje. Tolerance 4 je tedy rezerva na vyhlazení zaoblených
+            // konců, ne mez měřidla — dvě položky by daly dvojnásobek, tedy 68.
             #expect(abs(painted - 2 * stripe.height) <= 4, "\(section): akcentu na hraně \(painted)")
         }
     }
@@ -360,12 +367,16 @@ struct RailBadgeTests {
         /// Pruh aktivní sekce: akcent **na hraně railu**, tedy v prvních čtyřech sloupcích. Užší
         /// výřez než celá bitmapa je podmínka, ne úspora: v témž akcentu se kreslí i glyf aktivní
         /// položky, takže by obálka nad celým railem změřila ikonu.
-        var stripeBox: Box? { box(matching: tokens.accent, columns: 0..<4) }
+        var stripeBox: Box? { box(matching: tokens.accent, columns: Self.edge) }
+
+        /// Výřez hrany railu. Pruh je 2 body široký; čtyři jsou proto, aby se ve výřezu poznalo
+        /// i to, že se rozšířil — a pořád je to daleko od glyfu, který začíná na 18.
+        static let edge = 0..<4
 
         func countInEdgeColumn(matching color: Rgb) -> Int {
             var found = 0
             for row in pixels {
-                for (x, pixel) in row.enumerated() where x < 4 && pixel.distance(to: color) < 0.04 {
+                for (x, pixel) in row.enumerated() where Self.edge.contains(x) && pixel.distance(to: color) < 0.04 {
                     found += 1
                 }
             }

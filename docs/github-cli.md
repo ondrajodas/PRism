@@ -63,13 +63,43 @@ nálezy** pod hlavičkou, že nové komentáře nejsou.
 ### Když nedoběhne vůbec
 
 Do review napíše jen „Copilot encountered an error and was unable to review this pull request“
-a příčina je vidět **jen v logu akce**. Jsou na to dvě známé příčiny a **pozná se to podle toho,
-jestli job vůbec běžel**:
+a příčina je vidět **jen v logu akce**. Jsou na to tři známé příčiny a první dvě se poznají podle
+toho, **jestli job vůbec běžel**:
 
-- **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
+- **Job běžel a spadl uprostřed** → velikost `CLAUDE.md` ([záznam
   rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
+- **Job běžel a spadl na prvním volání API** → botovi vzalo přístup k pull requestům, viz hned níž.
+
+### Když botovi vezme přístup k PR (2026-09-04, PR #566)
+
+Třetí příčina, a od těch dvou se liší tím, že **`CLAUDE.md` s ní nemá nic společného**: job doběhne
+za **půl minuty** a spadne dřív, než se k instrukcím vůbec dostane. V logu kroku *Processing Request
+(Linux)* stojí:
+
+```
+Analyzing ondrajodas/PRism PR #566, request-id …
+Fetching PR metadata for ondrajodas/PRism#566
+HttpError: Resource not accessible by integration - …/rest/pulls/pulls#get-a-pull-request
+```
+
+Pozná se to **ze dvou věcí naráz** a obojí je potřeba, protože samotný `failure` vypadá jako první
+příčina:
+
+```bash
+# 1) Padá to všem PR, ne jednomu — pět běhů za sebou, různé branche, všechny `failure`.
+gh api "repos/{owner}/{repo}/actions/runs?per_page=5" \
+    --jq '.workflow_runs[] | "\(.id) \(.name) \(.status) \(.conclusion) \(.created_at)"'
+# 2) A v logu je `Resource not accessible by integration` na **prvním** volání API.
+gh api repos/{owner}/{repo}/actions/runs/<id>/logs > /tmp/copilot.zip
+unzip -o -q /tmp/copilot.zip -d /tmp/copilotlog && grep -h 'HttpError' /tmp/copilotlog/*/*.txt
+```
+
+**Vyžádat znovu nepomáhá** a **není to nic v repu** — je to oprávnění GitHub App
+`copilot-pull-request-reviewer`. Když to nastane, **kontrola prostě neproběhla**: hlásí se to jako
+**neověřená mezera** a PR se nemerguje s větou „Copilot nic nenašel“, protože Copilot se k diffu
+nedostal.
 
 ### Když se request spotřebuje mrtvým jobem
 

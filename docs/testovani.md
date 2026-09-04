@@ -425,7 +425,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Nepřečtené a bloky: **bez značky je nepřečtené všechno** (opačně než u konverzace — je u toho
   napsané proč), pruh `Tady jsem skončil` se kreslí před **první už viděnou** položkou a bez novinek
   se nekreslí vůbec, den se jmenuje `Dnes` / `Včera` / datem a počet v nadpisu je **za ten den**, ne
-  za celý záznam. Odznak sekce mlčí nad nulou **i na aktivní sekci**.
+  za celý záznam. Odznak sekce mlčí nad nulou — a od #526 už **ne** na aktivní sekci: tam svítí,
+  takže nadpis dne a odznak v railu jsou **dvě různá čísla** (den proti celému záznamu).
 
   `AppStore` proti skutečnému `ActivityLog`u a `AnnouncedPullRequests` nad dočasnou složkou
   (`AppStoreFeedTests`, 18 testů): že **vypnuté notifikace zápis nezastaví** (banner nedorazí, řádek

@@ -29,8 +29,10 @@ struct ActivityFeedDay: Identifiable, Hashable, Sendable {
     /// Co stojí v nadpisu za tečkou: **počet nepřečtených** v tom dni, a když žádné nejsou, celé
     /// datum u relativních titulků. `nil` = nic.
     ///
-    /// Počet patří do nadpisu, ne k odznaku v railu: na **aktivní** položce railu se odznak
-    /// nekreslí (poznámka 95 v návrhu), protože by v tomhle railu překryl ikonu.
+    /// Počet patří do nadpisu, i když odznak v railu od #526 svítí i na aktivní sekci: nadpis
+    /// počítá nepřečtené **v tom dni**, odznak v **celém záznamu**. Přes půlnoc se ta dvě čísla
+    /// rozejdou, a je to tak správně — každé odpovídá na jinou otázku. (Do #526 tu stálo, že na
+    /// aktivní položce se odznak nekreslí; ten důvod odpadl s pruhem na hraně railu.)
     let note: String?
     let rows: [ActivityFeedRow]
 }

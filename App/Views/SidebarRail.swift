@@ -149,6 +149,10 @@ struct SidebarRail: View {
             RoundedRectangle(cornerRadius: 1)
                 .fill(.tint)
                 .frame(width: 2, height: 18)
+                // Stav už nese `accessibilityAddTraits(.isSelected)` na tlačítku, takže je pruh
+                // **kresba téhož**, ne druhý prvek. Tentýž pruh na hraně řádku ve
+                // `FindingTableRowView` je schovaný stejně.
+                .accessibilityHidden(true)
         }
     }
 
@@ -166,6 +170,11 @@ struct SidebarRail: View {
     /// spodní hrana. Sedmi body vpravo zbývá k pravé hraně railu ještě 2 body, takže se pořád
     /// kreslí uvnitř těch 52 — a **nic ho neořezává**: rail není `ScrollView` ani `clipShape`
     /// (#483), takže `overlay` mimo plochu rodiče přežije. Je to na to test v bitmapě, ne úvaha.
+    ///
+    /// **Vyčnívající roh odznaku už není klikatelný, a je to důsledek, ne opomenutí.** Klikací
+    /// plocha zůstává rám tlačítka (34 × 30), protože kdyby se rozšířila na řádek, přepínal by sekci
+    /// klik do prázdna vedle ikony. Odznak je **údaj, ne ovládání** — cíl kliknutí je ikona a ta je
+    /// od #526 celá vidět, což je přesně to, co se opravovalo.
     ///
     /// Rozměry jsou z CSS doslova: obsah **14 × 14**, odsazení 3 na stranu, obtah 2 barvou railu
     /// (`--panel-2`), poloměr 7 zvenčí a 5 zvnitřku (CSS obtah poloměr zmenšuje). Vyjde z toho

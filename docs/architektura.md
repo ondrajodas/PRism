@@ -5665,7 +5665,8 @@ Dvě věci, které se tím ověřují a z kódu je vidět nejsou, protože o nic
 
 Odznak s počtem u sekce railu měl do #366 **dvě odchylky od návrhu naráz** a obě z kódu vypadaly
 jako záměr: barvu (`.tint`, tedy fialový akcent) a polohu (`offset(x: 6, y: -2)`, tedy 6 bodů za
-rámem ikony). Návrh (`.rail .ri .badge`) má červený odznak zarovnaný **s pravou hranou rámu**.
+rámem ikony). Návrh (`.rail .ri .badge`) měl tehdy červený odznak zarovnaný **s pravou hranou
+rámu**; od #526 má `right: -7px`, tedy roh — viz sekce níž.
 
 - **`--crit`, ne akcent.** Akcent v tomhle okně znamená „tady jsi“ — `.ri.on` je z něj celý —,
   takže odznak v téže barvě neříkal nic navíc; červená je „je co dělat“, což počet ve frontě je.
@@ -9195,7 +9196,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.isReported(_:on:)`, `Policy.activityKind(of:isReReview:)` | Brána dění (#414): o čem se **hlásí vůbec** — tatáž pravidla jako u notifikací (#332), lámaná podle druhu. **Jediné místo**, kde ta otázka je; bez ní by z dění byl obchvat pravidla „o vlastním PR se nehlásí“ |
 | `Policy.newPullRequestActivity(…)`, `Policy.reviewActivity(…)`, `Policy.foreignActivityEvent(…)`, `Policy.staleFindingsActivity(…)`, `Policy.departureActivity(…)` | Řádek dění na druh (#414) → `ActivityEvent?`. Text si berou z **týchž** funkcí jako banner (`reviewNotification`, `notificationDetail`, `activityHeadline`), takže se nad tímtéž během nemají čím rozejít; identita je deterministická a u zastaralých nálezů klíčovaná **hlavou** |
 | `Policy.activityLog(_:adding:limit:)`, `Policy.activityLimit` | Vložení do záznamu (#414): od nejnovějšího, bez duplicit, se stropem **200 položek**. **Jedno místo pro disk i paměť** — dvě implementace by znamenaly jiný záznam na obrazovce než v souboru |
-| `Policy.activityFeed(_:since:now:calendar:)`, `Policy.unreadActivity(_:since:)`, `Policy.activityBadge(unread:isActive:)` | Řádky dění po dnech se značkou poslední návštěvy, počet nepřečtených a odznak sekce (#414). **Bez značky je nové všechno** (opačně než u konverzace); odznak na aktivní sekci mlčí, protože by v railu překryl ikonu |
+| `Policy.activityFeed(_:since:now:calendar:)`, `Policy.unreadActivity(_:since:)`, `Policy.activityBadge(unread:)` | Řádky dění po dnech se značkou poslední návštěvy, počet nepřečtených a odznak sekce (#414). **Bez značky je nové všechno** (opačně než u konverzace); odznak od #526 svítí **i na aktivní sekci** — do té doby mlčel, protože by v railu překryl ikonu |
 | `Policy.destination(of:)`, `Policy.tone(of:)`, `Policy.symbol(of:)`, `Policy.showsSilentChip(_:announced:)`, `Policy.gitHubURL(of:)` | Co se u řádku dění kreslí a kam vede (#414). Chip **bez banneru** jen u druhů, které banner umí; jediný druh vede z aplikace **ven**, a adresa se skládá z identity, protože shrnutí v paměti být nemusí |
 | `Policy.showsRelativeTime(of:now:)`, `Policy.activityTime(of:now:at:calendar:)` | Čas u řádku dění (#414, #443) — relativní do dvou hodin, pak hodinami, a **jestli si řádek nese den** (`ActivityTimeLabel`, `ActivityRowPlace`). V sekci ho nese hlavička dne, na dashboardu ho nemá kdo nést, takže by `v 7:58` u včerejší události tvrdilo dnešní ráno. Relativní podobu skládá **view**, protože se v okně přepočítává sama |
 | `Policy.activityHeaderSentence(lastVisit:hasEvents:now:calendar:)`, `Policy.visitLabel(_:now:calendar:)`, `Policy.showsRelativeTime(of:now:)`, `Policy.commitsAfter(_:in:)`, `Policy.activityEmptyState(…)` | Věta v hlavičce dění, popisek návštěvy (jedno místo pro větu i pruh), kdy se čas píše relativně, počet commitů po hlavě nálezů a **čtyři prázdna, která se nesmí slít** (#414) |
@@ -9694,10 +9695,12 @@ prázdno. Rozhoduje o tom, co ta data jsou: záznam dění vzniká teprve za bě
 jsem tu nebyl“ znamená, že jsem opravdu nic z toho neviděl — kdežto u PR by to znamenalo vypsat
 celou jeho historii.
 
-**Odznak sekce počítá nepřečtené a na aktivní sekci se nekreslí** (`Policy.activityBadge`). To druhé
-je vada dnešního railu, ne rozhodnutí o dění: odznak v něm ikonu **překryje** (změřeno na
-dvoumístných počtech fronty), takže by na položce, ve které zrovna stojím, zbyl červený puntík bez
-identity. Počet je proto v **nadpisu bloku** (`Dnes · 4 nové`), a to za den, ne za celý záznam.
+**Odznak sekce počítá nepřečtené a od #526 svítí i na aktivní sekci** (`Policy.activityBadge`).
+Do #526 se na ní nekreslil, a nebylo to rozhodnutí o dění, ale vada dnešního railu: odznak v něm
+ikonu **překryl** (změřeno na dvoumístných počtech fronty), takže by na položce, ve které zrovna
+stojím, zbyl červený puntík bez identity. #526 odznak posunulo do rohu a aktivní sekci označilo
+pruhem na hraně railu, takže ten důvod odpadl. Nadpis dne (`Dnes · 4 nové`) zůstává a je to
+**jiné číslo**: počítá za den, kdežto odznak za celý záznam.
 
 **Každý řádek někam vede a je to v něm napsané** (`→ Nálezy`, `→ Konverzace`, `→ Commity`,
 `→ Přehled`, `→ Průběh`), ne šipka bez obsahu. Jde se **jediným vstupním bodem** `openTab(_:in:)`
