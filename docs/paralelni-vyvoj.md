@@ -25,8 +25,9 @@ v ní. Jmenovitě:
 - **posoudí nezávislost** issues a rozhodne, co jde souběžně a co za sebou (§1);
 - **přiděluje sloty** — na běžícího subagenta, ne na issue (§2);
 - **píše zadání**, včetně slotu, čísla issue a pauzy před mergem (§3);
-- **tlumočí připomínky** — pauza vede přes něj (`SendMessage` na `main`), takže drží, kdo na co
-  čeká a komu co předat (§4);
+- **tlumočí připomínky** — pauza vede přes něj: dostane ji jako hlášení skončeného subagenta
+  a odpověď mu pošle zpátky (`SendMessage`, nástroj **jeho**, ne subagentův), takže drží, kdo na
+  co čeká a komu co předat (§4);
 - **pošle nového subagenta do stromu po skončené session** (viz níž);
 - **domergne cizí větev jen v krajním případě** — když už nezbývá nic než merge, release a úklid
   (PR zelený, Copilot vyřízený, člověk proklikal) a subagent už neběží. Kde ve stromě zbyla
@@ -70,13 +71,28 @@ strom zůstane rozdělaný, **pustí se do toho stromu nový subagent** — ne n
 
 Zadání takového agenta se od běžného (§3) liší ve třech věcech:
 
-- **bez `isolation: "worktree"`**, protože ten by mu založil nový strom. Do existujícího vstoupí
-  `EnterWorktree` s `path` — strom musí být v `git worktree list`, což ten po skončeném agentovi
-  je, harness ho sám neuklidí (§5);
-- **cesta k tomu stromu, číslo existujícího PR a stav Copilota na něm.** Slot se **nepřepisuje** —
-  strom ho má v `.prism-slot` z minula a je to tentýž, na kterém se pak bude klikat;
+- **bez `isolation: "worktree"`**, protože ten by mu založil nový strom — a **do existujícího se
+  vstupuje `git -C <absolutní cesta>` v `Bash`i, ne `EnterWorktree`.** Ten nástroj to v tomhle
+  kontextu **odmítne**, a není to o registraci stromu (v `git worktree list` je, harness ho sám
+  neuklidí, §5): pustí cestu jedině ze session, která **už v nějakém worktree stojí**, kdežto
+  agent bez izolace stojí v kořeni repa. Doslova odpoví *„Cannot enter worktree: the current
+  working directory … is the repository root, not an isolated worktree“*. Do zadání tedy patří
+  **absolutní cesty ke všemu** a `git -C` u každého git příkazu; `cd` se píše **uvnitř
+  jednotlivého příkazu**, ne jako trvalý stav — pracovní adresář `Bash`e mezi voláními sice
+  přežívá, ale `cd` v compound příkazu umí vyvolat dotaz na povolení. Narazilo na to **šest**
+  agentů (#501, #503, #482, #152, #421, #515) a všichni dojeli přes `git -C`, což je i to, čím do
+  stromu sahá orchestrátor sám;
+- **kontext předchůdce, celý — agent ho hádat nesmí.** V zadání stojí **cesta ke stromu, jméno
+  větve, HEAD, počet necommitnutých souborů, číslo existujícího PR a stav Copilota na něm**, a
+  k tomu **pokyn přečíst si `git log`, `git diff` a popis PR celé**, než na cokoli sáhne. Bez toho
+  agent nepozná, co předchůdce dokončil a co načal, a doplní si to domněnkou. Slot se
+  **nepřepisuje** — strom ho má v `.prism-slot` z minula (a ten je gitignorovaný, takže ho
+  `git status --porcelain` do toho počtu nepřičte); je to tentýž slot, na kterém se pak bude
+  klikat;
 - **zákaz zakládat novou větev a nový PR.** Dotahuje se ten, který stojí, a to celý: vyřízení
-  Copilota, pauza, merge, zavření issue, release a úklid slotu (§4, §5).
+  Copilota, pauza, merge, zavření issue, release a úklid slotu (§4, §5). Platí to i tehdy, když by
+  se z čisté větve psalo pohodlněji — nová větev znamená nový PR a s ním zahozené kolo Copilota
+  i připomínky, které na tom starém stojí.
 
 Strom se **uklidí až po mergi**, jako každý jiný (§5). Odklizený dřív by vzal nově puštěnému
 agentovi to, kvůli čemu tam jde.
@@ -328,9 +344,18 @@ zákaz sahat mimo vlastní worktree taky nevznikl proto, že by někdo byl zlomy
 subagent má hotový PR i vyřízeného Copilota, zastaví a nechá člověka proklikat **svou slotovou
 aplikaci**. Merge čeká na odpověď; všechno před ním si subagent řídí sám.
 
-Jak to technicky drží: subagent **zavolá člověka přes orchestrátora** — `SendMessage` na `main`
-— a **skončí svůj turn**. Čekáním tedy neblokuje ani slot, ani sebe: leží pasivně a zpráva
-s odpovědí ho probudí z transkriptu se zachovaným kontextem.
+Jak to technicky drží: subagent **zavolá člověka přes orchestrátora** a **skončí svůj turn**.
+Čekáním tedy neblokuje ani slot, ani sebe: leží pasivně a zpráva s odpovědí ho probudí
+z transkriptu se zachovaným kontextem.
+
+**Na `SendMessage` se přitom subagent spoléhat nesmí** — v jeho kontextu ten nástroj **nemusí
+být k dispozici**; agent na #545 ho neměl ani načtený, ani mezi odloženými (`ToolSearch
+select:SendMessage` nevydal nic). Zadání proto pauzu formuluje jako **hlášení, které předá
+orchestrátor**: subagent napíše, co má člověk proklikat, do svého hlášení a **skončí** —
+orchestrátor ho dostane jako výsledek běhu, zeptá se člověka a odpověď pošle zpátky.
+`SendMessage` je nástroj **orchestrátora**, ne subagenta; cesta k člověku tedy vede v obou
+případech, jen se o ni subagent nestará. „Ozvi se přes `main`“ v zadání tohle **nahrazovat
+nesmí** — pokyn, který se dá vyplnit jedině nedostupným nástrojem, je pokyn k improvizaci.
 
 Co má v hlášení stát, aby pauza k něčemu byla:
 
@@ -377,6 +402,14 @@ v platnosti. Pauza počet takových issues zmenšuje, nenuluje ho.
 **Merguje si každý subagent sám**, jakmile je jeho PR zelený, Copilot vyřízený (#247) a člověk
 změnu proklikal (#256, §4) — čeká se tedy na práci a na jedno slovo, ne na frontu. Pořadí se
 **neurčuje předem**: kdo je dřív hotov, jde dřív.
+
+**Merguje se z pracovního stromu, a `gh pr merge` v něm skončí nenulově** — hlásí `fatal: 'main'
+is already used by worktree`, a **merge na GitHubu přesto proběhne**. Padá na tom **lokální** krok
+za mergem (typicky `--delete-branch`), který si chce přepnout na `main` — a ten drží hlavní strom.
+Ověřuje se to **zpětným čtením, ne návratovým kódem**, a větev se maže přes REST; příkazy jsou
+v [`github-cli.md`, *Merge z worktree*](github-cli.md#merge-z-worktree) a v dávce patří ten odkaz
+do zadání. Bez něj to každý agent zjišťuje znovu — a nejhorší, co si z toho může odnést, je „merge
+selhal“ a druhý pokus nad už mergnutým PR.
 
 **Kdo mergne zákres do `docs/navrh.html`, publikuje ho po mergi znovu ze slitého stavu** — je to
 krok mergování, ne úklid po něm, a nesmí ho vynechat ani ten, kdo si myslí, že poslední nebude

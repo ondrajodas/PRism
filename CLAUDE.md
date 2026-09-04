@@ -91,7 +91,8 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   proklikám, dokud je změna ještě levná na přepsání; zelené testy nejsou důkaz, že se to
   chová, jak jsem chtěl. Napiš, **na co se mám podívat** a co v příslušné obrazovce uvidím.
   **V dávce se pauza nezruší, jen se posune před merge** (#256, mění #247): subagent zastaví
-  s hotovým PR a zavolá mě **přes orchestrátora** (`SendMessage` na `main`) — čekáním neblokuje
+  s hotovým PR a zavolá mě **přes orchestrátora** — hlášením, které ten předá dál (`SendMessage`
+  subagent mít nemusí, #545) — a čekáním neblokuje
   slot ([podrobnosti](docs/paralelni-vyvoj.md#4-pauza-na-proklikání--změna-pravidla)).
 
   **Napřed se na to ale podívej sám — screenshotem.** `screencapture -x -R<x,y,w,h>` funguje
