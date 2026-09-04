@@ -26,7 +26,7 @@ struct QueueUrgencyTests {
                 state: .open
             ),
             state: state,
-            row: QueueRow(blocking: blocking, spectrum: []),
+            row: QueueRow(blocking: blocking),
             hasDraft: false
         )
     }

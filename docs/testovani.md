@@ -2652,6 +2652,44 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **Hostovat popover mimo obrazovku jde jedině s `fixedSize()`** — v pevném rámci položí
     testovacího hosta stejně jako souběh výš. Je to vlastnost sondy, ne legendy (v okně si popover
     bere vlastní okno a velikost od obsahu), takže se to řeší v sondě.
+- **Mini pás mapy PR v řádku fronty (#502)** — dvě sady a jedno tvrzení navíc v té staré, a nejvíc
+  z toho tvrdí, že se něco **NEstalo**:
+  - **`AppStore`** (`AppStoreQueueMapTests`) — **kdy se pás nekreslí**, a to je celá polovina sady:
+    bez záznamu, se záznamem bez běhů, bez načteného diffu, s rozdělaným (`loading`), se spadlým
+    (`failed`) a nad prázdným diffem. Rozbije se to potichu v tom nebezpečném směru: neutrální pás
+    nad PR, na kterém nic neběželo, se čte jako „čisto“. Druhá polovina jsou **čtyři vstupy, které
+    musí cache vyprázdnit** — nový diff (jiné razítko), odmítnutí nálezu (segment se odbarví
+    a popisek přestane počítat nález), značka `Prošlo` (segment se ztlumí a popisek přiznává
+    `1 prošlý`) a **blokující sada z konfigurace** (týž nález, jiná barva). Poslední dvě jsou ta
+    místa, kde se otisk umí rozejít, aniž by se dotkl nálezů. K tomu tvrzení, že **druhý dotaz
+    doopravdy chodí do cache** (podstrčená mapa s týmž otiskem se vrátí) — bez něj by ty čtyři
+    testy zezelenaly i s otiskem, který o vstupech neví nic —, a že **úklid po tiku cache pustí**.
+    A jedno o obsahu: **vlákna do pásu v řádku nejdou**, protože se ve frontě nemají odkud vzít.
+  - **`Policy`** (`PullRequestMapTests`, jeden test navíc) — **jeden `map`, dvě šířky**. Netvrdí se
+    rovnost šířek (ty se s místem měnit mají), ale že jsou **podíly na milióntinu stejné** ve 110
+    i v 800 bodech: nad rozložením ze sekce 42 nesáhne ani nejmenší segment na minimum (6,1 bodu
+    ve 110), takže je mini pás velký pás v jiném měřítku — lock 30,8 % v obou. K tomu součet přesně
+    na dostupnou šířku a minimum tří bodů i v tom užším.
+  - **Řádek a kresba** (`QueueMapStripTests`) — **měřená výška** (#325): řádek s pásem je stejně
+    vysoký jako bez něj, a to i v **636 bodech**, tedy v obsahu nejužšího okna, kde se pás musí
+    vejít vedle titulku a odznaku (`fittingSize` mimo obrazovku, tatáž cesta jako
+    `PullRequestRowPromptTests`). Pás sám má pevných 110 × 6 — bez rámce by `Canvas` vyšel nulový.
+    A k tomu **tři stráže nad zdrojáky**, protože zrovna tyhle věci se z obrázku nepoznají:
+    `Policy.mapFill(` smí stát jedině v `PullRequestMapView.swift` (jedno místo rozhoduje barvu
+    segmentu), `Policy.pullRequestMap(` jedině ve dvou souborech (detail PR a store), a jména
+    `SpectrumBar` i `ReviewerShare` v `App/` **nejsou vůbec** — mrtvý typ nic neshodí, jen leží
+    a svádí na něj sáhnout. Hledá se v kódu **bez řádkových komentářů a bez mezer**
+    (`Source.condensed`, #490, #550): o mapě se v komentářích píše na deseti místech, takže by
+    stráž nad surovým textem tvrdila něco jiného než ten test. Stráž si navíc ověřuje, že
+    **`App/` doopravdy přečetla** (víc než sto zdrojáků) — jinak by „nikde to není“ platilo na
+    každý vzor.
+  - **Sonda `QueueRowRenderProbe`** — řádek fronty **ve dvou šířkách** (636 a 900 b) a v obou
+    režimech, a na plátně jsou i řádky, u kterých se pás **nekreslí**: bez nich by z obrázku nešlo
+    poznat, jestli je prázdno záměr, nebo vada. Měření odpovídá na „zůstal řádek na jedné řádce“,
+    tahle sonda na „je ten pás ve 110 bodech k něčemu“, a na to se dá odpovědět jedině obrázkem.
+    Pouští se ručně (`TEST_RUNNER_PRISM_MEASURE=1`, cesta ven `TEST_RUNNER_PRISM_RENDER_DIR`) —
+    **prefix `TEST_RUNNER_` je povinný**, bez něj se proměnná do testovacího hosta nedostane
+    a sonda se tiše přeskočí.
 - **`AppStore` — rozbalení kontextu** — že se obsah souboru dotáhne jednou, že selhání
   nenechá po sobě točící se kolečko ani úsek označený za odkrytý, a že sbalení zahodí
   rozsahy, ale načtený obsah nechá.

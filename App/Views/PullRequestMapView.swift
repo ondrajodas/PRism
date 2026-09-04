@@ -131,14 +131,53 @@ struct PullRequestMapView: View {
             spacing: Self.stripSpacing
         )
         let top = (size.height - Self.stripHeight) / 2
+        Self.drawSegments(
+            in: &context,
+            of: map.segments,
+            geometry: geometry,
+            top: top,
+            height: Self.stripHeight
+        )
+        // **Druhý průchod, ne druhá kresba plochy**: značky jsou tím, čím se pás pod hlavičkou
+        // od mini pásu v řádku fronty liší (#502), takže leží vedle sdílené výplně, ne v ní.
+        // Projít segmenty dvakrát nic nestojí — je to aritmetika nad polem, ne stavění views.
         for index in map.segments.indices {
-            guard let span = geometry.span(of: index) else { continue }
             let segment = map.segments[index]
+            // **Předfiltr, ne dvojitá práce**: značku má u 158 souborů nejvýš pár segmentů, takže
+            // se poloha zbytku nepočítá vůbec. Kresba pásu běží při každém překreslení hlavičky.
+            guard !segment.threads.isEmpty || current == segment.path else { continue }
+            guard let span = geometry.span(of: index) else { continue }
             let rect = CGRect(
                 x: span.lowerBound,
                 y: top,
                 width: span.upperBound - span.lowerBound,
                 height: Self.stripHeight
+            )
+            for fraction in segment.threads { Self.drawTick(in: &context, at: fraction, in: rect) }
+            if current == segment.path { Self.drawMarker(in: &context, under: rect, in: size) }
+        }
+    }
+
+    /// Plochy segmentů — **jediná kresba pásu v celém okně** (#502).
+    ///
+    /// Pás pod hlavičkou i mini pás v řádku fronty (`QueueMapStrip`) kreslí tuhle funkci, jen
+    /// s jinou geometrií. Dvě kresby by znamenaly dvě pravdy o tom, co je červený segment
+    /// a co tlumený — a rozdíl by se poznal jedině tak, že by si někdo všiml obojího naráz.
+    static func drawSegments(
+        in context: inout GraphicsContext,
+        of segments: [PullRequestMapSegment],
+        geometry: PullRequestMapGeometry,
+        top: Double,
+        height: Double
+    ) {
+        for index in segments.indices {
+            guard let span = geometry.span(of: index) else { continue }
+            let segment = segments[index]
+            let rect = CGRect(
+                x: span.lowerBound,
+                y: top,
+                width: span.upperBound - span.lowerBound,
+                height: height
             )
             // **Prošlý se tlumí krytím, ne jinou barvou** — je to tatáž plocha, jen odbytá práce;
             // druhý odstín na každou barvu by ze škály udělal šest hodnot místo tří.
@@ -146,8 +185,6 @@ struct PullRequestMapView: View {
             let fill = Self.fill(of: Policy.mapFill(of: segment))
                 .opacity(segment.readState.isRead ? Policy.mapReadOpacity : 1)
             context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(fill))
-            for fraction in segment.threads { Self.drawTick(in: &context, at: fraction, in: rect) }
-            if current == segment.path { Self.drawMarker(in: &context, under: rect, in: size) }
         }
     }
 

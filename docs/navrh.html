@@ -689,9 +689,10 @@ code {
    visí v téže hlavičce o dva prvky vedle. Kapsle je vidět jen s otevřeným polem hledání. */
 .pill.hits  { color: var(--accent); background: var(--accent-weak); }
 
-/* spektrum reviewerů */
-.spectrum { display: flex; height: 5px; border-radius: 3px; overflow: hidden; width: 74px; flex: none; }
-.spectrum i { display: block; height: 100%; flex: none; }
+/* **`.spectrum` (spektrum reviewerů, #172) z dokumentu odešlo celé u #502.** Kreslily ho jedině
+   řádky fronty a nahradil ho tam mini pás mapy (`.qmap` v CSS sekce 42) — dvě barevné škály
+   v jedné řádce znamenají, že barva přestane nést jednu věc. Není to případ `.diffstat`, které
+   po #501 zůstalo: to kreslí dál záznam měření v sekci 19, kdežto spektrum nekreslí už nic. */
 
 .legend { display: flex; flex-direction: column; gap: 9px; padding: 12px 13px; }
 .leg { display: grid; grid-template-columns: 8px 1fr auto; gap: 9px; align-items: center; font-size: 12px; }
@@ -2647,20 +2648,27 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   padding: 8px 22px 10px; background: var(--panel);
 }
 .rv-prmap .strip { flex: 1; display: flex; gap: 2px; height: 10px; }
+/* Mini pás v **řádku fronty** (#502) — týž segment, jiná geometrie. V okně to kreslí
+   `QueueMapStrip` **touž funkcí** jako velký pás (`PullRequestMapView.drawSegments`), takže si
+   `.qmap` bere `.seg` i jeho barvy z rozvahy níž a přidává jedině rozměr z návrhu: 110 × 6 bodů,
+   mezera 2. Popisek u sebe **nemá**: v řádku vedle titulku a odznaku na něj není místo, takže se
+   `7 souborů · 3 prošlé · 5 nálezů` čte z nápovědy. A **řádek bez běhu pás nekreslí vůbec** —
+   prázdný obdélník by se tvářil jako údaj, tedy tatáž úvaha, kvůli které ho nekreslilo spektrum. */
+.qmap { display: flex; gap: 2px; width: 110px; height: 6px; flex: none; }
 /* Zvětšený pás pro zákres — v okně má 10 bodů, tady 22, aby se do něj vešla čárka i obrys. */
 .rv-prmap.big { padding: 40px 22px 8px; }
 .rv-prmap.big .rv-tip { top: auto; bottom: calc(100% + 8px); }
 .rv-prmap.big .strip { height: 22px; gap: 3px; }
-.rv-prmap .seg { position: relative; border-radius: 2px; min-width: 3px; }
+.rv-prmap .seg, .qmap .seg { position: relative; border-radius: 2px; min-width: 3px; }
 /* **Barva má jeden zdroj pro segment i pro vzorek v legendě.** Do #501 měla legenda barvy
    dosazené inline (`style="background: var(--crit)"`), tedy druhé místo, které při změně škály
    nikdo neprojde — a rozejití by nebylo na obrázku vidět, protože obojí je ta samá barva jen
    jinde. V okně tomu odpovídá to, že legenda musí volat **tutéž funkci**, jakou kreslí `Canvas`. */
-.rv-prmap .seg, .rv-legend i.sw { background: var(--panel-3); }
-.rv-prmap .seg.crit, .rv-legend i.sw.crit { background: var(--crit); }
-.rv-prmap .seg.find, .rv-legend i.sw.find { background: var(--find); }
-.rv-prmap .seg.new, .rv-legend i.sw.new { background: color-mix(in srgb, var(--ok) 55%, var(--panel-3)); }
-.rv-prmap .seg.viewed, .rv-legend i.sw.viewed { opacity: 0.35; }
+.rv-prmap .seg, .qmap .seg, .rv-legend i.sw { background: var(--panel-3); }
+.rv-prmap .seg.crit, .qmap .seg.crit, .rv-legend i.sw.crit { background: var(--crit); }
+.rv-prmap .seg.find, .qmap .seg.find, .rv-legend i.sw.find { background: var(--find); }
+.rv-prmap .seg.new, .qmap .seg.new, .rv-legend i.sw.new { background: color-mix(in srgb, var(--ok) 55%, var(--panel-3)); }
+.rv-prmap .seg.viewed, .qmap .seg.viewed, .rv-legend i.sw.viewed { opacity: 0.35; }
 /* Obrys u segmentu je od #501 **záznam měření, ne dnešní obrazovka** — kreslí ho jedině panel
    *Proč obrys odešel* v sekci 42. Je to tentýž vztah, jaký má `.diffstat` k sekci 19: pravidlo
    je „co je na obrazovce, kreslí `.runner`", a tohle je doklad, proč. */
@@ -3328,10 +3336,14 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                     </div>
                   </div>
                   <div class="right">
-                    <span class="spectrum">
-                      <i style="width: 55%; background: var(--crit);"></i>
-                      <i style="width: 25%; background: var(--find);"></i>
-                      <i style="width: 20%; background: var(--ink-3);"></i>
+                    <span class="qmap">
+                      <i class="seg crit" style="flex: 4.64;"></i>
+                      <i class="seg find" style="flex: 5.46;"></i>
+                      <i class="seg new" style="flex: 4.46;"></i>
+                      <i class="seg viewed" style="flex: 6.02;"></i>
+                      <i class="seg viewed" style="flex: 2.32;"></i>
+                      <i class="seg" style="flex: 11.45;"></i>
+                      <i class="seg" style="flex: 2.81;"></i>
                     </span>
                     <span class="pill crit">3 nálezy · 1 blokuje</span>
                   </div>
@@ -3367,8 +3379,11 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
                     </div>
                   </div>
                   <div class="right">
-                    <span class="spectrum">
-                      <i style="width: 100%; background: var(--ok);"></i>
+                    <span class="qmap">
+                      <i class="seg viewed" style="flex: 5.17;"></i>
+                      <i class="seg viewed" style="flex: 3.32;"></i>
+                      <i class="seg" style="flex: 8.41;"></i>
+                      <i class="seg" style="flex: 2.58;"></i>
                     </span>
                     <span class="pill ok">čisté</span>
                   </div>
@@ -3491,9 +3506,13 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <div class="note">
         <span class="num">4</span>
         <span class="body">
-          <b>Spektrum reviewerů</b>
-          <span>Hranol rozloží PR na reviewery — poměr proužku říká, odkud nálezy jsou,
-          dřív než se řádek otevře.</span>
+          <b>Mapa PR</b>
+          <span>Mini pás (110 × 6 b) rozloží PR na soubory — barva je závažnost, prošlé jsou
+          tlumené, takže <b>kde a jak zle</b> je vidět dřív, než se řádek otevře. <b>Nahradil
+          spektrum reviewerů</b> (#502): to říkalo, <em>kdo</em> nález nechal, a dvě barevné
+          škály v jedné řádce znamenají, že barva přestane nést jednu věc. „Odkud nálezy jsou“
+          zůstalo v chipech runbaru po otevření. <b>Řádek bez běhu pás nekreslí</b> — prázdný
+          obdélník by se tvářil jako údaj.</span>
         </span>
       </div>
     </div>
@@ -16777,18 +16796,22 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
               </div>
             </div>
             <div class="right">
-              <span class="spectrum">
-                <i style="width: 55%; background: var(--crit);"></i>
-                <i style="width: 25%; background: var(--find);"></i>
-                <i style="width: 20%; background: var(--ink-3);"></i>
+              <span class="qmap">
+                <i class="seg crit" style="flex: 4.64;"></i>
+                <i class="seg find" style="flex: 5.46;"></i>
+                <i class="seg new" style="flex: 4.46;"></i>
+                <i class="seg viewed" style="flex: 6.02;"></i>
+                <i class="seg viewed" style="flex: 2.32;"></i>
+                <i class="seg" style="flex: 11.45;"></i>
+                <i class="seg" style="flex: 2.81;"></i>
               </span>
               <span class="pill crit">3 nálezy · 1 blokuje</span>
             </div>
           </div>
         </div>
         <p style="font-size: 13.5px; color: var(--ink-2);">
-          Titulek nahoře, souřadnice pod ním v mono. Hrana nese závažnost, spektrum reviewery,
-          odznak počty — tři různé věci, tři různá místa.
+          Titulek nahoře, souřadnice pod ním v mono. Hrana nese závažnost, pás mapu PR (od #502
+          místo spektra reviewerů), odznak počty — tři různé věci, tři různá místa.
         </p>
       </div>
     </div>
@@ -17208,7 +17231,10 @@ Proč ^8.0 a ne ~8.0.0? U Symfony nás minor už jednou položil.</div>
         </p>
         <div class="verdict">
           <em>Spektrum jen tam, kde se opravdu něco rozkládá</em> — reviewery a průběh běhu.
-          Nikde jinde.
+          Nikde jinde. <b>Půlka toho odešla u #502</b>: reviewery v řádku fronty nahradila
+          mapa PR, protože „kde a jak zle“ rozhoduje dřív než „kdo“ — a dvě barevné škály
+          v jedné řádce znamenají, že barva přestane nést jednu věc. Rozkládá se tedy dál jen
+          <b>průběh běhu</b>.
         </div>
       </div>
     </div>

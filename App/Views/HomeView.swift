@@ -111,6 +111,8 @@ struct HomeView: View {
                     reviewState: store.reviewState(for: pullRequest.id),
                     hasDraft: true,
                     row: store.queueRow(for: pullRequest.id),
+                    // Mapa PR do mini pásu (#502) — jeden řádek, jedna podoba, i tady.
+                    map: store.queueMap(for: pullRequest.id),
                     // Vlastní PR vypadá jako vlastní PR i tady (#331) — jeden řádek, jedna podoba.
                     // Od #333 to platí i o akci: `Prompt →` bez akce se nekreslí, takže bez tohohle
                     // řádku by se sekce od seznamu lišila zrovna tím, čím se lišit nemá. Vlastní PR
