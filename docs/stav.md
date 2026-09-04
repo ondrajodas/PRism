@@ -8216,6 +8216,76 @@ v [`docs/github-cli.md`](github-cli.md#třetí-příčina-resource-not-accessibl
 proběhla (grepy z `CLAUDE.md` plus čtení diffu) a našla v ní dvě věci: přehnané tvrzení v komentáři
 u sondy (`ideal*` místo „ideální šířka“) a dvě smyčky přes jednoprvkové pole.
 
+## #526 — odznak v railu do rohu a pruh aktivní položky (zákres 50)
+
+**„Uvnitř rámu“ z #366 znamenalo „přes ikonu“.** Odznak je 24 × 18 na rámu 34 × 30, takže zakryje
+jeho pravou horní čtvrtinu, ať je posazený kamkoli — v běžícím okně byla pod `5`, `3` a `30` vidět
+jen spodní hrana glyfu a položky railu se poznávaly podle pořadí, ne podle ikony. Odznak proto jde
+**do rohu** (`offset(x: 7, y: -5)`), tedy zase ven z rámu. Není to návrat před #366: tehdy vadila
+**barva** (fialový akcent, tedy „tady jsi“) a šest bodů doprava bez protiváhy; teď jde ven o sedm,
+je červený a identitu aktivní sekce mezitím převzal pruh. **Šířka railu 52 bodů se nemění** —
+červená plocha končí na 47, obtah na 49 a obrys railu je na 51.
+
+**Aktivní sekci značí pruh na hraně railu, ne barva ikony.** 2 × 18 bodů v akcentu, poloměr 1,
+a je to **tentýž prvek, kterým `PullRequestRow` značí stav na hraně řádku fronty** — jen svisle.
+Osmnáctka se počítá z **výšky řádku** (`top: 6`, `bottom: 6` v rámu vysokém 30), ne z ikony.
+Aby se měl pruh kam pověsit, bere si **řádek položky celou šířku railu** (`SidebarRail.width`)
+a tlačítko v něm zůstává 34 bodů: rozšířit rám tlačítka **nešlo**, klikací plocha by se nafoukla
+na celou šířku a klik do prázdna vedle ikony by přepínal sekci.
+
+**Změna zapsaného rozhodnutí z #414**: `Policy.activityBadge(unread:isActive:)` → `activityBadge(unread:)`.
+`isActive` rozhodoval právě proto, že odznak ikonu překryl a na aktivní položce by zbyl červený
+puntík bez identity (poznámka 95 v návrhu). S pruhem ten důvod odpadl, takže `Dění` ukazuje počet
+nepřečtených **i zevnitř**. Parametr **zmizel celý**, ne že by se ignoroval — parametr, o kterém se
+nerozhoduje, je jen místo, kam se dá omylem sáhnout. Značka poslední návštěvy se u toho nemění:
+posouvá ji dál až **odchod** ze sekce, takže počet uvnitř `Dění` na nulu nespadne.
+
+**Zákres je jedno pravidlo v CSS railu, ne komponenta.** Rail je chrom okna, takže se změna projeví
+ve všech sekcích, které ho kreslí; sekce 50 drží jen zvětšený výřez, srovnání s dneškem a důvody.
+Sekce 27 (`Dění`) je záznam dneška, takže se překreslila s ním — aktivní položka v ní má odznak.
+
+Nová tvrzení: `RailBadgeTests` (poloha proti **změřenému** rámu ikony, ne proti konstantě; že odznak
+nic neořezává — #483 —, poznáno z tvaru pravé hrany; pruh na hraně railu a to, že ho má **jedna**
+položka) a výčet `Policy.activityBadge` nad jedním vstupem. **Regrese ověřena vložením regrese**:
+s vráceným `offset(y: 1)` padne poloha, s vynechaným pruhem obě tvrzení o aktivní sekci — a barevná
+tvrzení u obojího zůstanou zelená, takže se ty věci pořád měří zvlášť.
+
+**Měřidlo pásů v `SidebarRailTests` přestalo brát vzorek pozadí z prvního bodu**: na hraně railu
+teď leží pruh, takže by vzorek na řádcích aktivní položky vydal akcent a proti němu by se jako
+„obsah“ jevil celý zbytek řádku. A **tolerance u washe aktivní položky je poloviční** — ve světlém
+režimu je od `Palette.line` jen 0,032 daleko, takže se do měřeného rámu připočítával obrys railu
+i oddělovač a rám vycházel přes celou výšku railu.
+
+**Copilot k tomuhle PR nedoběhl a je to neověřená mezera** (2026-09-04). Job běžel, ale spadl na
+**prvním** volání API — `Resource not accessible by integration` při `Fetching PR metadata` — a bylo
+to tak u **čtyř různých větví** (#526, #542, #491 dvakrát), tedy repo-wide, ne na tomhle diffu.
+Vyžádání se opakovalo třikrát, pokaždé stejně. Je to **tatáž třetí příčina, kterou o hodinu dřív
+popsalo #507**; tenhle záznam k ní přidal jen čtvrtou větev a příkaz na čtení logu
+([`docs/github-cli.md`](github-cli.md)).
+
+**Místo něj proběhla druhá vlastní revize** (subagent nad `git diff main...HEAD`) a našla čtyři
+reálné věci, které do PR přišly opravené:
+
+- **Nadpis dne a odznak v railu nejsou totéž číslo.** README i komentář v sekci 27 tvrdily, že jsou —
+  nadpis počítá nepřečtené **za ten den** (`Policy.dayNote`), odznak za **celý záznam**
+  (`Policy.unreadActivity`). Přes půlnoc se rozejdou. Do #526 to nevadilo, protože ta dvě čísla
+  nestála vedle sebe; tenhle diff je poprvé postavil na jednu obrazovku.
+- **Sedm míst v repu pořád tvrdilo „odznak se na aktivní sekci nekreslí“** — včetně tabulky `Policy`
+  v `architektura.md`, kde stála **neexistující signatura** `activityBadge(unread:isActive:)`.
+  Opraveno jako třída, ne výskyt.
+- **„Rail se kreslí ve dvaceti sekcích“ byl odhad**; grepem je jich **jedenáct**.
+- **Dvě tvrzení v `RailBadgeTests` nemohla spadnout** (`rightmost.count == box.height` je identita,
+  `touching > 0` tautologie nad maximem). Zůstalo to jediné nosné, `touching < box.height − 2`.
+
+A jedna mezera se zavřela testem: tvrzení **„klikací plocha se rozšířit nesmí“** stálo jen
+v komentáři, přitom visí na **pořadí modifikátorů** (`.frame` za `.buttonStyle`). Hlídá ho teď stráž
+nad zdrojákem (`SidebarRailTests.widensTheRowButNotTheButton`, kód bez mezer podle #490/#550);
+ověřená vložením regrese — s rámem 52 uvnitř labelu padne i test o šířce ikon.
+
+**Vyčnívající roh odznaku už není klikatelný**, a je to důsledek, ne opomenutí: klikací plocha
+zůstává rám tlačítka, protože jinak by sekci přepínal klik do prázdna vedle ikony. Odznak je údaj,
+ne ovládání.
+
 ## #563 — mergnutelný PR patří do `K merge` i s blokujícím nálezem
 
 Vyšlo to z proklikání na ostrých datech:

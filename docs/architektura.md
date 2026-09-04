@@ -5149,7 +5149,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `AppAppearance`, `AppearanceApplying` | Přepnutí vzhledu celé aplikace (#278) — `NSApp.appearance`, a za protokolem, aby si na hostitele testů nesáhly testy |
 | `Palette` | Barvy okna z návrhu, světlá i tmavá varianta — **jeden zdroj pro celou aplikaci** (#180). Krytí je u tichých podkladů (`accentWeak`) v každém režimu jiné, jak to má návrh. Stavové tóny `ok`, `find`, `crit` (#218) jsou pro odznaky a puntíky **a od #277 i pro diff**: `DiffLineView.signColor(of:)` zůstává jediným zdrojem zelené a červené v diffu (aby se `+` v řádku nerozešlo s `+12` nad ním, #156), jen si ji bere odsud, ne ze systému; pozadí řádků má vlastní vyčíslené tokeny (`diffAdded`, `diffRemoved`, `diffAddedWord`, `diffRemovedWord`, `diffMissingStripe`) — viz *Barvy diffu* v sekci `App/Diff/`. Od #279 k tomu tři tóny výstrah (`alertNote`, `alertWarning`, `alertCaution` — `[!TIP]` a `[!IMPORTANT]` si půjčují `ok` a `accent`) a `codeFill` pod kód; `alertWarning` a `alertCaution` jsou **vlastní hex schválně**, protože ty GitHubovy se na hex rovnají `stale` a `crit`. Od #309 `mint` — **dvojice k akcentu**: akcent je to, co se nabízí udělat nebo co běží, mint to, co se jen konstatuje (`2×`, `✓ v mém review`, `odmítnuto`). Světlá větev je **vědomá odchylka od návrhu** (`#0E8F80` → `#0C7E71`), protože hodnota z mockupu byla jediný stavový token pod AA — čísla u `Palette.mint` a v `MintTokenTests` |
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
-| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`) a uvnitř rámu ikony**, jak ho kreslí návrh — viz *Odznak v railu* |
+| `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`)**, od #526 sedí **v rohu ikony** (ven z jejího rámu, aby zůstala celá) a aktivní sekci značí **pruh 2 body na hraně railu** — viz *Odznak v railu* a *Odznak v rohu a pruh aktivní sekce* |
 | `HomeView` | Obsah domácí záložky podle railu. Nad deskou **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
 | `BoardView` | Domácí záložka (#515) — **deska pruhů podle mého tahu**. Nahradila `DashboardView` z #181: karty odešly celé (`Policy.board`, `WorkLane`), věta pod pozdravem mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a levý sloupec drží **jen neprázdné pruhy** (`Board.visibleLanes`, z proklikání #515) v pořadí od hotového k rozdělanému (`K merge` první); když není ani jeden, stojí místo nich blok `Všechno vyřízené` (`Policy.boardEmpty`). Řádek je **týž `PullRequestRow`** jako v seznamu (#172), ne třetí podoba; vlastní PR pozná šipka v mintu a `Prompt →`. Vpravo v hlavičce pruhu je **akce nad celým pruhem** (`LaneAction`) — potvrzení si nechává jedině `Pustit review na N`, protože je to jediná, která utratí víc než jednu session. Tichý pruh (`Čeká na ostatní`) je ztlumený na 0,7, má strop **dva** řádky místo pěti a místo akce popisek `nic k udělání`; patka pruhu **rozbaluje na místě**, nepřepíná do sekce (pruh míchá cizí a vlastní PR, takže žádná sekce nemá tutéž množinu). Pravý sloupec drží od #515 **dva** bloky: `Dění` (#443, od #515 **osm** řádků — `Policy.activityRowLimit`) a `Dneska stálo` jako malý blok s částkou v hlavičce; legenda reviewerů odešla s kartami a `Reviewery` postaví #514 |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
@@ -5859,7 +5859,8 @@ Dvě věci, které se tím ověřují a z kódu je vidět nejsou, protože o nic
 
 Odznak s počtem u sekce railu měl do #366 **dvě odchylky od návrhu naráz** a obě z kódu vypadaly
 jako záměr: barvu (`.tint`, tedy fialový akcent) a polohu (`offset(x: 6, y: -2)`, tedy 6 bodů za
-rámem ikony). Návrh (`.rail .ri .badge`) má červený odznak zarovnaný **s pravou hranou rámu**.
+rámem ikony). Návrh (`.rail .ri .badge`) měl tehdy červený odznak zarovnaný **s pravou hranou
+rámu**; od #526 má `right: -7px`, tedy roh — viz sekce níž.
 
 - **`--crit`, ne akcent.** Akcent v tomhle okně znamená „tady jsi“ — `.ri.on` je z něj celý —,
   takže odznak v téže barvě neříkal nic navíc; červená je „je co dělat“, což počet ve frontě je.
@@ -5882,6 +5883,47 @@ rámem ikony). Návrh (`.rail .ri .badge`) má červený odznak zarovnaný **s p
 
 Co se **nezměnilo**: rám ikony zůstává 34 × 30 (návrh má 32 × 30), protože to je metrika položky
 railu z #278, ne odznaku.
+
+### Odznak v rohu a pruh aktivní sekce (#526, mění #366 i #414)
+
+**„Uvnitř rámu“ z #366 znamenalo „přes ikonu“.** Odznak je 24 × 18 na rámu 34 × 30, takže zakryje
+jeho pravou horní čtvrtinu, ať je posazený kamkoli — v běžícím okně byla pod `5`, `3` a `30` vidět
+jen spodní hrana glyfu a položky railu se poznávaly podle pořadí. #526 ho proto posílá **do rohu**
+(`offset(x: 7, y: -5)`, návrh sekce 50), tedy zase ven z rámu. Není to návrat před #366: tehdy
+vadila **barva** (fialový akcent) a **šest bodů doprava bez protiváhy**; teď jde ven o sedm, je
+červený a identitu aktivní sekce mezitím převzal pruh.
+
+Drží to čtyři věci:
+
+- **Sedm bodů je strop, ne libovolná hodnota.** Ikona je vystředěná v pruhu 52 bodů, takže po
+  stranách zbývá devět; s posunem o sedm končí červená plocha na 47 a její obtah na 49, tedy pořád
+  před obrysem railu (51). **Šířka railu se nemění** — je to podmínka issue, ne shoda okolností.
+- **Aktivní sekci značí pruh na hraně railu**, ne barva ikony. Odznak leží zrovna na ní, takže by
+  pod dvoumístným počtem nebyla vidět. Pruh je **2 × 18 bodů v akcentu, poloměr 1**
+  (`.rail .ri.on::before` v návrhu, `SidebarRail.activeStripe` v okně), a je to **tentýž prvek,
+  kterým `PullRequestRow` značí stav na hraně řádku fronty** — jen svisle. Osmnáctka se počítá
+  **z výšky řádku** (`top: 6`, `bottom: 6` v rámu vysokém 30), ne z ikony.
+- **Řádek položky si bere celou šířku railu, tlačítko zůstává 34 bodů.** Pruh visí na hraně, tedy
+  devět bodů nalevo od rámu ikony, a `overlay` mimo plochu rodiče by mířil na místo, které rodič
+  nemá. Rám tlačítka se přitom rozšířit **nesmí**: klikací plocha by se nafoukla na celou šířku
+  railu a klik do prázdna vedle ikony by přepínal sekci. `frame(width:)` nasazený **za**
+  `buttonStyle` tlačítko jen vystředí; šířku drží `SidebarRail.width`, aby dvě místa nedržela dvě
+  čísla.
+- **Odznak nic neořezává, a je to měřené tvrzení, ne úvaha** (#483). Rail není `ScrollView` ani
+  `clipShape`, takže `overlay` mimo plochu rodiče přežije — jenže to je vlastnost hierarchie kolem,
+  ne toho view, a kdyby se změnila, uřízne se odznak potichu. `RailBadgeTests` proto čtou **tvar
+  pravé hrany**: zaoblená kapsle dosáhne na svůj nejpravější sloupec **8 řádky ze 14**, uříznutá
+  všemi čtrnácti.
+
+**A `Policy.activityBadge` tím přišla o parametr** (mění rozhodnutí z #414): `isActive` rozhodoval
+právě proto, že odznak ikonu překryl a na aktivní položce by zbyl červený puntík bez identity.
+S pruhem ten důvod odpadl, takže `Dění` ukazuje počet nepřečtených **i zevnitř** — a to je zrovna
+místo, kde na něj člověk kouká. Argument **zmizel celý**, ne že by se ignoroval: parametr, o kterém
+se nerozhoduje, je jen místo, kam se dá omylem sáhnout.
+
+**Značka poslední návštěvy se u toho nemění.** Posouvá ji dál až **odchod** ze sekce (#414), takže
+počet uvnitř `Dění` na nulu nespadne. Je to záměr, ne vedlejší efekt: kdyby ji posouval vstup,
+zmizel by odznak zrovna ve chvíli, kdy jsem si ještě nic nepřečetl.
 
 ### Kapsle stavu na jednom místě (#348)
 
@@ -9348,7 +9390,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.isReported(_:on:)`, `Policy.activityKind(of:isReReview:)` | Brána dění (#414): o čem se **hlásí vůbec** — tatáž pravidla jako u notifikací (#332), lámaná podle druhu. **Jediné místo**, kde ta otázka je; bez ní by z dění byl obchvat pravidla „o vlastním PR se nehlásí“ |
 | `Policy.newPullRequestActivity(…)`, `Policy.reviewActivity(…)`, `Policy.foreignActivityEvent(…)`, `Policy.staleFindingsActivity(…)`, `Policy.departureActivity(…)` | Řádek dění na druh (#414) → `ActivityEvent?`. Text si berou z **týchž** funkcí jako banner (`reviewNotification`, `notificationDetail`, `activityHeadline`), takže se nad tímtéž během nemají čím rozejít; identita je deterministická a u zastaralých nálezů klíčovaná **hlavou** |
 | `Policy.activityLog(_:adding:limit:)`, `Policy.activityLimit` | Vložení do záznamu (#414): od nejnovějšího, bez duplicit, se stropem **200 položek**. **Jedno místo pro disk i paměť** — dvě implementace by znamenaly jiný záznam na obrazovce než v souboru |
-| `Policy.activityFeed(_:since:now:calendar:)`, `Policy.unreadActivity(_:since:)`, `Policy.activityBadge(unread:isActive:)` | Řádky dění po dnech se značkou poslední návštěvy, počet nepřečtených a odznak sekce (#414). **Bez značky je nové všechno** (opačně než u konverzace); odznak na aktivní sekci mlčí, protože by v railu překryl ikonu |
+| `Policy.activityFeed(_:since:now:calendar:)`, `Policy.unreadActivity(_:since:)`, `Policy.activityBadge(unread:)` | Řádky dění po dnech se značkou poslední návštěvy, počet nepřečtených a odznak sekce (#414). **Bez značky je nové všechno** (opačně než u konverzace); odznak od #526 svítí **i na aktivní sekci** — do té doby mlčel, protože by v railu překryl ikonu |
 | `Policy.destination(of:)`, `Policy.tone(of:)`, `Policy.symbol(of:)`, `Policy.showsSilentChip(_:announced:)`, `Policy.gitHubURL(of:)` | Co se u řádku dění kreslí a kam vede (#414). Chip **bez banneru** jen u druhů, které banner umí; jediný druh vede z aplikace **ven**, a adresa se skládá z identity, protože shrnutí v paměti být nemusí |
 | `Policy.showsRelativeTime(of:now:)`, `Policy.activityTime(of:now:at:calendar:)` | Čas u řádku dění (#414, #443) — relativní do dvou hodin, pak hodinami, a **jestli si řádek nese den** (`ActivityTimeLabel`, `ActivityRowPlace`). V sekci ho nese hlavička dne, na dashboardu ho nemá kdo nést, takže by `v 7:58` u včerejší události tvrdilo dnešní ráno. Relativní podobu skládá **view**, protože se v okně přepočítává sama |
 | `Policy.activityHeaderSentence(lastVisit:hasEvents:now:calendar:)`, `Policy.visitLabel(_:now:calendar:)`, `Policy.showsRelativeTime(of:now:)`, `Policy.commitsAfter(_:in:)`, `Policy.activityEmptyState(…)` | Věta v hlavičce dění, popisek návštěvy (jedno místo pro větu i pruh), kdy se čas píše relativně, počet commitů po hlavě nálezů a **čtyři prázdna, která se nesmí slít** (#414) |
@@ -9851,10 +9893,12 @@ prázdno. Rozhoduje o tom, co ta data jsou: záznam dění vzniká teprve za bě
 jsem tu nebyl“ znamená, že jsem opravdu nic z toho neviděl — kdežto u PR by to znamenalo vypsat
 celou jeho historii.
 
-**Odznak sekce počítá nepřečtené a na aktivní sekci se nekreslí** (`Policy.activityBadge`). To druhé
-je vada dnešního railu, ne rozhodnutí o dění: odznak v něm ikonu **překryje** (změřeno na
-dvoumístných počtech fronty), takže by na položce, ve které zrovna stojím, zbyl červený puntík bez
-identity. Počet je proto v **nadpisu bloku** (`Dnes · 4 nové`), a to za den, ne za celý záznam.
+**Odznak sekce počítá nepřečtené a od #526 svítí i na aktivní sekci** (`Policy.activityBadge`).
+Do #526 se na ní nekreslil, a nebylo to rozhodnutí o dění, ale vada dnešního railu: odznak v něm
+ikonu **překryl** (změřeno na dvoumístných počtech fronty), takže by na položce, ve které zrovna
+stojím, zbyl červený puntík bez identity. #526 odznak posunulo do rohu a aktivní sekci označilo
+pruhem na hraně railu, takže ten důvod odpadl. Nadpis dne (`Dnes · 4 nové`) zůstává a je to
+**jiné číslo**: počítá za den, kdežto odznak za celý záznam.
 
 **Každý řádek někam vede a je to v něm napsané** (`→ Nálezy`, `→ Konverzace`, `→ Commity`,
 `→ Přehled`, `→ Průběh`), ne šipka bez obsahu. Jde se **jediným vstupním bodem** `openTab(_:in:)`

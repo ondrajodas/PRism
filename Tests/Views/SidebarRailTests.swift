@@ -31,10 +31,10 @@ struct SidebarRailTests {
     /// další sekce dostane sama, a v pruhu o 52 bodech se to dá pokazit potichu: ikona širší než
     /// rám (34 × 30, tedy 9–43) by se do svislice ostatních nevešla a rail by se rozjel.
     ///
-    /// Měří se **bez odznaků**, ale už ne proto, že by z rámu vyčnívaly: od #366 jsou uvnitř
-    /// (`RailBadgeTests` to tvrdí a měří k tomu i barvu). Bez nich se měří proto, že tady jde
-    /// o **ikony** — odznak je jen na dvou položkách ze čtyř, takže by rozhodoval o tom, která
-    /// vyjde širší. Pásy se u toho **nepočítají** — ikona s mezerou uprostřed (šipka nad
+    /// Měří se **bez odznaků**, a od #526 je to znovu podmínka: odznak od #526 z rámu **vyčnívá**
+    /// (roh, ne rám — `RailBadgeTests` to měří i s barvou), takže by rozhodoval o tom, která
+    /// položka vyjde širší, a tahle sada se ptá na **ikony**. Pásy se u toho **nepočítají** —
+    /// ikona s mezerou uprostřed (šipka nad
     /// vaničkou u `Moje PR`) se do bitmapy zapíše jako dva pásy, takže by počet měřil kresbu
     /// glyfu, ne počet položek. Kolik sekcí rail má, tvrdí test výš.
     @Test("Sekce se vejdou do railu i s pátou položkou")
@@ -119,7 +119,45 @@ struct SidebarRailTests {
         #expect(try (heights.max() ?? 0) - #require(heights.min()) <= 2)
     }
 
+    /// **Řádek položky je široký jako rail, tlačítko v něm zůstává 34 bodů** (#526) — pruh aktivní
+    /// sekce visí na hraně railu, takže řádek musí být široký, ale klikací plocha ne. Kdyby se rám
+    /// tlačítka rozšířil na 52, přepínal by sekci **klik do prázdna vedle ikony**.
+    ///
+    /// Stojí to celé na **pořadí modifikátorů**: `.frame(width:)` nasazený **za** `.buttonStyle`
+    /// tlačítko jen vystředí, kdežto uvnitř `label` by ho nafoukl. To je přesně ta věc, kterou
+    /// příští refaktor prohodí a nikdo si nevšimne — a v okně mimo obrazovku se neověří: klikací
+    /// plocha `.plain` tlačítka se z bitmapy ani z `fittingSize` nepozná a accessibility tree se
+    /// nenaplní (#269). Tvrdí se to proto **nad zdrojákem**.
+    ///
+    /// **Nad kódem bez mezer** (#490, #550): ve Swiftu je mezera uvnitř volání volná, takže stráž
+    /// nad surovým textem by `.buttonStyle( .plain )` pustila.
+    @Test("Šířku railu si bere řádek, ne tlačítko")
+    func widensTheRowButNotTheButton() throws {
+        let code = try String(contentsOf: Self.railSource, encoding: .utf8)
+        let lines = TextLines.content(code)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+        let condensed = lines.joined().filter { !$0.isWhitespace }
+
+        let framed = try #require(
+            condensed.range(of: ".frame(width:Self.width).overlay(alignment:.leading)"),
+            "řádek položky si nebere šířku railu, nebo na něm nevisí pruh"
+        )
+        let styled = try #require(condensed.range(of: ".buttonStyle(.plain).help("), "tlačítko ztratilo .plain")
+        #expect(styled.upperBound < framed.lowerBound, "frame je před buttonStyle — nafoukl by klikací plochu")
+        // A rám ikony zůstává 34 × 30, tedy uvnitř labelu. Kdyby se šířka railu dostala **dovnitř**
+        // tlačítka, byl by to týž následek jinou cestou.
+        #expect(!condensed.contains(".frame(width:Self.width,height:30)"))
+        #expect(condensed.contains(".frame(width:34,height:30)"))
+    }
+
     // MARK: - měřidlo
+
+    /// Zdroják railu. Stráž výš čte **kód**, ne kresbu — viz její doc.
+    private static let railSource = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appending(path: "App/Views/SidebarRail.swift")
 
     /// Souvislý pás nakresleného obsahu v railu, v **bodech**.
     private struct Band {
@@ -181,6 +219,12 @@ struct SidebarRailTests {
     ///
     /// Pozadí se bere z **levého okraje téhož řádku**, ne z konstanty: rail má v každém režimu
     /// jinou plochu a zadrátovaná barva by našla „obsah“ všude.
+    ///
+    /// **Vzorek pozadí jde z pátého bodu a obsah se hledá od šestého; od #526 je to podmínka, ne
+    /// rezerva.** Na hraně railu leží pruh aktivní sekce (2 body akcentu), takže vzorek z prvního
+    /// bodu by na řádcích aktivní položky vydal **akcent** — a proti němu by se jako „obsah“ jevil
+    /// celý zbytek řádku včetně prázdné plochy. Tahle sada měří **ikony**: kde stojí a jak jsou
+    /// velké. Kde leží pruh, měří `RailBadgeTests` na vlastním výřezu hrany.
     private static func bands(in appearance: NSAppearance, rep: NSBitmapImageRep) -> [Band] {
         let scale = max(rep.pixelsWide / 52, 1)
         var pixels: [(top: Int, bottom: Int, left: Int, right: Int)] = []
@@ -188,11 +232,11 @@ struct SidebarRailTests {
 
         appearance.performAsCurrentDrawingAppearance {
             for y in 0..<rep.pixelsHigh {
-                let background = rep.colorAt(x: 1, y: y)
+                let background = rep.colorAt(x: 4 * scale, y: y)
                 var left: Int?
                 var right = 0
                 // Pravý okraj railu nese jeho obrys (1 bod), ten se do obsahu počítat nemá.
-                for x in 2..<(rep.pixelsWide - scale) where !matches(rep.colorAt(x: x, y: y), background) {
+                for x in (5 * scale)..<(rep.pixelsWide - scale) where !matches(rep.colorAt(x: x, y: y), background) {
                     if left == nil { left = x }
                     right = x
                 }
