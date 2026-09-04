@@ -1547,6 +1547,19 @@ final class AppStore {
     /// stejně byla `UNKNOWN`.
     var branchStatuses: [PRIdentifier: BranchStatusState] = [:]
 
+    /// Co repozitář o mergi říká (#556) — povolené metody a odkud GitHub skládá tělo commitu.
+    /// Chybějící klíč = **ještě se neptalo, nebo se to nepodařilo**.
+    ///
+    /// Klíčem je repo, ne PR, jako u nabídky labelů: jsou to příznaky repozitáře a mezi dvěma PR
+    /// z téhož repa se nemění. Na tom stojí, že je to **jedno volání za repo** (0,62 s), ne dotaz
+    /// na každé PR v tiku.
+    ///
+    /// **Bez mapy poruch, na rozdíl od labelů**, a je to rozhodnutí: „nezjistil jsem to“ je tady
+    /// **platná odpověď** — nad repem bez práva zápisu GitHub ta pole vůbec neposílá, takže se
+    /// „nevím“ od výpadku sítě nedá rozeznat ani z odpovědi. Potvrzení se v tom stavu chová
+    /// stejně: nabídne všechny tři metody a nic o nich netvrdí.
+    var repositoryMergeSettings: [RepoID: RepositoryMergeSettings] = [:]
+
     /// Co se právě děje se srovnáním větve (#466). Chybějící klíč = nic se neděje.
     ///
     /// **Stav, ne cesta ven** — tatáž konstrukce jako u `metadataActionStates`: akce se ovládá
@@ -2154,7 +2167,7 @@ final class AppStore {
         // paměť, kterou nikdo nepřečte. Rozdělané se tu čekat nedá: pruh je stav okna, ne volání.
         //
         // **Tady se zapisuje jedině při změně, a je to výjimka z pravidla, ne nedůslednost**
-        // (#421). Zbylých sedmatřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
+        // (#421). Zbylých osmatřicet map se přiřazuje bezpodmínečně schválně: zápis **téže**
         // hodnoty `@Observable` nehlásí, takže je `if` navíc jen mrtvá váha
         // (`PollObservationTests`). Jenže suprese stojí na tom, že se ty dvě hodnoty dají
         // **porovnat** — a `DiffSearchState` je `@Observable` **třída**, takže
@@ -2268,6 +2281,10 @@ final class AppStore {
         assignableUsers = assignableUsers.filter { wanted.contains($0.key) }
         assignableTeams = assignableTeams.filter { wanted.contains($0.key) }
         assignableUserFailures = assignableUserFailures.filter { wanted.contains($0.key) }
+        // Příznaky merge (#556) jdou tou samou cestou a ze stejného důvodu: klíčem je repo, takže
+        // se uklízí podle rep v seznamu. **Vypadnutí repa je zároveň jediné, co tu cache
+        // zneplatní** — `updatedAt` mluví o pull requestu, ne o nastavení repozitáře.
+        repositoryMergeSettings = repositoryMergeSettings.filter { wanted.contains($0.key) }
 
         // Rozkliknutý commit a jeho diff (#317). Diff jsou megabajty, takže jde stejnou cestou
         // jako diff PR — a rozdělané stahování přežije ze stejného důvodu: doběhlé volání by si

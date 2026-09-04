@@ -89,6 +89,21 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// nic neodejde“ drží **výchozí vypnuto**: dokud si o to někdo výslovně neřekne, nejde
     /// odeslat nikam. Odesílá pořád jedině člověk potvrzením (#68), to se nemění.
     var allowsPublishing: Bool
+    /// Jakou metodou se merguje vlastní PR (#556). Ve výchozím stavu **squash**.
+    ///
+    /// Do #556 to byla konstanta v `MergeRequest`; proč se to změnilo, je u `MergeMethod`.
+    /// **Výchozí squash proto, že tak se aplikace chovala do #556** — po zavedení pole se nesmí
+    /// začít chovat jinak. Je to tatáž úmluva jako u `reviewPrompt` a `reviewTimeoutMinutes`.
+    ///
+    /// **Není to brána, jen výchozí hodnota.** Bránu drží `allowsPublishing`: s vypnutým
+    /// odesíláním se nemergne nic, ať je tady cokoli. Proto to v okně leží na stránce `Odesílání`
+    /// **pod** ní, ne vedle — obráceně by to vypadalo, že se metodou odesílání zapíná.
+    ///
+    /// **Metodu, kterou konkrétní repozitář nepovoluje, jde tady vybrat** — globální hodnota platí
+    /// pro všechna repa a o kterémkoli z nich se odsud nedá nic tvrdit. Že ji tenhle konkrétní
+    /// repozitář nepustí, se pozná v potvrzení, tedy dřív, než se cokoli mergne
+    /// (`Policy.mergeMethodWarning`).
+    var mergeMethod: MergeMethod
     /// Jazyk, do kterého se nálezy překládají, než se ukážou. **Ne** jazyk, ve kterém je
     /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
     /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
@@ -166,6 +181,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         reviewTimeoutMinutes: Int = ReviewTimeout.standardMinutes,
         mode: ReviewMode,
         allowsPublishing: Bool = false,
+        mergeMethod: MergeMethod = .squash,
         findingsLanguage: FindingsLanguage = .czech,
         diffLayout: DiffLayout = .unified,
         appearance: AppearanceMode = .system,
@@ -188,6 +204,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.reviewTimeoutMinutes = reviewTimeoutMinutes
         self.mode = mode
         self.allowsPublishing = allowsPublishing
+        self.mergeMethod = mergeMethod
         self.findingsLanguage = findingsLanguage
         self.diffLayout = diffLayout
         self.appearance = appearance
@@ -258,6 +275,13 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // nálezů, kde je nejhorším následkem próza v jiném jazyce.
         allowsPublishing = (try? container.decode(Bool.self, forKey: .allowsPublishing))
             ?? standard.allowsPublishing
+        // **Rozbitá hodnota se srazí na výchozí, a ta je `squash`** (#556) — tedy na chování
+        // aplikace do #556. Přísnost jako u odesílání by tady nechránila nic (metodou se cesta ven
+        // neotevírá), ale ani mírnost jako u vzhledu nestačí: metoda je součást payloadu nevratné
+        // akce, takže překlep nesmí vyrobit jinou. Squash je ta jediná hodnota, o které se dá
+        // tvrdit, že se s ní aplikace chová jako dřív — a v potvrzení je pořád vidět, co odejde.
+        mergeMethod = (try? container.decode(MergeMethod.self, forKey: .mergeMethod))
+            ?? standard.mergeMethod
         findingsLanguage = (try? container.decode(FindingsLanguage.self, forKey: .findingsLanguage))
             ?? standard.findingsLanguage
         // Tolerantně jako jazyk nálezů, ne přísně jako režim nebo odesílání: nejhorší
@@ -310,6 +334,19 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// o tohle“ — a `false` u repa se proto **nesmaže** jako „shodné s globálním“, jinak by
     /// ho přepnutí globálního defaultu tiše otevřelo.
     var allowsPublishing: Bool?
+    /// `nil` = ber globální (#556). Vyplněná hodnota znamená „řekl jsem si o tohle“.
+    ///
+    /// **Metoda merge je zvyk repozitáře, ne člověka**, a proto to override má: tenhle repo
+    /// squashuje, firemní repo s prořezanou historií chce merge commit. Je to tatáž třída jako
+    /// `mode` nebo `incrementalAfterPush` — a **ne** jako `diffLayout` a `appearance`, které
+    /// override schválně nemají, protože jsou vlastností toho, kdo se kouká. Tohle je vlastnost
+    /// toho, **do čeho se merguje**.
+    ///
+    /// Na rozdíl od globální úrovně tady nabídka **nepovolenou metodu vybrat nedovolí**: repo je
+    /// jedno a jeho příznaky se dají přečíst, takže se do souboru nedá uložit hodnota, se kterou
+    /// by merge skončil chybou z API. Když se povolení na GitHubu změní **až potom**, uložená
+    /// hodnota v souboru zůstane — a pozná se to v potvrzení, ne z chyby.
+    var mergeMethod: MergeMethod?
     /// `nil` = ber globální. U firemního repa s mezinárodním týmem dává smysl angličtina,
     /// i když je zbytek fronty český.
     var findingsLanguage: FindingsLanguage?
@@ -343,6 +380,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     init(
         mode: ReviewMode? = nil,
         allowsPublishing: Bool? = nil,
+        mergeMethod: MergeMethod? = nil,
         findingsLanguage: FindingsLanguage? = nil,
         skills: [String]? = nil,
         blockingCategories: [String]? = nil,
@@ -352,6 +390,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     ) {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
+        self.mergeMethod = mergeMethod
         self.findingsLanguage = findingsLanguage
         self.skills = skills
         self.blockingCategories = blockingCategories
@@ -384,6 +423,15 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
             allowsPublishing = (try? container.decode(Bool.self, forKey: .allowsPublishing)) ?? false
         } else {
             allowsPublishing = nil
+        }
+        // Jako na globální úrovni (#556): chybějící klíč je „ber globální“, kdežto **rozbitá
+        // hodnota se srazí na `squash`**, tedy na chování aplikace do #556. Vzít u ní globální
+        // hodnotu by znamenalo, že překlep v repu, u kterého jsem si squash řekl výslovně, ho
+        // přepne na globální merge commit — a to je metoda nevratné akce, ne popisek.
+        if container.contains(.mergeMethod) {
+            mergeMethod = (try? container.decode(MergeMethod.self, forKey: .mergeMethod)) ?? .squash
+        } else {
+            mergeMethod = nil
         }
         // Na rozdíl od režimu se rozbitá hodnota bere jako „nic jsem neřekl“: špatný jazyk
         // znamená prózu v jiném jazyce, ne spuštěné review, o které nikdo nežádal.
@@ -454,6 +502,9 @@ struct Configuration: Codable, Equatable, Sendable {
             reviewTimeoutMinutes: ReviewTimeout.standardMinutes,
             mode: .manual,
             allowsPublishing: false,
+            // Doslova to, co bylo do #556 v konstantě `MergeRequest.method` — po zavedení pole se
+            // aplikace nesmí začít chovat jinak. Hlídá to test, který ji porovnává s literálem.
+            mergeMethod: .squash,
             findingsLanguage: .czech,
             diffLayout: .unified,
             appearance: .system,
@@ -489,6 +540,7 @@ struct Configuration: Codable, Equatable, Sendable {
         return ResolvedConfig(
             mode: overrides?.mode ?? global.mode,
             allowsPublishing: overrides?.allowsPublishing ?? global.allowsPublishing,
+            mergeMethod: overrides?.mergeMethod ?? global.mergeMethod,
             findingsLanguage: overrides?.findingsLanguage ?? global.findingsLanguage,
             skills: Self.nonBlank(overrides?.skills ?? global.skills),
             blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories)),
@@ -556,6 +608,10 @@ struct ResolvedConfig: Equatable, Sendable {
     /// Smí se z tohohle repa odeslat review? Odpovídá na to `PublishScope`, ne volající —
     /// dvě místa, kde se ta otázka vyhodnocuje, by se rozešla.
     let allowsPublishing: Bool
+    /// Jakou metodou se merguje vlastní PR (#556) — **výchozí hodnota, ne rozkaz**: potvrzení ji
+    /// vypisuje a dovolí přebít pro jeden merge, a jestli ji repozitář vůbec pustí, rozhoduje
+    /// `Policy.initialMergeMethod` z příznaků přečtených z GitHubu.
+    let mergeMethod: MergeMethod
     let findingsLanguage: FindingsLanguage
     let skills: [String]
     let blockingCategories: Set<String>

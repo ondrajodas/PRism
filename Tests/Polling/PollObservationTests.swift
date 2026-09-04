@@ -156,7 +156,7 @@ struct PollObservationTests {
     /// tom, že se ty dvě hodnoty dají **porovnat**, a `diffSearches` drží `@Observable` třídu, takže
     /// `Equatable` není. Věta „ten `if` nic nemění“ tedy platí o mapách s `Equatable` hodnotou, ne
     /// plošně — a která mapa to je, se z jednoho čtení nepozná. Proto je níž
-    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** devětatřiceti.
+    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** čtyřiceti.
     @Test("Tichý tik nezneplatní ani rozbalení kontextu v diffu")
     func quietTickDoesNotWakeTheDiffReader() async throws {
         let pr = PRIdentifier("cli/cli#1")!
@@ -347,6 +347,7 @@ struct PollObservationTests {
             ("assignableUsers", { _ = store.assignableUsers }),
             ("assignableTeams", { _ = store.assignableTeams }),
             ("assignableUserFailures", { _ = store.assignableUserFailures }),
+            ("repositoryMergeSettings", { _ = store.repositoryMergeSettings }),
             ("openCommits", { _ = store.openCommits }),
             ("commitDiffs", { _ = store.commitDiffs }),
             ("expandedChecks", { _ = store.expandedChecks }),
@@ -357,7 +358,7 @@ struct PollObservationTests {
         // nedopíše, projde s tímhle seznamem zeleně — což je ta chyba, kterou #421 hledalo pět
         // kol. Nedá se to spočítat z kódu, takže je to číslo napsané ručně, a rozejde-li se,
         // spadne to na tomhle řádku, ne o padesát řádků níž.
-        #expect(reads.count == 39, "forget(whatIsNotIn:) prořezává jiný počet map než tenhle výčet")
+        #expect(reads.count == 40, "forget(whatIsNotIn:) prořezává jiný počet map než tenhle výčet")
 
         let watchers = reads.map { entry -> (name: String, watcher: Watcher) in
             let watcher = Watcher()

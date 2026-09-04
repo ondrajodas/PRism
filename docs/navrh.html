@@ -14826,6 +14826,456 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
     </div>
   </section>
 
+  <section class="section" id="s48">
+    <div class="section-head">
+      <div class="eyebrow">48 — Vlastní PR · jakou metodou se merguje</div>
+      <h2>Squash přestává být konstanta a stává se výchozí hodnotou</h2>
+      <p class="muted">
+        Merge z panelu (#465) posílá <code>merge_method: "squash"</code> z <b>konstanty</b>, a u té
+        konstanty stojí zdůvodnění, že volba by byla „třetí věc na potvrzení, kterou člověk projde
+        jednou za rok, a přepnout ji jde na GitHubu“. <b>Praxe to vyvrátila</b> (#556): přepínat to
+        na GitHubu znamená odejít z okna kvůli jedné hodnotě, a squash není to, co chci ve všech
+        repech. Konstanta se tedy mění na <b>výchozí hodnotu v nastavení</b> — globálně
+        i per repo — a potvrzení ji <b>vypisuje a dovolí přebít pro jeden merge</b>.
+      </p>
+      <p class="muted">
+        <b>Tvrdá podmínka č. 1 se tím nemění ani o položku.</b> Merge zůstává <b>osmá metoda</b>
+        <code>ReviewPublishing</code>, jde přes bránu (<code>allowsPublishing</code>), na výslovný
+        pokyn a s potvrzením, ve kterém je vidět celý payload; hlava se dál ověřuje dvakrát.
+        Přibývá jen <b>čtení</b>: jaké metody repozitář povoluje, tedy jedno pole v
+        <code>GitHubGateway</code>, který zůstává bez zápisu.
+      </p>
+      <p class="muted">
+        <b>Globálně i per repo, a per repo je tady ta důležitější polovina.</b> Metoda merge je
+        <b>zvyk repozitáře</b>, ne člověka: tenhle repo squashuje, firemní repo s prořezanou
+        historií chce merge commit. Je to tedy tatáž třída jako <code>mode</code>,
+        <code>allowsPublishing</code> nebo <code>incrementalAfterPush</code> — globální default plus
+        volitelný override. Pohled na diff a vzhled okna override schválně nemají, protože jsou
+        vlastností toho, kdo se kouká; tohle je vlastnost toho, do čeho se merguje.
+      </p>
+      <p class="muted">
+        <b>A přebít se to dá i pro jeden merge, což #465 u téže obrazovky zamítlo.</b> Ten argument
+        ale mluvil o světě, ve kterém <b>žádná výchozí hodnota nebyla</b>: picker byl tehdy jediná
+        cesta, jak metodu určit, takže se <b>každý</b> merge musel rozhodovat. Teď je rozhodnuto
+        předem a přepnutí je <b>odchylka</b> — stojí jeden pohled, ne jedno rozhodnutí. Slovo
+        „výchozí“ navíc nic neznamená, když od něj není kam se odchýlit: PR s pečlivě rozdělenou
+        historií chce merge commit i v repu, kde se jinak squashuje.
+      </p>
+      <p class="muted">
+        <b>Není to druhá věc na potvrzení.</b> Picker leží <b>v tom výpisu payloadu</b>, který se
+        u nevratné akce čte tak jako tak, a mergne se pořád <b>jedním</b> kliknutím na pojmenované
+        tlačítko. Kdyby to byl druhý krok („vyber metodu“ → „potvrď“), platilo by zamítnutí z #465
+        dál.
+      </p>
+      <p class="muted">
+        <b>Nabídne se jedině to, co repo povoluje — a je to změřené.</b>
+        <code>keboola/job-queue-daemon</code> nemá <code>allow_rebase_merge</code>, kdežto
+        <code>ondrajodas/PRism</code> má všechny tři. Metoda, kterou repo nepovoluje, se v nabídce
+        <b>kreslí zašedlá se slovem <code>nejde</code></b> a vybrat ji nejde; nastavení tedy nemá jak
+        uložit hodnotu, se kterou by merge spadl. <b>Třetí odpověď je „nevím“</b>, taky změřená: nad
+        repem bez práva zápisu (<code>cli/cli</code>) vrací GitHub všechny tři příznaky jako
+        <code>null</code>. Tam se netvrdí nic — nabízí se všechny tři a věta pod výpisem to přizná.
+      </p>
+      <p class="muted">
+        <b>Nepovolená výchozí metoda se nepodstrčí jinou.</b> Když je v nastavení squash a repo ho
+        nepovoluje, potvrzení se otevře <b>bez vybrané metody</b>, <code>Mergnout</code> je
+        zakázané a pod výpisem stojí výstraha s tím, co repo povoluje. Tiše přepnout na první povolenou by
+        znamenalo, že se u nevratné akce stane něco, o co nikdo nepožádal — a to je zrovna ta věc,
+        kterou má potvrzení chytat.
+      </p>
+      <p class="muted">
+        <b>Titulek a tělo jsou u každé metody jiná otázka.</b> <code>commit_title</code> se dnes
+        posílá <b>vždycky</b> (<code>titulek PR (#číslo)</code>), protože bez něj si ho GitHub
+        skládá podle nastavení repozitáře, do kterého aplikace nevidí. To platí dál, ale <b>u každé
+        metody jinak</b>: u squashe zůstává titulek PR, u merge commitu se posílá
+        <code>Merge pull request #N from &lt;větev&gt;</code>, tedy vlastní úmluva GitHubu, a
+        <b>u rebase se neposílá vůbec</b> — žádný commit tam nevzniká, takže by to bylo pole, které
+        GitHub zahodí, a potvrzení by slibovalo titulek, který se nikde neobjeví.
+      </p>
+      <p class="muted">
+        <b>Tělo se neposílá u žádné metody, ale věta o něm je přesná, ne opatrná.</b> Do #556 stálo
+        v potvrzení <em>„Tělo squash commitu složí GitHub ze zpráv 3 commitů.“</em> — což je pravda
+        jedině tehdy, když má repo <code>squash_merge_commit_message = COMMIT_MESSAGES</code>
+        (tenhle repo má, změřeno). Nastavení se čte <b>týmž voláním</b> jako povolené metody, takže
+        věta umí říct, co v tom těle doopravdy bude: zprávy commitů, popis PR, titulek PR, nebo
+        prázdno. Kde se to zjistit nepodařilo, zůstává dnešní přiznání — <em>„složí GitHub podle
+        nastavení repozitáře“</em>.
+      </p>
+      <p class="muted">
+        <b>Věty o squashi se přepisují jako třída, ne po jednom výskytu.</b> Není to jen ta jedna
+        pod výpisem: řádek <code>commitů 3 → 1</code> je taky tvrzení o squashi — u merge commitu
+        je výsledek <code>3 + merge commit</code> a u rebase <code>3 přehrané</code>. Řádek, který
+        nad jinou metodou lže, je horší než řádek, který tam není.
+      </p>
+    </div>
+
+    <h3>Nastavení: kde se výchozí metoda bere</h3>
+    <p class="muted">
+      Globální default je na stránce <em>Odesílání</em>, hned <b>pod</b> bránou: je to jediná
+      stránka, která odpovídá na otázku „co z aplikace jde ven“, a merge je z toho ta nejnevratnější
+      část. Vlastní stránka by znamenala jeden knoflík na stránku, per repo se to nastavuje tam, kde
+      se nastavuje všechno ostatní per repo.
+    </p>
+    <div class="block">
+      <header>
+        <span>Stránka <strong>Odesílání</strong> — výchozí metoda pod branou, ne vedle ní</span>
+        <span class="more">↥ Odesílání</span>
+      </header>
+      <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 15px;">
+        <div class="set-sec">
+          <span class="t">Odesílání na GitHub</span>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="lbl">Povolit odesílání</span>
+              <span class="val">
+                <span class="pill run">Vypnuto</span>
+                <span class="pill idle">Povoleno</span>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            Výchozí stav je <strong>vypnuto</strong> a to se tímhle zákresem nemění — merge jde
+            touž branou jako review, takže s vypnutým odesíláním se <code>Mergnout…</code> jen
+            zašedne a řekne proč.
+          </span>
+        </div>
+
+        <!-- Nová sekce (#556). Leží **pod** branou schválně: brána rozhoduje, jestli se dá
+             mergnout vůbec, tahle sekce jenom čím. Obráceně by to vypadalo, že se metodou
+             odesílání zapíná. -->
+        <div class="set-sec">
+          <span class="t">Merge vlastního PR</span>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="lbl">Výchozí metoda</span>
+              <span class="val">
+                <span class="pill run">squash</span>
+                <span class="pill idle">merge commit</span>
+                <span class="pill idle">rebase</span>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            Platí pro repa, která si neřeknou o jinou. <strong>Squash je výchozí</strong>, protože
+            tak se aplikace chovala do #556 — po zavedení pole se nesmí začít chovat jinak.
+            Metodu, kterou repozitář nepovoluje, tady vybrat <strong>jde</strong>: globální hodnota
+            platí pro všechna repa a o kterémkoli z nich se odsud nedá nic tvrdit. Že ji tenhle
+            konkrétní repozitář nepustí, se pozná v potvrzení, tedy dřív, než se cokoli mergne.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="block">
+      <header>
+        <span>Stránka <strong>Repozitáře</strong> — override vedle ostatních, a s tím, co repo pustí</span>
+        <span class="more">▤ keboola/job-queue-daemon</span>
+      </header>
+      <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 15px;">
+        <div class="set-sec">
+          <span class="t">keboola/job-queue-daemon</span>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="lbl">Odesílání na GitHub</span>
+              <span class="val">
+                <span class="pill run">Podle globálního (vypnuto)</span>
+                <span class="pill idle">Povoleno</span>
+                <span class="pill idle">Zakázáno</span>
+              </span>
+            </div>
+            <!-- Čtyřhodnotový jako ostatní override: „ber globální“ musí být vidět **i s tou
+                 hodnotou**, protože jinak není poznat, co se stane. Nepovolená metoda se kreslí
+                 zašedle a se slovem `nejde` — zmizet nesmí, jinak se nedá poznat rozdíl mezi
+                 „repo to nepustí“ a „tuhle metodu GitHub nemá“. -->
+            <div class="set-row">
+              <span class="lbl">Metoda merge</span>
+              <span class="val" style="flex-wrap: wrap; justify-content: flex-end;">
+                <span class="pill idle">Podle globálního (squash)</span>
+                <span class="pill run">merge commit</span>
+                <span class="pill idle">squash</span>
+                <span class="pill idle" style="opacity: 0.45; text-decoration: line-through;">rebase</span>
+                <span style="font-size: 10.5px; color: var(--ink-3);">rebase repo nepovoluje</span>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            <strong>Povolené metody přečte aplikace z repozitáře</strong>
+            (<code>allow_merge_commit</code>, <code>allow_squash_merge</code>,
+            <code>allow_rebase_merge</code>) — jedno volání za repo, změřeno <strong>0,62 s</strong>,
+            a ptá se jedině při otevření <strong>vlastního</strong> PR, ne na tik pollingu.
+            Zašedlou hodnotu nejde vybrat, takže se do souboru nedá uložit metoda, se kterou by
+            merge skončil chybou z API. Když se povolení na GitHubu změní <strong>až potom</strong>,
+            uložená hodnota v souboru zůstane — a pozná se to v potvrzení, ne z chyby.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Potvrzení: co se vezme — a jak to přebít pro tenhle jeden merge</h3>
+    <p class="muted">
+      Řádek <code>metoda</code> v potvrzení (sekce 36) přestává být opsané slovo a stává se
+      <b>nabídkou</b>. Zůstává na svém místě ve výpisu <em>Co se stane</em>, protože je to
+      <b>součást payloadu</b>, ne nastavení: co je v tom řádku vybrané, to odejde. S metodou se
+      přepíšou i <b>ostatní řádky výpisu</b> — počet commitů i zpráva —, takže se nedá vybrat
+      metodu a přečíst si k ní čísla té předchozí.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Výchozí metoda z nastavení · squash</div>
+        <div class="frame flat">
+          <div class="sheet-head">
+            <span class="t">Mergnout pull request?</span>
+            <span class="slug">keboola/vault #85</span>
+            <span class="sub">Tohle se nedá vzít zpět z aplikace.</span>
+          </div>
+          <div class="sheet-body">
+            <div class="pl-sec">
+              <span class="cap">Co se stane</span>
+              <div class="rv-list">
+                <div class="rv-row"><span class="who">větev</span><span class="ans">odinuv:chore/deps → main</span></div>
+                <!-- Metoda je **řádek payloadu, ve kterém se dá kliknout**, ne políčko ve
+                     formuláři nad výpisem. Vybraná hodnota je ta, která odejde; přepnutím se
+                     přepíšou i řádky pod ní. -->
+                <div class="rv-row">
+                  <span class="who">metoda</span>
+                  <span class="ans" style="display: flex; gap: 6px; align-items: center;">
+                    <span class="pill run">squash</span>
+                    <span class="pill idle">merge commit</span>
+                    <span class="pill idle">rebase</span>
+                  </span>
+                </div>
+                <div class="rv-row"><span class="who">commitů</span><span class="ans">3 → 1</span></div>
+                <div class="rv-row"><span class="who">titulek</span><span class="ans">chore: modernize dependencies (#85)</span></div>
+                <div class="rv-row"><span class="who">hlava</span><span class="ans">9bb4352</span></div>
+              </div>
+            </div>
+            <span style="font-size: 11.5px; color: var(--ink-3); line-height: 1.5;">
+              Tělo squash commitu složí GitHub ze zpráv 3 commitů.
+            </span>
+          </div>
+          <div class="sheet-foot">
+            <span class="mini">Zrušit</span>
+            <span class="sp"></span>
+            <span class="mini pri">Mergnout keboola/vault #85</span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Beze změny nastavení je to <b>dnešní obrazovka plus tři pilulky</b>: výchozí hodnota je
+          předvybraná, takže merge zůstává dvě kliknutí.
+        </p>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Přebito pro tenhle jeden merge · merge commit</div>
+        <div class="frame flat">
+          <div class="sheet-head">
+            <span class="t">Mergnout pull request?</span>
+            <span class="slug">keboola/vault #85</span>
+            <span class="sub">Tohle se nedá vzít zpět z aplikace.</span>
+          </div>
+          <div class="sheet-body">
+            <div class="pl-sec">
+              <span class="cap">Co se stane</span>
+              <div class="rv-list">
+                <div class="rv-row"><span class="who">větev</span><span class="ans">odinuv:chore/deps → main</span></div>
+                <div class="rv-row">
+                  <span class="who">metoda</span>
+                  <span class="ans" style="display: flex; gap: 6px; align-items: center;">
+                    <span class="pill idle">squash</span>
+                    <span class="pill run">merge commit</span>
+                    <span class="pill idle">rebase</span>
+                  </span>
+                </div>
+                <!-- Tři řádky, které se s metodou **mění**: počet commitů (squash slévá do
+                     jednoho, merge commit přidává jeden, rebase přehrává), titulek (u rebase
+                     žádný není) a věta o těle pod výpisem. -->
+                <div class="rv-row"><span class="who">commitů</span><span class="ans">3 + merge commit</span></div>
+                <div class="rv-row"><span class="who">titulek</span><span class="ans">Merge pull request #85 from odinuv:chore/deps</span></div>
+                <div class="rv-row"><span class="who">hlava</span><span class="ans">9bb4352</span></div>
+              </div>
+            </div>
+            <span style="font-size: 11.5px; color: var(--ink-3); line-height: 1.5;">
+              Tělo merge commitu složí GitHub z titulku pull requestu. Přepnutá metoda platí
+              <b>pro tenhle merge</b> — výchozí hodnota v nastavení zůstává <code>squash</code>.
+            </span>
+          </div>
+          <div class="sheet-foot">
+            <span class="mini">Zrušit</span>
+            <span class="sp"></span>
+            <span class="mini pri">Mergnout keboola/vault #85</span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Že je přepnutí <b>jednorázové</b>, stojí pod výpisem. Bez té věty by picker vypadal jako
+          zkratka do nastavení a člověk by čekal, že si to okno bude pamatovat.
+        </p>
+      </div>
+    </div>
+
+    <h3>Když repo tu výchozí metodu nepovoluje</h3>
+    <p class="muted">
+      Poslední ze tří stavů, a jediný, ve kterém se merge <b>zastaví</b>. Nastavení říká
+      <code>rebase</code>, <code>keboola/job-queue-daemon</code> ho nepovoluje — takže není vybráno
+      nic, <code>Mergnout</code> je zakázané a pod výpisem stojí, co s tím. <b>Panel o tom mlčí</b>
+      a <code>Mergnout…</code> v něm zůstává povolené: mergnout <b>jde</b>, jen zbývá vybrat čím,
+      a to je otázka payloadu — tedy věc téhle obrazovky, ne panelu.
+    </p>
+    <div class="pane new" style="max-width: 520px;">
+      <div class="tag"><i></i>Výchozí metoda tady neplatí · nic není vybráno</div>
+      <div class="frame flat">
+        <div class="sheet-head">
+          <span class="t">Mergnout pull request?</span>
+          <span class="slug">keboola/job-queue-daemon #212</span>
+          <span class="sub">Tohle se nedá vzít zpět z aplikace.</span>
+        </div>
+        <div class="sheet-body">
+          <div class="pl-sec">
+            <span class="cap">Co se stane</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">větev</span><span class="ans">ondra/AJDA-892 → main</span></div>
+              <div class="rv-row">
+                <span class="who">metoda</span>
+                <span class="ans" style="display: flex; gap: 6px; align-items: center;">
+                  <span class="pill idle">squash</span>
+                  <span class="pill idle">merge commit</span>
+                  <span class="pill idle" style="opacity: 0.45; text-decoration: line-through;">rebase</span>
+                  <span style="font-size: 10.5px; color: var(--ink-3);">nejde</span>
+                </span>
+              </div>
+              <div class="rv-row"><span class="who">commitů</span><span class="ans" style="color: var(--ink-3);">podle metody</span></div>
+              <div class="rv-row"><span class="who">titulek</span><span class="ans" style="color: var(--ink-3);">podle metody</span></div>
+              <div class="rv-row"><span class="who">hlava</span><span class="ans">c3d4e5f</span></div>
+            </div>
+          </div>
+          <div class="warnbox">
+            <span class="i">▲</span>
+            <span>Výchozí metoda <code>rebase</code> tady <b>nejde</b> — repozitář povoluje
+            <code>squash</code> a <code>merge commit</code>. Vyber jednu z nich, nebo přepni
+            výchozí hodnotu v nastavení tohohle repa.</span>
+          </div>
+        </div>
+        <div class="sheet-foot">
+          <span class="mini">Zrušit</span>
+          <span class="sp"></span>
+          <span class="mini pri" style="opacity: 0.45;">Mergnout keboola/job-queue-daemon #212</span>
+        </div>
+      </div>
+      <p style="font-size: 13.5px; color: var(--ink-2);">
+        <code>podle metody</code> místo čísel: dokud není vybráno, <b>není co vypsat</b> —
+        a nechat tam čísla od nevybrané metody by bylo tvrzení, které si nikdo nevyžádal.
+      </p>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">169</span>
+        <span class="body">
+          <b>Zdůvodnění u konstanty se přepisuje, ne maže</b>
+          <span>U <code>MergeRequest.method</code> stojí, že volba by byla „třetí věc na
+          potvrzení“ a že přepnout ji jde na GitHubu. Smazat to a napsat nové by vypadalo jako
+          opomenutí; <b>přepsat i s důvodem</b> je to, co dovoluje pozdější korekci — a důvod je
+          tady jednou větou: odejít z okna kvůli jedné hodnotě je dražší než ta hodnota.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">170</span>
+        <span class="body">
+          <b>Metoda je zvyk repozitáře, proto per repo</b>
+          <span>Global default plus override, jako <code>mode</code> nebo
+          <code>incrementalAfterPush</code> — a ne jako <code>diffLayout</code> a vzhled okna,
+          které override schválně nemají. Rozhoduje ta otázka: <b>vlastnost toho, do čeho se
+          merguje</b>, patří k repu; vlastnost toho, kdo se kouká, ke člověku. Knoflík navíc, který
+          si nikdo nenastaví, je jen řádek v okně — tenhle se nastaví, protože squash a merge commit
+          se v mých repech střídají.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">171</span>
+        <span class="body">
+          <b>#465 tenhle picker zamítlo z důvodu, který padl</b>
+          <span>„Třetí věc na potvrzení, kterou člověk projde jednou za rok“ platilo, dokud byl
+          picker <b>jedinou</b> cestou, jak metodu určit — pak se rozhodoval každý merge. S výchozí
+          hodnotou v nastavení je předvybráno a přepnutí je odchylka: <b>jeden pohled, ne jedno
+          rozhodnutí</b>. A není to druhý krok — mergne se pořád jedním kliknutím na pojmenované
+          tlačítko, picker leží ve výpisu payloadu, který se u nevratné akce čte tak jako
+          tak.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">172</span>
+        <span class="body">
+          <b>Povolené metody jsou čtení, a „nevím“ je třetí odpověď</b>
+          <span>Tři příznaky z <code>GET /repos/{o}/{r}</code>, jedno volání za <b>repo</b>
+          (0,62 s), a jedině při otevření <b>vlastního</b> PR — ne dotaz na každé PR v tiku.
+          Změřeno, že <code>keboola/job-queue-daemon</code> nemá <code>allow_rebase_merge</code>
+          a že nad repem bez práva zápisu (<code>cli/cli</code>) přijdou <b>všechny tři jako
+          <code>null</code></b>. To je „nevím“, ne „nepovoluje“: nabídnou se všechny tři a věta to
+          přizná. Tvrdit z chybějících dat, že něco nejde, je u nevratné akce tatáž chyba jako
+          tvrdit, že jde.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">173</span>
+        <span class="body">
+          <b>Nepovolená výchozí metoda se nepodstrčí jinou</b>
+          <span>Sheet se otevře <b>bez vybrané metody</b> a s výstrahou, ne s tiše přepnutou
+          hodnotou. Podstrčit první povolenou by znamenalo, že u nevratné akce odejde něco, o co
+          nikdo nepožádal — a řádky <code>commitů</code> a <code>titulek</code> by přitom vypadaly
+          jako potvrzený payload.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">174</span>
+        <span class="body">
+          <b>Titulek se posílá u dvou metod ze tří</b>
+          <span>U squashe <code>titulek PR (#číslo)</code> jako dnes, u merge commitu
+          <code>Merge pull request #N from &lt;větev&gt;</code> — a <b>větev doslova tak, jak ji vypisuje
+          řádek <code>větev</code> nad ním</b>, aby se potvrzení nemohlo rozejít samo se sebou —,
+          <b>u rebase nic</b> — tam žádný
+          commit nevzniká, takže by to bylo pole, které GitHub zahodí, a potvrzení by slibovalo
+          titulek, který se nikde neobjeví. Důvod „posílat vždycky“ z #465 platí dál: bez
+          <code>commit_title</code> ho GitHub skládá podle nastavení repozitáře, a nad repem bez
+          práva zápisu se to nastavení <b>ani nedá přečíst</b> (měřeno u poznámky 172).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">175</span>
+        <span class="body">
+          <b>Tělo se neposílá, a věta o něm je přesná</b>
+          <span><code>commit_message</code> zůstává neposlané u všech metod — v tomhle repu je
+          v tělech slévaných commitů zdůvodnění změny a poslat prázdné by ho zahodilo. Věta pod
+          výpisem se ale <b>přestává hádat</b>: <code>squash_merge_commit_message</code>
+          a <code>merge_commit_message</code> přijdou <b>týmž voláním</b> jako povolené metody,
+          takže potvrzení řekne, co v těle bude (zprávy commitů, popis PR, titulek PR, prázdno).
+          Dnešní věta o „zprávách N commitů“ je pravdivá jedině v repu s
+          <code>COMMIT_MESSAGES</code>; tenhle ho má, ale záruka to není.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">176</span>
+        <span class="body">
+          <b><code>commitů 3 → 1</code> je věta o squashi</b>
+          <span>Texty se přepisují jako <b>třída</b>, ne po jednom výskytu: kromě věty o těle je
+          tvrzením o squashi i tenhle řádek. U merge commitu je výsledek <code>3 + merge
+          commit</code>, u rebase <code>3 přehrané</code>. Řádek payloadu, který nad jinou metodou
+          lže, je horší než řádek, který tam není — proto se s metodou přepisuje celý
+          výpis.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">177</span>
+        <span class="body">
+          <b>Panel o metodě mlčí</b>
+          <span>Sekce <em>Větev</em> odpovídá na „dá se to mergnout“, a to se nepovolenou metodou
+          nemění: mergnout jde, jen zbývá vybrat čím. Udělat z toho <b>překážku</b> by znamenalo
+          zašedlé <code>Mergnout…</code> nad něčím, co projde dvěma kliknutími; udělat z toho
+          <b>třetí řádek stavu</b> by znamenalo psát o payloadu tam, kde payload není. Výpis
+          payloadu je v potvrzení, tak tam patří i jeho problém.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#pr-prubeh"><span class="dir">← předchozí</span><span class="t">Průběh</span></a>
           <a class="next" href="#moje-prompt"><span class="dir">další →</span><span class="t">Prompt pro agenta</span></a>

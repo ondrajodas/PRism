@@ -1,10 +1,15 @@
 import SwiftUI
 
-/// Stránka `Odesílání` (#177).
+/// Stránka `Odesílání` (#177), od #556 se dvěma sekcemi.
 ///
-/// Vlastní stránka, i když je to jeden přepínač: je to jediné místo, kde se rozhoduje, jestli
-/// z aplikace **může něco odejít** (tvrdá podmínka č. 1). Vysvětlivka je proto dlouhá schválně —
-/// text je tu důležitější než přepínač.
+/// Vlastní stránka, i když to začalo jedním přepínačem: je to jediné místo, kde se rozhoduje,
+/// jestli z aplikace **může něco odejít** (tvrdá podmínka č. 1). Vysvětlivka je proto dlouhá
+/// schválně — text je tu důležitější než přepínač.
+///
+/// **Výchozí metoda merge leží pod branou, ne vedle ní** (#556). Brána rozhoduje, jestli se dá
+/// mergnout **vůbec**, tahle sekce jenom **čím**; obráceně by to vypadalo, že se metodou odesílání
+/// zapíná. Vlastní stránka by k tomu znamenala jeden knoflík na stránku, a merge je z toho, co
+/// z aplikace odchází, ta nejnevratnější část — tedy věc, která na téhle stránce patří nejvíc.
 struct PublishingSettingsView: View {
     @Bindable var settings: SettingsModel
 
@@ -27,8 +32,36 @@ struct PublishingSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            mergeMethod
         }
         .formStyle(.grouped)
     }
 
+    /// Výchozí metoda merge vlastního PR (#556).
+    ///
+    /// **Radiogroup jako režim a odesílání**, ne rozbalovací nabídka: jsou to tři hodnoty a všechny
+    /// tři mají být vidět naráz — u nevratné akce se nemá hledat v seznamu, co je vybráno.
+    ///
+    /// **Metoda, kterou konkrétní repozitář nepovoluje, tady vybrat jde.** Globální hodnota platí
+    /// pro všechna repa a o kterémkoli z nich se odsud nedá nic tvrdit — zašednout tu, kterou
+    /// nepovoluje repo, na které se člověk zrovna kouká, by znamenalo vlastnost jednoho repa
+    /// vydávat za pravidlo pro všechna. Že ji tenhle konkrétní repozitář nepustí, se pozná
+    /// v potvrzení, tedy dřív, než se cokoli mergne.
+    private var mergeMethod: some View {
+        Section {
+            Picker("Výchozí metoda", selection: $settings.draft.global.mergeMethod) {
+                ForEach(MergeMethod.allCases, id: \.self) { method in
+                    Text(verbatim: method.displayName).tag(method)
+                }
+            }
+            .pickerStyle(.radioGroup)
+        } header: {
+            Text("Merge vlastního PR")
+        } footer: {
+            Text("Platí pro repa, která si neřeknou o jinou. Squash je výchozí, protože tak se aplikace chovala předtím, než tahle volba vznikla. Potvrzení metodu vypisuje a dovolí ji přebít pro jeden merge; do nastavení se tím nezapisuje. Metodu, kterou repozitář nepovoluje, tady vybrat jde — globální hodnota platí pro všechna repa. Že ji to konkrétní repo nepustí, se pozná v potvrzení, ne z chyby po něm.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }
