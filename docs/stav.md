@@ -8062,3 +8062,24 @@ byla hotová u PR, jehož popis nikdo neviděl. Rozhoduje teď `isLoaded` uvnit�
 `description != nil`, ne „je neprázdný“: PR bez popisu se odškrtnout **musí**, jinak by u něj
 počítadlo nikdy nedošlo na konec. `Policy.stepFeedAtEnd` (#325) má tentýž tvar, ale do téhle třídy
 nepatří — je to živý přepínač, ne jednosměrná značka.
+
+## #530 — Otevřít soubor v editoru na řádku nálezu
+
+Tlačítko `Otevřít v <editoru>` v hlavičce souboru (glyf `↗`) a na kartě nálezu (popisek celý).
+Otevírá **kopii z cache aplikace**: u cizího PR pracovní strom review, u vlastního strom pro
+srovnání větve (`-sync`), odkud změna odejde jedině přes `Force push` se sheetem (#466).
+Uživatelův klon aplikace dál nezná.
+
+Volba je v `Nastavení › Systém › Otevírat soubory v` (`Nic` / Xcode / VS Code / Cursor), výchozí
+je `Nic` — a **bez zvoleného editoru se tlačítko nekreslí**, ne zašedne. Adresu skládá
+`Policy.editorURL` jako čistou funkci (tři schémata, jedna sada escapování); hranici cache hlídá
+`CacheFile.refusal`, tedy tatáž kontrola jako jinde v repu a **přísnější** z jejích dvou odpovědí,
+protože symbolický odkaz na souboru by editor otevřel jeho cíl.
+
+Rozbor je v [`docs/architektura.md`](architektura.md#otevření-souboru-v-editoru-530), měření
+a mezery v [`docs/testovani.md`](testovani.md#otevření-souboru-v-editoru-530), rozhodnutí ve
+[specifikaci](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--otevření-souboru-v-editoru-530).
+Zákres je sekce **51** návrhu.
+
+**Zapsaná mezera:** že se editor doopravdy otevře, ověřeno není — znamenalo by to spustit cizí
+aplikaci bez vědomí uživatele. Ověří to člověk kliknutím.

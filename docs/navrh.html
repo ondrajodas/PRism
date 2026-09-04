@@ -3144,6 +3144,22 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 .doc-move a.next { text-align: right; }
 .doc-move a.next .t, .doc-move a.next .dir { align-self: flex-end; }
 
+
+/* ---- sekce 51: otevření souboru v editoru (#530) ---------------------------------
+   Dvě podoby jedné akce, a **liší se schválně**. V hlavičce souboru je jen glyf `↗`
+   (`.fh-open`): řádka už nese cestu, odznak změny, kapsli nálezů, počty i `Prošlo`
+   a opakuje se u každého souboru — popisek by se v ní pral s tím, kvůli čemu se čte.
+   Na kartě nálezu je popisek celý (`.ed-open`), protože tam je to ta hlavní akce
+   a glyf bez jména editoru je hádanka.
+
+   **Ani jedno není `.mini`.** `.mini` je ohraničené tlačítko s podkladem; tohle je
+   holá akce v akcentu, tedy tentýž tvar jako `.go` v tabulce nálezů — jen vlastní
+   jméno, aby se `.go` nedefinovalo naholo (past z #390). */
+.fh-open { font-size: 11px; color: var(--ink-3); flex: none; }
+.locrow { display: flex; align-items: center; gap: 8px; padding: 0 10px 8px; }
+.locrow .loc { flex: 1; min-width: 0; padding: 0; }
+.ed-open { font-size: 11px; color: var(--accent); white-space: nowrap; flex: none; }
+
 /* --- úzké okno -------------------------------------------------- */
 @media (max-width: 1040px) {
   .doc { grid-template-columns: minmax(0, 1fr); }
@@ -9505,6 +9521,236 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           by v okně sedělo, ale kdekoli, kde sloupec vedle diffu nestojí, by rozhodnutí měnilo svůj
           vlastní vstup — a to umí <b>kmitat</b> (rozložený sloupec kolonu složí, složený ji
           rozloží).</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="section" id="s51">
+    <div class="section-head">
+      <div class="eyebrow">51 — Otevřít soubor v editoru</div>
+      <h2>Z nálezu do editoru — ale do kopie v cache, ne do tvého klonu</h2>
+      <p class="muted">
+        Nález v kódu se dneska nedá otevřít v editoru: u vlastního PR je to přitom druhá cesta
+        k opravě vedle agenta, u cizího rychlé prohlédnutí okolí, které diff neukazuje.
+        <strong>Otevírá se kopie z cache aplikace</strong> — u cizího PR pracovní strom review,
+        u vlastního strom pro srovnání větve (<code>-sync</code>), odkud změna odejde jedině přes
+        <em>Force push</em> se sheetem. Tvůj klon aplikace nezná a znát nebude (tvrdá podmínka
+        č. 3). <strong>Bez zvoleného editoru se tlačítko nekreslí</strong> — ne zašedle.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · hlavička souboru a karta nálezu</div>
+        <div class="frame flat">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="pill crit">1 blokuje</span>
+            <span class="sp"></span>
+            <span class="rv-num" style="color: var(--ok);">+18</span>
+            <span class="rv-num" style="color: var(--crit);">−6</span>
+            <span class="fh-open">↗</span>
+            <span class="rv-viewed"><span class="box"></span>Prošlo</span>
+          </div>
+          <div class="fhead" style="border-top: 1px solid var(--line-soft);">
+            <span>▸</span>
+            <span class="path"><span>tests/</span><b>SecretClientTest.php</b></span>
+            <span class="sp"></span>
+            <span class="rv-num" style="color: var(--ok);">+64</span>
+            <span class="rv-num" style="color: var(--crit);">−0</span>
+            <span class="fh-open">↗</span>
+            <span class="rv-viewed on"><span class="box">✓</span>Prošlo · před 12 min</span>
+          </div>
+
+          <div class="fcard crit" style="margin-top: 14px;">
+            <div class="top">
+              <span class="pill crit">blokuje</span>
+              <span class="cat">correctness · php-review</span>
+            </div>
+            <div class="sum"><code>?? ''</code> schová chybějící secret jako prázdnou hodnotu.</div>
+            <div class="locrow">
+              <span class="loc">src/Vault/SecretClient.php:81</span>
+              <span class="ed-open">↗ Otevřít v Cursoru</span>
+            </div>
+          </div>
+
+          <div class="fcard warn">
+            <div class="top">
+              <span class="pill">nález</span>
+              <span class="cat">test-coverage · php-review</span>
+            </div>
+            <div class="sum">Nová výjimka <code>SecretNotFound</code> nemá test.</div>
+            <div class="locrow">
+              <span class="loc">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · Nastavení › Systém</div>
+        <div class="frame flat">
+          <div class="set-body">
+            <div class="set-sec">
+              <span class="t">Otevírání souborů</span>
+              <div class="set-card">
+                <div class="set-row">
+                  <span class="lbl">Otevírat soubory v</span>
+                  <span class="val">
+                    <span class="segbtn">
+                      <span>Nic</span>
+                      <span>Xcode</span>
+                      <span>VS&nbsp;Code</span>
+                      <span class="on">Cursor</span>
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <span class="note">
+                Soubor se otevře v <strong>kopii z cache aplikace</strong>, nikdy v tvém klonu.
+                U cizího PR je to pracovní kopie review, tedy kód k přečtení: co se v ní změní,
+                nemá kam odejít. U vlastního PR je to strom <code>-sync</code>, takže oprava
+                odejde jedině přes <code>Force push</code> s potvrzením. Otevírá se
+                <strong>URL schématem</strong> (<code>xcode://</code>, <code>vscode://file/…:řádek</code>,
+                <code>cursor://file/…:řádek</code>) — aplikace nespouští žádnou binárku.
+              </span>
+            </div>
+
+            <div class="set-sec">
+              <span class="t">Bez zvoleného editoru</span>
+              <div class="set-card">
+                <div class="set-row">
+                  <span class="lbl">Otevírat soubory v</span>
+                  <span class="val">
+                    <span class="segbtn">
+                      <span class="on">Nic</span>
+                      <span>Xcode</span>
+                      <span>VS&nbsp;Code</span>
+                      <span>Cursor</span>
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <span class="note">Výchozí stav. Tlačítko <code>↗</code> v hlavičce souboru ani
+              <code>Otevřít v…</code> na kartě nálezu se pak <strong>nekreslí vůbec</strong> —
+              zašedlé by slibovalo akci, která se zapíná jinde.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Poruchy · co se řekne ve stavovém řádku</div>
+        <div class="frame flat">
+          <div class="warnbox">
+            <span class="i">△</span>
+            <span><b>Cesta vede mimo cache aplikace, takže se v editoru neotevřela.</b>
+            Jediný stav v téhle akci, u kterého se má někdo zarazit — a proto se
+            <strong>neslévá</strong> s ostatními do obecného „nepodařilo se otevřít“.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span><b>Soubor <code>src/Vault/Old.php</code> v pracovní kopii v cache není</b> —
+            smazané soubory otevřít nejde. V diffu jsou vidět, na disku po nich nezůstalo nic.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span><b>Tenhle pull request nemá v cache rozbalenou pracovní kopii</b> — pusť na něj
+            review, nebo u vlastního srovnej větev.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span><b>Systém adresu nepřevzal — je Cursor nainstalovaný?</b> Editor se otevírá
+            <strong>mimo okno</strong>, takže spolknutý neúspěch vypadá k nerozeznání od toho,
+            že se nekliklo.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Co se nemění</div>
+        <div class="frame">
+          <div class="warnbox">
+            <span class="i">△</span>
+            <span>Není to <strong>druhá cesta ven</strong> (tvrdá podmínka č. 1): nic se
+            neodesílá na GitHub ani do remote a nespouští se žádný podproces — ven jde
+            <em>adresa souboru v cache</em>. <code>grep ReviewPublishing App/</code> vypisuje
+            pořád týž seznam sedmi souborů.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span>Hranici drží <strong>tatáž kontrola jako jinde v repu</strong>
+            (<code>CacheFile</code>), ne opsaná dvojice <code>guardů</code>. A je to ta
+            <strong>přísnější</strong> z jejích dvou odpovědí: symbolický odkaz na samotném
+            souboru by editor otevřel jeho <em>cíl</em>, a ten smí ležet kdekoli.</span>
+          </div>
+          <div class="warnbox" style="margin-top: 10px;">
+            <span class="i">△</span>
+            <span>Aplikace <strong>nehledá binárku editoru</strong> a nepouští ji. Kdo se
+            k <code>cursor://</code> přihlásí, rozhoduje systém — proto je volba
+            <strong>výčet tří</strong>, ne cesta ani volný text: co odejde do
+            <code>NSWorkspace</code>, se pak dá vyčerpat testem.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">186</span>
+        <span class="body">
+          <b>Kopie z cache, a musí to být napsané</b>
+          <span><code>Otevřít v Cursoru</code> nad diffem vypadá jako „otevři mi ten soubor“
+          a kdo v něm začne psát, čeká, že píše do svého repozitáře. Píše přitom do kopie
+          v cache. Věta o tom je proto <strong>v nápovědě u obou tlačítek</strong> a celá
+          v nastavení, kde se ta volba dělá — u každé z dvaceti karet nálezu by to byl šum.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">187</span>
+        <span class="body">
+          <b>U vlastního PR vyhrává strom <code>-sync</code></b>
+          <span>Strom review stojí na <code>headSha</code> v <strong>odpojené hlavě</strong>,
+          takže je to kód k přečtení a nic víc — oprava v něm se zahodí s dalším úklidem cache.
+          Strom pro srovnání větve je proti tomu větev, ze které vede cesta ven (#466). Kdo si
+          soubor u vlastního PR otevře, ho nejčastěji chce <em>opravit</em>. U cizího PR se tím
+          nemění nic: <code>-sync</code> tam žádný není.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">188</span>
+        <span class="body">
+          <b>Dvojtečka ve jméně souboru je ta nejtišší vada</b>
+          <span>U VS Code a Cursoru dělí dvojtečka <strong>číslo řádku</strong>
+          (<code>…/A.swift:81</code>), takže neescapovaná by editor poslala na jiné místo — a
+          vypadalo by to, že nález sedí jinde. Cesta se proto procentuje sadou, ze které odchází
+          <code>:</code>, <code>&amp;</code>, <code>=</code> a <code>+</code>: první kvůli řádku,
+          zbytek kvůli tomu, že u Xcodu leží cesta v <em>query</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">189</span>
+        <span class="body">
+          <b>Nekreslí se, ne zašedlé</b>
+          <span>Bez zvoleného editoru tlačítko <strong>není</strong>. Zašedlé s důvodem patří
+          jedině tam, kde se stav mění na téže obrazovce (vypnutá brána, červený check, větev
+          pozadu); tohle se zapíná v nastavení, tedy jinde. Totéž platí o nálezu
+          <strong>bez souboru</strong> — otevřít se nemá co.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">190</span>
+        <span class="body">
+          <b>Neotevřít je odpověď, ne selhání</b>
+          <span>Cesta má pět zastávek — editor, strom v cache, hranice cache, existence souboru
+          a to, jestli systém adresu převzal — a <strong>každá má vlastní větu</strong>. Obecné
+          „nepodařilo se otevřít“ by slilo <em>soubor tu není</em> s <em>mířili jsme mimo
+          cache</em>, a to druhé je jediné, u čeho se má někdo zarazit.</span>
         </span>
       </div>
     </div>

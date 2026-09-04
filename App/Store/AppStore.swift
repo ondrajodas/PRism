@@ -675,6 +675,22 @@ final class AppStore {
     /// místa, která se musí nezávisle zahazovat — z `▶` přitom vede pokaždé právě jedna cesta.
     var terminalFailure: String?
 
+    /// Otevření souboru v editoru (#530). `nil` = odsud se neotevírá (testy).
+    ///
+    /// Nepovinné ze stejného důvodu jako `terminal`: živá implementace spouští **cizí aplikaci**,
+    /// takže by z každého testu, který si složí store, byl test otevírající Xcode.
+    let editorOpener: (any EditorOpening)?
+
+    /// Proč se soubor v editoru neotevřel (#530). `nil` = nic se nepokazilo.
+    ///
+    /// Vlastní pole vedle `terminalFailure`, ne sdílené: je to jiná akce s jiným následkem
+    /// a slité pole by znamenalo, že hláška o terminálu zmizí kliknutím na editor. Zahazuje se na
+    /// začátku každého pokusu, takže v okně stojí vždycky ta o tom **posledním**.
+    ///
+    /// **Musí být vidět** ze stejného důvodu jako u terminálu: editor se otevře **mimo okno**,
+    /// takže neúspěch vypadá k nerozeznání od toho, že se nekliklo. Kreslí to `AppNoticesView`.
+    var editorFailure: String?
+
     /// Počitadlo načtení přepisu. Viz `RawSessionSnapshot.generation` — bez něj by dvě čtení téhož
     /// cíle nešlo od sebe poznat.
     var rawSessionGeneration = 0
@@ -1003,6 +1019,7 @@ final class AppStore {
         interrupted: InterruptedRuns? = nil,
         transcripts: (any TranscriptReading)? = nil,
         terminal: (any TerminalOpening)? = nil,
+        editorOpener: (any EditorOpening)? = nil,
         appearance: (any AppearanceApplying)? = nil,
         dock: (any DockBadgeApplying)? = nil,
         loginItems: (any LoginItemControlling)? = nil,
@@ -1032,6 +1049,7 @@ final class AppStore {
         self.interrupted = interrupted
         self.transcripts = transcripts
         self.terminal = terminal
+        self.editorOpener = editorOpener
         self.configuration = configuration
         self.configStore = configStore
         polling = PollingService(
@@ -1218,6 +1236,9 @@ final class AppStore {
             // Terminál (#453) — bufferovaný runner stačí: `osascript` doběhne, jakmile Terminal
             // okno založí, a to okno pak žije mimo aplikaci.
             terminal: AppleScriptTerminal(runner: runner),
+            // Editor (#530). Živý jedině tady — jinak by si každý test, který si složí store,
+            // uměl otevřít Xcode.
+            editorOpener: WorkspaceEditor(),
             appearance: AppAppearance.application,
             // Odznak v Docku (#529) a přihlašovací položka. Živé jedině tady — testy sahají na
             // dlaždici i na systém jedině fakem, viz `dock` a `loginItems`.
