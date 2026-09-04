@@ -968,12 +968,19 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
     metod je zvlášť**: GitHub aspoň jednu povolit musí, ale kdyby přišlo samé `false`, nesmí
     vzniknout věta „repozitář povoluje“ s ničím za ní.
   - **`GhRepositoryMergeSettingsTests`** — dekódování **skutečné odpovědi** `gh api repos/{o}/{r}`
-    ze dvou **veřejných** repozitářů. `ondrajodas/PRism` má všechny tři metody a
+    ze dvou repozitářů, z vlastního a z veřejného. `ondrajodas/PRism` má všechny tři metody a
     `squash_merge_commit_message = COMMIT_MESSAGES`; `cli/cli` je ten podstatnější případ — repo
-    **bez práva zápisu**, kde přijde všech pět polí jako `null`. Ruční literál by ho nedoložil:
-    ta pole v odpovědi **jsou**, jen s hodnotou `null`, takže se „nevím“ nedá vyrobit vynecháním
-    klíče. `allow_rebase_merge: false` je proti tomu **inline JSONem** a je u toho napsáno proč:
-    změřené je to na `keboola/job-queue-daemon`, což je firemní repozitář.
+    **bez práva zápisu**, kde GitHub všech pět polí **vůbec nepošle** — a to se dá poznat jedině
+    ze syrového JSONu, protože `gh api --jq .allow_merge_commit` na tom vypíše `null` (`jq` chybějící
+    klíč vydá jako `null`). Pro aplikaci je to jedno (`decodeIfPresent` vydá `nil` na obojí) a test
+    to tvrdí z **obou** stran: fixture bez klíčů a inline JSON s explicitním `null`.
+    `allow_rebase_merge: false` je taky **inline JSONem** a je u toho napsáno proč: změřené je to
+    na `keboola/job-queue-daemon`, což je firemní repozitář.
+
+    **Fixtures jsou zkrácené o pole, která se nedekódují, a je to nález Copilota** (#560): plná
+    odpověď `GET /repos/{o}/{r}` nese `temp_clone_token`, tedy krátkodobý credential — a ten do
+    repa nepatří ani ve fixture. Zůstávají identita repa a jedenáct polí o mergi; **hodnoty jsou
+    pořád ty skutečné**, takže tvar odpovědi (chybějící klíč vs. `false`) fixture dokládá dál.
   - **`ConfigurationTests`** (rozšířené) — výchozí `squash` se porovnává **s literálem**, ne
     s konstantou (je to chování aplikace do #556, ne definice sama sebou), `rawValue` v souboru je
     **ta samá hodnota, kterou bere GitHub**, a rozbitá hodnota se srazí na `squash` **na obou

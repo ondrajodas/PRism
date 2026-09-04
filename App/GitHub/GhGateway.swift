@@ -458,14 +458,14 @@ struct GhGateway: GitHubGateway {
     /// pod výpisem payloadu by mluvila o jiném stavu než nabídka metod nad ním.
     ///
     /// **Dekóduje se JSON, ne `--jq`**, ze stejného důvodu jako u `fetchViewer` (#330): `--jq` na
-    /// pole, které v odpovědi není, vypíše prázdný řádek s nulovým návratovým kódem — a tady je
-    /// „chybí“ a `null` **jedna a tatáž** platná odpověď, takže by se prázdný výstup nedal odlišit
-    /// od rozbitého volání.
+    /// pole, které v odpovědi není, vypíše `null` s nulovým návratovým kódem — takže by se
+    /// „repo to neřeklo“ nedalo odlišit od rozbitého volání. Chybějící klíč je tady **platná
+    /// odpověď**, ne chyba, a to je přesně ta situace, ve které `--jq` mlčí.
     ///
     /// Změřeno **0,62 s** nad `ondrajodas/PRism` (všechny tři `true`), `allow_rebase_merge: false`
-    /// nad `keboola/job-queue-daemon` a **všech pět polí `null`** nad `cli/cli`, tedy nad repem bez
-    /// práva zápisu. To poslední je „nevím“ — rozhodnout z toho, že metoda nejde, patří
-    /// `Policy`, ne sem, a `Policy` v tom stavu netvrdí nic.
+    /// nad `keboola/job-queue-daemon` a **chybějící všech pět polí** nad `cli/cli`, tedy nad repem
+    /// bez práva zápisu — GitHub je tam neposílá vůbec. To je „nevím“ — rozhodnout z toho, že
+    /// metoda nejde, patří `Policy`, ne sem, a `Policy` v tom stavu netvrdí nic.
     func mergeSettings(repo: RepoID) async throws -> RepositoryMergeSettings {
         try await run(
             ["api", "repos/\(repo)"],

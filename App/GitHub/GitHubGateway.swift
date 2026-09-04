@@ -355,7 +355,7 @@ protocol GitHubGateway: Sendable {
     /// metod.
     ///
     /// **`nil` u příznaku je „nevím“, ne „nepovoluje“**, a je to změřené: nad repem bez práva
-    /// zápisu (`cli/cli`) vrací GitHub všech pět polí jako `null`. Rozhodnout z toho, že metoda
+    /// zápisu (`cli/cli`) GitHub všech pět polí **vůbec nepošle**. Rozhodnout z toho, že metoda
     /// nejde, je u nevratné akce tatáž chyba jako rozhodnout, že jde.
     ///
     /// **Šestadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád

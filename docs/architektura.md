@@ -11361,11 +11361,13 @@ pollingu**. Změřeno **0,62 s**.
 
 **Tři odpovědi, ne dvě, a ta třetí je změřená.** Nad `ondrajodas/PRism` přijdou všechny tři jako
 `true`, nad `keboola/job-queue-daemon` je `allow_rebase_merge: false` — a nad `cli/cli`, tedy nad
-repem **bez práva zápisu**, přijdou **všechna pět polí jako `null`**. To je **„nevím“, ne
+repem **bez práva zápisu**, GitHub **všech pět polí vůbec nepošle** (ověřeno nad syrovým JSONem —
+`gh api --jq` na tom vypíše `null`, protože `jq` chybějící klíč vydá jako `null`, takže se z něj ten
+rozdíl nepozná; pro nás je to jedno, `decodeIfPresent` vydá `nil` na obojí). To je **„nevím“, ne
 „nepovoluje“**: v nabídce se chová jako „ano“ (nabídnou se všechny tři) a **netvrdí se nic**.
 Rozhodnout z chybějících dat, že něco nejde, je u nevratné akce tatáž chyba jako rozhodnout, že
 jde. Selhání čtení proto **nemá vlastní mapu poruch** (na rozdíl od labelů) a nikde se nehlásí:
-od `null` v odpovědi se nedá odlišit ani z dat, a vlastní hláška by z běžného stavu udělala
+od chybějících polí se nedá odlišit ani z dat, a vlastní hláška by z běžného stavu udělala
 poruchu.
 
 **Nepovolená metoda se z nabídky neztratí** (`Policy.mergeMethodOptions`) — jen se nedá vybrat

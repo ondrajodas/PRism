@@ -8,7 +8,7 @@ import Foundation
 /// globálně, v nastavení repa a v potvrzení —, a ta tři místa by si každé řekla něco jiného.
 ///
 /// **Tři odpovědi, ne dvě.** Repozitář metodu buď pustí, nebo nepustí, nebo se to **nedá zjistit**:
-/// nad repem bez práva zápisu (`cli/cli`) vrací GitHub všechny tři příznaky jako `null`. „Nevím“
+/// nad repem bez práva zápisu (`cli/cli`) GitHub příznaky **vůbec nepošle**. „Nevím“
 /// se tady chová jako „ano“ — nabídne se a **netvrdí se nic** —, protože u nevratné akce je
 /// rozhodnout z chybějících dat, že něco nejde, tatáž chyba jako rozhodnout, že jde.
 extension Policy {
@@ -131,8 +131,8 @@ extension Policy {
     ///
     /// **Posílá se u obou metod, které commit vytvoří**, a důvod z #465 platí dál: bez
     /// `commit_title` si ho GitHub skládá podle nastavení repozitáře — a nad repem bez práva
-    /// zápisu se to nastavení ani nedá přečíst (`cli/cli` vrací i `squash_merge_commit_title` jako
-    /// `null`), takže by potvrzení ukazovalo titulek, který nemusí vzniknout.
+    /// zápisu se to nastavení ani nedá přečíst (`cli/cli` neposílá ani
+    /// `squash_merge_commit_title`), takže by potvrzení ukazovalo titulek, který nemusí vzniknout.
     ///
     /// U merge commitu je to **vlastní úmluva GitHubu** (`Merge pull request #N from <větev>`), aby
     /// historie vypadala stejně jako po mergi z webu; větev se bere **doslova ta, kterou vypisuje

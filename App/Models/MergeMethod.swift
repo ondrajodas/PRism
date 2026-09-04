@@ -66,9 +66,9 @@ enum MergeBodySource: String, Codable, Hashable, Sendable {
 /// pustila metodu, o jejímž těle by věta pod výpisem tvrdila něco z druhé odpovědi.
 ///
 /// **`nil` u příznaku znamená „nevím“, ne „nepovoluje“**, a je to změřené: nad repem bez práva
-/// zápisu (`cli/cli`) vrací GitHub **všechny tři jako `null`**, a stejně tak oba zdroje těla.
-/// Tvrdit z chybějících dat, že něco nejde, je u nevratné akce tatáž chyba jako tvrdit, že jde —
-/// takže se v tom stavu nabízejí všechny tři a věta o těle se přizná.
+/// zápisu (`cli/cli`) GitHub **všech pět polí vůbec nepošle** — klíče v odpovědi nejsou. Tvrdit
+/// z chybějících dat, že něco nejde, je u nevratné akce tatáž chyba jako tvrdit, že jde — takže se
+/// v tom stavu nabízejí všechny tři a věta o těle se přizná.
 struct RepositoryMergeSettings: Hashable, Sendable {
     /// `allow_merge_commit`.
     let allowsMergeCommit: Bool?

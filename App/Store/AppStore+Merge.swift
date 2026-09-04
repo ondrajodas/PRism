@@ -227,7 +227,7 @@ extension AppStore {
     /// **Selhání se nezapisuje a nikde se nehlásí**, a je to ta správná strana: „nezjistil jsem to“
     /// je v téhle otázce **platná odpověď** (`nil`, tedy „nevím“) a potvrzení z ní udělá nabídku
     /// všech tří metod bez jakéhokoli tvrzení. Vlastní hláška v okně by naopak z běžného stavu —
-    /// repo bez práva zápisu vrací všech pět polí jako `null` — udělala poruchu. **Zrušení jde
+    /// repo bez práva zápisu ta pole vůbec neposílá — udělala poruchu. **Zrušení jde
     /// touž cestou** a je to schválně: odchod z obrazovky není odpověď, takže se nic nezapíše
     /// a příští otevření se zeptá znovu (tatáž nesymetrie jako u `loadBranchStatus`, jen bez
     /// rozdělaného stavu, který by se musel uklízet).

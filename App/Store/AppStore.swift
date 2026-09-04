@@ -1540,8 +1540,8 @@ final class AppStore {
     /// na každé PR v tiku.
     ///
     /// **Bez mapy poruch, na rozdíl od labelů**, a je to rozhodnutí: „nezjistil jsem to“ je tady
-    /// **platná odpověď** — nad repem bez práva zápisu vrací GitHub všech pět polí jako `null`,
-    /// takže se od výpadku sítě nedá rozeznat ani z odpovědi. Potvrzení se v tom stavu chová
+    /// **platná odpověď** — nad repem bez práva zápisu GitHub ta pole vůbec neposílá, takže se
+    /// „nevím“ od výpadku sítě nedá rozeznat ani z odpovědi. Potvrzení se v tom stavu chová
     /// stejně: nabídne všechny tři metody a nic o nich netvrdí.
     var repositoryMergeSettings: [RepoID: RepositoryMergeSettings] = [:]
 

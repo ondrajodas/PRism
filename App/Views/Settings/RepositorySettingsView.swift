@@ -203,9 +203,16 @@ private struct RepositoryDetailView: View {
                 if option.isSelectable {
                     Text(verbatim: option.method.displayName).tag(MergeMethod?.some(option.method))
                 } else {
-                    Text(verbatim: "\(option.method.displayName) — nejde, repozitář ji nepovoluje")
-                        .tag(MergeMethod?.some(option.method))
-                        .disabled(true)
+                    // **Přeškrtnutí je z návrhu**, ne ozdoba: zašedlá položka sama vypadá jako
+                    // „zatím nedostupné“, kdežto tady jde o „tohle repo to nepustí“. Věta za
+                    // pomlčkou to říká slovy, protože ze škrtu neplyne **proč** — a škrt patří
+                    // jedině na jméno metody, ne na tu větu (jinak by přeškrtnutý byl i důvod).
+                    (
+                        Text(verbatim: option.method.displayName).strikethrough()
+                            + Text(verbatim: " — nejde, repozitář ji nepovoluje")
+                    )
+                    .tag(MergeMethod?.some(option.method))
+                    .disabled(true)
                 }
             }
         }

@@ -7644,7 +7644,7 @@ metody, takže věta řekne, co v tom těle bude; kde se to zjistit nepodařilo,
 `GET /repos/{o}/{r}` a drží se v cache klíčované **repem**; ptá se při otevření vlastního PR a při
 výběru repa v nastavení, **ne na tik pollingu**. Změřeno: `ondrajodas/PRism` 0,62 s a všechny tři
 `true`, `keboola/job-queue-daemon` `allow_rebase_merge: false`, a `cli/cli` — repo **bez práva
-zápisu** — **všech pět polí `null`**. To poslední je „nevím“, ne „nepovoluje“: nabídnou se všechny
+zápisu** — **všech pět polí GitHub vůbec nepošle**. To poslední je „nevím“, ne „nepovoluje“: nabídnou se všechny
 tři metody a nic se netvrdí. Nepovolená metoda se z nabídky **neztratí**, jen se nedá vybrat
 (zašedlá, přeškrtnutá, `nejde`) — zmizet nesmí, jinak se nedá poznat „repo to nepustí“ od „tuhle
 metodu GitHub nemá“.
@@ -7662,8 +7662,9 @@ sheet otevřel, `MergePlan` je **payload** — a `plan == nil` je platný stav (
 ne nedodělek.
 
 Testů **5266** v 513 suitách (+38), z toho nové `MergeMethodChoiceTests` a
-`GhRepositoryMergeSettingsTests`; fixtures jsou skutečné odpovědi `gh api` ze **veřejných** repozitářů
-(`ondrajodas/PRism`, `cli/cli`), `allow_rebase_merge: false` je inline JSONem, protože změřené je
-na firemním repu. **Naostro se nemergovalo** — merge je nevratný a brána je ve slotové konfiguraci
+`GhRepositoryMergeSettingsTests`; fixtures jsou skutečné odpovědi `gh api` (`ondrajodas/PRism` a veřejné `cli/cli`), **zkrácené
+o pole, která se nedekódují** — plná odpověď nese `temp_clone_token`, tedy krátkodobý credential
+(nález Copilota na PR #560). `allow_rebase_merge: false` je inline JSONem, protože změřené je na
+firemním repu. **Naostro se nemergovalo** — merge je nevratný a brána je ve slotové konfiguraci
 vypnutá; ověřené je to, co odejde v payloadu (na hotových bajtech) a co repozitáře doopravdy
 vracejí.

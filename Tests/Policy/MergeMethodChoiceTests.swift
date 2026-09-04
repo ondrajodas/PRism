@@ -54,7 +54,7 @@ struct MergeMethodChoiceTests {
     }
 
     /// **„Nevím“ se chová jako „ano“.** Nad repem bez práva zápisu (`cli/cli`) vrací GitHub
-    /// všechny tři příznaky jako `null`; rozhodnout z toho, že metoda nejde, je u nevratné akce
+    /// příznaky vůbec nepošle; rozhodnout z toho, že metoda nejde, je u nevratné akce
     /// tatáž chyba jako rozhodnout, že jde.
     @Test("Nezjištěné příznaky nabídnou všechny tři a nic netvrdí")
     func unknownFlagsOfferEverything() {
