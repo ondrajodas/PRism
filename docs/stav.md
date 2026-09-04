@@ -7809,5 +7809,5 @@ nezapíše. K tomu stráž nad zdrojáky (`DockBadgeWiringTests`, šestá podoba
 si vynutila právě ta vada z prvního kola: porovnává **bitmapu odznaku**, takže padne, když se
 odznak nenakreslí. Celkem **5298 testů v 517 suitách** (proti 5228 v 511 před #529, tedy 70 nových
 v šesti sadách), `TEST SUCCEEDED` za 113,3 s — měřeno se **souběžně běžícími sloty**, ne na volném
-stroji. Regrese ověřená vložením regrese **šestkrát** (nefiltrovaná fronta, chybějící brána
+stroji; nad slitým `mainem` s #502 a #556 je to 5351 v 523 za 133,0 s. Regrese ověřená vložením regrese **šestkrát** (nefiltrovaná fronta, chybějící brána
 u slotu, `SMAppService` ve storu, vynechaná kresba odznaku, návrat k `badgeLabel`).

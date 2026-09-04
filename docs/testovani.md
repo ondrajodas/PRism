@@ -10188,7 +10188,8 @@ běžný případ — aplikace na pozadí s otevřeným oknem — nesahá.
 ### Za jakých podmínek se měřilo (#529)
 
 Plná suita **5298 testů v 517 suitách, `TEST SUCCEEDED`**, 113,3 s (v prvním kole 5286 v 516
-za 117 s). Měřeno na stroji, na kterém **běžely souběžně další sloty** paralelního vývoje — tedy
+za 117 s). Po slití `mainu` s #502 a #556 je to **5351 v 523** za 133,0 s — čísla #529 se čtou
+z prvního, ne z druhého. Měřeno na stroji, na kterém **běžely souběžně další sloty** paralelního vývoje — tedy
 ne na volném stroji. Pád na čase je za těchhle podmínek zátěž, ne logika; suita jede blízko 120s
 stropu `waitUntil`.
 
