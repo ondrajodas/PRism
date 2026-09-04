@@ -293,39 +293,35 @@ struct BoardView: View {
         }
     }
 
-    /// Řádky pruhu, nebo věta. Pod nimi patka, když se pruh do stropu nevešel.
+    /// Řádky pruhu a pod nimi patka, když se pruh do stropu nevešel.
+    ///
+    /// **Prázdná větev tu není, a je to důsledek skrývání** (z proklikání #515): kreslí se jedině
+    /// `Board.visibleLanes`, takže sem prázdný pruh nedojde. Věta na prázdný pruh proto odešla
+    /// i z `WorkLane` — text, který se nemá kde ukázat, je mrtvá váha.
     ///
     /// **`LazyVStack` sem nepatří** (#469): strop je z `Policy`, ne odhad, takže i rozbalený
     /// pruh je pevný seznam. Neomezenost seznamu není důvod ten vzor snést — a tady ani
     /// neomezený není.
-    @ViewBuilder private func laneRows(_ lane: Board.Lane) -> some View {
-        if lane.rows.isEmpty {
-            Text(verbatim: lane.lane.emptyExplanation)
-                .font(.system(size: 12))
-                .foregroundStyle(Palette.ink3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(13)
-        } else {
-            let slice = Policy.laneSlice(
-                lane.rows,
-                of: lane.lane,
-                expanded: expandedLanes.contains(lane.lane)
-            )
-            VStack(spacing: 0) {
-                ForEach(slice.rows) { entry in
-                    row(entry)
-                    if entry.id != slice.rows.last?.id { separator }
-                }
-                // **Podmínka je nad plným pruhem, ne nad řezem.** `slice.hidden` je v rozbaleném
-                // stavu nula, takže by patka po rozbalení zmizela — a kdyby se ptala jen na
-                // `expanded`, zůstala by tam i po tiku, který pruh zmenšil pod strop, tedy jako
-                // tlačítko, po kterém se nic nestane.
-                if lane.rows.count > Policy.laneRowLimit(lane.lane) {
-                    // **Čára je tady, a jedna** (#371): patka svou vlastní horní linku nemá,
-                    // protože by se sečetla s tou pod posledním řádkem.
-                    separator
-                    laneFooter(lane.lane, hidden: slice.hidden)
-                }
+    private func laneRows(_ lane: Board.Lane) -> some View {
+        let slice = Policy.laneSlice(
+            lane.rows,
+            of: lane.lane,
+            expanded: expandedLanes.contains(lane.lane)
+        )
+        return VStack(spacing: 0) {
+            ForEach(slice.rows) { entry in
+                row(entry)
+                if entry.id != slice.rows.last?.id { separator }
+            }
+            // **Podmínka je nad plným pruhem, ne nad řezem.** `slice.hidden` je v rozbaleném
+            // stavu nula, takže by patka po rozbalení zmizela — a kdyby se ptala jen na
+            // `expanded`, zůstala by tam i po tiku, který pruh zmenšil pod strop, tedy jako
+            // tlačítko, po kterém se nic nestane.
+            if lane.rows.count > Policy.laneRowLimit(lane.lane) {
+                // **Čára je tady, a jedna** (#371): patka svou vlastní horní linku nemá,
+                // protože by se sečetla s tou pod posledním řádkem.
+                separator
+                laneFooter(lane.lane, hidden: slice.hidden)
             }
         }
     }

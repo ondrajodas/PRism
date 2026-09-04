@@ -157,8 +157,9 @@ extension WorkLaneTests {
         #expect(Set(placed) == Set(entries.map(\.id)))
     }
 
-    /// Pruhů je šest a **kreslí se vždycky všechny**, i prázdné: mizející pruh by desku při
-    /// každém tiku přeskládal.
+    /// Pruhů je šest **v datech**, i když jsou prázdné — o kresbě to netvrdí nic: prázdný pruh
+    /// se od proklikání #515 nekreslí (`Board.visibleLanes`), ale z `Board.lanes` zmizet nesmí,
+    /// protože z nich mluví věta pod pozdravem.
     @Test("Deska má šest pruhů v pořadí z návrhu i nad prázdným vstupem")
     func alwaysHasSixLanesInOrder() {
         let board = Policy.board(entries: [])

@@ -78,21 +78,11 @@ enum WorkLane: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    /// Věta v prázdném pruhu.
-    ///
-    /// **Na pruh jiná**, jako u prázdných sekcí railu: prázdné `Rozhodnout` znamená „nic
-    /// nedoběhlo“, kdežto prázdné `Dopsat a odeslat` znamená „nic jsi nezačal“ — a to je dobře.
-    /// Jedna společná věta by u některého z nich lhala.
-    var emptyExplanation: String {
-        switch self {
-        case .decide: "Nic nedoběhlo — není o čem rozhodovat."
-        case .read: "Všechno ve frontě už review mělo."
-        case .handOff: "Na vlastních PR nezbývá nic k předání."
-        case .merge: "Nic se zrovna nedá mergnout."
-        case .waiting: "Nic nečeká na ostatní."
-        case .finishReview: "Nic rozepsaného."
-        }
-    }
+    // **Věta na prázdný pruh tu do proklikání #515 byla a odešla s ním** (`Nic nedoběhlo — není
+    // o čem rozhodovat.` a spol.). Prázdný pruh se od té doby nekreslí (`Board.visibleLanes`),
+    // takže by ji nikdo nepřečetl — a držet text, který se nemá kde ukázat, je mrtvá váha, která
+    // svádí spolehnout se na ni. Co říct, když není ani jeden pruh, skládá
+    // `Policy.boardEmpty(isLoaded:)`, a je to **jedna** věta o celé desce, ne šest o pruzích.
 
     /// Je to ten tichý pruh? **Vlastnost pruhu, ne `if` ve view** — visí na tom ztlumení, strop
     /// řádků i to, že místo akce stojí popisek.

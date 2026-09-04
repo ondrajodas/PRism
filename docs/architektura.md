@@ -9306,8 +9306,10 @@ Platí se za to třemi věcmi a každá z nich má vlastní stráž:
   „všechno hotové“ nad nestaženými daty je tvrzení o ničem.
 - **Věta pod pozdravem se s deskou nemá čím rozejít**, a je to shoda podmínek, ne opatrnost: pruh se
   skrývá **při nule** a část věty se při nule **nepíše**, takže „4 čekají na ostatní“ a nakreslený
-  tichý pruh nastávají zároveň. `WorkLane.emptyExplanation` proto **nezaniká**: kreslí se v pruhu,
-  který se vyprazdňuje pod rukou, a nad `Board.lanes` je pořád úplná.
+  tichý pruh nastávají zároveň. **Věta na prázdný pruh naopak zanikla celá**
+  (`WorkLane.emptyExplanation`, šest vět typu `Nic rozepsaného.`): prázdný pruh se nekreslí, takže
+  by ji nikdo nepřečetl — a text, který se nemá kde ukázat, je mrtvá váha. Nahradila ji **jedna**
+  věta o celé desce (`Policy.boardEmpty`).
 
 **Pořadí pruhů je od proklikání jiné** (`WorkLane.order` = `merge`, `finishReview`, `decide`, `read`,
 `handOff`, `waiting`), a je to změna osy: deck kreslil pořadí od cizí práce k vlastní, kdežto teď

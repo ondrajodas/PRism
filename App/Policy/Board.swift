@@ -48,9 +48,10 @@ struct Board: Hashable, Sendable {
     /// se pruh `Rozhodnout` skryje, `⏎` **nepřevezme** jeho soused; nezaregistruje ji nikdo.
     /// Kdyby se vázala na pozici, byla by to kolize z #151 a #184, jen v čase.
     ///
-    /// `WorkLane.emptyExplanation` tím **nezaniká**: kreslí se v pruhu, který se pod rukou
-    /// vyprazdňuje (řádky odejdou v témže průchodu, ve kterém se pruh ještě kreslí), a nad
-    /// `lanes` je pořád úplná — filtruje se až kresba.
+    /// **A věta na prázdný pruh tím zanikla celá**: `WorkLane.emptyExplanation` odešel, protože
+    /// prázdný pruh se nekreslí, takže by ji nikdo nepřečetl. Co říct, když **není ani jeden**
+    /// pruh, skládá `Policy.boardEmpty(isLoaded:)` — jedna věta o celé desce místo šesti
+    /// o pruzích.
     var visibleLanes: [Lane] { lanes.filter { $0.count > 0 } }
 
     /// Není na desce **vůbec nic**?
