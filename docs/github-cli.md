@@ -63,37 +63,52 @@ nálezy** pod hlavičkou, že nové komentáře nejsou.
 ### Když nedoběhne vůbec
 
 Do review napíše jen „Copilot encountered an error and was unable to review this pull request“
-a příčina je vidět **jen v logu akce**. Jsou na to **tři** známé příčiny; první dvě se poznají
-podle toho, **jestli job vůbec běžel**, tu třetí odliší až text chyby v logu:
+a příčina je vidět **jen v logu akce**. Jsou na to tři známé příčiny a **pozná se to podle toho,
+jestli job běžel a jak dlouho**:
 
-- **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
+- **Job běžel a spadl uprostřed** → velikost `CLAUDE.md` ([záznam
   rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
+- **Job spadl do čtyř vteřin na `Resource not accessible by integration`** → strana GitHubu,
+  viz níž (#507).
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
-- **Job běžel, spadl po dvou sekundách a v logu stojí `Resource not accessible by integration`**
-  → výpadek na straně GitHubu, ne nic u nás. Viz hned níž.
 
-### Když Copilot nevidí na pull request (#542, PR #564)
+### Třetí příčina: `Resource not accessible by integration` (#507)
 
-Job se rozjede, po dvou sekundách skončí a v logu stojí:
+**Job běžel, ale spadl na první API volání** — a to znamená, že to velikost `CLAUDE.md` **není**:
+padá dřív, než se z repa cokoli přečte. V logu to vypadá takhle (čtvrtá vteřina jobu):
 
 ```
-Fetching PR metadata for ondrajodas/PRism#564
+Analyzing ondrajodas/PRism PR #565 (autofind.js version: 0.1.124)
+Fetching PR metadata for ondrajodas/PRism#565
 HttpError: Resource not accessible by integration - .../rest/pulls/pulls#get-a-pull-request
-Error creating PR review request: … Failed to fetch PR metadata for ondrajodas/PRism#564
+Error creating PR review request: … Failed to fetch PR metadata
 ```
 
-**Není to velikost `CLAUDE.md`** — ta se u #542 nezměnila a téhož dne ve 14:20 na ní jiné kolo
-doběhlo do `success`. Poznávací znamení je, že to **netrefuje jeden pull request**: ve stejné
-minutě spadlo se stejnou hláškou i kolo nad `PRism#565` z cizí větve. Bot v tu chvíli nemá právo
-přečíst si `GET /pulls/{n}`, tedy potíž instalace GitHub Appky, na kterou z repa nedosáhneme.
+Je to **strana GitHubu, ne stav repa**, a pozná se to podle dvou věcí: (1) job doběhne
+za **4 vteřiny** a jméno má normální (`Running Copilot Code Review`), takže o mrtvý request
+z předchozí sekce nejde; (2) **padá i na jiných PR téhož repa naráz** — u #507 spadla ve stejné
+minutě i kola na větvi jiného slotu. `CLAUDE.md` měla 98 708 B, tedy pod stropem, a ta samá
+velikost prošla o šest hodin dřív třikrát za sebou.
 
-**Vyžádat znovu pomůže jedině tehdy, když výpadek mezitím skončil.** U #542 se to zkusilo
-**čtyřikrát** (20:46, 20:48, 20:56 a 23:16) a pokaždé to spadlo stejně; run přitom pokaždé
-**vznikl a běžel**, takže to není spotřebovaný request z odstavce níž a `union: false` na tom nic
-nezmění. Cesta ven je
-počkat a zkusit to znovu později — a do té doby to **hlásit jako neověřenou mezeru**, ne mergovat
-s tím, že „Copilot nic nenašel“: nic nepřečetl.
+**Vyžádat znovu zkus jednou; víc ne.** U #507 dalo druhé kolo tutéž chybu za stejnou dobu. Pak už
+je jediné, co se dá udělat, **napsat to do popisu PR jako neověřenou mezeru** a spolehnout se na
+vlastní revizi diffu — ta je stejně **podmínka pushnutí**, ne náhrada za Copilota.
+
+**Třetí pokus na PR #565 dopadl stejně** (run `33919369283`, chyba v 21:05:06Z) a přinesl jeden
+údaj navíc: mezi proměnnými prostředí v kroku *Processing Request* stojí
+**`COPILOT_PERMISSION_GATE_REASON: ineligible_app`**. Vypisuje se **před** prvním voláním, takže
+se z něj dá tahle příčina poznat dřív než z `HttpError` — a potvrzuje, že jde o oprávnění
+integrace na straně GitHubu, ne o stav repa. **Odstup mezi pokusy nepomohl**: tři kola v rozmezí
+osmnácti minut skončila týmž řádkem, takže se u téhle příčiny nevyplatí čekat a zkoušet znovu.
+
+**A trvá to přes hodiny, ne přes minuty** (#542, PR #564). Tam se to zkusilo **pětkrát** za necelé
+tři hodiny (20:46, 20:48, 20:56, 23:16 a 23:31) a pokaždé to spadlo stejně: `Processing Request`
+vypsal `COPILOT_PERMISSION_GATE_REASON: ineligible_app` a hned nato `HttpError` nad
+`GET /pulls/564`. Run přitom pokaždé **vznikl a běžel** (poslední `33921491420`), takže
+o spotřebovaný request z odstavce níž nejde a `union: false` na tom nic nezmění. Dokud výpadek na
+straně GitHubu trvá, **hlásí se to jako neověřená mezera** — nemergne s tím, že „Copilot nic
+nenašel“: nic nepřečetl.
 
 ```bash
 # Rozpoznání: běžel job, a proč spadl.

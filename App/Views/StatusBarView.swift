@@ -26,6 +26,10 @@ struct StatusBarView: View {
             // hláška je porucha a ta má mít krajní místo, kdežto kopie je běžný stav. Bez
             // hlášky — tedy skoro vždycky — vyjde nalevo stejně.
             WorkingCopyStatusView(store: store)
+            // Průběh review (#507) — **za stavem kopie**: kopie je stav prostředí (je čím
+            // pracovat), tohle je stav **té práce**. Obojí se kreslí jen nad otevřeným pull
+            // requestem, takže se na domácí záložce neposouvá nic.
+            ItineraryStatusView(store: store)
             Spacer(minLength: 0)
             // Vlevo od útraty a puntíků: souhrn je o **práci**, ne o tom, jestli aplikace funguje.
             // `nil` = nemá se co sčítat (nenačtený seznam, prázdná fronta) — viz `queueSummary`.

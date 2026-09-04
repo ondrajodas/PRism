@@ -9014,7 +9014,7 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (od #501 sedmadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+- **Počet akcí je vyjmenovaný** (od #507 devětadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
   u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
@@ -9039,7 +9039,12 @@ Co z toho stojí za zapamatování:
   `CTFontGetGlyphsForCharacters` **`false`**, kdežto `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` `true`.
   Proto se `Tab` a `esc` píšou slovem. **U #501 se doměřily vodorovné šipky**, protože je mapa PR
   potřebuje: `←` je glyf 1312 a `→` 1314, tedy obojí `true` — a nová klávesa v katalogu se takhle
-  doměřit **musí**, jinak se text propadne do náhradního písma a kapsle bude jinak široká. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
+  doměřit **musí**, jinak se text propadne do náhradního písma a kapsle bude jinak široká.
+  **U #507 se doměřil mezerník**: `␣` (U+2423) je v monospace písmu glyf **1330**, takže se kreslí
+  glyfem, jak ho má návrh. V **proporcionálním** systémovém písmu ale není — `CTFontCreateForString`
+  nad ním vrátí `HelveticaNeue` —, což se týká jedině nápovědy tlačítka (`Policy.shortcutHelp`),
+  kde je z toho jeden znak v jiném řezu. `⎵` (U+23B5) nemá **ani jedno** z těch dvou písem, takže
+  se do katalogu nedostal. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
   běhu — `NSFont` v hostu pod zátěží vydá přechodně nepoužitelnou metriku (#407) a sáhnout si sem
   na písmo znamená koupit si falešně červený `main`. Přeměřit se to dá takhle:
 
@@ -10464,3 +10469,87 @@ u opravy kresby (rozbor je v *Šest zelených sad a v Docku nic* výš):
    ~16,5 b. K tomu se cestou ukázalo, že **bitmapa je v pixelech a `pill` v bodech**: bez převodu
    podílem z `pixelsWide` hlásil test 3218 „přetečených“ pixelů nad kresbou, která nikam
    nepřetéká.
+
+## Mezerník po itineráři (#507)
+
+**Že klávesa doopravdy zabere, se v harnessu ověřit nedá** — tentýž důvod jako u celého katalogu
+zkratek (#441): testovací host nedostane aktivaci, takže nemá key okno a stisk nemá kam sednout.
+Ověřuje to člověk na běžící aplikaci a v popisu PR to stojí jako neověřená mezera. Ověřit se dá
+všechno ostatní, a je toho víc, než se čekalo.
+
+### Co se tvrdí a proč zrovna to
+
+`ItineraryWalkTests` (čisté funkce) a `ItinerarySpacebarWiringTests` (zapojení). **Nejcennější
+tvrzení jsou ta, že se nic nestane:**
+
+- **Vyčerpávající matice tří vstupů** (`isEditing` × `atEnd` ∈ {`nil`, `false`, `true`}): klávesa
+  se vydá v **jediné kombinaci ze šesti**. Kdyby se braly i ostatní, sebral by mezerník psaní
+  a scrollování — a vypadalo by to jako „scroll občas přeskočí“, ne jako rozbitá zkratka.
+- **Neměřený konec obsahu (`nil`) je totéž rozhodnutí jako „není na konci“.** Tvrdit něco
+  o obsahu, který nikdo nezměřil, nese víc, než data unesou; testuje se to zvlášť, protože je to
+  jiná **příčina** téhož výsledku.
+- **Hlášení konce z jednoho tabu neplatí v druhém ani na jiném PR.** Bez toho by mezerník po
+  přepnutí tabu odskočil podle obsahu, který na obrazovce není.
+- **Konec hlásí právě ty taby, do kterých vedou zastávky.** Tvrdí se to srovnáním **zdrojáku
+  detailu** (`contentEnd.note(…, in: .X)`) s oborem hodnot `ItineraryStop.tab` — ne výčtem
+  napsaným do testu, takže nová zastávka v jiném tabu si vynutí i hlášení.
+- **Fokus polí přežije pořadí, ve kterém se dvě hlášení potkají.** Množina, ne `Bool`: při
+  přeskoku fokusu z pole do pole se nesmí objevit okamžik, ve kterém okno tvrdí, že se nikde
+  nepíše.
+- **Dvě stráže nad zdrojáky u polí.** První: fokus hlásí **právě čtyři** jmenované soubory. Druhá,
+  z opačné strany: každý soubor s `@FocusState` je buď mezi nimi, nebo je to okno nastavení (vlastní
+  scéna, se zkratkami detailu se nepotká). Bez té druhé by nové pole vzniklo bez hlášení a mezerník
+  by v něm sebral psaní.
+
+### Kde se ověřila regrese vložením regrese
+
+1. **`itineraryStep` přestane koukat na `isEditing`** → spadne *Mezerník se bere jen mimo pole
+   a jen na konci obsahu* (matice hlásí tři nadbytečné kombinace).
+2. **`nil` u `atEnd` se bere jako „na konci“** (`atEnd != false`) → spadne tatáž matice
+   a *Neměřený konec obsahu klávesu nedá*.
+3. **`DraftTextField` přestane hlásit fokus** → spadne *Fokus hlásí právě čtyři pole* a vypíše
+   zbylá tři. Druhá stráž (`@FocusState`) při tomhle **nespadne**, a je to schválně: chytá opačný
+   směr, tedy **nové** pole, které fokus drží a nehlásí ho.
+4. **`ChecksView` přestane hlásit konec obsahu** → spadne *Konec obsahu hlásí právě ty taby, do
+   kterých vedou zastávky*, a vypíše rozdíl proti `ItineraryStop.tab` (`["filesChanged",
+   "overview"]` proti třem).
+
+### Kolik se vejde do patky sloupce — změřeno, ne odhadnuto
+
+Patka má jednu řádku, jak ji má návrh, a jestli se do sloupce vejde, je otázka pro měřidlo:
+
+```swift
+let mono = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+let text = NSFont.systemFont(ofSize: 9.5)
+// `␣` + " další zastávka · " + `⌥↓` + " další nález · " + `⌥V` + " prošlo"
+```
+
+Sečíst se ale musí **všechno, čím se ta řádka sází**, a první pokus na tom pohořel: text sám dá
+197,2 b, jenže k němu patří **odsazení kapslí** (3 × 8 b) a hlavně **mezery mezi osmi prvky**
+`HStack`u (7 × mezera). Při mezeře 5 b z toho vyjde **236,5 b** proti **234 b**, které ve sloupci
+po odsazení zbývají (260 − 2 × 13) — a **přetečení se neprojeví přetečením**: SwiftUI ořízne
+**první popisek** (`další zast…`), takže se to pozná jedině z renderu, ne z toho, že by něco lezlo
+ven. S mezerou 3 b je to **222,5 b**, tedy 11,5 b rezervy; při 9,5 b sazby a mezeře 4 b **229,5 b**,
+což je na hraně.
+
+| sazba | mezera | s tečkami | bez teček |
+|---|---|---|---|
+| 9,5 b | 5 b | **236,5 b** (nevejde se) | 220,6 b |
+| 9,5 b | 4 b | 229,5 b | 215,6 b |
+| 9,5 b | 3 b | **222,5 b** (v repu) | 210,6 b |
+| 9 b | 4 b | 221,2 b | 207,5 b |
+
+**Poučení, které stojí za zapsání:** změřit text bez toho, čím ho rozvržení rozestrčí, znamená
+změřit něco jiného, než co je na obrazovce — a u řádky, která se ořízne zevnitř, to měřidlo
+neřekne. Render vedle měření je tady podmínka
+(`ReviewItineraryRenderProbe`, scénář `itinerar-plny`).
+
+### Co se v harnessu ověřit nedá
+
+- **Že mezerník zabere** — a hlavně že ho **nesebere** `ScrollView` dřív, než se dostane
+  k zakázanému tlačítku. Zakázané tlačítko klávesu nebere (vzorec ověřený u `⌘⏎`, `⌘2` a `⎋`), ale
+  že se propadne zrovna do scrollu, ověří jedině stisk na běžící aplikaci.
+- **Že si ho v poli vezme text.** `TextFieldFocus` říká, že o tom aplikace ví; jestli by mezera
+  bez toho doopravdy odskočila, se zjistí jedině psaním do composeru.
+- **Že `TimelineView` překreslí jen svůj `Text`.** U odpočtu na dashboardu to změřila sonda
+  (`DashboardCountdownRedrawTests`); tady se stejná konstrukce **přebírá**, ne měří znovu.

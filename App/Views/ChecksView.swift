@@ -25,6 +25,9 @@ struct ChecksView: View {
     var toggle: ((PullRequestCheck) -> Void)?
     var jump: ((String, Int?) -> Void)?
     var showFullLog: ((PullRequestCheck, JobLog) -> Void)?
+    /// Dojel výřez na konec obsahu? (#507) — z toho si mezerník bere klávesu na další zastávku.
+    /// `nil` = tuhle obrazovku nikdo neposlouchá (náhledy, sondy, měření šířky).
+    var reportContentEnd: ((Bool) -> Void)?
 
     /// Přeskočené se sbalí za číslo. Na skutečném PR jich bývá většina (změřeno na
     /// `keboola/platform-libraries#557`: 28 checků, 22 přeskočených) a rozepsané by utopily
@@ -35,6 +38,7 @@ struct ChecksView: View {
         ScrollView {
             content
         }
+        .reportsContentEnd(reportContentEnd)
         // Jména jobů a časy si člověk kopíruje do issue; je to několik řádků textu, ne líný
         // seznam tisíců `Text`ů jako diff.
         .textSelection(.enabled)

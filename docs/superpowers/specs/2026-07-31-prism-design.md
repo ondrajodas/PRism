@@ -6605,6 +6605,64 @@ fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzal
 z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
 scéna vyrostla na celé `ContentView`.
 
+### Záznam rozhodnutí — mezerník jako další zastávka (#507)
+
+Zadání znělo: *mezerník = další zastávka, `Krok 4 z 9 · 12 min` ve stavovém řádku, patka itineráře
+s klávesami*. Nejtěžší na tom není žádná z těch tří věcí, ale to, že **mezerník normálně
+scrolluje** — vzít si ho znamená vzít ho někomu, kdo ho zrovna potřebuje.
+
+1. **Rozhoduje `Policy`, ne view, a rozhoduje o třech vstupech naráz.** `Policy.itineraryStep`
+   dostane fokus v poli, polohu výřezu a kurzor a vydá klávesu v **jediné kombinaci ze šesti**.
+   Kdyby to byl `if` ve view, nešlo by se na to zeptat vyčerpávající maticí — a chyba by se
+   projevila jako „scroll občas přeskočí“, ne jako rozbitá zkratka.
+
+2. **Neměřený konec obsahu je `nil`, ne `false`, a přesto se rozhodne stejně.** Zamítnutá varianta
+   byla `Bool` s výchozím `false`: chová se stejně, ale zahazuje rozdíl mezi „změřeno, není na
+   konci“ a „nikdo se neptal“ — a ten rozdíl je odpověď na otázku, proč mezerník v `Konverzaci`
+   nedělá nic. Je to tatáž úvaha jako `unknown` u `Policy.codeReading` (#383).
+
+3. **Konec se měří jen ve třech tabech, a je to hranice, ne mezera.** Zamítnuto bylo připojit
+   měření na obsah detailu jedním modifikátorem: `onScrollGeometryChange` platí na **všechny**
+   scroll views v podstromu, takže by v diffu hlásily i vnořené vodorovné scrollery a bloky kódu.
+   Zamítnuto bylo i vyjmenovat všech osm tabů: v pěti z nich dráha nemá zastávku, takže o „dočteno“
+   nemají co říct. Zbyly tři, a **je to obor hodnot `ItineraryStop.tab`** — tvrdí se to stráží,
+   která zdroják detailu srovnává s tím výčtem, ne seznamem napsaným do testu.
+
+4. **Fokus v poli se nedal odvodit z tabu.** `Policy.claimsReturnShortcut` (#452) je precedens,
+   který **nefunguje**: composer rozdělaného review stojí v panelu vedle `Přehledu` i `Změněných
+   souborů`, takže by odpověď „podle tabu“ byla vedle přesně tam, kde na ní záleží nejvíc. Vznikl
+   proto `TextFieldFocus`, hlásí do něj čtyři místa a podává se prostředím — jednou, na kořen okna,
+   ze stejného důvodu jako `terminalFocused` (#459): předávat to argumentem znamená na jedno pole
+   zapomenout. **Množina, ne `Bool`**, protože pořadí hlášení při přeskoku fokusu není zaručené.
+
+5. **Kurzor procházení je stav pohledu, ne odškrtnutí.** Tvrdá podmínka #506 („hotovo se pozná
+   z dat“) platí beze změny: mezerník **nic neodškrtává**, jen posouvá pohled. Precedens je
+   `FindingCursor` (#187) a bere se z něj i to, že **nesmí přetéct mezi pull requesty**. Zamítnuta
+   byla varianta odvodit pozici z aktivního tabu bez stavu: tab a zastávka nejsou jedna ku jedné
+   (`Přehled` má dvě zastávky, `Změněné soubory` taky), takže by se z toho dala poskládat buď
+   nekonečná smyčka, nebo dráha, která se zasekne.
+
+6. **`Krok` v pruhu a `Itinerář` v hlavičce mají stejné počítadlo a jiné minuty.** Bylo by
+   pohodlnější psát na obou místech totéž číslo, jenže pruh má odpovědět na „dodělám to dneska?“ —
+   a na to odpovídá **uplynulý** čas, ne odhad zbývajícího. Rozlišuje se slovem `Krok` a větou
+   v nápovědě; počítadlo zůstává jedno (`AppStore.itineraryProgress`), aby se ta dvě místa
+   nerozešla.
+
+7. **Nečinnost se neodečítá, a je to rozhodnutí, ne zjednodušení.** Odečítat by znamenalo
+   rozhodovat, co je práce — a aplikace by odpovídala špatně v obou směrech (čtení diffu bez
+   jediného kliknutí prací je, otevřená záložka přes oběd ne). `12 min` je orientace; že čas běží
+   i vleže, stojí v nápovědě, aby to číslo nikdo nečetl jako výkaz.
+
+8. **Mezerník je druhá holá klávesa v katalogu a je to vědomé.** #515 si u `⏎` zapsalo, že smí být
+   bez modifikátoru proto, že domácí záložka nemá textové pole; tady je polí sedm, takže si klávesu
+   hlídá `itineraryStep`. Ty dvě se nepotkají — `⏎` platí jedině na desce, `␣` jedině v detailu PR.
+   `␣` (U+2423) se kreslí glyfem, protože ho monospace písmo kapslí **má** (glyf 1330); `⎵`
+   (U+23B5) nemá ani jedno z písem, takže se do katalogu nedostal.
+
+**Zapsaná mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, se v harnessu ověřit
+nedá — testovací host nedostane aktivaci, takže nemá key okno. Poslední kolo dělá člověk na běžící
+aplikaci, jako u celého katalogu zkratek (#441).
+
 ### Záznam rozhodnutí — pull request nad stropem souborů (#542)
 
 `gh pr diff` odpoví nad 300 souborů `HTTP 406` (*„the diff exceeded the maximum number of files
