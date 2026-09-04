@@ -575,36 +575,30 @@ Naměřená čísla, zamítnuté varianty a slepé uličky u každého pravidla 
   a `ShellPathReading`.
 - **Nové soubory drž malé a soustředěné.** Když soubor roste, obvykle dělá víc věcí.
 - **Do `project.pbxproj` nesahej.** `App/` a `Tests/` jsou buildable folders
-  (`PBXFileSystemSynchronizedRootGroup`) — soubory i podsložky se do targetu berou
-  z filesystému, nový zdroják = jen ho vytvořit. Editovat pbxproj je potřeba jen při změně
-  targetů nebo build settings. **Tři výjimky**: `Signing.xcconfig` (xcconfig se dá napojit jen
-  odkazem přes `baseConfigurationReference`), `ASSETCATALOG_COMPILER_APPICON_NAME` (#83 —
-  build setting, leží na **app targetu**, ne na projektu) a od #459 **`SwiftTerm`** (balíček se
-  jinak než přes `packageReferences` nepřipojí; `Package.resolved` je v repu, aby pin nikam
-  neutekl); `App/Assets.xcassets` se v pbxproj **nevyjmenovává**. A **dva zdrojáky se stejným
-  jménem build položí** (#184), i když leží v různých podsložkách — jméno souboru je v jednom
-  targetu klíč (`Multiple commands produce … <Jméno>.stringsdata`), takže se pojmenovávají
-  **jednoznačně napříč celým `App/`** (a `Tests/`).
+  (`PBXFileSystemSynchronizedRootGroup`) — nový zdroják = jen ho vytvořit. Editovat pbxproj je
+  potřeba jen při změně targetů nebo build settings. **Tři výjimky**: `Signing.xcconfig`,
+  `ASSETCATALOG_COMPILER_APPICON_NAME` (#83 — leží na **app targetu**, ne na projektu) a od #459
+  **`SwiftTerm`** (`Package.resolved` je v repu); `App/Assets.xcassets` se v pbxproj
+  **nevyjmenovává**. A **dva zdrojáky se stejným jménem build položí** (#184), i když leží
+  v různých podsložkách — jméno souboru je v jednom targetu klíč (`Multiple commands produce …
+  <Jméno>.stringsdata`), takže se pojmenovávají **jednoznačně napříč celým `App/`** (a `Tests/`).
 - **Co se počítá při každém překreslení, se pamatuje — a cache si musí říct, co ji vyprazdňuje**
   (#224). Hranice musí být v tom typu vidět (`SyntaxRunCache`: strop na počet řádků i na jejich
-  objem, po překročení se zahodí celá) — cache bez vyjmenované meze je únik paměti s odkladem.
-  **A do cache smí jen to, co je funkcí jejího klíče** (#153): `SyntaxRunCache` je klíčovaná
-  `(text řádku, jazyk)`, takže word-level zvýraznění, které závisí na **protějšku** dvojice, do
-  ní nepatří — vracela by zvýraznění cizí dvojice, a potichu. Takové věci se kreslí jako **druhá
-  vrstva nad** výsledkem z cache ([čísla i rozbor](docs/architektura.md#appsyntax)).
+  objem) — cache bez vyjmenované meze je únik paměti s odkladem. **A do cache smí jen to, co je
+  funkcí jejího klíče** (#153): word-level zvýraznění závisí na **protějšku** dvojice, takže do
+  cache klíčované `(text řádku, jazyk)` nepatří a kreslí se jako **druhá vrstva nad** ní
+  ([čísla i rozbor](docs/architektura.md#appsyntax)).
 - **Zlevnění, které práci jen přesune jinam, není zlevnění — a pozná se to jedině změřením obou
   konců** (#275). **Měř tu cestu, kterou kód doopravdy jde**, a co se nepodařilo zlevnit, napiš
   i s důvodem: bez toho to příště někdo zkusí znovu
   ([měření](docs/testovani.md#jak-změřit-projíždění-diffu-když-se-ho-nedá-dotknout-252)).
 - **Řádky dělí `TextLines`, nikdy `split(separator: "\n")` ani `components(separatedBy: .newlines)`**
-  (#292, na jedno místo svedeno #295). `"\r\n"` je ve Swiftu **jeden `Character`**, takže
-  `split(separator: "\n")` na `CRLF` **nerozdělí vůbec**; ta druhá cesta dělí po skalárech,
-  takže `CRLF` jsou pro ni dva oddělovače a vloží mezi ně prázdný řádek. Platí to na
+  (#292, na jedno místo svedeno #295). `"\r\n"` je ve Swiftu **jeden `Character`**, takže ta
+  první cesta na `CRLF` **nerozdělí vůbec** a ta druhá vloží mezi ně prázdný řádek. Platí to na
   **všechno, co zakončení řádků nevybírá aplikace**: hlavičky, logy z CI, diffy a obsah souborů
-  z cizích repozitářů. Výjimka je `String.singleLine`, a to **schválně**: sráží cizí text do
-  popisku, takže potřebuje širší `isNewline` (grep ji nechytá, dělí přes `whereSeparator`).
-  A **kdo text dělí na dvě části, dělí obě na tomtéž znaku** (#339) — tohle grep nechytá vůbec.
-  Zdůvodnění obojího je u `Character.isLineTerminator` a v
+  z cizích repozitářů. Výjimka je `String.singleLine`, a to **schválně**. A **kdo text dělí na
+  dvě části, dělí obě na tomtéž znaku** (#339) — tohle grep nechytá vůbec. Zdůvodnění obojího je
+  u `Character.isLineTerminator` a v
   [`docs/architektura.md`](docs/architektura.md#textlines--co-je-řádek-295).
 
   ```bash
@@ -651,13 +645,11 @@ Naměřená čísla, zamítnuté varianty a slepé uličky u každého pravidla 
   chybách*](docs/superpowers/specs/2026-07-31-prism-design.md#chování-při-chybách))
   — každý z nich má mít v UI vlastní rozlišitelný stav. `čisté` (žádné nálezy) a
   `failed` (session spadla) se nesmí slít do jednoho — a od #383 je mezi nimi **třetí**:
-  `inconclusive` (doběhlo, ale čisto z toho neplyne — reviewer nepřečetl kód, nenahlásil
-  nálezy, nebo se část ztratila). Rozhoduje o něm `Policy.inconclusiveReason(of:)`, což je
-  **jediné místo** — a když se ptáš, jestli běh kód doopravdy otevřel, tak
-  `Policy.codeReading(of:)`, kde `unknown` je odpověď, ne slabší „nepřečetl“.
-  **Od #518 je totéž o dráze**: `přeskočeno` (routing) není ani `nespuštěno`, ani `čisto` —
-  reviewer, na kterého se **schválně** nedošlo, o kódu neřekl nic
-  ([rozbor](docs/architektura.md#routing-reviewerů-podle-změněných-cest-518)).
+  `inconclusive` (doběhlo, ale čisto z toho neplyne). Rozhoduje o něm
+  `Policy.inconclusiveReason(of:)`, což je **jediné místo** — a když se ptáš, jestli běh kód
+  doopravdy otevřel, tak `Policy.codeReading(of:)`, kde `unknown` je odpověď, ne slabší
+  „nepřečetl“. **Od #518 je totéž o dráze**: `přeskočeno` (routing) není ani `nespuštěno`, ani
+  `čisto` ([rozbor](docs/architektura.md#routing-reviewerů-podle-změněných-cest-518)).
 
 ### Kresba, rozvržení a výkon v okně
 
@@ -666,75 +658,52 @@ věty pravidel, jména míst, kde se rozhoduje, a grepy; **co se měřilo, jaká
 zamítlo a co byla slepá ulička, je za odkazem** — a přečti si to **dřív, než pravidlo obejdeš**,
 protože většina z nich se v harnessu neprojeví.
 
-- **Rozměr se nenechává vyjednávat, když se dá spočítat** (#220): `frame(maxWidth: .infinity)`
-  stojí **~5,5× na úroveň** zanoření, takže se šířka **předává** (`availableWidth`,
-  `narrowingWidth`, `filling` v `App/Views/AvailableWidth.swift`).
+- **Rozměr se nenechává vyjednávat, když se dá spočítat** (#220) — šířka se **předává**
+  (`availableWidth`, `narrowingWidth`, `filling` v `App/Views/AvailableWidth.swift`), protože
+  `frame(maxWidth: .infinity)` stojí **~5,5× na úroveň** zanoření.
 - **Kdo si šířku rozdělí na kolony, musí ji předat i zúženou** (#546) — a **kdo paduje kolem
   `filling()`, o to zúží prostředí** (`narrowingWidth(by:)`, **jedna** konstanta na `padding`
-  i zúžení, a zúžení jde navrch). `filling()` je přibití na hodnotu z prostředí, ne pružnost,
-  takže se odsazení **přičte**; `ScrollView` se pak v nescrollované ose řídí obsahem a `frame`
-  tu přeteklou plochu **vystředí**, takže je vada vidět na druhém konci okna. `DiffView` do #546
-  posílal dolů štěrbinu celého tabu a diff se sázel o 100 b vedle
+  i zúžení). `filling()` je přibití na hodnotu z prostředí, ne pružnost
   ([rozbor](docs/architektura.md#kdo-paduje-kolem-filling-musí-o-to-zúžit-prostředí-546),
   [měření](docs/testovani.md#neověřená-mezera-71-znaků-na-stranu-v-živém-okně--vyřešeno-546)).
-- **Pružná výška v řádku líného seznamu je zakázaná taky, ale z jiného měření** (#375) — měřidlo
-  na projíždění tuhle třídu **nevidí**, takže se cena **neodhaduje z tabulky pro šířku**.
-  Zakázaná je **v řádku**, ne plošně; ohraničené formy jsou
+- **Pružná výška v řádku líného seznamu je zakázaná taky, ale z jiného měření** (#375) — zakázaná
+  je **v řádku**, ne plošně, a cena se **neodhaduje z tabulky pro šířku**; ohraničené formy jsou
   [vyjmenované](docs/architektura.md#šířka-v-okně-appviewsavailablewidthswift).
 - **Rozměr nevyjednává líný seznam** (#361) **ani obsah okna** (#472) — oba ho dostanou změřený
   (`fillingSlot()`); hlídá to `LazyIdealSizeTests`
-  ([líný seznam](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361), tam
-  [zlevnění, ne oprava](docs/architektura.md#nezastavilo-to-nic-a-je-to-změřené-361-třinácté-kolo);
+  ([líný seznam](docs/architektura.md#fillingslot--líný-seznam-rozměr-nevyjednává-vůbec-361),
   [obsah okna](docs/architektura.md#obsah-okna-dostane-změřenou-štěrbinu-472)).
-- **`LazyVStack` v diffu ani na ose konverzace nepatří, a je to změna proti #361** (#469).
-  Neomezenost seznamu není důvod ten vzor snést — je to vlastnost lazy layoutu, ne délky seznamu.
-  Diff kreslí **pevný `VStack`** a laznost je jedno rozhodnutí: živý `NSTextView` má blok kódu jen
-  v pásu kolem výřezu (`Policy.mountBand(visible:)`, `DiffBlockSlot`), hlavičku kreslí přes výřez
-  `DiffPinnedHeader` a scrollování se zapisuje jedině do `DiffViewport`. **Cena projíždění roste
-  s počtem nasazených `NSTextView`, ne s délkou seznamu**; hlídá to `DiffMountingTests`
-  ([čísla i ablace](docs/architektura.md#pevný-seznam-a-nasazování-bloků-469)). `List` je změřený
-  a **zamítnutý** — výška obsahu je u něj odhad, takže posuvník lže; hlídá to
-  `ConversationAxisEagerTests` ([cena](docs/architektura.md#patnácté-kolo-osa-líný-seznam-nemá-361)).
-- **Nevyjednává se ani počet prvků** (#252): prvek v `ForEach`i s prázdným obsahem se pořád
-  umisťuje, takže plochu, gesto a čtení geometrie nad blokem kódu počítá **jednou**
-  `DiffGutterGeometry`. A co se při scrollování mění, **nesmí být ve `@State`**
+- **`LazyVStack` v diffu ani na ose konverzace nepatří, a je to změna proti #361** (#469) —
+  neomezenost seznamu není důvod ten vzor snést. Diff kreslí **pevný `VStack`** a laznost je
+  jedno rozhodnutí: blok kódu má živý `NSTextView` jen v pásu kolem výřezu
+  (`Policy.mountBand(visible:)`, `DiffBlockSlot`), scrollování se zapisuje jedině do
+  `DiffViewport`; hlídá to `DiffMountingTests`. `List` je změřený a **zamítnutý** (posuvník lže),
+  hlídá to `ConversationAxisEagerTests`
+  ([čísla i ablace](docs/architektura.md#pevný-seznam-a-nasazování-bloků-469),
+  [cena `Listu`](docs/architektura.md#patnácté-kolo-osa-líný-seznam-nemá-361)).
+- **Nevyjednává se ani počet prvků** (#252) — plochu, gesto a čtení geometrie nad blokem kódu
+  počítá **jednou** `DiffGutterGeometry`. A co se při scrollování mění, **nesmí být ve `@State`**
   ([rozbor](docs/architektura.md#appdiff)).
-- **Kdo čte posun výřezu, je vyjmenovaný — a čte ho v modifikátoru, ne v těle** (#503).
-  `DiffViewport.top` se mění při **každém** otočení kolečka, takže se za jeho čtení platí
-  překladem toho těla, ve kterém stojí: v `ViewModifier.body(content:)` je `content` zástupný
-  uzel, takže se přeloží jedině modifikátor. Kdo potřebuje rozhodnout **co kreslit**, bere
-  **pás** (`DiffViewport.band`, kvantovaný na násobky výřezu) — karty v okraji se proto nasazují
-  jako bloky (`Policy.isBlockMounted`; bez toho 1,65 s CPU proti 1,56 s za gesto). Hlídá to
-  `DiffMarginScrollReadTests` nad zdrojáky — v harnessu se počet průchodů tělem změřit nedá
-  ([rozbor](docs/architektura.md#nálezy-v-okraji-503), [měření](docs/testovani.md#co-stojí-okraj-s-kartami-nálezů-503)).
+- **Kdo čte posun výřezu, je vyjmenovaný — a čte ho v modifikátoru, ne v těle** (#503). Kdo
+  potřebuje rozhodnout **co kreslit**, bere **pás** (`DiffViewport.band`), ne `top` — karty
+  v okraji se proto nasazují jako bloky (`Policy.isBlockMounted`). Hlídá to
+  `DiffMarginScrollReadTests` nad zdrojáky ([rozbor](docs/architektura.md#nálezy-v-okraji-503),
+  [měření](docs/testovani.md#co-stojí-okraj-s-kartami-nálezů-503)).
 - **Krabice, ze které se kreslí, hlásí předfiltr a jedině při změně** (#503). `DiffRowFrames`,
-  `DiffFileExtents` a `DiffBlockPlacement` sledované **nejsou** (čte je gesto a ukotvená hlavička);
-  `DiffMarginAnchors` sledovaná **je**, protože z ní jde kresba — a proto do ní jde jen to, co se
-  kreslí, a zápis má stráž na rovnost. **Nezměřený blok nehlásí ani prázdno**: prázdno znamená
-  „změřeno a nic tu není“, takže by si blok při každém přestavění přepsal platnou polohu na nic
-  (tatáž lekce jako „prázdná plocha se ignoruje“ u #252). A **rámečky řádků se předávají
-  argumentem, ne přes `@State`** — zápis do `@State` je vidět až v dalším průchodu tělem.
-- **Stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav, který mění** (#506).
-  `@State` uzlu, který se přestavuje **častěji** než ten stav, je stráž, která „jen někdy“ neplatí:
-  automatika kolon diffu (#188) přepisovala `⌘1` u sloupce, který od #506 stojí vedle **všech**
-  tabů, protože `switch tab` diff zahodí a nová instance rozhodnutí uplatní znovu. Stav i stráž
-  proto chodí **parametrem** od toho, kdo je kreslí (`DiffColumnActions`, `panelExpanded`), a jejich
-  `nil` znamená **„nic nepřepisuj“**. V harnessu se to neprojeví — scéna se staví jednou
+  `DiffFileExtents` a `DiffBlockPlacement` sledované **nejsou**; `DiffMarginAnchors` sledovaná
+  **je**, a zápis do ní má stráž na rovnost. **Nezměřený blok nehlásí ani prázdno.** A **rámečky
+  řádků se předávají argumentem, ne přes `@State`**.
+- **Stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav, který mění** (#506) —
+  stav i stráž chodí **parametrem** od toho, kdo je kreslí (`DiffColumnActions`,
+  `panelExpanded`), a jejich `nil` znamená **„nic nepřepisuj“**. V harnessu se to neprojeví
   ([rozbor](docs/architektura.md#stráž-automatiky-patří-ke-stavu-ne-k-diffu-506-třetí-kolo),
   [měření](docs/testovani.md#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506)).
 - **To pravidlo se dá splnit napůl, a pak se ptej „kde stav končí“, ne „kdo je nejbližší rodič“**
-  (#506, čtvrté kolo). `@State` detailu **nepřežije** kliknutí na `Přehled` (`switch
-  store.activeTab` v `ContentView` je `@ViewBuilder`, tedy jiná identita), kdežto stav sloupce žije
-  v `UserDefaults` — stráž proto bydlí ve store (`AppStore.appliedSideColumns`), jako
-  `isReviewPanelExpanded`.
-- **A uplatnit se smí jen to pole, o kterém se rozhodlo jinak než minule** (#506, čtvrté kolo).
-  `DiffSideColumns` má tři pole a automatika sahá na dvě — zapisovala ale obě, jakmile se rozhodnutí
-  změnilo v čemkoli, takže volbu u itineráře přepsal i klik na `Nálezy pod řádky`, sbalení souboru
-  nebo odkrytí kontextu (mění `margin`). Rozhoduje `Policy.sideColumnsToApply`, kde `nil` u pole je
-  **„nechat být“**, ne „složit“. **A když připomínka přijde podruhé, měřidlo z prvního kola tu
-  druhou příčinu nevidělo** — šířka scény se bere z běžícího okna
-  (`CGWindowListCopyWindowInfo`), ne z čísla, ze kterého počítá zákres, a scéna hostí **celé
-  `ContentView`**, protože jen detail tu cestu nemá kde vyrobit
+  (#506, čtvrté kolo) — stav sloupce žije v `UserDefaults`, takže stráž bydlí ve store
+  (`AppStore.appliedSideColumns`), jako `isReviewPanelExpanded`.
+- **A uplatnit se smí jen to pole, o kterém se rozhodlo jinak než minule** (#506, čtvrté kolo) —
+  rozhoduje `Policy.sideColumnsToApply`, kde `nil` u pole je **„nechat být“**, ne „složit“.
+  **A když připomínka přijde podruhé, měřidlo z prvního kola tu druhou příčinu nevidělo**
   ([rozbor](docs/architektura.md#dvě-cesty-kterými-se-volba-přepisovala-dál-506-čtvrté-kolo),
   [měření](docs/testovani.md#pořád-se-ten-itinerář-zavírá--čtvrté-kolo-506)).
 - **V líném seznamu se neiteruje pole tuplů** (#361): `ForEach(Array(x.enumerated()),
@@ -743,7 +712,7 @@ protože většina z nich se v harnessu neprojeví.
   (`ConversationRow`), index se dopočítá v `Policy`
   ([měření](docs/testovani.md#projíždění-kolečkem-a-co-z-něj-u-361-vyšlo-361)). Plošný grep
   prázdný vyjít **nemůže**: `id: \.offset` payload nekopíruje a u prvků, které se legitimně
-  opakují (řádky textu, sha), je pořadí **jediná** správná identita.
+  opakují, je pořadí **jediná** správná identita.
 
 ```bash
 grep -rn 'maxHeight: .infinity' App/Views/ConversationNodeView.swift | grep -vE ':[0-9]+: *//'
@@ -761,34 +730,26 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
 ```
 
 - **`@Observable` sleduje po vlastnostech, takže hrubá vlastnost je výkonová vada** (#469, znovu
-  #472) — co se mění jinak často a čte jinde, patří do **vlastní** vlastnosti. Naopak **psát „jen
-  změnu“ nemá smysl**: zápis téže hodnoty toolchain nehlásí (pinuje to `PollObservationTests`).
-  **Neplatí to ale u hodnoty, kterou nejde porovnat** (#421) — mapa s hodnotou, která `Equatable`
-  není (typicky `@Observable` **třída**), se neporovnává, takže ji bezpodmínečný zápis hlásí **i
-  když je prázdná**. Tam se zapisuje jen při změně, a je to výjimka, ne nový vzor: `forget(whatIsNotIn:)`
-  prořezává čtyřiačtyřicet map, z toho třiačtyřicet přiřazuje bezpodmínečně a jedině `diffSearches`
-  má tuhle podmínku. Hlídá to
-  `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** z nich
-  ([čím to bylo v okně](docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
-  **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421) — kdo to zkusí
-  znovu, ať měří **čas**, ne počty průchodů. **#421 je zavřené, ale čísla z jeho prvního kola
-  neplatí** (měřidlo lhalo dvěma způsoby, opraveno v druhém kole) a **u téhle vady se čas naměřit
-  nepodařilo** — počty jsou nula proti 12 530, kdežto CPU nerozliší nic; než na to sáhneš, přečti si
-  [*Co zašpiní tělo `DiffView`u*](docs/testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421)
-  a [čísla u #472](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472).
+  #472). Naopak **psát „jen změnu“ nemá smysl**: zápis téže hodnoty toolchain nehlásí (pinuje to
+  `PollObservationTests`). **Neplatí to ale u hodnoty, kterou nejde porovnat** (#421) — mapa
+  s hodnotou, která `Equatable` není, se neporovnává, takže ji bezpodmínečný zápis hlásí **i když
+  je prázdná**; z čtyřiačtyřiceti map, které prořezává `forget(whatIsNotIn:)`, má tuhle podmínku
+  jedině `diffSearches`. **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta**
+  (#421) — kdo to zkusí znovu, ať měří **čas**, ne počty průchodů ([*Co zašpiní tělo
+  `DiffView`u*](docs/testovani.md#co-zašpiní-tělo-diffviewu-nad-nečinným-diffem-421),
+  [čísla u #472](docs/architektura.md#pět-vlastností-ne-jeden-pollstate-472)).
 - **Cenu přerovnání okna drží rozvržení, ne naše kód** (#472) — vlastní práce aplikace je ve
   `sample`u **~1,5 %** hlavního vlákna, takže **napřed změř, která část scénáře je drahá**
-  ([čísla](docs/testovani.md#kolik-stojí-přerovnání-okna-472)) a přečti si [*Čtyři zlevnění, která
-  se změřila a zahodila*](docs/testovani.md#čtyři-zlevnění-která-se-změřila-a-zahodila).
-- **Animace, která nikdy nedoběhne, nesmí být ve SwiftUI** (#350): `repeatForever` si vyžádá
-  průchod při **každém obtažení obrazovky** a ten rozvrhne celé okno. Nekonečné otáčení patří na
-  `CALayer` (`SpinningRingView`), krátká animace na gesto ve SwiftUI zůstat může; `ProgressView`
-  je na macOS AppKitový ([čísla](docs/architektura.md#nekonečné-animace-v-okně-350)).
+  ([čísla](docs/testovani.md#kolik-stojí-přerovnání-okna-472), [*Čtyři zlevnění, která se změřila
+  a zahodila*](docs/testovani.md#čtyři-zlevnění-která-se-změřila-a-zahodila)).
+- **Animace, která nikdy nedoběhne, nesmí být ve SwiftUI** (#350) — `repeatForever` si vyžádá
+  průchod při **každém obtažení obrazovky**. Nekonečné otáčení patří na `CALayer`
+  (`SpinningRingView`), krátká animace na gesto ve SwiftUI zůstat může
+  ([čísla](docs/architektura.md#nekonečné-animace-v-okně-350)).
 - **Zpětná vazba z každého snímku nesmí zapisovat do `@State` bezpodmínečně** (#358):
   `onContinuousHover` dostane polohu i tehdy, když se myš **nehnula**. Rozhoduje
   **`Policy.hoverChange(from:to:)`**, na jednom místě schválně. Dvě neintuitivní věci: hodnota
-  stavu **musí být `Equatable`** (tuple ve Swiftu není) a předat ji **nejde přes `inout`** —
-  `@State` je počítaná vlastnost, takže `&hovered` projde setterem i beze změny.
+  stavu **musí být `Equatable`** (tuple ve Swiftu není) a předat ji **nejde přes `inout`**.
 - **`onGeometryChange` do téhle třídy nepatří** (#361) — při nezměněné hodnotě se **nespustí**;
   u **`.onHover` to ověřené není**
   ([co zbývá doměřit](docs/testovani.md#proč-na-358-není-sonda-a-je-to-změřené-358)). **„Akce se
@@ -799,29 +760,19 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   geometrie, ne změna dat. Co je v něm lineární v délce obsahu, se musí schovat za **klíč uložený
   v `Coordinator`u** (`DiffBlockDrawing` = obsah + styl + **šířka**). **Netýká se to všech
   representable, a je to změřené**: dostane ho ten, který si **říká o vlastní velikost**
-  (`sizeThatFits`), takže se stráž nedává plošně
-  ([tři neintuitivní věci](docs/architektura.md#stráž-v-updatensview-393)).
-- **V AppKitu není „bez barvy“ dědění, ale černá** (#393): `NSAttributedString` bez
-  `.foregroundColor` se kreslí **černě** (ve SwiftUI přitom `foregroundColor = nil` doopravdy
-  dědí). Barva se nasazuje **jako základní atribut celého řetězce** a syntaxe ji přepisuje;
-  hodnota je `Palette.ink`, ne poloprůhledný `labelColor`. A **kontrast paletového tokenu netvrdí
-  nic o kresbě** — k měření barvy patří i tvrzení, že se ta barva **do textu dostane**.
-- **Odznak v Docku si aplikace kreslí sama, `badgeLabel` je změřená slepá ulička** (#529) —
-  `dockTile.badgeLabel` je pod přepínačem `Odznaky` v Oznámeních a u aplikace, která si o `.badge`
-  neřekla, ho Dock **potichu zahodí**: nasadí se, přečte se zpátky, `display()` ani restart Docku
-  nepomůže. Kreslí to `DockBadgeTileView` do `dockTile.contentView` (bez povolení, a ořezaně
-  plochou dlaždice), geometrii vydává `Policy.dockBadgeLayout`. Hlídají to
-  `DockBadgeTileRenderTests` (bitmapa) a `DockBadgeWiringTests` (`badgeLabel` v
-  `DockBadgeTile.swift` nesmí být). **Je to nejdražší případ pravidla z #478 v tomhle repu** —
-  šest zelených sad a v Docku nic; než na to sáhneš, přečti si [postup
-  měření](docs/testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529)
-  a [zamítnutou variantu „požádat o
-  `.badge`“](docs/architektura.md#odznak-si-aplikace-kreslí-sama--badgelabel-je-změřená-slepá-ulička).
-- **Sémantická škála se kreslí z palety, nikdy ze systému** (#432) — systémová
-  `.green`/`.red`/`.orange`/`.yellow` je navržená jako **výplň** s bílým textem, kdežto tady je
-  barva ze škály skoro vždycky **text nebo glyf na tlumeném washi**. Ze systému **zůstávají tři
-  věci**: `.secondary` (není barva ze škály, ale „nemám co říct“), `.purple` u `merged` a `.blue`
-  u `renamed` — ta je zapsaná mezera, ne záměr ([záznam
+  (`sizeThatFits`) ([tři neintuitivní věci](docs/architektura.md#stráž-v-updatensview-393)).
+- **V AppKitu není „bez barvy“ dědění, ale černá** (#393) — barva se nasazuje **jako základní
+  atribut celého řetězce** a syntaxe ji přepisuje; hodnota je `Palette.ink`, ne poloprůhledný
+  `labelColor`. A **kontrast paletového tokenu netvrdí nic o kresbě**.
+- **Odznak v Docku si aplikace kreslí sama, `badgeLabel` je změřená slepá ulička** (#529) — Dock
+  ho u aplikace, která si o `.badge` neřekla, **potichu zahodí**. Kreslí to `DockBadgeTileView`
+  do `dockTile.contentView`, geometrii vydává `Policy.dockBadgeLayout`, hlídají to
+  `DockBadgeTileRenderTests` a `DockBadgeWiringTests`. **Je to nejdražší případ pravidla z #478
+  v tomhle repu** ([postup měření](docs/testovani.md#šest-zelených-sad-a-v-docku-nic--jak-se-to-našlo-529),
+  [zamítnutá varianta](docs/architektura.md#odznak-si-aplikace-kreslí-sama--badgelabel-je-změřená-slepá-ulička)).
+- **Sémantická škála se kreslí z palety, nikdy ze systému** (#432). Ze systému **zůstávají tři
+  věci**: `.secondary`, `.purple` u `merged` a `.blue` u `renamed` — ta je zapsaná mezera, ne
+  záměr ([záznam
   rozhodnutí](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--sémantická-škála-z-palety-432)).
   **Kontrast se měří z nakreslené bitmapy, ne z tokenu.**
 
@@ -835,59 +786,46 @@ grep -rnE '\.(green|red|yellow|orange)([^A-Za-z0-9_]|$)' App | grep -vE ':[0-9]+
 ```
 
 - **Kombinace kláves se v `App/` píše jen v katalogu zkratek** (#441), a **zkratka okna se v tabu,
-  který si tutéž klávesu bere, zakáže** (#452: `⌘⏎` odesílá otázku v `Zeptat se`, rozhoduje
-  `Policy.claimsReturnShortcut`). Dvě tlačítka se stejnou kombinací nejsou chyba ani pád —
-  vyhraje to zaregistrované později a druhá zkratka „nefunguje“; rozhoduje
+  který si tutéž klávesu bere, zakáže** (#452, `Policy.claimsReturnShortcut`). Dvě tlačítka se
+  stejnou kombinací nejsou chyba ani pád — vyhraje to zaregistrované později; rozhoduje
   `Policy.windowShortcut(_:)` a překládá to jediné místo (`WindowShortcutButtons`,
-  `View.windowShortcut(_:)`), popiska se **odvozuje**, nikdy neopisuje vedle klávesy. Dvě
-  tlačítka se **stejnou akcí a jinou klávesou** jsou naopak v pořádku — česká klávesnice má pod
-  `1`–`5` znaky `+ ě š č ř`. Hlídá to `WindowShortcutsTests` a **dvě** stráže nad zdrojáky: kde
-  se zkratka **registruje** (`grep -rn 'keyboardShortcut(' App`) a kde se **kreslí** (`⌘`/`⌥`
-  v řetězcovém literálu) — obojí **výčet, ne prázdný**. Že klávesa zabere, se v harnessu ověřit
-  nedá; zkouší to člověk, a u zkratek s číslicí **na obou mapách**
-  ([katalog](docs/architektura.md#katalog-klávesových-zkratek-441)).
+  `View.windowShortcut(_:)`), popiska se **odvozuje**. Dvě tlačítka se **stejnou akcí a jinou
+  klávesou** jsou naopak v pořádku — česká klávesnice má pod `1`–`5` znaky `+ ě š č ř`. Hlídá to
+  `WindowShortcutsTests` a **dvě** stráže nad zdrojáky: kde se zkratka **registruje**
+  (`grep -rn 'keyboardShortcut(' App`) a kde se **kreslí** (`⌘`/`⌥` v řetězcovém literálu) —
+  obojí **výčet, ne prázdný**. Že klávesa zabere, se v harnessu ověřit nedá; zkouší to člověk,
+  a u zkratek s číslicí **na obou mapách** ([katalog](docs/architektura.md#katalog-klávesových-zkratek-441)).
 - **Fokus a posun scrollu se nastavují o průchod později, ne časovačem** (#184, potřetí #392;
-  scroll #325) — dělá se `.task` s jedním `Task.yield()`. Rozhoduje **počet průchodů, ne čas**,
-  takže odklad časovačem nepomůže a je to navíc zakázaná třída (#350). Posun navěšený na **data**
-  naopak doběhne moc brzo (řádek ještě není rozvržený), takže se sleduje **geometrie**;
-  a sledování konce se nesmí opřít o „jsem na posledním bodu obsahu“ — rozhoduje
-  `Policy.stepFeedReaction` ([rozbor](docs/architektura.md#živý-výpis-kroků-v-tabu-průběh-325)).
-  **Fokus jde ověřit jedině na běžící aplikaci** (testovací host nedostane aktivaci), takže **do
-  popisu PR patří, že tuhle věc ověří člověk**
-  ([jak se měří](docs/testovani.md#jak-změřit-fokus-a-klávesy-184)).
-- **`scrollTo(id, anchor:)` umisťuje cíl, ne řádek v něm** (#152). Cílem je od #157 **blok** o nejvýš
-  šedesáti řádcích, takže se podíl výšky počítá z toho, kde v bloku cíl leží (`Policy.jumpAnchorY`,
-  `DiffJumpSpot` z `DiffRow.blockSpot`) — a **podíl mimo `0…1` je správná odpověď, ne chyba**.
-  **Rozměry se berou změřené** (`DiffRowFrames`), ne dopočítané z počtu řádků: v pohledu pod sebou se
-  **zalamuje**, takže odhad byl proti skutečnosti trojnásobně mimo. Ořezání podílu na rozsah
-  i vyjmutí cíle do vlastního bloku jsou **změřené a zamítnuté** varianty a **skok se neanimuje**
-  (animaci utnul druhý průchod). Kde cíl přistane, se měří **v souřadnicích okna**, ne z `id`, na
-  které se skočilo ([čísla](docs/architektura.md#kam-skok-posadí-cílový-řádek-152)).
-- **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236) — měření patří **do toho
-  typu, který drží šířku kreslení**, protože dvě místa znamenají dvě pravdy o jedné šířce. Testuje
-  se proti **layout manageru** a **přes pásmo šířek**, protože u jedné šířky test projde
-  ([rozbor](docs/architektura.md#appdiff)). Do téhle třídy patří i **„je tam vodorovný pruh?“**
-  ([#422](docs/architektura.md#trvalý-vodorovný-pruh-ve-split-pohledu-422)), **šířka dokumentu
-  u textu kresleného jinde než na `x: 0`** (`DiffTextView.naturalWidth`, počítaná **po řádcích**,
-  ne z `usedRect(for:)`) a **pruh, který jede s výřezem**
-  ([#428](docs/architektura.md#pruh-který-jede-s-výřezem-428) — mění se **jen `frame.origin.y`
-  scrolleru**, nikdy výška bloku). **A rozměr, ze kterého se počítá, se měří — nenasazuje se
-  rámcem** (#325): `frame(height:)` by srovnal výšku s kresbou **na sílu** a rozejití by nebylo
-  jak poznat. U výšky řádku navíc nesmí rozhodovat **ikona** — SF Symboly jednu výšku nemají,
-  takže je srovná `imageScale(.small)`.
+  scroll #325) — dělá se `.task` s jedním `Task.yield()`, protože rozhoduje **počet průchodů, ne
+  čas**. Posun navěšený na **data** doběhne moc brzo, takže se sleduje **geometrie**; konec
+  vydává `Policy.stepFeedReaction` ([rozbor](docs/architektura.md#živý-výpis-kroků-v-tabu-průběh-325)).
+  **Fokus jde ověřit jedině na běžící aplikaci**, takže **do popisu PR patří, že tuhle věc ověří
+  člověk** ([jak se měří](docs/testovani.md#jak-změřit-fokus-a-klávesy-184)).
+- **`scrollTo(id, anchor:)` umisťuje cíl, ne řádek v něm** (#152) — cílem je od #157 **blok**,
+  takže podíl výšky počítá `Policy.jumpAnchorY` z `DiffJumpSpot`, a **podíl mimo `0…1` je správná
+  odpověď, ne chyba**. **Rozměry se berou změřené** (`DiffRowFrames`), ne dopočítané z počtu
+  řádků, a **skok se neanimuje**. Kde cíl přistane, se měří **v souřadnicích okna**
+  ([čísla i dvě zamítnuté varianty](docs/architektura.md#kam-skok-posadí-cílový-řádek-152)).
+- **Kdo si říká o velikost, musí ji měřit na tom, na čem kreslí** (#236) — dvě místa znamenají
+  dvě pravdy o jedné šířce. Testuje se proti **layout manageru** a **přes pásmo šířek**, protože
+  u jedné šířky test projde ([rozbor](docs/architektura.md#appdiff)). Do téhle třídy patří
+  i **„je tam vodorovný pruh?“** ([#422](docs/architektura.md#trvalý-vodorovný-pruh-ve-split-pohledu-422)),
+  **šířka dokumentu u textu kresleného jinde než na `x: 0`** (`DiffTextView.naturalWidth`,
+  počítaná **po řádcích**) a **pruh, který jede s výřezem**
+  ([#428](docs/architektura.md#pruh-který-jede-s-výřezem-428)). **A rozměr, ze kterého se počítá,
+  se měří — nenasazuje se rámcem** (#325). U výšky řádku navíc nesmí rozhodovat **ikona** — SF
+  Symboly jednu výšku nemají, takže je srovná `imageScale(.small)`.
 - **`overlay`, který přesahuje plochu rodiče, ořízne každý ořezávající předek** (#483), a v tomhle
-  okně jsou dva: `ScrollView` (panel review, osa konverzace) a `clipShape` (bublina vlákna). Co
-  má viset nad polem, se proto kotví na tom předkovi, který **neořezává**, a stav se k němu podává
-  — u emotikonů `EmojiSuggestionBox`, jeden na majitele. `popover` to neřeší: bere fokus, takže by
-  v poli přestalo jít psát ([rozbor](docs/architektura.md#našeptávání-emotikonů-483), [jak se
-  zjistí, co ořezává](docs/testovani.md#jak-zjistit-co-ořezává-483)).
+  okně jsou dva: `ScrollView` a `clipShape`. Co má viset nad polem, se proto kotví na tom
+  předkovi, který **neořezává** — u emotikonů `EmojiSuggestionBox`, jeden na majitele. `popover`
+  to neřeší: bere fokus ([rozbor](docs/architektura.md#našeptávání-emotikonů-483), [jak se zjistí,
+  co ořezává](docs/testovani.md#jak-zjistit-co-ořezává-483)).
 - **Sheet dostane `idealWidth` jedině s `presentationSizing(.fitted)`; `idealHeight` si vezme i bez
-  něj** (#327, ta asymetrie změřená u #491) — bez toho modifikátoru je široký jako `minWidth`,
-  a nerozhoduje o tom okno za ním. **V okně `Settings` scény je mrtvé obojí** a oživit to nejde,
-  `presentationSizing` je modifikátor prezentace. S `.fitted` a pružným rámcem sheet navíc dostane
-  `.resizable` do `styleMask`u, takže se dá **roztáhnout myší**. Kdo si velikost pamatuje, musí
-  vědět, že se **sheet rozvrhuje dvakrát a v prvním průchodu má podlahu** — zápis bez odmlky uloží
-  podlahu ([rozbor](docs/architektura.md#sheet-se-dá-roztáhnout-a-velikost-si-pamatuje),
+  něj** (#327, ta asymetrie změřená u #491). **V okně `Settings` scény je mrtvé obojí** a oživit
+  to nejde. S `.fitted` a pružným rámcem sheet navíc dostane `.resizable` do `styleMask`u, takže
+  se dá **roztáhnout myší**. Kdo si velikost pamatuje, musí vědět, že se **sheet rozvrhuje
+  dvakrát a v prvním průchodu má podlahu**
+  ([rozbor](docs/architektura.md#sheet-se-dá-roztáhnout-a-velikost-si-pamatuje),
   [čísla](docs/testovani.md#co-dělá-ideal-u-sheetu-a-v-okně-settings-491)).
 
   ```bash
