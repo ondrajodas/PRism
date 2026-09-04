@@ -144,7 +144,10 @@ struct PollObservationTests {
     }
 
     /// **A úklid po tiku taky nikoho nebudí** — což je tvrzení o `forget(whatIsNotIn:)`, který
-    /// po každém úspěšném tiku přepíše třiačtyřicet map výsledkem `filter`u.
+    /// po každém úspěšném tiku prořeže **třiačtyřicet** map. **Dvaačtyřicet z nich přepíše
+    /// bezpodmínečně** (`x = x.filter { … }`), u `diffSearches` se zapisuje jen při změně počtu —
+    /// a proč zrovna u ní, je o odstavec níž (#421). Ta dvě čísla nejsou v rozporu: prořezává se
+    /// třiačtyřicet, bezpodmínečně se přiřazuje dvaačtyřicet.
     ///
     /// Vypadá to jako druhá polovina #472 a **není**: nabízelo se zapisovat jen tehdy, když
     /// z mapy opravdu ubylo, jenže s takovou úpravou i bez ní je tenhle test zelený — zápis téže
@@ -156,7 +159,8 @@ struct PollObservationTests {
     /// tom, že se ty dvě hodnoty dají **porovnat**, a `diffSearches` drží `@Observable` třídu, takže
     /// `Equatable` není. Věta „ten `if` nic nemění“ tedy platí o mapách s `Equatable` hodnotou, ne
     /// plošně — a která mapa to je, se z jednoho čtení nepozná. Proto je níž
-    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** třiačtyřiceti.
+    /// `quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** třiačtyřiceti — tedy i nad tou
+    /// jednou, která se nepřepisuje bezpodmínečně.
     @Test("Tichý tik nezneplatní ani rozbalení kontextu v diffu")
     func quietTickDoesNotWakeTheDiffReader() async throws {
         let pr = PRIdentifier("cli/cli#1")!

@@ -773,7 +773,8 @@ grep -rn 'ForEach(Array(' App | grep -vE ':[0-9]+: *//'          # výčet k pos
   **Neplatí to ale u hodnoty, kterou nejde porovnat** (#421) — mapa s hodnotou, která `Equatable`
   není (typicky `@Observable` **třída**), se neporovnává, takže ji bezpodmínečný zápis hlásí **i
   když je prázdná**. Tam se zapisuje jen při změně, a je to výjimka, ne nový vzor: `forget(whatIsNotIn:)`
-  přiřazuje třiačtyřicet map a jedině `diffSearches` má tuhle podmínku. Hlídá to
+  prořezává třiačtyřicet map, z toho dvaačtyřicet přiřazuje bezpodmínečně a jedině `diffSearches`
+  má tuhle podmínku. Hlídá to
   `PollObservationTests.quietTickWakesNoneOfTheMapsTheTickPrunes` nad **všemi** z nich
   ([čím to bylo v okně](docs/testovani.md#kdo-tělo-diffu-špinil-a-jak-se-to-našlo-421)).
   **„Hrubé místo čtení“ z toho pravidlo NENÍ, je to zamítnutá varianta** (#421) — kdo to zkusí
