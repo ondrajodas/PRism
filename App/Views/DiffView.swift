@@ -266,6 +266,12 @@ struct DiffView: View {
             // `@AppStorage` nad klíčem `diffTreeExpanded` a stráž ve `@State`, kterou přepnutí tabu
             // zahodilo: každý návrat do `Změněných souborů` byl nový `DiffView`, který uplatnil
             // rozhodnutí podruhé a přepsal tím volbu člověka. Viz `DiffColumnActions`.
+            //
+            // **A od #506/4 se uplatňuje jen to pole, které se změnilo** (`Policy.sideColumnsToApply`).
+            // Do té doby se zapisovalo obojí, jakmile se rozhodnutí změnilo v čemkoli — a `margin`
+            // se mění při kliknutí na `Nálezy pod řádky`, při sbalení souboru i při odkrytí kontextu,
+            // takže tyhle kliky přepisovaly uloženou volbu u sloupce. Změřeno v uživatelově okně,
+            // kde se žádná šířková mez nepřekračuje.
             .task(id: columns) {
                 // **Jen jednou na rozhodnutí.** `task(id:)` se spustí i při novém vzniku view —
                 // a to nastane pokaždé, když se přepne panel vpravo (přestaví se `HStack` v detailu
@@ -276,10 +282,19 @@ struct DiffView: View {
                 // `@State`, který nikdo nepřečte — a s ním průchod tělem při každé změně šířky.
                 guard columnActions != nil || panelExpanded != nil else { return }
                 guard appliedColumns.wrappedValue != columns else { return }
+                // **Stráž se posune i tehdy, když se neuplatní nic** — je to záznam „takhle
+                // `Policy` rozhodla naposledy“, ne „takhle jsem naposledy zapsal“. Bez toho by
+                // se změna v `margin` porovnávala proti zastaralému základu a příští skutečná
+                // změna `tree` by se od něj spočítala špatně.
+                let update = Policy.sideColumnsToApply(
+                    applied: appliedColumns.wrappedValue,
+                    columns: columns
+                )
                 appliedColumns.wrappedValue = columns
+                guard !update.isEmpty else { return }
                 withAnimation(.snappy(duration: 0.15)) {
-                    columnActions?.expanded.wrappedValue = columns.tree
-                    panelExpanded?.wrappedValue = columns.panel
+                    if let tree = update.tree { columnActions?.expanded.wrappedValue = tree }
+                    if let panel = update.panel { panelExpanded?.wrappedValue = panel }
                 }
             }
             // Kam cíl skočí, řeší `jumpAnchor`: **k vršku, ale s odstupem**. Na vrch samotný

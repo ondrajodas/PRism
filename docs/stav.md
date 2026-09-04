@@ -7794,3 +7794,59 @@ pohledu volbu přebít **smí**), k tomu dvě stráže nad zdrojáky v `Itinerar
 jeden uzel; do stavu sloupce píšou vyjmenovaná místa a diff commitu mezi nimi není) a tvrzení
 o nulové šířce. **Zapsaná mezera zůstává a je z ní tvrzení**: v tabu bez diffu se stavem sloupce
 nehýbe nic — v aplikaci se do ní ani nedá dostat, protože pohled přepíná lišta nad diffem.
+
+### Čtvrté kolo z proklikání: dvě cesty, kterými se volba přepisovala dál
+
+Připomínka přišla **podruhé** (*„pořád se ten itinerář zavírá“*), takže třetí kolo opravilo jen
+část. **První hypotéza byla správná, ale nebyla úplná** — zůstaly dvě nezávislé cesty a obě se
+změřily v uživatelově okně (1 512 × 882 → 1 460 b na detail, tedy tam, kde se **nepřekračuje žádná
+šířková mez**).
+
+**První: stráž nepřežila ani `@State` detailu.** `ContentView` vybírá obsah okna
+`switch store.activeTab`, a to je `@ViewBuilder` — jiná větev je jiná identita, takže kliknutí na
+`Přehled` zahodí celý `PullRequestDetailView` i s jeho `@State`. Návrat na záložku PR byl nová
+instance s prázdnou stráží, která #188 uplatnila jako první průchod a přepsala tím `⌘1`. Stráž proto
+bydlí ve store (`AppStore.appliedSideColumns`), vedle `isReviewPanelExpanded` (#242) — tam, kde
+přežije celé okno. **Lekce navíc proti třetímu kolu:** pravidlo *„stráž musí žít aspoň tak dlouho
+jako stav, který mění“* se dá splnit **napůl** — `@State` detailu je delší život než `@State` diffu,
+ale pořád ne život toho stavu, který je v `UserDefaults`. Otázka je *kde stav končí*, ne *kdo je
+nejbližší rodič*.
+
+**Druhá: uplatňovalo se celé rozhodnutí.** `DiffSideColumns` má tři pole a automatika sahá na dvě (`tree`, `panel`), zapisovala ale obě, jakmile
+se rozhodnutí od minule změnilo **v čemkoli**. Třetí pole (`margin`) přitom závisí na
+`showInlineFindingBubbles`, na sbalení souboru a na odkrytém kontextu — na věcech, které se
+překlikávají běžně a se šířkou okna nemají nic společného. Klik, který v okraji vyrobil první kartu
+nebo sundal poslední, tím přepsal `tree`, tedy **uloženou volbu u itineráře**.
+
+**Naměřeno**: *Vedle sebe* + `⌘1` + klik na `Nálezy pod řádky` → sloupec zavřený; *Pod sebou* +
+`⌘1` + tentýž klik → sloupec otevřený. Šířka se vzala z `CGWindowListCopyWindowInfo` nad běžící
+aplikací, ne z 1 048, ze kterých počítá zákres — na těch vada nenastává a měřidlo třetího kola ji
+proto nevidělo; a scéna vyrostla na celé `ContentView`, protože jen detail cestu přes `Přehled`
+nemá kde vyrobit.
+
+**Oprava: `Policy.sideColumnsToApply(applied:columns:)`** vrací `DiffSideColumnsUpdate` s dvěma
+`Optional<Bool>`, kde `nil` znamená **„nechat být“**, ne „složit“. `applied` tím změnil význam: z „co
+jsem naposledy zapsal“ na **„jak `Policy` naposledy rozhodla“** — posouvá se i tehdy, když se
+neuplatnilo nic. #188 i #503 dál platí: přepnutí pohledu mění `tree` a uplatní se, zúžení okna pod
+podlahu kolony kódu taky, a panel se za kartami dál srovná.
+
+**Zamítnuté varianty dvě**: *„nepřepisuj volbu nikdy“* (nález v úzkém okně by zmizel z obrazovky,
+#503 by přestalo platit) a *„odvoď efektivní stav z volby, bez zápisu“* (`available` se skládá
+z měřené štěrbiny plus šířky toho, co se **kreslí**, takže by se přání a kresba rozešly
+a rozhodnutí by se rozkmitalo).
+
+**Zapsaná mezera:** šířka panelu do `available` pořád vstupuje, takže v okně natolik úzkém, že
+složení panelu přehodí verdikt o podlaze kolony kódu, se sloupec za panelem pohne. V uživatelově
+okně to nenastává a **je to změřené**.
+
+**Zobecnitelné pravidlo:** *automatika, která rozhoduje o víc věcech naráz, smí uplatnit jen tu část,
+o které rozhodla jinak než minule.* A druhé, o měření: *když připomínka přijde podruhé, měřidlo
+z prvního kola tu druhou příčinu nevidělo.*
+
+Nová tvrzení: čtyři v `DiffColumnFitTests` nad `Policy` (vyčerpávající výčet 8 × 8 dvojic; změna
+jedině v `margin` neuplatní nic; první průchod uplatní obojí; přepnutí pohledu se uplatní), tři
+v `ItineraryChoiceTests` na 1 460 bodech (dvě o tom, že se volba nepřepsala, a jedno o tom, že se
+panel za kartami dál srovná — to poslední je proti variantě „nezapisuj nikdy“ schválně), dvě
+v nové `ItineraryHomeReturnTests` nad hostovaným celým `ContentView`em a stráž nad zdrojáky
+v `ItineraryEveryTabTests` (stráž deklaruje `Store/AppStore.swift`, detail se jí ptá storu).
+**Regrese se ověřila vložením regrese u každé příčiny zvlášť** — a všech pět tvrzení zčervenalo.

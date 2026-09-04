@@ -94,11 +94,20 @@ struct PullRequestDetailView: View {
     /// která musí žít tak dlouho jako stav, který hlídá** (#506, třetí kolo).
     ///
     /// Rozhoduje dál `DiffView` (podlaha, kvůli které se sloupec skládá, je podlaha kolony kódu),
-    /// ale stráž patří sem: `@State` detailu přežije přepnutí tabu i složení panelu, kdežto ta
-    /// v diffu zanikla s každým odchodem ze `Změněných souborů`. Po návratu se pak rozhodnutí
-    /// uplatnilo podruhé a přepsalo tím `⌘1` — a protože se přepisuje jen na hodnotu, která se od
-    /// uložené liší, dělo se to „jen někdy“. Podrobněji u `DiffColumnActions`.
-    @State private var appliedColumns: DiffSideColumns?
+    /// ale stráž patří jinam: ta v diffu zanikla s každým odchodem ze `Změněných souborů`, po
+    /// návratu se rozhodnutí uplatnilo podruhé a přepsalo tím `⌘1` — a protože se přepisuje jen na
+    /// hodnotu, která se od uložené liší, dělo se to „jen někdy“.
+    ///
+    /// **Od #506, čtvrtého kola, žije ve store, ne tady** (`AppStore.appliedSideColumns`): `@State`
+    /// detailu nepřežije kliknutí na `Přehled` — `switch store.activeTab` v `ContentView` vybere
+    /// jinou větev a celý detail zahodí. Podrobněji u `DiffColumnActions`.
+    ///
+    /// A je to „jak `Policy` naposledy rozhodla“, ne „co jsem naposledy zapsal“: uplatňuje se
+    /// jedině změněné pole (`Policy.sideColumnsToApply`), takže se sem zapisuje i rozhodnutí,
+    /// ze kterého nic nevyplynulo.
+    private var appliedColumns: Binding<DiffSideColumns?> {
+        Binding(get: { store.appliedSideColumns }, set: { store.appliedSideColumns = $0 })
+    }
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
@@ -1950,7 +1959,7 @@ struct PullRequestDetailView: View {
             // všech osmi tabů a diff zaniká s odchodem z toho svého. Diff commitu (#317) tenhle
             // parametr **nedostane**, takže sloupcem nehýbe: do #506/3 ho přepisoval taky, protože
             // si ten klíč držel vlastním `@AppStorage`.
-            columnActions: DiffColumnActions(expanded: $isColumnExpanded, applied: $appliedColumns),
+            columnActions: DiffColumnActions(expanded: $isColumnExpanded, applied: appliedColumns),
             stepFinding: { step($0) },
             search: searchActions,
             read: read,

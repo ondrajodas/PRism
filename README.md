@@ -848,7 +848,11 @@ Verdikt*, u každé stav (✓ hotovo / ● aktuální / ○ zbývá) a údaj vpr
 
 **Pohled *Vedle sebe* ho složí sám** (#188 — na dvě strany řádku by jinak nezbylo místo), a **`⌘1`
 to přebije až do další změny pohledu**: přepnutí tabu, klik na soubor ani vybrání commitu už tu
-volbu nepřepíšou.
+volbu nepřepíšou, a od čtvrtého kola #506 ani **odchod na `Přehled` a návrat**. Stejně tak ne klik
+na `Nálezy pod řádky`, sbalení souboru ani odkrytí kontextu —
+to všechno mění, jestli se kreslí okraj s kartami, a **z rozhodnutí o kolonách se uplatní jedině to,
+o čem se rozhodlo jinak než minule**. Sloupec se tedy skládá sám jen tehdy, když se změnil pohled
+nebo když se do okna přestala vejít kolona kódu.
 
 **Stojí vedle všech osmi tabů**, ne uvnitř `Změněných souborů`: je to průvodce review, takže tab,
 ve kterém by zmizel, je tab, ze kterého se nedá vrátit. Klik na zastávku **přepne tab** — `Od

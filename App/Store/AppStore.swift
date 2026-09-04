@@ -145,6 +145,24 @@ final class AppStore {
     /// přitom to nejdražší, co tady umí zmizet.
     var isReviewPanelExpanded = true
 
+    /// Jak `Policy.diffSideColumns` naposledy rozhodla — **stráž proti druhému uplatnění téhož
+    /// rozhodnutí** (#188, #503), a od #506/4 tady, ne ve `@State` view.
+    ///
+    /// **Ve store, protože stav, který hlídá, přežívá celé okno.** Sloupec s itinerářem si volbu
+    /// drží v `UserDefaults` (`diffTreeExpanded`) a panel v `isReviewPanelExpanded` o řádek výš,
+    /// kdežto každý uzel okna se cestou přestavuje: třetí kolo #506 stráž přestěhovalo z `DiffView`u
+    /// (zaniká přepnutím tabu detailu) do `@State` `PullRequestDetailView`u — a ten zaniká
+    /// **kliknutím na `Přehled`**, protože `switch store.activeTab` v `ContentView` vybere jinou
+    /// větev. Návrat na záložku PR byl tedy nový detail s prázdnou stráží, který rozhodnutí uplatnil
+    /// podruhé a přepsal tím `⌘1`. Naměřeno v okně 1 512 × 882; ve `Vedle sebe` se sloupec zavřel,
+    /// v `Pod sebou` sám otevřel.
+    ///
+    /// **Globálně, ne per PR** — ze stejného důvodu jako `isReviewPanelExpanded` a `diffLayout`:
+    /// rozhodnutí je funkce pohledu, šířky okna a toho, jestli jsou karty v okraji, a stav, který
+    /// mění, je taky globální. `nil` znamená **„ještě se neuplatnilo“**, tedy první průchod diffem
+    /// po startu aplikace — tam se #188 uplatnit má.
+    var appliedSideColumns: DiffSideColumns?
+
     /// Co je v panelu vidět. Ze stejného důvodu tady, ne ve view: doručení poznámky panel
     /// **přepne** na rozdělané review, a to se musí dát otestovat.
     ///

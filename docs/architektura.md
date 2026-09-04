@@ -1940,6 +1940,101 @@ diffu se nehýbe nic) a dvě stráže nad zdrojáky v `ItineraryEveryTabTests` (
 do stavu sloupce píšou **vyjmenovaná** místa a diff commitu mezi nimi není). Jak se to změřilo, je
 v [`docs/testovani.md`](testovani.md#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506).
 
+#### Dvě cesty, kterými se volba přepisovala dál (#506, čtvrté kolo)
+
+**Připomínka z proklikání, podruhé:** *„pořád se ten itinerář zavírá.“*
+
+Že přišla podruhé, je samo informace: hlášení nebylo o jedné cestě, ale o **jedné třídě**, a třetí
+kolo z ní opravilo jen část. Zůstaly **dvě nezávislé cesty** a obě se změřily v uživatelově okně
+(1 512 × 882, tedy 1 460 bodů na detail — tam, kde se **nepřekračuje žádná šířková mez**, protože
+`available` je 1 154 nebo 1 422 podle panelu a obě čísla jsou nad mezí 920):
+
+| Cesta | Jak se pozná | Čím to bylo |
+|---|---|---|
+| klik na **`Přehled`** a zpátky na záložku PR | *Vedle sebe*: sloupec zavřený. *Pod sebou*: otevřený | stráž nepřežila — `switch store.activeTab` v `ContentView` zahodí celý detail |
+| klik na **`Nálezy pod řádky`**, sbalení souboru, odkrytí kontextu | totéž | uplatnilo se **celé** rozhodnutí, i když se změnilo jen `margin` |
+
+##### První cesta: stráž nepřežila ani `@State` detailu
+
+Třetí kolo stráž přestěhovalo z `DiffView`u (zaniká přepnutím tabu **uvnitř** PR) do `@State`
+`PullRequestDetailView`u. To přežije tabbar detailu i složení panelu, ale **ne kliknutí na
+`Přehled`**: `ContentView` vybírá obsah okna `switch store.activeTab`, a to je `@ViewBuilder` —
+jiná větev je jiná identita, takže se detail i s `@State` zahodí. Návrat na záložku PR byl nová
+instance s prázdnou stráží, která rozhodnutí #188 uplatnila jako **první průchod** a přepsala tím
+`⌘1`.
+
+**Oprava: stráž bydlí ve store** (`AppStore.appliedSideColumns`), vedle `isReviewPanelExpanded`
+(#242) — tedy tam, kde přežije celé okno. Stav, který hlídá, žije v `UserDefaults`, takže žádný uzel
+okna na to nestačí; `DiffView.ownAppliedColumns` (`@State`) zůstává jen pro hosty, kterým sloupec
+vedle nestojí, a tam stráž nemá co přežít.
+
+**Je to tatáž lekce jako ve třetím kole, jen o úroveň výš** — a to je na tom to zajímavé
+k zapsání: pravidlo *„stráž musí žít aspoň tak dlouho jako stav, který mění“* se dá splnit **napůl**.
+`@State` detailu je delší život než `@State` diffu, ale pořád ne život toho stavu. Ten je
+v `UserDefaults`, takže odpověď je „store“, ne „o jednu úroveň výš“.
+
+##### Druhá cesta: uplatňovalo se celé rozhodnutí
+
+**Čím to bylo.** `DiffSideColumns` má tři pole (`tree`, `panel`, `margin`) a automatika sahá na dvě
+z nich. Zapisovala ale **obě**, jakmile se rozhodnutí od minule změnilo v čemkoli — tedy i tehdy,
+když se změnil jedině `margin`, na který nesahá. A `margin` závisí na věcech, které se překlikávají
+úplně běžně a se šířkou okna nemají nic společného:
+
+| Co člověk udělá | Proč se tím `margin` změní |
+|---|---|
+| klik na **`Nálezy pod řádky`** v liště (`showInlineFindingBubbles`) | karty v okraji existují **jedině s vypnutými bublinami** (`DiffView.marginCards` má na to `guard`) |
+| **sbalení souboru** | karta ve sbaleném souboru se nemá kde postavit, takže z výčtu vypadne |
+| **odkrytí kontextu** | nález na dosud nekresleném řádku kartu **získá** |
+| **dorazivší nálezy** z běhu review, odmítnutí nálezu, filtr reviewera | mění výčet karet |
+
+Když byl takový klik ten, který v okraji vyrobil první kartu (nebo sundal poslední), rozhodnutí se
+změnilo — a s ním se přepsal `tree`, tedy **uložená volba u itineráře**. Přepsal se na hodnotu,
+kterou `Policy` chtěla už předtím, takže z pohledu člověka „se to zavřelo samo“.
+
+**Naměřeno** (tatáž šířka jako výš):
+
+| Pohled | Volba `⌘1` | Po kliku na `Nálezy pod řádky` |
+|---|---|---|
+| *Vedle sebe* | otevřený (`true`) | **`false` — zavřel se** |
+| *Pod sebou* | složený (`false`) | **`true` — otevřel se sám** |
+
+**Oprava: rozhoduje `Policy.sideColumnsToApply(applied:columns:)`.** Vrací
+`DiffSideColumnsUpdate` s dvěma `Optional<Bool>`, kde `nil` znamená **„nechat být“** — ne „složit“.
+Uplatní se tedy jedině pole, o kterém se rozhodlo jinak než minule; `applied == nil` je první
+průchod a uplatní obojí (to je ten okamžik, kdy PR otevřený rovnou ve `split`u dostane složený
+sloupec, #188).
+
+**`applied` tím změnil význam.** Do čtvrtého kola to bylo „co jsem naposledy zapsal“, od něj je to
+**„jak `Policy` naposledy rozhodla“** — posouvá se i tehdy, když se neuplatnilo nic. Bez toho by se
+změna v `margin` porovnávala proti zastaralému základu a příští skutečná změna `tree` by z něj
+vyšla špatně.
+
+**Co se tím nezrušilo.** #188 i #503 přebít volbu **musí**, a dál to dělají: přepnutí pohledu
+(`split` ↔ `unified`) mění `tree`, takže se uplatní; zúžení okna pod podlahu kolony kódu taky;
+a panel se za kartami dál srovná (`panel: hasMargin ? !margin : wide`), protože nález bez domova je
+horší než složený panel. Kdyby oprava zněla „nezapisuj nikdy“, zmizel by nález z obrazovky — proto
+na to jsou dvě protilehlá tvrzení, ne jedno.
+
+**Zapsaná mezera.** `available` se pořád skládá z **měřené štěrbiny plus šířky sloupce**
+(`Policy.widthWithItinerary`), takže do něj šířka **panelu** vstupuje tak, jak je zrovna nastavená.
+V okně natolik úzkém, že složení nebo rozložení panelu přehodí verdikt o podlaze kolony kódu, se
+tedy sloupec za panelem pohne — ale to už je automatika, která dělá svou práci („není místo“), ne
+přepis volby bez důvodu. V uživatelově okně to nenastává a **je to změřené**, ne odhadnuté.
+
+**Zobecnitelné pravidlo:** *automatika, která rozhoduje o víc věcech naráz, smí uplatnit jen tu
+část, o které rozhodla jinak než minule.* Rozhodnutí složené z několika polí, uplatňované celé, je
+přepis stavu, o který nikdo nežádal — a ten se pozná až v provozu, protože o změnu se stará pole,
+kterého si nikdo nevšímá.
+
+**Co to hlídá.** `DiffColumnFitTests` nad `Policy` (vyčerpávající výčet všech 8 × 8 dvojic; změna
+jedině v `margin` neuplatní nic; první průchod uplatní obojí; přepnutí pohledu se uplatní),
+`ItineraryChoiceTests` nad hostovaným detailem na **1 460 bodech** (dvě tvrzení o tom, že se volba
+nepřepsala, a jedno o tom, že se panel za kartami dál srovná), `ItineraryHomeReturnTests` nad
+hostovaným **celým `ContentView`em** — scéna, která hostuje jen detail, tu první cestu nemá kde
+vyrobit — a stráž nad zdrojáky v `ItineraryEveryTabTests` (stráž deklaruje `Store/AppStore.swift`
+a detail se jí ptá storu). Jak se to změřilo, je
+v [`docs/testovani.md`](testovani.md#pořád-se-ten-itinerář-zavírá--čtvrté-kolo-506).
+
 ### Nálezy v okraji (#503)
 
 Karta nálezu stojí **vedle** svého řádku, ne pod ním: kód zůstane souvislý, řádek s kartou má na

@@ -181,6 +181,92 @@ struct ItineraryChoiceTests {
         #expect(scene.stored == false, "První průchod diffem sloupec nesložil (#188).")
     }
 
+    // MARK: - Klik, který na šířku nesáhne (#506, čtvrté kolo)
+
+    /// **Klik na `Nálezy pod řádky` sloupec nezavře** — čtvrté kolo #506, připomínka
+    /// *„pořád se ten itinerář zavírá“*.
+    ///
+    /// ## Čím to bylo
+    ///
+    /// Třetí kolo přesunulo stráž k tomu, kdo stav drží, takže volba přežila přepnutí tabu.
+    /// Zůstalo ale, že se rozhodnutí uplatňovalo **celé**, jakmile se změnilo v čemkoli —
+    /// a `DiffSideColumns` má tři pole. `margin` závisí na `showInlineFindingBubbles`, na
+    /// sbalení souboru i na odkrytém kontextu, tedy na věcech, které se překlikávají běžně;
+    /// každá taková změna přepsala i `tree`, tedy uloženou volbu u itineráře.
+    ///
+    /// ## Proč se to měří na 1 460 bodech
+    ///
+    /// **Aby se nepřekročila žádná šířková mez.** V uživatelově okně (1 512 b, tedy 1 460 b
+    /// na detail) je `available` 1 154 nebo 1 422 podle panelu, a obě čísla jsou nad mezí
+    /// 920 — sloupec se tedy z nedostatku místa skládat nemá **vůbec**. Kdyby se scéna
+    /// postavila na 1 048 b jako testy výš, vada by nenastala a bylo by to zeleně: proto je tady
+    /// jiná šířka, ne z pohodlí.
+    @Test("Vypnutí bublin nezavře sloupec otevřený ⌘1 (Vedle sebe)")
+    func togglingBubblesKeepsTheManualOpen() async throws {
+        let scene = try await Scene.make(layout: .split, width: Self.userWidth, findings: true)
+        defer { scene.close() }
+
+        #expect(scene.stored == false, "Ve `Vedle sebe` se sloupec nesložil, #188 se neuplatnilo.")
+        scene.write(true)
+        await scene.letItSettle()
+        #expect(scene.stored == true, "`⌘1` sloupec neotevřelo.")
+
+        scene.bubbles(false)
+        await scene.letItSettle()
+        #expect(scene.stored == true, """
+            Klik na `Nálezy pod řádky` sloupec zavřel — rozhodnutí o kolonách se uplatnilo celé,             i když se o sloupci rozhodlo úplně stejně jako minule.
+            """)
+
+        scene.bubbles(true)
+        await scene.letItSettle()
+        #expect(scene.stored == true, "Zapnutí bublin sloupec zavřelo.")
+    }
+
+    /// **A totéž z druhé strany: složený sloupec se po tom kliku sám neotevře.**
+    ///
+    /// Naměřeno v `Pod sebou`, kde `Policy` sloupec rozložený chce — takže tam ta vada zněla
+    /// „nezabralo mi to složení“, což si člověk vysvětlí jako svoji chybu.
+    @Test("Vypnutí bublin neotevře sloupec složený ⌘1 (Pod sebou)")
+    func togglingBubblesKeepsTheManualCollapse() async throws {
+        let scene = try await Scene.make(layout: .unified, width: Self.userWidth, findings: true)
+        defer { scene.close() }
+
+        #expect(scene.stored == true, "V `Pod sebou` sloupec rozložený není.")
+        scene.write(false)
+        await scene.letItSettle()
+        #expect(scene.stored == false, "`⌘1` sloupec nesložilo.")
+
+        scene.bubbles(false)
+        await scene.letItSettle()
+        #expect(scene.stored == false, """
+            Klik na `Nálezy pod řádky` sloupec otevřel — volba člověka se přepsala i tímhle směrem.
+            """)
+    }
+
+    /// **Panel se za kartami dál srovná** (#503) — bez tohohle tvrzení by se dala vada „opravit“
+    /// tím, že automatika nezapíše nikdy, a nález v okně užším než okraj by zmizel.
+    ///
+    /// Karty existují jedině s vypnutými bublinami, takže tenhle přepínač je zároveň tou
+    /// jedinou cestou, jak `hasMargin` v usazené scéně přehodit.
+    @Test("Panel se za kartami dál srovná")
+    func thePanelStillFollowsTheCards() async throws {
+        let scene = try await Scene.make(layout: .unified, width: Self.userWidth, findings: true)
+        defer { scene.close() }
+        #expect(scene.store.isReviewPanelExpanded, """
+            Bez karet má být panel rozložený — dál se neměří, jestli ho karty složí.
+            """)
+
+        scene.bubbles(false)
+        await scene.letItSettle()
+        #expect(!scene.store.isReviewPanelExpanded, """
+            Karty se objevily a panel zůstal rozložený — #503 se přestalo uplatňovat, tedy             oprava zašla dál, než měla.
+            """)
+
+        scene.bubbles(true)
+        await scene.letItSettle()
+        #expect(scene.store.isReviewPanelExpanded, "Karty zmizely a panel se nevrátil.")
+    }
+
     // MARK: - Scéna
 
     @MainActor
@@ -211,7 +297,19 @@ struct ItineraryChoiceTests {
 
         func close() { window.orderOut(nil) }
 
-        static func make(layout: DiffLayout, tab: PullRequestTab = .filesChanged) async throws -> Scene {
+        /// Klik na `Nálezy pod řádky` v liště diffu. Vypnuté bubliny jsou podmínka toho, aby
+        /// v okraji vznikly karty (`DiffView.marginCards`), takže tenhle jediný přepínač mění
+        /// `hasMargin` — a tím i rozhodnutí `Policy.diffSideColumns`.
+        func bubbles(_ shown: Bool) {
+            defaults.store.set(shown, forKey: "showInlineFindingBubbles")
+        }
+
+        static func make(
+            layout: DiffLayout,
+            tab: PullRequestTab = .filesChanged,
+            width: Double = ItineraryChoiceTests.width,
+            findings: Bool = false
+        ) async throws -> Scene {
             let defaults = try ScratchDefaults("itineraryChoice")
             // **Výchozí hodnota se zapisuje, ne nechává chybět**: `@AppStorage` má default `true`,
             // ale `object(forKey:)` by nad nezapsaným klíčem vydal `nil` — a testy níž potřebují
@@ -231,6 +329,16 @@ struct ItineraryChoiceTests {
             await store.refresh()
             await store.loadDetail(for: summary)
             await store.loadDiff(for: summary)
+            if findings {
+                // **Nálezy musí sedět na řádky, které fixture doopravdy kreslí** — karta v okraji
+                // vznikne jedině tam, kde má co k čemu zarovnat (`Policy.marginCards`), takže
+                // nález na cizí cestě by scénu postavil bez okraje a měřilo by se něco jiného.
+                store.reviewRecords[pr] = ReviewRecord(
+                    pullRequest: pr,
+                    headSha: detail.headSha,
+                    runs: [makeStoredRun(findings: reported, headSha: detail.headSha)]
+                )
+            }
             store.openTab(pr)
             store.setDetailTab(tab, for: pr)
             store.setDiffLayout(layout)
@@ -259,6 +367,28 @@ struct ItineraryChoiceTests {
     }
 
     // MARK: - Materiál
+
+    /// Šířka detailu v **uživatelově** okně: 1 512 bodů displeje minus rail (52). Změřeno
+    /// `CGWindowListCopyWindowInfo` nad běžící aplikací, ne odhadnuto — a je to ta šířka, na
+    /// které se **nepřekračuje žádná mez** `Policy.diffSideColumns`.
+    static let userWidth = 1_460.0
+
+    /// Nálezy na řádcích, které `gh/pr-diff-ordinary.diff` doopravdy kreslí (`CLAUDE.md` hunk
+    /// od 171, `README.md` od 66) — bez toho by karta v okraji neměla co k čemu zarovnat.
+    static let reported: [ReportedFinding] = [
+        makeReported(
+            file: "CLAUDE.md",
+            line: 174,
+            category: "correctness",
+            summary: "Nález, kvůli kterému v okraji vznikne karta."
+        ),
+        makeReported(
+            file: "README.md",
+            line: 69,
+            category: "style",
+            summary: "Druhý nález, aby karta byla i v druhém souboru."
+        ),
+    ]
 
     static let pr = PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14013)
 

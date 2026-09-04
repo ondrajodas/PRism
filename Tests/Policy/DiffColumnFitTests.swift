@@ -166,6 +166,100 @@ struct DiffColumnFitTests {
         #expect(Policy.diffCodeColumnWidth(available: nil, columns: unmeasured) == nil)
     }
 
+    // MARK: - Co z rozhodnutí se uplatní (#506, čtvrté kolo)
+
+    /// **Uplatní se jen to pole, o kterém se rozhodlo jinak než minule.**
+    ///
+    /// Vada, kvůli které to vzniklo: rozhodnutí se uplatňovalo celé, jakmile se změnilo
+    /// v čemkoli — a `margin` se mění při kliknutí na `Nálezy pod řádky`, při sbalení souboru
+    /// i při odkrytí kontextu. Každý takový klik přepsal `tree`, tedy **uloženou volbu
+    /// u itineráře**, na hodnotu, kterou `Policy` chtěla už předtím. Z pohledu člověka
+    /// „se ten levý panel zavřel sám“.
+    ///
+    /// Výčet je **vyčerpávající** (všech 8 × 8 dvojic), protože tvrzení je o tom, co se
+    /// **nestane**: `nil` u pole je „nechat být“, a to se rozbije potichu.
+    /// Tvrzení jsou **tři na pole a každé je jiná otázka**, ne jeden opsaný vzorec: test, který
+    /// si spočítá totéž co produkční funkce, tvrdí jedině to, že v něm není překlep.
+    @Test("Uplatní se jen změněná pole rozhodnutí")
+    func onlyChangedFieldsAreApplied() {
+        for applied in Self.allColumns {
+            for columns in Self.allColumns {
+                let update = Policy.sideColumnsToApply(applied: applied, columns: columns)
+                let pair = "\(applied) → \(columns)"
+
+                // 1. Nezměněné pole se **nesmí** uplatnit — to je ta vada.
+                if applied.tree == columns.tree {
+                    #expect(update.tree == nil, "\(pair): sloupec se uplatnil beze změny")
+                }
+                if applied.panel == columns.panel {
+                    #expect(update.panel == nil, "\(pair): panel se uplatnil beze změny")
+                }
+
+                // 2. Změněné pole se uplatnit **musí** — jinak by #188 přestalo platit.
+                if applied.tree != columns.tree {
+                    #expect(update.tree != nil, "\(pair): změna u sloupce se neuplatnila")
+                }
+                if applied.panel != columns.panel {
+                    #expect(update.panel != nil, "\(pair): změna u panelu se neuplatnila")
+                }
+
+                // 3. A uplatní se **nová** hodnota, ne ta stará: `nil` je „nechat být“, takže
+                //    obrácené znaménko by se v prvních dvou tvrzeních schovalo.
+                #expect(update.tree.map { $0 == columns.tree } ?? true, "\(pair): sloupec obráceně")
+                #expect(update.panel.map { $0 == columns.panel } ?? true, "\(pair): panel obráceně")
+            }
+        }
+    }
+
+    /// **Změna jedině v `margin` neuplatní nic.** To je ta vada vyjádřená jedním tvrzením:
+    /// karty se objeví nebo zmizí a stavem sloupce ani panelu to nesmí hýbat.
+    ///
+    /// Pozor, `Policy.diffSideColumns` takovou dvojici sama vydá jen výjimečně (`panel` na
+    /// `margin` závisí), ale automatika dostává **dvě libovolná rozhodnutí**, ne jen ta, která
+    /// jdou po sobě v jednom okně — a `margin` je jediné pole, na které nesahá.
+    @Test("Změna jen v okraji neuplatní nic")
+    func aChangeOnlyInTheMarginAppliesNothing() {
+        for tree in [true, false] {
+            for panel in [true, false] {
+                let before = DiffSideColumns(tree: tree, panel: panel, margin: false)
+                let after = DiffSideColumns(tree: tree, panel: panel, margin: true)
+                #expect(Policy.sideColumnsToApply(applied: before, columns: after).isEmpty)
+                #expect(Policy.sideColumnsToApply(applied: after, columns: before).isEmpty)
+            }
+        }
+    }
+
+    /// **První průchod uplatní obojí** — jinak by PR otevřený rovnou ve `split`u dostal sloupec
+    /// rozložený a #188 by se neuplatnilo nikdy. Bez tohohle tvrzení by se dala vada „opravit“
+    /// tím, že se nezapíše nic.
+    @Test("První průchod uplatní obojí")
+    func theFirstPassAppliesBoth() {
+        for columns in Self.allColumns {
+            let update = Policy.sideColumnsToApply(applied: nil, columns: columns)
+            #expect(update.tree == columns.tree)
+            #expect(update.panel == columns.panel)
+            #expect(!update.isEmpty)
+        }
+    }
+
+    /// **Změna pohledu sloupec přerovnat musí** (#188) — druhá polovina téhož: `split` složí
+    /// kolony, `unified` je rozloží, a to se uplatnit má.
+    @Test("Přepnutí pohledu se uplatní")
+    func changingTheLayoutIsStillApplied() {
+        let unified = Policy.diffSideColumns(layout: .unified, hasMargin: false, available: 1_460)
+        let split = Policy.diffSideColumns(layout: .split, hasMargin: false, available: 1_460)
+        #expect(Policy.sideColumnsToApply(applied: unified, columns: split).tree == false)
+        #expect(Policy.sideColumnsToApply(applied: split, columns: unified).tree == true)
+    }
+
+    /// Všech osm možných rozhodnutí. Tři booly, takže výčet je úplný a napsaný, ne generovaný
+    /// od oka.
+    static let allColumns: [DiffSideColumns] = [true, false].flatMap { tree in
+        [true, false].flatMap { panel in
+            [true, false].map { DiffSideColumns(tree: tree, panel: panel, margin: $0) }
+        }
+    }
+
     @Test("Šířky kolon má na starost Policy, ne dvě konstanty ve views")
     func widthsComeFromPolicy() {
         // Rozhodnutí i kresba musí čísla brát z jednoho místa — dvě pravdy o jedné šířce se

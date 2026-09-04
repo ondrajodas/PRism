@@ -211,6 +211,46 @@ struct ItineraryEveryTabTests {
         )
     }
 
+    /// **Stráž automatiky bydlí ve store, ne ve `@State` okna** (#506, čtvrté kolo).
+    ///
+    /// Třetí kolo ji přestěhovalo z `DiffView`u do `@State` `PullRequestDetailView`u a to nestačilo:
+    /// `ContentView` vybírá obsah okna `switch store.activeTab`, takže **kliknutí na `Přehled`**
+    /// celý detail i s jeho `@State` zahodí. Návrat na záložku PR byl pak nová instance s prázdnou
+    /// stráží, která rozhodnutí #188 uplatnila jako první průchod — a přepsala tím `⌘1`. Stav
+    /// sloupce žije v `UserDefaults`, takže stráž patří tam, kde přežije celé okno.
+    ///
+    /// Následek měří `ItineraryHomeReturnTests` nad hostovaným `ContentView`em; tohle tvrdí
+    /// **příčinu**, protože přesně ta se při příští úpravě rozbije potichu.
+    ///
+    /// `DiffView.ownAppliedColumns` v zákazu **není**: je to záloha pro hosty, kterým sloupec vedle
+    /// nestojí (diff commitu, náhledy), a tam stráž nemá co přežít — s tím `DiffView`em zaniká
+    /// i všechno, o čem rozhoduje.
+    @Test("Stráž automatiky bydlí ve store, ne ve @State okna")
+    func theAutomationGuardLivesInTheStore() throws {
+        let owners = try Self.sources(under: "App").filter {
+            $0.condensed.contains("varappliedSideColumns")
+        }
+        #expect(
+            owners.map(\.path) == ["Store/AppStore.swift"],
+            """
+            Stráž deklaruje \(owners.map(\.path)) — má ji držet store, protože stav, který hlídá, \
+            přežívá celé okno.
+            """
+        )
+        let detail = try Self.detailSource()
+        #expect(
+            !detail.condensed.contains("@StateprivatevarappliedColumns"),
+            """
+            Detail si stráž drží ve `@State` — a ten nepřežije kliknutí na `Přehled`, protože \
+            `switch store.activeTab` v `ContentView` vybere jinou větev.
+            """
+        )
+        #expect(
+            detail.condensed.contains("store.appliedSideColumns"),
+            "Detail se stráže neptá storu, takže ji bere odjinud."
+        )
+    }
+
     // MARK: - Klik na soubor
 
     /// **Klik na soubor ve sloupci jde tou hotovou cestou, kterou skáče mapa PR** (#501) — a to je

@@ -66,7 +66,61 @@ struct DiffSideColumns: Hashable, Sendable {
     let margin: Bool
 }
 
+/// Co z rozhodnutí o kolonách se má **doopravdy uplatnit** (#506, čtvrté kolo).
+///
+/// `nil` u pole znamená **„nechat být“** — ne „složit“. Automatika totiž sahá na dvě věci, které
+/// si člověk přebíjí ručně (`⌘1` u sloupce, `⌘2` u panelu), a `DiffSideColumns` má **tři** pole:
+/// kdyby se uplatňovala celá vždycky, když se změní kterékoli z nich, přepsala by volbu u sloupce
+/// i tehdy, když se o sloupci rozhodlo úplně stejně jako minule.
+struct DiffSideColumnsUpdate: Hashable, Sendable {
+    var tree: Bool?
+    var panel: Bool?
+
+    /// Není co uplatnit — rozhodnutí se změnilo, ale ne v ničem, na co automatika sahá.
+    var isEmpty: Bool { tree == nil && panel == nil }
+}
+
 extension Policy {
+    /// Které části rozhodnutí o kolonách se mají uplatnit — **jen ty, které se od minula
+    /// změnily** (#506, čtvrté kolo).
+    ///
+    /// ## Čím to bylo
+    ///
+    /// Do čtvrtého kola se rozhodnutí uplatňovalo **celé**, jakmile se od minule změnilo
+    /// v čemkoli. `DiffSideColumns` má ale tři pole a `margin` závisí na věcech, které člověk
+    /// překlikává úplně běžně: `Nálezy pod řádky` v liště (`showInlineFindingBubbles` — karty
+    /// v okraji existují jedině s vypnutými bublinami), sbalení souboru, odkrytí kontextu,
+    /// dorazivší nálezy. Každá taková změna přepsala i `tree`, tedy **uloženou volbu u itineráře**
+    /// — a přepsala ji na hodnotu, kterou `Policy` chtěla už předtím, takže z pohledu člověka
+    /// „se to zavřelo samo“.
+    ///
+    /// Naměřeno v uživatelově okně (1 512 b, tedy 1 460 b na detail — tam, kde se **žádná**
+    /// šířková mez nepřekračuje): *Vedle sebe*, sloupec otevřený `⌘1`, klik na `Nálezy pod řádky`
+    /// → sloupec **zavřený**. *Pod sebou*, sloupec složený `⌘1`, tentýž klik → sloupec
+    /// **otevřený**. Podrobněji v `docs/testovani.md`.
+    ///
+    /// ## Proč per pole a ne „nikdy nepřepisovat“
+    ///
+    /// Rozhodnutí #188 (*pohled vedle sebe složí postranní kolony*) a #503 (*karty rozhodují víc
+    /// než pohled*) přepsat volbu **musí** — jinak by `⌘2` nechalo sloupec 260 bodů široký
+    /// v pohledu, ve kterém na řádek zbývá polovina. Uplatní se tedy dál, ale jedině to pole,
+    /// o kterém se rozhodlo jinak než minule.
+    ///
+    /// `applied == nil` je **první průchod**, tedy „uplatni obojí“: to je ten okamžik, kdy PR
+    /// otevřený rovnou ve `split`u dostane složený sloupec.
+    static func sideColumnsToApply(
+        applied: DiffSideColumns?,
+        columns: DiffSideColumns
+    ) -> DiffSideColumnsUpdate {
+        guard let applied else {
+            return DiffSideColumnsUpdate(tree: columns.tree, panel: columns.panel)
+        }
+        return DiffSideColumnsUpdate(
+            tree: applied.tree == columns.tree ? nil : columns.tree,
+            panel: applied.panel == columns.panel ? nil : columns.panel
+        )
+    }
+
     /// Karty do okraje vpravo (#503) — v pořadí obsahu, tedy po souborech a v nich po řádcích.
     ///
     /// Karta vznikne jedině tam, kde má **co k čemu zarovnat**: soubor je rozbalený a jeho řádek

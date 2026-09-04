@@ -753,6 +753,21 @@ protože většina z nich se v harnessu neprojeví.
   `nil` znamená **„nic nepřepisuj“**. V harnessu se to neprojeví — scéna se staví jednou
   ([rozbor](docs/architektura.md#stráž-automatiky-patří-ke-stavu-ne-k-diffu-506-třetí-kolo),
   [měření](docs/testovani.md#jak-se-našlo-někdy-se-ten-levý-panel-zavře-506)).
+- **To pravidlo se dá splnit napůl, a pak se ptej „kde stav končí“, ne „kdo je nejbližší rodič“**
+  (#506, čtvrté kolo). `@State` detailu **nepřežije** kliknutí na `Přehled` (`switch
+  store.activeTab` v `ContentView` je `@ViewBuilder`, tedy jiná identita), kdežto stav sloupce žije
+  v `UserDefaults` — stráž proto bydlí ve store (`AppStore.appliedSideColumns`), jako
+  `isReviewPanelExpanded`.
+- **A uplatnit se smí jen to pole, o kterém se rozhodlo jinak než minule** (#506, čtvrté kolo).
+  `DiffSideColumns` má tři pole a automatika sahá na dvě — zapisovala ale obě, jakmile se rozhodnutí
+  změnilo v čemkoli, takže volbu u itineráře přepsal i klik na `Nálezy pod řádky`, sbalení souboru
+  nebo odkrytí kontextu (mění `margin`). Rozhoduje `Policy.sideColumnsToApply`, kde `nil` u pole je
+  **„nechat být“**, ne „složit“. **A když připomínka přijde podruhé, měřidlo z prvního kola tu
+  druhou příčinu nevidělo** — šířka scény se bere z běžícího okna
+  (`CGWindowListCopyWindowInfo`), ne z čísla, ze kterého počítá zákres, a scéna hostí **celé
+  `ContentView`**, protože jen detail tu cestu nemá kde vyrobit
+  ([rozbor](docs/architektura.md#dvě-cesty-kterými-se-volba-přepisovala-dál-506-čtvrté-kolo),
+  [měření](docs/testovani.md#pořád-se-ten-itinerář-zavírá--čtvrté-kolo-506)).
 - **V líném seznamu se neiteruje pole tuplů** (#361): `ForEach(Array(x.enumerated()),
   id: \.element.id)` čte identitu **přes tuple**, takže u enumu s asociovanými hodnotami
   **kopíruje** payload při každém dotazu. Identita patří do **uloženého pole**

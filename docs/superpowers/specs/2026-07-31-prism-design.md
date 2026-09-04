@@ -6298,3 +6298,70 @@ stráží a uplatnil rozhodnutí podruhé, přes `⌘1`.
 **Zobecnitelné pravidlo:** *stráž proti opakovanému uplatnění musí žít aspoň tak dlouho jako stav,
 který mění.* `@State` uzlu, který se přestavuje častěji než ten stav, je stráž, která „jen někdy“
 neplatí — a taková vada se pozná až v provozu, protože v harnessu se scéna staví jednou.
+
+#### Čtvrté kolo z proklikání (#506): dvě cesty, kterými se volba přepisovala dál
+
+Připomínka přišla **podruhé** — *„pořád se ten itinerář zavírá“* —, takže třetí kolo opravilo jen
+část. **První hypotéza byla správná, ale nebyla úplná**, a to je na tomhle kole to podstatné
+k zapsání. Zůstaly **dvě nezávislé cesty**:
+
+14. **Stráž nepřežila ani `@State` detailu.** `ContentView` vybírá obsah okna
+    `switch store.activeTab`, a to je `@ViewBuilder` — jiná větev je jiná identita, takže kliknutí
+    na `Přehled` zahodí celý `PullRequestDetailView` i s jeho `@State`. Návrat na záložku PR byl
+    nová instance s prázdnou stráží, která rozhodnutí #188 uplatnila jako první průchod, tedy přes
+    `⌘1`. Změřeno v okně 1 512 × 882: *Vedle sebe* sloupec zavřený, *Pod sebou* otevřený.
+
+    **Stráž se proto přestěhovala do store** (`AppStore.appliedSideColumns`), vedle
+    `isReviewPanelExpanded` (#242). Zvažovalo se **per PR** a **zamítlo**: stav, který stráž hlídá,
+    je globální (jeden klíč v `UserDefaults`, jeden `diffLayout`, jeden panel), takže per-PR stráž
+    nad globálním stavem je tatáž nesouměrnost v jiné podobě.
+
+    **Lekce, která z toho je navíc proti třetímu kolu:** pravidlo *„stráž musí žít aspoň tak dlouho
+    jako stav, který mění“* se dá splnit **napůl**. `@State` detailu je delší život než `@State`
+    diffu, ale pořád ne život toho stavu — ten je v `UserDefaults`, takže správná odpověď je
+    „store“, ne „o jednu úroveň výš“. Kdo příště bude stráž přesouvat, ať se ptá **kde stav
+    končí**, ne kdo je nejbližší rodič.
+
+15. **A uplatňovalo se celé rozhodnutí.** `DiffSideColumns` má tři pole a automatika sahá na dvě z nich (`tree`, `panel`), zapisovala ale obě,
+jakmile se rozhodnutí od minule změnilo **v čemkoli**. Třetí pole (`margin`) přitom závisí na
+`showInlineFindingBubbles`, na sbalení souboru a na odkrytém kontextu — tedy na věcech, které se
+překlikávají běžně a se šířkou okna nemají nic společného. Když takový klik vyrobil v okraji první
+kartu (nebo sundal poslední), přepsal se s ním `tree`, tedy uložená volba u itineráře.
+
+    **Uplatní se proto jen to pole, o kterém se rozhodlo jinak než minule**
+    (`Policy.sideColumnsToApply`, `DiffSideColumnsUpdate` s `nil` = *nechat být*). Zvažovaly se tři
+    varianty a dvě se **zamítly**:
+
+    - **„Automatika nepřepisuje volbu nikdy, `Policy` vydá jen doporučení“** — zamítnuto: `⌘1` by
+      pak ve `Vedle sebe` nechalo sloupec 260 bodů široký v pohledu, ve kterém na řádek zbývá
+      polovina, a nález v úzkém okně by zmizel z obrazovky (#503 by přestalo platit). Drží to
+      tvrzení `thePanelStillFollowsTheCards`, které je proti té variantě schválně.
+    - **„Odvodit efektivní stav z volby a z místa, bez zápisu“** (volba jako přání, kresba jako
+      `přání && vejde se`) — zamítnuto: `available` se skládá z měřené štěrbiny **plus šířky toho,
+      co se kreslí**, takže by se přání a kresba rozešly a rozhodnutí by se rozkmitalo mezi dvěma
+      hodnotami. Dnešní tvar je konzistentní právě tím, že se přičítá to, co je doopravdy
+      nakreslené.
+    - **Per pole** — přijato. Je to nejmenší změna, která odpovídá na otázku „změnilo se to, na co
+      sahám?“, a nechává #188 i #503 platit beze změny.
+
+    `applied` tím **změnil význam**: z „co jsem naposledy zapsal“ na „jak `Policy` naposledy
+    rozhodla“. Posouvá se i tehdy, když se neuplatnilo nic — jinak by se změna v `margin` měřila
+    proti zastaralému základu.
+
+16. **Zapsaná mezera: šířka panelu do `available` pořád vstupuje.** V okně natolik úzkém, že
+    složení nebo rozložení panelu přehodí verdikt o podlaze kolony kódu, se sloupec za panelem
+    pohne. **Je to změřené, ne odhadnuté**: v uživatelově okně (1 460 b na detail) je `available`
+    1 154 nebo 1 422 a obě čísla jsou nad mezí 920, takže tam ta cesta nefiguruje. A kdyby
+    figurovala, je to automatika, která dělá svou práci („není místo“), ne přepis volby bez důvodu.
+
+**Zobecnitelné pravidlo:** *automatika, která rozhoduje o víc věcech naráz, smí uplatnit jen tu
+část, o které rozhodla jinak než minule.* Rozhodnutí složené z několika polí, uplatňované celé, je
+přepis stavu, o který nikdo nežádal — a pozná se to až v provozu, protože změnu spouští to pole,
+kterého si nikdo nevšímá.
+
+**A jedno pravidlo o měření:** *když připomínka přijde podruhé, měřidlo z prvního kola tu druhou
+příčinu nevidělo.* Scéna třetího kola stála na 1 048 bodech, kde vada nenastává, hostovala **jen
+detail** (takže cestu přes `Přehled` neměla kde vyrobit) a nálezy v ní mířily na cesty, které
+fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzala
+z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
+scéna vyrostla na celé `ContentView`.

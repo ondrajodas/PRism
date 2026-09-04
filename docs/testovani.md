@@ -8735,6 +8735,84 @@ vlastní `DiffView`, který týž klíč přepisoval taky.
 `DetailTabRenderProbe`) a `⌘1` v živém okně, protože testovací host nedostane aktivaci (viz [*Jak
 změřit fokus a klávesy*](#jak-změřit-fokus-a-klávesy-184)).
 
+### „Pořád se ten itinerář zavírá“ — čtvrté kolo (#506)
+
+Připomínka přišla **podruhé**, tedy oprava z třetího kola nezabrala. To samo je informace: hlášení
+nebylo o jedné cestě, ale o **jedné třídě** — a měřidlo z třetího kola tu druhou příčinu **nevidělo**,
+protože bylo postavené na šířce, na které vada nenastává.
+
+**Tři věci, na kterých to měření stálo.**
+
+**1. Šířka scény se vzala z uživatelova okna, ne z pohodlí.** Scéna třetího kola měřila na
+1 048 × 860 (okno 1 100 bez railu), protože z toho čísla počítá zákres. Skutečné okno má
+`CGWindowListCopyWindowInfo` — 1 512 × 882, tedy **1 460 bodů na detail**:
+
+```swift
+let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+// … vyfiltrovat kCGWindowOwnerName == "PRism" a přečíst kCGWindowBounds …
+// PRism | 1512 × 882   ← uživatelovo okno
+```
+
+Na tom je to podstatné: `available` vyjde 1 154 (rozložený panel) nebo 1 422 (složený) a **obě
+čísla jsou nad mezí 920**, pod kterou se sloupec skládá z nedostatku místa. Scéna je tedy postavená
+tak, že žádná šířková mez nefiguruje — a přesto se sloupec zavírá. Tím se z výčtu možných příčin
+vyřadila celá polovina (mez, transient při animaci, zpětná vazba přes šířku panelu) **měřením, ne
+úvahou**.
+
+**2. Scéna hostuje celé `ContentView`, ne jen detail.** První z obou příčin je totiž
+**v `ContentView`u**: obsah okna vybírá `switch store.activeTab`, takže kliknutí na `Přehled`
+zahodí celý `PullRequestDetailView` i s jeho `@State`. Scéna z třetího kola hostuje jen detail
+a tuhle cestu proto **nemá kde vyrobit** — hostování celého okna je jediný způsob, jak se na ni
+dostat, a `ContentView(store:)` se hostovat dá (dělá to i `WindowRelayoutHost` u #472).
+
+Naměřeno (`ItineraryHomeReturnTests`, okno 1 512 × 882):
+
+| Krok | *Vedle sebe* | *Pod sebou* |
+|---|---|---|
+| po `⌘1` | `true` | `false` |
+| na `Přehledu` | `true` | `false` |
+| **zpátky na záložku PR** | **`false`** | **`true`** |
+| po opravě | `true` | `false` |
+
+Odchod volbu nezmění, **návrat ji přepíše** — tentýž tvar jako ve třetím kole, jen o úroveň výš.
+
+**3. Klikalo se tím, co `margin` doopravdy mění.** Karty v okraji existují jedině s **vypnutými**
+bublinami (`DiffView.marginCards` má na to `guard`), takže je `Nálezy pod řádky` v liště jediný
+přepínač, kterým se `hasMargin` v usazené scéně dá přehodit na jedno kliknutí. První podoba sondy
+tohle minula dvakrát: nálezy mířily na cesty, které fixture nemá (`Policy.marginCards` je pak
+prázdná, protože karta nemá co k čemu zarovnat), a bubliny zůstaly zapnuté. Sonda tehdy hlásila
+„nic se nepřepsalo“ — tedy [měřidlo, které vydá tutéž hodnotu pro *funguje* i
+*nefunguje*](#kolečko-v-zásuvce-478--co-jde-tvrdit-bez-pty).
+
+**Naměřeno** (`ItineraryChoiceTests`, 1 460 × 882, nálezy na `CLAUDE.md:174` a `README.md:69`, což
+jsou řádky, které `gh/pr-diff-ordinary.diff` doopravdy kreslí):
+
+| Krok | *Vedle sebe* | *Pod sebou* |
+|---|---|---|
+| po prvním průchodu diffem | `false` (#188, záměr) | `true` |
+| po `⌘1` | `true` | `false` |
+| **klik na `Nálezy pod řádky`** | **`false`** | **`true`** |
+| po opravě, tentýž klik | `true` | `false` |
+
+**Reprodukce pro člověka**: `⌘2` (*Vedle sebe*), `⌘1` (sloupec se otevře), pak v liště nad diffem
+klik na `Nálezy pod řádky` — sloupec se zavře. V *Pod sebou* je to naopak: `⌘1` sloupec složí
+a tentýž klik ho otevře. Vedle bublin do toho vedou i **sbalení souboru** a **odkrytí kontextu**,
+protože obojí mění výčet karet — ale bubliny jsou z nich to jediné, co je jedno kliknutí na jednom
+místě, takže se jimi měří.
+
+**Regrese se ověřila vložením regrese, a to dvakrát — u každé příčiny zvlášť.** Do
+`task(id: columns)` se dočasně vrátil bezpodmínečný zápis obou polí a obě tvrzení o volbě
+v `ItineraryChoiceTests` zčervenala (`stored → false` proti `true`, a naopak); kdežto třetí
+tvrzení, že se **panel** za kartami dál srovná, zůstalo zelené. To je ten pár, který drží opravu na
+místě: bez něj by „nezapisuj nikdy“ prošlo taky, a nález v úzkém okně by zmizel z obrazovky.
+A pak se stráž dočasně vrátila do `@State` detailu — zčervenala obě tvrzení
+v `ItineraryHomeReturnTests` **a** stráž nad zdrojáky, tedy tři tvrzení ze tří.
+
+**Co měřidlo pořád neumí**: že `⌘1` zabere klávesou. Testovací host nedostane aktivaci (viz [*Jak
+změřit fokus a klávesy*](#jak-změřit-fokus-a-klávesy-184)), takže se v testu zapisuje přímo do
+`ScratchDefaults` — tou cestou, kterou `⌘1` zapisuje taky. Rozbor je
+v [`docs/architektura.md`](architektura.md#dvě-cesty-kterými-se-volba-přepisovala-dál-506-čtvrté-kolo).
+
 ### Kolik stojí otevřená záložka (#274)
 
 **Posuvník se řídí přímo přes `AXUIElementSetAttributeValue`, ne přes `System Events`** — a je to
