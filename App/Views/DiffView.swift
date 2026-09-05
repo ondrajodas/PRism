@@ -81,6 +81,13 @@ struct DiffView: View {
     /// diff „co od minule přibylo“ (#284) nemluví o hlavě PR, takže by se jejich otisky se značkou
     /// nepotkaly. Zaškrtávátko, ✓ ve stromu ani počet v hlavičce se pak **nekreslí vůbec**.
     var read: DiffReadActions?
+    /// Otevření souboru v editoru (#530). `nil` = **není zvolený editor**, takže se tlačítko
+    /// v hlavičce souboru nekreslí vůbec — ne zašedle.
+    ///
+    /// Na rozdíl od `read` se to **nemění podle obrazovky**: pracovní kopie v cache je jedna
+    /// a soubor v ní je týž, ať se na něj člověk dívá z celého diffu, z rozsahu „co přibylo“, nebo
+    /// z diffu commitu. Značka `Prošlo` mluví o otiscích diffu, tohle o souboru na disku.
+    var editor: EditorActions?
     /// Výřez a rozsahy souborů **zvenku** (#501). `nil` = na tuhle obrazovku se nikdo odjinud
     /// nedívá (diff commitu, náhled), takže si je diff drží sám.
     ///
@@ -754,7 +761,8 @@ struct DiffView: View {
             blockingCategories: blockingCategories,
             toggle: { folding.toggle(file) },
             read: read.map { $0.state(of: file) },
-            toggleRead: read.map { actions in { actions.toggle(file) } }
+            toggleRead: read.map { actions in { actions.toggle(file) } },
+            editor: editor
         )
     }
 

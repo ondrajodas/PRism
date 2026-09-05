@@ -9464,6 +9464,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.handoff(_:record:conversation:head:commits:activitySince:)` | Co zbývá předat (#334) → `HandoffReport` (stav, `pending`, identity nové diskuze, zastaralé nálezy, počet commitů) a od #335 i **cizí aktivita** od minule. **Jediné místo, kde se rozhoduje, co je nové** — čtou z něj odznak v railu, pilulka `N k předání` v řádku i panel |
 | `Policy.foreignActivity(in:since:)`, `Policy.activityBaseline(lastVisit:lastNotice:)` | Co na vlastním PR udělal někdo jiný (#335) → `ForeignActivity` (cizí komentáře a review, **bez mých vlastních**) a proti čemu se to počítá — **pozdější** z návštěvy a oznámení. Staví na `changes(in:since:)`, tedy na téže funkci jako pruh „od minule“; commity v tom nejsou (na vlastním PR je push obvykle můj) |
 | `Policy.activitySweep(of:mine:loadedAt:now:lastSweep:interval:limit:)`, `Policy.activitySweepInterval`, `Policy.activitySweepLimit` | Na které vlastní PR se v tomhle tiku zeptáme na konverzaci (#335) — **cena celého issue**: předfiltr podle `updatedAt` (klidný den = nula dotazů), vlastní pětiminutový interval a strop tři PR na průchod. `mine` **bez výchozí hodnoty**, jako u automatu |
+| `Policy.mergeReadinessProbe(of:mine:isFresh:limit:)`, `Policy.mergeReadinessProbeLimit` | Na které **vlastní** PR se v tomhle tiku zeptáme na hlavičku a slévatelnost (#572), aby deska uměla říct `K merge` bez otevřené záložky. Předfiltr je razítko `updatedAt` v `detailStates` a `branchStatuses` (**tatáž cache, jakou má otevřená záložka**), takže klidný tik = nula dotazů; stav PR se bere ze **shrnutí**, protože detail v tu chvíli ještě není. **Mergnutý a zavřený se neptá** — vrací `mergeable: UNKNOWN` navždycky. Strop 30 je o **velikosti dokumentu**, ne o ceně. `mine` **bez výchozí hodnoty**, jako u `staleHeadProbe`. **Rozhodování o mergi se tím nemění**: `mergeOffer` ani `isMergeReady` se nedotkly |
 | `Policy.isReported(_:on:)`, `Policy.activityKind(of:isReReview:)` | Brána dění (#414): o čem se **hlásí vůbec** — tatáž pravidla jako u notifikací (#332), lámaná podle druhu. **Jediné místo**, kde ta otázka je; bez ní by z dění byl obchvat pravidla „o vlastním PR se nehlásí“ |
 | `Policy.newPullRequestActivity(…)`, `Policy.reviewActivity(…)`, `Policy.foreignActivityEvent(…)`, `Policy.staleFindingsActivity(…)`, `Policy.departureActivity(…)` | Řádek dění na druh (#414) → `ActivityEvent?`. Text si berou z **týchž** funkcí jako banner (`reviewNotification`, `notificationDetail`, `activityHeadline`), takže se nad tímtéž během nemají čím rozejít; identita je deterministická a u zastaralých nálezů klíčovaná **hlavou** |
 | `Policy.activityLog(_:adding:limit:)`, `Policy.activityLimit` | Vložení do záznamu (#414): od nejnovějšího, bez duplicit, se stropem **200 položek**. **Jedno místo pro disk i paměť** — dvě implementace by znamenaly jiný záznam na obrazovce než v souboru |
@@ -11218,6 +11219,68 @@ Ty dvě věty se nesmí rozejít, a proto je na ně **jeden** test
 a vyřadit ji jenom z `isMergeReady`. Je v [záznamu
 rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563).
 
+#### Slévatelnost se dotahuje tikem, ne až se záložkou (#572)
+
+Vyšlo to z proklikání #563: pravidlo *„co je `mergeable`, patří do `K merge`“* platilo **až po
+otevření záložky**. Do té doby byl pruh `K merge` na domově prázdný, i když má člověk vlastních PR
+k mergnutí několik. Nebyla to regrese z #563 — starší stav, který se tím jen zviditelnil.
+
+**Chybělo `mergeOffer` úplně všechno, ne jen slévatelnost.** `AppStore.isMergeReadyForLane(_:)`
+potřebuje hlavičku (`Policy.mergeProposal`) i stav větve, a obojí se dotahovalo teprve
+v `loadDetail`. Deska proto u vlastních PR vracela `waiting` — což je nad nenačtenými daty
+**správná** odpověď (`Policy.lane` to tak má schválně). Opravit se to dá jedině tím, že se ta data
+dozvíme dřív; `Policy` se u #572 **nezměnila ani o písmeno**.
+
+**Jedno volání na celou sadu** (`GitHubGateway.fetchMergeReadiness(of:)`, `MergeReadinessQuery`) —
+tentýž vzor jako u hlav z tiku (#420): aliasovaná kořenová pole v jednom GraphQL dokumentu. Vybralo
+se to **měřením**, ne odhadem; čísla i zamítnutá cesta jsou
+v [`docs/testovani.md`](testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572).
+
+Cenu drží tytéž tři věci jako u #420:
+
+| Co drží cenu | Jak | Změřeno |
+|---|---|---|
+| **Jedno volání, ne jedno na PR** | aliasovaný dokument, `cost` nezávisí na počtu | 23 aliasů z 16 repozitářů: **1 bod z 5000/h**, 2,60–3,64 s, 39,6 kB |
+| **Předfiltr `updatedAt` je zadarmo** | ptáme se jedině na PR, kterému hlavička nebo stav větve chybí, nebo mu zestaraly (`Policy.mergeReadinessProbe`) | na klidný tik **nula volání** — prázdný seznam se nespouští |
+| **Jen vlastní, a jen otevřené** | `Policy.pullRequests(_:ownedBy: .mine)` a stav ze **shrnutí** | cizí PR se neptá nikdy; mergnutý a zavřený taky ne |
+
+**Strop 30 PR na dotaz** (`Policy.mergeReadinessProbeLimit`) ohraničuje **velikost dokumentu**, ne
+počet volání. Co se nevejde, dojde na příští tik — do map se zapíše jedině to, na co se ptalo.
+
+Čtyři věci, které z toho plynou a nejsou zjevné:
+
+- **Zapisuje se do týchž map jako z otevřené záložky** (`detailStates`, `branchStatuses`), ne do
+  vlastních. Dvě mapy na jednu otázku by znamenaly dvě odpovědi, které se umí rozejít — a hlavně by
+  deska musela skládat plán merge podruhé. Vedlejší efekt je, že **otevření vlastního PR zlevnilo**:
+  hlavička i slévatelnost jsou v cache. **Rozdělaná odpověď se přitom nepřepisuje** — záložka umí
+  mít načteno víc a hromadná odpověď je z těch dvou ta chudší.
+- **Hlavičku skládá tentýž dekodér** (`GhPullRequestDetail`). `gh pr view --json` je nad GraphQL,
+  takže se jména polí shodují do písmene a `GhMergeReadinessResponse.Node` je čte **dvěma dekodéry
+  nad jedním kontejnerem**. Kdyby se hlavička skládala zvlášť, měla by vlastní PR po startu jiná
+  data než po otevření záložky — a to je přesně ten rozdíl, který se v okně nepozná. Hlídá to test
+  nad dokumentem (`MergeReadinessQueryTests.asksForTheSameFieldsAsTheSingleQuery`).
+- **Poloha větve proti základu v odpovědi není, a je to rozhodnutí.** `compare` potřebuje jméno
+  základu a hlavu, tedy hodnoty z **téže** odpovědi, a GraphQL na sourozenecké pole odkázat neumí.
+  Deska ji nepotřebuje (`mergeOffer` se na `divergence` neptá), takže ji dotáhne až otevřená záložka
+  — `AppStore.loadMissingDivergence(for:)`, jedno volání tam, kde do #572 byla dvě.
+- **Nedopočítaná slévatelnost se nezapisuje.** `mergeable: UNKNOWN` je u GitHubu „ještě jsem
+  nepočítal“; zapsat to jako odpověď by znamenalo, že se na to PR do dalšího pohybu nikdo nezeptá.
+  Hromadný dotaz se proto **neopakuje** (na rozdíl od `fetchBranchStatus`) — opakovat celou sadu
+  kvůli jednomu PR by znamenalo platit za dvacet dalších.
+
+**Návštěva se z toho nestane.** `noteHead` se nevolá: ledger odpovídá na „co jsem u toho PR
+naposledy viděl“, a zapsat mu hlavu, na kterou se nikdo nepodíval, znamená spolknout příští
+„přibyly commity“. Je na to test (`AppStoreMergeReadinessTests.doesNotCountAsAVisit`).
+
+**Commity se hromadně netahají**, a proto `isMergeReadyForLane` posílá do `Policy.mergeProposal`
+prázdné pole místo `commits[pr]`. Plán je bere kvůli **počtu v potvrzení**, tedy kvůli větě, kterou
+deska nekreslí; mezi překážkami merge počet není. Kdyby se `nil` propouštělo dál, dostal by se na
+pruh `K merge` jedině PR, u kterého se otevřela záložka — a to je zrovna ta vada, kterou #572 řeší.
+
+**Stráž v `loadBranchStatus` se tím neruší, zpřísňuje.** Stav se ptá **dvakrát**: ze shrnutí
+(mergnutý a zavřený PR se odmítne dřív než tři volání, která ta metoda dělá) i z detailu (po vlastním
+mergi z okna je hlavička načtená znovu, kdežto shrnutí je do dalšího tiku pořád `open`).
+
 ### Našeptávání emotikonů (#483)
 
 Píše se `:ta`, nabídne se 🎉 — a do textu se vloží **znak, ne shortcode**. Návrh, sekce 38. Je to
@@ -11707,6 +11770,13 @@ vteřina mezi nimi).
 volání za nic — a je to zrovna to volání, které si na straně GitHubu vyžádá výpočet. Čte se **jako
 poslední** v řadě za detailem, checky, commity a labely, ze stejného důvodu jako ostatní: každé je
 `gh` podproces a paralelní spouštění by jich na jeden výběr řádku zvedlo počet naráz běžících.
+
+**Od #572 je to druhá cesta k témuž poli, ne jediná.** Deska potřebuje slévatelnost u **všech**
+vlastních PR, takže se ta dvě pole tahají i hromadně (`fetchMergeReadiness(of:)`, jedno volání na
+celou sadu). Rozdíl proti téhle metodě je v tom, co se s `UNKNOWN` dělá: tady se ptáme **znovu**,
+tam se odpověď **zahodí** a zeptá se příští tik — opakovat celou sadu kvůli jednomu nedopočítanému
+PR by znamenalo platit za dvacet dalších. Podrobně u [sekce
+`Větev`](#slévatelnost-se-dotahuje-tikem-ne-až-se-záložkou-572).
 
 ### Poloha větve proti základu (#466) — `mergeStateStatus` na to neodpovídá
 
@@ -13636,3 +13706,130 @@ Je to vedle `Repozitářů` druhá stránka, která nečte jen konfiguraci — d
 přihlašovací položka se čte a zapisuje přes něj. Volba odznaku jde do `config.json` odloženě jako
 zbytek formuláře (`SettingsModel`); segmentovaný přepínač, ne `radioGroup`, protože jsou to tři
 krátká slova na jedné ose od „nejvíc“ k „nic“ — tak je to i v zákresu.
+
+## Otevření souboru v editoru (#530)
+
+Nález v kódu se do #530 nedal otevřít v editoru. U vlastního PR je to přitom druhá cesta k opravě
+vedle agenta, u cizího rychlé prohlédnutí okolí, které diff neukazuje. Tlačítko je na dvou místech
+— **v hlavičce souboru** a **na kartě nálezu** — a rozhoduje o něm pět věcí, z nichž jedna je
+tvrdá podmínka č. 3.
+
+### Otevírá se kopie z cache, a musí to být napsané
+
+`Otevřít v Cursoru` nad diffem vypadá jako „otevři mi ten soubor“ a kdo v otevřeném souboru začne
+psát, čeká, že píše do svého repozitáře. Píše přitom **do kopie v cache aplikace** — uživatelův
+klon aplikace nezná a znát nebude.
+
+Věta o tom je proto **u tlačítka** (nápověda, `Policy.editorNote(_:ownership:)`) a **celá
+v nastavení**, kde se ta volba dělá. Dvě různé věty, protože jsou to dvě různá sdělení:
+
+| Čí PR | Co se otevře | Co z toho plyne |
+|---|---|---|
+| cizí | pracovní strom review (`worktrees/<owner>/<repo>/<pr>-<sha>`) | kód **k přečtení**; co se v něm změní, nemá kam odejít |
+| vlastní | strom pro srovnání větve (`<pr>-sync`) | oprava odejde **jedině přes `Force push` s potvrzením** (#466) |
+
+**Sentence u každé karty by byla šum** — v panelu jich je dvacet —, takže se vidět celá dá
+v nastavení a u tlačítka je jako `help`. Je to slabší forma než věta pod tlačítkem (`#482`), ale
+tam jde o **akci, která něco odešle**; tady o to, kterou kopii soubor otevírá.
+
+### Strom `-sync` vyhrává (`Policy.editorTree(sync:review:)`)
+
+Strom review stojí na `headSha` v **odpojené hlavě**, takže je to kód k přečtení a nic víc — oprava
+v něm se zahodí s dalším `git worktree remove`. Strom pro srovnání větve je proti tomu větev, ze
+které vede cesta ven. Kdo si soubor u vlastního PR otevře, ho nejčastěji chce **opravit**.
+
+U cizího PR se tím nemění nic: `-sync` vzniká jedině při srovnávání **vlastní** větve, takže tam
+žádný není a rozhodne strom review. Jedno pravidlo tedy stačí pro obojí.
+
+Obojí se ověřuje **existencí složky, ne stavem v panelu** (`AppStore.existingDirectory`, sdílená
+se zásuvkou terminálu): `-sync` po sobě zahodí `Zahodit rebase`, strom review sebere eviction,
+a obojí se může stát z druhého okna.
+
+### Hranice cache je `CacheFile.refusal`, ne `isInsideCache` — a je to odchylka od zadání
+
+Zadání #530 jmenuje `CacheFile.isInsideCache`. Použit je **přísnější verdikt téhož typu**, a je to
+vědomé rozhodnutí: `isInsideCache` je odpověď pro **mazání**, u kterého `removeItem` přes odkaz
+smaže odkaz, ne cíl. Otevření v editoru je proti tomu **čtení a psaní** — symbolický odkaz na
+samotném souboru by editor otevřel jeho **cíl**, a ten smí ležet kdekoli. Tvrdá podmínka č. 3 by
+tím padla nejtišší možnou cestou: cesta v cache, editor v uživatelově klonu. Je to tatáž volba,
+jakou udělala zásuvka s terminálem (#459).
+
+Cesta se před kontrolou **standardizuje** (`standardizedFileURL`): `..` uprostřed by jinak zůstalo
+v adrese a hranici by řešilo až rozbalování symlinků uvnitř `contains`.
+
+Že se cesta mimo cache do `NSWorkspace` **nedostane**, tvrdí `AppStoreEditorTests` — a je to
+ověřené vložením regrese: bez toho `guardu` se v testu se symlinkem předala adresa
+`…/42-sync/src/Link.swift`, tedy odkaz mířící ven.
+
+### Adresa se skládá v `Policy`, tři tvary a jedna sada escapování
+
+`Policy.editorURL(_:file:line:)` je čistá funkce a testuje se výčtem tří editorů:
+
+| Editor | Adresa |
+|---|---|
+| Xcode | `xcode://open?url=file://<cesta>&line=<n>` — cesta je **parametr** |
+| VS Code | `vscode://file<cesta>:<n>` |
+| Cursor | `cursor://file<cesta>:<n>` |
+
+**Skládá se to ručně, ne přes `URLComponents`**: ten by v query nechal `&` i `=` nedotčené (jsou
+v `urlQueryAllowed`), takže by cesta s ampersandem rozbila parametr u Xcodu.
+
+Sada povolených znaků (`Policy.editorPathAllowed`) je `urlPathAllowed` **bez `:`, `&`, `=` a `+`**.
+Dvojtečka je ta nejtišší vada z celého #530: u VS Code a Cursoru dělí **číslo řádku**, takže by
+neescapovaná poslala editor na jiné místo — a vypadalo by to, že nález sedí jinde. Zbytek je kvůli
+query u Xcodu. Lomítko zůstává, aby byla adresa čitelná.
+
+**Řádek se přidává jen kladný.** Nula ani záporné číslo neexistují a `:0` by editor v lepším
+případě ignoroval, v horším skočil na začátek souboru a tvrdil, že nález je tam. Nález o souboru
+jako celku je proto adresa **bez řádku**.
+
+### Není to druhá cesta ven
+
+Tvrdá podmínka č. 1 se tím nedotýká: neodesílá se nic na GitHub ani do remote a **nespouští se
+žádný podproces** — ven jde adresa souboru v cache, kterou převezme systém. `grep ReviewPublishing
+App/` vypisuje pořád týž seznam sedmi souborů a `SingleWayOutTests` prochází beze změny.
+
+Aplikace navíc **nehledá binárku editoru**: kdo se k `cursor://` přihlásí, rozhoduje systém. Proto
+je volba **výčet tří** (`ExternalEditor`), ne cesta ani volný text — co odejde do `NSWorkspace`,
+se pak dá vyčerpat testem. Za protokolem (`EditorOpening`) je to ze stejného důvodu jako zbytek
+`Environment/`: spuštěná cizí aplikace se v testu nedá vzít zpátky.
+
+### Nekreslí se, ne zašedlé
+
+Bez zvoleného editoru (`Configuration.global.externalEditor == nil`, což je **výchozí stav**)
+tlačítko **není**. Zašedlé s důvodem patří jedině tam, kde se stav mění na téže obrazovce (vypnutá
+brána, červený check, větev pozadu); tohle se zapíná v nastavení, tedy jinde. Totéž platí o nálezu
+**bez souboru** — otevřít se nemá co.
+
+`nil` v konfiguraci proto znamená „akce v okně není“, ne „ber výchozí“: který editor člověk
+používá, se z ničeho odvodit nedá a podstrčený Xcode by spouštěl aplikaci, o kterou nikdo nežádal.
+**Rozbitá hodnota se sráží na tutéž stranu** — neznámé jméno nesmí podstrčit jiný editor.
+
+### Neotevřít je odpověď, ne selhání
+
+Cesta má pět zastávek — editor, strom v cache, hranice cache, existence souboru a to, jestli systém
+adresu převzal — a **každá má vlastní větu** v `AppStore.editorFailure`. Obecné „nepodařilo se
+otevřít“ by slilo *soubor tu není* (běžný stav u smazaného souboru) s *mířili jsme mimo cache*,
+a to druhé je jediné, u čeho se má někdo zarazit.
+
+**Šestá věta patří pojistce, a našla ji vlastní revize diffu.** Když `Policy.editorURL` vrátí `nil`
+(procentování ani `URL(string:)` selhat prakticky nemají čím), stálo tu původně odmítnutí
+`.outsideCache` — tedy hláška o cestě mimo cache nad cestou, která **v cache byla**. Je to učebnicový
+tvar vzoru *text, který tvrdí víc, než data unesou*: nepravdivá věta v nedosažitelné větvi přežije
+roky. `Policy.editorAddressNote` proto říká, co se stalo, a `EditorLinkTests` tvrdí, že se ta věta
+o mimo-cache **nepůjčuje**.
+
+Hláška se kreslí v `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“, a je to tentýž
+případ jako terminál a notifikace: **výsledek téhle akce je mimo okno**, takže spolknutý neúspěch
+vypadá k nerozeznání od toho, že se nekliklo.
+
+**Vlastní pole vedle `terminalFailure`**, ne sdílené: slité pole by znamenalo, že hláška
+o terminálu zmizí kliknutím na editor. Zahazuje se na začátku každého pokusu, takže v okně stojí
+vždycky ta o tom posledním.
+
+### Zákres
+
+Sekce **51** návrhu — hlavička souboru s `↗`, karta nálezu s `Otevřít v Cursoru`, stránka
+`Nastavení › Systém` ve dvou stavech a čtyři hlášky poruch. Leží na stránce *Změněné soubory*,
+protože odtud se ta akce spouští; stránku *Nastavení* nepřekresluje, jen z ní bere jednu sekci
+(tentýž vztah jako 49 k 10).

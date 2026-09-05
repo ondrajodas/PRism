@@ -29,6 +29,7 @@ struct SystemSettingsView: View {
         Form {
             dockBadge
             launch
+            editor
         }
         .formStyle(.grouped)
         // Při **každém** zobrazení stránky, ne jednou při startu: vypnout položku jde i v Nastavení
@@ -79,6 +80,40 @@ struct SystemSettingsView: View {
             Text(verbatim: row.note)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// V čem se otevírají soubory (#530).
+    ///
+    /// **Na tuhle stránku, ne do `Diffu`**, a je to tentýž klíč, podle kterého se dělí zbytek okna
+    /// nastavení: `Diff` odpovídá na „jak se kód čte tady“, kdežto tohle sahá **mimo okno** —
+    /// spustí se cizí aplikace, přesně jako u odznaku v Docku a přihlašovací položky nad tím.
+    ///
+    /// **`Nic` je plnohodnotná položka nabídky, ne prázdný řádek**: je to výchozí stav a znamená,
+    /// že tlačítko v diffu nebude. Bez ní by se ta volba nedala vzít zpátky.
+    private var editor: some View {
+        Section {
+            Picker("Otevírat soubory v", selection: $settings.draft.global.externalEditor) {
+                Text("Nic").tag(ExternalEditor?.none)
+                ForEach(ExternalEditor.allCases) { editor in
+                    Text(verbatim: editor.title).tag(ExternalEditor?.some(editor))
+                }
+            }
+            // Segmentovaný, jako `Co se počítá` o dvě sekce výš a jako to má návrh (sekce 51):
+            // jsou to čtyři krátká slova na jedné ose a je vidět celá nabídka naráz — včetně
+            // toho, že `Nic` je plnohodnotná volba, ne prázdný řádek.
+            .pickerStyle(.segmented)
+        } header: {
+            Text("Otevírání souborů")
+        } footer: {
+            // **Věta o kopii z cache je tady celá**, protože tady se ta volba dělá; u tlačítka
+            // v diffu je jako nápověda. Bez ní vypadá `Otevřít v Cursoru` jako „otevři mi ten
+            // soubor“ a člověk čeká, že píše do svého klonu.
+            Text(
+                "Soubor se otevře v **kopii z cache aplikace**, nikdy v tvém klonu — tvůj klon aplikace nezná (tvrdá podmínka č. 3). U cizího PR je to pracovní kopie review, tedy kód k přečtení: co se v ní změní, nemá kam odejít. U vlastního PR je to strom pro srovnání větve (`-sync`), takže oprava odejde jedině přes `Force push` s potvrzením. Bez zvoleného editoru se tlačítko v hlavičce souboru ani na kartě nálezu nekreslí. Otevírá se URL schématem, které si editor zaregistroval v systému (`xcode://`, `vscode://`, `cursor://`), takže aplikace nespouští žádnou binárku — a když schéma nemá kdo obsloužit, řekne se to ve stavovém řádku."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 

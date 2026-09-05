@@ -651,6 +651,7 @@ struct PullRequestDetailView: View {
             dismissals: dismissals,
             rechecks: findingStatuses,
             findingActions: findingActions,
+            editor: editorActions,
             blockingCategories: blockingCategories,
             isRunning: store.isReviewing(pullRequest.id),
             pullRequest: pullRequest.id,
@@ -2052,6 +2053,9 @@ struct PullRequestDetailView: View {
             stepFinding: { step($0) },
             search: searchActions,
             read: read,
+            // Editor (#530) — **stejný na všech pohledech na diff**, na rozdíl od značek `Prošlo`
+            // o řádek výš: soubor v pracovní kopii je jeden, ať se na něj člověk dívá odkudkoli.
+            editor: editorActions,
             // Výřez a rozsahy souborů (#501) — **drží je detail**, protože z nich čte i mapa PR
             // nad pruhem záložek. Diff do nich zapisuje jako dřív, jen krabice není jeho.
             tracking: tracking,
@@ -2081,6 +2085,27 @@ struct PullRequestDetailView: View {
         let id = pullRequest.id
         return DiffReadActions(states: store.fileReviewStates(in: id)) { file in
             store.toggleReadMark(file.displayPath, blobs: file.blobs, in: id)
+        }
+    }
+
+    /// Otevření souboru v editoru (#530). `nil` = v nastavení není zvolený editor, takže se
+    /// tlačítko **nekreslí** — ani v hlavičce souboru, ani na kartě nálezu.
+    ///
+    /// Věta u tlačítka se skládá **tady, ne v `EditorActions`**: záleží na tom, čí ten pull request
+    /// je (u vlastního se otevírá strom `-sync`, ze kterého vede cesta ven), a to je otázka, na
+    /// kterou odpovídá store, ne kresba.
+    ///
+    /// **Na rozdíl od `readActions` výš se to nemění podle obrazovky**: pracovní kopie v cache je
+    /// jedna a soubor v ní je týž, ať se na něj člověk dívá z celého diffu, z rozsahu „co přibylo“,
+    /// nebo z diffu commitu. Značka `Prošlo` mluví o otiscích diffu, tohle o souboru na disku.
+    private var editorActions: EditorActions? {
+        guard let editor = store.externalEditor else { return nil }
+        let id = pullRequest.id
+        return EditorActions(
+            title: Policy.openInEditorTitle(editor),
+            note: Policy.editorNote(editor, ownership: store.ownership(of: id))
+        ) { path, line in
+            Task { await store.openInEditor(file: path, line: line, of: id) }
         }
     }
 

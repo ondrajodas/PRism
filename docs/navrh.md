@@ -48,10 +48,20 @@ stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekc
 přidalo #517 a číslo nezvedlo (nález Copilota), a u **#526 tu stálo 48 nad devětačtyřiceti**
 — sekce 49 přišla s #529 a číslo zůstalo zase stát. **Sekci 47 přidalo #506** (itinerář review)
 a číslo zvedlo v témže commitu — o číslo se u dávky nehádá, přiděluje ho orchestrátor
-(#537):
+(#537), takže tenhle údaj patří tomu, kdo sekci kreslí:
 
 ```bash
 grep -c '<section class="section" id="s' docs/navrh.html
+```
+
+**V rozdělané dávce může být ten počet menší než nejvyšší `id`, a je to v pořádku, ne
+rozejití:** #530 kreslilo `s51` nad padesáti sekcemi, protože čísla v dávce přiděluje
+orchestrátor dopředu a `s50` si vzal soused (#526), jehož PR se slil až potom. Mezera se slitím
+zavřela, ale **další volné číslo se z tohohle počtu nedopočítává** — v dávce ho dostaneš
+v zadání (viz *Jak se aktualizuje*), mimo dávku se čte z nejvyššího `id`:
+
+```bash
+grep -o 'id="s[0-9]*"' docs/navrh.html | sed 's/[^0-9]//g' | sort -n | tail -1
 ```
 
 Většina sekcí kreslí jednu obrazovku nebo jeden stav v rámu okna (`.win`) a vedle sebe má
