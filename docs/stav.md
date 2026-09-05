@@ -8447,7 +8447,17 @@ mergnutý a zavřený PR se **neptá vůbec** — GitHub u nich vrací `mergeabl
 (změřeno u #465 na `PRism#470`, doloženo znovu fixturou z `cli/cli#14363`).
 
 **Na obrazovce se mění jediná věc: pruh `K merge` má obsah hned po startu.** Vzhled se nemění,
-`docs/navrh.html` se nesáhlo. Testů je **5 502** (+29) a regrese se ověřila vložením čtyř regresí.
+`docs/navrh.html` se nesáhlo. Testů je nad slitým stavem (po #530) **5 527**, z toho **+29**
+z tohohle PR, a jsou zelené; regrese se ověřila vložením čtyř regresí.
+
+**Plný běh nad slitým stavem byl jednou falešně červený a je to ta známá třída, ne regrese.**
+Sedm suit (`AppStore — review`, `— odmítnuté nálezy`, `— opakování jednoho reviewera`,
+`— routing reviewerů`, `— zadání pro reviewera`, `— notifikace o doběhlém review`
+a `HealthMonitor`) spadlo pod load average 17 při souběžném buildu tří slotů. Pozná se to
+podle tří věcí naráz: **hláška je o čekání** (24× `Nedočkalo se … strop 120.0 seconds`,
+k tomu jednou `metrika písma`), **spadlé suity se změny netýkají** — všechny tři suity #572
+v tom **červeném** běhu prošly — a **v izolaci projdou hned**: těch sedm plus tři suity #572
+je **101 testů v 10 suitách za 0,329 s**.
 
 **Copilot se na tenhle PR schválně nepouštěl** — GitHub má výpadek entitlementu, tatáž příčina jako
 u #570. Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
