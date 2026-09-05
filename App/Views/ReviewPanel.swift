@@ -33,6 +33,9 @@ struct ReviewPanel: View {
     var rechecks: [FindingKey: RecheckStatus] = [:]
     /// Odmítnutí a vrácení nálezu. Kontextové menu se bez toho nekreslí.
     var findingActions: FindingActions?
+    /// Otevření místa nálezu v editoru (#530). `nil` = **není zvolený editor**, takže se tlačítko
+    /// na kartách nekreslí vůbec — ne zašedle.
+    var editor: EditorActions?
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     var isRunning = false
     /// Ke kterému PR panel patří. Potřebuje to tab s rozdělaným review — na identitě PR
@@ -480,6 +483,7 @@ struct ReviewPanel: View {
                         row: row,
                         isCurrent: current == FindingPlace(row.finding),
                         findingActions: findingActions,
+                        editor: editor,
                         jump: { jump(row.finding) }
                     )
                 }

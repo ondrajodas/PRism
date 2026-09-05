@@ -6959,6 +6959,71 @@ a chybějící řádek v pruhu `K merge`). `WorkLaneTests` v tom **nefigurují**
 literál v testu, takže o novém případu enumu nevědí; hlídají, co `isMergeReady` s překážkou udělá,
 ne jaké překážky existují.
 
+### Záznam rozhodnutí — otevření souboru v editoru (#530)
+
+Nález v kódu se dal do #530 přečíst, ne otevřít. Rozhodnutí, která u toho padla:
+
+1. **Otevírá se kopie z cache, a nikdy uživatelův klon.** Tvrdá podmínka č. 3 to vynucuje, ale
+   podstatné je, že se to musí **říct**: `Otevřít v Cursoru` nad diffem vypadá jako „otevři mi ten
+   soubor“ a kdo v něm začne psát, čeká, že píše do svého repozitáře.
+
+2. **Věta u tlačítka je nápověda, ne řádek pod ním — a je to odchylka od vzoru z #482.** Tam jde
+   o akci, která něco **odešle**, takže věta musí být vidět bez najetí myší. Tady je tlačítko na
+   dvou místech, z toho jedno je karta nálezu v panelu, kterých je vedle sebe dvacet — věta pod
+   každou z nich je šum, který se přestane číst. Celá je proto v nastavení, kde se ta volba dělá,
+   a u tlačítka jako `help`. **Zapsané jako mezera k posouzení nad běžící aplikací**; kdyby se
+   ukázalo, že se přehlíží, je to jeden řádek v `FindingCardView`.
+
+3. **Strom `-sync` má přednost před stromem review.** Strom review stojí na `headSha` v odpojené
+   hlavě — oprava v něm se zahodí s dalším úklidem cache. `-sync` je větev, ze které vede cesta ven
+   (#466). U cizího PR se tím nemění nic, protože tam žádný `-sync` není, takže jedno pravidlo
+   stačí na obojí.
+
+4. **Hranice se ověřuje `CacheFile.refusal`, ne `isInsideCache` ze zadání.** `isInsideCache` je
+   verdikt pro **mazání** (přes odkaz se maže odkaz); tohle je čtení a psaní, takže symbolický
+   odkaz na samotném souboru by editor otevřel jeho **cíl** — a ten smí ležet kdekoli. Tvrdá
+   podmínka č. 3 by tím padla nejtišší možnou cestou: cesta v cache, editor v uživatelově klonu.
+   **Odchylka od textu issue je vědomá a je to ta přísnější strana.**
+
+5. **Volba je výčet tří editorů, ne cesta k binárce ani volný text.** Otevírá se URL schématem,
+   které si editor zaregistroval v systému, takže aplikace **nespouští žádný podproces**
+   a nepotřebuje vědět, kde editor je. Volný text („čím otevírat“) by znamenal, že se do
+   `NSWorkspace` dostane libovolné schéma z ručně editovaného `config.json`; tři vyjmenované
+   hodnoty jsou naopak něco, co jde vyčerpat testem.
+
+6. **`nil` znamená „akce v okně není“, ne „ber výchozí“** — a je to jediná hodnota v `config.json`,
+   u které prázdno ruší kus obrazovky. Který editor člověk používá, se z ničeho odvodit nedá;
+   podstrčený Xcode jen proto, že je to macOS, by spouštěl cizí aplikaci, o kterou nikdo nežádal.
+   Rozbitá hodnota se sráží na tutéž stranu.
+
+7. **Nekreslí se, ne zašedle.** Zašedlá akce s důvodem patří jedině tam, kde se stav mění na téže
+   obrazovce (vypnutá brána, červený check, větev pozadu). Tohle se zapíná v nastavení, tedy jinde.
+   Totéž platí o nálezu **bez souboru**.
+
+8. **Pět zastávek, pět vět.** Editor, strom v cache, hranice cache, existence souboru a to, jestli
+   systém adresu převzal. Obecné „nepodařilo se otevřít“ by slilo *soubor tu není* (běžný stav
+   u smazaného souboru) s *mířili jsme mimo cache*, a to druhé je jediné, u čeho se má někdo
+   zarazit. Vlastní pole `editorFailure` vedle `terminalFailure`, aby jedna akce nezahazovala
+   hlášku té druhé.
+
+   **Šestou větu dostala i pojistka** (nesložená adresa), a je to nález vlastní revize diffu: do ní
+   se tu hlásilo odmítnutí `.outsideCache`, tedy věta o cestě mimo cache nad cestou, která v cache
+   **byla**. Nedosažitelná větev je zrovna to místo, kde nepravdivá věta přežije roky — a věta,
+   kterou řekne i něco jiného, přestane být tou jednou, u které se má člověk zarazit.
+
+9. **Dvojtečka v cestě se escapuje, i když je v cestě legální.** U VS Code a Cursoru dělí **číslo
+   řádku**, takže by neescapovaná poslala editor na jiné místo — a vypadalo by to, že nález sedí
+   jinde. Je to nejtišší vada z celého #530 a nedá se poznat jinak než výčtem v testu.
+
+**Zapsaná mezera:** `xcode://open?url=…&line=` je jediný ze tří tvarů, který nemá oporu
+v dokumentaci editoru, jen v tom, jak ho používají cizí nástroje. **Neověřeno spuštěním** — ověřit
+to znamená otevřít uživateli Xcode bez jeho vědomí. Kdyby ten tvar nebral, je oprava v jedné čisté
+funkci a v jednom výčtu testu.
+
+**Zobecnitelné pravidlo:** *cesta, která odchází z aplikace ven, se ověřuje tou přísnější z odpovědí,
+které o hranici cache existují — i když zadání jmenuje tu mírnější.* Mazání a čtení nejsou tatáž
+otázka, a rozdíl mezi nimi je přesně jeden symbolický odkaz.
+
 ### Záznam rozhodnutí — slévatelnost vlastních PR se dotahuje tikem (#572)
 
 **Problém.** Pruh `K merge` na domácí desce byl po startu prázdný, dokud se pull request neotevřel.
