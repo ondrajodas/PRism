@@ -8493,6 +8493,17 @@ mezera**, protože sonda diffem nescrolluje a v harnessu se to rozhodnout nedá.
 **Měřilo se pod zátěží tří dalších slotů** (`load average` 3,9 až 9,4), proto jsou v tabulkách obě
 hodnoty ze dvojice, ne průměr.
 
+**Testů je nad slitým stavem (po #530 a #572) 5 530 v 542 sadách**, z toho **+3** z tohohle PR —
+`DiffMaterialTwinTests`, protože na tom, že se dvojče předloze velikostí vyrovná, stojí celý závěr.
+
+**Plný běh nad slitým stavem byl falešně červený a je to ta známá třída, ne regrese.** Dvanáct sad
+spadlo pod souběžným plným během jiného slotu; pozná se to podle tří věcí naráz: **hláška je
+o čekání** (46× `Nedočkalo se: review doběhne … strop 120.0 seconds`, k tomu jednou `metrika písma
+se neusadila` a šestkrát `.timedOut` v `RepoCheckout proti skutečnému gitu`), **spadlé sady se
+změny netýkají** — v `App/` se nezměnil znak a sada tohohle PR v tom **červeném** běhu prošla —
+a **v izolaci projdou hned**: těch dvanáct plus `DiffMaterialTwinTests` je **104 testů ve 13 sadách
+za 11,1 s**.
+
 **Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu — tatáž příčina jako
-u #570, #507, #542 a #491. Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná
-v PR.
+u #572, #570, #530, #507, #542 a #491. Je to **neověřená mezera**; vlastní revize diffu proběhla
+a je popsaná v PR.
