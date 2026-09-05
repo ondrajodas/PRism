@@ -12,6 +12,9 @@ struct FindingCardView: View {
     /// „tady jsem“ — v diffu to řekne skok, ale ten je jinde na obrazovce.
     var isCurrent = false
     var findingActions: FindingActions?
+    /// Otevření místa nálezu v editoru (#530). `nil` = **není zvolený editor**, takže se tlačítko
+    /// nekreslí vůbec — ne zašedle. U nálezu **bez souboru** se nekreslí taky: otevřít se nemá co.
+    var editor: EditorActions?
     let jump: () -> Void
 
     var body: some View {
@@ -156,13 +159,25 @@ struct FindingCardView: View {
 
     /// Místo se ořezává **zepředu**, ať zůstane vidět jméno souboru a číslo řádku — z dlouhé
     /// cesty je zajímavý konec. Stejné pravidlo jako ve sloupci `Místo`, který karta nahradila.
+    ///
+    /// Od #530 vedle něj stojí `Otevřít v <editoru>`, a je to **tentýž řádek schválně**: obojí
+    /// mluví o tom jednom místě v kódu. Cesta ustupuje (ořezává se zepředu), akce ne — popisek,
+    /// ze kterého zbude `Otevřít v…`, neříká nic.
     private var footer: some View {
-        Text(verbatim: row.location)
-            .font(.system(.caption, design: .monospaced))
-            .foregroundStyle(.tertiary)
-            .lineLimit(1)
-            .truncationMode(.head)
-            .help(row.locationHelp)
+        HStack(spacing: 8) {
+            Text(verbatim: row.location)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .help(row.locationHelp)
+            Spacer(minLength: 0)
+            if let editor, let file = row.finding.file {
+                editor.cardButton(path: file, line: row.finding.line)
+                    .fixedSize()
+                    .layoutPriority(2)
+            }
+        }
     }
 
     /// Barva hrany. Blokující červená, platný nález oranžový, odmítnutý tlumený — a je to

@@ -13559,3 +13559,130 @@ Je to vedle `Repozitářů` druhá stránka, která nečte jen konfiguraci — d
 přihlašovací položka se čte a zapisuje přes něj. Volba odznaku jde do `config.json` odloženě jako
 zbytek formuláře (`SettingsModel`); segmentovaný přepínač, ne `radioGroup`, protože jsou to tři
 krátká slova na jedné ose od „nejvíc“ k „nic“ — tak je to i v zákresu.
+
+## Otevření souboru v editoru (#530)
+
+Nález v kódu se do #530 nedal otevřít v editoru. U vlastního PR je to přitom druhá cesta k opravě
+vedle agenta, u cizího rychlé prohlédnutí okolí, které diff neukazuje. Tlačítko je na dvou místech
+— **v hlavičce souboru** a **na kartě nálezu** — a rozhoduje o něm pět věcí, z nichž jedna je
+tvrdá podmínka č. 3.
+
+### Otevírá se kopie z cache, a musí to být napsané
+
+`Otevřít v Cursoru` nad diffem vypadá jako „otevři mi ten soubor“ a kdo v otevřeném souboru začne
+psát, čeká, že píše do svého repozitáře. Píše přitom **do kopie v cache aplikace** — uživatelův
+klon aplikace nezná a znát nebude.
+
+Věta o tom je proto **u tlačítka** (nápověda, `Policy.editorNote(_:ownership:)`) a **celá
+v nastavení**, kde se ta volba dělá. Dvě různé věty, protože jsou to dvě různá sdělení:
+
+| Čí PR | Co se otevře | Co z toho plyne |
+|---|---|---|
+| cizí | pracovní strom review (`worktrees/<owner>/<repo>/<pr>-<sha>`) | kód **k přečtení**; co se v něm změní, nemá kam odejít |
+| vlastní | strom pro srovnání větve (`<pr>-sync`) | oprava odejde **jedině přes `Force push` s potvrzením** (#466) |
+
+**Sentence u každé karty by byla šum** — v panelu jich je dvacet —, takže se vidět celá dá
+v nastavení a u tlačítka je jako `help`. Je to slabší forma než věta pod tlačítkem (`#482`), ale
+tam jde o **akci, která něco odešle**; tady o to, kterou kopii soubor otevírá.
+
+### Strom `-sync` vyhrává (`Policy.editorTree(sync:review:)`)
+
+Strom review stojí na `headSha` v **odpojené hlavě**, takže je to kód k přečtení a nic víc — oprava
+v něm se zahodí s dalším `git worktree remove`. Strom pro srovnání větve je proti tomu větev, ze
+které vede cesta ven. Kdo si soubor u vlastního PR otevře, ho nejčastěji chce **opravit**.
+
+U cizího PR se tím nemění nic: `-sync` vzniká jedině při srovnávání **vlastní** větve, takže tam
+žádný není a rozhodne strom review. Jedno pravidlo tedy stačí pro obojí.
+
+Obojí se ověřuje **existencí složky, ne stavem v panelu** (`AppStore.existingDirectory`, sdílená
+se zásuvkou terminálu): `-sync` po sobě zahodí `Zahodit rebase`, strom review sebere eviction,
+a obojí se může stát z druhého okna.
+
+### Hranice cache je `CacheFile.refusal`, ne `isInsideCache` — a je to odchylka od zadání
+
+Zadání #530 jmenuje `CacheFile.isInsideCache`. Použit je **přísnější verdikt téhož typu**, a je to
+vědomé rozhodnutí: `isInsideCache` je odpověď pro **mazání**, u kterého `removeItem` přes odkaz
+smaže odkaz, ne cíl. Otevření v editoru je proti tomu **čtení a psaní** — symbolický odkaz na
+samotném souboru by editor otevřel jeho **cíl**, a ten smí ležet kdekoli. Tvrdá podmínka č. 3 by
+tím padla nejtišší možnou cestou: cesta v cache, editor v uživatelově klonu. Je to tatáž volba,
+jakou udělala zásuvka s terminálem (#459).
+
+Cesta se před kontrolou **standardizuje** (`standardizedFileURL`): `..` uprostřed by jinak zůstalo
+v adrese a hranici by řešilo až rozbalování symlinků uvnitř `contains`.
+
+Že se cesta mimo cache do `NSWorkspace` **nedostane**, tvrdí `AppStoreEditorTests` — a je to
+ověřené vložením regrese: bez toho `guardu` se v testu se symlinkem předala adresa
+`…/42-sync/src/Link.swift`, tedy odkaz mířící ven.
+
+### Adresa se skládá v `Policy`, tři tvary a jedna sada escapování
+
+`Policy.editorURL(_:file:line:)` je čistá funkce a testuje se výčtem tří editorů:
+
+| Editor | Adresa |
+|---|---|
+| Xcode | `xcode://open?url=file://<cesta>&line=<n>` — cesta je **parametr** |
+| VS Code | `vscode://file<cesta>:<n>` |
+| Cursor | `cursor://file<cesta>:<n>` |
+
+**Skládá se to ručně, ne přes `URLComponents`**: ten by v query nechal `&` i `=` nedotčené (jsou
+v `urlQueryAllowed`), takže by cesta s ampersandem rozbila parametr u Xcodu.
+
+Sada povolených znaků (`Policy.editorPathAllowed`) je `urlPathAllowed` **bez `:`, `&`, `=` a `+`**.
+Dvojtečka je ta nejtišší vada z celého #530: u VS Code a Cursoru dělí **číslo řádku**, takže by
+neescapovaná poslala editor na jiné místo — a vypadalo by to, že nález sedí jinde. Zbytek je kvůli
+query u Xcodu. Lomítko zůstává, aby byla adresa čitelná.
+
+**Řádek se přidává jen kladný.** Nula ani záporné číslo neexistují a `:0` by editor v lepším
+případě ignoroval, v horším skočil na začátek souboru a tvrdil, že nález je tam. Nález o souboru
+jako celku je proto adresa **bez řádku**.
+
+### Není to druhá cesta ven
+
+Tvrdá podmínka č. 1 se tím nedotýká: neodesílá se nic na GitHub ani do remote a **nespouští se
+žádný podproces** — ven jde adresa souboru v cache, kterou převezme systém. `grep ReviewPublishing
+App/` vypisuje pořád týž seznam sedmi souborů a `SingleWayOutTests` prochází beze změny.
+
+Aplikace navíc **nehledá binárku editoru**: kdo se k `cursor://` přihlásí, rozhoduje systém. Proto
+je volba **výčet tří** (`ExternalEditor`), ne cesta ani volný text — co odejde do `NSWorkspace`,
+se pak dá vyčerpat testem. Za protokolem (`EditorOpening`) je to ze stejného důvodu jako zbytek
+`Environment/`: spuštěná cizí aplikace se v testu nedá vzít zpátky.
+
+### Nekreslí se, ne zašedlé
+
+Bez zvoleného editoru (`Configuration.global.externalEditor == nil`, což je **výchozí stav**)
+tlačítko **není**. Zašedlé s důvodem patří jedině tam, kde se stav mění na téže obrazovce (vypnutá
+brána, červený check, větev pozadu); tohle se zapíná v nastavení, tedy jinde. Totéž platí o nálezu
+**bez souboru** — otevřít se nemá co.
+
+`nil` v konfiguraci proto znamená „akce v okně není“, ne „ber výchozí“: který editor člověk
+používá, se z ničeho odvodit nedá a podstrčený Xcode by spouštěl aplikaci, o kterou nikdo nežádal.
+**Rozbitá hodnota se sráží na tutéž stranu** — neznámé jméno nesmí podstrčit jiný editor.
+
+### Neotevřít je odpověď, ne selhání
+
+Cesta má pět zastávek — editor, strom v cache, hranice cache, existence souboru a to, jestli systém
+adresu převzal — a **každá má vlastní větu** v `AppStore.editorFailure`. Obecné „nepodařilo se
+otevřít“ by slilo *soubor tu není* (běžný stav u smazaného souboru) s *mířili jsme mimo cache*,
+a to druhé je jediné, u čeho se má někdo zarazit.
+
+**Šestá věta patří pojistce, a našla ji vlastní revize diffu.** Když `Policy.editorURL` vrátí `nil`
+(procentování ani `URL(string:)` selhat prakticky nemají čím), stálo tu původně odmítnutí
+`.outsideCache` — tedy hláška o cestě mimo cache nad cestou, která **v cache byla**. Je to učebnicový
+tvar vzoru *text, který tvrdí víc, než data unesou*: nepravdivá věta v nedosažitelné větvi přežije
+roky. `Policy.editorAddressNote` proto říká, co se stalo, a `EditorLinkTests` tvrdí, že se ta věta
+o mimo-cache **nepůjčuje**.
+
+Hláška se kreslí v `AppNoticesView`, tedy tam, kde stojí ostatní „co je špatně“, a je to tentýž
+případ jako terminál a notifikace: **výsledek téhle akce je mimo okno**, takže spolknutý neúspěch
+vypadá k nerozeznání od toho, že se nekliklo.
+
+**Vlastní pole vedle `terminalFailure`**, ne sdílené: slité pole by znamenalo, že hláška
+o terminálu zmizí kliknutím na editor. Zahazuje se na začátku každého pokusu, takže v okně stojí
+vždycky ta o tom posledním.
+
+### Zákres
+
+Sekce **51** návrhu — hlavička souboru s `↗`, karta nálezu s `Otevřít v Cursoru`, stránka
+`Nastavení › Systém` ve dvou stavech a čtyři hlášky poruch. Leží na stránce *Změněné soubory*,
+protože odtud se ta akce spouští; stránku *Nastavení* nepřekresluje, jen z ní bere jednu sekci
+(tentýž vztah jako 49 k 10).

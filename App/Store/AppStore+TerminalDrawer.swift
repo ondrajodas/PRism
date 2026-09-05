@@ -301,7 +301,11 @@ extension AppStore {
 
     /// Existuje ta složka? **Mimo hlavní vlákno** — je to sice jeden `stat`, ale disk umí zaseknout
     /// (síťový svazek, spící externí disk), a okno se kvůli hledání adresáře zaseknout nesmí.
-    private func existingDirectory(_ url: URL?) async -> URL? {
+    ///
+    /// **Není `private`, protože na tutéž otázku se ptá i otevření souboru v editoru** (#530): oba
+    /// hledají strom v cache, který mohla mezitím sebrat eviction. Druhá kopie by byla druhé místo,
+    /// kde se dá zapomenout, že `stat` na hlavní vlákno nepatří.
+    func existingDirectory(_ url: URL?) async -> URL? {
         guard let url else { return nil }
         return await Task.detached {
             var isDirectory: ObjCBool = false

@@ -8391,3 +8391,30 @@ celé jen proto, aby stráže nad zdrojáky potvrdily, že se v `App/` ani `Test
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`, tatáž třetí příčina jako u #507, #542 a #491),
 který v ten den selhal na osmi kolech napříč čtyřmi větvemi. Je to **neověřená mezera**; vlastní
 revize diffu proběhla a je popsaná v PR.
+
+## #530 — Otevřít soubor v editoru na řádku nálezu
+
+Tlačítko `Otevřít v <editoru>` v hlavičce souboru (glyf `↗`) a na kartě nálezu (popisek celý).
+Otevírá **kopii z cache aplikace**: u cizího PR pracovní strom review, u vlastního strom pro
+srovnání větve (`-sync`), odkud změna odejde jedině přes `Force push` se sheetem (#466).
+Uživatelův klon aplikace dál nezná.
+
+Volba je v `Nastavení › Systém › Otevírat soubory v` (`Nic` / Xcode / VS Code / Cursor), výchozí
+je `Nic` — a **bez zvoleného editoru se tlačítko nekreslí**, ne zašedne. Adresu skládá
+`Policy.editorURL` jako čistou funkci (tři schémata, jedna sada escapování); hranici cache hlídá
+`CacheFile.refusal`, tedy tatáž kontrola jako jinde v repu a **přísnější** z jejích dvou odpovědí,
+protože symbolický odkaz na souboru by editor otevřel jeho cíl.
+
+Rozbor je v [`docs/architektura.md`](architektura.md#otevření-souboru-v-editoru-530), měření
+a mezery v [`docs/testovani.md`](testovani.md#otevření-souboru-v-editoru-530), rozhodnutí ve
+[specifikaci](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--otevření-souboru-v-editoru-530).
+Zákres je sekce **51** návrhu.
+
+**Zapsané mezery jsou dvě.** Že se editor doopravdy otevře, ověřeno není — znamenalo by to
+spustit cizí aplikaci bez vědomí uživatele; ověří to člověk kliknutím. A `xcode://open?url=…&line=`
+je jediný ze tří tvarů, který nemá oporu v dokumentaci editoru, jen v tom, jak ho používají cizí
+nástroje.
+
+**Copilot se na tenhle PR schválně nepouštěl** — tentýž výpadek entitlementu na straně GitHubu
+(`COPILOT_PERMISSION_GATE_REASON: ineligible_app`) jako u #507, #542, #491 a #563. Je to
+**neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
