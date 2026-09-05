@@ -107,8 +107,9 @@ struct ActivityFeedView: View {
 
     private func header(_ day: ActivityFeedDay) -> some View {
         HStack(spacing: 6) {
-            // Počet nepřečtených patří do nadpisu, ne k odznaku: na aktivní položce railu se
-            // odznak nekreslí, protože by v tomhle railu překryl ikonu (návrh, poznámka 95).
+            // Počet nepřečtených je tady **za ten den**, kdežto odznak v railu počítá celý
+            // záznam — jsou to dvě různá čísla, ne jedno na dvou místech. (Do #526 se odznak na
+            // aktivní sekci nekreslil vůbec; od #526 svítí, viz `Policy.activityBadge`.)
             Text(verbatim: day.note.map { "\(day.title) · \($0)" } ?? day.title)
                 .font(.system(size: 12.5, weight: .semibold))
                 .lineLimit(1)

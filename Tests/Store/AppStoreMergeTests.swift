@@ -409,6 +409,62 @@ struct AppStoreMergeTests {
         #expect(store.branchSection(for: pr)?.merge.isAllowed == true)
     }
 
+    // MARK: - Blokující nález (#563)
+
+    /// **Mergnutelný PR patří do `K merge` i s blokujícím nálezem** (#563) — a nález u něj
+    /// **zůstane vidět**. Scéna je `keboola/platform-libraries#566` z proklikání: slévatelný,
+    /// čistý, zelené checky, a k tomu jeden potvrzený nález kategorie `correctness`
+    /// (`Policy.defaultBlockingCategories`), který nikdo neodmítl.
+    ///
+    /// **Nejcennější je tady druhá polovina.** Přesun do `K merge` se dá udělat i tak, že se nález
+    /// cestou ztratí — a to je horší vada než špatný pruh, protože prázdný odznak vypadá jako
+    /// „čisto“. Tvrdí se proto obojí naráz: pruh **a** to, co o nálezu pořád říká řádek
+    /// (`QueueRow.blocking`), osa filtru „jen blokující“ (`hasBlockingFinding`) a souhrn fronty
+    /// (`Policy.summary`). Mění se **jedině** role nálezu v `mergeOffer`.
+    @Test("Blokující nález nechá PR v K merge a zůstane vidět")
+    func keepsTheBlockingFindingVisible() async throws {
+        // `gh` musí na scéně **existovat**, jinak je brána zavřená a nabídka vyjde `notAllowed` —
+        // tedy zpráva o prostředí testu, ne o nálezu. Nespustí se: je na to `ghCalls()` níž.
+        let (store, _) = await prepared(gh: try fakeGh(mergedOutput))
+        await store.refresh()
+        store.reviewRecords[pr] = ReviewRecord(
+            pullRequest: pr,
+            headSha: "aaaa1111",
+            runs: [makeStoredRun(
+                findings: [makeReported(
+                    file: "libs/input-mapping/src/Table/Strategy/Local.php",
+                    line: 22,
+                    category: "correctness",
+                    summary: "verifyToken() se nevolá."
+                )],
+                headSha: "aaaa1111"
+            )]
+        )
+
+        // Tlačítko: nabídka je `allowed`, tedy `Mergnout…` jde zmáčknout a výstraha je prázdná.
+        let section = try #require(store.branchSection(for: pr))
+        #expect(section.merge == .allowed)
+        #expect(section.merge.obstacles.isEmpty)
+        // Pruh: tatáž odpověď. Kdyby se ty dvě rozešly, byl by PR v `K merge` se zakázaným
+        // tlačítkem — dvě odpovědi na jednu otázku.
+        #expect(store.isMergeReadyForLane(pr))
+        let lane = try #require(store.board.lanes.first { $0.lane == .merge })
+        let entry = try #require(lane.rows.first { $0.id == pr })
+
+        // A nic se neztratilo: odznak na řádku, osa filtru i souhrn počítají dál.
+        #expect(entry.row.blocking == 1)
+        #expect(store.hasBlockingFinding(pr))
+        #expect(
+            Policy.summary(
+                of: [summary()],
+                records: store.reviewRecords,
+                drafts: [:]
+            ).blocking == 1
+        )
+        // A nic se cestou neodeslalo — nabídnout merge znamená nakreslit tlačítko, ne mergnout.
+        #expect(try ghCalls() == 0)
+    }
+
     // MARK: - Záložka (#465)
 
     /// **Po úspěšném mergi se záložka zavře.** Zavírá ji klik na `Mergnout`, tedy člověk — pravidlo

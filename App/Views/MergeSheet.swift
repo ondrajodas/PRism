@@ -34,7 +34,16 @@ struct MergeSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 300, idealHeight: 380)
+        // **Bez `idealWidth`, ale s `idealHeight` — a ten rozdíl je změřený, ne opsaný** (#491).
+        // SwiftUI u sheetu bez `presentationSizing(.fitted)` **zahodí ideální šířku**, ne ideální
+        // výšku: `idealWidth: 520` tady tvrdilo šířku, kterou sheet ani jednou nedostal (otevírá se
+        // v podlaze), kdežto `idealHeight: 380` se uplatňuje a bez něj by se sheet otevíral o 80
+        // bodů nižší. Odebrat obojí by tedy nebyla oprava mrtvé hodnoty, ale změna vzhledu.
+        //
+        // Přidat `.fitted` je **zamítnuté**, tatáž odpověď jako u `BranchPushSheet` (#466): sheet by
+        // se rozšířil na 520 a stal se roztahovatelným, což je nezměřená změna velikosti obrazovky,
+        // kterou člověk takhle už proklikal. Zůstává podlaha, která platí, místo ideálu, který ne.
+        .frame(minWidth: 460, minHeight: 300, idealHeight: 380)
         // Zavřít okno uprostřed volání by znamenalo nevědět, jestli se mergovalo. `gh` má
         // třicetivteřinový timeout, takže je to čekání ohraničené.
         .interactiveDismissDisabled(submission.state == .merging)

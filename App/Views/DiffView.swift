@@ -104,6 +104,10 @@ struct DiffView: View {
     /// `nil` = **tuhle obrazovku nikdo neobnovuje**, takže se ani nepočítá: diff commitu (#317),
     /// rozsahový diff (#284) ani náhled o pull requestu nic neukládají.
     var reportScrollAnchor: ((DiffScrollAnchor?) -> Void)?
+    /// Kam hlásit, že výřez dojel na konec obsahu (#507) — z toho si mezerník bere klávesu.
+    /// `nil` = **tuhle obrazovku nikdo neposlouchá**, takže se ani neměří: rozsahový diff (#284),
+    /// diff commitu (#317) ani náhled o itineráři nic neříkají.
+    var reportContentEnd: ((Bool) -> Void)?
 
     /// Šířka, kterou diff dostal — okno bez railu, **bez levého sloupce** a bez panelu vpravo
     /// (#220, od #506 bez sloupce). Odsud se počítá kolona kódu; o kolonách samotných rozhoduje
@@ -492,6 +496,10 @@ struct DiffView: View {
             }
             .coordinateSpace(.named(Self.contentSpace))
         }
+        // Dojel výřez na konec? (#507) Druhý posluchač geometrie vedle toho níž schválně: ten
+        // počítá pás nasazení a horní hranu, tohle je jeden `Bool`, který se mění na přechodu —
+        // slít je do jedné hodnoty by znamenalo hlásit `top` i tomu, kdo se ptá na konec.
+        .reportsContentEnd(reportContentEnd)
         // **Jediné místo, kam se scrollování zapisuje** (#469). Pás se mění jednou za výřez a čtou
         // ho všechny bloky; `top` se mění při každém snímku a čte ho jenom ukotvená hlavička.
         .onScrollGeometryChange(for: CGRect.self) { $0.visibleRect } action: { _, visible in

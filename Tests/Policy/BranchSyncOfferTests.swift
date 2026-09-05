@@ -362,8 +362,7 @@ struct BranchSyncOfferTests {
                 detail: detail(),
                 commits: [],
                 status: status(ahead: 3, behind: 4),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             )
         )
 
@@ -379,8 +378,7 @@ struct BranchSyncOfferTests {
                 detail: detail(),
                 commits: [],
                 status: status(ahead: 3, behind: 0),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             )
         )
 
@@ -408,8 +406,7 @@ struct BranchSyncOfferTests {
                 detail: detail(base: "master"),
                 commits: [],
                 status: status(),
-                checks: [],
-                blockingFindings: 0
+                checks: []
             )
         )
         let plan = try #require(section.syncPlan)
@@ -429,8 +426,7 @@ struct BranchSyncOfferTests {
                 detail: nil,
                 commits: nil,
                 status: nil,
-                checks: nil,
-                blockingFindings: 0
+                checks: nil
             )
         )
 

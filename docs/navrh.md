@@ -39,22 +39,23 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **50** sekcí. To číslo patří ke
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **51** sekcí. To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
 #152, aniž by to číslo zvedlo), u #515 tu stálo 45 nad šestačtyřiceti, protože sekci 46
-přidalo #517 a číslo nezvedlo (nález Copilota), a u #530 tu stálo 48 nad devětačtyřiceti,
-protože sekci 49 přidalo #529 a číslo nezvedlo — **potřetí tatáž vada**. **Sekci 47 přidalo
-#506** (itinerář review) a číslo zvedlo v témže commitu — o číslo se u dávky nehádá,
-přiděluje ho orchestrátor (#537), takže tenhle údaj patří tomu, kdo sekci kreslí:
+přidalo #517 a číslo nezvedlo (nález Copilota), a u **#526 tu stálo 48 nad devětačtyřiceti**
+— sekce 49 přišla s #529 a číslo zůstalo zase stát. **Sekci 47 přidalo #506** (itinerář review)
+a číslo zvedlo v témže commitu — o číslo se u dávky nehádá, přiděluje ho orchestrátor
+(#537), takže tenhle údaj patří tomu, kdo sekci kreslí:
 
 ```bash
 grep -c '<section class="section" id="s' docs/navrh.html
 ```
 
-**Od #530 je ten počet menší než nejvyšší `id`, a je to v pořádku, ne rozejití:** #530 kreslí
-`s51` nad padesáti sekcemi, protože čísla v dávce přiděluje orchestrátor dopředu a `s50` si vzal
-soused. **Další volné číslo se proto z tohohle počtu nedopočítává** — v dávce ho dostaneš
+**V rozdělané dávce může být ten počet menší než nejvyšší `id`, a je to v pořádku, ne
+rozejití:** #530 kreslilo `s51` nad padesáti sekcemi, protože čísla v dávce přiděluje
+orchestrátor dopředu a `s50` si vzal soused (#526), jehož PR se slil až potom. Mezera se slitím
+zavřela, ale **další volné číslo se z tohohle počtu nedopočítává** — v dávce ho dostaneš
 v zadání (viz *Jak se aktualizuje*), mimo dávku se čte z nejvyššího `id`:
 
 ```bash

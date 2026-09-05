@@ -37,11 +37,19 @@ struct OverviewView: View {
     /// Doroloval se popis na konec? (#506) — z toho je hotová zastávka `Popis a záměr`
     /// v itineráři. `nil` = tuhle obrazovku nikdo neposlouchá (náhledy, sondy).
     var reportReadToEnd: ((Bool) -> Void)?
+    /// Dojel výřez na konec obsahu? (#507) — z toho si mezerník bere klávesu. `nil` = tuhle
+    /// obrazovku nikdo neposlouchá.
+    ///
+    /// **Druhá otázka vedle `reportReadToEnd`, ne tatáž.** Ta první odškrtává zastávku, takže se
+    /// ptá i na to, jestli je popis načtený; tahle rozhoduje jen o klávese, a v `Načítám popis…`
+    /// je odpověď „není kam scrollovat“ pravdivá.
+    var reportContentEnd: ((Bool) -> Void)?
 
     var body: some View {
         ScrollView {
             content
         }
+        .reportsContentEnd(reportContentEnd)
         // **Doroloval se popis na konec?** (#506) Transformace běží při každém přepočtu geometrie,
         // **akce jen při změně hodnoty** (#361), takže se hlásí jedině na přechodu — bezpodmínečný
         // zápis z každého snímku je zakázaná třída (#358). Rozhoduje `Policy.overviewAtEnd`, ať

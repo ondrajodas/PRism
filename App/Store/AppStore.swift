@@ -48,6 +48,18 @@ final class AppStore {
     /// Která záložka je vidět.
     var activeTab: WindowTab = .home
 
+    /// Kdy se která záložka otevřela (#507) — z toho je `12 min` ve stavovém řádku.
+    ///
+    /// **Otevření, ne první pohled a ne práce.** Druhé kliknutí na otevřenou záložku čas
+    /// nenuluje (v prohlížeči taky ne) a nečinnost se neodečítá — je to orientace, ne měření
+    /// práce (viz `Policy.minutesInTab`). Obnovená záložka (#527) se počítá od restartu:
+    /// aplikace předtím neběžela, takže se na ni dřív nikdo koukat nemohl.
+    ///
+    /// Uklízí to **zavření záložky**, ne tik: záložka, kterou seznam z pollingu nepřinesl, je
+    /// normální stav (#527, #531), takže by ji úklid po tiku vyprázdnil zrovna u těch, které
+    /// stojí otevřené nejdéle.
+    var tabOpenTimes: [PRIdentifier: Date] = [:]
+
     /// Běží právě obnovení záložek (#527)? Po tu dobu se **nezapisuje snímek**.
     ///
     /// Obnovení nasazuje taby jednu po druhé přes `setDetailTab(_:for:)`, a ta si zápis vyžádá —
@@ -1416,6 +1428,7 @@ final class AppStore {
     /// dvě volání by znamenala dvě místa, kde se dá zapomenout jedno z nich.
     func openTab(_ pullRequest: PRIdentifier, in tab: PullRequestTab? = nil) {
         if !openTabs.contains(pullRequest) { openTabs.append(pullRequest) }
+        noteTabOpened(pullRequest)
         if let summary = summary(for: pullRequest) { openTabSnapshots[pullRequest] = summary }
         activeTab = .pullRequest(pullRequest)
         selection = pullRequest
@@ -1454,6 +1467,10 @@ final class AppStore {
         // na který se nikdo nedívá. Zahodit ji **smí jedině zavření záložky**: tik, ve kterém PR
         // v seznamu není, je u téhle záložky normální stav, ne důvod ji vyprázdnit.
         adoptedTabs[pullRequest] = nil
+        // Čas otevření odchází se záložkou (#507) — je to stav **otevřené záložky**, ne PR, takže
+        // by po zavření zůstal ležet jako údaj, který nikdo nepřečte, a po znovuotevření by pruh
+        // tvrdil `40 min` nad záložkou otevřenou před vteřinou.
+        tabOpenTimes[pullRequest] = nil
         stopTerminal(for: pullRequest)
 
         guard activeTab == .pullRequest(pullRequest) else { return }

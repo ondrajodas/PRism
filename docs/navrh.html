@@ -350,13 +350,39 @@ code {
   color: var(--ink-3); font-size: 14px; position: relative;
 }
 .rail .ri.on { background: var(--accent-weak); color: var(--accent); }
+/* **Odznak v rohu, ven z rámu ikony** (sekce 50). Do té doby seděl na `top: 1px; right: 0`, tedy
+   uvnitř rámu — a uvnitř rámu nemá kam sednout: kapsle je 24 × 18 na rámu 32 × 30, takže zakryje
+   pravou horní čtvrtinu ikony, ať je posazená kamkoli. Změřeno v běžícím okně: pod `5`, `3`
+   a `30` byla z ikony vidět jen spodní hrana.
+
+   Sedm bodů vpravo je **strop, ne libovolná hodnota**: `.ri` je vystředěná v pruhu 52 bodů,
+   takže po stranách zbývá devět a půl — s posunem o sedm zůstává odznak i s obtahem uvnitř
+   railu. Šířka railu 52 bodů se nemění. */
 .rail .ri .badge {
-  position: absolute; top: 1px; right: 0;
+  position: absolute; top: -5px; right: -7px;
   min-width: 14px; height: 14px; padding: 0 3px;
   border-radius: 7px; background: var(--crit); color: var(--panel);
   font-family: var(--mono); font-size: 9px; font-weight: 700;
   display: grid; place-items: center;
   border: 2px solid var(--panel-2);
+}
+/* **Pruh aktivní sekce na hraně railu** (sekce 50). S odznakem v rohu přestává platit to, čím
+   se aktivní položka poznávala — fialová ikona na fialovém washi je zrovna to, co je pod
+   odznakem. Nese to proto pruh: **tentýž prvek, kterým se na hraně řádku fronty (`.qrow .stripe`)
+   značí stav**, jen svisle a o bod užší, protože v railu se nekříží s ničím.
+
+   `::before` na `.ri.on`, ne vlastní element: rail se v dokumentu kreslí v **jedenácti**
+   sekcích (změřeno grepem na `class="rail`, ne odhadnuto), takže by se element musel dopsat do
+   všech — a je to dekorace jedné položky, ne kus obsahu.
+
+   **Půl bodu v `left` je počítané, ne roztřesené**: pruh má ležet na levé hraně railu, `.ri` je
+   32 bodů vystředěných v **51** (52 minus pravý obrys railu), takže po stranách zbývá 9,5.
+   V aplikaci ta půlka není — `SidebarRail` obrys kreslí jako `overlay` a šířku nekrátí —, takže
+   je to rozdíl dokumentu proti oknu, ne rozdíl návrhu proti aplikaci. Výška 18 bodů je
+   `top: 6` a `bottom: 6` v rámu vysokém 30, tedy počítaná **z řádku**, ne z ikony. */
+.rail .ri.on::before {
+  content: ""; position: absolute; left: -9.5px; top: 6px; bottom: 6px; width: 2px;
+  border-radius: 1px; background: var(--accent);
 }
 .rail .sep { width: 20px; height: 1px; background: var(--line); margin: 6px 0; }
 .rail .grow { flex: 1; }
@@ -1928,6 +1954,30 @@ footer.end {
   border-radius: var(--radius-sm); overflow: hidden;
 }
 .dock-mirror > p { max-width: 46ch; }
+
+/* --- odznak v rohu a pruh aktivní sekce (sekce 50) ------------------------------------
+   Samotný zákres je **jedno pravidlo nahoře v CSS railu**, ne komponenta — proto je tady jen
+   to, čím se ta změna dá ukázat: výřez railu ve dvojnásobku a jeho podoba **před** změnou.
+
+   Zvětšuje se `zoom`, ne `transform: scale()`: `zoom` mění i **rozvržení**, takže si výřez
+   v dokumentu vezme tolik místa, kolik doopravdy zabírá. Se `scale()` by zůstal rám o poloviční
+   výšce a kresba by přetekla přes text pod ní. Rozdíl pěti a sedmi bodů se v kresbě 1 : 1
+   nepozná — odznak je 24 × 18 na railu širokém 52.
+
+   Vlastní třídy, ne `.dock-mirror > .rail`: ta kreslí rail jako **zrcadlo doku** vedle odstavce
+   a nese jeho odsazení; tady stojí rail sám za sebe. Odsazení kolem výřezu je **rezerva, ne
+   nutnost** — odznak i s obtahem končí 2 body před hranou railu (poznámka 183), takže z něj
+   nekouká; s `zoom: 2` je ale rám o dva body od textu pod ním a to je málo. */
+.s50-zoom { zoom: 2; display: inline-block; padding: 7px 9px 7px 0; }
+.s50-rail {
+  box-sizing: border-box; width: 52px; height: 200px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+/* Podoba railu **před** sekcí 50, aby bylo co srovnávat: odznak na ikoně a žádný pruh. Je to
+   jediné místo v dokumentu, kde se stará poloha kreslí — všude jinde platí ta nová, protože
+   `.rail` je chrom okna a kreslí se ve všech sekcích. */
+.s50-old .ri .badge { top: 1px; right: 0; }
+.s50-old .ri.on::before { content: none; }
 
 /* ============================================================
    PRÁZDNÉ STAVY A PORUCHY
@@ -4849,6 +4899,118 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
   </section>
 
 
+  <!-- ====================================================================================
+       SEKCE 50 — Odznak v railu do rohu a pruh aktivní položky
+       Rail je chrom okna, ne obrazovka, takže tahle sekce **nepřekresluje** žádnou z těch
+       předchozích: mění se jedno pravidlo v CSS railu a projeví se ve všech jedenácti sekcích,
+       které rail kreslí. Sekce sama drží jen výřez, srovnání s dneškem a důvody.
+       ==================================================================================== -->
+  <section class="section" id="s50">
+    <div class="section-head">
+      <div class="eyebrow">50 — Odznak v railu do rohu a pruh aktivní položky</div>
+      <h2>Ikona v railu zůstane celá — a aktivní sekce se pozná i pod odznakem</h2>
+      <p class="muted">
+        <strong>Dneska</strong> sedí odznak na ikoně: v běžícím okně je pod <code>5</code>,
+        <code>3</code> a <code>30</code> vidět jen spodní hrana glyfu, takže se položky railu
+        poznávají podle pořadí, ne podle ikony. Návrh si toho všiml sám (poznámka 95 u sekce 27)
+        a vyřešil to tím, že na <strong>aktivní</strong> sekci se odznak nekreslí — tedy že
+        v <em>Dění</em> není vidět, kolik nepřečtených tam je.
+      </p>
+      <p class="muted">
+        <strong>Návrh</strong>: odznak <strong>do rohu</strong> (o 5 bodů výš a o 7 vpravo), aby
+        ikona zůstala celá — a <strong>pruh 2 body na hraně railu</strong> u aktivní položky.
+        Identita aktivní sekce tím přestane stát na barvě ikony pod odznakem, takže odznak může
+        zůstat i na ní. <strong>Šířka railu 52 bodů se nemění</strong>: odznak i s obtahem se do
+        těch sedmi bodů vejde, protože po stranách ikony je devět a půl.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Dneska · odznak na ikoně, aktivní Dění bez počtu</div>
+        <div class="frame flat">
+          <div class="s50-zoom">
+            <nav class="rail s50-rail s50-old">
+              <div class="ri">⌂</div>
+              <div class="ri">☰<span class="badge">5</span></div>
+              <div class="ri">↑<span class="badge">3</span></div>
+              <div class="ri">✎</div>
+              <div class="ri on" title="Dění — co se stalo na pull requestech">◷</div>
+              <div class="sep"></div>
+              <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
+            </nav>
+          </div>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · odznak v rohu, aktivní Dění má pruh i počet</div>
+        <div class="frame flat">
+          <div class="s50-zoom">
+            <nav class="rail s50-rail">
+              <div class="ri">⌂</div>
+              <div class="ri">☰<span class="badge">5</span></div>
+              <div class="ri">↑<span class="badge">3</span></div>
+              <div class="ri">✎</div>
+              <div class="ri on" title="Dění — co se stalo na pull requestech">◷<span class="badge">30</span></div>
+              <div class="sep"></div>
+              <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">183</span>
+        <span class="body">
+          <b>Roh, ne rám</b>
+          <span>Odznak je <b>24 × 18</b> na rámu <b>32 × 30</b>, takže zakryje pravou horní
+          čtvrtinu ikony, ať je posazený kamkoli <em>uvnitř</em>. Musí ven:
+          <code>top: −5, right: −7</code>. Sedm bodů je <b>strop, ne libovolná hodnota</b> —
+          ikona je vystředěná v pruhu 52 bodů, takže po stranách zbývá devět a půl a odznak
+          i s dvoubodovým obtahem se do railu pořád vejde. Do sekce 50 to bylo obráceně a bylo
+          to <b>opravou z minula</b>: odznak se do rámu zatáhl proto, že v 52 bodech není šest
+          bodů navíc — jenže uvnitř rámu není ani ta ikona.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">184</span>
+        <span class="body">
+          <b>Pruh na hraně místo spoléhání na barvu ikony</b>
+          <span>Aktivní položka má fialový podklad a fialovou ikonu — a ta je pod odznakem. Pruh
+          <b>2 body na levé hraně railu</b> je vidět vždycky, i s odznakem, a je to
+          <b>tentýž prvek, kterým okno značí stav na hraně řádku fronty</b>
+          (<code>.qrow .stripe</code>), jen svisle. Výška 18 bodů se počítá <b>z řádku</b>
+          (<code>top: 6</code> a <code>bottom: 6</code> v rámu vysokém 30), ne z ikony — kdyby se
+          řádek změnil, pruh se s ním má hýbat.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">185</span>
+        <span class="body">
+          <b>Mění zapsané rozhodnutí, ne jen kresbu</b>
+          <span>Odznak nepřečtených se v aktivním <em>Dění</em> do sekce 50 <b>nekreslil</b>
+          (poznámka 95), protože by překryl ikonu. S pruhem ten důvod odpadá, takže se kreslí i tam
+          — a <code>Policy.activityBadge</code> o viditelnosti sekce přestává rozhodovat.
+          <b>Značka poslední návštěvy se tím nemění</b>: posouvá ji dál až odchod ze sekce, takže
+          počet uvnitř <em>Dění</em> nespadne na nulu, dokud se na něj koukám. Kdyby padal,
+          zmizel by odznak zrovna ve chvíli, kdy jsem si ještě nic nepřečetl.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">186</span>
+        <span class="body">
+          <b>Je to jedno pravidlo, a proto se to překreslí všude</b>
+          <span>Rail je <b>chrom okna, ne obrazovka</b>, takže tahle sekce žádnou z těch
+          předchozích nepřekresluje — mění se CSS railu a projeví se ve všech sekcích, které rail
+          kreslí. Jediná výjimka je pruh <em>před</em> v levém sloupci nahoře: tam se stará poloha
+          drží schválně, aby bylo co srovnávat.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#uvod"><span class="dir">← předchozí</span><span class="t">Úvod</span></a>
           <a class="next" href="#deni"><span class="dir">další →</span><span class="t">Dění</span></a>
@@ -4913,11 +5075,13 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
             <div class="ri">☰<span class="badge">13</span></div>
             <div class="ri">↑<span class="badge">2</span></div>
             <div class="ri">✎</div>
-            <!-- Odznak s počtem neviděných tady schválně není: na aktivní sekci se nekreslí
-                 (poznámka 95). Odznak v tomhle railu totiž ikonu **překryje** — změřeno na
-                 sekci 21, kde pod `13` a `2` není vidět `☰` ani `↑` —, takže na položce, ve
-                 které zrovna stojím, by zbyl červený puntík bez identity. -->
-            <div class="ri on" title="Dění — co se stalo na pull requestech">◷</div>
+            <!-- Odznak s počtem neviděných tady **je**, a je to změna proti prvnímu zákresu
+                 téhle sekce (sekce 50). Do té doby se na aktivní sekci nekreslil, protože by
+                 ikonu překryl (poznámka 95); s odznakem v rohu a pruhem na hraně railu ten důvod
+                 odpadl. Čtyřka tu sedí s nadpisem dne (`Dnes · 4 nové`) náhodou: nadpis počítá
+                 nepřečtené **v tom dni**, odznak v **celém záznamu**, takže přes půlnoc se ta dvě
+                 čísla rozejdou. -->
+            <div class="ri on" title="Dění — co se stalo na pull requestech">◷<span class="badge">4</span></div>
             <div class="sep"></div>
             <div class="ri" title="Vzhled: podle systému · kliknutím světlý">Ⓐ</div>
             <div class="grow"></div>
@@ -5153,7 +5317,7 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
       <div class="note">
         <span class="num">95</span>
         <span class="body">
-          <b>Odznak je tentýž červený jako u fronty — a na aktivní sekci se nekreslí</b>
+          <b>Odznak je tentýž červený jako u fronty — a od sekce 50 svítí i na aktivní sekci</b>
           <span>Počet neviděných nese <b>stejný odznak</b> jako fronta a vlastní PR; třetí
           barva by z railu udělala legendu, a počítadlo, které otravuje, se spravuje
           <b>posunem značky</b>, ne bledší červenou. Na položce, ve které zrovna stojím, ale
@@ -5162,7 +5326,11 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           <code>↑</code>: dvojmístný i jednomístný odznak vyjde na 20 bodů a sedí na
           <code>top: 1px; right: 0</code>. Na aktivní položce by tak zbyl červený puntík bez
           identity, takže tady ho nekreslím a počet stojí v nadpisu bloku. <b>Ta překrytá ikona
-          je vada dnešního railu</b>, ne tohohle zákresu — patří k ní vlastní issue.</span>
+          je vada dnešního railu</b>, ne tohohle zákresu — patří k ní vlastní issue.
+          <b>Ta issue je hotová a tenhle odstavec je od té chvíle záznam, ne pravidlo</b>:
+          <a class="jump" href="#s50">sekce 50</a> posílá odznak do rohu a aktivní sekci značí
+          pruhem na hraně railu, takže poslední důvod, proč ho na aktivní položce vynechávat,
+          zmizel — a v <em>Dění</em> je konečně vidět, kolik nepřečtených tam je.</span>
         </span>
       </div>
     </div>

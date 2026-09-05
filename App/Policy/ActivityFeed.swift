@@ -29,8 +29,10 @@ struct ActivityFeedDay: Identifiable, Hashable, Sendable {
     /// Co stojí v nadpisu za tečkou: **počet nepřečtených** v tom dni, a když žádné nejsou, celé
     /// datum u relativních titulků. `nil` = nic.
     ///
-    /// Počet patří do nadpisu, ne k odznaku v railu: na **aktivní** položce railu se odznak
-    /// nekreslí (poznámka 95 v návrhu), protože by v tomhle railu překryl ikonu.
+    /// Počet patří do nadpisu, i když odznak v railu od #526 svítí i na aktivní sekci: nadpis
+    /// počítá nepřečtené **v tom dni**, odznak v **celém záznamu**. Přes půlnoc se ta dvě čísla
+    /// rozejdou, a je to tak správně — každé odpovídá na jinou otázku. (Do #526 tu stálo, že na
+    /// aktivní položce se odznak nekreslí; ten důvod odpadl s pruhem na hraně railu.)
     let note: String?
     let rows: [ActivityFeedRow]
 }
@@ -473,12 +475,17 @@ extension Policy {
     /// **Počítá nepřečtené**, ne všechno: počítadlo nad celým záznamem by svítilo navěky a to, co
     /// otravuje, se spravuje **posunem značky**, ne bledší barvou.
     ///
-    /// **Na aktivní sekci se nekreslí** (poznámka 95 v návrhu). V tomhle railu odznak ikonu
-    /// **překryje** — změřeno na dvoumístných počtech fronty —, takže by na položce, ve které
-    /// zrovna stojím, zbyl červený puntík bez identity. Počet je místo toho v nadpisu bloku.
-    static func activityBadge(unread: Int, isActive: Bool) -> Int? {
-        guard !isActive, unread > 0 else { return nil }
-        return unread
+    /// **Kreslí se i na aktivní sekci** (#526, mění rozhodnutí z #414). Do #526 rozhodovalo i to,
+    /// jestli v `Dění` zrovna stojím: odznak seděl **na** ikoně a překryl ji, takže by na aktivní
+    /// položce zbyl červený puntík bez identity (poznámka 95 v návrhu). Od #526 je odznak
+    /// v **rohu** ikony a aktivní sekci značí **pruh na hraně railu** (`SidebarRail`), takže ten
+    /// důvod odpadl — a `Dění` ukazuje počet nepřečtených i zevnitř, což je zrovna to místo, kde
+    /// na něj člověk kouká.
+    ///
+    /// Argument o viditelnosti proto **zmizel celý**, ne že by se ignoroval: parametr, o kterém se
+    /// nerozhoduje, je jen místo, kam se dá omylem sáhnout.
+    static func activityBadge(unread: Int) -> Int? {
+        unread > 0 ? unread : nil
     }
 
     // MARK: - Řádky a bloky

@@ -281,8 +281,12 @@ nic.
 a nad ním pruh `Tady jsem skončil`, tedy tentýž mechanismus, jaký drží konverzaci. Značka se posouvá
 **až při odchodu ze sekce**: kdyby ji přepsal vstup, přestalo by být nové zrovna to, na co koukám.
 Řadí se **od nejnovějšího** jako commity, takže pruh stojí pod novinkami. Odznak v railu počítá
-**nepřečtené** a na aktivní sekci se nekreslí (odznak by v tom railu překryl ikonu, takže by z něj
-zbyl červený puntík bez identity); počet je proto v nadpisu bloku — `Dnes · 4 nové`.
+**nepřečtené**, a od #526 svítí **i uvnitř `Dění`**: do té doby se na aktivní sekci nekreslil,
+protože seděl na ikoně a překryl ji, takže by z něj zbyl červený puntík bez identity. Teď je
+v **rohu** ikony a aktivní sekci značí **pruh 2 body na hraně railu** — tentýž prvek, kterým okno
+značí stav na hraně řádku fronty —, takže ten důvod odpadl. Nadpis dne (`Dnes · 4 nové`) zůstává,
+a **není to totéž číslo**: nadpis počítá nepřečtené **v tom dni**, odznak v celém záznamu. Přes
+půlnoc se ta dvě čísla rozejdou, a je to tak správně — každé odpovídá na jinou otázku.
 
 **Každý řádek někam vede a je to v něm napsané** (`→ Nálezy`, `→ Konverzace`, `→ Commity`,
 `→ Přehled`, `→ Průběh`), ne šipka bez obsahu — a jde to tou samou cestou jako klik na notifikaci
@@ -648,6 +652,13 @@ místo jen vlevo. Do té doby se zalamovalo o jejich šířku dřív, takže se 
 kreslila přes poslední řádky bloku. Počty `+X` a `−Y` jsou obarvené jako znak změny v samotném řádku — zeleně
 a červeně, v řadě záložek PR i v hlavičkách souborů, takže „velký přírůstek“ a „velké mazání“
 jsou poznat na první pohled.
+
+**Pull request nad 300 souborů diff nemá, a je to napsané** (#542). GitHub API ho nad tímhle
+stropem nevydá (`HTTP 406`), takže místo diffu stojí věta o stropu — **s číslem přečteným
+z odpovědi**, ne dosazeným — a `Otevřít na GitHubu` místo `Zkusit znovu`, protože druhý pokus
+vrátí totéž. **Zbytek pull requestu se čte dál**: přehled, commity, kontroly ani konverzace na
+diffu nestojí. Do #542 z toho byla obecná hláška „Diff se nepodařilo načíst“, tedy tatáž jako
+u vypršelého tokenu.
 
 **Hlavička souboru nese celou cestu** (#219) — složka tlumeně, jméno tučně (`src/Vault/`**`SecretClient.php`**).
 Do té doby tam bylo jen jméno, takže u dvou souborů, které se jmenují stejně, nešlo poznat, který
@@ -2415,7 +2426,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
 | **Novinky v aplikaci** | Okno mluví o tom, co vyšlo na GitHubu, ne o spuštěném buildu — verze v bundlu tagy nikdy nesledovala, takže by tvrdila `0.1`. Značka je poslední **viděný tag** v předvolbách aplikace (stav aplikace, ne nastavení k editaci) a historie se drží v paměti do konce běhu: disková cache by dala offline režim, ale je to další store s vlastním úklidem. |
 | **Vzhled okna** | Tmavý, světlý, nebo podle systému — ovládá se **z levé lišty**, kde ho má návrh, a rozhoduje o tom jediný řádek (`NSApp.appearance`), ne větvení podle režimu. Barvy zůstávají v paletě, kde jednu hodnotu vybírá dynamická systémová barva podle vzhledu, ve kterém se zrovna kreslí; přepínač proto volí režim, ne paletu, a platí naráz pro všechna okna. Uplatňuje se na tom jednom místě, kterým konfigurace vchází do běžící aplikace — ve view by se minul okna, které zrovna není otevřené. |
-| **Kapsle a odznaky** | Stav a počet nese v okně **mono kapsle** (`.pill` z návrhu: mono 10,5, odsazení 7 a 2) a metrika je na jednom místě (`designPill`) — do #348 stála v sedmi kopiích a jedna z nich se rozešla na `11` bez mono, takže v hlavičce karty popisu vypadala jako jiný druh prvku. Mono není ozdoba: odlišuje **stav** od labelu z repozitáře, který je slovo a sází se v UI fontu. Odznak s počtem v railu je od #366 **červený a uvnitř rámu ikony**, jak ho kreslí návrh — fialový akcent v tomhle okně znamená „tady jsi“, takže odznak v téže barvě neříkal nic, a text v barvě plochy okna má na červené kontrast 5,4 proti 3,3 u bílé. |
+| **Kapsle a odznaky** | Stav a počet nese v okně **mono kapsle** (`.pill` z návrhu: mono 10,5, odsazení 7 a 2) a metrika je na jednom místě (`designPill`) — do #348 stála v sedmi kopiích a jedna z nich se rozešla na `11` bez mono, takže v hlavičce karty popisu vypadala jako jiný druh prvku. Mono není ozdoba: odlišuje **stav** od labelu z repozitáře, který je slovo a sází se v UI fontu. Odznak s počtem v railu je od #366 **červený** a od #526 sedí **v rohu ikony**, jak ho kreslí návrh — fialový akcent v tomhle okně znamená „tady jsi“, takže odznak v téže barvě neříkal nic, a text v barvě plochy okna má na červené kontrast 5,4 proti 3,3 u bílé. Uvnitř rámu ikonu překrýval, takže od #526 jde ven z něj a aktivní sekci značí pruh na hraně railu. |
 | **Rozměry v okně** | Šířka se v zanořeném stromu **předává, ne vyjednává**. `frame(maxWidth: .infinity)` na každé úrovni zanoření stojí ~5,5× na úroveň, takže okno na PR s 2000 změněnými řádky tuhlo dvacet minut na plném CPU — a to v obou tabech, protože o obsah vůbec nešlo, jen o tvar stromu. Šířka se proto měří jednou na hranici obsahu tabu a posílá dolů. Pružná výška v líném seznamu je tatáž chyba a řešila se dřív u dvojice řádků diffu. |
 | **Dostupnost služeb** | Jede na skutečném provozu, ne na sondě: `gh auth status` na timeru by stál spawn procesu a přístup do keychainu — a projde i tehdy, když skutečné volání selže na rate limitu. Status pages jsou proti tomu levné (`components.json` s `ETagem`) a odpovídají na to, co z volání nezjistíme: jestli je problém na jejich straně. |
 

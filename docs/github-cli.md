@@ -40,6 +40,24 @@ Funguje jedině GraphQL mutace `requestReviews` s `botIds`, kterou dělá
 ./bin/copilot-review.sh <číslo PR>
 ```
 
+### Co Copilot v tomhle repu nachází opakovaně
+
+Tohle je materiál k **vlastní revizi diffu**, která je podmínkou pushnutí (`CLAUDE.md`,
+*Pracovní postup*) — projde se **dřív**, než se Copilot pustí. Pět vzorů, na které v tomhle
+repu upozorňuje znovu a znovu; do #570 stály v `CLAUDE.md`, ale odpovídají na „proč to bolí“,
+takže patří sem:
+
+| Vzor | Proč to bolí |
+|---|---|
+| `try?`, prázdný `catch`, `?? default` nad operací, která může selhat | Ztracená data vypadají v UI jako „nic tu nebylo“. Ptej se: pozná uživatel, že se to nepovedlo? Když ne, patří to do stavu |
+| Text v UI, který tvrdí víc, než data unesou | „Reviewer nenahlásil žádný nález“ zní jako čisto i tehdy, když se nálezy nemají kde vzít |
+| Stav, který se drží, ale nikdo ho nečte | Buď to zobraz, nebo nedrž — jinak je to mrtvá váha, která svádí spolehnout se na ni |
+| Kontrola, která jinde v repu je, a tady chybí | Typicky ochrana proti mazání mimo cache. Když už někde existuje, patří na jedno místo |
+| Čtení nebo dekódování všeho, když stačí předfiltr | U operací, které běží při každém uložení nebo tiku, to není detail |
+
+**Když nález přijde, oprav třídu, ne výskyt** — Copilot vidí vždycky jen nový diff, takže na
+druhý výskyt téhož vzoru upozorní až v dalším kole.
+
 ### Výsledek se čte ze dvou míst a pod dvěma jmény
 
 Review píše `copilot-pull-request-reviewer[bot]`, ale inline komentáře **`Copilot`**. Filtr
@@ -63,13 +81,79 @@ nálezy** pod hlavičkou, že nové komentáře nejsou.
 ### Když nedoběhne vůbec
 
 Do review napíše jen „Copilot encountered an error and was unable to review this pull request“
-a příčina je vidět **jen v logu akce**. Jsou na to dvě známé příčiny a **pozná se to podle toho,
-jestli job vůbec běžel**:
+a příčina je vidět **jen v logu akce**. Jsou na to tři známé příčiny a **pozná se to podle toho,
+jestli job běžel a jak dlouho**:
 
-- **Job běžel a spadl** → velikost `CLAUDE.md` ([záznam
+- **Job běžel a spadl uprostřed** → velikost `CLAUDE.md` ([záznam
   rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-malý-a-je-to-podmínka-ne-estetika-162-znovu-447-potřetí-496)).
+- **Job spadl do čtyř vteřin na `Resource not accessible by integration`** → strana GitHubu,
+  viz níž (#507).
 - **Job nikdy nezačal** → request se spotřeboval, viz níž. Log v tom případě **není** (stažený zip
   má 138 B), takže se čte stav runu, ne jeho výstup.
+
+### Třetí příčina: `Resource not accessible by integration` (#507)
+
+**Job běžel, ale spadl na první API volání** — a to znamená, že to velikost `CLAUDE.md` **není**:
+padá dřív, než se z repa cokoli přečte. V logu to vypadá takhle (čtvrtá vteřina jobu):
+
+```
+Analyzing ondrajodas/PRism PR #565 (autofind.js version: 0.1.124)
+Fetching PR metadata for ondrajodas/PRism#565
+HttpError: Resource not accessible by integration - .../rest/pulls/pulls#get-a-pull-request
+Error creating PR review request: … Failed to fetch PR metadata
+```
+
+Je to **strana GitHubu, ne stav repa**, a pozná se to podle dvou věcí: (1) job doběhne
+za **4 vteřiny** a jméno má normální (`Running Copilot Code Review`), takže o mrtvý request
+z předchozí sekce nejde; (2) **padá i na jiných PR téhož repa naráz** — u #507 spadla ve stejné
+minutě i kola na větvi jiného slotu. `CLAUDE.md` měla 98 708 B, tedy pod stropem, a ta samá
+velikost prošla o šest hodin dřív třikrát za sebou.
+
+**Vyžádat znovu zkus jednou; víc ne.** U #507 dalo druhé kolo tutéž chybu za stejnou dobu. Pak už
+je jediné, co se dá udělat, **napsat to do popisu PR jako neověřenou mezeru** a spolehnout se na
+vlastní revizi diffu — ta je stejně **podmínka pushnutí**, ne náhrada za Copilota.
+
+**Třetí pokus na PR #565 dopadl stejně** (run `33919369283`, chyba v 21:05:06Z) a přinesl jeden
+údaj navíc: mezi proměnnými prostředí v kroku *Processing Request* stojí
+**`COPILOT_PERMISSION_GATE_REASON: ineligible_app`**. Vypisuje se **před** prvním voláním, takže
+se z něj dá tahle příčina poznat dřív než z `HttpError` — a potvrzuje, že jde o oprávnění
+integrace na straně GitHubu, ne o stav repa. **Odstup mezi pokusy nepomohl**: tři kola v rozmezí
+osmnácti minut skončila týmž řádkem, takže se u téhle příčiny nevyplatí čekat a zkoušet znovu.
+
+**A trvá to přes hodiny, ne přes minuty** (#542, PR #564). Tam se to zkusilo **pětkrát** za necelé
+tři hodiny (20:46, 20:48, 20:56, 23:16 a 23:31) a pokaždé to spadlo stejně: `Processing Request`
+vypsal `COPILOT_PERMISSION_GATE_REASON: ineligible_app` a hned nato `HttpError` nad
+`GET /pulls/564`. Run přitom pokaždé **vznikl a běžel** (poslední `33921491420`), takže
+o spotřebovaný request z odstavce níž nejde a `union: false` na tom nic nezmění. Dokud výpadek na
+straně GitHubu trvá, **hlásí se to jako neověřená mezera** — nemergne s tím, že „Copilot nic
+nenašel“: nic nepřečetl.
+
+**A není to jedno PR, je to celé repo** (#526, PR #566, runy `33920187418`, `33920459855`,
+`33920609845`): tatáž chyba na **čtvrté** větvi v tomtéž okně, jen na jiném diffu. Dohromady se to
+v jedné hodině potkalo na **#507, #542, #491 a #526** — takže se u téhle příčiny nemá cenu ptát,
+co je jiného na tom mém diffu.
+
+```bash
+# Rozpoznání: běžel job, a proč spadl.
+gh api repos/{owner}/{repo}/actions/runs/{id}/jobs --jq '.jobs[] | "\(.name) \(.conclusion)"'
+gh run view {id} --log-failed | grep -E "HttpError|PRism#[0-9]+"
+# Nebo z logu, když `gh run view` na stažení nestačí:
+gh api repos/{owner}/{repo}/actions/runs/{id}/logs > /tmp/copilot.zip
+unzip -o -q /tmp/copilot.zip -d /tmp/copilotlog && grep -h 'HttpError' /tmp/copilotlog/*/*.txt
+```
+**Počtvrté u #491 / PR #567, a nejostřejší doklad, že to není o diffu, je časový.** Tři kola nad
+**třemi různými PR** (`33923112018` → #567, `33923128007` → #569, `33922924268` → #568) vznikla
+během **171 sekund** a spadla všechna na tomtéž řádku; dohromady jich za pětatřicet minut bylo osm,
+napříč větvemi čtyř slotů. Diff, velikost ani stav jednoho PR tedy nerozhodují. `CLAUDE.md` měla
+tentokrát **99 047 B** — pořád pod stropem, o 339 B blíž než u #507, takže ani rostoucí soubor tu
+příčinu nevysvětluje. Vyžádání znovu (`33921009691`, o hodinu později znovu `33923112018`) spadlo
+pokaždé stejně, takže **odstup ani opakování nepomáhá**: pravidlo *zkus jednou, víc ne* platí i tady.
+
+**Přežilo to i do dalšího dne a padá celé repo naráz** (#563, PR #568, run `33922924268`): týž
+`ineligible_app`, týž `HttpError`, a ve stejné hodině spadla stejně kola na **třech** dalších
+větvích jiných slotů. To „naráz“ je nejrychlejší způsob, jak tuhle příčinu odlišit od té první —
+velikost `CLAUDE.md` by shodila jedině tu větev, na které se soubor nafoukl. A **na délku jobu se
+u rozpoznání nespoléhej**: tenhle běžel 24 s a padl až v poslední z nich.
 
 ### Když se request spotřebuje mrtvým jobem
 

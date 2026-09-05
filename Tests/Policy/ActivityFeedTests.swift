@@ -432,14 +432,22 @@ extension ActivityFeedTests {
         #expect(Policy.unreadActivity(events, since: Date(timeIntervalSince1970: 400)) == 0)
     }
 
-    /// Odznak **počítá nepřečtené**, ne celý záznam — a na aktivní položce se nekreslí, protože
-    /// by v tomhle railu překryl ikonu (poznámka 95 v návrhu).
-    @Test("Odznak: nula a aktivní sekce se nekreslí")
+    /// Odznak **počítá nepřečtené**, ne celý záznam — a `nil` má od #526 jediný důvod: **není co**.
+    ///
+    /// Do #526 do toho padala i aktivní sekce (poznámka 95 v návrhu): odznak seděl na ikoně
+    /// a překryl ji. Od #526 je v rohu a aktivní sekci značí pruh na hraně railu, takže se počet
+    /// ukazuje i zevnitř `Dění` — a parametr o viditelnosti z funkce zmizel celý. Výčet je proto
+    /// vyčerpávající proti **jednomu** vstupu, ne proti dvojici: nula, jedna, víc a dvojciferný.
+    ///
+    /// Dvojciferný počet tu není na okrasu: kvůli němu #526 vzniklo (pod `30` nebyla ikona vidět),
+    /// takže je to zároveň záznam toho, že se ta hodnota kreslit **má** — kde a jak, měří
+    /// `RailBadgeTests`.
+    @Test("Odznak: kreslí se počet nepřečtených, nula ne")
     func theBadgeStaysAwayWhenItHasNothingToSay() {
-        #expect(Policy.activityBadge(unread: 4, isActive: false) == 4)
-        #expect(Policy.activityBadge(unread: 4, isActive: true) == nil)
-        #expect(Policy.activityBadge(unread: 0, isActive: false) == nil)
-        #expect(Policy.activityBadge(unread: 0, isActive: true) == nil)
+        #expect(Policy.activityBadge(unread: 0) == nil)
+        #expect(Policy.activityBadge(unread: 1) == 1)
+        #expect(Policy.activityBadge(unread: 4) == 4)
+        #expect(Policy.activityBadge(unread: 30) == 30)
     }
 }
 
@@ -514,8 +522,8 @@ extension ActivityFeedTests {
         #expect(days[2].note == nil)
     }
 
-    /// Počet nepřečtených patří do **nadpisu bloku**, protože na aktivní položce railu se odznak
-    /// nekreslí — a je to počet **za ten den**, ne za celý záznam.
+    /// Počet nepřečtených v nadpisu dne je **za ten den**, ne za celý záznam — a od #526 to je
+    /// jiné číslo než odznak v railu, který svítí i na aktivní sekci a počítá celý záznam.
     @Test("Nadpis bloku nese počet nepřečtených toho dne")
     func countsUnreadPerDay() {
         var calendar = Calendar(identifier: .gregorian)

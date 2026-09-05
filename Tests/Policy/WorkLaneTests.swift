@@ -435,7 +435,6 @@ extension WorkLaneTests {
             .draftPullRequest,
             .notOpen(.merged),
             .failingChecks(["test"]),
-            .blockingFindings(1),
         ]
         for obstacle in real {
             #expect(!Policy.isMergeReady(.blocked([obstacle])), "\(obstacle)")
@@ -446,8 +445,10 @@ extension WorkLaneTests {
             )
         }
         #expect(!Policy.isMergeReady(.absent))
-        // Že je jich jedenáct, drží výčet: nová překážka si vynutí rozhodnutí, jestli pruh
-        // `K merge` zavírá.
-        #expect(real.count == 11)
+        // Že je jich deset, drží výčet: nová překážka si vynutí rozhodnutí, jestli pruh `K merge`
+        // zavírá. **Od #563 je jich o jednu míň** — vlastní blokující nález mezi překážky merge
+        // nepatří vůbec, takže se sem nedostane ani jako výjimka (`BranchMergeTests
+        // .neverSpeaksAboutFindings` hlídá tentýž výčet z druhé strany).
+        #expect(real.count == 10)
     }
 }

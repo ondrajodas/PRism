@@ -3023,7 +3023,7 @@ o implementaci, tedy to, co zákres nechal na ní.
 | **Identita položky je deterministická, u zastaralých nálezů klíčovaná hlavou** | `UUID` na položku | Téhož rozchodu si aplikace všimne při **každém** dotažení detailu, takže by z jednoho stavu byla stránka řádků. U ostatních druhů nese identita okamžik — PR se do fronty umí vrátit, a to je novinka; proto se řádky o nových PR zapisují až za `isWorthRetrying`, ve stejné chvíli jako snímek |
 | **Značka poslední návštěvy, posunutá při odchodu** | Příznak `přečteno` u položky; nebo posun při vstupu | Příznak je druhá odpověď na tutéž otázku a zápis na každý řádek. Posun při vstupu by přepsal zrovna to, na co koukám — tatáž nesymetrie jako `seedVisitBaseline(for:)` (#335). Rozhoduje **změna viditelnosti** (`syncActivityVisit`), ne to, které tlačítko ji způsobilo, takže je jedno, kolikrát se to zavolá |
 | **Bez značky je nové všechno** | Nic (jako `Policy.changes(in:since:)`, kde `nil` znamená prázdno) | Záznam vzniká teprve za běhu aplikace, takže „nikdy jsem tu nebyl“ znamená, že jsem opravdu nic z toho neviděl. U PR by to naopak znamenalo vypsat celou jeho historii |
-| **Odznak se na aktivní sekci nekreslí** | Kreslit ho vždycky; nebo bledší barvu | V tomhle railu odznak ikonu **překryje** (změřeno na dvoumístných počtech fronty), takže by na položce, ve které stojím, zbyl červený puntík bez identity. Počet je proto v nadpisu bloku. Bledší červená by z railu udělala legendu — a počítadlo, které otravuje, se spravuje posunem značky |
+| **Odznak se na aktivní sekci nekreslí** — **zrušeno v #526**, viz [záznam rozhodnutí](#záznam-rozhodnutí--odznak-v-railu-do-rohu-a-pruh-aktivní-sekce-526-mění-366-a-414) | Kreslit ho vždycky; nebo bledší barvu | V tomhle railu odznak ikonu **překryl** (změřeno na dvoumístných počtech fronty), takže by na položce, ve které stojím, zbyl červený puntík bez identity. Bledší červená by z railu udělala legendu — a počítadlo, které otravuje, se spravuje posunem značky. **#526 to obrátilo**: odznak jde do rohu a aktivní sekci značí pruh na hraně railu, takže důvod odpadl a `Dění` počet ukazuje i zevnitř. Nadpis dne zůstává, ale je to **jiné číslo** (den proti celému záznamu) |
 | **Čtyři prázdna, ne dvě** | Nechat jen klid a zakázané oprávnění (jak kreslí zákres) | Vypnutý přepínač by pak vypadal jako odmítnuté oprávnění a posílal člověka do Nastavení systému, kde s tím nic neudělá. Každý stav se spravuje jinde, takže má vlastní východ |
 | **Ztracený záznam je vlastní prázdno a přebíjí ostatní** | Prázdno jako u prvního spuštění (rozbitý soubor → prázdný seznam → klid); nebo hlášku do stavového řádku k `unreadableReviewFiles` | Klidné *Za poslední dny se nic nestalo* by nad ztracenou historií tvrdilo víc, než data unesou — je to přesně ten vzor, na který si `CLAUDE.md` stěžuje. Stavový řádek je od té otázky daleko: člověk se ptá **nad tou obrazovkou**, proč je prázdná. Chybějící soubor se proto od nečitelného odlišuje dřív než dekódováním, protože první spuštění je normální stav |
 | **Klik jde vstupním bodem z #409 a tab jmenuje** | Vlastní `openTab` + `setDetailTab`; nebo tab nejmenovat jako klik na notifikaci | Dvě cesty k témuž skoku se rozejdou v tom, na co se zapomene (u #409 to byl `activeTab`). Tab se jmenuje proto, že řádek dění **ví, o čem je** — „tam, kde jsi skončil“ by poslalo jinam, než na co člověk klikl |
@@ -3416,6 +3416,72 @@ byla **stráž, která tvrdila něco jiného než test, který ji hlídá**:
 - Grep na české prózy v shell skriptech (`grep -nP …`) na tomhle stroji **nejde spustit** —
   systémový `grep` je `ugrep` bez `-P`. Pravidlo platí, jen se ten grep musí pustit jinak; #496
   na text pravidla **nesahalo**, aby se změna pravidla nepromíchala s přeskládáním souboru.
+
+#### Počtvrté (#570): stěhují se odstavce, ne se zkracují věty — a cíl je 70 kB, ne 40
+
+**Spouštěčem byla zase ta hranice, ne spadlý Copilot.** `CLAUDE.md` měl **99 047 B**, tedy
+necelý kilobajt pod ~100 kB, a příští issue, které do souboru sáhne, by ji překročilo. Dvě sekce
+dělaly **56 %** souboru: `## Konvence` 29 102 B a `## Tvrdé podmínky` 26 188 B.
+
+**Postup: stěhovat celé odstavce, ne zkracovat věty.** #447 i #496 zkracovaly formulace a obojí
+skončilo výš, než mířilo. Tady se rovina řezu položila jinam a **na jedno místo**: v odstavci,
+kde stojí věta pravidla a hned za ní jeho zdůvodnění, se řeže **za tou větou**. Věta pravidla,
+tvrdá čísla (sedm souborů, devět metod, tři soubory, jedna metoda), výčty zakázaného, grepy
+a odkaz zůstávají; „proč to bolí“, naměřená čísla a historie kol jdou za odkaz.
+
+**Nejdůležitější zjištění je, že se skoro nic nestěhovalo — protože už to v `docs/` bylo.**
+Před prací se pro každý odstavec, který měl odejít, pustil grep na jeho klíčové jméno
+(`Policy.metadataEditing`, `orderFrontUnanimated`, `Source.condensed`, `DiffMarginAnchors`,
+`badgeLabel`, `rebasedFrom`, `zdiff3`, …) přes `docs/`. Ze **zhruba padesáti** takových sond
+vyšly prázdné **tři**:
+
+- `| grep -q` s `pipefail` a `SIGPIPE` (#61) — nikde v `docs/`;
+- bundle konvence `CFBundleIconName`, `CFBundleDevelopmentRegion` a `stringsdata` (#83, #184);
+- tabulka pěti vzorů, které **Copilot v tomhle repu nachází opakovaně**.
+
+První dvě proto zůstaly v `CLAUDE.md` **beze změny** (nebylo kam je stěhovat a jsou krátké),
+třetí se **přestěhovala** do
+[`docs/github-cli.md`, *Co Copilot v tomhle repu nachází opakovaně*](../../github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně)
+a v `CLAUDE.md` po ní zbyla věta pravidla, jednořádkový výčet těch pěti vzorů a odkaz. Všechno
+ostatní byla **duplikace**: pravidlo si k sobě přitáhlo zdůvodnění, které vedle něj už stálo
+v `docs/` za odkazem. To je i vysvětlení, **proč soubor roste**, a je to zobecnitelné: růst
+nedělají nová pravidla, ale zdůvodnění dopisovaná ke starým.
+
+**Cíl 70 kB se nesplnil, vyšlo 74 329 B — a je to zapsané, ne zameteno.** Ze 99 047 B je to
+**−25,0 %** a ~26 kB pod hranicí, u které Copilot přestává doběhnout, takže praktický účel je
+splněný s rezervou. Poslední 4 kB se ale nedaly vzít jinak než mazáním pravidel, což zadání
+zakazovalo. Doloží to složení hotového souboru změřené na konci:
+
+| Co | Bajtů |
+|---|---|
+| tučný text (věty pravidel a zdůrazněné výčty) | 22 116 |
+| cíle odkazů do `docs/` | 5 919 |
+| tabulky (moduly, údržba dokumentace, sady nástrojů) | 5 618 |
+| bloky ```bash``` (grepy a příkazy) | 5 827 |
+| zbytek prózy, která ta pravidla drží pohromadě | ~34 850 |
+
+Každý další průchod už vydával **pod 500 B** a platilo se za něj čitelností. Kontrolní číslo
+v `CLAUDE.md` proto zůstává **hranice 100 kB**; 74 kB je od ní dost daleko.
+
+**Čtyři invarianty se ověřovaly měřením, ne okem** — skripty ve scratchpadu, jednorázově:
+
+1. **Inventář vět pravidel.** Mechanická definice: z textu složeného do logických řádek se bere
+   tučný úsek na začátku řádky (po volitelné odrážce), plus položky seznamu, které tučně
+   nezačínají. Před prací **159**, po ní **týchž 159** — porovnáno `diff`em nad seřazenými
+   seznamy, ne počtem.
+2. **Grepy.** Všech **32** příkazů z `CLAUDE.md` se pustilo před prací i po ní do souboru
+   a výstupy se porovnaly `diff`em: shodné do posledního řádku (kromě `wc -c < CLAUDE.md`,
+   který má měřit rozdíl).
+3. **Nic se neztratilo z repa.** Viz sondy výš.
+4. **Kotvy.** Skript nad slugy všech nadpisů v `docs/` a `README.md` (s pravidlem, že GitHub
+   mění **každou mezeru zvlášť** a k opakovanému slugu přidává `-1`): **116 odkazů s kotvou
+   před, 85 po, rozbitých 0 v obou případech**. Úbytek je slitím druhých a třetích odkazů
+   u téhož pravidla, ne zahozením cíle.
+
+**Dvě zjištění z #496 se potvrdila znovu a zůstávají mezerou:** `grep -nP` nad `bin/*.sh` na
+tomhle stroji **nejde spustit** (systémový `grep` je bez `-P`) a grep na systémové barvy v `App/`
+vychází dnes **prázdný**, ačkoli je u něj napsané, že je to výčet k posouzení. Ani na jedno se
+u #570 nesahalo — bylo by to změna pravidla promíchaná s přeskládáním souboru.
 
 ### Release notes jsou záznam jedné změny, ne deník projektu (#125)
 
@@ -6077,10 +6143,13 @@ se s tou první rozejde (tatáž úvaha jako u `designPill`, #348). Je na to tvr
 v jednom testu — pruh **a** obsah řádku —, protože samotný přesun by tu informaci ztratil a to je
 horší vada než špatný pruh.
 
-**Hranice, kterou to nemění: blokující nález je skutečná překážka merge.** PR s blokujícím
-nálezem (`correctness`, `security`, `data-loss` — `Policy.defaultBlockingCategories`) není
-mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje o tom `mergeOffer`, ne
-`outranksMerge`. Zvenčí to vypadá jako „předání zase přebilo merge“, ale je to jiná věta.
+**~~Hranice, kterou to nemění: blokující nález je skutečná překážka merge.~~ — ZRUŠENO #563.**
+Platilo to takhle: PR s blokujícím nálezem (`correctness`, `security`, `data-loss` —
+`Policy.defaultBlockingCategories`) není mergnutelný, takže zůstává v `Předat agentovi`, a rozhoduje
+o tom `mergeOffer`, ne `outranksMerge`. Od #563 nález překážka **není**, takže mergnutelný PR patří
+do `K merge` i s ním — a je to dopočítání téhož pokynu, ne obrat (viz [záznam rozhodnutí
+u #563](#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563)). Zvenčí to vypadalo jako
+„předání zase přebilo merge“, ale byla to jiná věta.
 **Našlo se to při stavbě sondy** — první verze scény měla nálezy kategorie `correctness`
 a vyrendrovala `Předat agentovi`, tedy přesně to, co se opravovalo; sonda by tak tvrdila
 opak toho, co měla ukázat. Že tohle nebyl případ z proklikání, je vidět v jeho řádku:
@@ -6116,10 +6185,12 @@ není poznat, že to nevyřízené je zrovna cizí odpověď ve vlákně. Nebylo
 tuhle informaci nesl jedině **pruh** —, takže je to cena rozhodnutí, ne nová vada. Kdyby začala
 chybět, je to **nová kresba** (značka v řádku, nebo tvar pilulky), ne návrat výjimky.
 
-**Hranice, kterou to nemění (a je to tatáž jako v prvním kole): blokující nález je skutečná
-překážka merge.** PR s blokujícím nálezem není mergnutelný, takže zůstává v `Předat agentovi`;
-rozhoduje o tom `mergeOffer`. Ověřeno v testu z obou stran, včetně toho, že **nemergnutelný**
-`changed` v `Předat agentovi` zůstává.
+**~~Hranice, kterou to nemění (a je to tatáž jako v prvním kole): blokující nález je skutečná
+překážka merge.~~ — ZRUŠENO #563.** Platilo to takhle: PR s blokujícím nálezem není mergnutelný,
+takže zůstává v `Předat agentovi`; rozhoduje o tom `mergeOffer`. Ověřeno bylo v testu z obou stran,
+včetně toho, že **nemergnutelný** `changed` v `Předat agentovi` zůstává — a **ta druhá polovina
+platí dál**, jen se „nemergnutelný“ přestal skládat z nálezů (viz [záznam rozhodnutí
+u #563](#záznam-rozhodnutí--blokující-nález-není-překážka-merge-563)).
 
 **5. ~~`Předat agentovi` jde na poslední místo~~ — ZRUŠENO třetím kolem.** Zapsané tady zůstává
 proto, že jinak by z historie vypadl commit, který pořadí přeskládal, a příští session by ho
@@ -6605,7 +6676,290 @@ fixture nemá — hlásila tedy „nic se nepřepsalo“. Šířka se proto vzal
 z `CGWindowListCopyWindowInfo` nad **běžící** aplikací, ne z čísla, ze kterého počítá zákres, a
 scéna vyrostla na celé `ContentView`.
 
-## Záznam rozhodnutí — otevření souboru v editoru (#530)
+### Záznam rozhodnutí — mezerník jako další zastávka (#507)
+
+Zadání znělo: *mezerník = další zastávka, `Krok 4 z 9 · 12 min` ve stavovém řádku, patka itineráře
+s klávesami*. Nejtěžší na tom není žádná z těch tří věcí, ale to, že **mezerník normálně
+scrolluje** — vzít si ho znamená vzít ho někomu, kdo ho zrovna potřebuje.
+
+1. **Rozhoduje `Policy`, ne view, a rozhoduje o třech vstupech naráz.** `Policy.itineraryStep`
+   dostane fokus v poli, polohu výřezu a kurzor a vydá klávesu v **jediné kombinaci ze šesti**.
+   Kdyby to byl `if` ve view, nešlo by se na to zeptat vyčerpávající maticí — a chyba by se
+   projevila jako „scroll občas přeskočí“, ne jako rozbitá zkratka.
+
+2. **Neměřený konec obsahu je `nil`, ne `false`, a přesto se rozhodne stejně.** Zamítnutá varianta
+   byla `Bool` s výchozím `false`: chová se stejně, ale zahazuje rozdíl mezi „změřeno, není na
+   konci“ a „nikdo se neptal“ — a ten rozdíl je odpověď na otázku, proč mezerník v `Konverzaci`
+   nedělá nic. Je to tatáž úvaha jako `unknown` u `Policy.codeReading` (#383).
+
+3. **Konec se měří jen ve třech tabech, a je to hranice, ne mezera.** Zamítnuto bylo připojit
+   měření na obsah detailu jedním modifikátorem: `onScrollGeometryChange` platí na **všechny**
+   scroll views v podstromu, takže by v diffu hlásily i vnořené vodorovné scrollery a bloky kódu.
+   Zamítnuto bylo i vyjmenovat všech osm tabů: v pěti z nich dráha nemá zastávku, takže o „dočteno“
+   nemají co říct. Zbyly tři, a **je to obor hodnot `ItineraryStop.tab`** — tvrdí se to stráží,
+   která zdroják detailu srovnává s tím výčtem, ne seznamem napsaným do testu.
+
+4. **Fokus v poli se nedal odvodit z tabu.** `Policy.claimsReturnShortcut` (#452) je precedens,
+   který **nefunguje**: composer rozdělaného review stojí v panelu vedle `Přehledu` i `Změněných
+   souborů`, takže by odpověď „podle tabu“ byla vedle přesně tam, kde na ní záleží nejvíc. Vznikl
+   proto `TextFieldFocus`, hlásí do něj čtyři místa a podává se prostředím — jednou, na kořen okna,
+   ze stejného důvodu jako `terminalFocused` (#459): předávat to argumentem znamená na jedno pole
+   zapomenout. **Množina, ne `Bool`**, protože pořadí hlášení při přeskoku fokusu není zaručené.
+
+5. **Kurzor procházení je stav pohledu, ne odškrtnutí.** Tvrdá podmínka #506 („hotovo se pozná
+   z dat“) platí beze změny: mezerník **nic neodškrtává**, jen posouvá pohled. Precedens je
+   `FindingCursor` (#187) a bere se z něj i to, že **nesmí přetéct mezi pull requesty**. Zamítnuta
+   byla varianta odvodit pozici z aktivního tabu bez stavu: tab a zastávka nejsou jedna ku jedné
+   (`Přehled` má dvě zastávky, `Změněné soubory` taky), takže by se z toho dala poskládat buď
+   nekonečná smyčka, nebo dráha, která se zasekne.
+
+6. **`Krok` v pruhu a `Itinerář` v hlavičce mají stejné počítadlo a jiné minuty.** Bylo by
+   pohodlnější psát na obou místech totéž číslo, jenže pruh má odpovědět na „dodělám to dneska?“ —
+   a na to odpovídá **uplynulý** čas, ne odhad zbývajícího. Rozlišuje se slovem `Krok` a větou
+   v nápovědě; počítadlo zůstává jedno (`AppStore.itineraryProgress`), aby se ta dvě místa
+   nerozešla.
+
+7. **Nečinnost se neodečítá, a je to rozhodnutí, ne zjednodušení.** Odečítat by znamenalo
+   rozhodovat, co je práce — a aplikace by odpovídala špatně v obou směrech (čtení diffu bez
+   jediného kliknutí prací je, otevřená záložka přes oběd ne). `12 min` je orientace; že čas běží
+   i vleže, stojí v nápovědě, aby to číslo nikdo nečetl jako výkaz.
+
+8. **Mezerník je druhá holá klávesa v katalogu a je to vědomé.** #515 si u `⏎` zapsalo, že smí být
+   bez modifikátoru proto, že domácí záložka nemá textové pole; tady je polí sedm, takže si klávesu
+   hlídá `itineraryStep`. Ty dvě se nepotkají — `⏎` platí jedině na desce, `␣` jedině v detailu PR.
+   `␣` (U+2423) se kreslí glyfem, protože ho monospace písmo kapslí **má** (glyf 1330); `⎵`
+   (U+23B5) nemá ani jedno z písem, takže se do katalogu nedostal.
+
+**Zapsaná mezera:** že klávesa doopravdy zabere a že ji v poli sebere text, se v harnessu ověřit
+nedá — testovací host nedostane aktivaci, takže nemá key okno. Poslední kolo dělá člověk na běžící
+aplikaci, jako u celého katalogu zkratek (#441).
+
+### Záznam rozhodnutí — pull request nad stropem souborů (#542)
+
+`gh pr diff` odpoví nad 300 souborů `HTTP 406` (*„the diff exceeded the maximum number of files
+(300)“*), a do #542 z toho v okně byla věta `gh skončil s kódem 1.` se syrovou odpovědí pod ní.
+Tedy **tatáž cesta jako u vypršelého tokenu a nedostupného repa**: tři různé příčiny, jeden text.
+Vyšlo to z ostrých dat u #501 — `home-assistant/core#181088` (3 632 souborů).
+
+Rozhodnutí je jedna věta: **tuhle jednu příčinu rozpoznat a pojmenovat, a zbytek okna nechat
+k užitku**. Co se u toho rozhodlo jinak, než jak by to šlo napsat nejrychleji:
+
+1. **Rozhoduje `Policy` výčtem, ne `if` ve view.** `DiffState.failed` nese `DiffFailure`
+   (`tooManyFiles(limit:response:)` / `other`) místo hotové věty, protože **věta se z příčiny
+   odvodit dá, kdežto příčina z věty ne** — a `if` nad textem od `gh` ve `PullRequestDetailView`
+   je zrovna ten tvar, který se v tomhle repu stěhuje do `Policy`.
+
+2. **Strop se pozná z odpovědi, ne z počtu souborů.** Kolik souborů pull request mění, aplikace
+   v tu chvíli neví: dozvěděla by se to z toho diffu, který nedorazil. Signál je proto věta
+   z odpovědi GitHub API a **číslo v ní se čte**, nikdy nedosazuje — `Policy.diffFileCap`
+   vydá `nil`, když v odpovědi číslo nestojí, a věta pak žádné netvrdí. Tři sta je dnešní hodnota
+   GitHubu, ne naše rozhodnutí.
+
+3. **Rozpoznání se neváže na třídu chyby.** `GitHubError` třídí podle znění a `gh` ho měnit může,
+   takže se text bere přes `GitHubError.responseText`. Kdyby GitHub jednou napsal `not found` do
+   téže věty, byl by z toho `notFound` a rozpoznání vázané na `commandFailed` by **tiše** přestalo
+   platit — a tichých selhání je tohle issue plné bez toho, abychom si přidávali další.
+
+4. **U stropu se nenabízí `Zkusit znovu`.** Druhý pokus vrátí totéž, dokud se nepřepíše historie.
+   Místo něj stojí `Otevřít na GitHubu`; rozhoduje o tom `DiffFailureAction`, tedy zase `Policy`.
+
+5. **Zamítnuto: stránkovat `/pulls/{n}/files`.** Je to jiná cesta, jiný formát než unified diff
+   a znamenalo by to **druhý rozbor vedle `DiffParseru`** — dva parsery na jednu obrazovku se
+   rozejdou při první úpravě. Navíc: review na pull requestu o třech tisících souborech nemá
+   smysl pouštět, takže by ta práce vydala obrazovku, kterou nikdo nedočte. Kdyby to někdo chtěl,
+   je to **vlastní issue s vlastním měřením**, ne součást tohohle.
+
+6. **Zamítnuto i to druhé, a je to změřené: dotáhnout diff přes `compare/<base>...<head>`.**
+   Ten endpoint strop **nemá** — `gh api repos/home-assistant/core/compare/759e4658…29f9b353
+   --header "Accept: application/vnd.github.diff"` vrátil **14,8 MB** unified diffu s kódem 0.
+   Jenže tím se problém jen posune o jedno místo dál: 14,8 MB je rozbor a kresba 3 632 souborů
+   v okně, které se na velkém pull requestu už jednou zaseklo (#220), a **žádné měření o tom, že
+   to projde, nemáme**. Zároveň je to užitečná informace, ne slepá ulička: znamená, že rozsahový
+   diff (#284) ani diff commitu (#317) tuhle třídu selhání nemají, takže klasifikace patří jen
+   na cestu `loadDiff`.
+
+7. **Review se neblokuje.** Reviewer čte diff z pracovní kopie (`git diff <base>...HEAD`), kam
+   strop GitHub API nedosáhne, takže „nad tímhle nejde spustit review“ by bylo tvrzení, které
+   neplatí. Co se **nestane**, je že by nedoručený diff cokoli spustil — a nad záložkou otevřenou
+   odkazem automat neběží (#531). Tvrdí to test se **zapnutým** automatickým režimem.
+
+8. **Mockup se nekreslí a brána na tohle nepadá.** Nová obrazovka ani nový prvek to není: mění se
+   věta v chybovém stavu, který v návrhu je, a tlačítko pod ní. Schvaluje se **obrázek**, a ten
+   se nemění.
+
+**Zobecnitelné pravidlo:** *chybový stav, do kterého padá víc příčin, je stav bez informace.*
+Jakmile se do jedné věty slijí tři různé odpovědi na otázku „co s tím mám dělat“, přestane ta věta
+odpovídat na cokoli — a pozná se to až tehdy, když na ni někdo narazí v provozu.
+
+### Záznam rozhodnutí — `idealWidth` odchází, `idealHeight` zůstává (#491)
+
+**Rozhodnutí:** u `ReviewSubmissionSheet`, `MergeSheet` a `AgentPromptSheet` se z rámce odebrala
+`idealWidth` a **`idealHeight` zůstala**; u okna nastavení (`SettingsView`) se odebralo obojí.
+`presentationSizing(.fitted)` se nikam nepřidalo.
+
+**Proč zrovna takhle, u každého místa zvlášť:**
+
+- **`MergeSheet`** — tentýž případ jako `BranchPushSheet` u #466, který si tehdy do komentáře
+  napsal, že „sahat na velikost cizí hotové obrazovky sem nepatří“. Tohle je to místo, kde se na ni
+  sahá — a odpověď je táž: `.fitted` by sheet rozšířilo z 507 na 520 a udělalo ho roztahovatelným,
+  což je změna velikosti obrazovky, kterou člověk takhle proklikal.
+- **`ReviewSubmissionSheet`** — totéž, o stupeň důrazněji: je to poslední obrazovka před tím, než
+  něco opustí stroj, a celý její smysl je, že je na ní vidět to, co odejde. Změnit jí šířku znamená
+  přesázet ten výpis.
+- **`AgentPromptSheet`** — v komentáři u něj stála úvaha, že se u #333 musel posunout **celý** rozsah
+  (560 → 840, 720 → 1 080), protože „kdyby se zvedl jen `idealWidth`, zmenšené okno by spadlo zpátky“.
+  Měření tu úvahu **potvrdilo tvrději, než se tehdy vědělo**: rozhoduje `minWidth` a jenom on, takže
+  ideál 1 080 nebyl slabší mez, ale žádná. Závěr té úvahy se tím nemění, jen se z něj stává důvod,
+  proč ideál odejít může.
+- **`SettingsView`** — jiný případ, ne sheet. `presentationSizing` je modifikátor prezentace, takže
+  na okno `Settings` scény nedosáhne a ideál oživit **nejde**; okno si bere systémovou výchozí
+  velikost a jen ji zvedne na obsahové minimum. Odebralo se proto obojí.
+
+**Co se změnilo proti zadání issue, a proč.** Issue nabídlo dvě cesty a odebrání `ideal*` popsalo
+jako „změnu bez vizuálního projevu (mrtvá hodnota)“. To platí jen o šířce: `idealHeight` si sheet
+vezme i bez `.fitted` (změřeno, tabulky v `docs/testovani.md`). Odebrat celý zápis by tedy tři hotové
+obrazovky srazilo o 140, 80 a 200 bodů — pod hlavičkou úklidu. Zůstala proto polovina, která funguje.
+
+**Zamítnuté varianty:**
+
+1. **Přidat `.fitted`** — u všech tří. Byla by to nezměřená změna velikosti hotové obrazovky a spadá
+   pod jedinou schvalovací bránu v repu (zákres do návrhu a souhlas), ne pod opravu rozvržení.
+2. **Odebrat `ideal*` celé** — to, co issue navrhovalo. Zamítnuto měřením, viz výš.
+3. **Přestěhovat podlahy do `Policy`** — `Policy.rawSessionSheet*` a `Policy.codeSheetSizing` tam
+   jsou proto, že se z nich **počítá** (ořez uložené velikosti o okraje obrazovky, výběr profilu
+   podle druhu obsahu). Tyhle tři sheety nic neukládají a nic z obrazovky neberou, takže konstanta by
+   jen přestěhovala literál — a testu, který ji hlídá, by vzala možnost spadnout, protože by
+   porovnával view sám se sebou. V téhle změně tedy žádná rozhodovací logika do `Policy` nepřibyla,
+   protože žádná nevznikla.
+4. **Udělat z grepu v `CLAUDE.md` „musí vyjít prázdný“** — nejde: mimo sheety je `idealWidth`
+   v obyčejném pružném rámci (`DiffSearchBar`) v pořádku. Zbývá tedy výčet k posouzení, ale ta část,
+   která se tvrdit dá, se přesunula do testu (`SheetSizingTests`: sheet s `idealWidth` musí mít
+   `presentationSizing`, roster sheetů je uzavřený).
+
+**Zobecnitelné pravidlo:** *pravidlo zapsané o jedné ose neplatí automaticky o druhé.* #327 změřilo
+a zapsalo šířku; čtyři místa v repu si to přečetla jako pravidlo o `ideal*` a jedno issue z toho
+udělalo zadání. Když se zadání odvolává na starší měření, patří k práci ověřit, že to měření tvrdí
+zrovna to, co se z něj cituje — a ne to, co z něj plyne „přece“.
+
+### Záznam rozhodnutí — odznak v railu do rohu a pruh aktivní sekce (#526, mění #366 a #414)
+
+Zákres je sekce **50** návrhu (poznámky 183–186), odsouhlasený. Tady je jen to, co z kresby
+neplyne, a **co se cestou rozhodlo jinak, než bylo zapsáno dřív**.
+
+**Odznak jde ven z rámu ikony, a je to obrácení druhé poloviny #366.** #366 řešilo dvě věci naráz:
+barvu (fialový akcent → `--crit`) a polohu (šest bodů za rámem → dovnitř). Barva platí dál, poloha
+ne — uvnitř rámu 34 × 30 nemá odznak 24 × 18 kam sednout, takže „uvnitř rámu“ znamenalo „přes
+ikonu“: v běžícím okně byla pod `5`, `3` a `30` vidět jen spodní hrana glyfu a položky railu se
+poznávaly podle **pořadí**. Nové `top: −5, right: −7` je proti #366 posun o sedm doprava místo šesti;
+rozdíl proti tehdejšímu stavu není v tom čísle, ale v tom, že **odznak je červený a identitu aktivní
+sekce mezitím převzal pruh**. Šířka railu 52 bodů se nemění a je to podmínka: ikona je vystředěná,
+takže po stranách zbývá devět, a odznak i s obtahem končí na 49.
+
+**Aktivní sekci značí pruh na hraně, ne barva ikony — a je to výpůjčka, ne nový prvek.** Zvažovaly
+se tři cesty:
+
+1. **Nechat identitu na ikoně a odznak na aktivní položce vynechat** (stav do #526). Zamítnuto: je
+   to zrovna ta věta, kvůli které v `Dění` nebylo vidět, kolik nepřečtených tam je — tedy počet
+   chybí právě na obrazovce, kde se na něj člověk dívá.
+2. **Zvýraznit rám položky výrazněji** (silnější wash, obrys). Zamítnuto: pořád je to plocha **pod**
+   odznakem, takže dvoumístný počet ji zase zakryje; a druhá intenzita washe by v railu zavedla
+   škálu, kterou paleta nemá.
+3. **Pruh na hraně railu.** Přijato. Je vidět vždycky, s odznakem i bez něj, a je to **tentýž
+   prvek, kterým `PullRequestRow` značí stav na hraně řádku fronty** — okno tím nezískává nový
+   slovník, jen ho použije svisle.
+
+**Řádek položky si bere celou šířku railu, tlačítko zůstává 34 bodů, a to pořadí je podstatné.**
+Pruh visí devět bodů nalevo od rámu ikony, takže `overlay` na tlačítku by mířil mimo plochu rodiče
+(#483). Nabízelo se rám tlačítka rozšířit na 52 — zamítnuto: klikací plocha by se nafoukla na celou
+šířku railu a **klik do prázdna vedle ikony by přepínal sekci**. `frame(width:)` nasazený **za**
+`buttonStyle` tlačítko jen vystředí, takže zbytek řádku zůstane netečný. Šířku drží
+`SidebarRail.width`, protože si ji od #526 berou dvě místa a dvě čísla by se rozešla.
+
+**`Policy.activityBadge` přišla o parametr, ne o rozhodnutí** (mění #414). Zapsané rozhodnutí z #414
+znělo: *na aktivní sekci se odznak nekreslí, protože by v tomhle railu ikonu překryl a zbyl by
+červený puntík bez identity*. Ta věta byla pravdivá **kvůli poloze odznaku**, ne kvůli tomu, že by
+počet na aktivní položce nebyl zajímavý. S odznakem v rohu a pruhem na hraně obojí odpadá, takže
+`isActive` z funkce zmizel **celý**. Zvažovalo se parametr nechat a ignorovat ho (menší diff,
+snadnější návrat) — zamítnuto: parametr, o kterém se nerozhoduje, je mrtvá váha a zároveň místo,
+kam se dá omylem sáhnout; je to tatáž třída jako *stav, který se drží, ale nikdo ho nečte*.
+
+**Značka poslední návštěvy se nemění, a je to hranice, ne opomenutí.** Posouvá ji dál až **odchod**
+ze sekce (#414), takže počet uvnitř `Dění` na nulu nespadne. Nabízelo se ji posunout vstupem, když
+už se odznak uvnitř kreslí — zamítnuto ze stejného důvodu jako v #414: zmizel by zrovna ve chvíli,
+kdy jsem si ještě nic nepřečetl.
+
+**Zákres je jedno pravidlo v CSS railu, takže se překreslily i starší sekce.** Rail je **chrom
+okna, ne obrazovka**, takže pravidlo *novější sekce se do starší nepřekresluje* na něj nesedí —
+sedí na něj to druhé, *záznam dneška se překreslit musí*. Sekce 50 proto drží jen zvětšený výřez,
+srovnání s dneškem a důvody; jediné místo v dokumentu, kde se stará poloha kreslí dál, je levý
+sloupec toho srovnání (`.s50-old`).
+
+### Záznam rozhodnutí — blokující nález není překážka merge (#563)
+
+**Ruší zapsané rozhodnutí z #465** — to, podle kterého `Policy.mergeOffer` vydávalo dvanáctý
+případ `MergeObstacle.blockingFindings(N)` (*„Reviewer hlásí blokující nález.“*). Staré zůstává
+v záznamech u #465 i u #515 přeškrtnuté, protože podle něj je postavená scéna sondy desky
+a v obou kolech #515 se o něj opíralo tvrzení „tohle se nemění“.
+
+**Co to vyrobilo.** [`keboola/platform-libraries#566`](https://github.com/keboola/platform-libraries/pull/566)
+ležel v `Předat agentovi` s `mergeable: true`, `mergeable_state: clean`, bez draftu a s checky
+22 pass / 22 skipping / 0 fail. Držel ho tam **jeden** potvrzený nález kategorie `correctness`
+z `code-review:code-review` (`libs/input-mapping/src/Table/Strategy/Local.php:22`), který nikdo
+neodmítl.
+
+**Proč se pokyn z #515 splnil jen napůl.** Třetí proklikání #515 znělo *„co je mergeable, tak by
+mělo být k mergnutí“*. Implementace z toho vzala jedině to, že slévatelnost přebíjí předání
+(`Policy.lane`), ale `isMergeReady(_:)` se dál ptalo `mergeOffer` — a ta mezi překážky počítala
+**náš vlastní názor na kód**, ne stav pull requestu na GitHubu.
+
+**Rozhodnutí (4. 9. 2026, uživatel).** Blokující nález přestává být překážkou merge **úplně**:
+mizí z `Policy.mergeOffer`, ne jen z `isMergeReady`. Je to tatáž třída, kterou `isMergeReady` už
+jednou vyřešilo pro `notAllowed` — brána odesílání mluví o tom, co smí *aplikace* —, jen o úroveň
+dál: nález mluví o tom, co si o kódu myslí *reviewer*.
+
+**Zamítnutá varianta: „jen pruh, tlačítko blokuje dál“.** Tedy nechat překážku ve výčtu a vyřadit ji
+jenom z `isMergeReady`, jako druhou výjimku vedle `isPublishingGate`. Zamítnuto, protože **pruh
+a tlačítko musí odpovídat stejně**: PR v `K merge` se zašedlým `Mergnout` jsou dvě odpovědi na jednu
+otázku, a to je v tomhle repu zakázaný vzor (tatáž úvaha jako u „řádek stavu a zašednutí skládá
+jedno místo“ v #465). Nález je vidět jako nález — v panelu, na řádku a v okraji —, ne jako zámek na
+nevratné akci.
+
+**Případ se ruší i s větou.** Držet `blockingFindings` v enumu bez volajícího by byl přesně ten
+vzor, na který Copilot v tomhle repu chodí (*stav, který se drží, ale nikdo ho nečte*). Mrtvá větev
+v kreslení po něm nezbyla: výstraha v `PanelBranchView` skládá `obstacles.map(\.sentence)`, takže se
+nikdy nekreslila podle případů. Odešel s ním i parametr `blockingFindings:` ze `branchSection(…)`
+a `mergeOffer(…)` a privátní `AppStore.blockingFindingCount(for:)`.
+
+**Druhé rozhodnutí (tamtéž): spadlý check blokuje dál.** `mergeable: true` je věta o konfliktu, ne
+o zelené CI. Nabídnout nevratnou akci nad rozbitým buildem je jiná třída než nabídnout ji nad
+nálezem, o kterém člověk ví — nález je věta, kterou si člověk přečte a rozhodne se; červený check je
+stav, o kterém se rozhodovat nedá. Přísnost vůči `UNSTABLE` z #465 tedy zůstává, a protože se ty dvě
+věty rozejít nesmí, stojí obě v **jednom** testu.
+
+**Co se tím nemění.** Blokující nález se dál počítá do odznaku na řádku (`QueueRow.blocking`), do
+osy filtru *jen blokující*, do souhrnu fronty (`Policy.summary`), do notifikace o doběhlém review
+a do pořadí řádků (`Policy.urgency`). Mění se **jedině** jeho role v `mergeOffer`. Vzhled se nemění
+vůbec — mění se, do kterého pruhu řádek spadne —, takže `docs/navrh.html` zůstal beze změny.
+
+**Co to udělalo s testy.** `WorkLaneTests.respectsEveryRealObstacle` prochází **deset** překážek
+místo jedenácti; `BranchMergeTests.doesNotBlockOnABlockingFinding` drží obě věty z rozhodnutí nad
+scénou z #566 a `neverSpeaksAboutFindings` prochází výčet všech jedenácti případů (včetně
+`notAllowed`) s vyčerpávajícím `switch`em, který novou překážku nepustí přeložit. Nejcennější je
+`AppStoreMergeTests.keepsTheBlockingFindingVisible`: tvrdí, že se **nic neztratilo** — pruh
+`K merge`, nabídka `allowed`, odznak na řádku, osa filtru i souhrn —, protože přesun do `K merge` se
+dá udělat i tak, že nález cestou zmizí, a prázdný odznak vypadá jako „čisto“. Sonda sekce `Větev`
+přišla o scénu `vetev-blokujici-nalez`: od #563 by se nakreslila stejně jako `vetev-zeleno`, a dvě
+kopie jednoho snímku tvrdí, že je co srovnávat.
+
+**Ověřeno vložením regrese, a chytla se dvakrát.** Vrácení případu do enumu položí
+`neverSpeaksAboutFindings` **při překladu** (`switch must be exhaustive`); s doplněným `case`
+v tom `switch`i pak vrácení `blockingFindings` do `mergeOffer` shodí
+`keepsTheBlockingFindingVisible` **čtyřmi** tvrzeními (nabídka, prázdný výčet, předfiltr desky
+a chybějící řádek v pruhu `K merge`). `WorkLaneTests` v tom **nefigurují** — jejich výčet je
+literál v testu, takže o novém případu enumu nevědí; hlídají, co `isMergeReady` s překážkou udělá,
+ne jaké překážky existují.
+
+### Záznam rozhodnutí — otevření souboru v editoru (#530)
 
 Nález v kódu se dal do #530 přečíst, ne otevřít. Rozhodnutí, která u toho padla:
 

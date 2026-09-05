@@ -71,10 +71,12 @@ extension AppStore {
         Policy.unreadActivity(activityEvents, since: activityVisitSnapshot)
     }
 
-    /// Odznak u `Dění` v railu. `nil` = nekreslí se — buď není co, nebo v té sekci zrovna stojím
-    /// (v tomhle railu by odznak ikonu překryl).
+    /// Odznak u `Dění` v railu. `nil` = nekreslí se, a od #526 je to jediný důvod: **není co**.
+    /// Do #526 do toho padalo i „v té sekci zrovna stojím“ — odznak tehdy seděl na ikoně a překryl
+    /// ji. Od #526 je v rohu a aktivní sekci značí pruh na hraně railu, takže se počet nepřečtených
+    /// ukazuje i zevnitř `Dění`.
     var railActivityCount: Int? {
-        Policy.activityBadge(unread: unreadActivityCount, isActive: isActivityVisible)
+        Policy.activityBadge(unread: unreadActivityCount)
     }
 
     /// Je sekce `Dění` zrovna na obrazovce? Sekce railu je obsah **domácí** záložky, takže nad

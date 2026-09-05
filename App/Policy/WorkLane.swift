@@ -192,6 +192,12 @@ extension Policy {
     /// stojí *pull request*. S výchozím (vypnutým) odesíláním by jinak pruh `K merge` byl
     /// navždycky prázdný, a to je tvrzení o nastavení, ne o práci.
     ///
+    /// **Druhá taková věc se nepřidávala, ta se z výčtu rovnou vyřadila** (#563). Vlastní blokující
+    /// nález je tatáž třída o úroveň dál — je to názor *revieweera* na kód, ne stav pull requestu —,
+    /// jenže výjimka **tady** by znamenala PR v `K merge` se zakázaným `Mergnout`, tedy dvě
+    /// odpovědi na jednu otázku. Přestal být překážkou v `mergeOffer(…)`, takže se pruh a tlačítko
+    /// nemají jak rozejít a `isPublishingGate` zůstává jediná výjimka.
+    ///
     /// `absent` je **`false`**: to je cizí PR, kde se merge nekreslí vůbec — a i kdyby se sem
     /// takový dostal, „nevím“ je na desce vždycky odpověď `waiting`.
     static func isMergeReady(_ offer: MergeOffer) -> Bool {

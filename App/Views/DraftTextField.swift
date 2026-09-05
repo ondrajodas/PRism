@@ -36,6 +36,12 @@ struct DraftTextField: View {
 
     @State private var selection: TextSelection?
 
+    /// Má pole fokus? Hlásí se do okna (#507), protože mezerník si klávesu nesmí vzít nikomu,
+    /// kdo do ní píše mezeru. **Jedno místo pro všechny čtyři composery** — tentýž důvod, proč je
+    /// tady rámeček: dvě kopie by se rozešly a poznalo by se to tím, že v jednom z nich mezerník
+    /// uprostřed psaní odskočí na jinou zastávku.
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         if let suggestions {
             framed(TextEditor(text: $text, selection: $selection))
@@ -52,6 +58,8 @@ struct DraftTextField: View {
     private func framed(_ editor: some View) -> some View {
         editor
             .font(.callout)
+            .focused($isFocused)
+            .reportsTextFieldFocus(isFocused)
             .scrollContentBackground(.hidden)
             // `map` schválně: `Double?` se na `CGFloat?` implicitně nepřevede, i když
             // `Double` na `CGFloat` ano.

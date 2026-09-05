@@ -425,7 +425,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Nepřečtené a bloky: **bez značky je nepřečtené všechno** (opačně než u konverzace — je u toho
   napsané proč), pruh `Tady jsem skončil` se kreslí před **první už viděnou** položkou a bez novinek
   se nekreslí vůbec, den se jmenuje `Dnes` / `Včera` / datem a počet v nadpisu je **za ten den**, ne
-  za celý záznam. Odznak sekce mlčí nad nulou **i na aktivní sekci**.
+  za celý záznam. Odznak sekce mlčí nad nulou — a od #526 už **ne** na aktivní sekci: tam svítí,
+  takže nadpis dne a odznak v railu jsou **dvě různá čísla** (den proti celému záznamu).
 
   `AppStore` proti skutečnému `ActivityLog`u a `AnnouncedPullRequests` nad dočasnou složkou
   (`AppStoreFeedTests`, 18 testů): že **vypnuté notifikace zápis nezastaví** (banner nedorazí, řádek
@@ -887,10 +888,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   - **`BranchMergeTests`** — čistá funkce vyčerpávajícím výčtem. Nejcennější jsou tvrzení, ve kterých
     se merge **nenabídne**: cizí PR (tam se nekreslí ani nadpis sekce), vypnutá brána, **nenačtený
     stav větve** (`nil` i `.loading` i `.failed` — u nevratné akce je „nevím“ vlastní odpověď, ne
-    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev,
-    **červený check** a **vlastní blokující nález**. K tomu dvě rozhodnutí, která se dají potichu
-    obrátit: **běžící a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem**
-    (nad větou „je konflikt“ by věta „nevím“ nedávala smysl).
+    slabší „nejde to“), chybějící hlavička nebo commity, konflikt, větev pozadu, chráněná větev
+    a **červený check**. K tomu dvě rozhodnutí, která se dají potichu obrátit: **běžící
+    a přeskočený check merge nezakazují** a `UNKNOWN` se **nepřebíjí konfliktem** (nad větou „je
+    konflikt“ by věta „nevím“ nedávala smysl).
+
+    **Vlastní blokující nález v tom výčtu od #563 není** a jsou na to dvě tvrzení, která se nesmí
+    rozejít, proto stojí v **jednom** testu (`doesNotBlockOnABlockingFinding`): scéna
+    z `keboola/platform-libraries#566` (slévatelná, čistá, 22 zelených a 22 přeskočených checků)
+    vyjde `allowed`, a tatáž scéna s jedním **červeným** checkem `blocked`. K tomu je
+    `neverSpeaksAboutFindings` — **výčet všech jedenácti překážek**, ve kterém žádná věta nemluví
+    o nálezu, a uvnitř **vyčerpávající `switch`**, který nová překážka nepustí přeložit. Že se
+    nález cestou **neztratil**, tvrdí `AppStoreMergeTests.keepsTheBlockingFindingVisible` nad celým
+    řetězcem (pruh `K merge`, tlačítko `allowed`, odznak na řádku, osa filtru, souhrn) — a je to
+    z celé té sady nejcennější tvrzení: přesun do `K merge` se dá udělat i tak, že nález zmizí,
+    a prázdný odznak vypadá jako „čisto“.
+
+    **Ověřeno vložením regrese, a chytla se dvakrát na dvou různých místech.** Vrácení případu do
+    enumu položí `neverSpeaksAboutFindings` **při překladu** (`switch must be exhaustive`), takže se
+    do běhu ani nedojde; s doplněným `case` v tom `switch`i pak vrácení `blockingFindings` do
+    `mergeOffer` shodí `keepsTheBlockingFindingVisible` **čtyřmi** tvrzeními — nabídka, prázdnota
+    výčtu, předfiltr desky i to, že řádek v pruhu `K merge` **není**. **`WorkLaneTests` v tom
+    nefigurují**, a je dobré to vědět: jejich výčet je literál v testu, takže o novém případu enumu
+    nevědí — hlídají, co `isMergeReady` s překážkou udělá, ne jaké překážky existují.
 
     Řádky stavu se tvrdí **textem, ne strukturou**: `3 commity · 2 checky` / `zeleno` proti
     `1 commit · 2 checky` / `1 neprošel` — skloňování je v nich to, co se rozbije nejtišeji. A
@@ -2239,6 +2259,36 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   kontrola meze shodí test na strop (`count` vyjde 200 místo 10).
 - **`AppStore` — diff** — proti fake gateway: načtení, cache podle `updatedAt`, opakování
   po selhání a zahození diffu PR, které zmizelo ze seznamu.
+- **PR nad stropem souborů (#542)** — `DiffFailureTests` (`Policy`) a `AppStoreDiffCapTests`
+  (store). Fixture je **skutečná odpověď** `gh pr diff` nad `home-assistant/core#181088`
+  (`Tests/Fixtures/gh/pr-diff-too-large.txt`, 3 632 souborů, `HTTP 406`) — vymyšlený literál by
+  tady netvrdil nic, protože celé rozpoznání stojí na znění, které píše GitHub. `Policy` se pouští
+  **výčtem**: strop se pozná ze skutečné odpovědi; číslo se z ní **čte** (odpověď s `(500)` vydá
+  500, odpověď bez čísla vydá `nil` a věta pak žádné číslo netvrdí); `(-5)`, `(+300)` ani
+  `(https://api.github.com/…)` za strop neprojdou; strop se pozná **i** tehdy, když chyba spadne
+  do jiné třídy (`notFound`, `rateLimited`, `malformedOutput`) — a všech osm ostatních chyb
+  `GitHubError` projde beze změny do věty s nabídkou `Zkusit znovu`. Ve storu je **to nejcennější
+  negativní**: nad pull requestem, ke kterému diff nedorazil, se **nespustí review** — a to se
+  zapnutým automatickým režimem, aby test tvrdil něco i tehdy, kdyby plánovač na přijatou záložku
+  jednou sáhl. K tomu, že se **zbytek okna dá číst**: záložka je `PullRequestTabContent.detail`
+  (ne porucha), konverzace se načte a všechny taby jdou přepnout. **Ověřeno vložením regrese**
+  třikrát: vypnuté rozpoznání shodí devět tvrzení v `Policy` a obě tvrzení ve storu; dosazený
+  strop `300` místo čteného shodí test na odpověď bez čísla; vyndaná kontrola číslic vydá ze
+  `(-5)` záporný strop.
+
+  **Jak to vypadá, ukazuje sonda** `DiffFailureRenderProbe` (`PRISM_MEASURE=1`, výstup do
+  `PRISM_RENDER_DIR`) — obě podoby selhání ve dvou šířkách, aby se strop a obyčejné selhání daly
+  přečíst vedle sebe. **Klikáním v běžící aplikaci to nešlo**: přepnout na `Změněné soubory` je
+  klik a `osascript` v té session neměl asistenční přístup (`-25211`); synteticky poslaný
+  `CGEvent` se taky nedoručil. Sonda má u sebe **tři kroky v pořadí, které je podmínka**: kolo
+  smyčky (ať se `.task` rozjede), **čekání na jev** (#296 — smyčka drží hlavní actor, takže se
+  stav v ní nehne ani po 1,5 s, změřeno) a druhé kolo na překreslení. Bez toho prvního se čekání
+  vrátí hned nad **starým** `.failed` a vyfotí se `Načítám diff…`.
+
+  **Že se strop týká jen `gh pr diff`, je změřené, ne odhadnuté**: `gh api
+  repos/home-assistant/core/compare/759e4658…29f9b353 --header "Accept:
+  application/vnd.github.diff"` nad týmž pull requestem vrátil **14,8 MB** unified diffu
+  s návratovým kódem 0, takže rozsahový diff (#284) ani diff commitu (#317) tuhle třídu nemají.
 - **`AppStore` — zahození nálezů** — proti **skutečnému** `ReviewStore`: že to zmizí
   z panelu, z řádku i z disku a přežije restart, že další běh začíná načisto, že druhé
   zmáčknutí nic nerozbije, že starší záznamy zůstanou a že se na automatickém repu review
@@ -3429,13 +3479,37 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   místě, takže větší rozdíl znamená tlačítko, které při cyklení poskakuje. Rámečky by na tyhle chyby
   neodpověděly — `fittingSize` railu je pevných 52 bodů a accessibility tree se v okně mimo obrazovku
   nenaplní. Vyzkoušené vložením regrese: se stylem `.borderlessButton` vyjde střed 25 a test spadne.
-- **Odznak v railu (#366)** — `RailBadgeTests`, tři třídy tvrzení nad **bitmapou**: kde odznak leží
-  (nesmí opustit rám ikony 9–43 ani vyčnívat nad jeho horní hranu), jakou má barvu (`crit`, **žádný
-  akcent**, a číslo v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že
-  s počtem 1 se nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
+
+  **Měřidlo pásů přeskakuje první čtyři sloupce, a od #526 je to podmínka, ne rezerva.** Pozadí se
+  bere z **levého okraje téhož řádku** (rail má v každém režimu jinou plochu, takže konstanta by
+  našla „obsah“ všude) — jenže na hraně railu leží od #526 pruh aktivní sekce, takže vzorek
+  z prvního bodu vydá na řádcích aktivní položky **akcent** a proti němu se jako obsah jeví celý
+  zbytek řádku. Tahle sada měří **ikony**; pruh měří `RailBadgeTests` na vlastním výřezu hrany.
+- **Odznak v railu (#366, přesunutý do rohu #526)** — `RailBadgeTests`, čtyři třídy tvrzení nad
+  **bitmapou**: kde odznak leží (od #526 **v rohu** — o 5 bodů nad rámem ikony a o 7 vpravo od něj,
+  a pořád uvnitř railu), že ho **nic neořezává**, jakou má barvu (`crit`, **žádný akcent**, a číslo
+  v barvě plochy okna) a že se u nuly a u `nil` **nekreslí** — s protějškem, že s počtem 1 se
+  nakreslit musí, jinak by sada vycházela zeleně nad odznakem, který zmizel celý.
   K tomu rozměr červené plochy (20 × 14, tolerance bod na stranu kvůli vyhlazeným krajům) a kontrast
   **tokenů** v obou režimech (5,36 a 5,50 při hranici 4,5), včetně tvrzení, že bílá by v tmavém
   režimu byla **horší** — to je záznam rozhodnutí, ne kontrola.
+
+  **Od #526 k tomu pruh aktivní sekce**: leží na hraně railu (sloupec 0), je 2 × 18 bodů a je
+  **vystředěný na rám aktivní položky**. A má ho **jedna** položka, ne každá — měří se to počtem
+  akcentových bodů v celém sloupci hrany, ne okolím té aktivní: kdyby ho dostaly všechny, vyjde
+  jich pětkrát tolik a v okně by byla svislá čára přes celý rail.
+
+  **Rám ikony se neopisuje, měří se** — z akcentového washe aktivní položky (`.ri.on`), který leží
+  přesně na jejích 34 × 30. Každé tvrzení je pak rozdíl proti rámu, který v tomtéž snímku doopravdy
+  je, ne proti konstantě, která by po posunu odznaku tvrdila jen sama sebe. **Tolerance u washe je
+  poloviční (0,02), a je to změřené**: ve světlém režimu je wash (`0.90/0.90/0.97`) od `Palette.line`
+  (`0.90/0.91/0.94`) jen **0,032** daleko, takže se do obálky připočítal obrys railu i oddělovač pod
+  sekcemi a rám vyšel `0…259` místo `44…73`.
+
+  **Ořezání se pozná z tvaru pravé hrany, ne z šířky řádků** (#483). Zaoblená kapsle dosáhne na svůj
+  nejpravější sloupec **8 řádky ze 14**, uříznutá všemi čtrnácti — práh je proto o dva řádky pod
+  výškou, tedy mezera 8 proti 12. Šířka řádku na to neodpoví: číslo uvnitř odznaku z něj bere červené
+  body uprostřed, takže by nejužší řádek měřil písmo.
 
   **Barva se porovnává s nakreslenou, ne s tokenem, a je to změřené**: bitmapa
   z `bitmapImageRepForCachingDisplay` je v profilu displeje (`Barevný LCD`), takže `crit` v ní vyjde
@@ -3448,7 +3522,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   **Vyzkoušené vložením regrese ze dvou stran.** Se starým odznakem (akcent + `offset(x: 6, y: -2)`)
   padne 5 testů ze 6 — barevná tvrzení na tom, že v railu není ani jeden červený pixel. Se **samotným**
   `offset(x: 6, y: -2)` a ponechanou červenou padne právě tvrzení o poloze (`46 > 43`), takže je
-  vidět, že poloha se měří nezávisle na barvě.
+  vidět, že poloha se měří nezávisle na barvě. **U #526 znovu**: s vráceným `offset(y: 1)` padne
+  poloha (odznak nevyjde z rámu ani nahoru, ani doprava) a s vynechaným pruhem padnou obě tvrzení
+  o aktivní sekci — barevná tvrzení přitom zůstanou zelená, takže se ty dvě věci pořád měří zvlášť.
 - **Kapsle stavu z návrhu (#348)** — `DesignPillTests`. Že je to **mono**, se pozná na tom, že
   `TextWidth.pill("iii") == TextWidth.pill("WWW")` — a měřidlo to umí rozlišit, protože v UI fontu
   téže velikosti se ta dvě slova liší. Metrika se měří na `fittingSize` hostované kapsle proti sazbě
@@ -4171,10 +4247,12 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `changed`** shodí 16 tvrzení ve čtyřech testech — z toho deset v té mřížkové stráži.
 
   **Sonda k tomu má vlastní scénu** (`BoardRenderProbe`, `k-merge-s-predanim`) a při její stavbě
-  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález je skutečná překážka
-  merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` — tedy
-  přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho napsané
-  proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
+  se našla hranice, kterou by měřidlo jinak zamlčelo: **blokující nález byl do #563 skutečná
+  překážka merge**, takže s nálezy kategorie `correctness` scéna vyrendrovala `Předat agentovi` —
+  tedy přesně to, co se opravovalo. Scéna proto používá **neblokující** kategorie a je u toho
+  napsané proč. Je to ta druhá otázka z #478: naměřilo by to měřidlo rozdíl, kdyby chyba byla?
+  **Od #563 už by scéna s blokujícím nálezem vyšla stejně** (nález překážka není), ale kategorie
+  se **nemění**: takhle vypadal PR z proklikání #515, a scéna má fotit ten.
 
   **Tatáž otázka scénu u druhého proklikání překlopila na `changed`.** S razítkem `never` byla
   vidět jedině oprava z prvního kola — do `K merge` takový PR chodil i před druhou změnou, takže
@@ -6414,6 +6492,57 @@ se kotví na předkovi, který neořezává, a stav se k němu podává boxem.
 
 **`setActivationPolicy(.prohibited)`** k tomu patří: bez ní si skript vyskočí dopředu a přebere
 fokus, což při souběžné práci ve slotech není zdvořilé ani bezpečné.
+
+### Co dělá `ideal*` u sheetu a v okně `Settings` (#491)
+
+Pravidlo z #327 („bez `presentationSizing(.fitted)` se `idealWidth` zahodí“) se v repu četlo jako
+pravidlo o `ideal*` **celém**. Není: **zahazuje se šířka, výška se bere.** Rozdíl se dá změřit
+samostatným `swiftc` skriptem — sheet se otevře nad oknem mimo obrazovku a přečte se
+`window.attachedSheet.frame`. Obsah je `Color.clear`, tedy nic, co by si o velikost samo řeklo:
+
+| Rámec | Sheet |
+|---|---|
+| `min 460×300`, `ideal 520×380` | 470 × **380** |
+| `min 460×300`, `ideal 900×900` | 470 × **860** (strop obrazovky) |
+| `min 460×300`, bez ideálu | 470 × **300** |
+| bez `min`, `ideal 520×380` | **470** × 380 |
+| `min 600×300`, `ideal 520×380` | **600** × 380 |
+| `min 460×300`, `ideal 520×380` + `.fitted` + pružný rámec | **520 × 412**, `.resizable` |
+
+Šířka je tedy vždycky `max(minWidth, 470)` — ideál se neuplatní ani nahoru (520 → 470), ani dolů
+(min 600 s ideálem 520 → 600) —, kdežto výška ideál bere až po strop obrazovky. Ta poslední řádka je
+kontrola měřidla: kdyby ani s `.fitted` nevyšlo 520, neměří se ideál, ale něco jiného.
+
+**Okno `Settings` scény se měří jinak a vyjde z toho jiná odpověď: ignoruje obojí.** `Settings` scéna
+se v holém binárce nespustí, takže se skript zabalí do minimálního `.app` (`Info.plist` s vlastním
+`CFBundleIdentifier`, ať se nesahá na doménu ostré aplikace) a okno se otevře přes
+`@Environment(\.openSettings)` z `WindowGroup`u — `NSApp.sendAction(Selector(("showSettingsWindow:")))`
+vrátí `true`, ale okno nevznikne. **Doména se před každým během maže**, jinak se čte uložený rámec
+z minulého měření místo výchozí velikosti:
+
+| Rámec obsahu | Obsah okna |
+|---|---|
+| `min 720×420`, `ideal 880×560` | 900 × 420 |
+| `min 720×420`, `ideal 1400×800` | 900 × 420 |
+| `min 720×420`, bez ideálu | 900 × 420 |
+| `min 1000×420`, `ideal 880×560` | **1 000** × 420 |
+
+První tři řádky jsou shodné, tedy ideál neznamená nic; čtvrtá ukazuje, že `min` naopak platí. 900 je
+systémová výchozí šířka okna. Ověřit se to dá i **bez měření**, v ostré aplikaci:
+`defaults read com.ondrajodas.prism` má `NSWindow Frame com_apple_SwiftUI_Settings_window = 900 452`
+— tedy obsah 900 × 420, přesně to naměřené, a k tomu 420 = `minHeight`, ne `idealHeight` 560.
+
+**Nad skutečnými obrazovkami to pak měří `SheetSizingTests`** (tatáž scéna jako
+`RawSessionSheetSizingTests`: okno mimo obrazovku, `sheet(isPresented:)`, čekání na `attachedSheet`).
+Že je změna neviditelná, se tvrdí **dvěma běhy** — jednou s `idealWidth` v rámci a jednou bez něj —
+a vyšlo u obou totéž: `ReviewSubmissionSheet` 560 × 560, `MergeSheet` 507 × 380, `AgentPromptSheet`
+840 × 620. Suita sama tenhle rozdíl **rozlišit nemůže** (SwiftUI se v obou případech chová stejně),
+takže tvrzení o zdrojáku nese **stráž**, ne měření: sheet s `idealWidth` musí mít `presentationSizing`.
+Regrese se ověřila vložením — `idealWidth` zpátky do všech tří a stráž spadla na všech třech.
+
+Jedna past u té stráže se u toho ukázala hned: `#expect(file.condensed.contains(…))` vypíše při pádu
+**celý zhuštěný zdroják**, takže tři provinilci vydali desítky kilobajtů hlášky, ve které se jméno
+souboru ztratilo. Sbírá se proto seznam cest a tvrdí se **prázdnost**.
 
 ### Jak změřit pořadí a hladinu oken (#243)
 
@@ -8984,7 +9113,7 @@ Co z toho stojí za zapamatování:
   ani pád — vyhraje to zaregistrované později a druhá zkratka „nefunguje“. Ověřeno **vloženou
   regresí**: `⌘.` přepsané na `⌘K` shodí `Žádné dvě tlačítka v okně nemají tutéž kombinaci`,
   `Kreslené zkratky jsou ty skutečné` i `Paleta kreslí u akcí zkratku z katalogu`.
-- **Počet akcí je vyjmenovaný** (od #501 sedmadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
+- **Počet akcí je vyjmenovaný** (od #507 devětadvacet), ne „aspoň tolik“ — tatáž konstrukce jako
   u `SingleWayOutTests`. Nová zkratka v okně je rozhodnutí, ne přírůstek.
 - **Stráž nad zdrojáky** tvrdí, že `keyboardShortcut(` je v `App/` **jen v deseti jmenovitých
   souborech**: v překladu katalogu (`WindowShortcutButtons`) a v sheetech, scénách, uvítací bráně
@@ -9009,7 +9138,12 @@ Co z toho stojí za zapamatování:
   `CTFontGetGlyphsForCharacters` **`false`**, kdežto `⌘`, `⌃`, `⌥`, `⇧`, `⏎`, `↑` a `↓` `true`.
   Proto se `Tab` a `esc` píšou slovem. **U #501 se doměřily vodorovné šipky**, protože je mapa PR
   potřebuje: `←` je glyf 1312 a `→` 1314, tedy obojí `true` — a nová klávesa v katalogu se takhle
-  doměřit **musí**, jinak se text propadne do náhradního písma a kapsle bude jinak široká. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
+  doměřit **musí**, jinak se text propadne do náhradního písma a kapsle bude jinak široká.
+  **U #507 se doměřil mezerník**: `␣` (U+2423) je v monospace písmu glyf **1330**, takže se kreslí
+  glyfem, jak ho má návrh. V **proporcionálním** systémovém písmu ale není — `CTFontCreateForString`
+  nad ním vrátí `HelveticaNeue` —, což se týká jedině nápovědy tlačítka (`Policy.shortcutHelp`),
+  kde je z toho jeden znak v jiném řezu. `⎵` (U+23B5) nemá **ani jedno** z těch dvou písem, takže
+  se do katalogu nedostal. Test to tvrdí nad **výčtem znaků**, ne měřením písma za
   běhu — `NSFont` v hostu pod zátěží vydá přechodně nepoužitelnou metriku (#407) a sáhnout si sem
   na písmo znamená koupit si falešně červený `main`. Přeměřit se to dá takhle:
 
@@ -10434,6 +10568,90 @@ u opravy kresby (rozbor je v *Šest zelených sad a v Docku nic* výš):
    ~16,5 b. K tomu se cestou ukázalo, že **bitmapa je v pixelech a `pill` v bodech**: bez převodu
    podílem z `pixelsWide` hlásil test 3218 „přetečených“ pixelů nad kresbou, která nikam
    nepřetéká.
+
+## Mezerník po itineráři (#507)
+
+**Že klávesa doopravdy zabere, se v harnessu ověřit nedá** — tentýž důvod jako u celého katalogu
+zkratek (#441): testovací host nedostane aktivaci, takže nemá key okno a stisk nemá kam sednout.
+Ověřuje to člověk na běžící aplikaci a v popisu PR to stojí jako neověřená mezera. Ověřit se dá
+všechno ostatní, a je toho víc, než se čekalo.
+
+### Co se tvrdí a proč zrovna to
+
+`ItineraryWalkTests` (čisté funkce) a `ItinerarySpacebarWiringTests` (zapojení). **Nejcennější
+tvrzení jsou ta, že se nic nestane:**
+
+- **Vyčerpávající matice tří vstupů** (`isEditing` × `atEnd` ∈ {`nil`, `false`, `true`}): klávesa
+  se vydá v **jediné kombinaci ze šesti**. Kdyby se braly i ostatní, sebral by mezerník psaní
+  a scrollování — a vypadalo by to jako „scroll občas přeskočí“, ne jako rozbitá zkratka.
+- **Neměřený konec obsahu (`nil`) je totéž rozhodnutí jako „není na konci“.** Tvrdit něco
+  o obsahu, který nikdo nezměřil, nese víc, než data unesou; testuje se to zvlášť, protože je to
+  jiná **příčina** téhož výsledku.
+- **Hlášení konce z jednoho tabu neplatí v druhém ani na jiném PR.** Bez toho by mezerník po
+  přepnutí tabu odskočil podle obsahu, který na obrazovce není.
+- **Konec hlásí právě ty taby, do kterých vedou zastávky.** Tvrdí se to srovnáním **zdrojáku
+  detailu** (`contentEnd.note(…, in: .X)`) s oborem hodnot `ItineraryStop.tab` — ne výčtem
+  napsaným do testu, takže nová zastávka v jiném tabu si vynutí i hlášení.
+- **Fokus polí přežije pořadí, ve kterém se dvě hlášení potkají.** Množina, ne `Bool`: při
+  přeskoku fokusu z pole do pole se nesmí objevit okamžik, ve kterém okno tvrdí, že se nikde
+  nepíše.
+- **Dvě stráže nad zdrojáky u polí.** První: fokus hlásí **právě čtyři** jmenované soubory. Druhá,
+  z opačné strany: každý soubor s `@FocusState` je buď mezi nimi, nebo je to okno nastavení (vlastní
+  scéna, se zkratkami detailu se nepotká). Bez té druhé by nové pole vzniklo bez hlášení a mezerník
+  by v něm sebral psaní.
+
+### Kde se ověřila regrese vložením regrese
+
+1. **`itineraryStep` přestane koukat na `isEditing`** → spadne *Mezerník se bere jen mimo pole
+   a jen na konci obsahu* (matice hlásí tři nadbytečné kombinace).
+2. **`nil` u `atEnd` se bere jako „na konci“** (`atEnd != false`) → spadne tatáž matice
+   a *Neměřený konec obsahu klávesu nedá*.
+3. **`DraftTextField` přestane hlásit fokus** → spadne *Fokus hlásí právě čtyři pole* a vypíše
+   zbylá tři. Druhá stráž (`@FocusState`) při tomhle **nespadne**, a je to schválně: chytá opačný
+   směr, tedy **nové** pole, které fokus drží a nehlásí ho.
+4. **`ChecksView` přestane hlásit konec obsahu** → spadne *Konec obsahu hlásí právě ty taby, do
+   kterých vedou zastávky*, a vypíše rozdíl proti `ItineraryStop.tab` (`["filesChanged",
+   "overview"]` proti třem).
+
+### Kolik se vejde do patky sloupce — změřeno, ne odhadnuto
+
+Patka má jednu řádku, jak ji má návrh, a jestli se do sloupce vejde, je otázka pro měřidlo:
+
+```swift
+let mono = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+let text = NSFont.systemFont(ofSize: 9.5)
+// `␣` + " další zastávka · " + `⌥↓` + " další nález · " + `⌥V` + " prošlo"
+```
+
+Sečíst se ale musí **všechno, čím se ta řádka sází**, a první pokus na tom pohořel: text sám dá
+197,2 b, jenže k němu patří **odsazení kapslí** (3 × 8 b) a hlavně **mezery mezi osmi prvky**
+`HStack`u (7 × mezera). Při mezeře 5 b z toho vyjde **236,5 b** proti **234 b**, které ve sloupci
+po odsazení zbývají (260 − 2 × 13) — a **přetečení se neprojeví přetečením**: SwiftUI ořízne
+**první popisek** (`další zast…`), takže se to pozná jedině z renderu, ne z toho, že by něco lezlo
+ven. S mezerou 3 b je to **222,5 b**, tedy 11,5 b rezervy; při 9,5 b sazby a mezeře 4 b **229,5 b**,
+což je na hraně.
+
+| sazba | mezera | s tečkami | bez teček |
+|---|---|---|---|
+| 9,5 b | 5 b | **236,5 b** (nevejde se) | 220,6 b |
+| 9,5 b | 4 b | 229,5 b | 215,6 b |
+| 9,5 b | 3 b | **222,5 b** (v repu) | 210,6 b |
+| 9 b | 4 b | 221,2 b | 207,5 b |
+
+**Poučení, které stojí za zapsání:** změřit text bez toho, čím ho rozvržení rozestrčí, znamená
+změřit něco jiného, než co je na obrazovce — a u řádky, která se ořízne zevnitř, to měřidlo
+neřekne. Render vedle měření je tady podmínka
+(`ReviewItineraryRenderProbe`, scénář `itinerar-plny`).
+
+### Co se v harnessu ověřit nedá
+
+- **Že mezerník zabere** — a hlavně že ho **nesebere** `ScrollView` dřív, než se dostane
+  k zakázanému tlačítku. Zakázané tlačítko klávesu nebere (vzorec ověřený u `⌘⏎`, `⌘2` a `⎋`), ale
+  že se propadne zrovna do scrollu, ověří jedině stisk na běžící aplikaci.
+- **Že si ho v poli vezme text.** `TextFieldFocus` říká, že o tom aplikace ví; jestli by mezera
+  bez toho doopravdy odskočila, se zjistí jedině psaním do composeru.
+- **Že `TimelineView` překreslí jen svůj `Text`.** U odpočtu na dashboardu to změřila sonda
+  (`DashboardCountdownRedrawTests`); tady se stejná konstrukce **přebírá**, ne měří znovu.
 
 ## Otevření souboru v editoru (#530)
 
