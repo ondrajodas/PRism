@@ -522,6 +522,59 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v `UserDefaults` (`defaults write com.ondrajodas.prism.<slot> activity.lastVisit <ISO>`). Sekce je
   ve `ScrollView`, takže offscreen render nestačí (viz *Jak si zkontrolovat, jak view vypadá*)
   a fotí se **skutečné okno podle ID**.
+- **Odložení PR (#512)** — tři sady (`SnoozePolicyTests`, `AppStoreSnoozeTests`,
+  `SnoozeProbeQueryTests`, `PullRequestRowSnoozeTests`, dohromady **72 testů** plus dvě tvrzení
+  navíc v `AutomaticReviewTests`), a **skoro celá hodnota je v tvrzeních o tom, co
+  se nestane**. Je to u téhle věci jinak než jinde: odložený PR **není vidět**, takže se každá
+  chyba rozbije potichu — buď zmizí práce, nebo se za ni potichu platí.
+
+  `Policy` vyčerpávajícím výčtem: tři podmínky × (splněno / nesplněno / **nevíme**). Ta třetí
+  hodnota je celý obsah issue a testuje se u každé podmínky zvlášť: **nezjištěná hlava odložení
+  nezruší**, **chybějící základ odložení nezruší nikdy** (jinak by skončilo první rozhlídkou, tedy
+  do minuty), **nižší počet příspěvků odložení nezruší** (smazaný komentář není příchozí
+  komentář). K tomu hranice času (`>=`, tedy v devět, ne v 9:00:01), doplnění a **nepřepsání**
+  základu, a to, že se **fronta a blok dohromady rovnají vstupu** — jinak by PR uměl zmizet
+  z fronty, aniž by se objevil v bloku.
+
+  `AppStore` proti fake gateway: **nejcennější je, že automat odložený PR nepustí** — repo je
+  v automatickém režimu, takže by to bez pravidla prošlo, a jediné, co by to prozradilo, je běh na
+  účtu, o který nikdo nestál. Vedle toho: **nezvoní** (ani když se PR do fronty vrátí, což je ten
+  jediný případ, kdy je odložený PR mezi `newcomers`), **nepočítá se do odznaku ani do souhrnu**,
+  **není v žádném pruhu desky** — a naopak **je ve větě pod pozdravem**, protože zmizet beze stopy
+  nesmí. Dál že **úklid po tiku odloženému PR nic nezahodí**, že odložení **přežije restart** a je
+  v paměti **před prvním tikem**, a že **selhaná rozhlídka odložení nezruší** (jinak by výpadek
+  sítě vysypal všechna odložení naráz).
+
+  **Dvě pasti, na které se přišlo až při psaní těch testů**, a obě dělaly test falešně zeleným:
+  bez `autoRuns` se `startAutomaticReviews` vrací hned na prvním `guard`, takže by „na odložený PR
+  se nespustí review“ vyšlo zeleně i nad úplně vypnutým automatem (store si proto bere
+  `AutoRunLedger` nad vlastní cache); a `reviewTasks` je špatné měřidlo, protože běh umí do konce
+  `refresh()` doběhnout i selhat — tvrdí se proto nad `consideredForAutomation`, tedy nad razítkem
+  plánovače.
+
+  **Řádek fronty se testuje na tom, co se nenakreslí** (`PullRequestRowSnoozeTests`): tlačítko
+  `Odložit` **s prázdnou nabídkou nevznikne** — vlastní řádek dostane ze seznamu prázdné `offers`
+  (`Policy.canSnooze`), a tlačítko, po kterém se nic nestane, je zrovna ten stav, kvůli kterému se
+  v #333 přestala kreslit zakázaná `Prompt →`. Výchozí hodnota je „nekreslit“, takže se nabídka
+  neobjeví ani tam, kde se řádek kreslí bez storu (deska, sekce `Rozdělaná`, náhledy).
+
+  **Ověřeno vložením regrese, třikrát.** Vyhození `!isSnoozed` z plánovače shodí **5 tvrzení**
+  (mezi nimi obě z `AutomaticReviewTests`); vyhození zúžení z `queuePullRequests` shodí frontu,
+  odznak i souhrn; a záměna `guard let baseline, let head` za `guard let head` (tedy „neznámý základ
+  = vypršelo“) shodí **tři tvrzení v jednom testu** — přesně ta, která říkají, že se odložení nesmí
+  zrušit dřív, než má.
+
+  **Fixture rozhlídky je inline JSON a je u toho napsané proč**: skutečný výstup se z veřejného
+  repa sehnat dá, ale nese celé spojení komentářů — a dotaz chce **dvě čísla a jednu sha**, takže
+  by fixture byla z 99 % materiál, který se nečte. Tvar je opsaný z odpovědi na
+  `PullRequestHeadsQuery`, tedy z formátu, který fixturou ověřený **je**.
+
+  **Screenshot bloku `Odložené` se klikáním nepořídí** — čerstvá cache nic odloženého nemá a
+  odložení vzniká z kontextové nabídky, na kterou v paralelním běhu není asistenční přístup. Zapíše
+  se proto `snoozed.json` do cache slotu (klíč je `owner/repo#číslo`, `PRIdentifier` je
+  `CodingKeyRepresentable`) a aplikace se restartuje; tím se u toho rovnou ověří, že se odložení
+  čte z disku **před prvním tikem**. Že nabídka opravdu vyjede a že `⌥1` platí jedině nad ní,
+  ověřuje **člověk** — v harnessu se to zjistit nedá (viz *Jak změřit fokus a klávesy*).
 - **Zastaralé nálezy z tiku (#420)** — tři sady, a **cenná polovina jsou tvrzení o počtu volání**.
   Rozbije se to potichu: v okně vypadá stejně, jestli se aplikace zeptala jednou, nebo dvanáctkrát,
   jen se ten rozdíl platí každou minutu.

@@ -867,6 +867,22 @@ final class AppStore {
     /// tik dohoní, co se stalo, když aplikace neběžela — a je to **jeden** dotaz, ne jeden na PR.
     var headProbes: [PRIdentifier: Date] = [:]
 
+    /// Odložená PR (#512). Nepovinná závislost jako ostatní story — testy, které o odložení
+    /// nestojí, ji nedostanou a pak není odložené nic.
+    let snoozeStore: SnoozeStore?
+
+    /// Odložení, se kterými se pracuje (#512). Disk je **záloha**, ne jediná kopie: fronta, deska,
+    /// odznak i souhrn se na ně ptají při každém překreslení okna, takže se čtou z paměti —
+    /// z disku jednou při startu (`loadStoredSnoozes()`), a to **před prvním tikem**.
+    var snoozes: [PRIdentifier: Snooze] = [:]
+
+    /// `updatedAt`, se kterým se na odložené PR naposledy ptalo (#512).
+    ///
+    /// Předfiltr dávkového dotazu (`Policy.snoozeProbe`) — dokud se `updatedAt` nepohne, hlava ani
+    /// počet příspěvků se změnit nemá čím. **V paměti, ne na disku**, jako `headProbes`: po
+    /// restartu je prázdné, takže první tik dohoní, co se stalo, když aplikace neběžela.
+    var snoozeProbes: [PRIdentifier: Date] = [:]
+
     /// Které zadání jsem už předal agentovi (#334). Nepovinná závislost jako ostatní story —
     /// testy, které o razítka nestojí, ji nedostanou a pak je všechno nepředané.
     let handoffs: HandoffLedger?
@@ -1039,12 +1055,14 @@ final class AppStore {
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil,
+        snoozeStore: SnoozeStore? = nil,
         activityLog: ActivityLog? = nil,
         activityVisits: ActivityVisitLedger = ActivityVisitLedger(preferences: UserDefaults.standard)
     ) {
         self.visits = visits
         self.activityNotices = activityNotices
         self.handoffs = handoffs
+        self.snoozeStore = snoozeStore
         self.activityLog = activityLog
         self.activityVisits = activityVisits
         self.appearance = appearance
@@ -1091,6 +1109,12 @@ final class AppStore {
         self.spend = spend
         polling.afterSuccessfulTick = { [weak self] summaries in
             await self?.forget(whatIsNotIn: summaries)
+            // Odložená PR (#512) — **před automatem**, aby se na PR, jehož odložení právě
+            // skončilo, dalo pustit review hned, ne až za tik. Uvnitř úspěšného tiku ze stejného
+            // důvodu jako rozhlídky níž: vejde se to do backoffu pollingu a nepotřebuje druhý
+            // časovač. Kolik dotazů z toho je, rozhoduje `Policy.snoozeProbe` — na klidný den
+            // nula, jinak **jeden na všechna odložená PR**.
+            await self?.refreshSnoozes(in: summaries)
             // Až po `forget`: PR, který ze seznamu vypadl, se nemá čím spustit, a běžící
             // automat nad ním se má naopak zrušit.
             await self?.startAutomaticReviews(for: summaries)
@@ -1266,6 +1290,8 @@ final class AppStore {
             dock: DockBadgeTile.application,
             loginItems: LoginItemService.live,
             handoffs: HandoffLedger(),
+            // Odložená PR (#512). Živé jedině tady, jako razítka předání a záznam dění.
+            snoozeStore: SnoozeStore(),
             // Záznam dění (#414). Živý jedině tady — testy ho nedostanou, takže nesahají do cache.
             activityLog: ActivityLog()
         )
@@ -1584,7 +1610,11 @@ final class AppStore {
     /// `dashboardOwnPullRequests`); deska je skládá do pruhů, takže rozřazení podle autora
     /// proběhne uvnitř `Policy.board` jednou na řádek.
     var boardEntries: [QueueEntry] {
-        pullRequests.map {
+        // **Bez odložených** (#512). Deska odpovídá na „co udělám teď“, a odložený PR je zrovna
+        // ten, o kterém jsem řekl, že teď ne. Že něco schované je, nese věta pod pozdravem
+        // (`Policy.boardSentence(_:snoozed:)`) — pruh, ze kterého PR zmizí beze stopy, by byl
+        // tichá díra, kvůli které tohle issue existuje.
+        Policy.pullRequests(pullRequests, withoutSnoozed: isSnoozed(_:)).map {
             QueueEntry(
                 pullRequest: $0,
                 state: reviewState(for: $0.id),
@@ -1815,7 +1845,11 @@ final class AppStore {
         return Policy.listEmptyReason(
             poll: emptyReason,
             visible: queue.count - hidden,
-            hidden: hidden
+            hidden: hidden,
+            // Fronta prázdná proto, že je všechno odložené, **není** „žádné PR k review“ (#512).
+            // Zelené „vyřízeno“ nad prací, kterou jsem si sám schoval, je tatáž lež jako nad
+            // zapnutým filtrem — a je to ten stav, ze kterého musí být vidět cesta zpátky.
+            snoozed: snoozedQueuePullRequests.count
         )
     }
 
@@ -1870,6 +1904,11 @@ final class AppStore {
         // tiku zahazuje stav PR, které nejsou v seznamu, a obnovená záložka se mezi chtěné
         // dostane jedině tou značkou, kterou tohle nasadí (`adoptedTabs`).
         await restoreOpenTabs()
+        // **Odložení hned po záložkách a před vším ostatním** (#512). Čte se z disku, takže na
+        // konfiguraci ani na síti nestojí — a musí být v paměti **před prvním tikem**: automat
+        // i notifikace se odložených ptají v tiku, takže by první tik po startu pustil review na
+        // PR, který jsem si schoval.
+        await loadStoredSnoozes()
         await reloadConfiguration()
         // **Před** načtením záznamů: dotažené nálezy se mají objevit hned po startu, ne až
         // po dalším review. Kdyby se dotahovalo potom, `reviewRecords` by je neobsahovaly.

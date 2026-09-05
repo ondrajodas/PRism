@@ -6361,6 +6361,138 @@ Co se u ní nemá rozbít:
   chipem, který mluví o něčem jiném. Je to tatáž ochrana jako u zavřené záložky
   v `loadExternalDetail(of:)` (#531).
 
+## Odložit PR (#512)
+
+*Tenhle teď vidět nechci, ozvi se mi, až…* Filtr schová repo nebo autora, ne jeden pull request;
+botí PR proto ležel ve frontě týden, počítal se do odznaku a automat na něj každou minutu zvažoval
+review.
+
+**Odložení je stav, který něco skrývá — takže musí být poznat, že něco skryté je.** Fronta, ze
+které PR potichu zmizí, je horší než fronta, ve které leží: práci, o které nikdo neví, nejde ani
+udělat, ani odmítnout. Odložení má proto **čtyři vývody a všechny čtyři jsou povinné**:
+
+1. **blok `Odložené · 2` pod frontou** (`SnoozedBlockView`) s poznámkou `vrátí se zítra 9:00`
+   a s `Vrátit teď`;
+2. **věta pod pozdravem na desce** (`Policy.boardSentence(_:snoozed:)` → `· 2 odložené`) — deska
+   odložené PR v žádném pruhu nemá, takže je to jediné místo domova, které o nich mluví;
+3. **vlastní prázdný stav fronty** (`ListEmptyReason.allSnoozed(count:)`), když je odložené
+   všechno — zelené *Žádné PR k review* by nad prací, kterou jsem si sám schoval, tvrdilo opak
+   toho, co je pravda; je to tatáž lekce jako u filtru;
+4. **řádek v `Dění` při návratu** (`ActivityEvent.Kind.returnedFromSnooze`, `Vrátil se z odložení ·
+   přišel push`) — bez něj by se PR ve frontě objevil odnikud.
+
+### Podmínka, ne jen čas
+
+`SnoozeCondition` má tři případy a měří se **proti hodnotě**, ne proti `updatedAt`:
+
+| Podmínka | Měřidlo | Skončí, když |
+|---|---|---|
+| `until(Date)` | hodiny | `now >= deadline` |
+| `nextPush(head:)` | hlava PR ve chvíli odložení | dnešní hlava je jiná |
+| `nextComment(count:)` | počet příspěvků pod PR | dnešní počet je **vyšší** |
+
+Rozhoduje **jediná funkce** `Policy.snoozeExpired(_:head:comments:now:)` — tři volající (rozhlídka
+po tiku, blok a zúžení fronty) by si tu otázku jinak zodpověděli každý po svém a rozešli by se
+potichu, protože odložený PR není vidět.
+
+**Přes `updatedAt` by to nešlo, a je to ten podstatný důvod, proč rozhlídka existuje.** `updatedAt`
+se hýbe i po štítku a po úpravě titulku, takže by *do dalšího komentáře* skončilo pushem. Počet
+příspěvků je proto `comments.totalCount + reviews.totalCount` (odpověď ve vlákně u kódu je
+v GitHubu review o jednom komentáři); `commits` se do něj **nepočítají** — od pushe je tu
+`headRefOid`.
+
+**`>`, ne `!=`, a smazaný komentář sníží základ.** Kdyby se porovnávalo `!=`, ukončilo by odložení
+to, že někdo něco vzal zpátky. Že se základ smazáním posune dolů, dělá `Policy.snoozeBaseline`;
+bez toho by po smazaném komentáři odložení trvalo navždycky, protože příští komentář by počet
+vrátil jen na původní číslo.
+
+### Neznámé měřidlo je „nevím“, ne „vypršelo“
+
+Ve chvíli odložení se hlava ani počet příspěvků **neznají**: fronta stojí na `gh search prs`, které
+ani jedno nevrací, a detail se tahá až při otevření PR. Základ je proto **volitelný** a doplní ho
+**první rozhlídka** (`Policy.snoozeBaseline`, `Policy.snoozeNeedsBaseline`).
+
+`Policy.snoozeExpired` z neznámého základu **nikdy** neudělá „vypršelo“ — a je to rozhodnutí
+o směru chyby: odložení, které se zruší dřív, než mělo, vrátí PR do fronty a vypadá jako porucha
+odložení, kdežto odložení, které trvá o minutu déle, se dá kdykoli ukončit tlačítkem `Vrátit teď`.
+Tatáž úvaha platí o **nedoručené odpovědi**: PR, na který se rozhlídka nedostala, o svém stavu
+neříká nic, takže se `head` i `comments` posílají do `snoozeExpired` jako volitelné.
+
+### Rozhlídka je jeden dávkový dotaz, na klidný den nula
+
+`Policy.snoozeProbe` je tatáž škola jako `staleHeadProbe` (#420) a `activitySweep` (#335):
+
+1. **Jedno dávkové volání** (`SnoozeProbeQuery`, `GitHubGateway.fetchSnoozeSignals(of:)`) — dvacet
+   aliasů stojí 1 bod z 5000/h, tedy tolik co jeden.
+2. **Časová podmínka se neptá vůbec** (`SnoozeCondition.needsSignal`) — PR odložený do rána se za
+   celou noc nezeptá ani jednou.
+3. **`updatedAt` je předfiltr a je zadarmo.** Výjimka je PR bez základu: ten se musí zeptat i bez
+   posunu, jinak by odložení `do dalšího pushe` nemělo od čeho měřit.
+4. **Strop dvacet** (`Policy.snoozeProbeLimit`) na velikost dokumentu, ne na cenu.
+
+Běží **uvnitř `afterSuccessfulTick`**, takže dědí backoff pollingu, a **před
+`startAutomaticReviews`**: odložení, které v tomhle tiku skončilo, má být vidět hned, včetně toho,
+že se na ně smí pustit automat.
+
+**Vlastní dotaz vedle toho na hlavy, ne rozšíření toho existujícího.** Obě rozhlídky mají jiný
+předfiltr (zastaralé nálezy: cizí PR s uloženými nálezy; odložení: odložená PR), takže by společný
+dotaz musel spojit dvě různé množiny a jedné z nich vozit pole, které nepřečte. Cena za oddělení je
+**jedno volání navíc v nejhorším případě**; obě mají předfiltr, takže na klidný den je to nula.
+
+### Kde to bydlí a proč se to neklíčuje `headSha`
+
+`SnoozeStore` — jeden `snoozed.json` v kořeni cache, aktor jako `HandoffLedger`, lhůta 90 dní
+(odložený PR, který se zavřel, ze seznamu vypadne, takže by odložení leželo v souboru napořád).
+
+**Ukládá se k PR, ne k `headSha`, a je to zapsaná volba proti tvrdé podmínce č. 5.** Ta mluví
+o **nálezech**: tvrzení o kódu se nesmí ukazovat proti kódu, který už neexistuje. Odložení o kódu
+netvrdí nic — je to moje rozhodnutí o tom, kdy se na PR podívám, a push ho nemá zneplatnit, nýbrž
+**splnit**. Precedens je rozhovor nad PR (#452). Hlava v tom přesto figuruje, jen v opačné roli: je
+to **měřidlo podmínky**, ne klíč záznamu.
+
+**Čte se před prvním tikem** (`loadStoredSnoozes()` hned po obnovení záložek): automat i notifikace
+se odložených ptají v tiku, takže by první tik po startu pustil review na PR, který jsem si schoval.
+
+### Jen cizí PR, a je to hranice kresby
+
+`Policy.canSnooze(_:)` pouští jedině `.theirs`. Důvod není „vlastní PR se odkládat nemá“, ale
+**kresba**: blok `Odložené` visí pod **frontou**, takže odložené vlastní PR by ze sekce `Moje PR`
+zmizelo a nikde by se neobjevilo — tedy zrovna ta tichá díra, kvůli které tohle issue existuje. Na
+vlastním řádku se nabídka **nekreslí vůbec**, ne zašedle (tentýž vzor jako merge na cizím PR).
+
+### Co odložení nedělá
+
+- **Neruší běžící review.** Session je utracená v okamžiku, kdy začne (`AutoRunLedger.take`), takže
+  zabít ji uprostřed znamená zaplatit a nic nedostat. Co odložení vypne, je **další** běh.
+- **Nezavírá otevřenou záložku.** Odložení mluví o frontě, kdežto otevřená záložka je rozdělaná
+  práce (a od #531 se počítá do `pullRequestsInPlay`).
+- **Neuklízí nic z disku.** Klon, nálezy, drafty i značky `Prošlo` zůstávají — viz tabulka
+  *Které místo chce kterou množinu*.
+- **Nezvoní.** Banner o doběhlém review se u odloženého PR **nepošle**, ale do dění se zapíše
+  (`wasAnnounced: false`, tedy chip `bez banneru`): vyrušit ne, dohledat ano.
+
+### Nabídka a klávesy
+
+`Policy.snoozeOffers(now:calendar:)` vydá čtyři volby s klávesami `⌥1`–`⌥4`. **Nejsou v katalogu
+zkratek okna** (`WindowShortcut`) schválně: zaregistrované oknem by přebily psaní v každém textovém
+poli, a platit mají jedině nad rozbalenou nabídkou. Rozhodnuté jsou přesto v `Policy` a popiska se
+z kombinace **odvozuje** (`SnoozeOffer.shortcutLabel`), takže se nedá napsat `⌥1` vedle jiné klávesy.
+
+**První volba míří na *nejbližší* devátou, ne na zítřek**, a titulek se z toho **odvozuje**
+(`snoozeMorningTitle`): odložení v jednu v noci má vrátit PR za osm hodin, ne za dvaatřicet —
+a napsané `zítra` by tehdy lhalo. Poznámka v bloku (`snoozeDeadlineLabel`) počítá `zítra` proti
+předanému `now`, ne proti systémovým hodinám: `Calendar.isDateInTomorrow` se ptá na skutečný
+dnešek, takže by se rozešla s okamžikem, ze kterého se počítá zbytek odložení (tentýž kořen jako
+globální stav procesu v `Tests/`, #367).
+
+**`Vlastní datum…` z kresby vypadlo a je to zapsaná mezera proti zadání issue**: kalendář
+v kontextové nabídce je druhý překryv nad prvním a je to vlastní obrazovka; delší odklad než týden
+se dá složit dvojím odložením.
+
+**Blok je pod frontou přišpendlený ke spodní hraně** (`safeAreaInset(edge: .bottom)` na `content`,
+ne na `list`), a je to rozhodnutí, ne vedlejšek: musí být vidět i nad **prázdným** seznamem, tedy
+zrovna ve stavu, ve kterém by tichá díra bolela nejvíc.
+
 ## Otevřít PR mimo zdroje (#531)
 
 Zdroje (#4) definují **frontu**: co se hledá, na to se čeká, to je na kartách, v odznaku a
@@ -10260,7 +10392,12 @@ hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
   konzument; podmínka je proto `activityLog != nil`, ne `watchesPullRequestActivity` (ta jmenuje
   i notifikační centrum právě proto, že u ostatních druhů je druhým konzumentem).
 
-### Které místo chce kterou množinu (#332)
+### Které místo chce kterou množinu (#332, od #512 dvě osy)
+
+**Od #512 se zúžení skládá ze dvou nezávislých os**: podle **autora** (`.theirs` / `.mine`,
+#332) a podle **odložení** (`Policy.pullRequests(_:withoutSnoozed:)`). Sloupec `Množina` mluví
+o té první; třetí sloupec u míst, kterých se týká i ta druhá, říká proč. Pravidlo je stejné
+u obou: **je to pohled, ne nový zdroj pravdy**, takže na žádné z nich nesmí viset úklid.
 
 | Místo | Množina | Proč |
 |---|---|---|
@@ -10281,6 +10418,9 @@ hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
 | `summary(for:)` | obojí **plus záložky mimo zdroje** (#531) | odpovídá na „co víme o **tomhle** PR“, ne na „co je ve frontě“; u záložky mimo zdroje se shrnutí skládá z dotaženého detailu |
 | `knownRepositories` (nastavení), `filterOptions` | obojí | přenastavit chci i repo, ve kterém mám jen svoje PR |
 | paleta ⌘K | obojí, rozřazené do **dvou skupin** (#336) | katalog čte plný seznam a `Policy.ownership` z něj skládá `Pull requesty k review` a `Moje PR`; ⌘K jen hledá, nic neuklízí |
+| **bez odložených** (#512): `queuePullRequests`, `visibleQueuePullRequests`, `railQueueCount`, `queueSummary`, `boardEntries`, odznak v Docku, `Policy.automaticallyReviewable`, `announceNewPullRequests`, `notifyAboutFinishedReview` | `.theirs` bez odložených | *nechci to teď vidět* je tvrzení o frontě, takže se z ní PR schová všude, kde se o frontě něco říká — **včetně automatu**: odložení, po kterém se stejně utratí session, je odložení jen na obrazovce |
+| **s odloženými** (#512): `pullRequests`, `visiblePullRequests`, `filterOptions`, `knownRepositories`, `summary(for:)`, `handleNotificationClicks`, úklid a eviction, sekce `Rozdělaná` | obojí | odložený PR má na disku klon, nálezy i rozdělané review jako každý jiný — uklidit mu je jen proto, že ho zrovna nechci vidět, by znamenalo začínat po návratu od nuly; a repo, jehož jediné PR je odložené, se pořád sleduje |
+| blok `Odložené` (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené | doplněk k prvnímu řádku nad **tímtéž** vstupem (po filtru), takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v
   `Policy.automaticallyReviewable` **první v řadě**, takže se PR dál nezvažuje, ať si repo řeklo

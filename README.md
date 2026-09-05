@@ -255,6 +255,33 @@ znamená **nula dotazů navíc**. Co v diskuzi přibylo, nese i řádek seznamu:
 místo autora a času. **Spadlé CI se nehlídá** — je to druhý dotaz na PR a jiná událost, takže na to
 patří vlastní text i vlastní přepínač.
 
+## Odložit PR — do rána, do dalšího pushe, do dalšího komentáře (#512)
+
+Filtr schová repo nebo autora, ne **jeden** pull request. Botí PR proto ležel ve frontě týden,
+počítal se do odznaku a automat na něj každou minutu zvažoval review. Nabídka **`Odložit`** na
+řádku fronty (pravé tlačítko i tlačítko pod kurzorem, klávesy `⌥1`–`⌥4` uvnitř nabídky) nabídne
+čtyři volby: *do zítra 9:00*, *do dalšího pushe*, *do dalšího komentáře*, *na týden*.
+
+**Odložení je podmínka, ne jen čas.** *Do dalšího pushe* porovnává **hlavu** PR, *do dalšího
+komentáře* **počet příspěvků** (komentáře pod PR plus odeslaná review). Obojí přinese **jeden
+dávkový GraphQL dotaz na všechna odložená PR** uvnitř tiku pollingu, s předfiltrem přes
+`updatedAt` — na klidný den je to **nula dotazů navíc** a u časové podmínky se GitHubu neptá nikdy.
+
+**Odložený PR zmizí všude naráz**: z fronty, z odznaku v railu i v Docku, ze souhrnu ve stavovém
+řádku, z pruhů na domově, z notifikací **a z automatu** — *nechci to teď vidět* znamená i *neplať
+za to teď*. Běh, který už běží, se neruší; session je utracená v okamžiku, kdy začne.
+
+**A protože odložení něco skrývá, musí být poznat, že něco skryté je.** Vede z něj proto **čtvero
+ven**: blok **`Odložené · 2`** pod frontou s poznámkou `vrátí se zítra 9:00` a s `Vrátit teď`,
+připsání `· 2 odložené` do věty pod pozdravem na domově, vlastní prázdný stav fronty **`Všechno
+odložené`**, když je odložené všechno, a řádek **`Vrátil se z odložení · přišel push`** v `Dění`,
+aby PR nevypadl odnikud. Odložení leží v cache (`snoozed.json`), přežije restart a **na GitHub se
+o něm nepíše nic**.
+
+**Odložit jde jen cizí PR.** U vlastního rozhoduje o tom, kdy se na něj podívám, to, kdy pushnu —
+a blok `Odložené` visí pod frontou, takže odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde
+by se neobjevilo.
+
 ## Dění — co proletělo jako notifikace, zůstane
 
 Notifikace **nemá historii**: banner zmizí, stejná identita přepíše to, co ještě visí, a v okně po

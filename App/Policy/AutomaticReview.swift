@@ -29,15 +29,23 @@ extension Policy {
     /// Ruční spuštění (`AppStore.startReview`) tím dotčené **není** — pravidlo se týká automatu,
     /// ne tlačítka.
     ///
-    /// `mine` proto **nemá výchozí hodnotu**, na rozdíl od `Policy.dashboard`: prázdná množina
-    /// znamená „nikdo nejsem“, takže by zapomenutý parametr to pravidlo tiše vypnul — a tady se
-    /// za každý průchod platí session.
+    /// **Odložený PR automat nevydá** (#512), a je to tatáž věta jako u vlastních PR: „nechci to
+    /// teď vidět“ znamená i „neplať za to teď“. Odložení, po kterém se stejně utratí session
+    /// a přijde notifikace, je odložení jen na obrazovce.
+    ///
+    /// `mine` ani `isSnoozed` proto **nemají výchozí hodnotu**, na rozdíl od `Policy.dashboard`:
+    /// prázdná množina znamená „nikdo nejsem“ a mlčky dosazené `false` „nic není odložené“, takže
+    /// by zapomenutý parametr obě pravidla tiše vypnul — a tady se za každý průchod platí session.
     static func automaticallyReviewable(
         in summaries: [PullRequestSummary],
         configuration: Configuration,
         /// Loginy, které se počítají za moje (`Policy.ownLogins`). Prázdné = neví se, kdo se dívá,
         /// takže je podle `ownership(of:mine:)` všechno cizí — tatáž bezpečná strana jako všude.
         mine: Set<String>,
+        /// Je ten PR odložený (#512)? Uzávěrem, ne množinou: odložených je hrstka a plánovač běží
+        /// po každém tiku, takže skládat pro něj kopii mapy by byla práce za odpověď, která u
+        /// většiny řádků zní `false`.
+        isSnoozed: (PRIdentifier) -> Bool,
         /// `updatedAt`, se kterým se PR naposledy zvažoval. Co v mapě není, se nezvažovalo.
         considered: [PRIdentifier: Date],
         /// PR, nad kterými něco běží — druhý běh nad týmž PR nedává smysl.
@@ -45,6 +53,9 @@ extension Policy {
     ) -> [PRIdentifier] {
         summaries
             .filter { ownership(of: $0, mine: mine) == .theirs }
+            // Hned za autorstvím, a před vším ostatním: odložený PR se dál nezvažuje, ať si repo
+            // řeklo cokoli — je to pravidlo, ne předvolba.
+            .filter { !isSnoozed($0.id) }
             .filter { configuration.resolved(for: $0.repo).mode == .automatic }
             .filter { !running.contains($0.id) }
             // Draft se nereviewuje sám: autor na něm ještě pracuje a každý push by stál

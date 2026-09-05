@@ -112,7 +112,10 @@ struct BoardView: View {
     /// tvrdit nic — a nula nad nenačtenými daty je ta nebezpečná strana.
     private func summarySentence(_ board: Board) -> String {
         guard store.lastSuccess != nil else { return "Načítám frontu…" }
-        return Policy.boardSentence(board)
+        // **Odložené se připisují** (#512): na desce nejsou v žádném pruhu, takže je tahle věta
+        // to jediné, co na domově řekne, že něco schované je. Vrátit se dá v bloku `Odložené`
+        // pod frontou.
+        return Policy.boardSentence(board, snoozed: store.snoozedQueuePullRequests.count)
     }
 
     /// Kdy se to naposledy načetlo a kolik zbývá do příštího tiku — `poslední tik 09:41 ·

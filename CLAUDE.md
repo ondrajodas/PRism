@@ -431,7 +431,9 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
 
    **Rozhovor nad PR (#452) se tomuhle netýká, a je to zapsaná výjimka**: ukládá se **k PR, ne
-   k `headSha`**, protože rozhovor není nález.
+   k `headSha`**, protože rozhovor není nález. **Odložení PR (#512) je druhá taková výjimka**:
+   push ho nemá zneplatnit, nýbrž **splnit**, takže hlava v něm figuruje jako **měřidlo podmínky**,
+   ne jako klíč záznamu ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--odložení-pr-se-ukládá-k-pr-ne-k-headsha-512)).
 
    **Značka `Prošlo` u souboru (#500) je ta podmínka nad souborem, ne výjimka z ní.** Ukládá se
    **k PR**, ale nese **otisk obsahu** — sha z `index` řádky diffu, celou dvojici
@@ -496,7 +498,12 @@ přečtení, než sáhneš na:
   autora: `queuePullRequests` (cizí, tedy fronta) a vlastní PR (#331, #332). Fronta, karty
   `Čeká na mě` a `Blokuje`, souhrn, automat, hromadné spuštění a notifikace čtou **jen cizí**;
   úklid, eviction, nastavení, nabídka filtru a rozdělaná review **obojí**
-  ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332)). **Od #531 k tomu stojí
+  ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332-od-512-dvě-osy)). **Od #512
+  je nad tím druhá osa: odložení** (`Policy.pullRequests(_:withoutSnoozed:)`) — fronta, odznak,
+  souhrn, deska, notifikace a **automat** čtou **bez odložených**, úklid, filtr a nastavení
+  **s nimi**. **Odložení je stav, který něco skrývá, takže musí být poznat, že něco skryté je**:
+  blok `Odložené`, věta pod pozdravem, vlastní prázdno fronty a řádek v `Dění`
+  ([rozbor](docs/architektura.md#odložit-pr-512)). **Od #531 k tomu stojí
   přijaté záložky** (`adoptedTabs`) — PR otevřený odkazem nebo `prism://` a **od #527 i záložka
   obnovená po restartu** (`TabAdoption`) **do fronty nepatří**, ale úklid po tiku ho zahodit
   nesmí; obojí bere `pullRequestsInPlay(besides:)`. **Obnovení nic nespouští** (#527) — jen

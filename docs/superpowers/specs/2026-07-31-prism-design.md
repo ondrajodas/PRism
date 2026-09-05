@@ -7130,3 +7130,58 @@ nic, takže **na obrazovce není co vidět**.
 1,17 s a #541 se tím nezavírá jako „opraveno“. Nejbližší lever, který zbývá, není zlevnění uvnitř
 diffu — ty jsou vyzkoušené čtyřikrát v #472, jednou v #476 a jednou tady —, ale **kolik view v tom
 tabu vůbec vznikne**, a to je návrhová otázka o pevném seznamu z #469, ne mikrooptimalizace.
+
+### Záznam rozhodnutí — odložení PR se ukládá k PR, ne k `headSha` (#512)
+
+**Tvrdá podmínka č. 5 říká, že nálezy jsou klíčované `headSha`** — tvrzení o kódu se nesmí ukazovat
+proti kódu, který už neexistuje. Odložení se **ke `headSha` neklíčuje** a je to výjimka, kterou je
+potřeba umět obhájit, ne přehlédnutí.
+
+**Odložení o kódu netvrdí nic.** Je to moje rozhodnutí o tom, kdy se na pull request podívám, ne
+věta o řádku 42. Push ho proto nemá **zneplatnit**, nýbrž **splnit** — a to je opačný vztah, než
+jaký má push k nálezům. Kdyby se odložení klíčovalo hlavou, zaniklo by přesně tím pushem, kvůli
+kterému má skončit — jenže potichu a bez řádku v `Dění`, takže by se PR ve frontě objevil odnikud.
+
+**Precedens je rozhovor nad PR (#452)**, který se z téhož důvodu ukládá k PR: otázka „proč se ten
+mutex bere“ pushem nezastará.
+
+**Hlava v tom přesto figuruje, jen v opačné roli**: `SnoozeCondition.nextPush(head:)` ji drží jako
+**měřidlo podmínky**. Tvrdá podmínka č. 5 tedy platí nad odložením v tom smyslu, na kterém stojí —
+porovnání hlavy — jen se z něj neodvozuje **platnost záznamu**, nýbrž jeho **konec**.
+
+**Zamítnutá varianta: odložení jako filtr v paměti.** Nejlevnější by bylo držet odložení jen za
+běhu, bez souboru. Zahodilo se to hned: restart aplikace je běžná věc (`./bin/run.sh` po každém
+mergi) a PR, který se po něm vrátí do fronty, aniž by se cokoli stalo, je horší než žádné odložení
+— člověk mu přestane věřit a přestane ho používat.
+
+**Zamítnutá varianta: měřit „přišel komentář“ přes `updatedAt`.** Bylo by to zadarmo (search ho
+vrací) a nevyžadovalo by to žádný nový dotaz. Zahodilo se to, protože `updatedAt` se hýbe i po
+štítku, po přejmenování větve a **po pushi** — takže by *do dalšího komentáře* skončilo pushem
+a nabídka by slibovala něco jiného, než dělá. Je to zrovna ten vzor, který Copilot v tomhle repu
+nachází opakovaně: text tvrdí víc, než data unesou. Zvolila se cesta o jedno volání dražší
+(`comments.totalCount + reviews.totalCount` v dávkovém dotazu), protože rozdíl mezi pushem
+a komentářem je celý obsah těch dvou voleb.
+
+**Zamítnutá varianta: rozšířit `PullRequestHeadsQuery` (#420) místo vlastního dotazu.** Ušetřilo by
+to jedno volání za tik v nejhorším případě. Zahodilo se to, protože obě rozhlídky mají jiný
+předfiltr — zastaralé nálezy se ptají na **cizí PR s uloženými nálezy**, odložení na **odložená
+PR** —, takže by společný dotaz musel spojit dvě různé množiny a jedné z nich vozit pole, které
+nikdy nepřečte. `PullRequestHead` by navíc dostalo pole o komentářích, tedy jméno, které lže
+o polovině typu.
+
+**Zamítnutá varianta: odkládat i vlastní PR.** Vypadá to jako zbytečné omezení a technicky by nic
+nebránilo. Rozhodl o tom **kresba**: blok `Odložené` visí pod **frontou**, takže odložené vlastní
+PR by ze sekce `Moje PR` zmizelo a **nikde** by se neobjevilo — tedy zrovna ta tichá díra, kvůli
+které tohle issue existuje. Kdyby na to jednou přišla řeč, cena za to je druhý blok pod sekcí
+`Moje PR`, ne přepnutí příznaku.
+
+**Změna proti zadání issue: `Vlastní datum…` v nabídce není.** Kalendář v kontextové nabídce je
+druhý překryv nad prvním a je to vlastní obrazovka s vlastním fokusem a vlastní klávesnicí; čtyři
+hotové volby pokrývají to, co člověk zadá v devíti případech z deseti, a delší odklad než týden se
+dá složit dvojím odložením. Je to **zapsaná mezera**, ne opomenutí — kdyby chyběla, vrátí se to
+jako vlastní issue s vlastním zákresem.
+
+**Změna proti zákresu: první volba míří na nejbližší devátou, ne na zítřek.** Deck i sekce 53 píšou
+`do zítra 9:00`. Odložení zadané v jednu v noci by tím ale PR schovalo na dvaatřicet hodin, což je
+opak toho, co „do rána“ znamená. Okamžik je proto **příští výskyt deváté** a titulek se z něj
+**odvozuje** (`do rána 9:00`, když je devátá ještě dneska) — napsané `zítra` by v tu chvíli lhalo.

@@ -519,6 +519,31 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return (queued ?? heads).filter { ids.contains($0.key) }
     }
 
+    // MARK: - Rozhlídka po odložených PR (#512)
+
+    /// Co vrátí `fetchSnoozeSignals(of:)`, klíčované PR. **Chybějící klíč není chyba** — je to
+    /// odpověď „na tuhle PR nevíme“, a ta se u odložení nesmí splést s „nezměnilo se nic“:
+    /// z první z nich odložení trvá dál, z druhé se počítá základ.
+    var snoozeSignals: [PRIdentifier: SnoozeSignal] = [:]
+
+    /// Čím `fetchSnoozeSignals(of:)` spadne. `nil` = vrátí, co je v `snoozeSignals`.
+    var snoozeSignalsFailure: (any Error)?
+
+    /// **Na co se kdo ptal, po jednotlivých voláních.** Vnořené pole ze stejného důvodu jako
+    /// u hlav: stojí na něm tvrzení, že se za tik pošle **jeden** dotaz na všechna odložená PR.
+    var snoozeSignalRequests: [[PRIdentifier]] { lock.withLock { snoozeSignalsAsked } }
+
+    private var snoozeSignalsAsked: [[PRIdentifier]] = []
+
+    func fetchSnoozeSignals(of ids: [PRIdentifier]) async throws -> [PRIdentifier: SnoozeSignal] {
+        // Prázdný dotaz se nezaznamenává ani nespouští — jako ve `GhGateway`, ať se na tom dá
+        // tvrdit, že se na nic neptáme.
+        guard !ids.isEmpty else { return [:] }
+        lock.withLock { snoozeSignalsAsked.append(ids) }
+        if let snoozeSignalsFailure { throw snoozeSignalsFailure }
+        return snoozeSignals.filter { ids.contains($0.key) }
+    }
+
     // MARK: - Slévatelnost vlastních PR jedním dotazem (#572)
 
     /// Co vrátí `fetchMergeReadiness(of:)`. Chybějící PR = „nevíme“, jako u živého `gh`.

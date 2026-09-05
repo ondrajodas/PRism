@@ -250,14 +250,22 @@ extension Policy {
     /// **Části, které by byly nulou, se nepíšou** — „0 čeká na ostatní“ je hlášení o ničem a
     /// pozdrav má být krátký. Když není na tahu nic, řekne se to slovem, ne nulou: prázdná deska
     /// je nejlepší možný stav a nesmí vypadat jako porucha.
-    static func boardSentence(_ board: Board) -> String {
+    /// **Odložené se do věty připisují** (#512), i když na desce nejsou v žádném pruhu. Je to
+    /// jediné místo domova, kde se dá říct „něco tu schované je“ — a fronta, ze které práce
+    /// potichu zmizí, je horší než fronta, ve které leží. Píše se **až za pruhy** a jen když
+    /// nějaké odložené jsou: nula by byla hlášení o ničem, jako u ostatních částí věty.
+    ///
+    /// Platí to i nad **prázdnou** deskou: `Nic na tahu · 2 odložené` je pravda, kdežto samotné
+    /// „fronta je vyřízená“ nad dvěma schovanými PR není.
+    static func boardSentence(_ board: Board, snoozed: Int = 0) -> String {
         let counts = Dictionary(uniqueKeysWithValues: board.lanes.map { ($0.lane, $0.count) })
         let onMove = board.lanes.filter { $0.lane.isOnMove }.reduce(0) { $0 + $1.count }
         let waiting = counts[.waiting] ?? 0
         let merge = counts[.merge] ?? 0
 
         guard onMove > 0 || waiting > 0 else {
-            return "Nic na tahu — fronta je vyřízená a nic vlastního nečeká."
+            guard snoozed > 0 else { return "Nic na tahu — fronta je vyřízená a nic vlastního nečeká." }
+            return "Nic na tahu · \(snoozedPart(snoozed))".capitalizedFirst
         }
         var parts: [String] = [
             onMove > 0
@@ -280,9 +288,15 @@ extension Policy {
                 many: "se dá mergnout"
             ))
         }
+        if snoozed > 0 { parts.append(snoozedPart(snoozed)) }
         // První část začíná velkým písmenem, zbytek ne — je to jedna věta oddělená středníkovými
         // tečkami, ne tři nadpisy.
         return parts.joined(separator: " · ").capitalizedFirst
+    }
+
+    /// `2 odložené` do věty pod pozdravem (#512) — jedno místo pro obojí větev `boardSentence`.
+    private static func snoozedPart(_ count: Int) -> String {
+        Plural.czech(count, one: "odložený", few: "odložené", many: "odložených")
     }
 
     /// Co stojí na desce, na které **není ani jeden pruh** (#515).
