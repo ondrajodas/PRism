@@ -1057,9 +1057,20 @@ Push → CI → Review → Merge*. Kreslí se **stejně jako dráha reviewera v 
 tytéž kapsle, táž barevná škála: je to proces s fázemi, a okno umí jeden způsob, jak proces
 nakreslit. Na cizím PR se **nekreslí vůbec**, ne zašedle.
 
-**Aktivní je první stanice, která není hotová**, a všechno za ní je tiché. Není to úspora: zelený
-check nad kódem, který ještě nikdo nepushnul, mluví o **minulém** pushi. Co dráha zamlčí, je pořád
-vidět tam, kde to bydlí — v tabu `Kontroly`, v sekci `Větev`, v panelu `Zadání`.
+**Aktivní je první stanice, která není hotová** — ta je zvýrazněná, nese jedinou akci a mluví o ní
+věta pod fázemi. Rozdělaná je vždycky jen jedna kapsle; nejhorší stanice aktivní **není**, protože
+dráha odpovídá na „co je další krok“, ne „co je nejvíc rozbité“.
+
+**Stanice za zastávkou ale nejsou automaticky šedé: co je hotové, svítí zeleně.** Dráha říká dvě
+věci naráz — kde stojím a co je hotové —, aby bylo na první pohled vidět, **co chybí**. Schválený
+PR se zelenými checky má proto `CI` i `Review` zelené, i když se dráha zastavila na `Zadání`: kód je
+pushnutý, checky nad touhle hlavou doběhly a schválení platí.
+
+**Šedá zůstává tam, kde fakta závisí na kroku, který se neudělal.** `CI` a `Review` mluví o hlavě,
+která je **na GitHubu**, takže nad nepřetlačenou prací v cache nebo nad větví pozadu jsou tiché —
+zelený check nad kódem, který ještě nikdo nepushnul, mluví o **minulém** pushi. Tiché jsou i
+nenačtené checky (nenačteno není zeleno) a `Merge`, poslední brána před nevratnou akcí. Co dráha
+zamlčí, je pořád vidět tam, kde to bydlí — v tabu `Kontroly`, v sekci `Větev`, v panelu `Zadání`.
 
 **Pod fázemi je jedna věta o tom, co je na tahu** (*„Od předání přibyly 2 položky.“*, *„Větev je
 o 4 commity pozadu za základem — srovnej ji rebasem.“*, *„Zeleno — dá se to mergnout.“*) a vpravo

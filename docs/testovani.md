@@ -359,9 +359,29 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
 
   **Matice je kříž přes pět os, ne kartézský součin** (`handoff × větev × CI × review × merge`).
   Součin by měl tisíce prvků a testoval by pořád totéž pravidlo; kříž se dá projít pohledem a nad
-  ním se tvrdí to, co dráha slibuje: **před zastávkou je hotovo, za ní `idle` a `detail == nil`**
-  (stanice, na kterou se nedošlo, nesmí nic tvrdit), věta pod dráhou **nikdy nechybí** a akci má
-  jedině zastávka.
+  ním se tvrdí to, co dráha slibuje: **před zastávkou je hotovo, za ní jedině `done` nebo `idle`**
+  (rozdělaná smí být **nejvýš jedna** kapsle — ta aktivní, o které mluví věta), **`idle` nic
+  netvrdí** (`detail == nil`), věta pod dráhou **nikdy nechybí** a akci má jedině zastávka.
+
+  **Za zastávkou se od druhého kola #508 zelená kreslí, a testuje se to z obou stran.** Kladná
+  strana je případ `keboola/platform-libraries#566` doslova — schváleno, CI zeleně, walk stojí na
+  `Zadání` —, kde musí být `Push`, `CI` i `Review` `done` i s detailem (`zeleno`, `schváleno`)
+  a **aktivní stanice se nesmí pohnout** (pořád `Zadání`, pořád s akcí `Otevřít zadání`). Záporná
+  strana je cennější a je trojí: **nenačtené checky ani nenačtení reviewery za zastávkou
+  nezezelenají** (`nil` není nula), **červené CI za zastávkou taky ne** (rozdělaná je jen aktivní
+  stanice) a nad **nepřetlačenou nebo pozadu jsoucí větví jsou `CI` i `Review` šedé**, i když data
+  z GitHubu jsou zelená — šest podob té „rozešlé hlavy“ výčtem (rebase v cache, konflikt v cache,
+  větev pozadu, konflikt na GitHubu, `loading`, `failed`). K tomu se **výčet
+  `Policy.ownLoopFacts(of:)` tvrdí jmenovitě** pro všech sedm stanic, a k němu, že předpokladem smí
+  být jedině **dřívější** stanice.
+
+  **Ověřeno vložením tří regresí** — u každé se koukalo, jestli spadne to, co má:
+
+  | Vložená regrese | Co spadlo |
+  |---|---|
+  | `CI` přestane stát na `Push`i (`case .ci: []`) | 7 nálezů: výčet předpokladů u `.ci` a **všech šest** podob rozešlé hlavy (`CI` vyšlo `done`) |
+  | za zastávkou se kreslí rozdělaný stav místo `idle` | 36 nálezů: matice (32×) a všechna čtyři tvrzení o nenačtených datech (`unknown`, `failed`, detail `zjišťuju`) |
+  | návrat na staré pravidlo (za zastávkou vždycky `idle`) | 11 nálezů: obě kladná tvrzení — `Push`, `CI` i `Review` vyšly `idle` a detaily `nil` |
 
   **Tři věty, které se rozbijí potichu:** `unknown` × `failed` u merge (#572 — `K merge` po startu
   slévatelnost nezná, a `nejde mergnout` nad načítáním je tvrzení z chybějících dat); mergnutý PR

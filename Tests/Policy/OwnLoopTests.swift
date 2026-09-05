@@ -7,8 +7,9 @@ import Testing
 ///
 /// Nejcennější tvrzení tady jsou ta záporná: na **cizím** PR se dráha nekreslí vůbec, nad
 /// **nenačtenou** slévatelností se netvrdí `nejde` (#572), nad **mergnutým** PR se netvrdí, že
-/// zbývá předat zadání, a stanice **za** aktivní netvrdí nic (`idle`). Všechna čtyři se rozbijí
-/// potichu — dráha zůstane zelená a bude ukazovat vedle.
+/// zbývá předat zadání, a stanice za zastávkou **nezezelená z neznámých ani neaktuálních dat**
+/// (#508, druhé kolo). Všechna čtyři se rozbijí potichu — dráha zůstane zelená a bude ukazovat
+/// vedle.
 @Suite("Dráha smyčky vlastního PR (#508)")
 struct OwnLoopTests {
     // MARK: - Stavba vstupů
@@ -107,10 +108,13 @@ struct OwnLoopTests {
         }
     }
 
-    /// **Walk**: co je před zastávkou, je hotové; co je za ní, je `idle`. Tvrdí to nad celou
-    /// maticí, ne nad jedním případem — pořadí je to jediné, co dráha slibuje.
-    @Test("Před zastávkou hotovo, za ní nic")
-    func stationsAfterTheStopClaimNothing() throws {
+    /// **Walk**: co je před zastávkou, je hotové; za ní je jedině `done`, nebo `idle`.
+    ///
+    /// **Rozdělaná stanice smí být nejvýš jedna — ta aktivní** (#508, druhé kolo). Kdyby jich bylo
+    /// víc, věta pod dráhou by mluvila o jedné z nich a nedalo by se poznat o které. A `idle`
+    /// nesmí nic tvrdit: detail u šedé kapsle je věta o stavu, do kterého se nedošlo.
+    @Test("Před zastávkou hotovo, za ní jen zelená nebo nic")
+    func stationsAfterTheStopAreDoneOrSilent() throws {
         for (index, sample) in Self.matrix.enumerated() {
             let loop = try #require(sample.build(), "vzorek \(index)")
             guard let active = loop.active else {
@@ -125,12 +129,153 @@ struct OwnLoopTests {
                 if offset < position {
                     #expect(stop.state == .done, "vzorek \(index): \(stop.station) před zastávkou")
                 } else if offset > position {
-                    #expect(stop.state == .idle, "vzorek \(index): \(stop.station) za zastávkou")
-                    #expect(stop.detail == nil, "vzorek \(index): \(stop.station) něco tvrdí")
+                    #expect(
+                        stop.state == .done || stop.state == .idle,
+                        "vzorek \(index): \(stop.station) za zastávkou je rozdělaná"
+                    )
+                    if stop.state == .idle {
+                        #expect(stop.detail == nil, "vzorek \(index): \(stop.station) něco tvrdí")
+                    }
                 } else {
                     #expect(stop.state != .done && stop.state != .idle, "vzorek \(index): zastávka")
                 }
             }
+        }
+    }
+
+    // MARK: - Co smí zezelenat za zastávkou
+
+    /// **Případ #566 doslova: schváleno, CI zeleně, walk stojí na `Zadání`.**
+    ///
+    /// Tohle je ta změna zadání z proklikání (#508, druhé kolo): do ní byly `CI` i `Review` šedé,
+    /// protože se walk zastavil dřív. Fakta o nich jsou přitom **známá a aktuální** — kód je
+    /// pushnutý, checky nad touhle hlavou doběhly a schválení platí.
+    @Test("Za zastávkou zelená stanice: schváleno a CI zeleně nad nepředaným zadáním")
+    func doneStationsShowPastTheStop() throws {
+        let loop = try #require(
+            walk(
+                review: .completed(findings: 6),
+                handoff: report(.never, pending: 1),
+                status: status(.mergeable, .clean),
+                checks: [check("build", .passed), check("test", .passed)],
+                reviewers: [RequestedReviewer(login: "kolega", answer: .approved)],
+                merge: .allowed
+            )
+        )
+        // Aktivní stanice se změnou nehýbe: pořád první nehotová, pořád s větou a akcí.
+        #expect(loop.active == .handoff)
+        #expect(loop.move == .openHandoff)
+        #expect(loop.state(of: .handoff) == .running)
+
+        // A za ní zezelená, co je hotové.
+        #expect(loop.state(of: .push) == .done)
+        #expect(loop.state(of: .ci) == .done)
+        #expect(loop.state(of: .review) == .done)
+        #expect(loop.stations.first { $0.station == .ci }?.detail == "zeleno")
+        #expect(loop.stations.first { $0.station == .review }?.detail == "schváleno")
+
+        // `Agent` stojí na `Zadání` a `Merge` na celém kole — obojí mlčí.
+        #expect(loop.state(of: .agent) == .idle)
+        #expect(loop.state(of: .merge) == .idle)
+    }
+
+    /// **Nenačtená data se nesmí kreslit jako hotová.** Je to ten vzor, který Copilot v tomhle repu
+    /// nachází opakovaně: text, který tvrdí víc, než data unesou. `nil` u checků ani u reviewerů
+    /// není zeleno — a nad zastávkou se to pozná jedině tím, že zůstane `idle`.
+    @Test("Za zastávkou nezezelená to, co se neví")
+    func unknownFactsNeverGoGreenPastTheStop() throws {
+        let noChecks = try #require(
+            walk(handoff: report(.never, pending: 2), checks: nil, reviewers: [])
+        )
+        #expect(noChecks.active == .handoff)
+        #expect(noChecks.state(of: .ci) == .idle, "nenačtené checky nejsou zeleno")
+        #expect(noChecks.stations.first { $0.station == .ci }?.detail == nil)
+
+        let noReviewers = try #require(
+            walk(handoff: report(.never, pending: 2), checks: [], reviewers: nil)
+        )
+        #expect(noReviewers.active == .handoff)
+        #expect(noReviewers.state(of: .review) == .idle, "nenačtení reviewery nejsou zeleno")
+
+        // Červené checky za zastávkou taky nezezelenají — a nekreslí se jako druhá porucha.
+        let red = try #require(
+            walk(handoff: report(.never, pending: 2), checks: [check("build", .failed)])
+        )
+        #expect(red.active == .handoff)
+        #expect(red.state(of: .ci) == .idle)
+    }
+
+    /// **`CI` a `Review` mluví o hlavě na GitHubu, takže se s nepřetlačenou větví rozejdou.**
+    /// Dokud `Push` neprošel, je zelený check věta o **minulém** pushi — a to je přesně to původní
+    /// zdůvodnění z prvního kola, které se tímhle zúžilo na `Push`, místo aby se zahodilo.
+    @Test("Nepřetlačená větev drží CI a Review šedé i nad zelenými daty")
+    func staleFactsStaySilent() throws {
+        let rebased = RebasedBranch(
+            worktree: URL(filePath: "/tmp/566-sync"),
+            headSha: "abc1234",
+            rebasedFrom: "9c1de02",
+            arriving: [],
+            replayed: 2
+        )
+        let cases: [(String, BranchSyncState?, BranchStatusState?)] = [
+            ("rozdělaná práce v cache", .rebased(rebased), status()),
+            ("konflikt v cache", .conflicted(files: ["a.swift"]), status()),
+            ("větev pozadu", nil, status(.mergeable, .clean, behind: 4)),
+            ("konflikt na GitHubu", nil, status(.conflicting, .clean)),
+            ("stav se nedotáhl", nil, .loading),
+            ("stav se nepodařilo zjistit", nil, .failed("gh spadlo")),
+        ]
+        for (name, sync, branch) in cases {
+            let loop = try #require(
+                walk(
+                    sync: sync,
+                    status: branch,
+                    checks: [check("build", .passed)],
+                    reviewers: [RequestedReviewer(login: "kolega", answer: .approved)]
+                )
+            )
+            #expect(loop.active == .push, "\(name)")
+            #expect(loop.state(of: .ci) == .idle, "\(name): CI mluví o jiné hlavě")
+            #expect(loop.state(of: .review) == .idle, "\(name): Review mluví o jiné hlavě")
+        }
+    }
+
+    /// **`Push` na ničem nestojí, `Nálezy` taky ne** — a je to ten rozdíl, kvůli kterému má #566
+    /// zelené kapsle. Nepředané zadání z pushnuté a srovnané větve nedělá nepravdu.
+    @Test("Push zezelená i nad zastávkou na Nálezech a na Zadání")
+    func pushDoesNotDependOnEarlierStations() throws {
+        for review in [ReviewState.notStarted, .running(finished: 1, total: 3), .stale] {
+            let loop = try #require(walk(review: review, checks: [check("build", .passed)]))
+            #expect(loop.active == .findings, "\(review)")
+            #expect(loop.state(of: .push) == .done, "\(review): větev je pushnutá, ať review dělá co chce")
+            #expect(loop.state(of: .ci) == .done, "\(review): checky nad touhle hlavou doběhly")
+            #expect(loop.state(of: .handoff) == .idle, "\(review): zadání stojí na nálezech")
+            #expect(loop.state(of: .agent) == .idle, "\(review)")
+        }
+    }
+
+    /// Výčet předpokladů — **jediné místo, které o hranici rozhoduje**, takže se tvrdí jmenovitě.
+    /// Kdyby se `Merge` z výčtu utrhl, kreslila by dráha `k merge` nad nepředaným zadáním.
+    @Test("Na čem stojí fakta které stanice", arguments: OwnLoop.Station.allCases)
+    func factsOfEachStation(_ station: OwnLoop.Station) {
+        let expected: Set<OwnLoop.Station> = switch station {
+        case .findings: []
+        case .handoff: [.findings]
+        case .agent: [.handoff]
+        case .push: []
+        case .ci: [.push]
+        case .review: [.push]
+        case .merge: [.findings, .handoff, .agent, .push, .ci, .review]
+        }
+        #expect(Policy.ownLoopFacts(of: station) == expected, "\(station)")
+        // Předpoklad smí být jedině **dřívější** stanice — jinak by se dráha nedala projít jedním
+        // průchodem a `done` by odpovídalo na otázku, na kterou se ještě neptalo.
+        let position = OwnLoop.Station.allCases.firstIndex(of: station)
+        for fact in Policy.ownLoopFacts(of: station) {
+            #expect(
+                (OwnLoop.Station.allCases.firstIndex(of: fact) ?? 0) < (position ?? 0),
+                "\(station) stojí na pozdější \(fact)"
+            )
         }
     }
 

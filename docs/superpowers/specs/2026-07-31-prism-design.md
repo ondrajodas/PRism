@@ -7106,6 +7106,9 @@ u `Zadání`. Zahozeno: zelený ani červený check nad kódem, který ještě n
 o **minulém** pushi, tedy tvrzení, které data neunesou. Co dráha zamlčí, je pořád vidět tam, kde to
 bydlí — v tabu *Kontroly*, v sekci *Větev*, v panelu *Zadání*.
 
+**Tohle rozhodnutí se v druhém kole #508 změnilo, viz [záznam níž](#záznam-rozhodnutí--za-zastávkou-se-zelená-kreslí-508-druhé-kolo).**
+Zůstává důvod (a je to týž důvod), zúžený na stanici `Push`; padá rozsah, na který se uplatňoval.
+
 **3. Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá
 **nejlevnější tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá předat.
 Dráha odpovídá na jinou otázku — **kde v kole jsem** —, a `Zadání ✓` nad šesti nepředanými
@@ -7128,3 +7131,40 @@ rozhodnutí `OwnLoopView.showsAction` a snímek, který udělá člověk. A **ve
 `controlSize(.small)`, ne `font(.caption)`**: `bordered` si metriku bere z control size, takže
 samotné písmo tlačítko nezmenší (vidět na screenshotu z prvního kola, kde bylo stejně velké jako
 akcentové `Spustit review`).
+
+### Záznam rozhodnutí — za zastávkou se zelená kreslí (#508, druhé kolo)
+
+**Mění rozhodnutí č. 2 výš.** Vyšlo to z proklikání na `keboola/platform-libraries#566`: PR
+**schválený** a s **zeleným CI** měl stanice `CI` i `Review` šedé, protože se walk zastavil na
+`Zadání` u jediného nepředaného nálezu. Uživatelova formulace je zadání: *„chci zobrazit zeleně co
+je hotové, abychom na první pohled viděli, co chybí.“* Smysl dráhy se tím posouvá z **kam až jsem
+došel** na **co ještě chybí**.
+
+**Původní důvod nebyl chybný, byl jen moc široký.** *Tvrdit něco o CI nad kódem, který ještě není
+pushnutý, znamená mluvit o minulém pushi* — to platí dál, jenže popisuje zastávku **za `Push`em**,
+ne zastávku kdekoli. Když walk stojí na `Zadání`, je kód pushnutý, checky nad **touhle** hlavou
+doběhly a schválení platí; ta fakta jsou známá i aktuální a dráha je jen zamlčela.
+
+**Hranice je jedna čistá funkce a výčet, ne podmínka ve view.** `Policy.ownLoopFacts(of:)` říká, na
+dokončení kterých **dřívějších** stanic fakta té které stojí: `Nálezy` a `Push` na ničem (poloha
+větve je tvrzení o dnešní větvi), `Zadání` na `Nálezech`, `Agent` na `Zadání`, `CI` a `Review` na
+`Push`i (mluví o hlavě, která je na GitHubu) a `Merge` na všech šesti. Stanice za zastávkou se
+vyhodnotí jedině s celým svým výčtem hotovým, a nakreslí se `done`, **jen když projde**.
+
+**Zamítnuté varianty, tři:**
+
+1. **Kreslit za zastávkou i rozdělané a spadlé stavy** (červená CI je vidět, i když stojím na
+   `Zadání`). Zahozeno: věta pod dráhou mluví o **jedné** stanici, a druhá červená kapsle by se
+   s ní přetahovala o to, který krok je vlastně další. Nálezy z CI jsou o tab dál.
+2. **Vyhodnocovat za zastávkou úplně všechno a nechat rozhodnutí na kresbě.** Zahozeno: pak by
+   `Zadání ✓ nic k předání` vyšlo i nad review, které vůbec neběželo — nula, kterou nikdo
+   nespočítal. To je přesně vzor „text tvrdí víc, než data unesou“.
+3. **Pustit `Merge` na zeleno, když to GitHub dovolí.** Zahozeno: je to poslední brána před
+   **nevratnou** akcí, takže se u ní zaokrouhluje k „nevím“; `k merge` nad šesti nepředanými
+   položkami je navíc rada, která si protiřečí s větou o řádek níž. Že `mergeStep` nikdy nevrací
+   `.passed`, a `Merge` by tedy zelený nevyšel tak jako tak, je **shoda okolností** — proto řádek
+   ve výčtu zůstává.
+
+**Co se nemění ani o kus:** aktivní stanice (pořád první nehotová), věta pod dráhou, akce, razítko
+v hlavičce, sada stavů (`ReviewerLane.PhaseState`), zkratka nad mergnutým a zavřeným PR i to, že se
+na cizím PR dráha nekreslí vůbec. Změna je v jedné funkci a v jednom `guard`u ve walku.

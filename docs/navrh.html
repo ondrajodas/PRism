@@ -15011,10 +15011,19 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
         panel <em>Zadání</em> (sekce 22) a sekce <em>Větev</em> (sekce 36 a 37) zůstávají tam,
         kde jsou — akce do nich <b>odkazuje</b>.
       </p>
+      <p class="muted">
+        <strong>Dráha říká dvě věci naráz: kde stojím a co je hotové.</strong> Stanice <b>za</b>
+        aktivní proto nejsou automaticky šedé — <b>zelenají, kdykoli jsou jejich fakta známá
+        a aktuální</b>. Schválený pull request se zelenými checky má <em>CI</em> i <em>Review</em>
+        zelené, i když se dráha zastavila na <em>Zadání</em>: kód je pushnutý, checky nad touhle
+        hlavou doběhly a schválení platí. Šedá zůstává tam, kde fakta doopravdy závisí na kroku,
+        který se neudělal — a <b>rozdělaná je vždycky jen jedna kapsle</b>, ta, o které mluví věta
+        pod fázemi.
+      </p>
     </div>
 
     <div class="pane new">
-      <div class="tag"><i></i>Návrh · hlavička vlastního PR s dráhou, aktivní stanice je Zadání</div>
+      <div class="tag"><i></i>Návrh · hlavička vlastního PR s dráhou, aktivní stanice je Zadání a za ní svítí, co je hotové</div>
       <div class="frame flat">
         <div class="pr-head" style="padding-bottom: 12px;">
           <div class="pr-title"><h4>feat(diff): find in the diff with ⌘F</h4><span class="num">#499</span></div>
@@ -15039,9 +15048,9 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <span class="ph done" style="flex: 1;">Nálezy 3 nálezy ✓</span>
               <span class="ph run" style="flex: 1;">Zadání 2 k předání</span>
               <span class="ph idle" style="flex: 1;">Agent</span>
-              <span class="ph idle" style="flex: 1;">Push</span>
-              <span class="ph idle" style="flex: 1;">CI</span>
-              <span class="ph idle" style="flex: 1;">Review</span>
+              <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
               <span class="ph idle" style="flex: 1;">Merge</span>
             </div>
             <div class="last">Od předání přibyly 2 položky.</div>
@@ -15051,7 +15060,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
     </div>
 
     <div class="pane new">
-      <div class="tag"><i></i>Návrh · čtyři místa, kde se smyčka zastavuje</div>
+      <div class="tag"><i></i>Návrh · pět míst, kde se smyčka zastavuje — a co za zastávkou zůstane svítit</div>
       <div class="frame flat">
         <div class="lanes">
           <div class="lane">
@@ -15064,8 +15073,8 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <span class="ph run" style="flex: 1;">Nálezy nespuštěno</span>
               <span class="ph idle" style="flex: 1;">Zadání</span>
               <span class="ph idle" style="flex: 1;">Agent</span>
-              <span class="ph idle" style="flex: 1;">Push</span>
-              <span class="ph idle" style="flex: 1;">CI</span>
+              <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
               <span class="ph idle" style="flex: 1;">Review</span>
               <span class="ph idle" style="flex: 1;">Merge</span>
             </div>
@@ -15081,9 +15090,9 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <span class="ph done" style="flex: 1;">Nálezy 3 nálezy ✓</span>
               <span class="ph done" style="flex: 1;">Zadání 6 předáno ✓</span>
               <span class="ph idle" style="flex: 1;">Agent předáno</span>
-              <span class="ph idle" style="flex: 1;">Push</span>
-              <span class="ph idle" style="flex: 1;">CI</span>
-              <span class="ph idle" style="flex: 1;">Review</span>
+              <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
               <span class="ph idle" style="flex: 1;">Merge</span>
             </div>
             <div class="last">Předáno 6 položek. Jestli na tom agent pracuje, aplikace zatím neví — dráha se pohne, až na větev přijde commit.</div>
@@ -15101,10 +15110,28 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <span class="ph done" style="flex: 1;">Agent commit dorazil ✓</span>
               <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
               <span class="ph fail" style="flex: 1;">CI 1 neprošel ✕</span>
-              <span class="ph idle" style="flex: 1;">Review</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
               <span class="ph idle" style="flex: 1;">Merge</span>
             </div>
             <div class="last">1 check neprošel — oprav to a pushni znovu.</div>
+          </div>
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">předáno 6 položek · proti 9c1de02</span>
+              <span class="sp"></span>
+              <span class="mini pri">Otevřít větev</span>
+            </header>
+            <div class="phases">
+              <span class="ph done" style="flex: 1;">Nálezy čisto ✓</span>
+              <span class="ph done" style="flex: 1;">Zadání 6 předáno ✓</span>
+              <span class="ph done" style="flex: 1;">Agent commit dorazil ✓</span>
+              <span class="ph run" style="flex: 1;">Push o 4 vzadu</span>
+              <span class="ph idle" style="flex: 1;">CI</span>
+              <span class="ph idle" style="flex: 1;">Review</span>
+              <span class="ph idle" style="flex: 1;">Merge</span>
+            </div>
+            <div class="last">Větev je o 4 commity pozadu za základem — srovnej ji rebasem.</div>
           </div>
           <div class="lane">
             <header>
@@ -15145,11 +15172,11 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
         <span class="num">188</span>
         <span class="body">
           <b>Aktivní je první nehotová, ne nejhorší</b>
-          <span>Dráha se jde <b>po pořádku</b> a zastaví se na první stanici, která není hotová;
-          všechno za ní je <code>.ph.idle</code>, tedy <b>bez tvrzení</b>. Není to úspora: zelený
-          check nad kódem, který ještě nikdo nepushnul, je věta o <b>minulém</b> pushi. Co dráha
-          zamlčí, je pořád vidět tam, kde to bydlí — v tabu <em>Kontroly</em>, v sekci <em>Větev</em>,
-          v panelu <em>Zadání</em>.</span>
+          <span>Dráha se jde <b>po pořádku</b> a zastaví se na první stanici, která není hotová —
+          ta je zvýrazněná, nese <b>jedinou akci</b> a mluví o ní věta pod fázemi. Nejhorší stanice
+          aktivní <b>není</b>: dráha odpovídá na „co je další krok“, ne „co je nejvíc rozbité“.
+          A rozdělaná (<code>.ph.run</code>, <code>.ph.fail</code>) je <b>nejvýš jedna</b> — druhá
+          by soupeřila s tou větou a nedalo by se poznat, o které z nich mluví.</span>
         </span>
       </div>
       <div class="note">
@@ -15194,6 +15221,24 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
           <b>Na cizím PR se nekreslí, ne zašedne</b>
           <span>Smyčka je „co udělám se <b>svojí</b> větví“, takže nad cizím pull requestem je to
           nadpis bez obsahu — tatáž úvaha jako u sekce <em>Větev</em>. Nekreslí se ani rám.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">193</span>
+        <span class="body">
+          <b>Za zastávkou se zelená kreslí, šedá mlčí</b>
+          <span>Stanice za aktivní <b>nejsou automaticky <code>.ph.idle</code></b>: co je hotové,
+          svítí zeleně, aby bylo na první pohled vidět, <b>co chybí</b>. Hranici drží jedna věta —
+          stanice zezelená, jen když jsou její fakta <b>známá a aktuální</b>. <em>Push</em>
+          a <em>Nálezy</em> nestojí na ničem („větev je pushnutá a srovnaná“ je tvrzení o dnešní
+          větvi a nepředané zadání z něj nedělá nepravdu); <em>CI</em> a <em>Review</em> stojí na
+          <em>Pushi</em>, protože mluví o <b>hlavě, která je na GitHubu</b> — a nad nepřetlačenou
+          prací v cache nebo nad větví pozadu je zelený check věta o <b>minulém</b> pushi (čtvrtá
+          dráha odshora). <em>Zadání</em> stojí na <em>Nálezech</em>, <em>Agent</em> na
+          <em>Zadání</em> a <em>Merge</em> na celém kole: je to poslední brána před <b>nevratnou</b>
+          akcí, takže se u ní zaokrouhluje k „nevím“. Co se tím zamlčí (rozdělaná stanice za
+          zastávkou, nenačtené checky), je pořád vidět tam, kde to bydlí — v tabu <em>Kontroly</em>,
+          v sekci <em>Větev</em>, v panelu <em>Zadání</em>.</span>
         </span>
       </div>
     </div>

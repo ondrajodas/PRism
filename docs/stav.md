@@ -8483,6 +8483,25 @@ nezabírá: metriku si bere z control size.
 data: kdy se předalo a že se čeká na commit; stav je `unknown`, ne `running`, protože zadání
 odchází do **cizího** terminálu a aplikace o něm neví nic.
 
+**Druhé kolo z proklikání změnilo, co dráha kreslí za zastávkou.** Na
+`keboola/platform-libraries#566` měl **schválený** PR se **zeleným CI** stanice `CI` i `Review`
+šedé, protože se walk zastavil na `Zadání` u jediného nepředaného nálezu. Uživatelovo zadání:
+*„chci zobrazit zeleně, co je hotové, abychom na první pohled viděli, co chybí.“* Stanice za
+zastávkou se proto **vyhodnocují dál** a zelenají, kdykoli jsou jejich fakta **známá a aktuální**;
+aktivní stanice, věta pod dráhou ani akce se nemění.
+
+Hranici drží **jedna čistá funkce** — `Policy.ownLoopFacts(of:)`, výčtem po stanicích. `Nálezy`
+a `Push` nestojí na ničem (poloha větve je tvrzení o **dnešní** větvi), `Zadání` na `Nálezech`,
+`Agent` na `Zadání`, `CI` a `Review` na `Push`i (mluví o **hlavě, která je na GitHubu**) a `Merge`
+na celém kole. Původní zdůvodnění — *zelený check nad nepushnutým kódem je věta o minulém pushi* —
+**platí dál, jen se zúžilo na `Push`**: nad nepřetlačenou prací v cache i nad větví pozadu zůstávají
+`CI` i `Review` šedé. Za zastávkou se kreslí `done`, nebo `idle`, nic mezi tím: **nenačtené checky
+ani neznámý stav nezezelenají** a rozdělaná kapsle je vždycky jen jedna — ta aktivní.
+
+**Zákres v sekci 52 se překreslil ve stejném PR** (první dráha, tři z pěti zastávek, nová dráha
+*větev pozadu* a poznámka 193). Regrese se ověřila **vložením tří regresí**; tabulka je
+v [`docs/testovani.md`](testovani.md).
+
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR schválně nepouštěl.
 Vlastní revize diffu proběhla a je popsaná v PR.

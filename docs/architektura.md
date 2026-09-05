@@ -5411,10 +5411,50 @@ dráhy, tvrdí `LanePhaseChipTests` nad zdrojáky. Vlastní výčet by dovolil v
 kresba fází neumí; druhá kopie mapování by se rozešla první den, kdy někdo změní odstín.
 
 **Walk, ne sedm nezávislých odznaků.** `Policy.ownLoop` jde stanice v pořadí `Station.allCases`
-a **zastaví se na první, která není hotová**; ta je `active`, všechno za ní je `idle` a **netvrdí
-nic**. Není to úspora: zelený check nad kódem, který ještě nikdo nepushnul, je věta o **minulém**
-pushi. Co dráha zamlčí, je pořád vidět tam, kde to bydlí — v tabu *Kontroly*, v sekci *Větev*,
-v panelu *Zadání*.
+a **zastaví se na první, která není hotová**; ta je `active`, nese větu i akci.
+
+**Za zastávkou se ale nemlčí — a je to změna pravidla z proklikání** (#508, druhé kolo). Do ní bylo
+všechno za `active` `idle`, takže dráha odpovídala jedině na otázku *kam až jsem došel*. Otázka je
+ale **co ještě chybí**, a na tu se odpovídá zeleně. Vyšlo to z `keboola/platform-libraries#566`:
+schválený PR se zelenými checky měl `CI` i `Review` šedé, protože se walk zastavil na `Zadání`
+u jediného nepředaného nálezu — a ta fakta byla přitom známá i aktuální, dráha je jen zamlčela.
+**Rozhoduje `Policy.ownLoopFacts(of:)`**, což je jediné místo, kde ta hranice je, a je to **výčet**:
+
+| Stanice | Stojí na dokončení | Proč |
+|---|---|---|
+| `Nálezy` | — | o hlavě na GitHubu neříká nic |
+| `Zadání` | `Nálezy` | `nic k předání` nad nedoběhlým review je nula, kterou nikdo nespočítal |
+| `Agent` | `Zadání` | `commit dorazil` nad nepředanými položkami je práce, kterou nikdo nezadal |
+| `Push` | — | „větev je pushnutá a srovnaná“ je tvrzení o **dnešní** větvi; nepředané zadání z něj nedělá nepravdu |
+| `CI` | `Push` | mluví o **hlavě, která je na GitHubu** |
+| `Review` | `Push` | totéž — schválení platí k hlavě, ne k rozdělané práci v cache |
+| `Merge` | všech šest | poslední brána před **nevratnou** akcí, takže se u ní zaokrouhluje k „nevím“ |
+
+**Původní zdůvodnění platí, jen se zúžilo na `Push`.** *Zelený check nad kódem, který ještě nikdo
+nepushnul, je věta o minulém pushi* — tak to stálo v prvním kole nad **všemi** stanicemi za
+zastávkou. Nepřetlačená práce v cache, větev pozadu, konflikt i nezjištěný stav větve tedy `CI`
+i `Review` dál drží šedé; jenže když se walk zastaví na `Zadání`, je kód pushnutý a checky nad
+touhle hlavou doběhly.
+
+**Vyjmenovávají se přímé předpoklady, ne tranzitivní uzávěr.** Do množiny hotových se stanice
+dostane, jedině když se doopravdy vyhodnotila a **prošla**, takže se řetěz (`Agent` → `Zadání` →
+`Nálezy`) přenese sám a walk zůstává jeden průchod.
+
+**Za zastávkou se kreslí `done`, nebo `idle` — nic mezi tím.** Rozdělaná stanice je vždycky jen
+jedna, ta aktivní; druhá by soupeřila s větou pod fázemi a nedalo by se poznat, o které z nich věta
+mluví. Prakticky to znamená, že **nenačtené checky, neznámý stav ani červené CI za zastávkou
+nezezelenají a nic netvrdí** (`idle`, `detail == nil`). Co se tím zamlčí, je pořád vidět tam, kde to
+bydlí — v tabu *Kontroly*, v sekci *Větev*, v panelu *Zadání*.
+
+**Že `Merge` zelený nevyjde tak jako tak, je shoda okolností, ne pravidlo.** `mergeStep` nikdy
+nevrací `.passed` (mergnutou smyčku kreslí `closedLoop`), takže by `Merge` za zastávkou zůstal šedý
+i bez řádku ve výčtu. Řádek tam přesto je: kdyby se to změnilo, ať to zůstane **rozhodnuté**, ne
+odvozené.
+
+**Věta pod dráhou se nemění, a je to podstatné.** Dráha teď říká dvě věci naráz — *kde stojím*
+a *co je hotové* —, ale `last`, `move` i `active` mluví pořád jedině o **aktivní** stanici. Kdyby
+věta začala shrnovat i zelené kapsle za zastávkou, byl by z rozcestníku souhrn a další krok by
+z něj nešel přečíst.
 
 **Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá **nejlevnější
 tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá předat; dráha odpovídá na
@@ -5459,6 +5499,12 @@ stojí v hlavičce o pár bodů výš a #218 mu vyhradilo **jediné akcentové m
 kopie z hlavičky udělala semafor — vidět na screenshotu z prvního kola. Stanice `Nálezy` proto akci
 **nemá**; co dělat, říká věta pod fázemi. Akce dráhy je k tomu **malá** (`controlSize(.small)`, ne
 `font(.caption)`: `bordered` si metriku bere z control size a samotné písmo tlačítko nezmenší).
+
+**Vyhodnocení za zastávkou nic měřitelného nestojí.** Walk projde nejvýš sedm kroků místo `k`,
+jenže drahé části (`Policy.handoff`, `Policy.mergeOffer`) skládá **volající** bez ohledu na to, kde
+se walk zastaví — nezastavením se tedy nic nedopočítává navíc. Kroky samy čtou hotové hodnoty;
+lineární je jedině `summary(of: checks)` a dva `count {}` nad vyžádanými reviewery, a obojí je nad
+polem **jednoho** pull requestu.
 
 **Co dráha stojí při překreslení.** Dvě z jejích hodnot se na vlastním PR počítají v témže
 průchodu ještě jednou — panel si bere `handoffReport(for:)` a `branchSection(for:)` —, takže dráha

@@ -8,10 +8,19 @@ extension Policy {
     /// zašedle, nekreslí se vůbec.
     ///
     /// **Walk, ne sedm nezávislých odznaků.** Stanice se procházejí v pořadí `Station.allCases`
-    /// a walk se **zastaví na první, která není hotová**; ta je `active` a všechny za ní jsou
-    /// `idle`. Zamlčené fakty se tím neztrácejí — CI je pořád v tabu `Kontroly` a překážky merge
-    /// v sekci `Větev` —, jenže dráha odpovídá na **pořadí**, a zelený check nad kódem, který
-    /// ještě nikdo nepushnul, je věta o **minulém** pushi.
+    /// a walk se **zastaví na první, která není hotová** — ta je `active`, nese větu i akci.
+    ///
+    /// **Za zastávkou se ale nemlčí, a je to změna pravidla z proklikání** (#508, druhé kolo).
+    /// Do téhle změny bylo všechno za zastávkou `idle`; dráha tím odpovídala jedině na otázku
+    /// „kam až jsem došel“. Otázka je ale **„co ještě chybí“**, a na tu se odpovídá zeleně: co je
+    /// hotové, má být vidět, i když se walk zastavil dřív. Rozhoduje `ownLoopFacts(of:)` — stanice
+    /// za zastávkou se vyhodnotí, jen když **všechna dřívější fakta, na kterých stojí, jsou
+    /// hotová**, a nakreslí se `done` jen tehdy, když **projde**. Cokoli jiného je `idle`:
+    /// nenačtené checky nejsou zeleno a „nevím“ není hotovo.
+    ///
+    /// **Rozdělaná stanice je za zastávkou pořád jen jedna — ta aktivní.** Druhá červená kapsle by
+    /// soupeřila s větou pod dráhou, která mluví o **jedné** stanici; a fakt, který se tím zamlčí,
+    /// je pořád vidět tam, kde bydlí (tab `Kontroly`, sekce `Větev`, panel `Zadání`).
     ///
     /// **Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá
     /// **nejlevnější tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá
@@ -55,9 +64,16 @@ extension Policy {
 
         var stations: [OwnLoop.Stop] = []
         var stop: (station: OwnLoop.Station, sentence: String, move: OwnLoop.Move?)?
+        /// Co se cestou **dokončilo**. Před zastávkou v tom leží všechno předchozí (walk jinak
+        /// nepokračuje), za ní jedině to, co se doopravdy vyhodnotilo a prošlo — a právě proto
+        /// stačí `ownLoopFacts(of:)` vyjmenovat **přímé** předpoklady: co na nich stojí dál, na ně
+        /// nedosáhne samo.
+        var done: Set<OwnLoop.Station> = []
 
         for station in OwnLoop.Station.allCases {
-            guard stop == nil else {
+            guard ownLoopFacts(of: station).isSubset(of: done) else {
+                // Fakta téhle stanice stojí na kroku, který se neudělal — `idle` je odpověď, ne
+                // úspora. Před zastávkou sem walk nedojde: tam je hotové všechno předchozí.
                 stations.append(OwnLoop.Stop(station: station, state: .idle, detail: nil))
                 continue
             }
@@ -72,8 +88,15 @@ extension Policy {
                 merge: merge
             ) {
             case .passed(let detail):
+                done.insert(station)
                 stations.append(OwnLoop.Stop(station: station, state: .done, detail: detail))
             case .stopped(let state, let detail, let sentence, let action):
+                guard stop == nil else {
+                    // Za zastávkou se kreslí jedině zelená. Rozdělaná, spadlá i neznámá stanice je
+                    // tady `idle`: rozdělaná smí být jedna — ta, o které mluví věta pod dráhou.
+                    stations.append(OwnLoop.Stop(station: station, state: .idle, detail: nil))
+                    continue
+                }
                 stations.append(OwnLoop.Stop(station: station, state: state, detail: detail))
                 stop = (station, sentence, action)
             }
@@ -87,6 +110,44 @@ extension Policy {
             move: stop?.move,
             stamp: stamp
         )
+    }
+
+    /// Na dokončení kterých **dřívějších** stanic stojí fakta téhle (#508, druhé kolo).
+    ///
+    /// **Jediné místo, kde se rozhoduje, co se smí kreslit za zastávkou** — a je to výčet, ne
+    /// podmínka ve view. Stanice za zastávkou se vyhodnotí, jedině když je celý tenhle výčet
+    /// hotový; jinak by dráha tvrdila něco nad daty, která mluví o **jiném** stavu repozitáře.
+    /// Vyjmenovávají se **přímé** předpoklady: `done` se plní jedině stanicemi, které prošly,
+    /// takže se přenos přes řetěz (`agent` → `handoff` → `findings`) udělá sám.
+    ///
+    /// **`Push` na ničem nestojí, a to je ten podstatný řádek.** „Větev je pushnutá a srovnaná nad
+    /// základem“ je tvrzení o **dnešní** větvi; nepředané nálezy z něj nedělají nepravdu, jenom
+    /// ohlašují další kolo. Ze stejného důvodu na ničem nestojí `Nálezy`.
+    ///
+    /// **`CI` a `Review` stojí na `Push`i, a jedině na něm.** Obojí mluví o **hlavě, která je na
+    /// GitHubu**; dokud se s ní naše větev neshoduje (nepřetlačená práce v cache, větev pozadu,
+    /// konflikt, nezjištěný stav), je zelený check věta o **minulém** pushi — a to bylo přesně to
+    /// zdůvodnění, kvůli kterému bylo v prvním kole `idle` všechno za zastávkou. Platí dál, jenom
+    /// se ukázalo, že sedí **jen za `Push`em**: když se walk zastaví na `Zadání`, je kód pushnutý,
+    /// checky nad touhle hlavou doběhly a schválení platí. Naopak nálezy a zadání o hlavě na
+    /// GitHubu neříkají nic, takže mezi ně nepatří.
+    ///
+    /// **`Merge` stojí na všem, a je to nejtvrdší řádek výčtu.** Je to poslední brána před
+    /// **nevratnou** akcí, takže se nad ní zaokrouhluje k „nevím“; `k merge` nad šesti nepředanými
+    /// položkami by navíc byla rada, která si protiřečí s větou pod dráhou. Že by `Merge` zelený
+    /// nevyšel tak jako tak (`mergeStep` nikdy nevrací `.passed` — mergnutou smyčku kreslí
+    /// `closedLoop`), je **shoda okolností, ne pravidlo**; kdyby se to změnilo, ať to zůstane
+    /// rozhodnuté tady.
+    static func ownLoopFacts(of station: OwnLoop.Station) -> Set<OwnLoop.Station> {
+        switch station {
+        case .findings: []
+        case .handoff: [.findings]
+        case .agent: [.handoff]
+        case .push: []
+        case .ci: [.push]
+        case .review: [.push]
+        case .merge: [.findings, .handoff, .agent, .push, .ci, .review]
+        }
     }
 
     /// Co walk s jednou stanicí udělá: pustí dál, nebo se na ní zastaví.

@@ -13,11 +13,18 @@ import Foundation
 /// **`ReviewerLane.PhaseState`**, ne vlastní výčet — kdyby byl vlastní, dala by se v něm vyrobit
 /// hodnota, kterou kresba fází neumí, a slib „bez nového vzoru“ by držel jen komentář.
 ///
-/// **Sedm stanic je dráha, ne sedm nezávislých odznaků.** Walk jde po pořádku a **zastaví se na
-/// první, která není hotová** — všechno za ní je `idle`. Není to úspora: tvrdit něco o CI nad
-/// kódem, který ještě není pushnutý, znamená mluvit o **minulém** pushi. Co dráha zamlčí, je
-/// pořád vidět tam, kde to bydlí (tab `Kontroly`, sekce `Větev`, panel `Zadání`); dráha říká
-/// jedno, a to je pořadí.
+/// **Dráha říká dvě věci naráz: kde stojím a co je hotové** (#508, druhé kolo). Walk jde po
+/// pořádku a **zastaví se na první stanici, která není hotová** — ta je aktivní a mluví o ní věta
+/// pod fázemi. **Stanice za zastávkou se ale vyhodnocují dál** a zelenají, kdykoli jsou jejich
+/// fakta známá a aktuální: schválený PR se zelenými checky má `CI` a `Review` zelené, i když se
+/// walk zastavil na `Zadání`. To je celý smysl kresby — na první pohled má být vidět, **co
+/// chybí**, ne kam až se došlo.
+///
+/// **Do prvního kola tady stálo, že všechno za zastávkou je `idle`**, a důvodem bylo, že tvrdit
+/// něco o CI nad nepushnutým kódem znamená mluvit o **minulém** pushi. Ten důvod platí, jenom sedí
+/// **jen za stanicí `Push`** — a přesně tak je dnes zapsaný v `Policy.ownLoopFacts(of:)`, což je
+/// jediné místo, které o téhle hranici rozhoduje. Co dráha přesto zamlčí (rozdělaná stanice za
+/// zastávkou), je pořád vidět tam, kde to bydlí: tab `Kontroly`, sekce `Větev`, panel `Zadání`.
 struct OwnLoop: Equatable, Sendable {
     /// Stanice smyčky **v pořadí, ve kterém se jde**. Pořadí je součást typu, ne věc kresby —
     /// `allCases` je to jediné, podle čeho se dráha skládá, a testuje se, že jich je sedm.
@@ -105,8 +112,9 @@ struct OwnLoop: Equatable, Sendable {
         }
     }
 
-    /// Všech sedm, vždycky a v pořadí `Station.allCases`. Prázdná dráha neexistuje: stanice, na
-    /// kterou se nedošlo, je `idle`, a to je odpověď.
+    /// Všech sedm, vždycky a v pořadí `Station.allCases`. Prázdná dráha neexistuje: stanice, o
+    /// které se nedá říct, že je hotová, je `idle`, a to je odpověď. **Rozdělaná (`running`,
+    /// `failed`, `stopped`, `unknown`) je nejvýš jedna — ta aktivní.**
     let stations: [Stop]
     /// Kde smyčka stojí. **`nil` = došla** — pull request je mergnutý, nebo zavřený.
     let active: Station?
