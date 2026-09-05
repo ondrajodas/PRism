@@ -586,6 +586,40 @@ enum DiffMaterial {
         return synthetic(files: files, hunks: 1, lines: perFile)
     }
 
+    /// **Syntetické dvojče skutečného diffu** (#541): týž počet souborů, týž počet hunků na soubor
+    /// a zhruba tentýž počet řádků obsahu, ale obsah je generovaný.
+    ///
+    /// Existuje kvůli **první** otázce #541: je na ostrém diffu něco, co syntetická fixture nemá,
+    /// nebo je jen **větší** než největší měřená velikost (`diffSizes` končí na 2 000 řádcích)?
+    /// Bez dvojčete se to rozhodnout nedá — ostrý diff mění naráz **tři** věci (počet řádků, počet
+    /// souborů, obsah), takže je to učebnicový #478: měřidlo by vydalo tutéž hodnotu pro obě
+    /// odpovědi.
+    ///
+    /// **Co dvojče schválně nedrží, je jazyk a rozmanitost obsahu.** Generované soubory jsou
+    /// všechny `*.swift` a řádky se opakují po pěti; ostrý diff má `.go`, `.md` i `.json`
+    /// a pokaždé jiný text. Je to tedy zároveň ablace na **sazbu a zvýrazňování**: kdyby ta cena
+    /// byla v nich, dvojče vyjde výrazně levněji než ostrý diff téže velikosti.
+    static func twin(of text: String) -> String {
+        // **`TextLines`, ne `split(separator:)`** — je to cizí diff ze souboru (#292, #295);
+        // tentýž důvod jako u popisku série v `DetailRelayoutMeasurement.Material`.
+        let lines = TextLines.content(text)
+        let files = max(lines.count { $0.hasPrefix("diff --git") }, 1)
+        let hunks = max(lines.count { $0.hasPrefix("@@") }, files)
+        // Řádky obsahu, ne všechny. **`+++` a `---` se musí odečíst**: jsou to hlavičky souboru,
+        // ne řádky kódu, a `synthetic` si je skládá sama — jinak by dvojče vyšlo o dva řádky na
+        // soubor delší než předloha.
+        let content = max(
+            lines.count { $0.hasPrefix(" ") || $0.hasPrefix("+") || $0.hasPrefix("-") } - files * 2,
+            1
+        )
+        let hunksPerFile = max(hunks / files, 1)
+        return synthetic(
+            files: files,
+            hunks: hunksPerFile,
+            lines: max(content / (files * hunksPerFile), 1)
+        )
+    }
+
     static func synthetic(files: Int, hunks: Int, lines: Int) -> String {
         var out = ""
         for file in 0..<files {

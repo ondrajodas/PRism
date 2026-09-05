@@ -828,6 +828,9 @@ vypadá**. **Naměřená čísla i technika měření jsou tam**, ne tady. Zása
   podíl*](docs/testovani.md#ve-sampleu-se-čte-podíl-ne-jen-vrcholy-zásobníku-350)); nástroj na
   **živý** záchvat nesmí měřit z runloopu hlavního vlákna (#391); a u cizího privátního API
   rozhoduje **pád v testu v hostu**, ne odhad z footprintu (#361).
+- **Velký podíl ve `sample`u nemusí být práce navíc** (#541) — líně počítaný atribut grafu se
+  připíše tomu, kdo si o něj řekne první, takže o zlevnění rozhoduje **ablace, ne podíl**
+  ([čím se to změřilo](docs/testovani.md#sample-nejdražší-řádka-aplikace-je-diffviewswift517--a-přepsat-ji-nic-neušetří-541)).
 - **Usazení scény se pozná měřením, ne uplynulým časem** (#421, mění postup z #489) —
   `spinMainRunLoop` je **synchronní smyčka držící hlavní actor**, takže rozdělanou práci scény
   k sobě nepustí. Čeká se proto na dvě tichá kola počitadel (`settleUntilQuiet`), hodiny sondy

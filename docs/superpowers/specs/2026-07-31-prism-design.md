@@ -6958,3 +6958,49 @@ v tom `switch`i pak vrácení `blockingFindings` do `mergeOffer` shodí
 a chybějící řádek v pruhu `K merge`). `WorkLaneTests` v tom **nefigurují** — jejich výčet je
 literál v testu, takže o novém případu enumu nevědí; hlídají, co `isMergeReady` s překážkou udělá,
 ne jaké překážky existují.
+
+### Záznam rozhodnutí — cena přepnutí na `Změněné soubory` se změřila a nezlevnila (#541)
+
+#541 přišlo jako **měřicí** issue: přepnutí na tab s diffem stojí nad ostrým PR 0,9 až 1,3 s
+hlavního vlákna, a otázka zněla, kde ta sekunda leží a jestli je to regrese proti #476. **Rozhodnutí
+je nic v `App/` neměnit** a zapsat, co se změřilo — což je podle zadání plnohodnotný výsledek,
+protože je doložený.
+
+**Co se rozhodlo a proč.**
+
+1. **Napřed se změřilo, jestli je ostrý diff zvláštní, a není.** Do #541 uměla sonda nejvýš 2 000
+   řádků, kdežto ostré diffy z #541 mají 5 200 až 6 200 — a měnily naráz tři věci (řádky, soubory,
+   obsah). Přibylo proto **syntetické dvojče** (`DiffMaterial.twin(of:)`): týž počet souborů, hunků
+   a řádků, ale generovaný text, tedy zároveň ablace na sazbu a zvýrazňování. Vyšlo **stejně ve
+   všech třech velikostech**, takže obsah z podezřelých padá a zbývá velikost. Bez toho kroku by se
+   optimalizovalo zvýrazňování syntaxe, které za to nemůže.
+2. **Zamítnuto: přesunout `onGeometryChange` z diffu na jeho pozadí.** V `sample`u drží
+   `DiffView.swift:517` 26 až 42 % hlavního vlákna a vypadá jako jasný cíl — `of:` closure běží
+   uvnitř aktualizace grafu (#438) a čte geometrii svislého `ScrollView`u, tedy atribut závislý na
+   obsahu. Ablace ten rámec z profilu **odstranila** (`GeometryActionBinder` spadl z 1 581 a 3 969
+   vzorků na 39 a 29) a **cenu nezměnila**; tatáž práce se objevila pod
+   `AnimatableFrameAttribute.updateValue`. Je to #275 v čisté podobě, jen v novém převleku, a proto
+   se z toho stalo **pravidlo o čtení `sample`u**, ne oprava: velký podíl nemusí být práce navíc,
+   protože líně počítaný atribut se připíše tomu, kdo si o něj řekne první.
+3. **Nezakládá se issue na „bloky se neodnasazují“, zapisuje se to jako neověřená mezera.** Sonda
+   hlásí 219 z 219 nasazených bloků tam, kde #472 zapsalo pět — jenže jestli to platí i v běžící
+   aplikaci, se v harnessu rozhodnout nedá (sonda diffem nescrolluje, takže se pás nemusí změnit).
+   Tvrdit regresi z měřidla, které pro „funguje“ i „nefunguje“ může vydat totéž (#478), by bylo
+   přesně to, co tenhle repozitář zakazuje. Mez je popsaná v `docs/testovani.md` i s tím, čím má
+   příště začít ten, kdo na to sáhne.
+4. **Zamítnuto: dělat z ablace produkční přepínač.** #501 si u legendy pásu poznamenalo, že
+   prokládaná série A/B/A/B potřebuje přepínač v produkčním kódu. Tady se místo toho měřilo
+   **sekvenčně, ve dvou bězích** a rozdíl vyšel uvnitř driftu stroje (tři sloty vedle, `load average`
+   3,9 až 9,4) — takže by přepínač stejně nerozhodl. Rozhodl **strukturální doklad ze `sample`u**,
+   který drift nemá: rámec zmizel, cena zůstala. Přepínač v `App/` kvůli jednomu měření tedy
+   nevznikl.
+
+**Co z toho zůstalo v repu.** Jen sonda: osa `dvojče`, střídání **materiálů** uvnitř kola (do #541
+měl každý materiál obě kola vcelku, takže se ostrý diff a jeho dvojče měřily v různých třetinách
+sezení — a přesně mezi nimi je ta měřená veličina) a `DiffMaterial.twin(of:)`. V `App/` se nezměnilo
+nic, takže **na obrazovce není co vidět**.
+
+**Co se tím nevyřešilo, a je to poctivé říct.** Přepnutí na diff u PR o 157 souborech pořád stojí
+1,17 s a #541 se tím nezavírá jako „opraveno“. Nejbližší lever, který zbývá, není zlevnění uvnitř
+diffu — ty jsou vyzkoušené čtyřikrát v #472, jednou v #476 a jednou tady —, ale **kolik view v tom
+tabu vůbec vznikne**, a to je návrhová otázka o pevném seznamu z #469, ne mikrooptimalizace.

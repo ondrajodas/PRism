@@ -8845,6 +8845,171 @@ poctivý závěr, ne měření navíc: zbytek tiku není v tělech. Kde je, je b
 - **Rozměr se předepisuje scéně**, ne oknu (past ze `IdleDiffSpinProbe.show(store:full:)`).
 - **`FakeTimeSource` nespí**, takže `ContentView` se svým `.task { keepFresh() }` roztočí polling
   naplno; sonda ho zastaví `stopAfter: 1`.
+- **Řádky `MĚŘENÍ` se od #541 tisknou až na konci celého běhu**, ne po každém materiálu — je to
+  cena za to, že se materiály střídají uvnitř kola (viz níž). Nad třemi ostrými diffy je to
+  **48 sérií, tedy přes půl hodiny bez jediného čísla**; že běh žije, se pozná z řádek `SONDA scéna`,
+  které chodí po každé sérii. Kdo chce výsledek dřív, ať zmenší `PRISM_DIFF_DIR` na jeden soubor.
+
+### Přepnutí na `Změněné soubory` nad ostrým diffem (#541)
+
+#541 se ptalo, kde leží ta **sekunda**, kterou přepnutí na tab s diffem stojí nad ostrým PR, a jestli
+je to regrese proti #476. **Odpověď je „změřeno a nezlevnilo se to“** — a stojí za ní čtyři měření,
+z nichž tři jsou negativní. Čte se to odshora dolů; každý krok vyloučil jednu hypotézu.
+
+#### Za jakých podmínek se měřilo (#541)
+
+Debug, okno 1512×874, `mainThreadCPUSeconds` (CPU hlavního vlákna, ne hodiny), série
+prokládané uvnitř jednoho běhu. **Vedle běžely tři další sloty**, takže `load average` kolísal mezi
+**3,9 a 9,4** — proto jsou v tabulkách **obě hodnoty ze dvojice**, ne jen průměr: rozptyl mezi nimi
+(až 30 %) je drift stroje, ne měřená veličina. Ostrá data se stahují `gh pr diff` do scratchpadu,
+do repa nepatří (`cli/cli#14320` má 5 338 řádků).
+
+#### Ostrý diff není zvláštní, je jen větší — syntetické dvojče (#541)
+
+Sonda uměla do #541 nejvýš **2 000 řádků**, kdežto ostré diffy z #541 mají **5 200 až 6 200**.
+Ostrý diff přitom mění naráz **tři** věci — počet řádků, počet souborů a obsah —, takže z něj
+samotného nešlo poznat, jestli se nad ním děje něco navíc, nebo je jen třikrát delší. To je
+učebnicový #478.
+
+Přibyl proto materiál **`dvojče`** (`DiffMaterial.twin(of:)`): týž počet souborů, týž počet hunků na
+soubor a zhruba tentýž počet řádků obsahu, ale text **generovaný** — všechno `*.swift` a řádky se
+opakují po pěti. Je to tedy zároveň ablace na **sazbu, zvýrazňování syntaxe a word-level rozdíl**:
+u generovaného textu má `SyntaxRunCache` pět různých řádků a trefuje se skoro vždycky, kdežto nad
+ostrým diffem je každý řádek jiný a cache (`capacity: 4000`) na 5 200 řádcích ani nestačí.
+
+**A dvojče se sem měří hned vedle své předlohy, uvnitř jednoho běhu** (#274) — proto se od #541
+střídá i **materiál**, ne jen případ (`for kolo { for materiál { for případ } }`).
+
+| PR | souborů | řádků | **ostrý** | **dvojče** | bez diffu (`Kontroly`) |
+|---|---|---|---|---|---|
+| `PRism#499` | 45 | 5 670 | **737 ms** | **688 ms** | 82 / 84 ms |
+| `cli/cli#14104` | 71 | 6 106 | **1 100 ms** | **1 139 ms** | 128 / 106 ms |
+| `cli/cli#14320` | 157 | 5 181 | **1 169 ms** | **1 181 ms** | 237 / 242 ms |
+
+**Ostrý diff a jeho dvojče vyšly stejně ve všech třech velikostech**, takže z podezřelých padá
+obsah: zvýrazňování syntaxe, word-level rozdíl ani rozmanitost textu tu sekundu nedělají.
+**Zbývá velikost** — a čísla issue #541 tím platí, jen nejsou o ostrých datech, ale o tom, že ostrá
+data jsou třikrát větší než největší fixture, na které se do té doby měřilo.
+
+**Pozor: dvojče je proti předloze zvýhodněné, ne znevýhodněné.** Nálezy ve fixture (48 kusů) míří
+na cesty `src/Module<N>/Handler<N>.swift`, které v ostrém diffu nejsou, kdežto v dvojčeti jsou —
+takže dvojče kreslí navíc bubliny nálezů. I s tím vyšlo stejně, což tvrzení „obsah to nedělá“ jen
+utahuje.
+
+**Na dvojčeti je test, i když je to měřidlo** (`DiffMaterialTwinTests`). Celý závěr stojí na tom, že
+se dvojče předloze velikostí **vyrovná** — kdyby vydávalo diff o desetině řádků, vyšlo by levněji,
+usoudilo by se z toho, že cenu drží obsah, a měřidlo by u toho vypadalo zeleně. Tvrdí se tři věci:
+týž počet souborů, hunků aspoň jeden na soubor a nikdy víc než v předloze, a řádky obsahu **do pěti
+procent** (zbytek je celočíselné dělení, ne rozejití).
+
+**Ověřeno vložením regrese, a chytá to ten `CRLF` případ.** `twin(of:)` čte cizí diff ze souboru,
+takže řádky dělí `TextLines` (#292, #295). Nahradí-li se to `split(separator: "\n")`, je `CRLF`
+fixture **jeden** řádek → nula hunků, nula řádků obsahu, a `max(…, 1)` uvnitř z toho udělá
+jednořádkový diff místo dvaasedmdesátiřádkového; spadnou dvě tvrzení (`twin.hunks == 2` a drift
+0,94 proti stropu 0,05). Test nad **ne**-`CRLF` fixture přitom projde dál — proto tam ta druhá je.
+
+#### Věta z #541, která už neplatí: bez diffu to na počtu souborů závisí (#541)
+
+V zadání #541 stálo, že přepnutí **bez** diffu stojí po #501 „54 až 60 ms nezávisle na počtu
+souborů“. **Dnes to tak není** — sloupec `bez diffu` výš roste **82 → 128 → 237 ms** se 45 → 71 →
+157 soubory. Rozdíl proti #541 je v tom, že tamní čísla měla **ablovaný pás mapy**, kdežto tady se
+měří okno tak, jak ho člověk vidí. Za tím růstem tedy stojí to, co se kreslí v **každém** tabu
+a roste se soubory: pás mapy PR (#501) a **rozložený sloupec s itinerářem** (#506/2), který má od
+druhého kola #506 řádku na soubor a stojí vedle všech osmi tabů.
+
+**Rozklad té sekundy u `cli/cli#14320` je tedy dvoudílný**: ~240 ms je přestavba detailu, která
+s diffem nemá co dělat, a ~930 ms je diff. A **na scéně nezáleží** — `jen detail` vyšlo 1 201 ms
+proti 1 169 ms v celém okně, takže oprava z #472 (`fillingSlot()` na obsahu okna) drží a sousedé
+už nestojí nic.
+
+#### `sample`: nejdražší řádka aplikace je `DiffView.swift:517` — a přepsat ji nic neušetří (#541)
+
+Čtyři vzorky patnáctisekundové, vždycky uvnitř série `okno, Změněné soubory, přepnutí tabu`.
+**Kořen se četl u každého zvlášť** (#350) a u tří ze čtyř byl týž: `spinMainRunLoop` →
+`CA::Transaction::flush_as_runloop_observer` → `NSHostingView.layout()` → `render(interval:…)`.
+
+Jediný rámec **naší** aplikace s podílem, který stojí za řeč, je ve všech třech
+`closure #5 in DiffView.files(cards:)`, tedy `DiffView.swift:517` — `return $0.size` v
+`onGeometryChange`, kterým si diff měří výšku výřezu:
+
+| vzorek | vzorků hlavního vlákna | `DiffView.swift:517` |
+|---|---|---|
+| ostrý, kolo 2 | 12 845 | 3 285 = **26 %** |
+| ostrý, kolo 1 | 10 317 | 4 287 = **42 %** |
+| dvojče, kolo 1 | 10 052 | 3 965 = **39 %** |
+
+Pod tou řádkou je pokaždé `GeometryProxy.size.getter` → `AGGraphGetInputValue` →
+`AG::Graph::update_attribute` → řetěz `UnaryChildGeometry.value.getter`. Vypadá to jako jasný cíl:
+`of:` closure běží **uvnitř aktualizace grafu** (#438), a tady si vyžádá geometrický atribut
+scroll view, který se u svislého `ScrollView`u dopočítává přes obsah — tedy přes celý pevný seznam
+(#469).
+
+**Zkusilo se to a nezlevnilo to nic.** Ablace byla přesunout tentýž modifikátor na `background`
+scroll view, tedy na **jiný uzel se stejnou plochou**, který rozměr dostane nabídkou:
+
+| série (`cli/cli#14320`) | na scroll view | **na pozadí** |
+|---|---|---|
+| ostrý, okno, přepnutí tabu | 24,40 / 33,37 s | 22,59 / 29,57 s |
+| dvojče, okno, přepnutí tabu | 23,89 / 25,19 s | 22,20 / 24,29 s |
+| ostrý, jen detail, přepnutí tabu | 24,32 / 26,95 s | 25,27 / 27,05 s |
+| ostrý, `Kontroly` bez diffu | 4,80 / 4,79 s | 4,74 / 5,11 s |
+| ostrý, zápis do store | 2,09 / 2,14 s | 2,09 / 2,27 s |
+
+Rozdíl je **6 % jedním směrem u dvou sérií a 4 % druhým u třetí**, tedy uvnitř driftu stroje —
+a `Kontroly` i `zápis do store` se nehnuly vůbec. **Změna se proto zahodila a v `App/` po ní nic
+nezůstalo.**
+
+**Doklad, že to práci jen přesunulo, je ale strukturální, ne z čísel** (#275 chce oba konce):
+ve dvou vzorcích **po** změně spadl `GeometryActionBinder.updateValue` z **1 581 a 3 969** vzorků
+na **39 a 29** — z profilu tedy zmizel — a celková cena zůstala. Tatáž práce se objevila
+o kus vedle, pod `AnimatableFrameAttribute.updateValue` → `AG::Graph::update_attribute` →
+`SecondaryLayerGeometryQuery`, tedy **beze jména naší aplikace**.
+
+**Zůstává z toho pravidlo, ne oprava:** *velký podíl ve `sample`u nemusí být práce navíc.* Líně
+počítaný atribut AttributeGraphu se připíše tomu, **kdo si o něj řekne první** — a to je klidně náš
+`onGeometryChange`, i když by se ten atribut spočítal tak jako tak. Rozpozná se to podle toho, že
+pod naším rámcem stojí rovnou `AGGraph*` a nic vlastního; a rozhodne se to **jedině ablací**, ne
+podílem.
+
+#### Vzorek, který se nezopakoval, a proto to není nález (#541)
+
+V prvním ze čtyř vzorků drželo **44,6 %** hlavního vlákna
+`AccessibilityNode.updateFocus(for:from:)` → `updateFocusResponder()` → rekurzivní
+`MultiViewResponder.visit(applying:)` s `swift_conformsToProtocolMaybeInstantiateSuperclasses`
+v listech, tedy procházení responder stromu bez jediného našeho rámce. **Ve zbylých třech vzorcích
+je to nula.** Ten první byl z **druhého kola** běhu, kdy už sonda měla osm odložených oken s živými
+stromy; jestli je to ono, se nezjistilo.
+
+Je to tady jako **zapsaná mez měření, ne jako závěr**: kdyby se čtl jen ten první vzorek, vzniklo by
+z něj tvrzení o 45 % ceny, které tři další vzorky vyvracejí. Přesně proto se kořen čte u každého
+vzorku zvlášť (#350) a proto jsou vzorky víc než jeden.
+
+#### Neověřená mezera: bloky se v sondě neodnasazují vůbec (#541)
+
+Sonda vypisuje `bloků X, nasazení Y` — kolik bloků kódu v okně visí a kolikrát se do nich nasadil
+blok. **Ve všech měřených velikostech vychází X = Y = všechny bloky diffu**, i v ustáleném stavu
+po 2,5 s usazení a dvaceti přerovnáních:
+
+| materiál | bloků v ustáleném stavu |
+|---|---|
+| 100 řádků | 16 |
+| 500 řádků | 24 |
+| 2 000 řádků | **62** |
+| 2 000 řádků, 45 souborů | 53 |
+| `cli/cli#14320` (157 souborů) | **219** |
+
+**#472 přitom u 2 000řádkového diffu zapsalo „bloků 5 v ustáleném stavu“** a #469 slibuje šest bez
+ohledu na velikost. Buď se to od té doby rozbilo, nebo to sonda nikdy neuměla ukázat — a **#541 to
+nerozhodlo**. Mechanismus, který by to vysvětloval, existuje: `DiffBlockSlot.span` je krabice mimo
+observable stav, takže se tělo slotu přeloží **jedině při změně `viewport.band`**, a `viewport` od
+#501 patří detailu PR (`PullRequestDetailView.tracking`), tedy **přežívá přepnutí tabu** — pás už
+tím pádem má správnou hodnotu z minulé návštěvy a nemění se. Do #501 vznikal `ownTracking` s tabem
+znovu a pás se z `0...0` na skutečnou hodnotu **změnil**.
+
+**Na ceně přepnutí by to nic nezměnilo** (na první rozvržení se všechny bloky nasadí tak jako tak —
+o nezměřeném bloku se nedá tvrdit nic), a `zápis do store` je i při 219 nasazených blocích 106 ms.
+Je to tedy podezření na **paměť a cenu projíždění**, ne na tuhle sekundu. Kdo na to sáhne, ať začne
+tím, že si to potvrdí **na běžící aplikaci** (`./bin/run.sh --diagnose`), ne v sondě.
 
 ### Kolik ubere širší levý sloupec (#506)
 

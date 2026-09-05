@@ -8391,3 +8391,38 @@ celé jen proto, aby stráže nad zdrojáky potvrdily, že se v `App/` ani `Test
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`, tatáž třetí příčina jako u #507, #542 a #491),
 který v ten den selhal na osmi kolech napříč čtyřmi větvemi. Je to **neověřená mezera**; vlastní
 revize diffu proběhla a je popsaná v PR.
+
+## #541 — přepnutí na `Změněné soubory` se změřilo; zlevnit se nepodařilo
+
+**Měřicí issue, a výsledek je negativní i doložený.** Přepnutí na tab s diffem stojí nad ostrým PR
+**737 ms u 45 souborů, 1,10 s u 71 a 1,17 s u 157** (CPU hlavního vlákna, Debug, okno 1512×874).
+Čísla z #541 tedy nad dnešním `main`em platí.
+
+**Hlavní zjištění: ostrý diff není zvláštní, je jen větší.** Sonda uměla do #541 nejvýš 2 000
+řádků, kdežto ostré diffy mají 5 200 až 6 200 — a měnily naráz tři věci. Přibylo proto **syntetické
+dvojče** o týchž souborech, hunkách a řádcích, ale s generovaným textem; měří se **hned vedle své
+předlohy v témž běhu**. Vyšlo stejně ve všech třech velikostech, takže zvýrazňování syntaxe,
+word-level rozdíl ani rozmanitost obsahu tu cenu nedrží.
+
+**Věta ze zadání, která už neplatí:** přepnutí **bez** diffu nestojí 54–60 ms nezávisle na počtu
+souborů, ale **82 → 128 → 237 ms** se 45 → 71 → 157 soubory. Ta čísla v #541 měla ablovaný pás mapy;
+v okně, jak ho člověk vidí, roste se soubory pás mapy PR (#501) i rozložený sloupec s itinerářem
+(#506/2), protože oba stojí vedle **všech** tabů. Z té sekundy je tedy ~240 ms mimo diff.
+
+**Šestá zamítnutá varianta v téhle rodině.** V `sample`u drží `DiffView.swift:517` (čtení `$0.size`
+v `onGeometryChange`) 26 až 42 % hlavního vlákna. Přesun téhož modifikátoru na `background` ho
+z profilu **odstranil** a **cenu nezměnil** — tatáž práce se objevila pod
+`AnimatableFrameAttribute`. Zůstalo z toho pravidlo o čtení `sample`u, ne oprava.
+
+**V `App/` se nezměnilo nic**, takže na obrazovce není co vidět; změny jsou v sondě a v dokumentaci.
+Zapsané jsou i dvě meze měření: jeden ze čtyř vzorků ukazoval 44,6 % v procházení responder stromu
+a tři další nulu (proto se kořen čte u každého vzorku zvlášť, #350), a sonda hlásí, že se bloky mimo
+pás **neodnasazují vůbec** (219 z 219), kdežto #472 u 2 000 řádků zapsalo pět — to je **neověřená
+mezera**, protože sonda diffem nescrolluje a v harnessu se to rozhodnout nedá.
+
+**Měřilo se pod zátěží tří dalších slotů** (`load average` 3,9 až 9,4), proto jsou v tabulkách obě
+hodnoty ze dvojice, ne průměr.
+
+**Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu — tatáž příčina jako
+u #570, #507, #542 a #491. Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná
+v PR.

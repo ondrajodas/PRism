@@ -905,6 +905,34 @@ u nich platí pravidlo z #361 nezměněné. Že by se kolo utvořilo tam, **vylo
 vlastnost vzoru, ne délky seznamu —, ale ani jednou se to nestalo a cena pevného stacku by tam byla
 zbytečná.
 
+#### Co stojí přepnutí na tab s diffem, a proč se to nezlevnilo (#541)
+
+Cena prvního rozvržení z tabulky výš je to, co člověk platí **při každém návratu do `Změněných
+souborů`**: obsah tabu se přepnutím zahodí, změřené výšky bloků zaniknou s podstromem a staví se
+znovu. Nad ostrým PR to je **737 ms u 45 souborů, 1,10 s u 71 a 1,17 s u 157**.
+
+Tři věci, které z měření #541 platí a nemusí se zjišťovat znovu:
+
+- **Nedělá to obsah, dělá to velikost.** Syntetické dvojče o týchž souborech, hunkách a řádcích
+  vyšlo stejně jako ostrý diff, takže zvýrazňování syntaxe, word-level rozdíl ani rozmanitost textu
+  tu cenu nedrží. Ostrá data jsou prostě **třikrát větší** než největší fixture, na které se do
+  #541 měřilo — čísla z #476 tedy nic nevyvrací, jen končila dřív.
+- **Pětina té ceny s diffem nesouvisí** a roste se **soubory**: pás mapy PR (#501) a rozložený
+  sloupec s itinerářem (#506/2) se kreslí v **každém** tabu, takže přepnutí na `Kontroly` stojí nad
+  157 soubory 237 ms proti 82 ms nad 45. Na scéně naopak nezáleží — `jen detail` vyšlo stejně jako
+  celé okno, takže oprava z #472 drží.
+- **Nejdražší rámec aplikace v `sample`u není práce navíc.** `DiffView.swift:517` (čtení `$0.size`
+  v `onGeometryChange`) drží 26 až 42 % hlavního vlákna, ale přesun téhož modifikátoru na
+  `background` ho z profilu odstranil a **cenu nezměnil** — líně počítaný atribut AttributeGraphu
+  se připíše tomu, kdo si o něj řekne první. Je to **šestá zamítnutá varianta** v téhle rodině,
+  vedle pěti z #472 a #476.
+
+Čísla, postup a meze měření jsou
+v [`docs/testovani.md`](testovani.md#přepnutí-na-změněné-soubory-nad-ostrým-diffem-541) — včetně
+**neověřené mezery**: sonda hlásí, že se bloky mimo pás neodnasazují vůbec (219 z 219 u
+`cli/cli#14320`), kdežto #472 u 2 000 řádků zapsalo pět. Na ceně přepnutí by to nic nezměnilo — na
+první rozvržení se všechny bloky nasadí tak jako tak —, ale na projíždění a paměti může.
+
 ### Trvalý vodorovný pruh ve split pohledu (#422)
 
 Ve splitu se nezalamuje, takže dlouhý řádek odjede za okraj sloupce — a do #422 se to z okna
