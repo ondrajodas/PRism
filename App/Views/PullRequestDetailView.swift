@@ -334,6 +334,12 @@ struct PullRequestDetailView: View {
                 draftChip
                 Spacer(minLength: 8)
             }
+            // Dráha smyčky vlastního PR (#508, návrh sekce 52) — **hned pod souřadnicemi**, jak ji
+            // má návrh: stav PR je první otázka, „kde v kole jsem“ druhá. Na cizím PR vyjde
+            // z `Policy.ownLoop` `nil` a nekreslí se ani rám.
+            if let loop = store.ownLoop(for: pullRequest) {
+                OwnLoopView(loop: loop, perform: moveOnLoop)
+            }
             // Jen když se hlava rozešla se sha, proti které platí nálezy — jinak by to byl
             // řádek s údajem, který nikoho nezajímá. **Rozchod počítá store** (#284), protože
             // o témže stavu mluví i odznak v pruhu „od tvé poslední návštěvy“.
@@ -515,6 +521,33 @@ struct PullRequestDetailView: View {
 
     private var panelTab: Binding<ReviewPanelTab> {
         Binding(get: { store.reviewPanelTab }, set: { store.reviewPanelTab = $0 })
+    }
+
+    /// Jediná akce aktivní stanice dráhy (#508) — **navigace, ne druhé odesílání**.
+    ///
+    /// Dráha nemá vlastní logiku: akce jenom otevře to místo, kde ta práce bydlí (panel `Zadání`,
+    /// sekce `Větev`, tab `Kontroly`, tab `Konverzace`). Kdyby odsud šlo odeslat, byla by to druhá
+    /// cesta ven — a tvrdá podmínka č. 1 zná jednu.
+    private func moveOnLoop(_ move: OwnLoop.Move) {
+        switch move {
+        case .openHandoff:
+            revealPanel()
+            panelTab.wrappedValue = .agentPrompt
+        case .openBranch: revealPanel()
+        case .openChecks: store.setDetailTab(.checks, for: pullRequest.id)
+        case .openConversation: store.setDetailTab(.conversation, for: pullRequest.id)
+        }
+    }
+
+    /// Rozloží panel — a když je vidět tab, ve kterém panel není (#294), přepne i záložku.
+    ///
+    /// Bez toho druhého by kliknutí na `Otevřít zadání` v `Kontrolách` **neudělalo nic viditelného**:
+    /// panel by se rozložil někde, kde se nekreslí, a příště by se objevil bez souvislosti.
+    private func revealPanel() {
+        if !store.detailTab(for: pullRequest.id).showsReviewPanel {
+            store.setDetailTab(.filesChanged, for: pullRequest.id)
+        }
+        panelExpanded.wrappedValue = true
     }
 
     /// Obsah vybraného tabu a vedle něj panel s nálezy a mým review.

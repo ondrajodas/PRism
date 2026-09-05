@@ -346,6 +346,52 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   shodilo **čtyři** testy `Policy` a **tři** ve store — mezi nimi i ten o počtu commitů a o tom, že
   se review nespustí samo —, a smazání kontroly cizí odpovědi ve vlákně shodilo právě ten jeden
   test, který ji má chytat (a nic víc, což je taky informace: kontrola nepřebíjí ostatní pravidla).
+- **Dráha smyčky vlastního PR (#508)** — tři sady a **nejcennější polovina jsou negativní
+  tvrzení**: dráha, která ukazuje vedle, zůstane zelená.
+
+  `Policy` výčtem (`OwnLoopTests`): na **cizím** PR vyjde `nil` (dráha se nekreslí, ne zašedne) —
+  a testuje se to i nad rozpracovanou smyčkou, ne jen nad výchozími vstupy. Dál každá stanice
+  vyčerpávajícím výčtem svého vstupu: **patnáct** stavů `ReviewState` (jen `clean`, `completed`
+  a `dismissed` pustí dál, `inconclusive` **zastaví** — pustit ho dál by ho tiše přečetlo jako
+  čisto), sedm podob `HandoffReport` (rozhoduje `pending`, ne `stage`), devět stavů
+  `BranchSyncState` a všech osm `BranchStatus.MergeState`, `nil` × `[]` × zeleno × červeno
+  u checků, tři odpovědi reviewera a **jedenáct** překážek merge.
+
+  **Matice je kříž přes pět os, ne kartézský součin** (`handoff × větev × CI × review × merge`).
+  Součin by měl tisíce prvků a testoval by pořád totéž pravidlo; kříž se dá projít pohledem a nad
+  ním se tvrdí to, co dráha slibuje: **před zastávkou je hotovo, za ní `idle` a `detail == nil`**
+  (stanice, na kterou se nedošlo, nesmí nic tvrdit), věta pod dráhou **nikdy nechybí** a akci má
+  jedině zastávka.
+
+  **Tři věty, které se rozbijí potichu:** `unknown` × `failed` u merge (#572 — `K merge` po startu
+  slévatelnost nezná, a `nejde mergnout` nad načítáním je tvrzení z chybějících dat); mergnutý PR
+  má **sedm hotových stanic**, ne zastávku u nepředaného zadání; a stanice `Nálezy` **nikdy
+  nenabízí akci**, protože `Spustit review` stojí v hlavičce a #218 mu vyhradilo jediné akcentové
+  místo v pruhu.
+
+  **Kresba se tvrdí nad zdrojáky** (`LanePhaseChipTests`), protože za běhu se to ověřit nedá: obě
+  dráhy vypadají zeleně i tehdy, když si každá mapuje `PhaseState` na barvu sama — rozejdou se až
+  tím, že někdo změní odstín na jednom místě. Hlídá se tedy, že podpis
+  `(… ReviewerLane.PhaseState) -> Color` je **v jednom souboru** a že `ReviewerLane.PhaseState`
+  ve `App/Views/` čtou **jen dva** (`LanePhaseChip`, `ReviewerLaneText`). Hledá se **podpis
+  funkce, ne dvojice `case`**: `case .done: Palette.ok` je legitimně i v `PanelBranchView`, jenže
+  tam je to `BranchFact.Tone` — jiný výčet nad jinou otázkou. Text se porovnává **bez mezer**
+  (`condensed`, #490/#550), jinak by stráž pustila `LanePhaseChip (`.
+
+  Rozvržení (`OwnLoopRenderTests`): sedm kapslí se **nezalomí** (výška při 1200 a 620 bodech je
+  táž) a dráha **nepřeroste hlavičku** (pod 120 body).
+
+  **Že se akce doopravdy nakreslí, se v harnessu tvrdit nedá, a je to změřené.** SwiftUI `Button`
+  v hostované hierarchii `NSButton` **není** (`firstDescendant(ofType: NSButton.self)` vrátí `nil`
+  i nad dráhou, která tlačítko kreslí) a `fittingSize.width` vyjde s tlačítkem i bez něj **435
+  bodů**, protože přirozenou šířku drží věta pod fázemi. Obojí je měřidlo, které vydá tutéž hodnotu
+  pro „funguje“ i „nefunguje“ (#478), takže se do sady nepíše: zbývá pojmenované rozhodnutí
+  `OwnLoopView.showsAction` (tentýž vzor jako `PullRequestRow.showsPromptAction`, #333) a **snímek,
+  který udělá člověk** — patří to do popisu PR, jako u fokusu a kláves (#184).
+
+  **Ověřeno vložením regrese, třikrát:** obejití brány `ownership == .mine` shodilo test o cizím PR
+  (dvě tvrzení), sražení `isUnknownYet` na `false` shodilo osm tvrzení nad překážkami merge, a
+  vlastní `PhaseState → Color` v `OwnLoopView` shodilo obě stráže nad zdrojáky.
 - **Cizí aktivita na vlastních PR (#335)** — pět sad a **skoro celá oblast jsou negativní
   tvrzení**, protože se to rozbije potichu: notifikace, která přijde dvakrát, i dotaz, který se
   posílá zbytečně, vypadají na první pohled jako fungující aplikace.

@@ -1038,6 +1038,45 @@ check naopak nebrání.
 pokusy) — bez toho by tlačítko u čerstvého PR svítilo zašedle podle náhody. A ptá se **jen na
 vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „nevím“ navždycky.
 
+### Dráha smyčky — kde v tom kole zrovna jsem (#508)
+
+Práce na **vlastním** PR je smyčka: pustit review, předat nálezy agentovi, počkat na commit,
+srovnat a přetlačit větev, počkat na CI a na kolegu, mergnout. Do #508 byla rozsekaná po místech —
+nálezy v panelu, zadání v segmentu, agent v cizím terminálu, push a merge v sekci `Větev`, Copilot
+v konverzaci — a odpověď na „kde v tom kole zrovna jsem“ si člověk skládal sám.
+
+**Pod souřadnicemi vlastního PR je od #508 dráha se sedmi stanicemi**: *Nálezy → Zadání → Agent →
+Push → CI → Review → Merge*. Kreslí se **stejně jako dráha reviewera v tabu `Průběh`** — týž rám,
+tytéž kapsle, táž barevná škála: je to proces s fázemi, a okno umí jeden způsob, jak proces
+nakreslit. Na cizím PR se **nekreslí vůbec**, ne zašedle.
+
+**Aktivní je první stanice, která není hotová**, a všechno za ní je tiché. Není to úspora: zelený
+check nad kódem, který ještě nikdo nepushnul, mluví o **minulém** pushi. Co dráha zamlčí, je pořád
+vidět tam, kde to bydlí — v tabu `Kontroly`, v sekci `Větev`, v panelu `Zadání`.
+
+**Pod fázemi je jedna věta o tom, co je na tahu** (*„Od předání přibyly 2 položky.“*, *„Větev je
+o 4 commity pozadu za základem — srovnej ji rebasem.“*, *„Zeleno — dá se to mergnout.“*) a vpravo
+v hlavičce dráhy **jediná akce aktivní stanice**. Ta akce **nic neodesílá** — otevře to místo, kde
+ta práce bydlí: panel `Zadání`, sekci `Větev`, tab `Kontroly`, tab `Konverzace`. Obsah stanic se
+tedy nikam nestěhoval a nezdvojil.
+
+**`Spustit review` mezi akcemi dráhy není**: stojí v hlavičce o pár bodů výš a je to jediné
+akcentové místo v celém pruhu (#218). Stanice `Nálezy` proto akci nemá — co dělat, říká věta pod
+fázemi.
+
+**„Nevím“ je odpověď, ne „nejde“.** Slévatelnost, checky i vyžádaní reviewery se dotahují teprve
+s detailem PR, takže hned po otevření záložky je stanice **tichá** s větou *zjišťuju* — ne červená.
+Nad nevratnou akcí je tvrzení z chybějících dat ta nejdražší strana omylu.
+
+**Stanice `Agent` zatím jen datuje předání.** Zadání odchází do **cizího** terminálu, takže
+aplikace neví, jestli na něm někdo pracuje; říká proto jen to, co unese: *„Předáno 6 položek. Jestli
+na tom agent pracuje, aplikace zatím neví — dráha se pohne, až na větev přijde commit.“* Živý průběh
+relace agenta přijde s #511.
+
+**Nad mergnutým PR je dráha dojetá** (sedm hotových stanic a věta *Mergnuto*), nad zavřeným
+zastavená. Bez toho by nad mergnutou větví viselo `6 k předání`, což je rada, kterou nemá kdo
+splnit.
+
 ### `Připravit k review` — jediná překážka mergnutí, kterou aplikace odklidí jedním kliknutím (#482)
 
 Sekce `Větev` vypisuje, proč se nedá mergnout. Většina těch důvodů je práce — jeden z nich byl ale

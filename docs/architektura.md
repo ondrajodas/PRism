@@ -5397,6 +5397,83 @@ schválně chovají jako přerušené, ne jako zrušené:
 - **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
   zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
 
+### Dráha smyčky vlastního PR (#508)
+
+Pod souřadnicemi **vlastního** PR stojí dráha se sedmi stanicemi — *Nálezy → Zadání → Agent →
+Push → CI → Review → Merge* (návrh, sekce 52). Do #508 byla ta smyčka rozsekaná po místech
+(nálezy v panelu, zadání v segmentu, agent v cizím terminálu, push a merge v sekci *Větev*,
+Copilot v konverzaci) a odpověď na „kde v tom kole zrovna jsem“ si člověk skládal sám.
+
+**Kreslí se třídami dráhy reviewera, a je to vymahatelné, ne slib v komentáři.** Stav stanice je
+`ReviewerLane.PhaseState` (týž výčet, ne vlastní), kapsli kreslí **jediný sdílený prvek**
+`LanePhaseChip`, a že mapování `PhaseState → barva` je v jednom souboru a kreslí z něj **obě**
+dráhy, tvrdí `LanePhaseChipTests` nad zdrojáky. Vlastní výčet by dovolil vyrobit hodnotu, kterou
+kresba fází neumí; druhá kopie mapování by se rozešla první den, kdy někdo změní odstín.
+
+**Walk, ne sedm nezávislých odznaků.** `Policy.ownLoop` jde stanice v pořadí `Station.allCases`
+a **zastaví se na první, která není hotová**; ta je `active`, všechno za ní je `idle` a **netvrdí
+nic**. Není to úspora: zelený check nad kódem, který ještě nikdo nepushnul, je věta o **minulém**
+pushi. Co dráha zamlčí, je pořád vidět tam, kde to bydlí — v tabu *Kontroly*, v sekci *Větev*,
+v panelu *Zadání*.
+
+**Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá **nejlevnější
+tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá předat; dráha odpovídá na
+**kde v kole jsem**, a `Zadání ✓` nad šesti nepředanými položkami by byla nepravda. Nejsou to dvě
+odpovědi na jednu otázku — každá odpovídá na svoji.
+
+**„Nevím“ je odpověď, ne „nejde“** (drží #572). Slévatelnost, checky i vyžádaní reviewery se
+dotahují až s detailem, takže hned po otevření záložky se o nich nedá tvrdit nic; taková stanice je
+`unknown` s větou *zjišťuju*, ne `failed`. Které překážky merge to jsou, rozhoduje
+`Policy.MergeObstacle.isUnknownYet` — **vlastní otázka vedle `isPublishingGate`**: ta rozlišuje,
+**o čem** překážka mluví (o aplikaci × o pull requestu), tahle **jak jistá** je.
+
+**Co která stanice čte** (vstupy má store dnes, nic se kvůli dráze nedotahuje navíc):
+
+| Stanice | Vstup | Pustí dál |
+|---|---|---|
+| `Nálezy` | `ReviewState` | `clean`, `completed`, `dismissed` — všechno ostatní zastaví, **včetně `inconclusive`** (#383: pustit ho dál by ho tiše přečetlo jako čisto) |
+| `Zadání` | `HandoffReport.pending` | `pending == 0`. **Rozhoduje počet, ne `stage`** — `changed` s nulou (nová hlava, žádná položka) je platný stav a zastávka by v něm neměla obsah; `stage` říká **proč**, a to je věta pod dráhou |
+| `Agent` | `HandoffReport.hasMovedHead`, razítko | hlava se pohnula (práce dorazila), nebo se nikdy nepředávalo |
+| `Push` | `BranchSyncState`, `BranchStatusState` | větev je srovnaná. **Rozdělaná práce v cache přebíjí GitHub** — ten o rebase v cache neví |
+| `CI` | `[PullRequestCheck]?` | zeleno, přeskočeno, nebo PR bez CI. **`nil` a `[]` se nesmí slít** |
+| `Review` | `[RequestedReviewer]?` | nikdo nečeká a nikdo nechce změny |
+| `Merge` | `Policy.MergeOffer` | nikdy — zeleno je **zastávka**, protože mergnout musí člověk |
+
+**Stanice `Agent` netvrdí, že agent běží** (živý obsah dodá #511). Zadání odchází do **cizího**
+terminálu, takže aplikace neví, jestli na něm někdo pracuje; stanice říká jen to, co unesou data
+(kdy se předalo a že se čeká na commit) a je `unknown`, ne `running`. `běží 4 min` z decku přijde,
+až bude relace agenta v zásuvce.
+
+**Mergnutý a zavřený PR smyčku zkracují.** Nad mergnutým by walk zastavil tam, kde zrovna zbylo
+něco nepředaného — a `6 k předání` nad mergnutou větví je rada, kterou nemá kdo splnit. `merged` je
+sedm hotových stanic, `closed` sedm `stopped` (tedy hodnota, kterou dráha reviewera používá pro
+„nedoběhlo“, ne nový stav).
+
+**Akce je navigace, ne druhá cesta ven.** `OwnLoop.Move` umí čtyři věci a všechny jen **otevřou
+místo, kde ta práce bydlí** (panel *Zadání*, sekce *Větev*, tab *Kontroly*, tab *Konverzace*);
+obsah stanic se nikam nestěhuje a nekopíruje. Kdyby dráha odesílala sama, byla by to druhá cesta na
+GitHub (tvrdá podmínka č. 1) a druhé místo, které skládá plán merge.
+
+**`Spustit review` mezi akcemi není, a je to změna proti zákresu** (z proklikání #508). To tlačítko
+stojí v hlavičce o pár bodů výš a #218 mu vyhradilo **jediné akcentové místo** v celém pruhu; druhá
+kopie z hlavičky udělala semafor — vidět na screenshotu z prvního kola. Stanice `Nálezy` proto akci
+**nemá**; co dělat, říká věta pod fázemi. Akce dráhy je k tomu **malá** (`controlSize(.small)`, ne
+`font(.caption)`: `bordered` si metriku bere z control size a samotné písmo tlačítko nezmenší).
+
+**Co dráha stojí při překreslení.** Dvě z jejích hodnot se na vlastním PR počítají v témže
+průchodu ještě jednou — panel si bere `handoffReport(for:)` a `branchSection(for:)` —, takže dráha
+zdvojí `Policy.handoff` a `Policy.mergeOffer`. Obojí je omezené **jedním** pull requestem (jeho
+nálezy, vlákna a commity), takže se to k naměřeným 1,5 % vlastní práce aplikace v přerovnání okna
+(#472) chová jako konstanta. **Změřit se to bude muset u #509**, kde tatáž funkce poběží nad
+**každým řádkem** seznamu — tam je to jiný řád a předfiltr (jako `isMergeReadyForLane`, #515) tam
+nejspíš bude muset být.
+
+**Že se akce kreslí, se v harnessu tvrdit nedá.** SwiftUI `Button` v hostované hierarchii `NSButton`
+**není** a `fittingSize.width` vyjde s tlačítkem i bez něj stejná (435 bodů — přirozenou šířku drží
+věta pod fázemi), takže by to bylo měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“
+(#478). Zbývá **pojmenované rozhodnutí** `OwnLoopView.showsAction` (tentýž vzor jako
+`PullRequestRow.showsPromptAction`, #333) a screenshot, který udělá člověk.
+
 ### Mapa PR — pás pod hlavičkou (#501)
 
 Mezi hlavičkou a pruhem záložek leží od #501 **pás, ve kterém je každý soubor diffu segment**

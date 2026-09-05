@@ -6958,3 +6958,47 @@ v tom `switch`i pak vrácení `blockingFindings` do `mergeOffer` shodí
 a chybějící řádek v pruhu `K merge`). `WorkLaneTests` v tom **nefigurují** — jejich výčet je
 literál v testu, takže o novém případu enumu nevědí; hlídají, co `isMergeReady` s překážkou udělá,
 ne jaké překážky existují.
+
+### Záznam rozhodnutí — dráha smyčky vlastního PR (#508)
+
+Zákres (deck *Směry pro PRism*, stránka D; v repu sekce 52) říká, že dráha nese **stav a jedinou
+akci** a že aktivní je **první, kde je můj tah**. Při implementaci padla čtyři rozhodnutí, která
+z kresby neplynou, a dvě z nich jsou **proti ní**.
+
+**1. Stav stanice je `ReviewerLane.PhaseState`, ne vlastní výčet.** Issue slibuje `.ph` stavy
+„bez nového vzoru“ a vlastní enum by ten slib nechal držet jen komentářem: dal by se v něm vyrobit
+stav, který kresba fází neumí. Kapsli proto kreslí **jediný sdílený prvek** (`LanePhaseChip`,
+vytažený z `ReviewerLaneView`) a že mapování `PhaseState → barva` je na jednom místě, tvrdí test
+nad zdrojáky. **Zamítnutá varianta:** vlastní `Station.State` s mintovou hodnotou pro `k merge`,
+jak ji kreslí deck. Mint ve slovníku fází není a přidat ho by byl přesně ten nový vzor; `k merge`
+je proto `running`, tedy „tady se to zrovna děje / je to na tobě“ — v kresbě jediná zvýrazněná
+kapsle, což je přesně ta role.
+
+**2. Walk se zastaví na první nehotové stanici a všechno za ní je `idle`.** Zvažovalo se, že
+stanice budou **nezávislé odznaky**, aby červená CI byla vidět i tehdy, když smyčka stojí
+u `Zadání`. Zahozeno: zelený ani červený check nad kódem, který ještě nikdo nepushnul, je věta
+o **minulém** pushi, tedy tvrzení, které data neunesou. Co dráha zamlčí, je pořád vidět tam, kde to
+bydlí — v tabu *Kontroly*, v sekci *Větev*, v panelu *Zadání*.
+
+**3. Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá
+**nejlevnější tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá předat.
+Dráha odpovídá na jinou otázku — **kde v kole jsem** —, a `Zadání ✓` nad šesti nepředanými
+položkami by byla nepravda. Nejsou to dvě odpovědi na jednu otázku; kdyby byly, muselo by se to
+sjednotit v `Policy`, ne ve view.
+
+**4. Akce je navigace, ne odeslání — a `Spustit review` mezi nimi není.** To druhé je **změna
+proti zákresu** a vzniklo z proklikání: první kolo mělo `Spustit review` jako akci stanice
+`Nálezy`, a na screenshotu bylo vidět, že vedle téhož tlačítka v hlavičce vznikl semafor —
+přesně to, co #218 z hlavičky odstranilo, když jí nechalo **jediné akcentové místo**. Stanice
+`Nálezy` proto akci nemá; co dělat, říká věta pod fázemi, a tlačítko je o pár bodů výš. Zbylé
+čtyři akce jen **otevřou místo, kde ta práce bydlí**; odesílat z dráhy nejde nic, protože tvrdá
+podmínka č. 1 zná jednu cestu ven a druhé místo, které skládá plán merge, by se s prvním rozešlo.
+
+**Co se u toho změřilo a nešlo použít.** Že se akce doopravdy kreslí, se v harnessu tvrdit nedá:
+SwiftUI `Button` v hostované hierarchii `NSButton` **není** a `fittingSize.width` vyjde s tlačítkem
+i bez něj **435 bodů** (přirozenou šířku drží věta pod fázemi). Obojí je měřidlo, které vydá tutéž
+hodnotu pro „funguje“ i „nefunguje“ (#478), takže se do sady nedostalo — zbylo pojmenované
+rozhodnutí `OwnLoopView.showsAction` a snímek, který udělá člověk. A **velikost tlačítka drží
+`controlSize(.small)`, ne `font(.caption)`**: `bordered` si metriku bere z control size, takže
+samotné písmo tlačítko nezmenší (vidět na screenshotu z prvního kola, kde bylo stejně velké jako
+akcentové `Spustit review`).

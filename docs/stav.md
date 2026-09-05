@@ -8391,3 +8391,28 @@ celé jen proto, aby stráže nad zdrojáky potvrdily, že se v `App/` ani `Test
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`, tatáž třetí příčina jako u #507, #542 a #491),
 který v ten den selhal na osmi kolech napříč čtyřmi větvemi. Je to **neověřená mezera**; vlastní
 revize diffu proběhla a je popsaná v PR.
+
+## #508 — Dráha smyčky vlastního PR: sedm stanic v hlavičce
+
+**Pod souřadnicemi vlastního PR stojí dráha se sedmi stanicemi** — *Nálezy → Zadání → Agent → Push
+→ CI → Review → Merge* (návrh, sekce 52). Do #508 byla smyčka rozsekaná po místech a odpověď na
+„kde v tom kole zrovna jsem“ si člověk skládal sám; teď ji vydá `Policy.ownLoop` jako jednu čistou
+funkci a hlavička ji kreslí **týmiž třídami jako dráha reviewera**.
+
+**Obsah stanic se nikam nestěhoval.** Panel *Zadání* (#334) i sekce *Větev* (#465, #466) zůstávají
+tam, kde jsou; jediná akce aktivní stanice do nich **odkazuje**. Odesílat z dráhy nejde nic —
+`ReviewPublishing` ani `BranchPushing` se nezměnily ani o metodu.
+
+**Dvě rozhodnutí padla proti zákresu a obě z proklikání.** `Spustit review` se na dráze
+**nenabízí**: to tlačítko stojí v hlavičce o pár bodů výš a #218 mu vyhradilo jediné akcentové
+místo v pruhu — druhá kopie z hlavičky udělala semafor (vidět na screenshotu z prvního kola).
+A akce dráhy je **malá** (`controlSize(.small)`), protože `font(.caption)` na `bordered` tlačítku
+nezabírá: metriku si bere z control size.
+
+**Stanice `Agent` je zatím bez živého obsahu** — dodá ho #511. Do té doby tvrdí jen to, co unesou
+data: kdy se předalo a že se čeká na commit; stav je `unknown`, ne `running`, protože zadání
+odchází do **cizího** terminálu a aplikace o něm neví nic.
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
+(`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR schválně nepouštěl.
+Vlastní revize diffu proběhla a je popsaná v PR.
