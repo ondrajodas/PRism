@@ -293,6 +293,33 @@ protocol GitHubGateway: Sendable {
         head: String
     ) async throws -> BranchDivergence?
 
+    /// Hlavička a slévatelnost **víc vlastních pull requestů jedním voláním** (#572).
+    ///
+    /// Existuje kvůli desce: pruh `K merge` se ptá `Policy.mergeOffer` u **každého** vlastního PR,
+    /// a ta k odpovědi potřebuje hlavičku i slévatelnost — obojí se do #572 dotahovalo teprve při
+    /// otevření záložky, takže byl pruh po startu prázdný. Ptát se po jednom je zpátky ta `N+1`
+    /// past, kvůli které se pollingem netahá ani detail (`fetchHeads`).
+    ///
+    /// **Změřeno na živém API** nad 23 vlastními PR z 16 repozitářů: **1 volání, 2,60–3,64 s,
+    /// 1 bod z 5000/h, 39,6 kB**. Po jednom (`gh pr view` na hlavičku a druhý na slévatelnost) to
+    /// bylo **46 volání a 29,6 s**; s commity k tomu 69 volání a 40,6 s.
+    ///
+    /// **Slévatelnost se tady neopakuje** (na rozdíl od `fetchBranchStatus`). `mergeable` je líné
+    /// pole a nedopočítaná odpověď (`UNKNOWN`) se proto **nevrací vůbec** — PR v mapě chybí, což
+    /// je totéž „nevím“ jako chybějící alias. Opakovat celou sadu kvůli jednomu PR by znamenalo
+    /// platit za dvacet dalších; zeptá se příští tik, a je to zase jedno volání.
+    ///
+    /// **Poloha větve proti základu v odpovědi není** — `compare` potřebuje jméno základu a hlavu,
+    /// tedy hodnoty z **téhle** odpovědi, a GraphQL na sourozenecké pole odkázat neumí. Deska ji
+    /// nepotřebuje; panel si ji dotáhne při otevření záložky.
+    ///
+    /// **Částečná odpověď je odpověď**: PR, na kterou GitHub neodpoví, v mapě prostě není.
+    /// Prázdný seznam se **na nic neptá**.
+    ///
+    /// **Čtyřiadvacátá čtecí metoda** protokolu; tvrdá podmínka č. 1 platí dál — gateway pořád
+    /// nemá nic, čím by šlo něco odeslat.
+    func fetchMergeReadiness(of ids: [PRIdentifier]) async throws -> [PRIdentifier: MergeReadiness]
+
     /// Repozitáře organizace (#532) — jméno, počet otevřených PR a čas poslední změny.
     ///
     /// Na tom stojí hledání repa v paletě ⌘K (#533): Keboola má přes tisíc rep, takže dotaz při

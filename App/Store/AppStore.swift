@@ -1109,6 +1109,15 @@ final class AppStore {
             // limitu se netiká, takže se ani nekouká) a nepotřebuje druhý časovač. Kolik dotazů
             // z toho je, rozhoduje `Policy.activitySweep` — na klidný den nula.
             await self?.refreshOwnActivity(in: summaries)
+            // Slévatelnost **vlastních** PR (#572) — bez ní je pruh `K merge` na desce po startu
+            // prázdný, protože se hlavička i slévatelnost do #572 dotahovaly teprve při otevření
+            // záložky. Uvnitř úspěšného tiku ze stejného důvodu jako rozhlídky výš: vejde se to do
+            // backoffu pollingu a nepotřebuje druhý časovač. Kolik dotazů z toho je, rozhoduje
+            // `Policy.mergeReadinessProbe` — na klidný tik nula, jinak **jeden na celou sadu**.
+            //
+            // **Před `refreshOpenDivergence()`**, ne za ním: ten dopisuje polohu větve do už
+            // načteného stavu, takže když ji tenhle řádek zrovna doplnil, stihne se to v témže tiku.
+            await self?.refreshMergeReadiness(in: summaries)
             // Poloha větve proti základu (#466, z proklikání) — základ se může pohnout, aniž by se
             // na pull requestu změnilo cokoli, co jde vyčíst z `updatedAt`, takže bez tohohle by
             // otevřené okno tvrdilo `srovnaná` nad větví o commit pozadu až do restartu. Uvnitř

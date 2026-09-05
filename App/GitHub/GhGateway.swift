@@ -521,6 +521,52 @@ struct GhGateway: GitHubGateway {
         return try await divergence(repo: id.repo, base: base, head: head)
     }
 
+    /// Hlavička a slévatelnost víc vlastních PR jedním voláním (#572).
+    ///
+    /// **Tentýž tvar jako `fetchHeads(of:)`, a je to schválně**: prázdný seznam se nespouští,
+    /// nesrozumitelná odpověď nad nulovým kódem je `malformedOutput`, chybějící `data` je hranice
+    /// mezi „částečná odpověď“ a „odpověď nedorazila“. Čím se ta dvě volání liší, je uvnitř —
+    /// v tom, co se z uzlu skládá.
+    func fetchMergeReadiness(of ids: [PRIdentifier]) async throws -> [PRIdentifier: MergeReadiness] {
+        // Prázdný dotaz se **nespouští**: `query() { }` není platný dokument. Je to zároveň to, co
+        // drží „na klidný tik nula volání“ — předfiltr běží v `Policy.mergeReadinessProbe`.
+        guard !ids.isEmpty else { return [:] }
+        let result: ProcessResult
+        do {
+            result = try await runner.run(
+                gh,
+                arguments: MergeReadinessQuery.arguments(for: ids),
+                timeout: timeout
+            )
+        } catch ProcessError.timedOut {
+            throw GitHubError.timedOut
+        } catch ProcessError.launchFailed(let detail) {
+            throw GitHubError.toolUnavailable(detail)
+        } catch {
+            throw GitHubError.toolUnavailable(error.localizedDescription)
+        }
+
+        let response: GhMergeReadinessResponse
+        do {
+            response = try GhOutput.decoder.decode(
+                GhMergeReadinessResponse.self,
+                from: Data(result.standardOutput.utf8)
+            )
+        } catch {
+            // Nenulový kód **a** nesrozumitelný výstup je selhání volání; nad nulovým kódem je to
+            // odpověď, které nerozumíme — a v hlášce má být, čím se to pokazilo.
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            throw GitHubError.malformedOutput("Slévatelnost vlastních pull requestů: \(error)")
+        }
+        guard response.data != nil else {
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            throw GitHubError.malformedOutput(
+                "Slévatelnost vlastních pull requestů: v odpovědi není `data`."
+            )
+        }
+        return response.readiness(of: ids)
+    }
+
     private func divergence(repo: RepoID, base: String, head: String) async throws -> BranchDivergence? {
         try await run(
             BranchDivergenceQuery.arguments(repo: repo, base: base, head: head),
