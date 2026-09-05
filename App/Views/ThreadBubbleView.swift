@@ -282,7 +282,9 @@ struct ThreadBubbleView: View {
             //
             // Markdown se renderuje: komentáře na GitHubu se v něm píšou a `**takhle**`
             // s dvojitými hvězdičkami se čte špatně.
-            MarkdownText(text: comment.body, size: 12.5)
+            // Návrh změny se kreslí jako **mini diff**, ne jako blok kódu (#528). Co červeně
+            // nahrazuje, ví jedině vlákno — z `diffHunk`u, který končí u komentovaného řádku.
+            MarkdownText(text: comment.body, size: 12.5, suggestionOriginal: suggestionOriginal)
                 .narrowingWidth(by: 22)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 9)
@@ -351,6 +353,7 @@ struct ThreadBubbleView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 controls(actions)
+                suggestionControls(actions)
                 failureNote
             }
             .padding(.horizontal, 11)
@@ -437,6 +440,45 @@ struct ThreadBubbleView: View {
             }
             .font(.system(size: 11))
             .foregroundStyle(Palette.stale)
+        }
+    }
+
+    // MARK: - Návrh změny (#528)
+
+    /// Co návrh ve vlákně červeně nahrazuje. Počítá se jednou za bublinu, ne za komentář —
+    /// je to táž kotva pro celé vlákno.
+    private var suggestionOriginal: [String] { Policy.suggestionOriginal(of: thread) }
+
+    /// Nese vlákno návrh změny? Ptá se nad **rozloženými** bloky, ne nad textem: bublina je
+    /// buňka líného seznamu, takže by se markdown parsoval při každém překreslení (#224).
+    private var hasSuggestion: Bool {
+        thread.comments.items.contains { comment in
+            !Policy.suggestions(in: MarkdownRenderCache.shared.blocks(of: comment.body)).isEmpty
+        }
+    }
+
+    /// Řádek pod tlačítky vlákna — jen u vlákna s návrhem.
+    ///
+    /// **Aplikovat návrh tlačítko nemá a mít nebude**: je to zápis do repozitáře, takže jde přes
+    /// agenta a `git push` se sheetem (#466). Věta vpravo to říká nahlas, ať se to nehledá.
+    @ViewBuilder private func suggestionControls(_ actions: ThreadActions) -> some View {
+        if hasSuggestion {
+            // **Pod sebou, ne vedle sebe.** Bublina stojí i v panelu širokém 300 bodů a tam se
+            // popisek s větou vedle sebe nevejde — změřeno sondou: tlačítko vyšlo jako
+            // `Do zadání pro ag…`, tedy uříznuté zrovna na slově, které říká, kam to vede.
+            VStack(alignment: .leading, spacing: 4) {
+                if let handoff = actions.handoff {
+                    Button("Do zadání pro agenta") { handoff(thread) }
+                        .buttonStyle(.bordered)
+                        .font(.system(size: 11.5))
+                        .help("Otevře panel se zadáním, ve kterém tohle vlákno je — návrh se aplikuje agentem a pushem, ne odsud.")
+                }
+                Text("Aplikovat návrh jde na GitHubu — sem se to tlačítko nedává, je to zápis do repozitáře.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.ink3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .filling(alignment: .leading)
         }
     }
 

@@ -691,6 +691,19 @@ jako na GitHubu. Rozepsaný komentář jde ještě roztáhnout **⇧ klikem** na
 tažení neumí, protože komentář už existuje). Rozsah smí přeskočit i mezeru mezi hunky a odesílá se
 jako `start_line`/`start_side`, tedy tak, jak to čeká GitHub.
 
+**K vybraným řádkům se dá napsat návrh změny** (#528). Tlačítko `Návrh změny` v hlavičce
+rozepsaného komentáře vloží blok ` ```suggestion ` **předvyplněný původními řádky** — přepíšeš je
+a pod polem se rovnou kreslí mini diff toho, co uvidí autor PR: červeně původní, zeleně nové. Blok
+je **text komentáře**, takže odchází s review jako všechno ostatní; nová cesta ven nevzniká
+a *aplikovat* návrh se odsud nedá — to je zápis do repozitáře a patří agentovi a `Force pushi`.
+Když k výběru návrh napsat nejde, tlačítko zůstane zakázané **s větou proč**: přes hranici hunku ne
+(mezi hunky leží kód, který diff neukazuje, a návrh by ho přepsal), a k řádku ze staré verze
+souboru taky ne.
+
+**Návrh od kolegy se ve vlákně kreslí jako mini diff**, ne jako blok kódu. Na **vlastním** PR je pod
+ním `Do zadání pro agenta`, které vlákno ukáže v panelu se zadáním (`aplikuj návrh od … na ř. N`);
+na cizím PR tlačítko není vůbec, protože aplikovat návrh je věc autora.
+
 **Rozepsaný komentář visí jen v té půlce, které se týká** —
 komentář k odebranému řádku vlevo, k novému vpravo, a když komentuješ obě strany téhož řádku,
 stojí oba **vedle sebe**. Nálezy a cizí vlákna zůstávají přes celou šířku, protože se na stranu

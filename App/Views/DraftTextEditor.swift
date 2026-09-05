@@ -38,6 +38,12 @@ struct DraftTextEditor: View {
     /// `clipShape` a sedí uvnitř diffu, takže nabídka by se ořízla o hranu bubliny (změřeno, viz
     /// `EmojiSuggestionBox`). Zadání (#483) vyjmenovává tři pole a tohle mezi nimi není.
     var suggestions: EmojiSuggestionBox?
+    /// Odkud se do pole vkládá text zvenku (#528) — tlačítko `Návrh změny` nad polem.
+    ///
+    /// Vkládá se do **živého** textu, ne přes store: mezi tím, co je vidět, a tím, co store ví,
+    /// je odmlka 400 ms, takže blok složený nad hodnotou ze storu by tu odmlku přepsal
+    /// rozepsanou větou. Podrobnosti u `TextInsertionBox`.
+    var insertion: TextInsertionBox?
     let commit: (String) -> Void
 
     @State private var value = ""
@@ -71,6 +77,16 @@ struct DraftTextEditor: View {
             adopt(new)
         }
         .onChange(of: value) { _, new in schedule(new) }
+        // Vložení zvenku (#528). Zapisuje se do `value`, takže se o uložení postará `schedule`
+        // přes `onChange(of: value)` — vložení není zvláštní cesta k odeslání, jen zvláštní
+        // cesta k **napsání**.
+        .onChange(of: insertion?.pending) { _, new in
+            guard let new, !new.isEmpty else { return }
+            // Vynulovat hned: bez toho by tentýž blok naskočil znovu při každém překreslení,
+            // které by `pending` přečetlo.
+            insertion?.pending = nil
+            value = Policy.blockInsertion(of: new, into: value)
+        }
         .onDisappear { flush() }
     }
 

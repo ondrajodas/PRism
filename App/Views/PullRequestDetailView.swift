@@ -1294,6 +1294,11 @@ struct PullRequestDetailView: View {
                 Task { await store.setThreadResolved(resolved, of: thread, in: pullRequest) }
             },
             state: { store.threadState(for: $0.id, in: pullRequest.id) },
+            // Vlákno s návrhem do zadání pro agenta (#528) — **jen na vlastním PR**. Na cizím je
+            // `nil`, takže se tlačítko nekreslí vůbec: aplikovat návrh je věc autora.
+            handoff: store.isOwnPullRequest(pullRequest.id)
+                ? { _ in store.revealAgentPrompt(in: pullRequest.id) }
+                : nil,
             block: store.canPublishToThreads(in: pullRequest.repo)
                 ? nil
                 : PublishError.publishingNotAllowed(pullRequest.repo).userDescription
