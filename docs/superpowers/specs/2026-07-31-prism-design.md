@@ -7131,6 +7131,47 @@ nic, takže **na obrazovce není co vidět**.
 diffu — ty jsou vyzkoušené čtyřikrát v #472, jednou v #476 a jednou tady —, ale **kolik view v tom
 tabu vůbec vznikne**, a to je návrhová otázka o pevném seznamu z #469, ne mikrooptimalizace.
 
+### Záznam rozhodnutí — návrh změny kódu (#528)
+
+Zákres je z decku *Směry pro PRism*, stránka **T4**, odsouhlaseného 2. 9. 2026; do
+`docs/navrh.html` se přenesl jako **sekce 54**. Rozhodnutí, která z kresby neplynou:
+
+1. **Návrh je text komentáře, nová metoda protokolu nevzniká.** Blok odchází s review přes
+   `ReviewPublishing.submit`, tedy cestou z #67. *Aplikovat* návrh (`applySuggestedChanges`) je
+   **zápis do repozitáře** a schválně tu není: na to je od #466 druhý protokol s vlastními guardy
+   a s potvrzením, a desátá metoda u toho prvního by ten rozdíl zahodila. Hlídají to dvě stráže nad
+   zdrojáky (`CodeSuggestionTests`), ne jen tenhle odstavec.
+
+2. **Hranice hunku je hranice návrhu — a je to přísnější, než co GitHub dovolí.** Rozsah přes dva
+   hunky u **komentáře** projde (změřeno u #110), takže by šlo návrh nabídnout taky. Zamítnuto:
+   návrh nahrazuje **souvislý** kus souboru, kdežto mezi hunky leží kód, který diff neukazuje — přijatý
+   návrh by ho přepsal a autor by to poznal až z výsledného souboru. Odmítnutí proto nese **větu
+   proč**, ne zašedlé tlačítko.
+
+3. **Červená strana ve vlákně je jeden řádek, a je to zapsaná mez, ne opomenutí.** `ReviewThread`
+   nedrží začátek rozsahu (`startLine` se v konverzačním dotazu netahá) — dotahovat ho by byl zásah
+   do nejdražšího čtení v aplikaci (#158) kvůli jedné kresbě. Zamítnuto tedy **hádat** rozsah podle
+   počtu navrhovaných řádků: tvrdit červeně dva řádky, které jsme si domysleli, je vzor *text, který
+   tvrdí víc, než data unesou*. Hlavička bloku proto počítá **nové** řádky, ne nahrazované.
+
+4. **Vkládá se do živého textu pole, ne přes store.** `DraftTextEditor` posílá text dolů po odmlce
+   400 ms, takže blok složený nad hodnotou ze storu by tu odmlku přepsal rozepsanou větou — je to
+   tentýž případ, jaký má editor popsaný u převzetí nálezu. Zamítnuta varianta „vložit přes
+   `updateComment`“; vzniklo `TextInsertionBox`, tedy tentýž vzor jako `EmojiSuggestionBox`.
+
+5. **Do zadání pro agenta jen na vlastním PR, a na cizím se nekreslí vůbec.** Zašedlé tlačítko tvrdí
+   „tady se to dělá, jen teď ne“, a na cizím PR se to nedělá nikdy (tatáž úmluva jako u `+ label`,
+   #392). Tlačítko **neaplikuje** — otevře panel se zadáním; aplikace pak jde přes agenta a `git push`
+   se sheetem, tedy cestou z #466.
+
+6. **Odchylka od decku: patka `Přidat do review · Zrušit` v sekci 54 není.** V téhle aplikaci je
+   komentář v rozdělaném review od chvíle, kdy vznikne (#65), takže by ten krok potvrzoval něco, co se
+   už stalo — a `Zrušit` vedle `Vyjmout z review` v hlavičce by byla dvě jména pro jednu akci. Slib
+   *odejde s review, ne hned* nese věta pod náhledem a tab `Moje review`.
+
+7. **Uložené odpovědi se nenavrhují** (poznámka u T4 v decku). Byla by to nabídka v composeru; při
+   jednom reviewerovi a jednom člověku se opakují spíš nálezy než věty.
+
 ### Záznam rozhodnutí — odložení PR se ukládá k PR, ne k `headSha` (#512)
 
 **Tvrdá podmínka č. 5 říká, že nálezy jsou klíčované `headSha`** — tvrzení o kódu se nesmí ukazovat

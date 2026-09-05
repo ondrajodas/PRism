@@ -21,10 +21,21 @@ struct MarkdownText: View {
     /// nadpisů neměla z čeho vyjít — a přesně proto měly nadpisy do #279 dvě velikosti na šest
     /// úrovní.
     var size: Double = 12.5
+    /// Kreslit ` ```suggestion ` jako **návrh změny kódu** (#528) — a co červeně nahrazuje.
+    ///
+    /// **Tři stavy, ne dva.** `nil` znamená „tady se návrhy nekreslí“: v popisu PR ani
+    /// v rozhovoru s Claudem se návrh přijmout nedá, takže je to obyčejný blok kódu — a GitHub
+    /// mimo review komentáře kreslí totéž. Prázdné pole znamená „návrh to je, ale co nahrazuje,
+    /// nevíme“, takže se kreslí jen zelená strana. Neprázdné je celý mini diff.
+    var suggestionOriginal: [String]?
 
     var body: some View {
         let _ = RenderDiagnostics.pass(Self.self)
-        MarkdownBlocksView(blocks: MarkdownRenderCache.shared.blocks(of: text), size: size)
+        MarkdownBlocksView(
+            blocks: MarkdownRenderCache.shared.blocks(of: text),
+            size: size,
+            suggestionOriginal: suggestionOriginal
+        )
     }
 }
 
@@ -36,6 +47,10 @@ struct MarkdownText: View {
 struct MarkdownBlocksView: View {
     let blocks: [MarkdownBlock]
     var size: Double = 12.5
+    /// Viz `MarkdownText.suggestionOriginal`. **Vnořeným blokům se nepředává** (citace,
+    /// výstraha, `<details>`): fence uvnitř citace je ukázka, ne návrh, který jde přijmout —
+    /// tatáž mez, jakou drží `Policy.suggestions(in:replacing:)`.
+    var suggestionOriginal: [String]?
 
     var body: some View {
         // `spacing: 0` a mezera na každém bloku zvlášť: rytmus se řídí **přechodem** mezi dvěma
@@ -45,7 +60,7 @@ struct MarkdownBlocksView: View {
             // `id: \.offset`, ne obsah: dva stejné odstavce v jednom komentáři jsou možné
             // a `ForEach` by z nich udělal jeden.
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                MarkdownBlockView(block: block, size: size)
+                MarkdownBlockView(block: block, size: size, suggestionOriginal: suggestionOriginal)
                     .padding(.top, MarkdownTypography.spacing(
                         after: index == 0 ? nil : blocks[index - 1],
                         before: block
@@ -60,6 +75,8 @@ struct MarkdownBlocksView: View {
 struct MarkdownBlockView: View {
     let block: MarkdownBlock
     var size: Double = 12.5
+    /// Viz `MarkdownText.suggestionOriginal`.
+    var suggestionOriginal: [String]?
 
     var body: some View {
         switch block {
@@ -71,8 +88,8 @@ struct MarkdownBlockView: View {
             paragraph(text)
         case .listItem(let marker, let indent, let text):
             item(marker: marker, indent: indent, text: text)
-        case .code(_, let lines):
-            code(lines)
+        case .code(let language, let lines):
+            code(language: language, lines: lines)
         case .quote(let blocks):
             quote(blocks)
         case .alert(let kind, let blocks):
@@ -170,12 +187,28 @@ struct MarkdownBlockView: View {
         }
     }
 
+    /// Blok kódu — a od #528 i **návrh změny**, když je fence označený `suggestion` a volající
+    /// řekl, že se tady návrhy kreslí.
+    ///
+    /// Rozhoduje jazyk fence **a** kontext, ne jazyk sám: ` ```suggestion ` v popisu PR je pořád
+    /// jen blok kódu, protože ho tam nikdo přijmout nemůže.
+    @ViewBuilder private func code(language: String?, lines: [String]) -> some View {
+        if let suggestionOriginal, language?.lowercased() == Policy.suggestionLanguage {
+            SuggestionBlockView(
+                suggestion: CodeSuggestion(original: suggestionOriginal, replacement: lines),
+                size: size
+            )
+        } else {
+            plainCode(lines)
+        }
+    }
+
     /// Blok kódu monospace a s podkladem. Neobarvuje se: jazyk z fence je volný řetězec
     /// (`sh`, `zsh`, `console`) a `Syntax.Language` se pozná z **cesty k souboru** — mapovat
     /// jedno na druhé znamená hádat, a špatně obarvený cizí kód je horší než neobarvený.
     ///
     /// Tagy se v něm **nestrhávají**: `<T>` uvnitř kódu je kód, ne HTML.
-    private func code(_ lines: [String]) -> some View {
+    private func plainCode(_ lines: [String]) -> some View {
         Text(verbatim: lines.joined(separator: "\n"))
             .font(.system(size: MarkdownTypography.codeSize(base: size), design: .monospaced))
             .fixedSize(horizontal: false, vertical: true)

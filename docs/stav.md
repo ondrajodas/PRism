@@ -8508,6 +8508,37 @@ za 11,1 s**.
 u #572, #570, #530, #507, #542 a #491. Je to **neověřená mezera**; vlastní revize diffu proběhla
 a je popsaná v PR.
 
+## #528 — návrh změny kódu z výběru řádků a jeho čtení ve vlákně (zákres 54)
+
+GitHubový blok ` ```suggestion ` je nejúčinnější druh komentáře — autor ho přijme jedním kliknutím.
+Composer u řádku ho neuměl a ve vlákně od kolegy se kreslil jako obyčejný blok kódu. Přibylo obojí:
+tlačítko **`Návrh změny`**, které vloží blok **předvyplněný původními řádky** a pod polem ukáže
+náhled mini diffu, a **čtení návrhu ve vlákně** jako mini diff s tlačítkem `Do zadání pro agenta`
+na vlastním PR.
+
+**Tvrdá podmínka č. 1 se nemění ani o položku.** Návrh je **text komentáře** a odchází s review přes
+`ReviewPublishing.submit`; grep vydává dál sedm souborů u `ReviewPublishing` a tři u `BranchPushing`,
+`SingleWayOutTests` zůstaly beze změny. *Aplikovat* návrh (`applySuggestedChanges`) je zápis do
+repozitáře a schválně tu není — na to je agent a push se sheetem (#466). Hlídají to **dvě stráže nad
+zdrojáky**: to jméno se v `App/` nesmí vyskytnout a čtyři nové soubory nesmí znát ani jeden ze dvou
+protokolů.
+
+**Odmítnutí nese větu, ne zašedlé tlačítko.** Rozsah přes dva hunky je u komentáře v pořádku (#110),
+u návrhu ne: mezi hunky leží kód, který diff neukazuje, a přijatý návrh by ho přepsal. Totéž u řádku
+ze staré verze souboru a u kotvy, která v diffu není.
+
+**Zapsaná mez u čtení:** červená strana mini diffu je **jeden řádek** (z `diffHunk`u, který končí
+u komentovaného řádku). Kde rozsah vlákna začíná, data vlákna neříkají, takže hlavička bloku počítá
+**nové** řádky, ne nahrazované — hádat rozsah by bylo tvrzení, které data neunesou.
+
+**Sonda našla dvě věci, které z kódu vidět nebyly:** tlačítko `Do zadání pro agenta` se v panelu
+o 300 bodech ořezávalo na `Do zadání pro ag…` (věta vedle něj se přesunula pod něj) a pole komentáře
+ukazovalo z vloženého bloku dva řádky, protože `TextEditor` s obsahem neroste.
+
+**Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu (`ineligible_app`) —
+tatáž příčina jako u #541, #572, #570 a dalších. Je to **neověřená mezera**; vlastní revize diffu
+proběhla a je popsaná v PR.
+
 ## #512 — Odložit PR: do rána, do dalšího pushe, do dalšího komentáře (M16, zákres 53)
 
 **Filtr schová repo nebo autora, ne jeden pull request.** Botí PR ležel ve frontě týden, počítal se

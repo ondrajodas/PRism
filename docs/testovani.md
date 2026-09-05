@@ -11051,3 +11051,75 @@ nepošle **žádný**.
   aplikace po restartu (a bez sáhnutí na záložky, jinak by se data dotáhla druhou cestou).
 - **Že `gh` s dokumentem o 30 aliasech nenarazí na délku argumentu.** Změřeno bylo 23 aliasů
   (6,8 kB); strop je nad tím s rezervou, ale hranici, kde by to prasklo, se hledat nezkoušelo.
+
+## Návrh změny kódu (#528)
+
+Tři suity a jedna sonda. Nejcennější jsou tvrzení o tom, co se **ne**stalo — a jedno z nich je
+takové, že by se rozbilo úplně potichu.
+
+### `CodeSuggestionTests` — `Policy` výčtem
+
+Skládání z výběru se testuje nad **dvouhunkovým** souborem (tentýž tvar jako `DraftRangeTests`,
+nové řádky 5–7 a 20–22): jeden řádek, rozsah v pořadí souboru, odebraný řádek uvnitř rozsahu (musí
+vypadnout), a tři odmítnutí — přes hranici hunku, kotva na staré straně, rozsah, jehož **začátek** je
+na staré straně, a kotva mimo diff. U odmítnutí se netvrdí jen `nil`: **hledá se v té větě**
+(`hunku`, `diff neukazuje`, `nové verzi souboru`), protože „nejde to“ bez důvodu je zrovna to, čemu
+se zadání vyhýbá.
+
+Čtení zpátky výčtem: pozná se `suggestion`, nepozná se `php`, velikost písmen nerozhoduje — a
+**fence v citaci ani v `<details>` návrh není**. K tomu `CRLF` v těle komentáře: bez `TextLines` by
+z celého bloku byl **jeden** řádek a náhled by ukázal návrh, který nikdo nenapsal. Tatáž věc
+u `diffHunk`u.
+
+Popisek se testuje na čtyřech počtech (1 / 2 / 5 / 0), protože české tvary jsou tři a **nula je
+mazání**, tedy slovo, ne číslo.
+
+**Regrese ověřena vložením regrese**: `hunks.count == 1` → `>= 1` shodí test na hranici hunku se
+dvěma tvrzeními a v hlášce je vidět, co by z návrhu vyšlo — `["nové páté", "druhý kontext", "třetí
+kontext", "nové dvacáté"]`, tedy dva hunky slité do jednoho bloku i s kódem, který mezi nimi
+v diffu není.
+
+### Dvě stráže nad zdrojáky
+
+**Aplikovat návrh aplikace neumí**: `applySuggestedChanges` se v `App/` nesmí vyskytnout ani jednou
+(komentářové řádky se odečítají — v dokumentaci se o tom mluví a mluvit má). Byla by to desátá
+metoda protokolu, kterou tvrdá podmínka č. 1 nevyjmenovává.
+
+**Nové soubory neznají cestu ven**: čtyři soubory, které #528 přidalo, nesmí obsahovat
+`ReviewPublishing`, `BranchPushing` ani `GhReviewPublisher`. Je to druhá strana grepu ze `SingleWayOutTests`:
+ten hlídá, že jich je sedm, tohle že se do nich nový nepřidal.
+
+Do `#expect` jde **`Bool`, ne výraz nad `condensed`** — framework při pádu vypisuje celý výraz
+a zhuštěný `ThreadBubbleView.swift` má přes deset kilobajtů na jedné řádce.
+
+### `SuggestionBubbleRenderTests` — rozdíl bitmap
+
+Tatáž cesta i tytéž meze jako u `EditorButtonRenderTests` (#530): accessibility tree se
+v hostovaném okně nenaplní, takže „je vidět“ se dá tvrdit jedině z pixelů. Pět párů, z toho **dva
+tvrdí, že se nic nezměnilo**:
+
+- vlákno **s návrhem** na vlastním a na cizím PR — bitmapy se musí lišit (tlačítko navíc);
+- vlákno **bez návrhu** na vlastním a na cizím PR — bitmapy se musí **rovnat**. To je ta věta, která
+  by se rozbila potichu: kdyby se řádek s tlačítkem přestal vázat na návrh, přibyl by pod **každým**
+  vláknem na vlastním PR a v modelu by se nezměnilo nic;
+- návrh proti témuž textu s fencem `php` — musí vyjít jinak, jinak by se návrh kreslil jako kód
+  a #528 by nebylo k ničemu;
+- composer s nabídkou a bez ní (tlačítko `Návrh změny`);
+- composer s blokem v těle a bez něj (náhled se čte z těla komentáře, ne z toho, co tlačítko
+  vložilo).
+
+**Regrese ověřena vložením regrese**: nakreslit tlačítko i bez akce (`actions.handoff ?? { _ in }`)
+shodí první pár — `89983 bytes != 89983 bytes`, tedy dvě stejně velké, ale různé bitmapy.
+
+### `SuggestionRenderProbe` — sonda, ne test
+
+„Drží mini diff rytmus diffu“ a „nesplývá náhled s polem, do kterého se píše“ jsou otázky na
+obrázek. Rendruje se composer s návrhem, composer s odmítnutým výběrem a vlákno ve **dvou
+podobách** (vlastní a cizí PR) ve 300 bodech, v obou motivech. `NSHostingView`, ne `ImageRenderer`:
+`DraftTextEditor` je AppKitové pole a offscreen se nerasterizuje.
+
+**Sonda našla dvě věci, které z kódu vidět nebyly.** Tlačítko `Do zadání pro agenta` vyšlo v panelu
+širokém 300 bodů jako `Do zadání pro ag…`, tedy uříznuté zrovna na slově, které říká, kam vede —
+věta vedle něj se proto přesunula **pod** něj. A pole komentáře ukazovalo z vloženého bloku dva
+řádky: `TextEditor` s obsahem **neroste**, takže se přepisovat dal jedině naslepo. Odsud je
+`Policy.draftEditorHeight(hasSuggestion:)`.

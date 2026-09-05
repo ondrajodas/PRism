@@ -13924,3 +13924,111 @@ Sekce **51** návrhu — hlavička souboru s `↗`, karta nálezu s `Otevřít v
 `Nastavení › Systém` ve dvou stavech a čtyři hlášky poruch. Leží na stránce *Změněné soubory*,
 protože odtud se ta akce spouští; stránku *Nastavení* nepřekresluje, jen z ní bere jednu sekci
 (tentýž vztah jako 49 k 10).
+
+## Návrh změny kódu (#528)
+
+GitHubový blok ` ```suggestion ` je nejúčinnější druh komentáře — autor ho přijme jedním kliknutím.
+Do #528 ho composer u řádku neuměl a ve vlákně od kolegy se kreslil jako obyčejný blok kódu, tedy
+k nerozeznání od ukázky. Přibylo obojí: **skládání z výběru** a **čtení jako mini diff**.
+
+Kód drží čtyři místa: `Policy` (`App/Policy/CodeSuggestionPolicy.swift`, čisté funkce),
+`CodeSuggestion` (`App/Models/`), `SuggestionBlockView` (kresba mini diffu) a `TextInsertionBox`
+(kudy blok doputuje do pole). Zbytek jsou úpravy tam, kde se to potkává s dnešním oknem —
+`DraftCommentBubbleView`, `ThreadBubbleView`, `MarkdownText` a `AgentPromptText`.
+
+### Není to další cesta ven, a je to celý bod
+
+Návrh **je text komentáře**. Odchází s review přes `ReviewPublishing.submit`, tedy tou cestou, která
+tu byla od #67 — tvrdá podmínka č. 1 se nemění ani o položku a grep na `ReviewPublishing` vydává dál
+sedm souborů z `App/Publish/`. *Aplikovat* návrh (GraphQL `applySuggestedChanges`) je **zápis do
+repozitáře** a schválně tu není: na to je od #466 druhý protokol s vlastními guardy a s potvrzením,
+a přidat desátou metodu k tomu prvnímu by ten rozdíl zahodilo. `CodeSuggestionTests` na to má dvě
+záporná tvrzení — že se to jméno v `App/` nikde nevyskytuje a že žádný ze čtyř nových souborů
+`ReviewPublishing` ani `BranchPushing` nezná.
+
+### Blok se skládá z výběru, ne z ruky
+
+`Policy.suggestionOffer(for:in:)` vrátí buď blok **předvyplněný původními řádky**, nebo větu, proč to
+nejde. Předvyplnění není pohodlí: návrh psaný z ruky se s kódem, na který se váže, rozejde při prvním
+překlepu v odsazení — a GitHub takový návrh **přijme**, jen z něj vyjde jiný soubor, než jaký měl
+vzniknout. Takhle se návrh přepisuje, ne píše.
+
+Odmítnutí jsou tři a každé má vlastní větu:
+
+- **výběr v diffu není** (rozbalený kontext #47, jiný soubor) — nemá se z čeho předvyplnit;
+- **výběr je ze staré strany** — návrh se aplikuje na hlavu PR, takže k odebranému řádku nemá co
+  nahradit. Posuzují se **oba** konce rozsahu, ne jen ten, u kterého bublina visí;
+- **výběr přesahuje přes hranici hunku** — a tohle je ta věta, kvůli které funkce existuje. Rozsah
+  přes dva hunky je u **komentáře** v pořádku (změřeno u #110, GitHub ho bere), jenže návrh nahrazuje
+  **souvislý** kus souboru: mezi hunky leží kód, který diff neukazuje, a ten by návrh přepsal taky.
+
+Odebraný řádek **uvnitř** rozsahu se vynechá — v nové verzi souboru není, takže by ho návrh vracel
+zpátky. Nabídka se počítá **až když se na ni někdo zeptá** (`FileDraftActions.suggestion`), protože
+je to průchod hunky; ptá se jedině bublina komentáře, a těch je na souboru pár. Tatáž úvaha jako
+u `DraftActions.bound(lazilyTo:)`.
+
+### Do pole se vkládá živý text, ne to, co ví store
+
+`DraftTextEditor` drží rozepsaný text u sebe a dolů ho posílá **po odmlce 400 ms**. Blok složený nad
+hodnotou ze storu by se s tou odmlkou potkal: store zná starší text, blok by se přilepil k němu a
+rozepsaná věta by se při návratu hodnoty přepsala — je to tentýž případ, jaký má editor popsaný
+u převzetí nálezu do těla review. Vložení proto jde přes **`TextInsertionBox`** rovnou do `value`,
+tedy do toho, co je vidět; uložení pak obstará obvyklá cesta (`onChange(of: value)`). Vzor je
+`EmojiSuggestionBox`: sdílený stav, kterým si pole a jeho okolí podávají jednu věc.
+
+Pole s návrhem je **vyšší** (`Policy.draftEditorHeight(hasSuggestion:)`). `TextEditor` s obsahem
+neroste, takže do pole na dva řádky se čtyřřádkový blok vejde jedině scrollováním — a to je u návrhu
+ta nejhorší možná podoba, protože se v něm přepisují původní řádky a je potřeba je vidět naráz.
+
+### Náhled se čte z těla komentáře, ne z toho, co tlačítko vložilo
+
+Blok se dá přepsat, smazat i napsat rukou, takže druhý zdroj pravdy by ukazoval návrh, který
+v komentáři není. `Policy.suggestions(in:replacing:)` proto vytáhne fence z **markdownu těla** —
+a jedině z **nejvyšší úrovně**: fence uvnitř citace nebo `<details>` je ukázka, ne návrh, který jde
+přijmout (GitHub z odcitovaného návrhu tlačítko `Apply` taky nedělá).
+
+Existuje ve dvou podobách: nad textem a nad **už rozloženými bloky**. Ta druhá je kvůli pravidlu
+#224 — bublina je buňka líného seznamu, takže „nese tenhle komentář návrh?“ padne při každém
+překreslení, kdežto `MarkdownRenderCache` rozklad drží. `Policy` cache nezná a znát nemá; krmí ji
+volající.
+
+### Čtení ve vlákně — a jedna zapsaná mez
+
+`MarkdownText` má `suggestionOriginal` a jsou to **tři stavy, ne dva**: `nil` znamená „tady se návrhy
+nekreslí“ (popis PR, rozhovor s Claudem — tam se návrh přijmout nedá a GitHub kreslí obyčejný blok
+kódu), prázdné pole „návrh to je, ale co nahrazuje, nevíme“ a neprázdné je celý mini diff.
+Vnořeným blokům se nepředává, což drží tutéž mez jako `Policy.suggestions`.
+
+Červenou stranu vydává `Policy.suggestionOriginal(of:)` z `diffHunk`u vlákna, který končí přesně
+u komentovaného řádku (#158). **Je to jeden řádek, i když návrh nese tři**, a je to mez, ne
+opomenutí: kde rozsah vlákna začíná, `ReviewThread` nedrží — `startLine` se v konverzačním dotazu
+netahá a dotahovat ho by byl zásah do nejdražšího čtení v aplikaci kvůli jedné kresbě. Tvrdit
+červeně dva řádky, které jsme si domysleli, je horší než nakreslit ten jeden, o kterém data mluví,
+takže hlavička bloku počítá **nové** řádky (`návrh · 2 řádky`), ne nahrazované. Návrh bez jediného
+řádku je mazání a říká se to slovem (`návrh · smazat`); `návrh · 0 řádků` by vypadalo jako prázdný
+blok.
+
+### Do zadání pro agenta — jen na vlastním PR
+
+Vlákno s návrhem dostane v zadání **úkol** — větu *Aplikuj návrh od odinuv na ř. 41 — nové znění je
+v bloku `suggestion` níž.* Stojí **nad** textem vlákna, ne místo něj, protože próza kolem návrhu bývá to,
+proč se návrh píše. V nadpisu položky k tomu přibude značka `návrh změny`: je to jediná položka
+zadání, u které je hotové znění, takže agent nemá co vymýšlet — a z odstavce prózy pod tím se to
+pozná až po přečtení.
+
+Tlačítko `Do zadání pro agenta` se kreslí **jen na vlastním PR**, a to tak, že na cizím **není
+vůbec**, ne zašedle (tatáž úmluva jako u `+ label`, #392: zašedlé tlačítko tvrdí „tady se to dělá,
+jen teď ne“, a na cizím PR se to nedělá nikdy). Drží to `ThreadActions.handoff`, jehož `nil` znamená
+„nekreslit“; brána je `store.isOwnPullRequest`. Pod tlačítkem stojí věta, že **aplikovat návrh jde na
+GitHubu** — bez ní by se to tlačítko hledalo.
+
+### Zákres
+
+Sekce **54** návrhu — composer s vloženým návrhem v diffu a vlákno s návrhem v panelu. Leží na
+stránce *Konverzace*, i když levá polovina je ve *Změněných souborech*: obě poloviny jsou jedna věc
+a čtení návrhu je ta, kvůli které se tam chodí.
+
+**Patka `Přidat do review · Zrušit` z decku v ní není, a je to vědomá odchylka.** V téhle aplikaci je
+komentář v rozdělaném review od chvíle, kdy vznikne (#65), takže by potvrzovací krok potvrzoval něco,
+co se už stalo — a druhé tlačítko `Zrušit` vedle `Vyjmout z review` v hlavičce by znamenalo dvě jména
+pro tutéž akci. Slib *odejde s review, ne hned* nese věta pod náhledem a tab `Moje review`.
