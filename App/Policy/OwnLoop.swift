@@ -21,9 +21,13 @@ import Foundation
 /// chybí**, ne kam až se došlo.
 ///
 /// **Do prvního kola tady stálo, že všechno za zastávkou je `idle`**, a důvodem bylo, že tvrdit
-/// něco o CI nad nepushnutým kódem znamená mluvit o **minulém** pushi. Ten důvod platí, jenom sedí
-/// **jen za stanicí `Push`** — a přesně tak je dnes zapsaný v `Policy.ownLoopFacts(of:)`, což je
-/// jediné místo, které o téhle hranici rozhoduje. Co dráha přesto zamlčí (rozdělaná stanice za
+/// něco o CI nad nepushnutým kódem znamená mluvit o **minulém** pushi. Ten důvod platí, jenom je
+/// **užší, než se dvakrát zdálo** (#508, třetí kolo): `CI` a `Review` zhasne jedině to, co říká, že
+/// hlava na GitHubu **není ta naše** — tedy nepřetlačená práce v cache. Že je větev pozadu za
+/// základem nebo s ním v konfliktu, hlavou nehýbe: checky nad ní doběhly a schválení na ni platí.
+/// Druhé kolo tyhle dvě věci spletlo a `keboola/platform-libraries#566` mělo obojí šedé, přestože
+/// bylo schválené a se zeleným CI. Rozhoduje `Policy.ownLoopFacts(of:branch:)`, což je jediné
+/// místo, které o téhle hranici rozhoduje. Co dráha přesto zamlčí (rozdělaná stanice za
 /// zastávkou), je pořád vidět tam, kde to bydlí: tab `Kontroly`, sekce `Větev`, panel `Zadání`.
 struct OwnLoop: Equatable, Sendable {
     /// Stanice smyčky **v pořadí, ve kterém se jde**. Pořadí je součást typu, ne věc kresby —

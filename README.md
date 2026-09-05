@@ -1067,10 +1067,17 @@ PR se zelenými checky má proto `CI` i `Review` zelené, i když se dráha zast
 pushnutý, checky nad touhle hlavou doběhly a schválení platí.
 
 **Šedá zůstává tam, kde fakta závisí na kroku, který se neudělal.** `CI` a `Review` mluví o hlavě,
-která je **na GitHubu**, takže nad nepřetlačenou prací v cache nebo nad větví pozadu jsou tiché —
-zelený check nad kódem, který ještě nikdo nepushnul, mluví o **minulém** pushi. Tiché jsou i
-nenačtené checky (nenačteno není zeleno) a `Merge`, poslední brána před nevratnou akcí. Co dráha
-zamlčí, je pořád vidět tam, kde to bydlí — v tabu `Kontroly`, v sekci `Větev`, v panelu `Zadání`.
+která je **na GitHubu**, takže nad **nepřetlačenou prací v cache** jsou tiché — zelený check nad
+kódem, který ještě nikdo nepushnul, mluví o **minulém** pushi. Že je větev **pozadu za základem**
+nebo s ním v konfliktu, je proti tomu tvrzení o poloze, ne o hlavě: checky nad ní doběhly
+a schválení na ni platí, takže zelené zůstávají a nesrovnanou větev hlásí stanice `Push`. Tiché
+jsou dál nenačtené checky (nenačteno není zeleno), červená CI za zastávkou a `Merge`, poslední
+brána před nevratnou akcí. Co dráha zamlčí, je pořád vidět tam, kde to bydlí — v tabu `Kontroly`,
+v sekci `Větev`, v panelu `Zadání`.
+
+**Stanice `Review` je hotová, když někdo schválil** — i když na PR visí další žádost o review.
+Odpovídá to tomu, co o PR říká GitHub, a nic se tím neztrácí: na koho se ještě čeká, kreslí sekce
+`Reviewery` v panelu. `Chce změny` naopak nezezelená nikdy, ani vedle schválení.
 
 **Pod fázemi je jedna věta o tom, co je na tahu** (*„Od předání přibyly 2 položky.“*, *„Větev je
 o 4 commity pozadu za základem — srovnej ji rebasem.“*, *„Zeleno — dá se to mergnout.“*) a vpravo

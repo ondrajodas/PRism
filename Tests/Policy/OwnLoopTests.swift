@@ -47,6 +47,15 @@ struct OwnLoopTests {
         )
     }
 
+    /// Přerovnaná, **nepřetlačená** větev — commity leží ve stromě v cache a v remote nejsou.
+    private static let rebasedBranch = RebasedBranch(
+        worktree: URL(filePath: "/tmp/566-sync"),
+        headSha: "abc1234",
+        rebasedFrom: "9c1de02",
+        arriving: [],
+        replayed: 2
+    )
+
     private func check(_ name: String, _ outcome: PullRequestCheck.Outcome) -> PullRequestCheck {
         PullRequestCheck(name: name, outcome: outcome, link: nil, startedAt: nil, completedAt: nil)
     }
@@ -205,31 +214,24 @@ struct OwnLoopTests {
         #expect(red.state(of: .ci) == .idle)
     }
 
-    /// **`CI` a `Review` mluví o hlavě na GitHubu, takže se s nepřetlačenou větví rozejdou.**
-    /// Dokud `Push` neprošel, je zelený check věta o **minulém** pushi — a to je přesně to původní
-    /// zdůvodnění z prvního kola, které se tímhle zúžilo na `Push`, místo aby se zahodilo.
-    @Test("Nepřetlačená větev drží CI a Review šedé i nad zelenými daty")
-    func staleFactsStaySilent() throws {
-        let rebased = RebasedBranch(
-            worktree: URL(filePath: "/tmp/566-sync"),
-            headSha: "abc1234",
-            rebasedFrom: "9c1de02",
-            arriving: [],
-            replayed: 2
-        )
-        let cases: [(String, BranchSyncState?, BranchStatusState?)] = [
-            ("rozdělaná práce v cache", .rebased(rebased), status()),
-            ("konflikt v cache", .conflicted(files: ["a.swift"]), status()),
-            ("větev pozadu", nil, status(.mergeable, .clean, behind: 4)),
-            ("konflikt na GitHubu", nil, status(.conflicting, .clean)),
-            ("stav se nedotáhl", nil, .loading),
-            ("stav se nepodařilo zjistit", nil, .failed("gh spadlo")),
+    /// **Nepřetlačená práce v cache drží `CI` a `Review` šedé** — a je to ta jediná půlka
+    /// původního zdůvodnění, která platí. Dokud commity leží ve stromě v cache a v remote nejsou,
+    /// je zelený check věta o **minulém** pushi.
+    @Test("Nepřetlačená práce v cache drží CI a Review šedé i nad zelenými daty")
+    func unpushedWorkKeepsTheHeadStationsSilent() throws {
+        let cases: [(String, BranchSyncState)] = [
+            ("přerovnáno, nepřetlačeno", .rebased(Self.rebasedBranch)),
+            ("konflikt v cache", .conflicted(files: ["a.swift"])),
+            ("nedokončený rebase", .unfinished(files: ["a.swift"])),
+            ("nerozřešený konflikt", .unresolved(files: ["a.swift"], detail: nil)),
+            ("push spadl", .failed(.leaseRejected)),
+            ("zrovna se rebasuje", .rebasing),
+            ("zrovna se pushuje", .pushing),
         ]
-        for (name, sync, branch) in cases {
+        for (name, sync) in cases {
             let loop = try #require(
                 walk(
                     sync: sync,
-                    status: branch,
                     checks: [check("build", .passed)],
                     reviewers: [RequestedReviewer(login: "kolega", answer: .approved)]
                 )
@@ -238,6 +240,67 @@ struct OwnLoopTests {
             #expect(loop.state(of: .ci) == .idle, "\(name): CI mluví o jiné hlavě")
             #expect(loop.state(of: .review) == .idle, "\(name): Review mluví o jiné hlavě")
         }
+    }
+
+    /// **Poloha větve proti základu hlavou nehýbe** (#508, třetí kolo — mění druhé).
+    ///
+    /// Tohle je ta vada, kterou nahlásil uživatel na `keboola/platform-libraries#566`: PR
+    /// schválený, CI zelené, a dráha přesto obojí zhasla — protože byla větev o jednadvacet
+    /// commitů pozadu a `Push` tím nebyl hotový. Pozadu, konflikt se základem i nezjištěný stav
+    /// větve jsou **fakta o poloze**, ne o tom, čí je hlava na GitHubu; checky nad ní doběhly
+    /// a schválení na ni platí. `Push` si přitom svoje dál říká sám — proto se tvrdí i to, že
+    /// zastávka zůstala na něm.
+    @Test("Větev pozadu ani nezjištěný stav CI a Review nezhasne")
+    func branchPositionDoesNotSilenceTheHeadStations() throws {
+        // `nil` (ještě se neptalo) v `walk` vyjádřit nejde — helper si dosadí srovnanou větev —,
+        // a je to totéž jako `.loading`: `pushStep` je bere jednou větví.
+        let cases: [(String, BranchStatusState)] = [
+            ("o 21 commitů pozadu (#566)", status(.mergeable, .clean, behind: 21)),
+            ("za základem", status(.mergeable, .behind)),
+            ("konflikt se základem", status(.conflicting, .dirty)),
+            ("stav se nedotáhl", .loading),
+            ("stav se nepodařilo zjistit", .failed("gh spadlo")),
+        ]
+        for (name, branch) in cases {
+            let loop = try #require(
+                walk(
+                    status: branch,
+                    checks: [check("build", .passed)],
+                    reviewers: [RequestedReviewer(login: "kolega", answer: .approved)]
+                )
+            )
+            #expect(loop.active == .push, "\(name): zastávka zůstává na Pushi")
+            #expect(loop.state(of: .push) != .done, "\(name): Push si svoje říká dál")
+            #expect(loop.state(of: .ci) == .done, "\(name): checky nad touhle hlavou doběhly")
+            #expect(loop.state(of: .review) == .done, "\(name): schválení na tuhle hlavu platí")
+        }
+    }
+
+    /// **Uvolnilo se jen to, co se uvolnit mělo.** Nad toutéž větví pozadu zůstává „nevím“
+    /// šedé a spadlé červené se za zastávkou nekreslí — jinak by z opravy vzniklo tvrzení
+    /// z chybějících dat, tedy přesně ten vzor, kvůli kterému pravidlo vzniklo.
+    @Test("Nad větví pozadu nezezelená to, co se neví ani co spadlo")
+    func branchPositionDoesNotTurnUnknownFactsGreen() throws {
+        let behind = status(.mergeable, .clean, behind: 21)
+
+        let noChecks = try #require(walk(status: behind, checks: nil, reviewers: []))
+        #expect(noChecks.active == .push, "zastávka je pořád na Pushi")
+        #expect(noChecks.state(of: .ci) == .idle, "nenačtené checky nejsou zeleno")
+
+        let noReviewers = try #require(walk(status: behind, checks: [], reviewers: nil))
+        #expect(noReviewers.active == .push)
+        #expect(noReviewers.state(of: .review) == .idle, "nenačtení reviewery nejsou zeleno")
+
+        let red = try #require(
+            walk(
+                status: behind,
+                checks: [check("build", .failed)],
+                reviewers: [RequestedReviewer(login: "kolega", answer: .changesRequested)]
+            )
+        )
+        #expect(red.active == .push)
+        #expect(red.state(of: .ci) == .idle, "spadlé checky se za zastávkou nekreslí")
+        #expect(red.state(of: .review) == .idle, "chce změny za zastávkou nezezelená")
     }
 
     /// **`Push` na ničem nestojí, `Nálezy` taky ne** — a je to ten rozdíl, kvůli kterému má #566
@@ -254,28 +317,64 @@ struct OwnLoopTests {
         }
     }
 
-    /// Výčet předpokladů — **jediné místo, které o hranici rozhoduje**, takže se tvrdí jmenovitě.
-    /// Kdyby se `Merge` z výčtu utrhl, kreslila by dráha `k merge` nad nepředaným zadáním.
+    /// Výčet předpokladů — **jediné místo, které o hranici rozhoduje**, takže se tvrdí jmenovitě,
+    /// a od třetího kola nad **oběma** podobami větve. Kdyby se `Merge` z výčtu utrhl, kreslila by
+    /// dráha `k merge` nad nepředaným zadáním; kdyby `.push` přibyl `CI` a `Review` natvrdo, byla
+    /// by zpátky vada z `#566`.
     @Test("Na čem stojí fakta které stanice", arguments: OwnLoop.Station.allCases)
     func factsOfEachStation(_ station: OwnLoop.Station) {
-        let expected: Set<OwnLoop.Station> = switch station {
-        case .findings: []
-        case .handoff: [.findings]
-        case .agent: [.handoff]
-        case .push: []
-        case .ci: [.push]
-        case .review: [.push]
-        case .merge: [.findings, .handoff, .agent, .push, .ci, .review]
+        let everything: Set<OwnLoop.Station> = [.findings, .handoff, .agent, .push, .ci, .review]
+        // Vlevo větev, o které se **neví**, že by byla rozešlá; vpravo nepřetlačená práce v cache.
+        let expected: (Set<OwnLoop.Station>, Set<OwnLoop.Station>) = switch station {
+        case .findings: ([], [])
+        case .handoff: ([.findings], [.findings])
+        case .agent: ([.handoff], [.handoff])
+        case .push: ([], [])
+        case .ci, .review: ([], [.push])
+        case .merge: (everything, everything)
         }
-        #expect(Policy.ownLoopFacts(of: station) == expected, "\(station)")
+        let quiet = Policy.ownLoopFacts(of: station)
+        let unpushed = Policy.ownLoopFacts(of: station, branch: .rebased(Self.rebasedBranch))
+        #expect(quiet == expected.0, "\(station): bez rozdělané práce")
+        #expect(unpushed == expected.1, "\(station): s nepřetlačenou prací v cache")
         // Předpoklad smí být jedině **dřívější** stanice — jinak by se dráha nedala projít jedním
-        // průchodem a `done` by odpovídalo na otázku, na kterou se ještě neptalo.
+        // průchodem a `done` by odpovídalo na otázku, na kterou se ještě neptalo. Iteruje se přes
+        // to, co funkce **vydala**, ne přes očekávání: jinak by nový pozdější předpoklad prošel.
         let position = OwnLoop.Station.allCases.firstIndex(of: station)
-        for fact in Policy.ownLoopFacts(of: station) {
+        for fact in quiet.union(unpushed) {
             #expect(
                 (OwnLoop.Station.allCases.firstIndex(of: fact) ?? 0) < (position ?? 0),
                 "\(station) stojí na pozdější \(fact)"
             )
+        }
+    }
+
+    /// **Co se počítá za „práce, která na GitHubu ještě není“** — výčtem přes všechny stavy
+    /// srovnání větve. Rozdíl mezi nimi je jediná věc, která `CI` a `Review` zhasíná, takže se
+    /// tvrdí jmenovitě: `.pushed` a `.alreadyInSync` jsou hotové odpovědi, `nil` je „nevím
+    /// o ničem“ (ne důkaz), zbytek drží commity v cache.
+    @Test("Které stavy srovnání drží hlavu mimo GitHub")
+    func syncStatesThatHoldTheHeadBack() {
+        let onGitHub: [BranchSyncState] = [.pushed(replayed: 2), .alreadyInSync]
+        let held: [BranchSyncState] = [
+            .rebasing,
+            .resolving(round: 1, files: ["a.swift"]),
+            .rebased(Self.rebasedBranch),
+            .pushing,
+            .discarding,
+            .conflicted(files: ["a.swift"]),
+            .unfinished(files: ["a.swift"]),
+            .unresolved(files: ["a.swift"], detail: nil),
+            .failed(.leaseRejected),
+        ]
+        #expect(Policy.ownLoopFacts(of: .ci, branch: nil).isEmpty, "nevím o ničem není důkaz")
+        for sync in onGitHub {
+            #expect(Policy.ownLoopFacts(of: .ci, branch: sync).isEmpty, "\(sync)")
+            #expect(Policy.ownLoopFacts(of: .review, branch: sync).isEmpty, "\(sync)")
+        }
+        for sync in held {
+            #expect(Policy.ownLoopFacts(of: .ci, branch: sync) == [.push], "\(sync)")
+            #expect(Policy.ownLoopFacts(of: .review, branch: sync) == [.push], "\(sync)")
         }
     }
 
@@ -549,12 +648,7 @@ struct OwnLoopTests {
         let approved = try #require(walk(reviewers: [RequestedReviewer(login: "a", answer: .approved)]))
         #expect(approved.state(of: .review) == .done)
 
-        let waiting = try #require(
-            walk(reviewers: [
-                RequestedReviewer(login: "a", answer: .approved),
-                RequestedReviewer(login: "b", answer: .waiting),
-            ])
-        )
+        let waiting = try #require(walk(reviewers: [RequestedReviewer(login: "b", answer: .waiting)]))
         #expect(waiting.active == .review)
         #expect(waiting.state(of: .review) == .running)
         #expect(waiting.move == nil, "čekat na kolegu není můj tah")
@@ -568,6 +662,39 @@ struct OwnLoopTests {
         )
         #expect(changes.state(of: .review) == .failed)
         #expect(changes.move == .openConversation)
+    }
+
+    /// **Schválený PR má `Review` hotové, i když na něm visí další žádost** (#508, třetí kolo).
+    ///
+    /// Doslova `keboola/platform-libraries#566`: `odinuv` schválil, `MiroCillik` je vyžádaný
+    /// a nevyjádřil se. Do třetího kola z toho dráha skládala `čeká 1`, tedy `Review` nehotové nad
+    /// schváleným PR. Rozhodl to uživatel: jedno schválení stanici zavírá.
+    ///
+    /// **A ta druhá půlka se uvolnit nesmí**: `chce změny` nezezelená ani vedle schválení.
+    @Test("Review: schválení přebíjí visící žádost, chce změny ne")
+    func approvalOutranksAPendingRequest() throws {
+        let approvedWithPending = try #require(
+            walk(reviewers: [
+                RequestedReviewer(login: "odinuv", answer: .approved),
+                RequestedReviewer(login: "MiroCillik", answer: .waiting),
+            ])
+        )
+        #expect(approvedWithPending.state(of: .review) == .done)
+        #expect(
+            approvedWithPending.stations.first { $0.station == .review }?.detail == "schváleno"
+        )
+        // Walk jde dál — zastávka je až na `Merge`, ne na `Review`.
+        #expect(approvedWithPending.active == .merge)
+
+        let approvedButBlocked = try #require(
+            walk(reviewers: [
+                RequestedReviewer(login: "odinuv", answer: .approved),
+                RequestedReviewer(login: "kolega", answer: .changesRequested),
+                RequestedReviewer(login: "MiroCillik", answer: .waiting),
+            ])
+        )
+        #expect(approvedButBlocked.active == .review, "chce změny přebíjí schválení")
+        #expect(approvedButBlocked.state(of: .review) == .failed)
     }
 
     // MARK: - Stanice Merge

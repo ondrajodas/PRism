@@ -8490,17 +8490,30 @@ odchází do **cizího** terminálu a aplikace o něm neví nic.
 zastávkou se proto **vyhodnocují dál** a zelenají, kdykoli jsou jejich fakta **známá a aktuální**;
 aktivní stanice, věta pod dráhou ani akce se nemění.
 
-Hranici drží **jedna čistá funkce** — `Policy.ownLoopFacts(of:)`, výčtem po stanicích. `Nálezy`
-a `Push` nestojí na ničem (poloha větve je tvrzení o **dnešní** větvi), `Zadání` na `Nálezech`,
-`Agent` na `Zadání`, `CI` a `Review` na `Push`i (mluví o **hlavě, která je na GitHubu**) a `Merge`
-na celém kole. Původní zdůvodnění — *zelený check nad nepushnutým kódem je věta o minulém pushi* —
-**platí dál, jen se zúžilo na `Push`**: nad nepřetlačenou prací v cache i nad větví pozadu zůstávají
-`CI` i `Review` šedé. Za zastávkou se kreslí `done`, nebo `idle`, nic mezi tím: **nenačtené checky
-ani neznámý stav nezezelenají** a rozdělaná kapsle je vždycky jen jedna — ta aktivní.
+Hranici drží **jedna čistá funkce** — `Policy.ownLoopFacts(of:branch:)`, výčtem po stanicích.
+`Nálezy` a `Push` nestojí na ničem (poloha větve je tvrzení o **dnešní** větvi), `Zadání` na
+`Nálezech`, `Agent` na `Zadání` a `Merge` na celém kole. Za zastávkou se kreslí `done`, nebo
+`idle`, nic mezi tím: **nenačtené checky ani neznámý stav nezezelenají** a rozdělaná kapsle je
+vždycky jen jedna — ta aktivní.
+
+**Třetí kolo opravilo dvě věci, které tu druhé nechalo — a obojí nahlásil uživatel na běžící
+aplikaci.** Ta oprava z druhého kola `#566` totiž **nespravila**: větev je **o 21 commitů pozadu za
+`main`em**, takže `Push` nebyl hotový, a `CI` s `Review` na něm stály natvrdo. Zúžilo se to podruhé
+a tentokrát nad tím, co se doopravdy ví: `CI` a `Review` zhasne jedině **nepřetlačená práce
+v cache** (rozhoduje `BranchSyncState`), poloha větve proti základu **ne** — hlavou na GitHubu
+nehýbe, takže checky nad ní doběhly a schválení na ni platí. Druhá věc je stanice `Review`:
+**schválení přebíjí visící žádost** (`#566` má schválení od `odinuv` a otevřenou žádost na
+`MiroCillik`), a `chce změny` dál nezezelená nikdy. Tím padá issue #577. Poučení, kvůli kterému je
+to v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md), je obecnější než oprava:
+**hrubý předpoklad tvaru *stanice X stojí na stanici Y* zhasne i fakta, která s Y nesouvisí.**
+
+**Ověření se ve třetím kole taky změnilo.** Druhé kolo stálo na sondě `OwnLoopRenderProbe`, která
+kreslí view z **připravených** dat — a proto vyšlo zeleně něco, co uživateli zšedlo (pravidlo
+z #478). Doklad je teď **snímek běžící aplikace** nad `#566` vedle testů nad těmi dvěma stavy.
 
 **Zákres v sekci 52 se překreslil ve stejném PR** (první dráha, tři z pěti zastávek, nová dráha
-*větev pozadu* a poznámka 193). Regrese se ověřila **vložením tří regresí**; tabulka je
-v [`docs/testovani.md`](testovani.md).
+*větev pozadu* a poznámka 193). Regrese se ověřila **vložením regrese u každé opravy zvlášť**;
+tabulka je v [`docs/testovani.md`](testovani.md).
 
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR schválně nepouštěl.

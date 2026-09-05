@@ -7145,6 +7145,9 @@ pushnutý, znamená mluvit o minulém pushi* — to platí dál, jenže popisuje
 ne zastávku kdekoli. Když walk stojí na `Zadání`, je kód pushnutý, checky nad **touhle** hlavou
 doběhly a schválení platí; ta fakta jsou známá i aktuální a dráha je jen zamlčela.
 
+**Předpoklad `CI` a `Review` se ve třetím kole zúžil znovu, viz [záznam
+níž](#záznam-rozhodnutí--hrubý-předpoklad-zhasne-i-fakta-která-s-ním-nesouvisí-508-třetí-kolo).**
+
 **Hranice je jedna čistá funkce a výčet, ne podmínka ve view.** `Policy.ownLoopFacts(of:)` říká, na
 dokončení kterých **dřívějších** stanic fakta té které stojí: `Nálezy` a `Push` na ničem (poloha
 větve je tvrzení o dnešní větvi), `Zadání` na `Nálezech`, `Agent` na `Zadání`, `CI` a `Review` na
@@ -7168,3 +7171,57 @@ vyhodnotí jedině s celým svým výčtem hotovým, a nakreslí se `done`, **je
 **Co se nemění ani o kus:** aktivní stanice (pořád první nehotová), věta pod dráhou, akce, razítko
 v hlavičce, sada stavů (`ReviewerLane.PhaseState`), zkratka nad mergnutým a zavřeným PR i to, že se
 na cizím PR dráha nekreslí vůbec. Změna je v jedné funkci a v jednom `guard`u ve walku.
+
+### Záznam rozhodnutí — hrubý předpoklad zhasne i fakta, která s ním nesouvisí (#508, třetí kolo)
+
+**Mění rozhodnutí z druhého kola výš, a je to tentýž PR, tentýž screenshot a jiná příčina.**
+Oprava z druhého kola `keboola/platform-libraries#566` **nespravila**: v běžící aplikaci měl PR
+`CI` i `Review` dál šedé. Uživatel to řekl takhle: *„review je approved a ci je zelený, takže ty
+dva by měly být zelený.“*
+
+**Co se doopravdy dělo** (změřeno na běžícím okně, ne odhadnuto): stav větve načtený **byl**, jenže
+větev je **o 21 commitů pozadu za `main`em** — panel *Větev* to psal červeně vedle `1 commit ·
+44 checků · zeleno`. `Push` proto vrátil `.stopped`, druhé kolo mělo `CI` a `Review` napsané jako
+*stojí na `Push`i*, a obojí zhaslo. Hypotéza ze zadání (že se stav větve po #572 nenačetl vůbec)
+byla mylná; kdyby se na ni spolehlo, opravovalo by se načítání, které funguje.
+
+**Poučení je obecnější než ta oprava, a proto je tady, ne jen v komentáři.** Předpoklad tvaru
+*stanice X stojí na stanici Y* zhasne **i fakta, která s Y nesouvisí**. `Push` v sobě nese dvě
+různé věci — *je moje práce na GitHubu?* a *stojí větev nad dnešním základem?* —, a `CI` s `Review`
+potřebují jen tu první. Předpoklad se proto musí umět vyslovit nad tím, co se doopravdy ví
+(*o větvi se neví, že by byla rozešlá*), ne nad zástupným stavem sousední stanice; zástupný stav je
+pohodlný právě proto, že se v něm ty dvě věci nedají rozeznat.
+
+**Nová hranice: rozhoduje jedině `BranchSyncState`.** `Policy.ownLoopFacts(of:branch:)` přidá
+`CI` a `Review` předpoklad `Push` jedině tehdy, když v cache leží **nepřetlačená** práce (rebase
+rozdělaný, přerovnaný a nepushnutý, spadlý). `BranchStatus` — tedy poloha proti základu — do toho
+rozhodnutí **nevstupuje vůbec**: hlavou na GitHubu nehýbe, takže checky nad ní doběhly a schválení
+na ni platí. Poloha je vidět tam, kde bydlí: na stanici `Push` a v sekci *Větev*.
+
+**Druhá půlka téhož kola: schválení přebíjí visící žádost.** `#566` má `reviewDecision: APPROVED`
+od `odinuv` a zároveň otevřenou žádost na `MiroCillik`, ze které dráha skládala `čeká 1`. Uživatel
+rozhodl, že schválený PR znamená hotovou stanici `Review`; pořadí odpovědí je tedy `chce změny` →
+`schválil` → `čeká`. Je to konzistentní s GitHubem, který v tom stavu vrací `APPROVED`, a **žádnou
+informaci to z okna nebere** — sekce *Reviewery* v panelu (#392) kreslí obě řádky dál. Tím padá
+issue #577, které se na to chystalo zvlášť.
+
+**Zamítnuté varianty, dvě:**
+
+1. **Dotáhnout `reviewDecision` z GitHubu a rozhodovat podle něj.** Zahozeno: aplikace ten údaj
+   nemá a stálo by to nové pole v dotazu i v modelu — a odpověď z něj by byla **tatáž**, protože
+   `Policy.reviewers` už dnes drží pravidlo, že vyžádání přebíjí **vlastní starší** verdikt téhož
+   člověka. Schválení, které GitHub novou žádostí „vzal zpátky“, se do dráhy tedy nedostane.
+2. **Zhasnout `CI` a `Review` i nad větví pozadu a nad konfliktem se základem** (tak to znělo
+   v zadání třetího kola). Zahozeno po měření: na `#566` je větev pozadu, checky nad její hlavou
+   přesto doběhly zeleně a `odinuv` schválil **tuhle** hlavu. Zhasnout je kvůli poloze proti
+   základu by byla přesně ta vada, kterou kolo opravuje, jen posunutá o jeden vstup dál.
+
+**Co zůstává beze změny:** `nevím` se pořád nekreslí jako `done` (nenačtené checky, nenačtení
+reviewery i červené CI zůstávají za zastávkou `idle`), `chce změny` nezezelená nikdy, rozdělaná
+stanice je nejvýš jedna, `Merge` stojí dál na všech šesti a na cizím PR se dráha nekreslí vůbec.
+
+**Jak se to ověřilo, se taky mění.** Druhé kolo stálo na sondě `OwnLoopRenderProbe`, která kreslí
+view z **připravených** dat — a proto vyšlo zeleně něco, co uživateli zšedlo: scéna nenesla polohu
+větve, kterou aplikace má. Je to pravidlo z #478 (měřidlo, které vydá tutéž hodnotu pro „funguje“
+i „nefunguje“, netvrdí nic). Doklad třetího kola je proto **snímek běžící aplikace** nad `#566`
+vedle testů nad těmi dvěma stavy, ne render sondy.

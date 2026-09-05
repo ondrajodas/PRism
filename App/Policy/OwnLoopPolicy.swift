@@ -13,9 +13,9 @@ extension Policy {
     /// **Za zastávkou se ale nemlčí, a je to změna pravidla z proklikání** (#508, druhé kolo).
     /// Do téhle změny bylo všechno za zastávkou `idle`; dráha tím odpovídala jedině na otázku
     /// „kam až jsem došel“. Otázka je ale **„co ještě chybí“**, a na tu se odpovídá zeleně: co je
-    /// hotové, má být vidět, i když se walk zastavil dřív. Rozhoduje `ownLoopFacts(of:)` — stanice
-    /// za zastávkou se vyhodnotí, jen když **všechna dřívější fakta, na kterých stojí, jsou
-    /// hotová**, a nakreslí se `done` jen tehdy, když **projde**. Cokoli jiného je `idle`:
+    /// hotové, má být vidět, i když se walk zastavil dřív. Rozhoduje `ownLoopFacts(of:branch:)` —
+    /// stanice za zastávkou se vyhodnotí, jen když **všechna dřívější fakta, na kterých stojí,
+    /// jsou hotová**, a nakreslí se `done` jen tehdy, když **projde**. Cokoli jiného je `idle`:
     /// nenačtené checky nejsou zeleno a „nevím“ není hotovo.
     ///
     /// **Rozdělaná stanice je za zastávkou pořád jen jedna — ta aktivní.** Druhá červená kapsle by
@@ -66,12 +66,12 @@ extension Policy {
         var stop: (station: OwnLoop.Station, sentence: String, move: OwnLoop.Move?)?
         /// Co se cestou **dokončilo**. Před zastávkou v tom leží všechno předchozí (walk jinak
         /// nepokračuje), za ní jedině to, co se doopravdy vyhodnotilo a prošlo — a právě proto
-        /// stačí `ownLoopFacts(of:)` vyjmenovat **přímé** předpoklady: co na nich stojí dál, na ně
-        /// nedosáhne samo.
+        /// stačí `ownLoopFacts(of:branch:)` vyjmenovat **přímé** předpoklady: co na nich stojí
+        /// dál, na ně nedosáhne samo.
         var done: Set<OwnLoop.Station> = []
 
         for station in OwnLoop.Station.allCases {
-            guard ownLoopFacts(of: station).isSubset(of: done) else {
+            guard ownLoopFacts(of: station, branch: sync).isSubset(of: done) else {
                 // Fakta téhle stanice stojí na kroku, který se neudělal — `idle` je odpověď, ne
                 // úspora. Před zastávkou sem walk nedojde: tam je hotové všechno předchozí.
                 stations.append(OwnLoop.Stop(station: station, state: .idle, detail: nil))
@@ -112,7 +112,7 @@ extension Policy {
         )
     }
 
-    /// Na dokončení kterých **dřívějších** stanic stojí fakta téhle (#508, druhé kolo).
+    /// Na dokončení kterých **dřívějších** stanic stojí fakta téhle (#508, třetí kolo).
     ///
     /// **Jediné místo, kde se rozhoduje, co se smí kreslit za zastávkou** — a je to výčet, ne
     /// podmínka ve view. Stanice za zastávkou se vyhodnotí, jedině když je celý tenhle výčet
@@ -124,13 +124,23 @@ extension Policy {
     /// základem“ je tvrzení o **dnešní** větvi; nepředané nálezy z něj nedělají nepravdu, jenom
     /// ohlašují další kolo. Ze stejného důvodu na ničem nestojí `Nálezy`.
     ///
-    /// **`CI` a `Review` stojí na `Push`i, a jedině na něm.** Obojí mluví o **hlavě, která je na
-    /// GitHubu**; dokud se s ní naše větev neshoduje (nepřetlačená práce v cache, větev pozadu,
-    /// konflikt, nezjištěný stav), je zelený check věta o **minulém** pushi — a to bylo přesně to
-    /// zdůvodnění, kvůli kterému bylo v prvním kole `idle` všechno za zastávkou. Platí dál, jenom
-    /// se ukázalo, že sedí **jen za `Push`em**: když se walk zastaví na `Zadání`, je kód pushnutý,
-    /// checky nad touhle hlavou doběhly a schválení platí. Naopak nálezy a zadání o hlavě na
-    /// GitHubu neříkají nic, takže mezi ně nepatří.
+    /// **`CI` a `Review` stojí na `Push`i jedině tehdy, když se ví, že naše práce na GitHubu
+    /// není** (#508, třetí kolo — mění druhé). Obojí mluví o **hlavě, která je na GitHubu**, a to
+    /// je celý ten rozdíl: zhasnout je smí jedině fakt, který říká, že ta hlava **není ta naše** —
+    /// tedy nepřetlačená práce v cache. Poloha větve **proti základu** hlavou nehýbe: větev může
+    /// být o jednadvacet commitů pozadu i v konfliktu se základem, a checky nad tou hlavou přesto
+    /// doběhly a schválení na ni platí. Právě tohle spletlo druhé kolo dohromady, a bylo to vidět
+    /// na `keboola/platform-libraries#566`: schválený PR se zeleným CI měl obojí šedé, protože
+    /// větev byla pozadu.
+    ///
+    /// **Je z toho poučení, ne jen oprava jednoho řádku:** hrubý předpoklad tvaru „stanice X stojí
+    /// na stanici Y“ zhasne **i fakta, která s Y nesouvisí**. Předpoklad se musí umět vyslovit
+    /// nad tím, co se doopravdy ví (*o větvi se neví, že by byla rozešlá*), ne nad zástupným
+    /// stavem sousední stanice (*`Push` je hotový*).
+    ///
+    /// **Nenačtený ani nezjištěný stav větve je „nevím“, ne „rozešlo se to“.** Zhasnout kvůli němu
+    /// by znamenalo brát chybějící odpověď jako důkaz — tatáž hranice, jakou drží `isUnknownYet`
+    /// nad mergem. Nezhasne se tedy nic a `Push` si svoje „zjišťuju“ řekne sám.
     ///
     /// **`Merge` stojí na všem, a je to nejtvrdší řádek výčtu.** Je to poslední brána před
     /// **nevratnou** akcí, takže se nad ní zaokrouhluje k „nevím“; `k merge` nad šesti nepředanými
@@ -138,15 +148,45 @@ extension Policy {
     /// nevyšel tak jako tak (`mergeStep` nikdy nevrací `.passed` — mergnutou smyčku kreslí
     /// `closedLoop`), je **shoda okolností, ne pravidlo**; kdyby se to změnilo, ať to zůstane
     /// rozhodnuté tady.
-    static func ownLoopFacts(of station: OwnLoop.Station) -> Set<OwnLoop.Station> {
+    ///
+    /// - Parameter sync: co leží v kopii repa (#466). **Jediný vstup, který o hlavě na GitHubu
+    ///   něco říká** — `BranchStatus` mluví o poloze proti základu, ne o tom, čí je hlava.
+    static func ownLoopFacts(
+        of station: OwnLoop.Station,
+        branch sync: BranchSyncState? = nil
+    ) -> Set<OwnLoop.Station> {
         switch station {
         case .findings: []
         case .handoff: [.findings]
         case .agent: [.handoff]
         case .push: []
-        case .ci: [.push]
-        case .review: [.push]
+        case .ci, .review: headReachedGitHub(sync) ? [] : [.push]
         case .merge: [.findings, .handoff, .agent, .push, .ci, .review]
+        }
+    }
+
+    /// Je hlava, o které GitHub mluví, ta naše?
+    ///
+    /// **`true` znamená „neví se o ničem, co by naši práci drželo mimo GitHub“, ne „ověřeno“** —
+    /// a je to schválně slabší tvrzení: aplikace zná jedině **svoji** rozdělanou práci (rebase ve
+    /// vlastním stromě v cache), o commitech, které si člověk udělal ve svém klonu, neví nic.
+    /// Vnitřek `ownLoopFacts(of:branch:)`, ne druhé rozhodovací místo.
+    private static func headReachedGitHub(_ sync: BranchSyncState?) -> Bool {
+        guard let sync else { return true }
+        // Rozdělané i přerovnané: v obou případech leží v cache commity, které v remote nejsou.
+        if sync.isBusy || sync.rebasedBranch != nil { return false }
+        switch sync {
+        case .conflicted, .unfinished, .unresolved, .failed:
+            // Nedokončený rebase i spadlé přetlačení: co je na GitHubu, je **předchozí** hlava.
+            // U `.failed` se zaokrouhluje k opatrnější odpovědi — o výsledku pushe se z chyby
+            // nedá říct nic jistého.
+            return false
+        case .pushed, .alreadyInSync:
+            return true
+        case .rebasing, .resolving, .pushing, .discarding, .rebased:
+            // Odchycené výš; vypsané kvůli vyčerpávajícímu `switch`i, který ohlídá nový případ
+            // při překladu.
+            return false
         }
     }
 
@@ -517,6 +557,16 @@ extension Policy {
     ///
     /// **U `čeká` není akce, a je to schválně**: čekat na kolegu není můj tah. `chce změny` akci
     /// má — vede do konverzace, kde ta věta stojí.
+    ///
+    /// **Schválení přebíjí visící žádost** (#508, třetí kolo). Pořadí je `chce změny` → `schválil`
+    /// → `čeká`, a ta prostřední dvojice se do třetího kola četla obráceně: `#566` je schválený
+    /// (`reviewDecision: APPROVED`) a zároveň má otevřenou žádost na dalšího člověka, takže dráha
+    /// hlásila `čeká 1` nad hotovým review. Rozhodnuto je, že **stanice je tím hotová** — jedno
+    /// schválení stačí GitHubu i nám. Visící žádost se tím **neztrácí**: sekce `Reviewery`
+    /// v panelu (#392) ji kreslí dál, včetně toho, na koho se čeká.
+    ///
+    /// **`chce změny` nezezelená ani se schválením**, a je to ta půlka, která se uvolnit nesmí:
+    /// je to jediná odpověď, která něco blokuje, takže se testuje první.
     private static func reviewStep(_ reviewers: [RequestedReviewer]?) -> LoopStep {
         guard let reviewers else {
             return .stopped(
@@ -534,6 +584,8 @@ extension Policy {
                 move: .openConversation
             )
         }
+        let approved = reviewers.count { $0.answer == .approved }
+        if approved > 0 { return .passed(detail: "schváleno") }
         let waiting = reviewers.count { $0.answer == .waiting }
         if waiting > 0 {
             return .stopped(
@@ -544,8 +596,7 @@ extension Policy {
                 move: nil
             )
         }
-        let approved = reviewers.count { $0.answer == .approved }
-        return .passed(detail: approved > 0 ? "schváleno" : "bez reviewerů")
+        return .passed(detail: "bez reviewerů")
     }
 
     /// `Merge` — poslední stanice (#465).

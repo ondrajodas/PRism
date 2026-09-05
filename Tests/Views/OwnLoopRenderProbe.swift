@@ -10,10 +10,18 @@ import Testing
 /// Vypnutá schválně (`.disabled`) — pouští se ručně, když se na dráhu sahá. Render nezastupuje
 /// tvrzení: co má platit, tvrdí `OwnLoopTests`.
 ///
-/// **Scéna `01` jsou skutečná data z `keboola/platform-libraries#566`** (`gh pr view 566`, 5. 9.
-/// 2026): otevřený, `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`, `reviewDecision: APPROVED`,
-/// `latestReviews` s jedním `APPROVED` od `odinuv`, `reviewRequests` s otevřenou žádostí na
-/// `MiroCillik`, checky zeleně, jeden nález nepředaný.
+/// **Scéna `01` jsou skutečná data z `keboola/platform-libraries#566`** (`gh pr view 566` a `gh api
+/// compare`, 5. 9. 2026): otevřený, `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`,
+/// `reviewDecision: APPROVED`, `latestReviews` s jedním `APPROVED` od `odinuv`, `reviewRequests`
+/// s otevřenou žádostí na `MiroCillik`, checky zeleně, jeden nález nepředaný — a větev **o 21
+/// commitů pozadu** za `main`em.
+///
+/// **Ta poslední hodnota tady do třetího kola #508 chyběla, a je to poučení o téhle sondě.** Scéna
+/// bez ní vyšla podle tehdejšího pravidla „správně“, zatímco okno nad týmž PR kreslilo něco jiného
+/// — sonda totiž tvrdí něco o **kresbě z připravených dat**, ne o tom, jaká data aplikace
+/// doopravdy má. Je to pravidlo z #478: měřidlo, které vydá tutéž hodnotu pro „funguje“
+/// i „nefunguje“, netvrdí nic. **Doklad o tom, že dráha na skutečném PR sedí, je snímek běžící
+/// aplikace**, ne tenhle render.
 ///
 /// Postup, proč zrovna takhle a co se z renderu nedozvíš, je v
 /// [`docs/testovani.md`](../../docs/testovani.md), *Jak si zkontrolovat, jak view vypadá*.
@@ -34,7 +42,9 @@ struct OwnLoopRenderProbe {
     }
 
     private static let scenes: [(String, OwnLoop?)] = [
-        // Skutečná data #566: schváleno, CI zeleně, jeden nález k předání, jeden reviewer čeká.
+        // Skutečná data #566: schváleno, CI zeleně, jeden nález k předání, jeden reviewer čeká
+        // a větev o 21 commitů pozadu. `CI` a `Review` zelené, `Push` mlčí — poloha větve hlavou
+        // na GitHubu nehýbe.
         ("01-pl566", Policy.ownLoop(
             ownership: .mine,
             state: .open,
@@ -48,7 +58,11 @@ struct OwnLoopRenderProbe {
                 commits: nil
             ),
             status: .loaded(
-                BranchStatus(mergeability: .mergeable, mergeState: .clean),
+                BranchStatus(
+                    mergeability: .mergeable,
+                    mergeState: .clean,
+                    divergence: BranchDivergence(ahead: 1, behind: 21)
+                ),
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             checks: [
@@ -60,8 +74,8 @@ struct OwnLoopRenderProbe {
             ],
             merge: .allowed
         )),
-        // Totéž bez otevřené žádosti o review — takhle vypadá dráha, když je Review doopravdy hotové.
-        ("02-pl566-bez-cekajiciho", Policy.ownLoop(
+        // Totéž po rebase: srovnaná větev, takže zezelená i `Push` a zastávka se posune na `Merge`.
+        ("02-pl566-po-rebase", Policy.ownLoop(
             ownership: .mine,
             state: .open,
             review: .completed(findings: 6),
@@ -81,18 +95,25 @@ struct OwnLoopRenderProbe {
             reviewers: [RequestedReviewer(login: "odinuv", answer: .approved)],
             merge: .allowed
         )),
-        // Nepřetlačená práce v cache: CI ani Review nezezelenají, protože mluví o jiné hlavě.
+        // Nepřetlačená práce v cache: `CI` ani `Review` nezezelenají, protože na GitHubu leží
+        // **předchozí** hlava. Tohle je ta jediná podoba „rozešlé hlavy“, která je zhasíná —
+        // scéna `01` vedle toho ukazuje, že poloha proti základu je něco jiného.
         ("03-nepretlaceno", Policy.ownLoop(
             ownership: .mine,
             state: .open,
             review: .clean,
             handoff: .never,
+            sync: .rebased(
+                RebasedBranch(
+                    worktree: URL(filePath: "/tmp/566-sync"),
+                    headSha: "abc1234",
+                    rebasedFrom: "9c1de02",
+                    arriving: [],
+                    replayed: 2
+                )
+            ),
             status: .loaded(
-                BranchStatus(
-                    mergeability: .mergeable,
-                    mergeState: .clean,
-                    divergence: BranchDivergence(ahead: 1, behind: 4)
-                ),
+                BranchStatus(mergeability: .mergeable, mergeState: .clean),
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             checks: [check("build")],

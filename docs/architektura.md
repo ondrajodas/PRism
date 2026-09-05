@@ -5418,7 +5418,8 @@ všechno za `active` `idle`, takže dráha odpovídala jedině na otázku *kam a
 ale **co ještě chybí**, a na tu se odpovídá zeleně. Vyšlo to z `keboola/platform-libraries#566`:
 schválený PR se zelenými checky měl `CI` i `Review` šedé, protože se walk zastavil na `Zadání`
 u jediného nepředaného nálezu — a ta fakta byla přitom známá i aktuální, dráha je jen zamlčela.
-**Rozhoduje `Policy.ownLoopFacts(of:)`**, což je jediné místo, kde ta hranice je, a je to **výčet**:
+**Rozhoduje `Policy.ownLoopFacts(of:branch:)`**, což je jediné místo, kde ta hranice je, a je to
+**výčet**:
 
 | Stanice | Stojí na dokončení | Proč |
 |---|---|---|
@@ -5426,15 +5427,44 @@ u jediného nepředaného nálezu — a ta fakta byla přitom známá i aktuáln
 | `Zadání` | `Nálezy` | `nic k předání` nad nedoběhlým review je nula, kterou nikdo nespočítal |
 | `Agent` | `Zadání` | `commit dorazil` nad nepředanými položkami je práce, kterou nikdo nezadal |
 | `Push` | — | „větev je pushnutá a srovnaná“ je tvrzení o **dnešní** větvi; nepředané zadání z něj nedělá nepravdu |
-| `CI` | `Push` | mluví o **hlavě, která je na GitHubu** |
-| `Review` | `Push` | totéž — schválení platí k hlavě, ne k rozdělané práci v cache |
+| `CI` | `Push` **jen když v cache leží nepřetlačená práce** | mluví o **hlavě, která je na GitHubu** |
+| `Review` | totéž | totéž — schválení platí k hlavě, ne k rozdělané práci v cache |
 | `Merge` | všech šest | poslední brána před **nevratnou** akcí, takže se u ní zaokrouhluje k „nevím“ |
 
-**Původní zdůvodnění platí, jen se zúžilo na `Push`.** *Zelený check nad kódem, který ještě nikdo
-nepushnul, je věta o minulém pushi* — tak to stálo v prvním kole nad **všemi** stanicemi za
-zastávkou. Nepřetlačená práce v cache, větev pozadu, konflikt i nezjištěný stav větve tedy `CI`
-i `Review` dál drží šedé; jenže když se walk zastaví na `Zadání`, je kód pushnutý a checky nad
-touhle hlavou doběhly.
+#### Předpoklad `CI` a `Review` se zúžil podruhé (#508, třetí kolo)
+
+**Druhé kolo napsalo *`CI` a `Review` stojí na `Push`i* natvrdo, a bylo to moc hrubé.** Ta oprava
+znovu zhasla `#566`, jen z jiného důvodu: větev byla **o jednadvacet commitů pozadu za `main`em**,
+takže `Push` nebyl hotový — a s ním zhaslo zelené CI (44 checků, `zeleno`) i schválení od `odinuv`.
+Na obrazovce to vypadalo přesně jako vada z prvního kola, přestože příčina v kódu byla jiná.
+
+**Poučení je obecnější než ta oprava.** Předpoklad tvaru *stanice X stojí na stanici Y* zhasne
+**i fakta, která s Y nesouvisí**: `Push` v sobě nese dvě různé věci — *je moje práce na GitHubu?*
+a *stojí větev nad dnešním základem?* —, a `CI` s `Review` potřebují jen tu první. Předpoklad se
+proto musí umět vyslovit nad tím, co se doopravdy ví (*o větvi se neví, že by byla rozešlá*), ne
+nad zástupným stavem sousední stanice.
+
+**Rozhoduje jediný vstup: co leží v kopii repa** (`BranchSyncState`). `BranchStatus` mluví o poloze
+**proti základu**, a ta hlavou nehýbe: větev může být pozadu i v konfliktu se základem a checky nad
+tou hlavou přesto doběhly a schválení na ni platí. Ta poloha je vidět tam, kde bydlí — na stanici
+`Push` a v sekci *Větev*.
+
+| Stav srovnání větve | `CI` a `Review` | Proč |
+|---|---|---|
+| `nil` (neví se o ničem) | kreslí se z fakt | „nevím o rozejití“ není důkaz rozejití |
+| `pushed`, `alreadyInSync` | kreslí se z fakt | hotová odpověď: co je v cache, je i v remote |
+| `rebased` (přerovnáno, nepřetlačeno) | šedé | na GitHubu je **předchozí** hlava |
+| `rebasing`, `resolving`, `pushing`, `discarding` | šedé | rozdělaná práce, o výsledku se nedá říct nic |
+| `conflicted`, `unfinished`, `unresolved` | šedé | nedokončený rebase drží commity v cache |
+| `failed` | šedé | spadlé přetlačení — zaokrouhluje se k opatrnější odpovědi |
+
+**Aplikace zná jedině svoji rozdělanou práci, a je to zapsaná mez, ne přehlédnutí.** O commitech,
+které si člověk udělal ve svém klonu, neví nic (tvrdá podmínka č. 3), takže „neví se o rozejití“ je
+schválně slabší tvrzení než „ověřeno“. Silnější by šlo dostat jedině porovnáním hlavy z detailu
+s hlavou uživatelova stromu, a do toho stromu se nesahá.
+
+**Uvolnilo se jen to, co se uvolnit mělo.** Nenačtené checky, nenačtení reviewery, červené CI ani
+`chce změny` nad toutéž větví pozadu nezezelenají — je to tatáž hranice jako „nevím“ nad mergem.
 
 **Vyjmenovávají se přímé předpoklady, ne tranzitivní uzávěr.** Do množiny hotových se stanice
 dostane, jedině když se doopravdy vyhodnotila a **prošla**, takže se řetěz (`Agent` → `Zadání` →
@@ -5476,8 +5506,18 @@ dotahují až s detailem, takže hned po otevření záložky se o nich nedá tv
 | `Agent` | `HandoffReport.hasMovedHead`, razítko | hlava se pohnula (práce dorazila), nebo se nikdy nepředávalo |
 | `Push` | `BranchSyncState`, `BranchStatusState` | větev je srovnaná. **Rozdělaná práce v cache přebíjí GitHub** — ten o rebase v cache neví |
 | `CI` | `[PullRequestCheck]?` | zeleno, přeskočeno, nebo PR bez CI. **`nil` a `[]` se nesmí slít** |
-| `Review` | `[RequestedReviewer]?` | nikdo nečeká a nikdo nechce změny |
+| `Review` | `[RequestedReviewer]?` | nikdo nechce změny **a někdo schválil** (nebo nikdo nečeká) |
 | `Merge` | `Policy.MergeOffer` | nikdy — zeleno je **zastávka**, protože mergnout musí člověk |
+
+**Schválení přebíjí visící žádost** (#508, třetí kolo). Pořadí odpovědí je `chce změny` →
+`schválil` → `čeká`, a prostřední dvojice se do třetího kola četla obráceně: `#566` je schválený
+(`odinuv`) a zároveň má otevřenou žádost na `MiroCillik`, takže dráha hlásila `čeká 1` nad hotovým
+review. Rozhodl to uživatel a je to konzistentní s GitHubem, který v tom stavu vrací
+`reviewDecision: APPROVED`. **Informace se tím z okna neztrácí** — sekce *Reviewery* v panelu
+(#392) kreslí obě řádky dál, `odinuv schválil` i `MiroCillik čeká`. A `chce změny` nezezelená ani
+vedle schválení: je to jediná odpověď, která něco blokuje, takže se testuje první. Že vyžádání
+přebíjí **vlastní starší** verdikt téhož člověka, drží `Policy.reviewers` beze změny — schválení,
+které GitHub „vzal zpátky“ novou žádostí, se sem tedy vůbec nedostane.
 
 **Stanice `Agent` netvrdí, že agent běží** (živý obsah dodá #511). Zadání odchází do **cizího**
 terminálu, takže aplikace neví, jestli na něm někdo pracuje; stanice říká jen to, co unesou data

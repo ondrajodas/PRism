@@ -369,27 +369,47 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a **aktivní stanice se nesmí pohnout** (pořád `Zadání`, pořád s akcí `Otevřít zadání`). Záporná
   strana je cennější a je trojí: **nenačtené checky ani nenačtení reviewery za zastávkou
   nezezelenají** (`nil` není nula), **červené CI za zastávkou taky ne** (rozdělaná je jen aktivní
-  stanice) a nad **nepřetlačenou nebo pozadu jsoucí větví jsou `CI` i `Review` šedé**, i když data
-  z GitHubu jsou zelená — šest podob té „rozešlé hlavy“ výčtem (rebase v cache, konflikt v cache,
-  větev pozadu, konflikt na GitHubu, `loading`, `failed`). K tomu se **výčet
-  `Policy.ownLoopFacts(of:)` tvrdí jmenovitě** pro všech sedm stanic, a k němu, že předpokladem smí
-  být jedině **dřívější** stanice.
+  stanice) a nad **nepřetlačenou prací v cache jsou `CI` i `Review` šedé**, i když data z GitHubu
+  jsou zelená — sedm podob té „hlavy, která na GitHubu není“, výčtem (`rebased`, `conflicted`,
+  `unfinished`, `unresolved`, `failed`, `rebasing`, `pushing`). K tomu se **výčet
+  `Policy.ownLoopFacts(of:branch:)` tvrdí jmenovitě** pro všech sedm stanic a nad **oběma** podobami
+  větve, a k němu, že předpokladem smí být jedině **dřívější** stanice.
 
-  **Ověřeno vložením tří regresí** — u každé se koukalo, jestli spadne to, co má:
+  **Od třetího kola #508 se ta hranice testuje i opačně: poloha větve proti základu `CI` ani
+  `Review` nezhasne.** Je to vada, kterou nahlásil uživatel na běžící aplikaci — `#566` mělo obojí
+  šedé, protože byla větev **o 21 commitů pozadu**, takže `Push` nebyl hotový. Pět podob výčtem
+  (pozadu o 21, `behind`, konflikt se základem, `loading`, `failed`) a u každé se tvrdí obojí:
+  `CI` i `Review` jsou `done` **a zároveň** zastávka zůstala na `Push`i, který si svoje říká dál.
+  Vedle toho stojí sada, která hlídá, že se uvolnilo **jen** to: nad toutéž větví pozadu zůstávají
+  nenačtené checky, nenačtení reviewery, spadlé CI i `chce změny` šedé.
+
+  **Schválení přebíjí visící žádost** (třetí kolo) — `#566` doslova: `odinuv schválil` +
+  `MiroCillik čeká` musí dát `Review` `done` s detailem `schváleno` a walk pokračovat až na `Merge`.
+  Druhá půlka téhož testu je ta, která se uvolnit nesměla: `chce změny` vedle schválení dává
+  `failed`.
+
+  **Ověřeno vložením regrese, u každé opravy zvlášť:**
 
   | Vložená regrese | Co spadlo |
   |---|---|
-  | `CI` přestane stát na `Push`i (`case .ci: []`) | 7 nálezů: výčet předpokladů u `.ci` a **všech šest** podob rozešlé hlavy (`CI` vyšlo `done`) |
-  | za zastávkou se kreslí rozdělaný stav místo `idle` | 36 nálezů: matice (32×) a všechna čtyři tvrzení o nenačtených datech (`unknown`, `failed`, detail `zjišťuju`) |
-  | návrat na staré pravidlo (za zastávkou vždycky `idle`) | 11 nálezů: obě kladná tvrzení — `Push`, `CI` i `Review` vyšly `idle` a detaily `nil` |
+  | `CI` a `Review` stojí na `Push`i natvrdo (stav před třetím kolem) | 17 nálezů ve 3 testech: výčet předpokladů u `.ci` a `.review`, všech pět podob polohy větve (`CI` i `Review` vyšly `idle`) a celý výčet stavů srovnání |
+  | `čeká` se testuje před `schválil` (stav před třetím kolem) | 3 nálezy: `Review` vyšlo `running` s detailem `čeká 1` a zastávka zůstala na `Review` místo `Merge` |
+  | `CI` přestane stát na `Push`i úplně (druhé kolo) | 7 nálezů: výčet předpokladů u `.ci` a všech šest tehdejších podob rozešlé hlavy |
+  | za zastávkou se kreslí rozdělaný stav místo `idle` (druhé kolo) | 36 nálezů: matice (32×) a všechna čtyři tvrzení o nenačtených datech (`unknown`, `failed`, detail `zjišťuju`) |
+  | návrat na staré pravidlo (za zastávkou vždycky `idle`, první kolo) | 11 nálezů: obě kladná tvrzení — `Push`, `CI` i `Review` vyšly `idle` a detaily `nil` |
 
   **Jak dráha vypadá, ukáže sonda `OwnLoopRenderProbe`** (vypnutá, pouští se ručně) — vyrenderuje
   `OwnLoopView` do PNG přes `ImageRenderer`, takže **nepotřebuje běžící aplikaci**. Scéna `01` jsou
-  **skutečná data z `keboola/platform-libraries#566`** (`gh pr view 566`), scéna `02` totéž bez
-  otevřené žádosti o review a scéna `03` větev pozadu. Na `01` je vidět i to, co se z čísel nepozná:
-  `Review` u toho PR **zelené není**, protože v něm zbývá otevřená žádost na dalšího reviewera
-  (`čeká 1`) — schválení od prvního reviewera ji nepřebíjí. Je to chování `reviewStep`, které se
-  v druhém kole #508 **nesahalo**.
+  **skutečná data z `keboola/platform-libraries#566`** (`gh pr view 566` a `gh api compare`, včetně
+  polohy větve — 21 commitů pozadu), scéna `02` totéž po rebase a scéna `03` nepřetlačená práce
+  v cache.
+
+  **A přesně tady je mez té sondy, kvůli které se vada dostala na obrazovku** — je to pravidlo
+  z #478 v praxi. Sonda kreslí view z **připravených** dat, takže o tom, jaká data aplikace
+  doopravdy má, netvrdí nic: scéna `01` vyšla podle tehdejšího pravidla „správně“, zatímco okno nad
+  týmž PR ukazovalo něco jiného, protože v něm byla navíc **poloha větve** (21 commitů pozadu),
+  kterou scéna nenesla. Sonda zůstává (rychlá zpětná vazba na kresbu), ale **doklad o tom, že se
+  vada opravila, je snímek běžící aplikace nad tím PR**, ne render sondy.
 
   **Tři věty, které se rozbijí potichu:** `unknown` × `failed` u merge (#572 — `K merge` po startu
   slévatelnost nezná, a `nejde mergnout` nad načítáním je tvrzení z chybějících dat); mergnutý PR
