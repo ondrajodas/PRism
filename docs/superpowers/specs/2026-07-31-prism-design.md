@@ -7222,6 +7222,44 @@ hotové volby pokrývají to, co člověk zadá v devíti případech z deseti, 
 dá složit dvojím odložením. Je to **zapsaná mezera**, ne opomenutí — kdyby chyběla, vrátí se to
 jako vlastní issue s vlastním zákresem.
 
+**Naučeno z proklikání: akce, která se navěsí u jednoho volajícího, na ostatních chybí — a je to
+třída chyb, ne překlep.** `PullRequestRow` je od #172 **jeden** řádek se **třemi** volajícími
+(seznam, sekce `Rozdělaná`, pruh desky). Nabídka `Odložit` se navěsila jedině ve
+`PullRequestListView`, takže na domově — což je **deska** — odložit nešlo nic, přestože tam věta pod
+pozdravem hlásila `· 2 odložené`. Rozhodlo se to opravit **na příčině, ne na projevu**, třemi věcmi
+naráz:
+
+1. **`SnoozeAction` je jedna hodnota, ne dvojice `offers` + `snooze`**, a skládá ji jedno místo
+   (`AppStore.snoozeAction(for:)`). Dva parametry, které se musí předat oba a na každém místě
+   zvlášť, jsou zrovna ten tvar, na který se zapomíná.
+2. **Stráž nad zdrojáky** (`PullRequestRowSnoozeWiringTests`): kde stojí `PullRequestRow(`, tam
+   musí stát i `snoozeAction:`. Za běhu se to tvrdit nedá — `body` je neprůhledný typ —, takže bez
+   ní by se na čtvrté místo zapomnělo znovu. Je to **stráž na příště**, ne na ta tři.
+3. **Blok `Odložené` i na desce**, v pravém sloupci nahoře, z **týchž** řádků jako ten pod frontou
+   (`SnoozedRowsView`). **Číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné
+   číslo**; tvrzení, které se z obrazovky nedá ani ověřit, ani rozbalit, je horší než žádné tvrzení.
+
+**Zamítnutá varianta: udělat klikací tu část věty pod pozdravem** (`· 2 odložené` → přepnout do
+fronty). Je to méně kódu a nekreslí to nový blok. Zahodilo se to, protože částečně klikací věta se
+nedá objevit — v okně nic nenaznačuje, že zrovna tahle dvě slova jsou odkaz —, a odpověď by stejně
+byla *jdi jinam*, kdežto blok tu odpověď dává na místě. Cena je jeden blok v pravém sloupci, a ten
+se nekreslí, když odložené nic není.
+
+**Zamítnutá varianta: nechat řádek si odložení vzít z `@Environment`.** Odpadlo by předávání na
+třech místech. Zahodilo se to, protože `PullRequestRow` store nezná **schválně** (`List` staví řádky
+líně a mimo sledování závislostí rodiče, viz #502) a prostředí by tu hranici obešlo pro jednu akci.
+Stráž nad zdrojáky řeší totéž a nic neposouvá.
+
+**Deska přitom počítá jinou množinu než fronta, a je to zúžení, ne rozejití.** `snoozedPullRequests`
+stojí nad `pullRequests` (před filtrem), protože na tomtéž stojí `boardEntries`;
+`snoozedQueuePullRequests` nad `visiblePullRequests` (po filtru), protože blok pod frontou mluví
+o tom, co se z **té** fronty schovalo. Nad zapnutým filtrem by jedno číslo lhalo tak jako tak — dvě
+množiny jsou levnější než jedna nepravda.
+
+**V sekci `Rozdělaná` odložený řádek zůstane, a je to vědomé.** Odložení je tvrzení o **frontě**, ne
+o rozdělané práci; skrýt draft jen proto, že jsem si PR odsunul, by byla ta tichá díra o patro níž.
+Odložit se odtud přesto dá — je to týž řádek.
+
 **Změna proti zákresu: první volba míří na nejbližší devátou, ne na zítřek.** Deck i sekce 53 píšou
 `do zítra 9:00`. Odložení zadané v jednu v noci by tím ale PR schovalo na dvaatřicet hodin, což je
 opak toho, co „do rána“ znamená. Okamžik je proto **příští výskyt deváté** a titulek se z něj

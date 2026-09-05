@@ -47,6 +47,10 @@ struct PullRequestListView: View {
         if scope == .queue {
             SnoozedBlockView(
                 pullRequests: store.snoozedQueuePullRequests,
+                // Kolik odložených schoval filtr — jinak by `do fronty →` z desky (kde se počítá
+                // před filtrem) vedlo na menší číslo bez vysvětlení. Tatáž slovní zásoba jako
+                // u prázdného stavu `filtered(hidden:)`.
+                hidden: store.hiddenSnoozedPullRequestCount,
                 note: store.snoozeNote(for:),
                 open: { store.openTab($0) },
                 wake: { pr in Task { await store.wake(pr) } }
@@ -229,11 +233,10 @@ struct PullRequestListView: View {
                 openPrompt: { store.openAgentPrompt(in: row.id) },
                 pending: row.pending,
                 activity: row.activity,
-                // Odložit (#512) — **jen tam, kde to jde**: na vlastním řádku se nabídka
-                // nekreslí vůbec, ne zašedle (`Policy.canSnooze`). Řádek store nemá, takže
-                // se to rozhoduje tady, jako všechno ostatní odvozené.
-                snoozeOffers: store.canSnooze(row.id) ? store.snoozeOffers : [],
-                snooze: { condition in Task { await store.snooze(row.id, condition) } }
+                // Odložit (#512) — jedna hodnota z jednoho místa (`AppStore.snoozeAction(for:)`),
+                // stejně jako na desce a v sekci `Rozdělaná`. Brána `Policy.canSnooze` je uvnitř,
+                // takže na vlastním řádku přijde prázdná nabídka a nenakreslí se nic.
+                snoozeAction: store.snoozeAction(for: row.pullRequest)
             )
         }
     }

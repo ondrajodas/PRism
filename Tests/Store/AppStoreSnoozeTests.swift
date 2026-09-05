@@ -126,7 +126,10 @@ extension AppStoreSnoozeTests {
         let onBoard = store.board.lanes.flatMap { $0.rows.map(\.id) }
         #expect(!onBoard.contains(pr))
         #expect(onBoard.contains(other))
-        #expect(Policy.boardSentence(store.board, snoozed: store.snoozedQueuePullRequests.count)
+        // Blok `Odložené` na desce stojí nad **touž** množinou jako věta pod pozdravem — kdyby
+        // se rozešly, hlásilo by číslo něco, co se pod ním nedá rozbalit.
+        #expect(store.snoozedPullRequests.map(\.id) == [pr])
+        #expect(Policy.boardSentence(store.board, snoozed: store.snoozedPullRequests.count)
             .contains("1 odložený"))
     }
 
@@ -398,5 +401,68 @@ extension AppStoreSnoozeTests {
         #expect(!store.isSnoozed(pr))
         #expect(!store.canSnooze(pr))
         #expect(store.visibleOwnPullRequests.map(\.id) == [pr])
+    }
+}
+
+// MARK: - Odložit jde odevšad, kde se kreslí řádek (oprava po proklikání)
+
+extension AppStoreSnoozeTests {
+    /// **Jedno místo, které tu dvojici skládá.** Do opravy si nabídku i akci skládal seznam sám,
+    /// takže deska a sekce `Rozdělaná` ji neměly — a na desce se přitom o odložených mluví.
+    /// Že je akce dostupná ve všech třech místech, tvrdí `PullRequestRowSnoozeWiringTests` nad
+    /// zdrojáky; tady se tvrdí, že to, co ta místa dostanou, je použitelné.
+    @Test("Cizí PR dostane nabídku i akci, která doopravdy odloží")
+    func offersSnoozeOnForeignPullRequests() async {
+        let gateway = FakeGitHubGateway(always: .success([summary("cli/cli#1")]))
+        let store = store(gateway)
+        await store.refresh()
+
+        let action = store.snoozeAction(for: summary("cli/cli#1"))
+        #expect(action.isAvailable)
+        #expect(action.offers.map(\.title) == store.snoozeOffers.map(\.title))
+
+        action.snooze(.until(start.addingTimeInterval(3600)))
+        // Uzávěr odkládá v `Task`u, takže se čeká na jev, ne na pevný okamžik (#296).
+        await waitUntil("PR se odloží z akce řádku") { store.isSnoozed(self.pr) }
+
+        #expect(store.visibleQueuePullRequests.isEmpty)
+    }
+
+    /// **Vlastní řádek dostane prázdnou nabídku, ne `nil`** — a v řádku se z obojího nakreslí nic.
+    /// Kdyby přišla plná, byla by na vlastním PR položka, po které se nic nestane (`snooze(_:_:)`
+    /// se na `canSnooze` zarazí).
+    @Test("Vlastní PR dostane prázdnou nabídku")
+    func offersNothingOnOwnPullRequests() async {
+        let gateway = FakeGitHubGateway(always: .success([summary("cli/cli#1", author: "ondrajodas")]))
+        let store = store(gateway)
+        await store.refresh()
+
+        let action = store.snoozeAction(for: summary("cli/cli#1", author: "ondrajodas"))
+
+        #expect(action.offers.isEmpty)
+        #expect(!action.isAvailable)
+    }
+
+    /// **Deska a fronta se ptají na jinou množinu, a je to zúžení, ne rozejití** (#332, #531).
+    /// Blok pod frontou mluví o tom, co se z **filtrované** fronty schovalo; deska filtr nezná,
+    /// takže by nad zapnutým filtrem hlásila méně odložených, než kolik jich schovala.
+    @Test("Deska počítá odložené před filtrem, fronta po něm")
+    func countsSnoozedOnBothSidesOfTheFilter() async {
+        let gateway = FakeGitHubGateway(always: .success([
+            summary("cli/cli#1"),
+            summary("keboola/vault#7"),
+        ]))
+        let store = store(gateway)
+        await store.refresh()
+        await store.snooze(pr, .until(start.addingTimeInterval(3600)))
+        await store.snooze(PRIdentifier("keboola/vault#7")!, .until(start.addingTimeInterval(3600)))
+
+        store.setFilter(PullRequestFilter(repositories: [RepoID(owner: "keboola", name: "vault")]))
+
+        #expect(store.snoozedPullRequests.count == 2)
+        #expect(store.snoozedQueuePullRequests.map(\.id) == [PRIdentifier("keboola/vault#7")!])
+        // A nadpis bloku pod frontou ten rozdíl **řekne** — jinak by `do fronty →` z desky vedlo
+        // na menší číslo bez vysvětlení.
+        #expect(store.hiddenSnoozedPullRequestCount == 1)
     }
 }

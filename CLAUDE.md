@@ -504,8 +504,17 @@ přečtení, než sáhneš na:
   je nad tím druhá osa: odložení** (`Policy.pullRequests(_:withoutSnoozed:)`) — fronta, odznak,
   souhrn, deska, notifikace a **automat** čtou **bez odložených**, úklid, filtr a nastavení
   **s nimi**. **Odložení je stav, který něco skrývá, takže musí být poznat, že něco skryté je**:
-  blok `Odložené`, věta pod pozdravem, vlastní prázdno fronty a řádek v `Dění`
-  ([rozbor](docs/architektura.md#odložit-pr-512)). **Od #531 k tomu stojí
+  blok `Odložené` (pod frontou **i na desce**), věta pod pozdravem, vlastní prázdno fronty a řádek
+  v `Dění`. **A `Odložit` se navěšuje všude, kde se `PullRequestRow` kreslí** — jsou to **tři**
+  místa, takže to hlídá stráž nad zdrojáky, ne pozornost
+  ([rozbor](docs/architektura.md#odložit-pr-512)):
+
+  ```bash
+  # Výčet k posouzení, ne prázdný: každý soubor odsud musí předávat `snoozeAction:`.
+  grep -rln 'PullRequestRow(' App/Views | grep -v 'PullRequestRow.swift'
+  ```
+
+  **Od #531 k tomu stojí
   přijaté záložky** (`adoptedTabs`) — PR otevřený odkazem nebo `prism://` a **od #527 i záložka
   obnovená po restartu** (`TabAdoption`) **do fronty nepatří**, ale úklid po tiku ho zahodit
   nesmí; obojí bere `pullRequestsInPlay(besides:)`. **Obnovení nic nespouští** (#527) — jen

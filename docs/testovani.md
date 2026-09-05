@@ -522,10 +522,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v `UserDefaults` (`defaults write com.ondrajodas.prism.<slot> activity.lastVisit <ISO>`). Sekce je
   ve `ScrollView`, takže offscreen render nestačí (viz *Jak si zkontrolovat, jak view vypadá*)
   a fotí se **skutečné okno podle ID**.
-- **Odložení PR (#512)** — tři sady (`SnoozePolicyTests`, `AppStoreSnoozeTests`,
-  `SnoozeProbeQueryTests`, `PullRequestRowSnoozeTests`, dohromady **72 testů** plus dvě tvrzení
-  navíc v `AutomaticReviewTests`), a **skoro celá hodnota je v tvrzeních o tom, co
-  se nestane**. Je to u téhle věci jinak než jinde: odložený PR **není vidět**, takže se každá
+- **Odložení PR (#512)** — pět sad (`SnoozePolicyTests`, `AppStoreSnoozeTests`,
+  `SnoozeProbeQueryTests`, `PullRequestRowSnoozeTests`, `PullRequestRowSnoozeWiringTests`,
+  dohromady **78 testů** plus dvě tvrzení navíc v `AutomaticReviewTests`), a **skoro celá hodnota
+  je v tvrzeních o tom, co se nestane**. Je to u téhle věci jinak než jinde: odložený PR **není vidět**, takže se každá
   chyba rozbije potichu — buď zmizí práce, nebo se za ni potichu platí.
 
   `Policy` vyčerpávajícím výčtem: tři podmínky × (splněno / nesplněno / **nevíme**). Ta třetí
@@ -553,16 +553,46 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   plánovače.
 
   **Řádek fronty se testuje na tom, co se nenakreslí** (`PullRequestRowSnoozeTests`): tlačítko
-  `Odložit` **s prázdnou nabídkou nevznikne** — vlastní řádek dostane ze seznamu prázdné `offers`
+  `Odložit` **s prázdnou nabídkou nevznikne** — vlastní řádek dostane ze storu prázdné `offers`
   (`Policy.canSnooze`), a tlačítko, po kterém se nic nestane, je zrovna ten stav, kvůli kterému se
   v #333 přestala kreslit zakázaná `Prompt →`. Výchozí hodnota je „nekreslit“, takže se nabídka
-  neobjeví ani tam, kde se řádek kreslí bez storu (deska, sekce `Rozdělaná`, náhledy).
+  neobjeví tam, kde se řádek kreslí bez storu (náhledy).
 
-  **Ověřeno vložením regrese, třikrát.** Vyhození `!isSnoozed` z plánovače shodí **5 tvrzení**
+  **A že ta nabídka na řádku vůbec je, se tvrdí nad zdrojáky, ne za běhu**
+  (`PullRequestRowSnoozeWiringTests`, po proklikání). Přesně tohle se v první podobě rozbilo:
+  nabídka byla navěšená jedině ve `PullRequestListView`, kdežto `PullRequestRow` se kreslí na
+  **třech** místech, takže na domově (deska) odložit nešlo nic — a věta pod pozdravem tam přitom
+  hlásila `2 odložené`. Za běhu se to tvrdit nedá: `body` každého z těch view je neprůhledný typ,
+  takže „je v něm navěšená akce“ není otázka, na kterou by šlo odpovědět jinak než pohledem do
+  zdrojáku (tatáž konstrukce jako `UnanimatedWindowTests` — `condensed` bez mezer, řádkové
+  komentáře pryč). Stráž **počítá výskyty, neptá se na obsah** (tatáž konstrukce jako
+  `EmojiFieldWiringTests`): čtvrté místo nepřibude nutně jako nový soubor, spíš jako **druhý**
+  `PullRequestRow(` v už zapojeném view — a ten by se za jediné `snoozeAction:` v souboru schoval.
+  K tomu **dvě pojistky proti zezelenání nad prázdnem**: `sources()` na prázdné složce vyhodí
+  (uvnitř čtení, ne jen ve vedlejším testu) a místa jsou **vyjmenovaná literálem**.
+
+  Ke storu k tomu přibyla tři tvrzení: že `snoozeAction(for:)` **na cizím PR doopravdy odloží**
+  (uzávěr odkládá v `Task`u, takže se čeká na jev, ne na pevný okamžik, #296), že **na vlastním
+  vydá prázdnou nabídku** — ne `nil`, ten rozdíl je čitelný —, a že **deska počítá odložené před
+  filtrem, kdežto blok pod frontou po něm**: obojí naráz v jednom testu, protože ta dvě čísla
+  mluví o téže věci a rozešla by se potichu.
+
+  **Ověřeno vložením regrese, šestkrát.** Vyhození `!isSnoozed` z plánovače shodí **5 tvrzení**
   (mezi nimi obě z `AutomaticReviewTests`); vyhození zúžení z `queuePullRequests` shodí frontu,
   odznak i souhrn; a záměna `guard let baseline, let head` za `guard let head` (tedy „neznámý základ
   = vypršelo“) shodí **tři tvrzení v jednom testu** — přesně ta, která říkají, že se odložení nesmí
   zrušit dřív, než má.
+
+  Po proklikání tři další, a všechny tři jsou o právě opravené chybě: **vyhození `snoozeAction:`
+  z `BoardView`** shodí stráž nad zdrojáky s hláškou `offenders → ["Views/BoardView.swift"]` (tedy
+  přesně ten stav, který se do `main`u málem dostal); **záměna `pullRequests` za
+  `visiblePullRequests`** v `snoozedPullRequests` shodí tvrzení o desce nad zapnutým filtrem
+  (`1 == 2`); a **`showsSnoozeAction` zeslabené na `snoozeAction != nil`** shodí „s prázdnou
+  nabídkou se `Odložit` nekreslí“, tedy bránu na vlastní PR — a tahle poslední chytá **jedině
+  proto**, že se obě kreslicí místa ptají té pojmenované property; kdyby si každé psalo `if let …,
+  isAvailable` samo, hlídala by ta sada vedlejší produkt. Čtvrtá po revizi diffu: **druhý
+  `PullRequestRow(` v souboru, který `snoozeAction:` má jednou**, shodí stráž s hláškou
+  `2× řádek, 1× odložení`.
 
   **Fixture rozhlídky je inline JSON a je u toho napsané proč**: skutečný výstup se z veřejného
   repa sehnat dá, ale nese celé spojení komentářů — a dotaz chce **dvě čísla a jednu sha**, takže
@@ -573,7 +603,9 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   odložení vzniká z kontextové nabídky, na kterou v paralelním běhu není asistenční přístup. Zapíše
   se proto `snoozed.json` do cache slotu (klíč je `owner/repo#číslo`, `PRIdentifier` je
   `CodingKeyRepresentable`) a aplikace se restartuje; tím se u toho rovnou ověří, že se odložení
-  čte z disku **před prvním tikem**. Že nabídka opravdu vyjede a že `⌥1` platí jedině nad ní,
+  čte z disku **před prvním tikem**. **A fotí se domov, ne fronta** (poučení z proklikání): sonda
+  kreslí z připravených dat, takže o tom, co má aplikace na té které obrazovce navěšené, netvrdí
+  nic (#478) — a chyba, kvůli které se tohle opravovalo, byla přesně chyba **navěšení**, ne kresby. Že nabídka opravdu vyjede a že `⌥1` platí jedině nad ní,
   ověřuje **člověk** — v harnessu se to zjistit nedá (viz *Jak změřit fokus a klávesy*).
 - **Zastaralé nálezy z tiku (#420)** — tři sady, a **cenná polovina jsou tvrzení o počtu volání**.
   Rozbije se to potichu: v okně vypadá stejně, jestli se aplikace zeptala jednou, nebo dvanáctkrát,

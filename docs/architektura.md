@@ -6369,17 +6369,60 @@ review.
 
 **Odložení je stav, který něco skrývá — takže musí být poznat, že něco skryté je.** Fronta, ze
 které PR potichu zmizí, je horší než fronta, ve které leží: práci, o které nikdo neví, nejde ani
-udělat, ani odmítnout. Odložení má proto **čtyři vývody a všechny čtyři jsou povinné**:
+udělat, ani odmítnout. Odložení má proto **pět vývodů a všech pět je povinných**:
 
 1. **blok `Odložené · 2` pod frontou** (`SnoozedBlockView`) s poznámkou `vrátí se zítra 9:00`
    a s `Vrátit teď`;
-2. **věta pod pozdravem na desce** (`Policy.boardSentence(_:snoozed:)` → `· 2 odložené`) — deska
-   odložené PR v žádném pruhu nemá, takže je to jediné místo domova, které o nich mluví;
-3. **vlastní prázdný stav fronty** (`ListEmptyReason.allSnoozed(count:)`), když je odložené
+2. **týž blok v pravém sloupci desky** (`BoardView.snoozedBlock`, řádky z `SnoozedRowsView`),
+   protože číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné číslo — viz *Odložit
+   musí jít odevšad* níž;
+3. **věta pod pozdravem na desce** (`Policy.boardSentence(_:snoozed:)` → `· 2 odložené`), protože
+   v žádném pruhu odložené PR není;
+4. **vlastní prázdný stav fronty** (`ListEmptyReason.allSnoozed(count:)`), když je odložené
    všechno — zelené *Žádné PR k review* by nad prací, kterou jsem si sám schoval, tvrdilo opak
    toho, co je pravda; je to tatáž lekce jako u filtru;
-4. **řádek v `Dění` při návratu** (`ActivityEvent.Kind.returnedFromSnooze`, `Vrátil se z odložení ·
+5. **řádek v `Dění` při návratu** (`ActivityEvent.Kind.returnedFromSnooze`, `Vrátil se z odložení ·
    přišel push`) — bez něj by se PR ve frontě objevil odnikud.
+
+### Odložit musí jít odevšad, kde se kreslí řádek — a odložené musí být vidět odtamtud, odkud se o nich mluví
+
+**Naučené z proklikání, ne z návrhu.** V první podobě byla nabídka `Odložit` navěšená jedině ve
+`PullRequestListView` a blok `Odložené` visel jedině pod frontou. Jenže `PullRequestRow` se kreslí
+na **třech** místech (seznam, sekce `Rozdělaná` v `HomeView`, pruh desky v `BoardView`) a domov je
+**deska**: člověk tam viděl větu `· 2 odložené`, nic víc, a odložit odtud nešlo nic. Tvrzení, které
+se z té obrazovky nedá ani ověřit, ani rozbalit, je horší než žádné tvrzení.
+
+Opravily to **tři věci**, a každá je kontrolovatelná:
+
+1. **`SnoozeAction` je jedna hodnota, ne dvojice `offers` + `snooze`.** Skládá ji **jedno místo**
+   (`AppStore.snoozeAction(for:)`), takže druhý volající nemá čím se rozejít s prvním. Brána
+   `Policy.canSnooze` je uvnitř: vlastní PR dostane **prázdnou nabídku**, ne `nil`, a v řádku se
+   z obojího nakreslí **nic**.
+2. **Předává ho každé místo, které řádek kreslí** — a je to stráž nad zdrojáky
+   (`PullRequestRowSnoozeWiringTests`), ne poznámka: kde stojí `PullRequestRow(`, tam musí stát
+   i `snoozeAction:`. Za běhu se to tvrdit nedá (`body` je neprůhledný typ), takže bez té stráže
+   by se na čtvrté místo zapomnělo znovu.
+3. **Blok `Odložené` stojí i na desce**, v pravém sloupci **nahoře**, tedy v jedné výšce s větou,
+   která o odložených mluví. Kreslí se z **týchž** řádků jako ten pod frontou (`SnoozedRowsView`)
+   — dvě podoby jedné věci by se rozešly první změnou, tatáž úvaha jako u `PullRequestRow` (#172).
+   **Strop je pět řádků** (`Policy.snoozedBoardRowLimit`) a patka říká, kolik se nevešlo, jako
+   u pruhů a u `Dění`: nadpis počítá dál všechny, ale dvacet řádků v tom sloupci není blok, je to
+   druhá fronta.
+
+A protože ta dvě místa počítají jinou množinu, přibyla **čtvrtá věc**: nadpis bloku pod frontou
+umí říct `Odložené · 1 · 2 schoval filtr` (`Policy.snoozedBlockTitle(count:hidden:)`,
+`AppStore.hiddenSnoozedPullRequestCount`). Bez toho vede `do fronty →` z desky na menší číslo, než
+jaké nabídlo, a nic to nevysvětlí — je to tatáž slovní zásoba jako u `filtered(hidden:)`. Nula se
+**nepíše**.
+
+**Deska přitom počítá jinou množinu než fronta, a je to zúžení, ne rozejití.** Blok pod frontou
+stojí nad `visiblePullRequests` (po filtru), deska nad `pullRequests` (před ním) — protože na tomtéž
+vstupu stojí `boardEntries`. Nad zapnutým filtrem by jinak věta pod pozdravem hlásila míň, než
+kolik deska schovala. Obojí je v tabulce *Které místo chce kterou množinu*.
+
+**V sekci `Rozdělaná` řádek po odložení zůstane, a je to správně**: odložení je tvrzení o **frontě**,
+ne o rozdělané práci — `pullRequestsWithDraft` se jím nezužuje (viz tatáž tabulka). Odložit se odtud
+přesto dá, protože je to týž řádek.
 
 ### Podmínka, ne jen čas
 
@@ -6456,8 +6499,8 @@ se odložených ptají v tiku, takže by první tik po startu pustil review na P
 ### Jen cizí PR, a je to hranice kresby
 
 `Policy.canSnooze(_:)` pouští jedině `.theirs`. Důvod není „vlastní PR se odkládat nemá“, ale
-**kresba**: blok `Odložené` visí pod **frontou**, takže odložené vlastní PR by ze sekce `Moje PR`
-zmizelo a nikde by se neobjevilo — tedy zrovna ta tichá díra, kvůli které tohle issue existuje. Na
+**kresba**: blok `Odložené` stojí pod **frontou** a na **desce**, obojí nad cizími PR, takže
+odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde by se neobjevilo — tedy zrovna ta tichá díra, kvůli které tohle issue existuje. Na
 vlastním řádku se nabídka **nekreslí vůbec**, ne zašedle (tentýž vzor jako merge na cizím PR).
 
 ### Co odložení nedělá
@@ -10420,7 +10463,9 @@ u obou: **je to pohled, ne nový zdroj pravdy**, takže na žádné z nich nesm�
 | paleta ⌘K | obojí, rozřazené do **dvou skupin** (#336) | katalog čte plný seznam a `Policy.ownership` z něj skládá `Pull requesty k review` a `Moje PR`; ⌘K jen hledá, nic neuklízí |
 | **bez odložených** (#512): `queuePullRequests`, `visibleQueuePullRequests`, `railQueueCount`, `queueSummary`, `boardEntries`, odznak v Docku, `Policy.automaticallyReviewable`, `announceNewPullRequests`, `notifyAboutFinishedReview` | `.theirs` bez odložených | *nechci to teď vidět* je tvrzení o frontě, takže se z ní PR schová všude, kde se o frontě něco říká — **včetně automatu**: odložení, po kterém se stejně utratí session, je odložení jen na obrazovce |
 | **s odloženými** (#512): `pullRequests`, `visiblePullRequests`, `filterOptions`, `knownRepositories`, `summary(for:)`, `handleNotificationClicks`, úklid a eviction, sekce `Rozdělaná` | obojí | odložený PR má na disku klon, nálezy i rozdělané review jako každý jiný — uklidit mu je jen proto, že ho zrovna nechci vidět, by znamenalo začínat po návratu od nuly; a repo, jehož jediné PR je odložené, se pořád sleduje |
-| blok `Odložené` (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené | doplněk k prvnímu řádku nad **tímtéž** vstupem (po filtru), takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
+| blok `Odložené` **pod frontou** (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené, **po filtru** | doplněk k `visibleQueuePullRequests` nad **tímtéž** vstupem, takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
+| blok `Odložené` **na desce** a `· 2 odložené` ve větě pod pozdravem (`snoozedPullRequests`) | `.theirs`, **jen** odložené, **před filtrem** | doplněk k `boardEntries`, a ty filtr taky neznají: deska odpovídá na „co udělám teď“, ne na „co mám zrovna odškrtnuté“, takže nad zapnutým filtrem by věta hlásila míň, než kolik deska schovala |
+| nabídka `Odložit` na řádku (`snoozeAction(for:)`) | `.theirs` | **všude, kde se kreslí `PullRequestRow`** — ve frontě, v sekci `Rozdělaná` i v pruhu desky; je to jeden řádek, takže jedna podoba (#172), a hlídá to stráž nad zdrojáky |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v
   `Policy.automaticallyReviewable` **první v řadě**, takže se PR dál nezvažuje, ať si repo řeklo

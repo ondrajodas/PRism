@@ -36,12 +36,15 @@ struct PullRequestRow: View {
     /// v meta řádku. Prázdná znamená „nic nepřibylo“ (nebo se ještě nikdo nedíval) a řádek pak
     /// vypadá jako dřív; bere se z **téhož** `HandoffReport` jako `pending`.
     var activity: ForeignActivity = .none
-    /// Co nabídnout v `Odložit` (#512). **Prázdné = nabídka se nekreslí vůbec** — na vlastním PR
-    /// (`Policy.canSnooze`) i v místech, která odložení nemají odkud vzít (deska, sekce
-    /// `Rozdělaná`, náhledy). Zašedlá položka by sváděla na ni kliknout a hledat, co je rozbité —
-    /// tatáž úvaha jako u `Prompt →` (#333).
-    var snoozeOffers: [SnoozeOffer] = []
-    var snooze: ((SnoozeCondition) -> Void)?
+    /// Odložit (#512) — **jedna hodnota, ne dvojice nabídka + akce**. `nil` znamená „řádek
+    /// o odložení neví“ (náhledy, testy), prázdná nabídka uvnitř znamená „nesmí se“ (vlastní PR,
+    /// `Policy.canSnooze`). V obou případech se nekreslí **nic**, ne zašedlá položka — ta by
+    /// sváděla na ni kliknout a hledat, co je rozbité (tatáž úvaha jako u `Prompt →`, #333).
+    ///
+    /// **Kdo řádek kreslí, tohle předává**, a je to podmínka, ne nabídka: do opravy #512 to
+    /// předával jen seznam, takže na desce a v sekci `Rozdělaná` odložit nešlo — a na desce se
+    /// přitom o odložených mluví ve větě pod pozdravem. Hlídá to `PullRequestRowSnoozeWiringTests`.
+    var snoozeAction: SnoozeAction?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -69,8 +72,8 @@ struct PullRequestRow: View {
         // Pravé tlačítko — **druhá cesta k téže nabídce**, ne druhá nabídka. Bez nabídky se
         // `.contextMenu` nekreslí vůbec: prázdná nabídka po pravém kliknutí vypadá jako porucha.
         .contextMenu {
-            if showsSnoozeAction, let snooze {
-                SnoozeMenuItems(offers: snoozeOffers, snooze: snooze)
+            if showsSnoozeAction, let snoozeAction {
+                SnoozeMenuItems(offers: snoozeAction.offers, snooze: snoozeAction.snooze)
             }
         }
     }
@@ -87,7 +90,11 @@ struct PullRequestRow: View {
     /// se nic nestane — a to je zrovna ta lež, kvůli které se v #333 přestala kreslit zakázaná
     /// `Prompt →`. Vlastní řádek dostane prázdné `offers` (`Policy.canSnooze`), takže na něm
     /// nevznikne ani tlačítko, ani položka v kontextové nabídce.
-    var showsSnoozeAction: Bool { snooze != nil && !snoozeOffers.isEmpty }
+    ///
+    /// **Ptají se na ni obě kreslicí místa, ne jen jedno.** Kdyby si tlačítko a kontextová nabídka
+    /// psaly `if let snoozeAction, snoozeAction.isAvailable` každé po svém, byla by tahle property
+    /// vedlejší produkt — a test nad ní by pak tvrdil něco, co s kresbou nesouvisí.
+    var showsSnoozeAction: Bool { snoozeAction?.isAvailable == true }
 
     private var headline: some View {
         HStack(spacing: 6) {
@@ -126,8 +133,8 @@ struct PullRequestRow: View {
             }
             // Odložit pod kurzorem (#512). **Za odznakem, ne před ním**: řádek se čte zleva
             // doprava (co to je → jak to dopadlo) a akce patří na konec.
-            if isHovered, showsSnoozeAction, let snooze {
-                SnoozeRowButton(offers: snoozeOffers, snooze: snooze)
+            if isHovered, showsSnoozeAction, let snoozeAction {
+                SnoozeRowButton(action: snoozeAction)
             }
         }
     }

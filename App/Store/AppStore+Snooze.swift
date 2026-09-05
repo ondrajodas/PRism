@@ -36,7 +36,53 @@ extension AppStore {
         Policy.canSnooze(ownership(of: pr))
     }
 
-    /// Odložené PR z fronty — obsah bloku `Odložené` (#512).
+    /// Co řádek umí s odložením — **jediné místo, které tu dvojici skládá** (#512, oprava po
+    /// proklikání).
+    ///
+    /// Nabídka byla navěšená jedině ve `PullRequestListView`, jenže `PullRequestRow` se kreslí na
+    /// **třech** místech. Kdo řádek kreslí, ptá se tady: brána (`canSnooze`), nabídka
+    /// (`snoozeOffers`) i akce jsou v jedné odpovědi, takže se druhé místo nemá čím rozejít
+    /// s prvním.
+    ///
+    /// **Vlastní PR dostane prázdnou nabídku, ne `nil`.** Rozdíl je čitelný v řádku: `nil` znamená
+    /// „o odložení mi nikdo nic neřekl“ (náhledy), prázdno „řekl, a nesmí se“ — nakreslí se z toho
+    /// obojího **nic**.
+    ///
+    /// **Bere `PullRequestSummary`, ne `PRIdentifier`, a je to výkonové rozhodnutí.** Přes identitu
+    /// vede cesta k autorství lineárním hledáním v `pullRequests` (`AppStore.author(of:)`), takže
+    /// by seznam o třiceti řádcích při každém překreslení udělal třicet průchodů. Všechna tři
+    /// kreslicí místa summary mají — `ownership(of:)` nad ní je O(1). Druhé přetížení nad
+    /// identitou schválně **není**: nikdo ho nepotřebuje a existovalo by jen kvůli testům.
+    func snoozeAction(for pullRequest: PullRequestSummary) -> SnoozeAction {
+        let pr = pullRequest.id
+        return SnoozeAction(
+            offers: Policy.canSnooze(ownership(of: pullRequest)) ? snoozeOffers : [],
+            // **Strong `self`, ne `[weak self]`.** Cyklus tu není — store uzávěr nikam neukládá,
+            // drží ho jen strom view, který store stejně vlastní. Slabá reference by z toho
+            // udělala tlačítko, které po zániku storu potichu nedělá nic, tedy zrovna ten stav,
+            // kvůli kterému se v #333 přestala kreslit němá `Prompt →`.
+            snooze: { condition in
+                Task { await self.snooze(pr, condition) }
+            }
+        )
+    }
+
+    /// Všechna odložená cizí PR — obsah bloku `Odložené` **na desce** a číslo ve větě pod
+    /// pozdravem (#512, oprava po proklikání).
+    ///
+    /// **Nad `pullRequests`, tedy před filtrem**, protože na tomtéž vstupu stojí `boardEntries`:
+    /// deska odpovídá na „co udělám teď“, ne na „co mám zrovna odškrtnuté“. Kdyby se počítalo ze
+    /// zúženého seznamu, hlásila by věta pod pozdravem jiné číslo, než kolik deska schovala — což
+    /// je zrovna to rozejití, kvůli kterému `snoozedQueuePullRequests` stojí nad **týmž** vstupem
+    /// jako fronta.
+    var snoozedPullRequests: [PullRequestSummary] {
+        Policy.snoozedPullRequests(
+            in: Policy.pullRequests(pullRequests, ownedBy: .theirs, mine: ownLogins),
+            isSnoozed: isSnoozed(_:)
+        )
+    }
+
+    /// Odložené PR z fronty — obsah bloku `Odložené` pod seznamem (#512).
     ///
     /// **Zúžení nad `visiblePullRequests`, tedy po filtru.** Blok leží pod frontou a mluví o tom,
     /// co se z ní schovalo; kdyby se skládal z plného seznamu, ukázal by nad zafiltrovanou frontou
@@ -47,6 +93,15 @@ extension AppStore {
             in: Policy.pullRequests(visiblePullRequests, ownedBy: .theirs, mine: ownLogins),
             isSnoozed: isSnoozed(_:)
         )
+    }
+
+    /// Kolik odložených schoval **filtr** — do nadpisu bloku pod frontou (oprava po proklikání).
+    ///
+    /// Zrcadlí `hiddenQueuePullRequestCount`: je to rozdíl obou množin, ne třetí zdroj pravdy.
+    /// Bez něj by `do fronty →` z desky (kde se počítá **před** filtrem) vedlo na menší číslo
+    /// a nic by ten rozdíl nevysvětlilo.
+    var hiddenSnoozedPullRequestCount: Int {
+        snoozedPullRequests.count - snoozedQueuePullRequests.count
     }
 
     /// `vrátí se zítra 9:00` u řádku v bloku `Odložené`. `nil` = odložený není.

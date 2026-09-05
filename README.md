@@ -271,16 +271,20 @@ dávkový GraphQL dotaz na všechna odložená PR** uvnitř tiku pollingu, s př
 řádku, z pruhů na domově, z notifikací **a z automatu** — *nechci to teď vidět* znamená i *neplať
 za to teď*. Běh, který už běží, se neruší; session je utracená v okamžiku, kdy začne.
 
-**A protože odložení něco skrývá, musí být poznat, že něco skryté je.** Vede z něj proto **čtvero
-ven**: blok **`Odložené · 2`** pod frontou s poznámkou `vrátí se zítra 9:00` a s `Vrátit teď`,
-připsání `· 2 odložené` do věty pod pozdravem na domově, vlastní prázdný stav fronty **`Všechno
-odložené`**, když je odložené všechno, a řádek **`Vrátil se z odložení · přišel push`** v `Dění`,
-aby PR nevypadl odnikud. Odložení leží v cache (`snoozed.json`), přežije restart a **na GitHub se
-o něm nepíše nic**.
+**A protože odložení něco skrývá, musí být poznat, že něco skryté je.** Vede z něj proto **patero
+ven**: blok **`Odložené · 2`** s poznámkou `vrátí se zítra 9:00` a s `Vrátit teď` — **pod frontou
+i v pravém sloupci domova**, hned vedle věty, která o odložených mluví —, připsání `· 2 odložené`
+do té věty pod pozdravem, vlastní prázdný stav fronty **`Všechno odložené`**, když je odložené
+všechno, a řádek **`Vrátil se z odložení · přišel push`** v `Dění`, aby PR nevypadl odnikud.
+Odložení leží v cache (`snoozed.json`), přežije restart a **na GitHub se o něm nepíše nic**.
+
+**Odložit jde ze všech tří míst, kde řádek pull requestu stojí** — z fronty, ze sekce `Rozdělaná`
+i z pruhu na domově. Je to jeden řádek, takže jedna podoba; z `Rozdělaných` po odložení nezmizí,
+protože odložení mluví o frontě, ne o rozdělané práci.
 
 **Odložit jde jen cizí PR.** U vlastního rozhoduje o tom, kdy se na něj podívám, to, kdy pushnu —
-a blok `Odložené` visí pod frontou, takže odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde
-by se neobjevilo.
+a blok `Odložené` stojí pod frontou a na domově, takže odložené vlastní PR by ze sekce `Moje PR`
+zmizelo a nikde by se neobjevilo.
 
 ## Dění — co proletělo jako notifikace, zůstane
 

@@ -1980,7 +1980,10 @@ footer.end {
 .s50-old .ri.on::before { content: none; }
 
 /* Sekce 53 — odložit PR (#512). Dva nové komponenty: nabídka nad řádkem fronty a tichý blok
-   `Odložené` pod seznamem. Existující třídy nestačily ani u jednoho:
+   `Odložené` — ten stojí na dvou místech (pod seznamem a v rámečku `.block` v pravém sloupci
+   desky). Rám na desce nese existující `.brd .block`, takže druhá kresba přidala **jediný
+   modifikátor** `.s53-snoozed.plain` (bez podkladu a bez horní linky, protože ten rám má vlastní).
+   Existující třídy nestačily ani u jednoho:
    - `.s53-menu` je **kontextová nabídka**, ne `.card` ani `.empty` — má tmavší podklad, položky
      s klávesou vpravo a stín (`--shadow-lg`), který ji zvedá nad seznam. Nic takového dokument dosud nekreslil,
      protože do #512 se v okně nabídka pravým tlačítkem nikde neotevírala.
@@ -2012,6 +2015,10 @@ footer.end {
 }
 .s53-snoozed .row .note { font-size: 11px; color: var(--ink-3); flex: none; }
 .s53-snoozed .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Týž seznam v rámečku bloku (pravý sloupec desky) — rám nese `.block`, takže `.plain`
+   podklad i horní linku zahazuje. Jsou to dvě umístění jedné věci, ne dvě věci: kdyby si
+   každé kreslilo řádky po svém, rozešly by se první změnou. */
+.s53-snoozed.plain { background: none; border-top: none; padding: 4px 0; }
 
 /* ============================================================
    PRÁZDNÉ STAVY A PORUCHY
@@ -5120,8 +5127,9 @@ tr.sel td.sg { background: var(--accent-weak); }
         minutu zvažuje review.
       </p>
       <p class="muted">
-        <strong>Návrh</strong>: nabídka <em>Odložit</em> na řádku fronty (pravé tlačítko i tlačítko
-        pod kurzorem) a pod seznamem tichý blok <em>Odložené</em>. Odložení je
+        <strong>Návrh</strong>: nabídka <em>Odložit</em> na <b>každém řádku cizího PR</b> (pravé
+        tlačítko i tlačítko pod kurzorem) a tichý blok <em>Odložené</em> — pod seznamem
+        <b>i v pravém sloupci desky</b>, kde o odložených mluví věta pod pozdravem. Odložení je
         <strong>podmínka, ne jen čas</strong>: skončí ho termín, push, nebo komentář — a
         <strong>zmizí všude naráz</strong>, včetně automatu a notifikací.
       </p>
@@ -5186,18 +5194,59 @@ tr.sel td.sg { background: var(--accent-weak); }
       </div>
     </div>
 
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Deska — věta pod pozdravem o odložených mluví</div>
+        <div class="frame flat">
+          <div class="dash-head" style="padding: 12px 14px;">
+            <div>
+              <h4>Dobré ráno, Ondro.</h4>
+              <div class="sub">6 věcí na tahu · 7 čeká na ostatní · 2 se dají mergnout · <b>2 odložené</b></div>
+            </div>
+            <div class="when">poslední tik 09:41</div>
+          </div>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Deska — a v pravém sloupci se to číslo rozbalí</div>
+        <div class="frame">
+          <div class="brd">
+            <div class="block">
+              <header>
+                <span>Odložené <span class="cnt">2</span></span>
+                <span class="more">do fronty →</span>
+              </header>
+              <div class="s53-snoozed plain">
+                <div class="row">
+                  <span class="title">chore(deps): bump aws-sdk-php from 3.343.7 to 3.344.1</span>
+                  <span class="note">vrátí se zítra 9:00</span>
+                </div>
+                <div class="row">
+                  <span class="title">feat: nové rozhraní pro export do S3</span>
+                  <span class="note">vrátí se s dalším pushem</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="notes">
       <div class="note">
         <span class="num">193</span>
         <span class="body">
           <b>Odložení je stav, který něco skrývá — takže musí být poznat, že něco skryté je</b>
           <span>Fronta, ze které PR potichu zmizí, je horší než fronta, ve které leží: práci,
-          o které nikdo neví, nejde ani udělat, ani odmítnout. Odložení má proto <b>tři vývody</b>
-          a všechny tři jsou povinné: blok <em>Odložené · 2</em> pod seznamem, <b>připsání do věty
-          pod pozdravem</b> na desce (<code>· 2 odložené</code>, protože v žádném pruhu odložené PR
-          není) a <b>vlastní prázdný stav fronty</b>, když je odložené všechno — zelené
-          <em>Žádné PR k review</em> by nad prací, kterou jsem si sám schoval, tvrdilo opak toho, co
-          je pravda.</span>
+          o které nikdo neví, nejde ani udělat, ani odmítnout. Odložení má proto <b>pět vývodů</b>
+          a všech pět je povinných: blok <em>Odložené · 2</em> <b>pod seznamem</b>, <b>týž blok
+          v pravém sloupci desky</b>, <b>připsání do věty pod pozdravem</b> (<code>· 2 odložené</code>,
+          protože v žádném pruhu odložené PR není), <b>vlastní prázdný stav fronty</b>, když je
+          odložené všechno — zelené <em>Žádné PR k review</em> by nad prací, kterou jsem si sám
+          schoval, tvrdilo opak toho, co je pravda — a <b>řádek v <em>Dění</em></b> při návratu (viz
+          poznámka 196). <b>Číslo, ze kterého nevede cesta, je horší než žádné číslo</b>: dokud blok
+          visel jedině pod frontou, hlásila deska <em>2 odložené</em> a rozbalit se to z ní
+          nedalo.</span>
         </span>
       </div>
       <div class="note">
@@ -5240,10 +5289,13 @@ tr.sel td.sg { background: var(--accent-weak); }
         <span class="num">197</span>
         <span class="body">
           <b>Jen cizí PR, a je to hranice kresby, ne jen pravidlo</b>
-          <span>Blok <em>Odložené</em> visí <b>pod frontou</b>, takže odložené vlastní PR by ze
-          sekce <em>Moje PR</em> zmizelo a <b>nikde</b> by se neobjevilo — tedy zrovna ta tichá
-          díra, které se tahle sekce vyhýbá. Na vlastním řádku se nabídka <b>nekreslí vůbec</b>, ne
-          zašedle: u vlastního PR rozhoduje o tom, kdy se na něj podívám, to, kdy pushnu.</span>
+          <span>Blok <em>Odložené</em> stojí <b>pod frontou a na desce</b>, obojí nad <b>cizími</b>
+          PR — odložené vlastní PR by ze sekce <em>Moje PR</em> zmizelo a <b>nikde</b> by se
+          neobjevilo, tedy zrovna ta tichá díra, které se tahle sekce vyhýbá. Na vlastním řádku se
+          nabídka <b>nekreslí vůbec</b>, ne zašedle: u vlastního PR rozhoduje o tom, kdy se na něj
+          podívám, to, kdy pushnu. <b>Na cizím se naopak kreslí všude, kde ten řádek je</b> — ve
+          frontě, v <em>Rozdělaných</em> i v pruhu desky. Je to jeden řádek, takže jedna
+          podoba.</span>
         </span>
       </div>
       <div class="note">

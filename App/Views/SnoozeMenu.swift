@@ -1,5 +1,26 @@
 import SwiftUI
 
+/// Co řádek umí s odložením (#512) — **nabídka a akce v jedné hodnotě**.
+///
+/// Vzniklo z proklikání: nabídka byla navěšená jedině ve `PullRequestListView`, jenže `PullRequestRow`
+/// se kreslí na **třech** místech (fronta, sekce `Rozdělaná`, deska), takže na dvou z nich
+/// `Odložit` nebylo — a přitom na desce stojí věta `· 2 odložené`. Dva parametry, které se musí
+/// předat oba a na každém místě zvlášť, jsou zrovna ten tvar, na který se zapomíná; jedna hodnota
+/// z jednoho místa (`AppStore.snoozeAction(for:)`) se zapomenout dá taky, ale **je to vidět**
+/// a hlídá to stráž nad zdrojáky (`PullRequestRowSnoozeWiringTests`).
+///
+/// **Rozhodnutí „smí se odložit“ zůstává v `Policy.canSnooze`**, ne tady: tahle hodnota ho jen
+/// **nese** — u vlastního PR přijde prázdná nabídka, takže se `Odložit` nenakreslí vůbec.
+struct SnoozeAction {
+    /// Co nabídnout. Prázdné = řádek `Odložit` nemá (vlastní PR).
+    let offers: [SnoozeOffer]
+    let snooze: (SnoozeCondition) -> Void
+
+    /// Má se `Odložit` kreslit? **Prázdná nabídka znamená nic, ne zašedlé tlačítko** — tatáž
+    /// úvaha, kvůli které se v #333 přestala kreslit zakázaná `Prompt →`.
+    var isAvailable: Bool { !offers.isEmpty }
+}
+
 /// Nabídka `Odložit` nad řádkem fronty (#512).
 ///
 /// **Jeden obsah, dvě cesty k němu**: pravé tlačítko na řádku (`.contextMenu`) a tlačítko, které
@@ -34,12 +55,11 @@ struct SnoozeMenuItems: View {
 /// `onContinuousHover` — je to `Bool` na vstup i na výstup, takže bezpodmínečný zápis z každého
 /// snímku (#358) tady vzniknout nemůže.
 struct SnoozeRowButton: View {
-    let offers: [SnoozeOffer]
-    let snooze: (SnoozeCondition) -> Void
+    let action: SnoozeAction
 
     var body: some View {
         Menu {
-            SnoozeMenuItems(offers: offers, snooze: snooze)
+            SnoozeMenuItems(offers: action.offers, snooze: action.snooze)
         } label: {
             Image(systemName: "alarm")
                 .font(.caption)

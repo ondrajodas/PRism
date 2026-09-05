@@ -8571,15 +8571,28 @@ jinak by první tik po startu pustil review na PR, který jsem si schoval.
 volání**, u časové podmínky **nikdy** žádné. Vlastní dotaz vedle toho na hlavy (#420), protože obě
 rozhlídky mají jiný předfiltr; cena je jedno volání navíc v nejhorším případě.
 
-**Odložit jde jen cizí PR**, a je to hranice **kresby**: blok visí pod frontou, takže odložené
-vlastní PR by ze sekce `Moje PR` zmizelo a nikde by se neobjevilo.
+**Odložit jde jen cizí PR**, a je to hranice **kresby**: blok visí pod frontou a na desce, takže
+odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde by se neobjevilo. **Na cizím PR se odložit
+dá naopak odevšad, kde se ten řádek kreslí** — a je to oprava po proklikání, ne původní návrh:
+nabídka byla navěšená jedině ve `PullRequestListView`, kdežto `PullRequestRow` se kreslí na **třech**
+místech, takže na domově (deska) odložit nešlo nic, přestože tam věta pod pozdravem hlásila
+`2 odložené`. Opravily to tři věci: `SnoozeAction` jako **jedna hodnota z jednoho místa**
+(`AppStore.snoozeAction(for:)`), **stráž nad zdrojáky** (kde stojí `PullRequestRow(`, tam musí stát
+i `snoozeAction:`) a **týž blok `Odložené` v pravém sloupci desky**, kreslený z týchž řádků
+(`SnoozedRowsView`). Číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné číslo.
 
-**Zákres je sekce 53** v `docs/navrh.html` (dva nové komponenty: `.s53-menu` a `.s53-snoozed`).
+**Zákres je sekce 53** v `docs/navrh.html` (dva nové komponenty: `.s53-menu` a `.s53-snoozed`,
+ten druhý s modifikátorem `.plain` pro rám bloku na desce).
 **`Vlastní datum…` z kresby vypadlo** — kalendář v kontextové nabídce je vlastní obrazovka a delší
 odklad než týden se dá složit dvojím odložením; je to **zapsaná mezera proti zadání issue**.
 
-Testů je nad slitým stavem (po #576) **5 604**, z toho **+74** z tohohle PR (čtyři nové sady
-a dvě tvrzení navíc v `AutomaticReviewTests`), a jsou zelené; regrese se ověřila vložením tří
-regresí. **Copilot se na tenhle PR schválně
+**Zákres sekce 53 to dokreslil zpětně**: druhá dvojice panelů (věta pod pozdravem vedle bloku
+v pravém sloupci desky) a poznámka 193 mluví o **čtyřech** vývodech místo tří. `docs/navrh.md`
+sedělo na 52 sekcích nad třiapadesáti — srovnáno.
+
+Testů je nad slitým stavem (po #578) **5 641**, z toho **+80** z tohohle PR (pět nových sad, 78
+testů, a dvě tvrzení navíc v `AutomaticReviewTests`), a jsou zelené; regrese se ověřila vložením sedmi
+regresí — tří původních a čtyř po proklikání, mezi nimi i té, která do `main`u málem prošla
+(vyhozené `snoozeAction:` z `BoardView`). **Copilot se na tenhle PR schválně
 nepouštěl** — GitHub má výpadek entitlementu (`ineligible_app`), tatáž příčina jako u #570 a #572.
 Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.

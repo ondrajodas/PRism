@@ -332,9 +332,24 @@ extension Policy {
     /// Prázdný blok by byl rámeček s nulou — tatáž úvaha, kvůli které deska prázdné pruhy
     /// nekreslí (#515). Odložení je stav, který něco skrývá, takže blok musí být vidět **právě
     /// tehdy**, když je co skrývat.
-    static func snoozedBlockTitle(count: Int) -> String? {
-        count > 0 ? "Odložené · \(count)" : nil
+    ///
+    /// **`hidden` je počet odložených, které z bloku vyřadil filtr** (oprava po proklikání).
+    /// Blok pod frontou stojí nad **zafiltrovaným** seznamem, kdežto deska nad plným — takže
+    /// bez téhle části nadpisu vede `do fronty →` z desky na jiné číslo, než jaké nabídlo,
+    /// a nic to nevysvětlí. Nula se **nepíše**, jako u ostatních částí.
+    static func snoozedBlockTitle(count: Int, hidden: Int = 0) -> String? {
+        guard count > 0 || hidden > 0 else { return nil }
+        guard hidden > 0 else { return "Odložené · \(count)" }
+        return "Odložené · \(count) · \(hidden) schoval filtr"
     }
+
+    /// Kolik odložených se na desce nakreslí (oprava po proklikání).
+    ///
+    /// **Strop, ne množina.** Nadpis bloku počítá dál všechny; patka říká, kolik se nevešlo, a vede
+    /// do fronty. Bez stropu by dvacet odložených roztáhlo pravý sloupec desky přes celou
+    /// obrazovku — tatáž úvaha jako u `laneRowLimit` a `activityRowLimit`, a **pět** proto, že blok
+    /// je v tom sloupci třetí a má být tichý.
+    static let snoozedBoardRowLimit = 5
 
     /// Věta do řádku dění, když se PR vrátil z odložení (#512).
     ///

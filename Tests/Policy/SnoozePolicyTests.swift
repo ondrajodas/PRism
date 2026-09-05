@@ -401,6 +401,24 @@ extension SnoozePolicyTests {
         #expect(Policy.snoozedBlockTitle(count: 2) == "Odložené · 2")
     }
 
+    /// **Blok pod frontou počítá po filtru, deska před ním**, takže `do fronty →` z desky vede na
+    /// menší číslo. Nadpis to musí říct — jinak je to počet, který se pod ním nedá najít.
+    /// Nula se nepíše, jako u ostatních částí; a blok se kreslí **i tehdy**, když filtr schoval
+    /// všechna odložená, protože jinak by se z fronty ztratila věta o tom, že něco schované je.
+    @Test("Nadpis bloku řekne, kolik odložených schoval filtr")
+    func namesTheSnoozedHiddenByTheFilter() {
+        #expect(Policy.snoozedBlockTitle(count: 1, hidden: 2) == "Odložené · 1 · 2 schoval filtr")
+        #expect(Policy.snoozedBlockTitle(count: 2, hidden: 0) == "Odložené · 2")
+        #expect(Policy.snoozedBlockTitle(count: 0, hidden: 3) == "Odložené · 0 · 3 schoval filtr")
+    }
+
+    /// **Strop je strop, ne množina.** Bez něj by dvacet odložených roztáhlo pravý sloupec desky
+    /// přes celou obrazovku; je zapsaný literálem, aby se nedal změnit „mimochodem“.
+    @Test("Deska kreslí nejvýš pět odložených")
+    func capsTheBoardBlock() {
+        #expect(Policy.snoozedBoardRowLimit == 5)
+    }
+
     /// Řádek dění musí říct **proč** se PR vrátil — z fronty samotné to vidět není.
     @Test("Důvod návratu se překládá výčtem")
     func namesEveryReturnReason() {
