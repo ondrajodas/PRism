@@ -383,6 +383,14 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   | za zastávkou se kreslí rozdělaný stav místo `idle` | 36 nálezů: matice (32×) a všechna čtyři tvrzení o nenačtených datech (`unknown`, `failed`, detail `zjišťuju`) |
   | návrat na staré pravidlo (za zastávkou vždycky `idle`) | 11 nálezů: obě kladná tvrzení — `Push`, `CI` i `Review` vyšly `idle` a detaily `nil` |
 
+  **Jak dráha vypadá, ukáže sonda `OwnLoopRenderProbe`** (vypnutá, pouští se ručně) — vyrenderuje
+  `OwnLoopView` do PNG přes `ImageRenderer`, takže **nepotřebuje běžící aplikaci**. Scéna `01` jsou
+  **skutečná data z `keboola/platform-libraries#566`** (`gh pr view 566`), scéna `02` totéž bez
+  otevřené žádosti o review a scéna `03` větev pozadu. Na `01` je vidět i to, co se z čísel nepozná:
+  `Review` u toho PR **zelené není**, protože v něm zbývá otevřená žádost na dalšího reviewera
+  (`čeká 1`) — schválení od prvního reviewera ji nepřebíjí. Je to chování `reviewStep`, které se
+  v druhém kole #508 **nesahalo**.
+
   **Tři věty, které se rozbijí potichu:** `unknown` × `failed` u merge (#572 — `K merge` po startu
   slévatelnost nezná, a `nejde mergnout` nad načítáním je tvrzení z chybějících dat); mergnutý PR
   má **sedm hotových stanic**, ne zastávku u nepředaného zadání; a stanice `Nálezy` **nikdy
