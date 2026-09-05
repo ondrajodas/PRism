@@ -97,6 +97,13 @@ struct AppNoticesView: View {
                 if let failure = store.terminalFailure {
                     notice(failure, icon: "terminal")
                 }
+                // A co se nepodařilo s editorem (#530). Tentýž případ: editor se otevře **mimo
+                // okno**, takže neúspěch vypadá k nerozeznání od toho, že se nekliklo. Vlastní
+                // ikona, ne vykřičník — není to rozbitá aplikace, je to soubor, který v kopii
+                // není, nebo editor, který na stroji chybí.
+                if let failure = store.editorFailure {
+                    notice(failure, icon: "arrow.up.forward.app")
+                }
             }
         }
     }
@@ -121,6 +128,7 @@ struct AppNoticesView: View {
             || store.readMarkFailure != nil
             || store.notificationFailure != nil
             || store.terminalFailure != nil
+            || store.editorFailure != nil
     }
 
     private func notice(_ text: String, icon: String) -> some View {

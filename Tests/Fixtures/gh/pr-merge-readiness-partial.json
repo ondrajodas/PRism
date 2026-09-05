@@ -1,0 +1,62 @@
+{
+  "data": {
+    "pr0": {
+      "pullRequest": {
+        "number": 14360,
+        "title": "Record attachment operation counts in telemetry",
+        "author": {
+          "login": "BagToad"
+        },
+        "headRefOid": "091c24d7025772ca632bf443e3c3d4d8f9bdce91",
+        "baseRefOid": "cba9646b8c254a5711ef9e19e1dfc1455e88feaa",
+        "url": "https://github.com/cli/cli/pull/14360",
+        "updatedAt": "2026-09-04T21:56:43Z",
+        "state": "OPEN",
+        "isDraft": false,
+        "body": "<!--\nThank you for contributing to GitHub CLI!\n\nIf you are proposing a fix for a security issue, STOP and follow .github/SECURITY.md instead.\n-->\n\n<!-- List related issues here. Use `fixes` or `closes` keywords to associate an issue number. -->\n\nFollow-up to [#14327](https://github.com/cli/cli/pull/14327), which added attachment invocation counts.\n\n### Description\n\n<!--\nWhat's the problem? How are we addressing it?\n\nWrite for a reviewer who has not worked in this part of the codebase. Give them the\nbackground they need before the problem makes sense, and avoid jargon.\n-->\n\nAttachment telemetry records how many `--attach` flags a command received, but not how successful uploads changed the command's Markdown.\n\nThis adds `append_ops_count` and `replace_ops_count` measures to the existing `attachment_invocation` event. An attachment that replaces several textual references counts as one replacement.\n\nThe event is registered before argument validation and resolved when telemetry flushes. It still reports `attach_count` for failed invocations, including authentication and validation failures, while successful uploads can add their operation counts to the same event.\n\n### How did you test this change?\n\n<!--\nReport only actions you actually performed and results you actually observed, using factual\nfirst-person language (for example, \"I ran...\" and \"I saw...\"). Do not present planned,\nhypothetical, inferred, or merely expected scenarios as testing.\n\nAutomated test results do not belong here. Passing unit tests, `go test ./...` output, and\ncoverage numbers tell a reviewer nothing they cannot see from CI, so do not paste them.\n\nIf you did not exercise the changed behavior, write `Not tested` and explain why.\n\nUse one or more of these, whichever communicates best:\n\n1. Screenshots or GIFs of the real command running. Preferred whenever the change is visible\n   in terminal output. If output changed, show it before and after.\n2. Given/When/Then scenarios, but only when you actually executed the steps. For example:\n   Given I was in a repo with no open pull requests\n   When I ran `gh pr list`\n   Then I saw \"no open pull requests in cli/cli\"\n3. A natural language walkthrough of what you did by hand, the states you covered, and what\n   you saw, including error and edge cases.\n\nIf you leave this empty, your pull request will very likely be closed.\n-->\n\nI built the local `gh` binary and exercised a disposable test issue. I attached two PNGs, referenced the first twice in the comment body, and left the second unreferenced.\n\nThe posted comment rewrote both references to the first uploaded URL and appended the second attachment. With `GH_TELEMETRY=log`, I saw one `attachment_invocation` event with `attach_count` set to `2` and `replace_ops_count` and `append_ops_count` each set to `1`, plus the paired `command_invocation` event.\n\nI also ran the command with a missing attachment. It failed validation and logged `attach_count` as `1`, with both operation counts set to `0`.\n\nThe recordings project the raw log through `jq` so they show only event type, command, flags, and measures.\n\n#### Mixed append and replace\n\n![A mixed attachment invocation records one replacement and one append operation](https://github.com/user-attachments/assets/ce742b86-dde1-4590-bc38-ab9831ea3ce0)\n\n#### Validation failure\n\n![A failed attachment validation retains the attachment count and records zero operations](https://github.com/user-attachments/assets/84341c0b-6f73-4157-afcb-6ffed5de486d)\n\n### Key points\n\n<!--\nTradeoffs you accepted, alternatives you rejected, and anything a reviewer would otherwise have to guess at.\n-->\n\n- `attachment_invocation` uses dimensions `{command}` and measures `{attach_count, append_ops_count, replace_ops_count}`. It is sampled at 100%.\n- After `--attach` is parsed, authentication, positional argument, and command validation failures retain `attach_count` and report zero operations.\n- Partial failures count only uploads completed before the first failure. A final issue, pull request, or comment write failure does not erase completed Markdown operation counts.\n- The event contains no paths, alt text, body content, repository information, or asset data.\n- Generic command telemetry remains unaware of attachment behavior.\n\n### Notes for reviewers\n\n<!--\nWhere should review start, and what should be read next? Call out anything you are unsure about.\n\nLink related issues or prior discussion, with one sentence on why each matters.\n-->\n\n![Before and after code diagram for deferred attachment telemetry](https://github.com/user-attachments/assets/d4531b02-e8e2-49d4-9c41-90f18d24c05a)\n\nStart with the telemetry recorder interface and service implementation. The important new pattern is `RecordDeferred`: a caller registers an event early, with its original recorded timestamp, but supplies a callback that resolves the final event during `Flush`. Sampling and disabled-telemetry checks still happen before the callback is evaluated. The existing immediate `Record` path is unchanged.\n\nThen review `InvocationTelemetry`, which references the parsed attachment flag but owns the recorder and mutable event. Each command options struct stores it beside `AttachFlag`. It registers the deferred event from Cobra's argument validator, after flags are parsed but before positional argument validation. Successful uploads update this telemetry object before the process-level flush, producing exactly one `attachment_invocation` across subsequent validation and execution paths.\n\nThe telemetry service test covers flush-time resolution. The rooted attachment command test covers failure in a parent persistent pre-run hook, the lifecycle edge case that motivated the deferred recorder.\n\n### Authorship and follow-up\n\n<!--\nREQUIRED - If you are an AI agent filling in this template, answer \"Who wrote this\" for yourself and answer honestly. For \"Who answers review comments,\" use only a choice the human has explicitly made in the conversation. If no choice has already been established, pause and ask the human to choose one of the three options before creating or updating the pull request. Do not infer the choice from repository ownership, authorship, assignees, prior interactions, or the current operator. After the human answers, check exactly the option they chose; the last option is valid when the human explicitly chooses nobody.\n\nCheck exactly one box in each list.\n-->\n\nWho wrote this:\n\n- [ ] A human wrote it.\n- [x] An agent wrote it under close human direction.\n- [ ] An agent wrote it independently, and no human has guided the implementation beyond the initial prompt.\n\nWho answers review comments:\n\n- [x] @BagToad will read and reply directly. Name the account.\n- [ ] An agent will draft replies and @username will read them before they are posted.\n- [ ] Nobody has explicitly committed to replying.\n",
+        "headRefName": "bagtoad/attachment-operation-telemetry",
+        "baseRefName": "trunk",
+        "isCrossRepository": false,
+        "mergeable": "MERGEABLE",
+        "mergeStateStatus": "BLOCKED"
+      }
+    },
+    "pr1": {
+      "pullRequest": {
+        "number": 14363,
+        "title": "docs: fix broken \"GitHub language\" link in primer foundations",
+        "author": {
+          "login": "areesh-ali"
+        },
+        "headRefOid": "a6cb3e8572f2c147b86bd94fd61e80b0ed5b9ab2",
+        "baseRefOid": "31e17047d1b82244d11a780e250440a6f855a205",
+        "url": "https://github.com/cli/cli/pull/14363",
+        "updatedAt": "2026-09-05T13:44:37Z",
+        "state": "MERGED",
+        "isDraft": false,
+        "body": "### Description\n\nIn `docs/primer/foundations/README.md`, the \"GitHub language\" bullet under **When designing your command's language system** links to:\n\n```\n/getting-started/principles#make-it-feel-like-github\n```\n\nRendered on GitHub, a root-relative link resolves against the repository root, so this points at `cli/cli/blob/trunk/getting-started/principles` — a path that does not exist (404). There is no `principles` file; the intended \"Make it feel like GitHub\" section lives in `docs/primer/getting-started` (heading `### Make it feel like GitHub`, i.e. anchor `#make-it-feel-like-github`).\n\nThis updates the link to:\n\n```\n/docs/primer/getting-started#make-it-feel-like-github\n```\n\nwhich points to the correct location and matches the `/docs/primer/<dir>#<anchor>` convention already used elsewhere in the primer docs (for example, `docs/primer/getting-started/README.md` links to `/docs/primer/foundations#color`).\n\n### How did you test this change?\n\nI verified this by inspecting the repository rather than rendering the site:\n\n- I confirmed the old target `getting-started/principles` does not exist anywhere in the repo.\n- I confirmed `docs/primer/getting-started/README.md` exists and contains the heading `### Make it feel like GitHub`, which GitHub renders with the anchor `#make-it-feel-like-github`.\n- I confirmed the new `/docs/primer/<dir>#<anchor>` form matches links already present in the primer docs, so the fixed link is consistent with the surrounding convention.\n\n### Key points\n\nDocumentation-only, single-line change. No behavior or code is affected. The fix follows the linking convention already established in the primer docs rather than introducing a new one.\n\n### Notes for reviewers\n\nThe change is on line 57 of `docs/primer/foundations/README.md`. The convention reference is `docs/primer/getting-started/README.md`, which uses the same `/docs/primer/<dir>#<anchor>` link style.\n\n### Authorship and follow-up\n\nWho wrote this:\n\n- [ ] A human wrote it.\n- [x] An agent wrote it under close human direction.\n- [ ] An agent wrote it independently, and no human has guided the implementation beyond the initial prompt.\n\nWho answers review comments:\n\n- [x] @areesh-ali will read and reply directly.\n- [ ] An agent will draft replies and @areesh-ali will read them before they are posted.\n- [ ] Nobody has explicitly committed to replying.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n",
+        "headRefName": "docs-fix-primer-github-language-link",
+        "baseRefName": "trunk",
+        "isCrossRepository": true,
+        "mergeable": "UNKNOWN",
+        "mergeStateStatus": "UNKNOWN"
+      }
+    },
+    "pr2": null
+  },
+  "errors": [
+    {
+      "type": "NOT_FOUND",
+      "path": [
+        "pr2"
+      ],
+      "locations": [
+        {
+          "line": 4,
+          "column": 3
+        }
+      ],
+      "message": "Could not resolve to a Repository with the name 'ondrajodas/there-is-no-such-repo'."
+    }
+  ]
+}

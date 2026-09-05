@@ -16,6 +16,9 @@ struct DiffFileHeaderView: View {
     /// diff) a zaškrtávátko se **nekreslí vůbec** — zašedlé by slibovalo akci, která tam není.
     var read: FileReviewState?
     var toggleRead: (() -> Void)?
+    /// Otevření souboru v editoru (#530). `nil` = **není zvolený editor**, takže se tlačítko
+    /// nekreslí vůbec — ne zašedle, viz `EditorActions`.
+    var editor: EditorActions?
 
     /// Hledání v tomhle diffu (#152) — **prostředím, ne parametrem**: počet výskytů se mění při
     /// každém písmenu, takže předávat ho argumentem by znamenalo přeložit při každém znaku tělo
@@ -35,6 +38,14 @@ struct DiffFileHeaderView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text(verbatim: file.displayPath))
             .accessibilityHint(isFolded ? "Rozbalí diff souboru" : "Sbalí diff souboru")
+            // **Mimo tlačítko sbalení**, ze stejného důvodu jako zaškrtávátko o řádek níž:
+            // tlačítko v tlačítku je v SwiftUI přesně ten druh věci, u které se nedá spolehnout,
+            // kdo klik dostane. Smazaný soubor tlačítko **dostane taky** — že po něm na disku nic
+            // nezůstalo, se pozná až sáhnutím na disk a hláška o tom je poctivější než chybějící
+            // tlačítko u jednoho řádku z padesáti.
+            if let editor {
+                editor.headerButton(path: file.displayPath)
+            }
             if let read, let toggleRead {
                 DiffFileReadToggle(state: read, toggle: toggleRead)
             }

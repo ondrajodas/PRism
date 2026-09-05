@@ -50,6 +50,14 @@ extension AppStore {
     /// detailu se `mergeOffer` neskládá vůbec: bez plánu by z něj vyšlo `factsMissing`, což je
     /// totéž `false`, jen po dvou průchodech mapami.
     ///
+    /// **Commity se sem od #572 nepočítají, a je to zapsané rozhodnutí.** `Policy.mergeProposal`
+    /// je bere kvůli **počtu slévaných commitů v potvrzení**, tedy kvůli větě, kterou deska
+    /// nekreslí; mezi překážkami merge počet není. Kdyby se `nil` propouštělo dál, znamenalo by
+    /// to, že se na pruh `K merge` dostane jedině PR, u kterého se **otevřela záložka** — protože
+    /// commity se dotahují až s ní a hromadně se netahají schválně (`MergeReadiness`: druhý zdroj
+    /// téhož seznamu vedle `fetchCommits(id:)`). Prázdné pole je tady tedy „počet nás nezajímá“,
+    /// ne „PR nemá commity“ — a nikde se z něj nic nekreslí.
+    ///
     /// Že brána odesílání není překážka **pull requestu**, rozhoduje `Policy.isMergeReady(_:)` —
     /// s výchozím (vypnutým) odesíláním by jinak byl pruh `K merge` navždycky prázdný. Vlastní
     /// blokující nález je od #563 tatáž třída, jen se **nedostane už do `mergeOffer`**, takže se
@@ -63,7 +71,7 @@ extension AppStore {
                 // jestli něco merge **brání**, a metoda mezi překážky nepatří (viz `mergeOffer`).
                 // Číst k tomu konfiguraci u každého vlastního PR při každém průchodu tělem by byla
                 // práce za odpověď, kterou tady nikdo nepřečte.
-                proposal: Policy.mergeProposal(of: detail, commits: commits[pr]),
+                proposal: Policy.mergeProposal(of: detail, commits: commits[pr] ?? []),
                 state: detail.state,
                 status: branchStatusState(for: pr),
                 checks: checks[pr]
@@ -90,8 +98,13 @@ extension AppStore {
     ///
     /// **A jen na otevřeném.** Mergnutý a zavřený PR vrací `UNKNOWN` navždycky (změřeno na
     /// `PRism#470`), takže by se na něm vyčerpaly všechny pokusy včetně čekání mezi nimi — a to za
-    /// odpověď, kterou `Policy.mergeOffer` stejně přebije stavem PR. Ptá se to tedy až za detailem,
-    /// ze kterého je stav vidět.
+    /// odpověď, kterou `Policy.mergeOffer` stejně přebije stavem PR.
+    ///
+    /// **Od #572 se stav ptá dvakrát, a je to zúžení, ne uvolnění.** Shrnutí ho nese už dneska
+    /// (`PullRequestSummary.state`), takže se mergnutý a zavřený PR odmítne **dřív než tři volání**,
+    /// která tahle metoda dělá — do #572 se na jeho repo stihlo zeptat na nastavení merge a do cache
+    /// na rozdělaný rebase. Stav z **detailu** za tím zůstává: po vlastním mergi z okna se hlavička
+    /// načte znovu, kdežto shrnutí ze seznamu je do dalšího tiku pořád `open`.
     ///
     /// **Selhání se neschovává do prázdna.** „Nedá se mergnout“ a „nezjistil jsem, jestli to jde“
     /// jsou dvě různé odpovědi a u nevratné akce je ten rozdíl to podstatné: podle prvního se
@@ -99,6 +112,7 @@ extension AppStore {
     func loadBranchStatus(for pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
         guard ownership(of: id) == .mine else { return }
+        guard pullRequest.state == .open || pullRequest.state == .draft else { return }
         guard let detail = detail(of: id), detail.state == .open || detail.state == .draft else {
             return
         }
@@ -111,7 +125,13 @@ extension AppStore {
         // slevatelnost, tedy jinou cache s jiným důvodem k obnovení. Volání samo má vlastní
         // stráž, takže druhé otevření téhož repa nestojí nic.
         await loadMergeSettings(for: id.repo)
-        guard !hasCurrentBranchStatus(for: pullRequest) else { return }
+        guard !hasCurrentBranchStatus(for: pullRequest) else {
+            // Stav může být z hromadného dotazu desky (#572) a ten polohu větve proti základu
+            // **nenese** — `compare` potřebuje jméno základu a hlavu, tedy hodnoty z téže odpovědi.
+            // Bez tohohle doplnění by v panelu stálo `nevím, jestli je pozadu` až do příštího tiku.
+            await loadMissingDivergence(for: pullRequest)
+            return
+        }
         branchStatuses[id] = .loading
 
         do {
@@ -236,9 +256,52 @@ extension AppStore {
         repositoryMergeSettings[repo] = settings
     }
 
-    private func hasCurrentBranchStatus(for pullRequest: PullRequestSummary) -> Bool {
+    /// Je slévatelnost v cache k **tomuhle** `updatedAt`? **Ne `private`** ze stejného důvodu jako
+    /// `hasCurrentDetail(for:)` — ptá se tím i předfiltr desky (#572).
+    func hasCurrentBranchStatus(for pullRequest: PullRequestSummary) -> Bool {
         guard case .loaded(_, let updatedAt) = branchStatuses[pullRequest.id] else { return false }
         return updatedAt == pullRequest.updatedAt
+    }
+
+    /// Doplní **polohu větve proti základu** ve stavu, který přišel z hromadného dotazu desky
+    /// (#572) — ten ji nenese, protože `compare` potřebuje jméno základu a hlavu z téže odpovědi
+    /// a GraphQL na sourozenecké pole odkázat neumí.
+    ///
+    /// **Otevření vlastního PR tím nezdraží, zlevní.** Do #572 stálo dvě volání (`gh pr view` na
+    /// slévatelnost a `compare` na polohu); s hromadnou odpovědí v cache zbývá jedno.
+    ///
+    /// **Ptá se jedině tam, kde poloha chybí.** Nula ani „srovnaná“ to není: `divergence == nil`
+    /// znamená „nezjišťovalo se“, nebo „GitHub polohu neurčil“ (smazaný ref). Ten druhý případ se
+    /// odsud zeptá při každém otevření záložky znovu — je vzácný a jedno volání za otevření je
+    /// levnější než držet si čtvrtou mapu jen kvůli němu.
+    func loadMissingDivergence(for pullRequest: PullRequestSummary) async {
+        let id = pullRequest.id
+        guard case .loaded(let status, let updatedAt) = branchStatuses[id],
+            status.divergence == nil,
+            let detail = detail(of: id)
+        else { return }
+
+        let divergence: BranchDivergence?
+        do {
+            divergence = try await gateway.fetchDivergence(
+                id: id,
+                base: detail.baseRef,
+                head: detail.headSha
+            )
+        } catch {
+            // **Spolknuto schválně**, tatáž nesymetrie jako u `refreshOpenDivergence`: slévatelnost
+            // v panelu je, chybí jen řádek o poloze — a příští tik to zkusí znovu.
+            return
+        }
+
+        // Mezitím se mohlo doběhnout plné načtení nebo přepnout PR, takže se zapisuje jedině do
+        // toho stavu, nad kterým se ptalo.
+        guard case .loaded(let current, let currentUpdatedAt) = branchStatuses[id],
+            current == status, currentUpdatedAt == updatedAt
+        else { return }
+        var refreshed = status
+        refreshed.divergence = divergence
+        branchStatuses[id] = .loaded(refreshed, updatedAt: updatedAt)
     }
 
     /// Přeptá se na **polohu větve proti základu** u otevřeného vlastního PR (#466, z proklikání).

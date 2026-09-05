@@ -168,6 +168,17 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// **Per repo se přebít dá** (jako režim nebo limit): velké repo s dlouhými PR z toho těží
     /// nejvíc, malé se v prvním kole přečte celé tak jako tak.
     var incrementalAfterPush: Bool
+    /// V čem se otevírají soubory z kopie v cache (#530). **Výchozí `nil` = tlačítko se nekreslí.**
+    ///
+    /// Je to jediná hodnota v tomhle souboru, jejíž prázdno znamená **„tahle akce v okně není“**,
+    /// a je to schválně: který editor člověk používá, se z ničeho odvodit nedá. Podstrčit Xcode
+    /// jen proto, že je to macOS, by znamenalo tlačítko, které spustí cizí aplikaci, o kterou nikdo
+    /// nežádal — a zašedlé tlačítko sem nepatří, protože se ten stav nemění ničím, co je na téhle
+    /// obrazovce (viz `CLAUDE.md`, tvrdá podmínka č. 1 bod 2).
+    ///
+    /// **Globálně, ne per repo**, jako `diffLayout` a `appearance`: v čem čtu kód, je vlastnost
+    /// toho, kdo se dívá, ne repozitáře, na který se dívá.
+    var externalEditor: ExternalEditor?
     /// Co se počítá do odznaku v Docku (#529).
     ///
     /// **Výchozí `waiting`**, tedy druhá výchozí hodnota v tomhle souboru, která přidává chování
@@ -207,6 +218,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         model: String?,
         issueTextTool: String? = nil,
         incrementalAfterPush: Bool = true,
+        externalEditor: ExternalEditor? = nil,
         dockBadge: DockBadgeMode = .waiting,
         notifications: NotificationSettings = NotificationSettings()
     ) {
@@ -231,6 +243,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.model = model
         self.issueTextTool = issueTextTool
         self.incrementalAfterPush = incrementalAfterPush
+        self.externalEditor = externalEditor
         self.dockBadge = dockBadge
         self.notifications = notifications
     }
@@ -333,6 +346,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         incrementalAfterPush = container.contains(.incrementalAfterPush)
             ? ((try? container.decode(Bool.self, forKey: .incrementalAfterPush)) ?? false)
             : standard.incrementalAfterPush
+        // Chybějící klíč **i rozbitá hodnota** znamenají `nil`, tedy „tlačítko se nekreslí“ (#530)
+        // — a je to tentýž princip jako všude jinde, tedy srazit se na **bezpečnou stranu**. Ta je
+        // tady shodou okolností i výchozí: neznámé jméno editoru nesmí podstrčit jiný, protože
+        // tlačítko spouští cizí aplikaci. Chybějící akce je proti tomu stav, o kterém se dá
+        // rozhodnout jedním pohledem do nastavení.
+        externalEditor = try? container.decodeIfPresent(ExternalEditor.self, forKey: .externalEditor)
         // Tolerantně jako vzhled a pohled na diff, ne přísně jako režim nebo odesílání (#529):
         // nejhorší následek překlepu je **jiné číslo v Docku**, které se přepne jedním kliknutím
         // v nastavení — nespustí review, neodešle nic a nedá se z něj nic ztratit. Přísnost jako

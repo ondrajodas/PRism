@@ -10817,3 +10817,184 @@ neřekne. Render vedle měření je tady podmínka
   bez toho doopravdy odskočila, se zjistí jedině psaním do composeru.
 - **Že `TimelineView` překreslí jen svůj `Text`.** U odpočtu na dashboardu to změřila sonda
   (`DashboardCountdownRedrawTests`); tady se stejná konstrukce **přebírá**, ne měří znovu.
+
+## Otevření souboru v editoru (#530)
+
+Tři suity, a každá odpovídá na jinou otázku. Nejcennější je ta prostřední — tvrdí, co se
+**ne**stane.
+
+### `EditorLinkTests` — adresa, výčtem přes tři editory
+
+Každý editor má jiný tvar (`xcode://open?url=…&line=`, `vscode://file…:řádek`, `cursor://file…:řádek`)
+a jediné, co je na tom společné, je cesta. Testuje se tedy **výčtem**: tvar s řádkem, tvar bez
+řádku, nekladný řádek (zahazuje se), escapování mezery, diakritiky, dvojtečky a query oddělovačů,
+popisky tlačítka, věta u něj, `Policy.editorTree` a hlášky poruch.
+
+**Jedno z těch tvrzení je o tom, co hláška říkat nesmí**, a vzniklo z vlastní revize diffu:
+u nesložené adresy se tu hlásilo odmítnutí `.outsideCache`, tedy věta o cestě mimo cache nad
+cestou, která v cache byla. Testuje se to výčtem přes tři editory, protože ta věta jmenuje editor
+— a je to tvrzení, které by jinak nikdo nespustil: procentování ani `URL(string:)` nad cestou ze
+souborového systému selhat nemají čím, takže se ta větev v běhu nepotká.
+
+**`URL(filePath:)` i `appending(path:)` vydávají cestu rozloženou (NFD), a je to změřené**, ne
+odhad: `Příliš` z nich vyjde jako `P` `r` `◌̌` `i` `◌́` …, tedy `%CC%8C` místo `%C5%99`. První verze
+testu proto porovnávala doslovný složený řetězec a **spadla nad kódem, který je v pořádku**. Tvrdí
+se místo toho to, na čem doopravdy záleží: v adrese nezůstane nic mimo ASCII a **dekóduje se zpátky
+na tutéž cestu**. Ověřeno samostatným skriptem nad Foundation, ne odvozeno z chyby testu:
+
+```bash
+swift -e 'import Foundation; print(URL(filePath: "/a/Příliš.swift").path(percentEncoded: false).unicodeScalars.map { String(format: "%04X", $0.value) }.joined(separator: " "))'
+# … 0050 0072 030C 0069 0301 006C 0069 0073 030C …
+```
+
+### `AppStoreEditorTests` — co se neotevře
+
+Fake `EditorOpening` existuje právě proto, aby šlo tvrdit, že se `NSWorkspace` **nepředalo nic**.
+Devět testů, z nich čtyři jsou tvrzení o tom, co se nestalo: cesta mimo cache, symbolický odkaz
+v cache, chybějící editor a chybějící soubor. K tomu strom `-sync` proti stromu review, chybějící
+pracovní kopie, odmítnutí systémem a zahození hlášky z minula.
+
+**Regrese se ověřila vložením regrese**: bez `CacheFile.refusal` spadly dva testy se třemi
+tvrzeními — a u symlinku bylo v protokolu vidět, co se doopravdy předalo systému
+(`cursor://file/var/folders/…/42-sync/src/Link.swift`, tedy odkaz mířící ven z cache).
+
+### `EditorButtonRenderTests` — že tlačítko v okně je a jindy není
+
+„Nekreslí se, ne zašedlé“ je tvrzení o tom, co na obrazovce **není**, a nad `EditorActions`
+samotným se ověřit nedá: `nil` v modelu ještě neznamená, že se view zachovalo správně.
+
+**Rozdíl bitmap, ne čtení textu** — accessibility tree se v hostovaném okně nenaplní (změřeno
+u `DashboardCountdownRedrawTests`), takže „je vidět“ se dá tvrdit jedině z pixelů. Tatáž cesta
+i tytéž meze jako u `SettingsFieldsRenderTests`; okno se ukazuje bez animace (#462). Čtyři páry:
+hlavička souboru, karta nálezu, karta nálezu **bez souboru** (tam se bitmapy musí rovnat) a řádek
+v nastavení.
+
+Regrese ověřená vložením: když karta kreslí tlačítko i u nálezu bez souboru, spadne
+*Nález bez souboru tlačítko nedostane* a hlásí 24 252 proti 28 430 bajtům.
+
+Snímky se dají pustit na disk `TEST_RUNNER_PRISM_RENDER_DIR=<složka>` — touž cestou jako sondy.
+
+### Co se **neověřilo** a je to zapsaná mezera
+
+**Že se editor doopravdy otevře, ověřeno není.** Znamenalo by to spustit uživateli Xcode, VS Code
+nebo Cursor bez jeho vědomí — a `xcode://open?url=…&line=` je jediný z těch tří tvarů, který nemá
+oporu v dokumentaci editoru, jen v tom, jak ho používají cizí nástroje. Ověří to člověk kliknutím;
+kdyby Xcode ten tvar nebral, je oprava v jedné čisté funkci a v jednom výčtu testu.
+
+### Za jakých podmínek se měřilo (#530)
+
+Plná suita **5449 testů v 532 suitách, `TEST SUCCEEDED`**, 153,8 s. Měřeno na stroji, na kterém
+běželo souběžně **pět slotů** paralelního vývoje — tedy ne na volném stroji; čas je za těchhle
+podmínek zátěž, ne logika. Samotná render suita v tom běhu stála 100,7 s, protože každý ze čtyř
+párů čeká 0,4 s na usazení okna a je jich osm.
+
+**Mezi tím doběhly dva červené běhy a ani jeden z nich nebyl regrese** — obojí je ta třída, kterou
+`CLAUDE.md` popisuje u `Tests/Support/TestWaiting.swift`: `Nedočkalo se … (strop 120.0 seconds)`
+při load average **20+**. Poprvé 7 issues (`HealthMonitorTests`, `AppStoreIntentTests`), podruhé
+**234 issues napříč 21 suitami** — store, `RepoCheckout` proti skutečnému gitu, slévání konfliktů.
+Pozná se to podle tří věcí naráz a **žádná z nich sama nestačí**:
+
+1. **hláška je o čekání, ne o hodnotě** — 91 výskytů `Nedočkalo se … strop 120.0 seconds`;
+2. **spadlé suity se změny netýkají** — všechny tři suity #530 v tom **červeném** běhu prošly;
+3. **v izolaci projdou hned** — pět suit (obě spadlé plus tři editorové) doběhlo za **3,8 s**.
+
+Zbytečná práce z toho plyne jedna: čekat, až load klesne, a pustit znovu — táž změna doběhla zeleně
+při load average pod 10.
+
+## Kolik stojí slévatelnost vlastních PR (#572)
+
+Zadání říkalo, že se má vybrat **měřením, ne odhadem**, a že *zlevnění, které práci jen přesune
+jinam, není zlevnění* — takže se měřily **oba konce**: co to stojí, když se data doženou po jednom,
+a co to stojí, když se doženou naráz.
+
+**Za jakých podmínek.** Živé GitHub API přes `gh` (2.83.0), MacBook s běžícím Xcode buildem
+v pozadí, **23 vlastních otevřených PR ze 16 repozitářů** — tolik jich instalace toho dne měla
+(`gh search prs --author @me --state open`). Zadání odhadovalo dvanáct; skutečnost byla dvojnásobek,
+což ten rozdíl mezi cestami ještě zvětšuje.
+
+### Cesta 1 — dotáhnout po jednom (zamítnuto)
+
+To, co aplikace dělá při otevření záložky, jen pro všechna vlastní PR: `gh pr view --json` na
+hlavičku a druhý `gh pr view --json mergeable,mergeStateStatus` na slévatelnost. Skript pouštěl
+volání sériově, jako je pouští `AppStore`.
+
+| Co se táhlo | Volání | Čas |
+|---|---|---|
+| hlavička + slévatelnost | **46** | **29,6 s** |
+| hlavička + commity + slévatelnost | **69** | **40,6 s** |
+
+Druhý řádek je tam proto, že první návrh chtěl dotáhnout i commity (`Policy.mergeProposal` je bere
+kvůli počtu v potvrzení). Ukázalo se, že je deska nepotřebuje — počet mezi překážkami merge není —,
+takže se hromadně netahají vůbec; číslo tu zůstává jako doklad, kolik by to bylo stálo.
+
+### Cesta 2 — jeden aliasovaný dotaz (vybráno)
+
+Jeden GraphQL dokument s 23 aliasovanými kořenovými poli (`MergeReadinessQuery`), tedy tentýž vzor
+jako u hlav z tiku (#420). V dotazu je `rateLimit { cost remaining }`, aby se cena nedohadovala.
+
+| Běh | Čas | Odpověď | `cost` |
+|---|---|---|---|
+| 1 | 3,64 s | 39,6 kB | **1** |
+| 2 | 3,36 s | 39,6 kB | **1** |
+| 3 | 2,60 s | 39,6 kB | **1** |
+| 4 | 2,83 s | 39,6 kB | **1** |
+
+Dokument má 6,8 kB (~230 B na alias), odpověď ~1,7 kB na PR. **Cena je v tom dotazu, ne v počtu PR**
+— tentýž závěr jako u #420, kde 12 i 24 aliasů stálo jeden bod.
+
+**Rozdíl je 46 volání a 29,6 s proti jednomu volání a ~3 s**, tedy zhruba desetinásobek. A není to
+přesunutá práce: v odpovědi je **totéž**, co by přišlo po jednom (`gh pr view --json` je nad GraphQL,
+takže se dekóduje týmiž typy), jen v jednom kole. Druhý konec — otevření záložky — se přitom
+**nezdražil, zlevnil**: slévatelnost je v cache, takže místo dvou volání (`pr view` + `compare`)
+zbývá jedno.
+
+### Co se z toho dozvědělo o `UNKNOWN`
+
+Z těch 23 PR vrátilo `mergeable: UNKNOWN` **jedno** — a nebylo to náhodou: GitHub to pole počítá
+líně. Hromadný dotaz se proto **neopakuje** (na rozdíl od `fetchBranchStatus`, který má tři pokusy):
+opakovat celou sadu kvůli jednomu nedopočítanému PR by znamenalo platit za dvacet dalších.
+Nedopočítaná odpověď se **zahodí** a zeptá se na ni příští tik — což je zase jedno volání.
+
+Doklad, že se `UNKNOWN` u dokončeného PR **nedopočítá nikdy**, je ve fixture
+`gh/pr-merge-readiness-partial.json`: `cli/cli#14363` je mergnutý a obě pole má `UNKNOWN`. Je to
+tentýž údaj, který se u #465 změřil na `PRism#470`, jen tentokrát z veřejného repa.
+
+### Fixtures jsou skutečné odpovědi
+
+Obě leží v `Tests/Fixtures/gh/` a jsou to nezkrácené výstupy `gh api graphql` z veřejného `cli/cli`:
+
+- `pr-merge-readiness.json` — dvě otevřená PR, obě `MERGEABLE`. `BLOCKED` u `MERGEABLE` je běžný
+  stav repa, do kterého nemáme zápis (tentýž jev jako u #465 na `cli/cli#14278`).
+- `pr-merge-readiness-partial.json` — **tři případy v jedné odpovědi**: otevřené PR, mergnuté
+  s `UNKNOWN` a alias, na který GitHub odpověděl `null` plus `errors` (repozitář, který neexistuje;
+  `gh` u toho skončil kódem 1, ale data poslal). Přesně ty tři konce, které `readiness(of:)` musí
+  rozlišit.
+
+Co se ze skutečných dat nesehnalo, se testuje **inline JSONem** a je u toho napsané proč: PR bez
+autora (`author: null`) a odpověď s cizím číslem uvnitř aliasu.
+
+### Kde se ověřila regrese vložením regrese (#572)
+
+Čtyři pravidla, čtyři vložené regrese — u každé se koukalo, jestli spadne to, co má:
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| tik `refreshMergeReadiness(in:)` nevolá | 17 tvrzení v `AppStoreMergeReadinessTests`, mezi nimi „Po tiku je vlastní PR k mergnutí“ |
+| předfiltr nekouká na stav PR | `Na mergnutý ani zavřený PR se neptáme` (store) i `Mergnutý ani zavřený PR se neptá` (`Policy`) |
+| předfiltr nekouká na razítko `updatedAt` | `Tichý tik druhý dotaz neposílá` (tři tiky → tři dotazy) a dvě tvrzení v `Policy` |
+| `readiness(of:)` nezahazuje `UNKNOWN` | `Chybějící alias ani nedopočítaná slévatelnost se nezapíší` (mergnuté PR se zapsalo jako odpověď) |
+
+### Počet dotazů na fake gateway patří k číslům
+
+`FakeGitHubGateway.mergeReadinessRequests` je **pole polí**, ne plochý seznam — stejně jako
+`headRequests` u #420. Bez toho vnoření by se nedalo napsat ani jedno z těch dvou tvrzení, na
+kterých celé issue stojí: že se za tik pošle **jeden** dotaz na celou sadu, a že se na klidný tik
+nepošle **žádný**.
+
+### Co se v harnessu ověřit nedá
+
+- **Že je pruh `K merge` na obrazovce doopravdy plný.** Test tvrdí, že `Policy.board` vydá řádek
+  v pruhu `merge`; jestli se ten pruh nakreslí a jestli v něm PR sedí, ověří jedině spuštěná
+  aplikace po restartu (a bez sáhnutí na záložky, jinak by se data dotáhla druhou cestou).
+- **Že `gh` s dokumentem o 30 aliasech nenarazí na délku argumentu.** Změřeno bylo 23 aliasů
+  (6,8 kB); strop je nad tím s rezervou, ale hranici, kde by to prasklo, se hledat nezkoušelo.

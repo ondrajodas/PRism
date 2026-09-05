@@ -519,6 +519,30 @@ final class FakeGitHubGateway: GitHubGateway, @unchecked Sendable {
         return (queued ?? heads).filter { ids.contains($0.key) }
     }
 
+    // MARK: - Slévatelnost vlastních PR jedním dotazem (#572)
+
+    /// Co vrátí `fetchMergeReadiness(of:)`. Chybějící PR = „nevíme“, jako u živého `gh`.
+    var mergeReadiness: [PRIdentifier: MergeReadiness] = [:]
+
+    /// Čím `fetchMergeReadiness(of:)` spadne. `nil` = vrátí, co je v `mergeReadiness`.
+    var mergeReadinessFailure: (any Error)?
+
+    /// **Na co se kdo ptal, po jednotlivých voláních.** Vnořené pole je tady to podstatné, stejně
+    /// jako u `headRequests`: na něm stojí tvrzení, že se za tik pošle **jeden** dotaz na celou
+    /// sadu vlastních PR — a hlavně že na klidný tik nepošle **žádný**.
+    var mergeReadinessRequests: [[PRIdentifier]] { lock.withLock { mergeReadinessAsked } }
+
+    private var mergeReadinessAsked: [[PRIdentifier]] = []
+
+    func fetchMergeReadiness(of ids: [PRIdentifier]) async throws -> [PRIdentifier: MergeReadiness] {
+        // Prázdný dotaz se nezaznamenává ani nespouští — jako ve `GhGateway`, ať se na tom dá
+        // tvrdit, že se na nic neptáme.
+        guard !ids.isEmpty else { return [:] }
+        lock.withLock { mergeReadinessAsked.append(ids) }
+        if let mergeReadinessFailure { throw mergeReadinessFailure }
+        return mergeReadiness.filter { ids.contains($0.key) }
+    }
+
     func fetchDetail(id: PRIdentifier) async throws -> PullRequest {
         let answer: Result<PullRequest, any Error>? = lock.withLock {
             detailsAsked.append(id)

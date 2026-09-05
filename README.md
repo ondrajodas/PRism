@@ -102,6 +102,13 @@ s PR do kteréhokoli z nich. **Skutečná
 překážka merge se tím neobchází** — PR s blokujícím nálezem mergnutelný není, takže v `Předat
 agentovi` zůstane.
 
+**Slévatelnost aplikace zjišťuje sama, bez otevírání záložek** (#572). Do té doby se dotahovala až
+při výběru řádku, takže byl pruh `K merge` po startu prázdný, i když měl člověk vlastních PR
+k mergnutí několik. Ptá se na ni **tik pollingu, jedním dotazem na všechna vlastní otevřená PR**
+(změřeno: 23 PR ze 16 repozitářů = jedno volání, ~3 s); dokud se na pull requestu nic nepohne,
+neposílá se nic. Dokud slévatelnost známá není, leží PR v `Čeká na ostatní` — „nevím“ je na desce
+vždycky ta tichá strana.
+
 **Vpravo v hlavičce pruhu je akce nad celým pruhem**: `Otevřít první ⏎`, `Pustit review na 2 ⌘⇧R`,
 `Sestavit 2 zadání`, `Dopsat ⌘⇧D`. Potvrzení si nechává jedině spuštění review — je to jediná akce
 v aplikaci, která z jednoho kliknutí utratí víc než jednu session; otevřít záložky nestojí nic a jde
@@ -2338,6 +2345,32 @@ zmínku:
   uklidí bundle, cache i předvolby, ale přihlašovací položku ne (není v `config.json`, ale
   v systému), takže by po slotu zůstala v systému věc mířící na bundle, který zmizel s worktree.
   Zašedlý je i mimo `/Applications`, protože cesta zmizí s dalším buildem.
+
+### Otevřít soubor v editoru (#530)
+
+Nález se dá otevřít v editoru na tom řádku, o kterém mluví — glyf `↗` v hlavičce souboru a
+`Otevřít v <editoru>` na kartě nálezu v panelu. Editor se vybírá na stránce `Systém`
+(`Otevírat soubory v`: `Nic` / Xcode / VS Code / Cursor) a **bez zvoleného editoru se tlačítko
+nekreslí** — ne zašedne.
+
+**Otevírá se kopie z cache aplikace, nikdy tvůj klon** (tvrdá podmínka č. 3 — tvůj klon aplikace
+nezná):
+
+| Čí PR | Co se otevře | Co z toho plyne |
+|---|---|---|
+| cizí | pracovní strom review v cache | kód **k přečtení**; co se v něm změní, nemá kam odejít |
+| vlastní | strom pro srovnání větve (`<pr>-sync`) | oprava odejde **jedině přes `Force push` s potvrzením** (#466) |
+
+Věta o tom je v nápovědě u obou tlačítek a celá pod volbou v nastavení. Když pracovní kopie
+v cache není (na PR ještě neběželo review a větev se nesrovnávala), řekne se to ve stavovém
+řádku — stejně jako to, že soubor v kopii není (smazaný soubor), že cesta vede mimo cache, nebo
+že systém adresu nepřevzal (editor není nainstalovaný).
+
+**Není to druhá cesta ven**: nic se neodesílá na GitHub ani do remote a nespouští se žádný
+podproces. Ven jde **adresa souboru v cache**, kterou převezme systém — otevírá se URL schématem,
+které si editor sám zaregistroval (`xcode://`, `vscode://file/…:řádek`, `cursor://file/…:řádek`),
+takže aplikace nehledá žádnou binárku. Hranici cache hlídá tatáž kontrola jako jinde v repu, a to
+ta **přísnější** z jejích dvou odpovědí: symbolický odkaz na souboru by editor otevřel jeho cíl.
 
 ## Novinky
 

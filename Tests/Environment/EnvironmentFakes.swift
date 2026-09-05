@@ -288,3 +288,29 @@ extension ToolState {
         return source
     }
 }
+
+/// Editor, který nic neotevírá — zapamatuje si adresy a odpoví, jak si test řekl (#530).
+///
+/// **Prázdný seznam adres je to nejcennější, co tenhle fake umí.** Nejdůležitější tvrzení #530 je,
+/// že se cesta mimo cache do editoru **nedostane**, a to se dá ověřit jedině tím, že se
+/// `NSWorkspace` nikdy nic nepředalo. Skutečné otevření by navíc spustilo cizí aplikaci a nedalo
+/// se vzít zpátky.
+final class FakeEditorOpener: EditorOpening, @unchecked Sendable {
+    private let lock = NSLock()
+    private var accepts: Bool
+    private var urls: [URL] = []
+
+    init(accepting accepts: Bool = true) {
+        self.accepts = accepts
+    }
+
+    /// Co se doopravdy předalo systému.
+    var openedURLs: [URL] { lock.withLock { urls } }
+
+    func open(_ url: URL) async -> Bool {
+        lock.withLock {
+            urls.append(url)
+            return accepts
+        }
+    }
+}
