@@ -8418,3 +8418,46 @@ nástroje.
 **Copilot se na tenhle PR schválně nepouštěl** — tentýž výpadek entitlementu na straně GitHubu
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`) jako u #507, #542, #491 a #563. Je to
 **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
+
+## #572 — `K merge` po startu: slévatelnost se dotahuje tikem, ne až se záložkou
+
+**Pruh `K merge` na domově byl po startu prázdný**, dokud se PR neotevřel. Vyšlo to z proklikání
+#563: pravidlo *„co je `mergeable`, patří do `K merge`“* platilo až po otevření záložky. Nebyla to
+regrese z #563 — starší stav, který se tím jen zviditelnil.
+
+**Chybělo víc než slévatelnost.** `AppStore.isMergeReadyForLane(_:)` staví na `Policy.mergeOffer`,
+a ta potřebuje hlavičku i stav větve; obojí se dotahovalo teprve v `loadDetail`. Deska proto
+u vlastních PR vracela `waiting`, což je nad nenačtenými daty správná odpověď — opravit se to dá
+jedině tím, že se data dozvíme dřív. **`Policy.mergeOffer`, `isMergeReady` ani `lane` se nezměnily
+ani o písmeno**; přibyl vedle nich jen předfiltr `Policy.mergeReadinessProbe`, který odpovídá na
+otázku „koho se zeptat“.
+
+**Vybíralo se měřením, ne odhadem.** Nad 23 vlastními otevřenými PR ze 16 repozitářů stálo dotažení
+po jednom **46 volání a 29,6 s** (s commity 69 volání a 40,6 s); jeden aliasovaný GraphQL dokument
+stojí **1 volání, 2,60–3,64 s a 1 bod z 5000/h**. Vzor je tentýž jako u hlav z tiku (#420). Čísla
+i zamítnutá cesta jsou v [`docs/testovani.md`](testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572).
+
+**Otevření vlastního PR tím zlevnilo**, ne zdražilo: slévatelnost je z tiku v cache, takže místo
+dvou volání (`pr view` + `compare`) zbývá jedno — poloha větve proti základu se do hromadné
+odpovědi nevejde, protože `compare` potřebuje jméno základu a hlavu z téže odpovědi.
+
+**Tik zůstal tichý.** Předfiltr porovnává razítko `updatedAt` v `detailStates` a `branchStatuses`,
+tedy tutéž cache, jakou má otevřená záložka: dokud se pull request nepohne, neposílá se nic. Na
+mergnutý a zavřený PR se **neptá vůbec** — GitHub u nich vrací `mergeable: UNKNOWN` navždycky
+(změřeno u #465 na `PRism#470`, doloženo znovu fixturou z `cli/cli#14363`).
+
+**Na obrazovce se mění jediná věc: pruh `K merge` má obsah hned po startu.** Vzhled se nemění,
+`docs/navrh.html` se nesáhlo. Testů je nad slitým stavem (po #530) **5 527**, z toho **+29**
+z tohohle PR, a jsou zelené; regrese se ověřila vložením čtyř regresí.
+
+**Plný běh nad slitým stavem byl jednou falešně červený a je to ta známá třída, ne regrese.**
+Sedm suit (`AppStore — review`, `— odmítnuté nálezy`, `— opakování jednoho reviewera`,
+`— routing reviewerů`, `— zadání pro reviewera`, `— notifikace o doběhlém review`
+a `HealthMonitor`) spadlo pod load average 17 při souběžném buildu tří slotů. Pozná se to
+podle tří věcí naráz: **hláška je o čekání** (24× `Nedočkalo se … strop 120.0 seconds`,
+k tomu jednou `metrika písma`), **spadlé suity se změny netýkají** — všechny tři suity #572
+v tom **červeném** běhu prošly — a **v izolaci projdou hned**: těch sedm plus tři suity #572
+je **101 testů v 10 suitách za 0,329 s**.
+
+**Copilot se na tenhle PR schválně nepouštěl** — GitHub má výpadek entitlementu, tatáž příčina jako
+u #570. Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.

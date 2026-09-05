@@ -10735,3 +10735,101 @@ Pozná se to podle tří věcí naráz a **žádná z nich sama nestačí**:
 
 Zbytečná práce z toho plyne jedna: čekat, až load klesne, a pustit znovu — táž změna doběhla zeleně
 při load average pod 10.
+
+## Kolik stojí slévatelnost vlastních PR (#572)
+
+Zadání říkalo, že se má vybrat **měřením, ne odhadem**, a že *zlevnění, které práci jen přesune
+jinam, není zlevnění* — takže se měřily **oba konce**: co to stojí, když se data doženou po jednom,
+a co to stojí, když se doženou naráz.
+
+**Za jakých podmínek.** Živé GitHub API přes `gh` (2.83.0), MacBook s běžícím Xcode buildem
+v pozadí, **23 vlastních otevřených PR ze 16 repozitářů** — tolik jich instalace toho dne měla
+(`gh search prs --author @me --state open`). Zadání odhadovalo dvanáct; skutečnost byla dvojnásobek,
+což ten rozdíl mezi cestami ještě zvětšuje.
+
+### Cesta 1 — dotáhnout po jednom (zamítnuto)
+
+To, co aplikace dělá při otevření záložky, jen pro všechna vlastní PR: `gh pr view --json` na
+hlavičku a druhý `gh pr view --json mergeable,mergeStateStatus` na slévatelnost. Skript pouštěl
+volání sériově, jako je pouští `AppStore`.
+
+| Co se táhlo | Volání | Čas |
+|---|---|---|
+| hlavička + slévatelnost | **46** | **29,6 s** |
+| hlavička + commity + slévatelnost | **69** | **40,6 s** |
+
+Druhý řádek je tam proto, že první návrh chtěl dotáhnout i commity (`Policy.mergeProposal` je bere
+kvůli počtu v potvrzení). Ukázalo se, že je deska nepotřebuje — počet mezi překážkami merge není —,
+takže se hromadně netahají vůbec; číslo tu zůstává jako doklad, kolik by to bylo stálo.
+
+### Cesta 2 — jeden aliasovaný dotaz (vybráno)
+
+Jeden GraphQL dokument s 23 aliasovanými kořenovými poli (`MergeReadinessQuery`), tedy tentýž vzor
+jako u hlav z tiku (#420). V dotazu je `rateLimit { cost remaining }`, aby se cena nedohadovala.
+
+| Běh | Čas | Odpověď | `cost` |
+|---|---|---|---|
+| 1 | 3,64 s | 39,6 kB | **1** |
+| 2 | 3,36 s | 39,6 kB | **1** |
+| 3 | 2,60 s | 39,6 kB | **1** |
+| 4 | 2,83 s | 39,6 kB | **1** |
+
+Dokument má 6,8 kB (~230 B na alias), odpověď ~1,7 kB na PR. **Cena je v tom dotazu, ne v počtu PR**
+— tentýž závěr jako u #420, kde 12 i 24 aliasů stálo jeden bod.
+
+**Rozdíl je 46 volání a 29,6 s proti jednomu volání a ~3 s**, tedy zhruba desetinásobek. A není to
+přesunutá práce: v odpovědi je **totéž**, co by přišlo po jednom (`gh pr view --json` je nad GraphQL,
+takže se dekóduje týmiž typy), jen v jednom kole. Druhý konec — otevření záložky — se přitom
+**nezdražil, zlevnil**: slévatelnost je v cache, takže místo dvou volání (`pr view` + `compare`)
+zbývá jedno.
+
+### Co se z toho dozvědělo o `UNKNOWN`
+
+Z těch 23 PR vrátilo `mergeable: UNKNOWN` **jedno** — a nebylo to náhodou: GitHub to pole počítá
+líně. Hromadný dotaz se proto **neopakuje** (na rozdíl od `fetchBranchStatus`, který má tři pokusy):
+opakovat celou sadu kvůli jednomu nedopočítanému PR by znamenalo platit za dvacet dalších.
+Nedopočítaná odpověď se **zahodí** a zeptá se na ni příští tik — což je zase jedno volání.
+
+Doklad, že se `UNKNOWN` u dokončeného PR **nedopočítá nikdy**, je ve fixture
+`gh/pr-merge-readiness-partial.json`: `cli/cli#14363` je mergnutý a obě pole má `UNKNOWN`. Je to
+tentýž údaj, který se u #465 změřil na `PRism#470`, jen tentokrát z veřejného repa.
+
+### Fixtures jsou skutečné odpovědi
+
+Obě leží v `Tests/Fixtures/gh/` a jsou to nezkrácené výstupy `gh api graphql` z veřejného `cli/cli`:
+
+- `pr-merge-readiness.json` — dvě otevřená PR, obě `MERGEABLE`. `BLOCKED` u `MERGEABLE` je běžný
+  stav repa, do kterého nemáme zápis (tentýž jev jako u #465 na `cli/cli#14278`).
+- `pr-merge-readiness-partial.json` — **tři případy v jedné odpovědi**: otevřené PR, mergnuté
+  s `UNKNOWN` a alias, na který GitHub odpověděl `null` plus `errors` (repozitář, který neexistuje;
+  `gh` u toho skončil kódem 1, ale data poslal). Přesně ty tři konce, které `readiness(of:)` musí
+  rozlišit.
+
+Co se ze skutečných dat nesehnalo, se testuje **inline JSONem** a je u toho napsané proč: PR bez
+autora (`author: null`) a odpověď s cizím číslem uvnitř aliasu.
+
+### Kde se ověřila regrese vložením regrese (#572)
+
+Čtyři pravidla, čtyři vložené regrese — u každé se koukalo, jestli spadne to, co má:
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| tik `refreshMergeReadiness(in:)` nevolá | 17 tvrzení v `AppStoreMergeReadinessTests`, mezi nimi „Po tiku je vlastní PR k mergnutí“ |
+| předfiltr nekouká na stav PR | `Na mergnutý ani zavřený PR se neptáme` (store) i `Mergnutý ani zavřený PR se neptá` (`Policy`) |
+| předfiltr nekouká na razítko `updatedAt` | `Tichý tik druhý dotaz neposílá` (tři tiky → tři dotazy) a dvě tvrzení v `Policy` |
+| `readiness(of:)` nezahazuje `UNKNOWN` | `Chybějící alias ani nedopočítaná slévatelnost se nezapíší` (mergnuté PR se zapsalo jako odpověď) |
+
+### Počet dotazů na fake gateway patří k číslům
+
+`FakeGitHubGateway.mergeReadinessRequests` je **pole polí**, ne plochý seznam — stejně jako
+`headRequests` u #420. Bez toho vnoření by se nedalo napsat ani jedno z těch dvou tvrzení, na
+kterých celé issue stojí: že se za tik pošle **jeden** dotaz na celou sadu, a že se na klidný tik
+nepošle **žádný**.
+
+### Co se v harnessu ověřit nedá
+
+- **Že je pruh `K merge` na obrazovce doopravdy plný.** Test tvrdí, že `Policy.board` vydá řádek
+  v pruhu `merge`; jestli se ten pruh nakreslí a jestli v něm PR sedí, ověří jedině spuštěná
+  aplikace po restartu (a bez sáhnutí na záložky, jinak by se data dotáhla druhou cestou).
+- **Že `gh` s dokumentem o 30 aliasech nenarazí na délku argumentu.** Změřeno bylo 23 aliasů
+  (6,8 kB); strop je nad tím s rezervou, ale hranici, kde by to prasklo, se hledat nezkoušelo.

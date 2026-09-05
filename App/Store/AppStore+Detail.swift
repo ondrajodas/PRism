@@ -121,7 +121,15 @@ extension AppStore {
             // Slévatelnost větve (#465) má tentýž problém i tutéž odpověď, jen se ptá **jen na
             // vlastním PR** — na cizím se sekce `Větev` nekreslí, takže by to bylo volání za nic.
             // Rozhodnout o tom umí `loadBranchStatus` sám, tady se jen ptáme, jestli už odpověď je.
-            if branchStatuses[id] == nil { await loadBranchStatus(for: pullRequest) }
+            if branchStatuses[id] == nil {
+                await loadBranchStatus(for: pullRequest)
+            } else {
+                // Stav větve **může být z hromadného dotazu desky** (#572), a ten polohu proti
+                // základu nenese. Doplní se proto i tady, ne jen uvnitř `loadBranchStatus`: sem
+                // chodí právě ta cesta, kterou hromadná odpověď vyrábí — hlavička je v cache,
+                // takže se detail znovu netahá a `loadBranchStatus` se nevolá vůbec.
+                await loadMissingDivergence(for: pullRequest)
+            }
             return
         }
         detailStates[id] = .loading
@@ -209,7 +217,12 @@ extension AppStore {
         }
     }
 
-    private func hasCurrentDetail(for pullRequest: PullRequestSummary) -> Bool {
+    /// Je hlavička v cache k **tomuhle** `updatedAt`?
+    ///
+    /// **Ne `private`**, protože totéž potřebuje předfiltr desky (#572): hromadný dotaz se ptá
+    /// jedině na PR, kterému hlavička chybí, nebo mu zestarala. Dvě kopie téhle jedné podmínky by
+    /// znamenaly dvě různá „už to máme“ nad jednou mapou.
+    func hasCurrentDetail(for pullRequest: PullRequestSummary) -> Bool {
         guard case .loaded(_, let updatedAt) = detailStates[pullRequest.id] else { return false }
         return updatedAt == pullRequest.updatedAt
     }

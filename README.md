@@ -102,6 +102,13 @@ s PR do kteréhokoli z nich. **Skutečná
 překážka merge se tím neobchází** — PR s blokujícím nálezem mergnutelný není, takže v `Předat
 agentovi` zůstane.
 
+**Slévatelnost aplikace zjišťuje sama, bez otevírání záložek** (#572). Do té doby se dotahovala až
+při výběru řádku, takže byl pruh `K merge` po startu prázdný, i když měl člověk vlastních PR
+k mergnutí několik. Ptá se na ni **tik pollingu, jedním dotazem na všechna vlastní otevřená PR**
+(změřeno: 23 PR ze 16 repozitářů = jedno volání, ~3 s); dokud se na pull requestu nic nepohne,
+neposílá se nic. Dokud slévatelnost známá není, leží PR v `Čeká na ostatní` — „nevím“ je na desce
+vždycky ta tichá strana.
+
 **Vpravo v hlavičce pruhu je akce nad celým pruhem**: `Otevřít první ⏎`, `Pustit review na 2 ⌘⇧R`,
 `Sestavit 2 zadání`, `Dopsat ⌘⇧D`. Potvrzení si nechává jedině spuštění review — je to jediná akce
 v aplikaci, která z jednoho kliknutí utratí víc než jednu session; otevřít záložky nestojí nic a jde
