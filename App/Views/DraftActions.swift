@@ -30,6 +30,11 @@ struct DraftActions {
     var target: (Finding) -> DraftTarget = { _ in .body(path: nil, line: nil) }
     var updateComment: (_ id: UUID, _ body: String) -> Void = { _, _ in }
     var removeComment: (UUID) -> Void = { _ in }
+    /// Dá se ke kotvě napsat návrh změny (#528)? Odpověď nese i **větu proč ne**.
+    ///
+    /// Výchozí hodnota je `nil`, tedy „na to se tady neptá nikdo“: bubliny v náhledech a v testech
+    /// skládání řádků se staví bez souboru, takže by nabídka neměla z čeho vzniknout.
+    var suggestion: ((DraftAnchor) -> SuggestionOffer)?
     var setBody: (String) -> Void = { _ in }
     var setVerdict: (ReviewDraft.Verdict?) -> Void = { _ in }
     var discard: () -> Void = {}
@@ -59,7 +64,12 @@ struct DraftActions {
             isAdopted: isAdopted,
             target: target,
             updateComment: updateComment,
-            removeComment: removeComment
+            removeComment: removeComment,
+            // Návrh změny (#528) se počítá **až když se na něj někdo zeptá**: skládá se z řádků
+            // rozsahu, tedy průchodem hunky. Ptá se jedině bublina komentáře, a těch je na
+            // souboru pár — kdyby se to počítalo dopředu pro celý soubor, byla by to práce,
+            // kterou nikdo nepřečte (tatáž úvaha jako u `bound(lazilyTo:)`).
+            suggestion: { Policy.suggestionOffer(for: $0, in: file) }
         )
     }
 
@@ -96,6 +106,11 @@ struct FileDraftActions {
     var target: (Finding) -> DraftTarget = { _ in .body(path: nil, line: nil) }
     var updateComment: (_ id: UUID, _ body: String) -> Void = { _, _ in }
     var removeComment: (UUID) -> Void = { _ in }
+    /// Dá se ke kotvě napsat návrh změny (#528)? Odpověď nese i **větu proč ne**.
+    ///
+    /// Výchozí hodnota je `nil`, tedy „na to se tady neptá nikdo“: bubliny v náhledech a v testech
+    /// skládání řádků se staví bez souboru, takže by nabídka neměla z čeho vzniknout.
+    var suggestion: ((DraftAnchor) -> SuggestionOffer)?
 
     /// Co jde na řádku udělat. `nil` = nic — meta řádek ani hlavička hunku obsah souboru
     /// nejsou, takže se k nim nedá vztáhnout ani poznámka.

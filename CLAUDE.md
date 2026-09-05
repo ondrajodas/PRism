@@ -256,8 +256,10 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    `setLabels`, `requestReviewers`, `createLabel`, `merge`, `markReadyForReview`. **Každá si
    sama ověří bránu z bodu 6**, proto všechny berou adresu, ze které se pozná repo.
 
-   **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**, **`deleteLabel`**
-   a **návrat do draftu** (`convertPullRequestToDraft`) — devátá metoda je jednosměrná schválně.
+   **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**, **`deleteLabel`**,
+   **návrat do draftu** (`convertPullRequestToDraft`) — devátá metoda je jednosměrná schválně —
+   a **aplikování návrhu změny** (`applySuggestedChanges`, #528): návrh je **text komentáře**
+   a odchází `submit`em ([rozbor](docs/architektura.md#návrh-změny-kódu-528)).
 
    **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests`). **Měnit se smí jedině na
    vlastním PR** (`Policy.metadataEditing`, u merge `Policy.mergeOffer`); na cizím se akce

@@ -123,6 +123,10 @@ extension Policy {
             if replies > 0 {
                 marks.append(Plural.czech(replies, one: "odpověď", few: "odpovědi", many: "odpovědí"))
             }
+            // Návrh změny (#528) se **označí v nadpisu**: je to jediná položka zadání, u které
+            // je hotové znění, takže agent nemá co vymýšlet — a to se z odstavce prózy pod tím
+            // pozná až po přečtení.
+            if suggestionAuthor(of: thread) != nil { marks.append("návrh změny") }
             return "vlákno (\(marks.joined(separator: ", ")))"
         case .comment(let comment):
             return "komentář v diskuzi — \(comment.author)"
@@ -155,7 +159,9 @@ extension Policy {
             return blocks
         case .thread(let thread):
             let comments = thread.comments.items
-            var blocks = [comments.first?.body ?? "(text vlákna nedorazil)"]
+            var blocks: [String] = []
+            if let task = agentPromptSuggestionTask(of: thread) { blocks.append(task) }
+            blocks.append(comments.first?.body ?? "(text vlákna nedorazil)")
             blocks += comments.dropFirst().map { "Odpověď od \($0.author): \($0.body)" }
             if thread.comments.isTruncated {
                 blocks.append("(z vlákna dorazila jen část odpovědí — zbytek je na GitHubu)")
@@ -168,6 +174,26 @@ extension Policy {
         case .review(let review):
             return review.body.isEmpty ? [] : [review.body]
         }
+    }
+
+    /// Věta, která z vlákna s návrhem změny dělá **úkol** (#528) — `Aplikuj návrh od odinuv na
+    /// ř. 41`.
+    ///
+    /// Stojí **nad** textem vlákna, ne místo něj: próza kolem návrhu bývá to, proč se návrh píše,
+    /// a agent ji má přečíst. `nil` = vlákno návrh nenese.
+    ///
+    /// Aplikuje ho **agent**, ne aplikace: `applySuggestedChanges` je zápis do repozitáře a ten
+    /// jde přes commit ve stromě v cache a `git push` se sheetem (#466), tedy toutéž cestou jako
+    /// všechno ostatní ze zadání.
+    static func agentPromptSuggestionTask(of thread: ReviewThread) -> String? {
+        guard let author = suggestionAuthor(of: thread) else { return nil }
+        let place = thread.anchorLine.map { " na ř. \($0)" } ?? ""
+        return "Aplikuj návrh od \(author)\(place) — nové znění je v bloku `suggestion` níž."
+    }
+
+    /// Kdo ve vlákně napsal návrh. První takový komentář, protože podle něj se úkol pojmenuje.
+    private static func suggestionAuthor(of thread: ReviewThread) -> String? {
+        thread.comments.items.first { hasSuggestion(in: $0.body) }?.author
     }
 
     /// Diff hunk k položce. `nil` = není z čeho ho vzít.
