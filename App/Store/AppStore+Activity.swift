@@ -51,6 +51,14 @@ extension AppStore {
             seedVisitBaseline(for: pullRequest)
             await loadConversation(for: summary)
             await notifyAboutForeignActivity(on: pullRequest)
+            // Agent na vlastním PR (#510) — **až za notifikací**, protože o cizím hlasu se má
+            // vědět, ať se agent pustí, nebo ne. Razítko si drží vlastní (`AgentFixLedger`), takže
+            // se ta dvě rozhodnutí nemůžou přebít: vypnuté notifikace agenta nezastaví a spuštěný
+            // agent notifikaci neumlčí.
+            //
+            // **Samo od sebe se tím nespustí nic**: brána `autoAgent` je ve výchozím stavu vypnutá
+            // a rozhoduje `Policy.agentFix`.
+            await startAgentFix(on: pullRequest)
         }
     }
 

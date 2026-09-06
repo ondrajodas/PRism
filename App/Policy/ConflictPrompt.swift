@@ -123,13 +123,17 @@ extension Policy {
         return "Slévám konflikty ve \(count) (kolo \(round) z \(limit))."
     }
 
-    /// Co session zrovna dělá — druhý řádek u hlášky, dokud běží.
+    /// Co **zapisující session** zrovna dělá — druhý řádek u hlášky, dokud běží.
     ///
     /// **Vlastní funkce, ne `askActivity`**, a je to o slovník: tahle session **píše**, takže
     /// potřebuje `Write` i `Edit` — a to jsou zrovna ty dva kroky, kvůli kterým se na ten řádek
     /// kouká. Slít je do funkce rozhovoru by znamenalo, že se do tabu `Zeptat se` dostane věta
     /// „píše do…“ o session, která psát nesmí.
-    static func conflictToolActivity(of tool: ToolAttempt, inside worktree: URL?) -> String {
+    ///
+    /// **Jedna funkce pro obě zapisující session** (#510; do té doby se jmenovala
+    /// `conflictToolActivity`). Slovník je týž, protože je táž **sada nástrojů** — a druhá kopie
+    /// by se s ní rozešla ve chvíli, kdy do sady přibude nebo z ní ubude nástroj.
+    static func writingToolActivity(of tool: ToolAttempt, inside worktree: URL?) -> String {
         let detail = tool.shortened(inside: worktree).flatMap { $0.isEmpty ? nil : $0 }
         switch tool.name {
         case "Write": return detail.map { "přepisuje \($0)" } ?? "přepisuje soubor…"

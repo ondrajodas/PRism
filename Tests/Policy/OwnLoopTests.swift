@@ -242,6 +242,8 @@ struct OwnLoopTests {
             ("push spadl", .failed(.leaseRejected)),
             ("zrovna se rebasuje", .rebasing),
             ("zrovna se pushuje", .pushing),
+            ("agent opravuje", .fixing(items: 3)),
+            ("výsledek agenta nepřijat", .fixRejected(detail: "Zapsala mimo strom.")),
         ]
         for (name, sync) in cases {
             let loop = try #require(
@@ -365,10 +367,18 @@ struct OwnLoopTests {
     /// o ničem“ (ne důkaz), zbytek drží commity v cache.
     @Test("Které stavy srovnání drží hlavu mimo GitHub")
     func syncStatesThatHoldTheHeadBack() {
-        let onGitHub: [BranchSyncState] = [.pushed(replayed: 2), .alreadyInSync]
+        // **Agent, který nic nezměnil, hlavu nedrží** (#510) — v cache po něm nic neleží,
+        // takže je to tentýž případ jako `alreadyInSync`.
+        let onGitHub: [BranchSyncState] = [
+            .pushed(replayed: 2), .alreadyInSync, .fixedNothing(detail: nil),
+        ]
         let held: [BranchSyncState] = [
             .rebasing,
             .resolving(round: 1, files: ["a.swift"]),
+            // Běžící agent i jeho **nepřijatý** výsledek: v obou případech může ve stromě `-sync`
+            // ležet změna, o které GitHub neví (#510).
+            .fixing(items: 3),
+            .fixRejected(detail: "Session zapsala mimo strom."),
             .rebased(Self.rebasedBranch),
             .pushing,
             .discarding,
@@ -413,6 +423,11 @@ struct OwnLoopTests {
             ("konflikt v cache", .conflicted(files: ["a.swift"]), status(), "rebase"),
             ("rozdělaný rebase", .unfinished(files: []), status(), "rebase"),
             ("session nerozřešila", .unresolved(files: ["a.swift"], detail: nil), status(), "rebase"),
+            ("agent opravuje", .fixing(items: 3), status(), "probíhá"),
+            // **`nepřijato`, ne `rebase`** (#510): po agentovi žádný rozdělaný rebase ve stromě
+            // neleží, takže by to slovo pojmenovalo něco, co se nestalo.
+            ("výsledek agenta nepřijat", .fixRejected(detail: "Zapsala mimo strom."), status(), "nepřijato"),
+            ("agent nic nezměnil", .fixedNothing(detail: nil), status(), "srovnaná"),
             ("push spadl", .failed(.leaseRejected), status(), "rebase"),
             ("srovnaná větev", nil, status(), "srovnaná"),
         ]
@@ -670,6 +685,11 @@ struct OwnLoopTests {
             (.pushing, .running),
             (.discarding, .running),
             (.rebased(rebased), .running),
+            // **Zapisující session agenta je běžící práce jako slévání konfliktů** (#510),
+            // nepřijatý výsledek je porucha jako `unresolved`: v obou případech se rozhoduje
+            // o tom, co leží ve stromě `-sync`.
+            (.fixing(items: 3), .running),
+            (.fixRejected(detail: "Session zapsala mimo strom."), .failed),
             (.conflicted(files: ["a.swift"]), .failed),
             (.unfinished(files: []), .failed),
             (.unresolved(files: ["a.swift"], detail: nil), .failed),
@@ -682,7 +702,9 @@ struct OwnLoopTests {
             #expect(loop.move == .openBranch, "\(sync)")
         }
         // Doběhlé srovnání o **dnešní** poloze větve nerozhoduje — tu řekne `BranchStatus`.
-        for sync in [BranchSyncState.pushed(replayed: 2), .alreadyInSync] {
+        // **Agent, který nic nezměnil, je tentýž případ** (#510): v cache po něm nic neleží,
+        // takže o poloze větve nerozhoduje ani on.
+        for sync in [BranchSyncState.pushed(replayed: 2), .alreadyInSync, .fixedNothing(detail: nil)] {
             let loop = try #require(walk(sync: sync))
             #expect(loop.state(of: .push) == .done, "\(sync)")
         }

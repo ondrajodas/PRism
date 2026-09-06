@@ -56,7 +56,11 @@ extension AppStore {
     /// Ptá se **tou samou funkcí**, která rozhoduje o textu (#377), tedy i s předvybráním: PR,
     /// na kterém je jediný komentář a napsal jsem ho já, nemá co předat — a zkratka, po které by
     /// se otevřel sheet s větou „aplikace nemá co předat“, je k nerozeznání od rozbité aplikace.
-    func hasAgentPromptItems(for pr: PRIdentifier) -> Bool {
+    /// - Parameter only: zúžení na vyjmenované položky (#510) — ptá se tím spouštěč agenta, jestli
+    ///   z došlé cizí aktivity vůbec něco zbude. Zbýt nemusí: prázdná obálka review se do materiálu
+    ///   nepočítá (`agentPromptItems`), takže by session dostala zadání bez jediné položky —
+    ///   a zaplatilo by se za běh, který nemá co opravit. `nil` = neomezovat, tedy otázka `⌘⇧P`.
+    func hasAgentPromptItems(for pr: PRIdentifier, only: Set<String>? = nil) -> Bool {
         let record = reviewRecord(for: pr)
         let conversation = conversation(for: pr)
         return Policy.agentPromptItems(
@@ -64,6 +68,7 @@ extension AppStore {
             dismissals: record?.dismissals ?? [:],
             conversation: conversation
         )
+        .filter { only?.contains($0.id) ?? true }
         .contains {
             Policy.agentPromptIncludes($0, options: agentPromptOptions, conversation: conversation)
         }

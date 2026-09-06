@@ -37,6 +37,13 @@ extension Policy {
         case conflicting(base: String)
         /// Právě běží rebase nebo push.
         case running
+        /// Právě pracuje **agent** na vlastním PR (#510). Vlastní případ vedle `running`, protože
+        /// je to jiná odpověď na „co se děje“: nespustilo to žádné kliknutí, takže věta „právě se
+        /// to srovnává“ by odkazovala na akci, kterou člověk neudělal.
+        case agentRunning
+        /// V kopii repa leží změny od agenta, které se **nepřijaly** (#510). Rebase nad nimi by je
+        /// zahodil potichu — tedy tatáž úvaha jako u `unfinishedRebase`.
+        case rejectedFix
         /// V cache leží rozdělaný rebase — napřed se musí zahodit.
         case unfinishedRebase
         /// V cache leží **přerovnaná větev, která ještě neodešla**. Druhý rebase nad ní by tu práci
@@ -60,6 +67,9 @@ extension Policy {
                 "Větev je v konfliktu s \(base) a slévat ho nemá kdo — aplikace nenašla `claude`. "
                     + "Otevři terminál."
             case .running: "Právě se to srovnává."
+            case .agentRunning: "Právě to opravuje agent podle cizího review."
+            case .rejectedFix:
+                "V kopii repa leží změny od agenta, které se nepřijaly. Napřed je zahoď."
             case .unfinishedRebase: "V kopii repa leží rozdělaný rebase. Napřed ho zahoď."
             case .rebasedNotPushed:
                 "V kopii repa leží přerovnaná větev, která ještě neodešla. Udělej force push, nebo ji zahoď."
@@ -150,7 +160,14 @@ extension Policy {
         }
 
         if let sync {
-            if sync.isBusy { obstacles.append(.running) }
+            // **Běžící agent (#510) je vlastní věta, ne `running`** — a vylučují se, protože je to
+            // jedna odpověď na jednu otázku „co se v tom stromě zrovna děje“.
+            if sync.isFixing {
+                obstacles.append(.agentRunning)
+            } else if sync.isBusy {
+                obstacles.append(.running)
+            }
+            if sync.hasRejectedFix { obstacles.append(.rejectedFix) }
             if sync.hasUnfinishedRebase { obstacles.append(.unfinishedRebase) }
             if sync.rebasedBranch != nil { obstacles.append(.rebasedNotPushed) }
         }
@@ -217,7 +234,9 @@ extension Policy {
             // O tomhle mluví hláška **pod** akcemi (`BranchSyncState.sentence`), a ta je
             // konkrétnější: zná jména kolidujících souborů, počet přehraných commitů a nese
             // tlačítka `Force push…` a `Zahodit`.
-            case .running, .unfinishedRebase, .rebasedNotPushed: false
+            // A od #510 stejně tak běžící agent a jeho nepřijatá práce: hláška pod akcemi o obojím
+            // mluví a nese k tomu `Zrušit`, resp. `Zahodit změny`.
+            case .running, .agentRunning, .rejectedFix, .unfinishedRebase, .rebasedNotPushed: false
             }
         }
     }

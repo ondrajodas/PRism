@@ -21,6 +21,13 @@ enum CheckoutError: Error, Equatable, Sendable {
     /// Commit se nepodařilo dostat do klonu ani po dotažení refu pull requestu. Znamená
     /// to, že PR mezitím zmizel nebo byl přepsán — ne že se má opakovat donekonečna.
     case commitNotFound(String)
+    /// Ve stromě `-sync` leží rozdělaná práce, o které má rozhodnout člověk (#510) — rozdělaný
+    /// rebase, nebo přerovnaná větev, která neodešla.
+    ///
+    /// **Vlastní případ, ne `gitFailed`**: nic neselhalo. Je to odpověď „tenhle strom je zabraný“,
+    /// a plyne z ní jiný další krok (zahodit, nebo dokončit v terminálu) než z chyby `gitu`.
+    /// Přibylo to s agentem spuštěným bez kliknutí: **automat nesmí přepsat rozdělanou práci.**
+    case worktreeBusy
     case gitFailed(exitCode: Int32, message: String)
 }
 
@@ -45,6 +52,8 @@ extension CheckoutError {
             "Cache aplikace nejde připravit.\n\n\(detail)"
         case .commitNotFound(let sha):
             "Commit \(sha) se nepodařilo dotáhnout — PR mezitím zmizel nebo byl přepsán."
+        case .worktreeBusy:
+            "V kopii repa leží rozdělaná práce — napřed ji zahoď, nebo dokonči v terminálu."
         case .gitFailed(let exitCode, let message):
             "git skončil s kódem \(exitCode).\n\n\(message)"
         }

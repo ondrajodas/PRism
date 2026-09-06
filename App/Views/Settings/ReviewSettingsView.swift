@@ -46,6 +46,8 @@ struct ReviewSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            agent
+
             Section {
                 StringListEditor(
                     items: $settings.draft.global.skills,
@@ -123,4 +125,24 @@ struct ReviewSettingsView: View {
         .formStyle(.grouped)
     }
 
+    /// Agent na vlastním PR (#510) — **brána, ne předvolba**.
+    ///
+    /// Leží hned pod režimem review, protože je to tatáž otázka („co aplikace pustí, aniž bych na
+    /// to klikl“), jen o druhé session. Vlastní stránka by znamenala jeden knoflík na stránku
+    /// a schovala by ho zrovna vedle toho, s čím se má číst.
+    ///
+    /// **Text je tu důležitější než přepínač**, jako u odesílání: je to jediné místo, kde se
+    /// zapíná session, která **mění soubory** — a musí být jasné, kde ta hranice končí (v kopii
+    /// repa; push zůstává na potvrzení).
+    private var agent: some View {
+        Section {
+            Toggle("Pustit agenta po cizím review", isOn: $settings.draft.global.autoAgent)
+        } header: {
+            Text("Agent na vlastním PR")
+        } footer: {
+            Text("Výchozí stav je **vypnuto**. Když se zapne, pustí se na **vlastním** PR po cizí aktivitě (review Copilota, komentář kolegy) session, která upraví soubory v kopii repa — nikdy v tvém klonu, nikdy na cizím PR a nikdy po tvém vlastním komentáři. Commit dělá aplikace a **do remote se nesáhne**: force push zůstává na potvrzení, jako doteď. Běhy čerpají tentýž denní limit jako automatické review. Repo si to může přebít.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }

@@ -568,4 +568,83 @@ struct BranchSyncOfferTests {
         #expect(commit.shortSha == "1111222")
     }
 
+    // MARK: - Agent na vlastním PR (#510)
+
+    /// **Věta o výsledku nesmí mluvit o rebase**, když žádný neproběhl — a rozhoduje o tom
+    /// **původ**, ne počty. Je to tatáž třída chyby, jakou Copilot v tomhle repu nachází: text,
+    /// který tvrdí víc, než data unesou.
+    @Test("Commit agenta má vlastní větu, ne tu o rebase")
+    func theAgentResultDoesNotClaimARebase() {
+        let branch = RebasedBranch(
+            worktree: URL(filePath: "/cache/PRism/x-sync"),
+            headSha: "cccc",
+            rebasedFrom: "aaaa",
+            arriving: [RebasedCommit(sha: "cccc", title: "fix: address review feedback (#510)")],
+            replayed: 1,
+            origin: .agent,
+            fix: AgentFixAnswer(files: ["App/A.swift", "Tests/ATests.swift"], summary: "opraveno")
+        )
+
+        let sentence = BranchSyncState.rebased(branch).sentence
+
+        #expect(sentence.contains("Agent upravil 2 soubory"))
+        #expect(!sentence.lowercased().contains("rebase"))
+        // A po rebase zůstává věta z #466 beze změny.
+        #expect(BranchSyncState.rebased(Self.rebased(replayed: 2)).sentence.hasPrefix("Rebase hotový"))
+    }
+
+    /// **Práce agenta se pozná i u úspěchu**, ne jen u nepřijatého výsledku — na tom stojí slovo na
+    /// tlačítku (`Zahodit změny` místo `Zahodit rebase`). Vyšlo to z renderu sondy, kde pod větou
+    /// „Agent upravil 2 soubory“ stálo `Zahodit rebase`.
+    @Test("Práce agenta se pozná u přijatého i nepřijatého výsledku")
+    func recognisesTheAgentsWork() {
+        var branch = Self.rebased(replayed: 1)
+        branch.origin = .agent
+
+        #expect(BranchSyncState.rebased(branch).isAgentWork)
+        #expect(BranchSyncState.fixRejected(detail: "psal mimo strom").isAgentWork)
+        // Po rebase ne — tam v cache leží přehrané commity.
+        #expect(!BranchSyncState.rebased(Self.rebased(replayed: 1)).isAgentWork)
+        // A `nic se nezměnilo` taky ne: v cache po něm nic neleží, takže není co zahazovat.
+        #expect(!BranchSyncState.fixedNothing(detail: nil).isAgentWork)
+        #expect(!BranchSyncState.fixedNothing(detail: nil).hasDiscardableWork)
+        #expect(!BranchSyncState.fixedNothing(detail: nil).offersTerminal)
+    }
+
+    /// Běžící agent je **vlastní odpověď na „co se děje“**, ne `running`: nespustilo to kliknutí.
+    @Test("Běžící agent má vlastní překážku a vlastní větu")
+    func theRunningAgentHasItsOwnObstacle() {
+        let offer = Policy.branchSyncOffer(
+            editing: .allowed,
+            plan: nil,
+            detail: detail(),
+            status: nil,
+            sync: .fixing(items: 2)
+        )
+
+        #expect(offer.obstacles.contains(.agentRunning))
+        #expect(!offer.obstacles.contains(.running))
+        #expect(Policy.SyncObstacle.agentRunning.sentence.contains("agent"))
+        // A nepřijatá práce agenta brání rebasu ze stejného důvodu jako rozdělaný rebase.
+        #expect(
+            Policy.branchSyncOffer(
+                editing: .allowed,
+                plan: nil,
+                detail: detail(),
+                status: nil,
+                sync: .fixRejected(detail: "psal mimo strom")
+            )
+            .obstacles.contains(.rejectedFix)
+        )
+    }
+
+    private static func rebased(replayed: Int) -> RebasedBranch {
+        RebasedBranch(
+            worktree: URL(filePath: "/cache/PRism/x-sync"),
+            headSha: "cccc",
+            rebasedFrom: "aaaa",
+            arriving: (0..<replayed).map { RebasedCommit(sha: "sha\($0)", title: "krok \($0)") },
+            replayed: replayed
+        )
+    }
 }

@@ -104,6 +104,18 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// repozitář nepustí, se pozná v potvrzení, tedy dřív, než se cokoli mergne
     /// (`Policy.mergeMethodWarning`).
     var mergeMethod: MergeMethod
+    /// Smí se na **vlastním** PR pustit agent sám, po cizí aktivitě (#510)? Ve výchozím stavu
+    /// **ne**.
+    ///
+    /// **Je to brána, ne pohodlí**, a je to tatáž třída jako `allowsPublishing`: od #510 startuje
+    /// zapisující session (#467) poprvé **bez kliknutí**, takže vlastnost „samo nic nezačne“ drží
+    /// jedině **výchozí vypnuto**. Dokud si o to někdo výslovně neřekne, nespustí se nic — a ani
+    /// potom nic neodejde: commit zůstane v kopii repa a do remote se sáhne jedině přes potvrzení
+    /// force pushe (#466).
+    ///
+    /// **Globálně i per repo**, ze stejného důvodu jako odesílání: je to vlastnost **repa** (v tomhle
+    /// repu chci po Copilotovi opravit samo, ve firemním ne), ne toho, kdo se dívá.
+    var autoAgent: Bool
     /// Jazyk, do kterého se nálezy překládají, než se ukážou. **Ne** jazyk, ve kterém je
     /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
     /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
@@ -208,6 +220,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         mode: ReviewMode,
         allowsPublishing: Bool = false,
         mergeMethod: MergeMethod = .squash,
+        autoAgent: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
         diffLayout: DiffLayout = .unified,
         appearance: AppearanceMode = .system,
@@ -233,6 +246,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
         self.mergeMethod = mergeMethod
+        self.autoAgent = autoAgent
         self.findingsLanguage = findingsLanguage
         self.diffLayout = diffLayout
         self.appearance = appearance
@@ -312,6 +326,10 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // tvrdit, že se s ní aplikace chová jako dřív — a v potvrzení je pořád vidět, co odejde.
         mergeMethod = (try? container.decode(MergeMethod.self, forKey: .mergeMethod))
             ?? standard.mergeMethod
+        // **Rozbitá hodnota se srazí na výchozí, a ta je `false`** (#510) — tatáž přísnost jako
+        // u odesílání a ze stejného důvodu: překlep v souboru nesmí pustit session, která píše do
+        // souborů, a to bez jediného kliknutí.
+        autoAgent = (try? container.decode(Bool.self, forKey: .autoAgent)) ?? standard.autoAgent
         findingsLanguage = (try? container.decode(FindingsLanguage.self, forKey: .findingsLanguage))
             ?? standard.findingsLanguage
         // Tolerantně jako jazyk nálezů, ne přísně jako režim nebo odesílání: nejhorší
@@ -389,6 +407,10 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// by merge skončil chybou z API. Když se povolení na GitHubu změní **až potom**, uložená
     /// hodnota v souboru zůstane — a pozná se to v potvrzení, ne z chyby.
     var mergeMethod: MergeMethod?
+    /// `nil` = ber globální (#510). Vyplněná hodnota znamená „řekl jsem si o tohle“ — a `false`
+    /// u repa se proto **nesmaže** jako „shodné s globálním“, přesně jako u odesílání: repo, ve
+    /// kterém agenta spouštět nechci, si to má podržet i po přepnutí globálního defaultu.
+    var autoAgent: Bool?
     /// `nil` = ber globální. U firemního repa s mezinárodním týmem dává smysl angličtina,
     /// i když je zbytek fronty český.
     var findingsLanguage: FindingsLanguage?
@@ -423,6 +445,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         mode: ReviewMode? = nil,
         allowsPublishing: Bool? = nil,
         mergeMethod: MergeMethod? = nil,
+        autoAgent: Bool? = nil,
         findingsLanguage: FindingsLanguage? = nil,
         skills: [String]? = nil,
         blockingCategories: [String]? = nil,
@@ -433,6 +456,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         self.mode = mode
         self.allowsPublishing = allowsPublishing
         self.mergeMethod = mergeMethod
+        self.autoAgent = autoAgent
         self.findingsLanguage = findingsLanguage
         self.skills = skills
         self.blockingCategories = blockingCategories
@@ -474,6 +498,15 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
             mergeMethod = (try? container.decode(MergeMethod.self, forKey: .mergeMethod)) ?? .squash
         } else {
             mergeMethod = nil
+        }
+        // Jako u odesílání (#510): chybějící klíč je „ber globální“, ale **rozbitá hodnota se srazí
+        // na `false`**. Vzít u ní globální hodnotu by znamenalo, že překlep v repu, ve kterém se
+        // agent někdo pokoušel zakázat, ho při globálním povolení nechá zapnutého — a spouští se
+        // bez kliknutí.
+        if container.contains(.autoAgent) {
+            autoAgent = (try? container.decode(Bool.self, forKey: .autoAgent)) ?? false
+        } else {
+            autoAgent = nil
         }
         // Na rozdíl od režimu se rozbitá hodnota bere jako „nic jsem neřekl“: špatný jazyk
         // znamená prózu v jiném jazyce, ne spuštěné review, o které nikdo nežádal.
@@ -583,6 +616,7 @@ struct Configuration: Codable, Equatable, Sendable {
             mode: overrides?.mode ?? global.mode,
             allowsPublishing: overrides?.allowsPublishing ?? global.allowsPublishing,
             mergeMethod: overrides?.mergeMethod ?? global.mergeMethod,
+            autoAgent: overrides?.autoAgent ?? global.autoAgent,
             findingsLanguage: overrides?.findingsLanguage ?? global.findingsLanguage,
             skills: Self.nonBlank(overrides?.skills ?? global.skills),
             blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories)),
@@ -654,6 +688,9 @@ struct ResolvedConfig: Equatable, Sendable {
     /// vypisuje a dovolí přebít pro jeden merge, a jestli ji repozitář vůbec pustí, rozhoduje
     /// `Policy.initialMergeMethod` z příznaků přečtených z GitHubu.
     let mergeMethod: MergeMethod
+    /// Smí se na vlastním PR v tomhle repu pustit agent sám (#510)? **Výchozí `false`** — je to
+    /// brána, tedy tatáž třída jako `allowsPublishing`, ne předvolba.
+    let autoAgent: Bool
     let findingsLanguage: FindingsLanguage
     let skills: [String]
     let blockingCategories: Set<String>

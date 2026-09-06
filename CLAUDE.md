@@ -357,7 +357,7 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    | reviewer a **kontrola nálezů z minula** (#150), která bere **tytéž konstanty** | `Read,Grep,Glob,Bash(git:*),ReportFindings,Skill` |
    | **dotažení textu issue** (#345) — `ToolSearch` být **musí**, bez něj se MCP nástroj nedá zavolat | `ToolSearch` + **jeden čtecí MCP nástroj** (jméno v konfiguraci, `issueTextTool`) |
    | **rozhovor nad PR** (#452, tab `Zeptat se`) — **užší než reviewerova**: bez `ReportFindings` (nemá co hlásit) a bez `Skill` | `Read,Grep,Glob,Bash(git:*)` |
-   | **slévání konfliktů** (#467) — **jediná, která smí měnit soubory**, a **jediná bez `Bash`e** | `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` |
+   | **slévání konfliktů** (#467) **a agent na vlastním PR** (#510) — **jediné, které smí měnit soubory**, a **jediné bez `Bash`e**; sada je jedna, sdílená doslova | `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` |
    | překlad nálezů | prázdná |
 
    `--disallowedTools` je u **všech** tatáž konstanta `ClaudeCommand.disallowedTools`, takže `gh`
@@ -381,13 +381,19 @@ odkaz a čte se **dřív**, než se podmínka obchází.
      pak **nepřijme**. I odmítnutý pokus: otázka není „povedlo se to“, ale „mířila session mimo
      strom“.
 
+   **Od #510 smí zapisující session startovat i bez kliknutí — a jedině nad stromem `-sync`
+   *vlastního* PR, jedině po *cizí* aktivitě (`foreignActivity`, #335) a jedině s branou
+   `autoAgent`, která je ve výchozím stavu vypnutá**; sada se tím nemění ani o položku a commituje
+   dál aplikace ([rozbor](docs/architektura.md#agent-na-vlastním-pr--pátá-session-a-první-bez-kliknutí-510)).
+
    `SingleWayOutTests` k tomu hlídá, že `ConflictResolving` znají **tři soubory**, volá ho
-   **jedno místo** a rozsah zápisu skládá jedině `ConflictCommand`. **Sady ostatních session se
-   nezměnily ani o položku**
-   ([rozbor](docs/architektura.md#slévání-konfliktů--čtvrtá-session-467)).
+   **jedno místo** a rozsah zápisu skládá jedině `ConflictCommand` — a od #510 totéž o `AgentFixing`
+   a o tom, že bránu čte jen spouštěč a nastavení. **Sady ostatních session se nezměnily ani
+   o položku** ([rozbor](docs/architektura.md#slévání-konfliktů--čtvrtá-session-467)).
 
    ```bash
-   # Výčet k posouzení: pět míst, z toho čtyři sady a jedna prázdná (překlad nálezů).
+   # Výčet k posouzení: šest míst — čtyři sady, jedna prázdná (překlad nálezů) a jedna delegace
+   # (#510: agent bere sadu i argumenty od slévání konfliktů).
    grep -rn 'allowedTools' App/Review | grep -vE ':[0-9]+: *///?'
    # Pozor: grep na `Write(` **vyjde prázdný** — rozsah se skládá interpolací, takže ten řetězec
    # v kódu nestojí. Kdo chce ověřit, že je scoped, musí se zeptat funkce (`SessionToolSetsTests`).
@@ -395,6 +401,8 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    grep -rn 'ConflictResolving' App | grep -vE ':[0-9]+: *///?' |
        cut -d: -f1 | sort -u                                        # tři soubory
    grep -rn 'writingTools' App | grep -vE ':[0-9]+: *///?'          # jen ConflictCommand
+   grep -rn 'AgentFixing' App | grep -vE ':[0-9]+: *///?' |
+       cut -d: -f1 | sort -u                                        # tři soubory (#510)
    ```
 
    **Session z `▶` v zásuvce pod tuhle podmínku nespadá, a je to hranice, ne výjimka** (#460).
@@ -466,8 +474,8 @@ API**, **`BranchPushing`** (#466) jediný, který **zapisuje do remote**, a **`T
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, metadata a syrový diff (celý i mezi dvěma commity), login účtu, labely a vyžádané reviewery, hlavy víc PR jedním dotazem, slévatelnost větve — a od #572 **hlavičku i slévatelnost vlastních PR jedním dotazem**, aby deska uměla `K merge` bez otevřené záložky ([měření](docs/testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572)) —, **repozitáře organizace** (#532 — nejdražší čtení v aplikaci), **otevřené PR jednoho repa** (#533) a **co repozitář o mergi říká** (#556 — chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
-| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i jeho zahození, **zápis slitých souborů do indexu a dokončení rebase** (commituje aplikace, ne session), **je předchozí hlava předkem té dnešní** (#517) a **cesty, které PR mění** (#518 — podklad routingu). **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula — a k tomu čtyři session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452) a **slévání konfliktů** (#467) — **jediná, která smí měnit soubory** | `claude` CLI |
+| `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i jeho zahození, **zápis slitých souborů do indexu a dokončení rebase** i **commit práce agenta** (#510) — commituje aplikace, ne session, **je předchozí hlava předkem té dnešní** (#517) a **cesty, které PR mění** (#518 — podklad routingu). **Pořád bez zápisu do remote** | `git` |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula — a k tomu pět session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467) a **agent na vlastním PR** (#510) — poslední dvě **smí měnit soubory**, ta poslední se pouští **bez kliknutí** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu, obsah dashboardu, geometrie, na kterou se ptá kresba, a **desítky dalších**. Katalog je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |

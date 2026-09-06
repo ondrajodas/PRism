@@ -174,9 +174,15 @@ extension Policy {
             // U `.failed` se zaokrouhluje k opatrnější odpovědi — o výsledku pushe se z chyby
             // nedá říct nic jistého.
             return false
-        case .pushed, .alreadyInSync:
+        // **Nepřijatá práce agenta se počítá jako `unresolved`** (#510): ve stromě v cache po ní
+        // může ležet změna, o které GitHub neví.
+        case .fixRejected:
+            return false
+        // **Agent, který nic nezměnil, hlavou nehnul** — v cache po něm nic neleží, takže se
+        // odpovídá stejně jako u `alreadyInSync`.
+        case .pushed, .alreadyInSync, .fixedNothing:
             return true
-        case .rebasing, .resolving, .pushing, .discarding, .rebased:
+        case .rebasing, .resolving, .fixing, .pushing, .discarding, .rebased:
             // Odchycené výš; vypsané kvůli vyčerpávajícímu `switch`i, který ohlídá nový případ
             // při překladu.
             return false
@@ -493,8 +499,21 @@ extension Policy {
                 sentence: sync.sentence,
                 move: .openBranch
             )
-        case .pushed, .alreadyInSync, .rebasing, .resolving, .pushing, .discarding, .rebased:
+        // **Vlastní slovo, ne `rebase`** (#510): po agentovi žádný rozdělaný rebase v tom stromě
+        // neleží, takže by kapsle pojmenovala něco, co se nestalo — tatáž třída chyby jako věta
+        // o rebase nad jeho commitem.
+        case .fixRejected:
+            return .stopped(
+                state: .failed,
+                detail: "nepřijato",
+                reason: "nepřijato",
+                sentence: sync.sentence,
+                move: .openBranch
+            )
+        case .pushed, .alreadyInSync, .fixedNothing, .rebasing, .resolving, .fixing, .pushing,
+            .discarding, .rebased:
             // Doběhlé srovnání o dnešní poloze větve nerozhoduje — to řekne `BranchStatus` níž.
+            // Totéž platí o agentovi, který nic nezměnil (#510): v cache po něm nic neleží.
             // Běžící a přerovnané stavy odchytily větve výš; vypsané jsou kvůli vyčerpávajícímu
             // `switch`i, který ohlídá nový případ při překladu.
             return nil

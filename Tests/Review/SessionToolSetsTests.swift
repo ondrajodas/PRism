@@ -67,6 +67,28 @@ struct SessionToolSetsTests {
         )
     }
 
+    /// **5. Agent na vlastním PR** (#510) — **druhá session, která smí psát**, a **první, kterou
+    /// aplikace pouští bez kliknutí**.
+    ///
+    /// **Sada se tím nemění ani o položku, a tohle je to tvrzení.** Je to doslova týž řetězec jako
+    /// u slévání konfliktů, protože otázka „kam smí zapisující session psát“ má mít **jednu**
+    /// odpověď; nové na #510 je **spouštěč**, ne povolení. Kdyby si agent skládal sadu sám, byl by
+    /// v aplikaci druhý `Write(//…)` — a ten by se s prvním rozešel potichu.
+    ///
+    /// Tvrdí se **oba směry**: literál (aby se rozšíření sady muselo napsat sem) i rovnost se
+    /// čtvrtou sadou (aby se ty dvě nedaly rozejít).
+    @Test("Agent na vlastním PR má tutéž sadu jako slévání konfliktů")
+    func agentFixToolSet() {
+        #expect(
+            AgentFixCommand.allowedTools(in: worktree)
+                == "Read,Grep,Glob,Write(///cache/PRism/repos/o-r/42-sync/**),"
+                    + "Edit(///cache/PRism/repos/o-r/42-sync/**)"
+        )
+        #expect(AgentFixCommand.allowedTools(in: worktree) == ConflictCommand.allowedTools(in: worktree))
+        // **`Bash` v ní není vůbec**, tedy ani `Bash(git:*)`: commituje aplikace, ne session.
+        #expect(!AgentFixCommand.allowedTools(in: worktree).contains("Bash"))
+    }
+
     // MARK: - Co platí pro všechny čtyři
 
     /// **Jedna sada zákazů, ne čtyři.** Druhá by byla druhé místo, kde se dá tvrdá podmínka č. 2
@@ -150,6 +172,9 @@ struct SessionToolSetsTests {
             IntentTextCommand.arguments(prompt: "x", tool: "mcp__linear__get_issue"),
             AskCommand.arguments(prompt: "x", resuming: nil),
             ConflictCommand.arguments(prompt: "x", worktree: worktree),
+            // Pátá session (#510). Bere argumenty od té čtvrté, ale ve výčtu být **musí**: kdyby
+            // si je někdy začala skládat sama, mají o tom tvrzení „platí pro všechny“ vědět.
+            AgentFixCommand.arguments(prompt: "x", worktree: worktree),
         ]
     }
 
