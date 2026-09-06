@@ -714,6 +714,12 @@ code {
 /* Kolik výskytů má soubor (#152). Akcent, ne `--find`: `--find` je **nález**, a odznak nálezu
    visí v téže hlavičce o dva prvky vedle. Kapsle je vidět jen s otevřeným polem hledání. */
 .pill.hits  { color: var(--accent); background: var(--accent-weak); }
+/* „Nevím“ v řádku vlastního PR (#509, sekce 52) — `Push zjišťuju`, `CI zjišťuju`. **Ne
+   `.pill.idle`**: ta je `--ink-2`, tedy plnohodnotné tvrzení o tom, co se stalo (`neběželo`),
+   kdežto tohle je to nejtišší v řádku a musí to být `--ink-3` — doslova jako `.ph.idle` na dráze
+   o kus výš. Pilulka v řádku a kapsle v hlavičce mluví o **téže stanici**, takže si berou tutéž
+   škálu; v aplikaci to drží `LanePhaseChip.tint(of:)`, jedno místo pro obojí. */
+.pill.quiet { color: var(--ink-3); background: var(--panel-3); }
 
 /* **`.spectrum` (spektrum reviewerů, #172) z dokumentu odešlo celé u #502.** Kreslily ho jedině
    řádky fronty a nahradil ho tam mini pás mapy (`.qmap` v CSS sekce 42) — dvě barevné škály
@@ -1978,6 +1984,37 @@ footer.end {
    `.rail` je chrom okna a kreslí se ve všech sekcích. */
 .s50-old .ri .badge { top: 1px; right: 0; }
 .s50-old .ri.on::before { content: none; }
+
+/* Sekce 52 — dráha smyčky **zmenšená do řádku seznamu** (#509). Jediný nový komponent: pruh
+   pěti teček. Existující třídy na něj nestačily ani jedna:
+   - `.ph` (kapsle stanice na dráze) nese **text**, a v řádku fronty na pět textů místo není:
+     snědly by víc než titulek, tedy než to jediné, podle čeho se PR v seznamu pozná. Z kapsle
+     proto v řádku zbude jedině její **barva** a slovo o té jedné stanici, na které se to
+     zastavilo, řekne `.pill` vedle.
+   - `.qmap` je pás **souborů**, tedy poměry šířky nad proměnným počtem prvků; tady je to pevných
+     pět teček v pořadí, ve kterém se kolo jde — a to pořadí je celý smysl kresby.
+   - `.nl-step` kreslí **čísla** kroků nálezu ve sloupci, ne stav.
+   Barvy se berou **z téže škály jako `.ph`**, ne z `.pill.*`: tečka a kapsle mluví o témž stavu
+   téže stanice, takže druhá škála by znamenala, že `hotovo` v seznamu časem zezelená jinak než
+   `hotovo` v hlavičce. V aplikaci to drží `LanePhaseChip.dotFill(of:)` — jedno místo, kde se
+   `PhaseState` překládá na barvu, a je to tvrzení testu, ne komentáře.
+   Šířka se **nezapisuje číslem**: pět teček po osmi bodech a čtyři mezery po třech dají 52, a kdyby
+   stanic ubylo nebo přibylo (a jednou už ubyly), zapsané číslo by zůstalo stát. `border-box`
+   schválně (dokument jinde `box-sizing` nepřepisuje): kolečko má být osm bodů **celé**, ne osm
+   plus obtah — jinak by pruh vyšel na 57 bodů místo 52. */
+.s52-dots { display: flex; align-items: center; gap: 3px; flex: none; }
+/* Dutá tečka je **výchozí podoba**, a je to schválně: stanice, o které se nic neví (`zjišťuju`)
+   nebo na kterou se nedošlo, je ten častější případ. Plná neutrální tečka by se mezi zelenými
+   četla jako další odpověď — a „nevím“ odpověď není. Obtah je tam kvůli ní: bez něj by dutá
+   tečka na tichém podkladu řádku zmizela a z pěti stanic by jich bylo vidět míň. */
+.s52-dots i {
+  box-sizing: border-box; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--panel-3); border: 1px solid var(--line);
+}
+.s52-dots i.done { background: var(--ok);    border-color: var(--ok); }
+.s52-dots i.run  { background: var(--find);  border-color: var(--find); }
+.s52-dots i.fail { background: var(--crit);  border-color: var(--crit); }
+.s52-dots i.stop { background: var(--stale); border-color: var(--stale); }
 
 /* Sekce 53 — odložit PR (#512). Dva nové komponenty: nabídka nad řádkem fronty a tichý blok
    `Odložené` — ten stojí na dvou místech (pod seznamem a v rámečku `.block` v pravém sloupci
@@ -15469,7 +15506,7 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
   <section class="section" id="s52">
     <div class="section-head">
       <div class="eyebrow">52 — Dráha smyčky vlastního PR</div>
-      <h2>Pět stanic v hlavičce: kde v tom kole zrovna jsem</h2>
+      <h2>Pět stanic v hlavičce, pět teček v řádku: kde v tom kole zrovna jsem</h2>
       <p class="muted">
         <strong>Dneska</strong> je smyčka na vlastním PR rozsekaná po místech: nálezy v panelu,
         zadání v segmentu <em>Zadání</em>, push a merge v sekci <em>Větev</em>, Copilot
@@ -15511,6 +15548,27 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
         <code>zjišťuju</code>. Je to <b>slovo, ne počet</b>: šedá kapsle nemá pod sebou větu,
         o kterou by se opřela, a <code>o 21 vzadu</code> vedle cizí věty se čte jako tvrzení
         o tom, co je zrovna na tahu.
+      </p>
+      <p class="muted">
+        <strong>A tatáž dráha se vejde do řádku seznamu</strong> — na <b>pět teček a jedno slovo</b>.
+        Na pět kapslí s textem tam místo není: snědly by víc než titulek, tedy než to jediné, podle
+        čeho se pull request v seznamu pozná. Z kapsle proto zbude jedině její <b>barva</b> a slovo
+        o té stanici, na které se to zastavilo, řekne pilulka vedle — <code>Zadání 6 k předání</code>,
+        <code>Push o 4 vzadu</code>, <code>CI 1 neprošel</code>, <code>hotovo</code>. <b>Hranu řádku
+        bere aktivní stanice</b>, ne stav mého review: vlastní PR s čistým review a spadlým CI má
+        červenou hranu, ne zelenou.
+      </p>
+      <p class="muted">
+        <strong>Pilulka <code>6 k předání</code> tím z řádku mizí</strong> (sekce 21), a je to
+        postup, ne zrušení: <em>Zadání</em> je jedna z těch pěti stanic, takže se nepředaná práce
+        dozvím pořád — jenom teď vedle toho vidím i to, že mezitím spadlo CI. Dvě pilulky vedle sebe
+        by nešly, obě mluví o témže PR a jedna z nich by musela vyhrát bez důvodu.
+      </p>
+      <p class="muted">
+        <strong>Řádek je nakreslený tady, ne na stránce fronty</strong>, protože je to <b>totéž
+        rozhodnutí menší</b>: co v řádku svítí, se odvozuje z dráhy nad ním a rozejít se to nesmí.
+        V okně tomu odpovídá, že si řádek vlastní výčet stanic <b>neskládá</b> — dostane dráhu
+        a vytáhne si z ní tečky, slovo a odstín.
       </p>
     </div>
 
@@ -15630,6 +15688,124 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
               <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
             </div>
             <div class="last">Všech pět stanic je hotových — merge zůstává v sekci Větev.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Návrh · tatáž smyčka v řádku seznamu — pět teček, jedno slovo a hrana v barvě stanice</div>
+      <div class="frame flat">
+        <div class="qrow">
+          <div class="stripe" style="background: var(--find);"></div>
+          <div class="mid">
+            <div class="t1">
+              <span class="pr-ico" style="color: var(--mint);">↑</span>
+              <span class="title">feat(diff): find in the diff with ⌘F</span>
+            </div>
+            <div class="t2">
+              <span class="slug">ondrajodas/PRism #499</span><span>·</span>
+              <span style="color: var(--accent-2);">2 nové komentáře od minule</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="qmap">
+              <i class="seg crit" style="flex: 4.64;"></i>
+              <i class="seg find" style="flex: 5.46;"></i>
+              <i class="seg new" style="flex: 4.46;"></i>
+              <i class="seg viewed" style="flex: 6.02;"></i>
+              <i class="seg" style="flex: 11.45;"></i>
+            </span>
+            <span class="s52-dots"><i class="done"></i><i class="run"></i><i class="done"></i><i class="done"></i><i class="done"></i></span>
+            <span class="pill find">Zadání 6 k předání</span>
+            <span class="mini pri">Prompt →</span>
+          </div>
+        </div>
+        <div class="qrow">
+          <div class="stripe" style="background: var(--find);"></div>
+          <div class="mid">
+            <div class="t1">
+              <span class="pr-ico" style="color: var(--mint);">↑</span>
+              <span class="title">[AJDA-3148] Add per-table and per-phase timing logs to input-mapping table strategies</span>
+            </div>
+            <div class="t2">
+              <span class="slug">keboola/platform-libraries #566</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="s52-dots"><i class="done"></i><i class="done"></i><i class="run"></i><i class="done"></i><i class="done"></i></span>
+            <span class="pill find">Push o 4 vzadu</span>
+            <span class="mini">Prompt →</span>
+          </div>
+        </div>
+        <div class="qrow">
+          <div class="stripe" style="background: var(--crit);"></div>
+          <div class="mid">
+            <div class="t1">
+              <span class="pr-ico" style="color: var(--mint);">↑</span>
+              <span class="title">fix(sheets): drop the ideal width sheets never got</span>
+            </div>
+            <div class="t2">
+              <span class="slug">ondrajodas/PRism #567</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="s52-dots"><i class="done"></i><i class="done"></i><i class="done"></i><i class="fail"></i><i class="done"></i></span>
+            <span class="pill crit">CI 1 neprošel</span>
+            <span class="mini">Prompt →</span>
+          </div>
+        </div>
+        <div class="qrow">
+          <div class="stripe" style="background: var(--ok);"></div>
+          <div class="mid">
+            <div class="t1">
+              <span class="pr-ico" style="color: var(--mint);">↑</span>
+              <span class="title">feat(rail): the badge sits in the icon corner and a stripe marks the active section</span>
+            </div>
+            <div class="t2">
+              <span class="slug">ondrajodas/PRism #566</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="s52-dots"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i></span>
+            <span class="pill ok">hotovo</span>
+            <span class="mini">Prompt →</span>
+          </div>
+        </div>
+        <div class="qrow">
+          <div class="stripe" style="background: var(--ink-3);"></div>
+          <div class="mid">
+            <div class="t1">
+              <span class="pr-ico" style="color: var(--mint);">↑</span>
+              <span class="title">[AJDA-1215] Update specific tables/configurations</span>
+            </div>
+            <div class="t2">
+              <span class="slug">keboola/app-project-restore #91</span><span>·</span>
+              <span>záložka ještě nebyla otevřená</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="s52-dots"><i class="done"></i><i class="done"></i><i></i><i></i><i></i></span>
+            <span class="pill quiet">Push zjišťuju</span>
+            <span class="mini">Prompt →</span>
+          </div>
+        </div>
+        <div class="qrow">
+          <div class="stripe" style="background: var(--stale);"></div>
+          <div class="mid">
+            <div class="t1">
+              <span class="pr-ico" style="color: var(--mint);">↑</span>
+              <span class="title">chore: conflict probe for 467</span>
+            </div>
+            <div class="t2">
+              <span class="slug">ondrajodas/prism-review-sandbox #14</span><span>·</span>
+              <span>zavřený, ale rozdělané review na něm zbylo</span>
+            </div>
+          </div>
+          <div class="right">
+            <span class="s52-dots"><i class="stop"></i><i class="stop"></i><i class="stop"></i><i class="stop"></i><i class="stop"></i></span>
+            <span class="pill stale">zavřeno</span>
+            <span class="mini">Prompt →</span>
           </div>
         </div>
       </div>
@@ -15762,6 +15938,91 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
           a vymyslet jim důvod by bylo tvrzení z chybějících dat. Je to pravidlo pro
           <b>každou</b> stanici, ne výjimka pro <em>Push</em>: výjimka by znamenala, že se důvod
           dá vyčíst jen někdy, a to je horší, než kdyby se nedal nikdy.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">199</span>
+        <span class="body">
+          <b>Pruh teček je jediná nová třída — a jinak se nic nepřidává</b>
+          <span>Řádek zůstává <code>.qrow</code>, slovo je <code>.pill</code>, tlačítko
+          <code>.mini</code>; nová je jedině <code>.s52-dots</code>. Existující se na ni nedaly
+          použít: <code>.ph</code> nese <b>text</b> a pět textů si v řádku vezme víc než titulek,
+          <code>.qmap</code> je pás <b>souborů</b> v poměrech šířky, kdežto tady je pevných pět
+          teček <b>v pořadí, ve kterém se kolo jde</b>. <b>Barva se ale bere z téže škály jako
+          <code>.ph</code></b>, ne z <code>.pill.*</code>: tečka a kapsle mluví o témž stavu téže
+          stanice, takže druhá škála by znamenala, že <code>hotovo</code> v seznamu časem zezelená
+          jinak než <code>hotovo</code> v hlavičce. V okně to drží
+          <code>LanePhaseChip.dotFill(of:)</code> a tvrdí to test, ne komentář.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">200</span>
+        <span class="body">
+          <b>Šířka se nevyjednává, počítá se</b>
+          <span>Pruh je <b>52 × 8 bodů</b> — pět teček po osmi a čtyři mezery po třech —, a to
+          číslo se v okně <b>nezapisuje</b>: skládá se z počtu stanic, protože jednou už jich
+          ubylo (poznámka 190) a zapsané číslo by zůstalo stát. Pevný je schválně: v řádku líného
+          seznamu se rozměr nevyjednává, a kdyby se pruh roztahoval podle toho, kolik místa zrovna
+          zbylo, přestaly by být řádky <b>porovnatelné mezi sebou</b> — a porovnání je jediný
+          důvod, proč tečky v seznamu jsou. Nejširší případ kreslí <b>první řádek</b>: mapa PR,
+          tečky, pilulka i <code>Prompt →</code> vedle sebe.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">201</span>
+        <span class="body">
+          <b>Hranu bere aktivní stanice, ne stav mého review</b>
+          <span>Na vlastním řádku je otázka „co s tím ještě je“, ne „jak dopadlo moje review“ —
+          to je <b>první z pěti</b> stanic. Hrana se přitom čte periferně, takže má nést zrovna
+          tu odpověď: vlastní PR s čistým review a spadlým CI má hranu <b>červenou</b>, ne
+          zelenou. Na cizím řádku se nemění nic, tam je stav mého review celá odpověď.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">202</span>
+        <span class="body">
+          <b>Akcent si <code>Prompt →</code> bere jedině tam, kde je co předat</b>
+          <span>Do téhle změny bylo tlačítko plné vždycky, takže si v bloku <em>Moje PR</em>
+          bralo akcent i na řádcích, kde by prompt složil <b>prázdné zadání</b> — a akcent, který
+          svítí na všem, přestane ukazovat na cokoli. Tichá obrysová podoba zůstává, protože panel
+          <em>Zadání</em> se otevřít <b>dá</b> i bez položek: je v něm vidět, co se předalo minule.
+          <b>Stojí to na tom, co zbývá předat, ne na dráze</b> — zvýrazňuje se akce, ne stav: PR se
+          spadlým CI je naléhavý, ale prompt z něj složit nejde.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">203</span>
+        <span class="body">
+          <b>Dutá tečka je „nevím“, a je to výchozí podoba</b>
+          <span>Poslední řádek je pull request, jehož <b>záložka ještě nebyla otevřená</b>: stav
+          větve, checky ani reviewery se do té doby nedotahují (poznámka 191), takže o nich řádek
+          neví nic. Tři tečky jsou proto <b>duté</b> a pilulka říká <code>Push zjišťuju</code>
+          nejtišším odstínem v řádku — <b>ne červeně</b> a <b>ne plnou neutrální tečkou</b>, ta by
+          se mezi zelenými četla jako další odpověď. Obtah kolem duté tečky je tam kvůli tomu, aby
+          na tichém podkladu řádku nezmizela: z pěti stanic musí být vidět pět.
+          <b>Poslední řádek ukazuje stav, který není ani dutý, ani zelený</b>: <b>zavřený</b> pull request má
+          všech pět teček <b>nedojetých</b> (žlutá <code>--stale</code>) a slovo <code>zavřeno</code>
+          — smyčka nikam nevede, což není ani „hotovo“, ani „nevím“. V seznamu se to potká
+          v sekci <em>Rozdělaná</em> a na přijaté záložce, ne ve frontě.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">204</span>
+        <span class="body">
+          <b>Tři věci ze zákresu se sem nedostaly, a u každé je jiný důvod</b>
+          <span><b>Sedm teček je pět</b> — <em>Agent</em> a <em>Merge</em> odešly už z hlavičky
+          (poznámka 190) a řádek si vlastní výčet stanic <b>neskládá</b>, takže se to sem přeneslo
+          samo; dvě skládání jedné smyčky by uměla říct každé něco jiného než hlavička téhož PR.
+          <b>Dojetá smyčka říká <code>hotovo</code>, ne <code>k merge</code></b>: na slévatelnost
+          odpovídá pruh <em>K merge</em> na desce (sekce 45) a sekce <em>Větev</em> (sekce 36),
+          kdežto dráha na ni neodpovídá schválně — <b>nebere merge ani jako vstup</b> —, takže by
+          <code>k merge</code> odsud byla druhá odpověď na jednu otázku, složená z jiných dat než
+          ta první. <code>hotovo</code> naopak znamená <b>všech pět stanic je hotových</b>, a to
+          dráha unese. A <b>hlavička <code>1 k merge · 3 na tahu</code> nad seznamem nevzniká</b>:
+          blok <em>Moje PR</em>, nad kterým ji zákres kreslil, byl na dashboardu, a ten nahradily
+          pruhy desky (sekce 45) — <b>ty ten počet nesou samy</b>. Sekce <em>Moje PR</em> v railu
+          je oproti tomu seznam <b>bez hlavičky</b>, takže by šlo o <b>novou věc na obrazovce</b>,
+          a ta se kreslí a schvaluje dřív, než na ni vznikne issue.</span>
         </span>
       </div>
     </div>

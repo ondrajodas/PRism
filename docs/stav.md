@@ -8624,6 +8624,13 @@ teček je **pět, ne sedm** (přímý důsledek čtvrtého kola #508) a **hlavi�
 pruhy, a ty ten počet nesou samy; sekce `Moje PR` v railu je `List` bez hlavičky, takže by šlo
 o novou věc na obrazovce, a ta se kreslí a schvaluje dřív, než na ni vznikne issue.
 
+**Řádek je od druhého kola zakreslený v mockupu** — v sekci **52** vedle dráhy v hlavičce, pět
+stavů pod sebou (`Zadání 6 k předání`, `Push o 4 vzadu`, `CI 1 neprošel`, `hotovo` a neotevřený PR
+s dutými tečkami). Leží to u dráhy, ne na stránce fronty, protože je to totéž rozhodnutí menší.
+Nová třída je tam **jediná** (`.s52-dots`): řádek zůstává `.qrow`, slovo `.pill` a tlačítko
+`.mini`. V poznámkách 199–204 jsou i **tři rozhodnutí proti zákresu** — pět teček místo sedmi,
+`hotovo` místo `k merge` a hlavička `1 k merge · 3 na tahu`, která nevzniká.
+
 **Cena je změřená na obou koncích** (#275, `OwnLoopRowMeasurement`), protože #508 si to výslovně
 vyžádalo: tam dráha stála v hlavičce **jednoho** PR, v seznamu poběží nad **každým** řádkem.
 Nejdražší vstup (`Policy.handoff`) si řádek počítá už dneska kvůli pilulce a novinkám, takže se

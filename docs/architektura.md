@@ -5640,6 +5640,12 @@ které se u vlastního PR chodilo do prohlížeče (*dá se to už mergnout, a k
 tím dostala tam, kde se na ni člověk ptá: do fronty, ne až do otevřené záložky. Do #509 řádek
 o vlastním PR řekl jedině `6 k předání` (#334), tedy stav **jediné** z těch pěti stanic.
 
+**Zakreslené je to v mockupu, v sekci 52 vedle dráhy v hlavičce** — pět stavů řádku pod sebou
+(`Zadání 6 k předání`, `Push o 4 vzadu`, `CI 1 neprošel`, `hotovo` a neotevřený PR s dutými
+tečkami). Leží to u dráhy, ne na stránce fronty, protože je to **totéž rozhodnutí menší**: co
+v řádku svítí, se z dráhy odvozuje a rozejít se to nesmí. Nová třída je tam jediná
+(`.s52-dots`) — řádek zůstává `.qrow`, slovo `.pill` a tlačítko `.mini`.
+
 **Skládá to `Policy.ownLoopRow(_:)` nad `Policy.ownLoop`, ne řádek.** Vlastní výčet stanic by
 znamenal dvě odpovědi na jednu otázku: hlavička otevřeného PR by tvrdila `Push · o 4 vzadu`
 a řádek nad tímtéž PR třeba `CI`, protože by se každý zastavil jinde — a to se v okně nepozná
