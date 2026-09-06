@@ -522,6 +522,91 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   v `UserDefaults` (`defaults write com.ondrajodas.prism.<slot> activity.lastVisit <ISO>`). Sekce je
   ve `ScrollView`, takže offscreen render nestačí (viz *Jak si zkontrolovat, jak view vypadá*)
   a fotí se **skutečné okno podle ID**.
+- **Odložení PR (#512)** — pět sad (`SnoozePolicyTests`, `AppStoreSnoozeTests`,
+  `SnoozeProbeQueryTests`, `PullRequestRowSnoozeTests`, `PullRequestRowSnoozeWiringTests`,
+  dohromady **78 testů** plus dvě tvrzení navíc v `AutomaticReviewTests`), a **skoro celá hodnota
+  je v tvrzeních o tom, co se nestane**. Je to u téhle věci jinak než jinde: odložený PR **není vidět**, takže se každá
+  chyba rozbije potichu — buď zmizí práce, nebo se za ni potichu platí.
+
+  `Policy` vyčerpávajícím výčtem: tři podmínky × (splněno / nesplněno / **nevíme**). Ta třetí
+  hodnota je celý obsah issue a testuje se u každé podmínky zvlášť: **nezjištěná hlava odložení
+  nezruší**, **chybějící základ odložení nezruší nikdy** (jinak by skončilo první rozhlídkou, tedy
+  do minuty), **nižší počet příspěvků odložení nezruší** (smazaný komentář není příchozí
+  komentář). K tomu hranice času (`>=`, tedy v devět, ne v 9:00:01), doplnění a **nepřepsání**
+  základu, a to, že se **fronta a blok dohromady rovnají vstupu** — jinak by PR uměl zmizet
+  z fronty, aniž by se objevil v bloku.
+
+  `AppStore` proti fake gateway: **nejcennější je, že automat odložený PR nepustí** — repo je
+  v automatickém režimu, takže by to bez pravidla prošlo, a jediné, co by to prozradilo, je běh na
+  účtu, o který nikdo nestál. Vedle toho: **nezvoní** (ani když se PR do fronty vrátí, což je ten
+  jediný případ, kdy je odložený PR mezi `newcomers`), **nepočítá se do odznaku ani do souhrnu**,
+  **není v žádném pruhu desky** — a naopak **je ve větě pod pozdravem**, protože zmizet beze stopy
+  nesmí. Dál že **úklid po tiku odloženému PR nic nezahodí**, že odložení **přežije restart** a je
+  v paměti **před prvním tikem**, a že **selhaná rozhlídka odložení nezruší** (jinak by výpadek
+  sítě vysypal všechna odložení naráz).
+
+  **Dvě pasti, na které se přišlo až při psaní těch testů**, a obě dělaly test falešně zeleným:
+  bez `autoRuns` se `startAutomaticReviews` vrací hned na prvním `guard`, takže by „na odložený PR
+  se nespustí review“ vyšlo zeleně i nad úplně vypnutým automatem (store si proto bere
+  `AutoRunLedger` nad vlastní cache); a `reviewTasks` je špatné měřidlo, protože běh umí do konce
+  `refresh()` doběhnout i selhat — tvrdí se proto nad `consideredForAutomation`, tedy nad razítkem
+  plánovače.
+
+  **Řádek fronty se testuje na tom, co se nenakreslí** (`PullRequestRowSnoozeTests`): tlačítko
+  `Odložit` **s prázdnou nabídkou nevznikne** — vlastní řádek dostane ze storu prázdné `offers`
+  (`Policy.canSnooze`), a tlačítko, po kterém se nic nestane, je zrovna ten stav, kvůli kterému se
+  v #333 přestala kreslit zakázaná `Prompt →`. Výchozí hodnota je „nekreslit“, takže se nabídka
+  neobjeví tam, kde se řádek kreslí bez storu (náhledy).
+
+  **A že ta nabídka na řádku vůbec je, se tvrdí nad zdrojáky, ne za běhu**
+  (`PullRequestRowSnoozeWiringTests`, po proklikání). Přesně tohle se v první podobě rozbilo:
+  nabídka byla navěšená jedině ve `PullRequestListView`, kdežto `PullRequestRow` se kreslí na
+  **třech** místech, takže na domově (deska) odložit nešlo nic — a věta pod pozdravem tam přitom
+  hlásila `2 odložené`. Za běhu se to tvrdit nedá: `body` každého z těch view je neprůhledný typ,
+  takže „je v něm navěšená akce“ není otázka, na kterou by šlo odpovědět jinak než pohledem do
+  zdrojáku (tatáž konstrukce jako `UnanimatedWindowTests` — `condensed` bez mezer, řádkové
+  komentáře pryč). Stráž **počítá výskyty, neptá se na obsah** (tatáž konstrukce jako
+  `EmojiFieldWiringTests`): čtvrté místo nepřibude nutně jako nový soubor, spíš jako **druhý**
+  `PullRequestRow(` v už zapojeném view — a ten by se za jediné `snoozeAction:` v souboru schoval.
+  K tomu **dvě pojistky proti zezelenání nad prázdnem**: `sources()` na prázdné složce vyhodí
+  (uvnitř čtení, ne jen ve vedlejším testu) a místa jsou **vyjmenovaná literálem**.
+
+  Ke storu k tomu přibyla tři tvrzení: že `snoozeAction(for:)` **na cizím PR doopravdy odloží**
+  (uzávěr odkládá v `Task`u, takže se čeká na jev, ne na pevný okamžik, #296), že **na vlastním
+  vydá prázdnou nabídku** — ne `nil`, ten rozdíl je čitelný —, a že **deska počítá odložené před
+  filtrem, kdežto blok pod frontou po něm**: obojí naráz v jednom testu, protože ta dvě čísla
+  mluví o téže věci a rozešla by se potichu.
+
+  **Ověřeno vložením regrese, šestkrát.** Vyhození `!isSnoozed` z plánovače shodí **5 tvrzení**
+  (mezi nimi obě z `AutomaticReviewTests`); vyhození zúžení z `queuePullRequests` shodí frontu,
+  odznak i souhrn; a záměna `guard let baseline, let head` za `guard let head` (tedy „neznámý základ
+  = vypršelo“) shodí **tři tvrzení v jednom testu** — přesně ta, která říkají, že se odložení nesmí
+  zrušit dřív, než má.
+
+  Po proklikání tři další, a všechny tři jsou o právě opravené chybě: **vyhození `snoozeAction:`
+  z `BoardView`** shodí stráž nad zdrojáky s hláškou `offenders → ["Views/BoardView.swift"]` (tedy
+  přesně ten stav, který se do `main`u málem dostal); **záměna `pullRequests` za
+  `visiblePullRequests`** v `snoozedPullRequests` shodí tvrzení o desce nad zapnutým filtrem
+  (`1 == 2`); a **`showsSnoozeAction` zeslabené na `snoozeAction != nil`** shodí „s prázdnou
+  nabídkou se `Odložit` nekreslí“, tedy bránu na vlastní PR — a tahle poslední chytá **jedině
+  proto**, že se obě kreslicí místa ptají té pojmenované property; kdyby si každé psalo `if let …,
+  isAvailable` samo, hlídala by ta sada vedlejší produkt. Čtvrtá po revizi diffu: **druhý
+  `PullRequestRow(` v souboru, který `snoozeAction:` má jednou**, shodí stráž s hláškou
+  `2× řádek, 1× odložení`.
+
+  **Fixture rozhlídky je inline JSON a je u toho napsané proč**: skutečný výstup se z veřejného
+  repa sehnat dá, ale nese celé spojení komentářů — a dotaz chce **dvě čísla a jednu sha**, takže
+  by fixture byla z 99 % materiál, který se nečte. Tvar je opsaný z odpovědi na
+  `PullRequestHeadsQuery`, tedy z formátu, který fixturou ověřený **je**.
+
+  **Screenshot bloku `Odložené` se klikáním nepořídí** — čerstvá cache nic odloženého nemá a
+  odložení vzniká z kontextové nabídky, na kterou v paralelním běhu není asistenční přístup. Zapíše
+  se proto `snoozed.json` do cache slotu (klíč je `owner/repo#číslo`, `PRIdentifier` je
+  `CodingKeyRepresentable`) a aplikace se restartuje; tím se u toho rovnou ověří, že se odložení
+  čte z disku **před prvním tikem**. **A fotí se domov, ne fronta** (poučení z proklikání): sonda
+  kreslí z připravených dat, takže o tom, co má aplikace na té které obrazovce navěšené, netvrdí
+  nic (#478) — a chyba, kvůli které se tohle opravovalo, byla přesně chyba **navěšení**, ne kresby. Že nabídka opravdu vyjede a že `⌥1` platí jedině nad ní,
+  ověřuje **člověk** — v harnessu se to zjistit nedá (viz *Jak změřit fokus a klávesy*).
 - **Zastaralé nálezy z tiku (#420)** — tři sady, a **cenná polovina jsou tvrzení o počtu volání**.
   Rozbije se to potichu: v okně vypadá stejně, jestli se aplikace zeptala jednou, nebo dvanáctkrát,
   jen se ten rozdíl platí každou minutu.

@@ -33,7 +33,13 @@ extension AppStore {
         // **Vlastní PR se nepočítají ani do „je tu něco automatického“** (#332). Repo, ve kterém
         // mám jen svoje PR, automat nespustí, takže by načtený stav rozpočtu svítil u fronty,
         // ze které se nikdy nic nepustí. Rozřazení dělá tatáž funkce jako v plánovači.
-        let queue = Policy.pullRequests(summaries, ownedBy: .theirs, mine: mine)
+        // **Bez odložených** (#512), ze stejného důvodu jako bez vlastních: repo, jehož jediné PR
+        // je odložené, automat nespustí, takže by načtený stav rozpočtu svítil u fronty, ze které
+        // se nic nepustí. Zúžení dělá tatáž dvojice funkcí jako v plánovači.
+        let queue = Policy.pullRequests(
+            Policy.pullRequests(summaries, ownedBy: .theirs, mine: mine),
+            withoutSnoozed: isSnoozed(_:)
+        )
         let anyAutomatic = queue.contains { resolved(for: $0.repo).mode == .automatic }
         automaticRunsToday = anyAutomatic ? await autoRuns.used() : nil
 
@@ -41,6 +47,7 @@ extension AppStore {
             in: summaries,
             configuration: configuration,
             mine: mine,
+            isSnoozed: isSnoozed(_:),
             considered: consideredForAutomation,
             running: Set(reviewTasks.keys)
         )

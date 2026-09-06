@@ -8538,3 +8538,61 @@ ukazovalo z vloženého bloku dva řádky, protože `TextEditor` s obsahem neros
 **Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu (`ineligible_app`) —
 tatáž příčina jako u #541, #572, #570 a dalších. Je to **neověřená mezera**; vlastní revize diffu
 proběhla a je popsaná v PR.
+
+## #512 — Odložit PR: do rána, do dalšího pushe, do dalšího komentáře (M16, zákres 53)
+
+**Filtr schová repo nebo autora, ne jeden pull request.** Botí PR ležel ve frontě týden, počítal se
+do odznaku i do věty pod pozdravem — a automat na něj každou minutu zvažoval review.
+
+**Odložení je stav, který něco skrývá, takže musí být poznat, že něco skryté je.** To je celé
+zadání a promítlo se do **čtyř** vývodů, ne jednoho: blok `Odložené · 2` pod frontou, připsání
+`· 2 odložené` do věty pod pozdravem na desce (odložené PR není v žádném pruhu), vlastní prázdný
+stav fronty `Všechno odložené` a řádek `Vrátil se z odložení · přišel push` v `Dění`. Fronta, ze
+které práce potichu zmizí, je horší než fronta, ve které leží.
+
+**Podmínka, ne jen čas** — `Policy.snoozeExpired(_:head:comments:now:)` nad třemi případy. Měří se
+proti **hodnotě**, ne proti `updatedAt`: to se hýbe i po štítku, takže by `do dalšího komentáře`
+skončilo pushem. Rozhodlo se, že **neznámé měřidlo nikdy neznamená „vypršelo“** — základ dosadí
+první rozhlídka a do té doby odložení trvá. Směr chyby je zvolený schválně: odložení, které se
+zruší dřív, než mělo, vypadá jako porucha, kdežto odložení o minutu delší ukončí `Vrátit teď`.
+
+**Zmizí všude naráz, včetně automatu.** `Policy.automaticallyReviewable` dostalo `isSnoozed` bez
+výchozí hodnoty — *nechci to teď vidět* znamená i *neplať za to teď*. Běh, který už běží, se
+**neruší**: session je utracená v okamžiku, kdy začne. Notifikace o doběhlém review se u odloženého
+PR nepošle, ale **do dění se zapíše** (chip `bez banneru`).
+
+**Ukládá se k PR, ne k `headSha`** (`snoozed.json`, `SnoozeStore`), a je to zapsaná volba proti
+tvrdé podmínce č. 5: ta mluví o nálezech, kdežto odložení o kódu netvrdí nic — push ho nemá
+zneplatnit, nýbrž **splnit**. Precedens je rozhovor nad PR (#452). Čte se **před prvním tikem**,
+jinak by první tik po startu pustil review na PR, který jsem si schoval.
+
+**Rozhlídka je jeden dávkový GraphQL dotaz na všechna odložená PR** (`SnoozeProbeQuery`,
+`fetchSnoozeSignals`), s předfiltrem přes `updatedAt` a se stropem dvacet — na klidný den **nula
+volání**, u časové podmínky **nikdy** žádné. Vlastní dotaz vedle toho na hlavy (#420), protože obě
+rozhlídky mají jiný předfiltr; cena je jedno volání navíc v nejhorším případě.
+
+**Odložit jde jen cizí PR**, a je to hranice **kresby**: blok visí pod frontou a na desce, takže
+odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde by se neobjevilo. **Na cizím PR se odložit
+dá naopak odevšad, kde se ten řádek kreslí** — a je to oprava po proklikání, ne původní návrh:
+nabídka byla navěšená jedině ve `PullRequestListView`, kdežto `PullRequestRow` se kreslí na **třech**
+místech, takže na domově (deska) odložit nešlo nic, přestože tam věta pod pozdravem hlásila
+`2 odložené`. Opravily to tři věci: `SnoozeAction` jako **jedna hodnota z jednoho místa**
+(`AppStore.snoozeAction(for:)`), **stráž nad zdrojáky** (kde stojí `PullRequestRow(`, tam musí stát
+i `snoozeAction:`) a **týž blok `Odložené` v pravém sloupci desky**, kreslený z týchž řádků
+(`SnoozedRowsView`). Číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné číslo.
+
+**Zákres je sekce 53** v `docs/navrh.html` (dva nové komponenty: `.s53-menu` a `.s53-snoozed`,
+ten druhý s modifikátorem `.plain` pro rám bloku na desce).
+**`Vlastní datum…` z kresby vypadlo** — kalendář v kontextové nabídce je vlastní obrazovka a delší
+odklad než týden se dá složit dvojím odložením; je to **zapsaná mezera proti zadání issue**.
+
+**Zákres sekce 53 to dokreslil zpětně**: druhá dvojice panelů (věta pod pozdravem vedle bloku
+v pravém sloupci desky) a poznámka 193 mluví o **čtyřech** vývodech místo tří. `docs/navrh.md`
+sedělo na 52 sekcích nad třiapadesáti — srovnáno.
+
+Testů je nad slitým stavem (po #578) **5 641**, z toho **+80** z tohohle PR (pět nových sad, 78
+testů, a dvě tvrzení navíc v `AutomaticReviewTests`), a jsou zelené; regrese se ověřila vložením sedmi
+regresí — tří původních a čtyř po proklikání, mezi nimi i té, která do `main`u málem prošla
+(vyhozené `snoozeAction:` z `BoardView`). **Copilot se na tenhle PR schválně
+nepouštěl** — GitHub má výpadek entitlementu (`ineligible_app`), tatáž příčina jako u #570 a #572.
+Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.

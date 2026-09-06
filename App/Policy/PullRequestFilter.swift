@@ -86,6 +86,11 @@ enum ListEmptyReason: Equatable, Sendable {
     case unknownViewer
     /// `Moje PR`: zdroj i login jsou, jen nic otevřeného není — ten dobrý stav.
     case noOwnPullRequests
+    /// Fronta prázdná **není**, jen je všechno odložené (#512). Vlastní prázdno vedle
+    /// `filtered(hidden:)` a ze stejného důvodu: zelené „vyřízeno“ nad prací, kterou jsem si sám
+    /// schoval, tvrdí opak toho, co je pravda — a z toho stavu musí být vidět cesta zpátky
+    /// (blok `Odložené` je hned pod seznamem).
+    case allSnoozed(count: Int)
 }
 
 extension Policy {
@@ -172,16 +177,23 @@ extension Policy {
     ///
     /// Pořadí a tvar jsou schválně stejné jako u `ownListEmptyReason` — dvě sekce, dvě funkce,
     /// jeden typ; liší se jen tím, mezi kolika prázdny se rozhoduje.
+    ///
+    /// **Filtr má přednost před odložením** (#512), a je to pořadí, ne libovůle: filtr je stav,
+    /// který jsem zapnul teď a vypnu jedním kliknutím, kdežto odložení jsem si objednal dřív
+    /// a vrátí se samo. Nabídnout napřed to, co se dá vzít zpět, znamená kratší cestu z prázdné
+    /// obrazovky ven.
     static func listEmptyReason(
         poll: PollEmptyReason?,
         visible: Int,
-        hidden: Int
+        hidden: Int,
+        snoozed: Int = 0
     ) -> ListEmptyReason? {
         // `noPullRequests` se přeskočí a spadne až do návratu dole: z prázdného tiku i z tiku
         // s vlastními PR má vyjít tatáž věta, takže je na jednom místě.
         if let poll, poll != .noPullRequests { return .poll(poll) }
         guard visible == 0 else { return nil }
         if hidden > 0 { return .filtered(hidden: hidden) }
+        if snoozed > 0 { return .allSnoozed(count: snoozed) }
         return .poll(.noPullRequests)
     }
 

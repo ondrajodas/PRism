@@ -133,7 +133,14 @@ extension AppStore {
         // o vyrušení, ne o záznamu. `notify(_:)` vrátí `nil` právě v těch dvou případech, a z toho
         // je `wasAnnounced: false`, tedy chip `bez banneru` v řádku.
         var delivery: NotificationDelivery?
-        if let notification { delivery = await notify(notification) }
+        // **Odložený PR nezazvoní** (#512). Doběhnout na něm review může: automat ho sice nepustí,
+        // ale běh, který začal před odložením, se neruší (viz `AppStore.snooze(_:_:)`) a ruční
+        // spuštění z bloku `Odložené` je legitimní. Banner by ale byl to jediné, co jsem si
+        // odložením zakázal — odložení, které přesto zazvoní, je odložení jen na obrazovce.
+        //
+        // **Do dění se zapisuje dál**, jako u vypnutého přepínače: `delivery` zůstane `nil`, takže
+        // z toho je řádek s chipem `bez banneru`. Vyrušit ne, dohledat ano.
+        if let notification, !isSnoozed(pr) { delivery = await notify(notification) }
         await recordActivity(Policy.reviewActivity(
             for: pr,
             ownership: ownership,
@@ -191,7 +198,14 @@ extension AppStore {
         await recordActivity(changes.departed.map {
             Policy.departureActivity(for: $0, ownership: ownership(of: $0), at: time.now)
         })
-        guard !changes.newcomers.isEmpty else { return }
+        // **Odložený PR se neohlásí a nedostane řádek o příchodu** (#512). Do snímku
+        // (`listed`) přitom patří dál, a je to podstatný rozdíl: kdyby z něj vypadl, udělalo by
+        // odložení řádek `Už není ve frontě` a návrat z něj druhý o novém PR — tedy dvě nepravdy
+        // o tom, co se stalo. Že se PR vrátil, říká `Policy.snoozeReturnActivity`, ne tahle cesta.
+        // Případ nastane u PR, které se odložilo, z fronty odešlo a vrátilo se: tehdy je
+        // v `newcomers` a odložené zároveň.
+        let newcomers = changes.newcomers.filter { !isSnoozed($0) }
+        guard !newcomers.isEmpty else { return }
 
         // Jedna notifikace za celý tik (#87), ne jedna na PR: deset hlášek naráz je první
         // důvod, proč si člověk notifikace vypne. Čekací okno na to potřeba není — tik dodá
@@ -200,7 +214,7 @@ extension AppStore {
         let authors = authors(from: summaries)
         let reviewed = reviewedPullRequests
         let notification = Policy.newPullRequestsNotification(
-            for: changes.newcomers,
+            for: newcomers,
             titles: titles,
             reviewed: reviewed
         )
@@ -224,7 +238,7 @@ extension AppStore {
         // je vyrušení desetkrát; seznam, do kterého se chodí zpátky, tuhle daň neplatí a „5 nových
         // PR k review“ by v něm bylo tvrzení, ze kterého se nedá kliknout na žádné z nich.
         // `announced` je proto na všech řádcích stejné — je z jednoho doručeného souhrnu.
-        await recordActivity(changes.newcomers.map { pr in
+        await recordActivity(newcomers.map { pr in
             Policy.newPullRequestActivity(
                 for: pr,
                 title: titles[pr],

@@ -36,6 +36,15 @@ struct PullRequestRow: View {
     /// v meta řádku. Prázdná znamená „nic nepřibylo“ (nebo se ještě nikdo nedíval) a řádek pak
     /// vypadá jako dřív; bere se z **téhož** `HandoffReport` jako `pending`.
     var activity: ForeignActivity = .none
+    /// Odložit (#512) — **jedna hodnota, ne dvojice nabídka + akce**. `nil` znamená „řádek
+    /// o odložení neví“ (náhledy, testy), prázdná nabídka uvnitř znamená „nesmí se“ (vlastní PR,
+    /// `Policy.canSnooze`). V obou případech se nekreslí **nic**, ne zašedlá položka — ta by
+    /// sváděla na ni kliknout a hledat, co je rozbité (tatáž úvaha jako u `Prompt →`, #333).
+    ///
+    /// **Kdo řádek kreslí, tohle předává**, a je to podmínka, ne nabídka: do opravy #512 to
+    /// předával jen seznam, takže na desce a v sekci `Rozdělaná` odložit nešlo — a na desce se
+    /// přitom o odložených mluví ve větě pod pozdravem. Hlídá to `PullRequestRowSnoozeWiringTests`.
+    var snoozeAction: SnoozeAction?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -51,7 +60,41 @@ struct PullRequestRow: View {
                 .fill(ReviewStateAppearance.color(of: reviewState, blocking: row.blocking))
                 .frame(width: 3)
         }
+        // **Zápis `Bool`u na `Bool`, ne poloha z každého snímku** — `onContinuousHover` je ta
+        // třída, která si žádá `Policy.hoverChange` (#358); tohle se ozve jedině na přechodu.
+        //
+        // **A jen na řádku, který nabídku má.** Bez toho guardu by se stav přepisoval i na desce
+        // a v sekci `Rozdělaná`, tedy překreslení řádku za odpověď, kterou nikdo nepřečte.
+        .onHover { hovering in
+            guard showsSnoozeAction else { return }
+            isHovered = hovering
+        }
+        // Pravé tlačítko — **druhá cesta k téže nabídce**, ne druhá nabídka. Bez nabídky se
+        // `.contextMenu` nekreslí vůbec: prázdná nabídka po pravém kliknutí vypadá jako porucha.
+        .contextMenu {
+            if showsSnoozeAction, let snoozeAction {
+                SnoozeMenuItems(offers: snoozeAction.offers, snooze: snoozeAction.snooze)
+            }
+        }
     }
+
+    /// Je řádek pod kurzorem? Rozhoduje o `Odložit` (#512) — o ničem jiném, takže se v ostatních
+    /// místech, která řádek kreslí (deska, `Rozdělaná`), nezmění nic.
+    @State private var isHovered = false
+
+    /// Má řádek nabídku `Odložit` (#512)? **Pojmenované, ne `if` uvnitř `body`** — je to
+    /// rozhodnutí o tom, co řádek nabízí, a v `body` se testovat nedá; tatáž úvaha jako
+    /// u `showsPromptAction`.
+    ///
+    /// **Ptá se na akci i na obsah nabídky.** Tlačítko s prázdnou nabídkou je tlačítko, po kterém
+    /// se nic nestane — a to je zrovna ta lež, kvůli které se v #333 přestala kreslit zakázaná
+    /// `Prompt →`. Vlastní řádek dostane prázdné `offers` (`Policy.canSnooze`), takže na něm
+    /// nevznikne ani tlačítko, ani položka v kontextové nabídce.
+    ///
+    /// **Ptají se na ni obě kreslicí místa, ne jen jedno.** Kdyby si tlačítko a kontextová nabídka
+    /// psaly `if let snoozeAction, snoozeAction.isAvailable` každé po svém, byla by tahle property
+    /// vedlejší produkt — a test nad ní by pak tvrdil něco, co s kresbou nesouvisí.
+    var showsSnoozeAction: Bool { snoozeAction?.isAvailable == true }
 
     private var headline: some View {
         HStack(spacing: 6) {
@@ -87,6 +130,11 @@ struct PullRequestRow: View {
             }
             if showsPromptAction {
                 promptButton
+            }
+            // Odložit pod kurzorem (#512). **Za odznakem, ne před ním**: řádek se čte zleva
+            // doprava (co to je → jak to dopadlo) a akce patří na konec.
+            if isHovered, showsSnoozeAction, let snoozeAction {
+                SnoozeRowButton(action: snoozeAction)
             }
         }
     }

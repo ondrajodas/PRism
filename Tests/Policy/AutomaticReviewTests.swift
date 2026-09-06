@@ -36,12 +36,14 @@ struct AutomaticReviewTests {
         automatic: Bool = true,
         mine: Set<String> = [],
         considered: [PRIdentifier: Date] = [:],
-        running: Set<PRIdentifier> = []
+        running: Set<PRIdentifier> = [],
+        snoozed: Set<PRIdentifier> = []
     ) -> [PRIdentifier] {
         Policy.automaticallyReviewable(
             in: summaries,
             configuration: configuration(automatic: automatic),
             mine: mine,
+            isSnoozed: { snoozed.contains($0) },
             considered: considered,
             running: running
         )
@@ -106,6 +108,7 @@ struct AutomaticReviewTests {
             in: [summary("cli/cli#1", author: "OndraJodas")],
             configuration: configuration,
             mine: ["ondrajodas"],
+            isSnoozed: { _ in false },
             considered: [:],
             running: []
         )
@@ -119,6 +122,28 @@ struct AutomaticReviewTests {
     @Test("Vlastní PR se nevybere ani když si o automat řekne repo")
     func neverPicksOwnPullRequestsForAnAutomaticRepository() {
         #expect(pick([summary("cli/cli#1", author: "ondrajodas")], mine: ["ondrajodas"]).isEmpty)
+    }
+
+    // MARK: - Odložené PR (#512)
+
+    /// **Nejcennější test téhle sady vedle vlastních PR.** Odložení, po kterém se stejně utratí
+    /// session, je odložení jen na obrazovce — a pozná se to jedině tím, že se na účtu objeví
+    /// běh, o který nikdo nestál. Repo je v automatickém režimu, takže by to bez pravidla prošlo.
+    @Test("Odložený PR automat nevydá")
+    func neverPicksSnoozedPullRequests() {
+        #expect(pick([summary("cli/cli#1")], snoozed: [PRIdentifier("cli/cli#1")!]).isEmpty)
+    }
+
+    /// Druhá polovina téhož: neodložený PR v témže seznamu projít **musí**, jinak by test výš
+    /// platil i tehdy, kdyby se automat vypnul celý.
+    @Test("Neodložený PR ve stejném seznamu projde dál")
+    func stillPicksPullRequestsThatAreNotSnoozed() {
+        let picked = pick(
+            [summary("cli/cli#1"), summary("cli/cli#2")],
+            snoozed: [PRIdentifier("cli/cli#1")!]
+        )
+
+        #expect(picked == [PRIdentifier("cli/cli#2")])
     }
 
     /// Cizí PR v témže seznamu projít **musí** — jinak by test výš platil i tehdy, kdyby se
