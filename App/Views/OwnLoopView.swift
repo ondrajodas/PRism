@@ -3,7 +3,7 @@ import SwiftUI
 /// Dráha smyčky vlastního PR pod hlavičkou (#508, návrh sekce 52).
 ///
 /// **Tytéž třídy jako dráha reviewera** (`.lane`, `.phases`, `.ph`): rám s okrajem, hlavička,
-/// sedm kapslí vedle sebe a věta pod nimi. Kapsli kreslí `LanePhaseChip`, tedy **týž** prvek jako
+/// pět kapslí vedle sebe a věta pod nimi. Kapsli kreslí `LanePhaseChip`, tedy **týž** prvek jako
 /// v tabu `Průběh` — kdyby si tahle dráha mapovala stav na barvu sama, byl by to druhý slovník
 /// pro totéž a rozešel by se první den, kdy někdo změní odstín.
 ///
@@ -12,9 +12,10 @@ import SwiftUI
 /// **odkáže**. Kdyby akce odesílala sama, byla by to druhá cesta ven (tvrdá podmínka č. 1)
 /// a druhé místo, které skládá plán merge.
 ///
-/// **Stanice `Agent` je zatím bez živého obsahu** — ocas relace, `Otevřít zásuvku` a `Zastavit
-/// agenta` z návrhu dodá #511. Do té doby o ní dráha tvrdí jedině to, co ví: kdy se předalo
-/// a že se čeká na commit.
+/// **Stanice `Agent` a `Merge` na dráze nejsou** (#508, čtvrté kolo). Ani jedna z nich v okně
+/// nikdy nic neukázala — `Agent` nemá živý obsah a `Merge` stojí na celém kole —, takže z nich
+/// byly jen užší kapsle pro ostatních pět. Merge se dál dělá ze sekce `Větev` (#465), agenta má
+/// dodat #511.
 struct OwnLoopView: View {
     let loop: OwnLoop
     /// Co udělá jediná akce aktivní stanice. `nil` = akce se nekreslí — buď žádná není
@@ -50,7 +51,7 @@ struct OwnLoopView: View {
                 .lineLimit(1)
                 .help(
                     "Kde vlastní pull request stojí v kole "
-                        + "Nálezy → Zadání → Agent → Push → CI → Review → Merge."
+                        + "Nálezy → Zadání → Push → CI → Review."
                 )
             if let stamp = loop.stamp {
                 Text(verbatim: stamp)
@@ -89,7 +90,7 @@ struct OwnLoopView: View {
     /// stav, ve kterém člověk hledá, co je rozbité.
     var showsAction: Bool { loop.move != nil && perform != nil }
 
-    /// Sedm kapslí **rovným dílem**: na rozdíl od dráhy reviewera, kde `prochází kód` bere víc
+    /// Pět kapslí **rovným dílem**: na rozdíl od dráhy reviewera, kde `prochází kód` bere víc
     /// místa, tady žádná stanice netrvá déle než ostatní — dráha je pořadí, ne rozpočet času.
     /// Šířku dělí `ProportionalColumns`, aby se nevyjednávala na každé úrovni (#220).
     private var phases: some View {
@@ -107,11 +108,10 @@ struct OwnLoopView: View {
     let stations: [OwnLoop.Stop] = [
         OwnLoop.Stop(station: .findings, state: .done, detail: "3 nálezy"),
         OwnLoop.Stop(station: .handoff, state: .running, detail: "2 k předání"),
-        OwnLoop.Stop(station: .agent, state: .idle, detail: nil),
-        OwnLoop.Stop(station: .push, state: .idle, detail: nil),
-        OwnLoop.Stop(station: .ci, state: .idle, detail: nil),
-        OwnLoop.Stop(station: .review, state: .idle, detail: nil),
-        OwnLoop.Stop(station: .merge, state: .idle, detail: nil),
+        // Za zastávkou: zelené, co je hotové, a **jedno slovo** u toho, co není (#508).
+        OwnLoop.Stop(station: .push, state: .idle, detail: "pozadu"),
+        OwnLoop.Stop(station: .ci, state: .done, detail: "zeleno"),
+        OwnLoop.Stop(station: .review, state: .done, detail: "schváleno"),
     ]
     return OwnLoopView(
         loop: OwnLoop(

@@ -7271,6 +7271,10 @@ Zákres (deck *Směry pro PRism*, stránka D; v repu sekce 52) říká, že drá
 akci** a že aktivní je **první, kde je můj tah**. Při implementaci padla čtyři rozhodnutí, která
 z kresby neplynou, a dvě z nich jsou **proti ní**.
 
+**Stanic bylo tehdy sedm; od čtvrtého kola je jich pět** (`Agent` a `Merge` odešly, viz [záznam
+níž](#záznam-rozhodnutí--dvě-stanice-z-dráhy-odešly-a-šedá-dostala-slovo-508-čtvrté-kolo)).
+Kde v tomhle záznamu stojí *sedm*, čte se to jako stav prvního kola.
+
 **1. Stav stanice je `ReviewerLane.PhaseState`, ne vlastní výčet.** Issue slibuje `.ph` stavy
 „bez nového vzoru“ a vlastní enum by ten slib nechal držet jen komentářem: dal by se v něm vyrobit
 stav, který kresba fází neumí. Kapsli proto kreslí **jediný sdílený prvek** (`LanePhaseChip`,
@@ -7288,6 +7292,9 @@ bydlí — v tabu *Kontroly*, v sekci *Větev*, v panelu *Zadání*.
 
 **Tohle rozhodnutí se v druhém kole #508 změnilo, viz [záznam níž](#záznam-rozhodnutí--za-zastávkou-se-zelená-kreslí-508-druhé-kolo).**
 Zůstává důvod (a je to týž důvod), zúžený na stanici `Push`; padá rozsah, na který se uplatňoval.
+**A ve čtvrtém kole se změnilo podruhé:** šedá stanice za zastávkou už není němá — nese **jedno
+slovo**, proč není zelená. Stav zůstává `idle`, mění se jedině text; viz [záznam
+níž](#záznam-rozhodnutí--dvě-stanice-z-dráhy-odešly-a-šedá-dostala-slovo-508-čtvrté-kolo).
 
 **3. Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá
 **nejlevnější tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá předat.
@@ -7346,7 +7353,8 @@ vyhodnotí jedině s celým svým výčtem hotovým, a nakreslí se `done`, **je
    **nevratnou** akcí, takže se u ní zaokrouhluje k „nevím“; `k merge` nad šesti nepředanými
    položkami je navíc rada, která si protiřečí s větou o řádek níž. Že `mergeStep` nikdy nevrací
    `.passed`, a `Merge` by tedy zelený nevyšel tak jako tak, je **shoda okolností** — proto řádek
-   ve výčtu zůstává.
+   ve výčtu zůstává. **Ve čtvrtém kole z toho vyšel důsledek, ne oprava**: stanice, která je
+   prakticky vždycky šedá, na dráze nemá co dělat, a `Merge` odešel celý.
 
 **Co se nemění ani o kus:** aktivní stanice (pořád první nehotová), věta pod dráhou, akce, razítko
 v hlavičce, sada stavů (`ReviewerLane.PhaseState`), zkratka nad mergnutým a zavřeným PR i to, že se
@@ -7399,9 +7407,99 @@ issue #577, které se na to chystalo zvlášť.
 **Co zůstává beze změny:** `nevím` se pořád nekreslí jako `done` (nenačtené checky, nenačtení
 reviewery i červené CI zůstávají za zastávkou `idle`), `chce změny` nezezelená nikdy, rozdělaná
 stanice je nejvýš jedna, `Merge` stojí dál na všech šesti a na cizím PR se dráha nekreslí vůbec.
+**Poslední z těch tvrzení přežilo jen do čtvrtého kola** — `Merge` a `Agent` z dráhy odešly; zbytek
+platí dál.
 
 **Jak se to ověřilo, se taky mění.** Druhé kolo stálo na sondě `OwnLoopRenderProbe`, která kreslí
 view z **připravených** dat — a proto vyšlo zeleně něco, co uživateli zšedlo: scéna nenesla polohu
 větve, kterou aplikace má. Je to pravidlo z #478 (měřidlo, které vydá tutéž hodnotu pro „funguje“
 i „nefunguje“, netvrdí nic). Doklad třetího kola je proto **snímek běžící aplikace** nad `#566`
 vedle testů nad těmi dvěma stavy, ne render sondy.
+
+### Záznam rozhodnutí — dvě stanice z dráhy odešly a šedá dostala slovo (#508, čtvrté kolo)
+
+**Mění rozhodnutí č. 1 a č. 2 z prvního kola a zákres v sekci 52.** Do tohohle kola měla dráha
+**sedm** stanic — *Nálezy → Zadání → Agent → Push → CI → Review → Merge* —, jak je nakreslil deck
+(stránka D) i sekce 52. Uživatel po proklikání běžící aplikace rozhodl, že `Agent` a `Merge`
+odejdou, a formuloval to takhle: *„ty dva ke smazání nezobrazují žádný stav, tak tam být nemusí.“*
+
+**Důvod je věcný, ne úsporný.** Ani jedna z těch dvou v okně nikdy nic neukázala:
+
+- **`Agent` nemá živý obsah.** Zadání odchází do **cizího** terminálu, takže aplikace neví, jestli
+  na něm někdo pracuje; stanice uměla říct jedině *předáno* a *čekám na commit*. Živý průběh (ocas
+  relace, `Otevřít zásuvku`, `Zastavit agenta`) měla dodat #511.
+- **`Merge` stál na celém kole** (rozhodnutí z druhého kola, bod 3), takže se vyhodnotil jedině
+  tehdy, když byly hotové všechny ostatní — a v tu chvíli byl zastávkou. Jakmile kdekoli něco
+  zbývalo, byl šedý a němý.
+
+**Kapsle, která nikdy nic neřekne, je jen užší místo pro ostatní.** Pět kapslí se o šířku hlavičky
+dělí líp než sedm a rozdíl je vidět zrovna na těch, které mluví (`o 21 vzadu`, `2 k předání`).
+
+**Nic se tím neztratilo, a je to ověřené na obrazovce.** Merge se dál dělá ze sekce *Větev* (#465):
+týmž tlačítkem, týmž potvrzovacím sheetem, přes `Policy.mergeOffer` a `MergeSubmission`. Dráha na
+to místo ukazuje větou pod fázemi, jakmile kolo dojede do konce — `Všech pět stanic je hotových —
+merge zůstává v sekci Větev.` Je to **údaj o místě, ne tvrzení o slévatelnosti**: `Policy.ownLoop`
+od tohohle kola `MergeOffer` **nebere ani jako vstup**, takže se nemá s čím rozejít. Kdyby ho brala
+a nepoužila, byl by to držený parametr, který nikdo nečte — vzor, který Copilot v tomhle repu
+nachází opakovaně. Vedlejší efekt: odpadl druhý průchod mapami v `AppStore.ownLoop(for:)`
+(zdvojený `Policy.mergeOffer`), takže je hlavička o kus levnější, ne dražší.
+
+**Co z toho plyne pro #511, a schválně se to tady nerozhoduje.** To issue počítalo s tím, že
+stanici `Agent` naplní živým průběhem; stanice teď na dráze **není**. Jsou dvě cesty a obě jsou
+legitimní: buď #511 stanici **vrátí i s obsahem** — prázdná kapsle se vracet nemá, to je celý
+důvod tohohle kola —, nebo se agent ukáže **jinde** (zásuvka má vlastní hlavičku a od #460 v ní
+běží víc relací, takže tam ten stav vlastně už bydlí). Rozhodne se to při zadání #511, ať se na to
+přijde nad jeho vlastní kresbou, ne odvozením z tohohle záznamu.
+
+**Zamítnutá varianta: nechat obě stanice a jen je zúžit.** `ProportionalColumns` dělí šířku rovným
+dílem, takže by se dalo `Agent` a `Merge` dát menší poměr. Zahozeno: úzká němá kapsle je pořád němá
+kapsle — problém není v tom, kolik místa berou, ale že se z nich nedá nic přečíst. A nerovné poměry
+by z dráhy udělaly rozpočet času, kterým není (u dráhy reviewera to smysl dává, tam `prochází kód`
+doopravdy trvá déle).
+
+**Druhá půlka kola: šedá stanice za zastávkou dostala jedno slovo.** Tohle je druhá vada
+z proklikání a je to přesně ten druh, kterému se celé #508 vyhýbá — jen z opačné strany. Dráha
+stála na `Nálezech`, větev byla **o jednadvacet commitů pozadu** a `Push` visel šedý **bez textu**:
+z hlavičky se to nedalo poznat vůbec a informace zůstávala v sekci *Větev*, tedy o dvě kliknutí
+dál. Nehotová **vyhodnocená** stanice proto nese `reason` — `pozadu`, `konflikt`, `nepřetlačeno`,
+`zjišťuju`, `neprošlo`, `běží`, `čeká`.
+
+**Tři meze, a všechny tři jsou tvrzení testu:**
+
+1. **Slovo, ne počet.** `reason` je **vlastní hodnota vedle `detail`u**, ne `detail` propuštěný
+   dál. Detail aktivní stanice (`o 21 vzadu`, `1 neprošel`, `čeká 1`) se čte **s větou pod fázemi**;
+   šedá kapsle takovou oporu nemá a číslo vedle **cizí** věty se čte jako tvrzení o tom, co je
+   zrovna na tahu. Stráží to test, který nad celou maticí tvrdí, že šedý text je **bez mezery
+   a bez číslice** — vložení regrese (`detail` místo `reason`u) shodilo 62 tvrzení v pěti testech.
+2. **Slovo z kapsle neudělá aktivní.** Stav zůstává `idle`; rozdělaná (a tedy zvýrazněná) kapsle
+   je dál právě jedna — ta, o které mluví věta. Kdyby se změnil i stav, přetahovaly by se o to,
+   který krok je vlastně další (zamítnutá varianta č. 1 z druhého kola, beze změny).
+3. **Stanice, která se nevyhodnocovala, mlčí dál.** Když výčet z `ownLoopFacts` nesedí, walk ji
+   vůbec nespočítal, takže se o ní nedá říct ani proč není zelená; `nil` je tam odpověď, ne úspora.
+   Prakticky: nad nepřetlačenou prací v cache jsou `CI` i `Review` **prázdné**, protože mluví
+   o hlavě, která na GitHubu není. Vymyslet jim důvod by bylo přesně to tvrzení z chybějících dat,
+   kvůli kterému se `nevím` odděluje od `nejde`.
+
+**Pravidlo platí pro každou stanici, ne jen pro `Push`.** Zvažovala se výjimka — slovo jedině
+u `Push`e, protože jedině on se za zastávkou ocitá často. Zahozeno: *nehotová stanice řekne jedním
+slovem proč* je konzistentní věta, kdežto výjimka pro jednu znamená, že se důvod dá vyčíst **jen
+někdy** — a to je horší, než kdyby se nedal nikdy, protože se na to nedá spolehnout. `Nálezy`
+a `Zadání` se za zastávkou strukturálně neocitnou (první je první, druhá stojí na první), ale
+`reason` mají vyplněný stejně: pravidlo je **bezpodmínečné**, takže se dráha nemá jak potichu
+odmlčet, kdyby se výčet předpokladů někdy změnil.
+
+**Zamítnutá varianta: kreslit v šedé kapsli celý detail.** Bylo by to o jednu hodnotu míň a nikdy
+by se to nemohlo rozejít s aktivní kapslí. Zahozeno kvůli mezi č. 1 výš a kvůli šířce: `o 21 vzadu`
+v páté z pěti kapslí přeteče dřív než `pozadu`, a přetečená kapsle za zastávkou by ubrala místo
+té, o kterou jde.
+
+**Slovník se schválně drží u toho, co ta místa už říkají**, aby se dráha nerozešla se sekcí
+*Větev*: `pozadu` (větev je o N commitů pozadu za základem), `konflikt` (větev je v konfliktu se
+základem), `nepřetlačeno` (`BranchSyncState.rebased` — *přerovnáno, nepřetlačeno*), `zjišťuju`
+(tatáž věta jako u `MergeObstacle.statusLoading`). Nezjištěný stav větve dává `zjišťuju` nebo
+`nevím`, **nikdy `pozadu`**: nad šedou kapslí není věta, která by to upřesnila, takže se slovo čte
+jako fakt.
+
+**Ověření je zase snímek běžící aplikace**, ne render sondy — z téhož důvodu jako ve třetím kole
+(#478). Sonda kreslí z připravených dat, takže o tom, co okno nad tím PR doopravdy ukáže, netvrdí
+nic; obě vady čtvrtého kola byly vidět jedině na obrazovce.

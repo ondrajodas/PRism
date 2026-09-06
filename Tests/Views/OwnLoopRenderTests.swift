@@ -6,20 +6,23 @@ import Testing
 
 /// Dráha smyčky se do hlavičky doopravdy nakreslí (#508).
 ///
-/// `Policy.ownLoop` se dá otestovat výčtem, jenže z toho neplyne, že se sedm kapslí do hlavičky
+/// `Policy.ownLoop` se dá otestovat výčtem, jenže z toho neplyne, že se pět kapslí do hlavičky
 /// **vejde na jeden řádek** — a kdyby se zalomily, vyroste hlavička PR přes půl okna. Měří se
 /// rozvržením mimo obrazovku (`fittingSize`), jako u `PullRequestRowPromptTests`: accessibility
 /// tree se v okně mimo obrazovku nenaplní (změřeno u #269).
 @Suite("Dráha smyčky v hlavičce (#508)")
 @MainActor
 struct OwnLoopRenderTests {
+    /// Dráha se zastávkou na `Zadání` a **se slovem u šedé stanice za ní** (#508, čtvrté kolo) —
+    /// to je ta nejdelší podoba kapslí, jakou dráha kreslí, takže se na ní měří i to zalomení.
     private func loop(move: OwnLoop.Move?) -> OwnLoop {
-        OwnLoop(
+        let words = ["3 nálezy", "2 k předání", "nepřetlačeno", "zjišťuju", "schváleno"]
+        return OwnLoop(
             stations: OwnLoop.Station.allCases.enumerated().map { index, station in
                 OwnLoop.Stop(
                     station: station,
                     state: index == 1 ? .running : (index < 1 ? .done : .idle),
-                    detail: index == 1 ? "2 k předání" : nil
+                    detail: words[index]
                 )
             },
             active: .handoff,
@@ -49,14 +52,18 @@ struct OwnLoopRenderTests {
         // Bez uzávěru se nekreslí: tlačítko, které nic nedělá, je zrovna ten stav, ve kterém
         // člověk hledá, co je rozbité (tatáž úvaha jako u `Prompt →`, #333).
         #expect(!OwnLoopView(loop: loop(move: .openHandoff)).showsAction)
-        // A stanice bez tahu (`Nálezy`, `Agent`, čekání na reviewera) nenabídne prázdné tlačítko.
+        // A stanice bez tahu (`Nálezy`, čekání na reviewera) nenabídne prázdné tlačítko.
         #expect(!OwnLoopView(loop: loop(move: nil), perform: { _ in }).showsAction)
     }
 
-    /// Sedm kapslí vedle sebe se v hlavičce **nezalomí**: `ProportionalColumns` jim navrhuje
+    /// Pět kapslí vedle sebe se v hlavičce **nezalomí**: `ProportionalColumns` jim navrhuje
     /// konkrétní šířku, takže dráha zůstává tři řádky vysoká (hlavička, fáze, věta) i v úzkém okně.
-    @Test("Sedm stanic se do hlavičky vejde na jeden řádek")
-    func sevenStationsFitOnOneRow() {
+    ///
+    /// **Měří se se slovy ve všech pěti kapslích** (#508, čtvrté kolo): prázdné šedé kapsle by
+    /// tenhle test prošly, i kdyby se dráha se slovy zalomila — a to je zrovna měřidlo, které
+    /// vydá tutéž hodnotu pro „funguje“ i „nefunguje“ (#478).
+    @Test("Pět stanic se do hlavičky vejde na jeden řádek")
+    func fiveStationsFitOnOneRow() {
         let wide = hosting(OwnLoopView(loop: loop(move: nil)), width: 1200).fittingSize.height
         let narrow = hosting(OwnLoopView(loop: loop(move: nil)), width: 620).fittingSize.height
         #expect(wide == narrow, "kapsle se v užším okně zalomily")

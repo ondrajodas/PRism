@@ -7,7 +7,7 @@ extension Policy {
     /// větví“; nad cizí to je nadpis bez obsahu, stejně jako sekce `Větev` (#465). Nekreslí se
     /// zašedle, nekreslí se vůbec.
     ///
-    /// **Walk, ne sedm nezávislých odznaků.** Stanice se procházejí v pořadí `Station.allCases`
+    /// **Walk, ne pět nezávislých odznaků.** Stanice se procházejí v pořadí `Station.allCases`
     /// a walk se **zastaví na první, která není hotová** — ta je `active`, nese větu i akci.
     ///
     /// **Za zastávkou se ale nemlčí, a je to změna pravidla z proklikání** (#508, druhé kolo).
@@ -18,35 +18,37 @@ extension Policy {
     /// jsou hotová**, a nakreslí se `done` jen tehdy, když **projde**. Cokoli jiného je `idle`:
     /// nenačtené checky nejsou zeleno a „nevím“ není hotovo.
     ///
-    /// **Rozdělaná stanice je za zastávkou pořád jen jedna — ta aktivní.** Druhá červená kapsle by
-    /// soupeřila s větou pod dráhou, která mluví o **jedné** stanici; a fakt, který se tím zamlčí,
-    /// je pořád vidět tam, kde bydlí (tab `Kontroly`, sekce `Větev`, panel `Zadání`).
+    /// **Šedá za zastávkou přesto řekne jedním slovem proč** (#508, čtvrté kolo). Vyhodnocená, ale
+    /// nehotová stanice si nese `reason` — `pozadu`, `konflikt`, `nepřetlačeno`, `zjišťuju` —
+    /// a ten se nakreslí místo detailu. **Stav zůstává `idle`**, takže rozdělaná (a tedy
+    /// zvýrazněná) kapsle je dál právě jedna: ta, o které mluví věta pod dráhou. Stanice, která se
+    /// **nevyhodnocovala**, mlčí dál — vymyslet jí důvod by bylo tvrzení z chybějících dat.
     ///
     /// **Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá
     /// **nejlevnější tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá
     /// předat. Dráha odpovídá na jinou otázku — **kde v kole jsem** —, a `Zadání ✓` nad šesti
     /// nepředanými položkami by byla nepravda. Dvě odpovědi to nejsou: každá odpovídá na svoje.
     ///
-    /// **„Nevím“ je odpověď, ne „nejde“** (#572). Slévatelnost i checky se dotahují až s detailem,
-    /// takže hned po startu o nich okno neví nic — a stanice v tom stavu je `unknown` s větou
-    /// `zjišťuju`, ne `failed`. Nad nevratnou akcí je to tatáž hranice, kterou drží `MergeObstacle`
-    /// (`statusLoading` × `conflicting`).
+    /// **„Nevím“ je odpověď, ne „nejde“** (#572). Checky i vyžádaní reviewery se dotahují až
+    /// s detailem, takže hned po startu o nich okno neví nic — a stanice v tom stavu je `unknown`
+    /// s větou `zjišťuju`, ne `failed`.
+    ///
+    /// **Merge dráha neřeší** (#508, čtvrté kolo): sedmá stanice odešla, protože stála na celém
+    /// kole a byla prakticky vždycky šedá. Nabídku merge proto tahle funkce **nebere ani jako
+    /// vstup** — kdyby ji brala, byl by to držený parametr, který nikdo nečte. Kde se merguje, se
+    /// nezměnilo: sekce `Větev` a `Policy.mergeOffer` (#465).
     ///
     /// - Parameters:
     ///   - ownership: čí PR to je. Cokoli jiného než `.mine` vrací `nil`.
     ///   - state: stav pull requestu. `merged` a `closed` smyčku **zkracují** — nad mergnutým PR
     ///     nemá smysl tvrdit, že zbývá předat zadání.
     ///   - review: stav review na tomhle PR, tedy tatáž hodnota, jakou ukazuje řádek seznamu.
-    ///   - handoff: co zbývá předat (#334). Čte se z něj `pending`, `stage` i `hasMovedHead` —
-    ///     na rozdíl od desky, která bere jedině `awaitsMove`: dráha má dvě stanice (`Zadání`
-    ///     a `Agent`) a rozlišení „nepředáno“ × „předáno a čekám na commit“ je právě to, co je
-    ///     mezi nimi.
+    ///   - handoff: co zbývá předat (#334). Čte se z něj `pending` i `stage` — na rozdíl od desky,
+    ///     která bere jedině `awaitsMove`: dráha o nepředaném zadání říká i **proč** zbývá.
     ///   - sync: co se právě děje s větví (#466). `nil` = neděje se nic.
     ///   - status: co GitHub říká o slévatelnosti (#465). `nil` = ještě se neptalo.
     ///   - checks: kontroly. `nil` = nenačetly se (**„nevím“**), `[]` = PR bez CI (odpověď).
     ///   - reviewers: kdo na PR stojí a jak odpověděl (#392). `nil` = metadata se nenačetla.
-    ///   - merge: nabídka merge z `mergeOffer(…)`, tedy z **téhož** místa, ze kterého se kreslí
-    ///     tlačítko v sekci `Větev` — druhý seznam překážek by se s prvním rozešel.
     static func ownLoop(
         ownership: PullRequestOwnership,
         state: PullRequestState,
@@ -55,8 +57,7 @@ extension Policy {
         sync: BranchSyncState? = nil,
         status: BranchStatusState? = nil,
         checks: [PullRequestCheck]? = nil,
-        reviewers: [RequestedReviewer]? = nil,
-        merge: MergeOffer = .absent
+        reviewers: [RequestedReviewer]? = nil
     ) -> OwnLoop? {
         guard ownership == .mine else { return nil }
         let stamp = handoffStamp(handoff)
@@ -72,8 +73,9 @@ extension Policy {
 
         for station in OwnLoop.Station.allCases {
             guard ownLoopFacts(of: station, branch: sync).isSubset(of: done) else {
-                // Fakta téhle stanice stojí na kroku, který se neudělal — `idle` je odpověď, ne
-                // úspora. Před zastávkou sem walk nedojde: tam je hotové všechno předchozí.
+                // Fakta téhle stanice stojí na kroku, který se neudělal — `idle` **bez slova** je
+                // odpověď, ne úspora: nevyhodnocovala se, takže se o ní nedá říct ani proč není
+                // zelená. Před zastávkou sem walk nedojde: tam je hotové všechno předchozí.
                 stations.append(OwnLoop.Stop(station: station, state: .idle, detail: nil))
                 continue
             }
@@ -84,17 +86,17 @@ extension Policy {
                 sync: sync,
                 status: status,
                 checks: checks,
-                reviewers: reviewers,
-                merge: merge
+                reviewers: reviewers
             ) {
             case .passed(let detail):
                 done.insert(station)
                 stations.append(OwnLoop.Stop(station: station, state: .done, detail: detail))
-            case .stopped(let state, let detail, let sentence, let action):
+            case .stopped(let state, let detail, let reason, let sentence, let action):
                 guard stop == nil else {
-                    // Za zastávkou se kreslí jedině zelená. Rozdělaná, spadlá i neznámá stanice je
-                    // tady `idle`: rozdělaná smí být jedna — ta, o které mluví věta pod dráhou.
-                    stations.append(OwnLoop.Stop(station: station, state: .idle, detail: nil))
+                    // Za zastávkou se kreslí zelená, nebo **šedá s jedním slovem**: rozdělaná smí
+                    // být jedna — ta, o které mluví věta pod dráhou —, ale mlčet o důvodu by
+                    // znamenalo, že se z dráhy nepozná ani „větev je pozadu“ (#508, čtvrté kolo).
+                    stations.append(OwnLoop.Stop(station: station, state: .idle, detail: reason))
                     continue
                 }
                 stations.append(OwnLoop.Stop(station: station, state: state, detail: detail))
@@ -104,9 +106,9 @@ extension Policy {
         return OwnLoop(
             stations: stations,
             active: stop?.station,
-            // Bez zastávky došla smyčka do konce, aniž by byl PR mergnutý — stane se to mezi
-            // úspěšným merge a dalším načtením stavu PR.
-            last: stop?.sentence ?? "Všech sedm stanic je hotových — smyčka došla do konce.",
+            // Bez zastávky je hotové celé kolo. **Merge tady stanice není** (#508, čtvrté kolo),
+            // takže věta říká, kde bydlí — je to údaj o místě, ne tvrzení, že to jde mergnout.
+            last: stop?.sentence ?? "Všech pět stanic je hotových — merge zůstává v sekci Větev.",
             move: stop?.move,
             stamp: stamp
         )
@@ -118,7 +120,7 @@ extension Policy {
     /// podmínka ve view. Stanice za zastávkou se vyhodnotí, jedině když je celý tenhle výčet
     /// hotový; jinak by dráha tvrdila něco nad daty, která mluví o **jiném** stavu repozitáře.
     /// Vyjmenovávají se **přímé** předpoklady: `done` se plní jedině stanicemi, které prošly,
-    /// takže se přenos přes řetěz (`agent` → `handoff` → `findings`) udělá sám.
+    /// takže se přenos přes řetěz udělá sám.
     ///
     /// **`Push` na ničem nestojí, a to je ten podstatný řádek.** „Větev je pushnutá a srovnaná nad
     /// základem“ je tvrzení o **dnešní** větvi; nepředané nálezy z něj nedělají nepravdu, jenom
@@ -139,15 +141,8 @@ extension Policy {
     /// stavem sousední stanice (*`Push` je hotový*).
     ///
     /// **Nenačtený ani nezjištěný stav větve je „nevím“, ne „rozešlo se to“.** Zhasnout kvůli němu
-    /// by znamenalo brát chybějící odpověď jako důkaz — tatáž hranice, jakou drží `isUnknownYet`
-    /// nad mergem. Nezhasne se tedy nic a `Push` si svoje „zjišťuju“ řekne sám.
-    ///
-    /// **`Merge` stojí na všem, a je to nejtvrdší řádek výčtu.** Je to poslední brána před
-    /// **nevratnou** akcí, takže se nad ní zaokrouhluje k „nevím“; `k merge` nad šesti nepředanými
-    /// položkami by navíc byla rada, která si protiřečí s větou pod dráhou. Že by `Merge` zelený
-    /// nevyšel tak jako tak (`mergeStep` nikdy nevrací `.passed` — mergnutou smyčku kreslí
-    /// `closedLoop`), je **shoda okolností, ne pravidlo**; kdyby se to změnilo, ať to zůstane
-    /// rozhodnuté tady.
+    /// by znamenalo brát chybějící odpověď jako důkaz. Nezhasne se tedy nic a `Push` si svoje
+    /// „zjišťuju“ řekne sám.
     ///
     /// - Parameter sync: co leží v kopii repa (#466). **Jediný vstup, který o hlavě na GitHubu
     ///   něco říká** — `BranchStatus` mluví o poloze proti základu, ne o tom, čí je hlava.
@@ -158,10 +153,8 @@ extension Policy {
         switch station {
         case .findings: []
         case .handoff: [.findings]
-        case .agent: [.handoff]
         case .push: []
         case .ci, .review: headReachedGitHub(sync) ? [] : [.push]
-        case .merge: [.findings, .handoff, .agent, .push, .ci, .review]
         }
     }
 
@@ -196,9 +189,18 @@ extension Policy {
     /// kreslil. Kdyby byl venku, dala by se dráha složit odjinud než tady.
     private enum LoopStep {
         case passed(detail: String?)
+        /// - Parameters:
+        ///   - detail: co v kapsli stojí, když je tahle stanice **ta aktivní** — plná odpověď
+        ///     i s počtem (`o 4 vzadu`, `3 neprošly`), protože pod ní stojí věta.
+        ///   - reason: **jedno slovo**, které se nakreslí, když je stanice **za zastávkou**.
+        ///     Vlastní hodnota vedle `detail`u schválně: šedá kapsle stojí sama (věta pod dráhou
+        ///     mluví o jiné stanici) a dělí se o šířku s ostatními čtyřmi, takže se z ní musí dát
+        ///     přečíst **druh** překážky, ne její míra. Nikdy prázdné a **nikdy s číslem** —
+        ///     počet nad cizí větou se čte jako tvrzení o tom, co je zrovna na tahu.
         case stopped(
             state: ReviewerLane.PhaseState,
             detail: String?,
+            reason: String,
             sentence: String,
             move: OwnLoop.Move?
         )
@@ -211,17 +213,14 @@ extension Policy {
         sync: BranchSyncState?,
         status: BranchStatusState?,
         checks: [PullRequestCheck]?,
-        reviewers: [RequestedReviewer]?,
-        merge: MergeOffer
+        reviewers: [RequestedReviewer]?
     ) -> LoopStep {
         switch station {
         case .findings: findingsStep(review)
         case .handoff: handoffStep(handoff)
-        case .agent: agentStep(handoff)
         case .push: pushStep(sync: sync, status: status)
         case .ci: checksStep(checks)
         case .review: reviewStep(reviewers)
-        case .merge: mergeStep(merge)
         }
     }
 
@@ -231,7 +230,7 @@ extension Policy {
     ///
     /// **Zkracuje se celá, ne jen poslední stanice.** Nad mergnutým PR by walk zastavil tam, kde
     /// zrovna zbylo něco nepředaného — a věta `6 k předání` nad mergnutou větví je rada, kterou
-    /// nemá kdo splnit. `merged` je proto sedm hotových stanic, `closed` sedm nedojetých:
+    /// nemá kdo splnit. `merged` je proto pět hotových stanic, `closed` pět nedojetých:
     /// `stopped` je ta hodnota, kterou dráha reviewera používá pro „nedoběhlo, protože se to
     /// zastavilo“, takže se nový stav nezavádí.
     private static func closedLoop(state: PullRequestState, stamp: String?) -> OwnLoop? {
@@ -268,12 +267,18 @@ extension Policy {
     /// **Neprůkazný běh smyčku zastaví** (#383), a je to schválně: `inconclusive` existuje právě
     /// proto, aby se nečetl jako `čisto`, a pustit ho dál by ho tiše přečetlo jako čisto. Stav je
     /// `unknown`, ne `failed` — session doběhla.
+    ///
+    /// **`reason` se tady nikdy nenakreslí** — `Nálezy` jsou první stanice, takže jsou buď hotové,
+    /// nebo tou zastávkou. Vyplněný je stejně: pravidlo *nehotová stanice řekne jedním slovem
+    /// proč* je **bezpodmínečné**, a kdyby se výčet předpokladů v `ownLoopFacts` někdy změnil,
+    /// nesmí dráha potichu zmlknout.
     private static func findingsStep(_ review: ReviewState) -> LoopStep {
         switch review {
         case .notStarted:
             .stopped(
                 state: .running,
                 detail: "nespuštěno",
+                reason: "nespuštěno",
                 sentence: "Review na tomhle PR ještě neběželo — pusť ho, ať je z čeho složit zadání.",
                 move: nil
             )
@@ -281,6 +286,7 @@ extension Policy {
             .stopped(
                 state: .running,
                 detail: "čeká na slot",
+                reason: "fronta",
                 sentence: "Review čeká na volný slot.",
                 move: nil
             )
@@ -288,6 +294,7 @@ extension Policy {
             .stopped(
                 state: .running,
                 detail: "kopie repa",
+                reason: "klonuje",
                 sentence: "Připravuje se pracovní kopie repa.",
                 move: nil
             )
@@ -295,6 +302,7 @@ extension Policy {
             .stopped(
                 state: .running,
                 detail: "\(finished)/\(total)",
+                reason: "běží",
                 sentence: "Reviewery běží — hotových je \(finished) ze \(total).",
                 move: nil
             )
@@ -302,6 +310,7 @@ extension Policy {
             .stopped(
                 state: .failed,
                 detail: "kopie repa",
+                reason: "spadlo",
                 sentence: "Pracovní kopii repa se nepodařilo připravit: \(detail)",
                 move: nil
             )
@@ -309,6 +318,7 @@ extension Policy {
             .stopped(
                 state: .failed,
                 detail: "spadlo",
+                reason: "spadlo",
                 sentence: "Review spadlo (\(detail)) — nálezy z něj nejsou, což není totéž jako čisto.",
                 move: nil
             )
@@ -316,6 +326,7 @@ extension Policy {
             .stopped(
                 state: .stopped,
                 detail: "timeout",
+                reason: "timeout",
                 sentence: "Review nedoběhlo do limitu, takže za zbytek kódu nemluví.",
                 move: nil
             )
@@ -323,6 +334,7 @@ extension Policy {
             .stopped(
                 state: .stopped,
                 detail: "přerušeno",
+                reason: "přerušeno",
                 sentence: "Review skončilo s aplikací, takže za zbytek kódu nemluví.",
                 move: nil
             )
@@ -330,6 +342,7 @@ extension Policy {
             .stopped(
                 state: .unknown,
                 detail: "neprůkazné",
+                reason: "neprůkazné",
                 sentence: inconclusiveSentence(reason),
                 move: nil
             )
@@ -337,6 +350,7 @@ extension Policy {
             .stopped(
                 state: .stopped,
                 detail: "zastaralé",
+                reason: "zastaralé",
                 sentence: "Nálezy platí ke staršímu commitu, než jaký PR má teď — pusť review znovu.",
                 move: nil
             )
@@ -369,6 +383,10 @@ extension Policy {
     /// dráhou; jestli stanice pustí dál, je otázka „zbývá tu něco?“ — a na tu odpovídá jedno
     /// číslo. Kdyby to bylo obráceně, byla by `changed` s nulou (nová hlava, ale žádná položka)
     /// zastávka bez obsahu.
+    ///
+    /// **`reason` se tady nenakreslí** ze stejného důvodu jako u `Nálezů`: `Zadání` stojí na
+    /// `Nálezech`, takže se buď vyhodnotí jako první nehotová (a je zastávkou), nebo se
+    /// nevyhodnotí vůbec.
     private static func handoffStep(_ report: HandoffReport) -> LoopStep {
         guard report.pending > 0 else {
             guard let stamp = report.handoff else { return .passed(detail: "nic k předání") }
@@ -378,6 +396,7 @@ extension Policy {
         return .stopped(
             state: .running,
             detail: "\(report.pending) k předání",
+            reason: "nepředáno",
             sentence: handoffSentence(report, count: count),
             move: .openHandoff
         )
@@ -410,35 +429,16 @@ extension Policy {
         }
     }
 
-    /// `Agent` — **bez živého obsahu až do #511, a je to napsané, ne zamlčené.**
-    ///
-    /// Aplikace dneska neví, jestli nad předaným zadáním někdo pracuje: prompt se zkopíruje
-    /// a odejde do cizího terminálu. Jediné, co se dá tvrdit, je **kdy se předalo** a **jestli od
-    /// té doby přišel commit** — a přesně to stanice říká. Stav je proto `unknown`, ne `running`:
-    /// `běží` by bylo tvrzení, které data neunesou (a zrovna tohle je vzor, který Copilot v tomhle
-    /// repu nachází opakovaně).
-    ///
-    /// **Hotová je tehdy, když se hlava pohnula** (`HandoffReport.hasMovedHead`) — práce dorazila.
-    /// A hotová je i tehdy, když se nikdy nic nepředávalo: na PR bez nálezů a bez diskuze nemá
-    /// agent co dělat a `čekám na commit` by tam viselo navždycky.
-    private static func agentStep(_ report: HandoffReport) -> LoopStep {
-        if report.hasMovedHead { return .passed(detail: "commit dorazil") }
-        guard let stamp = report.handoff else { return .passed(detail: "nebylo co předat") }
-        return .stopped(
-            state: .unknown,
-            detail: "předáno",
-            sentence: "Předáno "
-                + "\(Plural.czech(stamp.count, one: "položka", few: "položky", many: "položek")). "
-                + "Jestli na tom agent pracuje, aplikace zatím neví — dráha se pohne, až na větev přijde commit.",
-            move: nil
-        )
-    }
-
     /// `Push` — srovnat větev nad základem a přetlačit ji (#466).
     ///
     /// **Rozdělaná práce v kopii repa přebíjí stav na GitHubu**, a je to pořadí, ne shoda: dokud
     /// v cache leží přerovnaná nebo rozdělaná větev, je další krok o ní, ne o tom, co si o větvi
     /// myslí GitHub (ten o rebase v cache neví vůbec).
+    ///
+    /// **Tohle je ta stanice, kvůli které slovo za zastávkou vzniklo** (#508, čtvrté kolo).
+    /// `Push` na ničem nestojí, takže se vyhodnotí vždycky — a když se walk zastavil na
+    /// `Nálezech` nebo `Zadání`, byla do téhle změny šedá a **němá**. Že je větev o jednadvacet
+    /// commitů pozadu, se pak dalo přečíst jedině v sekci `Větev`.
     private static func pushStep(sync: BranchSyncState?, status: BranchStatusState?) -> LoopStep {
         if let sync, let step = syncStep(sync) { return step }
         switch status {
@@ -446,6 +446,7 @@ extension Policy {
             return .stopped(
                 state: .unknown,
                 detail: "zjišťuju",
+                reason: "zjišťuju",
                 sentence: "Zjišťuju, jak větev stojí nad základem.",
                 move: nil
             )
@@ -454,6 +455,7 @@ extension Policy {
             return .stopped(
                 state: .unknown,
                 detail: "nevím",
+                reason: "nevím",
                 sentence: "Stav větve se nepodařilo zjistit. \(reason)",
                 move: nil
             )
@@ -466,13 +468,18 @@ extension Policy {
     private static func syncStep(_ sync: BranchSyncState) -> LoopStep? {
         if sync.isBusy {
             return .stopped(
-                state: .running, detail: "pracuje se", sentence: sync.sentence, move: .openBranch
+                state: .running,
+                detail: "pracuje se",
+                reason: "probíhá",
+                sentence: sync.sentence,
+                move: .openBranch
             )
         }
         if let branch = sync.rebasedBranch {
             return .stopped(
                 state: .running,
                 detail: "\(branch.replayed) přerovnáno",
+                reason: "nepřetlačeno",
                 sentence: sync.sentence,
                 move: .openBranch
             )
@@ -480,7 +487,11 @@ extension Policy {
         switch sync {
         case .conflicted, .unfinished, .unresolved, .failed:
             return .stopped(
-                state: .failed, detail: "rebase", sentence: sync.sentence, move: .openBranch
+                state: .failed,
+                detail: "rebase",
+                reason: "rebase",
+                sentence: sync.sentence,
+                move: .openBranch
             )
         case .pushed, .alreadyInSync, .rebasing, .resolving, .pushing, .discarding, .rebased:
             // Doběhlé srovnání o dnešní poloze větve nerozhoduje — to řekne `BranchStatus` níž.
@@ -495,6 +506,7 @@ extension Policy {
             return .stopped(
                 state: .failed,
                 detail: "konflikt",
+                reason: "konflikt",
                 sentence: "Větev je v konfliktu se základem — srovnej ji.",
                 move: .openBranch
             )
@@ -504,6 +516,7 @@ extension Policy {
             return .stopped(
                 state: .running,
                 detail: "o \(divergence.behind) vzadu",
+                reason: "pozadu",
                 sentence: "Větev je o \(commits) pozadu za základem — srovnej ji rebasem.",
                 move: .openBranch
             )
@@ -512,6 +525,7 @@ extension Policy {
             return .stopped(
                 state: .running,
                 detail: "za základem",
+                reason: "pozadu",
                 sentence: "Větev je pozadu za základem — srovnej ji rebasem.",
                 move: .openBranch
             )
@@ -526,7 +540,11 @@ extension Policy {
     private static func checksStep(_ checks: [PullRequestCheck]?) -> LoopStep {
         guard let checks else {
             return .stopped(
-                state: .unknown, detail: "zjišťuju", sentence: "Kontroly se načítají.", move: nil
+                state: .unknown,
+                detail: "zjišťuju",
+                reason: "zjišťuju",
+                sentence: "Kontroly se načítají.",
+                move: nil
             )
         }
         let summary = summary(of: checks)
@@ -536,6 +554,7 @@ extension Policy {
             return .stopped(
                 state: .failed,
                 detail: "\(summary.failed) \(word)",
+                reason: "neprošlo",
                 sentence: "\(Plural.czech(summary.failed, one: "check", few: "checky", many: "checků")) "
                     + "\(word) — oprav to a pushni znovu.",
                 move: .openChecks
@@ -545,6 +564,7 @@ extension Policy {
             return .stopped(
                 state: .running,
                 detail: "\(summary.running) běží",
+                reason: "běží",
                 sentence: "\(Plural.czech(summary.running, one: "check", few: "checky", many: "checků")) "
                     + "ještě běží.",
                 move: .openChecks
@@ -570,7 +590,11 @@ extension Policy {
     private static func reviewStep(_ reviewers: [RequestedReviewer]?) -> LoopStep {
         guard let reviewers else {
             return .stopped(
-                state: .unknown, detail: "zjišťuju", sentence: "Reviewery se načítají.", move: nil
+                state: .unknown,
+                detail: "zjišťuju",
+                reason: "zjišťuju",
+                sentence: "Reviewery se načítají.",
+                move: nil
             )
         }
         let blocking = reviewers.count { $0.answer == .changesRequested }
@@ -578,6 +602,7 @@ extension Policy {
             return .stopped(
                 state: .failed,
                 detail: "\(blocking) chce změny",
+                reason: "změny",
                 sentence: Plural.czech(
                     blocking, one: "reviewer chce", few: "reviewery chtějí", many: "reviewerů chce"
                 ) + " změny — přečti si je a předej je agentovi.",
@@ -591,54 +616,13 @@ extension Policy {
             return .stopped(
                 state: .running,
                 detail: "čeká \(waiting)",
+                reason: "čeká",
                 sentence: "Čeká se na \(Plural.czech(waiting, one: "reviewera", few: "reviewery", many: "reviewerů")) "
                     + "— tvůj tah to není.",
                 move: nil
             )
         }
         return .passed(detail: "bez reviewerů")
-    }
-
-    /// `Merge` — poslední stanice (#465).
-    ///
-    /// **Zeleno je `running`, ne vlastní barva.** Návrh kreslí `k merge` mintově, jenže mint není
-    /// ve slovníku fází dráhy reviewera — a přidat ho by byl přesně ten nový vzor, kterému se
-    /// #508 vyhýbá. `running` je hodnota pro „tady se to zrovna děje / je to na tobě“ a v kresbě
-    /// je to jediná zvýrazněná kapsle, což je přesně ta role.
-    ///
-    /// **Chybějící data jsou `unknown`, ne `failed`** (#572): `K merge` po startu slévatelnost
-    /// nezná, protože se dotahuje až s detailem.
-    private static func mergeStep(_ offer: MergeOffer) -> LoopStep {
-        switch offer {
-        case .absent:
-            // Nad vlastním PR sem walk nedojde (`branchSection` kreslí sekci na každém vlastním),
-            // ale tvrdit z toho `jde mergnout` by znamenalo tvrdit něco z chybějícího vstupu.
-            return .stopped(
-                state: .unknown, detail: "nevím", sentence: "O mergi se nedá říct nic.", move: nil
-            )
-        case .allowed:
-            return .stopped(
-                state: .running,
-                detail: "k merge",
-                sentence: "Zeleno — dá se to mergnout.",
-                move: .openBranch
-            )
-        case .blocked(let obstacles):
-            guard let first = obstacles.first else {
-                // Prázdné `blocked` `mergeOffer(…)` nevydá; kdyby se to změnilo, ať dráha mlčí,
-                // ne aby si důvod vymyslela.
-                return .stopped(
-                state: .unknown, detail: "nevím", sentence: "O mergi se nedá říct nic.", move: nil
-            )
-            }
-            let waiting = obstacles.allSatisfy(\.isUnknownYet)
-            return .stopped(
-                state: waiting ? .unknown : .failed,
-                detail: waiting ? "zjišťuju" : "nejde",
-                sentence: first.sentence,
-                move: waiting ? nil : .openBranch
-            )
-        }
     }
 
     /// Razítko do hlavičky dráhy — **počet předaných položek a hlava, proti které se předávalo**.
@@ -649,22 +633,5 @@ extension Policy {
         let count = Plural.czech(stamp.count, one: "položka", few: "položky", many: "položek")
         guard let head = stamp.shortHead else { return "předáno \(count)" }
         return "předáno \(count) · proti \(head)"
-    }
-}
-
-extension Policy.MergeObstacle {
-    /// Je to překážka „ještě nevím“, ne „nejde to“ (#508, drží #572)?
-    ///
-    /// **Vlastní otázka vedle `isPublishingGate`**, protože se ptá na něco jiného: ta rozlišuje,
-    /// o čem překážka mluví (o aplikaci × o pull requestu), tahle **jak jistá je**. Dráha na tom
-    /// stojí celá: `K merge` po startu slévatelnost nezná, a `nejde mergnout` by nad načítáním
-    /// bylo tvrzení z chybějících dat — tedy ta nejdražší strana omylu u nevratné akce.
-    var isUnknownYet: Bool {
-        switch self {
-        case .factsMissing, .statusLoading, .statusFailed, .statusUnknown: true
-        case .notAllowed, .conflicting, .behind, .protected, .draftPullRequest, .notOpen,
-            .failingChecks:
-            false
-        }
     }
 }

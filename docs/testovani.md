@@ -355,13 +355,20 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   a `dismissed` pustí dál, `inconclusive` **zastaví** — pustit ho dál by ho tiše přečetlo jako
   čisto), sedm podob `HandoffReport` (rozhoduje `pending`, ne `stage`), devět stavů
   `BranchSyncState` a všech osm `BranchStatus.MergeState`, `nil` × `[]` × zeleno × červeno
-  u checků, tři odpovědi reviewera a **jedenáct** překážek merge.
+  u checků a tři odpovědi reviewera.
 
-  **Matice je kříž přes pět os, ne kartézský součin** (`handoff × větev × CI × review × merge`).
-  Součin by měl tisíce prvků a testoval by pořád totéž pravidlo; kříž se dá projít pohledem a nad
-  ním se tvrdí to, co dráha slibuje: **před zastávkou je hotovo, za ní jedině `done` nebo `idle`**
-  (rozdělaná smí být **nejvýš jedna** kapsle — ta aktivní, o které mluví věta), **`idle` nic
-  netvrdí** (`detail == nil`), věta pod dráhou **nikdy nechybí** a akci má jedině zastávka.
+  **Stanic je od čtvrtého kola pět, a tvrdí se to třemi způsoby.** `allCases.count == 5`, celý
+  **výčet v pořadí** a **popisky** (`Nálezy`, `Zadání`, `Push`, `CI`, `Review`). Tři tvrzení
+  o jedné věci proto, že každé chytá jinou chybu: přidaná stanice, přehozené pořadí, přejmenovaná
+  kapsle. Vrátit `Agent` nebo `Merge` do `allCases` navíc **neprojde ani překladem** —
+  `factsOfEachStation` má nad `Station` vyčerpávající `switch`.
+
+  **Matice je kříž přes všechny osy, ne kartézský součin** (`review × handoff × větev × CI ×
+  reviewery`). Součin by měl tisíce prvků a testoval by pořád totéž pravidlo; kříž se dá projít
+  pohledem a nad ním se tvrdí to, co dráha slibuje: **před zastávkou je hotovo, za ní jedině `done`
+  nebo `idle`** (rozdělaná smí být **nejvýš jedna** kapsle — ta aktivní, o které mluví věta),
+  **šedý text je jedno slovo** (viz níž), věta pod dráhou **nikdy nechybí** a akci má jedině
+  zastávka.
 
   **Za zastávkou se od druhého kola #508 zelená kreslí, a testuje se to z obou stran.** Kladná
   strana je případ `keboola/platform-libraries#566` doslova — schváleno, CI zeleně, walk stojí na
@@ -372,7 +379,7 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   stanice) a nad **nepřetlačenou prací v cache jsou `CI` i `Review` šedé**, i když data z GitHubu
   jsou zelená — sedm podob té „hlavy, která na GitHubu není“, výčtem (`rebased`, `conflicted`,
   `unfinished`, `unresolved`, `failed`, `rebasing`, `pushing`). K tomu se **výčet
-  `Policy.ownLoopFacts(of:branch:)` tvrdí jmenovitě** pro všech sedm stanic a nad **oběma** podobami
+  `Policy.ownLoopFacts(of:branch:)` tvrdí jmenovitě** pro všech pět stanic a nad **oběma** podobami
   větve, a k němu, že předpokladem smí být jedině **dřívější** stanice.
 
   **Od třetího kola #508 se ta hranice testuje i opačně: poloha větve proti základu `CI` ani
@@ -383,10 +390,30 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   Vedle toho stojí sada, která hlídá, že se uvolnilo **jen** to: nad toutéž větví pozadu zůstávají
   nenačtené checky, nenačtení reviewery, spadlé CI i `chce změny` šedé.
 
+  **Od čtvrtého kola k tomu šedá stanice říká jedním slovem proč — a testuje se to ze čtyř stran.**
+  Byla to druhá vada z proklikání: `Push` visel šedý a **prázdný** i tehdy, když byla větev
+  o jednadvacet commitů pozadu.
+
+  1. **Slovník výčtem.** Šestnáct podob stavu větve (`pozadu`, `konflikt`, `nepřetlačeno`,
+     `probíhá`, `rebase`, `zjišťuju`, `nevím`, `srovnaná`) a k tomu pět podob checků a pět
+     odpovědí reviewera — pokaždé se zastávkou na `Nálezech`, aby se stanice vyhodnocovala **za**
+     ní. U každé se tvrdí i to, že slovo z kapsle **neudělalo aktivní** (`state == .idle`).
+  2. **Slovo, ne počet.** Nad celou maticí se tvrdí, že šedý text je **bez mezery a bez číslice**.
+     Je to jediná stráž nad tím, že se do šedé kapsle nedostane `detail` aktivní stanice
+     (`o 21 vzadu`, `1 neprošel`, `čeká 1`) místo `reason`u.
+  3. **Nezjištěný stav větve se nevydává za `pozadu`.** `nil`, `loading` i `failed` musí dát
+     `zjišťuju` nebo `nevím` — nad šedou kapslí není věta, která by to upřesnila, takže se slovo
+     čte jako fakt.
+  4. **Stanice, která se nevyhodnocovala, mlčí dál.** Nad nepřetlačenou prací v cache jsou `CI`
+     i `Review` `idle` **s `detail == nil`**, protože mluví o hlavě, která na GitHubu není; totéž
+     platí o `Zadání` nad nedoběhlým review. Vymyslet jim důvod by bylo tvrzení z chybějících dat.
+
   **Schválení přebíjí visící žádost** (třetí kolo) — `#566` doslova: `odinuv schválil` +
-  `MiroCillik čeká` musí dát `Review` `done` s detailem `schváleno` a walk pokračovat až na `Merge`.
-  Druhá půlka téhož testu je ta, která se uvolnit nesměla: `chce změny` vedle schválení dává
-  `failed`.
+  `MiroCillik čeká` musí dát `Review` `done` s detailem `schváleno`. Od čtvrtého kola je `Review`
+  poslední stanicí, takže walk v tom stavu **dojede do konce** (`active == nil`) a věta pod fázemi
+  posílá na merge do sekce *Větev* — testuje se i to, že přitom **netvrdí `Zeleno`**: o
+  slévatelnosti dráha nic neví, protože `MergeOffer` už nebere jako vstup. Druhá půlka téhož testu
+  je ta, která se uvolnit nesměla: `chce změny` vedle schválení dává `failed`.
 
   **Ověřeno vložením regrese, u každé opravy zvlášť:**
 
@@ -397,6 +424,11 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   | `CI` přestane stát na `Push`i úplně (druhé kolo) | 7 nálezů: výčet předpokladů u `.ci` a všech šest tehdejších podob rozešlé hlavy |
   | za zastávkou se kreslí rozdělaný stav místo `idle` (druhé kolo) | 36 nálezů: matice (32×) a všechna čtyři tvrzení o nenačtených datech (`unknown`, `failed`, detail `zjišťuju`) |
   | návrat na staré pravidlo (za zastávkou vždycky `idle`, první kolo) | 11 nálezů: obě kladná tvrzení — `Push`, `CI` i `Review` vyšly `idle` a detaily `nil` |
+  | **do šedé kapsle jde `detail` místo `reason`u** (čtvrté kolo) | **62 nálezů v 5 testech**, z toho 49 v matici — `čeká 1`, `1 neprošel`, `o 21 vzadu` |
+  | **šedá kapsle za zastávkou zase mlčí** (`detail: nil`, stav před čtvrtým kolem) | **26 nálezů v 5 testech**, z toho 15 ve slovníku `Push`e |
+  | **nevyhodnocená stanice si vymyslí důvod** (`nevím` v nesplněné větvi) | **3 nálezy** v tom jediném testu, který to má chytat (a nic víc — pravidlo nepřebíjí ostatní) |
+  | **nenačtený stav větve hlásí `pozadu`** | 3 nálezy ve 2 testech: `nevydává se za pozadu` (2×) a slovník `Push`e |
+  | **`Agent` se vrátí do `allCases`** | **nepřeloží se** (`factsOfEachStation`: *switch must be exhaustive*); s dopsanou větví v testu spadne `Vždycky pět stanic v pořadí smyčky` třemi nálezy |
 
   **Jak dráha vypadá, ukáže sonda `OwnLoopRenderProbe`** (vypnutá, pouští se ručně) — vyrenderuje
   `OwnLoopView` do PNG přes `ImageRenderer`, takže **nepotřebuje běžící aplikaci**. Scéna `01` jsou
@@ -411,11 +443,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   kterou scéna nenesla. Sonda zůstává (rychlá zpětná vazba na kresbu), ale **doklad o tom, že se
   vada opravila, je snímek běžící aplikace nad tím PR**, ne render sondy.
 
-  **Tři věty, které se rozbijí potichu:** `unknown` × `failed` u merge (#572 — `K merge` po startu
-  slévatelnost nezná, a `nejde mergnout` nad načítáním je tvrzení z chybějících dat); mergnutý PR
-  má **sedm hotových stanic**, ne zastávku u nepředaného zadání; a stanice `Nálezy` **nikdy
-  nenabízí akci**, protože `Spustit review` stojí v hlavičce a #218 mu vyhradilo jediné akcentové
-  místo v pruhu.
+  **Tři věty, které se rozbijí potichu:** mergnutý PR má **pět hotových stanic**, ne zastávku
+  u nepředaného zadání; **draft se od otevřeného PR neliší** (stanice, která na něm jediná
+  zastavovala, byla `Merge`, a ta odešla); a stanice `Nálezy` **nikdy nenabízí akci**, protože
+  `Spustit review` stojí v hlavičce a #218 mu vyhradilo jediné akcentové místo v pruhu.
 
   **Kresba se tvrdí nad zdrojáky** (`LanePhaseChipTests`), protože za běhu se to ověřit nedá: obě
   dráhy vypadají zeleně i tehdy, když si každá mapuje `PhaseState` na barvu sama — rozejdou se až
@@ -426,8 +457,10 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   tam je to `BranchFact.Tone` — jiný výčet nad jinou otázkou. Text se porovnává **bez mezer**
   (`condensed`, #490/#550), jinak by stráž pustila `LanePhaseChip (`.
 
-  Rozvržení (`OwnLoopRenderTests`): sedm kapslí se **nezalomí** (výška při 1200 a 620 bodech je
-  táž) a dráha **nepřeroste hlavičku** (pod 120 body).
+  Rozvržení (`OwnLoopRenderTests`): pět kapslí se **nezalomí** (výška při 1200 a 620 bodech je
+  táž) a dráha **nepřeroste hlavičku** (pod 120 body). **Měří se s textem ve všech pěti kapslích**
+  (čtvrté kolo) — na prázdných šedých kapslích by ten test prošel, i kdyby se dráha se slovy
+  zalomila, a to je zrovna měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“ (#478).
 
   **Že se akce doopravdy nakreslí, se v harnessu tvrdit nedá, a je to změřené.** SwiftUI `Button`
   v hostované hierarchii `NSButton` **není** (`firstDescendant(ofType: NSButton.self)` vrátí `nil`
@@ -437,9 +470,8 @@ přepisování výrazu, ne aritmetika. Léčba je srovnávat **jeden typ** (`Dou
   `OwnLoopView.showsAction` (tentýž vzor jako `PullRequestRow.showsPromptAction`, #333) a **snímek,
   který udělá člověk** — patří to do popisu PR, jako u fokusu a kláves (#184).
 
-  **Ověřeno vložením regrese, třikrát:** obejití brány `ownership == .mine` shodilo test o cizím PR
-  (dvě tvrzení), sražení `isUnknownYet` na `false` shodilo osm tvrzení nad překážkami merge, a
-  vlastní `PhaseState → Color` v `OwnLoopView` shodilo obě stráže nad zdrojáky.
+  **Ověřeno vložením regrese, dvakrát:** obejití brány `ownership == .mine` shodilo test o cizím PR
+  (dvě tvrzení) a vlastní `PhaseState → Color` v `OwnLoopView` shodilo obě stráže nad zdrojáky.
 - **Cizí aktivita na vlastních PR (#335)** — pět sad a **skoro celá oblast jsou negativní
   tvrzení**, protože se to rozbije potichu: notifikace, která přijde dvakrát, i dotaz, který se
   posílá zbytečně, vypadají na první pohled jako fungující aplikace.

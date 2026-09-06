@@ -43,8 +43,9 @@ struct OwnLoopRenderProbe {
 
     private static let scenes: [(String, OwnLoop?)] = [
         // Skutečná data #566: schváleno, CI zeleně, jeden nález k předání, jeden reviewer čeká
-        // a větev o 21 commitů pozadu. `CI` a `Review` zelené, `Push` mlčí — poloha větve hlavou
-        // na GitHubu nehýbe.
+        // a větev o 21 commitů pozadu. `CI` a `Review` zelené a `Push` je šedý **se slovem
+        // `pozadu`** (#508, čtvrté kolo) — poloha větve hlavou na GitHubu nehýbe, ale z dráhy se
+        // to teď pozná.
         ("01-pl566", Policy.ownLoop(
             ownership: .mine,
             state: .open,
@@ -71,10 +72,10 @@ struct OwnLoopRenderProbe {
             reviewers: [
                 RequestedReviewer(login: "odinuv", answer: .approved),
                 RequestedReviewer(login: "MiroCillik", answer: .waiting),
-            ],
-            merge: .allowed
+            ]
         )),
-        // Totéž po rebase: srovnaná větev, takže zezelená i `Push` a zastávka se posune na `Merge`.
+        // Totéž po rebase: srovnaná větev, takže zezelená i `Push` a smyčka dojede do konce —
+        // věta pod fázemi posílá na merge do sekce `Větev` (stanice `Merge` na dráze není).
         ("02-pl566-po-rebase", Policy.ownLoop(
             ownership: .mine,
             state: .open,
@@ -92,12 +93,12 @@ struct OwnLoopRenderProbe {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             checks: [check("build"), check("phpstan"), check("tests")],
-            reviewers: [RequestedReviewer(login: "odinuv", answer: .approved)],
-            merge: .allowed
+            reviewers: [RequestedReviewer(login: "odinuv", answer: .approved)]
         )),
         // Nepřetlačená práce v cache: `CI` ani `Review` nezezelenají, protože na GitHubu leží
         // **předchozí** hlava. Tohle je ta jediná podoba „rozešlé hlavy“, která je zhasíná —
-        // scéna `01` vedle toho ukazuje, že poloha proti základu je něco jiného.
+        // scéna `01` vedle toho ukazuje, že poloha proti základu je něco jiného. A obě šedé
+        // kapsle tu zůstávají **němé**: nevyhodnocovaly se, takže se o nich nedá říct ani proč.
         ("03-nepretlaceno", Policy.ownLoop(
             ownership: .mine,
             state: .open,
@@ -117,8 +118,7 @@ struct OwnLoopRenderProbe {
                 updatedAt: Date(timeIntervalSince1970: 100)
             ),
             checks: [check("build")],
-            reviewers: [RequestedReviewer(login: "odinuv", answer: .approved)],
-            merge: .allowed
+            reviewers: [RequestedReviewer(login: "odinuv", answer: .approved)]
         )),
     ]
 
