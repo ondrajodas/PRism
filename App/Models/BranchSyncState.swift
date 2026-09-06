@@ -20,6 +20,31 @@ enum BranchSyncState: Equatable, Sendable {
     /// (`branchSyncActivity`) — mění se při každém tool cally a přepisovat kvůli tomu celý stav by
     /// znamenalo špinit i to, co se nemění.
     case resolving(round: Int, files: [String])
+    /// **Agent opravuje vlastní PR** podle cizí zpětné vazby (#510) — `items` je počet položek,
+    /// které dostal do zadání.
+    ///
+    /// Vlastní stav vedle `resolving`, ne jeho druhé použití: je to **jiná práce z jiného podnětu**
+    /// (cizí review, ne kolizní commit), takže se o ní v panelu píše jinak — a hlavně se
+    /// **nespouští kliknutím**, což je to jediné, co má být z obrazovky poznat. Co session dělá
+    /// právě teď, drží `AppStore` vedle (`branchSyncTail`), stejně jako u slévání konfliktů.
+    ///
+    /// **`since` je od #511 součást stavu, ne mapa vedle něj.** Čte ho pilulka `agent běží · 4 min`
+    /// v řádku `Moje PR` (#509) a je to údaj **o tom běhu**: druhá mapa ve store by uměla přežít
+    /// stav, ke kterému patří, a řádek by pak počítal minuty běhu, který dávno skončil.
+    case fixing(items: Int, since: Date)
+    /// Agent doběhl a **ve stromě se nic nezměnilo** (#510) — v cache po něm nic neleží.
+    ///
+    /// Vlastní stav, ne selhání: je to legitimní výsledek („nemám co opravit“, „na tohle
+    /// nestačím“), po kterém není co zahazovat ani co pushovat. `detail` je věta od session;
+    /// `nil` = neřekla nic.
+    case fixedNothing(detail: String?)
+    /// Výsledek agenta se **nepřijal** (#510) a v kopii repa po něm může ležet rozdělaná práce.
+    ///
+    /// Vlastní případ vedle `failed`, ze stejného důvodu jako `unresolved` u konfliktů:
+    /// „zaplatilo se za pokus a nepřijal se“ je jiná věta než „nepovedlo se“ — a plyne z ní jiný
+    /// další krok (zahodit, nebo si to prohlédnout v terminálu). Sem vede zápis mimo strom
+    /// i session, která nedoběhla a něco ve stromě nechala.
+    case fixRejected(detail: String)
     /// **Přerovnáno, nepřetlačeno** — commity leží srovnané v kopii repa a do remote se nesáhlo.
     ///
     /// Vlastní stav, protože je to **normální mezistav, ne porucha**: první krok akce doběhl a na
@@ -59,10 +84,17 @@ enum BranchSyncState: Equatable, Sendable {
 
     var isBusy: Bool {
         switch self {
-        case .rebasing, .resolving, .pushing, .discarding: true
-        case .rebased, .pushed, .alreadyInSync, .conflicted, .unfinished, .unresolved, .failed:
+        case .rebasing, .resolving, .fixing, .pushing, .discarding: true
+        case .rebased, .pushed, .alreadyInSync, .conflicted, .unfinished, .unresolved,
+            .fixedNothing, .fixRejected, .failed:
             false
         }
+    }
+
+    /// Běží nad tím **agent** (#510)? Na tom stojí to, že se nad týmž PR nepustí druhý — a že
+    /// `Rebase` je mezitím zakázaný: obojí pracuje v jednom stromě.
+    var isFixing: Bool {
+        if case .fixing = self { true } else { false }
     }
 
     /// Běží nad tím `claude` session? Na tom stojí tlačítko `Zrušit` u hlášky (#467).
@@ -88,12 +120,35 @@ enum BranchSyncState: Equatable, Sendable {
         }
     }
 
+    /// Může v kopii repa ležet práce agenta, kterou nikdo nepřijal (#510)?
+    ///
+    /// **Vlastní otázka vedle `hasUnfinishedRebase`**, protože rozdělaný rebase to není — `git`
+    /// v tom stromě žádnou operaci nerozdělal, jen v něm zůstaly změněné soubory. Zahazuje se to
+    /// ale stejně (celý strom) a terminál se nabízí ze stejného důvodu, takže obojí vede do
+    /// `hasDiscardableWork` a `offersTerminal`.
+    ///
+    /// **`fixedNothing` sem nepatří**: tam se ověřilo `gitem`, že se nezměnilo nic, takže nabízet
+    /// `Zahodit` by znamenalo tlačítko, které nemá co zahodit.
+    var hasRejectedFix: Bool {
+        if case .fixRejected = self { true } else { false }
+    }
+
+    /// Leží v kopii repa **práce agenta** (#510), ať už přijatá, nebo ne?
+    ///
+    /// Na tom stojí **slovo na tlačítku** (`Zahodit změny` místo `Zahodit rebase`): po agentovi tam
+    /// žádný rebase není. Je to vlastní otázka vedle `hasRejectedFix`, protože zahrnuje i **úspěch**
+    /// — `rebased` s původem `.agent` je jeden commit, ne přehrané commity.
+    var isAgentWork: Bool {
+        if hasRejectedFix { return true }
+        return rebasedBranch?.origin == .agent
+    }
+
     /// Má se u hlášky nabídnout terminál? (#467, návrh sekce 36)
     ///
     /// Jedině tam, kde v kopii repa leží **rozdělaný rebase** — tam je kontext připravený a člověk
     /// v něm má plnou moc (#459). U zahozeného konfliktu (`conflicted`) v cache nic není, takže by
     /// terminál otevřel strom na hlavě PR a nebylo by v něm co dokončovat.
-    var offersTerminal: Bool { hasUnfinishedRebase }
+    var offersTerminal: Bool { hasUnfinishedRebase || hasRejectedFix }
 
     /// Přerovnaná větev, která čeká na přetlačení. `nil` = nečeká nic.
     ///
@@ -103,8 +158,9 @@ enum BranchSyncState: Equatable, Sendable {
         if case .rebased(let branch) = self { branch } else { nil }
     }
 
-    /// Leží v cache něco, co má smysl zahodit? Rozdělaný rebase **i** nepřetlačený výsledek.
-    var hasDiscardableWork: Bool { hasUnfinishedRebase || rebasedBranch != nil }
+    /// Leží v cache něco, co má smysl zahodit? Rozdělaný rebase, nepřetlačený výsledek **i
+    /// nepřijatá práce agenta** (#510).
+    var hasDiscardableWork: Bool { hasUnfinishedRebase || hasRejectedFix || rebasedBranch != nil }
 
     /// Věta do panelu. **U každého stavu jiná** — a u selhání jiná podle toho, co selhalo:
     /// odmítnutý lease se od ostatních chyb pozná (`BranchSyncError.leaseRejected`), protože
@@ -114,6 +170,20 @@ enum BranchSyncState: Equatable, Sendable {
         case .rebasing: "Přehrávám commity nad základem."
         case .resolving(let round, let files):
             Policy.conflictActivity(round: round, files: files)
+        case .fixing(let items, _): Policy.agentFixActivity(items: items)
+        // **Věta podle původu commitu** (#510): „Rebase hotový“ nad prací agenta by tvrdilo
+        // něco, co se nestalo — žádný rebase v tom stromě neproběhl. Od #511 ji skládá
+        // `Policy.agentRunSentence` z výčtu, tedy tímtéž místem, ze kterého ji bere notifikace
+        // i řádek v `Dění`; tenhle `switch` rozhoduje už jen o tom, **odkud se vezme strom**.
+        case .fixedNothing(let detail):
+            Policy.agentRunSentence(.nothing(detail: detail), worktree: nil)
+        case .fixRejected(let detail):
+            Policy.agentRunSentence(.discarded(detail: detail), worktree: nil)
+        case .rebased(let branch) where branch.origin == .agent:
+            Policy.agentRunSentence(
+                Policy.agentRun(files: branch.fix?.files.count ?? 0, skipped: branch.fix?.skipped),
+                worktree: branch.worktree.lastPathComponent
+            )
         case .rebased(let branch):
             "Rebase hotový v kopii repa — \(Plural.czech(branch.replayed, one: "commit přehraný", few: "commity přehrané", many: "commitů přehraných")). "
                 + "Do remote se zatím nesáhlo."

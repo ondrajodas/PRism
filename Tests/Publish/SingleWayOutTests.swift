@@ -339,6 +339,86 @@ struct SingleWayOutTests {
         #expect(allowed.contains("Edit(///cache/PRism/x-sync/**)"))
         #expect(!allowed.split(separator: ",").contains("Write"))
         #expect(!allowed.split(separator: ",").contains("Edit"))
+
+        // **A druhá zapisující session (#510) si vlastní rozsah neskládá** — bere týž řetězec.
+        // Kdyby si ho složila sama, byl by v aplikaci druhý `Write(//…)` a `deciding` výš by ho
+        // ohlásil; tohle je ta druhá půlka, kterou ze zdrojáku vyčíst nejde.
+        #expect(
+            AgentFixCommand.allowedTools(in: URL(filePath: "/cache/PRism/x-sync"))
+                == allowed
+        )
+    }
+
+    // MARK: - Agent na vlastním PR (#510)
+
+    /// **`AgentFixing` zná tři soubory**: protokol, implementace a `AppStore`, který si ji drží.
+    /// Volá ji **jedno místo** (`AppStore+AgentFix`).
+    ///
+    /// Tatáž konstrukce jako u `ConflictResolving`, a o důvod naléhavější: tuhle session pouští
+    /// aplikace **bez kliknutí**, takže výčet míst, ze kterých se dá spustit, je zároveň výčet
+    /// toho, co umí začít měnit soubory samo od sebe.
+    @Test("AgentFixing zná tři soubory a volá ji jedno místo")
+    func namesEveryPlaceThatStartsTheAgent() throws {
+        let files = try swiftFiles()
+        let naming = files.filter { $0.code.contains("AgentFixing") }.map(\.path).sorted()
+
+        #expect(naming == [
+            "Review/AgentFixing.swift",
+            "Review/ClaudeAgentFixer.swift",
+            "Store/AppStore.swift",
+        ])
+
+        let calling = files.filter { $0.code.contains(".fix(") }.map(\.path).sorted()
+        #expect(calling == ["Store/AppStore+AgentFix.swift"])
+    }
+
+    /// **Ani agent nemá čím odeslat nebo commitnout.**
+    ///
+    /// Tytéž čtyři tvrzení jako u session pro konflikty, nad soubory agenta: publisher, cesta do
+    /// remote, `push` a `commit`. Commituje aplikace (`RepoCheckout.commitAgentFix`) a do remote
+    /// se sáhne jedině z potvrzení — kdyby si to session uměla sama, přestalo by to platit.
+    @Test("Session agenta neumí odeslat ani commitnout")
+    func theAgentSessionCannotSendAnything() throws {
+        let files = try swiftFiles().filter {
+            ["Review/AgentFixCommand.swift", "Review/AgentFixing.swift",
+             "Review/ClaudeAgentFixer.swift"].contains($0.path)
+        }
+
+        #expect(files.count == 3)
+        for file in files {
+            #expect(!file.code.contains("ReviewPublishing"), "\(file.path) zná cestu na API")
+            #expect(!file.code.contains("BranchPushing"), "\(file.path) zná cestu do remote")
+            #expect(!file.code.contains("\"push\""), "\(file.path) skládá push")
+            #expect(!file.code.contains("\"commit\""), "\(file.path) skládá commit")
+        }
+    }
+
+    /// **Spouštěč bez kliknutí je jedno místo a stojí na bráně z konfigurace** (#510, tvrdá
+    /// podmínka č. 2).
+    ///
+    /// Dvě tvrzení nad zdrojáky, protože obojí se rozbije potichu:
+    ///
+    /// - **`autoAgent` čte jedině spouštěč a nastavení.** Kdyby se na bránu ptalo víc míst, dala by
+    ///   se jedna z nich obejít — a je to brána, která pouští session měnící soubory.
+    /// - **Rozhoduje `Policy.agentFix`, ne `if`y ve storu.** Vlastní podmínka vedle té čisté funkce
+    ///   by byla druhá odpověď na „smí se to spustit“, a testovat by šla jedině spuštěním.
+    @Test("Bránu agenta čte jen spouštěč a nastavení")
+    func namesEveryPlaceThatReadsTheAgentGate() throws {
+        let files = try swiftFiles()
+        let reading = files
+            .filter { $0.code.contains("autoAgent") }
+            .map(\.path)
+            .sorted()
+
+        #expect(reading == [
+            "Config/Configuration.swift",
+            "Store/AppStore+AgentFix.swift",
+            "Views/Settings/RepositorySettingsView.swift",
+            "Views/Settings/ReviewSettingsView.swift",
+        ])
+
+        let deciding = files.filter { $0.code.contains("Policy.agentFix(") }.map(\.path).sorted()
+        #expect(deciding == ["Store/AppStore+AgentFix.swift"])
     }
 
     /// **Reviewer má `git push` dál v zákazu** (tvrdá podmínka č. 2).

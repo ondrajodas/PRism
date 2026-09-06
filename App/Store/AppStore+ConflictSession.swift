@@ -63,7 +63,7 @@ extension AppStore {
         while let step = Self.pendingConflict(in: current), log.rounds < Policy.maxConflictRounds {
             log.rounds += 1
             branchSyncStates[id] = .resolving(round: log.rounds, files: step.files)
-            branchSyncActivity[id] = nil
+            branchSyncTail[id] = nil
 
             let result: RoundResult
             do {
@@ -181,9 +181,12 @@ extension AppStore {
         // viset řádek o kroku, který se hlásil naposled (tentýž vzor jako u rozhovoru).
         guard branchSyncStates[pr]?.isResolving == true else { return }
         switch progress {
-        case .started: branchSyncActivity[pr] = nil
+        case .started: branchSyncTail[pr] = nil
         case .attemptedTool(let tool):
-            branchSyncActivity[pr] = Policy.conflictToolActivity(of: tool, inside: worktree)
+            branchSyncTail[pr] = Policy.agentTail(
+                branchSyncTail[pr] ?? [],
+                appending: Policy.writingToolActivity(of: tool, inside: worktree)
+            )
         }
     }
 }

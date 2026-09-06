@@ -37,21 +37,27 @@ extension ActivityFeedTests {
     /// **Tohle je to tvrzení, kvůli kterému brána existuje**: z dění se nesmí stát obchvat
     /// pravidla „o vlastním PR se nehlásí“ (#332). Kdyby chyběla, hláška, kterou banner vydat
     /// nesmí, by na obrazovce zůstala navěky.
-    @Test("Cizí PR: hlásí se všechno kromě cizí aktivity")
-    func reportsEverythingButForeignActivityOnTheirs() {
+    @Test("Cizí PR: hlásí se všechno kromě toho, co patří k vlastnímu")
+    func reportsEverythingButOwnKindsOnTheirs() {
         for kind in ActivityEvent.Kind.allCases {
-            #expect(Policy.isReported(kind, on: .theirs) == (kind != .foreignActivity))
+            #expect(Policy.isReported(kind, on: .theirs) == !Self.ownKinds.contains(kind))
         }
     }
 
-    /// Opačná strana: na **mém** PR je novinka jedině to, že se ozval někdo jiný. „Nový PR
-    /// k review“ o vlastním pushi ani zastaralé nálezy po vlastním commitu novinky nejsou.
-    @Test("Vlastní PR: hlásí se jedině cizí aktivita")
-    func reportsOnlyForeignActivityOnMine() {
+    /// Opačná strana: na **mém** PR je novinka to, že se ozval někdo jiný — a od #511 taky to,
+    /// že na to odpověděl agent. „Nový PR k review“ o vlastním pushi ani zastaralé nálezy po
+    /// vlastním commitu novinky nejsou.
+    @Test("Vlastní PR: hlásí se jedině cizí aktivita a doběhlý agent")
+    func reportsOnlyOwnKindsOnMine() {
         for kind in ActivityEvent.Kind.allCases {
-            #expect(Policy.isReported(kind, on: .mine) == (kind == .foreignActivity))
+            #expect(Policy.isReported(kind, on: .mine) == Self.ownKinds.contains(kind))
         }
     }
+
+    /// **Výčet, ne podmínka opsaná z `Policy`.** Test, který si pravidlo odvodí toutéž cestou jako
+    /// kód, netvrdí nic — tady je vypsané, co na vlastní PR patří, takže nový druh musí někdo
+    /// **dopsat** a rozhodnout, na kterou stranu spadá.
+    private static let ownKinds: Set<ActivityEvent.Kind> = [.foreignActivity, .agentFix]
 
     @Test("Vlastní PR nedostane řádek o novém PR ani o zastaralých nálezech")
     func skipsOwnPullRequests() {

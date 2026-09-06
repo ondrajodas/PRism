@@ -13396,6 +13396,268 @@ existující ploše adresář **nepřepíše**.
   sheetu nevejde (v renderu z popisky zbylo `Otevřít v termi…`). Zamítnuto zahodit `Zrušit`, jak to
   kreslí zákres — nese `⎋`, tedy jedinou klávesovou únikovou cestu z potvrzení nevratné akce.
 
+## Agent na vlastním PR — pátá session a první bez kliknutí (#510)
+
+**Druhá session, která smí měnit soubory — a první, kterou aplikace pouští sama.** Mění to
+**tvrdou podmínku č. 2** o jednu větu: *zapisující session smí startovat bez kliknutí jedině nad
+stromem `-sync` **vlastního** PR a jedině po **cizí** aktivitě*. Nic jiného se nemění — sada
+povolení je doslova ta z #467, commituje aplikace a do remote se píše dál jedině přes
+`BranchPushing` s potvrzením. Zdůvodnění a zamítnuté varianty jsou v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--agent-na-vlastním-pr-startuje-bez-kliknutí-510).
+
+| Typ | Co dělá |
+|---|---|
+| `Policy.agentFix(…)` | **Jediné místo, kde se rozhoduje, jestli se pustí.** Čistá funkce, testovaná výčtem |
+| `Policy.agentFixItems(_:in:)` | Které položky zadání ta aktivita znamená — vstup pro `only:` u `agentPromptSelection` |
+| `AgentFixCommand` | Sada nástrojů (**delegovaná na `ConflictCommand`**), timeout a rozbor účtu |
+| `AgentFixing` | Protokol s jednou metodou `fix`. **Nemá čím commitnout ani odeslat** |
+| `ClaudeAgentFixer` | Implementace nad `claude -p` se `stream-json`, přes `SubprocessStreamer(sessions: .shared)` |
+| `AgentFixLedger` | Razítko **spuštění** na PR — třetí vedle návštěvy a oznámení |
+| `AppStore+AgentFix` | Spouštěč, brána, běh a to, co se s výsledkem stane |
+
+### Sada se nemění ani o položku, a je to delegace, ne kopie
+
+`AgentFixCommand.allowedTools(in:)` **je** `ConflictCommand.allowedTools(in:)`. Otázka „kam smí
+zapisující session psát“ má mít jednu odpověď: druhé místo, které si `Write(//…)` složí samo, by se
+s prvním rozešlo potichu — a je to ta brána, na které stojí #467 i #510. Drží to dvě tvrzení:
+`SingleWayOutTests` dál vypisuje **jediný** soubor, který rozsah skládá, a `SessionToolSetsTests`
+tvrdí **literálem** i **rovností**, že obě session dostanou týž řetězec.
+
+Liší se jedině **limit**: patnáct minut proti deseti u konfliktu. Konflikt je čtení kolem značky ve
+vyjmenovaných souborech, tohle je oprava, u které se místo v kódu teprve hledá.
+
+### Čtyři brány, každá jinde
+
+1. **`Policy.agentFix`** — vlastnictví, `autoAgent`, stav PR, je co opravovat, běží už něco.
+   **Pořadí je součástí odpovědi** a vyhrává první důvod: cizí PR s vypnutou branou je `notMine`.
+   Draft se **nevyřazuje** (na rozdíl od automatu review, #25): Copilot review na draftu píše a je
+   to zrovna ten hlas, kvůli kterému #510 vzniklo.
+2. **Stav stromu `-sync`.** Nad rozdělaným rebasem ani nad přerovnanou větví, která neodešla, se
+   nespustí nic — o té práci rozhoduje člověk. Ptá se `git` (`syncWorktreeState`), ne paměť: strom
+   v cache **je** ten záznam i po restartu. Druhá vrstva je v `GitRepoCheckout.agentFixWorktree`,
+   která nad zabraným stromem vyhodí `CheckoutError.worktreeBusy` — mezi dotazem a přípravou je čas.
+3. **Denní rozpočet** — `autoRunsPerDay`, **tentýž jako u automatu review**. Dvě poloviny by
+   dohromady byly dvojnásobek toho, co si člověk nastavil, a je to jedna otázka: kolik session smí
+   za den utratit něco, co jsem nespustil.
+4. **Druhá vrstva po běhu.** Co session zkusila zapsat mimo strom, se čte ze streamu
+   (`AgentFixCommand.writesOutside`) a výsledek se pak **nepřijme** — počítají se i **odmítnuté**
+   pokusy.
+
+### Razítko spuštění je třetí, ne přebité
+
+`AgentFixLedger` drží, po jakou položku už agent na tom PR odpovídal — **vlastní razítko** vedle
+`VisitLedger` (poslední návštěva) a `ActivityNoticeLedger` (poslední oznámení). Kdyby se agent řídil
+razítkem oznámení, nespustil by se **nikdy** u člověka, který má notifikace vypnuté; kdyby se řídil
+návštěvou, přestal by se spouštět nad PR, na který se zrovna koukám.
+
+**Chybějící razítko znamená ticho a zasadí se** (`seedAgentFixBaseline`): při prvním setkání s PR se
+zapíše to, co na něm už leží, a nespustí se nic. Bez toho by aplikace po startu pustila agenta na
+měsíc starou diskuzi, tedy na kód, který nikdo nemá před sebou.
+
+**Posouvá se při startu, ne po doběhnutí**, a je to rozhodnutí proti opakování: kdyby se posouvalo
+až po úspěchu, běh, který skončil chybou, by se pouštěl při **každém tiku** — nekonečná řada session
+za peníze nad zpětnou vazbou, kterou model neumí vyřídit. Podnět, který přijde **za běhu**, se tím
+nezahodí: jeho datum je novější, takže ho příští tik uvidí znovu, a tehdy už session neběží. To je
+celé „když běží, další podnět se zařadí“.
+
+### Zadání se skládá toutéž cestou jako `Sestavit prompt`
+
+`agentPrompt(for:only:)` s množinou identit z `Policy.agentFixItems` — tedy **jen nové položky, ne
+celý PR**. Druhá cesta k témuž textu by se s panelem rozešla.
+
+**Komentář ve vlákně se převádí na vlákno**, ne na komentář: `ForeignActivity.comments` míchá
+komentáře pod PR s těmi ve vláknech, kdežto zadání zná vlákno jako **jednu položku** i s kontextem
+u řádku. Kdyby se hledalo podle identity komentáře, nová odpověď v existujícím vlákně by do zadání
+nepřinesla nic.
+
+### Commituje aplikace, a zprávu skládá `Policy`
+
+`RepoCheckout.commitAgentFix` udělá `git add --all` a `git commit` — session `Bash` nemá.
+`nil` znamená **„ve stromě se nic nezměnilo“**, a pozná se to `git status --porcelain` **před**
+commitem: `git commit` bez změn končí nenulově s `nothing to commit`, což je k nerozeznání od
+skutečné chyby.
+
+**Zpráva je určená daty**: `fix: address review feedback (#<číslo>)`. Hlavička commitu je jediné
+místo, kde by se text od modelu dostal do **historie repa**, tedy tam, odkud se nedá vzít zpět
+jedním kliknutím — proto ji skládá `Policy.agentFixCommitMessage`, anglicky, v Conventional Commits
+a **bez jakékoli AI atribuce**. Co agent udělal a co nechal být, se ukazuje v panelu a v potvrzení
+force pushe, tedy **před** odesláním.
+
+### Výsledek je stav, který panel už umí
+
+Úspěch je `BranchSyncState.rebased(RebasedBranch)` s `origin == .agent` — tedy přesně ten mezistav,
+ze kterého #466 nabízí `Force push…` se sheetem, lease a bez výchozí akce. **Lease je hlava, ze
+které agent vyšel** (`rebasedFrom`), tatáž pojistka jako u rebase: mezi commitem a potvrzením může
+být libovolně dlouhá pauza.
+
+**`BranchWorkOrigin` je vlastní údaj, ne odvození z čísel.** Věta o stavu je u každého původu jiná:
+po rebase se commity **přehrály**, po agentovi **vznikl** jeden nový — a „Rebase hotový“ nad
+commitem, který žádný rebase neudělal, je text, který tvrdí víc, než data unesou.
+
+Čtyři konce, tři různé stavy:
+
+| Konec | Stav | Co se nestane |
+|---|---|---|
+| commit vznikl | `rebased(origin: .agent)` | do remote se nesáhne, dokud člověk nepotvrdí |
+| nic se nezměnilo | `fixedNothing(detail:)` | necommituje se a **nenabízí se ani zahazování** |
+| psala mimo strom | `fixRejected(detail:)` | `git add` ani commit neproběhnou |
+| session nedoběhla | `fixRejected(detail:)` | necommituje se — polovina opravy vypadá jako celá |
+
+**`fixedNothing` je doběhlá práce, ne mezistav**: `git` řekl, že se nezměnilo nic, takže je v panelu
+tečka a `Zahodit` se nekreslí — tlačítko, které nemá co zahodit, je horší než žádné.
+**`fixRejected` je naopak tatáž třída jako rozdělaný rebase**: v cache může ležet rozdělaná práce,
+takže nese `Zahodit změny` i `Otevřít v terminálu`.
+
+### Co se v okně mění
+
+- **Sekce `Větev` má dva nové stavy** a věta u běžícího agenta neříká „právě se to srovnává“:
+  nespustilo to kliknutí, a to je to jediné, co má být z obrazovky poznat. `Zrušit` je u něj
+  ze stejného důvodu jako u konfliktů, a o důvod naléhavěji.
+- **`Rebase` je mezitím zakázaný** s vlastní větou (`SyncObstacle.agentRunning`,
+  `SyncObstacle.rejectedFix`) — v jednom stromě nemůžou pracovat dvě věci.
+- **Tlačítko `Zahodit` mění slovo podle původu** (`BranchSyncState.isAgentWork`): po agentovi
+  v cache žádný rebase neleží, takže `Zahodit rebase` by pojmenovávalo něco, co tam není. Vyšlo to
+  z renderu sondy, ne z diffu.
+- **Slovník průběhu je jeden pro obě zapisující session** (`Policy.writingToolActivity`; do #510
+  `conflictToolActivity`). Je to táž sada nástrojů, takže druhá kopie by se s ní rozešla, jakmile do
+  sady něco přibude.
+- **Nastavení má bránu na dvou místech**: stránka `Review a skilly` (globálně, pod režimem review —
+  je to tatáž otázka „co aplikace pustí, aniž bych na to klikl“) a `Repozitáře` (tříhodnotově, jako
+  odesílání: `Nepouštět` u repa **není** totéž co „ber globální“).
+- **Dráha vlastního PR (#508) tři nové stavy větve rozlišuje, nesplácne je do `rebase`.** Stanice
+  `Push` čte `BranchSyncState`, takže se rozhodnutí muselo dopsat na obou místech
+  `OwnLoopPolicy`: běžící agent je `probíhá` (jako slévání konfliktů), **nepřijatý** výsledek je
+  vlastní slovo `nepřijato` — po agentovi žádný rozdělaný rebase ve stromě neleží, takže by
+  `rebase` pojmenovalo něco, co se nestalo —, a `fixedNothing` o poloze větve **nerozhoduje
+  vůbec** (v cache po něm nic neleží, tedy tentýž případ jako `alreadyInSync`). Totéž platí
+  o `ownLoopFacts`: běžící agent i nepřijatá práce drží `CI` a `Review` šedé, protože ve stromě
+  `-sync` může ležet změna, o které GitHub neví.
+
+## Běžící agent je vidět (#511)
+
+**#510 pustilo agenta, #511 ho ukazuje.** Do téhle změny bylo z okna vidět jedno: poslední nástroj,
+o který si session řekla, a po doběhnutí jedna věta. Kdo u toho neseděl, se o konci nedozvěděl
+vůbec — banner za agenta nechodil a v `Dění` po něm nezůstal řádek.
+
+### Rozhodnutí: agent bydlí v sekci `Větev`, dráha zůstává pětistanicová
+
+Zadání #511 stálo na větě „stanice *Agent* na dráze (#508) ukazuje stav“. **Ta stanice od #508
+neexistuje**, a odešla přesně proto, že **neměla živý obsah**. Zvažovaly se dvě cesty a rozhodlo se
+pro druhou:
+
+1. **Vrátit stanici `Agent` na dráhu, rovnou s obsahem.** Zamítnuto: do kapsle se vejde **jedno
+   slovo** (`Stop.detail` — proto tam stojí `pozadu`, `konflikt`, `nepřetlačeno`), kdežto obsah,
+   který #511 dodává, je čtyřřádkový ocas, věta o výsledku a tři tlačítka. Šestá kapsle by ostatní
+   jen zúžila a ten obsah by stejně musel bydlet jinde — tedy přesně vada, kvůli které stanice
+   odešla.
+2. **Ukázat agenta tam, kde ta práce je** — v sekci `Větev`, která od #510 kreslí všechny čtyři
+   stavy běhu a drží `Force push…` i `Zahodit změny`. **Vybráno.**
+
+**Dráha o agentovi nemlčí ani tak.** Stanice `Push` čte `BranchSyncState`, takže běžící agent je
+`probíhá` a jeho nepřetlačený commit `nepřetlačeno` (#510) — commit v kopii repa do obsahu té
+stanice patří. Cesta k němu vede `OwnLoop.Move.openBranch`, tedy do téže sekce.
+
+### Ocas je jedna mapa pro obě zapisující session
+
+`AppStore.branchSyncActivity` (jeden řetězec) se stal `branchSyncTail` (pole). Je to **jedna** mapa
+schválně: dvě by o téže věci uměly tvrdit dvojí. Slévání konfliktů si z ní bere **poslední prvek**
+(`branchSyncActivityLine`) a kreslí se jako do #511; agent kreslí celý ocas.
+
+**Proč u agenta víc řádek než u konfliktů.** Slévání běží nad **vyjmenovanými** soubory, takže
+poslední krok odpovídá na celou otázku „kde v tom seznamu je“. Agent běží patnáct minut, místo
+v kódu si hledá sám a **nespustil ho člověk** — jedna řádka pak řekne, že se okno nezaseklo, ale ne
+co ta session celou dobu dělá.
+
+**Jsou to kroky, ne próza modelu.** Ze streamu se čtou pokusy o nástroj (`AgentFixProgress`); text,
+který model mezi nimi píše, `StreamSummary` **nedrží** — a dotáhnout ho sem by znamenalo sázet do
+panelu neověřenou větu session. Strop drží `Policy.agentTail(_:appending:)` (čtyři kroky) a
+vyprazdňuje ho konec běhu, tedy táž ruka, která ho plní (pravidlo #224). Bezprostřední opakování se
+nezdvojuje: session čte tentýž soubor po částech a čtyři stejné řádky nejsou ocas.
+
+### Výsledek je výčet, ne tři skládání jedné věty
+
+`AgentRunOutcome` — `done`, `partial`, `nothing`, `failed`, `discarded`. **Zadání jmenovalo čtyři**
+(*hotovo / částečně / spadlo / zahozeno*); pátý je `nothing`, a je to stav, který #510 **výslovně**
+oddělilo od selhání (doběhlá práce, po které v cache nic neleží — tečka, ne vykřičník). Slít ho do
+`failed` by to rozhodnutí zrušilo, slít do `partial` by tvrdilo, že část opravy leží v kopii repa,
+přestože `git` řekl, že se nezměnilo nic.
+
+Věta se skládá **na jednom místě** (`Policy.agentRunSentence`), protože o témž výsledku mluví tři:
+panel, banner a řádek v `Dění`. Tvar je *Agent upravil 2 soubory ve stromě 499-sync · nic se
+neodeslalo.* — co udělal, kde to leží, co se nestalo. Ta třetí část je celá hranice #510 a je snazší
+ji přehlédnout než přečíst, protože se o ní jinak mlčí.
+
+**O testech se nikde netvrdí nic, a je to podmínka, ne opomenutí.** Deck měl *„2 soubory, testy
+zelené“*; session testy pustit **nemůže** (`Bash` v její sadě není) a aplikace je nad jejím
+výsledkem nepouští. Hlídá to test nad všemi pěti výsledky, ne komentář.
+
+**Nula souborů má vlastní větu.** Účet od modelu může být nečitelný (`AgentFixCommand.parse` vrátí
+prázdno), přitom commit vznikl — a `git` je ta strana, která má pravdu. *Upravil 0 souborů* nad
+existujícím commitem je text, který si odporuje sám se sebou.
+
+**`BranchSyncState.failed` `Policy.agentRun(of:)` nepřekládá**, a je to hranice: ten stav nenese,
+kdo ho způsobil (rebase i agent končí v témže případu). „Agent spadl“ o něm smí tvrdit jedině ten,
+kdo právě agenta pustil — `AppStore+AgentFix.agentOutcome(on:)`.
+
+### `Prohlédnout diff agenta` — čtení `gitu` v cache
+
+Do #511 se dal ten commit prohlédnout jedině **za nevratnou akcí**: potvrdit force push a přečíst si
+ho na GitHubu. `RepoCheckout.agentFixCommit(in:since:)` čte `git log -1` a `git diff <hlava PR>..HEAD`
+v pracovním stromě; kreslí to **tatáž obrazovka jako diff commitu** (`CommitDiffView`, #317), takže
+oba pohledy, zvýrazňování, strom souborů i hledání jsou tytéž.
+
+**Do seznamu commitů pull requestu se ten commit nepřimíchává.** Na GitHubu **není**, takže by
+v seznamu tvrdil, že na PR leží, počítal by se do odznaku u záložky a `Policy.headCommit` by o něm
+musel rozhodovat. Drží ho vlastní mapa (`AppStore.agentCommits`) a do tabu se dostane jedině tehdy,
+když se na něj z panelu přepne — `Policy.openCommit(_:in:local:)` ho hledá **až za** seznamem.
+
+**Pozice ani adresa na GitHubu se nevymýšlejí**: `2 ze 7` by mu přiřklo místo v pull requestu, které
+nemá, a odkaz by vedl na commit, který tam není. Obojí je `nil`. Autor a datum se naopak **čtou
+z `gitu`** — commituje aplikace pod gitovou identitou toho, kdo u stroje sedí, a dosadit sem „agent“
+by znamenalo napsat do okna něco, co v repu nestojí.
+
+**Zahození práce agenta ten pohled zavře** (`forgetAgentDiff`): otevřený diff commitu, který ve
+stromě už neleží, je zrovna ten tichý stav v cache, kterému se `Zahodit` vyhýbá.
+
+**Tvrdé podmínky se to netýká.** Je to čtení, `GitHubGateway` ani `ReviewPublishing` v tom nefigurují
+a grepy z podmínky č. 1 vypisují týchž **sedm**, **tři** a **tři** souborů jako po #510.
+
+### Konec běhu jde toutéž branou jako ostatní hlášky (#414)
+
+Nový `NotificationEvent.agentFix` s **vlastním přepínačem** (`NotificationSettings.agentFix`,
+výchozí zapnuto) a **vlastní `replacementGroup`**: že doběhl agent, nesmí přebít zprávu, na kterou
+ten agent reagoval — přepsala by se příčina výsledkem. Vedle toho `ActivityEvent.Kind.agentFix`.
+
+Rozhoduje `AppStore+AgentFix.reportAgentRun(on:)`, a hlásí se to **v jednom místě**, ne v `accept`:
+konců je pět a rozeseté po `catch`ích by se u některého zapomnělo — právě to je ta mezera, po které
+agent doběhne a nikdo se to nedozví.
+
+**Zrušený běh se nehlásí.** `Zrušit` zmáčkl člověk, který se na tu hlášku zrovna dívá; banner
+o vlastním kliknutí je čisté vyrušení a v `Dění` nemá co dělat, protože jsem to neprošvihl.
+
+**Řádek vzniká i bez banneru** (vypnutý přepínač, odmítnuté oprávnění) — přepínače rozhodují
+o vyrušení, ne o záznamu, a chip `bez banneru` je půlka hodnoty té obrazovky. Vede na `Přehled`:
+dráha (#508) žádný vlastní tab nemá, kreslí se **nad** pruhem záložek.
+
+**Na cizím PR se nehlásí nic**, a je to dvojitá pojistka: agent se tam nespustí
+(`Policy.agentFix` vrací `notMine` jako první odpověď) a `Policy.isReported(.agentFix, on:)` to
+tvrdí podruhé.
+
+### Pilulka v řádku `Moje PR` (#509)
+
+`agent běží · 4 min` / `push čeká na tebe` — **tentýž jediný slot**, ve kterém jindy stojí
+`N k předání` nebo odznak review (#334). Tři pilulky vedle sebe se v řádku neuživí, a dokud běží
+agent, je to on: `6 k předání` nad ním radí práci, kterou zrovna dělá někdo jiný.
+
+**Začátek běhu je v tom stavu, ne v mapě vedle něj** (`BranchSyncState.fixing(items:since:)`):
+razítko, které stav přežije, by počítalo minuty běhu, který dávno skončil. **Skládá to store, ne
+řádek** — uplynulý čas se počítá z `time.now`, tedy z toho zdroje času, který se v testech dá
+nastavit; `Date()` uvnitř `body` by z toho udělal měření, které se nedá zopakovat.
+
+**Minuty, ne vteřiny**, a je to mez běhu (patnáct minut), ne úspora znaků — vteřiny by z pilulky
+v seznamu udělaly věc, která se hýbe pod rukou. Pod minutu se píše `<1 min`: nula by tvrdila, že se
+nic neděje, zrovna když se začalo.
+
 ## Vestavěný terminál (#459)
 
 `App/Terminal/` — shell v zásuvce pod diffem, návrh sekce 35. Jsou to tři soubory a každý drží

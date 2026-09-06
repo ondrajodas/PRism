@@ -153,7 +153,7 @@ struct ConflictResolutionTests {
     func toolActivityNamesWritesSeparately() {
         let worktree = URL(filePath: "/cache/x")
         func line(_ name: String, _ detail: String) -> String {
-            Policy.conflictToolActivity(
+            Policy.writingToolActivity(
                 of: ToolAttempt(name: name, detail: detail, id: "1"),
                 inside: worktree
             )

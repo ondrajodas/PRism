@@ -196,6 +196,102 @@ struct GitRepoCheckout: RepoCheckout {
         }
     }
 
+    // MARK: - Agent na vlastním PR (#510)
+
+    /// Strom, ve kterém agent opraví vlastní PR — **tentýž `-sync` strom, jen na hlavě PR**.
+    ///
+    /// **Rozdělanou práci nepřepíše.** `preparedSyncWorktree` níž strom, který nestojí na hlavě,
+    /// zahodí — a to je u rebase správně (spouští ho člověk kliknutím a předchozí výsledek zahazuje
+    /// vědomě), kdežto tady spouští běh **polling**. Proto se napřed ptáme, co v tom stromě leží,
+    /// a nad rozdělaným rebasem i nad přerovnanou větví, která neodešla, se **nepokračuje**.
+    ///
+    /// Hlava se dotahuje přes `prepare` + `ensureCommit`, jako u stromu pro review: agent běží
+    /// nad commitem, který na PR doopravdy je.
+    func agentFixWorktree(for pr: PRIdentifier, at headSha: String) async throws -> URL {
+        let path = layout.syncWorktree(for: pr)
+        return try await coordinator.run(key: Self.worktreeKey(path), kind: "agent-fix") {
+            let clone = try await prepare(pr.repo)
+            if await hasRebaseInProgress(at: path) { throw CheckoutError.worktreeBusy }
+            // Strom, který existuje a nestojí na hlavě PR, nese nepřetlačenou práci — a tu
+            // `preparedSyncWorktree` maže. **Ptáme se `gitu`, ne `FileManageru`**: cizí složka bez
+            // `.git` je nepoužitelný strom, ne rozdělaná práce.
+            if FileManager.default.fileExists(atPath: path.path(percentEncoded: false)),
+                try await hasOtherHead(at: path, than: headSha) {
+                throw CheckoutError.worktreeBusy
+            }
+            return try await preparedSyncWorktree(for: pr, at: headSha, in: clone, at: path)
+        }
+    }
+
+    /// Zapíše práci agenta jedním commitem. `nil` = ve stromě se nic nezměnilo.
+    ///
+    /// **`git add --all`, tedy i nové soubory.** Oprava po review běžně znamená nový test nebo nový
+    /// soubor a commit bez nich by byl polovina práce, která navíc vypadá hotově. Strom je
+    /// odpojený (`--detach`) a leží v cache, takže v něm nic jiného než práce agenta být nemá.
+    ///
+    /// **Prázdnota se pozná `status --porcelain` před commitem, ne z návratového kódu `git
+    /// commit`.** `commit` bez změn skončí nenulově s textem `nothing to commit`, což je
+    /// k nerozeznání od skutečné chyby — a „nic se nezměnilo“ je legitimní výsledek, ne porucha.
+    func commitAgentFix(
+        for pr: PRIdentifier,
+        in worktree: URL,
+        at headSha: String,
+        message: String
+    ) async throws -> RebasedBranch? {
+        try await coordinator.run(key: Self.worktreeKey(worktree), kind: "agent-commit") {
+            let path = worktree.path(percentEncoded: false)
+            let status = try await run(["-C", path, "status", "--porcelain"])
+            guard !status.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+
+            try await run(["-C", path, "add", "--all"])
+            try await run(["-C", path, "commit", "--message", message])
+
+            let head = try await run(["-C", path, "rev-parse", "HEAD"])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // **Nesrozumitelná odpověď je porucha, ne prázdný commit.** Hlava se z ní skládá do
+            // lease force pushe, takže se tady nesmí nic domýšlet.
+            guard !head.isEmpty, head != headSha else {
+                throw CheckoutError.gitFailed(
+                    exitCode: 0,
+                    message: "Commit agenta se nepodařilo přečíst — hlava stromu se nezměnila."
+                )
+            }
+            let arriving = try await commits(in: worktree, from: headSha)
+            return RebasedBranch(
+                worktree: worktree,
+                headSha: head,
+                // **Lease z hlavy, ze které agent vyšel** — tatáž pojistka jako u rebase (#466):
+                // mezi commitem a potvrzením může být libovolně dlouhá pauza a hlava PR se mezitím
+                // může pohnout.
+                rebasedFrom: headSha,
+                arriving: arriving,
+                // Nic se nepřehrávalo, takže **všechno, co přibude, je práce agenta** — a `fromBase`
+                // vyjde nula, což je pravda: z base se nedostalo do větve nic.
+                replayed: arriving.count,
+                origin: .agent
+            )
+        }
+    }
+
+    /// Stojí v tom stromě něco jiného než hlava PR? **Nepřečtená odpověď je `false`**, protože
+    /// nepoužitelný strom (chybí `.git`, smazaný klon) rozdělanou práci nenese — a
+    /// `preparedSyncWorktree` si s ním poradí.
+    ///
+    /// **Zrušení se ale nepolyká**, jako u `succeeds`: holé `try?` by z něj udělalo odpověď „ne“
+    /// a založil by se strom pro běh, který nikdo nechce.
+    private func hasOtherHead(at path: URL, than headSha: String) async throws -> Bool {
+        do {
+            let head = try await run([
+                "-C", path.path(percentEncoded: false), "rev-parse", "HEAD",
+            ]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return !head.isEmpty && head != headSha
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return false
+        }
+    }
+
     func syncWorktreeState(
         for pr: PRIdentifier,
         at headSha: String,
@@ -418,6 +514,41 @@ struct GitRepoCheckout: RepoCheckout {
         ])
         // Řádky přes `TextLines` (#295) — jedno místo, kde se rozhoduje, co je řádek.
         return TextLines.nonEmpty(output ?? "").map(String.init)
+    }
+
+    /// Commit agenta a jeho diff (#511) — **dvě čtení `gitu`, obě v cache**.
+    ///
+    /// **Hlavička se čte, nedosazuje.** `%an` a `%aI` jsou to, co v repu doopravdy stojí; kdyby se
+    /// autor dosadil z konfigurace aplikace, ukazovalo by okno jiné jméno, než jaké odejde force
+    /// pushem. Nečitelné datum je `nil`, ne „teď“ — vymyšlené datum by v hlavičce vypadalo jako
+    /// změřené.
+    ///
+    /// **Nedělí se `TextLines`m, ale `\u{1}`**: zpráva commitu je víceřádková, takže by dělení na
+    /// řádky rozsekalo poslední pole. Znak `\u{1}` se v hlavičce commitu nevyskytuje a `git` ho
+    /// do formátu pustí doslova.
+    func agentFixCommit(in worktree: URL, since headSha: String) async throws -> AgentFixCommit {
+        let path = worktree.path(percentEncoded: false)
+        let header = try await run([
+            "-C", path, "log", "-1", "--format=%H%x01%an%x01%aI%x01%B", "HEAD",
+        ])
+        let parts = header.components(separatedBy: "\u{1}")
+        guard parts.count == 4, !parts[0].isEmpty else {
+            throw CheckoutError.gitFailed(
+                exitCode: 0,
+                message: "Commit agenta se nepodařilo přečíst z „\(header)“."
+            )
+        }
+        return AgentFixCommit(
+            sha: parts[0],
+            message: parts[3].trimmingCharacters(in: .whitespacesAndNewlines),
+            authorName: parts[1],
+            committedAt: ISO8601DateFormatter().date(from: parts[2]),
+            // **Dvě tečky, ne tři.** Chceme přesně to, co ten commit nad hlavou PR přidal;
+            // trojtečka by hledala společného předka, což je u commitu **nad** tou hlavou totéž,
+            // dokud se hlava nepohne — a ve chvíli, kdy se pohne, by trojtečka tiše ukázala jiný
+            // kód, než jaký force push přetlačí.
+            diff: try await run(["-C", path, "diff", "\(headSha)..HEAD"])
+        )
     }
 
     func trackedFiles(in worktree: URL) async throws -> [String] {

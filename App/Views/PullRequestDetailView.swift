@@ -688,10 +688,11 @@ struct PullRequestDetailView: View {
             branch: store.branchSection(for: pullRequest.id),
             branchActions: branchActions,
             branchSync: store.branchSyncState(for: pullRequest.id),
-            // Co session nad konflikty zrovna dělá (#467) — **vlastní hodnota, ne součást stavu**:
-            // mění se při každém kroku session, kdežto stav zůstává (pravidlo o hrubé vlastnosti,
-            // #472).
-            branchSyncActivity: store.branchSyncActivityLine(for: pullRequest.id),
+            // Co zapisující session dělala — **vlastní hodnota, ne součást stavu**: mění se při
+            // každém kroku session, kdežto stav zůstává (pravidlo o hrubé vlastnosti, #472).
+            // Od #511 je to ocas posledních kroků, ne jedna řádka; kolik se jich drží, rozhoduje
+            // `Policy.agentTail`, ne panel.
+            branchSyncTail: store.agentTail(for: pullRequest.id),
             // Proti kterému kódu nálezy platí (#392). Rozhoduje `Policy` — panel z toho jen sází
             // větu, takže se okno neptá dvakrát jinak.
             headNotice: headNotice,
@@ -748,7 +749,11 @@ struct PullRequestDetailView: View {
             // **zůstane** — panel to řekne a nabídne zahodit i terminál.
             cancelSync: { store.cancelBranchSync(for: id) },
             // `Otevřít v terminálu` — zásuvka v tom stromě, kde rebase uvázl (#467).
-            openTerminal: { Task { await store.openConflictTerminal(for: id) } }
+            openTerminal: { Task { await store.openConflictTerminal(for: id) } },
+            // `Prohlédnout diff agenta` (#511) — přepne na `Commity` a otevře v nich commit, který
+            // agent nechal v kopii repa. Je to **čtení `gitu` v cache**, ne volání GitHubu: ten
+            // commit nikde jinde není.
+            showAgentDiff: { store.openAgentDiff(in: id) }
         )
     }
 
@@ -1627,7 +1632,14 @@ struct PullRequestDetailView: View {
             // **Rozkliknutý commit přebíjí seznam, ne poruchu nad ním** (#317): okrová věta
             // o zastaralém seznamu patří k seznamu, a v diffu commitu by mluvila o něčem, co
             // zrovna není vidět.
-            if let open = Policy.openCommit(store.openedCommit(in: pullRequest.id), in: list) {
+            // **Commit agenta se hledá až za seznamem** (#511): leží v kopii repa, na GitHubu
+            // není, a do seznamu se proto nepřimíchává — je vidět, teprve když se na něj z panelu
+            // `Větev` přepne.
+            if let open = Policy.openCommit(
+                store.openedCommit(in: pullRequest.id),
+                in: list,
+                local: store.agentCommit(in: pullRequest.id)
+            ) {
                 commitDiff(of: open, in: list)
             } else {
                 VStack(spacing: 0) {
@@ -1649,11 +1661,16 @@ struct PullRequestDetailView: View {
     /// klíčuje **i sha commitu**, aby se kontext nebral z hlavy PR a sbalení souboru nepřeteklo
     /// do `Změněných souborů`.
     private func commitDiff(of commit: PullRequestCommit, in list: [PullRequestCommit]) -> some View {
-        CommitDiffView(
+        // **Commit agenta nemá ani pozici, ani adresu** (#511), a je to ta hranice, kvůli které se
+        // do seznamu nepřimíchává: `2 ze 7` by mu přiřklo místo v pull requestu, které nemá,
+        // a odkaz na GitHub by vedl na commit, který tam není. Obojí je `nil`, ne vymyšlená
+        // hodnota — hlavička se s tím vyrovná stejně jako u commitu bez data.
+        let isLocal = commit.sha == store.agentCommit(in: pullRequest.id)?.sha
+        return CommitDiffView(
             commit: commit,
             state: store.commitDiffState(of: commit, in: pullRequest.id),
-            position: Policy.commitPosition(of: commit.sha, in: list),
-            url: Policy.commitURL(of: commit.sha, in: pullRequest.repo),
+            position: isLocal ? nil : Policy.commitPosition(of: commit.sha, in: list),
+            url: isLocal ? nil : Policy.commitURL(of: commit.sha, in: pullRequest.repo),
             isMessageExpanded: commitMessageExpanded,
             expansion: commitExpansion(of: commit.sha),
             folding: commitFolding(of: commit.sha),
@@ -1664,7 +1681,14 @@ struct PullRequestDetailView: View {
             // Zopakování jde **touž cestou jako první otevření** (`openCommit`), ne přímo na
             // `loadCommitDiff`: jinak by tlačítko stáhlo diff, ale nechalo v okně starou chybu,
             // protože stav by se nikdy nevrátil na `loading`.
-            retry: { store.openCommit(commit.sha, in: pullRequest.id) }
+            // Zopakování jde u commitu agenta **jinou cestou**: `openCommit` by sáhlo na GitHub
+            // pro sha, které tam není. Obojí ale vrací stav na `loading`, takže se v okně chová
+            // stejně.
+            retry: {
+                isLocal
+                    ? store.openAgentDiff(in: pullRequest.id)
+                    : store.openCommit(commit.sha, in: pullRequest.id)
+            }
         )
     }
 

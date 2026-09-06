@@ -59,7 +59,9 @@ struct BranchSyncRenderProbe {
             behind: 1,
             checkFailed: false,
             sync: .resolving(round: 2, files: ["conflict-probe-467.md", "src/Vault/SecretClient.php"]),
-            activity: "upravuje src/Vault/SecretClient.php"
+            // U slévání konfliktů se kreslí **jen poslední krok** (chování z #467), takže scéna
+            // dostane ocas o dvou prvcích a v renderu musí být vidět jediná řádka.
+            tail: ["čte src/Vault/SecretClient.php", "upravuje src/Vault/SecretClient.php"]
         )),
         ("14-nerozreseno", Scene(
             behind: 1,
@@ -75,14 +77,66 @@ struct BranchSyncRenderProbe {
                     + "která má přednost"
             )
         )),
+        // #510 — agent na vlastním PR. **Čtyři scény, protože jsou to čtyři různá rozvržení**:
+        // běžící agent (druhý řádek s krokem a `Zrušit`), hotový commit (dvě tlačítka a věta,
+        // která **nesmí mluvit o rebase**), nic se nezměnilo (jedno tlačítko, tečka místo
+        // vykřičníku) a nepřijatý výsledek s **dlouhou cizí cestou** — na té se pozná, jestli se
+        // panel rozsype.
+        ("16-agent-bezi", Scene(
+            behind: 0,
+            checkFailed: false,
+            sync: .fixing(items: 2, since: Date(timeIntervalSince1970: 1_000_000)),
+            // #511 — **ocas, ne jedna řádka**: na téhle scéně se pozná, jestli se čtyři kroky
+            // do panelu vejdou a jestli se dlouhá cesta ořízne uprostřed, ne že přeteče.
+            tail: [
+                "čte App/Policy/DiffFind.swift",
+                "hledá findMatches",
+                "upravuje App/Policy/DiffFind.swift",
+                "upravuje Tests/Policy/DiffFindTests.swift",
+            ]
+        )),
+        ("17-agent-hotovo", Scene(
+            behind: 0,
+            checkFailed: false,
+            sync: .rebased(Self.fixed(files: 2, skipped: "README nechávám tobě: text mění význam."))
+        )),
+        ("18-agent-nic", Scene(
+            behind: 0,
+            checkFailed: false,
+            sync: .fixedNothing(detail: "Tohle je rozhodnutí o produktu, ne o kódu.")
+        )),
+        ("19-agent-mimo-strom", Scene(
+            behind: 0,
+            checkFailed: false,
+            sync: .fixRejected(
+                detail: Policy.agentFixWritesOutside([
+                    "/Users/ondra/Projects/PRism/App/Policy/DiffFind.swift",
+                    "/Users/ondra/Projects/PRism/README.md",
+                    "/etc/hosts",
+                ])
+            )
+        )),
     ]
+
+    /// Výsledek agenta (#510) — `rebased` s původem `.agent`, tedy tentýž mezistav jako po rebase,
+    /// jen s jinou větou.
+    private static func fixed(files: Int, skipped: String?) -> RebasedBranch {
+        var branch = rebased(replayed: 1)
+        branch.origin = .agent
+        branch.fix = AgentFixAnswer(
+            files: (0..<files).map { "App/Policy/Soubor\($0).swift" },
+            summary: "opraveno",
+            skipped: skipped
+        )
+        return branch
+    }
 
     private struct Scene {
         let behind: Int
         let checkFailed: Bool
         let sync: BranchSyncState?
-        /// Co session zrovna dělá (#467) — druhý řádek u hlášky.
-        var activity: String?
+        /// Co session dělala — posledních pár kroků (#511, mění #467).
+        var tail: [String] = []
         var editing: Policy.MetadataEditing = .allowed
         var crossRepository: Bool? = false
     }
@@ -109,7 +163,7 @@ struct BranchSyncRenderProbe {
             section: section,
             contentWidth: Self.contentWidth,
             syncState: scene.sync,
-            syncActivity: scene.activity
+            syncTail: scene.tail
         )
         .availableWidth(Self.contentWidth)
         .background(Palette.chrome)

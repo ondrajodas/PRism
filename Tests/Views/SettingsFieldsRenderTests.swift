@@ -30,13 +30,16 @@ struct SettingsFieldsRenderTests {
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     ///
-    /// **Od #517 o dvě stě bodů výš, od #519 o dalších čtyři sta.** `Form` je `ScrollView`, takže
-    /// co se do okna nevejde, se **nenakreslí** — a každá nová sekce nad `Text issue z trackeru`
-    /// ho posunula pod dosavadní hranici (#517 přepínačem `Po pushi review jen přírůstku`, #519
-    /// sekcí `Tiché hodiny` se čtyřmi řádky a vysvětlením). Test se tím nezměnil v tom, co tvrdí:
-    /// dvě bitmapy vyšly stejné právě proto, že se pole přestalo kreslit, což je zrovna ta vada,
-    /// kterou má chytat — a je to i **návod, jak ho číst**, když příště zčervená.
-    private static let height: CGFloat = 2200
+    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta a od #519 o dalších čtyři sta.**
+    /// `Form` je `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — a každá nová sekce
+    /// nad `Text issue z trackeru` ho posunula pod dosavadní hranici (#517 přepínačem `Po pushi
+    /// review jen přírůstku`, #510 sekcí `Agent na vlastním PR`, #519 sekcí `Tiché hodiny` se
+    /// čtyřmi řádky a vysvětlením). Test se tím nezměnil v tom, co tvrdí: dvě bitmapy vyšly stejné
+    /// právě proto, že se pole přestalo kreslit, což je zrovna ta vada, kterou má chytat.
+    ///
+    /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
+    /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
+    private static let height: CGFloat = 2500
 
     // MARK: - Text issue z trackeru
 
@@ -212,6 +215,52 @@ struct SettingsFieldsRenderTests {
     }
 
     // MARK: - Kreslení
+
+    // MARK: - Přepínač agenta na stránce Notifikace (#511)
+
+    /// Že přepínač `Agent na mém PR doběhl` na stránce **doopravdy je** a je napojený.
+    ///
+    /// Vlastní tvrzení vedle `AgentRunNoticeTests`: ty se ptají `NotificationSettings.allows(_:)`,
+    /// takže by prošly i nad stránkou, kde ten přepínač nikdo nenakreslil — a hláška, kterou nejde
+    /// vypnout, je ta horší polovina té dvojice.
+    @Test("Přepínač agenta na stránce Notifikace je nakreslený a napojený")
+    func theAgentToggleIsDrawn() throws {
+        let on = try renderNotifications("agent-zapnuto") { $0.agentFix = true }
+        let off = try renderNotifications("agent-vypnuto") { $0.agentFix = false }
+
+        #expect(on != off)
+    }
+
+    /// **Vypnutý hlavní vypínač přepínače schová**, ne zašedne — pod ním by to bylo šest řádků,
+    /// které nic neříkají (důvod je o řádek výš, na rozdíl od tlačítek v okně review).
+    @Test("S vypnutými notifikacemi přepínač agenta na stránce není")
+    func theAgentToggleHidesWithNotificationsOff() throws {
+        let on = try renderNotifications("hlavni-zapnuto") { $0.isEnabled = true }
+        let offWithAgent = try renderNotifications("hlavni-vypnuto-agent") {
+            $0.isEnabled = false
+            $0.agentFix = true
+        }
+        let offWithoutAgent = try renderNotifications("hlavni-vypnuto-bez") {
+            $0.isEnabled = false
+            $0.agentFix = false
+        }
+
+        #expect(on != offWithAgent)
+        // **Tohle je to tvrzení**: s vypnutým hlavním vypínačem se stránka nesmí lišit podle
+        // hodnoty, která na ní není vidět.
+        #expect(offWithAgent == offWithoutAgent)
+    }
+
+    private func renderNotifications(
+        _ name: String,
+        _ edit: (inout NotificationSettings) -> Void
+    ) throws -> Data {
+        var configuration = Configuration.standard
+        edit(&configuration.global.notifications)
+        return try bitmap(name) {
+            NotificationSettingsView(settings: SettingsModel(configuration: configuration) { _ in })
+        }
+    }
 
     private func render(_ name: String, _ edit: (inout Configuration) -> Void) throws -> Data {
         var configuration = Configuration.standard

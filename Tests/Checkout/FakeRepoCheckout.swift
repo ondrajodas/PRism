@@ -207,6 +207,58 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         at headSha: String,
         onto base: String
     ) async -> SyncWorktreeState { syncWorktree }
+
+    // MARK: - Agent na vlastním PR (#510)
+
+    /// Strom, ve kterém agent pracuje. `nil` = vydá se vymyšlená cesta.
+    var agentWorktree: URL?
+    /// Čím spadne příprava stromu. `nil` = povede se.
+    var agentWorktreeFailure: CheckoutError?
+    /// Co vydá commit. **Výchozí `nil`, tedy „ve stromě se nic nezměnilo“** — testu, který
+    /// o commit nestojí, tím v cache nic nevznikne; kdo commit chce, si ho nastaví.
+    var agentCommit: Result<RebasedBranch?, CheckoutError> = .success(nil)
+
+    /// Komu se připravoval strom a **s jakou zprávou se commitovalo**. Na počtu commitů stojí
+    /// tvrzení „necommitlo se nic“, které je z celého #510 to nejcennější.
+    var agentWorktreeRequests: [PRIdentifier] { lock.withLock { agentWorktrees } }
+    var agentCommitRequests: [(pr: PRIdentifier, message: String)] { lock.withLock { agentCommits } }
+
+    private var agentWorktrees: [PRIdentifier] = []
+    private var agentCommits: [(pr: PRIdentifier, message: String)] = []
+
+    func agentFixWorktree(for pr: PRIdentifier, at headSha: String) async throws -> URL {
+        lock.withLock { agentWorktrees.append(pr) }
+        if let agentWorktreeFailure { throw agentWorktreeFailure }
+        return agentWorktree ?? URL(filePath: "/tmp/\(pr.number)-sync")
+    }
+
+    func commitAgentFix(
+        for pr: PRIdentifier,
+        in worktree: URL,
+        at headSha: String,
+        message: String
+    ) async throws -> RebasedBranch? {
+        lock.withLock { agentCommits.append((pr, message)) }
+        return try agentCommit.get()
+    }
+
+    /// Co vydá čtení commitu agenta (#511). **Výchozí je chyba, ne prázdný commit**: test, který
+    /// si o to čtení neřekl, se k němu nemá dostat — a prázdná odpověď by v okně vypadala jako
+    /// diff, který nic nemění.
+    var agentFixCommitAnswer: Result<AgentFixCommit, CheckoutError> = .failure(
+        .gitFailed(exitCode: 0, message: "fake: commit agenta nikdo nenastavil")
+    )
+    /// Nad kterými stromy se ten commit četl — na tom stojí tvrzení, že se **nesahá na GitHub**.
+    var agentFixCommitRequests: [(worktree: URL, since: String)] {
+        lock.withLock { agentFixCommitReads }
+    }
+
+    private var agentFixCommitReads: [(worktree: URL, since: String)] = []
+
+    func agentFixCommit(in worktree: URL, since headSha: String) async throws -> AgentFixCommit {
+        lock.withLock { agentFixCommitReads.append((worktree, headSha)) }
+        return try agentFixCommitAnswer.get()
+    }
 }
 
 

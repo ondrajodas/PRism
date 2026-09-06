@@ -8669,6 +8669,149 @@ v [`docs/testovani.md`](testovani.md).
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR schválně nepouštěl.
 Vlastní revize diffu proběhla a je popsaná v PR.
 
+## #510 — Agent opraví vlastní PR sám: zapisující session spuštěná cizí aktivitou (M15, zákres 55)
+
+**Smyčka na vlastním PR se dodneška spouštěla ručně**: přišel komentář Copilota, já sestavil zadání
+(#333), předal ho agentovi, počkal a pushnul. Aplikace přitom od #467 uměla pustit session, která
+smí měnit soubory, a od #466 uměla větev přetlačit ze sheetu — chyběl **spouštěč**.
+
+**Mění to tvrdou podmínku č. 2 o jednu větu**: zapisující session smí startovat **bez kliknutí**
+jedině nad stromem `-sync` **vlastního** PR a jedině po **cizí** aktivitě (`foreignActivity`, #335).
+**Sada povolení se nemění ani o položku** — `AgentFixCommand` ji bere doslova z `ConflictCommand`,
+takže `Write` a `Edit` mají dál vypsaný rozsah, `Bash` v ní není vůbec a `gh` s `git push` zůstávají
+v zákazu. Test to tvrdí literálem **i rovností** obou sad.
+
+**#332 se neruší.** Ten zakázal automat na vlastním PR kvůli **review** — a to platí dál, reviewer se
+na vlastní PR sám nepouští. Tohle je oprava po cizím review: podnětem není můj push, ale cizí hlas,
+a výsledkem není nález proti kódu, který za deset minut nebude, ale **commit v kopii repa**.
+Zdůvodnění i zamítnuté varianty jsou v záznamu rozhodnutí ve specifikaci.
+
+**Čtyři brány, každá jinde a každá kontrolovatelná**: `Policy.agentFix` (vlastnictví, `autoAgent`,
+stav PR, je co opravovat, běží už něco), **stav stromu `-sync`** (nad rozdělanou prací se nespouští
+nic — rozhoduje o ní člověk), **denní rozpočet** (`autoRunsPerDay`, tentýž jako u automatu review)
+a **druhá vrstva po běhu** (zápis mimo strom se čte ze streamu a výsledek se pak nepřijme, i když
+ten pokus brána odmítla).
+
+**Brána je globálně i per repo a ve výchozím stavu vypnutá** — právě to drží vlastnost „samo nic
+nezačne“. Rozbitá hodnota v `config.json` se sráží na `false` a `Nepouštět` u repa **není** totéž
+co „ber globální“, jako u odesílání.
+
+**Commituje aplikace, ne session** (`RepoCheckout.commitAgentFix`, `git add --all` + `git commit`)
+a **zprávu skládá `Policy`**: `fix: address review feedback (#N)`, anglicky a bez AI atribuce.
+Hlavička commitu je jediné místo, kde by se text od modelu dostal do historie repa.
+
+**Výsledek je stav, který panel už umí**: `rebased` s původem `.agent`, tedy mezistav *přerovnáno,
+nepřetlačeno* z #466 — odtud vede `Force push…` se sheetem, lease z hlavy, ze které agent vyšel, a
+bez výchozí akce. **Z #466 se nemění nic.** Vedle toho jsou dva nové stavy: `fixedNothing` (doběhlo,
+v cache nic neleží, `Zahodit` se nenabízí) a `fixRejected` (výsledek se nepřijal, nabízí se
+`Zahodit změny` i terminál).
+
+**Razítko spuštění je třetí vedle návštěvy a oznámení** (`AgentFixLedger`) a posouvá se **při
+startu**: kdyby se posouvalo po úspěchu, pouštěl by se neúspěšný běh při každém tiku. Podnět, který
+přijde za běhu, se tím nezahodí — má novější datum, takže ho příští tik uvidí znovu, a to je celé
+„zařadí se do fronty“. Při **prvním** setkání s PR se razítko jen zasadí, takže na starou diskuzi
+agent nesáhne.
+
+**Na dráhu vlastního PR (#508) se nic nevěsí** a notifikace v tomhle issue nejsou — dráha má od
+6. 9. 2026 pět stanic a kde se běžící agent ukáže, rozhoduje #511. **Zapsaná mezera: testy nepouští
+nikdo** — session je pustit nemůže (`Bash` v sadě není) a aplikace to zatím nedělá, takže je
+v promptu věta, že se nesmí tvrdit, že bylo něco ověřeno spuštěním.
+
+**Brána patří i do očisty slotu** (`bin/slot-config.sh`): má obě úrovně, takže zděděné `true` by
+z dev instance pustilo agenta na moje skutečné PR — vyčistí se globálně i u rep a kontrola nad
+výsledkem to hlásí jmenovitě, jako u odesílání a automatu.
+
+**Zákres je sekce 55** v `docs/navrh.html` (bez nových CSS tříd — kreslí se tímtéž, čím sekce 36
+a 48). `docs/navrh.md` sedělo na 53 sekcích nad čtyřiapadesáti — srovnáno.
+
+**Z renderu sondy vypadly dvě opravy, které z diffu vidět nebyly**: pod větou „Agent upravil
+2 soubory“ stálo `Zahodit rebase` (žádný rebase tam neproběhl) a řádek o tom, co agent zrovna dělá,
+se nekreslil vůbec, protože podmínka ve view zněla `isResolving`. Obojí má teď tvrzení.
+
+**Slití s #508 chtělo tři arms navíc, ne jen tichý `git`.** Dráha vlastního PR čte
+`BranchSyncState` dvěma vyčerpávajícími `switch`i, takže tři nové stavy položily překlad — což je
+přesně to, k čemu ty vyjmenované `case`y v `OwnLoopPolicy` jsou. Rozhodlo se: běžící agent je
+`probíhá`, **nepřijatý** výsledek dostal vlastní slovo `nepřijato` (`rebase` by pojmenovalo něco,
+co ve stromě neleží) a `fixedNothing` o poloze větve nerozhoduje vůbec, tedy jako `alreadyInSync`.
+Totéž v `ownLoopFacts`: běžící agent i nepřijatá práce drží `CI` a `Review` šedé.
+
+Testů je nad slitým stavem (po #508) **5 711** v 556 sadách, z toho **+33** z tohohle PR (dvě nové
+sady a sedm tvrzení navíc ve stráži `SingleWayOutTests`, `SessionToolSetsTests`
+a `BranchSyncOfferTests`; tři stavy navíc ve výčtech `OwnLoopTests` přišly až se slitím), a jsou
+zelené; regrese se ověřila **vložením čtyř regresí** — vypnutá brána, vypnutá kontrola vlastnictví,
+přijatý zápis mimo strom a vlastní komentář počítaný za cizí. Ta druhá je poučná: store test u ní
+**prošel**, protože cizí PR zastaví už rozhlídka — guard hlídá `AgentFixPolicyTests`. Plný běh nad
+slitým stavem byl **falešně červený pod souběžným buildem druhého slotu** (deset issues ve třech
+sadách o čekání — `HealthMonitorTests`, notifikace a routing, nic z toho se tohohle PR netýká);
+samostatný běh těch tří sad je zelený (29 testů).
+
+**Tři neověřené mezery.** (1) **Copilot se na tenhle PR schválně nepouštěl** — GitHub má výpadek
+entitlementu (`ineligible_app`), tatáž příčina jako u #508, #512, #570 a #572; vlastní revize diffu
+proběhla a je popsaná v PR. (2) **Že session doopravdy opraví, co po ní zpětná vazba chce, se
+v harnessu netvrdí** — je za tím cizí model, síť a peníze; testuje se spouštěč, brána, sada
+povolení a přijetí výsledku, ne kvalita opravy. (3) **Testy nad výsledkem agenta nepouští nikdo** —
+deck mluvil o „testy zelené (spustila aplikace)“, session je pustit nemůže (`Bash` v sadě není)
+a aplikace to zatím nedělá; v promptu je proto věta, že se **nesmí tvrdit**, že bylo něco ověřeno
+spuštěním.
+
+## #511 — Běžící agent je vidět, a když doběhne, dá se to poznat (M15, zákres 56)
+
+**První krok bylo rozhodnutí, ne kód.** Zadání stálo na větě „stanice *Agent* na dráze (#508)
+ukazuje stav“ — jenže ta stanice z dráhy odešla přesně proto, že **neměla živý obsah**. Vybíralo se
+mezi „vrátit ji, ale rovnou s obsahem“ a „ukázat agenta tam, kde ta práce je“. Rozhodlo se pro
+druhé: do kapsle na dráze se vejde **jedno slovo**, kdežto obsah, který #511 dodává, je čtyřřádkový
+ocas, věta o výsledku a tři tlačítka. Dráha zůstává **pětistanicová** a o agentovi nemlčí — stanice
+`Push` hlásí `probíhá` i `nepřetlačeno` (#510), protože commit v kopii repa patří do jejího obsahu.
+Zbytek bydlí v sekci `Větev`, tam, kde je ten strom a ta další akce.
+
+**Co přibylo.** Živý ocas posledních čtyř kroků pod větou o stavu (kroky ze streamu, ne próza
+modelu — tu aplikace nedrží). Věta výsledku z výčtu `AgentRunOutcome`, skládaná na **jednom místě**,
+protože o témž výsledku mluví panel, banner i řádek v `Dění`: *Agent upravil 2 soubory ve stromě
+499-sync · nic se neodeslalo.* Tlačítko **`Prohlédnout diff agenta`** — do téhle změny se ten commit
+dal přečíst jedině **za nevratnou akcí**, tedy potvrdit force push a podívat se na GitHubu; teď se
+čte `git` v kopii repa a kreslí to tatáž obrazovka jako diff commitu (#317). Notifikace s vlastním
+přepínačem a řádek v `Dění`, který vzniká i bez banneru. A pilulka `agent běží · 4 min` /
+`push čeká na tebe` v řádku `Moje PR` — ve stejném jediném slotu, kde jindy stojí `N k předání`.
+
+**Výčet má pět případů, ne čtyři ze zadání.** Chybějící pátý je `nothing` a je to stav, který #510
+výslovně oddělilo od selhání (doběhlá práce, po které v cache nic neleží). Slít ho do `failed` by to
+rozhodnutí zrušilo, slít do `partial` by tvrdilo, že část opravy leží v kopii repa, přestože `git`
+řekl, že se nezměnilo nic.
+
+**Zadání chtělo větu „testy zelené“ — nedodala se, a je to podmínka.** Session testy pustit nemůže
+(`Bash` v její sadě není) a aplikace je nad jejím výsledkem nepouští. V žádné z pěti vět, v žádném
+titulku banneru ani v žádném dalším kroku se proto o testech nemluví, a **hlídá to test**, ne
+komentář. Pustit testy nad výsledkem agenta by bylo vlastní issue.
+
+**Vlastní revize diffu našla dvě věci.** `AgentRunOutcome` nesl dvě vlastnosti (`files`,
+`awaitsPush`), které četly **jenom testy** — držený stav, který nikdo nečte, je jeden z pěti vzorů,
+co Copilot v tomhle repu nachází; obojí odešlo. A `loadAgentDiff` neuměl to, co `loadCommitDiff`
+umí: **přeskládat výskyty hledání** po dotažení diffu (#152), takže by `⌘F` nad diffem agenta
+hlásilo nula výskytů nad textem, ve kterém jsou.
+
+**Jedna mapa místo dvou.** `branchSyncActivity` (jeden řetězec) se stal `branchSyncTail` (pole).
+Slévání konfliktů si z něj bere poslední prvek a kreslí se jako do #511; druhá mapa vedle by o téže
+věci uměla tvrdit dvojí.
+
+Testů je **5 750** v 559 sadách, z toho **+39** z tohohle PR (tři nové sady, dvě tvrzení navíc v `SettingsFieldsRenderTests`, pět tvrzení navíc
+v `AppStoreAgentFixTests`, dvě přepsaná v `ActivityFeedTests` a dvě scény sondy). Plný běh je
+zelený; regrese se ověřila **vložením tří regresí** — věta s „testy zelené“ (spadly tři testy ve
+dvou sadách), hlášení o agentovi puštěné i na cizí PR (spadl `AgentRunNoticeTests`) a smazaný
+přepínač ze stránky `Notifikace` (dvě stejně velké, ale různé bitmapy).
+
+**Grepy tvrdé podmínky č. 1 vydávají po slití s `main`em týž výčet jako po #510**: sedm souborů
+u `ReviewPublishing`, tři u `BranchPushing`, tři u `AgentFixing`. Sady nástrojů se nezměnily ani
+o položku — `Prohlédnout diff agenta` je čtení `gitu`, ne session.
+
+**Tři neověřené mezery.** (1) **Copilot se na tenhle PR schválně nepouštěl** — uživatel to zakázal,
+GitHub má výpadek entitlementu (`ineligible_app`); vlastní revize diffu proběhla a je popsaná v PR.
+(2) **Ocas za běhu netvrdí žádný store test**: krok se do něj zapisuje z odpovědi streamu přes
+`Task { @MainActor }`, takže po usazení je běh dávno hotový a ocas prázdný. Co se dá tvrdit, se
+tvrdí — strop a skládání v `Policy`, kresba čtyř řádků v sondě a to negativní, že po doběhnutí ocas
+**nezůstane**. (3) **Že ve slotu doopravdy naběhne agent, se neověřilo** — brána je ve výchozím
+stavu vypnutá a `slot-config.sh` ji z kopie konfigurace vyndává, takže se stavy panelu ověřily
+renderem sondy a čtením konfigurace, ne živým během.
+
 ## #519 — velké PR se v automatu odloží do tichých hodin (M16)
 
 Třetí a poslední issue skupiny automatu (#517, #518, #519). Do #519 se PR o dvou tisících řádcích

@@ -37,9 +37,13 @@ struct PanelBranchView: View {
     let contentWidth: Double
     /// Co se právě děje se srovnáním větve (#466). `nil` = nic se nedělo.
     var syncState: BranchSyncState?
-    /// Co session nad konflikty zrovna dělá (#467) — **druhý řádek**, ne součást věty o stavu:
-    /// mění se při každém kroku session, kdežto stav zůstává.
-    var syncActivity: String?
+    /// Co zapisující session nad tímhle PR dělala — **posledních pár kroků** (#511, mění #467),
+    /// od nejstaršího. Prázdné = ještě nic neřekla.
+    ///
+    /// **Ne součást věty o stavu**: mění se při každém kroku session, kdežto stav zůstává.
+    /// U slévání konfliktů se kreslí **jen poslední** (chování z #467), u agenta celý ocas — proč,
+    /// je u `tailRows`.
+    var syncTail: [String] = []
     /// Co se právě děje s metadaty PR (#482). Sekci zajímá **jediný** z jeho případů —
     /// `readyFailed`, tedy věta pod tlačítkem `Připravit k review`; ostatní kreslí blok labelů.
     /// Rozhoduje o tom `MetadataActionState.noticePlace`, ne tenhle panel.
@@ -372,10 +376,13 @@ struct PanelBranchView: View {
                 // je to řádek navíc v panelu, který má 300 bodů.
                 if Self.noticeActions(state) == .one { singleNoticeButton(state) }
             }
-            // **Co session dělá právě teď — druhý řádek, a jedině dokud slévá.** Bez něj je
+            // **Co session dělá právě teď — pod větou, a jedině za běhu.** Bez toho je
             // desetiminutová session k nerozeznání od zaseknutého okna; a po doběhnutí by řádek
             // o naposled hlášeném kroku zůstal viset nad hotovým výsledkem.
-            if state.isResolving, let syncActivity { activityRow(syncActivity) }
+            // **Obě zapisující session**, ne jen slévání konfliktů (#510) — u agenta jich je od
+            // #511 víc než jedna, viz `tailRows`.
+            tailRows(state)
+            if Self.showsAgentDiff(state) { agentDiffButton }
             if Self.noticeActions(state) == .two { pairedNoticeButtons(state) }
         }
         // **Velikost vypsaná, ne `.caption`.** Celá sekce sází explicitními body (12 popis, 11
@@ -398,16 +405,20 @@ struct PanelBranchView: View {
         // **Rozdělaný rebase má od #467 dvě akce, ne jednu** (návrh sekce 36): `Otevřít
         // v terminálu` k tomu, co tam už bylo. Vlastní řádek na ně je změřený u #466 — dvě
         // tlačítka vedle věty jí nechají ~50 bodů, tedy slovo na řádek.
-        if state.hasUnfinishedRebase { return .two }
-        // **Běžící slévání má `Zrušit`**, na rozdíl od rebase a zahazování: je to session, která
-        // běží minuty a stojí peníze, takže „rozmyslel jsem si to“ nesmí znamenat čekat na konec.
-        if state.isResolving { return .one }
+        // A od #510 stejně tak nepřijatá práce agenta: v kopii repa může ležet a rozhoduje o ní
+        // člověk — tedy tytéž dvě akce.
+        if state.hasUnfinishedRebase || state.hasRejectedFix { return .two }
+        // **Běžící session má `Zrušit`**, na rozdíl od rebase a zahazování: běží minuty a stojí
+        // peníze, takže „rozmyslel jsem si to“ nesmí znamenat čekat na konec. Platí to pro slévání
+        // konfliktů i pro agenta (#510) — a u agenta o důvod víc, protože ho nikdo nespouštěl
+        // kliknutím.
+        if state.isResolving || state.isFixing { return .one }
         return state.isBusy ? .none : .one
     }
 
     /// Jedno tlačítko u věty: `Zrušit` u běžícího slévání, jinak `Zavřít` u hlášky.
     @ViewBuilder private func singleNoticeButton(_ state: BranchSyncState) -> some View {
-        if state.isResolving {
+        if state.isResolving || state.isFixing {
             Button(Self.cancelTitle, action: actions.cancelSync)
                 .buttonStyle(.mini)
                 .fixedSize()
@@ -416,6 +427,32 @@ struct PanelBranchView: View {
             Button("Zavřít", action: actions.clearSync)
                 .buttonStyle(.mini)
                 .fixedSize()
+        }
+    }
+
+    /// Co session dělá — **jedna řádka u konfliktů, ocas u agenta** (#511).
+    ///
+    /// **Bez něj je desetiminutová session k nerozeznání od zaseknutého okna**, a po doběhnutí by
+    /// řádek o naposled hlášeném kroku zůstal viset nad hotovým výsledkem — proto se kreslí
+    /// **jedině za běhu**.
+    ///
+    /// **Proč u agenta víc řádek než u konfliktů.** Slévání běží nad **vyjmenovanými** soubory,
+    /// takže jedna řádka odpovídá na celou otázku („kde v tom seznamu zrovna je“). Agent běží
+    /// patnáct minut, místo v kódu si hledá sám a **nespustil ho člověk**: jediná řádka pak řekne,
+    /// že se okno nezaseklo, ale ne co ta session celou dobu dělá — a to je zrovna ta otázka,
+    /// kvůli které #511 vzniklo. Strop drží `Policy.agentTailLength`, ne tenhle typ.
+    @ViewBuilder private func tailRows(_ state: BranchSyncState) -> some View {
+        if state.isFixing {
+            // Identita z **pořadí**: dvě stejné řádky v ocase být můžou (agent se do souboru
+            // vrátí) a pořadí je u nich jediná správná identita — je to ta výjimka, kterou
+            // pravidlo #361 jmenuje. Payload se přes tuple nečte, `id` je `\.offset`.
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(syncTail.enumerated()), id: \.offset) { step in
+                    activityRow(step.element)
+                }
+            }
+        } else if state.isResolving, let last = syncTail.last {
+            activityRow(last)
         }
     }
 
@@ -449,15 +486,63 @@ struct PanelBranchView: View {
                     .buttonStyle(.miniPrimary)
                     .fixedSize()
             }
-            Button(Self.discardTitle, action: actions.discardSync)
+            Button(Self.discardTitle(state), action: actions.discardSync)
                 .buttonStyle(.mini)
                 .fixedSize()
             Spacer(minLength: 0)
         }
     }
 
+    /// Kreslí se `Prohlédnout diff agenta`? **Jen nad commitem, který udělal agent** (#511).
+    ///
+    /// Ne nad rebasem: tam se přehrály **moje** commity, které jsem už jednou psal, a jejich diff
+    /// je na GitHubu. Tohle je jediný stav v celém okně, kdy v cache leží kód, který nikdo
+    /// **neviděl** — a hned za ním stojí nevratná akce.
+    private static func showsAgentDiff(_ state: BranchSyncState) -> Bool {
+        state.rebasedBranch?.origin == .agent
+    }
+
+    /// `Prohlédnout diff agenta` — **vlastní řádek přes celou šířku, ne třetí tlačítko v řadě.**
+    ///
+    /// Je to tatáž změřená mez jako u `Připravit k review` (#482) a řeší se stejně: `Force push…`
+    /// (82 b) a `Zahodit změny` (~90 b) si s mezerou vezmou ~178 z 274 bodů, které panel na obsah
+    /// má, takže na třetí tlačítko zbývá ~90 — a `Prohlédnout diff agenta` potřebuje víc než
+    /// dvojnásobek. Na podlaze panelu (214 b) se nevejde ani ta dvojice s ním.
+    ///
+    /// **Nahoře, ne dole**, a je to pořadí kroků: prohlédnout se má **před** potvrzením force
+    /// pushe, ne po něm. Zvýrazněné není — hlavní akce v tom stavu zůstává `Force push…`; dvě
+    /// akcentová tlačítka pod sebou by se pralo o roli té hlavní.
+    ///
+    /// **Bez tří teček**: nic neotevírá k potvrzení, přepne obsah tabu `Commity` na diff — tedy
+    /// tatáž kresba jako u commitu (#317) a tentýž způsob, jak se z něj vrátit.
+    private var agentDiffButton: some View {
+        HStack(spacing: Self.actionSpacing) {
+            Button(Self.agentDiffTitle, action: actions.showAgentDiff)
+                .buttonStyle(.mini)
+                .fixedSize()
+                .help(Self.agentDiffHelp)
+            // `Spacer`, ne pružný rámec na tlačítku — tatáž úmluva jako u `pairedNoticeButtons`
+            // a tentýž důvod (#220): tlačítko má svou šířku, roztáhnout se má mezera.
+            Spacer(minLength: 0)
+        }
+    }
+
+    private static let agentDiffTitle = "Prohlédnout diff agenta"
+    private static let agentDiffHelp =
+        "Otevře v záložce Commity, co agent nacommitoval v kopii repa. Nic se tím neodesílá."
+
     private static let pushTitle = "Force push…"
-    private static let discardTitle = "Zahodit rebase"
+
+    /// Co se tím tlačítkem zahazuje. **Slovo podle stavu, ne jedno na všechno** (#510): po
+    /// agentovi v cache žádný rozdělaný rebase neleží, takže `Zahodit rebase` by pojmenovávalo
+    /// něco, co tam není — a je to tatáž třída chyby jako věta o rebase nad jeho commitem.
+    ///
+    /// **Platí to i pro úspěch**, ne jen pro nepřijatý výsledek: `rebased` s původem `.agent` je
+    /// commit agenta, ne přehrané commity. Vyšlo to z renderu sondy (scéna `17-agent-hotovo`), kde
+    /// pod větou „Agent upravil 2 soubory“ stálo `Zahodit rebase`.
+    private static func discardTitle(_ state: BranchSyncState) -> String {
+        state.isAgentWork ? "Zahodit změny" : "Zahodit rebase"
+    }
     private static let terminalTitle = "Otevřít v terminálu"
     private static let terminalHelp =
         "Otevře zásuvku se shellem v té kopii repa, kde rebase uvázl. Tam máš plná práva."
@@ -470,23 +555,28 @@ struct PanelBranchView: View {
     /// **Ikona ze stavu, ne z barvy** — a `checkmark` jedině u toho, co doopravdy doběhlo.
     private static func noticeIcon(_ state: BranchSyncState) -> String {
         switch state {
-        case .rebasing, .resolving, .pushing, .discarding: "arrow.triangle.2.circlepath"
+        case .rebasing, .resolving, .fixing, .pushing, .discarding: "arrow.triangle.2.circlepath"
         // **Ne `checkmark`.** První krok doběhl, ale akce hotová není — do remote se nesáhlo,
         // a zaškrtnutí by tvrdilo, že je uklizeno.
         case .rebased: "arrow.up.circle"
-        case .pushed, .alreadyInSync: "checkmark.circle"
-        case .conflicted, .unfinished, .unresolved, .failed: "exclamationmark.triangle"
+        // **Agent, který nic nezměnil, není porucha** (#510): doběhl a v cache po něm nic neleží.
+        // Vykřičník nad legitimním výsledkem by svítil zbytečně.
+        case .pushed, .alreadyInSync, .fixedNothing: "checkmark.circle"
+        case .conflicted, .unfinished, .unresolved, .fixRejected, .failed: "exclamationmark.triangle"
         }
     }
 
     /// **Barva ze škály se bere z palety, nikdy ze systému** (#432).
     private static func noticeTint(_ state: BranchSyncState) -> Color {
         switch state {
-        case .rebasing, .resolving, .pushing, .discarding: Palette.ink3
-        case .pushed, .alreadyInSync: Palette.ok
+        case .rebasing, .resolving, .fixing, .pushing, .discarding: Palette.ink3
+        // Agent, který nic nezměnil (#510), je **doběhlá práce, ne mezistav**: nic v cache neleží
+        // a nic se nečeká — tedy tentýž tón jako `alreadyInSync`, o kterém platí totéž.
+        case .pushed, .alreadyInSync, .fixedNothing: Palette.ok
         // Mezistav není ani hotovo, ani porucha — **čeká na rozhodnutí**, a to je tentýž tón jako
-        // u rozdělaného rebase.
-        case .rebased, .unfinished, .unresolved: Palette.stale
+        // u rozdělaného rebase. Nepřijatá práce agenta je tatáž třída: leží v cache a rozhoduje
+        // o ní člověk.
+        case .rebased, .unfinished, .unresolved, .fixRejected: Palette.stale
         case .conflicted, .failed: Palette.crit
         }
     }

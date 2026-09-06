@@ -486,7 +486,8 @@ potřebuje.
 
 **A maže se i doména v `UserDefaults`** (`com.ondrajodas.prism.<slot>`, #399). Nastavení **přežije
 smazání bundlu i cache**, takže příští slot na tomtéž písmenu nastartuje s nastavením po předchůdci
-— tedy i s tím, co z něj `bin/slot-config.sh` schválně vyndal (odesílání, notifikace, automat).
+— tedy i s tím, co z něj `bin/slot-config.sh` schválně vyndal (odesílání, notifikace, automat
+a od #510 i agent na vlastním PR).
 Past, kterou skript řeší a ruční postup přehlížel: `defaults delete` po sobě nechá **prázdný plist**
 (42 B), na kterém `defaults read` už hlásí, že doména neexistuje — soubor v
 `~/Library/Preferences/` ale leží dál. **Ověřuje se proto zpětným čtením, ne návratovým kódem**;

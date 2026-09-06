@@ -233,6 +233,10 @@ struct PullRequestListView: View {
                 openPrompt: { store.openAgentPrompt(in: row.id) },
                 pending: row.pending,
                 activity: row.activity,
+                // Agent na vlastním PR (#511) — **jeden řádek, jedna podoba**, tedy i tady:
+                // z pilulky se pozná, že nad PR běží něco, co jsem nespustil, nebo že v kopii repa
+                // leží commit k přetlačení.
+                agent: store.agentRowPill(for: row.pullRequest),
                 // Odložit (#512) — jedna hodnota z jednoho místa (`AppStore.snoozeAction(for:)`),
                 // stejně jako na desce a v sekci `Rozdělaná`. Brána `Policy.canSnooze` je uvnitř,
                 // takže na vlastním řádku přijde prázdná nabídka a nenakreslí se nic.

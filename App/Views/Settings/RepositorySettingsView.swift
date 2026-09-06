@@ -118,6 +118,18 @@ private struct RepositoryDetailView: View {
                 }
                 .pickerStyle(.radioGroup)
 
+                // Tříhodnotový jako odesílání (#510) a ze stejného důvodu: `false` u repa není
+                // totéž jako `nil` — repo, ve kterém agenta pouštět nechci, si to podrží i po
+                // přepnutí globálního defaultu. Leží hned pod odesíláním, protože je to tatáž
+                // třída otázky („co smí aplikace udělat sama“), jen o session místo o API.
+                Picker("Agent po cizím review", selection: config.autoAgent) {
+                    Text("Podle globálního nastavení (\(agentName(settings.draft.global.autoAgent)))")
+                        .tag(Bool?.none)
+                    Text("Pouštět").tag(Bool?.some(true))
+                    Text("Nepouštět").tag(Bool?.some(false))
+                }
+                .pickerStyle(.radioGroup)
+
                 mergeMethodPicker
 
                 // Tříhodnotový jako odesílání (#517), a ze stejného důvodu: `false` u repa není
@@ -393,6 +405,10 @@ private struct RepositoryDetailView: View {
 
     private func publishingName(_ allowed: Bool) -> String {
         allowed ? "povoleno" : "zakázáno"
+    }
+
+    private func agentName(_ enabled: Bool) -> String {
+        enabled ? "pouštět" : "nepouštět"
     }
 
     private func incrementName(_ enabled: Bool) -> String {

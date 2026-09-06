@@ -551,6 +551,17 @@ final class AppStore {
     /// a nespouští tím `claude`.
     let conflicts: (any ConflictResolving)?
 
+    /// Agent, který opraví vlastní PR po cizím review (#510). `nil` = **nespouští se nic**, tedy
+    /// stav před #510; tak jsou na tom testy, které o agenta nestojí, a nespouští tím `claude`.
+    ///
+    /// **Není to brána.** Tou je `ResolvedConfig.autoAgent` (globálně i per repo, výchozí
+    /// vypnuto) — tohle je jen zapojení session, přesně jako `conflicts`.
+    let fixer: (any AgentFixing)?
+
+    /// Na co už agent na vlastním PR odpovídal (#510). Razítko **spuštění**, ne návštěvy ani
+    /// oznámení — viz `AgentFixLedger`.
+    let agentFixes: AgentFixLedger
+
     /// Uložené rozhovory (#452). `nil` = neukládá se, tedy rozhovor zanikne se zavřením aplikace.
     let asks: AskStore?
 
@@ -758,12 +769,23 @@ final class AppStore {
     /// přežije rodiče a platí tokeny dál.
     var branchSyncTasks: [PRIdentifier: Task<Void, Never>] = [:]
 
-    /// Co session nad konflikty zrovna dělá — druhý řádek u hlášky v panelu (#467). Chybějící
-    /// záznam = zatím nic neřekla.
+    /// Co zapisující session nad tímhle PR dělala — **posledních pár kroků**, ne jen ten poslední
+    /// (#511, mění #467). Chybějící záznam = zatím nic neřekla.
     ///
     /// **Vedle stavu, ne v něm**: mění se při každém tool cally, a přepisovat kvůli tomu
     /// `branchSyncStates` by špinilo i to, co se nemění (pravidlo o hrubé vlastnosti, #472).
-    var branchSyncActivity: [PRIdentifier: String] = [:]
+    ///
+    /// **Jedna mapa pro obě zapisující session, a ocas místo řádky.** Do #511 tu stál jeden řetězec
+    /// (`branchSyncActivity`) a stačil, dokud šlo o slévání konfliktů — to běží kolem deseti minut
+    /// nad **vyjmenovanými** soubory. Agent (#510) běží patnáct, hledá si místo v kódu sám
+    /// a **nikdo ho nespustil**, takže jediná řádka odpovídá na „nezaseklo se to?“, ale ne na „co
+    /// to celou dobu dělá?“. Druhá mapa vedle téhle by byla druhá pravda o jedné věci; ocas je
+    /// nadmnožina, ze které si slévání konfliktů vezme **poslední prvek**
+    /// (`branchSyncActivityLine`) a kreslí se stejně jako dřív.
+    ///
+    /// **Strop drží `Policy.agentTail(_:appending:)`**, ne tahle deklarace, a vyprazdňuje ho konec
+    /// běhu — tedy táž ruka, která ho plní (pravidlo #224).
+    var branchSyncTail: [PRIdentifier: [String]] = [:]
 
     /// Co session zrovna dělá — řádek u prstýnku na místě příští bubliny (#452). Chybějící
     /// záznam = zatím nic neřekla.
@@ -1041,6 +1063,7 @@ final class AppStore {
         intentText: (any IntentTextFetching)? = nil,
         asker: (any AskRunning)? = nil,
         conflicts: (any ConflictResolving)? = nil,
+        fixer: (any AgentFixing)? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
@@ -1064,6 +1087,7 @@ final class AppStore {
         installation: AppInstallation = .main,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
+        agentFixes: AgentFixLedger = AgentFixLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil,
         snoozeStore: SnoozeStore? = nil,
         deferredRuns: DeferredRunStore? = nil,
@@ -1072,6 +1096,7 @@ final class AppStore {
     ) {
         self.visits = visits
         self.activityNotices = activityNotices
+        self.agentFixes = agentFixes
         self.handoffs = handoffs
         self.snoozeStore = snoozeStore
         self.deferredRuns = deferredRuns
@@ -1112,6 +1137,7 @@ final class AppStore {
         self.intentText = intentText
         self.asker = asker
         self.conflicts = conflicts
+        self.fixer = fixer
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
@@ -1266,6 +1292,16 @@ final class AppStore {
             // a přes tentýž registr běžících session (#351) jako reviewer a rozhovor: `claude -p`
             // běží minuty a jako sirotek po zabité aplikaci platí tokeny dál.
             conflicts: ClaudeConflictResolver(
+                claude: toolPaths.claude,
+                gh: toolPaths.gh,
+                runner: SubprocessStreamer(sessions: .shared),
+                model: { box.value.global.model }
+            ),
+            // Agent na vlastním PR (#510) — **druhá session, která smí měnit soubory**, a jediná,
+            // kterou aplikace pouští bez kliknutí. Brána je v konfiguraci (`autoAgent`, výchozí
+            // vypnuto), tady je jen zapojení. Přes tentýž registr běžících session (#351) jako
+            // zbytek: `claude -p` běží minuty a jako sirotek po zabité aplikaci platí tokeny dál.
+            fixer: ClaudeAgentFixer(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,
                 runner: SubprocessStreamer(sessions: .shared),
@@ -1748,6 +1784,19 @@ final class AppStore {
     /// Strop je v klíči schválně — proč, je u `CommitDiff`. Návratem do seznamu se nezahazuje:
     /// je to zároveň paměť na to, kde v seznamu člověk byl (`lastOpenedCommit(in:)`).
     var commitDiffs: [PRIdentifier: CommitDiff] = [:]
+
+    /// Commit, který po agentovi zůstal v kopii repa (#511) — **řádek pro prohlížeč commitů**,
+    /// ne prvek seznamu commitů pull requestu.
+    ///
+    /// **Vlastní mapa vedle `commitDiffs`, ne prvek v seznamu z GitHubu.** Ten commit na GitHubu
+    /// **není**, takže by ho seznam nesměl obsahovat ani na okamžik — přimíchaný by se kreslil
+    /// v seznamu, počítal by se do odznaku u záložky a `Policy.headCommit` by o něm musel
+    /// rozhodovat. Takhle se do tabu dostane jedině tehdy, když se na něj přepne
+    /// (`Policy.openCommit(_:in:local:)`).
+    ///
+    /// Chybějící klíč = agent tu nic nenechal, nebo se to ještě nečetlo. Zahazuje se se zahozením
+    /// práce agenta (`discardSync`) a s vypadnutím PR ze seznamu.
+    var agentCommits: [PRIdentifier: PullRequestCommit] = [:]
 
     /// Je v hlavičce rozkliknutého commitu vidět **tělo zprávy** (#317)?
     ///
@@ -2514,6 +2563,9 @@ final class AppStore {
         commitDiffs = commitDiffs.filter {
             wantedPullRequests.contains($0.key) || $0.value.content == .loading
         }
+        // Commit agenta (#511) jde s nimi: bez toho by po vrácení PR do seznamu zůstal v mapě
+        // řádek o commitu, který mezitím ze stromu v cache zmizel.
+        agentCommits = agentCommits.filter { wantedPullRequests.contains($0.key) }
 
         // Rozbalený check a jeho detail (#214). Stahování se **ruší**, ne opouští: osmimegový log
         // by dojel do stavu, který už nikdo nečte. Text se u toho zahazuje schválně — nemá přežít
