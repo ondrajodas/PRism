@@ -117,6 +117,18 @@ protocol RepoCheckout: Sendable {
         onto base: String
     ) async -> SyncWorktreeState
 
+    /// Commit, který v tom stromě nechal agent — **hlavička a jeho diff proti hlavě PR** (#511).
+    ///
+    /// **Jediná cesta, jak se ten kód dá přečíst před force pushem**: commit leží v cache a na
+    /// GitHubu není, takže na něj `GitHubGateway.fetchDiff(repo:commit:)` nemá co odpovědět.
+    /// Je to **čtení** — `git log` a `git diff` v pracovní kopii —, takže se tvrdé podmínky č. 1
+    /// ani č. 2 netýká.
+    ///
+    /// `headSha` je hlava pull requestu, tedy `rebasedFrom` toho výsledku: diff se počítá **proti
+    /// ní**, ne proti základu větve. Ptát se `HEAD~1..HEAD` by dalo totéž jen do chvíle, než by
+    /// commitů bylo víc než jeden.
+    func agentFixCommit(in worktree: URL, since headSha: String) async throws -> AgentFixCommit
+
     /// Cesty souborů, které repo verzuje — podklad pro odhad jazyka projektu.
     ///
     /// Ptá se `gitu`, ne `FileManageru`: ignorované složky (`vendor/`, `node_modules/`,

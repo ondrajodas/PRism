@@ -110,3 +110,82 @@ extension Policy {
         }
     }
 }
+
+extension Policy {
+    /// Notifikace o tom, že doběhl agent na **vlastním** PR (#511). `nil` = nehlásí se.
+    ///
+    /// **Vlastní cesta vedle `activityNotification`, ne její druhé použití.** Ta odpovídá na
+    /// „ozval se někdo jiný“; tahle na „doběhla práce, kterou jsi nespustil“ — jiný přepínač
+    /// (`NotificationEvent.agentFix`), jiná `replacementGroup` a hlavně jiný další krok.
+    ///
+    /// Rozvržení je **titulek → detail → PR** jako u ostatních (#200): banner se čte odshora
+    /// a dolní řádek se ořízne, takže nahoru patří to, podle čeho se člověk rozhoduje, jestli jít
+    /// k počítači.
+    ///
+    /// **Druhá řádka je další krok, ne účet.** Když commit v kopii repa leží, je to
+    /// `zkontroluj a pushni`; jinak věta o tom, co se stalo. Sázet do banneru celý účet agenta
+    /// nemá cenu — má čtyři řádky a ten čtvrtý patří identifikaci PR.
+    ///
+    /// **Na cizím PR nevydá nic**, a je to pojistka, ne brána: agent se na cizím PR nespouští
+    /// (`Policy.agentFix` vrací `notMine` jako první odpověď), takže je to stav, který nemá jak
+    /// vzniknout — a kdyby vznikl, nesmí z něj být hláška o práci, o kterou nikdo nežádal. Je to
+    /// tatáž dvojitá kontrola jako u `isReported(_:on:)`.
+    static func agentRunNotification(
+        for pr: PRIdentifier,
+        ownership: PullRequestOwnership,
+        outcome: AgentRunOutcome
+    ) -> PullRequestNotification? {
+        guard ownership == .mine else { return nil }
+        return PullRequestNotification(
+            pullRequest: pr,
+            title: agentRunHeadline(outcome),
+            body: [agentRunNextStep(outcome), pr.description].joined(separator: "\n"),
+            event: .agentFix
+        )
+    }
+
+    /// Titulek banneru a **headline řádku v `Dění`** — jedno místo pro obojí.
+    ///
+    /// **Nese počet souborů, protože podle něj se rozhoduje**, jestli se na to jde podívat teď,
+    /// nebo po obědě. O testech se v něm nemluví (viz `AgentRunOutcome`).
+    static func agentRunHeadline(_ outcome: AgentRunOutcome) -> String {
+        switch outcome {
+        case .done(let files):
+            return "Agent má hotovo\(agentFileTally(files))"
+        // **Vlastní titulek, ne `hotovo` s poznámkou v těle.** Že agent část zadání nesplnil, je
+        // to podstatné — a v banneru se čte první řádek.
+        case .partial(let files, _):
+            return "Agent hotov jen zčásti\(agentFileTally(files))"
+        case .nothing:
+            return "Agent nic nezměnil"
+        case .failed:
+            return "Agent nedoběhl"
+        case .discarded:
+            return "Výsledek agenta se nepřijal"
+        }
+    }
+
+    /// ` · 2 soubory` do titulku. Prázdné u nuly: `0 souborů` nad commitem, který vznikl, tvrdí
+    /// něco, co si odporuje (viz `agentRunSentence`).
+    private static func agentFileTally(_ files: Int) -> String {
+        guard files > 0 else { return "" }
+        return " · \(Plural.czech(files, one: "soubor", few: "soubory", many: "souborů"))"
+    }
+
+    /// Druhá řádka banneru: **co s tím**. Nikdy prázdná — banner bez dalšího kroku je vyrušení
+    /// bez pointy.
+    static func agentRunNextStep(_ outcome: AgentRunOutcome) -> String {
+        switch outcome {
+        case .done: return "zkontroluj a pushni"
+        // Tady je pořadí obrácené: napřed se dozvím, že něco zbývá **na mě**, teprve pak že je co
+        // pushnout. Zkrácená věta od modelu by se do banneru stejně nevešla celá.
+        case .partial: return "část zadání nechal tobě · zkontroluj a pushni"
+        case .nothing: return "nic v kopii repa neleží"
+        // **Ne „něco leží v kopii repa“.** Sem vede i selhání, po kterém strom ani nevznikl
+        // (nenačtený detail, cesta mimo cache), takže by to tvrdilo víc, než data unesou; co se
+        // stalo, řekne věta v panelu.
+        case .failed: return "podívej se do sekce Větev, co se stalo"
+        case .discarded: return "nic se necommitlo · zahoď to, nebo si to prohlédni"
+        }
+    }
+}

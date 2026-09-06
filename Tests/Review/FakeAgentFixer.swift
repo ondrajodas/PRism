@@ -15,6 +15,11 @@ final class FakeAgentFixer: AgentFixing, @unchecked Sendable {
     var failure: (any Error)?
     /// Co se má stát **před** odpovědí — sem si test dá zrušení tasku.
     var beforeAnswer: (@Sendable (AgentFixRequest) -> Void)?
+    /// Kroky, které se ohlásí do průběhu, než přijde odpověď (#511). Prázdné = neohlásí se nic.
+    ///
+    /// **Pokusy o nástroj, ne text**: živý ocas v panelu se skládá z nich, protože prózu modelu
+    /// aplikace ze streamu nečte.
+    var steps: [ToolAttempt] = []
 
     private let lock = NSLock()
     private var received: [AgentFixRequest] = []
@@ -35,6 +40,8 @@ final class FakeAgentFixer: AgentFixing, @unchecked Sendable {
             received.append(request)
             return received.count - 1
         }
+        if !steps.isEmpty { progress(.started) }
+        for step in steps { progress(.attemptedTool(step)) }
         beforeAnswer?(request)
         if let failure { throw failure }
         guard !answers.isEmpty else { return AgentFixAnswer() }

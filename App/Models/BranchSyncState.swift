@@ -26,8 +26,12 @@ enum BranchSyncState: Equatable, Sendable {
     /// Vlastní stav vedle `resolving`, ne jeho druhé použití: je to **jiná práce z jiného podnětu**
     /// (cizí review, ne kolizní commit), takže se o ní v panelu píše jinak — a hlavně se
     /// **nespouští kliknutím**, což je to jediné, co má být z obrazovky poznat. Co session dělá
-    /// právě teď, drží `AppStore` vedle (`branchSyncActivity`), stejně jako u slévání konfliktů.
-    case fixing(items: Int)
+    /// právě teď, drží `AppStore` vedle (`branchSyncTail`), stejně jako u slévání konfliktů.
+    ///
+    /// **`since` je od #511 součást stavu, ne mapa vedle něj.** Čte ho pilulka `agent běží · 4 min`
+    /// v řádku `Moje PR` (#509) a je to údaj **o tom běhu**: druhá mapa ve store by uměla přežít
+    /// stav, ke kterému patří, a řádek by pak počítal minuty běhu, který dávno skončil.
+    case fixing(items: Int, since: Date)
     /// Agent doběhl a **ve stromě se nic nezměnilo** (#510) — v cache po něm nic neleží.
     ///
     /// Vlastní stav, ne selhání: je to legitimní výsledek („nemám co opravit“, „na tohle
@@ -166,15 +170,19 @@ enum BranchSyncState: Equatable, Sendable {
         case .rebasing: "Přehrávám commity nad základem."
         case .resolving(let round, let files):
             Policy.conflictActivity(round: round, files: files)
-        case .fixing(let items): Policy.agentFixActivity(items: items)
-        case .fixedNothing(let detail): Policy.agentFixNothing(detail: detail)
-        case .fixRejected(let detail): detail
+        case .fixing(let items, _): Policy.agentFixActivity(items: items)
+        // **Věta podle původu commitu** (#510): „Rebase hotový“ nad prací agenta by tvrdilo
+        // něco, co se nestalo — žádný rebase v tom stromě neproběhl. Od #511 ji skládá
+        // `Policy.agentRunSentence` z výčtu, tedy tímtéž místem, ze kterého ji bere notifikace
+        // i řádek v `Dění`; tenhle `switch` rozhoduje už jen o tom, **odkud se vezme strom**.
+        case .fixedNothing(let detail):
+            Policy.agentRunSentence(.nothing(detail: detail), worktree: nil)
+        case .fixRejected(let detail):
+            Policy.agentRunSentence(.discarded(detail: detail), worktree: nil)
         case .rebased(let branch) where branch.origin == .agent:
-            // **Věta podle původu commitu** (#510): „Rebase hotový“ nad prací agenta by tvrdilo
-            // něco, co se nestalo — žádný rebase v tom stromě neproběhl.
-            Policy.agentFixResult(
-                files: branch.fix?.files.count ?? 0,
-                skipped: branch.fix?.skipped
+            Policy.agentRunSentence(
+                Policy.agentRun(files: branch.fix?.files.count ?? 0, skipped: branch.fix?.skipped),
+                worktree: branch.worktree.lastPathComponent
             )
         case .rebased(let branch):
             "Rebase hotový v kopii repa — \(Plural.czech(branch.replayed, one: "commit přehraný", few: "commity přehrané", many: "commitů přehraných")). "

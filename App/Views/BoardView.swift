@@ -365,6 +365,10 @@ struct BoardView: View {
                 openPrompt: { store.openAgentPrompt(in: entry.id) },
                 pending: handoff.pending,
                 activity: handoff.activity,
+                // Agent na vlastním PR (#511) — **jeden řádek, jedna podoba**, tedy i tady:
+                // z pilulky se pozná, že nad PR běží něco, co jsem nespustil, nebo že v kopii repa
+                // leží commit k přetlačení.
+                agent: store.agentRowPill(for: entry.pullRequest),
                 // Odložit i na desce (#512, oprava po proklikání) — **jeden řádek, jedna podoba**.
                 // Deska je první obrazovka, kterou vidím, a věta pod pozdravem o odložených mluví;
                 // nabídka, která by tady chyběla, by z toho čísla udělala tvrzení bez cesty dál.

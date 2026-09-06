@@ -11347,3 +11347,71 @@ podobách** (vlastní a cizí PR) ve 300 bodech, v obou motivech. `NSHostingView
 věta vedle něj se proto přesunula **pod** něj. A pole komentáře ukazovalo z vloženého bloku dva
 řádky: `TextEditor` s obsahem **neroste**, takže se přepisovat dal jedině naslepo. Odsud je
 `Policy.draftEditorHeight(hasSuggestion:)`.
+
+## Běžící agent je vidět (#511)
+
+Tři sady a jedna sonda. **Nejcennější tvrzení jsou negativní** — všechna se rozbijí potichu,
+protože jejich porušení není chyba, ale věta, které se dá uvěřit.
+
+### `AgentRunReportTests` — co se o běhu smí tvrdit
+
+- **O testech se nikde nemluví.** Nad všemi pěti výsledky se prochází věta v panelu, titulek
+  banneru i další krok, a v žádném z těch textů nesmí být `test` ani `zelen`. Session testy pustit
+  **nemůže** (`Bash` v její sadě není) a aplikace je nad jejím výsledkem nepouští, takže by to bylo
+  tvrzení, které data neunesou. Zadání to chtělo (*„2 soubory, testy zelené“*), takže to není
+  hypotetická chyba — je to ta, kterou by někdo dopsal.
+- **Vyčerpávající výčet stavů**: jedenáct stavů, které o agentovi nemluví, musí vydat `nil` —
+  včetně `rebased` s původem `.rebase`. Věta o agentovi nad prací, kterou udělal rebase, je tatáž
+  třída chyby jako „Rebase hotový“ nad commitem agenta (#510).
+- **„Částečně“ rozhoduje přiznání, ne počet souborů.** Dvě položky se dají opravit v jednom
+  souboru, takže z počtu se to odvodit nedá; jediné, co o nesplněné části zadání něco ví, je věta,
+  kterou o ní session napsala.
+- **Nula souborů má vlastní větu** a v textu se `0` neobjeví.
+- **Ocas**: strop čtyř kroků, bezprostřední opakování se nezdvojuje, opakování dál v ocase
+  zůstává (`čte A`, `čte B`, `čte A` je pravdivý postup), prázdný krok ocas nemění.
+- **Uplynulý čas nikdy nevydá `0 min`** — ani při startu, ani při posunutých hodinách (záporný
+  rozdíl).
+
+### `AgentRunNoticeTests` — brána a řádek v dění
+
+- **Na cizím PR nevznikne ani banner, ani řádek**, a to u všech pěti výsledků. Je to pojistka nad
+  pojistkou: agent se na cizím PR nespouští, ale kdyby ten stav vznikl, nesmí z něj být hláška
+  o práci, o kterou nikdo nežádal.
+- **Vlastní přepínač**: `agentFix` se vypíná zvlášť od `activity` a hlavní vypínač přebíjí oba.
+  Chybějící klíč v `config.json` znamená **zapnuto**, jako u zbytku notifikací.
+- **Vlastní `replacementGroup`** (čtyři skupiny celkem): že doběhl agent, nesmí přebít zprávu, na
+  kterou ten agent reagoval.
+- **Pět konců, pět různých titulků a kroků** — jinak se z banneru nedá poznat, co se stalo. A
+  `pushni` se radí jedině tam, kde v cache něco leží.
+
+### `AppStoreAgentDiffTests` — prohlédnutí commitu
+
+- **Na GitHub se u toho nesahá** (`commitDiffRequests.isEmpty`): ten commit tam není, takže by
+  odpověď mluvila o jiném kódu. Čte se strom `-sync` a **proti hlavě PR**, ne proti základu větve.
+- **Do seznamu commitů PR se nepřimíchává**: `Policy.openCommit` ho bez `local:` nenajde.
+- **Bez práce agenta v cache se nestane nic** — ani nad doběhlým rebasem, ani nad prázdnem.
+- **Nepovedené čtení skončí v poruše**, ne ve věčném `Načítám diff commitu…`, a řádek commitu
+  u toho nevznikne.
+- **`Zahodit` ten pohled zavře** — otevřený diff commitu, který ve stromě už neleží, je zrovna ten
+  tichý stav v cache, kterému se ta akce vyhýbá.
+
+### `AppStoreAgentFixTests` — že se o konci dozvím
+
+Pět tvrzení navíc nad sadou z #510, ve **stejné scéně** (rozhlídka po tiku): banner i řádek
+v `Dění` po doběhnutí, řádek **i s vypnutými notifikacemi** (chip `bez banneru`), **nic** na cizím
+PR, prázdný ocas po doběhnutí a pilulka řádku, která po konci hlásí čekající push, ne běžícího
+agenta.
+
+**Ocas za běhu tahle sada netvrdí, a je to zapsaná mezera.** Krok se do něj zapisuje z odpovědi
+streamu přes `Task { @MainActor }`, takže po `settle()` je běh dávno hotový a ocas vyprázdněný —
+měřit „bylo tam něco uprostřed“ by znamenalo závoru uvnitř fake session a stav zachycený mezi
+dvěma tiky hlavního actoru. Co se z toho **dá** tvrdit, se tvrdí: strop a skládání v `Policy`,
+kresba čtyř řádků v sondě, a to negativní — že po doběhnutí ocas **nezůstane**, ani když událost
+z běhu dorazí opožděně.
+
+### `BranchSyncRenderProbe` — scény 13 a 16
+
+Scéna `16-agent-bezi` dostala **čtyři kroky** místo jednoho: na renderu se pozná, jestli se ocas do
+panelu o 278 bodech vejde a jestli se dlouhá cesta ořízne uprostřed, místo aby přetekla. Scéna
+`13-slevam` má ocas o dvou prvcích a v renderu z něj musí být vidět **jediná** řádka — to je ta
+věta o slévání konfliktů, která se s přechodem na jednu mapu nesmí změnit.

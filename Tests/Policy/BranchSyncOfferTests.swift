@@ -619,7 +619,7 @@ struct BranchSyncOfferTests {
             plan: nil,
             detail: detail(),
             status: nil,
-            sync: .fixing(items: 2)
+            sync: .fixing(items: 2, since: .distantPast)
         )
 
         #expect(offer.obstacles.contains(.agentRunning))

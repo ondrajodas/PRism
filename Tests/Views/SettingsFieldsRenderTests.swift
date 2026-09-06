@@ -183,6 +183,52 @@ struct SettingsFieldsRenderTests {
 
     // MARK: - Kreslení
 
+    // MARK: - Přepínač agenta na stránce Notifikace (#511)
+
+    /// Že přepínač `Agent na mém PR doběhl` na stránce **doopravdy je** a je napojený.
+    ///
+    /// Vlastní tvrzení vedle `AgentRunNoticeTests`: ty se ptají `NotificationSettings.allows(_:)`,
+    /// takže by prošly i nad stránkou, kde ten přepínač nikdo nenakreslil — a hláška, kterou nejde
+    /// vypnout, je ta horší polovina té dvojice.
+    @Test("Přepínač agenta na stránce Notifikace je nakreslený a napojený")
+    func theAgentToggleIsDrawn() throws {
+        let on = try renderNotifications("agent-zapnuto") { $0.agentFix = true }
+        let off = try renderNotifications("agent-vypnuto") { $0.agentFix = false }
+
+        #expect(on != off)
+    }
+
+    /// **Vypnutý hlavní vypínač přepínače schová**, ne zašedne — pod ním by to bylo šest řádků,
+    /// které nic neříkají (důvod je o řádek výš, na rozdíl od tlačítek v okně review).
+    @Test("S vypnutými notifikacemi přepínač agenta na stránce není")
+    func theAgentToggleHidesWithNotificationsOff() throws {
+        let on = try renderNotifications("hlavni-zapnuto") { $0.isEnabled = true }
+        let offWithAgent = try renderNotifications("hlavni-vypnuto-agent") {
+            $0.isEnabled = false
+            $0.agentFix = true
+        }
+        let offWithoutAgent = try renderNotifications("hlavni-vypnuto-bez") {
+            $0.isEnabled = false
+            $0.agentFix = false
+        }
+
+        #expect(on != offWithAgent)
+        // **Tohle je to tvrzení**: s vypnutým hlavním vypínačem se stránka nesmí lišit podle
+        // hodnoty, která na ní není vidět.
+        #expect(offWithAgent == offWithoutAgent)
+    }
+
+    private func renderNotifications(
+        _ name: String,
+        _ edit: (inout NotificationSettings) -> Void
+    ) throws -> Data {
+        var configuration = Configuration.standard
+        edit(&configuration.global.notifications)
+        return try bitmap(name) {
+            NotificationSettingsView(settings: SettingsModel(configuration: configuration) { _ in })
+        }
+    }
+
     private func render(_ name: String, _ edit: (inout Configuration) -> Void) throws -> Data {
         var configuration = Configuration.standard
         edit(&configuration)

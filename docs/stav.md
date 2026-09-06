@@ -8753,3 +8753,61 @@ povolení a přijetí výsledku, ne kvalita opravy. (3) **Testy nad výsledkem a
 deck mluvil o „testy zelené (spustila aplikace)“, session je pustit nemůže (`Bash` v sadě není)
 a aplikace to zatím nedělá; v promptu je proto věta, že se **nesmí tvrdit**, že bylo něco ověřeno
 spuštěním.
+
+## #511 — Běžící agent je vidět, a když doběhne, dá se to poznat (M15, zákres 56)
+
+**První krok bylo rozhodnutí, ne kód.** Zadání stálo na větě „stanice *Agent* na dráze (#508)
+ukazuje stav“ — jenže ta stanice z dráhy odešla přesně proto, že **neměla živý obsah**. Vybíralo se
+mezi „vrátit ji, ale rovnou s obsahem“ a „ukázat agenta tam, kde ta práce je“. Rozhodlo se pro
+druhé: do kapsle na dráze se vejde **jedno slovo**, kdežto obsah, který #511 dodává, je čtyřřádkový
+ocas, věta o výsledku a tři tlačítka. Dráha zůstává **pětistanicová** a o agentovi nemlčí — stanice
+`Push` hlásí `probíhá` i `nepřetlačeno` (#510), protože commit v kopii repa patří do jejího obsahu.
+Zbytek bydlí v sekci `Větev`, tam, kde je ten strom a ta další akce.
+
+**Co přibylo.** Živý ocas posledních čtyř kroků pod větou o stavu (kroky ze streamu, ne próza
+modelu — tu aplikace nedrží). Věta výsledku z výčtu `AgentRunOutcome`, skládaná na **jednom místě**,
+protože o témž výsledku mluví panel, banner i řádek v `Dění`: *Agent upravil 2 soubory ve stromě
+499-sync · nic se neodeslalo.* Tlačítko **`Prohlédnout diff agenta`** — do téhle změny se ten commit
+dal přečíst jedině **za nevratnou akcí**, tedy potvrdit force push a podívat se na GitHubu; teď se
+čte `git` v kopii repa a kreslí to tatáž obrazovka jako diff commitu (#317). Notifikace s vlastním
+přepínačem a řádek v `Dění`, který vzniká i bez banneru. A pilulka `agent běží · 4 min` /
+`push čeká na tebe` v řádku `Moje PR` — ve stejném jediném slotu, kde jindy stojí `N k předání`.
+
+**Výčet má pět případů, ne čtyři ze zadání.** Chybějící pátý je `nothing` a je to stav, který #510
+výslovně oddělilo od selhání (doběhlá práce, po které v cache nic neleží). Slít ho do `failed` by to
+rozhodnutí zrušilo, slít do `partial` by tvrdilo, že část opravy leží v kopii repa, přestože `git`
+řekl, že se nezměnilo nic.
+
+**Zadání chtělo větu „testy zelené“ — nedodala se, a je to podmínka.** Session testy pustit nemůže
+(`Bash` v její sadě není) a aplikace je nad jejím výsledkem nepouští. V žádné z pěti vět, v žádném
+titulku banneru ani v žádném dalším kroku se proto o testech nemluví, a **hlídá to test**, ne
+komentář. Pustit testy nad výsledkem agenta by bylo vlastní issue.
+
+**Vlastní revize diffu našla dvě věci.** `AgentRunOutcome` nesl dvě vlastnosti (`files`,
+`awaitsPush`), které četly **jenom testy** — držený stav, který nikdo nečte, je jeden z pěti vzorů,
+co Copilot v tomhle repu nachází; obojí odešlo. A `loadAgentDiff` neuměl to, co `loadCommitDiff`
+umí: **přeskládat výskyty hledání** po dotažení diffu (#152), takže by `⌘F` nad diffem agenta
+hlásilo nula výskytů nad textem, ve kterém jsou.
+
+**Jedna mapa místo dvou.** `branchSyncActivity` (jeden řetězec) se stal `branchSyncTail` (pole).
+Slévání konfliktů si z něj bere poslední prvek a kreslí se jako do #511; druhá mapa vedle by o téže
+věci uměla tvrdit dvojí.
+
+Testů je **5 750** v 559 sadách, z toho **+39** z tohohle PR (tři nové sady, dvě tvrzení navíc v `SettingsFieldsRenderTests`, pět tvrzení navíc
+v `AppStoreAgentFixTests`, dvě přepsaná v `ActivityFeedTests` a dvě scény sondy). Plný běh je
+zelený; regrese se ověřila **vložením tří regresí** — věta s „testy zelené“ (spadly tři testy ve
+dvou sadách), hlášení o agentovi puštěné i na cizí PR (spadl `AgentRunNoticeTests`) a smazaný
+přepínač ze stránky `Notifikace` (dvě stejně velké, ale různé bitmapy).
+
+**Grepy tvrdé podmínky č. 1 vydávají po slití s `main`em týž výčet jako po #510**: sedm souborů
+u `ReviewPublishing`, tři u `BranchPushing`, tři u `AgentFixing`. Sady nástrojů se nezměnily ani
+o položku — `Prohlédnout diff agenta` je čtení `gitu`, ne session.
+
+**Tři neověřené mezery.** (1) **Copilot se na tenhle PR schválně nepouštěl** — uživatel to zakázal,
+GitHub má výpadek entitlementu (`ineligible_app`); vlastní revize diffu proběhla a je popsaná v PR.
+(2) **Ocas za běhu netvrdí žádný store test**: krok se do něj zapisuje z odpovědi streamu přes
+`Task { @MainActor }`, takže po usazení je běh dávno hotový a ocas prázdný. Co se dá tvrdit, se
+tvrdí — strop a skládání v `Policy`, kresba čtyř řádků v sondě a to negativní, že po doběhnutí ocas
+**nezůstane**. (3) **Že ve slotu doopravdy naběhne agent, se neověřilo** — brána je ve výchozím
+stavu vypnutá a `slot-config.sh` ji z kopie konfigurace vyndává, takže se stavy panelu ověřily
+renderem sondy a čtením konfigurace, ne živým během.

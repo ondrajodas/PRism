@@ -79,7 +79,7 @@ extension AppStore {
         branchSyncTasks[id] = task
         await task.value
         branchSyncTasks[id] = nil
-        branchSyncActivity[id] = nil
+        branchSyncTail[id] = nil
     }
 
     /// Zrušení uživatelem — **zabije session, která slévá konflikty**.
@@ -96,7 +96,35 @@ extension AppStore {
     }
 
     /// Co session nad konflikty zrovna dělá. Prázdné, dokud neřekla nic.
-    func branchSyncActivityLine(for pr: PRIdentifier) -> String? { branchSyncActivity[pr] }
+    ///
+    /// **Poslední prvek ocasu, ne vlastní záznam** (#511): u slévání konfliktů kreslí panel jednu
+    /// řádku dál (#467) a druhá mapa vedle `branchSyncTail` by o jedné věci uměla tvrdit dvě.
+    func branchSyncActivityLine(for pr: PRIdentifier) -> String? { branchSyncTail[pr]?.last }
+
+    /// Posledních pár kroků agenta — **živý ocas** pod větou v sekci `Větev` (#511).
+    ///
+    /// Prázdné pole a `nil` jsou tady jedno a totéž („zatím nic neřekl“), takže se vrací pole:
+    /// view kreslí ocas jedině, když v něm něco je, a rozlišovat dvě prázdna by bylo rozhodnutí
+    /// bez následku.
+    func agentTail(for pr: PRIdentifier) -> [String] { branchSyncTail[pr] ?? [] }
+
+    /// Co o agentovi říká **řádek seznamu** (#511). `nil` = nic — cizí PR, nebo se nic neděje.
+    ///
+    /// **Skládá to store, ne řádek**, a je to kvůli hodinám: uplynulý čas se počítá z `time.now`,
+    /// tedy z toho zdroje času, který se v testech dá nastavit — `Date()` uvnitř `body` by z toho
+    /// udělal měření, které se nedá zopakovat. Rozhodnutí zůstává v `Policy`, tady je jen sběr
+    /// vstupů.
+    ///
+    /// **Přepočítává se při každém překreslení řádku, a to je schválně.** Je to jeden `switch` nad
+    /// jednou hodnotou z mapy; cache by tady stála víc pozornosti, než kolik ušetří — a hlavně by
+    /// se musela vyprazdňovat každou minutu, protože v odpovědi je uplynulý čas.
+    func agentRowPill(for pullRequest: PullRequestSummary) -> AgentRowPill? {
+        Policy.agentRowPill(
+            sync: branchSyncStates[pullRequest.id],
+            ownership: ownership(of: pullRequest),
+            now: time.now
+        )
+    }
 
     /// Přehraje commity nad základem — **a nic nepřetlačí**.
     ///
@@ -179,6 +207,9 @@ extension AppStore {
         do {
             try await checkout.discardSync(for: pr)
             branchSyncStates[pr] = nil
+            // Diff agenta (#511) mluví o commitu, který ve stromě právě přestal existovat —
+            // nechat ho otevřený v tabu `Commity` by byl pohled na kód, který nikde není.
+            forgetAgentDiff(in: pr)
         } catch let error as CheckoutError {
             branchSyncStates[pr] = .failed(.failed(error.userDescription))
         } catch is CancellationError {

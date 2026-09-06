@@ -37,9 +37,13 @@ struct PanelBranchView: View {
     let contentWidth: Double
     /// Co se právě děje se srovnáním větve (#466). `nil` = nic se nedělo.
     var syncState: BranchSyncState?
-    /// Co session nad konflikty zrovna dělá (#467) — **druhý řádek**, ne součást věty o stavu:
-    /// mění se při každém kroku session, kdežto stav zůstává.
-    var syncActivity: String?
+    /// Co zapisující session nad tímhle PR dělala — **posledních pár kroků** (#511, mění #467),
+    /// od nejstaršího. Prázdné = ještě nic neřekla.
+    ///
+    /// **Ne součást věty o stavu**: mění se při každém kroku session, kdežto stav zůstává.
+    /// U slévání konfliktů se kreslí **jen poslední** (chování z #467), u agenta celý ocas — proč,
+    /// je u `tailRows`.
+    var syncTail: [String] = []
     /// Co se právě děje s metadaty PR (#482). Sekci zajímá **jediný** z jeho případů —
     /// `readyFailed`, tedy věta pod tlačítkem `Připravit k review`; ostatní kreslí blok labelů.
     /// Rozhoduje o tom `MetadataActionState.noticePlace`, ne tenhle panel.
@@ -372,13 +376,13 @@ struct PanelBranchView: View {
                 // je to řádek navíc v panelu, který má 300 bodů.
                 if Self.noticeActions(state) == .one { singleNoticeButton(state) }
             }
-            // **Co session dělá právě teď — druhý řádek, a jedině dokud slévá.** Bez něj je
+            // **Co session dělá právě teď — pod větou, a jedině za běhu.** Bez toho je
             // desetiminutová session k nerozeznání od zaseknutého okna; a po doběhnutí by řádek
             // o naposled hlášeném kroku zůstal viset nad hotovým výsledkem.
-            // **Obě zapisující session**, ne jen slévání konfliktů (#510): patnáctiminutové ticho
-            // nad větou „Agent opravuje“ je k nerozeznání od zaseknutého okna, což je celý důvod,
-            // proč ten řádek existuje.
-            if state.isResolving || state.isFixing, let syncActivity { activityRow(syncActivity) }
+            // **Obě zapisující session**, ne jen slévání konfliktů (#510) — u agenta jich je od
+            // #511 víc než jedna, viz `tailRows`.
+            tailRows(state)
+            if Self.showsAgentDiff(state) { agentDiffButton }
             if Self.noticeActions(state) == .two { pairedNoticeButtons(state) }
         }
         // **Velikost vypsaná, ne `.caption`.** Celá sekce sází explicitními body (12 popis, 11
@@ -426,6 +430,32 @@ struct PanelBranchView: View {
         }
     }
 
+    /// Co session dělá — **jedna řádka u konfliktů, ocas u agenta** (#511).
+    ///
+    /// **Bez něj je desetiminutová session k nerozeznání od zaseknutého okna**, a po doběhnutí by
+    /// řádek o naposled hlášeném kroku zůstal viset nad hotovým výsledkem — proto se kreslí
+    /// **jedině za běhu**.
+    ///
+    /// **Proč u agenta víc řádek než u konfliktů.** Slévání běží nad **vyjmenovanými** soubory,
+    /// takže jedna řádka odpovídá na celou otázku („kde v tom seznamu zrovna je“). Agent běží
+    /// patnáct minut, místo v kódu si hledá sám a **nespustil ho člověk**: jediná řádka pak řekne,
+    /// že se okno nezaseklo, ale ne co ta session celou dobu dělá — a to je zrovna ta otázka,
+    /// kvůli které #511 vzniklo. Strop drží `Policy.agentTailLength`, ne tenhle typ.
+    @ViewBuilder private func tailRows(_ state: BranchSyncState) -> some View {
+        if state.isFixing {
+            // Identita z **pořadí**: dvě stejné řádky v ocase být můžou (agent se do souboru
+            // vrátí) a pořadí je u nich jediná správná identita — je to ta výjimka, kterou
+            // pravidlo #361 jmenuje. Payload se přes tuple nečte, `id` je `\.offset`.
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(syncTail.enumerated()), id: \.offset) { step in
+                    activityRow(step.element)
+                }
+            }
+        } else if state.isResolving, let last = syncTail.last {
+            activityRow(last)
+        }
+    }
+
     /// Co session zrovna dělá. **Odsazené pod věty**, aby se nečetlo jako druhá věta o stavu.
     private func activityRow(_ text: String) -> some View {
         Text(verbatim: text)
@@ -462,6 +492,44 @@ struct PanelBranchView: View {
             Spacer(minLength: 0)
         }
     }
+
+    /// Kreslí se `Prohlédnout diff agenta`? **Jen nad commitem, který udělal agent** (#511).
+    ///
+    /// Ne nad rebasem: tam se přehrály **moje** commity, které jsem už jednou psal, a jejich diff
+    /// je na GitHubu. Tohle je jediný stav v celém okně, kdy v cache leží kód, který nikdo
+    /// **neviděl** — a hned za ním stojí nevratná akce.
+    private static func showsAgentDiff(_ state: BranchSyncState) -> Bool {
+        state.rebasedBranch?.origin == .agent
+    }
+
+    /// `Prohlédnout diff agenta` — **vlastní řádek přes celou šířku, ne třetí tlačítko v řadě.**
+    ///
+    /// Je to tatáž změřená mez jako u `Připravit k review` (#482) a řeší se stejně: `Force push…`
+    /// (82 b) a `Zahodit změny` (~90 b) si s mezerou vezmou ~178 z 274 bodů, které panel na obsah
+    /// má, takže na třetí tlačítko zbývá ~90 — a `Prohlédnout diff agenta` potřebuje víc než
+    /// dvojnásobek. Na podlaze panelu (214 b) se nevejde ani ta dvojice s ním.
+    ///
+    /// **Nahoře, ne dole**, a je to pořadí kroků: prohlédnout se má **před** potvrzením force
+    /// pushe, ne po něm. Zvýrazněné není — hlavní akce v tom stavu zůstává `Force push…`; dvě
+    /// akcentová tlačítka pod sebou by se pralo o roli té hlavní.
+    ///
+    /// **Bez tří teček**: nic neotevírá k potvrzení, přepne obsah tabu `Commity` na diff — tedy
+    /// tatáž kresba jako u commitu (#317) a tentýž způsob, jak se z něj vrátit.
+    private var agentDiffButton: some View {
+        HStack(spacing: Self.actionSpacing) {
+            Button(Self.agentDiffTitle, action: actions.showAgentDiff)
+                .buttonStyle(.mini)
+                .fixedSize()
+                .help(Self.agentDiffHelp)
+            // `Spacer`, ne pružný rámec na tlačítku — tatáž úmluva jako u `pairedNoticeButtons`
+            // a tentýž důvod (#220): tlačítko má svou šířku, roztáhnout se má mezera.
+            Spacer(minLength: 0)
+        }
+    }
+
+    private static let agentDiffTitle = "Prohlédnout diff agenta"
+    private static let agentDiffHelp =
+        "Otevře v záložce Commity, co agent nacommitoval v kopii repa. Nic se tím neodesílá."
 
     private static let pushTitle = "Force push…"
 

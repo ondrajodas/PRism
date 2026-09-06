@@ -242,7 +242,7 @@ struct OwnLoopTests {
             ("push spadl", .failed(.leaseRejected)),
             ("zrovna se rebasuje", .rebasing),
             ("zrovna se pushuje", .pushing),
-            ("agent opravuje", .fixing(items: 3)),
+            ("agent opravuje", .fixing(items: 3, since: .distantPast)),
             ("výsledek agenta nepřijat", .fixRejected(detail: "Zapsala mimo strom.")),
         ]
         for (name, sync) in cases {
@@ -377,7 +377,7 @@ struct OwnLoopTests {
             .resolving(round: 1, files: ["a.swift"]),
             // Běžící agent i jeho **nepřijatý** výsledek: v obou případech může ve stromě `-sync`
             // ležet změna, o které GitHub neví (#510).
-            .fixing(items: 3),
+            .fixing(items: 3, since: .distantPast),
             .fixRejected(detail: "Session zapsala mimo strom."),
             .rebased(Self.rebasedBranch),
             .pushing,
@@ -423,7 +423,7 @@ struct OwnLoopTests {
             ("konflikt v cache", .conflicted(files: ["a.swift"]), status(), "rebase"),
             ("rozdělaný rebase", .unfinished(files: []), status(), "rebase"),
             ("session nerozřešila", .unresolved(files: ["a.swift"], detail: nil), status(), "rebase"),
-            ("agent opravuje", .fixing(items: 3), status(), "probíhá"),
+            ("agent opravuje", .fixing(items: 3, since: .distantPast), status(), "probíhá"),
             // **`nepřijato`, ne `rebase`** (#510): po agentovi žádný rozdělaný rebase ve stromě
             // neleží, takže by to slovo pojmenovalo něco, co se nestalo.
             ("výsledek agenta nepřijat", .fixRejected(detail: "Zapsala mimo strom."), status(), "nepřijato"),
@@ -688,7 +688,7 @@ struct OwnLoopTests {
             // **Zapisující session agenta je běžící práce jako slévání konfliktů** (#510),
             // nepřijatý výsledek je porucha jako `unresolved`: v obou případech se rozhoduje
             // o tom, co leží ve stromě `-sync`.
-            (.fixing(items: 3), .running),
+            (.fixing(items: 3, since: .distantPast), .running),
             (.fixRejected(detail: "Session zapsala mimo strom."), .failed),
             (.conflicted(files: ["a.swift"]), .failed),
             (.unfinished(files: []), .failed),

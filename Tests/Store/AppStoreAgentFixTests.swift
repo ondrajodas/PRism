@@ -95,7 +95,9 @@ struct AppStoreAgentFixTests {
         author: String = "ondrajodas",
         commenter: String = "odinuv",
         fixer: FakeAgentFixer? = FakeAgentFixer(),
-        checkout: FakeRepoCheckout = FakeRepoCheckout()
+        checkout: FakeRepoCheckout = FakeRepoCheckout(),
+        center: FakeNotificationCenter? = nil,
+        notifications: Bool = true
     ) throws -> (store: AppStore, fixer: FakeAgentFixer?, checkout: FakeRepoCheckout, time: FakeTimeSource) {
         let time = FakeTimeSource(start: start)
         let gateway = FakeGitHubGateway(
@@ -107,16 +109,22 @@ struct AppStoreAgentFixTests {
             ]
         )
         checkout.agentWorktree = try worktree
+        var configuration = configuration(autoAgent: autoAgent)
+        configuration.global.notifications = NotificationSettings(isEnabled: notifications)
         let store = AppStore(
             gateway: gateway,
-            configuration: configuration(autoAgent: autoAgent),
+            configuration: configuration,
             time: time,
             checkout: checkout,
             fixer: fixer,
             cacheLayout: layout,
+            notifications: center,
             visits: VisitLedger(preferences: InMemoryPreferences()),
             activityNotices: ActivityNoticeLedger(preferences: InMemoryPreferences()),
-            agentFixes: AgentFixLedger(preferences: InMemoryPreferences())
+            agentFixes: AgentFixLedger(preferences: InMemoryPreferences()),
+            // **Dění se plní i bez notifikačního centra** (#414) — právě proto se ta obrazovka
+            // dá číst i v úplně mlčící aplikaci. Bez záznamu by se to nedalo tvrdit.
+            activityLog: ActivityLog(layout: layout)
         )
         return (store, fixer, checkout, time)
     }
@@ -412,5 +420,107 @@ struct AppStoreAgentFixTests {
         #expect(try #require(scene.fixer).runs == 1)
         // Push jde jedině přes potvrzení, a to bez cesty ke `gitu` nevznikne ani jako nabídka.
         #expect(scene.store.branchPushSubmission(for: summary(updated: 400)) == nil)
+    }
+    // MARK: - Když doběhne, dá se to poznat (#511)
+
+    /// Základní směr #511: po doběhnutí **přijde banner** a **zůstane řádek v dění** — jedinou
+    /// branou je `Policy.agentRunNotification` plus přepínače (#414).
+    @Test("Doběhlý agent dá vědět bannerem i řádkem v dění")
+    func reportsWhenTheAgentFinishes() async throws {
+        let center = FakeNotificationCenter()
+        let scene = try scene(autoAgent: true, center: center)
+        scene.checkout.agentCommit = .success(
+            RebasedBranch(
+                worktree: try worktree,
+                headSha: "cccc3333",
+                rebasedFrom: "aaaa1111",
+                arriving: [RebasedCommit(sha: "cccc3333", title: "fix: address review feedback")],
+                replayed: 1,
+                origin: .agent
+            )
+        )
+
+        await sweepTwice(scene.store, scene.time)
+
+        let notification = try #require(center.delivered.last)
+        #expect(notification.event == .agentFix)
+        #expect(notification.title.hasPrefix("Agent má hotovo"))
+        #expect(notification.body.contains("zkontroluj a pushni"))
+
+        let event = try #require(scene.store.activityEvents.first { $0.kind == .agentFix })
+        #expect(event.pullRequest == pr)
+        #expect(event.wasAnnounced)
+        // Věta v dění je **tatáž jako v panelu** a jmenuje strom, ve kterém commit leží.
+        #expect(event.detail?.contains("510-sync") == true)
+        #expect(event.detail?.contains("nic se neodeslalo") == true)
+    }
+
+    /// **Vypnutý přepínač znamená ticho, ne prázdné dění** (#414): přepínače rozhodují o vyrušení,
+    /// ne o záznamu — a `bez banneru` se z toho pozná.
+    @Test("Vypnuté notifikace řádek v dění nezastaví")
+    func silentNotificationsStillRecord() async throws {
+        let center = FakeNotificationCenter()
+        let scene = try scene(autoAgent: true, center: center, notifications: false)
+
+        await sweepTwice(scene.store, scene.time)
+
+        #expect(center.delivered.isEmpty)
+        let event = try #require(scene.store.activityEvents.first { $0.kind == .agentFix })
+        #expect(!event.wasAnnounced)
+        #expect(Policy.showsSilentChip(event.kind, announced: event.wasAnnounced))
+    }
+
+    /// **Na cizím PR se nehlásí nic** — a je to dvojitá pojistka: agent se tam nespustí, takže
+    /// nevznikne ani běh, ani banner, ani řádek.
+    @Test("Na cizím PR se o agentovi nehlásí nic")
+    func foreignPullRequestStaysSilent() async throws {
+        let center = FakeNotificationCenter()
+        let scene = try scene(autoAgent: true, author: "odinuv", center: center)
+
+        await sweepTwice(scene.store, scene.time)
+
+        #expect(try #require(scene.fixer).runs == 0)
+        #expect(!center.delivered.contains { $0.event == .agentFix })
+        #expect(!scene.store.activityEvents.contains { $0.kind == .agentFix })
+    }
+
+    /// **Po doběhnutí nezůstane viset řádek o kroku, který se hlásil naposled** (#511).
+    ///
+    /// Ocas se plní za běhu a konec ho vyprazdňuje — tatáž ruka, která ho plní (pravidlo #224).
+    /// Došlá událost z běhu, který mezitím skončil, se zahazuje, takže ho ani nedoplní zpětně.
+    @Test("Po doběhnutí ocas nezůstane")
+    func tailIsEmptyAfterTheRun() async throws {
+        let fixer = FakeAgentFixer()
+        fixer.steps = [
+            ToolAttempt(name: "Read", detail: "App/Policy/DiffFind.swift"),
+            ToolAttempt(name: "Edit", detail: "App/Policy/DiffFind.swift"),
+        ]
+        let scene = try scene(autoAgent: true, fixer: fixer)
+
+        await sweepTwice(scene.store, scene.time)
+        await TestWait.pause()
+
+        #expect(scene.store.agentTail(for: pr).isEmpty)
+        #expect(scene.store.branchSyncActivityLine(for: pr) == nil)
+    }
+
+    /// **Za běhu má řádek pilulku, po něm ne** — a na cizím řádku nikdy (to tvrdí `Policy`).
+    @Test("Po doběhnutí řádek hlásí čekající push, ne běžícího agenta")
+    func rowPillFollowsTheRun() async throws {
+        let scene = try scene(autoAgent: true)
+        scene.checkout.agentCommit = .success(
+            RebasedBranch(
+                worktree: try worktree,
+                headSha: "cccc3333",
+                rebasedFrom: "aaaa1111",
+                arriving: [RebasedCommit(sha: "cccc3333", title: "fix: address review feedback")],
+                replayed: 1,
+                origin: .agent
+            )
+        )
+
+        await sweepTwice(scene.store, scene.time)
+
+        #expect(scene.store.agentRowPill(for: summary(updated: 400)) == .awaitingPush)
     }
 }

@@ -769,12 +769,23 @@ final class AppStore {
     /// přežije rodiče a platí tokeny dál.
     var branchSyncTasks: [PRIdentifier: Task<Void, Never>] = [:]
 
-    /// Co session nad konflikty zrovna dělá — druhý řádek u hlášky v panelu (#467). Chybějící
-    /// záznam = zatím nic neřekla.
+    /// Co zapisující session nad tímhle PR dělala — **posledních pár kroků**, ne jen ten poslední
+    /// (#511, mění #467). Chybějící záznam = zatím nic neřekla.
     ///
     /// **Vedle stavu, ne v něm**: mění se při každém tool cally, a přepisovat kvůli tomu
     /// `branchSyncStates` by špinilo i to, co se nemění (pravidlo o hrubé vlastnosti, #472).
-    var branchSyncActivity: [PRIdentifier: String] = [:]
+    ///
+    /// **Jedna mapa pro obě zapisující session, a ocas místo řádky.** Do #511 tu stál jeden řetězec
+    /// (`branchSyncActivity`) a stačil, dokud šlo o slévání konfliktů — to běží kolem deseti minut
+    /// nad **vyjmenovanými** soubory. Agent (#510) běží patnáct, hledá si místo v kódu sám
+    /// a **nikdo ho nespustil**, takže jediná řádka odpovídá na „nezaseklo se to?“, ale ne na „co
+    /// to celou dobu dělá?“. Druhá mapa vedle téhle by byla druhá pravda o jedné věci; ocas je
+    /// nadmnožina, ze které si slévání konfliktů vezme **poslední prvek**
+    /// (`branchSyncActivityLine`) a kreslí se stejně jako dřív.
+    ///
+    /// **Strop drží `Policy.agentTail(_:appending:)`**, ne tahle deklarace, a vyprazdňuje ho konec
+    /// běhu — tedy táž ruka, která ho plní (pravidlo #224).
+    var branchSyncTail: [PRIdentifier: [String]] = [:]
 
     /// Co session zrovna dělá — řádek u prstýnku na místě příští bubliny (#452). Chybějící
     /// záznam = zatím nic neřekla.
@@ -1756,6 +1767,19 @@ final class AppStore {
     /// je to zároveň paměť na to, kde v seznamu člověk byl (`lastOpenedCommit(in:)`).
     var commitDiffs: [PRIdentifier: CommitDiff] = [:]
 
+    /// Commit, který po agentovi zůstal v kopii repa (#511) — **řádek pro prohlížeč commitů**,
+    /// ne prvek seznamu commitů pull requestu.
+    ///
+    /// **Vlastní mapa vedle `commitDiffs`, ne prvek v seznamu z GitHubu.** Ten commit na GitHubu
+    /// **není**, takže by ho seznam nesměl obsahovat ani na okamžik — přimíchaný by se kreslil
+    /// v seznamu, počítal by se do odznaku u záložky a `Policy.headCommit` by o něm musel
+    /// rozhodovat. Takhle se do tabu dostane jedině tehdy, když se na něj přepne
+    /// (`Policy.openCommit(_:in:local:)`).
+    ///
+    /// Chybějící klíč = agent tu nic nenechal, nebo se to ještě nečetlo. Zahazuje se se zahozením
+    /// práce agenta (`discardSync`) a s vypadnutím PR ze seznamu.
+    var agentCommits: [PRIdentifier: PullRequestCommit] = [:]
+
     /// Je v hlavičce rozkliknutého commitu vidět **tělo zprávy** (#317)?
     ///
     /// **Globálně, ne per PR ani per commit** — je to předvolba pohledu, stejně jako
@@ -2509,6 +2533,9 @@ final class AppStore {
         commitDiffs = commitDiffs.filter {
             wantedPullRequests.contains($0.key) || $0.value.content == .loading
         }
+        // Commit agenta (#511) jde s nimi: bez toho by po vrácení PR do seznamu zůstal v mapě
+        // řádek o commitu, který mezitím ze stromu v cache zmizel.
+        agentCommits = agentCommits.filter { wantedPullRequests.contains($0.key) }
 
         // Rozbalený check a jeho detail (#214). Stahování se **ruší**, ne opouští: osmimegový log
         // by dojel do stavu, který už nikdo nečte. Text se u toho zahazuje schválně — nemá přežít

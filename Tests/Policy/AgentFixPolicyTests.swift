@@ -257,12 +257,18 @@ struct AgentFixPolicyTests {
     // MARK: - Věty do okna
 
     /// Věta o výsledku **nesmí mluvit o rebase** — žádný v tom stromě neproběhl.
+    ///
+    /// Od #511 ji skládá `Policy.agentRunSentence` z výčtu; tvrzení zůstává, protože se ptá na to,
+    /// **co ta věta o repu tvrdí**, ne na to, kdo ji složil.
     @Test("Věta o výsledku agenta o rebase nemluví")
     func resultSentenceDoesNotClaimARebase() {
-        let sentence = Policy.agentFixResult(files: 2, skipped: "README nechávám tobě.")
+        let sentence = Policy.agentRunSentence(
+            Policy.agentRun(files: 2, skipped: "README nechávám tobě."),
+            worktree: "499-sync"
+        )
 
         #expect(sentence.contains("2 soubory"))
-        #expect(sentence.contains("Do remote se zatím nesáhlo."))
+        #expect(sentence.contains("nic se neodeslalo"))
         #expect(sentence.contains("README nechávám tobě."))
         #expect(!sentence.lowercased().contains("rebase"))
     }
