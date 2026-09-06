@@ -91,8 +91,14 @@ struct GhPullRequestDetail: Decodable {
     /// (#466) se z toho stane zákaz — pushnout se dá jedině do repozitáře, který máme
     /// naklonovaný, a to je ten základní.
     let isCrossRepository: Bool?
+    /// Kolik řádků PR přidává a maže (#519). Optional ze stejného důvodu jako `body`: chybějící
+    /// pole nemá položit celý detail, na kterém stojí `headSha` pro review. `nil` znamená
+    /// **nevím**, a u tichých hodin se z toho stane „pusť to teď“ — odložit review kvůli neznámé
+    /// velikosti je tichá ztráta času.
+    let additions: Int?
+    let deletions: Int?
 
-    static let jsonFields = "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName,isCrossRepository"
+    static let jsonFields = "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName,isCrossRepository,additions,deletions"
 
     /// Identifikátor se bere z dotazu — `gh pr view` neříká, ze kterého repa PR je, protože
     /// jsme mu ho zadali. Číslo se přesto ověřuje: nálezy se klíčují `headSha` konkrétního
@@ -113,7 +119,11 @@ struct GhPullRequestDetail: Decodable {
             updatedAt: updatedAt,
             state: try GhOutput.state(raw: state, isDraft: isDraft),
             body: body ?? "",
-            isCrossRepository: isCrossRepository
+            isCrossRepository: isCrossRepository,
+            // **Součet se skládá tady, ne v `Policy`**: je to překlad odpovědi `gh` na model, a obě
+            // čísla musí být, jinak o velikosti nevíme nic. Jedno chybějící pole tedy dá `nil`,
+            // ne polovinu — polovina by u PR s tisíci smazanými řádky vyšla pod prahem.
+            changedLines: additions.flatMap { additions in deletions.map { additions + $0 } }
         )
     }
 }

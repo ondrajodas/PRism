@@ -2319,13 +2319,33 @@ zastaral hned další verzí.
    vydá prvních sto souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes` #141772:
    591 změněných souborů, v odpovědi 100), a routing nad zkráceným seznamem by přeskočil
    revieweera, jehož soubor stojí na sto prvním místě.
-7. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
+7. **Tiché hodiny pro velké PR** (#519) — PR o dvou tisících řádcích se v automatu pouštěl ve tři
+   odpoledne a bral slot menším. Sekce `Tiché hodiny` na stránce `Review a skilly` (přepínač,
+   práh a dvě hodiny, **výchozí vypnuto**) proto velké PR odloží: nad prahem (výchozí **1 500**
+   změněných řádků) a mimo okno (výchozí **22:00–6:00**) se běh naplánuje na nejbližší začátek
+   okna. Práh se bere **z hlavičky PR** (`+` a `−` dohromady), ne z diffu — ten se u velkého PR
+   nemusí ani stáhnout.
+
+   **Platí to jen na automat.** Ruční `Spustit review` odklad nezná a **PR, který mám otevřený,
+   se neodkládá** (člověk na něj čeká). Denní limit ani strop útraty se tím **neobcházejí** —
+   odklad mění, *kdy* se session utratí, ne kolik jich bude. V tabu `Průběh` má dráha kapsli
+   `odloženo na noc`, větu `2 790 řádků nad prahem 1 500 · nikdo na PR nečeká`, vpravo
+   `poběží 23:00` a pod tím `Pustit teď` — **ruční** běh, takže mimo denní limit, a pouští celé
+   review. Odklad, který už padl, se otevřením záložky **nespustí**: kdyby ano, byla by ta dráha
+   k nevidění, protože se kreslí jedině v otevřené záložce.
+
+   **Odložené běhy přežijí restart** (`deferred.json` v cache): noc bez běžící aplikace by jinak
+   nepustila nic a ráno by to vypadalo, že automat nefunguje. Zmeškaná noc se **dožene ráno**, ne
+   posune na další. Okno smí přecházet přes půlnoc; stejná hodnota na obou stranách odklad
+   **vypne**, protože prázdné okno je čitelnější než ticho pořád. Nastavuje se **jen globálně** —
+   kdy chci mít na stroji ticho, z repozitáře neplyne.
+8. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
-8. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
+9. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
    řaditelná tabulka pro nálezy, které ke konkrétnímu řádku nepatří (chybějící testy,
    architektonické poznámky).
 
-9. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
+10. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci **otevře záložku** toho pull requestu (na tabu, kde jsi
    v něm skončil) a dá okno dopředu. PR, který se mezitím ze seznamu odklidil, se neotevírá —
    a filtr, který ho schoval, klik zruší.

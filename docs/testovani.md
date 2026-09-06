@@ -10771,6 +10771,90 @@ a tlačítko `Pustit přesto` mají v hlavičce dráhy **jeden řádek**, takže
 — a to se pozná jedině z kresby (offscreen render podle *Jak si zkontrolovat, jak view vypadá*,
 nebo proklikáním). Texty samotné se tvrdí nad `ReviewerLaneText`, tedy bez kreslení.
 
+## Tiché hodiny (#519)
+
+### Okno se v testech odvozuje z hodin, ne píše číslem
+
+Dvě různé techniky podle toho, co se testuje — a **obě jsou odpověď na tentýž kořen** (#367:
+`Calendar.current` a `Date()` jsou globální stav procesu):
+
+1. **`Policy` bere kalendář parametrem**, takže si `QuietHoursPolicyTests` drží vlastní
+   `Calendar` s `Europe/Prague` a okamžiky skládá z `DateComponents` — „22:00 na den, kdy se mění
+   čas“ se přes vteřiny od roku 1970 napsat nedá.
+2. **`AppStore` bere `Calendar.current`**, takže do `AppStoreQuietHoursTests` se okno **napsat
+   nedá**: `22`–`6` by dělalo sadu zelenou jen v některých zónách a jen v některých hodinách.
+   Okno se proto **odvozuje z fake hodin** — `awayFromNow(_:)` posadí začátek dvě hodiny za `now`,
+   `aroundNow(_:)` na `now`. Obě čtou hodinu tímtéž `Calendar.current`, jakým ji přečte store,
+   takže je tvrzení pravdivé v každé zóně.
+
+### Změna letního času se tvrdí dvěma čísly, ne jedním
+
+U dlouhého dne (podzimní posun) nestačí porovnat výsledný **místní** okamžik: implementace
+s pevnou délkou dne vydá 25. 10. v 21:30, což je jiný místní čas, ale kdo si toho v testu nevšimne,
+napíše tvrzení, které projde obojí. Tvrdí se proto **i skutečný odstup**:
+
+```
+z 24. 10. 22:30 na nejbližší 22:00  →  25. 10. 22:00  a  88 200 s  (24,5 h)
+naivní +86 400                      →  25. 10. 21:30  a  84 600 s
+```
+
+U krátkého dne (jarní posun) se tvrdí, že hodina, která ten den **neexistuje**, vydá nejbližší
+další čas, ne `nil`: okno začínající ve dvě má 29. 3. začít ve tři. `nil` by v kódu znamenalo
+„nikdy“ a odložený běh by v cache uvízl.
+
+### Kde se u #519 ověřila regrese vložením regrese
+
+Osm věcí, každá zvlášť, aby bylo poznat, **který** test ji chytá:
+
+1. **Naivní okno** (`hour >= start && hour < end` bez druhé větve) → spadne *Okno 22–6 přechází
+   přes půlnoc* v pěti argumentech a *V tichých hodinách se neodkládá* ve třech: v noci by se
+   nepustilo nic.
+2. **Naivní `+86 400`** místo `Calendar.nextDate` → spadne *Podzimní změna času: den má 25 hodin*
+   na odstupu (`84 600 == 88 200`).
+3. **Vyzvednutý odklad se odloží znovu** (zahozený `honoringQuietHours`) → spadne *Odložený běh
+   přežije restart a zmeškanou noc dožene ráno*: prospaná noc by se posouvala donekonečna.
+4. **Otevřená záložka se ignoruje** (`isOpen: false` natvrdo v `deferToQuietHours`) → spadne
+   *Otevřený PR se neodkládá a review se pustí*: PR, na který se dívám, by čekal do noci.
+5. **Rozpočet se u automatu obejde** (`canSpendSession` bez `guard`) → spadne *Denním limitem se
+   neprojde jen proto, že je noc* (`2 == 1`).
+
+A k tomu osmá, z **vlastní revize diffu**: **vyzvednutí nad holým seznamem z tiku** (bez zúžení na
+frontu) položí *Odložený PR se v tichých hodinách nepustí* — PR, který jsem si odložil (#512), by se
+ve dvacet dva večer sám zreviewoval. Poznat by to nešlo, protože odložený PR není vidět.
+
+A šestá, u samotného vyzvednutí: **měřit se proti `deferredAt` místo `runAt`** položí
+*Před časem se odložený běh nepustí* i *Odložený běh se pustí až v tichých hodinách*. Sedmá je
+opačná: **pustit odklad při otevřené záložce** (`isOpen ||` zpátky v `deferralsToRelease`) položí
+*Otevřená záložka odložený běh sama nespustí* a *Otevření už odloženého PR běh sám nespustí* —
+a v okně by to znamenalo dráhu, kterou nejde vidět (viz `docs/architektura.md`).
+
+### Měřidlo, které by vyšlo zeleně nad rozbitou aplikací
+
+Tvrzení *velké PR se mimo tiché hodiny nepustí* vyjde zeleně i tehdy, kdyby brána zastavovala
+**všechno** — reviewer prostě neběží. K němu proto patří **kontrolní měření** (#478): *Malé PR se
+pustí i mimo tiché hodiny*, toutéž cestou a se stejným nastavením. Bez něj by sada nerozlišila
+funkční odklad od vypnutého automatu.
+
+### Co se v harnessu ověřit nedá
+
+**Že to nakreslené jde vidět, se muselo změřit na běžící aplikaci, ne v harnessu.** První podoba
+pouštěla odložený běh při otevření záložky (podle věty v zadání) — a `deferred.json` ukázal, že
+odklad zmizel dřív, než se dráha stihla vykreslit, protože tik po startu je hned. Sonda ani test by
+to nenašly: obě znají jen stav, který jim někdo připraví. Rozhodnutí, které z toho vzešlo, je
+v [`docs/architektura.md`](architektura.md).
+
+**Že se odklad v deset dopoledne naživo ukáže.** Aplikace čte skutečné hodiny, takže se dráha
+`odloženo na noc` na běžícím okně objeví jedině tehdy, když je okno tichých hodin nastavené **mimo
+aktuální hodinu** — což je zároveň jediný způsob, jak si to proklikat kdykoli přes den: v nastavení
+se práh srazí nízko a okno se posadí na hodinu, která **ještě nenastala** (třeba `23`–`6` v deset
+dopoledne). Odklad se tím chová přesně jako v noci; co se z toho **neověří**, je přechod přes
+skutečnou půlnoc a skutečný přechod letního času — obojí je pokryté jedině výčtem v `Policy`.
+
+**Jak dráha vypadá na obrazovce.** Kapsle `odloženo na noc`, věta s počtem řádků, `poběží 23:00`
+a tlačítko `Pustit teď` mají v hlavičce dráhy **jeden řádek**, takže se v úzkém panelu ořezávají —
+tatáž věta jako u routingu (#518). Texty samotné se tvrdí nad `Policy` a `ReviewerLaneText`, tedy
+bez kreslení.
+
 ## Odznak v Docku a spuštění po přihlášení (#529)
 
 Sedm sad, a **z většiny jsou to tvrzení, že se něco NEstalo**. Obojí se rozbije potichu a ani jedno

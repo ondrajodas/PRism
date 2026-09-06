@@ -67,6 +67,6 @@ enum MergeReadinessQuery {
     /// odpověď se proto **nezapisuje** a zeptá se na ni příští tik — „nevím“ zůstává „nevím“.
     private static let readinessFields = """
     number title author { login } headRefOid baseRefOid url updatedAt state isDraft body \
-    headRefName baseRefName isCrossRepository mergeable mergeStateStatus
+    headRefName baseRefName isCrossRepository additions deletions mergeable mergeStateStatus
     """
 }

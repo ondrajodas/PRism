@@ -32,6 +32,16 @@ struct ReviewerLaneView: View {
     /// nebo v okně není zásuvka** — v obou případech se tlačítko nekreslí a rozhoduje o tom
     /// `Policy.terminalSession(of:)` se `AppStore.hasTerminalDrawer`, ne `if` tady.
     var resumeInDrawer: (() -> Void)?
+    /// Pustí **celé** odložené review teď (#519). `nil` = nejde to (něco běží).
+    ///
+    /// **Vlastní akce, ne `rerun`**: odklad padl na celý běh, takže ho celý ruší — kdežto `rerun`
+    /// pouští jednoho revieweera. Kdyby se to slilo, `Pustit teď` by v tabu s pěti dráhami pustilo
+    /// jednu pětinu toho, co odklad drží.
+    var runNow: (() -> Void)?
+    /// „Teď“ pro větu `poběží 23:00` (#519). **Předává se od storu** (`AppStore.time`), aby se
+    /// dráha nemohla rozejít s hodinami, ze kterých se o odkladu rozhodovalo. Výchozí `Date()` je
+    /// jen pro sondy a náhledy — v aplikaci ho přebíjí volající.
+    var now = Date()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,6 +65,9 @@ struct ReviewerLaneView: View {
             // Přeskočeno routingem (#518) — věta a tlačítko, ne jen kapsle v hlavičce: kdyby
             // tady nic nebylo, přeskočená dráha by vypadala jako porucha, ze které není cesta ven.
             if case .skipped(let patterns) = lane.state { skippedBlock(patterns) }
+            // Odloženo do tichých hodin (#519) — věta a tlačítko, ze stejného důvodu jako
+            // u přeskočení: kapsle `odloženo na noc` sama je stav bez cesty ven.
+            if case .deferred(let run) = lane.state { deferredBlock(run) }
             if let failure = lane.failure { failureBlock(failure) }
             if feed != .none {
                 StepFeedView(
@@ -128,6 +141,17 @@ struct ReviewerLaneView: View {
                     .lineLimit(1)
                     .help(ReviewerLaneText.routingSkip(patterns: patterns))
             }
+            // Proč se odložilo (#519). **Vedle kapsle, ne pod dráhou**, ze stejného důvodu jako
+            // u routingu: `odloženo na noc` bez čísel je stav bez důvodu a v tabu s pěti dráhami
+            // se nedá poznat, co ten práh přesáhlo. Nápověda nese totéž doslova, protože v úzkém
+            // panelu se řádek ořeže.
+            if case .deferred(let run) = lane.state {
+                Text(verbatim: ReviewerLaneText.deferralNote(run))
+                    .font(.caption)
+                    .foregroundStyle(Palette.ink3)
+                    .lineLimit(1)
+                    .help(ReviewerLaneText.deferralNote(run))
+            }
             // Zadání, které nedorazilo celé (#345). Musí to být poznat **na dráze**, ne až
             // v souboru: review bez textu issue vypadá v okně stejně jako to s ním, a nález,
             // který se váže k zadání, se tak nemá čím nestat. Popisek je krátký schválně —
@@ -158,6 +182,16 @@ struct ReviewerLaneView: View {
                     .foregroundStyle(Palette.ink3)
                     .monospacedDigit()
                     .help("Session se nespustila, takže tenhle reviewer nic nestál.")
+            }
+            // Kdy poběží (#519) — na místě, kde u doběhlé dráhy stojí cena, protože odpovídá na
+            // tutéž otázku „co mě tenhle běh stál a kdy“. Cena tu být nemůže: ještě se neutratila,
+            // a `0,00 $` jako u přeskočení by tvrdilo, že je hotovo za nic.
+            if case .deferred(let run) = lane.state {
+                Text(verbatim: ReviewerLaneText.deferralRun(run, now: now))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Palette.stale)
+                    .monospacedDigit()
+                    .help(ReviewerLaneText.runNowHelp(run))
             }
             if let usage = ReviewerLaneText.usage(of: lane) {
                 Text(verbatim: usage)
@@ -225,6 +259,29 @@ struct ReviewerLaneView: View {
         .padding(.bottom, 10)
     }
 
+    /// Věta a `Pustit teď` pod odloženou dráhou (#519).
+    ///
+    /// **Bez vlastního podkladu**, jako blok přeskočení: odklad není porucha, tak nemá co svítit.
+    /// `runNow == nil` znamená „něco běží“, takže se tlačítko nekreslí — a **věta se s ním mění**,
+    /// jinak by slibovala akci, která na obrazovce není.
+    @ViewBuilder private func deferredBlock(_ run: DeferredRun) -> some View {
+        HStack(spacing: 8) {
+            Text(verbatim: ReviewerLaneText.runNowNote(hasButton: runNow != nil))
+                .font(.callout)
+                .foregroundStyle(Palette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let runNow {
+                Button(ReviewerLaneText.runNow, systemImage: "play.circle", action: runNow)
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    .help(ReviewerLaneText.runNowHelp(run))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
+    }
+
     private var statePill: some View {
         Text(verbatim: ReviewerLaneText.state(lane.state))
             .font(.system(.caption2, design: .monospaced))
@@ -243,6 +300,10 @@ struct ReviewerLaneView: View {
         // porucha ani výsledek. O odstín silnější než `nespuštěno` schválně — o tomhle
         // revieweerovi se **rozhodlo**, kdežto na ten druhý jen nedošlo.
         case .skipped: Palette.ink2
+        // `stale` jako `.pill.stale` z návrhu (sekce 46), a je to tatáž barva jako u vypršelého
+        // času: obojí znamená „tohle ještě není dopovězené“. Od `finished` se musí lišit na první
+        // pohled — odložený běh o kódu neřekl nic.
+        case .deferred: Palette.stale
         case .queued, .stopped: Palette.ink2
         case .running: Palette.accent
         case .finished: Palette.ok

@@ -32,6 +32,18 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         /// reviewer o kódu neřekl **nic** — je to tatáž hranice, kterou `CLAUDE.md` hlídá
         /// u `clean` vs. `failed` a #383 u `inconclusive`.
         case skipped(patterns: [String])
+        /// Automat běh odložil do tichých hodin (#519) — PR je nad prahem a nikdo na něj nečeká.
+        ///
+        /// **Pátý stav vedle `notStarted`, `skipped`, `finished` a `failed`, a nesmí se slít ani
+        /// s jedním.** `nespuštěno` mluví o revieweerovi, na kterého ještě nedošlo, `přeskočeno`
+        /// o tom, na kterého se schválně nedošlo — tohle o tom, na kterého **dojde, jen později**.
+        /// Je to jediný z těch stavů, ve kterém je běh **naplánovaný**: nese okamžik, ve kterém se
+        /// pustí, a věta pod dráhou nese cestu, jak ho pustit dřív.
+        ///
+        /// **Nese celý záznam, ne jen čas.** Věta v hlavičce se skládá z počtu řádků a z prahu,
+        /// který v tu chvíli platil — kdyby dráha znala jen `runAt`, musela by práh dobrat
+        /// z nastavení a po jeho změně by tvrdila něco jiného, než podle čeho se rozhodlo.
+        case deferred(DeferredRun)
         /// Běh v záznamu **je**, ale jeho osa ne (#242). Tak vypadají soubory z doby před #203.
         ///
         /// Třetí stav, který se nesmí slít s předchozími dvěma: `nespuštěno` by o doběhlém běhu
@@ -88,6 +100,10 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         static let code = "prochází kód"
         static let findings = "hlásí nálezy"
         static let missing = "průběh se neuložil"
+        /// Jediná fáze odloženého běhu (#519). Věta z návrhu, sekce 46, doslova — a je to
+        /// **čekání na hodiny**, ne na slot: `čeká na slot` o kus výš znamená, že review běží
+        /// a tenhle reviewer je na řadě, kdežto tady neběží nic.
+        static let quiet = "čeká na tiché hodiny"
         /// Jediná fáze přeskočené dráhy (#518). Věta z návrhu, sekce 46, doslova — a říká **čí to
         /// rozhodnutí bylo**: „nepustilo se“ samotné by znělo jako porucha.
         static let routed = "nepustilo se — pravidlo repa"
@@ -145,6 +161,13 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
 
     var id: String { skill }
 
+    /// Čeká tahle dráha na tiché hodiny (#519)? Odvozené, ne druhé pole — `state` je jediná
+    /// pravda o tom, kde dráha je, a druhý příznak by se s ním uměl rozejít.
+    var isDeferred: Bool {
+        if case .deferred = state { return true }
+        return false
+    }
+
     /// Proč to spadlo. `nil` u všeho, co nespadlo — chybová hláška u zrušeného běhu je text,
     /// který tvrdí víc, než data unesou.
     var failure: String? {
@@ -185,7 +208,8 @@ extension Policy {
         skills: [String],
         record: ReviewRecord? = nil,
         running: Set<String> = [],
-        skipped: [String: [String]] = [:]
+        skipped: [String: [String]] = [:],
+        deferred: DeferredRun? = nil
     ) -> [ReviewerLane] {
         let configured = Set(skills)
         let recorded = record?.runs.map(\.skillID) ?? []
@@ -205,6 +229,12 @@ extension Policy {
                 )
             }
             if running.contains(skill) { return queuedLane(of: skill, isConfigured: isConfigured) }
+            // Odklad (#519) stojí **před přeskočením i před dráhou bez osy**, a je to silnější
+            // tvrzení než obě: odkládá se **celý běh**, takže se v tomhle průchodu nerozhodlo ani
+            // o routingu — na ten se dojde teprve po checkoutu, který se kvůli odkladu nestal.
+            // Dráha s osou si přednost drží dál: běh, který doběhl, je pravda o tomhle PR
+            // a přepsat ho slibem na noc by zahodilo výsledek, který je v tabu `Nálezy` vidět.
+            if let deferred { return deferredLane(of: skill, run: deferred, isConfigured: isConfigured) }
             // Přeskočení stojí **před** dráhou bez osy (#518), protože je to fakt o **posledním**
             // průchodu, kdežto běh bez osy je záznam z doby před ním. V praxi se ty dva nesejdou:
             // přeskočení žije jen v paměti a běh, který v témhle sezení doběhl, si osu drží taky —
@@ -281,6 +311,40 @@ extension Policy {
             // Dnes je to vždycky `true` — co v sadě není a nemá ani osu, ani běh, se do pořadí
             // drah nedostane. Předává se přesto: ta pravda drží jen pořadím větví ve `lanes`,
             // a to je slabší záruka než parametr.
+            isConfigured: isConfigured
+        )
+    }
+
+    /// Reviewer, jehož běh automat odložil do tichých hodin (#519).
+    ///
+    /// **Jedna fáze, jako u přeskočené dráhy** — a ze stejného důvodu: tvar běhu (session → kód →
+    /// nálezy) předstírat nemá co, protože se nic z toho nestalo a nestane až do noci.
+    ///
+    /// **`nil` u nálezů, ceny i session**: nic se nespustilo. Že to zatím nic nestálo, se do
+    /// hlavičky nepíše jako u routingu (`0,00 $`) — u odkladu to není konečná cena, jenom ještě
+    /// nezaplacená, a `0,00 $` u běhu, který ve 22:00 utratí session, by tvrdilo víc, než data
+    /// unesou.
+    private static func deferredLane(
+        of skill: String,
+        run: DeferredRun,
+        isConfigured: Bool
+    ) -> ReviewerLane {
+        ReviewerLane(
+            skill: skill,
+            state: .deferred(run),
+            phases: [ReviewerLane.Phase(title: ReviewerLane.Title.quiet, detail: nil, state: .idle)],
+            lastTool: nil,
+            finishedAt: nil,
+            reportedFindings: nil,
+            usage: nil,
+            sessionID: nil,
+            worktree: nil,
+            droppedEntries: 0,
+            loadedSkill: nil,
+            intentGap: nil,
+            entries: [],
+            increment: nil,
+            wholeReason: nil,
             isConfigured: isConfigured
         )
     }
@@ -466,10 +530,11 @@ extension Policy {
         // vypadala k nerozeznání od té, co ještě nezačala.
         let marked = switch state {
         case .failed, .stopped, .timedOut, .interrupted: max(reached, 1)
-        // `notStarted`, `skipped` ani `missingProgress` sem nedojdou — dráha bez osy se skládá
-        // vlastní cestou (`notStartedLane`, `skippedLane`, `missingProgressLane`). Stojí
+        // `notStarted`, `skipped`, `deferred` ani `missingProgress` sem nedojdou — dráha bez osy
+        // se skládá vlastní cestou (`notStartedLane`, `skippedLane`, `deferredLane`,
+        // `missingProgressLane`). Stojí
         // u `queued`, protože kdyby došly, není v ose co značit.
-        case .running, .finished, .queued, .notStarted, .skipped, .missingProgress: reached
+        case .running, .finished, .queued, .notStarted, .skipped, .deferred, .missingProgress: reached
         }
 
         var phases: [ReviewerLane.Phase] = []
@@ -513,9 +578,9 @@ extension Policy {
         case .running: .running
         case .failed: .failed
         case .timedOut, .interrupted, .stopped: .stopped
-        // `notStarted`, `skipped` ani `missingProgress` sem nedojdou (viz `marked` výš); jsou
+        // `notStarted`, `skipped`, `deferred` ani `missingProgress` sem nedojdou (viz `marked` výš); jsou
         // u `queued` ze stejného důvodu.
-        case .finished, .queued, .notStarted, .skipped, .missingProgress: .done
+        case .finished, .queued, .notStarted, .skipped, .deferred, .missingProgress: .done
         }
     }
 }

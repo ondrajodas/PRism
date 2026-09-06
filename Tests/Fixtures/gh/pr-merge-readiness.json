@@ -17,6 +17,8 @@
         "headRefName": "bagtoad/attachment-operation-telemetry",
         "baseRefName": "trunk",
         "isCrossRepository": false,
+        "additions": 554,
+        "deletions": 135,
         "mergeable": "MERGEABLE",
         "mergeStateStatus": "BLOCKED"
       }
@@ -38,6 +40,8 @@
         "headRefName": "williammartin-acceptance-app-workflow",
         "baseRefName": "williammartin-acceptance-token-capabilities",
         "isCrossRepository": false,
+        "additions": 212,
+        "deletions": 3,
         "mergeable": "MERGEABLE",
         "mergeStateStatus": "BLOCKED"
       }

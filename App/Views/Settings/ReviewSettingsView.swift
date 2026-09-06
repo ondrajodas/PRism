@@ -48,6 +48,33 @@ struct ReviewSettingsView: View {
 
             agent
 
+            // Vlastní sekce, ne řádek v `Režim review` (#519): tamty čtyři hodnoty si repo smí
+            // přebít, tahle **ne** — kdy chci mít na stroji ticho, z repozitáře neplyne. Sekce se
+            // svým vlastním vysvětlením je jediné místo, kde se ten rozdíl dá říct.
+            Section {
+                Toggle("Velké PR odložit do tichých hodin", isOn: $settings.draft.global.quietHours.isEnabled)
+                SettingsNumberField(
+                    label: "Práh (změněných řádků)",
+                    value: $settings.draft.global.quietHours.lineThreshold,
+                    range: 1...100_000,
+                    step: 100
+                )
+                SettingsHourField(
+                    label: "Od (hodin)",
+                    hour: $settings.draft.global.quietHours.startHour
+                )
+                SettingsHourField(
+                    label: "Do (hodin)",
+                    hour: $settings.draft.global.quietHours.endHour
+                )
+            } header: {
+                Text("Tiché hodiny")
+            } footer: {
+                Text("Platí **jen na automat** — ruční `Spustit review` odklad nezná a PR, který mám otevřený, se neodkládá. Ostatní PR nad prahem se mimo tiché hodiny odloží na nejbližší začátek okna; v tabu `Průběh` je vidět kdy a tlačítko `Pustit teď` je pustí hned (ručně, tedy mimo denní limit). Práh se bere z hlavičky PR (`+` a `−` dohromady), ne z diffu. Okno smí přecházet přes půlnoc (`22`–`6`); stejná hodnota na obou stranách odklad vypne, protože prázdné okno je čitelnější než ticho pořád. Denní limit ani strop útraty tím neobchází — odklad mění, **kdy** se session utratí, ne kolik jich bude. Odložené běhy přežijí restart: co se nestihlo v noci, pustí první tik po startu.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 StringListEditor(
                     items: $settings.draft.global.skills,

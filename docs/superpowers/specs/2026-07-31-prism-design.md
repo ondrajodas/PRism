@@ -7619,3 +7619,59 @@ Ověřeno vložením regrese — doplnění `· testy zelené` do věty shodí t
 **Co by ta věta stálo pravdivou udělat**, je vlastní issue: aplikace by musela nad stromem `-sync`
 pustit `xcodebuild test` (nebo co si repo řekne), tedy **další podproces, další konfigurace a další
 minuty** — a hlavně rozhodnutí, co se stane s výsledkem, když spadne. Do #511 to nepatří.
+
+### Záznam rozhodnutí — tiché hodiny odkládají běh, ne pull request (#519)
+
+Odklad velkého PR do noci se nabízel jako druhá podoba **odložení PR** (#512): tam už je úložiště
+v cache, blok pod frontou, rozhlídka po tiku i věta v `Dění`. Zahozeno, a je to hranice, ne úspora
+kódu.
+
+**Odpovídají na jinou otázku.** *Odložit PR* je moje rozhodnutí o tom, **co chci vidět** — PR
+z fronty zmizí a musí být poznat, že něco skryté je (proto těch pět vývodů). *Tiché hodiny* jsou
+rozhodnutí automatu o tom, **kdy se utratí session** — PR ve frontě **zůstane**, protože na mě čeká
+dál; odloží se jenom běh. Sloučit to by znamenalo buď schovat PR, na který čekám, nebo mít v jednom
+souboru dva stavy, mezi kterými se `Vrátit teď` a `Pustit teď` perou o jeden zápis.
+
+**Proto ani řádek v tabulce *Které místo chce kterou množinu***. Zúžení jsou dvě osy (autor a
+odložení PR) a obě mluví o seznamu; tohle je vlastnost **jednoho běhu**. Třetí osa by tvrdila, že se
+PR někde schová — a to se nestane nikde.
+
+**Zamítnuto taky per repo.** Režim, jazyk nálezů, limit běhu i přírůstek si repo přebít smí, tohle
+ne: kdy chci mít na stroji ticho, z repozitáře neplyne. Je to tatáž úvaha jako u `appearance`
+a `diffLayout` — vlastnost člověka, který se dívá, ne repozitáře, na který se dívá.
+
+**Výchozí vypnuto, a je to obrácená strana než u #517.** Přírůstek se zapíná ve výchozím stavu,
+protože nic neztrácí — dělá totéž levněji. Odklad **mění, kdy** se výsledek objeví: velké PR, na
+které nikdo nespěchá, se do rána nezreviduje. To je volba o denním režimu, a ta se nemá zapnout tím,
+že si někdo nainstaluje novou verzi.
+
+**Prázdné okno místo ticha pořád.** `22`–`22` jde přečíst obojím způsobem. Rozhodlo, které z těch
+dvou se dá **poznat**: stejná hodnota na obou stranách znamená v praxi nedopsaný konec, a odklad,
+který by z toho udělal ticho po celý den, by review zastavil úplně — a v okně by to vypadalo jako
+porucha automatu, ne jako chyba v nastavení. Tatáž strana jako u ostatních nesmyslných hodnot:
+nesmyslné pravidlo odklad **vypne**, nezastaví review.
+
+**Zmeškaná noc se pouští, ne posouvá.** Aplikace přes noc běžet nemusí (restart je tu po každém
+mergi), takže vyzvednutý odklad umí přijít v deset dopoledne — a tehdy je otázka „pustit, nebo
+odložit na dnešní večer?“. Pouští se: slib `poběží ve 23:00` se plní tím, že se běh **stane**, ne
+tím, že se přesune o den. Kdyby se posouval, dostal by se PR do smyčky, ve které se odkládá
+donekonečna, a v dráze by to vypadalo pořád stejně. Nese to **parametr jednoho spuštění**
+(`honoringQuietHours`), ne pole storu: držený stav, který nikdo neuklidí, je zrovna ten vzor, který
+Copilot v tomhle repu nachází.
+
+**Věta „otevření PR ruší odklad“ se implementovala jen z poloviny, a rozhodl o tom zákres.**
+Otevřený PR se neodkládá; odklad, který už padl, otevření záložky **nespustí**. Důvod je
+strukturální: dráha `odloženo na noc` se kreslí **jedině v otevřené záložce**, takže by ji původní
+pravidlo udělalo nedosažitelnou — `poběží 23:00` i `Pustit teď` z návrhu by se na obrazovku
+nedostaly nikdy. Změřeno na běžící aplikaci: po otevření odloženého PR zbyl na dráhu zlomek
+sekundy, protože tik po startu je hned. **Nakreslený stav, který nejde vidět, je horší než odchylka
+od věty v zadání** — a odchylka je navíc v bezpečném směru: cesta ven je jedno pojmenované
+tlačítko, ne automatické spuštění vyvolané tím, že se člověk podíval. Ostatně `Pustit teď` je
+**ruční** běh, takže nesáhne na denní rozpočet; automatické spuštění při otevření by bylo jediné
+místo v aplikaci, kde *dívat se* stojí session. Věta pod dráhou se proti návrhu mění, zbytek
+zákresu platí doslova.
+
+**Zamítnuto: přidat odloženému PR vlastní stav do řádku fronty.** Řádek by o odkladu řekl dřív než
+tab `Průběh`, jenže je to nová věc na obrazovce a v mockupu zakreslená není — a *jediná schvalovací
+brána v tomhle repu* je zrovna vzhled. Zapsaná mezera: dokud to v návrhu nebude, dozví se člověk
+o odkladu jedině z dráhy v tabu `Průběh`.
