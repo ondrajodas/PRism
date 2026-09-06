@@ -905,6 +905,34 @@ u nich platí pravidlo z #361 nezměněné. Že by se kolo utvořilo tam, **vylo
 vlastnost vzoru, ne délky seznamu —, ale ani jednou se to nestalo a cena pevného stacku by tam byla
 zbytečná.
 
+#### Co stojí přepnutí na tab s diffem, a proč se to nezlevnilo (#541)
+
+Cena prvního rozvržení z tabulky výš je to, co člověk platí **při každém návratu do `Změněných
+souborů`**: obsah tabu se přepnutím zahodí, změřené výšky bloků zaniknou s podstromem a staví se
+znovu. Nad ostrým PR to je **737 ms u 45 souborů, 1,10 s u 71 a 1,17 s u 157**.
+
+Tři věci, které z měření #541 platí a nemusí se zjišťovat znovu:
+
+- **Nedělá to obsah, dělá to velikost.** Syntetické dvojče o týchž souborech, hunkách a řádcích
+  vyšlo stejně jako ostrý diff, takže zvýrazňování syntaxe, word-level rozdíl ani rozmanitost textu
+  tu cenu nedrží. Ostrá data jsou prostě **třikrát větší** než největší fixture, na které se do
+  #541 měřilo — čísla z #476 tedy nic nevyvrací, jen končila dřív.
+- **Pětina té ceny s diffem nesouvisí** a roste se **soubory**: pás mapy PR (#501) a rozložený
+  sloupec s itinerářem (#506/2) se kreslí v **každém** tabu, takže přepnutí na `Kontroly` stojí nad
+  157 soubory 237 ms proti 82 ms nad 45. Na scéně naopak nezáleží — `jen detail` vyšlo stejně jako
+  celé okno, takže oprava z #472 drží.
+- **Nejdražší rámec aplikace v `sample`u není práce navíc.** `DiffView.swift:517` (čtení `$0.size`
+  v `onGeometryChange`) drží 26 až 42 % hlavního vlákna, ale přesun téhož modifikátoru na
+  `background` ho z profilu odstranil a **cenu nezměnil** — líně počítaný atribut AttributeGraphu
+  se připíše tomu, kdo si o něj řekne první. Je to **šestá zamítnutá varianta** v téhle rodině,
+  vedle pěti z #472 a #476.
+
+Čísla, postup a meze měření jsou
+v [`docs/testovani.md`](testovani.md#přepnutí-na-změněné-soubory-nad-ostrým-diffem-541) — včetně
+**neověřené mezery**: sonda hlásí, že se bloky mimo pás neodnasazují vůbec (219 z 219 u
+`cli/cli#14320`), kdežto #472 u 2 000 řádků zapsalo pět. Na ceně přepnutí by to nic nezměnilo — na
+první rozvržení se všechny bloky nasadí tak jako tak —, ale na projíždění a paměti může.
+
 ### Trvalý vodorovný pruh ve split pohledu (#422)
 
 Ve splitu se nezalamuje, takže dlouhý řádek odjede za okraj sloupce — a do #422 se to z okna
@@ -6496,6 +6524,181 @@ Co se u ní nemá rozbít:
   chipem, který mluví o něčem jiném. Je to tatáž ochrana jako u zavřené záložky
   v `loadExternalDetail(of:)` (#531).
 
+## Odložit PR (#512)
+
+*Tenhle teď vidět nechci, ozvi se mi, až…* Filtr schová repo nebo autora, ne jeden pull request;
+botí PR proto ležel ve frontě týden, počítal se do odznaku a automat na něj každou minutu zvažoval
+review.
+
+**Odložení je stav, který něco skrývá — takže musí být poznat, že něco skryté je.** Fronta, ze
+které PR potichu zmizí, je horší než fronta, ve které leží: práci, o které nikdo neví, nejde ani
+udělat, ani odmítnout. Odložení má proto **pět vývodů a všech pět je povinných**:
+
+1. **blok `Odložené · 2` pod frontou** (`SnoozedBlockView`) s poznámkou `vrátí se zítra 9:00`
+   a s `Vrátit teď`;
+2. **týž blok v pravém sloupci desky** (`BoardView.snoozedBlock`, řádky z `SnoozedRowsView`),
+   protože číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné číslo — viz *Odložit
+   musí jít odevšad* níž;
+3. **věta pod pozdravem na desce** (`Policy.boardSentence(_:snoozed:)` → `· 2 odložené`), protože
+   v žádném pruhu odložené PR není;
+4. **vlastní prázdný stav fronty** (`ListEmptyReason.allSnoozed(count:)`), když je odložené
+   všechno — zelené *Žádné PR k review* by nad prací, kterou jsem si sám schoval, tvrdilo opak
+   toho, co je pravda; je to tatáž lekce jako u filtru;
+5. **řádek v `Dění` při návratu** (`ActivityEvent.Kind.returnedFromSnooze`, `Vrátil se z odložení ·
+   přišel push`) — bez něj by se PR ve frontě objevil odnikud.
+
+### Odložit musí jít odevšad, kde se kreslí řádek — a odložené musí být vidět odtamtud, odkud se o nich mluví
+
+**Naučené z proklikání, ne z návrhu.** V první podobě byla nabídka `Odložit` navěšená jedině ve
+`PullRequestListView` a blok `Odložené` visel jedině pod frontou. Jenže `PullRequestRow` se kreslí
+na **třech** místech (seznam, sekce `Rozdělaná` v `HomeView`, pruh desky v `BoardView`) a domov je
+**deska**: člověk tam viděl větu `· 2 odložené`, nic víc, a odložit odtud nešlo nic. Tvrzení, které
+se z té obrazovky nedá ani ověřit, ani rozbalit, je horší než žádné tvrzení.
+
+Opravily to **tři věci**, a každá je kontrolovatelná:
+
+1. **`SnoozeAction` je jedna hodnota, ne dvojice `offers` + `snooze`.** Skládá ji **jedno místo**
+   (`AppStore.snoozeAction(for:)`), takže druhý volající nemá čím se rozejít s prvním. Brána
+   `Policy.canSnooze` je uvnitř: vlastní PR dostane **prázdnou nabídku**, ne `nil`, a v řádku se
+   z obojího nakreslí **nic**.
+2. **Předává ho každé místo, které řádek kreslí** — a je to stráž nad zdrojáky
+   (`PullRequestRowSnoozeWiringTests`), ne poznámka: kde stojí `PullRequestRow(`, tam musí stát
+   i `snoozeAction:`. Za běhu se to tvrdit nedá (`body` je neprůhledný typ), takže bez té stráže
+   by se na čtvrté místo zapomnělo znovu.
+3. **Blok `Odložené` stojí i na desce**, v pravém sloupci **nahoře**, tedy v jedné výšce s větou,
+   která o odložených mluví. Kreslí se z **týchž** řádků jako ten pod frontou (`SnoozedRowsView`)
+   — dvě podoby jedné věci by se rozešly první změnou, tatáž úvaha jako u `PullRequestRow` (#172).
+   **Strop je pět řádků** (`Policy.snoozedBoardRowLimit`) a patka říká, kolik se nevešlo, jako
+   u pruhů a u `Dění`: nadpis počítá dál všechny, ale dvacet řádků v tom sloupci není blok, je to
+   druhá fronta.
+
+A protože ta dvě místa počítají jinou množinu, přibyla **čtvrtá věc**: nadpis bloku pod frontou
+umí říct `Odložené · 1 · 2 schoval filtr` (`Policy.snoozedBlockTitle(count:hidden:)`,
+`AppStore.hiddenSnoozedPullRequestCount`). Bez toho vede `do fronty →` z desky na menší číslo, než
+jaké nabídlo, a nic to nevysvětlí — je to tatáž slovní zásoba jako u `filtered(hidden:)`. Nula se
+**nepíše**.
+
+**Deska přitom počítá jinou množinu než fronta, a je to zúžení, ne rozejití.** Blok pod frontou
+stojí nad `visiblePullRequests` (po filtru), deska nad `pullRequests` (před ním) — protože na tomtéž
+vstupu stojí `boardEntries`. Nad zapnutým filtrem by jinak věta pod pozdravem hlásila míň, než
+kolik deska schovala. Obojí je v tabulce *Které místo chce kterou množinu*.
+
+**V sekci `Rozdělaná` řádek po odložení zůstane, a je to správně**: odložení je tvrzení o **frontě**,
+ne o rozdělané práci — `pullRequestsWithDraft` se jím nezužuje (viz tatáž tabulka). Odložit se odtud
+přesto dá, protože je to týž řádek.
+
+### Podmínka, ne jen čas
+
+`SnoozeCondition` má tři případy a měří se **proti hodnotě**, ne proti `updatedAt`:
+
+| Podmínka | Měřidlo | Skončí, když |
+|---|---|---|
+| `until(Date)` | hodiny | `now >= deadline` |
+| `nextPush(head:)` | hlava PR ve chvíli odložení | dnešní hlava je jiná |
+| `nextComment(count:)` | počet příspěvků pod PR | dnešní počet je **vyšší** |
+
+Rozhoduje **jediná funkce** `Policy.snoozeExpired(_:head:comments:now:)` — tři volající (rozhlídka
+po tiku, blok a zúžení fronty) by si tu otázku jinak zodpověděli každý po svém a rozešli by se
+potichu, protože odložený PR není vidět.
+
+**Přes `updatedAt` by to nešlo, a je to ten podstatný důvod, proč rozhlídka existuje.** `updatedAt`
+se hýbe i po štítku a po úpravě titulku, takže by *do dalšího komentáře* skončilo pushem. Počet
+příspěvků je proto `comments.totalCount + reviews.totalCount` (odpověď ve vlákně u kódu je
+v GitHubu review o jednom komentáři); `commits` se do něj **nepočítají** — od pushe je tu
+`headRefOid`.
+
+**`>`, ne `!=`, a smazaný komentář sníží základ.** Kdyby se porovnávalo `!=`, ukončilo by odložení
+to, že někdo něco vzal zpátky. Že se základ smazáním posune dolů, dělá `Policy.snoozeBaseline`;
+bez toho by po smazaném komentáři odložení trvalo navždycky, protože příští komentář by počet
+vrátil jen na původní číslo.
+
+### Neznámé měřidlo je „nevím“, ne „vypršelo“
+
+Ve chvíli odložení se hlava ani počet příspěvků **neznají**: fronta stojí na `gh search prs`, které
+ani jedno nevrací, a detail se tahá až při otevření PR. Základ je proto **volitelný** a doplní ho
+**první rozhlídka** (`Policy.snoozeBaseline`, `Policy.snoozeNeedsBaseline`).
+
+`Policy.snoozeExpired` z neznámého základu **nikdy** neudělá „vypršelo“ — a je to rozhodnutí
+o směru chyby: odložení, které se zruší dřív, než mělo, vrátí PR do fronty a vypadá jako porucha
+odložení, kdežto odložení, které trvá o minutu déle, se dá kdykoli ukončit tlačítkem `Vrátit teď`.
+Tatáž úvaha platí o **nedoručené odpovědi**: PR, na který se rozhlídka nedostala, o svém stavu
+neříká nic, takže se `head` i `comments` posílají do `snoozeExpired` jako volitelné.
+
+### Rozhlídka je jeden dávkový dotaz, na klidný den nula
+
+`Policy.snoozeProbe` je tatáž škola jako `staleHeadProbe` (#420) a `activitySweep` (#335):
+
+1. **Jedno dávkové volání** (`SnoozeProbeQuery`, `GitHubGateway.fetchSnoozeSignals(of:)`) — dvacet
+   aliasů stojí 1 bod z 5000/h, tedy tolik co jeden.
+2. **Časová podmínka se neptá vůbec** (`SnoozeCondition.needsSignal`) — PR odložený do rána se za
+   celou noc nezeptá ani jednou.
+3. **`updatedAt` je předfiltr a je zadarmo.** Výjimka je PR bez základu: ten se musí zeptat i bez
+   posunu, jinak by odložení `do dalšího pushe` nemělo od čeho měřit.
+4. **Strop dvacet** (`Policy.snoozeProbeLimit`) na velikost dokumentu, ne na cenu.
+
+Běží **uvnitř `afterSuccessfulTick`**, takže dědí backoff pollingu, a **před
+`startAutomaticReviews`**: odložení, které v tomhle tiku skončilo, má být vidět hned, včetně toho,
+že se na ně smí pustit automat.
+
+**Vlastní dotaz vedle toho na hlavy, ne rozšíření toho existujícího.** Obě rozhlídky mají jiný
+předfiltr (zastaralé nálezy: cizí PR s uloženými nálezy; odložení: odložená PR), takže by společný
+dotaz musel spojit dvě různé množiny a jedné z nich vozit pole, které nepřečte. Cena za oddělení je
+**jedno volání navíc v nejhorším případě**; obě mají předfiltr, takže na klidný den je to nula.
+
+### Kde to bydlí a proč se to neklíčuje `headSha`
+
+`SnoozeStore` — jeden `snoozed.json` v kořeni cache, aktor jako `HandoffLedger`, lhůta 90 dní
+(odložený PR, který se zavřel, ze seznamu vypadne, takže by odložení leželo v souboru napořád).
+
+**Ukládá se k PR, ne k `headSha`, a je to zapsaná volba proti tvrdé podmínce č. 5.** Ta mluví
+o **nálezech**: tvrzení o kódu se nesmí ukazovat proti kódu, který už neexistuje. Odložení o kódu
+netvrdí nic — je to moje rozhodnutí o tom, kdy se na PR podívám, a push ho nemá zneplatnit, nýbrž
+**splnit**. Precedens je rozhovor nad PR (#452). Hlava v tom přesto figuruje, jen v opačné roli: je
+to **měřidlo podmínky**, ne klíč záznamu.
+
+**Čte se před prvním tikem** (`loadStoredSnoozes()` hned po obnovení záložek): automat i notifikace
+se odložených ptají v tiku, takže by první tik po startu pustil review na PR, který jsem si schoval.
+
+### Jen cizí PR, a je to hranice kresby
+
+`Policy.canSnooze(_:)` pouští jedině `.theirs`. Důvod není „vlastní PR se odkládat nemá“, ale
+**kresba**: blok `Odložené` stojí pod **frontou** a na **desce**, obojí nad cizími PR, takže
+odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde by se neobjevilo — tedy zrovna ta tichá díra, kvůli které tohle issue existuje. Na
+vlastním řádku se nabídka **nekreslí vůbec**, ne zašedle (tentýž vzor jako merge na cizím PR).
+
+### Co odložení nedělá
+
+- **Neruší běžící review.** Session je utracená v okamžiku, kdy začne (`AutoRunLedger.take`), takže
+  zabít ji uprostřed znamená zaplatit a nic nedostat. Co odložení vypne, je **další** běh.
+- **Nezavírá otevřenou záložku.** Odložení mluví o frontě, kdežto otevřená záložka je rozdělaná
+  práce (a od #531 se počítá do `pullRequestsInPlay`).
+- **Neuklízí nic z disku.** Klon, nálezy, drafty i značky `Prošlo` zůstávají — viz tabulka
+  *Které místo chce kterou množinu*.
+- **Nezvoní.** Banner o doběhlém review se u odloženého PR **nepošle**, ale do dění se zapíše
+  (`wasAnnounced: false`, tedy chip `bez banneru`): vyrušit ne, dohledat ano.
+
+### Nabídka a klávesy
+
+`Policy.snoozeOffers(now:calendar:)` vydá čtyři volby s klávesami `⌥1`–`⌥4`. **Nejsou v katalogu
+zkratek okna** (`WindowShortcut`) schválně: zaregistrované oknem by přebily psaní v každém textovém
+poli, a platit mají jedině nad rozbalenou nabídkou. Rozhodnuté jsou přesto v `Policy` a popiska se
+z kombinace **odvozuje** (`SnoozeOffer.shortcutLabel`), takže se nedá napsat `⌥1` vedle jiné klávesy.
+
+**První volba míří na *nejbližší* devátou, ne na zítřek**, a titulek se z toho **odvozuje**
+(`snoozeMorningTitle`): odložení v jednu v noci má vrátit PR za osm hodin, ne za dvaatřicet —
+a napsané `zítra` by tehdy lhalo. Poznámka v bloku (`snoozeDeadlineLabel`) počítá `zítra` proti
+předanému `now`, ne proti systémovým hodinám: `Calendar.isDateInTomorrow` se ptá na skutečný
+dnešek, takže by se rozešla s okamžikem, ze kterého se počítá zbytek odložení (tentýž kořen jako
+globální stav procesu v `Tests/`, #367).
+
+**`Vlastní datum…` z kresby vypadlo a je to zapsaná mezera proti zadání issue**: kalendář
+v kontextové nabídce je druhý překryv nad prvním a je to vlastní obrazovka; delší odklad než týden
+se dá složit dvojím odložením.
+
+**Blok je pod frontou přišpendlený ke spodní hraně** (`safeAreaInset(edge: .bottom)` na `content`,
+ne na `list`), a je to rozhodnutí, ne vedlejšek: musí být vidět i nad **prázdným** seznamem, tedy
+zrovna ve stavu, ve kterém by tichá díra bolela nejvíc.
+
 ## Otevřít PR mimo zdroje (#531)
 
 Zdroje (#4) definují **frontu**: co se hledá, na to se čeká, to je na kartách, v odznaku a
@@ -10395,7 +10598,12 @@ hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
   konzument; podmínka je proto `activityLog != nil`, ne `watchesPullRequestActivity` (ta jmenuje
   i notifikační centrum právě proto, že u ostatních druhů je druhým konzumentem).
 
-### Které místo chce kterou množinu (#332)
+### Které místo chce kterou množinu (#332, od #512 dvě osy)
+
+**Od #512 se zúžení skládá ze dvou nezávislých os**: podle **autora** (`.theirs` / `.mine`,
+#332) a podle **odložení** (`Policy.pullRequests(_:withoutSnoozed:)`). Sloupec `Množina` mluví
+o té první; třetí sloupec u míst, kterých se týká i ta druhá, říká proč. Pravidlo je stejné
+u obou: **je to pohled, ne nový zdroj pravdy**, takže na žádné z nich nesmí viset úklid.
 
 | Místo | Množina | Proč |
 |---|---|---|
@@ -10416,6 +10624,11 @@ hlavou, zapíše ho ten, kdo je první — datum je z obou cest stejné.
 | `summary(for:)` | obojí **plus záložky mimo zdroje** (#531) | odpovídá na „co víme o **tomhle** PR“, ne na „co je ve frontě“; u záložky mimo zdroje se shrnutí skládá z dotaženého detailu |
 | `knownRepositories` (nastavení), `filterOptions` | obojí | přenastavit chci i repo, ve kterém mám jen svoje PR |
 | paleta ⌘K | obojí, rozřazené do **dvou skupin** (#336) | katalog čte plný seznam a `Policy.ownership` z něj skládá `Pull requesty k review` a `Moje PR`; ⌘K jen hledá, nic neuklízí |
+| **bez odložených** (#512): `queuePullRequests`, `visibleQueuePullRequests`, `railQueueCount`, `queueSummary`, `boardEntries`, odznak v Docku, `Policy.automaticallyReviewable`, `announceNewPullRequests`, `notifyAboutFinishedReview` | `.theirs` bez odložených | *nechci to teď vidět* je tvrzení o frontě, takže se z ní PR schová všude, kde se o frontě něco říká — **včetně automatu**: odložení, po kterém se stejně utratí session, je odložení jen na obrazovce |
+| **s odloženými** (#512): `pullRequests`, `visiblePullRequests`, `filterOptions`, `knownRepositories`, `summary(for:)`, `handleNotificationClicks`, úklid a eviction, sekce `Rozdělaná` | obojí | odložený PR má na disku klon, nálezy i rozdělané review jako každý jiný — uklidit mu je jen proto, že ho zrovna nechci vidět, by znamenalo začínat po návratu od nuly; a repo, jehož jediné PR je odložené, se pořád sleduje |
+| blok `Odložené` **pod frontou** (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené, **po filtru** | doplněk k `visibleQueuePullRequests` nad **tímtéž** vstupem, takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
+| blok `Odložené` **na desce** a `· 2 odložené` ve větě pod pozdravem (`snoozedPullRequests`) | `.theirs`, **jen** odložené, **před filtrem** | doplněk k `boardEntries`, a ty filtr taky neznají: deska odpovídá na „co udělám teď“, ne na „co mám zrovna odškrtnuté“, takže nad zapnutým filtrem by věta hlásila míň, než kolik deska schovala |
+| nabídka `Odložit` na řádku (`snoozeAction(for:)`) | `.theirs` | **všude, kde se kreslí `PullRequestRow`** — ve frontě, v sekci `Rozdělaná` i v pruhu desky; je to jeden řádek, takže jedna podoba (#172), a hlídá to stráž nad zdrojáky |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v
   `Policy.automaticallyReviewable` **první v řadě**, takže se PR dál nezvažuje, ať si repo řeklo
@@ -13919,3 +14132,111 @@ Sekce **51** návrhu — hlavička souboru s `↗`, karta nálezu s `Otevřít v
 `Nastavení › Systém` ve dvou stavech a čtyři hlášky poruch. Leží na stránce *Změněné soubory*,
 protože odtud se ta akce spouští; stránku *Nastavení* nepřekresluje, jen z ní bere jednu sekci
 (tentýž vztah jako 49 k 10).
+
+## Návrh změny kódu (#528)
+
+GitHubový blok ` ```suggestion ` je nejúčinnější druh komentáře — autor ho přijme jedním kliknutím.
+Do #528 ho composer u řádku neuměl a ve vlákně od kolegy se kreslil jako obyčejný blok kódu, tedy
+k nerozeznání od ukázky. Přibylo obojí: **skládání z výběru** a **čtení jako mini diff**.
+
+Kód drží čtyři místa: `Policy` (`App/Policy/CodeSuggestionPolicy.swift`, čisté funkce),
+`CodeSuggestion` (`App/Models/`), `SuggestionBlockView` (kresba mini diffu) a `TextInsertionBox`
+(kudy blok doputuje do pole). Zbytek jsou úpravy tam, kde se to potkává s dnešním oknem —
+`DraftCommentBubbleView`, `ThreadBubbleView`, `MarkdownText` a `AgentPromptText`.
+
+### Není to další cesta ven, a je to celý bod
+
+Návrh **je text komentáře**. Odchází s review přes `ReviewPublishing.submit`, tedy tou cestou, která
+tu byla od #67 — tvrdá podmínka č. 1 se nemění ani o položku a grep na `ReviewPublishing` vydává dál
+sedm souborů z `App/Publish/`. *Aplikovat* návrh (GraphQL `applySuggestedChanges`) je **zápis do
+repozitáře** a schválně tu není: na to je od #466 druhý protokol s vlastními guardy a s potvrzením,
+a přidat desátou metodu k tomu prvnímu by ten rozdíl zahodilo. `CodeSuggestionTests` na to má dvě
+záporná tvrzení — že se to jméno v `App/` nikde nevyskytuje a že žádný ze čtyř nových souborů
+`ReviewPublishing` ani `BranchPushing` nezná.
+
+### Blok se skládá z výběru, ne z ruky
+
+`Policy.suggestionOffer(for:in:)` vrátí buď blok **předvyplněný původními řádky**, nebo větu, proč to
+nejde. Předvyplnění není pohodlí: návrh psaný z ruky se s kódem, na který se váže, rozejde při prvním
+překlepu v odsazení — a GitHub takový návrh **přijme**, jen z něj vyjde jiný soubor, než jaký měl
+vzniknout. Takhle se návrh přepisuje, ne píše.
+
+Odmítnutí jsou tři a každé má vlastní větu:
+
+- **výběr v diffu není** (rozbalený kontext #47, jiný soubor) — nemá se z čeho předvyplnit;
+- **výběr je ze staré strany** — návrh se aplikuje na hlavu PR, takže k odebranému řádku nemá co
+  nahradit. Posuzují se **oba** konce rozsahu, ne jen ten, u kterého bublina visí;
+- **výběr přesahuje přes hranici hunku** — a tohle je ta věta, kvůli které funkce existuje. Rozsah
+  přes dva hunky je u **komentáře** v pořádku (změřeno u #110, GitHub ho bere), jenže návrh nahrazuje
+  **souvislý** kus souboru: mezi hunky leží kód, který diff neukazuje, a ten by návrh přepsal taky.
+
+Odebraný řádek **uvnitř** rozsahu se vynechá — v nové verzi souboru není, takže by ho návrh vracel
+zpátky. Nabídka se počítá **až když se na ni někdo zeptá** (`FileDraftActions.suggestion`), protože
+je to průchod hunky; ptá se jedině bublina komentáře, a těch je na souboru pár. Tatáž úvaha jako
+u `DraftActions.bound(lazilyTo:)`.
+
+### Do pole se vkládá živý text, ne to, co ví store
+
+`DraftTextEditor` drží rozepsaný text u sebe a dolů ho posílá **po odmlce 400 ms**. Blok složený nad
+hodnotou ze storu by se s tou odmlkou potkal: store zná starší text, blok by se přilepil k němu a
+rozepsaná věta by se při návratu hodnoty přepsala — je to tentýž případ, jaký má editor popsaný
+u převzetí nálezu do těla review. Vložení proto jde přes **`TextInsertionBox`** rovnou do `value`,
+tedy do toho, co je vidět; uložení pak obstará obvyklá cesta (`onChange(of: value)`). Vzor je
+`EmojiSuggestionBox`: sdílený stav, kterým si pole a jeho okolí podávají jednu věc.
+
+Pole s návrhem je **vyšší** (`Policy.draftEditorHeight(hasSuggestion:)`). `TextEditor` s obsahem
+neroste, takže do pole na dva řádky se čtyřřádkový blok vejde jedině scrollováním — a to je u návrhu
+ta nejhorší možná podoba, protože se v něm přepisují původní řádky a je potřeba je vidět naráz.
+
+### Náhled se čte z těla komentáře, ne z toho, co tlačítko vložilo
+
+Blok se dá přepsat, smazat i napsat rukou, takže druhý zdroj pravdy by ukazoval návrh, který
+v komentáři není. `Policy.suggestions(in:replacing:)` proto vytáhne fence z **markdownu těla** —
+a jedině z **nejvyšší úrovně**: fence uvnitř citace nebo `<details>` je ukázka, ne návrh, který jde
+přijmout (GitHub z odcitovaného návrhu tlačítko `Apply` taky nedělá).
+
+Existuje ve dvou podobách: nad textem a nad **už rozloženými bloky**. Ta druhá je kvůli pravidlu
+#224 — bublina je buňka líného seznamu, takže „nese tenhle komentář návrh?“ padne při každém
+překreslení, kdežto `MarkdownRenderCache` rozklad drží. `Policy` cache nezná a znát nemá; krmí ji
+volající.
+
+### Čtení ve vlákně — a jedna zapsaná mez
+
+`MarkdownText` má `suggestionOriginal` a jsou to **tři stavy, ne dva**: `nil` znamená „tady se návrhy
+nekreslí“ (popis PR, rozhovor s Claudem — tam se návrh přijmout nedá a GitHub kreslí obyčejný blok
+kódu), prázdné pole „návrh to je, ale co nahrazuje, nevíme“ a neprázdné je celý mini diff.
+Vnořeným blokům se nepředává, což drží tutéž mez jako `Policy.suggestions`.
+
+Červenou stranu vydává `Policy.suggestionOriginal(of:)` z `diffHunk`u vlákna, který končí přesně
+u komentovaného řádku (#158). **Je to jeden řádek, i když návrh nese tři**, a je to mez, ne
+opomenutí: kde rozsah vlákna začíná, `ReviewThread` nedrží — `startLine` se v konverzačním dotazu
+netahá a dotahovat ho by byl zásah do nejdražšího čtení v aplikaci kvůli jedné kresbě. Tvrdit
+červeně dva řádky, které jsme si domysleli, je horší než nakreslit ten jeden, o kterém data mluví,
+takže hlavička bloku počítá **nové** řádky (`návrh · 2 řádky`), ne nahrazované. Návrh bez jediného
+řádku je mazání a říká se to slovem (`návrh · smazat`); `návrh · 0 řádků` by vypadalo jako prázdný
+blok.
+
+### Do zadání pro agenta — jen na vlastním PR
+
+Vlákno s návrhem dostane v zadání **úkol** — větu *Aplikuj návrh od odinuv na ř. 41 — nové znění je
+v bloku `suggestion` níž.* Stojí **nad** textem vlákna, ne místo něj, protože próza kolem návrhu bývá to,
+proč se návrh píše. V nadpisu položky k tomu přibude značka `návrh změny`: je to jediná položka
+zadání, u které je hotové znění, takže agent nemá co vymýšlet — a z odstavce prózy pod tím se to
+pozná až po přečtení.
+
+Tlačítko `Do zadání pro agenta` se kreslí **jen na vlastním PR**, a to tak, že na cizím **není
+vůbec**, ne zašedle (tatáž úmluva jako u `+ label`, #392: zašedlé tlačítko tvrdí „tady se to dělá,
+jen teď ne“, a na cizím PR se to nedělá nikdy). Drží to `ThreadActions.handoff`, jehož `nil` znamená
+„nekreslit“; brána je `store.isOwnPullRequest`. Pod tlačítkem stojí věta, že **aplikovat návrh jde na
+GitHubu** — bez ní by se to tlačítko hledalo.
+
+### Zákres
+
+Sekce **54** návrhu — composer s vloženým návrhem v diffu a vlákno s návrhem v panelu. Leží na
+stránce *Konverzace*, i když levá polovina je ve *Změněných souborech*: obě poloviny jsou jedna věc
+a čtení návrhu je ta, kvůli které se tam chodí.
+
+**Patka `Přidat do review · Zrušit` z decku v ní není, a je to vědomá odchylka.** V téhle aplikaci je
+komentář v rozdělaném review od chvíle, kdy vznikne (#65), takže by potvrzovací krok potvrzoval něco,
+co se už stalo — a druhé tlačítko `Zrušit` vedle `Vyjmout z review` v hlavičce by znamenalo dvě jména
+pro tutéž akci. Slib *odejde s review, ne hned* nese věta pod náhledem a tab `Moje review`.

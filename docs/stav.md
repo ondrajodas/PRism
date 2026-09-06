@@ -8462,6 +8462,141 @@ je **101 testů v 10 suitách za 0,329 s**.
 **Copilot se na tenhle PR schválně nepouštěl** — GitHub má výpadek entitlementu, tatáž příčina jako
 u #570. Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
 
+## #541 — přepnutí na `Změněné soubory` se změřilo; zlevnit se nepodařilo
+
+**Měřicí issue, a výsledek je negativní i doložený.** Přepnutí na tab s diffem stojí nad ostrým PR
+**737 ms u 45 souborů, 1,10 s u 71 a 1,17 s u 157** (CPU hlavního vlákna, Debug, okno 1512×874).
+Čísla z #541 tedy nad dnešním `main`em platí.
+
+**Hlavní zjištění: ostrý diff není zvláštní, je jen větší.** Sonda uměla do #541 nejvýš 2 000
+řádků, kdežto ostré diffy mají 5 200 až 6 200 — a měnily naráz tři věci. Přibylo proto **syntetické
+dvojče** o týchž souborech, hunkách a řádcích, ale s generovaným textem; měří se **hned vedle své
+předlohy v témž běhu**. Vyšlo stejně ve všech třech velikostech, takže zvýrazňování syntaxe,
+word-level rozdíl ani rozmanitost obsahu tu cenu nedrží.
+
+**Věta ze zadání, která už neplatí:** přepnutí **bez** diffu nestojí 54–60 ms nezávisle na počtu
+souborů, ale **82 → 128 → 237 ms** se 45 → 71 → 157 soubory. Ta čísla v #541 měla ablovaný pás mapy;
+v okně, jak ho člověk vidí, roste se soubory pás mapy PR (#501) i rozložený sloupec s itinerářem
+(#506/2), protože oba stojí vedle **všech** tabů. Z té sekundy je tedy ~240 ms mimo diff.
+
+**Šestá zamítnutá varianta v téhle rodině.** V `sample`u drží `DiffView.swift:517` (čtení `$0.size`
+v `onGeometryChange`) 26 až 42 % hlavního vlákna. Přesun téhož modifikátoru na `background` ho
+z profilu **odstranil** a **cenu nezměnil** — tatáž práce se objevila pod
+`AnimatableFrameAttribute`. Zůstalo z toho pravidlo o čtení `sample`u, ne oprava.
+
+**V `App/` se nezměnilo nic**, takže na obrazovce není co vidět; změny jsou v sondě a v dokumentaci.
+Zapsané jsou i dvě meze měření: jeden ze čtyř vzorků ukazoval 44,6 % v procházení responder stromu
+a tři další nulu (proto se kořen čte u každého vzorku zvlášť, #350), a sonda hlásí, že se bloky mimo
+pás **neodnasazují vůbec** (219 z 219), kdežto #472 u 2 000 řádků zapsalo pět — to je **neověřená
+mezera**, protože sonda diffem nescrolluje a v harnessu se to rozhodnout nedá.
+
+**Měřilo se pod zátěží tří dalších slotů** (`load average` 3,9 až 9,4), proto jsou v tabulkách obě
+hodnoty ze dvojice, ne průměr.
+
+**Testů je nad slitým stavem (po #530 a #572) 5 530 v 542 sadách**, z toho **+3** z tohohle PR —
+`DiffMaterialTwinTests`, protože na tom, že se dvojče předloze velikostí vyrovná, stojí celý závěr.
+
+**Plný běh nad slitým stavem byl falešně červený a je to ta známá třída, ne regrese.** Dvanáct sad
+spadlo pod souběžným plným během jiného slotu; pozná se to podle tří věcí naráz: **hláška je
+o čekání** (46× `Nedočkalo se: review doběhne … strop 120.0 seconds`, k tomu jednou `metrika písma
+se neusadila` a šestkrát `.timedOut` v `RepoCheckout proti skutečnému gitu`), **spadlé sady se
+změny netýkají** — v `App/` se nezměnil znak a sada tohohle PR v tom **červeném** běhu prošla —
+a **v izolaci projdou hned**: těch dvanáct plus `DiffMaterialTwinTests` je **104 testů ve 13 sadách
+za 11,1 s**.
+
+**Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu — tatáž příčina jako
+u #572, #570, #530, #507, #542 a #491. Je to **neověřená mezera**; vlastní revize diffu proběhla
+a je popsaná v PR.
+
+## #528 — návrh změny kódu z výběru řádků a jeho čtení ve vlákně (zákres 54)
+
+GitHubový blok ` ```suggestion ` je nejúčinnější druh komentáře — autor ho přijme jedním kliknutím.
+Composer u řádku ho neuměl a ve vlákně od kolegy se kreslil jako obyčejný blok kódu. Přibylo obojí:
+tlačítko **`Návrh změny`**, které vloží blok **předvyplněný původními řádky** a pod polem ukáže
+náhled mini diffu, a **čtení návrhu ve vlákně** jako mini diff s tlačítkem `Do zadání pro agenta`
+na vlastním PR.
+
+**Tvrdá podmínka č. 1 se nemění ani o položku.** Návrh je **text komentáře** a odchází s review přes
+`ReviewPublishing.submit`; grep vydává dál sedm souborů u `ReviewPublishing` a tři u `BranchPushing`,
+`SingleWayOutTests` zůstaly beze změny. *Aplikovat* návrh (`applySuggestedChanges`) je zápis do
+repozitáře a schválně tu není — na to je agent a push se sheetem (#466). Hlídají to **dvě stráže nad
+zdrojáky**: to jméno se v `App/` nesmí vyskytnout a čtyři nové soubory nesmí znát ani jeden ze dvou
+protokolů.
+
+**Odmítnutí nese větu, ne zašedlé tlačítko.** Rozsah přes dva hunky je u komentáře v pořádku (#110),
+u návrhu ne: mezi hunky leží kód, který diff neukazuje, a přijatý návrh by ho přepsal. Totéž u řádku
+ze staré verze souboru a u kotvy, která v diffu není.
+
+**Zapsaná mez u čtení:** červená strana mini diffu je **jeden řádek** (z `diffHunk`u, který končí
+u komentovaného řádku). Kde rozsah vlákna začíná, data vlákna neříkají, takže hlavička bloku počítá
+**nové** řádky, ne nahrazované — hádat rozsah by bylo tvrzení, které data neunesou.
+
+**Sonda našla dvě věci, které z kódu vidět nebyly:** tlačítko `Do zadání pro agenta` se v panelu
+o 300 bodech ořezávalo na `Do zadání pro ag…` (věta vedle něj se přesunula pod něj) a pole komentáře
+ukazovalo z vloženého bloku dva řádky, protože `TextEditor` s obsahem neroste.
+
+**Copilot se na tenhle PR schválně nepouštěl.** GitHub má výpadek entitlementu (`ineligible_app`) —
+tatáž příčina jako u #541, #572, #570 a dalších. Je to **neověřená mezera**; vlastní revize diffu
+proběhla a je popsaná v PR.
+
+## #512 — Odložit PR: do rána, do dalšího pushe, do dalšího komentáře (M16, zákres 53)
+
+**Filtr schová repo nebo autora, ne jeden pull request.** Botí PR ležel ve frontě týden, počítal se
+do odznaku i do věty pod pozdravem — a automat na něj každou minutu zvažoval review.
+
+**Odložení je stav, který něco skrývá, takže musí být poznat, že něco skryté je.** To je celé
+zadání a promítlo se do **čtyř** vývodů, ne jednoho: blok `Odložené · 2` pod frontou, připsání
+`· 2 odložené` do věty pod pozdravem na desce (odložené PR není v žádném pruhu), vlastní prázdný
+stav fronty `Všechno odložené` a řádek `Vrátil se z odložení · přišel push` v `Dění`. Fronta, ze
+které práce potichu zmizí, je horší než fronta, ve které leží.
+
+**Podmínka, ne jen čas** — `Policy.snoozeExpired(_:head:comments:now:)` nad třemi případy. Měří se
+proti **hodnotě**, ne proti `updatedAt`: to se hýbe i po štítku, takže by `do dalšího komentáře`
+skončilo pushem. Rozhodlo se, že **neznámé měřidlo nikdy neznamená „vypršelo“** — základ dosadí
+první rozhlídka a do té doby odložení trvá. Směr chyby je zvolený schválně: odložení, které se
+zruší dřív, než mělo, vypadá jako porucha, kdežto odložení o minutu delší ukončí `Vrátit teď`.
+
+**Zmizí všude naráz, včetně automatu.** `Policy.automaticallyReviewable` dostalo `isSnoozed` bez
+výchozí hodnoty — *nechci to teď vidět* znamená i *neplať za to teď*. Běh, který už běží, se
+**neruší**: session je utracená v okamžiku, kdy začne. Notifikace o doběhlém review se u odloženého
+PR nepošle, ale **do dění se zapíše** (chip `bez banneru`).
+
+**Ukládá se k PR, ne k `headSha`** (`snoozed.json`, `SnoozeStore`), a je to zapsaná volba proti
+tvrdé podmínce č. 5: ta mluví o nálezech, kdežto odložení o kódu netvrdí nic — push ho nemá
+zneplatnit, nýbrž **splnit**. Precedens je rozhovor nad PR (#452). Čte se **před prvním tikem**,
+jinak by první tik po startu pustil review na PR, který jsem si schoval.
+
+**Rozhlídka je jeden dávkový GraphQL dotaz na všechna odložená PR** (`SnoozeProbeQuery`,
+`fetchSnoozeSignals`), s předfiltrem přes `updatedAt` a se stropem dvacet — na klidný den **nula
+volání**, u časové podmínky **nikdy** žádné. Vlastní dotaz vedle toho na hlavy (#420), protože obě
+rozhlídky mají jiný předfiltr; cena je jedno volání navíc v nejhorším případě.
+
+**Odložit jde jen cizí PR**, a je to hranice **kresby**: blok visí pod frontou a na desce, takže
+odložené vlastní PR by ze sekce `Moje PR` zmizelo a nikde by se neobjevilo. **Na cizím PR se odložit
+dá naopak odevšad, kde se ten řádek kreslí** — a je to oprava po proklikání, ne původní návrh:
+nabídka byla navěšená jedině ve `PullRequestListView`, kdežto `PullRequestRow` se kreslí na **třech**
+místech, takže na domově (deska) odložit nešlo nic, přestože tam věta pod pozdravem hlásila
+`2 odložené`. Opravily to tři věci: `SnoozeAction` jako **jedna hodnota z jednoho místa**
+(`AppStore.snoozeAction(for:)`), **stráž nad zdrojáky** (kde stojí `PullRequestRow(`, tam musí stát
+i `snoozeAction:`) a **týž blok `Odložené` v pravém sloupci desky**, kreslený z týchž řádků
+(`SnoozedRowsView`). Číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné číslo.
+
+**Zákres je sekce 53** v `docs/navrh.html` (dva nové komponenty: `.s53-menu` a `.s53-snoozed`,
+ten druhý s modifikátorem `.plain` pro rám bloku na desce).
+**`Vlastní datum…` z kresby vypadlo** — kalendář v kontextové nabídce je vlastní obrazovka a delší
+odklad než týden se dá složit dvojím odložením; je to **zapsaná mezera proti zadání issue**.
+
+**Zákres sekce 53 to dokreslil zpětně**: druhá dvojice panelů (věta pod pozdravem vedle bloku
+v pravém sloupci desky) a poznámka 193 mluví o **čtyřech** vývodech místo tří. `docs/navrh.md`
+sedělo na 52 sekcích nad třiapadesáti — srovnáno.
+
+Testů je nad slitým stavem (po #578) **5 641**, z toho **+80** z tohohle PR (pět nových sad, 78
+testů, a dvě tvrzení navíc v `AutomaticReviewTests`), a jsou zelené; regrese se ověřila vložením sedmi
+regresí — tří původních a čtyř po proklikání, mezi nimi i té, která do `main`u málem prošla
+(vyhozené `snoozeAction:` z `BoardView`). **Copilot se na tenhle PR schválně
+nepouštěl** — GitHub má výpadek entitlementu (`ineligible_app`), tatáž příčina jako u #570 a #572.
+Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
+
 ## #508 — Dráha smyčky vlastního PR: sedm stanic v hlavičce
 
 **Pod souřadnicemi vlastního PR stojí dráha se sedmi stanicemi** — *Nálezy → Zadání → Agent → Push

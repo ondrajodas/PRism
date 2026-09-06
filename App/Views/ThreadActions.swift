@@ -25,6 +25,16 @@ struct ThreadActions {
     /// Co se s vláknem právě děje. `nil` = nic.
     var state: (ReviewThread) -> ThreadActionState? = { _ in nil }
 
+    /// Vzít vlákno **do zadání pro agenta** (#528) — na vlastním PR, u vlákna s návrhem změny.
+    ///
+    /// `nil` znamená, že se tlačítko **nekreslí vůbec**, ne zašedle: na cizím PR se návrh jen
+    /// čte, protože aplikovat ho je věc autora. Zašedlé tlačítko tvrdí „tady se to dělá, jen
+    /// teď ne“ — a na cizím PR se to nedělá nikdy (tatáž úvaha jako u `+ label` v panelu, #392).
+    ///
+    /// **Není to cesta ven.** Otevře panel se zadáním; aplikovat návrh je zápis do repozitáře
+    /// a ten jde přes agenta a `git push` se sheetem (#466), ne přes tohle tlačítko.
+    var handoff: ((ReviewThread) -> Void)?
+
     /// Proč se odesílat nedá. `nil` = dá se.
     ///
     /// Je to stav, ne akce, ale patří k `send` stejně jako `DraftActions.sendBlock` k odeslání

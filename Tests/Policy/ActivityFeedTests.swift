@@ -156,7 +156,7 @@ extension ActivityFeedTests {
     @Test("Chip bez banneru dostanou jen druhy, které banner umí")
     func silentChipOnlyWhereABannerIsPossible() {
         for kind in ActivityEvent.Kind.allCases {
-            let computed = kind == .staleFindings || kind == .leftQueue
+            let computed = kind == .staleFindings || kind == .leftQueue || kind == .returnedFromSnooze
             #expect(Policy.showsSilentChip(kind, announced: false) == !computed)
             // Doručený banner chip nedostane nikdy — o tom, že nepřišel, není co říct.
             #expect(!Policy.showsSilentChip(kind, announced: true))

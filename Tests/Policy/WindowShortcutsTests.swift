@@ -331,6 +331,11 @@ struct WindowShortcutsTests {
             // diff commitu), je nad ním zakázaná (`Policy.canCloseCommit`). `⌘G` a `⌘⇧G` jdou
             // naopak z katalogu (`WindowShortcutButtons`), protože musí platit i s fokusem v poli.
             "Views/DiffSearchBar.swift",
+            // Nabídka `Odložit` (#512): `⌥1`–`⌥4` platí **uvnitř otevřené nabídky**, ne v okně —
+            // do katalogu proto nepatří (`SnoozeOffer.key`). Zaregistrované oknem by přebily psaní
+            // v každém textovém poli; je to tentýž vzorec jako u palety a composeru výš, jen se
+            // překryv otevírá pravým tlačítkem. Kombinaci přesto rozhoduje `Policy`, ne kresba.
+            "Views/SnoozeMenu.swift",
         ]
 
         let found = Set(try sources().filter { $0.code.contains("keyboardShortcut(") }.map(\.path))

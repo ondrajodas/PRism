@@ -35,6 +35,27 @@ struct PullRequestListView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 PollStatusBanner(status: store.status, lastSuccess: store.lastSuccess)
             }
+            // Blok `Odložené` (#512) — **na `content`, ne na `list`**, a je to celý smysl téhle
+            // věci: musí být vidět i nad **prázdným** seznamem. Fronta, ve které je odložené
+            // všechno, je zrovna ten stav, ve kterém by tichá díra bolela nejvíc.
+            .safeAreaInset(edge: .bottom, spacing: 0) { snoozedBlock }
+    }
+
+    /// Blok `Odložené · 2` pod frontou (#512). V sekci `Moje PR` se nekreslí — vlastní PR se
+    /// odložit nedá (`Policy.canSnooze`), takže by tam byl vždycky prázdný.
+    @ViewBuilder private var snoozedBlock: some View {
+        if scope == .queue {
+            SnoozedBlockView(
+                pullRequests: store.snoozedQueuePullRequests,
+                // Kolik odložených schoval filtr — jinak by `do fronty →` z desky (kde se počítá
+                // před filtrem) vedlo na menší číslo bez vysvětlení. Tatáž slovní zásoba jako
+                // u prázdného stavu `filtered(hidden:)`.
+                hidden: store.hiddenSnoozedPullRequestCount,
+                note: store.snoozeNote(for:),
+                open: { store.openTab($0) },
+                wake: { pr in Task { await store.wake(pr) } }
+            )
+        }
     }
 
     /// Proč je seznam prázdný. **Dvě různé funkce, jeden typ** (#331): u vlastních PR se rozhoduje
@@ -115,6 +136,17 @@ struct PullRequestListView: View {
                 title: "Nevím, kdo jsi",
                 message: "Login přihlášeného účtu se nepodařilo zjistit, takže se nedá poznat, které PR jsou tvoje. Zkontroluj přihlášení v gh a spusť aplikaci znovu."
             )
+        // Fronta prázdná **není** — všechno je odložené (#512). Vlastní věta, ne `Žádné PR
+        // k review`: zelené „vyřízeno“ nad prací, kterou jsem si sám schoval, tvrdí opak toho, co
+        // je pravda. Tlačítko tu není schválně — blok `Odložené` visí hned pod tímhle stavem,
+        // takže cesta zpátky je na obrazovce vidět, ne schovaná za akci.
+        case .allSnoozed(let count):
+            EmptyStateView(
+                nature: .waiting,
+                symbol: "alarm",
+                title: "Všechno odložené",
+                message: snoozedMessage(count)
+            )
         case .noOwnPullRequests:
             EmptyStateView(
                 nature: .calm,
@@ -134,6 +166,18 @@ struct PullRequestListView: View {
         case .mine:
             "Filtr schovává \(Plural.czech(hidden, one: "tvůj otevřený pull request", few: "tvoje otevřené pull requesty", many: "tvých otevřených pull requestů"))."
         }
+    }
+
+    /// Věta u fronty, ze které je všechno odložené (#512). Říká **kolik** a **kde to je** —
+    /// samotné „všechno odložené“ by neřeklo, že se s tím dá něco udělat.
+    private func snoozedMessage(_ count: Int) -> String {
+        let subject = Plural.czech(
+            count,
+            one: "pull request čeká",
+            few: "pull requesty čekají",
+            many: "pull requestů čeká"
+        )
+        return "\(subject) na review, ale odložil jsem je. Vrátit je jde v bloku Odložené pod seznamem."
     }
 
     /// Kdy naposledy tik prošel — do věty prázdného stavu, jak to má návrh. `nil`, dokud
@@ -188,7 +232,11 @@ struct PullRequestListView: View {
                 // uzávěr nese jen identitu řádku; skládání textu je věc panelu, ne seznamu.
                 openPrompt: { store.openAgentPrompt(in: row.id) },
                 pending: row.pending,
-                activity: row.activity
+                activity: row.activity,
+                // Odložit (#512) — jedna hodnota z jednoho místa (`AppStore.snoozeAction(for:)`),
+                // stejně jako na desce a v sekci `Rozdělaná`. Brána `Policy.canSnooze` je uvnitř,
+                // takže na vlastním řádku přijde prázdná nabídka a nenakreslí se nic.
+                snoozeAction: store.snoozeAction(for: row.pullRequest)
             )
         }
     }

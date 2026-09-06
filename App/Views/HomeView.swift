@@ -120,7 +120,12 @@ struct HomeView: View {
                     ownership: ownership,
                     openPrompt: { store.openAgentPrompt(in: pullRequest.id) },
                     pending: handoff.pending,
-                    activity: handoff.activity
+                    activity: handoff.activity,
+                    // Odložit i tady (#512, oprava po proklikání) — **jeden řádek, jedna podoba**,
+                    // z téhož důvodu jako `Prompt →` o řádek výš. Cizí PR s rozdělaným review je
+                    // zrovna to, co se odkládá; odložení je o **frontě**, takže z téhle sekce
+                    // řádek nezmizí a rozdělaná práce se neschová.
+                    snoozeAction: store.snoozeAction(for: pullRequest)
                 )
             }
         }

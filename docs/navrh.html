@@ -1979,6 +1979,47 @@ footer.end {
 .s50-old .ri .badge { top: 1px; right: 0; }
 .s50-old .ri.on::before { content: none; }
 
+/* Sekce 53 — odložit PR (#512). Dva nové komponenty: nabídka nad řádkem fronty a tichý blok
+   `Odložené` — ten stojí na dvou místech (pod seznamem a v rámečku `.block` v pravém sloupci
+   desky). Rám na desce nese existující `.brd .block`, takže druhá kresba přidala **jediný
+   modifikátor** `.s53-snoozed.plain` (bez podkladu a bez horní linky, protože ten rám má vlastní).
+   Existující třídy nestačily ani u jednoho:
+   - `.s53-menu` je **kontextová nabídka**, ne `.card` ani `.empty` — má tmavší podklad, položky
+     s klávesou vpravo a stín (`--shadow-lg`), který ji zvedá nad seznam. Nic takového dokument dosud nekreslil,
+     protože do #512 se v okně nabídka pravým tlačítkem nikde neotevírala.
+   - `.s53-snoozed` je **ztlumený seznam pod frontou**, ne `.qrow`: nemá proužek stavu, mapu PR
+     ani odznak review, protože není druhá fronta — je to seznam toho, co jsem si odsunul, a kdyby
+     vypadal jako fronta, nemělo by odložení smysl. */
+.s53-menu {
+  width: 232px; padding: 5px; border-radius: 9px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg); font-size: 12.5px;
+}
+.s53-menu .cap {
+  padding: 4px 9px 5px; font-size: 11px; color: var(--ink-3); letter-spacing: 0.01em;
+}
+.s53-menu .item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 5px 9px; border-radius: 6px;
+}
+.s53-menu .item.on { background: var(--accent-weak); color: var(--accent); }
+.s53-menu .item .k { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.s53-menu .item.on .k { color: var(--accent); }
+.s53-snoozed { background: var(--panel-3); border-top: 1px solid var(--line-soft); }
+.s53-snoozed .cap {
+  padding: 8px 14px 4px; font-size: 11.5px; font-weight: 560; color: var(--ink-2);
+}
+.s53-snoozed .row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 14px; font-size: 12px; color: var(--ink-2);
+}
+.s53-snoozed .row .note { font-size: 11px; color: var(--ink-3); flex: none; }
+.s53-snoozed .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Týž seznam v rámečku bloku (pravý sloupec desky) — rám nese `.block`, takže `.plain`
+   podklad i horní linku zahazuje. Jsou to dvě umístění jedné věci, ne dvě věci: kdyby si
+   každé kreslilo řádky po svém, rozešly by se první změnou. */
+.s53-snoozed.plain { background: none; border-top: none; padding: 4px 0; }
+
 /* ============================================================
    PRÁZDNÉ STAVY A PORUCHY
    ============================================================ */
@@ -3209,6 +3250,71 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 .locrow { display: flex; align-items: center; gap: 8px; padding: 0 10px 8px; }
 .locrow .loc { flex: 1; min-width: 0; padding: 0; }
 .ed-open { font-size: 11px; color: var(--accent); white-space: nowrap; flex: none; }
+
+/* ---- sekce 54: návrh změny kódu (#528) -------------------------------------------
+   **Mini diff, ne blok kódu.** GitHubový ` ```suggestion ` autor přijme jedním kliknutím, takže
+   je to nejúčinnější druh komentáře — a dokud se kreslil jako kód, nebylo z okna poznat, že se
+   liší od ukázky. Blok je proto vlastní komponenta (`.rv-sblock`) a kreslí se **stejně
+   v composeru i ve vlákně**: druhá kresba téhož by se rozešla s tím, co s návrhem udělá GitHub.
+
+   Barvy jsou `--del-bg` a `--add-bg`, tedy **tytéž pruhy jako v diffu** — nový token by tu byl
+   token bez protějšku v `Palette`. Znaménko je `::before` v `--crit`/`--ok`, jako ve sloupci
+   `.sg` u diffu.
+
+   Řádky se **neobtékají, ořezávají** (`white-space: pre` + `text-overflow`). Zalomený řádek kódu
+   v bublině široké 300 bodů se přestane číst jako řádek a mini diff by ztratil to jediné, čím je
+   čitelný: že červené a zelené řádky stojí pod sebou. */
+.rv-sblock {
+  border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+  font-family: var(--mono); font-size: 11px; line-height: 1.6; background: var(--panel);
+}
+.rv-sblock .hd {
+  padding: 3px 8px; background: var(--panel-3); color: var(--ink-3);
+  font-size: 10px; display: flex; gap: 8px;
+}
+.rv-sblock .hd .sp { flex: 1; }
+.rv-sblock .l { padding: 0 8px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.rv-sblock .l.del { background: var(--del-bg); }
+.rv-sblock .l.add { background: var(--add-bg); }
+.rv-sblock .l.del::before { content: "− "; color: var(--crit); }
+.rv-sblock .l.add::before { content: "+ "; color: var(--ok); }
+
+/* Bublina rozdělaného komentáře v diffu. **Třetí druh bubliny** vedle nálezu (`.inline-find`)
+   a vlákna (`.tl-card`), a je to tak schválně: nález je tvrzení aplikace, vlákno napsal někdo
+   jiný, a tohle je jediná bublina, do které píšu. Proužek je proto akcentový, ne stavový. */
+.rv-compose {
+  margin: 6px 14px 10px 54px;
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm); background: var(--panel-2); overflow: hidden;
+}
+.rv-compose header {
+  display: flex; align-items: center; gap: 8px; padding: 7px 11px;
+  border-bottom: 1px solid var(--line-soft); font-size: 11.5px; color: var(--accent);
+}
+.rv-compose header .sp { flex: 1; }
+.rv-compose header .at { color: var(--ink-3); font-size: 11px; }
+.rv-compose header .x { color: var(--ink-3); font-size: 11px; }
+.rv-compose .body { padding: 9px 11px; display: flex; flex-direction: column; gap: 8px; }
+/* Pole drží **surový text komentáře i s fencem** — je to markdownový editor, ne WYSIWYG, takže
+   se v něm blok píše tak, jak odejde. Náhled pod ním je to, co uvidí autor. */
+.rv-compose .field {
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+  padding: 6px 9px; font-size: 12.5px; color: var(--ink); white-space: pre-wrap;
+}
+.rv-compose .field .mono { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
+.rv-compose .note { font-size: 11px; color: var(--ink-3); }
+.rv-compose .note.warn { color: var(--stale); }
+
+/* Vybrané řádky v gutteru — tažení, které tu je od #252. Zvýrazňuje se **číslo a znaménko**,
+   ne plocha kódu: podklad řádku už nese, jestli je přidaný nebo odebraný, a druhá barva přes něj
+   by ten první význam přebila. */
+tr.sel td.ln { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+tr.sel td.sg { background: var(--accent-weak); }
+
+/* Věta u návrhu ve vlákně. **Aplikovat návrh tlačítko nemá a mít nebude** — je to zápis do
+   repozitáře, takže jde přes agenta a push se sheetem (#466). Věta to říká nahlas, ať se to
+   tlačítko nehledá. */
+.sg-apply { margin-left: auto; font-size: 11px; color: var(--ink-3); }
 
 /* --- úzké okno -------------------------------------------------- */
 @media (max-width: 1040px) {
@@ -5006,6 +5112,201 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
           předchozích nepřekresluje — mění se CSS railu a projeví se ve všech sekcích, které rail
           kreslí. Jediná výjimka je pruh <em>před</em> v levém sloupci nahoře: tam se stará poloha
           drží schválně, aby bylo co srovnávat.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s53">
+    <div class="section-head">
+      <div class="eyebrow">53 — Odložit PR</div>
+      <h2>Odložit PR: do rána, do dalšího pushe, do dalšího komentáře</h2>
+      <p class="muted">
+        <strong>Dneska</strong> se dá schovat repo nebo autor, ne jeden pull request. Botí PR leží
+        ve frontě týden, počítá se do odznaku i do věty pod pozdravem — a automat na něj každou
+        minutu zvažuje review.
+      </p>
+      <p class="muted">
+        <strong>Návrh</strong>: nabídka <em>Odložit</em> na <b>každém řádku cizího PR</b> (pravé
+        tlačítko i tlačítko pod kurzorem) a tichý blok <em>Odložené</em> — pod seznamem
+        <b>i v pravém sloupci desky</b>, kde o odložených mluví věta pod pozdravem. Odložení je
+        <strong>podmínka, ne jen čas</strong>: skončí ho termín, push, nebo komentář — a
+        <strong>zmizí všude naráz</strong>, včetně automatu a notifikací.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Nabídka nad řádkem fronty</div>
+        <div class="frame flat">
+          <div class="s53-menu">
+            <div class="cap">Odložit</div>
+            <div class="item on"><span>do zítra 9:00</span><span class="k">⌥1</span></div>
+            <div class="item"><span>do dalšího pushe</span><span class="k">⌥2</span></div>
+            <div class="item"><span>do dalšího komentáře</span><span class="k">⌥3</span></div>
+            <div class="item"><span>na týden</span><span class="k">⌥4</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Fronta o dva řádky kratší — a blok, který je drží</div>
+        <div class="frame flat">
+          <div class="qrow">
+            <div class="stripe" style="background: var(--crit);"></div>
+            <div class="mid">
+              <div class="t1">
+                <span class="pr-ico open">⬤</span>
+                <span class="title">chore: modernize dependencies (Symfony 8-ready, PHPUnit 11)</span>
+              </div>
+              <div class="t2">
+                <span class="slug">keboola/vault #85</span><span>·</span>
+                <span>odinuv</span><span>·</span><span>před hodinou</span>
+              </div>
+            </div>
+            <div class="right"><span class="pill crit">3 nálezy · 1 blokuje</span></div>
+          </div>
+          <div class="qrow">
+            <div class="stripe" style="background: var(--accent);"></div>
+            <div class="mid">
+              <div class="t1">
+                <span class="pr-ico open">⬤</span>
+                <span class="title">fix: nezahazovat token při souběžném refreshi</span>
+              </div>
+              <div class="t2">
+                <span class="slug">keboola/connection #21663</span><span>·</span>
+                <span>mzdrahal</span><span>·</span><span>před 20 minutami</span>
+              </div>
+            </div>
+            <div class="right"><span class="pill ok">čisté</span></div>
+          </div>
+          <div class="s53-snoozed">
+            <div class="cap">Odložené · 2</div>
+            <div class="row">
+              <span class="title">chore(deps): bump aws-sdk-php from 3.343.7 to 3.344.1</span>
+              <span class="note">vrátí se zítra 9:00</span>
+            </div>
+            <div class="row">
+              <span class="title">feat: nové rozhraní pro export do S3</span>
+              <span class="note">vrátí se s dalším pushem</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Deska — věta pod pozdravem o odložených mluví</div>
+        <div class="frame flat">
+          <div class="dash-head" style="padding: 12px 14px;">
+            <div>
+              <h4>Dobré ráno, Ondro.</h4>
+              <div class="sub">6 věcí na tahu · 7 čeká na ostatní · 2 se dají mergnout · <b>2 odložené</b></div>
+            </div>
+            <div class="when">poslední tik 09:41</div>
+          </div>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Deska — a v pravém sloupci se to číslo rozbalí</div>
+        <div class="frame">
+          <div class="brd">
+            <div class="block">
+              <header>
+                <span>Odložené <span class="cnt">2</span></span>
+                <span class="more">do fronty →</span>
+              </header>
+              <div class="s53-snoozed plain">
+                <div class="row">
+                  <span class="title">chore(deps): bump aws-sdk-php from 3.343.7 to 3.344.1</span>
+                  <span class="note">vrátí se zítra 9:00</span>
+                </div>
+                <div class="row">
+                  <span class="title">feat: nové rozhraní pro export do S3</span>
+                  <span class="note">vrátí se s dalším pushem</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">193</span>
+        <span class="body">
+          <b>Odložení je stav, který něco skrývá — takže musí být poznat, že něco skryté je</b>
+          <span>Fronta, ze které PR potichu zmizí, je horší než fronta, ve které leží: práci,
+          o které nikdo neví, nejde ani udělat, ani odmítnout. Odložení má proto <b>pět vývodů</b>
+          a všech pět je povinných: blok <em>Odložené · 2</em> <b>pod seznamem</b>, <b>týž blok
+          v pravém sloupci desky</b>, <b>připsání do věty pod pozdravem</b> (<code>· 2 odložené</code>,
+          protože v žádném pruhu odložené PR není), <b>vlastní prázdný stav fronty</b>, když je
+          odložené všechno — zelené <em>Žádné PR k review</em> by nad prací, kterou jsem si sám
+          schoval, tvrdilo opak toho, co je pravda — a <b>řádek v <em>Dění</em></b> při návratu (viz
+          poznámka 196). <b>Číslo, ze kterého nevede cesta, je horší než žádné číslo</b>: dokud blok
+          visel jedině pod frontou, hlásila deska <em>2 odložené</em> a rozbalit se to z ní
+          nedalo.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">194</span>
+        <span class="body">
+          <b>Podmínka, ne jen čas — a měří se proti hodnotě, ne proti <code>updatedAt</code></b>
+          <span><em>Do dalšího pushe</em> porovnává <b>hlavu</b>, <em>do dalšího komentáře</em>
+          <b>počet příspěvků</b> (komentáře pod PR plus odeslaná review). Přes <code>updatedAt</code>
+          by to nešlo: hýbe se i po štítku a po úpravě titulku, takže by <em>do dalšího komentáře</em>
+          skončilo pushem. Obojí přinese <b>jeden dávkový GraphQL dotaz na všechna odložená PR</b>
+          — tatáž škola jako dotaz na hlavy u sekce 27, včetně předfiltru přes
+          <code>updatedAt</code>: na klidný den <b>nula volání</b>, u časové podmínky <b>nikdy</b>
+          žádné.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">195</span>
+        <span class="body">
+          <b>Odložení, které přesto zazvoní, je odložení jen na obrazovce</b>
+          <span>Zmizet musí <b>všude naráz</b>: z fronty, z odznaku v railu i v Docku, ze souhrnu ve
+          stavovém řádku, z pruhů desky, z notifikací <b>a z automatu</b>. To poslední je to
+          podstatné — <em>nechci to teď vidět</em> znamená i <b>neplať za to teď</b>, takže odložený
+          PR se do plánovače nedostane vůbec, ať si repo řeklo cokoli. <b>Běh, který už běží, se
+          neruší</b>: session je utracená v okamžiku, kdy začne, takže zabít ji uprostřed znamená
+          zaplatit a nic nedostat.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">196</span>
+        <span class="body">
+          <b>Návrat udělá řádek v <em>Dění</em>, protože PR se nesmí objevit odnikud</b>
+          <span><code>Vrátil se z odložení · přišel push</code>. Bez toho řádku by se PR ve frontě
+          objevil bez vysvětlení a jediný způsob, jak zjistit proč, by bylo pamatovat si, co jsem
+          před týdnem naklikal. <b>Banner za to nechodí</b> — návrat je splnění mé vlastní
+          objednávky, ne novinka zvenčí; chip <em>bez banneru</em> se u něj proto nekreslí, stejně
+          jako u odchodu z fronty.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">197</span>
+        <span class="body">
+          <b>Jen cizí PR, a je to hranice kresby, ne jen pravidlo</b>
+          <span>Blok <em>Odložené</em> stojí <b>pod frontou a na desce</b>, obojí nad <b>cizími</b>
+          PR — odložené vlastní PR by ze sekce <em>Moje PR</em> zmizelo a <b>nikde</b> by se
+          neobjevilo, tedy zrovna ta tichá díra, které se tahle sekce vyhýbá. Na vlastním řádku se
+          nabídka <b>nekreslí vůbec</b>, ne zašedle: u vlastního PR rozhoduje o tom, kdy se na něj
+          podívám, to, kdy pushnu. <b>Na cizím se naopak kreslí všude, kde ten řádek je</b> — ve
+          frontě, v <em>Rozdělaných</em> i v pruhu desky. Je to jeden řádek, takže jedna
+          podoba.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">198</span>
+        <span class="body">
+          <b><code>⌥1</code>–<code>⌥4</code> platí uvnitř nabídky, ne v okně</b>
+          <span>Zaregistrované oknem by přebily psaní v každém textovém poli, takže do katalogu
+          zkratek nepatří — ale <b>rozhodnuté jsou pořád v <code>Policy</code></b> a popiska se
+          z kombinace <b>odvozuje</b>. <em>Vlastní datum…</em> z kresby vypadlo: kalendář
+          v kontextové nabídce je druhý překryv nad prvním a delší odklad než týden se dá složit
+          dvojím odložením. Je to <b>zapsaná mezera</b>, ne opomenutí.</span>
         </span>
       </div>
     </div>
@@ -11862,6 +12163,178 @@ body: <b>Díky za úklid anotací 🎉</b></div>
           <span>👍 jako reakce je jiné API (<code>POST …/reactions</code>) a byla by to
           <b>desátá</b> metoda protokolu. Zůstává mimo schválně: „emotikony jako na GitHubu“
           se dá číst i takhle, a výčet cest ven neroste omylem.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s54">
+    <div class="section-head">
+      <div class="eyebrow">54 — Návrh změny kódu · composer u řádku a čtení ve vlákně</div>
+      <h2>Návrh změny: blok, který autor přijme jedním kliknutím</h2>
+      <p class="muted">
+        GitHubový blok <code>```suggestion</code> je nejúčinnější druh komentáře — autor ho přijme
+        jedním kliknutím. Composer u řádku ho do <b>#528</b> neuměl a ve vlákně od kolegy se kreslil
+        jako obyčejný kód. Tady je obojí: <b>vlevo</b> composer, ve kterém tlačítko
+        <em>Návrh změny</em> vloží blok předvyplněný původními řádky, <b>vpravo</b> návrh od kolegy
+        na vlastním PR.
+      </p>
+      <p class="muted">
+        Sekce leží u <em>Konverzace</em>, i když levá polovina je v <em>Změněných souborech</em>:
+        obě poloviny jsou jedna věc a čtení návrhu je ta, kvůli které se sem chodí. Zákres je
+        z decku <em>Směry pro PRism</em>, stránka <em>T4</em>, odsouhlaseného 2. 9. 2026.
+      </p>
+    </div>
+
+    <div class="scroller">
+      <div class="win tall">
+        <div class="titlebar">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="tabstrip">
+            <span class="tab home">⌂</span>
+            <span class="tab active"><span class="dot" style="background: var(--ok);"></span><span class="label">Přidat cache k SecretClientu</span><span class="repo">#412</span><span class="x">×</span></span>
+          </div>
+          <div class="toolbtns"><span class="tbtn">⟳</span><span class="tbtn key">⌘K</span></div>
+        </div>
+        <div class="body-grid">
+          <div class="rail">
+            <span class="ri">⌂</span>
+            <span class="ri on">◫</span>
+            <span class="ri">☰</span>
+            <span class="grow"></span>
+            <span class="ri">⚙</span>
+          </div>
+          <div>
+            <div class="work" style="grid-template-columns: 1fr 380px;">
+              <div class="diffpane">
+                <div class="fhead">
+                  <span>▾</span>
+                  <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+                  <span class="sp"></span>
+                  <span class="rv-num" style="color: var(--ok);">+18</span>
+                  <span class="rv-num" style="color: var(--crit);">−6</span>
+                </div>
+                <table class="diff">
+                  <tr class="hunk"><td colspan="3">@@ -76,6 +76,8 @@ public function get(string $key): string</td></tr>
+                  <tr><td class="ln">79</td><td class="sg"></td><td class="code">    {</td></tr>
+                  <tr class="add sel"><td class="ln">80</td><td class="sg">＋</td><td class="code">        $row = $<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">get</span>($key) ?? $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key);</td></tr>
+                  <tr class="add sel"><td class="ln">81</td><td class="sg">＋</td><td class="code">        <span class="k">return</span> $row[<span class="st">'value'</span>] ?? <span class="st">''</span>;</td></tr>
+                  <tr><td class="ln">82</td><td class="sg"></td><td class="code">    }</td></tr>
+                </table>
+                <div class="rv-compose">
+                  <header>
+                    <span>✎ Můj komentář k review</span>
+                    <span class="at">řádky 80–81</span>
+                    <span class="sp"></span>
+                    <span class="mini pri">Návrh změny</span>
+                    <span class="x">🗑</span>
+                  </header>
+                  <div class="body">
+                    <div class="field">Fallback bych otočil — chybějící secret má být chyba, ne prázdný řetězec:
+
+<span class="mono">```suggestion
+        $row = $this-&gt;cache-&gt;get($key) ?? $this-&gt;client-&gt;fetch($key);
+        return $row['value'] ?? throw new SecretNotFound($key);
+```</span></div>
+                    <div class="rv-sblock">
+                      <div class="hd"><span>návrh · 2 řádky</span><span class="sp"></span><span>upravuješ ř. 80–81</span></div>
+                      <div class="l del">        $row = $this-&gt;cache-&gt;get($key) ?? $this-&gt;client-&gt;fetch($key);</div>
+                      <div class="l del">        return $row['value'] ?? '';</div>
+                      <div class="l add">        $row = $this-&gt;cache-&gt;get($key) ?? $this-&gt;client-&gt;fetch($key);</div>
+                      <div class="l add">        return $row['value'] ?? throw new SecretNotFound($key);</div>
+                    </div>
+                    <div class="note">Návrh odejde s review jako text komentáře, ne hned.</div>
+                  </div>
+                </div>
+              </div>
+              <aside class="side">
+                <header><span>Vlákno u řádku 41</span><span class="sp"></span><span class="fold">›</span></header>
+                <div style="padding: 11px;">
+                  <div class="tl-card acc-mine">
+                    <div class="tl-anchor"><span class="p">src/Vault/SecretClient.php</span><span>·</span><span>ř. 41</span></div>
+                    <header><span class="av sm">O</span><span class="nm">odinuv</span><span class="ago">před 2 h</span></header>
+                    <div class="txt">
+                      <p>TTL bych nechal přebít z konfigurace tenanta:</p>
+                      <div class="rv-sblock" style="margin-top: 8px;">
+                        <div class="hd"><span>návrh · 1 řádek</span></div>
+                        <div class="l del">        private readonly int $ttl = self::MAX_TTL,</div>
+                        <div class="l add">        private readonly int $ttl = self::MAX_TTL, private readonly ?int $ttlCeiling = null,</div>
+                      </div>
+                    </div>
+                    <div class="reply"><span class="box">Odpovědět do vlákna…</span></div>
+                    <footer><span class="mini pri">Odpovědět</span><span class="mini">Označit jako vyřešené</span></footer>
+                    <footer><span class="mini">Do zadání pro agenta</span><span class="sg-apply">aplikovat: na GitHubu</span></footer>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">01</span>
+        <span class="body">
+          <b>Blok se skládá z výběru, ne z ruky</b>
+          <span>Tažení v gutteru je od #252; <em>Návrh změny</em> z něj složí blok
+          <b>předvyplněný původními řádky</b>, takže se nemůže rozejít s tím, na co se váže. Náhled
+          kreslí totéž, co uvidí autor — <b>co je vidět, to odejde</b> (#68).</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">02</span>
+        <span class="body">
+          <b>Hranice hunku je hranice návrhu</b>
+          <span>Rozsah přes dva hunky je u komentáře v pořádku (#110), u návrhu ne: mezi hunky leží
+          kód, který diff neukazuje, a návrh by přepsal i ten. Tlačítko proto zůstane
+          <b>zakázané s větou</b>, ne schované. Totéž u řádku ze staré verze souboru.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">03</span>
+        <span class="body">
+          <b>Jediná cesta ven se nemění</b>
+          <span>Návrh je <b>text komentáře</b> a odchází s review přes
+          <code>ReviewPublishing.submit</code>. Nová metoda nevzniká; <em>aplikovat</em> návrh
+          (<code>applySuggestedChanges</code>) je zápis do repozitáře a schválně tu není.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">04</span>
+        <span class="body">
+          <b>Čtení: mini diff místo kódu</b>
+          <span>Ve vlákně se návrh kreslí jako mini diff. Červený řádek je ten, u kterého vlákno
+          visí (z <code>diffHunk</code>u) — kde rozsah začíná, data vlákna neříkají, takže hlavička
+          počítá <b>nové</b> řádky, ne nahrazované.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">05</span>
+        <span class="body">
+          <b>Do zadání jen na vlastním PR</b>
+          <span>Na cizím se návrh <b>jen kreslí</b> — aplikovat ho je věc autora, takže tam
+          tlačítko není vůbec, ne zašedle (tatáž úmluva jako u <code>+ label</code>, sekce 24). Na
+          vlastním otevře panel se zadáním, ve kterém vlákno stojí jako
+          <em>aplikuj návrh od odinuv na ř. 41</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">06</span>
+        <span class="body">
+          <b>Patka <em>Přidat do review · Zrušit</em> tu není</b>
+          <span>Odchylka od decku, a je vědomá: v téhle aplikaci je komentář v rozdělaném review
+          od chvíle, kdy vznikne — potvrzovací krok by tedy potvrzoval něco, co se už stalo. Slib
+          <em>odejde s review, ne hned</em> nese věta pod náhledem a tab <em>Moje review</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">07</span>
+        <span class="body">
+          <b>Uložené odpovědi nenavrhujeme</b>
+          <span>Byla by to nabídka v composeru; při jednom reviewerovi a jednom člověku se opakují
+          spíš nálezy než věty. Až se ukáže, že se něco píše potřetí, patří to sem.</span>
         </span>
       </div>
     </div>

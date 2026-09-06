@@ -57,6 +57,26 @@ protocol GitHubGateway: Sendable {
     /// a gateway pořád nemá nic, čím by šlo něco odeslat.
     func fetchHeads(of ids: [PRIdentifier]) async throws -> [PRIdentifier: PullRequestHead]
 
+    /// Hlava a počet příspěvků **odložených** pull requestů (#512) — čím se pozná, že odložení
+    /// `do dalšího pushe` nebo `do dalšího komentáře` skončilo.
+    ///
+    /// Existuje ze stejného důvodu jako `fetchHeads(of:)`: `gh search prs` nevrací ani jedno,
+    /// takže jedinou další cestou by byl `fetchDetail(id:)` na každé odložené PR, tedy `N+1`
+    /// dotazů každou minutu. **Jedno volání na všechna odložená PR**, skládá ho `SnoozeProbeQuery`
+    /// z aliasovaných kořenových polí — dvacet aliasů stojí **1 bod z 5000/h** (změřeno u #420).
+    /// Prázdný seznam se **na nic neptá**.
+    ///
+    /// **Vedle `fetchHeads(of:)`, ne místo něj.** Obě rozhlídky mají jiný předfiltr, takže by
+    /// společný dotaz vozil jedné z nich pole, které nepřečte; proč to tak je, stojí
+    /// v `SnoozeProbeQuery`.
+    ///
+    /// **Částečná odpověď je odpověď.** PR, na kterou GitHub neodpoví, v mapě prostě **není** —
+    /// a u odložení je ten rozdíl podstatný: „nevíme“ znamená, že odložení trvá dál, kdežto
+    /// tvrzení „hlava je stejná“ by ho jednou uzavřelo špatně.
+    ///
+    /// **Čtení, jako všechno ostatní tady** — tvrdá podmínka č. 1 platí beze změny.
+    func fetchSnoozeSignals(of ids: [PRIdentifier]) async throws -> [PRIdentifier: SnoozeSignal]
+
     /// Checky na PR (#209) — jak dopadly joby z GitHub Actions a další statusy.
     ///
     /// **Čtení, jako všechno ostatní tady**: restart workflow do aplikace nepatří (tvrdá

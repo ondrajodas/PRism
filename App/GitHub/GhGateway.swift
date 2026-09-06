@@ -164,6 +164,45 @@ struct GhGateway: GitHubGateway {
         return response.heads(of: ids)
     }
 
+    /// Rozhlídka po odložených PR (#512). Tvarem dvojče `fetchHeads(of:)` — a je to schválně
+    /// **kopie postupu, ne sdílená funkce**: liší se dotaz, odpověď i věta v chybě, takže by ze
+    /// společné cesty zbyly dva parametry a `switch` nad nimi.
+    func fetchSnoozeSignals(of ids: [PRIdentifier]) async throws -> [PRIdentifier: SnoozeSignal] {
+        // Prázdný dotaz se **nespouští**: `query() { }` není platný dokument. Je to zároveň to, co
+        // drží „na klidný den nula volání“ — předfiltr běží v `Policy.snoozeProbe`.
+        guard !ids.isEmpty else { return [:] }
+        let result: ProcessResult
+        do {
+            result = try await runner.run(
+                gh,
+                arguments: SnoozeProbeQuery.arguments(for: ids),
+                timeout: timeout
+            )
+        } catch ProcessError.timedOut {
+            throw GitHubError.timedOut
+        } catch ProcessError.launchFailed(let detail) {
+            throw GitHubError.toolUnavailable(detail)
+        } catch {
+            throw GitHubError.toolUnavailable(error.localizedDescription)
+        }
+
+        let response: GhSnoozeSignalsResponse
+        do {
+            response = try GhOutput.decoder.decode(
+                GhSnoozeSignalsResponse.self,
+                from: Data(result.standardOutput.utf8)
+            )
+        } catch {
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            throw GitHubError.malformedOutput("Odložené pull requesty: \(error)")
+        }
+        guard response.data != nil else {
+            guard result.exitCode == 0 else { throw GitHubError(failure: result) }
+            throw GitHubError.malformedOutput("Odložené pull requesty: v odpovědi není `data`.")
+        }
+        return response.signals(of: ids)
+    }
+
     /// `gh pr checks` končí **nenulovým kódem, když něco spadlo** — a to není chyba volání,
     /// ale výsledek, kvůli kterému se ptáme. Selhání se proto rozlišuje podle toho, jestli
     /// dorazil rozumný JSON; prázdný výstup u PR bez checků taky není chyba.

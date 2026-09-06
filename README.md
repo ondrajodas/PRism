@@ -255,6 +255,37 @@ znamená **nula dotazů navíc**. Co v diskuzi přibylo, nese i řádek seznamu:
 místo autora a času. **Spadlé CI se nehlídá** — je to druhý dotaz na PR a jiná událost, takže na to
 patří vlastní text i vlastní přepínač.
 
+## Odložit PR — do rána, do dalšího pushe, do dalšího komentáře (#512)
+
+Filtr schová repo nebo autora, ne **jeden** pull request. Botí PR proto ležel ve frontě týden,
+počítal se do odznaku a automat na něj každou minutu zvažoval review. Nabídka **`Odložit`** na
+řádku fronty (pravé tlačítko i tlačítko pod kurzorem, klávesy `⌥1`–`⌥4` uvnitř nabídky) nabídne
+čtyři volby: *do zítra 9:00*, *do dalšího pushe*, *do dalšího komentáře*, *na týden*.
+
+**Odložení je podmínka, ne jen čas.** *Do dalšího pushe* porovnává **hlavu** PR, *do dalšího
+komentáře* **počet příspěvků** (komentáře pod PR plus odeslaná review). Obojí přinese **jeden
+dávkový GraphQL dotaz na všechna odložená PR** uvnitř tiku pollingu, s předfiltrem přes
+`updatedAt` — na klidný den je to **nula dotazů navíc** a u časové podmínky se GitHubu neptá nikdy.
+
+**Odložený PR zmizí všude naráz**: z fronty, z odznaku v railu i v Docku, ze souhrnu ve stavovém
+řádku, z pruhů na domově, z notifikací **a z automatu** — *nechci to teď vidět* znamená i *neplať
+za to teď*. Běh, který už běží, se neruší; session je utracená v okamžiku, kdy začne.
+
+**A protože odložení něco skrývá, musí být poznat, že něco skryté je.** Vede z něj proto **patero
+ven**: blok **`Odložené · 2`** s poznámkou `vrátí se zítra 9:00` a s `Vrátit teď` — **pod frontou
+i v pravém sloupci domova**, hned vedle věty, která o odložených mluví —, připsání `· 2 odložené`
+do té věty pod pozdravem, vlastní prázdný stav fronty **`Všechno odložené`**, když je odložené
+všechno, a řádek **`Vrátil se z odložení · přišel push`** v `Dění`, aby PR nevypadl odnikud.
+Odložení leží v cache (`snoozed.json`), přežije restart a **na GitHub se o něm nepíše nic**.
+
+**Odložit jde ze všech tří míst, kde řádek pull requestu stojí** — z fronty, ze sekce `Rozdělaná`
+i z pruhu na domově. Je to jeden řádek, takže jedna podoba; z `Rozdělaných` po odložení nezmizí,
+protože odložení mluví o frontě, ne o rozdělané práci.
+
+**Odložit jde jen cizí PR.** U vlastního rozhoduje o tom, kdy se na něj podívám, to, kdy pushnu —
+a blok `Odložené` stojí pod frontou a na domově, takže odložené vlastní PR by ze sekce `Moje PR`
+zmizelo a nikde by se neobjevilo.
+
 ## Dění — co proletělo jako notifikace, zůstane
 
 Notifikace **nemá historii**: banner zmizí, stejná identita přepíše to, co ještě visí, a v okně po
@@ -690,6 +721,19 @@ vybraný rozsah se průběžně zvýrazňuje a po puštění se otevře komentá
 jako na GitHubu. Rozepsaný komentář jde ještě roztáhnout **⇧ klikem** na `+` u jiného řádku (to
 tažení neumí, protože komentář už existuje). Rozsah smí přeskočit i mezeru mezi hunky a odesílá se
 jako `start_line`/`start_side`, tedy tak, jak to čeká GitHub.
+
+**K vybraným řádkům se dá napsat návrh změny** (#528). Tlačítko `Návrh změny` v hlavičce
+rozepsaného komentáře vloží blok ` ```suggestion ` **předvyplněný původními řádky** — přepíšeš je
+a pod polem se rovnou kreslí mini diff toho, co uvidí autor PR: červeně původní, zeleně nové. Blok
+je **text komentáře**, takže odchází s review jako všechno ostatní; nová cesta ven nevzniká
+a *aplikovat* návrh se odsud nedá — to je zápis do repozitáře a patří agentovi a `Force pushi`.
+Když k výběru návrh napsat nejde, tlačítko zůstane zakázané **s větou proč**: přes hranici hunku ne
+(mezi hunky leží kód, který diff neukazuje, a návrh by ho přepsal), a k řádku ze staré verze
+souboru taky ne.
+
+**Návrh od kolegy se ve vlákně kreslí jako mini diff**, ne jako blok kódu. Na **vlastním** PR je pod
+ním `Do zadání pro agenta`, které vlákno ukáže v panelu se zadáním (`aplikuj návrh od … na ř. N`);
+na cizím PR tlačítko není vůbec, protože aplikovat návrh je věc autora.
 
 **Rozepsaný komentář visí jen v té půlce, které se týká** —
 komentář k odebranému řádku vlevo, k novému vpravo, a když komentuješ obě strany téhož řádku,

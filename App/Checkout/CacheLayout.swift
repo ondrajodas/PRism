@@ -119,6 +119,13 @@ struct CacheLayout: Sendable, Equatable {
     /// co aplikaci nepřežilo — viz `InterruptedRuns`.
     var interruptedFile: URL { root.appending(path: "interrupted.json") }
 
+    /// Odložená PR (#512) — `tenhle teď vidět nechci, ozvi se mi, až…`; viz `SnoozeStore`.
+    ///
+    /// **Mimo dosah eviction**, jako razítka předání a záznam dění: je to pár set bajtů na PR
+    /// a zároveň rozhodnutí, které jsem udělal já. Smazat ho kvůli rozpočtu na místo by znamenalo
+    /// PR, který se sám vrátí do fronty, aniž by se cokoli stalo.
+    var snoozedFile: URL { root.appending(path: "snoozed.json") }
+
     /// Které zadání jsem už předal agentovi (#334) — razítko `(kdy, proti čemu, co)` na PR.
     ///
     /// Vedle nálezů, ne v jejich souborech: razítko patří **pull requestu**, kdežto `reviews/` se

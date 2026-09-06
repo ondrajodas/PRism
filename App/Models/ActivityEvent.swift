@@ -16,7 +16,7 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
     /// Který druh novinky to je. Rozhoduje o glyfu, barvě puntíku, cíli kliknutí i o tom, jestli
     /// se u řádku kreslí chip `bez banneru` — všechno v `Policy`, vyčerpávajícím výčtem.
     ///
-    /// **Šest druhů, osm případů**: `newPullRequest`/`reReview` a trojice výsledků review jsou
+    /// **Sedm druhů, devět případů**: `newPullRequest`/`reReview` a trojice výsledků review jsou
     /// v návrhu (sekce 27) jeden druh se dvěma, resp. třemi podobami, protože se liší glyf i to,
     /// kam řádek vede.
     enum Kind: String, Codable, CaseIterable, Hashable, Sendable {
@@ -37,6 +37,10 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
         case staleFindings
         /// PR z fronty odešel. **Dopočítané** — doplněk k `newcomers(in:)` nad tímtéž snímkem.
         case leftQueue
+        /// PR se vrátil z odložení (#512). **Dopočítané** — banner za něj nechodí: vrácení do
+        /// fronty jsem si objednal já, takže vyrušit nemá, jen se má dát dohledat. Bez tohohle
+        /// řádku by se PR ve frontě objevil odnikud.
+        case returnedFromSnooze
     }
 
     /// Identita položky. **Deterministická, ne `UUID`**: skládá ji `Policy` z druhu, PR a toho, co

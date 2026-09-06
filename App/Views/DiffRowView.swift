@@ -227,6 +227,9 @@ struct DiffRowView: View {
             DraftCommentBubbleView(
                 comment: comment,
                 indent: commentIndent,
+                // Nabídka návrhu (#528) se počítá **jen tam, kde bublina doopravdy je** — je to
+                // průchod hunky, takže řádkům diffu se nedává vůbec.
+                suggestion: draft.suggestion?(comment.anchor),
                 update: { draft.updateComment(comment.id, $0) },
                 remove: { draft.removeComment(comment.id) }
             )

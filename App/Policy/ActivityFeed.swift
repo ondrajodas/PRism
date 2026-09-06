@@ -108,7 +108,8 @@ extension Policy {
     /// úvaha, kvůli které `ForeignActivity` schválně nenese commity.
     static func isReported(_ kind: ActivityEvent.Kind, on ownership: PullRequestOwnership) -> Bool {
         switch kind {
-        case .newPullRequest, .reReview, .findings, .clean, .failure, .staleFindings, .leftQueue:
+        case .newPullRequest, .reReview, .findings, .clean, .failure, .staleFindings, .leftQueue,
+             .returnedFromSnooze:
             ownership == .theirs
         case .foreignActivity:
             ownership == .mine
@@ -149,6 +150,9 @@ extension Policy {
         case .staleFindings: .tab(.commits)
         // Jediný řádek, který do okna nevede — PR z fronty odešel, takže v seznamu není.
         case .leftQueue: .gitHub
+        // Návrat z odložení vede na `Přehled`, jako příchod do fronty: je to tentýž okamžik —
+        // PR je zpátky na stole a rozhodnutí „jdu do toho“ se dělá z popisu, ne z výsledků.
+        case .returnedFromSnooze: .tab(.overview)
         }
     }
 
@@ -162,6 +166,9 @@ extension Policy {
         // Odchod z fronty není dobrá ani zlá zpráva, takže nedostane barvu žádnou — řádek je
         // navíc celý ztlumený, protože nikam do okna nevede.
         case .leftQueue: .neutral
+        // Návrat z odložení taky ne: je to změna pohledu, ne zpráva o PR. Zeleně by se tvářil
+        // jako úspěch, červeně jako porucha, a je to ani jedno.
+        case .returnedFromSnooze: .neutral
         }
     }
 
@@ -177,6 +184,7 @@ extension Policy {
         case .foreignActivity: "bubble.left"
         case .staleFindings: "clock.arrow.circlepath"
         case .leftQueue: "minus"
+        case .returnedFromSnooze: "alarm"
         }
     }
 
@@ -189,7 +197,7 @@ extension Policy {
         guard !announced else { return false }
         switch kind {
         case .newPullRequest, .reReview, .findings, .clean, .failure, .foreignActivity: return true
-        case .staleFindings, .leftQueue: return false
+        case .staleFindings, .leftQueue, .returnedFromSnooze: return false
         }
     }
 
@@ -396,6 +404,32 @@ extension Policy {
             at: at,
             headline: "Už není ve frontě",
             detail: "mergnuto, nebo zrušený request — z fronty se to nepozná"
+        )
+    }
+
+    /// Řádek o tom, že se PR vrátil z odložení (#512). `nil` = nehlásí se.
+    ///
+    /// **Bez tohohle řádku by se PR ve frontě objevil odnikud** — a to je zrovna ta vlastnost,
+    /// kvůli které je odložení riskantní věc: schová práci a pak ji tiše vrátí. Řádek říká
+    /// **proč** se vrátil (`došel čas`, `přišel push`, `přišel komentář`, `vrátil jsem ho ručně`),
+    /// protože to je jediné, co z fronty samotné vidět není.
+    ///
+    /// **Banner za něj nechodí** (`showsSilentChip(_:announced:)` u něj chip nekreslí): návrat je
+    /// splnění mé vlastní objednávky, ne novinka zvenčí. Že PR leží ve frontě, řekne fronta.
+    static func snoozeReturnActivity(
+        for pr: PRIdentifier,
+        ownership: PullRequestOwnership = .theirs,
+        reason: SnoozeReturn,
+        at: Date
+    ) -> ActivityEvent? {
+        guard isReported(.returnedFromSnooze, on: ownership) else { return nil }
+        return ActivityEvent(
+            id: identity(.returnedFromSnooze, pr, at: at),
+            kind: .returnedFromSnooze,
+            pullRequest: pr,
+            at: at,
+            headline: "Vrátil se z odložení",
+            detail: snoozeReturnDetail(reason)
         )
     }
 

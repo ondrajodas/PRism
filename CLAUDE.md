@@ -256,8 +256,10 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    `setLabels`, `requestReviewers`, `createLabel`, `merge`, `markReadyForReview`. **Každá si
    sama ověří bránu z bodu 6**, proto všechny berou adresu, ze které se pozná repo.
 
-   **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**, **`deleteLabel`**
-   a **návrat do draftu** (`convertPullRequestToDraft`) — devátá metoda je jednosměrná schválně.
+   **Zakázané zůstává**: approve mimo review, **zavření PR**, **milník**, **`deleteLabel`**,
+   **návrat do draftu** (`convertPullRequestToDraft`) — devátá metoda je jednosměrná schválně —
+   a **aplikování návrhu změny** (`applySuggestedChanges`, #528): návrh je **text komentáře**
+   a odchází `submit`em ([rozbor](docs/architektura.md#návrh-změny-kódu-528)).
 
    **Od #333 to hlídá test, ne jen tenhle grep** (`SingleWayOutTests`). **Měnit se smí jedině na
    vlastním PR** (`Policy.metadataEditing`, u merge `Policy.mergeOffer`); na cizím se akce
@@ -431,7 +433,9 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    „zastaralé“), nikdy se nesmí tiše zobrazovat proti kódu, který už neexistuje.
 
    **Rozhovor nad PR (#452) se tomuhle netýká, a je to zapsaná výjimka**: ukládá se **k PR, ne
-   k `headSha`**, protože rozhovor není nález.
+   k `headSha`**, protože rozhovor není nález. **Odložení PR (#512) je druhá taková výjimka**:
+   push ho nemá zneplatnit, nýbrž **splnit**, takže hlava v něm figuruje jako **měřidlo podmínky**,
+   ne jako klíč záznamu ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--odložení-pr-se-ukládá-k-pr-ne-k-headsha-512)).
 
    **Značka `Prošlo` u souboru (#500) je ta podmínka nad souborem, ne výjimka z ní.** Ukládá se
    **k PR**, ale nese **otisk obsahu** — sha z `index` řádky diffu, celou dvojici
@@ -496,7 +500,21 @@ přečtení, než sáhneš na:
   autora: `queuePullRequests` (cizí, tedy fronta) a vlastní PR (#331, #332). Fronta, karty
   `Čeká na mě` a `Blokuje`, souhrn, automat, hromadné spuštění a notifikace čtou **jen cizí**;
   úklid, eviction, nastavení, nabídka filtru a rozdělaná review **obojí**
-  ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332)). **Od #531 k tomu stojí
+  ([tabulka](docs/architektura.md#které-místo-chce-kterou-množinu-332-od-512-dvě-osy)). **Od #512
+  je nad tím druhá osa: odložení** (`Policy.pullRequests(_:withoutSnoozed:)`) — fronta, odznak,
+  souhrn, deska, notifikace a **automat** čtou **bez odložených**, úklid, filtr a nastavení
+  **s nimi**. **Odložení je stav, který něco skrývá, takže musí být poznat, že něco skryté je**:
+  blok `Odložené` (pod frontou **i na desce**), věta pod pozdravem, vlastní prázdno fronty a řádek
+  v `Dění`. **A `Odložit` se navěšuje všude, kde se `PullRequestRow` kreslí** — jsou to **tři**
+  místa, takže to hlídá stráž nad zdrojáky, ne pozornost
+  ([rozbor](docs/architektura.md#odložit-pr-512)):
+
+  ```bash
+  # Výčet k posouzení, ne prázdný: každý soubor odsud musí předávat `snoozeAction:`.
+  grep -rln 'PullRequestRow(' App/Views | grep -v 'PullRequestRow.swift'
+  ```
+
+  **Od #531 k tomu stojí
   přijaté záložky** (`adoptedTabs`) — PR otevřený odkazem nebo `prism://` a **od #527 i záložka
   obnovená po restartu** (`TabAdoption`) **do fronty nepatří**, ale úklid po tiku ho zahodit
   nesmí; obojí bere `pullRequestsInPlay(besides:)`. **Obnovení nic nespouští** (#527) — jen
@@ -828,6 +846,9 @@ vypadá**. **Naměřená čísla i technika měření jsou tam**, ne tady. Zása
   podíl*](docs/testovani.md#ve-sampleu-se-čte-podíl-ne-jen-vrcholy-zásobníku-350)); nástroj na
   **živý** záchvat nesmí měřit z runloopu hlavního vlákna (#391); a u cizího privátního API
   rozhoduje **pád v testu v hostu**, ne odhad z footprintu (#361).
+- **Velký podíl ve `sample`u nemusí být práce navíc** (#541) — líně počítaný atribut grafu se
+  připíše tomu, kdo si o něj řekne první, takže o zlevnění rozhoduje **ablace, ne podíl**
+  ([čím se to změřilo](docs/testovani.md#sample-nejdražší-řádka-aplikace-je-diffviewswift517--a-přepsat-ji-nic-neušetří-541)).
 - **Usazení scény se pozná měřením, ne uplynulým časem** (#421, mění postup z #489) —
   `spinMainRunLoop` je **synchronní smyčka držící hlavní actor**, takže rozdělanou práci scény
   k sobě nepustí. Čeká se proto na dvě tichá kola počitadel (`settleUntilQuiet`), hodiny sondy

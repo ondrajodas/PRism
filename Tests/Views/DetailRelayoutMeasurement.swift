@@ -41,12 +41,25 @@ struct DetailRelayoutMeasurement {
 
     @Test("Kolik stojí přerovnání okna nad otevřeným PR")
     func relayoutCost() async throws {
-        for material in try Self.materials() {
-            var costs: [Case: [Double]] = [:]
-            var passes: [Case: [String]] = [:]
-            // Série se střídají A/B/A/B — drift sezení je větší než hledaný rozdíl (#274).
-            for _ in 0..<2 {
+        let materials = try Self.materials()
+        var costs: [String: [Double]] = [:]
+        var passes: [String: [String]] = [:]
+        // Pořadí výpisu je pořadí prvního kola; `seen` je předfiltr, aby se v něm nehledalo
+        // lineárně při každé sérii.
+        var order: [String] = []
+        var seen: Set<String> = []
+        // Série se střídají A/B/A/B — drift sezení je větší než hledaný rozdíl (#274).
+        //
+        // **Od #541 se střídá i materiál, ne jen případ.** Do té doby měl každý materiál obě svá
+        // kola vcelku, takže ostrý diff a jeho syntetické dvojče vycházely z různých třetin
+        // sezení — a přesně mezi nimi je ten rozdíl, na který se #541 ptá. Materiálů je víc než
+        // dva, takže to není doslova A/B/A/B, ale A/B/C…/A/B/C…; podstatné je, že žádný materiál
+        // nemá celé kolo pro sebe.
+        for _ in 0..<2 {
+            for material in materials {
                 for scenario in Self.cases where material.covers(scenario) {
+                    let key = "\(material.label), \(scenario.label)"
+                    if seen.insert(key).inserted { order.append(key) }
                     // **Store i okno na každou sérii nové.** Odložené okno drží svůj strom dál
                     // a ten dál poslouchá store, takže by se do dalšího měření počítaly průchody
                     // tělem předchozích scén — v první podobě sondy z toho byl růst 0,57 → 2,26 s
@@ -58,19 +71,19 @@ struct DetailRelayoutMeasurement {
                     defer { _ = directory }
                     store.setDetailTab(scenario.tab, for: pr)
                     let (cost, snapshot) = try await measure(store: store, scenario: scenario)
-                    costs[scenario, default: []].append(cost)
-                    passes[scenario, default: []].append(snapshot)
+                    costs[key, default: []].append(cost)
+                    passes[key, default: []].append(snapshot)
                 }
             }
-            for scenario in Self.cases where material.covers(scenario) {
-                let values = costs[scenario] ?? []
-                let average = values.reduce(0, +) / Double(max(values.count, 1))
-                print("MĚŘENÍ \(material.label), \(scenario.label): "
-                    + values.map { String(format: "%.2f", $0) }.joined(separator: " / ")
-                    + String(format: " s CPU za %d přerovnání (%.0f ms na jedno)", Self.relayouts,
-                             average / Double(Self.relayouts) * 1000)
-                    + " — \((passes[scenario] ?? []).joined(separator: " | "))")
-            }
+        }
+        for key in order {
+            let values = costs[key] ?? []
+            let average = values.reduce(0, +) / Double(max(values.count, 1))
+            print("MĚŘENÍ \(key): "
+                + values.map { String(format: "%.2f", $0) }.joined(separator: " / ")
+                + String(format: " s CPU za %d přerovnání (%.0f ms na jedno)", Self.relayouts,
+                         average / Double(Self.relayouts) * 1000)
+                + " — \((passes[key] ?? []).joined(separator: " | "))")
         }
     }
 
@@ -318,25 +331,46 @@ struct DetailRelayoutMeasurement {
     enum Material {
         case synthetic(lines: Int)
         case real(label: String, text: String)
+        /// **Syntetické dvojče ostrého diffu** (#541) — týž počet souborů, hunků i řádků obsahu,
+        /// ale generovaný text. Vzniká jedině vedle ostrých dat (`PRISM_DIFF_DIR`) a měří se
+        /// v témž běhu hned vedle své předlohy.
+        ///
+        /// Odpovídá na první otázku #541: **je ostrý diff zvláštní, nebo jen větší?** Sonda do
+        /// #541 uměla nejvýš 2 000 řádků, kdežto ostré diffy z issue mají 5 300 až 6 200 — takže
+        /// bez dvojčete nešlo rozlišit „na ostrých datech se děje něco navíc“ od „je to třikrát
+        /// delší seznam“.
+        case twin(label: String, text: String)
 
         var label: String {
             switch self {
             case .synthetic(let lines): "\(lines) řádků"
-            // **`TextLines`, ne `split(separator:)`** — a zrovna tady to platí doslova: je to
-            // **cizí diff ze souboru**, tedy text, jehož zakončení řádků aplikace nevybírá (#292,
-            // #295). Nad `CRLF` diffem je `split(separator: "\n")` **jeden** řádek, takže by
-            // popisek série tvrdil `0 souborů` — a měřidlo by přitom vypadalo zeleně.
-            case .real(let label, let text):
-                "\(label) (\(TextLines.all(text).count { $0.hasPrefix("diff --git") }) souborů)"
+            // Počet souborů počítá `files(in:)` níž — i s tím, proč se dělí `TextLines`.
+            case .real(let label, let text): "\(label) (\(Self.files(in: text)) souborů)"
+            // **Popisek vypisuje i řádky**, protože u dvojčete je právě velikost to tvrzení: bez
+            // ní by z výpisu nešlo poznat, jestli se dvojče předloze velikostí vůbec vyrovnalo.
+            case .twin(let label, let text):
+                "dvojče \(label) (\(Self.files(in: text)) souborů,"
+                    + " \(TextLines.content(text).count) řádků)"
             }
         }
 
+        /// Kolik souborů diff mění.
+        ///
+        /// **`TextLines`, ne `split(separator:)`** — a zrovna tady to platí doslova: je to **cizí
+        /// diff ze souboru**, tedy text, jehož zakončení řádků aplikace nevybírá (#292, #295). Nad
+        /// `CRLF` diffem je `split(separator: "\n")` **jeden** řádek, takže by popisek série tvrdil
+        /// `0 souborů` — a měřidlo by u toho vypadalo zeleně.
+        private static func files(in text: String) -> Int {
+            TextLines.all(text).count { $0.hasPrefix("diff --git") }
+        }
+
         /// Nad ostrým diffem se osa „počet souborů“ **nepoužívá** — počet souborů je daný tím
-        /// diffem. Rozdělovat ho znovu by měřilo něco, co v tom PR není.
+        /// diffem. Rozdělovat ho znovu by měřilo něco, co v tom PR není. Totéž platí o dvojčeti:
+        /// jeho smysl je mít **tytéž** rozměry jako předloha.
         func covers(_ scenario: Case) -> Bool {
             switch self {
             case .synthetic: true
-            case .real: scenario.files == nil
+            case .real, .twin: scenario.files == nil
             }
         }
 
@@ -345,7 +379,7 @@ struct DetailRelayoutMeasurement {
             case .synthetic(let lines):
                 scenario.files.map { DiffMaterial.spread(files: $0, lines: lines) }
                     ?? DiffMaterial.text(lines: lines)
-            case .real(_, let text):
+            case .real(_, let text), .twin(_, let text):
                 text
             }
         }
@@ -359,9 +393,13 @@ struct DetailRelayoutMeasurement {
         let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "diff" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        return try files.map { file in
-            .real(label: file.deletingPathExtension().lastPathComponent,
-                  text: try String(contentsOf: file, encoding: .utf8))
+        // **Dvojče hned vedle své předlohy** (#541), ne v samostatném běhu: rozdíl mezi nimi je ta
+        // měřená veličina, takže musí ležet uvnitř jednoho sezení (#274).
+        return try files.flatMap { file in
+            let label = file.deletingPathExtension().lastPathComponent
+            let text = try String(contentsOf: file, encoding: .utf8)
+            return [Material.real(label: label, text: text),
+                    .twin(label: label, text: DiffMaterial.twin(of: text))]
         }
     }
 

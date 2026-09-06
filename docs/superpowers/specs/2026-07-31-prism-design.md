@@ -7085,6 +7085,186 @@ ne o ceně — měření ukázalo, že `cost` je na počtu aliasů nezávislý.
 **Ověřeno vložením čtyř regresí**, u každé se koukalo, jestli spadne to, co má; tabulka je
 v [`docs/testovani.md`](../../testovani.md#kde-se-ověřila-regrese-vložením-regrese-572).
 
+### Záznam rozhodnutí — cena přepnutí na `Změněné soubory` se změřila a nezlevnila (#541)
+
+#541 přišlo jako **měřicí** issue: přepnutí na tab s diffem stojí nad ostrým PR 0,9 až 1,3 s
+hlavního vlákna, a otázka zněla, kde ta sekunda leží a jestli je to regrese proti #476. **Rozhodnutí
+je nic v `App/` neměnit** a zapsat, co se změřilo — což je podle zadání plnohodnotný výsledek,
+protože je doložený.
+
+**Co se rozhodlo a proč.**
+
+1. **Napřed se změřilo, jestli je ostrý diff zvláštní, a není.** Do #541 uměla sonda nejvýš 2 000
+   řádků, kdežto ostré diffy z #541 mají 5 200 až 6 200 — a měnily naráz tři věci (řádky, soubory,
+   obsah). Přibylo proto **syntetické dvojče** (`DiffMaterial.twin(of:)`): týž počet souborů, hunků
+   a řádků, ale generovaný text, tedy zároveň ablace na sazbu a zvýrazňování. Vyšlo **stejně ve
+   všech třech velikostech**, takže obsah z podezřelých padá a zbývá velikost. Bez toho kroku by se
+   optimalizovalo zvýrazňování syntaxe, které za to nemůže.
+2. **Zamítnuto: přesunout `onGeometryChange` z diffu na jeho pozadí.** V `sample`u drží
+   `DiffView.swift:517` 26 až 42 % hlavního vlákna a vypadá jako jasný cíl — `of:` closure běží
+   uvnitř aktualizace grafu (#438) a čte geometrii svislého `ScrollView`u, tedy atribut závislý na
+   obsahu. Ablace ten rámec z profilu **odstranila** (`GeometryActionBinder` spadl z 1 581 a 3 969
+   vzorků na 39 a 29) a **cenu nezměnila**; tatáž práce se objevila pod
+   `AnimatableFrameAttribute.updateValue`. Je to #275 v čisté podobě, jen v novém převleku, a proto
+   se z toho stalo **pravidlo o čtení `sample`u**, ne oprava: velký podíl nemusí být práce navíc,
+   protože líně počítaný atribut se připíše tomu, kdo si o něj řekne první.
+3. **Nezakládá se issue na „bloky se neodnasazují“, zapisuje se to jako neověřená mezera.** Sonda
+   hlásí 219 z 219 nasazených bloků tam, kde #472 zapsalo pět — jenže jestli to platí i v běžící
+   aplikaci, se v harnessu rozhodnout nedá (sonda diffem nescrolluje, takže se pás nemusí změnit).
+   Tvrdit regresi z měřidla, které pro „funguje“ i „nefunguje“ může vydat totéž (#478), by bylo
+   přesně to, co tenhle repozitář zakazuje. Mez je popsaná v `docs/testovani.md` i s tím, čím má
+   příště začít ten, kdo na to sáhne.
+4. **Zamítnuto: dělat z ablace produkční přepínač.** #501 si u legendy pásu poznamenalo, že
+   prokládaná série A/B/A/B potřebuje přepínač v produkčním kódu. Tady se místo toho měřilo
+   **sekvenčně, ve dvou bězích** a rozdíl vyšel uvnitř driftu stroje (tři sloty vedle, `load average`
+   3,9 až 9,4) — takže by přepínač stejně nerozhodl. Rozhodl **strukturální doklad ze `sample`u**,
+   který drift nemá: rámec zmizel, cena zůstala. Přepínač v `App/` kvůli jednomu měření tedy
+   nevznikl.
+
+**Co z toho zůstalo v repu.** Jen sonda: osa `dvojče`, střídání **materiálů** uvnitř kola (do #541
+měl každý materiál obě kola vcelku, takže se ostrý diff a jeho dvojče měřily v různých třetinách
+sezení — a přesně mezi nimi je ta měřená veličina) a `DiffMaterial.twin(of:)`. V `App/` se nezměnilo
+nic, takže **na obrazovce není co vidět**.
+
+**Co se tím nevyřešilo, a je to poctivé říct.** Přepnutí na diff u PR o 157 souborech pořád stojí
+1,17 s a #541 se tím nezavírá jako „opraveno“. Nejbližší lever, který zbývá, není zlevnění uvnitř
+diffu — ty jsou vyzkoušené čtyřikrát v #472, jednou v #476 a jednou tady —, ale **kolik view v tom
+tabu vůbec vznikne**, a to je návrhová otázka o pevném seznamu z #469, ne mikrooptimalizace.
+
+### Záznam rozhodnutí — návrh změny kódu (#528)
+
+Zákres je z decku *Směry pro PRism*, stránka **T4**, odsouhlaseného 2. 9. 2026; do
+`docs/navrh.html` se přenesl jako **sekce 54**. Rozhodnutí, která z kresby neplynou:
+
+1. **Návrh je text komentáře, nová metoda protokolu nevzniká.** Blok odchází s review přes
+   `ReviewPublishing.submit`, tedy cestou z #67. *Aplikovat* návrh (`applySuggestedChanges`) je
+   **zápis do repozitáře** a schválně tu není: na to je od #466 druhý protokol s vlastními guardy
+   a s potvrzením, a desátá metoda u toho prvního by ten rozdíl zahodila. Hlídají to dvě stráže nad
+   zdrojáky (`CodeSuggestionTests`), ne jen tenhle odstavec.
+
+2. **Hranice hunku je hranice návrhu — a je to přísnější, než co GitHub dovolí.** Rozsah přes dva
+   hunky u **komentáře** projde (změřeno u #110), takže by šlo návrh nabídnout taky. Zamítnuto:
+   návrh nahrazuje **souvislý** kus souboru, kdežto mezi hunky leží kód, který diff neukazuje — přijatý
+   návrh by ho přepsal a autor by to poznal až z výsledného souboru. Odmítnutí proto nese **větu
+   proč**, ne zašedlé tlačítko.
+
+3. **Červená strana ve vlákně je jeden řádek, a je to zapsaná mez, ne opomenutí.** `ReviewThread`
+   nedrží začátek rozsahu (`startLine` se v konverzačním dotazu netahá) — dotahovat ho by byl zásah
+   do nejdražšího čtení v aplikaci (#158) kvůli jedné kresbě. Zamítnuto tedy **hádat** rozsah podle
+   počtu navrhovaných řádků: tvrdit červeně dva řádky, které jsme si domysleli, je vzor *text, který
+   tvrdí víc, než data unesou*. Hlavička bloku proto počítá **nové** řádky, ne nahrazované.
+
+4. **Vkládá se do živého textu pole, ne přes store.** `DraftTextEditor` posílá text dolů po odmlce
+   400 ms, takže blok složený nad hodnotou ze storu by tu odmlku přepsal rozepsanou větou — je to
+   tentýž případ, jaký má editor popsaný u převzetí nálezu. Zamítnuta varianta „vložit přes
+   `updateComment`“; vzniklo `TextInsertionBox`, tedy tentýž vzor jako `EmojiSuggestionBox`.
+
+5. **Do zadání pro agenta jen na vlastním PR, a na cizím se nekreslí vůbec.** Zašedlé tlačítko tvrdí
+   „tady se to dělá, jen teď ne“, a na cizím PR se to nedělá nikdy (tatáž úmluva jako u `+ label`,
+   #392). Tlačítko **neaplikuje** — otevře panel se zadáním; aplikace pak jde přes agenta a `git push`
+   se sheetem, tedy cestou z #466.
+
+6. **Odchylka od decku: patka `Přidat do review · Zrušit` v sekci 54 není.** V téhle aplikaci je
+   komentář v rozdělaném review od chvíle, kdy vznikne (#65), takže by ten krok potvrzoval něco, co se
+   už stalo — a `Zrušit` vedle `Vyjmout z review` v hlavičce by byla dvě jména pro jednu akci. Slib
+   *odejde s review, ne hned* nese věta pod náhledem a tab `Moje review`.
+
+7. **Uložené odpovědi se nenavrhují** (poznámka u T4 v decku). Byla by to nabídka v composeru; při
+   jednom reviewerovi a jednom člověku se opakují spíš nálezy než věty.
+
+### Záznam rozhodnutí — odložení PR se ukládá k PR, ne k `headSha` (#512)
+
+**Tvrdá podmínka č. 5 říká, že nálezy jsou klíčované `headSha`** — tvrzení o kódu se nesmí ukazovat
+proti kódu, který už neexistuje. Odložení se **ke `headSha` neklíčuje** a je to výjimka, kterou je
+potřeba umět obhájit, ne přehlédnutí.
+
+**Odložení o kódu netvrdí nic.** Je to moje rozhodnutí o tom, kdy se na pull request podívám, ne
+věta o řádku 42. Push ho proto nemá **zneplatnit**, nýbrž **splnit** — a to je opačný vztah, než
+jaký má push k nálezům. Kdyby se odložení klíčovalo hlavou, zaniklo by přesně tím pushem, kvůli
+kterému má skončit — jenže potichu a bez řádku v `Dění`, takže by se PR ve frontě objevil odnikud.
+
+**Precedens je rozhovor nad PR (#452)**, který se z téhož důvodu ukládá k PR: otázka „proč se ten
+mutex bere“ pushem nezastará.
+
+**Hlava v tom přesto figuruje, jen v opačné roli**: `SnoozeCondition.nextPush(head:)` ji drží jako
+**měřidlo podmínky**. Tvrdá podmínka č. 5 tedy platí nad odložením v tom smyslu, na kterém stojí —
+porovnání hlavy — jen se z něj neodvozuje **platnost záznamu**, nýbrž jeho **konec**.
+
+**Zamítnutá varianta: odložení jako filtr v paměti.** Nejlevnější by bylo držet odložení jen za
+běhu, bez souboru. Zahodilo se to hned: restart aplikace je běžná věc (`./bin/run.sh` po každém
+mergi) a PR, který se po něm vrátí do fronty, aniž by se cokoli stalo, je horší než žádné odložení
+— člověk mu přestane věřit a přestane ho používat.
+
+**Zamítnutá varianta: měřit „přišel komentář“ přes `updatedAt`.** Bylo by to zadarmo (search ho
+vrací) a nevyžadovalo by to žádný nový dotaz. Zahodilo se to, protože `updatedAt` se hýbe i po
+štítku, po přejmenování větve a **po pushi** — takže by *do dalšího komentáře* skončilo pushem
+a nabídka by slibovala něco jiného, než dělá. Je to zrovna ten vzor, který Copilot v tomhle repu
+nachází opakovaně: text tvrdí víc, než data unesou. Zvolila se cesta o jedno volání dražší
+(`comments.totalCount + reviews.totalCount` v dávkovém dotazu), protože rozdíl mezi pushem
+a komentářem je celý obsah těch dvou voleb.
+
+**Zamítnutá varianta: rozšířit `PullRequestHeadsQuery` (#420) místo vlastního dotazu.** Ušetřilo by
+to jedno volání za tik v nejhorším případě. Zahodilo se to, protože obě rozhlídky mají jiný
+předfiltr — zastaralé nálezy se ptají na **cizí PR s uloženými nálezy**, odložení na **odložená
+PR** —, takže by společný dotaz musel spojit dvě různé množiny a jedné z nich vozit pole, které
+nikdy nepřečte. `PullRequestHead` by navíc dostalo pole o komentářích, tedy jméno, které lže
+o polovině typu.
+
+**Zamítnutá varianta: odkládat i vlastní PR.** Vypadá to jako zbytečné omezení a technicky by nic
+nebránilo. Rozhodl o tom **kresba**: blok `Odložené` visí pod **frontou**, takže odložené vlastní
+PR by ze sekce `Moje PR` zmizelo a **nikde** by se neobjevilo — tedy zrovna ta tichá díra, kvůli
+které tohle issue existuje. Kdyby na to jednou přišla řeč, cena za to je druhý blok pod sekcí
+`Moje PR`, ne přepnutí příznaku.
+
+**Změna proti zadání issue: `Vlastní datum…` v nabídce není.** Kalendář v kontextové nabídce je
+druhý překryv nad prvním a je to vlastní obrazovka s vlastním fokusem a vlastní klávesnicí; čtyři
+hotové volby pokrývají to, co člověk zadá v devíti případech z deseti, a delší odklad než týden se
+dá složit dvojím odložením. Je to **zapsaná mezera**, ne opomenutí — kdyby chyběla, vrátí se to
+jako vlastní issue s vlastním zákresem.
+
+**Naučeno z proklikání: akce, která se navěsí u jednoho volajícího, na ostatních chybí — a je to
+třída chyb, ne překlep.** `PullRequestRow` je od #172 **jeden** řádek se **třemi** volajícími
+(seznam, sekce `Rozdělaná`, pruh desky). Nabídka `Odložit` se navěsila jedině ve
+`PullRequestListView`, takže na domově — což je **deska** — odložit nešlo nic, přestože tam věta pod
+pozdravem hlásila `· 2 odložené`. Rozhodlo se to opravit **na příčině, ne na projevu**, třemi věcmi
+naráz:
+
+1. **`SnoozeAction` je jedna hodnota, ne dvojice `offers` + `snooze`**, a skládá ji jedno místo
+   (`AppStore.snoozeAction(for:)`). Dva parametry, které se musí předat oba a na každém místě
+   zvlášť, jsou zrovna ten tvar, na který se zapomíná.
+2. **Stráž nad zdrojáky** (`PullRequestRowSnoozeWiringTests`): kde stojí `PullRequestRow(`, tam
+   musí stát i `snoozeAction:`. Za běhu se to tvrdit nedá — `body` je neprůhledný typ —, takže bez
+   ní by se na čtvrté místo zapomnělo znovu. Je to **stráž na příště**, ne na ta tři.
+3. **Blok `Odložené` i na desce**, v pravém sloupci nahoře, z **týchž** řádků jako ten pod frontou
+   (`SnoozedRowsView`). **Číslo, ze kterého z té obrazovky nevede cesta, je horší než žádné
+   číslo**; tvrzení, které se z obrazovky nedá ani ověřit, ani rozbalit, je horší než žádné tvrzení.
+
+**Zamítnutá varianta: udělat klikací tu část věty pod pozdravem** (`· 2 odložené` → přepnout do
+fronty). Je to méně kódu a nekreslí to nový blok. Zahodilo se to, protože částečně klikací věta se
+nedá objevit — v okně nic nenaznačuje, že zrovna tahle dvě slova jsou odkaz —, a odpověď by stejně
+byla *jdi jinam*, kdežto blok tu odpověď dává na místě. Cena je jeden blok v pravém sloupci, a ten
+se nekreslí, když odložené nic není.
+
+**Zamítnutá varianta: nechat řádek si odložení vzít z `@Environment`.** Odpadlo by předávání na
+třech místech. Zahodilo se to, protože `PullRequestRow` store nezná **schválně** (`List` staví řádky
+líně a mimo sledování závislostí rodiče, viz #502) a prostředí by tu hranici obešlo pro jednu akci.
+Stráž nad zdrojáky řeší totéž a nic neposouvá.
+
+**Deska přitom počítá jinou množinu než fronta, a je to zúžení, ne rozejití.** `snoozedPullRequests`
+stojí nad `pullRequests` (před filtrem), protože na tomtéž stojí `boardEntries`;
+`snoozedQueuePullRequests` nad `visiblePullRequests` (po filtru), protože blok pod frontou mluví
+o tom, co se z **té** fronty schovalo. Nad zapnutým filtrem by jedno číslo lhalo tak jako tak — dvě
+množiny jsou levnější než jedna nepravda.
+
+**V sekci `Rozdělaná` odložený řádek zůstane, a je to vědomé.** Odložení je tvrzení o **frontě**, ne
+o rozdělané práci; skrýt draft jen proto, že jsem si PR odsunul, by byla ta tichá díra o patro níž.
+Odložit se odtud přesto dá — je to týž řádek.
+
+**Změna proti zákresu: první volba míří na nejbližší devátou, ne na zítřek.** Deck i sekce 53 píšou
+`do zítra 9:00`. Odložení zadané v jednu v noci by tím ale PR schovalo na dvaatřicet hodin, což je
+opak toho, co „do rána“ znamená. Okamžik je proto **příští výskyt deváté** a titulek se z něj
+**odvozuje** (`do rána 9:00`, když je devátá ještě dneska) — napsané `zítra` by v tu chvíli lhalo.
+
 ### Záznam rozhodnutí — dráha smyčky vlastního PR (#508)
 
 Zákres (deck *Směry pro PRism*, stránka D; v repu sekce 52) říká, že dráha nese **stav a jedinou

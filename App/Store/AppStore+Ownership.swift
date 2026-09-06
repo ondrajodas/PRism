@@ -73,8 +73,17 @@ extension AppStore {
     ///
     /// **Nikdy z tohohle getteru neuklízej.** Úklid a eviction berou `summaries` z tiku, tedy plný
     /// seznam (viz `AppStore.pullRequests`) — klon vlastního PR zabírá místo stejně jako cizí.
+    ///
+    /// **Od #512 je to zúžení dvojí: podle autora a bez odložených.** Odložení je *tenhle teď
+    /// vidět nechci*, tedy tvrzení o frontě — takže se z ní PR schová všude, kde se o frontě něco
+    /// říká (odznak, souhrn, hromadné spuštění, automat). Ven z toho vede blok `Odložené` pod
+    /// frontou (`snoozedQueuePullRequests`), který stojí nad **týmž** seznamem, takže se ty dvě
+    /// množiny nemají čím rozejít.
     var queuePullRequests: [PullRequestSummary] {
-        Policy.pullRequests(pullRequests, ownedBy: .theirs, mine: ownLogins)
+        Policy.pullRequests(
+            Policy.pullRequests(pullRequests, ownedBy: .theirs, mine: ownLogins),
+            withoutSnoozed: isSnoozed(_:)
+        )
     }
 
     /// Fronta **po filtru** — obsah sekce `Fronta` a její odznak v railu (#332).
@@ -82,7 +91,12 @@ extension AppStore {
     /// Zrcadlí `visibleOwnPullRequests`: nejdřív filtr, pak autor. Dvě sekce, dvě množiny, jedno
     /// řazení — a `visiblePullRequests` zůstává plný pohled, ze kterého se obě berou.
     var visibleQueuePullRequests: [PullRequestSummary] {
-        Policy.pullRequests(visiblePullRequests, ownedBy: .theirs, mine: ownLogins)
+        Policy.pullRequests(
+            Policy.pullRequests(visiblePullRequests, ownedBy: .theirs, mine: ownLogins),
+            // Bez odložených (#512) — jako `queuePullRequests`. Blok `Odložené` pod seznamem stojí
+            // nad tímtéž vstupem, takže se to, co ze seznamu zmizí, objeví právě v něm.
+            withoutSnoozed: isSnoozed(_:)
+        )
     }
 
     /// Kolik PR **ve frontě** schoval filtr (#332) — číslo u tlačítka filtru nad frontou.

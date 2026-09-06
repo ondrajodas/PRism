@@ -51,10 +51,13 @@ struct BoardView: View {
         // ptá na předání i na merge a skládá blok `Dění`; getter volaný z každého pruhu zvlášť
         // by tu práci udělal šestkrát za sebou.
         let board = store.board
+        // **Taky jednou za překreslení**, ze stejného důvodu jako `board`: mluví o něm věta pod
+        // pozdravem i blok v pravém sloupci, a getter volaný z obou by ten seznam prošel dvakrát.
+        let snoozed = store.snoozedPullRequests
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                head(board)
-                columns(board)
+                head(board, snoozed: snoozed.count)
+                columns(board, snoozed: snoozed)
             }
             .padding(.horizontal, 26)
             .padding(.top, 22)
@@ -71,13 +74,13 @@ struct BoardView: View {
 
     // MARK: - Hlavička
 
-    private func head(_ board: Board) -> some View {
+    private func head(_ board: Board, snoozed: Int) -> some View {
         HStack(alignment: .bottom, spacing: 20) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: greeting)
                     .font(.system(size: 25, weight: .semibold))
                     .tracking(-0.5)
-                Text(verbatim: summarySentence(board))
+                Text(verbatim: summarySentence(board, snoozed: snoozed))
                     .font(.system(size: 13))
                     .foregroundStyle(Palette.ink2)
             }
@@ -110,9 +113,16 @@ struct BoardView: View {
     ///
     /// **Nenačtená fronta větu nedostane.** „Načítám frontu…“ je stav, ve kterém se o práci nedá
     /// tvrdit nic — a nula nad nenačtenými daty je ta nebezpečná strana.
-    private func summarySentence(_ board: Board) -> String {
+    private func summarySentence(_ board: Board, snoozed: Int) -> String {
         guard store.lastSuccess != nil else { return "Načítám frontu…" }
-        return Policy.boardSentence(board)
+        // **Odložené se připisují** (#512): na desce nejsou v žádném pruhu, takže by o nich jinak
+        // domov neřekl nic. Rozbalit se dají v bloku `Odložené` v pravém sloupci — do opravy #512
+        // tady stálo číslo, ke kterému z téhle obrazovky nevedla cesta.
+        //
+        // **Počet chodí shora** (`snoozedPullRequests`, tedy před filtrem — na tomtéž vstupu stojí
+        // pruhy): filtr je věc fronty, ne desky. Kdyby si ho tahle funkce brala ze storu sama,
+        // prošel by se ten seznam podruhé kvůli jednomu číslu.
+        return Policy.boardSentence(board, snoozed: snoozed)
     }
 
     /// Kdy se to naposledy načetlo a kolik zbývá do příštího tiku — `poslední tik 09:41 ·
@@ -148,7 +158,7 @@ struct BoardView: View {
 
     // MARK: - Dva sloupce
 
-    private func columns(_ board: Board) -> some View {
+    private func columns(_ board: Board, snoozed: [PullRequestSummary]) -> some View {
         // Poměr z návrhu (`1.45fr 1fr`), ne pevná šířka: pravý sloupec drží dění a útratu, a ty
         // se v proužku číst nedají.
         ProportionalColumns(ratios: [1.45, 1], spacing: 16) {
@@ -166,6 +176,11 @@ struct BoardView: View {
                 }
             }
             VStack(spacing: 12) {
+                // **Nahoře, ne pod útratou** (#512, oprava po proklikání): věta pod pozdravem
+                // hlásí `· 2 odložené` a tenhle blok je jediné místo domova, kde se to číslo dá
+                // rozbalit — má tedy být v jedné výšce s ní, ne na konci sloupce. Když odložené
+                // nic není, nekreslí se a sloupec vypadá jako dřív.
+                snoozedBlock(snoozed)
                 activity(board.activity)
                 spendBlock
             }
@@ -349,7 +364,11 @@ struct BoardView: View {
                 ownership: ownership,
                 openPrompt: { store.openAgentPrompt(in: entry.id) },
                 pending: handoff.pending,
-                activity: handoff.activity
+                activity: handoff.activity,
+                // Odložit i na desce (#512, oprava po proklikání) — **jeden řádek, jedna podoba**.
+                // Deska je první obrazovka, kterou vidím, a věta pod pozdravem o odložených mluví;
+                // nabídka, která by tady chyběla, by z toho čísla udělala tvrzení bez cesty dál.
+                snoozeAction: store.snoozeAction(for: entry.pullRequest)
             )
             // Vlevo nic: proužek stavu má sedět na hraně pruhu, jak ho kreslí návrh.
             .padding(.trailing, 13)
@@ -431,6 +450,50 @@ struct BoardView: View {
 
     private var separator: some View {
         Rectangle().fill(Palette.lineSoft).frame(height: 1)
+    }
+
+    // MARK: - Odložené
+
+    /// Blok `Odložené` na desce (#512, oprava po proklikání).
+    ///
+    /// **Číslo, ze kterého nevede cesta, je horší než žádné číslo.** Věta pod pozdravem hlásila
+    /// `· 2 odložené` a domov na to neuměl odpovědět: blok visel jedině pod frontou, tedy na jiné
+    /// obrazovce. Tenhle blok je odpověď — **z týchž řádků** jako ten pod frontou
+    /// (`SnoozedRowsView`), aby se ty dvě podoby nemohly rozejít.
+    ///
+    /// **Nekreslí se, když odložené nic není**, jako prázdný pruh desky (#515) a jako blok pod
+    /// frontou: rámeček s nulou je odpověď na otázku, kterou nikdo nepoložil. Rozhoduje o tom
+    /// `isEmpty`, ne `Policy.snoozedBlockTitle`: nadpis tady skládá rám bloku (`block(_:count:)`),
+    /// takže volat funkci na titulek a titulek zahodit by bylo tvrzení o sdílení, které neplatí.
+    ///
+    /// **Cesta do fronty je v hlavičce**, jako u `Dění`: odložené se odkládají tam a v seznamu je
+    /// vidět i to, co je nad nimi.
+    @ViewBuilder private func snoozedBlock(_ snoozed: [PullRequestSummary]) -> some View {
+        if !snoozed.isEmpty {
+            // **Strop, jako u pruhů a u `Dění`.** Nadpis počítá všechny, kreslí se prvních pět
+            // a patka řekne, kolik se nevešlo — bez toho by dvacet odložených roztáhlo pravý
+            // sloupec přes celou obrazovku a nikde by nestálo, že je to všechno.
+            let shown = Array(snoozed.prefix(Policy.snoozedBoardRowLimit))
+            block("Odložené", count: snoozed.count, action: { sectionLink(.queue, title: "do fronty →") }) {
+                VStack(spacing: 0) {
+                    SnoozedRowsView(
+                        pullRequests: shown,
+                        note: store.snoozeNote(for:),
+                        open: { store.openTab($0) },
+                        wake: { pr in Task { await store.wake(pr) } }
+                    )
+                    .padding(.vertical, 4)
+                    if snoozed.count > shown.count {
+                        separator
+                        footerRow(BlockFooter(
+                            title: "Zobrazit všechny odložené",
+                            rest: "+\(snoozed.count - shown.count)",
+                            section: .queue
+                        ))
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Dění
