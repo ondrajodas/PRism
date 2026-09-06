@@ -36,6 +36,13 @@ struct PullRequestRow: View {
     /// v meta řádku. Prázdná znamená „nic nepřibylo“ (nebo se ještě nikdo nedíval) a řádek pak
     /// vypadá jako dřív; bere se z **téhož** `HandoffReport` jako `pending`.
     var activity: ForeignActivity = .none
+    /// Co na vlastním PR dělá agent (#511) — `agent běží · 4 min`, nebo `push čeká na tebe`.
+    /// `nil` = neběží nic a nic nečeká; na cizím PR **nikdy** (rozhoduje `Policy.agentRowPill`).
+    ///
+    /// **Skládá to store, ne řádek**, a je to kvůli hodinám: uplynulý čas se počítá z `time.now`,
+    /// tedy z toho zdroje času, který se v testech dá nastavit. `Date()` uvnitř `body` by z toho
+    /// udělal měření, které se nedá zopakovat.
+    var agent: AgentRowPill?
     /// Odložit (#512) — **jedna hodnota, ne dvojice nabídka + akce**. `nil` znamená „řádek
     /// o odložení neví“ (náhledy, testy), prázdná nabídka uvnitř znamená „nesmí se“ (vlastní PR,
     /// `Policy.canSnooze`). V obou případech se nekreslí **nic**, ne zašedlá položka — ta by
@@ -123,7 +130,14 @@ struct PullRequestRow: View {
             //
             // **Když nezbývá nic, zůstává odznak.** Prázdné místo po pilulce by z vlastního řádku
             // udělalo řádek, ze kterého nejde poznat, jestli review vůbec běželo.
-            if let pending = pendingHandoff {
+            // **Agent přebíjí obojí, a jen na vlastním PR** (#511). Je to tentýž jediný slot
+            // a tatáž úvaha jako u `N k předání` (#334): tři pilulky vedle sebe se v řádku
+            // neuživí, takže se ukazuje ta, která odpovídá na dnešní otázku. A dokud nad PR běží
+            // agent, je to on — `6 k předání` nad běžícím agentem radí práci, kterou zrovna dělá
+            // někdo jiný.
+            if let agent {
+                agentPill(agent)
+            } else if let pending = pendingHandoff {
                 handoffPill(pending)
             } else {
                 ReviewStateBadge(state: reviewState, blocking: row.blocking)
@@ -182,6 +196,28 @@ struct PullRequestRow: View {
             .designPill(tint: Palette.find, background: Palette.find.opacity(0.15))
             .help("Nálezy, vlákna a komentáře, které jsi ještě nepředal agentovi — sestavit zadání jde v panelu Zadání")
             .accessibilityLabel("\(pending) k předání agentovi")
+    }
+
+    /// `agent běží · 4 min` / `push čeká na tebe` (#511).
+    ///
+    /// **Akcent, ne barva nálezu**: na rozdíl od `N k předání` to není práce, která leží, ale
+    /// **něco, co se právě děje nebo právě čeká** — tedy tatáž role, jakou má akcent u odznaku
+    /// `běží`. `Prompt →` se s ním o pozornost nepere: to je tlačítko a stojí za ním.
+    private func agentPill(_ pill: AgentRowPill) -> some View {
+        Text(verbatim: pill.text)
+            .designPill(tint: Palette.accent2, background: Palette.accent2.opacity(0.15))
+            .help(Self.agentHelp(pill))
+            .accessibilityLabel(pill.text)
+    }
+
+    /// Nápověda říká **co dál**, ne co je vidět — text pilulky se v ní neopakuje.
+    private static func agentHelp(_ pill: AgentRowPill) -> String {
+        switch pill {
+        case .running:
+            "Agent opravuje tenhle PR podle cizího review. Co dělá, je vidět v sekci Větev."
+        case .awaitingPush:
+            "Agent nechal commit v kopii repa. Prohlédni si ho a přetlač z panelu — samo nic neodejde."
+        }
     }
 
     /// `Prompt →` u vlastního PR (#331, akce od #333) — plné akcentové tlačítko z návrhu

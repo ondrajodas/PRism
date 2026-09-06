@@ -204,22 +204,8 @@ extension Policy {
             + "Co ve stromě zůstalo, zahoď, nebo si to prohlédni v terminálu."
     }
 
-    /// Věta o tom, jak agent dopadl — do stavu `rebased`, když commit vznikl z jeho práce.
-    ///
-    /// **Vlastní věta, ne ta o rebase**: v tom stavu neleží přehrané commity, ale jeden commit
-    /// s opravou. Text „Rebase hotový“ by nad ním tvrdil něco, co se nestalo (a je to zrovna ta
-    /// třída chyb, kterou Copilot v tomhle repu nachází: text, který tvrdí víc, než data unesou).
-    static func agentFixResult(files: Int, skipped: String?) -> String {
-        let count = Plural.czech(files, one: "soubor", few: "soubory", many: "souborů")
-        let head = files > 0
-            ? "Agent upravil \(count) a commit leží v kopii repa."
-            : "Agent commit připravil v kopii repa."
-        return head + " Do remote se zatím nesáhlo." + (skipped.map { " \($0)" } ?? "")
-    }
-
-    /// Věta o tom, že agent doběhl a **nic nezměnil**. Vlastní stav, ne selhání: je to legitimní
-    /// výsledek („na tohle nestačím“, „nemám co opravit“), po kterém v cache nic neleží.
-    static func agentFixNothing(detail: String?) -> String {
-        "Agent nic nezměnil, takže není co commitnout." + (detail.map { " \($0)" } ?? "")
-    }
+    // **Věty o výsledku běhu se od #511 skládají jinde** (`Policy.agentRunSentence`
+    // v `AgentRunReport.swift`), a je to přesun, ne úklid: o témž výsledku mluví panel, notifikace
+    // i řádek v `Dění`, takže musí být jedno místo, ze kterého všechna tři berou. Zbylo tu to, co
+    // se ptá **na běh**, ne na jeho konec.
 }

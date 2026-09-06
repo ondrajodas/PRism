@@ -241,6 +241,24 @@ final class FakeRepoCheckout: RepoCheckout, @unchecked Sendable {
         lock.withLock { agentCommits.append((pr, message)) }
         return try agentCommit.get()
     }
+
+    /// Co vydá čtení commitu agenta (#511). **Výchozí je chyba, ne prázdný commit**: test, který
+    /// si o to čtení neřekl, se k němu nemá dostat — a prázdná odpověď by v okně vypadala jako
+    /// diff, který nic nemění.
+    var agentFixCommitAnswer: Result<AgentFixCommit, CheckoutError> = .failure(
+        .gitFailed(exitCode: 0, message: "fake: commit agenta nikdo nenastavil")
+    )
+    /// Nad kterými stromy se ten commit četl — na tom stojí tvrzení, že se **nesahá na GitHub**.
+    var agentFixCommitRequests: [(worktree: URL, since: String)] {
+        lock.withLock { agentFixCommitReads }
+    }
+
+    private var agentFixCommitReads: [(worktree: URL, since: String)] = []
+
+    func agentFixCommit(in worktree: URL, since headSha: String) async throws -> AgentFixCommit {
+        lock.withLock { agentFixCommitReads.append((worktree, headSha)) }
+        return try agentFixCommitAnswer.get()
+    }
 }
 
 

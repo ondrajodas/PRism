@@ -251,12 +251,31 @@ taky ne. **Do remote se přitom nesáhne**: skončí to ve stavu *přerovnáno, 
 vede jediná cesta ven — `Force push…` s potvrzením, jako od #466. Běhy čerpají **tentýž** denní
 strop `autoRunsPerDay`.
 
+**Od #511 je ten běh vidět, i když u něj nesedím.** Dokud agent pracuje, kreslí sekce `Větev` pod
+větou o stavu **živý ocas** posledních čtyř kroků (`čte …`, `upravuje …`) — patnáctiminutové ticho
+je jinak k nerozeznání od zaseknutého okna. Po doběhnutí je tam věta, která jmenuje **strom
+i to, že se nic neodeslalo** (*Agent upravil 2 soubory ve stromě 499-sync · nic se neodeslalo.*),
+a k ní tři akce: **`Prohlédnout diff agenta`** (diff toho commitu, čte se `git` v kopii repa —
+na GitHubu ten commit není), `Force push…` a `Zahodit změny`. **O testech se v žádné z těch vět
+nemluví**: session je pustit nemůže (nemá `Bash`) a aplikace je nad jejím výsledkem nepouští.
+
+Konec běhu jde **toutéž branou jako ostatní hlášky**: banner s vlastním přepínačem
+`Agent na mém PR doběhl` a řádek v `Dění`, který zůstane, i když je banner vypnutý. V řádku
+`Moje PR` je u toho pilulka `agent běží · 4 min`, po doběhnutí `push čeká na tebe` — je to
+**tentýž jediný slot**, ve kterém jindy stojí `N k předání` nebo odznak review.
+
+**Stanice `Agent` se kvůli tomu na dráhu vlastního PR nevrací.** #508 ji odebralo proto, že
+neměla živý obsah; ten obsah se sem vejde, ale do kapsle na dráze ne — dráha o agentovi mlčet
+nezačala, protože stanice `Push` hlásí `probíhá` i `nepřetlačeno`.
+
 **Notifikace o review jsou cesta pro review requesty**, takže o vlastním PR nedají vědět: „Nový PR
 k review“ o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi, a výsledek review,
 které jsem si sám spustil, je v okně vidět na řádku i v panelu.
 
-**O vlastních PR se hlásí jedna věc, a je to ta opačná** (#335): že se na nich ozval **někdo jiný** —
-kolega odpověděl do vlákna, Copilot dopsal review. Aplikace se proto na diskuzi vlastních PR ptá sama
+**O vlastních PR se hlásí dvě věci** (#335, #511), a obě jsou ten opačný směr. První je, že se na
+nich ozval **někdo jiný** — kolega odpověděl do vlákna, Copilot dopsal review;
+druhá, že na ně **odpověděl agent** (viz výš), a má vlastní přepínač, protože kdo si zapne agenta,
+nemusí chtít vyrušit u každého jeho konce. Aplikace se proto na diskuzi vlastních PR ptá sama
 na pozadí, a je to **záměrně skoupé**: konverzace se tahá jedině u PR, kde se `updatedAt` ze seznamu
 posunul (tedy kde se doopravdy něco stalo), nejvýš **u tří PR za pět minut** a jedině po úspěšném tiku
 pollingu — takže se to vejde do jeho backoffu a při rate limitu se nekouká vůbec. Na klidný den to

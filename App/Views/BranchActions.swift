@@ -38,4 +38,12 @@ struct BranchActions: Sendable {
     /// Je to ta půlka „co nerozřeší, nechá být“: v rozdělaném rebase má člověk plnou moc a kontext
     /// připravený, takže se nabízí místo hádání.
     var openTerminal: @MainActor () -> Void = {}
+    /// Prohlédnout, co agent v kopii repa nacommitoval (#511) — diff stromu `-sync` proti hlavě
+    /// pull requestu.
+    ///
+    /// **Prohlížeč, ne cesta ven**: čte se `git diff` v cache, kreslí ho tatáž obrazovka jako diff
+    /// commitu (`CommitDiffView`, #317) a nic se tím neodesílá. Je to ten krok, který má být mezi
+    /// „agent má hotovo“ a nevratným force pushem — a do #511 chyběl: jediné, co šlo, bylo
+    /// potvrdit push a přečíst si to až na GitHubu.
+    var showAgentDiff: @MainActor () -> Void = {}
 }

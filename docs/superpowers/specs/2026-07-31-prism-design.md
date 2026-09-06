@@ -7570,3 +7570,52 @@ který panel už umí ukázat (`přerovnáno, nepřetlačeno`), takže se s nič
 ne session)“. Session je pustit nemůže (`Bash` v sadě není) a aplikace to zatím nedělá — v promptu
 je proto věta, že se **nesmí tvrdit**, že bylo něco ověřeno spuštěním. Až to bude potřeba, je to
 vlastní issue: pustit testy nad stromem `-sync` je práce aplikace, ne rozšíření sady.
+
+### Záznam rozhodnutí — běžící agent bydlí v sekci `Větev`, ne na dráze (#511)
+
+**Mění zadání #511, ne rozhodnutí #508.** Issue stálo na větě „stanice *Agent* na dráze (#508)
+ukazuje stav (`běží 4 min` / `hotovo 7 min` / `spadlo`)“ — psalo se ve chvíli, kdy dráha měla sedm
+stanic. Čtvrté kolo #508 stanici `Agent` odebralo a **důvodem byla přesně tahle chybějící věc**:
+neměla živý obsah, který měla dodat #511. Rozhodnutí je tedy dvojznačné z podstaty: buď se stanice
+vrátí i s obsahem, nebo se obsah ukáže jinde.
+
+**Zvažovaly se dvě cesty:**
+
+1. **Vrátit stanici `Agent` s obsahem.** Zamítnuto, a ne kvůli #508, ale kvůli tomu, co se do
+   kapsle vejde. `OwnLoop.Stop.detail` je **jedno slovo** — proto tam u šedých stanic stojí
+   `pozadu`, `konflikt`, `nepřetlačeno`, `zjišťuju`, a proto se u #508 měřilo, že pět kapslí se
+   o šířku hlavičky dělí líp než sedm. Obsah, který #511 dodává, je **čtyřřádkový ocas, věta
+   o výsledku a tři tlačítka**; do kapsle by se vešlo `běží 4 min` a zbytek by stejně musel bydlet
+   jinde. Šestá kapsle by tedy ostatní zúžila a vadu z #508 vrátila v mírnější podobě.
+2. **Ukázat agenta tam, kde ta práce je** — v sekci `Větev`. **Vybráno.** Ta sekce od #510 kreslí
+   všechny čtyři konce běhu, drží `Force push…` i `Zahodit změny`, a je to týž strom, o kterém se
+   mluví. Ocas, věta i třetí tlačítko se tam vejdou při každé šířce panelu.
+
+**Dráha o agentovi nezačala mlčet, a to je to, co tu volbu dělá levnou.** Stanice `Push` čte
+`BranchSyncState`, takže běžící agent je `probíhá` a jeho nepřetlačený commit `nepřetlačeno`
+(rozhodnutí z #510) — commit v kopii repa do obsahu té stanice patří, kdežto do stanice `Agent` by
+patřil jenom proto, že se tak jmenuje. Akce aktivní stanice (`Move.openBranch`) vede do téže sekce,
+takže cesta z dráhy k agentovi je o jedno kliknutí a nevznikla kvůli tomuhle issue.
+
+**Zamítnuto bylo taky vlastní místo pro agenta** (blok pod dráhou, vlastní tab): byl by to třetí
+způsob, jak se v tomhle okně mluví o práci v kopii repa, a dva už jsou dost.
+
+### Záznam rozhodnutí — o testech se v účtu agenta netvrdí nic (#511)
+
+**Ruší půlku zadání z decku.** Deck (stránka *Za mě › Z7*) i issue #511 měly větu *„Agent upravil
+2 soubory ve stromě 499-sync · testy zelené · nic se neodeslalo.“* a notifikaci *„2 soubory, testy
+zelené“*. **Testy ale nikdo nepustil.** Session je pustit nemůže — `Bash` v její sadě není
+(`AgentFixCommand` bere sadu doslova z `ConflictCommand`, #467) — a aplikace je nad jejím výsledkem
+nepouští; #510 to nechalo jako zapsanou mezeru a do promptu dalo větu, že se to **nesmí tvrdit**.
+
+**Věta o zelených testech je proto text, který data neunesou**, a je to nejhorší možná podoba téhle
+chyby: čte se **před nevratnou akcí** (force push) a odpovídá přesně na tu otázku, kvůli které si
+člověk diff otevírá. Kdo jí uvěří, pushne neověřený commit.
+
+**Hlídá to test, ne komentář** (`AgentRunReportTests`): nad všemi pěti výsledky se prochází věta
+v panelu, titulek banneru i další krok a v žádném z těch textů nesmí být `test` ani `zelen`.
+Ověřeno vložením regrese — doplnění `· testy zelené` do věty shodí tři testy ve dvou sadách.
+
+**Co by ta věta stálo pravdivou udělat**, je vlastní issue: aplikace by musela nad stromem `-sync`
+pustit `xcodebuild test` (nebo co si repo řekne), tedy **další podproces, další konfigurace a další
+minuty** — a hlavně rozhodnutí, co se stane s výsledkem, když spadne. Do #511 to nepatří.

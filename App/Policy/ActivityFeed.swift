@@ -111,7 +111,9 @@ extension Policy {
         case .newPullRequest, .reReview, .findings, .clean, .failure, .staleFindings, .leftQueue,
              .returnedFromSnooze:
             ownership == .theirs
-        case .foreignActivity:
+        case .foreignActivity, .agentFix:
+            // **Agent běží jedině na vlastním PR** (`Policy.agentFix` vrací `notMine` jako první
+            // odpověď), takže řádek o něm nad cizím PR by byl záznam o něčem, co se nestalo.
             ownership == .mine
         }
     }
@@ -129,6 +131,7 @@ extension Policy {
         case .clean: .clean
         case .failure: .failure
         case .activity: .foreignActivity
+        case .agentFix: .agentFix
         }
     }
 
@@ -145,6 +148,11 @@ extension Policy {
         // místo, kde se dá poznat, co reviewer doopravdy dělal.
         case .clean, .failure: .tab(.progress)
         case .foreignActivity: .tab(.conversation)
+        // **Na `Přehled`, protože nad tabem je dráha** (#508) a pod ní sekce `Větev` (#465, #510) —
+        // tedy obojí, co o běhu agenta něco říká. Zadání #511 mluví o „kliku na dráhu“; dráha
+        // žádný vlastní tab nemá, kreslí se **nad** pruhem záložek, takže ji `Přehled` otevře
+        // stejně jako kterýkoli jiný — a `Přehled` k ní přidá to, co se o PR ví.
+        case .agentFix: .tab(.overview)
         // Zastaralé nálezy vedou na `Commity`, ne na `Nálezy`: rozhodnutí, co s nimi, se dělá
         // podle toho, co v těch commitech přišlo.
         case .staleFindings: .tab(.commits)
@@ -160,6 +168,11 @@ extension Policy {
     static func tone(of kind: ActivityEvent.Kind) -> ActivityTone {
         switch kind {
         case .newPullRequest, .reReview, .foreignActivity: .accent
+        // **Jedna barva na celý druh, ne podle toho, jak běh dopadl.** Puntík odpovídá na „co to
+        // je“, ne na „jak to dopadlo“ — to nese věta v řádku. Zeleně by se spadlý běh tvářil jako
+        // úspěch, červeně by se hotová oprava tvářila jako porucha, a akcent je to, co obojí
+        // spojuje: **na tomhle PR na tebe něco čeká**.
+        case .agentFix: .accent
         case .findings, .failure: .critical
         case .clean: .ok
         case .staleFindings: .stale
@@ -182,6 +195,7 @@ extension Policy {
         case .clean: "checkmark"
         case .failure: "xmark"
         case .foreignActivity: "bubble.left"
+        case .agentFix: "wand.and.stars"
         case .staleFindings: "clock.arrow.circlepath"
         case .leftQueue: "minus"
         case .returnedFromSnooze: "alarm"
@@ -196,7 +210,9 @@ extension Policy {
     static func showsSilentChip(_ kind: ActivityEvent.Kind, announced: Bool) -> Bool {
         guard !announced else { return false }
         switch kind {
-        case .newPullRequest, .reReview, .findings, .clean, .failure, .foreignActivity: return true
+        case .newPullRequest, .reReview, .findings, .clean, .failure, .foreignActivity,
+             .agentFix:
+            return true
         case .staleFindings, .leftQueue, .returnedFromSnooze: return false
         }
     }
@@ -302,6 +318,36 @@ extension Policy {
             at: at,
             headline: sentence ?? summary,
             detail: sentence == nil || activity.count < 2 ? nil : summary,
+            wasAnnounced: announced
+        )
+    }
+
+    /// Řádek o tom, že doběhl agent na **vlastním** PR (#511). `nil` = nehlásí se.
+    ///
+    /// **Headline je tentýž text jako titulek banneru** (`Policy.agentRunHeadline`), na rozdíl od
+    /// cizí aktivity, kde se ty dva obracejí. Důvod je v tom, čím se ta položka pozná: u cizí
+    /// aktivity je to **věta, kterou někdo napsal**, kdežto tady je to **jak to dopadlo** — a to
+    /// je zrovna to, co se do titulku vejde celé. Druhé skládání téhož by se s bannerem rozešlo.
+    ///
+    /// **Detail je celá věta o výsledku**, tedy ta z panelu (`Policy.agentRunSentence`) — v řádku
+    /// je na ni místo a je to jediné místo, kde se to, co agent nechal být, dá po týdnu dohledat:
+    /// stav v `AppStore` se zavřením aplikace ztratí a záznam běhu se k PR neukládá.
+    static func agentFixEvent(
+        for pr: PRIdentifier,
+        ownership: PullRequestOwnership = .mine,
+        outcome: AgentRunOutcome,
+        worktree: String?,
+        at: Date,
+        announced: Bool
+    ) -> ActivityEvent? {
+        guard isReported(.agentFix, on: ownership) else { return nil }
+        return ActivityEvent(
+            id: identity(.agentFix, pr, at: at),
+            kind: .agentFix,
+            pullRequest: pr,
+            at: at,
+            headline: agentRunHeadline(outcome),
+            detail: agentRunSentence(outcome, worktree: worktree),
             wasAnnounced: announced
         )
     }

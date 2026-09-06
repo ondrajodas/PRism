@@ -516,6 +516,41 @@ struct GitRepoCheckout: RepoCheckout {
         return TextLines.nonEmpty(output ?? "").map(String.init)
     }
 
+    /// Commit agenta a jeho diff (#511) — **dvě čtení `gitu`, obě v cache**.
+    ///
+    /// **Hlavička se čte, nedosazuje.** `%an` a `%aI` jsou to, co v repu doopravdy stojí; kdyby se
+    /// autor dosadil z konfigurace aplikace, ukazovalo by okno jiné jméno, než jaké odejde force
+    /// pushem. Nečitelné datum je `nil`, ne „teď“ — vymyšlené datum by v hlavičce vypadalo jako
+    /// změřené.
+    ///
+    /// **Nedělí se `TextLines`m, ale `\u{1}`**: zpráva commitu je víceřádková, takže by dělení na
+    /// řádky rozsekalo poslední pole. Znak `\u{1}` se v hlavičce commitu nevyskytuje a `git` ho
+    /// do formátu pustí doslova.
+    func agentFixCommit(in worktree: URL, since headSha: String) async throws -> AgentFixCommit {
+        let path = worktree.path(percentEncoded: false)
+        let header = try await run([
+            "-C", path, "log", "-1", "--format=%H%x01%an%x01%aI%x01%B", "HEAD",
+        ])
+        let parts = header.components(separatedBy: "\u{1}")
+        guard parts.count == 4, !parts[0].isEmpty else {
+            throw CheckoutError.gitFailed(
+                exitCode: 0,
+                message: "Commit agenta se nepodařilo přečíst z „\(header)“."
+            )
+        }
+        return AgentFixCommit(
+            sha: parts[0],
+            message: parts[3].trimmingCharacters(in: .whitespacesAndNewlines),
+            authorName: parts[1],
+            committedAt: ISO8601DateFormatter().date(from: parts[2]),
+            // **Dvě tečky, ne tři.** Chceme přesně to, co ten commit nad hlavou PR přidal;
+            // trojtečka by hledala společného předka, což je u commitu **nad** tou hlavou totéž,
+            // dokud se hlava nepohne — a ve chvíli, kdy se pohne, by trojtečka tiše ukázala jiný
+            // kód, než jaký force push přetlačí.
+            diff: try await run(["-C", path, "diff", "\(headSha)..HEAD"])
+        )
+    }
+
     func trackedFiles(in worktree: URL) async throws -> [String] {
         // `-c` je sice výchozí, ale vypsané je z příkazu vidět, že jde o index, ne o to,
         // co zrovna leží na disku.

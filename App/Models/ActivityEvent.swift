@@ -16,7 +16,7 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
     /// Který druh novinky to je. Rozhoduje o glyfu, barvě puntíku, cíli kliknutí i o tom, jestli
     /// se u řádku kreslí chip `bez banneru` — všechno v `Policy`, vyčerpávajícím výčtem.
     ///
-    /// **Sedm druhů, devět případů**: `newPullRequest`/`reReview` a trojice výsledků review jsou
+    /// **Osm druhů, deset případů**: `newPullRequest`/`reReview` a trojice výsledků review jsou
     /// v návrhu (sekce 27) jeden druh se dvěma, resp. třemi podobami, protože se liší glyf i to,
     /// kam řádek vede.
     enum Kind: String, Codable, CaseIterable, Hashable, Sendable {
@@ -32,6 +32,14 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
         case failure
         /// Na **vlastním** PR se ozval někdo jiný (#335).
         case foreignActivity
+        /// **Agent na vlastním PR doběhl** (#511) — a je to jediný druh dění, který mluví o práci
+        /// **naší aplikace na mém PR**.
+        ///
+        /// Vlastní druh vedle `foreignActivity`: ta je podnět (někdo se ozval), tohle je odpověď
+        /// na něj. Slít je do jednoho by znamenalo, že se na ose nedá odlišit „přišlo review“ od
+        /// „agent na to review odpověděl“ — přitom druhé se stane jedině tehdy, když si to někdo
+        /// zapnul, a je to zrovna ta věc, kterou chce po návratu k počítači vidět.
+        case agentFix
         /// Hlava se posunula pod uloženými nálezy (tvrdá podmínka č. 5). **Dopočítané** — banner
         /// za to nechodí, protože zastaralé nálezy nemají vyrušovat; dohledat se ale mají.
         case staleFindings
