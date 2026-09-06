@@ -6745,6 +6745,170 @@ se dá složit dvojím odložením.
 ne na `list`), a je to rozhodnutí, ne vedlejšek: musí být vidět i nad **prázdným** seznamem, tedy
 zrovna ve stavu, ve kterém by tichá díra bolela nejvíc.
 
+## Tiché hodiny — velké PR na noc (#519)
+
+PR o dvou tisících řádcích se pouští ve tři odpoledne, když na něj čekám, a bere slot menším.
+**Odklad platí jen na automat**: `Spustit review` ho nezná a PR, který mám otevřený, se neodkládá.
+Zákres je v [`docs/navrh.html`, sekce 46](navrh.html) — dráha `odloženo na noc · poběží 23:00`.
+
+### Práh se bere z hlavičky PR, ne z diffu
+
+`PullRequest.changedLines` je `additions + deletions` z `gh pr view` (a z téhož výčtu polí i
+z dávkového GraphQL dotazu, `MergeReadinessQuery.readinessFields` — dva různé `PullRequest`y
+z jednoho okna by znamenaly, že se odklad rozhoduje jinak po startu a jinak po otevření záložky;
+hlídá to `MergeReadinessQueryTests`).
+
+**Z diffu by to nešlo změřit zrovna u toho PR, kvůli kterému práh existuje**: nad 300 souborů
+vrací GitHub 406 (#542), takže se diff velkého PR nemusí ani stáhnout. Hlavička obě čísla vrací
+vždycky a nic navíc nestojí.
+
+**Součet, ne dvě pole**: smazaný a přidaný řádek stojí reviewera stejně a dvě čísla v modelu by
+znamenala dvě místa, kde se dá sečíst jinak. **`nil` je „nevím“, ne nula** — chybí-li jedno
+z čísel, nevzniká polovina (ta by u PR s tisícem smazaných řádků vyšla pod prahem).
+
+### Čas je past, a jsou v ní tři různé díry
+
+Rozhoduje `Policy.deferToQuietHours(pr:isOpen:now:rules:calendar:)` — **čistá funkce s předaným
+`now` a předaným kalendářem**, takže se dá projít výčtem. `Date()` uvnitř by znamenalo sadu, která
+je zelená jen odpoledne; `Calendar.current` uvnitř sadu, která je zelená jen v jedné zóně (tentýž
+kořen jako globální stav procesu v `Tests/`, #367).
+
+1. **Okno přechází přes půlnoc.** `22:00–6:00` napsané naivně jako `hour >= 22 && hour < 6` je
+   **vždycky** nepravda, takže by se v noci nepustilo nic a odložené běhy by se hromadily do rána,
+   které nikdy nepřijde. `Policy.quietHours(contain:rules:calendar:)` má proto dvě větve podle
+   toho, jestli konec leží za začátkem, nebo před ním.
+2. **Den nemá vždycky 24 hodin.** Nejbližší začátek okna hledá `Calendar.nextDate(…,
+   matchingPolicy: .nextTime)`, ne `+86 400`: na podzimním posunu má den 25 hodin, takže by
+   přičtený interval minul začátek o hodinu (změřeno v testu: z 24. 10. 22:30 do 25. 10. 22:00 je
+   **88 200 s**, ne 84 600).
+3. **Hodina, na kterou se míří, ten den existovat nemusí.** Jarní posun přeskočí 2:00–3:00, takže
+   okno začínající ve dvě nemá kdy začít; `.nextTime` vydá nejbližší další čas. `nil` by v kódu
+   znamenalo „nikdy“ a běh by v cache uvízl.
+
+**Nesmyslné okno odklad vypne, nezastaví review** (`Policy.quietHoursAreUsable`). Ručně editovaný
+`config.json` umí mít hodinu 25 nebo práh nula. **Stejný začátek jako konec je prázdné okno, ne
+ticho pořád**: obě čtení jdou obhájit, ale tohle je to, které se dá poznat — `22`–`22` znamená
+nedopsaný konec, a ticho po celý den by review zastavilo úplně a vypadalo by to jako porucha.
+
+### Kde brána stojí a co odklad stojí
+
+V `AppStore.review` **hned za bránou `hasCurrentReview` a před vším, co něco stojí** — před
+checkoutem, routingem, rozpočtem, zadáním i session. Dřív než tam to nejde: kolik řádků PR mění,
+vyhledávání neříká, takže se **jeden `gh pr view` zaplatí vždycky**. Za bránou na `hasCurrentReview`
+proto, že zreviewovaný PR se nemá co odkládat — slib na běh, který se stejně nespustí, by v dráze
+svítil do rána.
+
+**Ruční běh sem nespadá** (`automaticReviews.contains(pr)`), stejně jako u denního rozpočtu.
+
+### Otevření PR odklad nespouští, a je to odchylka od věty v zadání
+
+Zadání issue má bod **„otevření PR ruší odklad (člověk čeká)“**. Implementovaný je **jen jeho
+první poločas**: PR, který mám otevřený, se **neodloží** (`deferToQuietHours` bere `isOpen`).
+Odklad, který už padl, otevření záložky **nespustí** — od toho je `Pustit teď`.
+
+**Rozhodl o tom zákres, ne pohodlí.** Dráha `odloženo na noc` se kreslí **jedině v otevřené
+záložce** (tab `Průběh` jinde není). Kdyby otevření běh pouštělo, byla by ta dráha vidět nejvýš
+mezi otevřením a nejbližším tikem — a `poběží 23:00` i `Pustit teď` z návrhu by se na obrazovku
+**nedostaly nikdy**. Změřeno na běžící aplikaci: po otevření odloženého PR zbyl na dráhu zlomek
+sekundy, protože tik po startu je hned. Nakreslený stav, který nejde vidět, je horší než odchylka
+od věty v zadání.
+
+Cesta ven je proto **jedno pojmenované tlačítko**, jako `Pustit přesto` u routingu (#518) — a
+`Pustit teď` je navíc **ruční** běh, takže nesáhne na denní rozpočet automatu; automatické spuštění
+kvůli otevření záložky by proti tomu bylo jediné místo v aplikaci, kde *dívat se* stojí session.
+Věta pod dráhou se tím proti návrhu mění (`Odkládá se jen to, na co se zrovna nedívám — pustit jde
+kdykoli:`); zbytek zákresu platí doslova.
+
+### Odklad není obejití limitu
+
+Denní limit (`AutoRunLedger`) i strop útraty se strhávají v `canSpendSession`, tedy v okamžiku, kdy
+se session doopravdy utrácí — a to platí v noci stejně jako ve dne. Odklad mění **kdy**, ne
+**kolik**. Je na to test, který v tichých hodinách pustí dvě velká PR proti limitu jedna.
+
+**`Pustit teď` je proti tomu ruční běh** (`startReview` vyhodí PR z `automaticReviews`), takže si
+o rozpočet nesáhne — za tím stojí člověk. A pouští **celé** review, ne jednoho revieweera: odklad
+padl na celý běh. To je rozdíl proti `Pustit přesto` u routingu (#518), kde je rozhodnutí opravdu
+o jednom skillu.
+
+### Odložený běh přežije restart, a je to celý smysl toho zápisu
+
+`DeferredRunStore` — jeden `deferred.json` v kořeni cache, aktor a lhůta **7 dní**, jako
+`SnoozeStore` (jehož devadesát dní je delší schválně: odložení PR je moje rozhodnutí, kdežto odklad
+je slib na jednu noc). Čte se **před prvním tikem** (`loadDeferredRuns()` hned za odloženými PR).
+
+Bez disku by noc bez běžící aplikace nepustila nic a ráno by to vypadalo, že automat nefunguje —
+a restart je v tomhle repu běžná věc, po každém mergi.
+
+**Zmeškaná noc se pouští ráno, ne odkládá na další.** Vyzvednutý odklad jde do `review` s
+`honoringQuietHours: false`, jinak by ho druhá brána poslala do dalšího odkladu a slib
+`poběží ve 23:00` by se nesplnil nikdy. Je to **parametr, ne pole storu**: je to vlastnost
+jednoho spuštění, a držený stav, který nikdo neuklidí, je zrovna ten vzor, co Copilot v tomhle
+repu nachází.
+
+**Osiřelý zápis se pozná stářím, ne procesem** — a je to rozdíl proti `sessions.json` (#351), kde
+osiřelost vydává `(pid, startedAt)`. Odložený běh žádný proces nemá: je to slib. Osiří tím, že PR
+ze seznamu zmizí (zavřel se, mergnul se), a **vystřelit už nemůže**, protože
+`Policy.deferralsToRelease` bere **seznam z tiku**, ne obsah souboru — tatáž škola jako
+`Policy.snoozeProbe`. Zbývá ho jen uklidit, aby slovník nerostl bez omezení (#224). Z **paměti** ho
+pouští `forget(whatIsNotIn:)` spolu s `routingSkips`; **na disku** se nemaže, zápis kvůli PR, který
+se zavřel na pět minut, by byl disk za nic.
+
+### Dráha `odloženo na noc` je pátý stav, ne odstín čtvrtého
+
+`ReviewerLane.State.deferred(DeferredRun)` se nesmí slít ani s jedním z ostatních: `nespuštěno`
+mluví o revieweerovi, na kterého ještě nedošlo, `přeskočeno` (#518) o tom, na kterého se schválně
+nedošlo, `ve frontě` o tom, kdo čeká na slot **za běžícího review** — a tenhle o tom, na kterého
+**dojde, jen později**. Je to jediný z nich, ve kterém je běh **naplánovaný**: nese okamžik i cestu,
+jak ho pustit dřív.
+
+**Nese celý záznam, ne jen čas**: věta v hlavičce se skládá z počtu řádků a z prahu, který v tu
+chvíli platil (`Policy.deferralNote`). Kdyby dráha znala jen `runAt`, brala by práh z dnešního
+nastavení a po jeho změně by tvrdila něco jiného, než podle čeho se rozhodlo.
+
+**Stojí před `skipped` i před dráhou bez osy, a je to silnější tvrzení než obě**: odkládá se celý
+běh, takže se v tomhle průchodu nerozhodlo ani o routingu — na ten se dojde teprve po checkoutu,
+který se kvůli odkladu nestal. Dráha **s osou** si přednost drží dál: doběhlý běh je pravda o tomhle
+PR a přepsat ho slibem na noc by zahodilo výsledek, který je v tabu `Nálezy` vidět.
+
+**`0,00 $` u něj není** (na rozdíl od přeskočení): u odkladu to není konečná cena, jenom ještě
+nezaplacená. Na tom místě stojí `poběží 23:00` (`Policy.deferralRunLabel`) — den se dopisuje jen
+tehdy, když to není dnes, a `runAt` v minulosti se přizná jako `poběží hned`, protože čas, který
+už byl, by vypadal jako zaseknutý odklad.
+
+### Vyzvednutí bere frontu, ne holý seznam z tiku
+
+**Nález vlastní revize diffu, a byla to tichá díra.** První podoba `releaseDeferredRuns` brala
+`summaries` rovnou z tiku, takže PR, který jsem mezitím **odložil** (#512), by se ve dvacet dva
+večer sám pustil — odložení znamená „tenhle teď vidět nechci“ a to platí i v noci. Vyzvednutí proto
+prochází **tutéž dvojici zúžení jako plánovač**: jen cizí (#332) a bez odložených (#512).
+
+Poznat by se to nedalo: odložený PR není vidět, takže by po ránu ležela session, o kterou nikdo
+neřekl. Je na to test a je ověřený **vloženou regresí**.
+
+### Co odklad nedělá
+
+- **Nemíchá se s odložením PR** (#512). Obojí odkládá, ale odpovídá na jinou otázku: `snoozed.json`
+  je moje rozhodnutí o tom, co chci vidět, `deferred.json` rozhodnutí automatu o tom, kdy se utratí
+  session. Odložené PR se do automatu nedostane vůbec, takže se ty dvě cesty nepotkají.
+- **Nezužuje množinu, se kterou pracuje fronta.** Odložený PR ve frontě **zůstane** — je to práce,
+  která na mě čeká; odloženo je jen review. V tabulce *Které místo chce kterou množinu* proto
+  nemá řádek: zúžení jsou dvě (autor a odložení PR), tohle je třetí věc, a týká se **jednoho běhu**,
+  ne seznamu.
+- **Neruší běžící review.** Brána stojí před spuštěním, ne nad během.
+- **Nezavírá záložku ani nic neuklízí z disku.**
+
+### Nastavení je globální, ne per repo
+
+Vlastní sekce `Tiché hodiny` na stránce `Review a skilly` (přepínač, práh a dvě hodiny přes
+`SettingsHourField`, který za číslem kreslí **odvozený** čas `22:00` — číslo samo neřekne, jestli
+je `6` ráno nebo večer). **Per repo se nepřebíjí**, na rozdíl od režimu, jazyka nálezů, limitu běhu
+a přírůstku: kdy chci mít na stroji ticho, z repozitáře neplyne — tatáž úvaha jako u `appearance`
+a `diffLayout`.
+
+**Výchozí vypnuto**, a je to schválně jiná strana než u `incrementalAfterPush` (#517). Přírůstek
+nic neztrácí, dělá totéž levněji; odklad **mění, kdy** se výsledek objeví. To je volba o denním
+režimu, a ta se nemá zapnout tím, že si někdo nainstaluje novou verzi.
+
 ## Otevřít PR mimo zdroje (#531)
 
 Zdroje (#4) definují **frontu**: co se hledá, na to se čeká, to je na kartách, v odznaku a
@@ -10675,6 +10839,7 @@ u obou: **je to pohled, ne nový zdroj pravdy**, takže na žádné z nich nesm�
 | blok `Odložené` **pod frontou** (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené, **po filtru** | doplněk k `visibleQueuePullRequests` nad **tímtéž** vstupem, takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
 | blok `Odložené` **na desce** a `· 2 odložené` ve větě pod pozdravem (`snoozedPullRequests`) | `.theirs`, **jen** odložené, **před filtrem** | doplněk k `boardEntries`, a ty filtr taky neznají: deska odpovídá na „co udělám teď“, ne na „co mám zrovna odškrtnuté“, takže nad zapnutým filtrem by věta hlásila míň, než kolik deska schovala |
 | nabídka `Odložit` na řádku (`snoozeAction(for:)`) | `.theirs` | **všude, kde se kreslí `PullRequestRow`** — ve frontě, v sekci `Rozdělaná` i v pruhu desky; je to jeden řádek, takže jedna podoba (#172), a hlídá to stráž nad zdrojáky |
+| odklad do tichých hodin (#519) | **řádek nemá, a je to rozhodnutí** | odkládá se **jeden běh**, ne položka seznamu: odložený PR ve frontě zůstane (čeká na mě dál), odložené je jedině review. Třetí osa by tvrdila, že se PR někde schová — a to se nestane nikde. Viz *Tiché hodiny — velké PR na noc* |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v
   `Policy.automaticallyReviewable` **první v řadě**, takže se PR dál nezvažuje, ať si repo řeklo

@@ -105,7 +105,7 @@ struct GhGatewayTests {
             .init(executable: gh, arguments: [
                 "pr", "view", "32",
                 "--repo", "ondrajodas/PRism",
-                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName,isCrossRepository",
+                "--json", "number,title,author,headRefOid,baseRefOid,url,updatedAt,state,isDraft,body,headRefName,baseRefName,isCrossRepository,additions,deletions",
             ]),
         ])
     }
@@ -122,6 +122,31 @@ struct GhGatewayTests {
         #expect(pullRequest.state == .merged)
         #expect(pullRequest.author == "ondrajodas")
         #expect(pullRequest.updatedAt == (try date("2026-07-31T20:05:20Z")))
+    }
+
+    /// Velikost PR rozhoduje o odkladu do tichých hodin (#519), takže se musí dát přečíst
+    /// z **hlavičky** — diff velkého PR se nemusí ani stáhnout (#542). Součet je jedno číslo:
+    /// smazaný a přidaný řádek stojí reviewera stejně.
+    @Test("Detail nese počet změněných řádků")
+    func detailCarriesTheSize() async throws {
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: Fixture.text("gh/pr-view-merged.json"))
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: prism)
+
+        #expect(pullRequest.changedLines == 528 + 12)
+    }
+
+    /// **`nil` je odpověď, ne nula** (#519): nula by znamenala prázdný PR, tedy tvrzení, kdežto
+    /// chybějící pole znamená „nevím“ — a z toho se v tichých hodinách stane „pusť to teď“.
+    @Test("Detail bez počtu řádků nic o velikosti netvrdí")
+    func aMissingSizeStaysUnknown() async throws {
+        let json = try Fixture.text("gh/pr-view-merged.json")
+            .replacingOccurrences(of: "\"additions\": 528,", with: "")
+        let runner = try FakeProcessRunner(exitCode: 0, standardOutput: json)
+
+        let pullRequest = try await gateway(runner).fetchDetail(id: prism)
+
+        #expect(pullRequest.changedLines == nil)
     }
 
     /// Popis PR jde do tabu `Přehled` (#72) a bere se z **téhož** detailu, kvůli kterému se

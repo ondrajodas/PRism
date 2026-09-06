@@ -159,7 +159,17 @@ extension AppStore {
         return Policy.timelines(of: reviewRecords[pr])
     }
 
-    func review(_ pr: PRIdentifier, skills subset: [String]? = nil) async {
+    /// - Parameter honoringQuietHours: smí se tenhle běh ještě odložit do tichých hodin (#519)?
+    ///   `false` jedině u běhu, který se z odkladu právě **vyzvedl** — ten se odložit znovu nesmí,
+    ///   jinak by běh, jehož noc aplikace prospala, ráno spadl do dalšího odkladu a slib
+    ///   `poběží ve 22:00` by se nesplnil nikdy. Parametrem, ne polem storu: je to vlastnost
+    ///   **tohohle** spuštění, a držený stav, který nikdo neuklidí, je zrovna ten vzor, co Copilot
+    ///   v tomhle repu nachází.
+    func review(
+        _ pr: PRIdentifier,
+        skills subset: [String]? = nil,
+        honoringQuietHours: Bool = true
+    ) async {
         defer {
             reviewTasks[pr] = nil
             automaticReviews.remove(pr)
@@ -202,6 +212,22 @@ extension AppStore {
                 reviewPhases[pr] = nil
                 return
             }
+            // Tiché hodiny (#519) — **před checkoutem, rozpočtem, zadáním i session**, tedy dřív
+            // než cokoli, co něco stojí. Dotažený detail je jediné, co se za odložený běh zaplatí,
+            // a bez něj to nejde: kolik řádků PR mění, vyhledávání neříká.
+            //
+            // Za bránou na `hasCurrentReview`, ne před ní: PR, který je zreviewovaný, se nemá co
+            // odkládat — slib na běh, který se stejně nespustí, by v dráze svítil do rána.
+            if let deferral = quietHoursDeferral(for: pr, of: detail, honoring: honoringQuietHours) {
+                await deferRun(of: pr, at: detail, deferral)
+                reviewPhases[pr] = nil
+                return
+            }
+            // Běh, který se rozjel, odklad ruší — ať se vyzvedl sám, nebo ho pustil člověk. Je to
+            // **jedno místo**, ne jedno na cestu: dvě by znamenala slib, který v cache přežije
+            // běh, o kterém slibuje.
+            await forgetDeferral(of: pr)
+
             // Nový průchod začíná bez přeskočení z toho předchozího (#518) — stejně jako s čistou
             // osou, a u opakování jednoho revieweera (#149) se maže **jen jeho** záznam, ze
             // stejného důvodu jako u osy: ostatní se v tomhle průchodu nerozhodují, takže by po

@@ -59,6 +59,19 @@ struct PullRequest: Hashable, Codable, Sendable {
     /// z čerstvě načteného detailu, takže se to v praxi projeví jedině tehdy, když detail
     /// nedorazil.
     var isCrossRepository: Bool?
+    /// Kolik řádků PR mění — `additions + deletions` z hlavičky PR (#519). `nil` = **nevím**.
+    ///
+    /// **Z metadat, ne z diffu.** Diff velkého PR se nemusí ani stáhnout (#542 — nad 300 souborů
+    /// vrací GitHub 406), takže počítat řádky z něj by práh neuměl změřit zrovna u toho PR, kvůli
+    /// kterému práh existuje. `gh pr view` obě čísla vrací vždycky a nic navíc nestojí.
+    ///
+    /// **Optional, a `nil` neodkládá**, ne odkládá: starší uložená data pole nemají a odložit
+    /// review kvůli tomu, co nevíme, je tichá ztráta času. Tatáž bezpečná strana jako u neznámých
+    /// cest v routingu (#518).
+    ///
+    /// **Součet, ne dvě pole.** Práh je o velikosti změny; smazaný a přidaný řádek stojí reviewera
+    /// stejně, a dvě čísla v modelu by znamenala dvě místa, kde se dá sečíst jinak.
+    var changedLines: Int?
 
     init(
         id: PRIdentifier,
@@ -72,7 +85,8 @@ struct PullRequest: Hashable, Codable, Sendable {
         updatedAt: Date,
         state: PullRequestState,
         body: String = "",
-        isCrossRepository: Bool? = nil
+        isCrossRepository: Bool? = nil,
+        changedLines: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -86,6 +100,7 @@ struct PullRequest: Hashable, Codable, Sendable {
         self.state = state
         self.body = body
         self.isCrossRepository = isCrossRepository
+        self.changedLines = changedLines
     }
 
     var repo: RepoID { id.repo }

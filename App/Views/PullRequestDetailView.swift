@@ -1774,7 +1774,10 @@ struct PullRequestDetailView: View {
                 running: store.runningReviewers(for: pullRequest.id),
                 // Koho routing nepustil (#518). Bere se z paměti, ne z disku — přeskočení je
                 // odpověď na dnešní pravidlo a dnešní diff (proč, je u `ReviewerRoutingPass`).
-                skipped: store.skippedReviewers(for: pullRequest.id)
+                skipped: store.skippedReviewers(for: pullRequest.id),
+                // Odložený běh (#519). Z paměti, ne z disku — je to týž slovník, který se při
+                // startu načetl z cache, a **jediné místo**, kterého se na odklad ptá i plánovač.
+                deferred: store.deferral(of: pullRequest.id)
             ),
             rerun: store.isReviewing(pullRequest.id)
                 ? nil
@@ -1791,6 +1794,13 @@ struct PullRequestDetailView: View {
             resumeInDrawer: store.hasTerminalDrawer
                 ? { session in Task { await store.resumeInDrawer(session, for: pullRequest.id) } }
                 : nil,
+            // `Pustit teď` (#519) — stejná brána jako u `rerun`: dokud něco běží, není co pouštět.
+            runNow: store.isReviewing(pullRequest.id)
+                ? nil
+                : { Task { await store.runDeferredNow(pullRequest.id) } },
+            // Hodiny z **téhož zdroje**, ze kterého se o odkladu rozhodovalo — jinak by dráha
+            // uměla tvrdit `poběží 23:00` proti jinému „teď“, než jaké platí v plánovači.
+            now: store.time.now,
             slug: "\(pullRequest.repo)#\(pullRequest.number)"
         )
     }

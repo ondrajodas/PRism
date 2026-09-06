@@ -883,6 +883,16 @@ final class AppStore {
     /// restartu je prázdné, takže první tik dohoní, co se stalo, když aplikace neběžela.
     var snoozeProbes: [PRIdentifier: Date] = [:]
 
+    /// Běhy odložené do tichých hodin (#519). Nepovinná závislost jako ostatní story — testy,
+    /// které o odklad nestojí, ji nedostanou a pak se neodkládá nic.
+    let deferredRuns: DeferredRunStore?
+
+    /// Odložené běhy, se kterými se pracuje (#519). Disk je **záloha**, ne jediná kopie: tab
+    /// `Průběh` se na ně ptá při každém překreslení, takže se čtou z paměti — z disku jednou při
+    /// startu (`loadDeferredRuns()`), a to **před prvním tikem**, jinak by první tik po restartu
+    /// zaplatil `gh pr view` za odpověď, kterou má na disku.
+    var deferrals: [PRIdentifier: DeferredRun] = [:]
+
     /// Které zadání jsem už předal agentovi (#334). Nepovinná závislost jako ostatní story —
     /// testy, které o razítka nestojí, ji nedostanou a pak je všechno nepředané.
     let handoffs: HandoffLedger?
@@ -1056,6 +1066,7 @@ final class AppStore {
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil,
         snoozeStore: SnoozeStore? = nil,
+        deferredRuns: DeferredRunStore? = nil,
         activityLog: ActivityLog? = nil,
         activityVisits: ActivityVisitLedger = ActivityVisitLedger(preferences: UserDefaults.standard)
     ) {
@@ -1063,6 +1074,7 @@ final class AppStore {
         self.activityNotices = activityNotices
         self.handoffs = handoffs
         self.snoozeStore = snoozeStore
+        self.deferredRuns = deferredRuns
         self.activityLog = activityLog
         self.activityVisits = activityVisits
         self.appearance = appearance
@@ -1115,6 +1127,10 @@ final class AppStore {
             // časovač. Kolik dotazů z toho je, rozhoduje `Policy.snoozeProbe` — na klidný den
             // nula, jinak **jeden na všechna odložená PR**.
             await self?.refreshSnoozes(in: summaries)
+            // Odložené běhy (#519) — **před automatem**, ze stejného důvodu jako rozhlídka výš:
+            // běh, kterému právě došel čas, se má pustit teď, ne za tik. Nic to nestojí (je to
+            // porovnání dvou hodnot nad seznamem z tiku) a **žádný dotaz z toho není**.
+            await self?.releaseDeferredRuns(for: summaries)
             // Až po `forget`: PR, který ze seznamu vypadl, se nemá čím spustit, a běžící
             // automat nad ním se má naopak zrušit.
             await self?.startAutomaticReviews(for: summaries)
@@ -1292,6 +1308,8 @@ final class AppStore {
             handoffs: HandoffLedger(),
             // Odložená PR (#512). Živé jedině tady, jako razítka předání a záznam dění.
             snoozeStore: SnoozeStore(),
+            // Odložené běhy (#519). Živé jedině tady, ze stejného důvodu jako odložení PR.
+            deferredRuns: DeferredRunStore(),
             // Záznam dění (#414). Živý jedině tady — testy ho nedostanou, takže nesahají do cache.
             activityLog: ActivityLog()
         )
@@ -1909,6 +1927,10 @@ final class AppStore {
         // i notifikace se odložených ptají v tiku, takže by první tik po startu pustil review na
         // PR, který jsem si schoval.
         await loadStoredSnoozes()
+        // **Odložené běhy hned za odložením** (#519) a ze stejného důvodu: čtou se z disku a musí
+        // být v paměti dřív, než tik pošle velké PR do automatu — jinak by se za slib, který na
+        // disku je, ještě jednou zaplatilo `gh pr view`.
+        await loadDeferredRuns()
         await reloadConfiguration()
         // **Před** načtením záznamů: dotažené nálezy se mají objevit hned po startu, ne až
         // po dalším review. Kdyby se dotahovalo potom, `reviewRecords` by je neobsahovaly.
@@ -2422,6 +2444,14 @@ final class AppStore {
         // pravdy o posledním průchodu („tenhle běžel, tenhle se nepustil“). Kdyby zbylo jen jedno
         // z toho, tvrdil by tab `Průběh` o vypadlém PR polovinu.
         routingSkips = routingSkips.filter {
+            wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
+        }
+        // Odložené běhy (#519) se z **paměti** pouštějí spolu s nimi: PR, který ze seznamu vypadl,
+        // se nemá čím pustit, takže by dráha slibovala běh, který nikdy nepřijde. **Na disku se
+        // nesmažou** — soubor uklízí lhůta v `DeferredRunStore` a vystřelit odsud nemá jak
+        // (`Policy.deferralsToRelease` bere seznam z tiku). Zápis kvůli PR, který se zavřel na
+        // pět minut, by byl disk za nic.
+        deferrals = deferrals.filter {
             wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
 

@@ -8668,3 +8668,65 @@ v [`docs/testovani.md`](testovani.md).
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR schválně nepouštěl.
 Vlastní revize diffu proběhla a je popsaná v PR.
+
+## #519 — velké PR se v automatu odloží do tichých hodin (M16)
+
+Třetí a poslední issue skupiny automatu (#517, #518, #519). Do #519 se PR o dvou tisících řádcích
+pouštěl ve tři odpoledne, když na něj někdo čekal, a bral slot menším.
+
+**Automat teď PR nad prahem (výchozí 1 500 změněných řádků) odloží na nejbližší začátek tichých
+hodin** (výchozí `22:00`–`6:00`, obojí v nastavení, stránka `Review a skilly`, sekce `Tiché
+hodiny`). Rozhoduje `Policy.deferToQuietHours(pr:isOpen:now:rules:calendar:)` — čistá funkce
+s předaným časem i kalendářem, takže se dá projít výčtem; hodiny ani zóna se uvnitř nečtou.
+
+**Práh se bere z hlavičky PR** (`additions + deletions`), ne z diffu: nad 300 souborů vrací GitHub
+406 (#542), takže by se velikost nedala změřit zrovna u toho PR, kvůli kterému práh existuje.
+`PullRequest.changedLines` je proto nové pole a přibylo **do obou** cest, kterými detail přichází —
+`gh pr view` i dávkový GraphQL dotaz —, jinak by se odklad rozhodoval jinak po startu a jinak po
+otevření záložky. Chybějící číslo je `nil`, tedy „nevím“, a z toho vyjde `pusť to teď`.
+
+**Odklad platí jen na automat a limit neobchází.** Ruční `Spustit review` ho nezná, PR, který mám
+otevřený, se **neodkládá**, a denní limit i strop útraty se strhávají v `canSpendSession` stejně
+jako ve dne — odklad mění **kdy**, ne **kolik**. `Pustit teď` v dráze je ruční běh, takže si
+o rozpočet nesáhne, a pouští **celé** review: odklad padl na celý běh, ne na jednoho revieweera.
+
+**Odložené běhy se zapisují do cache** (`deferred.json`, lhůta 7 dní) a čtou se před prvním tikem.
+Bez toho by noc bez běžící aplikace nepustila nic a ráno by to vypadalo, že automat nefunguje —
+a restart je v tomhle repu po každém mergi. **Zmeškaná noc se pouští ráno, ne odkládá na další**:
+vyzvednutý odklad jde do `review` s `honoringQuietHours: false`, jinak by ho druhá brána poslala do
+dalšího odkladu donekonečna. Osiřelý zápis (po PR, které se zavřelo) **vystřelit nemůže** —
+`Policy.deferralsToRelease` bere seznam z tiku, ne obsah souboru — a uklidí ho lhůta.
+
+**V tabu `Průběh` je to pátý stav dráhy** (`odloženo na noc`, jedna fáze `čeká na tiché hodiny`,
+věta `2 790 řádků nad prahem 1 500 · nikdo na PR nečeká`, vpravo `poběží 23:00` a pod tím
+`Pustit teď`). Nesmí se slít ani s `nespuštěno`, ani s `přeskočeno` (#518), ani s `ve frontě`: tenhle
+jediný má běh **naplánovaný**. `0,00 $` u něj není — u odkladu to není konečná cena, jen ještě
+nezaplacená. Zákres je sekce 46, kterou přenesla #517.
+
+**Čas je past a řeší se třemi věcmi**: okno `22:00–6:00` **přechází přes půlnoc** (naivní
+`hour >= 22 && hour < 6` je vždycky nepravda, takže by se v noci nepustilo nic), den má na přechodu
+letního času **23 nebo 25 hodin** (proto `Calendar.nextDate`, ne `+86 400` — změřeno: 88 200 s
+místo 84 600) a hodina, na kterou se míří, ten den **existovat nemusí** (jarní posun přeskočí
+2:00–3:00). Nesmyslné okno odklad **vypne**, nezastaví review; `22`–`22` je prázdné okno, ne ticho
+pořád. Podrobnosti jsou v [`docs/architektura.md`](architektura.md), měření
+v [`docs/testovani.md`](testovani.md).
+
+**Jedna věta ze zadání se implementovala jen z poloviny, a je to zapsané rozhodnutí.** Zadání má
+bod „otevření PR ruší odklad“; otevřený PR se opravdu **neodkládá**, ale odklad, který už padl,
+otevření záložky **nespustí**. Důvod je zákres: dráha `odloženo na noc` se kreslí jedině v otevřené
+záložce, takže by pod původním pravidlem `poběží 23:00` ani `Pustit teď` nešly vidět — změřeno na
+běžící aplikaci, odklad zmizel dřív, než se dráha vykreslila. Cesta ven je `Pustit teď`, a je to
+navíc **ruční** běh, takže nesáhne na denní rozpočet.
+
+**Vlastní revize diffu našla tichou díru**: vyzvednutí odloženého běhu bralo holý seznam z tiku,
+takže PR, který jsem si **odložil** (#512), by se ve dvacet dva večer sám zreviewoval. Vyzvednutí
+teď prochází tutéž dvojici zúžení jako plánovač (jen cizí, bez odložených).
+
+Přibylo 40 testů ve třech sadách a dva rendery nastavení; regrese se ověřila **vložením regrese
+u osmi věcí zvlášť**,
+včetně kontrolního měření (malé PR toutéž cestou projde), bez kterého by sada nerozlišila funkční
+odklad od vypnutého automatu.
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
+(`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR na pokyn uživatele
+nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
