@@ -287,7 +287,9 @@ struct ReviewerLaneView: View {
     private var phases: some View {
         ProportionalColumns(ratios: lane.phases.map(ratio(of:)), spacing: 3) {
             ForEach(lane.phases, id: \.self) { phase in
-                phaseChip(phase)
+                // **Sdílená kapsle od #508** (`LanePhaseChip`): dráha smyčky vlastního PR kreslí
+                // fáze týmž prvkem, takže se `hotovo` nemá jak obarvit dvakrát jinak.
+                LanePhaseChip(title: phase.title, detail: phase.detail, state: phase.state)
             }
         }
         .padding(.horizontal, 12)
@@ -296,63 +298,6 @@ struct ReviewerLaneView: View {
 
     private func ratio(of phase: ReviewerLane.Phase) -> Double {
         phase.title == ReviewerLane.Title.code ? 2.6 : 1
-    }
-
-    private func phaseChip(_ phase: ReviewerLane.Phase) -> some View {
-        HStack(spacing: 4) {
-            Text(verbatim: phase.title)
-                .lineLimit(1)
-            if let detail = phase.detail {
-                Text(verbatim: detail)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            if let mark = mark(of: phase.state) {
-                Image(systemName: mark).font(.system(size: 8))
-            }
-        }
-        .font(.system(size: 10.5, weight: phase.state == .running ? .semibold : .regular))
-        .foregroundStyle(tint(of: phase.state))
-        .padding(.horizontal, 8)
-        // Chip **vyplní svůj podíl** (`.ph { flex }`), jinak jsou mezi fázemi mezery a dráhy se
-        // nedají porovnat — a porovnání je jediný důvod, proč fáze stojí vedle sebe. `.infinity`
-        // je tady bezpečné (a #220 to nezakazuje): `ProportionalColumns` navrhuje **konkrétní**
-        // šířku, takže se nevyjednává, jen se roztáhne na to, co dostal.
-        .frame(maxWidth: .infinity)
-        .frame(height: 23)
-        .background(background(of: phase.state), in: .rect(cornerRadius: 5))
-        .accessibilityElement(children: .combine)
-        // Stav **té fáze**, ne celé dráhy: ten by u všech fází přečetl totéž.
-        .accessibilityValue(ReviewerLaneText.phase(phase.state))
-    }
-
-    /// Značka za popiskem. **`idle` nemá žádnou** — fáze, na kterou nedošlo, není ani hotová,
-    /// ani rozbitá, a jakýkoli symbol by o ní tvrdil, že se něco stalo. Totéž platí o `unknown`:
-    /// tam se neví, jak dopadla, takže značka by si vybírala za nás.
-    private func mark(of state: ReviewerLane.PhaseState) -> String? {
-        switch state {
-        case .done: "checkmark"
-        case .failed: "xmark"
-        case .stopped: "minus"
-        case .running, .idle, .unknown: nil
-        }
-    }
-
-    private func tint(of state: ReviewerLane.PhaseState) -> Color {
-        switch state {
-        case .done: Palette.ok
-        case .running: Palette.find
-        case .failed: Palette.crit
-        case .stopped: Palette.stale
-        case .idle, .unknown: Palette.ink3
-        }
-    }
-
-    private func background(of state: ReviewerLane.PhaseState) -> Color {
-        switch state {
-        case .idle, .unknown: Palette.raised
-        default: tint(of: state).opacity(0.16)
-        }
     }
 
     // MARK: - Spadlá session

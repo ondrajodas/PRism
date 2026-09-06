@@ -15458,6 +15458,317 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
   </section>
 
 
+
+  <!-- ====================================================================================
+       SEKCE 52 — Dráha smyčky vlastního PR
+       Kreslí se **třídami dráhy reviewera** (`.lane`, `.phases`, `.ph`, sekce 07): smyčka
+       vlastního PR je proces s fázemi stejně jako běh reviewera, takže vlastní vzor by byl
+       třetí jazyk pro totéž. Nová třída v téhle sekci **není žádná** — a je to podmínka, ne
+       shoda okolností.
+       ==================================================================================== -->
+  <section class="section" id="s52">
+    <div class="section-head">
+      <div class="eyebrow">52 — Dráha smyčky vlastního PR</div>
+      <h2>Pět stanic v hlavičce: kde v tom kole zrovna jsem</h2>
+      <p class="muted">
+        <strong>Dneska</strong> je smyčka na vlastním PR rozsekaná po místech: nálezy v panelu,
+        zadání v segmentu <em>Zadání</em>, push a merge v sekci <em>Větev</em>, Copilot
+        v konverzaci. Odpověď na „kde v tom kole jsem“ si člověk skládá sám a řádek v seznamu
+        o tom řekne jen <code>6 k předání</code>.
+      </p>
+      <p class="muted">
+        <strong>Návrh</strong>: pod souřadnicemi vlastního PR stojí <strong>dráha s pěti
+        stanicemi</strong> — <em>Nálezy → Zadání → Push → CI → Review</em>.
+        Stanice nese <b>stav a jedinou akci</b>, aktivní je <b>první, která není hotová</b>,
+        a pod fázemi je <b>jedna věta o tom, co je na tahu</b>. Obsah stanic se nikam nestěhuje:
+        panel <em>Zadání</em> (sekce 22) a sekce <em>Větev</em> (sekce 36 a 37) zůstávají tam,
+        kde jsou — akce do nich <b>odkazuje</b>.
+      </p>
+      <p class="muted">
+        <strong>Stanice <em>Agent</em> a <em>Merge</em> na dráze nejsou</strong>, a je to změna
+        proti prvnímu zákresu, kde jich bylo sedm. Ani jedna z nich v okně <b>nikdy nic
+        neukázala</b>: <em>Agent</em> nemá živý obsah (aplikace o cizím terminálu neví nic)
+        a <em>Merge</em> stojí na celém kole, takže je prakticky vždycky šedý. Kapsle, která nikdy
+        nic neřekne, je jen <b>užší místo pro ostatní</b> — pět kapslí se o šířku hlavičky dělí
+        líp než sedm. Nic se tím neztratilo: <b>merge se dál dělá ze sekce <em>Větev</em></b>
+        (sekce 36) a dráha na ni větou pod fázemi ukazuje.
+      </p>
+      <p class="muted">
+        <strong>Dráha říká dvě věci naráz: kde stojím a co je hotové.</strong> Stanice <b>za</b>
+        aktivní proto nejsou automaticky šedé — <b>zelenají, kdykoli jsou jejich fakta známá
+        a aktuální</b>. Schválený pull request se zelenými checky má <em>CI</em> i <em>Review</em>
+        zelené, i když se dráha zastavila na <em>Zadání</em>: kód je pushnutý, checky nad touhle
+        hlavou doběhly a schválení platí. Šedá zůstává tam, kde fakta doopravdy závisí na kroku,
+        který se neudělal — u <em>CI</em> a <em>Review</em> je to <b>jenom</b> nepřetlačená práce
+        v kopii repa, ne poloha větve proti základu — a <b>rozdělaná je vždycky jen jedna
+        kapsle</b>, ta, o které mluví věta pod fázemi.
+      </p>
+      <p class="muted">
+        <strong>A šedá stanice řekne jedním slovem, proč není zelená.</strong> Do téhle změny byla
+        za zastávkou <b>prázdná</b> kapsle, takže se z dráhy nedalo poznat, že je větev o
+        jednadvacet commitů pozadu — ta informace zůstávala jen v sekci <em>Větev</em>. Teď v ní
+        stojí <code>pozadu</code>, <code>konflikt</code>, <code>nepřetlačeno</code>,
+        <code>zjišťuju</code>. Je to <b>slovo, ne počet</b>: šedá kapsle nemá pod sebou větu,
+        o kterou by se opřela, a <code>o 21 vzadu</code> vedle cizí věty se čte jako tvrzení
+        o tom, co je zrovna na tahu.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Návrh · hlavička vlastního PR s dráhou, aktivní stanice je Zadání a za ní svítí, co je hotové</div>
+      <div class="frame flat">
+        <div class="pr-head" style="padding-bottom: 12px;">
+          <div class="pr-title"><h4>feat(diff): find in the diff with ⌘F</h4><span class="num">#499</span></div>
+          <div class="pr-meta">
+            <span class="state-chip">⬤ Otevřený</span>
+            <span class="pill mint">moje PR</span>
+            <span>ondrajodas/PRism</span>
+            <span>·</span>
+            <span>ondrajodas chce sloučit</span>
+            <span class="branch">issue-152-find</span><span>→</span><span class="branch">main</span>
+          </div>
+        </div>
+        <div class="lanes">
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">předáno 6 položek · proti 9c1de02</span>
+              <span class="sp"></span>
+              <span class="mini">Otevřít zadání</span>
+            </header>
+            <div class="phases">
+              <span class="ph done" style="flex: 1;">Nálezy 3 nálezy ✓</span>
+              <span class="ph run" style="flex: 1;">Zadání 2 k předání</span>
+              <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
+            </div>
+            <div class="last">Od předání přibyly 2 položky.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Návrh · pět míst, kde se smyčka zastavuje — a co za zastávkou zůstane svítit nebo řekne jedním slovem</div>
+      <div class="frame flat">
+        <div class="lanes">
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">nepředáno</span>
+              <span class="sp"></span>
+            </header>
+            <div class="phases">
+              <span class="ph run" style="flex: 1;">Nálezy nespuštěno</span>
+              <span class="ph idle" style="flex: 1;">Zadání</span>
+              <span class="ph idle" style="flex: 1;">Push pozadu</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
+            </div>
+            <div class="last">Review na tomhle PR ještě neběželo — pusť ho, ať je z čeho složit zadání.</div>
+          </div>
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">předáno 6 položek · proti 9c1de02</span>
+              <span class="sp"></span>
+              <span class="mini">Otevřít kontroly</span>
+            </header>
+            <div class="phases">
+              <span class="ph done" style="flex: 1;">Nálezy čisto ✓</span>
+              <span class="ph done" style="flex: 1;">Zadání 6 předáno ✓</span>
+              <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
+              <span class="ph fail" style="flex: 1;">CI 1 neprošel ✕</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
+            </div>
+            <div class="last">1 check neprošel — oprav to a pushni znovu.</div>
+          </div>
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">předáno 6 položek · proti 9c1de02</span>
+              <span class="sp"></span>
+              <span class="mini pri">Otevřít větev</span>
+            </header>
+            <div class="phases">
+              <span class="ph done" style="flex: 1;">Nálezy čisto ✓</span>
+              <span class="ph done" style="flex: 1;">Zadání 6 předáno ✓</span>
+              <span class="ph run" style="flex: 1;">Push o 4 vzadu</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
+            </div>
+            <div class="last">Větev je o 4 commity pozadu za základem — srovnej ji rebasem.</div>
+          </div>
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">předáno 6 položek · proti 9c1de02</span>
+              <span class="sp"></span>
+              <span class="mini pri">Otevřít větev</span>
+            </header>
+            <div class="phases">
+              <span class="ph done" style="flex: 1;">Nálezy čisto ✓</span>
+              <span class="ph done" style="flex: 1;">Zadání 6 předáno ✓</span>
+              <span class="ph run" style="flex: 1;">Push 2 přerovnáno</span>
+              <span class="ph idle" style="flex: 1;">CI</span>
+              <span class="ph idle" style="flex: 1;">Review</span>
+            </div>
+            <div class="last">Větev je přerovnaná nad základem, ale ještě není přetlačená — 2 commity přehrané.</div>
+          </div>
+          <div class="lane">
+            <header>
+              <span class="nm">smyčka</span>
+              <span class="meta">předáno 6 položek · proti 9c1de02</span>
+              <span class="sp"></span>
+            </header>
+            <div class="phases">
+              <span class="ph done" style="flex: 1;">Nálezy čisto ✓</span>
+              <span class="ph done" style="flex: 1;">Zadání 6 předáno ✓</span>
+              <span class="ph done" style="flex: 1;">Push srovnaná ✓</span>
+              <span class="ph done" style="flex: 1;">CI zeleno ✓</span>
+              <span class="ph done" style="flex: 1;">Review schváleno ✓</span>
+            </div>
+            <div class="last">Všech pět stanic je hotových — merge zůstává v sekci Větev.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">187</span>
+        <span class="body">
+          <b>Tatáž dráha jako v Průběhu, doslova</b>
+          <span>Rám, hlavička, kapsle i věta pod nimi jsou <code>.lane</code>, <code>.phases</code>,
+          <code>.ph</code> a <code>.last</code> ze <b>sekce 07</b> — tahle sekce nepřidává ani jednu
+          novou třídu. Smyčka vlastního PR je proces s fázemi stejně jako běh reviewera, a okno umí
+          jeden způsob, jak proces kreslit; druhý by byl <b>třetí jazyk pro totéž</b>. V aplikaci to
+          drží jeden sdílený prvek (<code>LanePhaseChip</code>), ne dvě kopie mapování stavu na
+          barvu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">188</span>
+        <span class="body">
+          <b>Aktivní je první nehotová, ne nejhorší</b>
+          <span>Dráha se jde <b>po pořádku</b> a zastaví se na první stanici, která není hotová —
+          ta je zvýrazněná, nese <b>jedinou akci</b> a mluví o ní věta pod fázemi. Nejhorší stanice
+          aktivní <b>není</b>: dráha odpovídá na „co je další krok“, ne „co je nejvíc rozbité“.
+          A rozdělaná (<code>.ph.run</code>, <code>.ph.fail</code>) je <b>nejvýš jedna</b> — druhá
+          by soupeřila s tou větou a nedalo by se poznat, o které z nich mluví. Slovo v šedé kapsli
+          (poznámka 196) to <b>nemění</b>: kapsle zůstává <code>.ph.idle</code>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">189</span>
+        <span class="body">
+          <b>Jedna akce, a je to rozcestník</b>
+          <span>Stanice nese <b>jedinou</b> akci a ta <b>otevře místo, kde ta práce bydlí</b>
+          (<code>Otevřít zadání</code>, <code>Otevřít větev</code>, <code>Otevřít kontroly</code>);
+          <code>Spustit review</code> mezi nimi <b>není</b>: stojí v hlavičce o pár bodů výš
+          a sekce 12 mu vyhradila <b>jediné akcentové místo</b> v celém pruhu, takže druhá kopie
+          z hlavičky udělá semafor (vidět na screenshotu z prvního kola implementace). Stanice
+          <em>Nálezy</em> proto akci nemá — co dělat, říká věta pod fázemi.
+          Odesílat odsud nejde nic — tvrdá podmínka č. 1 zná <b>jednu</b> cestu ven.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">190</span>
+        <span class="body">
+          <b>Kapsle, která nikdy nic neřekne, na dráze nemá co dělat</b>
+          <span>První zákres měl sedm stanic; <em>Agent</em> a <em>Merge</em> odešly po proklikání,
+          protože v okně <b>nikdy nic neukázaly</b>. <em>Agent</em> nemá živý obsah — zadání odchází
+          do <b>cizího</b> terminálu, takže aplikace neví, jestli na něm někdo pracuje, a
+          <code>běží 4 min</code> z decku by bylo tvrzení, které data neunesou. <em>Merge</em> stojí
+          na celém kole (poznámka 193), takže je prakticky vždycky šedý. Obojí bylo hlavně
+          <b>užší místo pro ostatních pět</b>. Merge se dál dělá ze sekce <em>Větev</em> (sekce 36)
+          a poslední dráha odshora na ni ukazuje větou; kdyby se agent měl na obrazovku vrátit,
+          musí přijít <b>i s obsahem</b>, ne jako prázdná kapsle.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">191</span>
+        <span class="body">
+          <b>„Nevím“ je odpověď, ne „nejde“</b>
+          <span>Checky i vyžádaní reviewery se dotahují <b>až s detailem</b>, takže
+          hned po otevření záložky o nich okno neví nic. Taková stanice je <b>tichá</b>
+          (<code>.ph.idle</code>) se slovem <em>zjišťuju</em> — <b>ne červená</b>. Nad nevratnou akcí
+          je tvrzení z chybějících dat ta nejdražší strana omylu; je to tatáž hranice, kterou drží
+          sekce <em>Větev</em> mezi <em>zjišťuju, jestli se dá mergnout</em> a <em>větev je
+          v konfliktu</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">192</span>
+        <span class="body">
+          <b>Na cizím PR se nekreslí, ne zašedne</b>
+          <span>Smyčka je „co udělám se <b>svojí</b> větví“, takže nad cizím pull requestem je to
+          nadpis bez obsahu — tatáž úvaha jako u sekce <em>Větev</em>. Nekreslí se ani rám.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">194</span>
+        <span class="body">
+          <b>CI a Review zhasne jedině práce, která na GitHubu není</b>
+          <span>Obojí mluví o <b>hlavě, která je na GitHubu</b>, takže je zhasne jedině fakt, který
+          říká, že ta hlava <b>není ta naše</b> — <b>nepřetlačená práce v kopii repa</b> (čtvrtá
+          dráha odshora: přerovnáno, nepushnuto). Že je větev <b>pozadu za základem</b> nebo s ním
+          v konfliktu, hlavou nehýbe: checky nad ní doběhly a schválení na ni platí, takže zůstávají
+          zelené a nesrovnanou větev hlásí stanice <em>Push</em> (třetí dráha odshora). Předpoklad
+          <em>CI stojí na Pushi</em> byl na tohle <b>moc hrubý</b> — zhasl i fakta, která
+          s přetlačením nesouvisí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">195</span>
+        <span class="body">
+          <b>Schválení přebíjí visící žádost</b>
+          <span><em>Review</em> je hotové, když někdo <b>schválil</b> — i když na pull requestu visí
+          další žádost o review. Odpovídá to tomu, co o něm říká GitHub, a nic se tím neztrácí: na
+          koho se ještě čeká, kreslí sekce <em>Reviewery</em> v panelu (sekce 24).
+          <em>Chce změny</em> naopak nezezelená <b>nikdy</b>, ani vedle schválení — je to jediná
+          odpověď, která něco blokuje.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">193</span>
+        <span class="body">
+          <b>Za zastávkou se zelená kreslí, šedá mlčí</b>
+          <span>Stanice za aktivní <b>nejsou automaticky <code>.ph.idle</code></b>: co je hotové,
+          svítí zeleně, aby bylo na první pohled vidět, <b>co chybí</b>. Hranici drží jedna věta —
+          stanice zezelená, jen když jsou její fakta <b>známá a aktuální</b>. <em>Push</em>
+          a <em>Nálezy</em> nestojí na ničem („větev je pushnutá a srovnaná“ je tvrzení o dnešní
+          větvi a nepředané zadání z něj nedělá nepravdu); <em>Zadání</em> stojí na
+          <em>Nálezech</em> a <em>CI</em> s <em>Review</em> na <em>Pushi</em>, ale jedině tehdy,
+          když se ví, že naše práce na GitHubu není (poznámka 194). Co se tím zamlčí (rozdělaná
+          stanice za zastávkou, nenačtené checky), je pořád vidět tam, kde to bydlí — v tabu
+          <em>Kontroly</em>, v sekci <em>Větev</em>, v panelu <em>Zadání</em>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">196</span>
+        <span class="body">
+          <b>Šedá stanice řekne jedním slovem proč — ale jen ta, na kterou se došlo</b>
+          <span>Nehotová stanice <b>za</b> zastávkou nese <b>jedno slovo</b>:
+          <code>pozadu</code>, <code>konflikt</code>, <code>nepřetlačeno</code>,
+          <code>zjišťuju</code>, <code>neprošlo</code>, <code>běží</code>, <code>čeká</code>.
+          Bez něj visel <em>Push</em> šedý a prázdný, i když byla větev o jednadvacet commitů
+          pozadu — jediné místo, kde to šlo přečíst, byla sekce <em>Větev</em>. Tři meze:
+          <b>slovo, ne počet</b> (číslo vedle cizí věty se čte jako tvrzení o tom, co je na tahu),
+          <b>kapsle zůstává <code>.ph.idle</code></b> (rozdělaná je pořád jen jedna) a
+          <b>stanice, která se nevyhodnocovala, mlčí dál</b> — čtvrtá dráha odshora má
+          <em>CI</em> i <em>Review</em> prázdné, protože mluví o hlavě, která na GitHubu není,
+          a vymyslet jim důvod by bylo tvrzení z chybějících dat. Je to pravidlo pro
+          <b>každou</b> stanici, ne výjimka pro <em>Push</em>: výjimka by znamenala, že se důvod
+          dá vyčíst jen někdy, a to je horší, než kdyby se nedal nikdy.</span>
+        </span>
+      </div>
+    </div>
+
+  </section>
+
+
   <section class="section" id="s36">
     <div class="section-head">
       <div class="eyebrow">36 — Vlastní PR · mergnout a srovnat větev</div>
