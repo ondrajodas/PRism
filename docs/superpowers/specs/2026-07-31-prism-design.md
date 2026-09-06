@@ -7264,3 +7264,70 @@ Odložit se odtud přesto dá — je to týž řádek.
 `do zítra 9:00`. Odložení zadané v jednu v noci by tím ale PR schovalo na dvaatřicet hodin, což je
 opak toho, co „do rána“ znamená. Okamžik je proto **příští výskyt deváté** a titulek se z něj
 **odvozuje** (`do rána 9:00`, když je devátá ještě dneska) — napsané `zítra` by v tu chvíli lhalo.
+
+### Záznam rozhodnutí — agent na vlastním PR startuje bez kliknutí (#510)
+
+**Rozhodnutí:** na **vlastním** pull requestu, kde je zapnutá brána `autoAgent`, se po **cizí**
+aktivitě (review Copilota, komentář kolegy, *changes requested*) pustí **tatáž zapisující session
+jako u konfliktů** (#467) ve stromě `-sync` v cache. **Commituje aplikace**, do remote se dál píše
+jedině přes `BranchPushing` a jedině z potvrzení. Tvrdá podmínka **č. 2** dostává **větu
+o spouštěči**; sada povolení se nemění ani o položku a č. 1 se nemění vůbec.
+
+**Co je na tom nové, je spouštěč, ne to, co session smí.** Do #510 startovala zapisující session
+jedině z kliknutí na `Rebase`. Teď ji pouští **polling**, a proto musí být ta věta kontrolovatelná
+stejně jako sada: *bez kliknutí jedině nad stromem `-sync` vlastního PR a jedině po cizí aktivitě*.
+Drží ji jedna čistá funkce (`Policy.agentFix`) a stráže nad zdrojáky — `AgentFixing` znají tři
+soubory, volá ho jedno místo a bránu čte jen spouštěč a nastavení.
+
+**#332 se tím neruší, a je to jiná otázka.** Ten zakázal automat na vlastním PR kvůli **review**, ze
+tří důvodů: automat existuje kvůli **čekání** na cizí práci, vlastní PR se mění pod rukama a
+přepínač je způsob, jak si to zapnout omylem. První dva tady neplatí — podnětem není můj push, ale
+**cizí hlas**, na který se stejně bude reagovat, a výsledkem není nález proti kódu, který za deset
+minut nebude, ale **commit v kopii repa**, o kterém rozhodnu já. Třetí důvod platí dál, a proto je
+brána **ve výchozím stavu vypnutá** a na obrazovce u ní stojí odstavec, ne jen přepínač.
+Reviewer se na vlastní PR sám dál nepouští; `Policy.automaticallyReviewable` se nemění.
+
+**Zamítnutá varianta: rozšířit `ConflictResolving` o druhou metodu.** Nabízí se to — je to tatáž
+sada nástrojů a tentýž běh. Zahodilo se to, protože `SingleWayOutTests` tvrdí, kolik míst umí
+spustit session, která píše do souborů, a jedno místo se dvěma významy z toho výčtu udělá slabší
+tvrzení: „volá ji jedno místo“ by přestalo platit a účet (`ConflictAnswer.files` po souborech
+s akcemi `both`/`manual`) by u opravy znamenal něco jiného než u konfliktu. **Sdílí se to, co se
+sdílet musí** — sada povolení a rozsah zápisu (`AgentFixCommand` je bere z `ConflictCommand`) —,
+protože otázka „kam smí zapisující session psát“ má mít jednu odpověď.
+
+**Zamítnutá varianta: nechat session commitnout.** Ušetřilo by to metodu v `RepoCheckoutu`. Zahodilo
+se to z téhož důvodu jako u #467: dvě věci, které commitují, se rozejdou — a hlavně by session
+s `Bash`em přestala mít mez „necommituje“ jako **vlastnost sady** a měla by ji jen jako **seznam
+zákazů**, tedy hádání, co všechno se dá napsat.
+
+**Zamítnutá varianta: nechat model napsat zprávu commitu.** Vypadá to lákavě (agent ví, co
+opravil). Zahodilo se to, protože hlavička commitu je **jediné místo, kde by se text od modelu
+dostal do historie repa** — tedy tam, odkud se nedá vzít zpět jedním kliknutím, a kde by porušil
+pravidlo o AI atribucích, kdyby se model rozhodl podepsat. Zpráva je proto určená daty
+(`fix: address review feedback (#N)`) a co agent udělal, se ukazuje v panelu a v potvrzení.
+
+**Zamítnutá varianta: pouštět agenta na cizí PR s nálezy.** Aplikace nemá co opravovat cizí práci —
+je to tatáž věta jako u automatu review (#332), jen ostřejší: u cizího PR by se výsledek neměl kam
+pushnout a jediná cesta ven by byl komentář, tedy odesílání bez potvrzení.
+
+**Zamítnutá varianta: vlastní denní limit.** Nabízelo se dát agentovi vlastní rozpočet, aby
+nesoupeřil s automatem review. Zahodilo se to, protože dvě poloviny jsou dohromady dvojnásobek toho,
+co si člověk nastavil, a odpovídají na jednu otázku: **kolik session smí za den utratit něco, co
+jsem nespustil.** Sdílený `autoRunsPerDay` je tedy pojistka, ne úspora řádku v nastavení.
+
+**Razítko se posouvá při startu, ne po doběhnutí, a je to rozhodnutí proti opakování.** Po úspěchu
+by se běh, který skončil chybou, pouštěl při každém tiku — nekonečná řada session za peníze nad
+zpětnou vazbou, kterou model neumí vyřídit. Podnět, který přijde **za běhu**, se tím nezahodí: má
+novější datum, takže ho příští tik uvidí znovu a session už neběží. Tak vypadá „zařadí se do
+fronty“ bez druhé mapy stavu.
+
+**Změna proti zákresu Z7: dráha ani notifikace v tomhle issue nejsou.** Deck kreslí výsledek na
+dráze vlastního PR a hlášku „Agent má hotovo“. Dráha má od 6. 9. 2026 **pět stanic** (`Agent`
+a `Merge` z ní na pokyn odešly), takže se na ni nic nevěší a kde se běžící agent ukáže, rozhoduje
+#511. Tohle issue končí u **spouštěče, brány, session a jejího výsledku** — a ten výsledek je stav,
+který panel už umí ukázat (`přerovnáno, nepřetlačeno`), takže se s ničím nekříží.
+
+**Zapsaná mezera: testy nepouští nikdo.** Zákres v decku mluví o „testy zelené (spustila aplikace,
+ne session)“. Session je pustit nemůže (`Bash` v sadě není) a aplikace to zatím nedělá — v promptu
+je proto věta, že se **nesmí tvrdit**, že bylo něco ověřeno spuštěním. Až to bude potřeba, je to
+vlastní issue: pustit testy nad stromem `-sync` je práce aplikace, ne rozšíření sady.

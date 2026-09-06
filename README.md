@@ -242,6 +242,15 @@ jsou dohromady dvojnásobek — a po #332 ho čerpají jedině cizí PR. **Ručn
 jde dál**, i tlačítkem na řádku: pravidlo se týká automatu a hromadné akce, ne toho, když si
 o review řeknu.
 
+**Co se ale od #510 na vlastním PR pustit může, je agent** — a je to jiná otázka než review. Když
+se v nastavení zapne `Agent na vlastním PR` (globálně nebo u repa, **ve výchozím stavu vypnuté**),
+pustí po **cizí** aktivitě — review Copilota, komentář kolegy, *changes requested* — session, která
+opraví soubory v **kopii repa** a nechá po sobě **jeden commit** nad hlavou PR. Vlastní komentář ani
+vlastní push nespouští nic, na cizím PR se to nespustí nikdy a nad rozdělanou prací v kopii repa
+taky ne. **Do remote se přitom nesáhne**: skončí to ve stavu *přerovnáno, nepřetlačeno*, ze kterého
+vede jediná cesta ven — `Force push…` s potvrzením, jako od #466. Běhy čerpají **tentýž** denní
+strop `autoRunsPerDay`.
+
 **Notifikace o review jsou cesta pro review requesty**, takže o vlastním PR nedají vědět: „Nový PR
 k review“ o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi, a výsledek review,
 které jsem si sám spustil, je v okně vidět na řádku i v panelu.
@@ -2471,7 +2480,7 @@ jinak by po startu vypadala jako nová celá historie.
 | **Token** | Aplikace na GitHub token nikdy nesahá. Autentizace je delegovaná na `gh`, který credential drží v keychainu. |
 | **Prompt review** | Psaná **šablona** se zástupnými texty a **jádro**, které se připojí vždycky. Dělí se to proto, že věta o `ReportFindings` není styl, ale kontrakt: bez ní reviewer nálezy napíše textem a rozbitý sběr vypadá jako čisté review. Výchozí šablona je doslova ten text, co byl v kódu, prázdná znamená „ber výchozí“ a chybějící zástupný text je chyba u pole — neplatná šablona se neuloží a review se s ní nespustí. Globálně, ne per repo: prompt je „jak vypadá review u mě“, ne vlastnost repozitáře. |
 | **Časový limit běhu** | V nastavení, globálně i per repo, s rozsahem 5–60 minut a **bez volby „bez limitu“**: timeout je jediná pojistka proti session, která se zacyklí, kdežto denní strop a limit souběhu omezují jen počet běhů. Horní mez je vazba na účet (strop krát denní limit je nejhorší den), dolní proti tomu, aby limit dělal `timedOut` z review, které fungovalo. Putuje s požadavkem, takže rozjetý běh doběhne s tím svým; ke staršímu výsledku se číslo nepíše, protože uložený běh limit nenese. Sdílí ho kontrola nálezů — tatáž session, tentýž strom, tytéž peníze. |
-| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit, přírůstek po pushi a od #518 **routing reviewerů podle cest**). Routing je jediný klíč, který globální dvojče **nemá**: cesty popisují rozvržení jednoho repa, takže globální mapa by byla pravidlo, které je skoro všude vedle — a přeskočený reviewer je nejtišší podoba chybějícího review. Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
+| **Konfigurace** | Tři úrovně: globální default, sada podle programovacího jazyka repa a override per repo (režim auto/manual, sada skillů, blokující kategorie, časový limit, přírůstek po pushi, od #510 **agent na vlastním PR** a od #518 **routing reviewerů podle cest**). Routing je jediný klíč, který globální dvojče **nemá**: cesty popisují rozvržení jednoho repa, takže globální mapa by byla pravidlo, které je skoro všude vedle — a přeskočený reviewer je nejtišší podoba chybějícího review. Co si repo neřekne, bere globálně — proto je override `nil`, ne prázdná hodnota. Edituje se ručně v `config.json` i oknem nastavení; obojí píše do téhož souboru. |
 | **Odesílání na GitHub** | Platí pro review, odpovědi do vláken, komentáře pod PR, labely s reviewery, od #465 **merge vlastního PR** a od #466 **přetlačení vlastní větve** (`git push --force-with-lease`, jediný zápis do remote v celé aplikaci). Ve výchozím stavu vypnuté a zapíná se v nastavení, globálně i per repo. Brána je jedno místo (`PublishScope`), na které se ptá publisher i okno — jinak by tlačítko slibovalo něco, na čem odeslání skončí. Proti omylu nechrání seznam rep, ale potvrzení s úplným výpisem payloadu a kontrola, že se posílá proti commitu, který jsi viděl — u merge navíc **hlava v payloadu**, na kterou GitHub odpoví `409` a nemergne nic. |
 | **Metoda merge** (#556) | Do #556 konstanta `squash`, od #556 **výchozí hodnota v nastavení** — globálně i per repo, jako režim nebo přírůstek po pushi. Metoda merge je zvyk **repozitáře**, ne člověka, proto override per repo; `diffLayout` a vzhled okna ho z opačného důvodu nemají. Potvrzení metodu **vypisuje a dovolí přebít pro jeden merge**, a s ní se přepíšou i ostatní řádky payloadu — jinak by se dala vybrat metoda a přečíst k ní čísla té předchozí. Nabídne se jedině to, co repozitář povoluje (jedno čtení `GET /repos/{o}/{r}` za repo, 0,62 s, drží se v cache); chybějící příznak — nad repem bez práva zápisu GitHub ta pole neposílá — znamená **„nevím“, ne „nepovoluje“**, takže se v tom stavu nabídnou všechny tři a nic se netvrdí. Nepovolená **výchozí** metoda se nepodstrčí jinou — sheet se otevře bez vybrané a řekne, co repo povoluje. |
 | **Notifikace** | Slévají se nad seznamem z jednoho tiku pollingu, ne přes vlastní čekací okno — tik dodá všechna nová PR naráz, takže se slévá právě to, co se stalo mezi dvěma tiky, a nepotřebuje to stav ani zdržení hlášky. Vypnout je jde po událostech; s vypnutým hlavním přepínačem se nežádá ani o systémové oprávnění, protože dialog za něco vypnutého je dialog za nic. |
@@ -2686,11 +2695,13 @@ konfiguraci, klony i uložené nálezy. Je to ta podstatná část: build s rozb
 nemá jak smazat rozdělaný draft, tedy ručně psanou práci.
 
 Konfigurace se do slotu zkopíruje, ale **očištěná** — bez povoleného odesílání, bez
-notifikací a bez automatického spouštění review, a to **na obou úrovních**: globálně
-i u každého repa. Odesílání proto, že výchozí stav je vypnuto a u rozestavěného buildu to
-platí dvojnásob; notifikace proto, že slot má vlastní `announced.json` a ohlásil by jako nové
-úplně všechny PR ve frontě; automat proto, že by spouštěl review, které nikdo nečte a za které
-se platí. Když na stroji není `jq`, konfigurace se **nezkopíruje vůbec** — kopírovat ji
+notifikací, bez automatického spouštění review a od #510 **bez agenta na vlastním PR**, a to
+**na obou úrovních**: globálně i u každého repa. Odesílání proto, že výchozí stav je vypnuto
+a u rozestavěného buildu to platí dvojnásob; notifikace proto, že slot má vlastní
+`announced.json` a ohlásil by jako nové úplně všechny PR ve frontě; automat proto, že by
+spouštěl review, které nikdo nečte a za které se platí; agent proto, že je to session, která
+**mění soubory** a startuje bez kliknutí — zděděné povolení by z dev instance pustilo agenta na
+moje skutečné pull requesty. Když na stroji není `jq`, konfigurace se **nezkopíruje vůbec** — kopírovat ji
 neočištěnou by znamenalo předat slotu povolené odesílání.
 
 Očistu drží **`bin/slot-config.sh`** a je to jediné místo, kde existuje (#262):

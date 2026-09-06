@@ -183,7 +183,7 @@ extension AppStore {
         switch progress {
         case .started: branchSyncActivity[pr] = nil
         case .attemptedTool(let tool):
-            branchSyncActivity[pr] = Policy.conflictToolActivity(of: tool, inside: worktree)
+            branchSyncActivity[pr] = Policy.writingToolActivity(of: tool, inside: worktree)
         }
     }
 }

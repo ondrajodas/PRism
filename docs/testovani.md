@@ -10409,6 +10409,72 @@ a se seznamem souborů před podmětem se věta rozpadla („Konflikt v a, b, c 
 Odtud pořadí *Session konflikt nerozřešila (…)*.
 
 
+## Agent na vlastním PR: co jde tvrdit v harnessu a co jedině spuštěním (#510)
+
+Vrstvy jsou tytéž jako u slévání konfliktů (#467) a k nim jedna nová — **spouštěč**. Právě u něj
+platí pravidlo z #478 dvojnásob: měřidlo, které vydá tutéž hodnotu pro „spouštěč funguje“ i pro
+„nefunguje“, netvrdí nic, a **vypadá u toho zeleně**, protože výsledkem obou je „nic se nespustilo“.
+
+| Co se ptá | Kde se to ověří | Čím ne |
+|---|---|---|
+| Je sada nástrojů táž jako u konfliktů? | `SessionToolSetsTests` — **literálem** a k tomu **rovností** obou sad | Porovnáním jen proti `ConflictCommand`: po jejím rozšíření by test prošel dál |
+| Pustí se agent jedině tam, kde má? | `AgentFixPolicyTests` — **vyčerpávajícím výčtem** nad čistou funkcí | Testem přes store: rozhlídka vlastní filtr má, takže tvrzení měří obě vrstvy naráz (viz níž) |
+| Nespustí se, když nemá? | `AppStoreAgentFixTests` — **nula běhů** u cizího PR, u vypnuté brány, u vlastního komentáře a nad rozdělanou prací | Tvrzením o stavu: „v panelu nic není“ vyjde stejně u vypnutého spouštěče i u rozbitého |
+| Necommituje se to, co se nepřijalo? | `AppStoreAgentFixTests` — **nula commitů** po zápisu mimo strom a po spadlé session | Testem nad „šťastnou“ cestou; ten projde i bez těch kontrol |
+| Neodejde nic? | `SingleWayOutTests` — `AgentFixing` zná **tři soubory**, volá ho **jedno místo**, a jeho soubory neznají `ReviewPublishing`, `BranchPushing`, `"push"` ani `"commit"` | Během: že se nic neodeslalo, se z jednoho běhu nedá zobecnit |
+| Opraví to model doopravdy? | **spuštěním** — je to cizí model, síť a peníze | Ničím v harnessu |
+
+### Kde se ověřila regrese vložením regrese (#510)
+
+U čtyř vět, na kterých #510 stojí, se chyba **dočasně vrátila** a koukalo se, co spadne:
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| kontrola brány (`isAllowed`) z `Policy.agentFix` odebrána | devět tvrzení ve dvou sadách, mimo jiné *S vypnutou branou se nespustí nic* |
+| kontrola vlastnictví odebrána | **jen `AgentFixPolicyTests`** — viz níž |
+| přijetí výsledku po zápisu mimo strom | *Po zápisu mimo strom se necommituje nic* — pět tvrzení včetně toho o commitu |
+| filtr vlastních komentářů v `Policy.changes` odebrán | *Vlastní komentář agenta nepustí* — dvě tvrzení včetně commitu |
+
+**Ta druhá řádka je to poučné místo.** Store test *Na cizím PR se agent nepustí* prošel i bez
+kontroly vlastnictví, protože cizí PR zastaví už `Policy.activitySweep`, který sahá jedině na
+`.mine`. Tvrzení tedy měří **složení obou vrstev**, ne guard v rozhodnutí — a kdyby zůstalo samo,
+byl by to přesně ten případ z #478. Guard samotný hlídá `AgentFixPolicyTests`. Obojí je potřeba:
+kdyby se rozhlídka rozšířila, chytí to `Policy`, a kdyby se změnilo rozhodnutí, chytí to rozhlídka.
+
+### Dvě věci, na kterých scéna store testu stojí
+
+- **Vlastní cache ve scratch složce.** Strom agenta se ověřuje proti hranici cache
+  (`CacheFile.refusal`, tvrdá podmínka č. 3), takže s vymyšlenou cestou v `/tmp` skončí běh na
+  `outsideCache` — a test by měřil tu kontrolu místo spouštěče. Poznalo se to na první červené:
+  věta v panelu byla *Pracovní strom … leží mimo cache aplikace*.
+- **Dva tiky, ne jeden.** Při prvním setkání s PR se razítko jen **zasadí**, takže agent na
+  diskuzi, která tam byla dřív, nesmí sáhnout — a scéna to má stejně jako provoz: první tik prázdná
+  diskuze, druhý komentář.
+
+### Co z renderu vyšlo (#510)
+
+Panel se kouká toutéž sondou jako u #467 (`BranchSyncRenderProbe`, scény `16-agent-bezi`,
+`17-agent-hotovo`, `18-agent-nic`, `19-agent-mimo-strom`) — čtyři, protože jsou to čtyři různá
+rozvržení. **Vypadly z toho dvě opravy, které z diffu vidět nebyly**:
+
+- **Pod větou „Agent upravil 2 soubory“ stálo `Zahodit rebase`.** Žádný rebase v tom stromě
+  neproběhl, takže tlačítko pojmenovávalo něco, co tam není. Rozhoduje o tom `isAgentWork`, ne
+  `hasRejectedFix` — práce agenta se musí poznat i u **úspěchu**, ne jen u nepřijatého výsledku.
+- **Řádek o tom, co agent zrovna dělá, se nekreslil vůbec.** Podmínka ve view zněla `isResolving`,
+  tedy jen slévání konfliktů — a patnáctiminutové ticho nad větou „Agent opravuje“ je k nerozeznání
+  od zaseknutého okna, což je celý důvod, proč ten řádek existuje.
+
+Poslední scéna je tam ze stejného důvodu jako `15-nerozreseno-dlouha-veta` u #467: cesta mimo strom
+je **cizí text neznámé délky**. V renderu vyjde na šest řádků a panel se nerozsype; zkracovat ji
+nechceme, protože je to jediný doklad o tom, kam session mířila.
+
+### Co se ověřit nedá a musí to proklikat člověk
+
+Že session doopravdy opraví, co po ní zpětná vazba chce, a že se u toho drží ve stromě — to je cizí
+model, síť a peníze. V harnessu se tvrdí jedině **hranice** (kam smí psát, co se z jejího výsledku
+přijme), ne **kvalita**. Odtud věta v popisu PR: sandbox s vlastním PR, komentář z druhého účtu.
+
+
 ## Kolik stojí výpis repozitářů organizace (#532)
 
 Změřeno na `keboola` (`gh` 2.x, tenhle stroj, ráno 2. 9. 2026). **Je to to jediné číslo, ze kterého

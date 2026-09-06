@@ -16633,6 +16633,301 @@ jsem 120“ zbyde „vždycky tam bylo 60“…</div>
     </div>
   </section>
 
+
+  <section class="section" id="s55">
+    <div class="section-head">
+      <div class="eyebrow">55 — Vlastní PR · agent opraví PR po cizím review</div>
+      <h2>Zapisující session poprvé startuje bez kliknutí — a push zůstává na mně</h2>
+      <p class="muted">
+        <b>Dnes</b> se smyčka na vlastním PR spouští ručně: přijde komentář Copilota, já sestavím
+        zadání (sekce 23), předám ho agentovi, počkám, pushnu. Aplikace přitom od #467 <b>umí
+        pustit session, která smí měnit soubory</b> — ve vlastním stromě <code>-sync</code>
+        v cache, s <code>Write</code> a <code>Edit</code> jen tam, bez <code>Bash</code>e — a od
+        #466 umí větev přetlačit ze sheetu. Chybí jedna věc: <b>spouštěč</b>.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: na vlastním PR, kde si to zapnu, se po <b>cizí</b> aktivitě (review Copilota,
+        komentář kolegy, <em>changes requested</em>) pustí <b>tatáž zapisující session</b> se
+        zadáním složeným z toho, co přišlo. Když skončí, leží v kopii repa <b>jeden commit</b> nad
+        hlavou PR a panel je ve stavu, který už umí: <em>čeká na potvrzení</em>.
+        <b>Do remote se nesáhne</b> — force push zůstává sheetem s lease, bez výchozí akce.
+      </p>
+      <p class="muted">
+        <b>Tvrdá podmínka č. 2 dostává větu, ne řádek v tabulce sad.</b> Sada povolení se
+        <b>nemění ani o položku</b>: je to doslova ta z #467 (test to tvrdí literálem a k tomu
+        rovností obou sad). Nové je jedině to, že session poprvé startuje <b>bez kliknutí</b> — a
+        proto se ta věta musí dát zkontrolovat: <b>jedině nad stromem <code>-sync</code> vlastního
+        PR a jedině po cizí aktivitě</b> (<code>foreignActivity</code>, #335).
+      </p>
+      <p class="muted">
+        <b>#332 tím nepadá.</b> Ten zakázal automat na vlastním PR kvůli <b>review</b> — a to platí
+        dál: reviewer se na vlastní PR sám nepouští, protože se vlastní PR mění pod rukama a
+        automat existuje kvůli čekání na cizí práci. Tohle je <b>oprava po cizím review</b>, tedy
+        jiná otázka: podnětem není můj push, ale cizí hlas, a výsledkem není nález, ale commit,
+        o kterém rozhodnu já.
+      </p>
+      <p class="muted">
+        <b>Brána je vypnutá ve výchozím stavu — a právě ona drží vlastnost „samo nic nezačne“.</b>
+        Zapíná se globálně i per repo, jako odesílání (sekce 48): v tomhle repu chci po Copilotovi
+        opravit samo, ve firemním ne. <b>Vlastní komentář ani vlastní push nespouští nic</b> —
+        moje položky v cizí aktivitě vůbec nejsou. A <b>běhy čerpají tentýž denní limit</b> jako
+        automatické review: dvě poloviny by dohromady byly dvojnásobek toho, co jsem si nastavil.
+      </p>
+      <p class="muted">
+        <b>Commituje aplikace, ne session</b> (jako u konfliktů) a zpráva commitu je
+        <b>určená daty</b>: <code>fix: address review feedback (#510)</code>. Hlavička commitu je
+        jediné místo, kde by se text od modelu dostal do <b>historie repa</b> — a co agent udělal
+        a co nechal být, se ukáže v panelu a v potvrzení, tedy tam, kde se to dá přečíst
+        <b>před</b> odesláním.
+      </p>
+    </div>
+
+    <h3>Panel: běžící agent a jeho výsledek</h3>
+    <p class="muted">
+      Kreslí se to v sekci <em>Větev</em> (sekce 36), protože je to tentýž strom a tatáž další akce.
+      <b>Že to nespustilo moje kliknutí, musí být poznat z věty</b> — proto „Agent opravuje, co
+      přišlo v review“, ne „Právě se to srovnává“, a proto vlastní kapsle v hlavičce PR.
+      <code>Rebase</code> je mezitím zašedlý: v jednom stromě nemůžou pracovat dvě věci.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Agent běží · spustila ho cizí aktivita, ne kliknutí</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div class="pr-meta" style="margin-bottom: 9px;">
+            <span class="pill mint">moje PR</span>
+            <span class="pill run">agent · zapnuto pro toto repo</span>
+          </div>
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">issue-152-find → main</span><span class="ans done">srovnaná</span></div>
+              <div class="rv-row"><span class="who">3 commity · 6 checků</span><span class="ans done">zeleno</span></div>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <span class="mini pri">Mergnout…</span>
+              <span class="mini" style="opacity: 0.45;">Rebase</span>
+            </div>
+            <!-- Hláška pod akcemi, tatáž konstrukce jako u slévání konfliktů (sekce 36): věta
+                 o stavu, pod ní tichý řádek o tom, co session zrovna dělá, a jedno tlačítko.
+                 `Zrušit` tu je z téhož důvodu jako u konfliktů — běží to minuty a stojí peníze —
+                 a o důvod víc: nikdo to nespouštěl. -->
+            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 7px; font-size: 12px; color: var(--ink-2);">
+              <div style="display: flex; gap: 7px; align-items: baseline;">
+                <span style="color: var(--ink-3);">↻</span>
+                <span>Agent opravuje, co přišlo v review (2 položky).</span>
+                <span class="sp" style="flex: 1;"></span>
+                <span class="mini" style="white-space: nowrap;">Zrušit</span>
+              </div>
+              <div style="padding-left: 20px; font-size: 11.5px; color: var(--ink-3);">
+                upravuje App/Policy/DiffFind.swift
+              </div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Řádek pod větou je <b>slovník zapisující session</b> — tentýž, jaký má slévání konfliktů
+          (<code>čte</code>, <code>upravuje</code>, <code>přepisuje</code>). Jedna sada nástrojů,
+          jedna sada sloves.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Hotovo · commit leží v kopii repa a čeká na potvrzení</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div class="rv-list">
+              <div class="rv-row"><span class="who">issue-152-find → main</span><span class="ans done">srovnaná</span></div>
+              <div class="rv-row"><span class="who">4 commity · 6 checků</span><span class="ans done">zeleno</span></div>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <span class="mini pri">Mergnout…</span>
+              <span class="mini" style="opacity: 0.45;">Rebase</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 7px; font-size: 12px; color: var(--ink-2);">
+              <div style="display: flex; gap: 7px; align-items: baseline;">
+                <span style="color: var(--stale);">↑</span>
+                <span>Agent upravil 2 soubory a commit leží v kopii repa. Do remote se zatím
+                nesáhlo. README nechávám tobě: text mění význam.</span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span class="mini pri" style="white-space: nowrap;">Force push…</span>
+                <span class="mini" style="white-space: nowrap;">Zahodit změny</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Je to <b>týž stav</b>, do kterého vede rebase — jen s jinou větou, protože žádný rebase
+          neproběhl. Odtud vede jediná cesta do remote: <b>sheet</b> s výpisem a lease z hlavy,
+          ze které agent vyšel.
+        </p>
+      </div>
+    </div>
+
+    <h3>Dva konce, u kterých se nic necommitne</h3>
+    <p class="muted">
+      <b>Agent, který nic nezměnil, není porucha</b> — je to legitimní odpověď („na tohle
+      nestačím“), po které v kopii repa nic neleží, takže se nenabízí ani zahazování.
+      <b>Zápis mimo strom je naopak konec</b>: brána v povoleních takový pokus odmítne, ale
+      výsledek se pak <b>nepřijme</b> — a počítá se i pokus, který neprošel. Otázka není „povedlo
+      se to“, ale „mířila session mimo strom“.
+    </p>
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Nic se nezměnilo · v cache nic neleží</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-2);">
+              <div style="display: flex; gap: 7px; align-items: baseline;">
+                <span style="color: var(--ok);">✓</span>
+                <span>Agent nic nezměnil, takže není co commitnout. Tohle je rozhodnutí
+                o produktu, ne o kódu.</span>
+                <span class="sp" style="flex: 1;"></span>
+                <span class="mini" style="white-space: nowrap;">Zavřít</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Tečka, ne vykřičník: doběhlo to. <code>Zahodit</code> se <b>nenabízí</b>, protože by
+          nemělo co zahodit — že se nezměnilo nic, řekl <code>git</code>, ne model.
+        </p>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Psal mimo strom · výsledek se nepřijal</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div class="pl-sec">
+            <span class="cap">Větev</span>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-2);">
+              <div style="display: flex; gap: 7px; align-items: baseline;">
+                <span style="color: var(--stale);">▲</span>
+                <span>Agent psal mimo kopii repa (<code>~/Projects/PRism/App/A.swift</code>),
+                takže se jeho výsledek nepřijal a nic se necommitlo. Co ve stromě zůstalo,
+                zahoď, nebo si to prohlédni v terminálu.</span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <span class="mini pri" style="white-space: nowrap;">Otevřít v terminálu</span>
+                <span class="mini" style="white-space: nowrap;">Zahodit změny</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Je to stav, který <b>nemá nastat</b>: scoped <code>Write(//…)</code> je změřená brána.
+          Kdyby přesto nastal, znamená to, že se ta brána změnila — a pak se nesmí commitnout nic.
+        </p>
+      </div>
+    </div>
+
+    <h3>Nastavení: brána, a ve výchozím stavu vypnutá</h3>
+    <p class="muted">
+      Globální přepínač leží na stránce <em>Review a skilly</em> hned pod <em>Režimem review</em>:
+      je to tatáž otázka („co aplikace pustí, aniž bych na to klikl“), jen o druhé session. Per repo
+      se to přebíjí tam, kde se přebíjí všechno ostatní — a <b>tříhodnotově</b>, protože
+      <code>Nepouštět</code> u repa není totéž co „ber globální“.
+    </p>
+    <div class="block">
+      <header>
+        <span>Stránka <strong>Review a skilly</strong> — brána pod režimem, ne vedle něj</span>
+        <span class="more">↥ Review a skilly</span>
+      </header>
+      <div style="padding: 11px 13px; display: flex; flex-direction: column; gap: 15px;">
+        <div class="set-sec">
+          <span class="t">Agent na vlastním PR</span>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="lbl">Pustit agenta po cizím review</span>
+              <span class="val">
+                <span class="pill run">Vypnuto</span>
+                <span class="pill idle">Zapnuto</span>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            Výchozí stav je <strong>vypnuto</strong>, a je to totéž pravidlo jako u odesílání:
+            dokud si o to někdo výslovně neřekne, nespustí se nic. Text pod přepínačem je
+            důležitější než přepínač — musí říct, kde ta hranice končí: session mění soubory
+            <strong>v kopii repa</strong>, commit dělá aplikace a <strong>do remote se nesáhne</strong>.
+          </span>
+        </div>
+
+        <div class="set-sec">
+          <span class="t">ondrajodas/PRism</span>
+          <div class="set-card">
+            <div class="set-row">
+              <span class="lbl">Agent po cizím review</span>
+              <span class="val">
+                <span class="pill idle">Podle globálního (vypnuto)</span>
+                <span class="pill run">Pouštět</span>
+                <span class="pill idle">Nepouštět</span>
+              </span>
+            </div>
+          </div>
+          <span class="note">
+            Tříhodnotově jako odesílání: <code>Nepouštět</code> u repa <strong>není</strong> totéž
+            co „ber globální“ — repo, ve kterém agenta pouštět nechci, si to podrží i po přepnutí
+            globálního defaultu.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">178</span>
+        <span class="body">
+          <b>Tatáž session, nový spouštěč</b>
+          <span><code>Write</code> a <code>Edit</code> s vypsaným rozsahem stromu v cache, bez
+          <code>Bash</code>e, <code>gh</code> a <code>git push</code> v zákazu — <b>doslova sada
+          z #467</b>, ne její kopie. Druhá vrstva je čtení streamu: pokus o zápis mimo strom
+          výsledek zahodí. Nová sada nevzniká, vzniká nový <b>spouštěč</b>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">179</span>
+        <span class="body">
+          <b>Spouštěčem je cizí hlas, ne moje kliknutí</b>
+          <span>Review Copilota, komentář kolegy, <em>changes requested</em> — tedy
+          <code>foreignActivity</code>, které Dění zná od #335. <b>Vlastní komentáře ani pushe
+          nespouští nic</b>, a je to tvrzení, které se testuje: moje položky v cizí aktivitě
+          nejsou. Na starou diskuzi se agent nepouští vůbec — při prvním setkání s PR se značka
+          jen zasadí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">180</span>
+        <span class="body">
+          <b>Push zůstává člověkův, doslova</b>
+          <span>Potvrzovací sheet s lease z hlavy, ze které agent vyšel, a <em>Force push</em> bez
+          výchozí akce — z #466 se nemění nic. Agent připraví commit ve stromě; do remote nedosáhne,
+          protože <b>nemá čím</b>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">181</span>
+        <span class="body">
+          <b>Nad rozdělanou prací se nespouští nic</b>
+          <span>Když v kopii repa leží rozdělaný rebase nebo přerovnaná větev, která neodešla,
+          agent se <b>nepustí</b> — o té práci rozhoduje člověk. Ptá se na to <code>git</code>, ne
+          paměť: strom v cache <b>je</b> ten záznam i po restartu aplikace.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">182</span>
+        <span class="body">
+          <b>Co to otevírá, řečeno rovnou</b>
+          <span>#332 zakázal automat na vlastním PR kvůli <em>review</em> (platí dál — reviewer se
+          na vlastní PR sám nepouští). Tohle je oprava po cizím review, a je to jiná otázka.
+          A podmínka č. 2 dostává větu navíc: zapisující session smí startovat bez kliknutí jedině
+          nad stromem <code>-sync</code> vlastního PR a jedině po cizí aktivitě.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
         <div class="doc-move">
           <a class="prev" href="#pr-prubeh"><span class="dir">← předchozí</span><span class="t">Průběh</span></a>
           <a class="next" href="#moje-prompt"><span class="dir">další →</span><span class="t">Prompt pro agenta</span></a>

@@ -66,6 +66,35 @@ protocol RepoCheckout: Sendable {
         keepingConflict: Bool
     ) async throws -> RebaseOutcome
 
+    /// Strom, ve kterém agent opraví vlastní PR (#510) — **tentýž `-sync` strom** jako u srovnání
+    /// větve, jen postavený na **hlavě pull requestu**, ne nad základem.
+    ///
+    /// **Nezahazuje rozdělanou práci.** Když ve stromě něco leží (rozdělaný rebase, přerovnaná
+    /// větev, která neodešla), vyhodí `CheckoutError` — o té práci má rozhodnout člověk a agent
+    /// spuštěný pollingem ji nesmí přepsat. Volající se ptá dřív (`syncWorktreeState`); tohle je
+    /// druhá vrstva, protože mezi dotazem a přípravou je čas.
+    ///
+    /// **Do remote nesahá a nemá čím** (tvrdá podmínka č. 1) — je to `worktree add --detach`
+    /// v cache, tedy tatáž operace jako u stromu pro review.
+    func agentFixWorktree(for pr: PRIdentifier, at headSha: String) async throws -> URL
+
+    /// Zapíše, co agent ve stromě změnil, **jedním commitem nad hlavou PR** (#510).
+    ///
+    /// **Commituje aplikace, ne session** (tatáž úmluva jako u #467): dvě věci, které commitují,
+    /// se rozejdou — a session, která umí commitnout, si umí commitnout i to, co jí nikdo
+    /// neschválil.
+    ///
+    /// `nil` znamená **„ve stromě se nic nezměnilo“**, což je legitimní výsledek (agent nenašel co
+    /// opravit, nebo se přiznal, že na to nestačí), ne chyba. Jinak je výsledek `RebasedBranch`
+    /// s původem `.agent`, tedy přesně ten stav, ze kterého panel nabízí **potvrzení force pushe**
+    /// (#466) — odsud se do remote nesáhne.
+    func commitAgentFix(
+        for pr: PRIdentifier,
+        in worktree: URL,
+        at headSha: String,
+        message: String
+    ) async throws -> RebasedBranch?
+
     /// Zahodí, co ve stromě pro srovnání větve leží — **rozdělaný rebase i přerovnanou větev, která
     /// neodešla** (#466). Chybějící strom není chyba: na remote se nesáhlo, takže není co vracet.
     ///

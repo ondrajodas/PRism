@@ -127,11 +127,18 @@ trap 'rm -f "${CLEANED}"' EXIT
 # **Výčet klíčů je úplný a je to tady vidět** (#262). Rozhodující jsou ty, které mají obě
 # úrovně (`GlobalConfig` i `RepositoryConfig`), protože u nich očista jedné úrovně nestačí —
 # per-repo override je přednější, to je celý smysl `Configuration.resolved(for:)`. Takových
-# klíčů je **šest** a všech šest je tady:
+# klíčů je **osm** a všech osm je tady:
 #
 #   klíč                  obě úrovně   čistí se   proč
 #   mode                  ano          ANO        automat by pustil review, které nikdo nečte
 #   allowsPublishing      ano          ANO        brána z tvrdé podmínky č. 1
+#   autoAgent             ano          ANO        brána z tvrdé podmínky č. 2 (#510): session,
+#                                                 která **mění soubory**, a startuje bez kliknutí.
+#                                                 Zděděné `true` by z dev instance pustilo agenta
+#                                                 na moje skutečné PR — tedy zrovna to, čemu se
+#                                                 slot vyhýbá
+#   mergeMethod           ano          ne         metoda nevratné akce, ne brána: s vypnutým
+#                                                 odesíláním se stejně nemergne nic
 #   findingsLanguage      ano          ne         jazyk prózy; nic nespustí ani neodešle
 #   skills                ano          ne         zrovna to je to, co se ve slotu zkouší
 #   blockingCategories    ano          ne         mění jen příznak u nálezu
@@ -177,6 +184,7 @@ trap 'rm -f "${CLEANED}"' EXIT
 # nemaže: očista má být čitelná ze souboru, ne odvoditelná z toho, co v něm chybí.
 jq '.global.allowsPublishing = false
     | .global.mode = "manual"
+    | .global.autoAgent = false
     | .global.autoRunsPerDay = 0
     | .global.notifications.isEnabled = false
     | .global.pollIntervalSeconds = 900
@@ -184,6 +192,7 @@ jq '.global.allowsPublishing = false
           .repositories |= with_entries(
               .value.allowsPublishing = false
               | .value.mode = "manual"
+              | .value.autoAgent = false
           )
       else . end' \
     "${INPUT}" > "${CLEANED}"
@@ -198,7 +207,10 @@ LEFTOVERS="$(jq -r '[
     ((.repositories // {}) | to_entries[] | select(.value.mode == "automatic")
         | "automat u " + .key),
     ((.repositories // {}) | to_entries[] | select(.value.allowsPublishing)
-        | "odesílání u " + .key)
+        | "odesílání u " + .key),
+    (if .global.autoAgent then "agent globálně" else empty end),
+    ((.repositories // {}) | to_entries[] | select(.value.autoAgent)
+        | "agent u " + .key)
 ] | join(", ")' "${CLEANED}")"
 
 if [ -n "${LEFTOVERS}" ]; then
@@ -210,5 +222,5 @@ fi
 mv "${CLEANED}" "${TARGET_CONFIG}"
 trap - EXIT
 
-echo "Konfigurace slotu „${SLOT}“ je hotová: bez odesílání, bez notifikací, bez automatu."
+echo "Konfigurace slotu „${SLOT}“ je hotová: bez odesílání, bez notifikací, bez automatu a bez agenta."
 echo "  ${TARGET_CONFIG}"

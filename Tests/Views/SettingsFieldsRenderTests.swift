@@ -35,7 +35,12 @@ struct SettingsFieldsRenderTests {
     /// `Režim review` posunul `Text issue z trackeru` pod dosavadní hranici. Test se tím nezměnil
     /// v tom, co tvrdí: dvě bitmapy vyšly stejné právě proto, že se pole přestalo kreslit, což je
     /// zrovna ta vada, kterou má chytat.
-    private static let height: CGFloat = 1800
+    ///
+    /// **Od #510 o dalších tři sta, ze stejného důvodu a se stejným poučením**: sekce `Agent na
+    /// vlastním PR` (přepínač a odstavec pod ním) posunula `Text issue z trackeru` zase níž a obě
+    /// bitmapy vyšly znovu stejné. Konstanta je proto „kam až stránka sahá“, ne „jak velké je
+    /// okno“ — když na stránku něco přibude, patří to i sem.
+    private static let height: CGFloat = 2100
 
     // MARK: - Text issue z trackeru
 

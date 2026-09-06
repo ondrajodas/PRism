@@ -77,6 +77,19 @@ struct ConflictStaging: Equatable, Sendable {
     }
 }
 
+/// Odkud se v kopii repa vzal commit, který čeká na přetlačení (#510).
+///
+/// **Vlastní údaj, ne odvození z čísel.** Panel i potvrzení o tom stavu píší větu a ta je u každého
+/// původu jiná: po rebase se commity **přehrály**, po agentovi **vznikl** jeden nový. „Rebase
+/// hotový“ nad commitem, který žádný rebase neudělal, je text, který tvrdí víc, než data unesou —
+/// a pushuje se z něj do remote.
+enum BranchWorkOrigin: Hashable, Sendable {
+    /// Přehrání commitů nad základem (#466).
+    case rebase
+    /// Oprava po cizím review: soubory upravil agent, **commitla aplikace** (#510).
+    case agent
+}
+
 /// Výsledek přehrání commitů (#466).
 struct RebasedBranch: Hashable, Sendable {
     /// Pracovní strom v cache, ve kterém výsledek leží. Odsud se pushuje.
@@ -125,13 +138,25 @@ struct RebasedBranch: Hashable, Sendable {
     /// případech to samé, protože hlava i `rebasedFrom` v cache jsou.
     var resolution: ConflictResolution?
 
+    /// Odkud se ten commit vzal (#510). **Výchozí `.rebase`**, tedy chování do #510 — po zavedení
+    /// pole se aplikace nesmí začít chovat jinak, a stav nalezený v cache po restartu je pořád
+    /// výsledek rebase (jiný se do `-sync` stromu nedostane bez toho, aby o něm store věděl).
+    var origin: BranchWorkOrigin = .rebase
+
+    /// Co agent opravil (#510). `nil` = **žádný agent to nedělal, nebo se to nedá vědět** — tedy
+    /// dvě různé cesty, obě v pořádku, přesně jako u `resolution`: účet session se z pracovního
+    /// stromu po restartu nezrekonstruuje a vymyslet se nesmí. Pushuje se v obou případech totéž.
+    var fix: AgentFixAnswer?
+
     init(
         worktree: URL,
         headSha: String,
         rebasedFrom: String,
         arriving: [RebasedCommit],
         replayed: Int,
-        resolution: ConflictResolution? = nil
+        resolution: ConflictResolution? = nil,
+        origin: BranchWorkOrigin = .rebase,
+        fix: AgentFixAnswer? = nil
     ) {
         self.worktree = worktree
         self.headSha = headSha
@@ -139,10 +164,20 @@ struct RebasedBranch: Hashable, Sendable {
         self.arriving = arriving
         self.replayed = replayed
         self.resolution = resolution
+        self.origin = origin
+        self.fix = fix
     }
 
     /// Kolik commitů z base se pod ně dostalo — dopočítané, aby nešlo tvrdit dvě různá čísla.
     var fromBase: Int { max(0, arriving.count - replayed) }
+
+    /// Tentýž výsledek s připsaným účtem agenta (#510). **Vzniká ve store, ne v `RepoCheckoutu`**,
+    /// ze stejného důvodu jako `reporting(_:)` níž: checkout o session nic neví a vědět nemá.
+    func reporting(fix: AgentFixAnswer?) -> RebasedBranch {
+        var copy = self
+        copy.fix = fix
+        return copy
+    }
 
     /// Tentýž výsledek s připsaným účtem session. **Vzniká ve store, ne v `RepoCheckoutu`**:
     /// checkout o session nic neví a vědět nemá (je to lokální modul nad `gitem`).

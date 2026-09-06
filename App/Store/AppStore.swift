@@ -551,6 +551,17 @@ final class AppStore {
     /// a nespouští tím `claude`.
     let conflicts: (any ConflictResolving)?
 
+    /// Agent, který opraví vlastní PR po cizím review (#510). `nil` = **nespouští se nic**, tedy
+    /// stav před #510; tak jsou na tom testy, které o agenta nestojí, a nespouští tím `claude`.
+    ///
+    /// **Není to brána.** Tou je `ResolvedConfig.autoAgent` (globálně i per repo, výchozí
+    /// vypnuto) — tohle je jen zapojení session, přesně jako `conflicts`.
+    let fixer: (any AgentFixing)?
+
+    /// Na co už agent na vlastním PR odpovídal (#510). Razítko **spuštění**, ne návštěvy ani
+    /// oznámení — viz `AgentFixLedger`.
+    let agentFixes: AgentFixLedger
+
     /// Uložené rozhovory (#452). `nil` = neukládá se, tedy rozhovor zanikne se zavřením aplikace.
     let asks: AskStore?
 
@@ -1031,6 +1042,7 @@ final class AppStore {
         intentText: (any IntentTextFetching)? = nil,
         asker: (any AskRunning)? = nil,
         conflicts: (any ConflictResolving)? = nil,
+        fixer: (any AgentFixing)? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
@@ -1054,6 +1066,7 @@ final class AppStore {
         installation: AppInstallation = .main,
         visits: VisitLedger = VisitLedger(preferences: UserDefaults.standard),
         activityNotices: ActivityNoticeLedger = ActivityNoticeLedger(preferences: UserDefaults.standard),
+        agentFixes: AgentFixLedger = AgentFixLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil,
         snoozeStore: SnoozeStore? = nil,
         activityLog: ActivityLog? = nil,
@@ -1061,6 +1074,7 @@ final class AppStore {
     ) {
         self.visits = visits
         self.activityNotices = activityNotices
+        self.agentFixes = agentFixes
         self.handoffs = handoffs
         self.snoozeStore = snoozeStore
         self.activityLog = activityLog
@@ -1100,6 +1114,7 @@ final class AppStore {
         self.intentText = intentText
         self.asker = asker
         self.conflicts = conflicts
+        self.fixer = fixer
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
@@ -1250,6 +1265,16 @@ final class AppStore {
             // a přes tentýž registr běžících session (#351) jako reviewer a rozhovor: `claude -p`
             // běží minuty a jako sirotek po zabité aplikaci platí tokeny dál.
             conflicts: ClaudeConflictResolver(
+                claude: toolPaths.claude,
+                gh: toolPaths.gh,
+                runner: SubprocessStreamer(sessions: .shared),
+                model: { box.value.global.model }
+            ),
+            // Agent na vlastním PR (#510) — **druhá session, která smí měnit soubory**, a jediná,
+            // kterou aplikace pouští bez kliknutí. Brána je v konfiguraci (`autoAgent`, výchozí
+            // vypnuto), tady je jen zapojení. Přes tentýž registr běžících session (#351) jako
+            // zbytek: `claude -p` běží minuty a jako sirotek po zabité aplikaci platí tokeny dál.
+            fixer: ClaudeAgentFixer(
                 claude: toolPaths.claude,
                 gh: toolPaths.gh,
                 runner: SubprocessStreamer(sessions: .shared),
