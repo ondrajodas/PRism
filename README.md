@@ -1089,6 +1089,70 @@ check naopak nebrání.
 pokusy) — bez toho by tlačítko u čerstvého PR svítilo zašedle podle náhody. A ptá se **jen na
 vlastním otevřeném PR**: na cizím se sekce nekreslí a mergnutý vrací „nevím“ navždycky.
 
+### Dráha smyčky — kde v tom kole zrovna jsem (#508)
+
+Práce na **vlastním** PR je smyčka: pustit review, předat nálezy agentovi, počkat na commit,
+srovnat a přetlačit větev, počkat na CI a na kolegu, mergnout. Do #508 byla rozsekaná po místech —
+nálezy v panelu, zadání v segmentu, push a merge v sekci `Větev`, Copilot v konverzaci — a odpověď
+na „kde v tom kole zrovna jsem“ si člověk skládal sám.
+
+**Pod souřadnicemi vlastního PR je od #508 dráha s pěti stanicemi**: *Nálezy → Zadání → Push → CI →
+Review*. Kreslí se **stejně jako dráha reviewera v tabu `Průběh`** — týž rám, tytéž kapsle, táž
+barevná škála: je to proces s fázemi, a okno umí jeden způsob, jak proces nakreslit. Na cizím PR se
+**nekreslí vůbec**, ne zašedle.
+
+**Stanice `Agent` a `Merge` na dráze nejsou.** První zákres jich měl sedm; obě odešly, protože
+v okně nikdy nic neukázaly — `Agent` nemá živý obsah (zadání odchází do **cizího** terminálu, takže
+aplikace neví, jestli na něm někdo pracuje) a `Merge` stál na celém kole, takže byl prakticky
+vždycky šedý. Kapsle, která nikdy nic neřekne, je jen užší místo pro ostatní. **Mergne se dál ze
+sekce `Větev`** a dráha na ni ukazuje větou, jakmile kolo dojede do konce.
+
+**Aktivní je první stanice, která není hotová** — ta je zvýrazněná, nese jedinou akci a mluví o ní
+věta pod fázemi. Rozdělaná je vždycky jen jedna kapsle; nejhorší stanice aktivní **není**, protože
+dráha odpovídá na „co je další krok“, ne „co je nejvíc rozbité“.
+
+**Stanice za zastávkou ale nejsou automaticky šedé: co je hotové, svítí zeleně.** Dráha říká dvě
+věci naráz — kde stojím a co je hotové —, aby bylo na první pohled vidět, **co chybí**. Schválený
+PR se zelenými checky má proto `CI` i `Review` zelené, i když se dráha zastavila na `Zadání`: kód je
+pushnutý, checky nad touhle hlavou doběhly a schválení platí.
+
+**A šedá stanice řekne jedním slovem, proč není zelená** — `pozadu`, `konflikt`, `nepřetlačeno`,
+`zjišťuju`, `neprošlo`, `běží`, `čeká`. Bez toho visel `Push` prázdný i tehdy, když byla větev
+o jednadvacet commitů pozadu, a přečíst se to dalo jedině v sekci `Větev`. Je to **slovo, ne
+počet**: šedá kapsle nemá pod sebou větu, o kterou by se opřela, a číslo vedle cizí věty se čte
+jako tvrzení o tom, co je zrovna na tahu. Kapsle přitom zůstává šedá — zvýrazněná je pořád jen
+jedna, ta aktivní.
+
+**Šedá a němá zůstává tam, kde fakta závisí na kroku, který se neudělal.** `CI` a `Review` mluví
+o hlavě, která je **na GitHubu**, takže nad **nepřetlačenou prací v cache** neřeknou nic — zelený
+check nad kódem, který ještě nikdo nepushnul, mluví o **minulém** pushi, a vymýšlet si k tomu důvod
+by bylo tvrzení z chybějících dat. Že je větev **pozadu za základem** nebo s ním v konfliktu, je
+proti tomu tvrzení o poloze, ne o hlavě: checky nad ní doběhly a schválení na ni platí, takže
+zelené zůstávají a nesrovnanou větev hlásí stanice `Push`. Co dráha zamlčí, je pořád vidět tam, kde
+to bydlí — v tabu `Kontroly`, v sekci `Větev`, v panelu `Zadání`.
+
+**Stanice `Review` je hotová, když někdo schválil** — i když na PR visí další žádost o review.
+Odpovídá to tomu, co o PR říká GitHub, a nic se tím neztrácí: na koho se ještě čeká, kreslí sekce
+`Reviewery` v panelu. `Chce změny` naopak nezezelená nikdy, ani vedle schválení.
+
+**Pod fázemi je jedna věta o tom, co je na tahu** (*„Od předání přibyly 2 položky.“*, *„Větev je
+o 4 commity pozadu za základem — srovnej ji rebasem.“*, *„Všech pět stanic je hotových — merge
+zůstává v sekci Větev.“*) a vpravo v hlavičce dráhy **jediná akce aktivní stanice**. Ta akce **nic
+neodesílá** — otevře to místo, kde ta práce bydlí: panel `Zadání`, sekci `Větev`, tab `Kontroly`,
+tab `Konverzace`. Obsah stanic se tedy nikam nestěhoval a nezdvojil.
+
+**`Spustit review` mezi akcemi dráhy není**: stojí v hlavičce o pár bodů výš a je to jediné
+akcentové místo v celém pruhu (#218). Stanice `Nálezy` proto akci nemá — co dělat, říká věta pod
+fázemi.
+
+**„Nevím“ je odpověď, ne „nejde“.** Checky i vyžádaní reviewery se dotahují teprve s detailem PR,
+takže hned po otevření záložky je stanice **tichá** se slovem *zjišťuju* — ne červená. Nad
+nevratnou akcí je tvrzení z chybějících dat ta nejdražší strana omylu.
+
+**Nad mergnutým PR je dráha dojetá** (pět hotových stanic a věta *Mergnuto*), nad zavřeným
+zastavená. Bez toho by nad mergnutou větví viselo `6 k předání`, což je rada, kterou nemá kdo
+splnit.
+
 ### `Připravit k review` — jediná překážka mergnutí, kterou aplikace odklidí jedním kliknutím (#482)
 
 Sekce `Větev` vypisuje, proč se nedá mergnout. Většina těch důvodů je práce — jeden z nich byl ale

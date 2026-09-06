@@ -8596,3 +8596,75 @@ regresí — tří původních a čtyř po proklikání, mezi nimi i té, která
 (vyhozené `snoozeAction:` z `BoardView`). **Copilot se na tenhle PR schválně
 nepouštěl** — GitHub má výpadek entitlementu (`ineligible_app`), tatáž příčina jako u #570 a #572.
 Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
+
+## #508 — Dráha smyčky vlastního PR: pět stanic v hlavičce
+
+**Pod souřadnicemi vlastního PR stojí dráha s pěti stanicemi** — *Nálezy → Zadání → Push → CI →
+Review* (návrh, sekce 52). Do #508 byla smyčka rozsekaná po místech a odpověď na „kde v tom kole
+zrovna jsem“ si člověk skládal sám; teď ji vydá `Policy.ownLoop` jako jednu čistou funkci
+a hlavička ji kreslí **týmiž třídami jako dráha reviewera**.
+
+**Obsah stanic se nikam nestěhoval.** Panel *Zadání* (#334) i sekce *Větev* (#465, #466) zůstávají
+tam, kde jsou; jediná akce aktivní stanice do nich **odkazuje**. Odesílat z dráhy nejde nic —
+`ReviewPublishing` ani `BranchPushing` se nezměnily ani o metodu.
+
+**Dvě rozhodnutí padla proti zákresu a obě z proklikání.** `Spustit review` se na dráze
+**nenabízí**: to tlačítko stojí v hlavičce o pár bodů výš a #218 mu vyhradilo jediné akcentové
+místo v pruhu — druhá kopie z hlavičky udělala semafor (vidět na screenshotu z prvního kola).
+A akce dráhy je **malá** (`controlSize(.small)`), protože `font(.caption)` na `bordered` tlačítku
+nezabírá: metriku si bere z control size.
+
+**Druhé kolo z proklikání změnilo, co dráha kreslí za zastávkou.** Na
+`keboola/platform-libraries#566` měl **schválený** PR se **zeleným CI** stanice `CI` i `Review`
+šedé, protože se walk zastavil na `Zadání` u jediného nepředaného nálezu. Uživatelovo zadání:
+*„chci zobrazit zeleně, co je hotové, abychom na první pohled viděli, co chybí.“* Stanice za
+zastávkou se proto **vyhodnocují dál** a zelenají, kdykoli jsou jejich fakta **známá a aktuální**;
+aktivní stanice, věta pod dráhou ani akce se nemění.
+
+Hranici drží **jedna čistá funkce** — `Policy.ownLoopFacts(of:branch:)`, výčtem po stanicích.
+`Nálezy` a `Push` nestojí na ničem (poloha větve je tvrzení o **dnešní** větvi), `Zadání` na
+`Nálezech` a `CI` s `Review` na `Push`i, ale jedině tehdy, když se ví, že naše práce na GitHubu
+není. Za zastávkou se kreslí `done`, nebo `idle`: **nenačtené checky ani neznámý stav
+nezezelenají** a rozdělaná kapsle je vždycky jen jedna — ta aktivní.
+
+**Třetí kolo opravilo dvě věci, které tu druhé nechalo — a obojí nahlásil uživatel na běžící
+aplikaci.** Ta oprava z druhého kola `#566` totiž **nespravila**: větev je **o 21 commitů pozadu za
+`main`em**, takže `Push` nebyl hotový, a `CI` s `Review` na něm stály natvrdo. Zúžilo se to podruhé
+a tentokrát nad tím, co se doopravdy ví: `CI` a `Review` zhasne jedině **nepřetlačená práce
+v cache** (rozhoduje `BranchSyncState`), poloha větve proti základu **ne** — hlavou na GitHubu
+nehýbe, takže checky nad ní doběhly a schválení na ni platí. Druhá věc je stanice `Review`:
+**schválení přebíjí visící žádost** (`#566` má schválení od `odinuv` a otevřenou žádost na
+`MiroCillik`), a `chce změny` dál nezezelená nikdy. Tím padá issue #577. Poučení, kvůli kterému je
+to v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md), je obecnější než oprava:
+**hrubý předpoklad tvaru *stanice X stojí na stanici Y* zhasne i fakta, která s Y nesouvisí.**
+
+**Ověření se ve třetím kole taky změnilo.** Druhé kolo stálo na sondě `OwnLoopRenderProbe`, která
+kreslí view z **připravených** dat — a proto vyšlo zeleně něco, co uživateli zšedlo (pravidlo
+z #478). Doklad je teď **snímek běžící aplikace** nad `#566` vedle testů nad těmi dvěma stavy.
+
+**Čtvrté kolo ubralo dvě stanice a přidalo jim slovo.** Rozhodl to uživatel po proklikání a důvod
+je věcný: `Agent` a `Merge` v okně **nikdy nic neukázaly**. `Agent` nemá živý obsah (zadání odchází
+do cizího terminálu, dodat ho měla #511) a `Merge` stál na celém kole, takže byl prakticky vždycky
+šedý. Ze sedmi stanic je tedy **pět** a kapsle, které mluví, dostaly víc místa. **Cesta k mergi se
+nezhoršila**: merge se dál dělá ze sekce *Větev* (#465) týmž tlačítkem a týmž potvrzením a dráha na
+ni ukazuje větou, jakmile kolo dojede do konce. `Policy.ownLoop` k tomu přestalo brát `MergeOffer`
+jako vstup, takže odpadl i druhý průchod mapami v `AppStore.ownLoop(for:)`. **Co z toho plyne pro
+#511, je zapsané, ne rozhodnuté** — buď se `Agent` vrátí i s obsahem, nebo se agent ukáže jinde.
+
+**Druhá vada z proklikání: šedá kapsle za zastávkou byla němá.** Dráha stála na `Nálezech`, větev
+byla o jednadvacet commitů pozadu a `Push` visel šedý **bez textu** — jediné místo, kde to šlo
+přečíst, byla sekce *Větev*. Nehotová vyhodnocená stanice proto nese **jedno slovo** (`pozadu`,
+`konflikt`, `nepřetlačeno`, `zjišťuju`, `neprošlo`, `běží`, `čeká`), rozhoduje o něm `Policy` na
+jednom místě a platí to pro **každou** stanici, ne jen pro `Push`. Tři meze: **slovo, ne počet**
+(číslo vedle cizí věty se čte jako tvrzení o tom, co je na tahu), **kapsle zůstává `idle`**
+(rozdělaná je pořád jen jedna) a **stanice, která se nevyhodnocovala, mlčí dál** — nad
+nepřetlačenou prací v cache jsou `CI` i `Review` prázdné, protože mluví o hlavě, která na GitHubu
+není.
+
+**Zákres v sekci 52 se překreslil ve stejném PR** (pět stanic, pět zastávek, slovo u šedých kapslí,
+poznámky 190, 193 a 196). Regrese se ověřila **vložením regrese u každé opravy zvlášť**; tabulka je
+v [`docs/testovani.md`](testovani.md).
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
+(`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR schválně nepouštěl.
+Vlastní revize diffu proběhla a je popsaná v PR.

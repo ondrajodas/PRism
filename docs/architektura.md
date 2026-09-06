@@ -5425,6 +5425,215 @@ schválně chovají jako přerušené, ne jako zrušené:
 - **Nic se neukládá jako doběhlé.** To platí i u zrušení (`Task.isCancelled` před zápisem) —
   zabitý běh není doběhlý běh a `čisté` by nad ním lhalo.
 
+### Dráha smyčky vlastního PR (#508)
+
+Pod souřadnicemi **vlastního** PR stojí dráha s pěti stanicemi — *Nálezy → Zadání → Push → CI →
+Review* (návrh, sekce 52). Do #508 byla ta smyčka rozsekaná po místech (nálezy v panelu, zadání
+v segmentu, push a merge v sekci *Větev*, Copilot v konverzaci) a odpověď na „kde v tom kole zrovna
+jsem“ si člověk skládal sám.
+
+#### Stanic je pět, ne sedm (#508, čtvrté kolo)
+
+**Zákres i první tři kola měly sedm stanic** — *Nálezy → Zadání → Agent → Push → CI → Review →
+Merge*. `Agent` a `Merge` odešly po proklikání a důvod je u obou týž: **v okně nikdy nic
+neukázaly**.
+
+- **`Agent` nemá živý obsah.** Zadání odchází do **cizího** terminálu, takže aplikace neví, jestli
+  na něm někdo pracuje; stanice uměla říct jedině *předáno* a *čekám na commit*. Dodat jí obsah
+  (ocas relace, `Otevřít zásuvku`, `Zastavit agenta`) měla #511.
+- **`Merge` stál na celém kole**, takže se vyhodnotil jedině tehdy, když byly hotové všechny
+  ostatní — a v tu chvíli byl zastávkou. Jakmile kdekoli něco zbývalo, byl šedý a němý.
+
+**Kapsle, která nikdy nic neřekne, je jen užší místo pro ostatní**: pět kapslí se o šířku hlavičky
+dělí líp než sedm, a rozdíl je vidět zrovna na těch, které mluví. **Nic se tím neztratilo.** Merge
+se dál dělá ze sekce *Větev* (#465) — týmž tlačítkem, týmž potvrzením, přes `Policy.mergeOffer` —
+a dráha na ni ukazuje větou pod fázemi, jakmile kolo dojede do konce
+(`Všech pět stanic je hotových — merge zůstává v sekci Větev.`). Je to **údaj o místě, ne tvrzení
+o slévatelnosti**: `Policy.ownLoop` od čtvrtého kola `MergeOffer` **nebere ani jako vstup**, takže
+se s ním nedá rozejít. Odpadl tím i druhý průchod mapami v `AppStore.ownLoop(for:)`.
+
+**Co z toho plyne pro #511.** To issue počítalo s tím, že stanici `Agent` naplní živým průběhem;
+stanice teď na dráze není. Buď ji #511 **vrátí i s obsahem** — prázdná kapsle se vracet nemá —,
+nebo se agent ukáže jinde (zásuvka má vlastní hlavičku a #460 v ní drží víc relací). **Nerozhoduje
+se to tady**; rozhodne se to při zadání #511.
+
+**Kreslí se třídami dráhy reviewera, a je to vymahatelné, ne slib v komentáři.** Stav stanice je
+`ReviewerLane.PhaseState` (týž výčet, ne vlastní), kapsli kreslí **jediný sdílený prvek**
+`LanePhaseChip`, a že mapování `PhaseState → barva` je v jednom souboru a kreslí z něj **obě**
+dráhy, tvrdí `LanePhaseChipTests` nad zdrojáky. Vlastní výčet by dovolil vyrobit hodnotu, kterou
+kresba fází neumí; druhá kopie mapování by se rozešla první den, kdy někdo změní odstín.
+
+**Walk, ne pět nezávislých odznaků.** `Policy.ownLoop` jde stanice v pořadí `Station.allCases`
+a **zastaví se na první, která není hotová**; ta je `active`, nese větu i akci.
+
+**Za zastávkou se ale nemlčí — a je to změna pravidla z proklikání** (#508, druhé kolo). Do ní bylo
+všechno za `active` `idle`, takže dráha odpovídala jedině na otázku *kam až jsem došel*. Otázka je
+ale **co ještě chybí**, a na tu se odpovídá zeleně. Vyšlo to z `keboola/platform-libraries#566`:
+schválený PR se zelenými checky měl `CI` i `Review` šedé, protože se walk zastavil na `Zadání`
+u jediného nepředaného nálezu — a ta fakta byla přitom známá i aktuální, dráha je jen zamlčela.
+**Rozhoduje `Policy.ownLoopFacts(of:branch:)`**, což je jediné místo, kde ta hranice je, a je to
+**výčet**:
+
+| Stanice | Stojí na dokončení | Proč |
+|---|---|---|
+| `Nálezy` | — | o hlavě na GitHubu neříká nic |
+| `Zadání` | `Nálezy` | `nic k předání` nad nedoběhlým review je nula, kterou nikdo nespočítal |
+| `Push` | — | „větev je pushnutá a srovnaná“ je tvrzení o **dnešní** větvi; nepředané zadání z něj nedělá nepravdu |
+| `CI` | `Push` **jen když v cache leží nepřetlačená práce** | mluví o **hlavě, která je na GitHubu** |
+| `Review` | totéž | totéž — schválení platí k hlavě, ne k rozdělané práci v cache |
+
+#### Předpoklad `CI` a `Review` se zúžil podruhé (#508, třetí kolo)
+
+**Druhé kolo napsalo *`CI` a `Review` stojí na `Push`i* natvrdo, a bylo to moc hrubé.** Ta oprava
+znovu zhasla `#566`, jen z jiného důvodu: větev byla **o jednadvacet commitů pozadu za `main`em**,
+takže `Push` nebyl hotový — a s ním zhaslo zelené CI (44 checků, `zeleno`) i schválení od `odinuv`.
+Na obrazovce to vypadalo přesně jako vada z prvního kola, přestože příčina v kódu byla jiná.
+
+**Poučení je obecnější než ta oprava.** Předpoklad tvaru *stanice X stojí na stanici Y* zhasne
+**i fakta, která s Y nesouvisí**: `Push` v sobě nese dvě různé věci — *je moje práce na GitHubu?*
+a *stojí větev nad dnešním základem?* —, a `CI` s `Review` potřebují jen tu první. Předpoklad se
+proto musí umět vyslovit nad tím, co se doopravdy ví (*o větvi se neví, že by byla rozešlá*), ne
+nad zástupným stavem sousední stanice.
+
+**Rozhoduje jediný vstup: co leží v kopii repa** (`BranchSyncState`). `BranchStatus` mluví o poloze
+**proti základu**, a ta hlavou nehýbe: větev může být pozadu i v konfliktu se základem a checky nad
+tou hlavou přesto doběhly a schválení na ni platí. Ta poloha je vidět tam, kde bydlí — na stanici
+`Push` a v sekci *Větev*.
+
+| Stav srovnání větve | `CI` a `Review` | Proč |
+|---|---|---|
+| `nil` (neví se o ničem) | kreslí se z fakt | „nevím o rozejití“ není důkaz rozejití |
+| `pushed`, `alreadyInSync` | kreslí se z fakt | hotová odpověď: co je v cache, je i v remote |
+| `rebased` (přerovnáno, nepřetlačeno) | šedé | na GitHubu je **předchozí** hlava |
+| `rebasing`, `resolving`, `pushing`, `discarding` | šedé | rozdělaná práce, o výsledku se nedá říct nic |
+| `conflicted`, `unfinished`, `unresolved` | šedé | nedokončený rebase drží commity v cache |
+| `failed` | šedé | spadlé přetlačení — zaokrouhluje se k opatrnější odpovědi |
+
+**Aplikace zná jedině svoji rozdělanou práci, a je to zapsaná mez, ne přehlédnutí.** O commitech,
+které si člověk udělal ve svém klonu, neví nic (tvrdá podmínka č. 3), takže „neví se o rozejití“ je
+schválně slabší tvrzení než „ověřeno“. Silnější by šlo dostat jedině porovnáním hlavy z detailu
+s hlavou uživatelova stromu, a do toho stromu se nesahá.
+
+**Uvolnilo se jen to, co se uvolnit mělo.** Nenačtené checky, nenačtení reviewery, červené CI ani
+`chce změny` nad toutéž větví pozadu nezezelenají — je to tatáž hranice jako „nevím“ nad mergem.
+
+**Vyjmenovávají se přímé předpoklady, ne tranzitivní uzávěr.** Do množiny hotových se stanice
+dostane, jedině když se doopravdy vyhodnotila a **prošla**, takže se řetěz (`Zadání` → `Nálezy`)
+přenese sám a walk zůstává jeden průchod.
+
+#### Šedá stanice řekne jedním slovem proč (#508, čtvrté kolo)
+
+**Do čtvrtého kola byla šedá kapsle za zastávkou němá** (`idle`, `detail == nil`) — a přesně na
+tom se to zlomilo při proklikání: dráha stála na `Nálezech`, větev byla o jednadvacet commitů
+pozadu, `Push` visel šedý **bez textu** a z hlavičky to nešlo poznat vůbec. Informace zůstávala
+jedině v sekci *Větev*, tedy o dvě kliknutí dál.
+
+**Nehotová vyhodnocená stanice proto nese `reason` — jedno slovo.** Skládá se v `Policy` (jediné
+místo), je to vlastní hodnota `LoopStep.stopped` **vedle** `detail`u a slovník je krátký schválně:
+
+| Stanice | Stav | Slovo |
+|---|---|---|
+| `Push` | větev pozadu (`divergence`, `mergeState == .behind`) | `pozadu` |
+| `Push` | konflikt se základem | `konflikt` |
+| `Push` | přerovnáno, nepřetlačeno | `nepřetlačeno` |
+| `Push` | rebase/push/zahazování běží | `probíhá` |
+| `Push` | rozdělaný nebo spadlý rebase, spadlý push | `rebase` |
+| `Push` | stav větve se dotahuje / nezjistil | `zjišťuju` / `nevím` |
+| `CI` | nenačteno / spadlé / běžící | `zjišťuju` / `neprošlo` / `běží` |
+| `Review` | nenačteno / chce změny / čeká | `zjišťuju` / `změny` / `čeká` |
+| `Nálezy`, `Zadání` | (nedosažitelné, viz níž) | `nespuštěno`, `běží`, `spadlo`, `nepředáno`, … |
+
+**Tři meze, a každá je kontrolovatelná:**
+
+1. **Slovo, ne počet.** `detail` aktivní stanice (`o 21 vzadu`, `3 neprošly`, `čeká 1`) se čte
+   **s větou pod fázemi**; šedá kapsle takovou oporu nemá a číslo vedle cizí věty se čte jako
+   tvrzení o tom, co je zrovna na tahu. Proto je `reason` vlastní hodnota, ne `detail` propuštěný
+   dál — a stráží to test, který nad celou maticí tvrdí, že šedý text je **bez mezery a bez
+   číslice**.
+2. **Slovo z kapsle neudělá aktivní.** Stav zůstává `idle`, mění se jedině text; rozdělaná (a tedy
+   zvýrazněná) kapsle je dál právě jedna — ta, o které mluví věta.
+3. **Stanice, která se nevyhodnocovala, mlčí dál.** Když je výčet z `ownLoopFacts` nesplněný, walk
+   ji vůbec nespočítal, takže se o ní nedá říct ani proč není zelená; `nil` je tam odpověď, ne
+   úspora. Prakticky: nad nepřetlačenou prací v cache jsou `CI` i `Review` **prázdné**, protože
+   mluví o hlavě, která na GitHubu není.
+
+**Platí to pro každou stanici, ne jen pro `Push`.** Výjimka pro jednu by znamenala, že se důvod dá
+vyčíst jen někdy — a to je horší, než kdyby se nedal nikdy. `Nálezy` a `Zadání` se za zastávkou
+neocitnou (první je první, druhá stojí na první), ale `reason` mají vyplněný stejně: pravidlo je
+**bezpodmínečné**, takže se dráha nemá jak potichu odmlčet, kdyby se výčet předpokladů někdy
+změnil.
+
+**Věta pod dráhou se nemění, a je to podstatné.** Dráha teď říká dvě věci naráz — *kde stojím*
+a *co je hotové* —, ale `last`, `move` i `active` mluví pořád jedině o **aktivní** stanici. Kdyby
+věta začala shrnovat i kapsle za zastávkou, byl by z rozcestníku souhrn a další krok by z něj
+nešel přečíst.
+
+**Nepřebírá se pravidlo desky, že slévatelnost vyhrává vždycky** (#515). Deska vybírá **nejlevnější
+tah**, takže mergnutelný PR patří do `K merge`, i když na něm něco zbývá předat; dráha odpovídá na
+**kde v kole jsem**, a `Zadání ✓` nad šesti nepředanými položkami by byla nepravda. Nejsou to dvě
+odpovědi na jednu otázku — každá odpovídá na svoji.
+
+**„Nevím“ je odpověď, ne „nejde“** (drží #572). Checky i vyžádaní reviewery se dotahují až
+s detailem, takže hned po otevření záložky se o nich nedá tvrdit nic; taková stanice je `unknown`
+s větou *zjišťuju*, ne `failed`.
+
+**Co která stanice čte** (vstupy má store dnes, nic se kvůli dráze nedotahuje navíc):
+
+| Stanice | Vstup | Pustí dál |
+|---|---|---|
+| `Nálezy` | `ReviewState` | `clean`, `completed`, `dismissed` — všechno ostatní zastaví, **včetně `inconclusive`** (#383: pustit ho dál by ho tiše přečetlo jako čisto) |
+| `Zadání` | `HandoffReport.pending` | `pending == 0`. **Rozhoduje počet, ne `stage`** — `changed` s nulou (nová hlava, žádná položka) je platný stav a zastávka by v něm neměla obsah; `stage` říká **proč**, a to je věta pod dráhou |
+| `Push` | `BranchSyncState`, `BranchStatusState` | větev je srovnaná. **Rozdělaná práce v cache přebíjí GitHub** — ten o rebase v cache neví |
+| `CI` | `[PullRequestCheck]?` | zeleno, přeskočeno, nebo PR bez CI. **`nil` a `[]` se nesmí slít** |
+| `Review` | `[RequestedReviewer]?` | nikdo nechce změny **a někdo schválil** (nebo nikdo nečeká) |
+
+**Schválení přebíjí visící žádost** (#508, třetí kolo). Pořadí odpovědí je `chce změny` →
+`schválil` → `čeká`, a prostřední dvojice se do třetího kola četla obráceně: `#566` je schválený
+(`odinuv`) a zároveň má otevřenou žádost na `MiroCillik`, takže dráha hlásila `čeká 1` nad hotovým
+review. Rozhodl to uživatel a je to konzistentní s GitHubem, který v tom stavu vrací
+`reviewDecision: APPROVED`. **Informace se tím z okna neztrácí** — sekce *Reviewery* v panelu
+(#392) kreslí obě řádky dál, `odinuv schválil` i `MiroCillik čeká`. A `chce změny` nezezelená ani
+vedle schválení: je to jediná odpověď, která něco blokuje, takže se testuje první. Že vyžádání
+přebíjí **vlastní starší** verdikt téhož člověka, drží `Policy.reviewers` beze změny — schválení,
+které GitHub „vzal zpátky“ novou žádostí, se sem tedy vůbec nedostane.
+
+**Mergnutý a zavřený PR smyčku zkracují.** Nad mergnutým by walk zastavil tam, kde zrovna zbylo
+něco nepředaného — a `6 k předání` nad mergnutou větví je rada, kterou nemá kdo splnit. `merged` je
+pět hotových stanic, `closed` pět `stopped` (tedy hodnota, kterou dráha reviewera používá pro
+„nedoběhlo“, ne nový stav). **Draft se od čtvrtého kola neliší od otevřeného PR**: stanice `Merge`,
+která na něm jediná zastavovala, je pryč — že se draft mergnout nedá, říká sekce *Větev*.
+
+**Akce je navigace, ne druhá cesta ven.** `OwnLoop.Move` umí čtyři věci a všechny jen **otevřou
+místo, kde ta práce bydlí** (panel *Zadání*, sekce *Větev*, tab *Kontroly*, tab *Konverzace*);
+obsah stanic se nikam nestěhuje a nekopíruje. Kdyby dráha odesílala sama, byla by to druhá cesta na
+GitHub (tvrdá podmínka č. 1).
+
+**`Spustit review` mezi akcemi není, a je to změna proti zákresu** (z proklikání #508). To tlačítko
+stojí v hlavičce o pár bodů výš a #218 mu vyhradilo **jediné akcentové místo** v celém pruhu; druhá
+kopie z hlavičky udělala semafor — vidět na screenshotu z prvního kola. Stanice `Nálezy` proto akci
+**nemá**; co dělat, říká věta pod fázemi. Akce dráhy je k tomu **malá** (`controlSize(.small)`, ne
+`font(.caption)`: `bordered` si metriku bere z control size a samotné písmo tlačítko nezmenší).
+
+**Vyhodnocení za zastávkou nic měřitelného nestojí.** Walk projde nejvýš pět kroků místo `k`,
+jenže drahou část (`Policy.handoff`) skládá **volající** bez ohledu na to, kde se walk zastaví —
+nezastavením se tedy nic nedopočítává navíc. Kroky samy čtou hotové hodnoty; lineární je jedině
+`summary(of: checks)` a dva `count {}` nad vyžádanými reviewery, a obojí je nad polem **jednoho**
+pull requestu.
+
+**Co dráha stojí při překreslení.** Jediná hodnota, která se na vlastním PR počítá v témže průchodu
+ještě jednou, je `handoffReport(for:)` (bere si ji panel), takže dráha zdvojí `Policy.handoff`. Je
+omezená **jedním** pull requestem (jeho nálezy, vlákna a commity), takže se to k naměřeným 1,5 %
+vlastní práce aplikace v přerovnání okna (#472) chová jako konstanta. **Zdvojený `Policy.mergeOffer`
+odpadl** se stanicí `Merge` (čtvrté kolo). **Změřit se to bude muset u #509**, kde tatáž funkce
+poběží nad **každým řádkem** seznamu — tam je to jiný řád a předfiltr (jako `isMergeReadyForLane`,
+#515) tam nejspíš bude muset být.
+
+**Že se akce kreslí, se v harnessu tvrdit nedá.** SwiftUI `Button` v hostované hierarchii `NSButton`
+**není** a `fittingSize.width` vyjde s tlačítkem i bez něj stejná (435 bodů — přirozenou šířku drží
+věta pod fázemi), takže by to bylo měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“
+(#478). Zbývá **pojmenované rozhodnutí** `OwnLoopView.showsAction` (tentýž vzor jako
+`PullRequestRow.showsPromptAction`, #333) a screenshot, který udělá člověk.
+
 ### Mapa PR — pás pod hlavičkou (#501)
 
 Mezi hlavičkou a pruhem záložek leží od #501 **pás, ve kterém je každý soubor diffu segment**
