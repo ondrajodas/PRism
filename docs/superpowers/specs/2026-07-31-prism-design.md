@@ -7570,3 +7570,65 @@ který panel už umí ukázat (`přerovnáno, nepřetlačeno`), takže se s nič
 ne session)“. Session je pustit nemůže (`Bash` v sadě není) a aplikace to zatím nedělá — v promptu
 je proto věta, že se **nesmí tvrdit**, že bylo něco ověřeno spuštěním. Až to bude potřeba, je to
 vlastní issue: pustit testy nad stromem `-sync` je práce aplikace, ne rozšíření sady.
+
+### Záznam rozhodnutí — řádek seznamu neříká `k merge` (#509)
+
+**Zákres to chtěl jinak.** Deck *Směry pro PRism*, směr D, poznámka 20: řádek `Moje PR` má nést
+sedm teček a pilulku, která **pohlcuje N4** (*co brání mergi*) — `k merge`, `CI spadlo`,
+`chce změny`, `za mainem o 3`. N4 k tomu navrhoval vlastní funkci `Policy.mergeBlocker` s pořadím
+rozhodování *draft → CI spadlo → chce změny → za mainem → čeká na CI → k merge*.
+
+**`Policy.mergeBlocker` nevznikne, a je to rozhodnutí, ne odklad.** Mezi zákresem a #509 se stalo
+dvojí: #515 postavilo desku a v ní **pruh `K merge`**, který na slévatelnost odpovídá
+(`Policy.isMergeReady` nad `mergeOffer`), a čtvrté kolo #508 z dráhy vyhodilo stanici `Merge`,
+takže `Policy.ownLoop` **nebere `MergeOffer` ani jako vstup**. Pilulka složená z dráhy tedy
+o slévatelnosti **neví nic** — a kdyby si ji dopočítala sama, byla by to **druhá odpověď na jednu
+otázku, složená z jiných dat**. To je zrovna ten druh rozporu, který se v okně pozná až tím, že se
+člověk dívá na dvě místa naráz.
+
+**Dojetá smyčka proto říká `hotovo`.** Je to tvrzení, které dráha unese — *všech pět stanic je
+hotových* —, a je to táž věta, jakou pod fázemi říká hlavička (*merge zůstává v sekci Větev*).
+Odpověď na *dá se to mergnout* zůstává tam, kde na ni jsou data: pruh `K merge` na desce a sekce
+*Větev* v panelu.
+
+**Rozpor mezi tím dvojím je vidět a je to záměr, ne vada.** Na desce má PR v pruhu `K merge`
+v řádku `Nálezy nespuštěno`. Deska vybírá **nejlevnější tah** (mergnutelný PR tam patří, i když na
+něm něco zbývá), dráha odpovídá na **kde v kole jsem** — a `Nálezy ✓` nad nespuštěným review by
+byla nepravda. Je to tatáž hranice, kterou #508 zapsalo u `Policy.ownLoop`; #509 ji jen posunulo
+o kus blíž k sobě, protože ta dvě tvrzení teď stojí v jednom řádku vedle sebe.
+
+**Zamítnutá varianta: pilulka by se ptala `isMergeReadyForLane` a jinak by brala dráhu.** Bylo by
+to nejblíž zákresu. Zahozeno ze dvou důvodů: dráha by přestala být **jedním** zdrojem řádku (což
+je celé pravidlo, kvůli kterému `Policy.ownLoopRow` existuje), a `k merge` by se objevovalo nad
+řádkem, jehož tečky ukazují nedojeté kolo — tedy tvrzení a jeho protiklad na jedné řádce.
+
+### Záznam rozhodnutí — hlavička bloku `Moje PR` počet nedostala (#509)
+
+Zákres má nad řádky hlavičku `Moje PR · 1 k merge · 3 na tahu`. Nevznikla, a nejsou to dva důvody
+proti jednomu, jsou to tři:
+
+1. **Ten blok v aplikaci není.** Deck kreslil dashboard, kde `Moje PR` byl blok s hlavičkou; #515
+   dashboard nahradilo **pruhy** a `Moje PR` zůstalo jako **sekce railu**, tedy `List` bez
+   hlavičky.
+2. **Počet už na obrazovce je.** Pruhy desky ho nesou samy (`K merge 2`, `Předat agentovi 2`)
+   a věta pod pozdravem taky (`9 věcí na tahu · 4 čekají na ostatní · 2 se dají mergnout`). Třetí
+   místo, které totéž počítá, by bylo třetí místo, které se s ostatními umí rozejít.
+3. **Byla by to nová věc na obrazovce**, a ta se podle pravidla o mockupu kreslí a schvaluje
+   **dřív, než na ni vznikne issue**. Dokreslit ji cestou k tomu, co issue zadává, je zrovna to,
+   na co doplatilo #504.
+
+### Záznam rozhodnutí — slovo v řádku je `detail`, ne `reason` (#509)
+
+Čtvrté kolo #508 zavedlo `reason` — **jedno slovo bez čísla** do šedé kapsle za zastávkou —
+a zdůvodnilo to tím, že taková kapsle nemá pod sebou větu, o kterou by se opřela, takže se číslo
+vedle **cizí** věty čte jako tvrzení o tom, co je na tahu.
+
+**V řádku platí opak, a proto se bere `detail`.** Pilulka je tam **jediná** věta o tom pull
+requestu a tečky vedle ní ukazují, které stanice se týká — takže `o 4 vzadu` je zrovna to, co se
+má člověk dozvědět. Není to výjimka z pravidla #508: to pravidlo mluví o kapsli **vedle jiné
+věty**, tahle pilulka žádnou cizí větu vedle sebe nemá.
+
+**Jméno stanice před detailem stojí schválně.** Samotné `zjišťuju`, `spadlo` nebo `o 4 vzadu` může
+být o kterékoli z pěti stanic; tečky říkají **kde**, ale ne **co**. Slovo v řádku má proto tvar
+`Push o 4 vzadu` — a testuje se to nad celou maticí, ne na vzorcích: slovo musí začínat jménem
+aktivní stanice, nebo to musí být konec kola.

@@ -214,7 +214,12 @@ struct PullRequestListView: View {
                 map: store.queueMap(for: summary.id),
                 ownership: ownership,
                 pending: handoff.pending,
-                activity: handoff.activity
+                activity: handoff.activity,
+                // Dráha smyčky do řádku (#509) — **z už spočítaného reportu**, ne podruhé:
+                // `Policy.handoff` je nejdražší vstup dráhy a řádek si ho skládá o dva řádky výš.
+                // Vlastnictví se ptá **tady**, ne uvnitř: je to týž předfiltr jako u `handoff`u
+                // a na cizím řádku by dráha byla práce za odpověď, kterou nikdo nenakreslí.
+                loop: ownership == .mine ? store.ownLoopRow(for: summary, handoff: handoff) : nil
             )
         }
 
@@ -236,7 +241,8 @@ struct PullRequestListView: View {
                 // Odložit (#512) — jedna hodnota z jednoho místa (`AppStore.snoozeAction(for:)`),
                 // stejně jako na desce a v sekci `Rozdělaná`. Brána `Policy.canSnooze` je uvnitř,
                 // takže na vlastním řádku přijde prázdná nabídka a nenakreslí se nic.
-                snoozeAction: store.snoozeAction(for: row.pullRequest)
+                snoozeAction: store.snoozeAction(for: row.pullRequest),
+                loop: row.loop
             )
         }
     }
@@ -280,6 +286,9 @@ struct PullRequestListView: View {
         let pending: Int
         /// Co od minule udělal někdo jiný (#335) — z **téhož** reportu jako `pending`.
         let activity: ForeignActivity
+        /// Dráha smyčky vlastního PR (#509). `nil` na cizím — a z **téhož** reportu jako
+        /// `pending`, takže se `Policy.handoff` na řádek počítá pořád jednou.
+        let loop: OwnLoopRow?
 
         var id: PRIdentifier { pullRequest.id }
     }

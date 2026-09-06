@@ -97,10 +97,22 @@ celé z té osy a výjimku nemá.** Uvnitř pruhu se řadí **podle závažnosti
 `K merge`, i když na něm něco zbývá předat agentovi, a **výjimka z toho žádná není** — když je PR
 mergnutelný, patří do `K merge`. Předání je naopak **poslední pravidlo, které něco tvrdí**; tichý
 pruh za ním je fallback pro „nedá se tvrdit nic“, ne šesté pravidlo. Informace o předání se
-přesunem neztrácí: pilulka `N k předání` i `Prompt →` visí na **řádku**, ne na pruhu, takže jdou
+přesunem neztrácí: **dráha smyčky** i `Prompt →` visí na **řádku**, ne na pruhu, takže jdou
 s PR do kteréhokoli z nich. **Skutečná
 překážka merge se tím neobchází** — PR s blokujícím nálezem mergnutelný není, takže v `Předat
 agentovi` zůstane.
+
+**Řádek vlastního PR nese celou smyčku** (#509): **pět teček** za titulkem a **pilulku se slovem
+k té stanici, na které to stojí** — `Zadání 6 k předání`, `Push o 4 vzadu`, `CI 1 neprošel`,
+`hotovo`. Je to tatáž dráha, jakou kreslí hlavička otevřeného PR (#508), zmenšená do jednoho
+řádku, a skládá ji **jedna funkce** (`Policy.ownLoopRow` nad `Policy.ownLoop`), takže se seznam
+s hlavičkou nemá jak rozejít. **Hrana řádku bere barvu z aktivní stanice**, takže PR s čistým
+review a spadlým CI je červený, ne zelený; `Prompt →` je plné akcentové tlačítko **jen tam, kde je
+co předat**. Do #509 řekl řádek jedině `6 k předání`, tedy stav jediné z těch pěti stanic.
+**Cizí řádek se nemění** — smyčka je „co udělám se svojí větví“. Že se dá PR mergnout, řádek
+netvrdí: na to odpovídá pruh `K merge` a sekce *Větev*, a dvě odpovědi na jednu otázku by se
+rozešly. `CI` a `Review` jsou na neotevřeném PR **duté tečky** (checky a reviewery se dotahují až
+se záložkou) — je to „nevím“, ne „nejde“.
 
 **Slévatelnost aplikace zjišťuje sama, bez otevírání záložek** (#572). Do té doby se dotahovala až
 při výběru řádku, takže byl pruh `K merge` po startu prázdný, i když měl člověk vlastních PR
