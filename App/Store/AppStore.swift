@@ -562,6 +562,26 @@ final class AppStore {
     /// oznámení — viz `AgentFixLedger`.
     let agentFixes: AgentFixLedger
 
+    /// Brief na domově (#516) — **šestá session, a ta jediná bez nástrojů kromě překladu nálezů**.
+    /// `nil` = **blok se nekreslí a nic se nespouští**, tedy stav před #516; tak jsou na tom testy,
+    /// které o brief nestojí, a nespouští tím `claude`.
+    ///
+    /// **Není to brána.** Tou je `GlobalConfig.brief` (výchozí `off`) — tohle je jen zapojení
+    /// session, přesně jako `fixer` a `conflicts`.
+    let briefWriter: (any BriefWriting)?
+
+    /// Poslední brief na disku (#516). `nil` = nepamatuje se, takže se po restartu blok otevře
+    /// prázdný a automat bude dnešek považovat za neshrnutý.
+    let briefStore: BriefStore?
+
+    /// V jakém stavu je brief (#516). **Čtyři stavy**, protože prázdný blok je k nerozeznání od
+    /// vypnutého — viz `BriefState`.
+    var briefState: BriefState = .never
+
+    /// Běžící brief. Drží se kvůli zavírání aplikace (#264) a kvůli tomu, aby se druhý nespustil
+    /// dřív, než první doběhne — o tom ale rozhoduje `briefState`, ne existence tasku.
+    var briefTask: Task<Void, Never>?
+
     /// Uložené rozhovory (#452). `nil` = neukládá se, tedy rozhovor zanikne se zavřením aplikace.
     let asks: AskStore?
 
@@ -1075,6 +1095,8 @@ final class AppStore {
         asker: (any AskRunning)? = nil,
         conflicts: (any ConflictResolving)? = nil,
         fixer: (any AgentFixing)? = nil,
+        briefWriter: (any BriefWriting)? = nil,
+        briefStore: BriefStore? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
@@ -1149,6 +1171,8 @@ final class AppStore {
         self.asker = asker
         self.conflicts = conflicts
         self.fixer = fixer
+        self.briefWriter = briefWriter
+        self.briefStore = briefStore
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
@@ -1226,6 +1250,12 @@ final class AppStore {
             // — účetní kniha si den pamatuje, takže se na disk sahá jednou za den, ne jednou
             // za minutu.
             await self?.loadDailySpend()
+            // Brief na domově (#516) — **jediná cesta, kterou se šestá session pustí bez
+            // kliknutí**, a jedině v režimu `firstTickOfDay`. Uvnitř úspěšného tiku ze stejného
+            // důvodu jako rozhlídky výš: fronta je v tu chvíli načtená, takže brief nemluví
+            // o datech, která se ještě nestáhla. **Nečeká se na něj** — session běží minuty
+            // a tik by na ni stál.
+            await self?.writeBriefIfDue()
         }
         // Monitor si skutečná volání nedrží — bere si je odsud. Jinak by existovalo druhé
         // místo se stavem pollingu a rozejít se v tomhle znamená svítit červeně nad
@@ -1319,6 +1349,16 @@ final class AppStore {
                 runner: SubprocessStreamer(sessions: .shared),
                 model: { box.value.global.model }
             ),
+            // Brief na domově (#516) — **šestá session a druhá s prázdnou sadou nástrojů**. Streamem
+            // kvůli ceně a přes tentýž registr běžících session (#351) jako zbytek. Cesta k `gh`
+            // se jí **nepředává**: session bez nástrojů nemá `git`, takže credential helper
+            // nepotřebuje. Brána je v konfiguraci (`brief`, výchozí vypnuto).
+            briefWriter: ClaudeBriefWriter(
+                claude: toolPaths.claude,
+                runner: SubprocessStreamer(sessions: .shared)
+            ),
+            // Poslední brief (#516). Živý jedině tady — testy ho nedostanou, takže do cache nesahají.
+            briefStore: BriefStore(),
             asks: AskStore(),
             askContexts: AskContextStore(),
             // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
@@ -2011,6 +2051,10 @@ final class AppStore {
         // nebylo nic.
         await loadStoredActivity()
         await loadDailySpend()
+        // Poslední brief (#516) — **jen disk, žádná session**. Bez tohohle by blok po restartu
+        // vypadal, jako by se nikdy neshrnovalo, a automat by dnešek považoval za neshrnutý, takže
+        // by zaplatil za druhý brief o tomtéž.
+        await loadStoredBrief()
         // Katalog repozitářů (#533) — **jen disk, žádný dotaz na GitHub**. Bez tohohle by skupina
         // `Repozitáře` v paletě byla prázdná, dokud by někdo neotevřel nastavení, protože právě
         // tam se katalog do #533 načítal. Dotažení ze sítě zůstává tam, kde bylo: stránka

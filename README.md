@@ -153,7 +153,39 @@ nepustí ani tehdy, když na něm review neběželo.
 `Co teď`, jehož akce se přestěhovaly nad pruhy. **Čísla z karet zůstávají v railu a ve stavovém
 řádku**, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z domácí záložky. Osa filtru
 `Jen s blokujícím nálezem`, kterou zapínala karta `Blokuje`, zůstává — odškrtává se v nabídce
-filtru. **Brief ve třech větách nad deskou dodá #516**; do té doby je tam pozdrav.
+filtru.
+
+**Nad deskou stojí od #516 brief ve třech pojmenovaných větách** — `Přibylo`, `Hoří`,
+`První na řadě` — a pozdrav zůstává nad ním. Skládá ho session Claude Code **bez jediného
+nástroje**: dostane hotový stav aplikace (počty z pruhů, řádky viditelných pruhů, počet odložených,
+`Dění`) a jenom ho **přeformuluje**. **Nečte repozitář**, a je to hranice, ne opatrnost — brief
+z kódu už je review logika a ta patří do skillu, ne do aplikace. Pod větami stojí
+`shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu` a tlačítko `Shrň znovu`.
+
+**Čísla pull requestů ve větách otevírají záložku** — kliknutím na `#727` se PR otevře stejně jako
+z fronty, z palety ⌘K nebo z `prism://`; je to **tatáž cesta**, ne druhá, takže se otevře i PR,
+který mezitím z fronty vypadl (jako záložka ke čtení). Odkaz ale vznikne **jenom pro pull request,
+který do briefu doopravdy šel**: text je od modelu, takže si číslo umí vymyslet, a odkaz na
+neexistující PR je horší než prostý text. Cíl navíc neurčuje samo číslo — v briefu stojí čísla
+z víc repozitářů —, takže **když se nedá poznat repozitář, zůstane číslo obyčejným textem**. Žádné
+mrtvé tlačítko a žádná hláška.
+
+**Otázka, na kterou ve stavu aplikace odpověď není, mlčí** — řádek se prostě nenakreslí. Struktura,
+která by si vynutila větu na každou ze tří otázek, si o vymyšlenou větu říká, a to je zrovna to,
+čemu se brief vyhýbá.
+
+**Ve výchozím stavu je vypnuto a blok se pak nekreslí vůbec.** V nastavení (`Review a skilly`,
+sekce `Brief na domově`) jsou tři volby: `Vypnuto`, `Na požádání` a `Při prvním tiku dne` — to
+poslední je vedle agenta z #510 jediná cesta, kterou tady session startuje bez kliknutí, a složí
+brief **jednou za den**, jakmile je fronta načtená. Podle čeho se pozná, že je dnešek shrnutý,
+přežívá restart (`brief.json` v cache), takže se za druhý brief o tomtéž neplatí. **Cena každého
+briefu** je na jeho řádku a počítá se do `Dneska stálo` — i u běhu, který text nevrátil. **Stojí
+kolem 0,09 $**, tedy ~2,50 $ měsíčně při `Při prvním tiku dne`, a ta částka je vidět i v nastavení
+u přepínače. Drtivou většinu z ní spolkne **start session**, ne délka shrnutí — proto brief jako
+jediná session **vynucuje levný model** místo toho, aby ho nechal na `claude`
+([měření](docs/testovani.md#kolik-stojí-jeden-brief-a-kde-ty-peníze-doopravdy-jsou-516)). **Když se
+session nepovede**, stojí v bloku `Shrnutí se nepovedlo.`, pod tím důvod a tlačítko `Zkusit znovu`;
+prázdný rámeček by byl k nerozeznání od vypnutého briefu.
 kurzoru, ani hover stav.
 
 **Karty odešly s #515** (do té doby jich bylo pět, viz výš) a rozdíl, který nesly, drží od #515

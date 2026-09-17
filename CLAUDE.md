@@ -348,8 +348,8 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    není obraz oprávnění**. Odmítnutý nástroj **není chyba běhu**
    ([čísla](docs/claude-cli.md#--allowedtools-co-doopravdy-dělá)).
 
-   **Aplikace pouští čtyři vyjmenované sady a jednu prázdnou. Všechny čtyři tvrdí test literálem
-   na jednom místě** (`SessionToolSetsTests`, od #467) — rozdíly mezi nimi se ze čtyř souborů
+   **Aplikace pouští čtyři vyjmenované sady a dvě prázdné. Všech šest tvrdí test literálem
+   na jednom místě** (`SessionToolSetsTests`, od #467) — rozdíly mezi nimi se ze šesti souborů
    nedají přečíst:
 
    | Session | `--allowedTools` |
@@ -359,6 +359,7 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    | **rozhovor nad PR** (#452, tab `Zeptat se`) — **užší než reviewerova**: bez `ReportFindings` (nemá co hlásit) a bez `Skill` | `Read,Grep,Glob,Bash(git:*)` |
    | **slévání konfliktů** (#467) **a agent na vlastním PR** (#510) — **jediné, které smí měnit soubory**, a **jediné bez `Bash`e**; sada je jedna, sdílená doslova | `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` |
    | překlad nálezů | prázdná |
+   | **brief na domově** (#516) — **čte stav aplikace nahlas, ne kód**: vstup skládá `Policy.briefInput`, session jen formuluje. Vypnuto ve výchozím stavu, cena je na řádku. **Jediná session s vynuceným modelem**, a je to změřená výjimka, ne opomenutí ([rozbor](docs/architektura.md#brief-na-domově--šestá-session-a-druhá-bez-nástrojů-516)) | prázdná |
 
    `--disallowedTools` je u **všech** tatáž konstanta `ClaudeCommand.disallowedTools`, takže `gh`
    ani `git push` nemá **žádná**. **Materiál jde do promptu cestou k souboru, ne jako nástroj**
@@ -392,8 +393,8 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    o položku** ([rozbor](docs/architektura.md#slévání-konfliktů--čtvrtá-session-467)).
 
    ```bash
-   # Výčet k posouzení: šest míst — čtyři sady, jedna prázdná (překlad nálezů) a jedna delegace
-   # (#510: agent bere sadu i argumenty od slévání konfliktů).
+   # Výčet k posouzení: sedm míst — čtyři sady, **dvě** prázdné (překlad nálezů a brief, #516)
+   # a jedna delegace (#510: agent bere sadu i argumenty od slévání konfliktů).
    grep -rn 'allowedTools' App/Review | grep -vE ':[0-9]+: *///?'
    # Pozor: grep na `Write(` **vyjde prázdný** — rozsah se skládá interpolací, takže ten řetězec
    # v kódu nestojí. Kdo chce ověřit, že je scoped, musí se zeptat funkce (`SessionToolSetsTests`).
@@ -482,7 +483,7 @@ API**, **`BranchPushing`** (#466) jediný, který **zapisuje do remote**, a **`T
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, metadata a syrový diff (celý i mezi dvěma commity), login účtu, labely a vyžádané reviewery, hlavy víc PR jedním dotazem (od #513 **i s větvemi** — podklad série PR), slévatelnost větve — a od #572 **hlavičku i slévatelnost vlastních PR jedním dotazem**, aby deska uměla `K merge` bez otevřené záložky ([měření](docs/testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572)) —, **repozitáře organizace** (#532 — nejdražší čtení v aplikaci), **otevřené PR jednoho repa** (#533) a **co repozitář o mergi říká** (#556 — chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i jeho zahození, **zápis slitých souborů do indexu a dokončení rebase** i **commit práce agenta** (#510) — commituje aplikace, ne session, **je předchozí hlava předkem té dnešní** (#517) a **cesty, které PR mění** (#518 — podklad routingu). **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula (od #522 se ptá i na **moje odeslané komentáře**, jedním polem odpovědí a beze změny sady) — a k tomu pět session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467) a **agent na vlastním PR** (#510) — poslední dvě **smí měnit soubory**, ta poslední se pouští **bez kliknutí** | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula (od #522 se ptá i na **moje odeslané komentáře**, jedním polem odpovědí a beze změny sady) — a k tomu šest session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467), **agent na vlastním PR** (#510) a **brief na domově** (#516) — dvě z nich **smí měnit soubory**, agent se pouští **bez kliknutí** a brief nemá **jediný nástroj** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu, obsah dashboardu, geometrie, na kterou se ptá kresba, a **desítky dalších**. Katalog je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |

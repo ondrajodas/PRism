@@ -48,6 +48,8 @@ struct ReviewSettingsView: View {
 
             agent
 
+            brief
+
             // Vlastní sekce, ne řádek v `Režim review` (#519): tamty čtyři hodnoty si repo smí
             // přebít, tahle **ne** — kdy chci mít na stroji ticho, z repozitáře neplyne. Sekce se
             // svým vlastním vysvětlením je jediné místo, kde se ten rozdíl dá říct.
@@ -150,6 +152,31 @@ struct ReviewSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Brief na domově (#516) — **brána, ne předvolba**, a ze stejného důvodu jako agent nad ní:
+    /// `Při prvním tiku dne` pouští session **bez kliknutí**.
+    ///
+    /// **Tři volby, ne přepínač.** Rozhodují se tu dvě věci — jestli se brief skládá vůbec a jestli
+    /// ho smí spustit aplikace sama — a přepínač by je slil do jedné.
+    ///
+    /// **Globálně, bez override na repo**: brief mluví o celé desce, tedy o všech repozitářích
+    /// naráz, takže hodnota na repo by neměla co znamenat.
+    private var brief: some View {
+        Section {
+            Picker("Brief na domově", selection: $settings.draft.global.brief) {
+                ForEach(BriefMode.allCases, id: \.self) { mode in
+                    Text(verbatim: mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.radioGroup)
+        } header: {
+            Text("Brief na domově")
+        } footer: {
+            Text("Výchozí stav je **vypnuto** a blok se pak na domově nekreslí vůbec. Když se zapne, složí až tři věty — co přibylo, co hoří a co si vzít první — session Claude Code **bez jediného nástroje**: dostane hotový stav aplikace (pruhy desky, počty, dění) a jenom ho přeformuluje. Nečte repozitář, nesahá na disk ani na GitHub. `Na požádání` čeká na tlačítko, `Při prvním tiku dne` k tomu složí brief jednou denně, jakmile je fronta načtená.\n\n**Jeden brief stojí kolem 0,09 $** (změřeno; drtivou většinu z toho spolkne start session, ne délka shrnutí). Při `Při prvním tiku dne` je to zhruba **2,50 $ měsíčně**. Cena každého běhu je na řádku pod briefem a počítá se do `Dneska stálo`; do denního limitu automatických běhů se **nezapočítává**.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     /// Agent na vlastním PR (#510) — **brána, ne předvolba**.

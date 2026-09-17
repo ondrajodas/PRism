@@ -39,9 +39,9 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **57** sekcí (poslední přišla s #513 —
-série PR ve frontě, **číslo 57**; před ní přidalo #511 běžícího agenta v sekci `Větev` s **číslem
-56**, #510 agenta na vlastním PR s **číslem 55** a #508 dráhu smyčky vlastního PR s **číslem 52**
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **58** sekcí (poslední přišla se #516 —
+brief na domově, **číslo 58**; před ní přidalo #513 sérii PR ve frontě s **číslem 57**, #511
+běžícího agenta v sekci `Větev` s **číslem 56** a #510 agenta na vlastním PR s **číslem 55**
 — číslo sekce a jejich počet spolu nesouvisí, protože čísla se v dávce přidělují dopředu).
 To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
@@ -50,7 +50,8 @@ stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekc
 přidalo #517 a číslo nezvedlo (nález Copilota), a u **#526 tu stálo 48 nad devětačtyřiceti**
 — sekce 49 přišla s #529 a číslo zůstalo zase stát. **Sekci 47 přidalo #506** (itinerář review)
 a číslo zvedlo v témže commitu — stejně jako **sekci 54** u #528, **sekci 53** u #512,
-**sekci 55** u #510, **sekci 56** u #511 a **sekci 57** u #513 — o číslo se u dávky nehádá,
+**sekci 55** u #510, **sekci 56** u #511, **sekci 57** u #513 a **sekci 58** u #516
+— o číslo se u dávky nehádá,
 přiděluje ho orchestrátor
 (#537), takže tenhle údaj patří tomu, kdo sekci kreslí:
 

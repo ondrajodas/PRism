@@ -8944,6 +8944,100 @@ odklad od vypnutého automatu.
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR na pokyn uživatele
 nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
 
+## #516 — brief na domově: tři pojmenované věty ze stavu aplikace (M16, zákres 58)
+
+Nad pruhy desky je **blok s až třemi pojmenovanými větami** — `Přibylo`, `Hoří`, `První na řadě` —,
+které složila session Claude Code **bez jediného nástroje**. Dostane hotový text
+z `Policy.briefInput` — počty z pruhů, řádky viditelných pruhů (repo, číslo, titulek, autor, stav
+review, kolik z nálezů blokuje, stáří), počet odložených a blok `Dění` — a jenom ho
+**přeformuluje**. Pod větami stojí `shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu`
+a tlačítko `Shrň znovu`.
+
+**Přibyla tím šestá session do tabulky v tvrdé podmínce č. 2, a je to druhá s prázdnou sadou**
+(po překladu nálezů). `--disallowedTools` je tatáž konstanta jako u ostatních pěti a
+`SessionToolSetsTests` tvrdí obojí literálem — od #516 je v tom výčtu **i překlad nálezů**, o kterém
+se do té doby netvrdilo nic. **Není to review logika, je to čtení nahlas**: brief z kódu (session
+s `Read` nad repozitáři) by review logika byl a ta patří do skillu, ne do aplikace.
+
+**Vypnuto ve výchozím stavu**, a blok se pak nekreslí vůbec — ne zašedle. V nastavení jsou tři
+volby (`Vypnuto` / `Na požádání` / `Při prvním tiku dne`), protože se rozhodují dvě věci: jestli se
+brief skládá vůbec a jestli ho smí spustit **aplikace sama**. Ta poslední volba je vedle agenta
+z #510 jediná cesta, kterou v téhle aplikaci startuje session bez kliknutí — a **dnešek se posuzuje
+z uloženého briefu** (`brief.json` v cache), protože pojistka, kterou obejde restart, není pojistka.
+
+**Cena každého briefu jde do `SpendLedger` a je vidět na jeho řádku**, i u běhu, který text
+nevrátil — `nil` cena se píše jako `cenu nenahlásilo`, ne `0,00 $`. **Spadlá session nekončí
+prázdnem**: blok řekne `Shrnutí se nepovedlo.`, pod tím důvod a nabídne `Zkusit znovu`. Prázdný
+rámeček by byl k nerozeznání od vypnutého briefu, který se nekreslí.
+
+**Pozdrav zůstává nad briefem**, na rozdíl od toho, co si #515 poznamenalo: pozdrav a věta o pruzích
+mluví z dat, která aplikace má jistě, kdežto brief je text od modelu a smí se nepovést.
+
+**Denní rozpočet `autoRunsPerDay` se nečerpá, a je to zapsané rozhodnutí** — je to pojistka proti
+řadě patnáctiminutových review a agentů, kdežto brief je jeden odstavec bez nástrojů nejvýš jednou
+za den. Účet přesto nikde nemlčí.
+
+Zákres přenesla tahle issue do **sekce 58** (#515 v sekci 45 nechalo poznámku, že brief přijde
+s #516); sekce 45 se nepřekresluje, blok visí pod pozdravem a nad pruhy.
+
+### Co změnilo první proklikání
+
+**Odstavec se rozpadl na tři pojmenované věty.** Souvislá próza na čtyři řádky se musela přečíst
+celá, aby z ní vypadla jedna věc — a tím se rušil celý smysl briefu, totiž být **levnější než
+přečíst čtyři bloky pod ním**. Odpověď session je od té doby **protokol** (`ADDED:` / `BURNING:` /
+`NEXT:`), ne volný text, a blok ji kreslí jako sloupec návěští a sloupec vět. **Otázka, na kterou
+ve vstupu odpověď není, mlčí** — struktura, jež si vynutí větu na každou otázku, si o vymyšlenou
+větu říká.
+
+**Cena se změřila a vyšla patnáctkrát vyšší, než stálo v hlášení: $0,46 za jeden brief**, tedy
+~14 $ měsíčně při `Při prvním tiku dne`. Měření ukázalo, že **náš vstup je ~2 % účtu** a zbytek je
+boot session zapsaná do hodinové cache, kterou brief nikdy nepoužije. Strop na velikost vstupu by
+tedy neušetřil nic a **zamítl se**; místo toho brief jako **jediná session vynucuje model**
+(`haiku`) a přidal `--strict-mcp-config`. **Změřeno ~$0,09 místo ~$0,46**, tj. ~2,50 $ místo ~14 $
+měsíčně. Limit se zvedl na tři minuty, protože haiku běží ~60 s. Ta částka je teď vidět
+**v nastavení u přepínače**, ne až na účtu.
+
+**Nejednoznačný vstup je vada vstupu, ne promptu.** `blokuje 2` model přečetl jako počet
+*reviewerů*; jsou to blokující nálezy. Opraveno na `z toho 2 blokující` a drží to test v obou
+směrech.
+
+**Třetí kolo po proklikání: čísla ve větách otevírají záložku.** Klikatelné je **jen číslo**
+(`#727`), otevírá `AppStore.openPullRequest` — tedy **tatáž cesta** jako `prism://`, `Odkaz`
+v paletě ⌘K a klik ve frontě, ne druhá. **Uzavřeným seznamem cílů je to, co do briefu doopravdy
+šlo**: `Policy.briefInput` vrací od téhle změny `BriefMaterial` (text **a** seznam pull requestů,
+jednou procházkou přes tytéž pruhy), seznam se ukládá v `Brief.mentioned` a v textu se jen hledá,
+**kde** na ně ukazuje. Rozpoznávat `#\d+` z odpovědi by nestačilo ze dvou důvodů: model umí napsat
+číslo, které na desce není, a **samo číslo cíl neurčuje** — v briefu stojí čísla z víc repozitářů.
+Rozhoduje `Policy.briefSpans`: jméno repa před číslem vybírá cíl a **cizí jméno je odmítnutí, ne
+nejbližší podobný**; bez jména rozhoduje **jednoznačnost**. Co se složit nedá, zůstane prostým
+textem — žádné mrtvé tlačítko a žádná hláška. Čtení uloženého briefu je **tolerantní**, aby brief
+bez seznamu nepřišel o razítko dnešního běhu.
+
+Testů je v šesti sadách **69**; regrese se ověřila **vložením regrese u osmi věcí zvlášť** —
+u čtyř z prvního kola, u vynuceného modelu a dvojtečky za klíčem návěští z druhého a nově
+u jednoznačnosti cíle odkazu a u tolerantního čtení `mentioned`.
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu, takže se na pokyn
+uživatele nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
+
+**Neověřená mezera: že klik doopravdy otevře záložku, ověřuje člověk.** Harness tvrdí, které číslo
+se odkazem stane a na co ukazuje, ale `AttributedString` s `.link` a `OpenURLAction` se projeví až
+v běžícím okně. Kdyby se odchycení nepovedlo, odkaz by se otevřel **v prohlížeči** místo v záložce
+— tedy nic rozbitého, jen něco jiného, což zelený běh nechytí.
+
+**Neověřená mezera: kvalita textu z haiku se posoudila na jednom vstupu.** Měřilo se nad jedním
+realistickým stavem desky (čtyři pruhy, 13 PR); že haiku obstojí i nad prázdnou nebo naopak hodně
+zaplněnou deskou, se nezkoušelo — každý běh stojí peníze uživatele.
+
+**Neověřená mezera: `~$0,09` je dopočet, ne přímé měření studeného běhu.** Vychází z naměřeného
+poměru tokenů a ceníku `haiku`; celý studený běh s prázdnou hodinovou cache se za tu cenu
+**nezměřil**. Změřený je poměr *97 % boot / ~2 % vstup*, a právě ten rozhoduje o tom, že jediná
+páka je model, ne délka vstupu.
+
+**Neověřená mezera: blok s jedním či dvěma řádky odpovědi se v okně neproklikal.** Drží to test
+parseru (`BriefCommandTests`), takže se to nerozpadne potichu — ale jak taková kratší odpověď
+vypadá nad deskou, viděl harness, ne člověk.
+
 ## #522 — druhé kolo: kontrola z #150 páruje moje odeslané komentáře (M17, Z3)
 
 První issue skupiny „Za mě“ (#522, #523). Do #522 kontrola z #150 řekla, které **nálezy revieweera**

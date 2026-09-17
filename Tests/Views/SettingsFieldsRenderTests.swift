@@ -30,7 +30,10 @@ struct SettingsFieldsRenderTests {
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     ///
-    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta a od #519 o dalších čtyři sta.**
+    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta, od #519 o dalších čtyři sta a od
+    /// #516 o dalších tři sta** — ta poslední porce **není novou sekcí**, ale **delším vysvětlením**
+    /// u té stávající (`Brief na domově` dostalo odstavec o ceně). Do téhle konstanty se tedy
+    /// nepromítá jen to, co na stránku přibude, ale i to, co na ní **naroste**.
     /// `Form` je `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — a každá nová sekce
     /// nad `Text issue z trackeru` ho posunula pod dosavadní hranici (#517 přepínačem `Po pushi
     /// review jen přírůstku`, #510 sekcí `Agent na vlastním PR`, #519 sekcí `Tiché hodiny` se
@@ -39,7 +42,7 @@ struct SettingsFieldsRenderTests {
     ///
     /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
     /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
-    private static let height: CGFloat = 2500
+    private static let height: CGFloat = 2800
 
     // MARK: - Text issue z trackeru
 
