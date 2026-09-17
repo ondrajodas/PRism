@@ -338,7 +338,7 @@ extension AppStore {
             // v panelu má — ne první načtení —, takže „nepovedlo se přeptat“ nemá co nakreslit:
             // stará odpověď platí dál a příští tik to zkusí znovu. Že GitHub neodpovídá, drží
             // stavový řádek z pollingu. Tatáž nesymetrie jako u razítek rozhlídky (#335)
-            // a u `refreshStaleHeads`.
+            // a u `refreshHeads`.
             return
         }
 

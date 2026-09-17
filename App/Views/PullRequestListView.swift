@@ -195,6 +195,18 @@ struct PullRequestListView: View {
         // jedině seznam a detail vybraného řádku. Cokoli dalšího nad zúženým seznamem by ze
         // zapnutí filtru udělalo mazání cache — viz `AppStore.pullRequests`. Rozřazení podle
         // autora (#331, #332) je **další zúžení nad tímtéž**, ne nový zdroj pravdy.
+        // Série a popisky nad skupinami (#513) — **jednou na seznam, ne dotazem na řádek**:
+        // `Policy.series` je jeden průchod se slovníkem, a ptát se na něj u každého řádku by tu
+        // práci udělalo tolikrát, kolik je řádků. Popisky se počítají nad `summaries`, tedy nad
+        // tím, co seznam doopravdy kreslí — nad členem, kterého schoval filtr nebo odložení,
+        // popisek nevznikne.
+        //
+        // **Pilulka se počítá v obou sekcích, popisek jen ve frontě**: stát na cizí větvi je
+        // vlastnost pull requestu (vlastní PR můžou být stohované stejně jako cizí, a na desce se
+        // jim pilulka kreslí), kdežto popisek tvrdí něco o pořadí v seznamu — a to drží jedině
+        // fronta, protože jedině ona členy přeskládá.
+        let series = store.pullRequestSeries
+        let captions = scope == .queue ? store.queueSeriesCaptions : [:]
         let rows = summaries.map { summary -> ListRow in
             let ownership = store.ownership(of: summary)
             // **Jen u vlastních PR** (#334, #335) a **jeden report na řádek**: skládá položky zadání
@@ -219,7 +231,13 @@ struct PullRequestListView: View {
                 // `Policy.handoff` je nejdražší vstup dráhy a řádek si ho skládá o dva řádky výš.
                 // Vlastnictví se ptá **tady**, ne uvnitř: je to týž předfiltr jako u `handoff`u
                 // a na cizím řádku by dráha byla práce za odpověď, kterou nikdo nenakreslí.
-                loop: ownership == .mine ? store.ownLoopRow(for: summary, handoff: handoff) : nil
+                loop: ownership == .mine ? store.ownLoopRow(for: summary, handoff: handoff) : nil,
+                series: Policy.seriesPlacement(
+                    of: summary.id,
+                    in: series,
+                    refs: store.branchRefs(for:)
+                ),
+                seriesCaption: captions[summary.id]
             )
         }
 
@@ -246,7 +264,12 @@ struct PullRequestListView: View {
                 // stejně jako na desce a v sekci `Rozdělaná`. Brána `Policy.canSnooze` je uvnitř,
                 // takže na vlastním řádku přijde prázdná nabídka a nenakreslí se nic.
                 snoozeAction: store.snoozeAction(for: row.pullRequest),
-                loop: row.loop
+                loop: row.loop,
+                // Série (#513) — pilulka v řádku a popisek nad skupinou. **Jediné místo, kde se
+                // popisek kreslí**: fronta je jediný seznam, ve kterém členové drží pohromadě
+                // (`visibleQueuePullRequests` je přeskládá) a nic se z něj neořezává.
+                series: row.series,
+                seriesCaption: row.seriesCaption
             )
         }
     }
@@ -293,6 +316,10 @@ struct PullRequestListView: View {
         /// Dráha smyčky vlastního PR (#509). `nil` na cizím — a z **téhož** reportu jako
         /// `pending`, takže se `Policy.handoff` na řádek počítá pořád jednou.
         let loop: OwnLoopRow?
+        /// Kde v sérii ten PR stojí (#513). `nil` = v žádné není.
+        let series: SeriesPlacement?
+        /// Popisek nad skupinou. `nil` = tenhle řádek ho nedostane.
+        let seriesCaption: String?
 
         var id: PRIdentifier { pullRequest.id }
     }

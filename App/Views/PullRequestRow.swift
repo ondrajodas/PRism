@@ -64,8 +64,51 @@ struct PullRequestRow: View {
     /// **Kdo řádek kreslí, předává i tohle** — hlídá to `OwnLoopRowRenderTests`, a ze stejného
     /// důvodu jako u `snoozeAction`: řádek se kreslí na třech místech (#512).
     var loop: OwnLoopRow?
+    /// Kde v sérii tenhle PR stojí (#513). `nil` = v žádné není, nebo o ní řádek neví (náhled, test).
+    /// Kreslí se z toho pilulka `1. v sérii` a přerušovaná čára na kraji řádku.
+    ///
+    /// **Pilulka jde všude, kam se řádek kreslí.** Stát na cizí větvi je vlastnost pull requestu,
+    /// takže na desce i v sekci `Rozdělaná` platí stejně jako ve frontě — na rozdíl od popisku níž.
+    var series: SeriesPlacement?
+    /// Popisek nad skupinou — `série · AJDA-563 · 2 PR · review v pořadí ↓` (#513). `nil` = tenhle
+    /// řádek popisek nedostane.
+    ///
+    /// **Jen ve frontě, a je to rozhodnutí, ne opomenutí.** Popisek je tvrzení o **pořadí
+    /// v seznamu** (tyhle řádky patří k sobě a čtou se shora dolů), a to drží jedině fronta: deska
+    /// řádky rozřazuje do pruhů podle mého tahu a ořezává je na pět, takže by čára obtáhla skupinu,
+    /// která tam celá není. Rozhoduje `Policy.seriesCaptions(in:series:)` nad tím, co se doopravdy
+    /// kreslí — nad osamoceným členem popisek nevznikne.
+    var seriesCaption: String?
 
     var body: some View {
+        // `spacing: 0` a popisek **uvnitř řádku**, ne jako další prvek seznamu (#361): řádky fronty
+        // se identifikují pull requestem, a popisek s vlastní identitou by do seznamu přidal prvek,
+        // jehož identita by musela být pořadí. Takhle se identita nemění vůbec.
+        VStack(alignment: .leading, spacing: 0) {
+            if let seriesCaption { caption(seriesCaption) }
+            rowBody
+        }
+    }
+
+    /// `SÉRIE · AJDA-563 · 2 PR · REVIEW V POŘADÍ ↓` — popisek nad skupinou (návrh, `.rv-stackcap`).
+    ///
+    /// Mono 10 s prostrkáním a verzálkami jako ostatní nadpisy v okně, ale **v akcentu**: je to
+    /// jediná věc v seznamu, která mluví o vztahu mezi řádky, a musí se od jejich vlastního obsahu
+    /// odlišit.
+    private func caption(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: 10, design: .monospaced))
+            .tracking(0.8)
+            .textCase(.uppercase)
+            .foregroundStyle(Palette.accent)
+            .lineLimit(1)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .padding(.leading, 13)
+            .accessibilityLabel(text)
+    }
+
+    private var rowBody: some View {
         VStack(alignment: .leading, spacing: 3) {
             headline
             meta
@@ -78,6 +121,18 @@ struct PullRequestRow: View {
             Capsule()
                 .fill(stripe)
                 .frame(width: 3)
+        }
+        // Přerušovaná čára série (#513, návrh `.rv-stackgroup`) — **vlevo od proužku stavu**, ne
+        // místo něj: proužek mluví o výsledku review na tomhle PR, čára o tom, že řádek patří do
+        // skupiny. Odsazení se přidává jedině členovi série, takže se ostatní řádky nehnou.
+        .padding(.leading, series == nil ? 0 : Self.spineInset)
+        .overlay(alignment: .leading) {
+            if series != nil {
+                SeriesSpine()
+                    .stroke(Palette.accent, style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
+                    .frame(width: 2)
+                    .accessibilityHidden(true)
+            }
         }
         // **Zápis `Bool`u na `Bool`, ne poloha z každého snímku** — `onContinuousHover` je ta
         // třída, která si žádá `Policy.hoverChange` (#358); tohle se ozve jedině na přechodu.
@@ -132,6 +187,13 @@ struct PullRequestRow: View {
             // se do #502 nekreslilo spektrum u řádku bez běhu.
             if let map, !map.isEmpty {
                 QueueMapStrip(map: map)
+            }
+            // Série (#513) — **vedle ostatních, ne místo nich**: `1. v sérii` odpovídá na „v jakém
+            // pořadí to číst“, kdežto dráha, pilulka agenta i odznak na „jak to dopadlo“ a „kde
+            // v kole to stojí“. Jsou to různé otázky, takže se o slot neperou — a je to jediná věc
+            // v řádku, která mluví o **jiném** pull requestu.
+            if let series {
+                seriesPill(series)
             }
             // **Na vlastním PR dráha smyčky místo odznaku stavu** (#509, návrh sekce 52). Tečky
             // říkají, kde v kole to stojí, pilulka vedle nich to řekne slovem — a je to celá
@@ -296,6 +358,23 @@ struct PullRequestRow: View {
             .accessibilityLabel("Na tahu: \(loop.word)")
     }
 
+    /// `1. v sérii` / `2. · stojí na #726` (#513) — pilulka z návrhu (`.pill.run`).
+    ///
+    /// **Akcent, jako u běžícího review**: je to jediná věc v řádku, která mluví o **vztahu k jinému
+    /// řádku**, a musí se odlišit od stavových barev, které mluví o nálezech. Text i nápovědu
+    /// skládá `Policy`, ne kresba.
+    private func seriesPill(_ placement: SeriesPlacement) -> some View {
+        let text = Policy.seriesPill(placement)
+        return Text(verbatim: text)
+            .designPill(tint: Palette.accent, background: Palette.accent.opacity(0.15))
+            .help(Policy.seriesHint(placement))
+            .accessibilityLabel(text)
+    }
+
+    /// Odsazení řádku, které si bere přerušovaná čára série (návrh: `margin-left: 3px`
+    /// + `border-left: 2px`, mezi čarou a proužkem stavu zbývají 2 body).
+    private static let spineInset: Double = 7
+
     /// `agent běží · 4 min` / `push čeká na tebe` (#511).
     ///
     /// **Akcent, ne barva nálezu**: na rozdíl od `N k předání` to není práce, která leží, ale
@@ -428,6 +507,36 @@ struct PullRequestRow: View {
         )
         PullRequestRow(
             pullRequest: PullRequestSummary(
+                id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14451),
+                title: "Refreshable tokens (2/7): refresher domain, OAuth refresher, storage",
+                author: "babakks",
+                url: URL(string: "https://github.com/cli/cli/pull/14451")!,
+                updatedAt: Date().addingTimeInterval(-10800),
+                state: .open
+            ),
+            reviewState: .notStarted,
+            series: SeriesPlacement(position: 1, count: 2, standsOn: nil, standsOnBase: nil),
+            seriesCaption: Policy.seriesCaption(count: 2, titles: ["AJDA-563 a", "AJDA-563 b"])
+        )
+        PullRequestRow(
+            pullRequest: PullRequestSummary(
+                id: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14452),
+                title: "Refreshable tokens (3/7): short-lived login, refresh, git credential path",
+                author: "babakks",
+                url: URL(string: "https://github.com/cli/cli/pull/14452")!,
+                updatedAt: Date().addingTimeInterval(-1200),
+                state: .open
+            ),
+            reviewState: .completed(findings: 1),
+            series: SeriesPlacement(
+                position: 2,
+                count: 2,
+                standsOn: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 14451),
+                standsOnBase: "trunk"
+            )
+        )
+        PullRequestRow(
+            pullRequest: PullRequestSummary(
                 id: PRIdentifier(repo: RepoID(owner: "ondrajodas", name: "PRism"), number: 171),
                 title: "feat: události na časové ose konverzace",
                 author: "ondrajodas",
@@ -440,4 +549,18 @@ struct PullRequestRow: View {
         )
     }
     .frame(width: 420)
+}
+
+/// Přerušovaná čára u skupiny série (#513, návrh `.rv-stackgroup`).
+///
+/// **Tvar, ne `Rectangle` s okrajem**: čára jde po celé výšce řádku, který může mít titulek na dvě
+/// řádky, takže se výška nedá napsat číslem — `Shape` ji dostane změřenou od `overlay`, stejně jako
+/// proužek stavu vedle ní.
+struct SeriesSpine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        return path
+    }
 }

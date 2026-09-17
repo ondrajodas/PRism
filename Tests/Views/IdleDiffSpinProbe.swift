@@ -433,7 +433,7 @@ struct IdleDiffSpinProbe {
         let steps: [(String, () async -> Void)] = [
             ("startAutomaticReviews", { await store.startAutomaticReviews(for: summaries) }),
             ("announceNewPullRequests", { await store.announceNewPullRequests(in: summaries) }),
-            ("refreshStaleHeads", { await store.refreshStaleHeads(in: summaries) }),
+            ("refreshHeads", { await store.refreshHeads(in: summaries) }),
             ("refreshOwnActivity", { await store.refreshOwnActivity(in: summaries) }),
             ("loadDailySpend", { await store.loadDailySpend() }),
         ]

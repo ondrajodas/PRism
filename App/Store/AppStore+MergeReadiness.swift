@@ -29,7 +29,7 @@ extension AppStore {
     /// spolknout příští „přibyly commity“.
     ///
     /// **Selhání nic nemaže a nic nehlásí.** Razítka se neposunou, takže se příští tik zeptá znovu
-    /// — tatáž nesymetrie jako u `refreshStaleHeads`. Do okna se to nehlásí: nic v něm netvrdí, že
+    /// — tatáž nesymetrie jako u `refreshHeads`. Do okna se to nehlásí: nic v něm netvrdí, že
     /// slévatelnost zná, a stav GitHubu drží stavový řádek z pollingu.
     func refreshMergeReadiness(in summaries: [PullRequestSummary]) async {
         let candidates = Policy.mergeReadinessProbe(
@@ -47,7 +47,7 @@ extension AppStore {
         }
 
         // Shrnutí se vytáhne **jednou**, ne hledáním v seznamu u každého kandidáta — tatáž úvaha
-        // jako v `refreshStaleHeads`.
+        // jako v `refreshHeads`.
         let asked = Dictionary(
             summaries.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }

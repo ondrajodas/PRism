@@ -9029,6 +9029,15 @@ v běžícím okně. Kdyby se odchycení nepovedlo, odkaz by se otevřel **v pro
 realistickým stavem desky (čtyři pruhy, 13 PR); že haiku obstojí i nad prázdnou nebo naopak hodně
 zaplněnou deskou, se nezkoušelo — každý běh stojí peníze uživatele.
 
+**Neověřená mezera: `~$0,09` je dopočet, ne přímé měření studeného běhu.** Vychází z naměřeného
+poměru tokenů a ceníku `haiku`; celý studený běh s prázdnou hodinovou cache se za tu cenu
+**nezměřil**. Změřený je poměr *97 % boot / ~2 % vstup*, a právě ten rozhoduje o tom, že jediná
+páka je model, ne délka vstupu.
+
+**Neověřená mezera: blok s jedním či dvěma řádky odpovědi se v okně neproklikal.** Drží to test
+parseru (`BriefCommandTests`), takže se to nerozpadne potichu — ale jak taková kratší odpověď
+vypadá nad deskou, viděl harness, ne člověk.
+
 ## #522 — druhé kolo: kontrola z #150 páruje moje odeslané komentáře (M17, Z3)
 
 První issue skupiny „Za mě“ (#522, #523). Do #522 kontrola z #150 řekla, které **nálezy revieweera**
@@ -9078,3 +9087,63 @@ pro #523**.
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`ineligible_app`), takže se na pokyn uživatele nepouštěl. Vlastní revize diffu proběhla a je
 popsaná v PR.
+
+## #513 — Série PR: fronta drží stohované pull requesty pohromadě (zákres 57)
+
+**PR, jehož base větev je hlavou jiného otevřeného PR v tomtéž repozitáři, je v sérii.** Fronta ho
+drží u ostatních členů v pořadí, v jakém se budou mergovat, řádek nese pilulku `1. v sérii` /
+`2. · stojí na #14451` a přerušovanou čáru na kraji, nad skupinou stojí popisek
+`série · AJDA-563 · 2 PR · review v pořadí ↓`. Hlavička PR ukazuje řetěz
+`větev [3. v sérii] → větev [#14451] → trunk` a pod souřadnicemi větu *Diff je jen tahle vrstva:
+4 soubory nad #14451. Až se #14451 mergne, GitHub přepne základ na trunk a řetěz zmizí sám.*
+**Nic se nepíše** — je to čtení a čisté funkce nad daty.
+
+**Věta ze zadání neplatila a opravila se.** Issue slibovalo „jedno porovnání nad hlavičkami, které
+polling dotahuje“; `gh search prs` ale větve **nevrací vůbec** (ověřeno na CLI, seznam polí je
+v [`docs/testovani.md`](testovani.md)), takže je `PullRequestSummary` nemá ani jako pole a cizí PR
+ve frontě načtený detail nemají. Kreslený scénář je přitom právě **cizí** série, takže by série nad
+dnešními daty nevznikla nikdy. Rozhodnutí (17. 9. 2026): **rozšířit dávkový dotaz na hlavy** (#420)
+o `headRefName`, `baseRefName` a `isCrossRepository` a pustit ho přes frontu. Zamítnuta byla
+levnější varianta „série jen u PR s načteným detailem“ — levné, ale kreslený scénář by nefungoval.
+**Rozsah tím vyrostl z S na M** a je to vědomé.
+
+**Nepřibývá volání ani bod.** Tři pole leží na témže uzlu téhož dotazu; změřeno na živém API, že
+dvacet aliasů s větvemi stojí pořád **1 bod z 5000/h** (dokument roste o ~42 B na alias, odpověď
+o ~100 B na PR). Dvě rozhlídky — zastaralé nálezy (#420) a větve (#513) — slévá
+`Policy.headProbe(stale:refs:)` do **jednoho** seznamu, takže je z nich **jeden** dotaz: na klidný
+tik nula, na pohnutý jeden. Čísla i tabulka dotazů na fake gateway jsou
+v [`docs/testovani.md`](testovani.md).
+
+**Ve čtyřech stavech se netvrdí nic**: hlava z forku, chybějící `isCrossRepository` (`nil` je zákaz,
+ne povolení), dvě otevřená PR na téže větvi a nedotažené větve. Napříč repozitáři se větve nepárují
+a mergnutý ani zavřený PR skupinu nedrží — **série tak zaniká sama** tím, že GitHub po mergi
+spodního přepne base horního na `main`.
+
+**Tři rozhodnutí, která zadání nechalo otevřená** (podrobně ve specifikaci): popisek a čára se
+kreslí **jen ve frontě** (na desce a v sekci `Rozdělaná` zůstává pilulka, protože tam skupina
+pohromadě nedrží); popisek se kreslí **uvnitř řádku** svého prvního člena, takže identita řádků
+v líném seznamu zůstává `PRIdentifier` (#361); a **odložený člen** ze skupiny prostě vypadne —
+pilulka u zbylého zůstane (je to pravda o PR), popisek zmizí, protože `2 PR` nad jedním řádkem
+tvrdí víc, než je vidět.
+
+**Po prvním proklikání se opravil řetěz v hlavičce.** Nesl pilulku `#14451 · 2. v sérii`, kdežto
+řádek téhož PR ve frontě `3. · stojí na #14451` — obojí pravda (hlavička mluvila o base větvi, řádek
+o otevřeném PR), ale vedle sebe to byly dvě odpovědi na jednu otázku a **pořadí otevřeného PR
+z detailu nešlo přečíst vůbec**. Čísla se rozdělila podle toho, **u čí větve stojí**: u hlavy
+`3. v sérii` (jediné pořadí v řetězu), u base větve pouhý odkaz `#14451`, pořadí toho spodního jen
+v nápovědě u jeho čísla. Pilulku dostal i **základ série**. Řetěz od té doby skládá
+`Policy.branchChain(head:base:series:)` a ne kresba, takže se nad tím dá tvrdit test: v pilulkách
+řetězu je **právě jedno** pořadové číslo, patří hlavě a rovná se tomu, které o témž PR říká řádek
+fronty (5 případů, pozice 2 až 6). Zamítnuto bylo odlišit obě čísla barvou (rozdíl je ve významu, ne
+v důrazu) i psát `3. ze 3` (česká předložka se podle číslovky mění — `ze tří`, ale `z pěti`), takže
+počet nese popisek nad skupinou a nápovědy.
+
+Přibylo 74 testů ve čtyřech nových sadách (45 nad `Policy.series` a jejími větami, 10 nad
+předfiltrem, 11 nad tikem, 5 měřených nad kresbou řádku) a tři nad rozšířeným dotazem, k tomu
+jedna fixtura ze živého API (skutečná série `cli/cli`
+#14451–#14453); regrese se ověřila **vložením regrese u čtyř věcí zvlášť**.
+
+**Neověřená mezera: PR neprošel Copilotem** (výpadek entitlementu, na pokyn uživatele se nepouštěl)
+a **popisek nad skupinou ve frontě je doložený jedině rendrem mockupu a testy** — na běžícím okně
+se dá vyfotit pruh desky, ale přepnutí railu na sekci `Fronta` vyžaduje kliknutí, na které tenhle
+stroj nemá asistenční přístup.

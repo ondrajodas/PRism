@@ -909,6 +909,17 @@ final class AppStore {
     /// tik dohoní, co se stalo, když aplikace neběžela — a je to **jeden** dotaz, ne jeden na PR.
     var headProbes: [PRIdentifier: Date] = [:]
 
+    /// Větve PR z **téhož** dávkového dotazu (#513). Chybějící klíč = ještě nevíme.
+    ///
+    /// Je to celý podklad série: `gh search prs` větve nevrací vůbec, takže by bez téhle mapy
+    /// `Policy.series(in:refs:)` nad cizí frontou vracela prázdno pořád. Kdo se na větve ptá, ptá
+    /// se **`branchRefs(for:)`**, ne téhle mapy — u vlastních PR a u otevřené záložky je nese
+    /// načtený detail a dvě čtení by znamenala dvě odpovědi na jednu otázku.
+    ///
+    /// **V paměti, ne na disku**, jako `headProbes`: uložená jména větví by po restartu tvrdila
+    /// sérii, která se mezitím mohla rozpadnout mergnutím toho spodního.
+    var probedBranchRefs: [PRIdentifier: BranchRefs] = [:]
+
     /// Odložená PR (#512). Nepovinná závislost jako ostatní story — testy, které o odložení
     /// nestojí, ji nedostanou a pak není odložené nic.
     let snoozeStore: SnoozeStore?
@@ -1210,8 +1221,9 @@ final class AppStore {
             // Zastaralé nálezy (#420) — hlava se posunula pod uloženými nálezy. Uvnitř úspěšného
             // tiku ze stejného důvodu jako rozhlídka po diskuzi: vejde se to do backoffu pollingu
             // a nepotřebuje druhý časovač. Kolik dotazů z toho je, rozhoduje
-            // `Policy.staleHeadProbe` — na klidný den nula, jinak **jeden na celou frontu**.
-            await self?.refreshStaleHeads(in: summaries)
+            // `Policy.headProbe` ze dvou předfiltrů (#420 zastaralé nálezy, #513 větve pro sérii) —
+            // na klidný tik nula, jinak **jeden na celou frontu**.
+            await self?.refreshHeads(in: summaries)
             // Cizí aktivita na **vlastních** PR (#335) — komentář kolegy, Copilotovo review.
             // Uvnitř úspěšného tiku schválně: rozhlídka se tím vejde do backoffu pollingu (při rate
             // limitu se netiká, takže se ani nekouká) a nepotřebuje druhý časovač. Kolik dotazů
@@ -1682,6 +1694,9 @@ final class AppStore {
         Policy.board(
             entries: boardEntries,
             mine: ownLogins,
+            // Série (#513) — drží členy pohromadě uvnitř pořadí podle závažnosti. Počítá se nad
+            // **plným** seznamem, jako všude jinde: je to vlastnost PR, ne pohledu.
+            series: pullRequestSeries,
             // Kolik zbývá předat (#334) — **tatáž funkce**, ze které čte odznak v railu, pilulka
             // v řádku i panel `Zadání`. Uzávěrem, ne mapou: čte se jen u vlastních PR.
             handoff: { self.handoffReport(for: $0) },
@@ -2570,6 +2585,10 @@ final class AppStore {
         // navíc neptáme, takže razítko po něm nemá co říct; kdyby se vrátil, zeptáme se znovu a
         // druhý řádek z toho nevznikne (identita nese hlavu).
         headProbes = headProbes.filter { wantedPullRequests.contains($0.key) }
+        // Větve z téhož dotazu (#513) — uklízejí se **spolu s razítky**, protože jsou to dvě
+        // poloviny jedné odpovědi: větve po PR mimo seznam by držely sérii kolem řádku, který se
+        // nekreslí, a razítko bez větví by se příští tik zeptalo znovu.
+        probedBranchRefs = probedBranchRefs.filter { wantedPullRequests.contains($0.key) }
 
         // Labely a reviewery (#392) — platí k jednomu PR a mapa drží celý identifikátor, takže by
         // bez úklidu rostla donekonečna. Rozdělané načítání přežije ze stejného důvodu jako

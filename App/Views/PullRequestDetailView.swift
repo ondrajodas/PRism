@@ -329,7 +329,10 @@ struct PullRequestDetailView: View {
                     ownership: ownership,
                     // Pilulka `mimo zdroje` (#531) — rozhoduje o ní store, protože jedině ten ví,
                     // co přišlo ze zdrojů a co si člověk otevřel odkazem.
-                    origin: store.origin(of: pullRequest.id)
+                    origin: store.origin(of: pullRequest.id),
+                    // Série (#513) — řetěz větví. Rozhoduje store, protože větve ostatních PR zná
+                    // jedině on (rozhlídka po hlavách plus načtené detaily).
+                    series: store.seriesPlacement(for: pullRequest.id)
                 )
                 draftChip
                 Spacer(minLength: 8)
@@ -339,6 +342,15 @@ struct PullRequestDetailView: View {
             // z `Policy.ownLoop` `nil` a nekreslí se ani rám.
             if let loop = store.ownLoop(for: pullRequest) {
                 OwnLoopView(loop: loop, perform: moveOnLoop)
+            }
+            // Série PR (#513) — věta o tom, že diff je jen horní vrstva, a že řetěz zmizí sám.
+            // **Pod souřadnicemi, ne v nich**: řetěz větví je v hlavičce a tohle je to, co z něj
+            // plyne pro čtení diffu. Na PR mimo sérii a na jejím základu vyjde `nil`.
+            if let series = store.seriesNote(for: pullRequest.id) {
+                Text(verbatim: series)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             // Jen když se hlava rozešla se sha, proti které platí nálezy — jinak by to byl
             // řádek s údajem, který nikoho nezajímá. **Rozchod počítá store** (#284), protože

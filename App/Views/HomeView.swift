@@ -134,7 +134,10 @@ struct HomeView: View {
                     // pilulka o pár řádků výš. Vlastnictví se ptá tady, jako u `handoff`u.
                     loop: ownership == .mine
                         ? store.ownLoopRow(for: pullRequest, handoff: handoff)
-                        : nil
+                        : nil,
+                    // Série (#513) — **pilulka ano, popisek ne**, jako na desce: tahle sekce je
+                    // výběr podle rozdělaného review, takže vedle sebe členové skupiny nestojí.
+                    series: store.seriesPlacement(for: pullRequest.id)
                 )
             }
         }

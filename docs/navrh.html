@@ -2057,6 +2057,22 @@ footer.end {
    každé kreslilo řádky po svém, rozešly by se první změnou. */
 .s53-snoozed.plain { background: none; border-top: none; padding: 4px 0; }
 
+/* --- série PR ve frontě (sekce 57, #513) ---------------------------------------------
+   Skupina se od zbytku seznamu odlišuje **popiskem a přerušovanou čarou**, ne rámečkem ani
+   podkladem: řádky uvnitř zůstávají obyčejnými řádky fronty (proužek stavu, odznak, mapa),
+   takže je nesmí nic přebarvit. Rámeček by ze skupiny udělal druhý blok vedle `Odložené`
+   a podklad by se pral s proužkem závažnosti na kraji řádku.
+
+   Čára je **akcent**, protože je to jediná věc v seznamu, která mluví o vztahu mezi řádky,
+   a **přerušovaná** podle téže úmluvy jako `.chip-add` a `.rv-av.wait`: plné je to, co na PR
+   je, přerušované to, co k němu někdo domyslel. Odsazení `3px` drží proužek stavu na svém
+   místě — čára stojí vlevo od něj, ne místo něj. */
+.s57-cap {
+  padding: 8px 13px 2px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);
+}
+.s57-group { border-left: 2px dashed var(--accent); margin-left: 3px; }
+
 /* ============================================================
    PRÁZDNÉ STAVY A PORUCHY
    ============================================================ */
@@ -5584,6 +5600,234 @@ tr.sel td.sg { background: var(--accent-weak); }
           z kombinace <b>odvozuje</b>. <em>Vlastní datum…</em> z kresby vypadlo: kalendář
           v kontextové nabídce je druhý překryv nad prvním a delší odklad než týden se dá složit
           dvojím odložením. Je to <b>zapsaná mezera</b>, ne opomenutí.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================== 57 ==================================== -->
+  <section class="section" id="s57">
+    <div class="section-head">
+      <div class="eyebrow">57 — Série PR</div>
+      <h2>Série PR: dva ze tří leží ve frontě a nikdo neřekne, který číst první</h2>
+      <p class="muted">
+        <strong>Dneska</strong> jsou ve frontě <em>Refreshable tokens [2/7]</em> a <em>[3/7]</em>,
+        každý na jiném místě: seznam řadí podle času a deska podle závažnosti, takže je od sebe
+        klidně rozdělí. Že <b>#14452 stojí na větvi #14451</b> a jeho diff je jen ta horní vrstva,
+        aplikace neví ani z čeho zjistit — <code>gh search prs</code> větve nevrací vůbec.
+      </p>
+      <p class="muted">
+        <strong>Návrh</strong>: PR, jehož base větev je hlavou jiného otevřeného PR v tomtéž
+        repozitáři, je <em>v sérii</em>. Ve frontě drží členové spolu v pořadí, v jakém se budou
+        mergovat, s popiskem nad skupinou, přerušovanou čarou na kraji a pilulkou <em>1. v sérii</em>,
+        <em>2. · stojí na #14451</em>. Hlavička ukazuje <b>řetěz větví</b>, ve kterém má každá větev
+        za sebou, čí je — <em>2. v sérii</em> u vlastní, <em>#14451</em> u té base —, a pod ním větu,
+        že diff je jen tahle vrstva. <b>Nic se nepíše</b> a <b>nepřibývá volání</b>: větve dorazí
+        týmž dávkovým dotazem, kterým se od sekce 27 zjišťují hlavy.
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="pane">
+        <div class="tag"><i></i>Dneska — řazení je od sebe rozdělí</div>
+        <div class="frame flat">
+          <div class="qrow">
+            <div class="stripe" style="background: var(--find);"></div>
+            <div class="mid">
+              <div class="t1"><span class="pr-ico open">⬤</span><span class="title">Refreshable tokens (3/7): short-lived login, refresh, and git credential path</span></div>
+              <div class="t2"><span class="slug">cli/cli #14452</span><span>·</span><span>babakks</span><span>·</span><span>před 20 minutami</span></div>
+            </div>
+            <div class="right"><span class="pill find">1 nález</span></div>
+          </div>
+          <div class="qrow">
+            <div class="stripe" style="background: var(--crit);"></div>
+            <div class="mid">
+              <div class="t1"><span class="pr-ico open">⬤</span><span class="title">chore: modernize dependencies (Symfony 8-ready, PHPUnit 11)</span></div>
+              <div class="t2"><span class="slug">keboola/vault #85</span><span>·</span><span>odinuv</span><span>·</span><span>před hodinou</span></div>
+            </div>
+            <div class="right"><span class="pill crit">3 nálezy · 1 blokuje</span></div>
+          </div>
+          <div class="qrow">
+            <div class="stripe" style="background: var(--line);"></div>
+            <div class="mid">
+              <div class="t1"><span class="pr-ico open">⬤</span><span class="title">Refreshable tokens (2/7): refresher domain, OAuth refresher, storage, and wiring</span></div>
+              <div class="t2"><span class="slug">cli/cli #14451</span><span>·</span><span>babakks</span><span>·</span><span>před 3 hodinami</span></div>
+            </div>
+            <div class="right"><span class="pill idle">neběželo</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh — skupina drží pohromadě a jde od základu nahoru</div>
+        <div class="frame flat">
+          <div class="qrow">
+            <div class="stripe" style="background: var(--crit);"></div>
+            <div class="mid">
+              <div class="t1"><span class="pr-ico open">⬤</span><span class="title">chore: modernize dependencies (Symfony 8-ready, PHPUnit 11)</span></div>
+              <div class="t2"><span class="slug">keboola/vault #85</span><span>·</span><span>odinuv</span><span>·</span><span>před hodinou</span></div>
+            </div>
+            <div class="right"><span class="pill crit">3 nálezy · 1 blokuje</span></div>
+          </div>
+          <div class="s57-cap">série · 2 PR · review v pořadí ↓</div>
+          <div class="s57-group">
+            <div class="qrow">
+              <div class="stripe" style="background: var(--line);"></div>
+              <div class="mid">
+                <div class="t1"><span class="pr-ico open">⬤</span><span class="title">Refreshable tokens (2/7): refresher domain, OAuth refresher, storage, and wiring</span></div>
+                <div class="t2"><span class="slug">cli/cli #14451</span><span>·</span><span>babakks</span><span>·</span><span>před 3 hodinami</span></div>
+              </div>
+              <div class="right"><span class="pill run">1. v sérii</span><span class="pill idle">neběželo</span></div>
+            </div>
+            <div class="qrow">
+              <div class="stripe" style="background: var(--find);"></div>
+              <div class="mid">
+                <div class="t1"><span class="pr-ico open">⬤</span><span class="title">Refreshable tokens (3/7): short-lived login, refresh, and git credential path</span></div>
+                <div class="t2"><span class="slug">cli/cli #14452</span><span>·</span><span>babakks</span><span>·</span><span>před 20 minutami</span></div>
+              </div>
+              <div class="right"><span class="pill run">2. · stojí na #14451</span><span class="pill find">1 nález</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="pane new">
+        <div class="tag"><i></i>Hlavička #14452 — řetěz větví a věta pod ním</div>
+        <div class="frame flat">
+          <div class="pr-head" style="padding-bottom: 14px;">
+            <div class="pr-title"><h4>Refreshable tokens (3/7): short-lived login, refresh, and git credential path</h4><span class="num">#14452</span></div>
+            <div class="pr-meta">
+              <span class="state-chip">⬤ Otevřený</span>
+              <span><strong>babakks</strong> chce sloučit</span>
+              <span class="branch">refresh-token-c1-login</span>
+              <span class="pill run">2. v sérii</span>
+              <span>→</span>
+              <span class="branch">refresh-token-b-domain</span>
+              <span class="pill run">#14451</span>
+              <span>→</span>
+              <span class="branch">trunk</span>
+              <span>·</span>
+              <span>cli/cli</span>
+            </div>
+            <div class="pr-meta" style="font-size: 12px; color: var(--ink-3);">
+              <span>Diff je jen tahle vrstva: 4 soubory nad #14451. Až se #14451 mergne, GitHub přepne základ na <code>trunk</code> a řetěz zmizí sám.</span>
+            </div>
+          </div>
+        </div>
+        <p style="margin-top: 10px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+          Ve <em>Změněných souborech</em> se nemění nic — diff proti base větvi je už dneska jen ta
+          vrstva. Mění se jen to, že to okno <strong>řekne</strong>.
+        </p>
+      </div>
+      <div class="pane">
+        <div class="tag"><i></i>Deska — pilulka ano, popisek ne</div>
+        <div class="frame">
+          <div class="brd">
+            <div class="block">
+              <header><span>Rozhodnout <span class="cnt">1</span></span></header>
+              <div class="qrow">
+                <div class="stripe" style="background: var(--find);"></div>
+                <div class="mid">
+                  <div class="t1"><span class="pr-ico open">⬤</span><span class="title">Refreshable tokens (3/7): short-lived login…</span></div>
+                  <div class="t2"><span class="slug">cli/cli #14452</span><span>·</span><span>babakks</span></div>
+                </div>
+                <div class="right"><span class="pill run">2. · stojí na #14451</span><span class="pill find">1 nález</span></div>
+              </div>
+            </div>
+            <div class="block">
+              <header><span>Přečíst <span class="cnt">1</span></span></header>
+              <div class="qrow">
+                <div class="stripe" style="background: var(--line);"></div>
+                <div class="mid">
+                  <div class="t1"><span class="pr-ico open">⬤</span><span class="title">Refreshable tokens (2/7): refresher domain…</span></div>
+                  <div class="t2"><span class="slug">cli/cli #14451</span><span>·</span><span>babakks</span></div>
+                </div>
+                <div class="right"><span class="pill run">1. v sérii</span><span class="pill idle">neběželo</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p style="margin-top: 10px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+          Pruhy jsou <b>druhá osa</b>: spodní PR patří do <em>Přečíst</em> a horní do
+          <em>Rozhodnout</em>, takže je skupina rozdělená právem. Pilulka zůstává — stát na cizí
+          větvi platí v každém seznamu —, popisek a čára ne.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">199</span>
+        <span class="body">
+          <b>Rozpoznání je jedno porovnání, ale data pro něj se musí dotáhnout</b>
+          <span>Base větev PR proti hlavám ostatních otevřených PR v témže repu — <b>a ani jedno
+          z toho fronta dneska nemá</b>: <code>gh search prs</code> větve nevrací a cizí PR detail
+          načtený nemá. Původní zadání tvrdilo opak a bylo to <b>fakticky špatně</b>. Řeší se to
+          tím, že dávkový dotaz na hlavy (sekce 27) si vedle <code>headRefOid</code> řekne
+          i o <code>headRefName</code>, <code>baseRefName</code> a <code>isCrossRepository</code> —
+          tři pole na témže uzlu, tedy <b>žádné volání ani bod navíc</b> (změřeno: dvacet aliasů
+          s větvemi pořád <b>1 bod z 5000/h</b>). Předfiltr je tentýž jako u hlav: <b>na klidný tik
+          nula dotazů, na pohnutý jeden</b>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">200</span>
+        <span class="body">
+          <b>Pořadí ve frontě je pořadí mergování</b>
+          <span>Skupina drží pohromadě <b>na místě toho člena, který je v pořadí nejvýš</b>, a uvnitř
+          jde od základu nahoru. Není to druhé řazení: seznam si pořadí rozhodl sám (čas ve frontě,
+          závažnost na desce) a série v něm jen posune členy k sobě. Review spodního PR dřív než
+          horního je práce, která se stejně musí udělat — fronta to jen přestane schovávat.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">201</span>
+        <span class="body">
+          <b>Popisek jen tam, kde skupina doopravdy drží pohromadě</b>
+          <span>Pilulka <em>1. v sérii</em> jde <b>všude, kde se řádek kreslí</b> — je to vlastnost
+          pull requestu. Popisek a čára jsou naopak tvrzení <b>o seznamu</b>, takže patří jedině do
+          fronty: deska řadí do pruhů podle mého tahu a ořezává je na pět řádků, sekce
+          <em>Rozdělaná</em> je výběr podle draftu. A když ze skupiny zbude ve frontě <b>jeden</b>
+          řádek (druhého schoval filtr nebo odložení), popisek <b>nevznikne</b> — <em>2 PR</em> nad
+          jedním řádkem tvrdí víc, než je vidět.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">202</span>
+        <span class="body">
+          <b>Zaniká samo, a to je celý úklid</b>
+          <span>Po mergi spodního PR přepne GitHub base horního na <code>main</code>; <code>updatedAt</code>
+          se tím pohne, další tik se zeptá a skupina zmizí bez zásahu. Proto se větve <b>nedrží na
+          disku</b>: uložená jména by po restartu tvrdila sérii, která se mezitím rozpadla.
+          <b>Mergnutý ani zavřený PR skupinu nedrží</b> — je to řádek, se kterým se nedá nic
+          dělat.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">203</span>
+        <span class="body">
+          <b>Čtyři stavy, ve kterých se raději netvrdí nic</b>
+          <span><b>Hlava z forku</b> (<code>headRefName</code> je pak větev cizího repozitáře),
+          <b>neznámý původ hlavy</b> (<code>isCrossRepository</code> chybí — zákaz, ne povolení),
+          <b>dvě otevřená PR na téže větvi</b> (která je ta spodní, se z dat říct nedá)
+          a <b>nedotažené větve</b>. Ve všech čtyřech se skupina <b>nevytvoří</b>: falešná série by
+          poslala člověka číst dva PR v pořadí, které spolu nesouvisí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">204</span>
+        <span class="body">
+          <b>V hlavičce je jedno pořadí a patří tomu PR, který je otevřený</b>
+          <span>První podoba nesla v řetězu pilulku <em>#14451 · 2. v sérii</em>, kdežto řádek téhož
+          PR ve frontě <em>3. · stojí na #14451</em>. <b>Obojí byla pravda</b> — hlavička mluvila
+          o base větvi, řádek o otevřeném PR —, jenže vedle sebe to byly <b>dvě odpovědi na jednu
+          otázku</b> a z detailu se pořadí otevřeného PR nedalo poznat vůbec. Čísla se proto rozdělila
+          <b>podle toho, u čí větve stojí</b>: u hlavy <em>2. v sérii</em> (tenhle PR, a je to jediné
+          pořadí v řetězu), u base větve pouhý odkaz <em>#14451</em>. Že je <em>#14451</em> v sérii
+          dřív, řekne nápověda — tam to stojí u jeho čísla, takže se to zaměnit nedá. Pilulku má
+          i <b>základ série</b> (<em>1. v sérii</em>), jinak by se z jeho detailu pořadí nedozvěděl
+          nikdo.</span>
         </span>
       </div>
     </div>
