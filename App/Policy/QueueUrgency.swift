@@ -26,7 +26,21 @@ extension Policy {
     /// **Pořadí ze vzorku v návrhu se nepřebírá doslova.** Mockup ukazuje běžící review hned pod
     /// blokujícím a čisté nad zastaralým; to je ukázka odznaků, ne škála závažnosti — běžící
     /// review po mně nechce nic a čisté už vůbec ne.
-    static func byUrgency(_ entries: [QueueEntry]) -> [QueueEntry] {
+    ///
+    /// **Série řazení nerozbije** (#513): skupina drží pohromadě na místě toho člena, který vyšel
+    /// nejvýš, a uvnitř jde od základu nahoru (`Policy.grouped(_:by:keeping:)`). Bez toho by je
+    /// závažnost rozházela po celé desce, a přečíst horní PR dřív než spodní je práce, která se
+    /// stejně bude dělat znovu. Výchozí prázdné `series` nedělají nic.
+    ///
+    /// **Pruhy desky to nedrží** (#513) — rozřazení podle mého tahu (`Policy.lane`) je druhá osa
+    /// a běží až nad tímhle pořadím, takže spodní PR může skončit v `Rozhodnout` a horní
+    /// v `Přečíst`. Je to záměr: pruh odpovídá na „co udělám teď“ a série na „v jakém pořadí“.
+    /// Uvnitř pruhu zůstávají členové vedle sebe a ve správném pořadí.
+    static func byUrgency(_ entries: [QueueEntry], keeping series: [PullRequestSeries] = []) -> [QueueEntry] {
+        grouped(sortedByUrgency(entries), by: \.id, keeping: series)
+    }
+
+    private static func sortedByUrgency(_ entries: [QueueEntry]) -> [QueueEntry] {
         entries.sorted { left, right in
             let ranks = (urgency(of: left), urgency(of: right))
             if ranks.0 != ranks.1 { return ranks.0 < ranks.1 }

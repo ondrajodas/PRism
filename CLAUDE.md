@@ -480,7 +480,7 @@ API**, **`BranchPushing`** (#466) jediný, který **zapisuje do remote**, a **`T
 
 | Modul | Zodpovědnost | Vnější svět |
 |---|---|---|
-| `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, metadata a syrový diff (celý i mezi dvěma commity), login účtu, labely a vyžádané reviewery, hlavy víc PR jedním dotazem, slévatelnost větve — a od #572 **hlavičku i slévatelnost vlastních PR jedním dotazem**, aby deska uměla `K merge` bez otevřené záložky ([měření](docs/testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572)) —, **repozitáře organizace** (#532 — nejdražší čtení v aplikaci), **otevřené PR jednoho repa** (#533) a **co repozitář o mergi říká** (#556 — chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
+| `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, metadata a syrový diff (celý i mezi dvěma commity), login účtu, labely a vyžádané reviewery, hlavy víc PR jedním dotazem (od #513 **i s větvemi** — podklad série PR), slévatelnost větve — a od #572 **hlavičku i slévatelnost vlastních PR jedním dotazem**, aby deska uměla `K merge` bez otevřené záložky ([měření](docs/testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572)) —, **repozitáře organizace** (#532 — nejdražší čtení v aplikaci), **otevřené PR jednoho repa** (#533) a **co repozitář o mergi říká** (#556 — chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i jeho zahození, **zápis slitých souborů do indexu a dokončení rebase** i **commit práce agenta** (#510) — commituje aplikace, ne session, **je předchozí hlava předkem té dnešní** (#517) a **cesty, které PR mění** (#518 — podklad routingu). **Pořád bez zápisu do remote** | `git` |
 | `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula (od #522 se ptá i na **moje odeslané komentáře**, jedním polem odpovědí a beze změny sady) — a k tomu pět session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467) a **agent na vlastním PR** (#510) — poslední dvě **smí měnit soubory**, ta poslední se pouští **bez kliknutí** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
@@ -528,6 +528,12 @@ přečtení, než sáhneš na:
   # Výčet k posouzení, ne prázdný: každý soubor odsud musí předávat `snoozeAction:`.
   grep -rln 'PullRequestRow(' App/Views | grep -v 'PullRequestRow.swift'
   ```
+
+  **Od #513 je nad tím série PR** (`Policy.series`): PR stojící na větvi jiného otevřeného PR.
+  Počítá se nad **plným** seznamem (je to vlastnost PR, ne pohledu), **řazení ji nesmí rozdělit**
+  (`Policy.grouped` ve frontě i v `byUrgency`), ale **popisek nad skupinou kreslí jen fronta** —
+  jinde skupina pohromadě nedrží ([rozbor](docs/architektura.md#série-pr-513)). Větve, na kterých
+  to stojí, vozí **týž** dávkový dotaz jako hlavy (#420), takže volání nepřibývá.
 
   **Od #531 k tomu stojí
   přijaté záložky** (`adoptedTabs`) — PR otevřený odkazem nebo `prism://` a **od #527 i záložka

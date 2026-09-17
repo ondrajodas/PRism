@@ -194,10 +194,14 @@ extension AppStoreStaleHeadTests {
         #expect(store.activityEvents.count == 1)
     }
 
-    /// **Bez záznamu dění se neptá vůbec.** Za zastaralé nálezy banner nechodí, takže je záznam
-    /// jediný konzument — dotaz bez něj je volání za nic, každou minutu.
-    @Test("Bez záznamu dění se neptá")
-    func asksNothingWithoutTheLog() async {
+    /// **Bez záznamu dění se na zastaralé nálezy neptá.** Banner za ně nechodí, takže je záznam
+    /// jejich jediný konzument — dotaz kvůli nim by byl volání za nic, každou minutu.
+    ///
+    /// **Od #513 to ale neznamená, že se nepošle dotaz žádný**: týmž dotazem se tahají větve pro
+    /// sérii PR a ty mají konzumenta jiného (frontu). Řádek dění z toho nevznikne, a to je ta
+    /// polovina, na které tenhle test stojí.
+    @Test("Bez záznamu dění řádek nevznikne")
+    func recordsNothingWithoutTheLog() async {
         let pr = PRIdentifier("cli/cli#1")!
         let gateway = FakeGitHubGateway(always: .success([summary("cli/cli#1")]))
         gateway.heads = [pr: PullRequestHead(sha: "9c1de02", committedAt: pushedAt)]
@@ -205,18 +209,19 @@ extension AppStoreStaleHeadTests {
 
         await store.refresh()
 
-        #expect(gateway.headRequests.isEmpty)
+        #expect(store.activityEvents.isEmpty)
     }
 
-    /// PR bez uložených nálezů do dotazu nepatří — není co zastarat.
-    @Test("PR bez nálezů se neptá")
-    func asksNothingWithoutFindings() async {
+    /// PR bez uložených nálezů do **téhle** rozhlídky nepatří — není co zastarat —, takže z něj
+    /// nevznikne řádek. Od #513 se na něj dotaz pošle kvůli větvím, ale to je druhá rozhlídka
+    /// v témže dokumentu (viz `SeriesRefsProbeTests`).
+    @Test("PR bez nálezů řádek nedá")
+    func recordsNothingWithoutFindings() async {
         let gateway = FakeGitHubGateway(always: .success([summary("cli/cli#1")]))
         let store = store(gateway, findings: [:])
 
         await store.refresh()
 
-        #expect(gateway.headRequests.isEmpty)
         #expect(store.activityEvents.isEmpty)
     }
 

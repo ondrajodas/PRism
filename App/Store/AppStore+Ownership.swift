@@ -90,12 +90,20 @@ extension AppStore {
     ///
     /// Zrcadlí `visibleOwnPullRequests`: nejdřív filtr, pak autor. Dvě sekce, dvě množiny, jedno
     /// řazení — a `visiblePullRequests` zůstává plný pohled, ze kterého se obě berou.
+    ///
+    /// **Od #513 se nad tím ještě přeskládají série** — členové drží pohromadě na místě toho, který
+    /// je v pořadí nejvýš, a uvnitř jdou od základu nahoru. Není to druhé řazení: množina zůstává
+    /// tatáž (odznak i počty se nemění) a mění se jedině pořadí, ve kterém se kreslí.
     var visibleQueuePullRequests: [PullRequestSummary] {
-        Policy.pullRequests(
-            Policy.pullRequests(visiblePullRequests, ownedBy: .theirs, mine: ownLogins),
-            // Bez odložených (#512) — jako `queuePullRequests`. Blok `Odložené` pod seznamem stojí
-            // nad tímtéž vstupem, takže se to, co ze seznamu zmizí, objeví právě v něm.
-            withoutSnoozed: isSnoozed(_:)
+        Policy.grouped(
+            Policy.pullRequests(
+                Policy.pullRequests(visiblePullRequests, ownedBy: .theirs, mine: ownLogins),
+                // Bez odložených (#512) — jako `queuePullRequests`. Blok `Odložené` pod seznamem stojí
+                // nad tímtéž vstupem, takže se to, co ze seznamu zmizí, objeví právě v něm.
+                withoutSnoozed: isSnoozed(_:)
+            ),
+            by: \.id,
+            keeping: pullRequestSeries
         )
     }
 

@@ -11345,6 +11345,23 @@ autora (`author: null`) a odpověď s cizím číslem uvnitř aliasu.
 | předfiltr nekouká na razítko `updatedAt` | `Tichý tik druhý dotaz neposílá` (tři tiky → tři dotazy) a dvě tvrzení v `Policy` |
 | `readiness(of:)` nezahazuje `UNKNOWN` | `Chybějící alias ani nedopočítaná slévatelnost se nezapíší` (mergnuté PR se zapsalo jako odpověď) |
 
+### Cena `Policy.series` se změřila, cache se zamítla
+
+Série se počítá **při čtení**, takže k tomu patří číslo. Změřeno sondou nad tisícem průchodů
+(Debug build, tentýž stroj):
+
+| Fronta | Na průchod |
+|---|---|
+| 20 PR (jedna série) | **153 µs** |
+| 60 PR (jedna série) | **1,0 ms** |
+
+Seznam fronty se z toho poskládá **třemi průchody** (`visibleQueuePullRequests`, `pullRequestSeries`
+pro pilulky, `queueSeriesCaptions`), tedy kolem **půl milisekundy** na jedno sestavení řádků — a to
+se neděje na snímek, ale na změnu stavu. Cache se proto **zamítla**: musela by si říct, co ji
+vyprazdňuje (#224) — seznam z tiku, každý načtený detail a každá rozhlídka po hlavách —, a tři
+invalidace za čtyři procenta snímku se neplatí. Sonda v repu nezůstala; je to měření, ne tvrzení
+o chování.
+
 ### Počet dotazů na fake gateway patří k číslům
 
 `FakeGitHubGateway.mergeReadinessRequests` je **pole polí**, ne plochý seznam — stejně jako
@@ -11461,6 +11478,112 @@ u volajícího hned vedle řádku, který o `handoff`u rozhoduje dnes.
 musela hostovat celý seznam, a `List` staví řádky líně, takže by měřila hlavně to, kolik jich
 zrovna vzniklo. Zbývá z toho tvrzení o **výšce** řádku (`OwnLoopRowRenderTests`) a snímek běžící
 aplikace.
+
+## Série PR: co stojí větve navíc a co drží počet dotazů (#513)
+
+Zadání issue tvrdilo, že se série pozná z dat, která polling už má. **Nepozná** — a to je první věc,
+kterou tahle sekce dokládá; druhá je, kolik stálo to napravit.
+
+### Že fronta větve nezná, je měření, ne domněnka
+
+```bash
+gh search prs --repo cli/cli --state open --json 2>&1 | head -3
+```
+
+`gh search prs --json` nabízí `assignees, author, authorAssociation, body, closedAt, commentsCount,
+createdAt, id, isDraft, isLocked, isPullRequest, labels, number, repository, state, title,
+updatedAt, url` a **žádné pole o větvích** (vypsáno `gh` 2.83.0 dne 17. 9. 2026). Proto je `PullRequestSummary` nemá a proto by `Policy.series(in:refs:)`
+nad cizí frontou vracela prázdno pořád.
+
+### Kolik stojí tři pole navíc v dávkovém dotazu
+
+Živé GitHub API přes `gh` (2.83.0), 17. 9. 2026, MacBook s běžícím Xcode buildem v pozadí. Dotaz je
+**doslova ten, který skládá `PullRequestHeadsQuery`**, jen s přidaným `rateLimit { cost remaining
+nodeCount }`, aby se cena nedohadovala.
+
+| Dotaz | Aliasů | `cost` | Čas | Odpověď | Dokument |
+|---|---|---|---|---|---|
+| s větvemi (`cli/cli` #14451–#14453) | 3 | **1** | 0,61–0,70 s | 1,0 kB | — |
+| s větvemi (20 PR z 6 repozitářů) | 20 | **1** | 3,42–4,78 s | 6,1 kB | 5 200 B |
+| bez větví (tytéž PR, #420) | 20 | **1** | 1,82–3,58 s | 4,1 kB | 4 360 B |
+
+Měřeno **střídavě A/B/A/B** (tři kola), protože jednorázové číslo z živého API nese šum sítě: rozpětí
+obou cest se **překrývají**, takže se z nich nedá tvrdit, že větve dotaz zpomalují. Co se tvrdit dá,
+je zbytek řádku: **cena zůstává 1 bod z 5000/h**, dokument roste o ~42 B na alias a odpověď o ~100 B
+na PR. **Tři pole na témže uzlu tedy nestojí ani volání, ani bod** — a právě proto se nešlo cestou
+druhého dotazu.
+
+### Zamítnutá varianta se taky měří
+
+Druhá cesta by byla dotáhnout větve `fetchDetail`em (`gh pr view --json`) na každý řádek fronty.
+U #572 se **totéž** změřilo na vlastních PR: **46 volání a 29,6 s** proti jednomu volání a ~3 s.
+Nad cizí frontou by to bylo jedno volání na PR **každou minutu** — tedy přesně ta `N+1` past, kvůli
+které dávkový dotaz u #420 vznikl.
+
+### Počet dotazů na fake gateway patří k číslům
+
+`FakeGitHubGateway.headRequests` je **pole polí** (od #420), takže se dá tvrdit obojí — kolik dotazů
+a na koho. Naměřeno v `AppStoreSeriesTests` nad frontou o čtyřech cizích PR:
+
+| Tik | Dotazů | Aliasů v dotazu |
+|---|---|---|
+| první (nic se neví) | **1** | 4 |
+| druhý, nic se nezměnilo | **0** | — |
+| druhý, pohnulo se jedno PR | **1** | **1** (jen to pohnuté) |
+| fronta jen z vlastních PR | **0** | — |
+
+Poslední řádek je hranice, ne úspora: větve vlastních PR nese rozhlídka po slévatelnosti (#572),
+takže by dotaz tudy byl druhé volání za tutéž hodnotu.
+
+### Fixtura je skutečná série z veřejného repa
+
+`Tests/Fixtures/gh/pr-heads-series.json` je nezkrácená odpověď `gh api graphql` na `cli/cli`
+#14451–#14453 (*Refreshable tokens 2/7–4/7* od `babakks`) — **doopravdy stohovaná** PR, kde base
+každého je hlavou toho předchozího. Test nad ní nepočítá jen dekódování: pustí přes ni
+`Policy.series(in:refs:)` a čeká trojici od základu nahoru, tedy tentýž výpočet, jaký dělá okno.
+
+Starší fixtura `pr-heads.json` (#420) zůstává a testuje se proti ní, že odpověď **bez** větví hlavu
+nepoloží — „nevíme“ se od „nestojí na ničem“ musí poznat.
+
+### Kde se ověřila regrese vložením regrese (#513)
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| `series` nekouká na `livesInBaseRepository` (bere i forky) | `Hlava z forku sérii nezaloží`, `Nejistý původ hlavy sérii nezaloží` |
+| `seriesRefsProbe` nekouká na razítko (ptá se pořád) | `Klidný tik se na nic neptá` (`Policy`) i `Klidný tik se neptá` a `Odpověď bez větví se podruhé neptá` (store) |
+| `headProbe` neodstraňuje duplicity | `Sjednocení nemá duplicity a drží pořadí` (PR v dotazu dvakrát) |
+| fronta nepřeskládá členy (`Policy.grouped` vynecháno) | `Fronta přeskládá sérii od základu nahoru` **a** `Popisek je jeden a sedí nad základem` — popisek nad rozházenou skupinou nevznikne, což je ta stráž, kvůli které se kreslí jedině ve frontě |
+| pilulka u base větve se vrátí do tvaru `#14451 · 2. v sérii` | `Pořadí otevřeného PR a pořadí jeho základu se nedají zaměnit` **všech pět případů** a `Pilulka u base větve je jen odkaz na spodní PR` (změřeno po připomínce k prvnímu proklikání) |
+
+### Dvě čísla v hlavičce se testují tím, že se **nedají** zaměnit
+
+Řetěz v hlavičce nese pořadí otevřeného PR u jeho vlastní větve a `#14451` u té base. **Obě čísla
+byla pravdivá i v té podobě, která mátla** — proto nestačí test na jedno z nich:
+`neverConfusesTheTwoPositions` běží nad pozicemi **2 až 6** a tvrdí naráz, že v pilulkách řetězu je
+**právě jedno** pořadové číslo, že patří **hlavě** a že se rovná tomu, které o témž PR říká
+`Policy.seriesPill` v řádku fronty. Čísla se z textu vytahují **hledáním číslice zakončené tečkou**,
+tedy tvarem, kterým se ta dvě čísla dala zaměnit; `#14451` se do výčtu nedostane.
+
+### Že se to do řádku vejde, je měření, ne pohled
+
+Řádek fronty je úzký a od #509 se v něm o místo dělí mapa PR, tečky dráhy, pilulka a `Prompt →`.
+Pilulka série je do toho **další** prvek, takže `SeriesRowRenderTests` měří `fittingSize` mimo
+obrazovku (tatáž konstrukce jako `OwnLoopRowRenderTests`) a tvrdí čtyři věci: pilulka výšku řádku
+nezvedne, v **636 bodech** (obsah nejužšího okna bez railu) zůstane řádek na jedné řádce, **vlastní
+PR v sérii unese pilulku i dráhu naráz** — to je ta nejtěsnější kombinace v celém okně a vznikla
+až slitím dvou větví — a popisek přidá **21 bodů**, tedy jednu řádku, ne roztažený řádek pod sebou.
+
+### Co se v harnessu ověřit nedá
+
+- **Že je popisek nad skupinou ve frontě doopravdy vidět.** Testy tvrdí, že ho
+  `queueSeriesCaptions` vydá a že ho `PullRequestListView` předává; jestli se nakreslí a jak vypadá
+  vedle přerušované čáry, ověří jedině spuštěná aplikace. **Na běžícím okně je zatím doložený
+  jedině pruh desky** (pilulka a čára), protože přepnout rail na sekci `Fronta` jde jen kliknutím
+  a `osascript` ani syntetické `CGEvent` na tomhle stroji asistenční přístup nemají.
+- **Že se kreslený scénář ze zadání dá dneska vyfotit.** `keboola/job-queue` #725–#727 (`AJDA-563
+  [1/3]`–`[3/3]`) **sérií nejsou**: všechna tři mají dneska `baseRefName: main` (ověřeno
+  `gh api repos/keboola/job-queue/pulls/<n>`). Pro pohled na běžící okno se proto do konfigurace
+  slotu přidal zdroj `repo:cli/cli is:pr is:open author:babakks`, kde skutečná série leží.
 
 ## Návrh změny kódu (#528)
 

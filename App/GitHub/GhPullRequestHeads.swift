@@ -17,6 +17,12 @@ struct GhPullRequestHeadsResponse: Decodable {
 
     struct PullRequestNode: Decodable {
         let headRefOid: String
+        /// Větve (#513). **Volitelné, ačkoli je GraphQL vrací vždycky**: fixtury starší než #513
+        /// je nemají a tvrdé pole by z nich udělalo nerozluštitelnou odpověď — tedy z chybějící
+        /// vlastnosti porucha celého dotazu na frontu.
+        var headRefName: String?
+        var baseRefName: String?
+        var isCrossRepository: Bool?
         let commits: Commits?
     }
 
@@ -43,7 +49,11 @@ struct GhPullRequestHeadsResponse: Decodable {
         var heads: [PRIdentifier: PullRequestHead] = [:]
         for (index, id) in ids.enumerated() {
             guard let node = data[PullRequestHeadsQuery.alias(index)]??.pullRequest else { continue }
-            heads[id] = PullRequestHead(sha: node.headRefOid, committedAt: node.date(of: node.headRefOid))
+            heads[id] = PullRequestHead(
+                sha: node.headRefOid,
+                committedAt: node.date(of: node.headRefOid),
+                refs: node.refs
+            )
         }
         return heads
     }
@@ -59,5 +69,14 @@ extension GhPullRequestHeadsResponse.PullRequestNode {
     func date(of head: String) -> Date? {
         guard let commit = commits?.nodes?.last?.commit, commit.oid == head else { return nil }
         return commit.committedDate
+    }
+}
+
+extension GhPullRequestHeadsResponse.PullRequestNode {
+    /// Větve z odpovědi (#513). `nil`, když v ní **nejsou obě** — jedno jméno bez druhého
+    /// neodpovídá na nic, protože série stojí na porovnání jedné hlavy s druhým základem.
+    var refs: BranchRefs? {
+        guard let headRefName, let baseRefName else { return nil }
+        return BranchRefs(head: headRefName, base: baseRefName, isCrossRepository: isCrossRepository)
     }
 }
