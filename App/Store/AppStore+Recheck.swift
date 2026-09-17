@@ -150,6 +150,11 @@ extension AppStore {
                 for: pr,
                 at: material.headSha
             )
+            // Druhé kolo dá vědět samo (#523) — **až za uložením**, protože hláška se skládá
+            // z uložených verdiktů a z živé konverzace. Před zápisem by mluvila o kontrole, která
+            // v záznamu ještě není. Zrušený ani spadlý běh sem nedojde: hlásit „nic se nepohnulo“
+            // po session, která nedoběhla, by bylo tvrzení o datech, která nedorazila.
+            await notifyAboutReplyRound(on: pr)
         } catch is CancellationError {
             // Zrušení není selhání a **neukládá se z něj nic**: verdikty, které si nikdo
             // nevyžádal, by po zrušení zůstaly ležet u nálezů.

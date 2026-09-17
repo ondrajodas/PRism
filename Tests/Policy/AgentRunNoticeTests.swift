@@ -133,7 +133,10 @@ struct AgentRunNoticeTests {
         #expect(NotificationEvent.agentFix.replacementGroup == "agent")
         #expect(NotificationEvent.agentFix.replacementGroup != NotificationEvent.activity.replacementGroup)
         #expect(NotificationEvent.agentFix.replacementGroup != NotificationEvent.findings.replacementGroup)
-        #expect(groups.count == 4)
+        // Sedm událostí, **pět** skupin: tři výsledky review sdílejí jednu, zbytek má vlastní.
+        // Od #523 je mezi nimi `replies` — hláška o druhém kole nesmí přebít výsledek revieweera
+        // na tomtéž PR.
+        #expect(groups.count == 5)
     }
 
     /// Rozbitá hodnota v souboru se sráží na **výchozí (zapnuto)**, jako u zbytku notifikací:

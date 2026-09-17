@@ -11940,3 +11940,82 @@ i s nálezy, což je přesně ta cena, kterou to pole má.
   nepřečtená odpověď vyjde jako `bez odpovědi`, ne jako `opraveno`.
 - **Že session na zodpovězené vlákno nenarazí jinudy** (třeba přes `git log`). Prompt to zakazuje
   větou, ne branou — brána je ve vstupu, tedy v tom, že se takové vlákno vůbec nepředkládá.
+
+## Karta druhého kola, hláška a předepsané schválení (#523)
+
+Kresba nad daty z #522. Tři sady, a **většina tvrzení je negativních**: že se nic neodeslalo, že
+se na vlastním PR nehlásí nic a že se přes nezodpovězený bod nepředepisuje ani věta.
+
+### `ReviewReplyCardTests` — návrh verdiktu výčtem
+
+`Policy.replyProposal` se vyčerpává **mřížkou** `opraveno × odpovězeno × bez odpovědi` nad třemi
+vlákny: devět kombinací s vypsaným návrhem, aby při změně pravidla bylo vidět, **které buňky se
+hnuly**. Tvrdí se z ní jediná věta: schvaluje se **jedině tehdy, když nic nezbývá** — poměr
+`opraveno` ku `odpovězeno` do návrhu nemluví.
+
+Regrese vložena (`if false` místo `if tally.unanswered > 0`): padne šest z devíti buněk **a k tomu
+dva pojmenované testy** — tělo se začne předepisovat a tlačítko se přejmenuje zpátky na `Schválit`.
+Tedy trojí nález na jednu chybu, což je u pravidla, které rozhoduje o odeslaném `APPROVE`, žádoucí.
+
+Dál se tady tvrdí:
+
+- **Useknutá stránka vláken bere schválení** — a **zbývající bod je konkrétnější**: s obojím vyjde
+  `1 bez odpovědi`, ne `o všech vláknech nevíme`. Jinak by se ta akční věta schovala za obecnou.
+- **Tři podoby `bez odpovědi` se neslijí** (`Set(notes).count == 3`) a každá je vypsaná doslova.
+  Test na počet je tam schválně: shoda dvou vět se dá vyrobit překlepem a jednotlivá očekávání by
+  ji nechytila.
+- **Tělo netvrdí víc, než kolik se opravilo** — čtyři případy `(opraveno, odpovězeno)`.
+- **Předpis nepřepíše rozepsanou větu**, a bílé místo se za rozepsanou větu nepovažuje.
+- **Karta se na vlastním PR a nad `unknown` reportem nekreslí vůbec.**
+- **Sčítá se jedině přebytek opravených** — sedm oprav, jedna odpověď a jeden zbývající bod dají
+  `foldedFixed == 2` a sedm řádků v pořadí `✓ ✓ ✓ ✓ ✓ ↩ ○`.
+- **Datum bere nejnovější *odeslané* moje review**: rozepsané (`submittedAt == nil`) ani cizí se
+  nepočítá, takže karta nemůže tvrdit, že kolega odpovídá na něco, co neviděl.
+
+### `ReplyRoundNotificationTests` — čtyři způsoby, jak nedat vědět
+
+Nejcennější je tady to, co hláška **nevydá**, protože zbytečná notifikace se pozná až tím, že si
+ji člověk vypne:
+
+- **vlastní PR** (banner i řádek, a k tomu `isReported(.replyRound, on: .mine) == false` — tatáž
+  dvojitá kontrola jako u cizí aktivity);
+- **žádné moje vlákno** a **nenačtená konverzace**;
+- **nic se nepohnulo** — pět komentářů, všech pět bez odpovědi, žádný banner ani řádek.
+
+Regrese vložena (`ownership == .theirs || true`): padne tvrzení o vlastním PR ve dvou sadách —
+v `Policy` i ve storu, kde přes `notifyAboutReplyRound` prochází skutečný fake notifikačního
+centra.
+
+K tomu se tvrdí věta ze zadání doslova (`sykora-ji opravil 3 z 5` + `1 bez odpovědi`),
+**samostatná věta pro samé odpovědi** (`odpověděl na 2 z 3` — opravit a odpovědět se nesčítá do
+jednoho čísla) a **vlastní přepínač i skupina**, aby hláška nepřebila výsledek review na tomtéž PR.
+
+### `AppStoreReplyCardTests` — klik nic neodešle
+
+- **Předepsané schválení zapíše draft a složí sheet, nic víc**: `draft.verdict == .approve`,
+  `draft.body == "Díky, opraveno."` a `submission(for:)` je nenulové. Odeslání se odsud nevolá —
+  publisher vzniká až v `ReviewSubmission.send()`, ke kterému sada schválně nedojde.
+- **Bez karty se draft nezaloží** (vlastní PR).
+- **Rozepsaná věta přežije předpis.**
+- **Karta složí obě osy** po skutečném běhu kontroly přes `FakeReviewRunner`, tedy toutéž cestou
+  jako v provozu: dvě řady indexů, `opraveno` z verdiktu a `bez odpovědi` ze `still_applies`.
+- **Vypnutý přepínač nechá řádek v `Dění`** s `wasAnnounced == false`, tedy s chipem
+  `bez banneru` — přepínače rozhodují o vyrušení, ne o záznamu (#414).
+- **`Otevřít zbývající` přepne tab a vlákno rozbalí.**
+
+Tvrzení „na vlastním PR se nehlásí nic“ se tam filtruje **na druh** (`event == .replies`), ne na
+prázdný seznam: na vlastním PR chodí cizí aktivita (#335) a ta je v pořádku. Napsané jako prázdno
+by bylo falešně červené z důvodu, který s #523 nesouvisí — což se při psaní sady doopravdy stalo.
+
+### Co se v harnessu ověřit nedá
+
+- **Jestli karta v okně sedí tam, kde má.** Ověřeno **snímkem běžící aplikace** ve slotu `a`
+  a položením vedle renderu sekce 60 (postup výš, *Jak si zkontrolovat, jak view vypadá*). Stav se
+  přitom musel **vyrobit**: ve slotu není cizí PR, na kterém bych měl odeslaná vlákna, takže
+  `replyCard(for:)` dočasně vracela předepsanou kartu z proměnné prostředí. **Z toho neplyne nic
+  o párování** — jen to, jak se karta kreslí a jak se chová v úzkém sloupci.
+- Ten snímek přitom **našel chybu, kterou testy nevidí**: `Text("… \(Text(…))")` vybere
+  `Text(String)`, takže se do razítka vysázelo `Text(storage: SwiftUI…)`. Skládá se proto
+  `Text` + `Text`.
+- **Že kliknutí na `Schválit` doopravdy otevře sheet** — sheet je `@State` ve `ContentView`u
+  a store o něm neví. Store tvrdí jen to, že `submission(for:)` je nenulové.
