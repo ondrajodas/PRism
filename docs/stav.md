@@ -8985,9 +8985,10 @@ Přibylo 37 testů v pěti sadách; regrese se ověřila **vložením regrese u 
 autor vlákna podle prvního komentáře, přednost dat před modelem, ověření hlavy, posun indexu
 a `decodeIfPresent` u nového pole (bez něj se přestane číst **celý** záznam, tedy i nálezy).
 
-**Zákres do `docs/navrh.html` (sekce Z3a) tenhle PR nenese** — orchestrátor v dávce sekci
-nepřidělil a kreslit na vlastní pěst se v tomhle repu nesmí. Zbývá doplnit, než se bude kreslit
-#523.
+**Zákres do `docs/navrh.html` (sekce Z3a) patří k #523, ne sem** — tak to v dávce rozhodl
+orchestrátor. Na #522 není co kreslit (vznikají data a testy), takže zákres vzniká tam, kde vzniká
+i kresba: v #523, které si k tomu vyžádá číslo sekce. Není to tedy dluh tohohle PR, je to **zadání
+pro #523**.
 
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`ineligible_app`), takže se na pokyn uživatele nepouštěl. Vlastní revize diffu proběhla a je
