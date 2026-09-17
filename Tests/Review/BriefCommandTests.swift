@@ -90,6 +90,25 @@ struct BriefCommandTests {
         ])
     }
 
+    /// **Skutečná odpověď skutečné session**, ne vymyšlený literál — zachycená při měření ceny
+    /// u #516 (`claude -p` s argumenty z `BriefCommand.arguments`, vstup 2,7 kB stavu desky).
+    /// Ostatní případy popisují tvary, které model **umí** poslat; tenhle tvrdí, že ten, který
+    /// doopravdy poslal, projde.
+    @Test("Odpověď ze skutečného běhu se rozebere")
+    func readsARealAnswer() {
+        let captured = """
+            ADDED: Review na ondrajodas/PRism #584 skončil čistě.
+            BURNING: Na keboola/job-queue #727 jsou 2 blokující nálezy z 4.
+            NEXT: Vezmi si do merge ondrajodas/PRism #584.
+            """
+
+        #expect(BriefCommand.parse(captured) == [
+            BriefLine(part: .added, text: "Review na ondrajodas/PRism #584 skončil čistě."),
+            BriefLine(part: .burning, text: "Na keboola/job-queue #727 jsou 2 blokující nálezy z 4."),
+            BriefLine(part: .next, text: "Vezmi si do merge ondrajodas/PRism #584."),
+        ])
+    }
+
     /// **Jeden řádek je legitimní odpověď, ne porucha.** Otázka, na kterou ve vstupu odpověď není,
     /// se má vynechat — je to celý smysl toho, že brief drží pole a ne trojici polí.
     @Test("Vynechaná otázka není porucha")

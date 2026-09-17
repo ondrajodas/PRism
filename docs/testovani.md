@@ -10615,7 +10615,7 @@ je čistá funkce, takže se testuje výčtem a bez mockování.
 | Pozná se spadlá session od vypnuté? | `AppStoreBriefTests` + `BriefInputTests` — blok má **čtyři různé podoby** a žádná není prázdná | Pohledem na obrazovku: prázdný rámeček a nekreslený blok vypadají skoro stejně |
 | Účtuje se i nepovedený běh? | `AppStoreBriefTests` — `dailySpend` po běhu **bez textu** | Testem šťastné cesty; ten projde i tehdy, když se cena u selhání zahodí |
 | Přežije dnešek restart? | `BriefStoreTests` — **druhá instance** `BriefStore`u nad touž cache | Tvrzením nad jednou instancí: to projde i nad pamětí |
-| Rozebere se odpověď na pojmenované řádky? | `BriefCommandTests` — **výčtem tvarů**, které model umí poslat: ozdoba, malá písmena, próza kolem, dvojí klíč, `CRLF`, ohradníky | Jedním šťastným vstupem: ten projde i nad parserem, který hledá první dvojtečku |
+| Rozebere se odpověď na pojmenované řádky? | `BriefCommandTests` — **výčtem tvarů**, které model umí poslat: ozdoba, malá písmena, próza kolem, dvojí klíč, `CRLF`, ohradníky — **a k tomu jedna odpověď zachycená ze skutečného běhu** (fixtures jsou skutečné výstupy) | Jedním šťastným vstupem: ten projde i nad parserem, který hledá první dvojtečku |
 | Je vynechaný řádek odpověď, ne porucha? | `BriefCommandTests` — jeden řádek je platný výsledek, **nula je `nil`** | Tvrzením „vrátí tři řádky“: to si vynutí právě tu vymyšlenou větu |
 | Jede to na levném modelu? | `BriefCommandTests` — `--model` **i jeho hodnota** | Prohlédnutím argumentů okem: chybějící přepínač vypadá jako „vybere se sám“, což je taky odpověď — jen za 14 $ měsíčně |
 | Jsou ty tři věty k něčemu? | **spuštěním** — cizí model, síť a peníze | Ničím v harnessu |
