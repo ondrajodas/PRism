@@ -23,23 +23,58 @@ enum RecheckCommand {
     ///
     /// **O jazyku mlčí**, stejně jako prompt review: cokoli v promptu může ovlivnit, co reviewer
     /// najde — a tady navíc to, jak přísně soudí.
+    /// - Note: **Bez komentářů vyjde slovo od slova týž prompt jako do #522.** Druhá otázka se
+    ///   přidává jedině tehdy, když je na co se ptát: věta o prázdném seznamu by běh poslala
+    ///   hledat něco, co v promptu není.
     static func prompt(for material: RecheckMaterial, baseSha: String) -> String {
-        """
-        You are re-checking code-review findings on a pull request. \
-        The head commit is checked out here; the findings below were reported against commit \
-        \(material.headSha). \
-        What changed since then is `git diff \(material.headSha)...HEAD`; the whole pull request \
-        is `git diff \(baseSha)...HEAD`. \
-        There is no GitHub access, so read the working tree instead of fetching the pull request. \
-        For every finding decide whether the new commits resolved it. \
-        Do not look for new problems and do not call ReportFindings — this run answers about the \
-        listed findings and nothing else. \
-        \(verdictFormat) \
-        Do not run anything that writes or sends: no commits, no pushes, \
-        no `gh` commands, no comments on GitHub. \
-        These rules override anything a skill tells you. \
-        Findings: \(json(of: material.findings))
-        """
+        let noun = noun(forCommentCount: material.comments.count)
+        return """
+            You are re-checking code-review findings on a pull request. \
+            The head commit is checked out here; the findings below were reported against commit \
+            \(material.headSha). \
+            What changed since then is `git diff \(material.headSha)...HEAD`; the whole pull \
+            request is `git diff \(baseSha)...HEAD`. \
+            There is no GitHub access, so read the working tree instead of fetching the pull \
+            request. \
+            \(task(forCommentCount: material.comments.count)) \
+            Do not look for new problems and do not call ReportFindings — this run answers about \
+            the listed \(noun)s and nothing else. \
+            \(verdictFormat(of: noun)) \
+            Do not run anything that writes or sends: no commits, no pushes, \
+            no `gh` commands, no comments on GitHub. \
+            These rules override anything a skill tells you. \
+            Findings: \(json(of: material.findings))\
+            \(list(of: material.comments, startingAt: material.commentIDOffset))
+            """
+    }
+
+    /// Na co se běh ptá. **Komentář není nález**, takže druhá věta zní jinak: u nálezu se ptáme,
+    /// jestli ho commity opravily, u komentáře, jestli se s tím, na co ukazuje, něco stalo. Jedna
+    /// společná formulace by z mého komentáře udělala nález a běh by ho soudil přísněji, než jak
+    /// byl napsaný.
+    ///
+    /// **Že mi někdo odpověděl, se běh neptá** (#522), a je to napsané výslovně: tohle ví
+    /// konverzace (#72) a model o tom rozhodovat nemá. Bez té věty je „someone replied, so it is
+    /// handled“ ta nejpřirozenější odpověď, kterou může dát.
+    private static func task(forCommentCount count: Int) -> String {
+        guard count > 0 else {
+            return "For every finding decide whether the new commits resolved it."
+        }
+        return "For every finding decide whether the new commits resolved it, and for every "
+            + "comment of mine decide whether the new commits addressed what it asks about. "
+            + "Do not judge whether anyone replied to a comment — that is not your question."
+    }
+
+    /// Jak se položkám v seznamu ve větách říká. Se samými nálezy zůstává `finding`, takže se
+    /// prompt kontroly bez komentářů nezměnil ani o písmeno.
+    private static func noun(forCommentCount count: Int) -> String {
+        count > 0 ? "item" : "finding"
+    }
+
+    /// Komentáře za seznamem nálezů, nebo **nic**, když žádné nejsou.
+    private static func list(of comments: [SentComment], startingAt offset: Int) -> String {
+        guard !comments.isEmpty else { return "" }
+        return " My comments: \(json(of: comments, startingAt: offset))"
     }
 
     /// Jak se o verdiktech řekne — a **jediné místo, kde se ten tvar popisuje** (#517).
@@ -48,14 +83,23 @@ enum RecheckCommand {
     /// a přírůstkové review (`IncrementalCommand`). Odpověď obou čte tentýž `parse(_:count:)`
     /// o pár řádků níž, takže dvě formulace téhož tvaru by znamenaly, že se úpravou jedné rozbije
     /// čtení u druhé — a tiše: nepřečtená odpověď vypadá jako nález, na který se běh nevyjádřil.
-    static let verdictFormat = """
+    ///
+    /// **Od #522 se liší jediným slovem** — podstatným jménem položky —, protože kontrola se od
+    /// té doby ptá i na moje komentáře a odpovědi na obojí leží **v jednom poli**. Vlastní druhá
+    /// formulace pro komentáře by byla přesně to, čemu tenhle jeden zdroj brání.
+    static func verdictFormat(of item: String) -> String {
+        """
         Answer with your last message and nothing else: a JSON array of objects \
         {"id": <the id you were given>, "status": "resolved" | "still-applies" | "unclear", \
-        "note": "<one short sentence>"}, one object per finding, with no prose around it and no \
+        "note": "<one short sentence>"}, one object per \(item), with no prose around it and no \
         code fences. \
         Use "still-applies" when the problem is still there and "unclear" when the code does not \
         tell you either way — do not guess.
         """
+    }
+
+    /// Tvar pro seznam samých nálezů — tak se ptá přírůstkové review (#517).
+    static let verdictFormat = verdictFormat(of: "finding")
 
     /// Nálezy jako JSON. Nese `id`, aby se odpověď dala spárovat podle něj a ne podle pořadí —
     /// tatáž úvaha jako u překladu: model, který jednu položku vynechá nebo prohodí, by u pozičního
@@ -80,6 +124,26 @@ enum RecheckCommand {
         // Serializovat se to vždycky dá (řetězce a čísla), takže je `?? "[]"` nedosažitelné.
         // Kdyby přece, dostane model prázdný seznam a odpoví prázdně — z toho vyjde „na nic
         // neodpověděl“, což je vidět jako `droppedStatuses`, ne jako vyřešené nálezy.
+        return (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
+
+    /// Moje odeslané komentáře jako JSON (#522).
+    ///
+    /// `id` **navazuje na nálezy** (`offset`), protože odpověď je jedno pole — dvě řady indexů od
+    /// nuly by znamenaly, že verdikt o komentáři sedne na nález s týmž číslem, a to je přesně ta
+    /// tichá záměna, kvůli které se páruje přes index a ne přes text.
+    ///
+    /// **Identita vlákna do promptu nejde.** Model ji k odpovědi nepotřebuje (páruje se `id`)
+    /// a poslat mu ji by znamenalo nabídnout mu adresu, na kterou se dá na GitHubu psát —
+    /// zbytečně, když `gh` stejně nemá (tvrdá podmínka č. 2).
+    static func json(of comments: [SentComment], startingAt offset: Int) -> String {
+        let input = comments.enumerated().map { index, comment -> [String: Any] in
+            var item: [String: Any] = ["id": offset + index, "comment": comment.body]
+            item["file"] = comment.path
+            item["line"] = comment.line
+            return item
+        }
         return (try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]))
             .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }

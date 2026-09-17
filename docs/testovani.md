@@ -11601,3 +11601,84 @@ Scéna `16-agent-bezi` dostala **čtyři kroky** místo jednoho: na renderu se p
 panelu o 278 bodech vejde a jestli se dlouhá cesta ořízne uprostřed, místo aby přetekla. Scéna
 `13-slevam` má ocas o dvou prvcích a v renderu z něj musí být vidět **jediná** řádka — to je ta
 věta o slévání konfliktů, která se s přechodem na jednu mapu nesmí změnit.
+
+## Druhé kolo nad mými komentáři (#522)
+
+Datová vrstva — v okně z ní není vidět nic než jedna věta v nápovědě u tlačítka (kreslí #523),
+takže se všechno tvrdí v harnessu. Pět sad, a **tři z nich tvrdí, že se něco nestalo**.
+
+### `SentCommentsTests` — kdo je autor, nad skutečnými daty
+
+Sada stojí na **ostrých odpovědích** (`conversation-small.json`, `conversation-threads.json`,
+`conversation-timeline.json`), protože právě tady se dá splést tvar dat. `viewer` se u dvou případů
+přepisuje na jiný login: `viewer` je samostatné pole GraphQL odpovědi (kdo se dívá), takže tatáž
+vlákna viděná jiným účtem jsou stav, který v provozu nastane běžně — a je to jediný způsob, jak se
+na `cli/cli` dostat k vláknům, která jsou „moje“.
+
+- **Odpověď do cizího vlákna ze mě autora nedělá.** `conversation-timeline.json` má tři vlákna
+  založená Copilotem, do kterých `ondrajodas` odpověděl. Pravidlo „je v něm můj komentář“ z nich
+  udělá tři moje — **a na syntetickém vzorku by prošlo**. Ověřeno vložením regrese: záměna
+  `items.first` za `items.first(where: isMine)` sadu položí právě tímhle případem.
+- **Zastaralé vlákno si nese `originalLine`** — `line` u něj GitHub neposílá, takže bez toho by
+  komentář šel do promptu bez kotvy a session by ho hledala v celém souboru.
+- **Vyřešené vlákno z druhého kola nevypadne.**
+- **Zodpovězené vlákno se modelu nepředkládá** a **vlastní druhý komentář odpovědí není**.
+
+### `ReviewReplyReportTests` — dvě osy maticí, ne vybranými případy
+
+`Policy.replyState(answered:verdict:against:)` je jediné místo, kde se data a model skládají
+dohromady, takže se vyčerpává **celý součin**: odpověď (ano/ne) × verdikt (`nil` a tři hodnoty
+`RecheckStatus.Verdict`). Osm případů s vypsaným očekáváním — tabulka je v testu proto, aby při
+změně pravidla bylo vidět, **které buňky se hnuly**. K tomu čtyři případy „bez platné hlavy
+nevydá model žádný stav“, tedy tvrdá podmínka č. 5 nad všemi verdikty naráz.
+
+Nejcennější tvrzení: **odpověď z dat přebije verdikt modelu**. Model řekl `resolved`, ve vlákně je
+odpověď, a přesto vyjde `odpovězeno` — s `note == nil`, aby pod stavem z dat nestála věta, která
+by vypadala jako jeho zdroj. Regrese vložena (`case .resolved` s přednostní `.fixed`): padne
+maticový případ i ten pojmenovaný, tedy dvakrát a v obou vrstvách.
+
+**Useknutá stránka vláken je v reportu vidět** (`conversation-truncated.json`: 38 celkem, jedno
+dorazilo) a na úplné odpovědi se to **nerozsvítí** — hláška o zkrácení, která svítí vždycky,
+přestane něco znamenat.
+
+**Posunutá hlava zhasne verdikty, odpovědi zůstanou.** Kdyby se to slilo do jednoho `outdated`,
+schoval by příchozí commit větu kolegy — a tenhle test je jediné místo, kde by se to poznalo.
+Regrese vložena vynecháním porovnání `againstHeadSha == head`.
+
+### `RecheckCommandTests` — prompt, a hlavně to, co v něm není
+
+- **Bez komentářů je prompt slovo od slova ten z #150** (`one object per finding`, žádné
+  `My comments`). Kontrola běží dál na PR, kde jsem nic neodeslal, a jiná formulace by u ní
+  znamenala jinou přísnost, aniž by se o to kdokoli řekl.
+- **`id` komentářů navazuje na nálezy** (`commentIDOffset`, `questionCount`).
+- **Prompt zakáže soudit, jestli někdo odpověděl.** Bez té věty je „someone replied, so it is
+  handled“ nejpřirozenější odpověď, kterou model může dát.
+- **Identita vlákna do promptu nejde** — model ji k odpovědi nepotřebuje a byla by to adresa, na
+  kterou se dá na GitHubu psát.
+- **Prompt zůstává jeden řádek** a formát pro samé nálezy (#517) je nezměněný.
+
+### `AppStoreRecheckTests` — jedna session, dvě řady indexů
+
+- **Komentáře jedou v téže session**: jeden požadavek, `kind == .recheck`, a verdikty se rozdělí
+  podle indexu (`0` nálezu, `1` prvnímu komentáři). Regrese vložena vynecháním posunu — padne
+  tahle sada i párovací test v `Policy`.
+- **`odpovězeno` nepochází z modelu**: session o zodpovězeném vlákně nedostane ani zmínku
+  (`request.recheck?.comments` ho neobsahuje), a report ho přesto označí za zodpovězené.
+- **Bez načtené konverzace se kontrola chová jako do #522** — prázdné `comments`, prázdné
+  `replyStatuses`, report `unknown` (**ne** prázdný seznam).
+
+### `ReviewStoreRecheckTests` — soubory z disku se musí číst dál
+
+Verdikty o vláknech přežijí restart, a hlavně: **kontrola uložená do #522 se přečte dál**. Starší
+tvar se **vyrobí z dnešního záznamu odebráním klíče**, ne opsáním z hlavy — napsaný literál by
+nesl tvar, o kterém si myslím, že na disku je (kódování `outcome` i data je věcí enkodéru).
+Regrese vložena záměnou `decodeIfPresent` za `decode`: záznam se přestane číst **celý**, tedy
+i s nálezy, což je přesně ta cena, kterou to pole má.
+
+### Co se v harnessu ověřit nedá
+
+- **Jak model odpovídá na dva seznamy v jednom poli.** Že tvar odpovědi pochopí, se dá tvrdit
+  jedině spuštěním; harness testuje `parse` nad předepsaným textem. Riziko je jednostranné:
+  nepřečtená odpověď vyjde jako `bez odpovědi`, ne jako `opraveno`.
+- **Že session na zodpovězené vlákno nenarazí jinudy** (třeba přes `git log`). Prompt to zakazuje
+  větou, ne branou — brána je ve vstupu, tedy v tom, že se takové vlákno vůbec nepředkládá.
