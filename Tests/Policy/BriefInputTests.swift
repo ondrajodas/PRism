@@ -39,13 +39,14 @@ struct BriefInputTests {
 
     private func entry(
         _ number: Int,
+        repo: String = "keboola/job-queue",
         state: ReviewState = .notStarted,
         blocking: Int = 0,
         hasDraft: Bool = false,
         author: String = "sykora-ji"
     ) -> QueueEntry {
         QueueEntry(
-            pullRequest: summary(number, author: author),
+            pullRequest: summary(number, repo: repo, author: author),
             state: state,
             row: QueueRow(blocking: blocking),
             hasDraft: hasDraft
@@ -81,7 +82,7 @@ extension BriefInputTests {
             ]),
             snoozed: 2,
             now: now
-        )
+        ).text
 
         #expect(input.contains("na tahu 2"))
         #expect(input.contains("odložených 2"))
@@ -95,11 +96,32 @@ extension BriefInputTests {
         #expect(!input.contains("blokuje 5"))
     }
 
+    /// **Seznam cílů odkazů vzniká z týchž pruhů jako text** (#516), takže do něj patří právě ty
+    /// pull requesty, o kterých se session dozvěděla — nic míň a nic navíc.
+    @Test("Materiál nese pull requesty, které do textu doopravdy šly")
+    func carriesTheMentionedPullRequests() {
+        let material = Policy.briefInput(
+            board: board([
+                entry(4, state: .completed(findings: 5), blocking: 5),
+                entry(584, repo: "ondrajodas/PRism"),
+            ]),
+            now: now
+        )
+
+        #expect(material.mentioned == [
+            PRIdentifier("keboola/job-queue#4")!,
+            PRIdentifier("ondrajodas/PRism#584")!,
+        ])
+        for pullRequest in material.mentioned {
+            #expect(material.text.contains("\(pullRequest.repo) #\(pullRequest.number)"))
+        }
+    }
+
     /// Prázdný pruh se do vstupu **nedostane** — je to tatáž množina, jakou kreslí deska
     /// (`visibleLanes`), takže brief nemluví o pruzích, které na obrazovce nejsou.
     @Test("Prázdné pruhy se do vstupu nepíšou")
     func skipsEmptyLanes() {
-        let input = Policy.briefInput(board: board([entry(726)]), now: now)
+        let input = Policy.briefInput(board: board([entry(726)]), now: now).text
 
         #expect(input.contains("Pruh Přečíst (1):"))
         #expect(!input.contains("Pruh Rozhodnout"))
@@ -112,7 +134,7 @@ extension BriefInputTests {
         let input = Policy.briefInput(
             board: board([entry(726)], activity: [event("Review doběhlo", detail: "1 nález", at: -600)]),
             now: now
-        )
+        ).text
 
         #expect(input.contains("Dění (1 nejnovějších):"))
         #expect(input.contains("před 10 min: Review doběhlo — 1 nález"))
@@ -122,7 +144,7 @@ extension BriefInputTests {
     /// větu.
     @Test("Prázdné dění se nepíše vůbec")
     func skipsEmptyActivity() {
-        #expect(!Policy.briefInput(board: board([entry(726)]), now: now).contains("Dění"))
+        #expect(!Policy.briefInput(board: board([entry(726)]), now: now).text.contains("Dění"))
     }
 
     /// Nad tímtéž stavem vyjde **tentýž text**. Bez toho by se nedalo tvrdit, že o obsahu
@@ -152,7 +174,7 @@ extension BriefInputTests {
                 activity: [event("Review spadlo", at: -60)]
             ),
             now: now
-        )
+        ).text
 
         // Cesty a schémata — ani z chybové hlášky, která je v `ReviewState` nese.
         #expect(!input.contains("/Users/"))

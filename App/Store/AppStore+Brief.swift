@@ -65,10 +65,10 @@ extension AppStore {
         // **Materiál se skládá teď, ne v tasku.** Deska je v paměti store a o tik později by to
         // byl jiný stav — brief by pak mluvil o něčem jiném, než co bylo na obrazovce ve chvíli,
         // kdy jsem na tlačítko klikl.
-        let input = Policy.briefInput(board: board, snoozed: snoozedPullRequests.count, now: time.now)
+        let material = Policy.briefInput(board: board, snoozed: snoozedPullRequests.count, now: time.now)
         briefState = .running
         briefTask = Task { [weak self] in
-            await self?.run(BriefRequest(input: input), with: briefWriter)
+            await self?.run(BriefRequest(input: material.text), mentioning: material.mentioned, with: briefWriter)
             self?.briefTask = nil
         }
     }
@@ -77,7 +77,11 @@ extension AppStore {
     ///
     /// **Cena jde do `SpendLedger` vždycky, i když text nedorazil** (`recordSpend`): zabitá session
     /// peníze stála taky, a útrata, která se ztratí právě u nepovedeného běhu, je o účtu lež.
-    private func run(_ request: BriefRequest, with writer: any BriefWriting) async {
+    private func run(
+        _ request: BriefRequest,
+        mentioning mentioned: [PRIdentifier],
+        with writer: any BriefWriting
+    ) async {
         let answer: BriefAnswer
         do {
             answer = try await writer.write(request)
@@ -106,7 +110,15 @@ extension AppStore {
             briefState = .failed(reason: "Session nevrátila žádný text.")
             return
         }
-        let brief = Brief(lines: lines, writtenAt: time.now, cost: answer.usage?.cost)
+        // **Seznam cílů odkazů jde do briefu odsud, ne z odpovědi.** Jsou to PR, které do zadání
+        // doopravdy šly (`BriefMaterial.mentioned`) — text od modelu o nich nerozhoduje, jenom se
+        // v něm hledá, kde na ně ukazuje.
+        let brief = Brief(
+            lines: lines,
+            writtenAt: time.now,
+            cost: answer.usage?.cost,
+            mentioned: mentioned
+        )
         briefState = .ready(brief)
         // **Na disk až po úspěchu.** Uložený neúspěch by po restartu vypadal jako brief, a hlavně
         // by automatu tvrdil, že je dnešek shrnutý.

@@ -4250,6 +4250,41 @@ Odpověď session je proto **protokol, ne volný text**: tři řádky uvozené k
 - **Zákaz vypisovat seznamy čísel** je ze stejného důvodu, proč brief vůbec je: čísla pull
   requestů stojí v pruzích **pod** ním, takže věta, která je zopakuje, nešetří nic.
 
+### Odkazy ve větách: odkud se berou cíle (#516, po proklikání)
+
+Číslo pull requestu ve větě je **odkaz** — klikne se na něj a otevře se záložka toho PR. Otevírá
+ji `AppStore.openPullRequest`, tedy **tatáž cesta jako `prism://`, `Odkaz` v paletě ⌘K a klik ve
+frontě** (#531): druhá cesta k otevření záložky by se s tou první rozešla přesně v tom, co je na
+ní jediné zajímavé — co se stane s PR, který ve zdrojích není.
+
+**Uzavřeným seznamem cílů je to, co do briefu doopravdy šlo, ne to, co model napsal.** Proto vrací
+`Policy.briefInput` od téhle změny `BriefMaterial` — text **a** seznam pull requestů — a obojí
+vzniká **jednou procházkou** přes tytéž pruhy desky. Kdyby seznam skládala druhá funkce, rozešly by
+se ty dvě zrovna tam, kde na tom záleží. Seznam pak putuje do `Brief.mentioned` a **ukládá se
+s briefem**: brief je snímek jedné chvíle a odkazy v něm mají ukazovat tam, kam ukazoval jeho text;
+dopočítaný z dnešní desky by po tiku zmizel nebo přeskočil jinam. Čtení uloženého briefu je proto
+**tolerantní** (`decodeIfPresent`) — brief bez seznamu je pořád platný brief a tvrdé dekódování by
+kvůli chybějícímu klíči zahodilo razítko dnešního běhu, za který se pak zaplatí znovu.
+
+Kde odkaz ve větě **stojí**, se hledá v textu (`#\d+`) — ale na co ukazuje, rozhoduje
+`Policy.briefSpans(of:mentioning:)` výčtem, ne heuristikou:
+
+- **Před číslem stojí jméno repozitáře** (`owner/name #584`, i bez mezery, bez ohledu na velikost
+  písmen) — cílem je **jedině** ten repozitář s tím číslem. Jméno, které v seznamu není, je
+  **prostý text**, ne nejbližší podobný: `keboola/job-queue #584` nad deskou, kde je jen
+  `ondrajodas/PRism #584`, by jinak odkazoval na cizí pull request. Cokoli s lomítkem se tím stává
+  nárokem na repozitář, který se musí potkat se seznamem.
+- **Před číslem jméno repozitáře nestojí** — cílem je PR s tím číslem, **jestli je v seznamu
+  jediný**. Dvě repa s týmž číslem znamenají prostý text; hádat se nemá co.
+- **Když se odkaz složit nedá, zůstane prostý text.** Žádné mrtvé tlačítko a žádná hláška — věta
+  se čte dál stejně.
+
+**Odkazem je jen číslo**, ne celé `owner/name #584`: je to zvýrazněné číslo uvnitř věty, jméno
+repozitáře před ním je próza a slouží k rozpoznání cíle. Kreslí se to `AttributedString`em, aby se
+věta lámala jako dřív; `.link` nese adresu na GitHubu (`Policy.githubURL`), takže ji zvládne
+i kontextová nabídka, a `OpenURLAction` na bloku ji rozebere **toutéž funkcí jako vložený odkaz
+v paletě** (`Policy.linkedPullRequest`). Co se rozebrat nedá, se nepolyká — jde systému.
+
 ### Co ta session stojí a proč zrovna tolik (#516)
 
 První verze nechala výběr modelu na `claude`, jako to dělá dotažení textu issue a překlad nálezů.

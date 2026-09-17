@@ -16,7 +16,8 @@ struct BriefStoreTests {
             BriefLine(part: .burning, text: "Sandbox #4 blokuje."),
         ],
         writtenAt: Date(timeIntervalSince1970: 1_700_000_000),
-        cost: 0.03
+        cost: 0.03,
+        mentioned: [PRIdentifier("keboola/job-queue#4")!]
     )
 
     @Test("Uložený brief přečte druhá instance")
@@ -42,5 +43,26 @@ struct BriefStoreTests {
         try FileManager.default.createDirectory(at: layout.root, withIntermediateDirectories: true)
         try Data("{ tohle není brief".utf8).write(to: layout.briefFile)
         #expect(await BriefStore(layout: layout).load() == nil)
+    }
+
+    /// **Brief bez seznamu cílů odkazů je pořád platný brief** (#516) — a je to měřitelný rozdíl
+    /// proti tvrdému dekódování: kdyby chybějící klíč soubor zahodil, přišel by automat o razítko
+    /// dnešního běhu a zaplatil by za něj znovu.
+    @Test("Brief uložený bez cílů odkazů se přečte, jen bez nich")
+    func readsABriefWithoutLinkTargets() async throws {
+        let directory = try TemporaryDirectory()
+        let layout = CacheLayout(root: directory.url)
+        try FileManager.default.createDirectory(at: layout.root, withIntermediateDirectories: true)
+        try Data("""
+            {
+              "cost" : 0.03,
+              "lines" : [ { "part" : "added", "text" : "Přes den přišly dva PR do fronty." } ],
+              "writtenAt" : "2023-11-14T22:13:20Z"
+            }
+            """.utf8).write(to: layout.briefFile)
+
+        let loaded = try #require(await BriefStore(layout: layout).load())
+        #expect(loaded.lines.count == 1)
+        #expect(loaded.mentioned.isEmpty)
     }
 }

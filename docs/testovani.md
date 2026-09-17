@@ -10618,6 +10618,9 @@ je čistá funkce, takže se testuje výčtem a bez mockování.
 | Rozebere se odpověď na pojmenované řádky? | `BriefCommandTests` — **výčtem tvarů**, které model umí poslat: ozdoba, malá písmena, próza kolem, dvojí klíč, `CRLF`, ohradníky — **a k tomu jedna odpověď zachycená ze skutečného běhu** (fixtures jsou skutečné výstupy) | Jedním šťastným vstupem: ten projde i nad parserem, který hledá první dvojtečku |
 | Je vynechaný řádek odpověď, ne porucha? | `BriefCommandTests` — jeden řádek je platný výsledek, **nula je `nil`** | Tvrzením „vrátí tři řádky“: to si vynutí právě tu vymyšlenou větu |
 | Jede to na levném modelu? | `BriefCommandTests` — `--model` **i jeho hodnota** | Prohlédnutím argumentů okem: chybějící přepínač vypadá jako „vybere se sám“, což je taky odpověď — jen za 14 $ měsíčně |
+| Odkazuje se jedině na PR, který do briefu šel? | `BriefLinksTests` — **negativně**: neznámé číslo, cizí jméno repa a dvojznačné holé číslo zůstanou textem | Tvrzením „na `#584` se dá kliknout“: to projde i nad funkcí, která odkazuje na cokoli, co vypadá jako číslo |
+| Je seznam cílů tentýž jako text? | `BriefInputTests` — `mentioned` **a** kontrola, že každý z nich v textu doopravdy stojí; `AppStoreBriefTests` — hotový brief ho nese z materiálu | Testem nad samotným seznamem: ten projde i tehdy, když se skládá jinde než text |
+| Nezmění rozdělení na odkazy větu? | `BriefLinksTests` — spany se **složí zpátky doslova** | Porovnáním počtu spanů: ten sedí i nad textem, ze kterého vypadl znak |
 | Jsou ty tři věty k něčemu? | **spuštěním** — cizí model, síť a peníze | Ničím v harnessu |
 
 ### Kde se ověřila regrese vložením regrese (#516)
@@ -10631,6 +10634,8 @@ U čtyř vět, na kterých #516 stojí, se chyba **dočasně vrátila** a koukal
 | do řádku vstupu přidána adresa pull requestu | *Vstup nenese cestu na disk, URL ani kód* a ve store *Session dostane stav aplikace, ne cesty a kód* |
 | spadlá session nechána ve stavu `never` místo `failed` | *Spadlá session nechá v bloku větu a nabídku, ne prázdno* — tři tvrzení včetně toho, že se tlačítko jmenuje `Zkusit znovu` |
 | `--model` odebrán z `BriefCommand.arguments` (návrat k tomu, co stálo $0,46) | *Model je vynucený a je to ten levný* — **dvě** tvrzení, přítomnost přepínače i hodnota |
+| v `briefTarget` odebrána podmínka jednoznačnosti (první kandidát s tím číslem) | *Dvojznačné holé číslo zůstává textem* a *Cizí jméno repa odkaz nevyrobí, i když je číslo jednoznačné* — obojí, protože bez ní stačí k odkazu **samo číslo** |
+| `Brief.mentioned` dekódován tvrdě (`decode` místo `decodeIfPresent`) | *Brief uložený bez cílů odkazů se přečte, jen bez nich* — soubor se zahodil celý, tedy i razítko dnešního běhu |
 | z `labelled` odebrán požadavek na dvojtečku za klíčem | *Věta, která klíčem jen začíná, není návěští* — `NEXT week bude klid.` se rozebralo na řádek `next` s textem `eek bude klid.`, tedy přesně ta tichá ztráta prvního slova, kvůli které ta podmínka je |
 
 ### Dvě věci, na kterých scéna store testu stojí
@@ -10648,6 +10653,13 @@ U čtyř vět, na kterých #516 stojí, se chyba **dočasně vrátila** a koukal
 Že tři věty odpovídají tomu, co je na desce, a že se v nich neobjeví nic vymyšleného — to je cizí
 model, síť a peníze. V harnessu se tvrdí jedině **hranice** (co session dostala, kdy se pustila, co
 se z jejího výsledku přijalo), ne **kvalita textu**. Odtud věta v popisu PR.
+
+**Totéž platí o kliknutí na odkaz.** Harness tvrdí, **které číslo se odkazem stane a na co ukazuje**
+(`BriefLinksTests`) a že otevření jde jedinou cestou (`AppStore.openPullRequest`) — ale že klik
+v okně doopravdy otevře záložku, se ověřit nedá: je to `AttributedString` s `.link` a `OpenURLAction`
+na bloku, tedy dvě věci, které se projeví až v běžícím okně. Kdyby se odchycení nepovedlo, odkaz by
+se **otevřel v prohlížeči** místo v záložce — tedy nic rozbitého, jen něco jiného, což je přesně ten
+druh vady, kterou zelený běh nechytí. Proklikne to člověk.
 
 ## Kolik stojí jeden brief a kde ty peníze doopravdy jsou (#516)
 

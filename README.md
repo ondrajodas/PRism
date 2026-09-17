@@ -162,6 +162,14 @@ nástroje**: dostane hotový stav aplikace (počty z pruhů, řádky viditelnýc
 z kódu už je review logika a ta patří do skillu, ne do aplikace. Pod větami stojí
 `shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu` a tlačítko `Shrň znovu`.
 
+**Čísla pull requestů ve větách otevírají záložku** — kliknutím na `#727` se PR otevře stejně jako
+z fronty, z palety ⌘K nebo z `prism://`; je to **tatáž cesta**, ne druhá, takže se otevře i PR,
+který mezitím z fronty vypadl (jako záložka ke čtení). Odkaz ale vznikne **jenom pro pull request,
+který do briefu doopravdy šel**: text je od modelu, takže si číslo umí vymyslet, a odkaz na
+neexistující PR je horší než prostý text. Cíl navíc neurčuje samo číslo — v briefu stojí čísla
+z víc repozitářů —, takže **když se nedá poznat repozitář, zůstane číslo obyčejným textem**. Žádné
+mrtvé tlačítko a žádná hláška.
+
 **Otázka, na kterou ve stavu aplikace odpověď není, mlčí** — řádek se prostě nenakreslí. Struktura,
 která by si vynutila větu na každou ze tří otázek, si o vymyšlenou větu říká, a to je zrovna to,
 čemu se brief vyhýbá.

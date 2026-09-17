@@ -174,6 +174,20 @@ extension AppStoreBriefTests {
         #expect(!input.contains(".swift"))
     }
 
+    /// **Cíle odkazů si brief nese z materiálu, ne z odpovědi modelu** (#516). Text je volný
+    /// výstup session, takže o tom, na co se dá kliknout, nesmí rozhodovat — rozhoduje o tom
+    /// seznam pull requestů, které do zadání doopravdy šly.
+    @Test("Hotový brief nese pull requesty, které do zadání šly")
+    func carriesLinkTargetsFromTheInput() async throws {
+        let scene = await store(mode: .onDemand)
+
+        scene.store.writeBrief()
+        await settle(scene.store)
+
+        let brief = try #require(scene.store.briefState.brief)
+        #expect(brief.mentioned == [PRIdentifier("keboola/job-queue#727")!])
+    }
+
     /// **Spadlá session nesmí skončit prázdnem.** Prázdný blok je k nerozeznání od vypnutého
     /// briefu, takže se v něm musí objevit věta o tom, že se to nepovedlo — i s důvodem — a
     /// nabídka zkusit to znovu.

@@ -7805,6 +7805,46 @@ míň, než data unesou.
 (#512): není to nález, mluví o celé desce a nese u sebe **kdy vznikl**. Tvrdá podmínka č. 5 se tím
 nemění — klíčované `headSha` zůstávají nálezy.
 
+### Záznam rozhodnutí — cíle odkazů v briefu se skládají ze vstupu, ne z odpovědi (#516, po proklikání)
+
+Čísla ve třech větách jsou od téhle změny **klikatelná** a otevírají záložku toho pull requestu.
+Otázka nebyla jestli, ale **odkud se vezme cíl**, a odpověď je mez proti tomu, aby text od modelu
+rozhodoval o tom, kam aplikace klikem půjde.
+
+**Zamítnuto: rozpoznávat `#\d+` v hotové odpovědi a otevřít PR toho čísla.** Je to nejkratší cesta
+a má dvě díry, z nichž každá sama stačí:
+
+1. **Text je od modelu.** Může napsat číslo, které na desce není, nebo si ho vymyslet — a odkaz na
+   neexistující pull request je horší než prostý text: klikne se na něj a otevře se záložka nad
+   ničím. Prázdná sada nástrojů brání tomu, aby se session o cizím repozitáři **dozvěděla**, ne
+   tomu, aby napsala číslo.
+2. **Samo číslo cíl neurčuje.** V briefu stojí čísla z víc repozitářů (`ondrajodas/PRism #584`
+   i `keboola/job-queue #725`), takže `#584` bez dalšího neříká, který PR to je. Tohle je ten
+   hlavní důvod: ani bezchybný model by tu dvojznačnost neodstranil.
+
+**Přijato: uzavřeným seznamem cílů je to, co do briefu doopravdy šlo.** `Policy.briefInput` proto
+vrací `BriefMaterial` — text **a** seznam pull requestů —, a obojí vzniká **jednou procházkou** přes
+tytéž pruhy desky. Dvě funkce nad týmž materiálem se rozešly zrovna tam, kde na tom záleží; jeden
+typ se rozejít nemá jak. V odpovědi se pak hledá jen to, **kde** odkaz stojí, ne na co ukazuje.
+
+**Rozhodování je výčet, ne heuristika** (`Policy.briefSpans`): jméno repozitáře před číslem vybírá
+cíl, **cizí jméno je odmítnutí, ne nejbližší podobný**, a bez jména rozhoduje **jednoznačnost**
+čísla v seznamu. Když se odkaz složit nedá, zůstane **prostý text** — žádné mrtvé tlačítko a žádná
+hláška; věta se čte dál stejně.
+
+**Odkazem je jen číslo, ne celé `owner/name #584`.** Zvýrazněné číslo uvnitř věty se čte jako próza;
+podtržené dvacetiznakové jméno repozitáře by z věty udělalo odkaz s textem kolem. Tlačítko na konci
+řádku se zahodilo ze stejného důvodu jako odstavec místo tří vět: přidávalo by do bloku prvek navíc
+tam, kde je celý smysl v tom, aby se blok přečetl rychleji než čtyři bloky pod ním.
+
+**Otevírá se jedinou cestou** (`AppStore.openPullRequest`), tedy toutéž jako `prism://`, `Odkaz`
+v paletě ⌘K a klik ve frontě (#531). Druhá cesta by se s tou první rozešla přesně v tom, co je na ní
+jediné zajímavé: PR, který mezitím z fronty vypadl, se má otevřít **jako záložka ke čtení**, ne jako
+prázdno. Proto se seznam cílů **ukládá s briefem**, ne dopočítává z dnešní desky — brief je snímek
+jedné chvíle a odkaz dopočítaný o tik později by zmizel nebo přeskočil jinam. Uložený brief se čte
+**tolerantně**: brief bez seznamu je pořád platný brief a tvrdé dekódování by kvůli chybějícímu
+klíči zahodilo razítko dnešního běhu, za který se pak zaplatí znovu.
+
 ### Záznam rozhodnutí — tiché hodiny odkládají běh, ne pull request (#519)
 
 Odklad velkého PR do noci se nabízel jako druhá podoba **odložení PR** (#512): tam už je úložiště

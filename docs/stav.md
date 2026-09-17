@@ -9001,11 +9001,29 @@ měsíčně. Limit se zvedl na tři minuty, protože haiku běží ~60 s. Ta č�
 *reviewerů*; jsou to blokující nálezy. Opraveno na `z toho 2 blokující` a drží to test v obou
 směrech.
 
-Testů je v pěti sadách **56**; regrese se ověřila **vložením regrese u šesti věcí zvlášť** —
-u čtyř z prvního kola a nově u vynuceného modelu a u dvojtečky za klíčem návěští.
+**Třetí kolo po proklikání: čísla ve větách otevírají záložku.** Klikatelné je **jen číslo**
+(`#727`), otevírá `AppStore.openPullRequest` — tedy **tatáž cesta** jako `prism://`, `Odkaz`
+v paletě ⌘K a klik ve frontě, ne druhá. **Uzavřeným seznamem cílů je to, co do briefu doopravdy
+šlo**: `Policy.briefInput` vrací od téhle změny `BriefMaterial` (text **a** seznam pull requestů,
+jednou procházkou přes tytéž pruhy), seznam se ukládá v `Brief.mentioned` a v textu se jen hledá,
+**kde** na ně ukazuje. Rozpoznávat `#\d+` z odpovědi by nestačilo ze dvou důvodů: model umí napsat
+číslo, které na desce není, a **samo číslo cíl neurčuje** — v briefu stojí čísla z víc repozitářů.
+Rozhoduje `Policy.briefSpans`: jméno repa před číslem vybírá cíl a **cizí jméno je odmítnutí, ne
+nejbližší podobný**; bez jména rozhoduje **jednoznačnost**. Co se složit nedá, zůstane prostým
+textem — žádné mrtvé tlačítko a žádná hláška. Čtení uloženého briefu je **tolerantní**, aby brief
+bez seznamu nepřišel o razítko dnešního běhu.
+
+Testů je v šesti sadách **69**; regrese se ověřila **vložením regrese u osmi věcí zvlášť** —
+u čtyř z prvního kola, u vynuceného modelu a dvojtečky za klíčem návěští z druhého a nově
+u jednoznačnosti cíle odkazu a u tolerantního čtení `mentioned`.
 
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu, takže se na pokyn
 uživatele nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
+
+**Neověřená mezera: že klik doopravdy otevře záložku, ověřuje člověk.** Harness tvrdí, které číslo
+se odkazem stane a na co ukazuje, ale `AttributedString` s `.link` a `OpenURLAction` se projeví až
+v běžícím okně. Kdyby se odchycení nepovedlo, odkaz by se otevřel **v prohlížeči** místo v záložce
+— tedy nic rozbitého, jen něco jiného, což zelený běh nechytí.
 
 **Neověřená mezera: kvalita textu z haiku se posoudila na jednom vstupu.** Měřilo se nad jedním
 realistickým stavem desky (čtyři pruhy, 13 PR); že haiku obstojí i nad prázdnou nebo naopak hodně

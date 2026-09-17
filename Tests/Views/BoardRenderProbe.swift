@@ -251,7 +251,10 @@ struct BoardRenderProbe {
                         BriefLine(part: .next, text: "Vezmi si keboola/vault #1, kde máš rozepsané review a zbývá ho odeslat."),
                     ],
                     writtenAt: Date(),
-                    cost: 0.09
+                    cost: 0.09,
+                    // **Cíle odkazů, ne rozpoznávání čísel v textu** (#516): klikatelné se stane
+                    // jedině číslo pull requestu, který do briefu doopravdy šel.
+                    mentioned: [PRIdentifier("keboola/vault#1")!, PRIdentifier("keboola/vault#3")!]
                 ))
                 : .failed(reason: "Shrnutí nedoběhlo v limitu 3 minuty.")
         }

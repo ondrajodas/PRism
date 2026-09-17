@@ -62,6 +62,33 @@ struct Brief: Codable, Equatable, Sendable {
     /// Co ten běh stál. **`nil` není nula**: zabitá session peníze stála taky, jen o nich nevíme
     /// (tatáž úvaha jako u `RunUsage.cost` a `DailySpend.unknown`).
     let cost: Double?
+    /// Pull requesty, o kterých se session dozvěděla (`BriefMaterial.mentioned`) — **uzavřený
+    /// seznam cílů odkazů** v hotových větách (#516).
+    ///
+    /// **Ukládá se s briefem, ne dopočítává z dnešní desky.** Brief je snímek jedné chvíle
+    /// a odkazy v něm mají ukazovat tam, kam ukazoval jeho text; deska se do příštího rána
+    /// přeskládá a odkaz, který by se z ní dopočítal, by po tiku zmizel nebo přeskočil jinam.
+    /// PR, který mezitím z fronty vypadl, se otevře jako **záložka mimo zdroje** — tatáž cesta
+    /// jako `prism://` a `Odkaz` v paletě (#531).
+    let mentioned: [PRIdentifier]
+
+    init(lines: [BriefLine], writtenAt: Date, cost: Double?, mentioned: [PRIdentifier] = []) {
+        self.lines = lines
+        self.writtenAt = writtenAt
+        self.cost = cost
+        self.mentioned = mentioned
+    }
+
+    /// **Tolerantní čtení**, jako `Configuration`: brief uložený dřív, než odkazy existovaly, je
+    /// pořád platný brief — jen bez cílů. Tvrdé dekódování by kvůli chybějícímu klíči zahodilo
+    /// razítko dnešního běhu, a automat by za něj zaplatil znovu.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lines = try container.decode([BriefLine].self, forKey: .lines)
+        writtenAt = try container.decode(Date.self, forKey: .writtenAt)
+        cost = try container.decodeIfPresent(Double.self, forKey: .cost)
+        mentioned = try container.decodeIfPresent([PRIdentifier].self, forKey: .mentioned) ?? []
+    }
 }
 
 /// V jakém stavu je brief na desce (#516).

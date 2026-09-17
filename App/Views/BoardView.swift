@@ -102,7 +102,13 @@ struct BoardView: View {
     /// smí nepovést. Kdyby pozdrav nahradil, byl by vypnutý nebo spadlý brief dírou nad deskou.
     @ViewBuilder private var brief: some View {
         if let block = Policy.briefBlock(mode: store.configuration.global.brief, state: store.briefState) {
-            BriefBlockView(block: block) { store.writeBrief() }
+            BriefBlockView(
+                block: block,
+                write: { store.writeBrief() },
+                // **Tatáž cesta jako `prism://` a `Odkaz` v paletě** (#531): PR ze zdrojů se
+                // otevře beze změny, PR, který mezitím z fronty vypadl, jako záložka ke čtení.
+                open: { store.openPullRequest($0) }
+            )
         }
     }
 

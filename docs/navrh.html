@@ -3053,6 +3053,12 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 .rv-brief .lines > div > b {
   flex: 0 0 88px; font-size: 11px; font-weight: 600; color: var(--ink-3); white-space: nowrap;
 }
+/* Číslo pull requestu ve větě je **odkaz**, ne tlačítko na konci řádku (#516): otevře záložku
+   toho PR, tedy toutéž cestou jako klik ve frontě, `Odkaz` v paletě ⌘K a `prism://`. Odkazem je
+   **jen číslo** — jméno repozitáře před ním je próza a slouží k rozpoznání cíle. Klikatelné se
+   přitom stane jedině číslo pull requestu, který do briefu **doopravdy šel**; co se z textu
+   nedá určit, zůstává obyčejným textem. */
+.rv-brief .prlink { color: var(--accent); cursor: pointer; }
 .rv-brief .meta {
   display: flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
@@ -5107,6 +5113,15 @@ tr.sel td.sg { background: var(--accent-weak); }
         <code>Shrň znovu</code>.
       </p>
       <p class="muted">
+        <b>Čísla ve větách otevírají záložku</b> — kliknutím na <span class="prlink">#727</span>
+        se PR otevře stejně jako ze fronty, z palety ⌘K nebo z <code>prism://</code>; je to
+        <b>tatáž cesta</b>, ne druhá. Odkaz ale vznikne <b>jenom pro PR, který do briefu doopravdy
+        šel</b>: text je od modelu, takže si číslo umí vymyslet, a odkaz na neexistující pull
+        request je horší než prostý text. Cíl navíc neurčuje samo číslo — v briefu stojí čísla
+        z víc repozitářů —, takže když se <b>nedá poznat repozitář</b>, zůstane číslo obyčejným
+        textem. Žádné mrtvé tlačítko a žádná hláška.
+      </p>
+      <p class="muted">
         <b>Pozdrav zůstává nad ním</b>, a je to rozhodnutí: pozdrav a věta o pruzích mluví z dat,
         která aplikace má jistě, kdežto brief je text od modelu — a ten se smí nepovést. Kdyby
         pozdrav nahradil, byl by vypnutý nebo spadlý brief dírou nad deskou.
@@ -5135,9 +5150,9 @@ tr.sel td.sg { background: var(--accent-weak); }
         <div class="tag"><i></i>Hotovo · tak to kreslí deck</div>
         <div class="rv-brief">
           <div class="lines">
-            <div><b>Přibylo</b><p>Dva nové pull requesty do fronty, na job-queue #727 už leží jeden nález.</p></div>
-            <div><b>Hoří</b><p>Sandbox #4 má pět blokujících nálezů a čeká nejdéle ze všeho.</p></div>
-            <div><b>První na řadě</b><p>Vezmi si sandbox #4 — rozhodnout se o něm blokuje zbytek fronty.</p></div>
+            <div><b>Přibylo</b><p>Dva nové pull requesty do fronty, na keboola/job-queue <span class="prlink">#727</span> už leží jeden nález.</p></div>
+            <div><b>Hoří</b><p>Sandbox <span class="prlink">#4</span> má pět blokujících nálezů a čeká nejdéle ze všeho.</p></div>
+            <div><b>První na řadě</b><p>Vezmi si sandbox <span class="prlink">#4</span> — rozhodnout se o něm blokuje zbytek fronty.</p></div>
           </div>
           <div class="meta">
             <span>shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu</span>
@@ -5250,6 +5265,17 @@ tr.sel td.sg { background: var(--accent-weak); }
           <b>Nenačtená fronta brief nedostane</b>
           <span>Nad seznamem, který se ještě nestáhl, by tři věty tvrdily „nic na tahu“ — tatáž
           nebezpečná strana jako u věty pod pozdravem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">189</span>
+        <span class="body">
+          <b>Odkaz se skládá ze vstupu, ne z odpovědi</b>
+          <span>Uzavřeným seznamem cílů je to, co do zadání šlo
+          (<code>Policy.briefInput</code>); v textu se jen hledá, kde na ně ukazuje. Cizí jméno
+          repozitáře před číslem je <b>odmítnutí</b>, ne nejbližší podobný, a totéž číslo ve dvou
+          repech bez jména před ním je otázka, na kterou v textu odpověď není — obojí zůstane
+          textem.</span>
         </span>
       </div>
     </div>

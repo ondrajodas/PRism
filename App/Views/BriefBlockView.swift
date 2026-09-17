@@ -14,6 +14,12 @@ struct BriefBlockView: View {
     /// Co má tlačítko udělat. Jedna akce na všechny tři podoby (`Shrň`, `Shrň znovu`,
     /// `Zkusit znovu`) — je to pořád totéž spuštění, jen popisek se liší podle stavu.
     let write: () -> Void
+    /// Otevřít záložku pull requestu, na jehož číslo se ve větě kliklo (#516).
+    ///
+    /// **Je to `AppStore.openPullRequest`, tedy tatáž cesta jako `prism://`, `Odkaz` v paletě ⌘K
+    /// a klik ve frontě** — druhá cesta k otevření záložky by se s tou první rozešla přesně
+    /// v tom, co je na ní jediné zajímavé: co se stane s PR, který ve zdrojích není.
+    let open: (PRIdentifier) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -28,6 +34,17 @@ struct BriefBlockView: View {
         // Akcentový pruh vlevo z návrhu. `clipShape` na rámu bloku, aby pruh sledoval zaoblení.
         .overlay(alignment: .leading) { Rectangle().fill(Palette.accent).frame(width: 3) }
         .clipShape(.rect(cornerRadius: 12))
+        // **Odkaz ve větě je odkaz, ne tlačítko** — proto `.link` v textu a odchycení tady.
+        // Adresa je ta na GitHubu (`Policy.githubURL`), takže ji zvládne i `⌘C` z kontextové
+        // nabídky; rozebírá se **toutéž funkcí jako vložený odkaz v paletě** (#531), aby se ty dvě
+        // místa nemohla rozejít. Co se rozebrat nedá, se nepolyká: jde systému, ne do prázdna.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let pullRequest = Policy.linkedPullRequest(in: url.absoluteString) else {
+                return .systemAction
+            }
+            open(pullRequest)
+            return .handled
+        })
     }
 
     @ViewBuilder private func body(of body: BriefBlock.Body) -> some View {
@@ -78,10 +95,43 @@ struct BriefBlockView: View {
                         .foregroundStyle(Palette.ink3)
                         .lineLimit(1)
                         .frame(width: Self.labelWidth, alignment: .leading)
-                    sentence(line.text, color: Palette.ink)
+                    sentence(of: line, mentioning: brief.mentioned)
                 }
             }
         }
+    }
+
+    /// Jedna věta briefu — **text s klikatelnými čísly** (#516).
+    ///
+    /// Rozdělení na text a odkazy vydá `Policy.briefSpans`; tady se z něj skládá `AttributedString`,
+    /// aby číslo zůstalo **uvnitř věty** a věta se lámala jako dřív. Tlačítko na konci řádku by
+    /// znamenalo jeden odkaz na větu a další prvek v bloku, který má být levnější na přečtení než
+    /// čtyři bloky pod ním.
+    private func sentence(of line: BriefLine, mentioning mentioned: [PRIdentifier]) -> some View {
+        Text(attributed(line.text, mentioning: mentioned))
+            .font(.system(size: 13))
+            .lineSpacing(3)
+            .foregroundStyle(Palette.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Věta složená z kusů, které vydala `Policy`. **View nerozhoduje, co je odkaz** — jen kreslí:
+    /// akcentová barva a adresa, na kterou se klikne.
+    private func attributed(_ text: String, mentioning mentioned: [PRIdentifier]) -> AttributedString {
+        var result = AttributedString()
+        for span in Policy.briefSpans(of: text, mentioning: mentioned) {
+            switch span {
+            case .text(let plain):
+                result += AttributedString(plain)
+            case .link(let label, let target):
+                var run = AttributedString(label)
+                run.link = Policy.githubURL(of: target)
+                run.foregroundColor = Palette.accent
+                result += run
+            }
+        }
+        return result
     }
 
     private func sentence(_ text: String, color: Color) -> some View {

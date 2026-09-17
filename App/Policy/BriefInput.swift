@@ -29,16 +29,22 @@ extension Policy {
     /// **Deterministický a bez locale.** Časy jsou relativní a počítané z `now` (`před 3 h`), ne
     /// formátované přes `DateFormatter` — jinak by se tentýž stav popsal na každém stroji jinak
     /// a nedal by se testovat výčtem.
-    static func briefInput(board: Board, snoozed: Int = 0, now: Date) -> String {
+    static func briefInput(board: Board, snoozed: Int = 0, now: Date) -> BriefMaterial {
         var lines: [String] = [
             "Stav aplikace PRism. Jsou to hotová data, ne dotaz do repozitáře.",
             "",
             briefCounts(board, snoozed: snoozed),
         ]
+        var mentioned: [PRIdentifier] = []
         for lane in board.visibleLanes {
             lines.append("")
             lines.append("Pruh \(lane.lane.title) (\(lane.count)):")
             lines += lane.rows.map { "- " + briefRow($0, now: now) }
+            // **Jedna procházka, ne druhá funkce.** Seznam pull requestů, na které se smí v hotovém
+            // briefu udělat odkaz, je tentýž seznam, který do promptu doopravdy šel — a kdyby ho
+            // skládalo druhé místo, rozešly by se ta dvě zrovna tam, kde na tom záleží: odkaz na
+            // PR, o kterém se session nedozvěděla, by ukazoval na něco, co v briefu není.
+            mentioned += lane.rows.map(\.pullRequest.id)
         }
         let events = board.activity.rows
         if !events.isEmpty {
@@ -46,7 +52,9 @@ extension Policy {
             lines.append("Dění (\(events.count) nejnovějších):")
             lines += events.map { "- " + briefEvent($0, now: now) }
         }
-        return lines.joined(separator: "\n")
+        // Týž PR stojí ve dvou pruzích jen výjimečně, ale stát může (deska pruhy nevylučuje),
+        // a dvakrát zapsaný identifikátor by v `briefSpans` vypadal jako dvojznačnost dvou repozitářů.
+        return BriefMaterial(text: lines.joined(separator: "\n"), mentioned: Array(Set(mentioned)).sorted())
     }
 
     /// První řádek vstupu — tytéž počty, jaké nese věta pod pozdravem.
