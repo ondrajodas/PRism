@@ -86,10 +86,13 @@ extension AppStore {
         // v cache. Rozdělaný rebase v něm je stav, o kterém okno mluví (`unresolved`), takže se tím
         // nic tichého nenechává.
         for sync in branchSyncTasks.values { sync.cancel() }
+        // A brief (#516). Je to `claude -p` jako ostatní — bez nástrojů, ale se stejným účtem:
+        // session, která přežije zavřenou aplikaci, platí tokeny dál.
+        briefTask?.cancel()
 
         var remaining = Self.terminationChecks
         while !reviewTasks.isEmpty || !recheckTasks.isEmpty || !askTasks.isEmpty
-            || !branchSyncTasks.isEmpty, remaining > 0 {
+            || !branchSyncTasks.isEmpty || briefTask != nil, remaining > 0 {
             remaining -= 1
             // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake
             // hodiny čekání přeskočí, a test, který má tvrdit, že po zavření nic neběží, by

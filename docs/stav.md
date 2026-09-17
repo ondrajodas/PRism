@@ -8873,3 +8873,43 @@ odklad od vypnutého automatu.
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR na pokyn uživatele
 nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
+
+
+## #516 — brief na domově: tři věty ze stavu aplikace (M16, zákres 58)
+
+Nad pruhy desky je **blok se třemi větami**, které složila session Claude Code **bez jediného
+nástroje**. Dostane hotový text z `Policy.briefInput` — počty z pruhů, řádky viditelných pruhů
+(repo, číslo, titulek, autor, stav review, kolik blokuje, stáří), počet odložených a blok `Dění` —
+a jenom ho **přeformuluje**. Pod větami stojí `shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne
+z kódu` a tlačítko `Shrň znovu`.
+
+**Přibyla tím šestá session do tabulky v tvrdé podmínce č. 2, a je to druhá s prázdnou sadou**
+(po překladu nálezů). `--disallowedTools` je tatáž konstanta jako u ostatních pěti a
+`SessionToolSetsTests` tvrdí obojí literálem — od #516 je v tom výčtu **i překlad nálezů**, o kterém
+se do té doby netvrdilo nic. **Není to review logika, je to čtení nahlas**: brief z kódu (session
+s `Read` nad repozitáři) by review logika byl a ta patří do skillu, ne do aplikace.
+
+**Vypnuto ve výchozím stavu**, a blok se pak nekreslí vůbec — ne zašedle. V nastavení jsou tři
+volby (`Vypnuto` / `Na požádání` / `Při prvním tiku dne`), protože se rozhodují dvě věci: jestli se
+brief skládá vůbec a jestli ho smí spustit **aplikace sama**. Ta poslední volba je vedle agenta
+z #510 jediná cesta, kterou v téhle aplikaci startuje session bez kliknutí — a **dnešek se posuzuje
+z uloženého briefu** (`brief.json` v cache), protože pojistka, kterou obejde restart, není pojistka.
+
+**Cena každého briefu jde do `SpendLedger` a je vidět na jeho řádku**, i u běhu, který text
+nevrátil — `nil` cena se píše jako `cenu nenahlásilo`, ne `0,00 $`. **Spadlá session nekončí
+prázdnem**: blok řekne `Shrnutí se nepovedlo.`, pod tím důvod a nabídne `Zkusit znovu`. Prázdný
+rámeček by byl k nerozeznání od vypnutého briefu, který se nekreslí.
+
+**Pozdrav zůstává nad briefem**, na rozdíl od toho, co si #515 poznamenalo: pozdrav a věta o pruzích
+mluví z dat, která aplikace má jistě, kdežto brief je text od modelu a smí se nepovést.
+
+**Denní rozpočet `autoRunsPerDay` se nečerpá, a je to zapsané rozhodnutí** — je to pojistka proti
+řadě patnáctiminutových review a agentů, kdežto brief je jeden odstavec bez nástrojů nejvýš jednou
+za den. Účet přesto nikde nemlčí.
+
+Zákres přenesla tahle issue do **sekce 58** (#515 v sekci 45 nechalo poznámku, že brief přijde
+s #516); sekce 45 se nepřekresluje, blok visí pod pozdravem a nad pruhy. Přibylo 56 testů v pěti
+sadách; regrese se ověřila **vložením regrese u čtyř věcí zvlášť**.
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu, takže se na pokyn
+uživatele nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.

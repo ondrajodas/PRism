@@ -2984,6 +2984,32 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 .brd-quiet { opacity: 0.7; }
 .brd-empty { padding: 12px 13px; font-size: 12px; color: var(--ink-3); }
 
+/* ---- sekce 58: brief na domově --------------------------------------------------
+   Tři věty o stavu aplikace nad pruhy (#516). Zákres přišel z decku „Směry pro PRism“
+   (stránka *Směry › C Deska podle mého tahu*), kde blok visí pod pozdravem a nad deskou; do
+   téhle sekce se přenáší i s podobami, které deck nekreslí (běží, nepovedlo se).
+
+   **Jedna třída, ne komponenta.** Rám je tentýž pár jako u `.block` (`--panel-2` na `--line`,
+   radius 12), přibývá jedině **akcentový pruh vlevo** — ten je celý rozdíl proti bloku a znamená
+   „tohle napsal model, ne aplikace“. Text je 13 b jako věta pod pozdravem, řádek pod ním mono
+   10,5 b jako odpočet tiku vpravo v hlavičce.
+
+   `.meta` se **nedefinuje naholo** (past z #390): `.lane > header .meta` si totéž jméno bere jako
+   vnořený popisek. Tlačítko je existující `.mini`, ne vlastní tvar — je to tatáž akce jako
+   `Prohlédnout diff agenta` a spol. */
+.rv-brief {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: var(--radius); background: var(--panel-2);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.rv-brief p { font-size: 13px; color: var(--ink); line-height: 1.55; max-width: none; }
+.rv-brief p.quiet { color: var(--ink-2); }
+.rv-brief .meta {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+}
+.rv-brief .meta .sp { flex: 1; }
+
 /* ---- sekce 47: itinerář review --------------------------------------------------
    Levý sloupec přestal být strom cest a stal se dráhou se zastávkami (#506). Zákres přišel
    z decku „Směry pro PRism“ (stránka *Směry › A Itinerář review*) a tady jsou jen ty čtyři
@@ -4514,8 +4540,9 @@ tr.sel td.sg { background: var(--accent-weak); }
         řádku, ne třetí. Co je nové, je <b>akce nad celým pruhem</b> vpravo v jeho hlavičce:
         pustit review na všechno, co v pruhu leží, otevřít první, sestavit zadání. Věta pod
         pozdravem mluví o pruzích (<code>9 věcí na tahu · 4 čekají na ostatní · 2 se dají
-        mergnout</code>); <b>brief ve třech větách</b> z decku sem přijde až s #516, do té doby
-        je nad deskou dnešní pozdrav.
+        mergnout</code>); <b>brief ve třech větách</b> z decku přibyl s #516 a je zakreslený
+        v <a href="#s58">sekci 58</a> — visí <b>pod pozdravem a nad pruhy</b>, takže pozdrav
+        zůstává.
       </p>
     </div>
 
@@ -4999,6 +5026,157 @@ tr.sel td.sg { background: var(--accent-weak); }
           stavu předání nezávisí — viz druhý řádek <em>K merge</em>. <b>Skutečná překážka se tím
           neobchází</b>: PR s blokujícím nálezem mergnutelný není, takže v <em>Předat agentovi</em>
           zůstane.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ====================================================================================
+       SEKCE 58 — Brief na domově
+       Přenos z decku „Směry pro PRism“, stránka *Směry › C Deska podle mého tahu* (#516).
+       Deck kreslí jednu podobu (hotový brief); tady jsou k ní ty, které z ní neplynou —
+       běžící session a spadlá. Sekce 45 se **nepřekresluje**: blok sedí pod pozdravem
+       a nad pruhy, takže deska pod ním zůstává, jak je.
+       ==================================================================================== -->
+  <section class="section" id="s58">
+    <div class="section-head">
+      <div class="eyebrow">58 — Přehled · brief ze stavu aplikace</div>
+      <h2>Tři věty místo čtyř bloků — a je to čtení nahlas, ne druhé review</h2>
+      <p class="muted">
+        <b>Dnes</b> se stav po otevření aplikace skládá z čísel a řádků: pozdrav s počty, šest
+        pruhů, dění, útrata. Odpověď na „co se stalo, než jsem přišel“ z toho jde vyčíst, ale
+        stojí to čtyři bloky.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: nad pruhy <b>tři věty</b>, které složila session Claude Code
+        <b>bez jediného nástroje</b>. Dostane hotový stav aplikace — pruhy, počty, nálezy, dění —
+        a jenom ho <b>přeformuluje</b>. <b>Nečte repozitář</b>, a je to hranice, ne opatrnost:
+        brief z kódu už je review logika a ta patří do skillu, ne do aplikace. Pod větami stojí
+        <code>shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne z kódu</code> a tlačítko
+        <code>Shrň znovu</code>.
+      </p>
+      <p class="muted">
+        <b>Pozdrav zůstává nad ním</b>, a je to rozhodnutí: pozdrav a věta o pruzích mluví z dat,
+        která aplikace má jistě, kdežto brief je text od modelu — a ten se smí nepovést. Kdyby
+        pozdrav nahradil, byl by vypnutý nebo spadlý brief dírou nad deskou.
+      </p>
+      <p class="muted">
+        <b>Ve výchozím stavu je vypnuto a blok se pak nekreslí vůbec</b> — ne zašedle: vypnutý
+        brief se nedělá nikdy, takže zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“.
+        V nastavení jsou <b>tři volby</b>, ne přepínač: <code>Vypnuto</code>,
+        <code>Na požádání</code> a <code>Při prvním tiku dne</code>. Rozhodují se tím dvě různé
+        věci — jestli se brief skládá vůbec, a jestli ho smí spustit <b>aplikace sama</b>.
+      </p>
+    </div>
+
+    <h3>Blok nad pruhy: tři podoby, žádná prázdná</h3>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Hotovo · tak to kreslí deck</div>
+        <div class="rv-brief">
+          <p>Přes den přišly dva PR do fronty (<b>job-queue #726 a #727</b>, oba od sykora-ji, na
+          #727 už leží jeden nález). <b>Sandbox #4 blokuje</b> — pět nálezů correctness, všechny
+          CONFIRMED. Na tvém <b>#499</b> chce Copilot dvě změny a šest věcí čeká na předání
+          agentovi; <b>#11</b> má zelené CI, schválené review a dá se mergnout.</p>
+          <div class="meta">
+            <span>shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne z kódu</span>
+            <span class="sp"></span>
+            <span class="mini">Shrň znovu</span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Cena je <b>na řádku</b>, ne schovaná v útratě za den: session, která stojí peníze
+          a neukáže kolik, je vada. Do bloku <em>Dneska stálo</em> se přitom počítá taky.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Nepovedlo se · a říká proč</div>
+        <div class="rv-brief">
+          <p>Shrnutí se nepovedlo.</p>
+          <p class="quiet">Shrnutí nedoběhlo v limitu 2 minuty.</p>
+          <div class="meta">
+            <span class="sp"></span>
+            <span class="mini">Zkusit znovu</span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Prázdno by bylo k nerozeznání od „nic se neděje“</b>, a u vypnutého briefu se nekreslí
+          zrovna prázdný rámeček — takže by se ty dva stavy slily. Proto dvě věty: co se stalo
+          a proč. <b>Razítko tu není</b>: <code>shrnuto —</code> by tvrdilo, že něco shrnuto je.
+        </p>
+      </div>
+    </div>
+
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Běží · týž prstýnek jako všude</div>
+        <div class="rv-brief">
+          <p class="quiet"><span class="spin" style="display: inline-block; vertical-align: -1px; margin-right: 7px;"></span>Shrnuji stav aplikace…</p>
+          <div class="meta">
+            <span class="sp"></span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Tlačítko se nekreslí, ne zašedle</b>: běžící session se nedá spustit podruhé a druhé
+          tlačítko by o tom mlčelo. Prstýnek je <b>týž kus kódu</b> jako na záložce s běžícím
+          review (sekce 44).
+        </p>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Vypnuto · výchozí stav</div>
+        <div class="frame flat">
+          <div class="dash-head" style="padding: 14px;">
+            <div>
+              <h4 style="font-size: 20px;">Dobrý večer.</h4>
+              <div class="sub">9 věcí na tahu · 4 čekají na ostatní · 2 se dají mergnout</div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Domov vypadá jako do #516 — pozdrav, věta o pruzích, deska. <b>Žádný rámeček s nulou
+          a žádné zašedlé tlačítko</b>, protože vypnutý brief se nedělá nikdy.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">185</span>
+        <span class="body">
+          <b>Session bez jediného nástroje</b>
+          <span>Šestá vyjmenovaná session v aplikaci a druhá s <b>prázdnou sadou</b> (po překladu
+          nálezů). Nemá <code>Read</code>, <code>Bash</code> ani nic jiného, takže se o repozitáři
+          nemá jak dozvědět nic — mez je vidět z argumentů, ne z promptu. Zákazy jsou tatáž
+          konstanta jako u ostatních pěti.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">186</span>
+        <span class="body">
+          <b>Co je na tahu, rozhoduje aplikace</b>
+          <span>Vstup skládá <code>Policy.briefInput</code> deterministicky z pruhů, počtů
+          a dění — model jen formuluje. Kdyby o tom rozhodoval on, byl by to druhý zdroj pravdy
+          o desce, jen dražší a pokaždé jiný.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">187</span>
+        <span class="body">
+          <b>Jednou za den znamená jednou za den</b>
+          <span>V režimu <code>Při prvním tiku dne</code> se brief složí, jakmile je fronta
+          načtená — a podruhé týž den už ne. Rozhoduje o tom <b>razítko uloženého briefu</b>, ne
+          paměť: pojistka, kterou obejde restart, není pojistka.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">188</span>
+        <span class="body">
+          <b>Nenačtená fronta brief nedostane</b>
+          <span>Nad seznamem, který se ještě nestáhl, by tři věty tvrdily „nic na tahu“ — tatáž
+          nebezpečná strana jako u věty pod pozdravem.</span>
         </span>
       </div>
     </div>

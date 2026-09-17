@@ -4108,6 +4108,75 @@ Věci, které se u toho nemají rozbít:
   překlad visí vedle a texty se skládají **po polích** (`translation?.summary ?? reported.summary`).
   Kdyby překladateli jedno pole vypadlo, je jeden anglický řádek lepší než chybějící text.
 
+## Brief na domově — šestá session a druhá bez nástrojů (#516)
+
+**Tři věty o stavu aplikace nad pruhy desky** (návrh, [sekce 58](navrh.html)). Session dostane
+hotový text z `Policy.briefInput` a **přeformuluje** ho; rozhodnutí, co je na tahu, co blokuje
+a co se dá mergnout, je udělané dřív a deterministicky.
+
+**Mění to tvrdou podmínku č. 2 o řádek v tabulce sad, nic víc**: přibývá šestá session
+s **prázdnou sadou** — tatáž, jakou má překlad nálezů —, `--disallowedTools` je tatáž konstanta
+`ClaudeCommand.disallowedTools` a `SessionToolSetsTests` to tvrdí literálem.
+
+**Proč to není review logika, ale čtení nahlas.** Review čte kód a hlásí nálezy; tahle session
+nedostane ani `Read`, takže se o repozitáři nemá jak dozvědět nic. Brief **z kódu** (session
+s `Read` nad repozitáři) by review logika byl — a ta podle *Co aplikace je* patří do skillu, ne do
+aplikace. Ta hranice je vidět **z argumentů**, ne z promptu: věta „nic si nedomýšlej“ by
+vymýšlejícímu modelu nezabránila v ničem, kdežto chybějící nástroj ano.
+
+| Typ | Co dělá |
+|---|---|
+| `BriefMode` | Brána: `off` (výchozí) / `onDemand` / `firstTickOfDay`. **Tři stavy, ne přepínač** |
+| `Policy.briefInput(board:snoozed:now:)` | **Jediné místo, kde se skládá materiál.** Čistá funkce, deterministická, bez locale |
+| `Policy.brief(mode:state:last:isLoaded:now:trigger:)` | **Jediné místo, kde se rozhoduje o spuštění.** Výčet důvodů, ne `Bool` |
+| `Policy.briefBlock(mode:state:)` | Co je v bloku vidět. `nil` = **blok se nekreslí vůbec** |
+| `BriefCommand` | Argumenty (prázdná sada, `stream-json`), prompt a defenzivní čtení odpovědi |
+| `BriefWriting` / `ClaudeBriefWriter` | Protokol s jednou metodou a implementace nad `claude -p`. **Nezná `gh` ani pracovní adresář** |
+| `BriefStore` | Poslední brief v cache (`brief.json`) — podle jeho data se pozná, jestli je dnešek shrnutý |
+| `AppStore+Brief` | Spouštěč, brána, běh a to, co se s výsledkem stane |
+| `BriefBlockView` | Kresba bloku podle `BriefBlock` — čtyři podoby, žádná prázdná |
+
+### Co se u toho nemá rozbít
+
+- **Materiál nese stav aplikace, ne kód.** Do vstupu jde: počty z pruhů, řádky viditelných pruhů
+  (repo, číslo, titulek, autor, stav review, kolik blokuje, jestli tam leží rozdělané review,
+  stáří) a blok `Dění`. **Není v něm cesta na disk, adresa pull requestu ani řádek diffu** — a je
+  na to negativní test. Stav review se píše **slovem z výčtu** (`Policy.briefReviewState`), ne
+  `String(describing:)`, protože ten by do promptu pustil jména z kódu.
+- **Množina je tatáž jako u desky**, tedy `boardEntries`: cizí i vlastní PR, **bez odložených**
+  (#512). Odložené se do vstupu připisují **jen počtem**, jako ve větě pod pozdravem — o tom, co
+  jsem odložil, nemá brief mluvit, ale zamlčet, že něco schované je, taky nemá.
+- **Prázdný pruh se do vstupu nedostane** (`visibleLanes`) a **prázdné dění nedostane ani
+  nadpis**. Brief má mluvit o tom, co je na obrazovce.
+- **Vypnuto znamená, že se nekreslí nic** — ne zašedlý blok. Vypnutý brief se nedělá nikdy, takže
+  zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“ (tatáž úvaha jako
+  u `Policy.MetadataEditing.absent`).
+- **Automat pouští jedině `firstTickOfDay`, a jedině po úspěšném tiku.** Tik v režimu
+  `Na požádání` nespustí nic. Nad **nenačtenou frontou** se nespustí nic ani tlačítkem: „nic na
+  tahu“ nad seznamem, který se ještě nestáhl, je ta nebezpečná strana (tatáž jako
+  u `Policy.boardEmpty(isLoaded:)`).
+- **Dnešek se posuzuje z uloženého briefu, ne z paměti.** Pojistka, kterou obejde restart, není
+  pojistka — bez `BriefStore`u by se za brief platilo při každém spuštění aplikace.
+- **Cena jde do `SpendLedger` vždycky, i u spadlého běhu**, a je vidět **na řádku pod textem**
+  (`Policy.briefMeta`). `nil` cena **není nula**: zabitá session peníze stála taky, takže se
+  napíše `cenu nenahlásilo`, ne `0,00 $`.
+- **Spadlá session nekončí prázdnem.** Blok řekne `Shrnutí se nepovedlo.`, pod tím **důvod**
+  a nabídne `Zkusit znovu`. Prázdný rámeček je k nerozeznání od „nic se neděje“ — a protože se
+  vypnutý brief nekreslí vůbec, slil by se i s ním.
+- **Pozdrav zůstává nad briefem.** Pozdrav a věta o pruzích mluví z dat, která aplikace má jistě;
+  brief je text od modelu a smí se nepovést. Kdyby ho nahradil, byl by vypnutý nebo spadlý brief
+  dírou nad deskou.
+- **Denní rozpočet (`autoRunsPerDay`) se nečerpá, a je to rozhodnutí.** Ten limit je pojistka
+  proti řadě patnáctiminutových review a agentů; brief je jeden odstavec bez nástrojů, nejvýš
+  jednou za den, takže by v limitu ukrojil místo běhu, na kterém záleží víc. Účet přitom nemlčí:
+  cena je na řádku a v bloku `Dneska stálo`.
+- **Brief se neváže na `headSha`** — je to výjimka téhož druhu jako rozhovor nad PR (#452):
+  není to nález, mluví o celé desce a u sebe nese **kdy vznikl**. Tvrdá podmínka č. 5 se tím
+  nemění.
+- **Session nemá pracovní adresář a nedostane ani cestu k `gh`.** Ostatní session ho dostávají
+  kvůli credential helperu pro `git`; tahle `git` nemá. Typ, který cestu k `gh` ani nedostane, je
+  silnější tvrzení než prostředí, ve kterém zrovna nefiguruje.
+
 ## `App/Support/`
 
 Sdílené drobnosti, které nepatří žádnému modulu:
@@ -10839,6 +10908,7 @@ u obou: **je to pohled, ne nový zdroj pravdy**, takže na žádné z nich nesm�
 | blok `Odložené` **pod frontou** (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené, **po filtru** | doplněk k `visibleQueuePullRequests` nad **tímtéž** vstupem, takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
 | blok `Odložené` **na desce** a `· 2 odložené` ve větě pod pozdravem (`snoozedPullRequests`) | `.theirs`, **jen** odložené, **před filtrem** | doplněk k `boardEntries`, a ty filtr taky neznají: deska odpovídá na „co udělám teď“, ne na „co mám zrovna odškrtnuté“, takže nad zapnutým filtrem by věta hlásila míň, než kolik deska schovala |
 | nabídka `Odložit` na řádku (`snoozeAction(for:)`) | `.theirs` | **všude, kde se kreslí `PullRequestRow`** — ve frontě, v sekci `Rozdělaná` i v pruhu desky; je to jeden řádek, takže jedna podoba (#172), a hlídá to stráž nad zdrojáky |
+| brief na domově (#516) — `Policy.briefInput` | **obojí, bez odložených** | skládá se z **`boardEntries`**, tedy přesně z toho, co je na desce vidět: cizí i vlastní (tah je osa práce, ne autor) a bez odložených (brief odpovídá na „co udělám teď“). Odložené se do vstupu připisují **jen počtem**, jako ve větě pod pozdravem — zamlčet, že něco schované je, by z briefu udělalo text, který tvrdí víc, než data unesou |
 | odklad do tichých hodin (#519) | **řádek nemá, a je to rozhodnutí** | odkládá se **jeden běh**, ne položka seznamu: odložený PR ve frontě zůstane (čeká na mě dál), odložené je jedině review. Třetí osa by tvrdila, že se PR někde schová — a to se nestane nikde. Viz *Tiché hodiny — velké PR na noc* |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v

@@ -7620,6 +7620,55 @@ Ověřeno vložením regrese — doplnění `· testy zelené` do věty shodí t
 pustit `xcodebuild test` (nebo co si repo řekne), tedy **další podproces, další konfigurace a další
 minuty** — a hlavně rozhodnutí, co se stane s výsledkem, když spadne. Do #511 to nepatří.
 
+### Záznam rozhodnutí — brief je čtení nahlas, ne šesté review (#516)
+
+Brief na domově přidává **šestou session** do tabulky v tvrdé podmínce č. 2, a je to jediná změna
+té podmínky: sada je **prázdná**, jako u překladu nálezů, zákazy jsou tatáž konstanta.
+
+**Hranice je „stav aplikace“, ne „kód“, a drží ji chybějící nástroj, ne prompt.** Nabízelo se dát
+session `Read` a `Grep` nad pracovní kopií, aby uměla říct, *co* se v těch PR mění. Zahozeno: tím se
+z briefu stává **review logika**, a ta podle *Co aplikace je* patří do skillu, ne do aplikace —
+aplikace je orchestrátor a prohlížeč. Věta v promptu („nedívej se do kódu“) by tu hranici
+nedržela: model, který sáhne po `Read`, to udělá i s tou větou. Prázdná sada ji drží tak, že sáhnout
+není po čem, a `SessionToolSetsTests` to tvrdí literálem.
+
+**Rozhodnutí, co je na tahu, zůstává v `Policy`.** Vstup skládá `Policy.briefInput` deterministicky
+z pruhů desky; session **jen formuluje**. Kdyby o tom rozhodoval model, byl by to druhý zdroj pravdy
+o desce — dražší, pokaždé jiný a netestovatelný. Vedlejší zisk je, že se dá tvrdit negativně, co ve
+vstupu **není** (cesty, URL, kód).
+
+**Vypnuto ve výchozím stavu, a jsou to tři volby, ne přepínač.** Rozhodují se dvě různé věci: jestli
+se brief skládá vůbec (`off`) a jestli ho smí spustit aplikace sama (`firstTickOfDay`). Přepínač by
+je slil a „zapnuto“ by znamenalo obojí — tedy session za peníze každé ráno, aniž by si o to kdo
+řekl. Je to tatáž třída jako `allowsPublishing` a `autoAgent`: vlastnost „samo nic nezačne“ drží
+jedině výchozí vypnuto.
+
+**Denní rozpočet `autoRunsPerDay` se nečerpá.** Nabízelo se pověsit brief na tentýž limit jako
+automat review a agenta (#510) — argument pro je, že je to taky utrácení bez kliknutí. Zahozeno:
+ten limit je pojistka proti řadě **patnáctiminutových** běhů, kdežto brief je jeden odstavec bez
+nástrojů nejvýš jednou za den. V limitu by ukrojil místo běhu, na kterém záleží víc, a pojistka by
+tím byla slabší, ne silnější. Účet přesto nikde nemlčí: cena je na řádku briefu i v bloku
+`Dneska stálo`.
+
+**Dnešek se posuzuje z uloženého briefu, ne z paměti.** Bez `BriefStore`u by `firstTickOfDay`
+znamenalo „při každém startu aplikace“ — a restart je v tomhle repu po každém mergi. Je to tatáž
+úvaha jako u `AutoRunLedger`: pojistka, kterou obejde restart, není pojistka.
+
+**Pozdrav se nenahrazuje, a je to změna proti poznámce z #515.** `BoardView` si u pozdravu
+poznamenalo, že ho brief vystřídá. Zahozeno nad hotovou obrazovkou: pozdrav a věta o pruzích mluví
+z dat, která aplikace má jistě, kdežto brief je text od modelu — a jeho stavy `vypnuto`, `běží`
+a `nepovedlo se` by nad deskou nechaly díru. Deck to ostatně kreslí stejně: pozdrav nahoře, brief
+pod ním.
+
+**Blok se při vypnutém briefu nekreslí vůbec**, ne zašedle — vypnutý brief se nedělá nikdy, takže
+zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“ (tatáž úmluva jako u akcí na cizím PR).
+Cena toho rozhodnutí je, že **prázdno v tom bloku nesmí nastat jinak**: spadlá session by se s
+vypnutým briefem slila. Proto má `failed` vlastní dvě věty a tlačítko `Zkusit znovu`.
+
+**Brief se neváže na `headSha`.** Je to výjimka téhož druhu jako rozhovor nad PR (#452) a odložení
+(#512): není to nález, mluví o celé desce a nese u sebe **kdy vznikl**. Tvrdá podmínka č. 5 se tím
+nemění — klíčované `headSha` zůstávají nálezy.
+
 ### Záznam rozhodnutí — tiché hodiny odkládají běh, ne pull request (#519)
 
 Odklad velkého PR do noci se nabízel jako druhá podoba **odložení PR** (#512): tam už je úložiště

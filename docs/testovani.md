@@ -10601,6 +10601,50 @@ model, síť a peníze. V harnessu se tvrdí jedině **hranice** (kam smí psát
 přijme), ne **kvalita**. Odtud věta v popisu PR: sandbox s vlastním PR, komentář z druhého účtu.
 
 
+## Brief na domově: co jde tvrdit v harnessu a co jedině spuštěním (#516)
+
+Šestá session nemá jediný nástroj, takže se u ní **neměří, co udělala s repozitářem** — nic tam
+udělat nemůže. Měří se dvě jiné věci: **co dostala na vstupu** a **kdy se vůbec pustila**. Obojí
+je čistá funkce, takže se testuje výčtem a bez mockování.
+
+| Co se ptá | Kde se to ověří | Čím ne |
+|---|---|---|
+| Je sada prázdná a zákazy tytéž? | `SessionToolSetsTests` — **literálem** i přes seznam argumentů | Tvrzením „neobsahuje `Read`“: prázdná sada se od `Grep` nepozná, když se ptáme jen na jedno jméno |
+| Nese vstup jenom stav aplikace? | `BriefInputTests` — **negativně**: žádné `/Users/`, `https://`, `.swift`, `diff --git`, `@@` | Přečtením promptu okem: text se skládá ze tří míst a poroste |
+| Nespustí se, když nemá? | `AppStoreBriefTests` — **nula běhů** s vypnutou branou, při tiku v režimu `Na požádání`, nad nenačtenou frontou, při zavírání a podruhé týž den | Tvrzením o stavu: „v bloku nic není“ vyjde stejně u vypnuté brány i u rozbitého spouštěče |
+| Pozná se spadlá session od vypnuté? | `AppStoreBriefTests` + `BriefInputTests` — blok má **čtyři různé podoby** a žádná není prázdná | Pohledem na obrazovku: prázdný rámeček a nekreslený blok vypadají skoro stejně |
+| Účtuje se i nepovedený běh? | `AppStoreBriefTests` — `dailySpend` po běhu **bez textu** | Testem šťastné cesty; ten projde i tehdy, když se cena u selhání zahodí |
+| Přežije dnešek restart? | `BriefStoreTests` — **druhá instance** `BriefStore`u nad touž cache | Tvrzením nad jednou instancí: to projde i nad pamětí |
+| Jsou ty tři věty k něčemu? | **spuštěním** — cizí model, síť a peníze | Ničím v harnessu |
+
+### Kde se ověřila regrese vložením regrese (#516)
+
+U čtyř vět, na kterých #516 stojí, se chyba **dočasně vrátila** a koukalo se, co spadne:
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| kontrola brány (`mode.isOn`) z `Policy.brief` odebrána | *Vypnutá brána nepustí ani tlačítko, ani tik* a ve store *S vypnutou branou se nespustí žádná session* (dvě tvrzení, mimo jiné to o stavu) |
+| `BriefCommand.allowedTools` změněné na `"Read"` | *Brief nemá jediný nástroj* — **dvě** tvrzení, literál i seznam argumentů |
+| do řádku vstupu přidána adresa pull requestu | *Vstup nenese cestu na disk, URL ani kód* a ve store *Session dostane stav aplikace, ne cesty a kód* |
+| spadlá session nechána ve stavu `never` místo `failed` | *Spadlá session nechá v bloku větu a nabídku, ne prázdno* — tři tvrzení včetně toho, že se tlačítko jmenuje `Zkusit znovu` |
+
+### Dvě věci, na kterých scéna store testu stojí
+
+- **Scéna se načítá tikem, a v režimu `Při prvním tiku dne` tím brief spustí.** Není to nedopatření
+  scény, je to **ta cesta, která je na #516 nová** — jediná session bez kliknutí vedle agenta
+  z #510. Test to proto tvrdí rovnou: po `refresh()` je běh **jeden**, druhý `writeBriefIfDue()`
+  už žádný. Kdo scénu změní, ať tenhle řádek nečte jako šum.
+- **Na běh se musí počkat.** Spouštěč visí na tiku, takže na session **nečeká** (jinak by dvě
+  minuty stál úklid cache i hlášení o zbytku fronty). Test proto čeká sám (`while let task =
+  store.briefTask`), jinak by měřil stav uprostřed běhu.
+
+### Co se ověřit nedá a musí to proklikat člověk
+
+Že tři věty odpovídají tomu, co je na desce, a že se v nich neobjeví nic vymyšleného — to je cizí
+model, síť a peníze. V harnessu se tvrdí jedině **hranice** (co session dostala, kdy se pustila, co
+se z jejího výsledku přijalo), ne **kvalita textu**. Odtud věta v popisu PR.
+
+
 ## Kolik stojí výpis repozitářů organizace (#532)
 
 Změřeno na `keboola` (`gh` 2.x, tenhle stroj, ráno 2. 9. 2026). **Je to to jediné číslo, ze kterého

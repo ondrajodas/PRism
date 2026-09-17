@@ -139,7 +139,22 @@ nepustí ani tehdy, když na něm review neběželo.
 `Co teď`, jehož akce se přestěhovaly nad pruhy. **Čísla z karet zůstávají v railu a ve stavovém
 řádku**, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z domácí záložky. Osa filtru
 `Jen s blokujícím nálezem`, kterou zapínala karta `Blokuje`, zůstává — odškrtává se v nabídce
-filtru. **Brief ve třech větách nad deskou dodá #516**; do té doby je tam pozdrav.
+filtru.
+
+**Nad deskou stojí od #516 brief ve třech větách** — a pozdrav zůstává nad ním. Skládá ho session
+Claude Code **bez jediného nástroje**: dostane hotový stav aplikace (počty z pruhů, řádky
+viditelných pruhů, počet odložených, `Dění`) a jenom ho **přeformuluje**. **Nečte repozitář**, a je
+to hranice, ne opatrnost — brief z kódu už je review logika a ta patří do skillu, ne do aplikace.
+Pod větami stojí `shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne z kódu` a tlačítko `Shrň znovu`.
+
+**Ve výchozím stavu je vypnuto a blok se pak nekreslí vůbec.** V nastavení (`Review a skilly`,
+sekce `Brief na domově`) jsou tři volby: `Vypnuto`, `Na požádání` a `Při prvním tiku dne` — to
+poslední je vedle agenta z #510 jediná cesta, kterou tady session startuje bez kliknutí, a složí
+brief **jednou za den**, jakmile je fronta načtená. Podle čeho se pozná, že je dnešek shrnutý,
+přežívá restart (`brief.json` v cache), takže se za druhý brief o tomtéž neplatí. **Cena každého
+briefu** je na jeho řádku a počítá se do `Dneska stálo` — i u běhu, který text nevrátil. **Když se
+session nepovede**, stojí v bloku `Shrnutí se nepovedlo.`, pod tím důvod a tlačítko `Zkusit znovu`;
+prázdný rámeček by byl k nerozeznání od vypnutého briefu.
 kurzoru, ani hover stav.
 
 **Karty odešly s #515** (do té doby jich bylo pět, viz výš) a rozdíl, který nesly, drží od #515
