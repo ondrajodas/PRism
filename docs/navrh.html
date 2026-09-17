@@ -866,6 +866,15 @@ tr.del mark.w { background: var(--del-hi); }
    — dvě sady barev na tomtéž textu se čtou jako kaše (tentýž důvod jako u `mark.w`). */
 mark.hit { background: var(--hit-bg); color: inherit; border-radius: 2px; padding: 0 1px; }
 mark.hit.on { background: var(--hit-hi); }
+/* Anotace hunku (#524, sekce 59) — věta *proč* pod souřadnicí hunku. **Vlastní třída, ne `tr.hunk`**,
+   a **mimo `table.diff`**. Jmenuje se `hunk-why`, ne `ann`: `ann` už drží anotace checků (sekce 13)
+   a je `display: flex`, takže by věta i zdroj skončily jako dvě kolony vedle sebe — vyrenderováno. `tr.hunk` kreslí souřadnici, tedy strojový údaj mono písmem, kdežto tohle
+   je věta pro člověka — proporcionální, o odsazení dál a bez podkladu, aby se od kódu oddělila bez
+   druhého pruhu. Kdyby to byla řádka tabulky, dostala by od auto-layoutu **nejužší možnou kolonu**
+   (kolona kódu má `white-space: pre`, takže si vezme všechno) a věta by se zalámala po slovech —
+   vyrenderováno a změřeno. Blok mezi dvěma tabulkami se láme na šířku panelu. */
+.hunk-why { color: var(--ink-2); font-size: 11.5px; line-height: 1.5; padding: 3px 14px 5px 22px; }
+.hunk-why .src { color: var(--ink-3); }
 
 /* barvy syntaxe */
 .k  { color: #A855F7; }
@@ -10257,6 +10266,182 @@ tr.sel td.sg { background: var(--accent-weak); }
           a to, jestli systém adresu převzal — a <strong>každá má vlastní větu</strong>. Obecné
           „nepodařilo se otevřít“ by slilo <em>soubor tu není</em> s <em>mířili jsme mimo
           cache</em>, a to druhé je jediné, u čeho se má někdo zarazit.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s59">
+    <div class="section-head">
+      <div class="eyebrow">59 — Změněné soubory · diff, který se vysvětluje sám</div>
+      <h2>Ke každému hunku jedna věta <em>proč</em> — a u souboru druh změny</h2>
+      <p class="muted">
+        <b>Dnes</b> stojí nad hunkem souřadnice (<code>@@ -78,9 +78,21 @@</code>) a vedle řádku
+        nález, tedy věta o tom, co je <b>špatně</b>. To, <em>proč</em> ta změna v PR je, se
+        skládá v hlavě z popisu, z commitů a z kódu kolem — pokaždé znovu a u cizího repa
+        pomalu.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: <b>jedna krátká session na hlavu</b> napíše ke každému hunku větu
+        <em>proč</em> a ke každému souboru <b>druh změny</b> z pěti slov — <code>změna
+        chování</code>, <code>refaktor</code>, <code>test</code>, <code>konfigurace</code>,
+        <code>generované</code>. Věta stojí <b>pod souřadnicí hunku</b>, druh <b>v hlavičce
+        souboru</b> vedle pilulek, které tam už jsou. Zákres je z decku <em>Směry pro PRism</em>,
+        stránka <em>Za mě › Z4</em>.
+      </p>
+      <p class="muted">
+        <b>Anotace není nález, a je to hranice v datech, ne v tónu textu.</b> Nález tvrdí, že je
+        něco špatně, a váže se na něj blokující příznak, návrh verdiktu, odznaky i souhrn; anotace
+        říká, <b>co se v tom hunku děje</b>. Session, která je píše, <b>nemá čím nález nahlásit</b>
+        (<code>ReportFindings</code> v její sadě není) a <b>tvar odpovědi, který aplikace čte, nemá
+        pole pro závažnost</b> — takže se z anotace nemůže stát nález ani omylem. Napsat to do
+        promptu by nestačilo: prompt je prosba, tvar je podmínka.
+      </p>
+      <p class="muted">
+        <b>Kreslení hunků přijde až v dalším kroku (#525).</b> V #524 je z toho vidět
+        <b>jedna věc</b> — dráha <code>anotace</code> v tabu <em>Průběh</em> a položka
+        <code>Popsat změny</code> v nabídce nad diffem. Kresba níž je proto <b>zadání</b>,
+        ne stav aplikace.
+      </p>
+    </div>
+
+    <h3>Věta pod souřadnicí, druh v hlavičce souboru</h3>
+    <p class="muted">
+      Věta je <b>proporcionálním písmem a o odsazení dál</b>, aby se od kódu a od souřadnice
+      oddělila bez druhého barevného pruhu: jsou to dvě různá tvrzení a v jednom řádku by se četla
+      jako jedno. <b>Zdroj</b> (<code>z commitu …</code>) je za odrážkou a tišší — je to doklad,
+      ne věta; anotace bez zdroje je pořád věta, kterou stojí za to mít, takže se kvůli němu
+      <b>nezahazuje</b>.
+    </p>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Hunk s anotací</div>
+        <div class="frame flat" style="padding: 0;">
+          <div class="fhead">
+            <span>▾</span>
+            <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
+            <span class="pill">změna chování</span>
+            <span class="sp"></span>
+            <span class="rv-num" style="color: var(--ok);">+18</span>
+            <span class="rv-num" style="color: var(--crit);">−6</span>
+          </div>
+          <table class="diff">
+            <tr class="hunk"><td colspan="3">@@ -78,9 +78,21 @@ final class SecretClient</td></tr>
+          </table>
+          <div class="hunk-why">Zavádí cache před voláním vaultu, aby se na jeden klíč nechodilo dvakrát. <span class="src">· z commitu <code>perf: cache secrets</code></span></div>
+          <table class="diff">
+            <tr><td class="ln">78</td><td class="sg"></td><td class="code">    <span class="k">public function</span> <span class="fn">getSecret</span>(<span class="k">string</span> $key): <span class="k">string</span></td></tr>
+            <tr class="del"><td class="ln">80</td><td class="sg">−</td><td class="code">        $row = $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key);</td></tr>
+            <tr class="add"><td class="ln">80</td><td class="sg">＋</td><td class="code">        $row = $<span class="vr">this</span>-&gt;<span class="fn">cache</span>-&gt;<span class="fn">get</span>($key) ?? $<span class="vr">this</span>-&gt;<span class="fn">client</span>-&gt;<span class="fn">fetch</span>($key);</td></tr>
+            <tr class="hunk"><td colspan="3">@@ -96,4 +108,9 @@ final class SecretClient</td></tr>
+          </table>
+          <div class="hunk-why">Prázdná hodnota se vrací místo výjimky — volající to dneska nečeká. <span class="src">· popis PR to nezmiňuje</span></div>
+          <table class="diff">
+            <tr class="add"><td class="ln">108</td><td class="sg">＋</td><td class="code">        <span class="k">return</span> $row[<span class="st">'value'</span>] ?? <span class="st">''</span>;</td></tr>
+          </table>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          Věta je <b>jedna</b>, ne odstavec: hunků je v PR padesát a dva řádky u každého z toho
+          udělají druhý dokument. Druh změny se kreslí <b>v hlavičce souboru</b>, tedy jednou —
+          v každém hunku by to byl opis.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Strom souborů · pět druhů</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px;">
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">SecretClient.php</span><span class="pill">změna chování</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">Encryptor.php</span><span class="pill">refaktor</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">SecretClientTest.php</span><span class="pill">test</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">composer.json</span><span class="pill">konfigurace</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">composer.lock</span><span class="pill">generované</span></div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Uzavřený výčet, ne volný text</b>, a je to opačné rozhodnutí než u
+          <code>category</code> u nálezu, kde si aplikace vlastní škálu schválně nevymýšlí. Důvod
+          je v tom, k čemu ta hodnota je: kategorie nálezu se váže na blokující sadu, kterou si
+          píšu v nastavení, kdežto druh změny je to, <b>podle čeho se bude řadit a barvit</b> —
+          a řadit se dá jedině podle výčtu. Neznámá hodnota se <b>nehádá</b>: soubor prostě druh
+          nemá.
+        </p>
+      </div>
+    </div>
+
+    <h3>Co je z toho vidět hned (#524)</h3>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Tab Průběh · dráha <code>anotace</code> pod reviewery</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">code-review</span><span class="pill">doběhlo · 3 nálezy</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">security-review</span><span class="pill">doběhlo · čisto</span></div>
+            <div style="border-top: 1px solid var(--line); margin: 4px 0;"></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">anotace</span><span class="pill">doběhlo · 14 anotací · 5 souborů</span></div>
+            <div style="padding-left: 2px; font-size: 11.5px; color: var(--ink-3);">session · prochází kód · píše anotace</div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Pod děličem, ne mezi reviewery</b>, a je to podmínka: seznam drah vypisuje tytéž
+          reviewery jako chipy nad tabem, a chip u nich nese <b>počet nálezů</b>. Sedmá session
+          žádný nemá a mít nebude, takže by tam ukazoval číslo, které neznamená, co se u ostatních
+          čte. Je to jiná otázka nad týmž PR: ne <em>co našli</em>, ale <em>co se v tom diffu
+          děje</em>.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Nabídka nad diffem · <code>Popsat změny</code></div>
+        <div class="frame flat" style="padding: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px;">
+            <div>Nálezy pod řádky</div>
+            <div>Sbalit rozbalené úseky</div>
+            <div style="border-top: 1px solid var(--line); margin: 3px 0;"></div>
+            <div><b>Popsat změny</b></div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>V nabídce, ne v liště</b>: je to akce, která se na jednom PR pustí jednou, kdežto
+          v liště se soutěží o místo s věcmi, které se používají při každém review. Sloveso
+          v položce je schválně — samotné <em>„anotace“</em> by vypadalo jako přepínač
+          viditelnosti. Bez zapojené session se položka <b>nekreslí</b>, ne zašedne.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">201</span>
+        <span class="body">
+          <b>Páruje se pořadím hunku, ne úryvkem kódu</b>
+          <span>Session pošle <b>index hunku v souboru</b>, ne kus textu. Text by se musel v diffu
+          hledat — a řádek, který je v souboru dvakrát (<code>}</code> na konci metody), by větu
+          posadil k <b>cizímu</b> kusu kódu. Index je poziční, a právě proto se celý záznam
+          klíčuje <b>hlavou</b>: po pushi se hunky přečíslují, takže stará anotace by neukazovala
+          na starý kód, ale vedle. Po pushi se proto <b>neukáže vůbec</b>, ani jako zastaralá.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">202</span>
+        <span class="body">
+          <b>Odpovídá se posledním sdělením — a když se nedá přečíst, řekne se to</b>
+          <span>Vlastní nástroj <code>ReportAnnotations</code> by znamenal <b>MCP server</b>, tedy
+          další proces, který by aplikace spouštěla; to je nová hranice a zahodilo se to. Odpověď
+          je proto <b>JSON v posledním sdělení</b>, jako u kontroly nálezů. Cena je, že
+          <b>zabitá session nepřinese nic</b> (do posledního sdělení se nedostala) a že se sběr
+          umí pokazit potichu — a právě proto je <em>„odpověď se nedala přečíst“</em>
+          <b>vlastní stav</b>, ne prázdný seznam.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">203</span>
+        <span class="body">
+          <b>Ve výchozím stavu vypnuto, a platí to jen na automat</b>
+          <span>Je to <b>session navíc na každou hlavu</b>, tedy peníze, o které si nikdo neřekl —
+          vlastnost „samo se neutrácí víc, než jsem si vybral“ drží jedině výchozí vypnuto. Brána
+          je globální i per repo a týká se <b>automatu</b>; ručně se <code>Popsat změny</code>
+          pouští i tam, kde je vypnutý. Tatáž dělba jako u <em>Pustit přesto</em> u routingu.</span>
         </span>
       </div>
     </div>

@@ -247,6 +247,11 @@ struct PullRequestDetailView: View {
         // identifikátor, ne celé shrnutí — nový commit značky **nezneplatní**, jen z nich udělá
         // `změněno od prošlého`, a to se pozná z otisku v diffu.
         .task(id: pullRequest.id) { await store.loadReadMarks(for: pullRequest.id) }
+        // Anotace hunků (#524) tou samou cestou a ze stejného důvodu: jsou vidět jedině v diffu,
+        // takže by se při startu dekódovalo všechno, co kdy někdo popsal. Klíčem je identifikátor,
+        // ne shrnutí — o tom, jestli uložený záznam pro dnešní hlavu platí, rozhoduje
+        // `Policy.annotations(of:head:)`, ne to, kdy se načetl.
+        .task(id: pullRequest.id) { await store.loadAnnotations(for: pullRequest.id) }
         // Skok z palety (#184). Klíčem je **žádost i to, jak dopadl diff**: paleta umí skočit do
         // PR, jehož záložka se právě otevřela, takže diff v tu chvíli ještě není — a bez druhé
         // části klíče by se úloha po jeho dorazení už nespustila.
@@ -1825,7 +1830,11 @@ struct PullRequestDetailView: View {
             // Hodiny z **téhož zdroje**, ze kterého se o odkladu rozhodovalo — jinak by dráha
             // uměla tvrdit `poběží 23:00` proti jinému „teď“, než jaké platí v plánovači.
             now: store.time.now,
-            slug: "\(pullRequest.repo)#\(pullRequest.number)"
+            slug: "\(pullRequest.repo)#\(pullRequest.number)",
+            // Dráha `anotace` (#524) — **zvlášť, ne mezi dráhami reviewerů**: `Policy.lanes`
+            // vypisuje tytéž reviewery jako chipy nad tabem, takže sedmá session mezi ně nepatří.
+            // `nil` = na tomhle PR se nepopisovalo, takže se nekreslí nic.
+            annotationLane: store.annotationLane(for: pullRequest.id)
         )
     }
 
@@ -2109,7 +2118,15 @@ struct PullRequestDetailView: View {
                 : nil,
             reportContentEnd: reportsScrollAnchor
                 ? { contentEnd.note($0, of: pullRequest.id, in: .filesChanged) }
-                : nil
+                : nil,
+            // Popis změn (#524) — **jen nad celým diffem**, tedy za toutéž bránou jako kotva
+            // scrollu, a není to opatrnost: session popisuje `git diff <base>...HEAD` a anotace
+            // se páruje **pořadím hunku** v něm. Rozsah `Od tvé poslední návštěvy` (#284) je jiný
+            // seznam souborů s jiným počtem hunků, takže by tatáž čísla ukazovala jinam.
+            annotate: reportsScrollAnchor && store.canAnnotate(pullRequest.id)
+                ? { store.startAnnotating(for: pullRequest.id) }
+                : nil,
+            isAnnotating: store.isAnnotating(pullRequest.id)
         )
     }
 

@@ -143,6 +143,17 @@ private struct RepositoryDetailView: View {
                 }
                 .pickerStyle(.radioGroup)
 
+                // Tříhodnotový ze stejného důvodu jako přírůstek nad ním (#524): `false` u repa
+                // není totéž jako `nil` — repo, u kterého anotace platit nechci, si to podrží
+                // i po přepnutí globálního defaultu.
+                Picker("Po review popsat hunky", selection: config.annotatesHunks) {
+                    Text("Podle globálního nastavení (\(annotateName(settings.draft.global.annotatesHunks)))")
+                        .tag(Bool?.none)
+                    Text("Popisovat").tag(Bool?.some(true))
+                    Text("Nepopisovat").tag(Bool?.some(false))
+                }
+                .pickerStyle(.radioGroup)
+
                 // `nil` je i tady vlastní volba, ne prázdno — ze stejného důvodu jako
                 // u režimu.
                 Picker("Jazyk nálezů", selection: config.findingsLanguage) {
@@ -156,7 +167,7 @@ private struct RepositoryDetailView: View {
                 Text(verbatim: repo.description)
                     .font(.headline)
             } footer: {
-                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Metoda merge je výchozí hodnota pro potvrzení, ve kterém se dá přebít pro jeden merge; přeškrtnutá metoda je ta, kterou tenhle repozitář nepovoluje — přečteno z GitHubu. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou. Přírůstek platí až od druhého kola — v prvním se čte celý diff tak jako tak, a stejně tak u revieweera, který nad předchozí hlavou nedoběhl.")
+                Text("Manuální čeká na tlačítko. Automatický spustí review, jakmile se PR objeví v seznamu. Odesílání rozhoduje jen o tom, jestli se review dá odeslat; když je zakázané, tlačítko `Odeslat review…` zůstane zakázané a řekne proč. Potvrdit odeslání musí vždycky člověk. Metoda merge je výchozí hodnota pro potvrzení, ve kterém se dá přebít pro jeden merge; přeškrtnutá metoda je ta, kterou tenhle repozitář nepovoluje — přečteno z GitHubu. Jazyk se projeví na dalším běhu; už uložené nálezy zůstanou, jak jsou. Přírůstek platí až od druhého kola — v prvním se čte celý diff tak jako tak, a stejně tak u revieweera, který nad předchozí hlavou nedoběhl. Popis hunků je session navíc a platí **jen na automat**; ručně se pouští z nabídky nad diffem i tam, kde je vypnutý.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -413,6 +424,10 @@ private struct RepositoryDetailView: View {
 
     private func incrementName(_ enabled: Bool) -> String {
         enabled ? "jen přírůstek" : "vždycky celý diff"
+    }
+
+    private func annotateName(_ enabled: Bool) -> String {
+        enabled ? "popisovat" : "nepopisovat"
     }
 
     private func modeName(_ mode: ReviewMode) -> String {

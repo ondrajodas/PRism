@@ -4069,6 +4069,121 @@ Co je v okně a proč zrovna tak:
 vrací týž seznam a `SingleWayOutTests` procházejí beze změny. Kdo z odpovědi chce komentář na PR,
 pošle ho composerem v `Konverzaci`.
 
+### Anotace hunků — sedmá session (#524)
+
+Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov. Kreslení
+u hunku přijde až v #525; v #524 je z toho vidět **dráha `anotace` v tabu `Průběh`** a položka
+`Popsat změny` v nabídce nad diffem. Zákres je [sekce 59 mockupu](navrh.html).
+
+**Sedmá session, ale ne šestá sada povolení — a to je to tvrzení.** Běží doslova s
+`AskCommand.allowedTools`, tedy `Read,Grep,Glob,Bash(git:*)`; liší se **promptem a parserem**, ne
+právy. Zadání #524 mělo vlastní sadu s nástrojem `ReportAnnotations`, ten ale odpadl (níž), a druhá
+konstanta s týmž obsahem by byla jen druhé místo, kde se dá tvrdá podmínka č. 2 porušit. Delegace
+je tu ze stejného důvodu jako u agenta (#510), který si sadu půjčuje od slévání konfliktů.
+
+#### Odpovídá se posledním sdělením, ne nástrojem — a co to stálo
+
+**`ReportAnnotations` se zahodil.** Nástroj, který si „definuje aplikace“, v `claude` CLI
+neexistuje jinak než jako **MCP server** — tedy jako **další proces, který by PRism spouštěl**, a to
+je nová hranice pod tvrdou podmínkou č. 1 i č. 2. Změřeno na běhu se jménem nástroje
+v `--allowedTools`: session si `ReportAnnotations` **nezavolala**, třikrát ho zkusila najít přes
+`ToolSearch` a nakonec odpověděla textem. `ReportFindings` je v tom výjimka jen zdánlivě — sbírá se
+ze **streamu**, tedy z pokusu o nástroj, který taky nikdo neobsluhuje.
+
+Odpověď je proto **JSON v `result` eventu**, čte ho `AnnotateCommand.parse` a precedens je
+**kontrola nálezů** (#150) a **rozhovor nad PR** (#452). Čte se defenzivně: vykrojí se od prvního
+`{` po poslední `}`, takže projde i odpověď v ```-bloku nebo s větou kolem.
+
+**Cena je vidět ve dvou místech a ani jedno se nezamlčuje:**
+
+- **Zabitá session nepřinese nic.** Do posledního sdělení se nedostala, takže po ní nezbyde ani
+  půlka — na rozdíl od revieweera, kterému zabití vezme jen zbytek. Dráha o tom mluví vlastní větou
+  (`ReviewerLaneText`), ne tou o „nálezech, které do té doby dorazily“.
+- **Sběr umí tiše nefungovat.** Session, která si tvar nepřečte, napíše prózu — a prázdné seznamy
+  by se od toho nedaly odlišit. Proto je `answered` **vlastní pole** vedle prázdných seznamů
+  (`AnnotateCommand.Answer`, `AnnotationRun`, `StoredAnnotations`) a proto je nejcennější test
+  téhle oblasti ten, který tvrdí, že se **nesebralo nic**.
+
+#### Hranice mezi anotací a nálezem je v tvaru schématu
+
+Zadání #524 mělo tuhle hranici v **tvaru nástroje**; s nástrojem ta věta padá a nahrazuje ji **tvar
+schématu, které aplikace parsuje** (`AnnotationSchema`). Drží ji tři vrstvy, každá sama o sobě:
+
+1. **Ve schématu není pole pro závažnost** — ani verdikt, kategorie nebo blokující příznak. Model
+   nemá kam ji napsat a parser ji nemá odkud přečíst. Hlídá to `AnnotateCommandTests` nad
+   `everyField` a `severityWords`; `category` je mezi zakázanými slovy schválně, protože je to
+   u nálezu slug s vazbou na blokující sadu.
+2. **`ReportFindings` v sadě není**, takže se session nemá kam zapsat, ani kdyby chtěla.
+3. **`AnnotationRun` nemá pole pro nález**, takže by se výsledek neměl kudy protáhnout.
+
+**Popis do promptu se z výčtu polí skládá, nepíše ručně** — jinak by vzniklo pole, o kterém ví
+parser a ne model, nebo naopak. A **druh změny je uzavřený výčet**, na rozdíl od `category`
+u nálezu: kategorie se váže na sadu, kterou si píše člověk v nastavení, kdežto druh je to, podle
+čeho bude itinerář řadit a mapa barvit — a řadit se dá jedině podle výčtu. Neznámá hodnota se
+**nehádá**, položka se zahodí a započítá.
+
+#### Vlastní store, ne pole v `ReviewRecord`u
+
+`AnnotationStore` je jeden JSON na PR pod `annotations/`. Tři důvody, každý sám o sobě stačí:
+
+- **Anotace není nález.** V záznamu s nálezy by byla jeden `if` od toho, aby se počítala do odznaků,
+  do souhrnu nebo do návrhu verdiktu. Takhle je oddělení **kontrolovatelné grepem**:
+  `HunkAnnotation` se v `App/Store/ReviewRecord.swift` nevyskytuje.
+- **Anotace se pouští i bez review.** Ručně se dá popsat PR, na kterém žádný reviewer neběžel —
+  a `ReviewRecord` bez jediného běhu v `Policy.currentRecords` **vyhraje** nad zastaralým záznamem
+  s nálezy, protože zastaralý není. Nálezy z minula by tím z okna zmizely ve chvíli, kdy si člověk
+  řekne o popis změn; je to tatáž past, kvůli které nemá vlastní záznam ani kontrola nálezů (#150).
+- **`AppStore.reviewRecords[pr]` je ten *současný* záznam**, tedy klidně ten pro starší hlavu —
+  anotace pro tu dnešní by v něm neměly kde být.
+
+#### Klíčuje se hlavou, ne otiskem obsahu
+
+Opačné rozhodnutí než u značky `Prošlo` (#500), a jsou k němu tři důvody:
+
+- **Anotace se nepočítá z obsahu hunku.** Věta vzniká z commitů, z popisu PR a z kódu kolem, takže
+  by ji otisk udržel při životě i tehdy, když se odpověď změnila. `Prošlo` je naopak tvrzení o tom,
+  **co jsem přečetl**, a to na ničem jiném než na bajtech nezávisí.
+- **Páruje se pořadím hunku**, ne textem (`Policy.annotations(of:in:)`). Úryvek kódu by se musel
+  v diffu hledat a řádek, který je v souboru dvakrát (`}` na konci metody), by větu posadil k cizímu
+  hunku. Index je ale poziční: první push, který přidá hunk nad ní, posune všechny ostatní — a otisk
+  by tu chybu nechytil, protože obsah hunku se nezměnil, jen jeho číslo.
+- **Zastarat má stejně jako nálezy**, přesně jak říká zadání.
+
+**Hlavu proto drží i průběh**, ne jen uložený záznam (`AnnotationPass.headSha`): dráha z běhu nad
+starou hlavou by v tabu `Průběh` tvrdila „popsáno, 14 anotací“ o diffu, ze kterého se v okně nekreslí
+nic. Rozhoduje `Policy.annotationLane(pass:stored:head:)`. **Soubor je ale jeden na PR, ne na
+`(PR, hlava)`** — užitečná je vždycky jen sada pro dnešní hlavu a starší se nesmí ukázat ani jako
+zastaralá, takže by soubory po starých hlavách byly v cache mrtvé místo; nový běh ten předchozí
+**přepíše**.
+
+#### Dráha `anotace` stojí pod reviewery, ne mezi nimi
+
+`Policy.lanes` vypisuje **tytéž reviewery jako `Policy.chips`** (je na to test) a chip u nich nese
+**počet nálezů**. Sedmá session žádný nemá, takže mezi ně nepatří; `ReviewProgressView` ji bere
+zvlášť (`annotationLane`) a kreslí pod děličem. `ReviewerLane.reportedFindings` u ní zůstává navěky
+`nil` a co nahlásila, nese **`ReviewerLane.Kind.annotations(hunks:files:)`** — rozhodovat to podle
+`skill == "anotace"` by znamenalo hranici v řetězci, který si může někdo pojmenovat skill.
+
+**Osu kroků dráha nedrží** a `AnnotationPass` se **neukládá**: po restartu má z dráhy zbýt to, co
+leží na disku, tedy výsledek, ne průběh. Fáze jsou u uloženého výsledku proto `done`, ne `unknown` —
+u anotací se nic neztratilo. A **fáze `píše anotace` skočí z prázdné rovnou na hotovou**, protože
+odpověď přijde najednou v posledním sdělení.
+
+#### Kdy se pouští
+
+**Ručně** z nabídky nad diffem (`Popsat změny`) — a **bránu to nečte**, tatáž dělba jako
+u `Pustit přesto` u routingu (#518): brána rozhoduje o tom, co si vybírá aplikace, ne o tom, o co si
+člověk řekne kliknutím. **Automaticky** jen po **automatickém** review a jen s
+`ResolvedConfig.annotatesHunks`, která je **ve výchozím stavu vypnutá**: je to session navíc na
+každou hlavu, tedy peníze, o které si nikdo neřekl. Denní limit automatických běhů (`AutoRunLedger`)
+se tím **nekrátí** — ten hlídá, kolik **review** se pustí samo, a anotace běží až po review, které
+se do něj už započetlo. Útrata do `SpendLedger` jde, jako u všeho ostatního.
+
+**Položka se bez zapojené session nekreslí, ne zašedne** (tatáž úvaha jako u `Otevřít v editoru`,
+#530), a nabízí se **jen nad celým diffem**: session popisuje `git diff <base>...HEAD` a anotace se
+páruje pořadím hunku v něm, takže nad rozsahem `Od tvé poslední návštěvy` (#284) by tatáž čísla
+ukazovala jinam.
+
 ## Překlad nálezů (`App/Review/`)
 
 Nálezy se do jazyka z nastavení překládají **až po doběhnutí review**, ne instrukcí

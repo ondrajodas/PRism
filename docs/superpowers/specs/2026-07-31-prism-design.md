@@ -7773,3 +7773,75 @@ který nikdo nečte, tedy zrovna ten vzor, který Copilot v tomhle repu opakovan
 **Zamítnuto: dát agentovi vlastní místo vedle pilulky dráhy.** Dvě pilulky v jednom řádku zakázalo
 #509 měřením, ne vkusem: v nejužším okně by místo nich ustupoval titulek, tedy to jediné, podle
 čeho se PR v seznamu pozná.
+
+## Záznam rozhodnutí — anotace hunků odpovídají posledním sdělením, ne nástrojem (#524)
+
+**Mění to větu ze zadání #524.** To stálo na vlastním nástroji `ReportAnnotations`, definovaném
+„stejně jako `ReportFindings`“, a na tom, že **hranice mezi anotací a nálezem je v tvaru nástroje**.
+Obojí padlo, a v tomhle pořadí.
+
+**Zamítnuto: vlastní MCP server.** Nástroj, který si „definuje aplikace“, v `claude` CLI neexistuje
+jinak než jako MCP server — tedy jako **další proces, který by PRism spouštěl**. To je nová hranice
+pod tvrdou podmínkou č. 1 (co všechno aplikace umí rozběhnout) i č. 2 (co všechno smí session), a na
+jedno issue o popisu diffu je to nepoměrná cena. `ReportFindings` je v tom výjimka jen zdánlivě:
+není to nástroj CLI, obsluhuje ho harness review skillu.
+
+**Změřeno, ne odhadnuto.** Běh se jménem `ReportAnnotations` v `--allowedTools`: session si nástroj
+**nezavolala ani jednou**, **třikrát** ho zkusila najít přes `ToolSearch` a nakonec odpověděla
+prostým textem. Jméno v povoleních tedy samo o sobě nic neregistruje — vypadá to jako odložený
+nástroj, který nikdo neobsluhuje.
+
+**Zvolená cesta: JSON v `result` eventu**, čtený `AnnotateCommand.parse`. Precedens je **kontrola
+nálezů** (#150) a **rozhovor nad PR** (#452); třetí tvar se nevymýšlel. Čte se defenzivně — od
+prvního `{` po poslední `}` —, protože je to volný text od modelu, ne formát, na kterém bychom se
+dohodli.
+
+**Hranice mezi anotací a nálezem se tím nepřesunula, jen přejmenovala.** Platí: je v **tvaru
+schématu, které aplikace parsuje** (`AnnotationSchema`), a v tom, že anotace **nemá pole pro
+závažnost**. Drží ji tři nezávislé vrstvy — schéma bez toho pole (test nad `everyField`
+× `severityWords`), sada bez `ReportFindings` a `AnnotationRun` bez pole pro nález. Argument proti
+promptu zůstává týž: prompt je prosba, tvar je podmínka.
+
+**Cena té cesty se nezamlčuje, protože je vidět v okně.** Zabitá session `result` nepošle, takže
+po ní **nezbyde nic** — na rozdíl od revieweera, kterému zabití vezme jen zbytek. A sběr umí **tiše
+nefungovat**: session, která si tvar nepřečte, napíše prózu, a prázdné seznamy by se od toho nedaly
+odlišit. Proto je `answered` vlastní pole vedle prázdných seznamů a proto je nejcennější test celé
+oblasti ten, který tvrdí, že se **nesebralo nic**.
+
+**Důsledek, který se nečekal: nepřibývá sada povolení.** Bez nástroje je sada anotací **doslova táž**
+jako u rozhovoru (`Read,Grep,Glob,Bash(git:*)`). Vlastní konstanta s týmž obsahem by byla jen druhé
+místo, kde se dá tvrdá podmínka č. 2 porušit, takže si ji `AnnotateCommand` **půjčuje** — tatáž
+delegace jako u agenta (#510). V tabulce session v `CLAUDE.md` proto **nepřibyl řádek**; anotace
+stojí u rozhovoru a liší se **promptem a parserem**.
+
+**Je to pokus, ne hotová věc.** Rozhodl to uživatel 17. 9. 2026 slovy *„zkus tu odpověď v posledním
+sdělení, uvidíme jak to bude vypadat“*. Kdyby se ukázalo, že model tvar nedrží, je cesta zpátky
+otevřená — a bude se poznat podle `answered` a podle `dropped`, které se obojí ukládají.
+
+## Záznam rozhodnutí — anotace bydlí ve vlastním storu a klíčují se hlavou (#524)
+
+**Vlastní store, ne pole v `ReviewRecord`u.** Zadání říkalo „ukládá se do `ReviewStore` vedle
+nálezů“; zamítnuto, a jsou k tomu tři důvody, každý sám o sobě dostatečný:
+
+- **Anotace není nález.** V záznamu s nálezy by byla jeden `if` od toho, aby se počítala do odznaků,
+  do souhrnu nebo do návrhu verdiktu. Odděleně je to **kontrolovatelné grepem**.
+- **Anotace se pouští i bez review**, ručně z nabídky nad diffem. `ReviewRecord` bez jediného běhu
+  v `Policy.currentRecords` **vyhraje** nad zastaralým záznamem s nálezy, protože zastaralý není —
+  takže by ruční `Popsat změny` na PR, kde reviewer neběžel, **sundalo z okna nálezy z minula**. Je
+  to tatáž past, kvůli které nemá vlastní záznam ani kontrola nálezů (#150).
+- **`AppStore.reviewRecords[pr]` je ten *současný* záznam**, tedy klidně ten pro starší hlavu.
+
+**Klíčem je hlava, ne otisk obsahu** — opačné rozhodnutí než u značky `Prošlo` (#500), a to
+schválně. `Prošlo` je tvrzení o tom, **co jsem přečetl**, a to nezávisí na ničem jiném než na
+bajtech. Anotace je proti tomu **poziční**: páruje se **pořadím hunku**, protože párování textem by
+u řádku, který je v souboru dvakrát, posadilo větu k cizímu kusu kódu. První push, který přidá hunk
+nad ní, tedy posune všechny ostatní — a otisk by tu chybu **nechytil**, protože obsah hunku se
+nezměnil, jen jeho číslo.
+
+**Hlavu proto drží i průběh, ne jen uložený záznam** (`AnnotationPass.headSha`). Bez toho by dráha
+`anotace` po pushi dál hlásila „doběhlo · 14 anotací“ o diffu, ze kterého se v okně nekreslí nic —
+tedy přesně ten text, který tvrdí víc, než data unesou.
+
+**Soubor je jeden na PR, ne na `(PR, hlava)`.** Užitečná je vždycky jen sada pro dnešní hlavu
+a starší se nesmí ukázat ani jako zastaralá, takže by soubory po starých hlavách byly v cache mrtvé
+místo, které nikdo nečte a nic nemaže. Nový běh ten předchozí **přepíše**.

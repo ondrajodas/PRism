@@ -8943,3 +8943,50 @@ odklad od vypnutého automatu.
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR na pokyn uživatele
 nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
+
+## #524 — Anotace hunků: sedmá session, která popisuje diff (M17, zákres 59)
+
+Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov — `změna
+chování`, `refaktor`, `test`, `konfigurace`, `generované`. Kreslení u hunku přijde až v #525;
+z #524 je vidět **dráha `anotace` v tabu `Průběh`** a položka `Popsat změny` v nabídce nad diffem.
+Zákres je sekce 59 v `docs/navrh.html`.
+
+**Zadání se změnilo ve dvou větách a obojí je zapsané rozhodnutí.**
+
+První: **vlastní nástroj `ReportAnnotations` se zahodil.** Nástroj, který si „definuje aplikace“,
+v `claude` CLI neexistuje jinak než jako **MCP server** — tedy jako další proces, který by PRism
+spouštěl, a to je nová hranice pod tvrdou podmínkou č. 1 i č. 2. Změřeno: session si nástroj
+**nezavolala**, třikrát ho zkusila najít přes `ToolSearch` a nakonec odpověděla textem. Odpovídá se
+proto **JSON v posledním sdělení**, jako u kontroly nálezů (#150) a rozhovoru (#452).
+
+Druhá plyne z první: **hranice mezi anotací a nálezem není v tvaru nástroje, ale v tvaru schématu,
+které aplikace parsuje** — a v tom, že anotace **nemá pole pro závažnost**. Drží ji tři nezávislé
+vrstvy: schéma bez toho pole, sada bez `ReportFindings` a `AnnotationRun` bez pole pro nález.
+
+**Sedmá session, ale žádná šestá sada povolení.** Anotace běží doslova s
+`AskCommand.allowedTools` (`Read,Grep,Glob,Bash(git:*)`) a liší se **promptem a parserem**, ne
+právy; vlastní konstanta s týmž obsahem by byla druhé místo, kde se dá tvrdá podmínka č. 2 porušit.
+Je to tatáž delegace jako u agenta (#510), který si sadu půjčuje od slévání konfliktů.
+
+**Co cesta přes poslední sdělení stála:** zabitá session nepřinese **nic** (do posledního sdělení se
+nedostala) a sběr umí **tiše nefungovat**, takže je „odpověď se nedala přečíst“ **vlastní stav**
+(`answered`) vedle prázdných seznamů, ne totéž. Obojí je v okně poznat na dráze.
+
+Anotace bydlí ve **vlastním storu** (`annotations/<owner>/<repo>/<pr>.json`), ne v `ReviewRecord`u:
+ruční `Popsat změny` na PR bez review by jinak sundalo z okna nálezy z minula — tatáž past jako
+u #150. Klíčuje se **hlavou**, ne otiskem obsahu jako `Prošlo` (#500), protože se páruje **pořadím
+hunku**; hlavu drží uložený záznam **i běh**, jinak by dráha po pushi tvrdila „popsáno“ o diffu, ze
+kterého se nekreslí nic. Spouští se **ručně z nabídky nad diffem** (bránu nečte) nebo **po
+automatickém review** za branou `annotatesHunks`, která je ve výchozím stavu **vypnutá**.
+
+**Vlastní revize diffu našla skutečnou chybu, a je z třídy „nejtišších“:** guard psaný jako
+`!(value is Bool)` zahazuje JSONová čísla **0 a 1**, protože je Swift bridguje na `Bool` (`42` už
+ne). U anotací by to znamenalo, že **hunk 1 nemá nikdy anotaci**. Opraveno přes
+`CFGetTypeID(number) == CFBooleanGetTypeID()`; **tentýž guard stojí i v `StreamParser.line(from:)`**,
+kde bere nález hlášený na řádku 1 — to je mimo rozsah tohohle issue a je na to vlastní úkol.
+
+Přibylo 71 testů v pěti sadách; regrese se ověřila vložením regrese u kontroly tvaru odpovědi.
+
+**Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl. Vlastní revize diffu
+proběhla a je popsaná v PR. **A kreslení anotací u hunku není součástí #524** — mockup je zadání pro
+#525, ne stav aplikace.

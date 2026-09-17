@@ -41,6 +41,12 @@ struct DiffToolbar: View {
     var openSearch: (() -> Void)?
     /// Je pruh hledání otevřený? Popisek pak svítí akcentem, aby bylo poznat, odkud se pruh vzal.
     var isSearching = false
+    /// Popsat změny sedmou session (#524). `nil` = **položka se nekreslí** — session není zapojená,
+    /// nebo se neví, nad kterou hlavou by běžela. Zašedlá by slibovala akci, která se zapíná
+    /// jinde; je to tatáž úvaha jako u `Otevřít v editoru` (#530).
+    var annotate: (() -> Void)?
+    /// Běží popis změn právě teď? Položka se pak nekliká a řekne to.
+    var isAnnotating = false
 
     var body: some View {
         HStack(spacing: 9) {
@@ -117,7 +123,7 @@ struct DiffToolbar: View {
     @ViewBuilder private var foldMenu: some View {
         if !diff.files.isEmpty {
             let allFolded = diff.files.allSatisfy(folding.isFolded)
-            if hasFindings || collapseExpansion != nil {
+            if hasFindings || collapseExpansion != nil || annotate != nil {
                 Menu {
                     if hasFindings {
                         // Jmenuje se `Nálezy pod řádky`, ne `Bubliny`: schovává **jen** nálezy,
@@ -135,6 +141,14 @@ struct DiffToolbar: View {
                         Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
                             collapseExpansion()
                         }
+                    }
+                    // Popis změn (#524). **V nabídce, ne v liště**: je to akce, která se na jednom
+                    // PR pustí jednou, kdežto v liště se soutěží o místo s věcmi, které se
+                    // používají při každém review. Sloveso je v položce, protože „anotace“ samotné
+                    // by v nabídce vypadalo jako přepínač viditelnosti.
+                    if let annotate {
+                        Button("Popsat změny", systemImage: "text.alignleft", action: annotate)
+                            .disabled(isAnnotating)
                     }
                 } label: {
                     foldLabel(allFolded)

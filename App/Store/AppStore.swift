@@ -328,6 +328,25 @@ final class AppStore {
     /// ještě nečetlo, a to se od „nic zaškrtnutého“ liší jen tím, že se čtení má ještě spustit.
     var readMarks: [PRIdentifier: ReadMarks] = [:]
 
+    /// Anotace hunků (#524), načtené z disku při otevření PR. Chybějící klíč = z disku se ještě
+    /// nečetlo.
+    ///
+    /// **Vlastní mapa vedle `reviewRecords`, ne pole v záznamu** — proč, je u `AnnotationStore`.
+    /// Platnost proti dnešní hlavě rozhoduje `Policy.annotations(of:head:)`, ne tahle mapa: záznam
+    /// z jiné hlavy tu klidně leží, jen se z něj nic nekreslí.
+    var hunkAnnotations: [PRIdentifier: StoredAnnotations] = [:]
+
+    /// Běžící anotační session (#524) — jedna na PR.
+    var annotationTasks: [PRIdentifier: Task<Void, Never>] = [:]
+
+    /// Co anotační session zatím udělala (#524). **Jen v paměti**, jako přeskočení routingu
+    /// (`routingSkips`): dráha `anotace` je záznam o tom, co se právě děje, a po restartu z ní
+    /// zbude to, co je na disku — tedy výsledek, ne průběh.
+    var annotationProgress: [PRIdentifier: AnnotationPass] = [:]
+
+    /// Proč anotace neproběhly (#524). `nil` = neproběhlo nic, o čem by se mělo mluvit.
+    var annotationFailures: [PRIdentifier: String] = [:]
+
     /// Stav značky u každého souboru **načteného** diffu (#500) — odvozená mapa, ze které čte
     /// strom, hlavička souboru i sbalování.
     ///
@@ -572,6 +591,17 @@ final class AppStore {
     /// Uložené značky `Prošlo` (#500). `nil` = neukládají se, tedy zaškrtnutí zanikne se
     /// zavřením aplikace — v okně se přitom chová stejně, protože stav drží `readMarks`.
     let readMarkStore: ReadMarkStore?
+
+    /// Popis změn hunk po hunku (#524) — **sedmá session**. `nil` = **nepopisuje se nic**, tedy
+    /// stav před #524; tak jsou na tom testy, které o anotace nestojí, a nespouští tím `claude`.
+    ///
+    /// **Není to brána.** Tou je `ResolvedConfig.annotatesHunks` (globálně i per repo, výchozí
+    /// vypnuto) pro automat a kliknutí v nabídce nad diffem pro ruční spuštění — tohle je jen
+    /// zapojení session, přesně jako `asker` nebo `fixer`.
+    let annotator: (any HunkAnnotating)?
+
+    /// Uložené anotace (#524). `nil` = neukládají se, tedy popis zanikne se zavřením aplikace.
+    let annotationStore: AnnotationStore?
 
     /// Snímek otevřených záložek (#527). `nil` = **záložky restart nepřežijí**, tedy stav před
     /// #527; tak jsou na tom testy, které o obnovení nestojí, a proto se u nich ani nesahá do
@@ -1067,6 +1097,8 @@ final class AppStore {
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
+        annotator: (any HunkAnnotating)? = nil,
+        annotationStore: AnnotationStore? = nil,
         openTabsStore: OpenTabsStore? = nil,
         repositoryCatalog: RepositoryCatalog? = nil,
         autoRuns: AutoRunLedger? = nil,
@@ -1141,6 +1173,8 @@ final class AppStore {
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
+        self.annotator = annotator
+        self.annotationStore = annotationStore
         self.openTabsStore = openTabsStore
         self.repositoryCatalog = repositoryCatalog
         self.autoRuns = autoRuns
@@ -1311,6 +1345,16 @@ final class AppStore {
             askContexts: AskContextStore(),
             // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
             readMarkStore: ReadMarkStore(),
+            // Anotace hunků (#524) — **sedmá session**, ale **ne šestá sada povolení**: běží
+            // doslova s toutéž jako rozhovor nad PR a liší se promptem a parserem. Přes tentýž
+            // registr běžících session (#351) jako zbytek.
+            annotator: ClaudeHunkAnnotator(
+                claude: toolPaths.claude,
+                gh: toolPaths.gh,
+                runner: SubprocessStreamer(sessions: .shared),
+                model: { box.value.global.model }
+            ),
+            annotationStore: AnnotationStore(),
             // Snímek otevřených záložek (#527) — jeden malý JSON v kořeni cache slotu, čte se
             // jednou při startu a zapisuje při změně záložky. Živý jedině tady; testy ho
             // nedostanou, takže do cache nesahají.
@@ -2419,6 +2463,14 @@ final class AppStore {
         // **spolu**, jinak by po vypadlém PR zbyly stavy odvozené z mapy, která už není.
         readMarks = readMarks.filter { wantedPullRequests.contains($0.key) }
         readStates = readStates.filter { wantedPullRequests.contains($0.key) }
+        // Anotace hunků (#524) jdou tou samou cestou a ze stejného důvodu jako značky `Prošlo`:
+        // z paměti ven, **na disku zůstávají** (zaplacená session, a vrácený PR by ji platil
+        // znovu). Průběh a hlášky se uklízejí **spolu s nimi**, jinak by po vypadlém PR zbyla
+        // dráha `anotace` nad daty, která už nikdo nemá. Běžící session se **neruší**, stejně jako
+        // ruční review: vyžádal si ji člověk.
+        hunkAnnotations = hunkAnnotations.filter { wantedPullRequests.contains($0.key) }
+        annotationProgress = annotationProgress.filter { wantedPullRequests.contains($0.key) }
+        annotationFailures = annotationFailures.filter { wantedPullRequests.contains($0.key) }
         // Mapa PR pro řádek fronty (#502) jde tou samou cestou a ze stejného důvodu jako diff,
         // ze kterého vzniká: u PR mimo chtěnou množinu ji nikdo nekreslí. Je to
         // `@ObservationIgnored` cache, takže tenhle zápis nikoho nebudí — na rozdíl od map výš

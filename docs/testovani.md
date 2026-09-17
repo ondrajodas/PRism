@@ -11601,3 +11601,89 @@ Scéna `16-agent-bezi` dostala **čtyři kroky** místo jednoho: na renderu se p
 panelu o 278 bodech vejde a jestli se dlouhá cesta ořízne uprostřed, místo aby přetekla. Scéna
 `13-slevam` má ocas o dvou prvcích a v renderu z něj musí být vidět **jediná** řádka — to je ta
 věta o slévání konfliktů, která se s přechodem na jednu mapu nesmí změnit.
+
+## Anotace hunků (#524)
+
+Pět sad, 71 testů. Co je u téhle oblasti nejcennější, plyne z toho, **jak se odpověď sbírá**:
+je to JSON v posledním sdělení (`docs/claude-cli.md`), tedy zrovna to místo, kde sběr umí **tiše
+nefungovat** — session, která si tvar nepřečte, napíše prózu a bez pojmenování by z toho v okně
+vyšlo „diff nemá co popsat“, tedy tvrzení o kódu místo tvrzení o běhu.
+
+### `AnnotateCommandTests` — že se nesebralo nic
+
+Sada je postavená kolem jediného rozdílu: **prázdné seznamy** (`answered == true`) versus
+**nepřečtená odpověď** (`answered == false`). Parametrizovaný test prochází šest podob odpovědi,
+ze kterých se nesmí sebrat nic — próza, prázdný řetězec, **pole místo objektu**, objekt s cizím
+klíčem, `hunks` jako řetězec a nevalidní JSON —, a k tomu `nil`, tedy zabitou session bez `result`
+eventu. Regrese se ověřila **vložením regrese**: po odstranění kontroly tvaru padly tři z těch šesti
+případů (u zbylých tří odpověď neobsahuje `{`, takže je zahodí už vykrojení).
+
+Zbytek sady tvrdí schéma a vadné položky:
+
+- **ve schématu není pole pro závažnost** — nad `everyField` × `severityWords`, tedy výčtem, ne
+  úsudkem; je tam i `category`, protože u nálezu je to slug s vazbou na blokující sadu;
+- **popis do promptu se skládá z výčtu polí** — v instrukci musí stát každé jméno pole i každá
+  hodnota uzavřeného výčtu, jinak by vzniklo pole, o kterém ví parser a ne model;
+- **vadná položka se zahodí a započítá**, aby se tichá ztráta dala odlišit od nepopsané části diffu;
+- **index hunku, který není kladné celé číslo, neprojde** — parametrizovaně přes `true`, `2.5`,
+  `0`, `-1`, `null` a `""`.
+
+**Ten test na `true` našel skutečnou chybu, a je to ta nejtišší podoba téhle třídy.** Guard psaný
+jako `!(value is Bool)` (tak, jak stojí i v `StreamParser.line(from:)`) zahazuje **`0` a `1`** —
+Swift je z `__NSCFNumber` bridguje na `Bool`, kdežto `42` už ne. U anotací by to znamenalo, že
+**hunk 1 nemá nikdy anotaci**. Rozlišit se to dá jedině podle skutečného typu
+(`CFGetTypeID(number) == CFBooleanGetTypeID()`); změřeno samostatným skriptem nad
+`JSONSerialization`.
+
+### `ClaudeHunkAnnotatorTests` — co po zabité session zbyde
+
+Nad `FakeProcessStreamer`, tedy celou cestou od streamu k výsledku. Nejcennější je tvrzení, že po
+**zabité** session nezbyde nic, a to i tehdy, když už něco psala: scénář `timeout(after:)` pošle
+`init` event a assistant text s kusem JSONu, a přesto musí vyjít `answered == false` a prázdné
+seznamy. Session id se přitom **uchová** — `claude --resume` se na zabitý běh navázat dá.
+
+K tomu: pořadí událostí průběhu (session → krok → počty **až s odpovědí**), a to negativní —
+**nepřečtená odpověď událost nevydá vůbec**, tedy ani `annotated(0, 0)`, protože nula by v dráze
+tvrdila „nemá co dodat“.
+
+### `AnnotationPairingTests` — párování a platnost
+
+Čisté funkce `Policy`, vyčerpávajícím výčtem. Dvě tvrzení, která se rozbijí potichu:
+
+- **páruje se pořadím hunku, ne textem** — a index mimo rozsah se **zahodí**, neposadí na kraj;
+  u přejmenovaného souboru sedí nové i staré jméno, cizí cesta se nespáruje vůbec;
+- **anotace z jiné hlavy se nevydá** (tvrdá podmínka č. 5), a **neznámá hlava je zákaz, ne
+  povolení** — parametrizovaně přes `nil` i `""`.
+
+K tomu tvrzení o dráze, které tu hranici drží v poslední vrstvě: **`reportedFindings` u ní zůstává
+`nil`** u běžící i doběhlé session, a **doběhlá session bez čitelné odpovědi má v dráze `nil`, ne
+nulu**.
+
+### `AnnotationStoreTests` — proti skutečnému disku
+
+Nad dočasnou složkou, jako `ReadMarkStore`: round trip i s otiskem a počtem zahozených položek,
+**přepis** novým během, cizí anotace v souboru, symlink, rozbitý soubor a cesta bez commitu
+v názvu. A **prázdný i nečitelný běh se uloží taky** — bez souboru by se „zkusilo se to a nevyšlo“
+nedalo odlišit od „nikdy neběželo“, tedy od stavu, který si vyžádá běh druhý.
+
+### `AppStoreAnnotationsTests` — brána a to, že z anotace nevznikne nález
+
+Nejcennější je tady test, který tvrdí, že po popsání změn **není ani jeden nález**: prázdné
+`reviewRecords`, prázdné chipy a na disku soubor **jedině** pod `annotations/`, nic pod `reviews/`.
+Je to jediné místo, kde se ta hranice dá tvrdit naráz o všech třech vrstvách.
+
+Kolem toho brána: automat **bez** zapnuté `annotatesHunks` nepopíše nic, ruční review nepopíše nic
+ani se zapnutou, kliknutí popíše **i u repa, kde je vypnutá**. A co se nesmí stát: zrušený běh
+neuloží nic a uklidí po sobě průběh, dvě kliknutí za sebou pustí jednu session, po pushi se uložené
+anotace **přestanou vydávat** — včetně dráhy —, ale z paměti ani z disku se přitom **nic nemaže**.
+
+**Zabitá session se přesto uloží**, s `answered == false` a `outcome == .timedOut`; je to ten
+záznam, který brání tomu, aby se příští otevření PR zaplatilo znovu.
+
+### `SessionToolSetsTests` — šestý test, ale žádná šestá sada
+
+Anotace dostaly vlastní test, který tvrdí **oba směry**: literál `Read,Grep,Glob,Bash(git:*)` (aby
+se rozšíření muselo napsat sem) i **rovnost s `AskCommand.allowedTools`** (aby se ty dvě nedaly
+rozejít). Argumenty anotací jsou navíc ve výčtu `everyArgumentList`, takže se na ně vztahují
+i tvrzení „platí pro všechny“ — jedna konstanta zákazů a žádné `gh` v povoleních. Půjčenou sadou se
+to tedy obejít nedá.

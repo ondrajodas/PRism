@@ -108,6 +108,12 @@ struct DiffView: View {
     /// `nil` = **tuhle obrazovku nikdo neposlouchá**, takže se ani neměří: rozsahový diff (#284),
     /// diff commitu (#317) ani náhled o itineráři nic neříkají.
     var reportContentEnd: ((Bool) -> Void)?
+    /// Popsat změny sedmou session (#524) — položka v nabídce nad diffem. `nil` = **nekreslí se**:
+    /// na tuhle obrazovku akce nepatří (diff commitu, rozsahový diff, náhled), nebo session není
+    /// zapojená a hlava PR se nezná.
+    var annotate: (() -> Void)?
+    /// Běží popis změn právě teď? Položka se pak nekliká.
+    var isAnnotating = false
 
     /// Šířka, kterou diff dostal — okno bez railu, **bez levého sloupce** a bez panelu vpravo
     /// (#220, od #506 bez sloupce). Odsud se počítá kolona kódu; o kolonách samotných rozhoduje
@@ -749,7 +755,11 @@ struct DiffView: View {
             // `nil`, když hledání nikdo nedodal (náhledy, sondy) — popisek se pak nekreslí, místo
             // aby otevíral pruh, který nemá kde vzniknout.
             openSearch: search.open,
-            isSearching: search.isOpen
+            isSearching: search.isOpen,
+            // Popis změn (#524). `nil`, když ho nikdo nedodal (náhledy, sondy) nebo když session
+            // není zapojená — položka se pak v nabídce **nekreslí**.
+            annotate: annotate,
+            isAnnotating: isAnnotating
         )
     }
 

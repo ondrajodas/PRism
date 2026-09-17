@@ -91,6 +91,10 @@ struct CacheLayout: Sendable, Equatable {
     /// rozpočtu na místo by znamenalo přečíst padesátisouborový diff znovu.
     var readMarks: URL { root.appending(path: "read-marks") }
 
+    /// Anotace hunků (#524). **Mimo dosah eviction**, jako `reviews/` a `read-marks/`: je to pár
+    /// kilobajtů na PR a zaplacená session, ne pracovní kopie.
+    var annotations: URL { root.appending(path: "annotations") }
+
     /// Konfigurace. Leží v kořeni cache, ne pod `reviews/` — edituje se ručně a má být
     /// vidět hned, jakmile člověk složku otevře.
     var configFile: URL { root.appending(path: "config.json") }
@@ -222,6 +226,21 @@ struct CacheLayout: Sendable, Equatable {
 
     func readMarks(of repo: RepoID) -> URL {
         readMarks.appending(path: repo.owner).appending(path: repo.name)
+    }
+
+    /// Anotace jednoho PR: `annotations/<owner>/<repo>/<pr>.json` (#524).
+    ///
+    /// **Bez `headSha` v názvu, a přesto klíčované hlavou.** Hlavu nese `StoredAnnotations.headSha`
+    /// a rozhoduje podle ní `Policy.annotations(of:head:)` — anotace z jiné hlavy se neukáže vůbec,
+    /// ani jako zastaralá. Soubor na hlavu by tedy znamenal, že v cache leží záznamy, které nikdo
+    /// nikdy nepřečte a nic nemaže; jeden soubor na PR se novým během **přepíše**. Proč se
+    /// neklíčuje otiskem obsahu jako značka `Prošlo`, je u `StoredAnnotations`.
+    func annotationFile(for pr: PRIdentifier) -> URL {
+        annotations(of: pr.repo).appending(path: "\(pr.number).json")
+    }
+
+    func annotations(of repo: RepoID) -> URL {
+        annotations.appending(path: repo.owner).appending(path: repo.name)
     }
 
     /// Leží cesta uvnitř kořene, i po rozbalení symlinků?
