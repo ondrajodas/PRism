@@ -7811,3 +7811,71 @@ v zobrazení.
 
 **Brána kontroly zůstala u nálezů** (#150), i když by šlo pustit ji i na PR, kde mám jen
 komentáře. Tlačítko na místě, kde dosud nebylo, je kresba — a ta patří do #523, ne sem.
+
+### Záznam rozhodnutí — série PR se poznává z rozšířeného dotazu na hlavy (#513)
+
+**Zadání issue bylo fakticky špatně a opravilo se před implementací.** Stálo v něm, že se série
+pozná porovnáním „base větve proti hlavám ostatních otevřených PR — obojí je v hlavičkách, které
+polling dotahuje“. Ověřeno na CLI: `gh search prs --json` **žádné pole o větvích nenabízí**, takže
+je `PullRequestSummary` nemá ani jako pole a fronta o nich neví nic. Větve nese jedině `PullRequest`
+(detail z `gh pr view`) a ten se dotahuje třemi cestami, z nichž **ani jedna nepokrývá cizí frontu**:
+detail vybraného PR, PR přijatý odkazem a hlavičky z #572, které `Policy.mergeReadinessProbe`
+filtruje na `ownedBy: .mine`. Kreslený scénář je přitom právě **cizí** série, takže by
+`Policy.series(in:refs:)` nad dnešními daty vracela prázdno vždycky a funkce by ve frontě nebyla
+vidět nikdy.
+
+**Vybráno (17. 9. 2026): rozšířit dávkový dotaz na hlavy** (`PullRequestHeadsQuery`, #420)
+o `headRefName`, `baseRefName` a `isCrossRepository` a pustit ho **přes frontu**. Jsou to tři pole
+na **témže uzlu**, takže nepřibývá ani volání, ani bod (změřeno: dvacet aliasů s větvemi pořád
+1 bod z 5000/h). Předfiltr dostal protějšek (`Policy.seriesRefsProbe`) **stejnou školou jako
+`snoozeProbe`**: neznáme větve, nebo se posunul `updatedAt`. Na klidný tik z toho vyjde nula dotazů,
+na pohnutý jeden — oba předfiltry slévá `Policy.headProbe(stale:refs:)` do jednoho seznamu, protože
+se ptají na týž uzel téhož dotazu.
+
+**Zamítnuto: omezit sérii na PR s načteným detailem.** Levné (nula nových polí, nula nových dotazů),
+ale kreslený scénář — cizí série ve frontě — by nefungoval: detail se u cizího PR dotáhne teprve
+tehdy, když ho člověk otevře, tedy až potom, co mu fronta měla poradit, který z nich číst první.
+Funkce, která je vidět jedině po ručním otevření obou PR, je nakreslená nula.
+
+**Rozsah tím vyrostl ze `S` na `M`**, a je to vědomé: přibyl nový předfiltr, nová mapa ve storu
+a rozhlídka přes celou frontu. Odhad v decku *Směry pro PRism* (`cena: S · 1 PR`) tím přestal platit.
+
+**Zamítnuto také: držet větve na disku.** Uložená jména by po restartu tvrdila sérii, která se
+mezitím rozpadla mergnutím spodního PR — a série zaniká právě tím, že GitHub přepne base horního na
+`main`. Mapa proto žije v paměti (`probedBranchRefs`) a uklízí se spolu s razítky dotazů.
+
+### Záznam rozhodnutí — popisek série je tvrzení o seznamu, pilulka o pull requestu (#513)
+
+Zadání nechalo otevřené, kde se skupinový popisek kreslí. `PullRequestRow` se kreslí na **třech**
+místech (fronta, deska, sekce `Rozdělaná`) a od #512 to hlídá stráž nad zdrojáky, takže odpověď
+„všude“ by byla pohodlná a nepravdivá.
+
+**Rozhodnuto: pilulka všude, popisek a přerušovaná čára jedině ve frontě.** Pilulka `1. v sérii`
+odpovídá na otázku o **pull requestu** — stát na cizí větvi platí bez ohledu na to, ve kterém
+seznamu ten řádek zrovna je. Popisek a čára naopak tvrdí něco **o seznamu**: že spolu tyhle řádky
+sousedí a čtou se shora dolů. To drží jedině fronta, protože jediná členy přeskládá
+(`visibleQueuePullRequests` → `Policy.grouped`); deska rozřazuje do pruhů podle mého tahu a ořezává
+je na pět řádků, sekce `Rozdělaná` je výběr podle draftu. Čára kolem skupiny, ve které chybí
+prostřední řádek, by obtáhla cizí PR.
+
+**Stráží to funkce, ne pozornost**: `Policy.seriesCaptions(in:series:)` počítá popisky nad tím, co
+se doopravdy kreslí, a vydá je jedině tehdy, když v seznamu leží **aspoň dva** členové té série
+a leží **vedle sebe**. Ověřeno vložením regrese: když se z fronty odstraní přeskládání, popisek
+zmizí sám.
+
+**Odložený člen** (druhá osa z #512) tím má odpověď, kterou zadání ještě neznalo: ze skupiny prostě
+vypadne. Pilulka u zbylého řádku zůstává — `2. · stojí na #14451` je pravda i tehdy, když je
+#14451 odložený a leží v bloku `Odložené` pod frontou —, popisek zmizí, protože `2 PR` nad jedním
+řádkem tvrdí víc, než je vidět. Série sama se přitom počítá nad **plným** seznamem, tedy
+i s odloženými: je to vlastnost pull requestu, ne pohledu.
+
+**Identita řádků v líném seznamu se nemění ani o prvek** (#361). Popisek se kreslí **uvnitř** řádku
+svého prvního člena (`PullRequestRow.seriesCaption`), ne jako další položka seznamu — nová položka
+by musela mít identitu a tou by bylo **pořadí**, tedy zrovna ten vzor, který #361 z okna vyhnalo.
+Cena je, že kliknutí na popisek vybere první PR skupiny; to je správná odpověď na kliknutí do
+skupiny, takže se za ni platí rádo.
+
+**Řetěz větví zůstal jen v hlavičce.** Deck kreslil v řádku fronty i `→ main` / `→ #726`; v řádku
+širokém 420 bodů by to ukrojilo z titulku, a pilulka `2. · stojí na #14451` říká totéž kratší cestou.
+Odchylka od zákresu je proto zapsaná tady a sekce 57 v `docs/navrh.html` už kreslí to, co aplikace
+doopravdy dělá.

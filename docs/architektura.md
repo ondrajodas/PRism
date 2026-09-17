@@ -6925,6 +6925,109 @@ se dá složit dvojím odložením.
 ne na `list`), a je to rozhodnutí, ne vedlejšek: musí být vidět i nad **prázdným** seznamem, tedy
 zrovna ve stavu, ve kterém by tichá díra bolela nejvíc.
 
+## Série PR (#513)
+
+**PR, jehož base větev je hlavou jiného otevřeného PR v tomtéž repozitáři, je v sérii.** Fronta je
+pak drží pohromadě v pořadí, v jakém se budou mergovat, řádek nese pilulku `1. v sérii` /
+`2. · stojí na #14451` a hlavička řetěz `větev → větev [#14451 · 1. v sérii] → trunk` s větou
+o tom, že diff je jen ta horní vrstva. Nakreslené je to v návrhu, [sekce 57](navrh.html).
+
+### Zadání tvrdilo, že se to pozná z dnešních dat — a bylo to špatně
+
+Issue slibovalo „jedno porovnání nad hlavičkami, které polling dotahuje“. **Fronta ale větve
+nezná**: `gh search prs` `headRefName` ani `baseRefName` nenabízí (ověřeno na CLI), takže je
+`PullRequestSummary` nemá ani jako pole. Větve nese jedině `PullRequest` (detail z `gh pr view`)
+a ten se dotahuje třemi cestami, z nichž **ani jedna nepokrývá cizí frontu**: detail vybraného PR,
+PR přijatý odkazem a hlavičky z #572, které `Policy.mergeReadinessProbe` filtruje na `ownedBy:
+.mine`. Kreslený scénář je přitom právě cizí série, takže by `Policy.series(in:refs:)` nad dnešními
+daty vracela prázdno vždycky.
+
+**Řeší to rozšíření dávkového dotazu na hlavy** (#420): `PullRequestHeadsQuery` si vedle
+`headRefOid` říká i o `headRefName`, `baseRefName` a `isCrossRepository` — tři pole na **témže
+uzlu**, tedy žádné volání ani bod navíc (měření je v [`docs/testovani.md`](testovani.md)). Zamítnutá
+varianta a důvod jsou v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md).
+
+### Dvě rozhlídky, jeden dotaz
+
+`Policy.staleHeadProbe` (#420, zastaralé nálezy) a `Policy.seriesRefsProbe` (#513, větve) se ptají
+na **týž uzel téhož dotazu**, takže je `Policy.headProbe(stale:refs:)` slije do jednoho seznamu —
+`gateway.fetchHeads(of:)` z něj složí jeden GraphQL dokument. Je to rozdíl proti `SnoozeProbeQuery`
+(#512), kde se dotazy liší **poli**, a proto tam dvojice zůstala.
+
+Předfiltr je stejnou školou jako u obou sousedů:
+
+- **`updatedAt` je zadarmo** — base větev se bez posunu `updatedAt` nemá čím změnit, takže na
+  klidný tik vyjde **prázdno a dotaz se nespustí**.
+- **„Ještě jsme se neptali“ nese totéž razítko**, takže PR bez razítka se zeptá i bez posunu — a
+  právě tím se série po startu dozví, na čem co stojí. Razítko dostane jedině PR, na které odpověď
+  **dorazila**, takže chybějící alias znamená zeptat se příště znovu.
+- **Odpověď bez větví se za neznalost nepočítá**, a je to oprava proti prvnímu návrhu, kde předfiltr
+  četl mapu větví: GitHub větve na otevřeném PR vrací vždycky, takže PR, u kterého by v odpovědi
+  chyběly, by se ptal **každou minutu donekonečna** (v testech to dokládají fixtury z #420, které
+  větve nenesou). „Nevíme“ je proto stav, se kterým se čeká na další pohyb.
+- **Zastaralé nálezy jdou v seznamu první.** Strop je na velikost dokumentu, takže když se do něj
+  obojí nevejde, ustoupí rozhlídka po větvích: série se dozví za minutu, kdežto zastaralé nálezy
+  jsou ta událost, po které je práce k zahození.
+- **Jen cizí PR.** Větve vlastních nese každý tik rozhlídka po slévatelnosti (#572), takže by to
+  bylo druhé volání za tutéž hodnotu. Spojuje to `AppStore.branchRefs(for:)` — jedno čtení nad
+  dvěma zdroji (nejdřív načtený detail, pak `probedBranchRefs`).
+
+### Čtyři stavy, ve kterých se netvrdí nic
+
+`Policy.series(in:refs:)` skupinu **nevytvoří**, když: větve nedorazily; hlava je z **forku**
+(`headRefName` pak pojmenovává větev cizího repozitáře); `isCrossRepository` chybí — **`nil` je
+zákaz, ne povolení**, tatáž škola jako u guardu force pushe; nebo mají **dvě otevřená PR tutéž
+hlavu** (GitHub to proti dvěma základům dovolí a která je ta spodní, se z dat říct nedá). Napříč
+repozitáři se větve nepárují vůbec (`main` má každé repo vlastní) a **mergnutý ani zavřený PR
+skupinu nedrží**. Řetěz zakousnutý do ocasu nevydá kořen, takže z něj nevznikne ani hrana.
+
+**Zaniká samo, a to je celý úklid**: po mergi spodního PR přepne GitHub base horního na `main`,
+`updatedAt` se tím pohne, další tik se zeptá a skupina zmizí. Proto se větve drží **v paměti, ne na
+disku** (`probedBranchRefs`) — uložená jména by po restartu tvrdila sérii, která se mezitím
+rozpadla — a uklízejí se **spolu s razítky** v `forget(whatIsNotIn:)`.
+
+### Pořadí drží `Policy.grouped`, ne kresba
+
+`Policy.grouped(_:by:keeping:)` bere **už seřazený** seznam a posune členy skupiny k tomu, který
+vyšel nejvýš; uvnitř jdou od základu nahoru. Není to druhé řazení — pořadí rozhodl někdo jiný (čas
+ve frontě přes `Policy.sorted`, závažnost na desce přes `Policy.byUrgency`) — a **členové, kteří
+v seznamu nejsou, se nedoplňují**: filtr i odložení je z něj vyndat můžou a skupina se pak nakreslí
+menší, ne s řádkem, který jinam nepatří.
+
+Na desce se to uplatní **uvnitř** `Policy.byUrgency`, ne přes pruhy: rozřazení podle mého tahu
+(`Policy.lane`) je druhá osa a běží až nad tím pořadím, takže spodní PR může skončit v `Přečíst`
+a horní v `Rozhodnout`. Je to záměr — pruh odpovídá na „co udělám teď“, série na „v jakém pořadí“.
+
+### Popisek jen tam, kde skupina doopravdy drží pohromadě
+
+**Pilulka jde všude, kde se řádek kreslí** (fronta, deska, sekce `Rozdělaná`) — stát na cizí větvi
+je vlastnost pull requestu. **Popisek nad skupinou a přerušovaná čára jsou naopak tvrzení
+o seznamu**, takže je předává jedině fronta: deska řadí do pruhů a ořezává je na pět řádků, sekce
+`Rozdělaná` je výběr podle draftu. Rozhoduje `Policy.seriesCaptions(in:series:)` nad tím, co se
+**doopravdy kreslí**: popisek vznikne jedině tehdy, když v seznamu leží aspoň dva členové té série
+a leží **vedle sebe**. Ze série, ze které filtr nebo odložení nechalo jeden řádek, tedy zbude
+pilulka (pravda o PR) a popisek zmizí (`2 PR` nad jedním řádkem tvrdí víc, než je vidět).
+
+**Identitu řádků v líném seznamu to nemění ani o prvek** (#361): popisek se kreslí **uvnitř**
+řádku svého prvního člena (`PullRequestRow.seriesCaption`), ne jako další položka seznamu — nový
+prvek by musel mít identitu, a tou by bylo pořadí.
+
+### Kde to bydlí
+
+| Kus | Co dělá |
+|---|---|
+| `BranchRefs` (`App/Models/`) | jméno hlavy, base a `isCrossRepository`; `livesInBaseRepository` je jediné místo, kde se `nil` čte jako zákaz |
+| `PullRequestHead.refs` | větve z dávkového dotazu — `nil` = odpověď je nenesla |
+| `PullRequestSeries`, `SeriesPlacement` (`App/Policy/`) | skupina od základu nahoru a místo jednoho PR v ní |
+| `Policy.series`, `grouped`, `seriesCaptions`, `seriesPill`, `seriesBasePill`, `seriesNote`, `seriesTicket` | všechna rozhodnutí a všechny věty |
+| `Policy.seriesRefsProbe`, `Policy.headProbe` | koho se tik zeptá a jak se to slije s #420 |
+| `AppStore+Series.swift` | `branchRefs(for:)`, `pullRequestSeries`, `seriesPlacement(for:)`, `queueSeriesCaptions`, `seriesNote(for:)` |
+| `PullRequestRow`, `PullRequestHeaderView`, `PullRequestDetailView` | pilulka a čára, řetěz větví, věta pod souřadnicemi |
+
+**Série se počítá při čtení, necachuje se**: je to jeden průchod seznamem se slovníkem, takže by
+cache byla dřív, než by se čím obhájila — a musela by si říct, co ji vyprazdňuje (#224): seznam
+z tiku, každý načtený detail a každá rozhlídka po hlavách.
+
 ## Tiché hodiny — velké PR na noc (#519)
 
 PR o dvou tisících řádcích se pouští ve tři odpoledne, když na něj čekám, a bere slot menším.
@@ -11019,6 +11122,8 @@ u obou: **je to pohled, ne nový zdroj pravdy**, takže na žádné z nich nesm�
 | blok `Odložené` **pod frontou** (`snoozedQueuePullRequests`) | `.theirs`, **jen** odložené, **po filtru** | doplněk k `visibleQueuePullRequests` nad **tímtéž** vstupem, takže se ty dvě množiny nemají čím rozejít — a PR nemůže zmizet z fronty, aniž by se objevil v bloku |
 | blok `Odložené` **na desce** a `· 2 odložené` ve větě pod pozdravem (`snoozedPullRequests`) | `.theirs`, **jen** odložené, **před filtrem** | doplněk k `boardEntries`, a ty filtr taky neznají: deska odpovídá na „co udělám teď“, ne na „co mám zrovna odškrtnuté“, takže nad zapnutým filtrem by věta hlásila míň, než kolik deska schovala |
 | nabídka `Odložit` na řádku (`snoozeAction(for:)`) | `.theirs` | **všude, kde se kreslí `PullRequestRow`** — ve frontě, v sekci `Rozdělaná` i v pruhu desky; je to jeden řádek, takže jedna podoba (#172), a hlídá to stráž nad zdrojáky |
+| série PR (#513): `pullRequestSeries`, `seriesPlacement(for:)` | **obojí, s odloženými** | stát na cizí větvi je vlastnost pull requestu, ne pohledu — zúžený vstup by sérii rozpadl pokaždé, když si jednoho člena schovám |
+| popisek nad skupinou (`queueSeriesCaptions`) | `.theirs`, **po filtru a bez odložených** | je to tvrzení o **nakresleném seznamu**: ze skupiny, ze které zbyl jeden řádek, popisek nevznikne |
 | odklad do tichých hodin (#519) | **řádek nemá, a je to rozhodnutí** | odkládá se **jeden běh**, ne položka seznamu: odložený PR ve frontě zůstane (čeká na mě dál), odložené je jedině review. Třetí osa by tvrdila, že se PR někde schová — a to se nestane nikde. Viz *Tiché hodiny — velké PR na noc* |
 
 - **Automat vlastní PR nevydá nikdy, a přepínač se zamítl** (#332). Filtr je v

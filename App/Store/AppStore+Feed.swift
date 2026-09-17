@@ -144,7 +144,7 @@ extension AppStore {
     /// Zapíše, že nálezy zastaraly (#414) — **bez volání navíc**.
     ///
     /// Volá se z `loadDetail(for:)`, tedy ve chvíli, kdy aplikace hlavu zná z jiného důvodu.
-    /// Tikem to od #420 pozná `refreshStaleHeads(in:)`, takže obvykle je řádek na obrazovce dřív,
+    /// Tikem to od #420 pozná `refreshHeads(in:)`, takže obvykle je řádek na obrazovce dřív,
     /// než se na PR vůbec podívám; tahle cesta zůstává proto, že o rozchodu ví **s počtem
     /// commitů** — a je to jediná cesta u PR, na které se dotaz nedostal (strop dotazu, chybějící
     /// odpověď GitHubu, nebo `updatedAt`, které se od minula nepohnulo).
@@ -170,24 +170,26 @@ extension AppStore {
         ))
     }
 
-    /// Zeptá se na **hlavy** PR, na kterých leží uložené nálezy, a zapíše, které zastaraly (#420).
+    /// Zeptá se na **hlavy a větve** PR ve frontě: co zastaralo (#420) a co na čem stojí (#513).
     ///
     /// Do #420 se rozchod poznal jedině při otevření PR nebo při běhu review — tedy zrovna tehdy,
     /// když už ho vidím i bez dění (hlavička nad taby ho říká), takže ten řádek nepřinášel nic.
     /// Novinka, která přijde jedině tehdy, když se na PR koukám, je nakreslená nula.
     ///
-    /// **Jedno volání na tik, ne jedno na PR ani na repozitář.** Koho se zeptat, rozhoduje
-    /// `Policy.staleHeadProbe`; `gateway.fetchHeads(of:)` z toho složí jeden GraphQL dokument.
-    /// Předfiltr přes `updatedAt` znamená, že se na klidný den neptáme vůbec — a prázdný seznam
-    /// se ani nespouští.
+    /// **Jedno volání na tik, ne jedno na PR ani na repozitář** — a od #513 pořád jedno, přestože
+    /// se ptají **dvě** rozhlídky. Koho se zeptat, rozhodují `Policy.staleHeadProbe`
+    /// a `Policy.seriesRefsProbe`; `Policy.headProbe(stale:refs:)` z nich udělá jeden seznam
+    /// a `gateway.fetchHeads(of:)` jeden GraphQL dokument. Předfiltr přes `updatedAt` znamená, že se
+    /// na klidný tik neptáme vůbec — a prázdný seznam se ani nespouští.
     ///
-    /// **Bez záznamu dění se neptá vůbec.** Za zastaralé nálezy banner nechodí (jsou to data pro
-    /// tu obrazovku, ne vyrušení), takže je záznam jediný konzument — dotaz bez něj by byl dotaz
-    /// za nic. Je to jiná podmínka než `watchesPullRequestActivity`: ta jmenuje obojí právě proto,
-    /// že u ostatních druhů je druhým konzumentem notifikační centrum.
-    func refreshStaleHeads(in summaries: [PullRequestSummary]) async {
-        guard activityLog != nil else { return }
-        let candidates = Policy.staleHeadProbe(
+    /// **Bez záznamu dění se neptá jen ta první z nich.** Za zastaralé nálezy banner nechodí (jsou
+    /// to data pro tu obrazovku, ne vyrušení), takže je záznam jejich jediný konzument. Větve mají
+    /// konzumenta jiného — sérii ve frontě —, takže se na ně ptá i aplikace bez záznamu dění.
+    func refreshHeads(in summaries: [PullRequestSummary]) async {
+        // **Jména `staleCandidates` a `refsCandidates`**, ne `stale` a `refs`: o pár řádků níž se
+        // `stale` jmenuje rozchod nálezů jednoho PR (`Policy.staleFindings`) a dvě různé věci
+        // téhož jména v jedné funkci se čtou špatně.
+        let staleCandidates = activityLog == nil ? [] : Policy.staleHeadProbe(
             of: summaries,
             mine: ownLogins,
             // Uložené nálezy v paměti — `reviewRecords` se plní při startu z disku, takže předfiltr
@@ -195,6 +197,12 @@ extension AppStore {
             hasFindings: { reviewRecords[$0].map { !$0.findings.isEmpty } ?? false },
             probedAt: { headProbes[$0] }
         )
+        let refsCandidates = Policy.seriesRefsProbe(
+            of: summaries,
+            mine: ownLogins,
+            probedAt: { headProbes[$0] }
+        )
+        let candidates = Policy.headProbe(stale: staleCandidates, refs: refsCandidates)
         guard !candidates.isEmpty else { return }
 
         let heads: [PRIdentifier: PullRequestHead]
@@ -219,6 +227,9 @@ extension AppStore {
             // na tu PR nezeptalo, dokud se `updatedAt` nepohne.
             guard let head = heads[pr] else { continue }
             headProbes[pr] = updates[pr]
+            // Větve z téže odpovědi (#513). **Zapisují se jen když dorazily** — `nil` znamená
+            // „nevíme“, a přepsat jím to, co už víme, by sérii rozpadlo na jeden tik doprázdna.
+            if let refs = head.refs { probedBranchRefs[pr] = refs }
             guard let stale = Policy.staleFindings(of: reviewRecords[pr], head: head.sha),
                   stale.hasFindings
             else { continue }

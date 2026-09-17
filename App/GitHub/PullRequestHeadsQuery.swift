@@ -62,7 +62,19 @@ enum PullRequestHeadsQuery {
     /// `oid` je v odpovědi proto, aby se dalo **ověřit**, že poslední commit v seznamu je
     /// opravdu ta hlava (spojení je řazené od nejstaršího; změřeno na dvanácti PR, že se `oid`
     /// s `headRefOid` shoduje u všech). Neshoda znamená „datum nevíme“, ne cizí datum.
+    ///
+    /// **`headRefName`, `baseRefName` a `isCrossRepository` přibyly u #513** — tři pole na témže
+    /// uzlu, tedy **žádné volání ani bod navíc**; roste jen text dotazu (~40 B na alias) a odpověď.
+    /// Jsou tu proto, že série PR (pull request stojící na větvi jiného pull requestu) se
+    /// z dnešních dat poznat nedá: `gh search prs` větve nevrací vůbec, takže jedinou další cestou
+    /// by byl `fetchDetail` na každý řádek fronty — tedy `N+1` na tik, ta past, kvůli které tenhle
+    /// dotaz vznikl.
+    ///
+    /// `isCrossRepository` je součást téhož rozhodnutí, ne pole navíc: `headRefName` u pull requestu
+    /// z forku pojmenovává větev **cizího** repozitáře, takže by se shodou jmen spárovala s cizím
+    /// `baseRefName`.
     private static let headFields = """
-    headRefOid commits(last: 1) { nodes { commit { oid committedDate } } }
+    headRefOid headRefName baseRefName isCrossRepository \
+    commits(last: 1) { nodes { commit { oid committedDate } } }
     """
 }

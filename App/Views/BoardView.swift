@@ -379,7 +379,11 @@ struct BoardView: View {
                 // nad cizím řádkem počítala nejčastěji.
                 loop: ownership == .mine
                     ? store.ownLoopRow(for: entry.pullRequest, handoff: handoff)
-                    : nil
+                    : nil,
+                // Série (#513) — **pilulka ano, popisek ne**: skupinu drží `Policy.byUrgency`
+                // uvnitř pořadí, ale pruhy jsou druhá osa a strop na pět řádků je třetí, takže
+                // popisek nad skupinou by tvrdil o seznamu víc, než v něm je vidět.
+                series: store.seriesPlacement(for: entry.id)
             )
             // Vlevo nic: proužek stavu má sedět na hraně pruhu, jak ho kreslí návrh.
             .padding(.trailing, 13)

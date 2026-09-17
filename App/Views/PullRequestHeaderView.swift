@@ -20,6 +20,13 @@ struct PullRequestHeaderView: View {
     /// Odkud se záložka vzala (#531). Mimo zdroje za stavem stojí pilulka `mimo zdroje ·
     /// jen ke čtení`, jak ji má návrh (sekce 41) — u PR ze zdrojů se nekreslí nic.
     var origin: PullRequestOrigin = .sources
+    /// Kde v sérii tenhle PR stojí (#513). `nil` = v žádné není — pak se řetěz větví kreslí jako
+    /// dřív, tedy `větev → base`.
+    ///
+    /// Kreslí se z toho **pokračování řetězu**: `větev → větev [#726 · 1. v sérii] → main`. Věta
+    /// o tom, že diff je jen ta horní vrstva, stojí **pod** hlavičkou (`AppStore.seriesNote(for:)`),
+    /// protože je dlouhá a v jednom řádku by se ořezala zrovna ona.
+    var series: SeriesPlacement?
 
     var body: some View {
         HStack(spacing: 9) {
@@ -121,12 +128,32 @@ struct PullRequestHeaderView: View {
                 .fontWeight(.medium)
             Text("chce sloučit")
             branch(detail.headRef)
-            Image(systemName: "arrow.right")
-                .font(.caption2)
-                .foregroundStyle(Palette.ink3)
+            arrow
             branch(detail.baseRef)
+            // Pokračování řetězu u série (#513): base větev tohohle PR je hlavou jiného otevřeného
+            // PR, takže se za ní řekne **čí** ta větev je a kam se merguje dál. Bez toho by
+            // v hlavičce stálo jméno větve, u kterého se nedá poznat, že jde o pull request, který
+            // se mergne dřív — a právě to je to, co #513 řeší.
+            if let series, let pill = Policy.seriesBasePill(series) {
+                Text(verbatim: pill)
+                    .designPill(tint: Palette.accent, background: Palette.accent.opacity(0.15))
+                    .help(Policy.seriesHint(series))
+                if let base = series.standsOnBase {
+                    arrow
+                    branch(base)
+                }
+            }
         }
         .foregroundStyle(Palette.ink2)
+    }
+
+    /// Šipka v řetězu větví. **Jedno místo**: od #513 je v řetězu víc než jedna a dvě sazby téže
+    /// šipky se poznají jedině vedle sebe.
+    private var arrow: some View {
+        Image(systemName: "arrow.right")
+            .font(.caption2)
+            .foregroundStyle(Palette.ink3)
+            .accessibilityHidden(true)
     }
 
     private func branch(_ name: String) -> some View {
