@@ -151,9 +151,10 @@ extension AppStoreBriefTests {
         let writer = try #require(scene.writer)
         #expect(writer.runs == 1)
         let brief = try #require(scene.store.briefState.brief)
-        #expect(brief.text.hasPrefix("Přes den přišly"))
+        #expect(brief.lines.map(\.part) == [.added, .burning, .next])
+        #expect(brief.lines.first?.text.hasPrefix("Přes den přišly") == true)
         #expect(brief.writtenAt == start)
-        #expect(brief.cost == 0.03)
+        #expect(brief.cost == 0.09)
     }
 
     /// **Vstup nese stav aplikace, ne kód.** Tvrdí se to nad tím, co session doopravdy dostala —
@@ -181,7 +182,7 @@ extension AppStoreBriefTests {
         let scene = await store(
             mode: .onDemand,
             writer: FakeBriefWriter(answers: [
-                BriefAnswer(text: nil, usage: RunUsage(cost: 0.01), failure: "Session skončila chybou (error).")
+                BriefAnswer(lines: nil, usage: RunUsage(cost: 0.01), failure: "Session skončila chybou (error).")
             ])
         )
 
@@ -212,7 +213,7 @@ extension AppStoreBriefTests {
             configuration: configuration,
             time: FakeTimeSource(start: start),
             briefWriter: FakeBriefWriter(answers: [
-                BriefAnswer(text: nil, usage: RunUsage(cost: 0.02), failure: "spadlo")
+                BriefAnswer(lines: nil, usage: RunUsage(cost: 0.02), failure: "spadlo")
             ]),
             spend: SpendLedger(layout: layout),
             cacheLayout: layout

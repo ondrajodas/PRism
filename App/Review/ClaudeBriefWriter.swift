@@ -46,15 +46,15 @@ struct ClaudeBriefWriter: BriefWriting {
             }
         } catch ProcessError.timedOut {
             // **Nedopsaný brief se nebere.** Na rozdíl od agenta, kde v souborech zůstává odvedená
-            // práce, je tu výsledkem jediný odstavec — a půlka odstavce je horší než věta o tom,
-            // že se to nepovedlo. Cena se přesto vrací: zabitá session peníze stála.
+            // práce, je tu výsledkem pár vět — a půlka věty je horší než hláška o tom, že se to
+            // nepovedlo. Cena se přesto vrací: zabitá session peníze stála.
             return BriefAnswer(
-                text: nil,
+                lines: nil,
                 usage: summary.usage,
                 failure: "Shrnutí nedoběhlo v limitu \(Self.minutes(request.timeout))."
             )
         } catch ProcessError.launchFailed(let detail) {
-            return BriefAnswer(text: nil, usage: summary.usage, failure: "Session se nespustila. \(detail)")
+            return BriefAnswer(lines: nil, usage: summary.usage, failure: "Session se nespustila. \(detail)")
         }
 
         // Zrušený proud skončí **bez chyby**, takže bez téhle kontroly by ze zrušeného běhu
@@ -62,13 +62,14 @@ struct ClaudeBriefWriter: BriefWriting {
         try Task.checkCancellation()
 
         let failure = Self.failure(of: exit, summary: summary)
-        let text = failure == nil ? BriefCommand.parse(summary.outcome?.text) : nil
+        let lines = failure == nil ? BriefCommand.parse(summary.outcome?.text) : nil
         return BriefAnswer(
-            text: text,
+            lines: lines,
             usage: summary.usage,
             // **Doběhlá session, která nic nenapsala, je porucha.** Prázdný blok je k nerozeznání
-            // od vypnutého briefu, takže se to musí říct větou.
-            failure: failure ?? (text == nil ? "Session nevrátila žádný text." : nil)
+            // od vypnutého briefu, takže se to musí říct větou. Týká se to i odpovědi, ve které
+            // **žádný řádek nenesl návěští** — próza bez klíčů se nedá nakreslit pod ta správná.
+            failure: failure ?? (lines == nil ? "Session nevrátila žádný text." : nil)
         )
     }
 

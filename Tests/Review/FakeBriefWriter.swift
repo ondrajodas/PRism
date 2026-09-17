@@ -20,8 +20,12 @@ final class FakeBriefWriter: BriefWriting, @unchecked Sendable {
     init(
         answers: [BriefAnswer] = [
             BriefAnswer(
-                text: "Přes den přišly dva PR do fronty. Sandbox #4 blokuje. Nic dalšího nehoří.",
-                usage: RunUsage(cost: 0.03),
+                lines: [
+                    BriefLine(part: .added, text: "Přes den přišly dva PR do fronty."),
+                    BriefLine(part: .burning, text: "Sandbox #4 blokuje."),
+                    BriefLine(part: .next, text: "Vezmi si keboola/job-queue #727."),
+                ],
+                usage: RunUsage(cost: 0.09),
                 failure: nil
             )
         ]
@@ -39,7 +43,7 @@ final class FakeBriefWriter: BriefWriting, @unchecked Sendable {
             return received.count - 1
         }
         if let failure { throw failure }
-        guard !answers.isEmpty else { return BriefAnswer(text: nil, usage: nil, failure: "prázdno") }
+        guard !answers.isEmpty else { return BriefAnswer(lines: nil, usage: nil, failure: "prázdno") }
         return answers[min(index, answers.count - 1)]
     }
 }

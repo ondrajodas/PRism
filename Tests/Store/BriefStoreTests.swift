@@ -11,7 +11,10 @@ import Testing
 @Suite("BriefStore — brief přežije restart")
 struct BriefStoreTests {
     private let brief = Brief(
-        text: "Přes den přišly dva PR do fronty.",
+        lines: [
+            BriefLine(part: .added, text: "Přes den přišly dva PR do fronty."),
+            BriefLine(part: .burning, text: "Sandbox #4 blokuje."),
+        ],
         writtenAt: Date(timeIntervalSince1970: 1_700_000_000),
         cost: 0.03
     )

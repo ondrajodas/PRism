@@ -11,6 +11,12 @@ extension Policy {
 
     /// Materiál pro brief — **stav aplikace, nic jiného** (#516).
     ///
+    /// **Strop na velikost tu není, a je to změřené rozhodnutí, ne opomenutí** (#516). Nabízel se,
+    /// protože brief stojí peníze — jenže měření ukázalo, že vstup je **~2 % účtu** (~1 000 tokenů
+    /// proti ~42 tisícům boot session, [čísla](docs/testovani.md)). Osekaný vstup by tedy neušetřil
+    /// prakticky nic a zaplatil by se tím nejdražším, co brief má: shrnutím, které **mlčí o části
+    /// desky, aniž by to přiznalo**. Cenu řeší model (`BriefCommand.model`), ne délka textu.
+    ///
     /// Skládá se z toho, co store **doopravdy má**: z pruhů desky (a ty už jsou po filtru
     /// odložených, viz `AppStore.boardEntries`), z počtu odložených a z bloku `Dění`. Není v tom
     /// ani cesta k repozitáři, ani obsah souboru, ani řádek diffu — session nemá jediný nástroj,
@@ -66,7 +72,14 @@ extension Policy {
             "review: \(briefReviewState(entry.state))",
         ]
         if entry.row.blocking > 0 {
-            parts.append("blokuje \(entry.row.blocking)")
+            // **Řádek musí být jednoznačný sám o sobě**, jinak si model domyslí, čeho je to počet
+            // — a domyslí si ho špatně. Změřeno u #516: `blokuje 2` vydalo v briefu větu „blokuje
+            // dva reviewery“, ačkoli jsou to **blokující nálezy**. Je to tentýž vzor jako „text
+            // v UI, který tvrdí víc, než data unesou“, jen o krok dřív: nejednoznačný **vstup** to
+            // tvrzení do briefu teprve pustí, a žádné pravidlo v promptu tomu nezabrání.
+            parts.append("z toho \(entry.row.blocking) " + Plural.word(
+                entry.row.blocking, one: "blokující", few: "blokující", many: "blokujících"
+            ))
         }
         if entry.hasDraft {
             parts.append("leží tu rozdělané review")
@@ -194,7 +207,7 @@ extension Policy {
         switch state {
         case .never:
             return BriefBlock(
-                body: .never("Zatím se neshrnovalo. Tři věty o tom, co je na tahu, složí session ze stavu aplikace."),
+                body: .never("Zatím se neshrnovalo. Session bez jediného nástroje z toho složí tři věty: co přibylo, co hoří a co si vzít první."),
                 action: "Shrň"
             )
         case .running:
@@ -208,7 +221,7 @@ extension Policy {
         }
     }
 
-    /// Řádek pod textem — `shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne z kódu`.
+    /// Řádek pod textem — `shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu`.
     ///
     /// **Hodiny a peníze se sem předávají naformátované**, protože obojí jde přes locale a v
     /// `Policy` by se nedalo testovat (tatáž úvaha jako u `RunUsageText`). Co tady zůstává, je

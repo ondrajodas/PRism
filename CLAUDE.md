@@ -359,7 +359,7 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    | **rozhovor nad PR** (#452, tab `Zeptat se`) — **užší než reviewerova**: bez `ReportFindings` (nemá co hlásit) a bez `Skill` | `Read,Grep,Glob,Bash(git:*)` |
    | **slévání konfliktů** (#467) **a agent na vlastním PR** (#510) — **jediné, které smí měnit soubory**, a **jediné bez `Bash`e**; sada je jedna, sdílená doslova | `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` |
    | překlad nálezů | prázdná |
-   | **brief na domově** (#516) — **čte stav aplikace nahlas, ne kód**: vstup skládá `Policy.briefInput`, session jen formuluje. Vypnuto ve výchozím stavu, cena je na řádku ([rozbor](docs/architektura.md#brief-na-domově--šestá-session-a-druhá-bez-nástrojů-516)) | prázdná |
+   | **brief na domově** (#516) — **čte stav aplikace nahlas, ne kód**: vstup skládá `Policy.briefInput`, session jen formuluje. Vypnuto ve výchozím stavu, cena je na řádku. **Jediná session s vynuceným modelem**, a je to změřená výjimka, ne opomenutí ([rozbor](docs/architektura.md#brief-na-domově--šestá-session-a-druhá-bez-nástrojů-516)) | prázdná |
 
    `--disallowedTools` je u **všech** tatáž konstanta `ClaudeCommand.disallowedTools`, takže `gh`
    ani `git push` nemá **žádná**. **Materiál jde do promptu cestou k souboru, ne jako nástroj**

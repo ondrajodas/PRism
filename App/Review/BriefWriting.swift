@@ -1,6 +1,6 @@
 import Foundation
 
-/// Jeden běh šesté session (#516) — složit tři věty ze stavu aplikace.
+/// Jeden běh šesté session (#516) — složit až tři pojmenované věty ze stavu aplikace.
 ///
 /// **Nese text, nic jiného.** Ani cestu k repozitáři, ani pull request, ani pracovní strom:
 /// session nemá jediný nástroj, takže by neměla čím je použít — a typ, ve kterém se taková cesta
@@ -19,9 +19,13 @@ struct BriefRequest: Sendable, Equatable {
 
 /// Výsledek jednoho běhu.
 struct BriefAnswer: Sendable, Equatable {
-    /// Co session napsala. `nil` = nenapsala nic použitelného — a to je **porucha, ne prázdno**:
-    /// blok o tom musí říct, jinak vypadá jako „nic se neděje“.
-    let text: String?
+    /// Co session napsala, rozebrané na pojmenované řádky (`BriefCommand.parse`). `nil` =
+    /// nenapsala nic použitelného — a to je **porucha, ne prázdno**: blok o tom musí říct, jinak
+    /// vypadá jako „nic se neděje“.
+    ///
+    /// **Jeden nebo dva řádky jsou v pořádku.** Otázka, na kterou ve vstupu odpověď není, se má
+    /// vynechat — vynucená věta je zrovna to, čemu se tím vyhýbáme.
+    let lines: [BriefLine]?
     /// Co běh stál. `nil` = cenu nenahlásil (zabitá session bez `result` eventu).
     let usage: RunUsage?
     /// Proč to nedopadlo. `nil` = doběhlo v pořádku.

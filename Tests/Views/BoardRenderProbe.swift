@@ -64,7 +64,8 @@ struct BoardRenderProbe {
         /// musí kreslit **nad** tichým pruhem, tedy jako **pátý** (třetí proklikání ho vrátilo
         /// z konce; poslední místo bylo špatně přeložený pokyn o posledním *pravidle*).
         case allLanes = "vsechny-pruhy"
-        /// **Brief nad pruhy, hotový** (#516) — tři věty, razítko s cenou a `Shrň znovu`. Scéna
+        /// **Brief nad pruhy, hotový** (#516) — tři **pojmenované** věty, razítko s cenou
+        /// a `Shrň znovu`. Scéna
         /// existuje proto, že brief je **jediný blok desky, jehož výšku určuje cizí text**:
         /// otázka „vejde se odstavec nad pruhy, aniž by první pruh spadl pod hranu?“ se z čísla
         /// nepozná.
@@ -242,11 +243,17 @@ struct BoardRenderProbe {
         if scenario == .brief || scenario == .briefFailed {
             store.briefState = scenario == .brief
                 ? .ready(Brief(
-                    text: "Přes den přišly dva PR do fronty (keboola/vault #2 a #3, oba od odinuva, na #3 už leží jeden nález). Nic z toho zatím neblokuje — nejstarší čeká čtyři hodiny. První na řadě je #1, kde máš rozepsané review a zbývá ho odeslat.",
+                    // **Nejdelší věta je na stropu z promptu** (`BriefCommand.sentenceLimit`):
+                    // sonda má ukázat tu podobu, na kterou se text zalomí, ne tu pohodlnou.
+                    lines: [
+                        BriefLine(part: .added, text: "Přibyly dva pull requesty do fronty a na keboola/vault #3 už leží jeden nález."),
+                        BriefLine(part: .burning, text: "Nic zatím neblokuje, nejstarší kus fronty ale čeká čtyři hodiny a review na něm ještě neběželo."),
+                        BriefLine(part: .next, text: "Vezmi si keboola/vault #1, kde máš rozepsané review a zbývá ho odeslat."),
+                    ],
                     writtenAt: Date(),
-                    cost: 0.03
+                    cost: 0.09
                 ))
-                : .failed(reason: "Shrnutí nedoběhlo v limitu 2 minuty.")
+                : .failed(reason: "Shrnutí nedoběhlo v limitu 3 minuty.")
         }
         guard scenario != .activityEmpty else { return store }
         store.activityEvents = Self.events

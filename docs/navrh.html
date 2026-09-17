@@ -3041,6 +3041,18 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 }
 .rv-brief p { font-size: 13px; color: var(--ink); line-height: 1.55; max-width: none; }
 .rv-brief p.quiet { color: var(--ink-2); }
+
+/* Tři **pojmenované** věty místo odstavce (#516, po proklikání). Návěští je **sloupec**, ne tučný
+   začátek uvnitř věty: popisky se pak dají přelétnout okem a vybrat si z nich jeden, kdežto
+   lead-in by se pořád četl jako próza — tedy jako to, co se tím ruší. Šířka sloupce je **pevná**
+   (`BriefBlockView.labelWidth`, 88 b), aby věty pod sebou začínaly na jedné svislici; nejdelší
+   popisek je `První na řadě`. Řádek, na který ve vstupu odpověď není, se **nekreslí vůbec** —
+   prázdné návěští by tvrdilo, že se o té otázce nedá nic říct. */
+.rv-brief .lines { display: flex; flex-direction: column; gap: 6px; }
+.rv-brief .lines > div { display: flex; align-items: baseline; gap: 10px; }
+.rv-brief .lines > div > b {
+  flex: 0 0 88px; font-size: 11px; font-weight: 600; color: var(--ink-3); white-space: nowrap;
+}
 .rv-brief .meta {
   display: flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
@@ -5086,11 +5098,12 @@ tr.sel td.sg { background: var(--accent-weak); }
         stojí to čtyři bloky.
       </p>
       <p class="muted">
-        <b>Návrh</b>: nad pruhy <b>tři věty</b>, které složila session Claude Code
-        <b>bez jediného nástroje</b>. Dostane hotový stav aplikace — pruhy, počty, nálezy, dění —
-        a jenom ho <b>přeformuluje</b>. <b>Nečte repozitář</b>, a je to hranice, ne opatrnost:
-        brief z kódu už je review logika a ta patří do skillu, ne do aplikace. Pod větami stojí
-        <code>shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne z kódu</code> a tlačítko
+        <b>Návrh</b>: nad pruhy <b>tři pojmenované věty</b> — <em>co přibylo</em>, <em>co hoří</em>,
+        <em>co si vzít první</em> —, které složila session Claude Code <b>bez jediného nástroje</b>.
+        Dostane hotový stav aplikace (pruhy, počty, nálezy, dění) a jenom ho <b>přeformuluje</b>.
+        <b>Nečte repozitář</b>, a je to hranice, ne opatrnost: brief z kódu už je review logika
+        a ta patří do skillu, ne do aplikace. Pod větami stojí
+        <code>shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu</code> a tlačítko
         <code>Shrň znovu</code>.
       </p>
       <p class="muted">
@@ -5105,6 +5118,15 @@ tr.sel td.sg { background: var(--accent-weak); }
         <code>Na požádání</code> a <code>Při prvním tiku dne</code>. Rozhodují se tím dvě různé
         věci — jestli se brief skládá vůbec, a jestli ho smí spustit <b>aplikace sama</b>.
       </p>
+      <p class="muted">
+        <b>Cena je změřená, ne odhadnutá, a rozhoduje o modelu.</b> První verze nechala výběr
+        modelu na <code>claude</code> a jeden brief stál <b>0,46 $</b> — ~14 $ měsíčně za tři věty.
+        Měření ukázalo, kde ty peníze jsou: vstup z aplikace je <b>~2 % účtu</b>, zbytek je
+        <b>start session</b> (~42 tisíc tokenů systémového promptu a jmen nástrojů). Strop na délku
+        vstupu by tedy neušetřil nic; rozhoduje <b>model</b>. Brief proto jede na tom levném
+        a stojí <b>~0,09 $</b>, tj. ~2,50 $ měsíčně. Ta částka je vidět <b>v nastavení u přepínače</b>,
+        ne až na účtu.
+      </p>
     </div>
 
     <h3>Blok nad pruhy: tři podoby, žádná prázdná</h3>
@@ -5112,16 +5134,30 @@ tr.sel td.sg { background: var(--accent-weak); }
       <div class="pane new">
         <div class="tag"><i></i>Hotovo · tak to kreslí deck</div>
         <div class="rv-brief">
-          <p>Přes den přišly dva PR do fronty (<b>job-queue #726 a #727</b>, oba od sykora-ji, na
-          #727 už leží jeden nález). <b>Sandbox #4 blokuje</b> — pět nálezů correctness, všechny
-          CONFIRMED. Na tvém <b>#499</b> chce Copilot dvě změny a šest věcí čeká na předání
-          agentovi; <b>#11</b> má zelené CI, schválené review a dá se mergnout.</p>
+          <div class="lines">
+            <div><b>Přibylo</b><p>Dva nové pull requesty do fronty, na job-queue #727 už leží jeden nález.</p></div>
+            <div><b>Hoří</b><p>Sandbox #4 má pět blokujících nálezů a čeká nejdéle ze všeho.</p></div>
+            <div><b>První na řadě</b><p>Vezmi si sandbox #4 — rozhodnout se o něm blokuje zbytek fronty.</p></div>
+          </div>
           <div class="meta">
-            <span>shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne z kódu</span>
+            <span>shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu</span>
             <span class="sp"></span>
             <span class="mini">Shrň znovu</span>
           </div>
         </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Tři pojmenované věty, ne odstavec</b> — změna po proklikání. Souvislá próza na čtyři
+          řádky se musela přečíst celá, aby z ní vypadla jedna věc, a tím se rušil celý smysl
+          briefu: být <b>levnější než přečíst čtyři bloky pod ním</b>. Návěští odpovídá
+          <b>otázce</b>, ne pořadí — proto ne odrážky (tři puntíky vypadají jako výčet jednoho
+          druhu věcí) a ne čísla (ta by tvrdila pořadí důležitosti, které nikdo nerozhodl).
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Řádek, na který ve vstupu odpověď není, se nekreslí.</b> Je to ta mez proti textu,
+          který tvrdí víc, než data unesou: struktura, jež si vynutí větu na každou otázku, si
+          o vymyšlenou větu přímo říká. Zadání to session výslovně dovoluje a blok umí jeden i dva
+          řádky.
+        </p>
         <p style="font-size: 13.5px; color: var(--ink-2);">
           Cena je <b>na řádku</b>, ne schovaná v útratě za den: session, která stojí peníze
           a neukáže kolik, je vada. Do bloku <em>Dneska stálo</em> se přitom počítá taky.
@@ -5132,7 +5168,7 @@ tr.sel td.sg { background: var(--accent-weak); }
         <div class="tag"><i></i>Nepovedlo se · a říká proč</div>
         <div class="rv-brief">
           <p>Shrnutí se nepovedlo.</p>
-          <p class="quiet">Shrnutí nedoběhlo v limitu 2 minuty.</p>
+          <p class="quiet">Shrnutí nedoběhlo v limitu 3 minuty.</p>
           <div class="meta">
             <span class="sp"></span>
             <span class="mini">Zkusit znovu</span>

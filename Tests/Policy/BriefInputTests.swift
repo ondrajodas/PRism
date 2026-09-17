@@ -11,6 +11,13 @@ import Testing
 /// peníze, nebo text, který tvrdí víc, než data unesou.
 @Suite("Brief — vstup, brána, blok (#516)")
 struct BriefInputTests {
+    /// Ukázkové řádky briefu — **pojmenované, ne odstavec** (#516, po proklikání).
+    static let sample = [
+        BriefLine(part: .added, text: "Doběhlo ti čisté review na ondrajodas/PRism #584."),
+        BriefLine(part: .burning, text: "Hoří keboola/job-queue #727 se 4 nálezy."),
+        BriefLine(part: .next, text: "Vezmi si ondrajodas/PRism #584."),
+    ]
+
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
     private func summary(
@@ -82,7 +89,10 @@ extension BriefInputTests {
         #expect(input.contains("Pruh Přečíst (1):"))
         #expect(input.contains("keboola/job-queue #4"))
         #expect(input.contains("5 nálezů"))
-        #expect(input.contains("blokuje 5"))
+        // **Počet musí být ve vstupu jednoznačný.** `blokuje 5` model přečetl jako počet
+        // **reviewerů** a napsal to tak i do briefu (změřeno u #516) — jsou to blokující nálezy.
+        #expect(input.contains("z toho 5 blokujících"))
+        #expect(!input.contains("blokuje 5"))
     }
 
     /// Prázdný pruh se do vstupu **nedostane** — je to tatáž množina, jakou kreslí deska
@@ -244,8 +254,8 @@ extension BriefInputTests {
     /// paměť. Tlačítko limit nezná: za tím vždycky stojí člověk.
     @Test("Automat shrnuje jednou za den, tlačítko kdykoli")
     func summarizesOncePerDay() {
-        let today = Brief(text: "tři věty", writtenAt: now.addingTimeInterval(-3600), cost: 0.03)
-        let yesterday = Brief(text: "tři věty", writtenAt: now.addingTimeInterval(-90_000), cost: 0.03)
+        let today = Brief(lines: Self.sample, writtenAt: now.addingTimeInterval(-3600), cost: 0.09)
+        let yesterday = Brief(lines: Self.sample, writtenAt: now.addingTimeInterval(-90_000), cost: 0.09)
 
         #expect(decision(mode: .firstTickOfDay, state: .ready(today), last: today, trigger: .tick) == .alreadyToday)
         #expect(decision(mode: .firstTickOfDay, state: .ready(yesterday), last: yesterday, trigger: .tick) == .start)
@@ -269,7 +279,7 @@ extension BriefInputTests {
     /// k nerozeznání od vypnutého, a u spadlé session by to byla lež o tom, že se nic nedělo.
     @Test("Každý stav má vlastní větu a vlastní tlačítko")
     func everyStateSaysSomething() throws {
-        let brief = Brief(text: "Tři věty.", writtenAt: now, cost: 0.03)
+        let brief = Brief(lines: Self.sample, writtenAt: now, cost: 0.09)
 
         let never = try #require(Policy.briefBlock(mode: .onDemand, state: .never))
         #expect(never.action == "Shrň")

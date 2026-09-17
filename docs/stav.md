@@ -8945,13 +8945,14 @@ odklad od vypnutého automatu.
 nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
 
 
-## #516 — brief na domově: tři věty ze stavu aplikace (M16, zákres 58)
+## #516 — brief na domově: tři pojmenované věty ze stavu aplikace (M16, zákres 58)
 
-Nad pruhy desky je **blok se třemi větami**, které složila session Claude Code **bez jediného
-nástroje**. Dostane hotový text z `Policy.briefInput` — počty z pruhů, řádky viditelných pruhů
-(repo, číslo, titulek, autor, stav review, kolik blokuje, stáří), počet odložených a blok `Dění` —
-a jenom ho **přeformuluje**. Pod větami stojí `shrnuto 21:48 · 0,03 $ · ze stavu aplikace, ne
-z kódu` a tlačítko `Shrň znovu`.
+Nad pruhy desky je **blok s až třemi pojmenovanými větami** — `Přibylo`, `Hoří`, `První na řadě` —,
+které složila session Claude Code **bez jediného nástroje**. Dostane hotový text
+z `Policy.briefInput` — počty z pruhů, řádky viditelných pruhů (repo, číslo, titulek, autor, stav
+review, kolik z nálezů blokuje, stáří), počet odložených a blok `Dění` — a jenom ho
+**přeformuluje**. Pod větami stojí `shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu`
+a tlačítko `Shrň znovu`.
 
 **Přibyla tím šestá session do tabulky v tvrdé podmínce č. 2, a je to druhá s prázdnou sadou**
 (po překladu nálezů). `--disallowedTools` je tatáž konstanta jako u ostatních pěti a
@@ -8978,8 +8979,35 @@ mluví z dat, která aplikace má jistě, kdežto brief je text od modelu a smí
 za den. Účet přesto nikde nemlčí.
 
 Zákres přenesla tahle issue do **sekce 58** (#515 v sekci 45 nechalo poznámku, že brief přijde
-s #516); sekce 45 se nepřekresluje, blok visí pod pozdravem a nad pruhy. Přibylo 56 testů v pěti
-sadách; regrese se ověřila **vložením regrese u čtyř věcí zvlášť**.
+s #516); sekce 45 se nepřekresluje, blok visí pod pozdravem a nad pruhy.
+
+### Co změnilo první proklikání
+
+**Odstavec se rozpadl na tři pojmenované věty.** Souvislá próza na čtyři řádky se musela přečíst
+celá, aby z ní vypadla jedna věc — a tím se rušil celý smysl briefu, totiž být **levnější než
+přečíst čtyři bloky pod ním**. Odpověď session je od té doby **protokol** (`ADDED:` / `BURNING:` /
+`NEXT:`), ne volný text, a blok ji kreslí jako sloupec návěští a sloupec vět. **Otázka, na kterou
+ve vstupu odpověď není, mlčí** — struktura, jež si vynutí větu na každou otázku, si o vymyšlenou
+větu říká.
+
+**Cena se změřila a vyšla patnáctkrát vyšší, než stálo v hlášení: $0,46 za jeden brief**, tedy
+~14 $ měsíčně při `Při prvním tiku dne`. Měření ukázalo, že **náš vstup je ~2 % účtu** a zbytek je
+boot session zapsaná do hodinové cache, kterou brief nikdy nepoužije. Strop na velikost vstupu by
+tedy neušetřil nic a **zamítl se**; místo toho brief jako **jediná session vynucuje model**
+(`haiku`) a přidal `--strict-mcp-config`. **Změřeno ~$0,09 místo ~$0,46**, tj. ~2,50 $ místo ~14 $
+měsíčně. Limit se zvedl na tři minuty, protože haiku běží ~60 s. Ta částka je teď vidět
+**v nastavení u přepínače**, ne až na účtu.
+
+**Nejednoznačný vstup je vada vstupu, ne promptu.** `blokuje 2` model přečetl jako počet
+*reviewerů*; jsou to blokující nálezy. Opraveno na `z toho 2 blokující` a drží to test v obou
+směrech.
+
+Testů je v pěti sadách **56**; regrese se ověřila **vložením regrese u šesti věcí zvlášť** —
+u čtyř z prvního kola a nově u vynuceného modelu a u dvojtečky za klíčem návěští.
 
 **Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu, takže se na pokyn
 uživatele nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
+
+**Neověřená mezera: kvalita textu z haiku se posoudila na jednom vstupu.** Měřilo se nad jedním
+realistickým stavem desky (čtyři pruhy, 13 PR); že haiku obstojí i nad prázdnou nebo naopak hodně
+zaplněnou deskou, se nezkoušelo — každý běh stojí peníze uživatele.

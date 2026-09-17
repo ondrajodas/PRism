@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// Blok `brief` nad pruhy desky (#516) — tři věty o stavu aplikace a řádek pod nimi.
+/// Blok `brief` nad pruhy desky (#516) — až tři **pojmenované** věty o stavu aplikace a řádek pod
+/// nimi.
 ///
 /// **Rozhoduje `Policy.briefBlock`, tady se kreslí.** Jestli se blok kreslí vůbec, co v něm stojí
 /// a co je na tlačítku, vydá `Policy`; view z toho nesmí nic dopočítávat — právě tady by se dalo
 /// nejsnáz napsat něco, co data neunesou.
 ///
-/// Rozměry jsou z návrhu (`.rv-brief`, sekce 45) doslova: rámeček s akcentovým pruhem vlevo,
-/// odstavec 13 b a pod ním řádek monem 10,5 b.
+/// Rozměry jsou z návrhu (`.rv-brief`, sekce 58) doslova: rámeček s akcentovým pruhem vlevo,
+/// věty 13 b se sloupcem návěští 11 b vlevo a pod nimi řádek monem 10,5 b.
 struct BriefBlockView: View {
     let block: BriefBlock
     /// Co má tlačítko udělat. Jedna akce na všechny tři podoby (`Shrň`, `Shrň znovu`,
@@ -32,7 +33,7 @@ struct BriefBlockView: View {
     @ViewBuilder private func body(of body: BriefBlock.Body) -> some View {
         switch body {
         case .text(let brief):
-            sentence(brief.text, color: Palette.ink)
+            lines(of: brief)
         case .never(let text):
             sentence(text, color: Palette.ink2)
         case .running(let text):
@@ -48,6 +49,37 @@ struct BriefBlockView: View {
                 // **Důvod je vidět**, ne jen „nepovedlo se“: bez něj je blok prázdno s rámečkem,
                 // což je přesně to, čemu se tenhle stav vyhýbá.
                 sentence(detail, color: Palette.ink2)
+            }
+        }
+    }
+
+    /// Šířka sloupce s návěštím. **Konstanta, ne měření**: jsou to tři pevné popisky
+    /// (`BriefPart.title`), takže se nemá co měnit — a pružný sloupec by právě tady srovnání vět
+    /// pod sebou rozbil, což je celý smysl rozdělení.
+    ///
+    /// Nejdelší z nich je `První na řadě`; 88 bodů ho při 11 b pojme i s rezervou na širší písmo.
+    private static let labelWidth: CGFloat = 88
+
+    /// Tři pojmenované věty pod sebou (#516) — **ne odstavec**.
+    ///
+    /// Blok kreslí **jen ty řádky, které dorazily**: otázka, na kterou ve vstupu odpověď nebyla, se
+    /// vynechává už v odpovědi session (`BriefCommand.parse`), a prázdné návěští by tvrdilo, že se
+    /// o ní nedá nic říct — což je jiné tvrzení než „nikdo se neptal“.
+    ///
+    /// **Návěští je sloupec, ne lead-in ve větě.** Vlevo zarovnané popisky se dají přelétnout okem
+    /// a vybrat si z nich jeden; tučný začátek uvnitř odstavce by se pořád četl jako próza, tedy
+    /// jako to, co se tímhle ruší.
+    private func lines(of brief: Brief) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(brief.lines, id: \.part) { line in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(verbatim: line.part.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Palette.ink3)
+                        .lineLimit(1)
+                        .frame(width: Self.labelWidth, alignment: .leading)
+                    sentence(line.text, color: Palette.ink)
+                }
             }
         }
     }
@@ -83,7 +115,7 @@ struct BriefBlockView: View {
             if let action = block.action {
                 Button(action) { write() }
                     .buttonStyle(.mini)
-                    .help("Složí tři věty o tom, co je zrovna na desce. Je to session Claude Code bez jediného nástroje — čte stav aplikace, ne kód, a její cena jde do dnešní útraty.")
+                    .help("Složí až tři věty o tom, co je zrovna na desce — co přibylo, co hoří a co si vzít první. Je to session Claude Code bez jediného nástroje: čte stav aplikace, ne kód. Stojí kolem 0,09 $ a počítá se do dnešní útraty.")
             }
         }
     }

@@ -173,7 +173,7 @@ struct ReviewSettingsView: View {
         } header: {
             Text("Brief na domově")
         } footer: {
-            Text("Výchozí stav je **vypnuto** a blok se pak na domově nekreslí vůbec. Když se zapne, složí tři věty o tom, co je na tahu, session Claude Code **bez jediného nástroje**: dostane hotový stav aplikace — pruhy desky, počty, dění — a jenom ho přeformuluje. Nečte repozitář, nesahá na disk ani na GitHub. `Na požádání` čeká na tlačítko, `Při prvním tiku dne` k tomu složí brief jednou denně, jakmile je fronta načtená. Každý brief stojí peníze: cena je na jeho řádku a počítá se do `Dneska stálo`.")
+            Text("Výchozí stav je **vypnuto** a blok se pak na domově nekreslí vůbec. Když se zapne, složí až tři věty — co přibylo, co hoří a co si vzít první — session Claude Code **bez jediného nástroje**: dostane hotový stav aplikace (pruhy desky, počty, dění) a jenom ho přeformuluje. Nečte repozitář, nesahá na disk ani na GitHub. `Na požádání` čeká na tlačítko, `Při prvním tiku dne` k tomu složí brief jednou denně, jakmile je fronta načtená.\n\n**Jeden brief stojí kolem 0,09 $** (změřeno; drtivou většinu z toho spolkne start session, ne délka shrnutí). Při `Při prvním tiku dne` je to zhruba **2,50 $ měsíčně**. Cena každého běhu je na řádku pod briefem a počítá se do `Dneska stálo`; do denního limitu automatických běhů se **nezapočítává**.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

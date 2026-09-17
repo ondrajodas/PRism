@@ -7727,6 +7727,80 @@ zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“ (tatáž ú
 Cena toho rozhodnutí je, že **prázdno v tom bloku nesmí nastat jinak**: spadlá session by se s
 vypnutým briefem slila. Proto má `failed` vlastní dvě věty a tlačítko `Zkusit znovu`.
 
+### Záznam rozhodnutí — brief jsou tři pojmenované věty, ne odstavec (#516, po proklikání)
+
+První verze dostala do zadání „napiš přesně tři věty … v jednom odstavci“ a vydala přesně to:
+**souvislou prózu na čtyři řádky**, ve které byly natěsnané tři různé věci — co přibylo, co hoří,
+co je první na řadě. Při proklikání se ukázalo, že takový špalek se musí přečíst **celý**, aby z něj
+vypadla jedna věc, a tím padá to jediné, čím se brief platí: že je **levnější než přečíst čtyři
+bloky pod ním**.
+
+Odpověď session je proto **protokol**, ne volný text: tři řádky uvozené klíčem (`ADDED:`,
+`BURNING:`, `NEXT:`), z nichž `BriefCommand.parse` složí `[BriefLine]` a blok je kreslí jako
+sloupec návěští a sloupec vět.
+
+**Zvažované a zahozené podoby:**
+
+- **Odrážky.** Tři puntíky vypadají jako výčet **jednoho druhu** věcí — a tohle jsou tři různé
+  otázky. Puntík navíc neřekne, na kterou se odpovídá, takže se stejně musí číst všechny.
+- **Čísla vlevo.** Tvrdila by **pořadí důležitosti**, které nikdo nerozhodl; „co přibylo“ není
+  důležitější než „co hoří“, jsou to jiné otázky.
+- **Tučné návěští jako lead-in uvnitř věty** (`**Hoří** — …`). Nejmenší zásah, ale text zůstane
+  odstavcem: oko nemá kam skočit a čte se to pořád jako próza. Sloupec pevné šířky je to, co
+  dovolí popisky **přelétnout** a vybrat si jeden.
+
+**Část, na kterou nejsou data, mlčí — a je to hlavní mez celého rozhodnutí.** Struktura si umí
+vynutit větu tam, kde pro ni nejsou podklady, a tím by z ní vzniklo přesně to, co Copilot v tomhle
+repu nachází opakovaně: text, který tvrdí víc, než data unesou. Proto `[BriefLine]` a ne trojice
+polí, proto to zadání session **výslovně dovoluje**, a proto je nula řádků **porucha**, ne prázdný
+brief.
+
+**Strop na délku a zákaz seznamů jsou v promptu, ne v `Policy`.** Uvažovalo se oříznout dlouhou
+větu při čtení odpovědi; zahozeno, protože uříznutý konec umí obrátit, co věta tvrdí — blok by pak
+tvrdil něco jiného než session. Délka je **tvar odpovědi**, a ten umí ovlivnit jedině model.
+Zákaz vypisovat čísla PR má tentýž kořen jako celý brief: ta čísla stojí v pruzích **pod** ním.
+
+### Záznam rozhodnutí — brief má vynucený levný model (#516, po změření ceny)
+
+Ostatní session model nevolí: `IntentTextCommand` to má zapsané jako rozhodnutí („`--model` by byla
+jen třetí odpověď na otázku, se kterým modelem aplikace mluví“). Brief z té úmluvy **vystupuje**,
+a je to změna vynucená měřením, ne názorem.
+
+Naměřeno: jeden brief stál **$0,46**, tedy ~14 $ měsíčně při `firstTickOfDay` za tři věty. Měření
+ukázalo, kde ty peníze jsou — **náš vstup je ~2 % účtu**, zbytek je boot session (~42 tisíc tokenů
+systémového promptu a jmen nástrojů) zapsaná do **hodinové cache, kterou brief nikdy nepoužije**,
+protože běží jednou denně. Cena je tedy prakticky `boot × cena tokenu`, a tu řídí jedině model.
+[Čísla a postup](../../testovani.md#kolik-stojí-jeden-brief-a-kde-ty-peníze-doopravdy-jsou-516).
+
+**Proč zrovna brief tu výjimku dostane** (a ne dotažení textu issue, kde se cena vědomě přijala):
+
+1. Je to **přeformulování hotového textu**, ne úvaha nad cizím kódem — tatáž třída jako překlad
+   nálezů. Co je na tahu, rozhodla `Policy`; model nic neposuzuje.
+2. Je to **jediná session, která se pouští bez kliknutí a podle kalendáře**. U dotažení issue stojí
+   za během vždycky review, které si člověk pustil; tady se platí za to, že aplikace ráno běží.
+3. Změřeno **~$0,09 místo ~$0,46**.
+
+**Zamítnuté varianty, všechny změřené:**
+
+- **Strop na velikost `briefInput`.** Ušetřil by ~2 % účtu a zaplatil by se briefem, který mlčí
+  o části desky, aniž by to přiznal.
+- **`--bare`.** Vypnul by CLAUDE.md, hooky i plugin sync, ale bere authentizaci výhradně
+  z `ANTHROPIC_API_KEY`/`apiKeyHelperu` — OAuth ani klíčenku nečte. Na tomhle stroji `api_error`,
+  exit 1.
+- **`--effort low`.** Přemýšlení haiku nezkrotilo (rozdíl je v šumu), takže se místo něj zvedl
+  limit na tři minuty.
+- **`sonnet` jako kompromis.** Dopočteno ~$0,25 za studený běh, tedy ~2× místo ~5×; za to, co by
+  navíc dal, se nevyplatí.
+
+**Co se přijalo:** haiku píše sušeji a bez souvislostí, které opus unese, a běží ~60 s místo ~21 s.
+Strukturu z téhož issue to snese, protože **návěští nese kus významu, který dřív musela nést próza**
+— obě změny se tu drží navzájem. **Konfigurovaný model se nebere**: `GlobalConfig` odpovídá na
+otázku „se kterým modelem se kontroluje kód“, a brief žádný kód nečte.
+
+**A ta cena musí být vidět dřív, než se utratí.** Do nastavení proto přibyla částka (~0,09 $ za běh,
+~2,50 $ měsíčně), ne jen věta „každý brief stojí peníze“ — ta u čtrnácti dolarů měsíčně sama tvrdí
+míň, než data unesou.
+
 **Brief se neváže na `headSha`.** Je to výjimka téhož druhu jako rozhovor nad PR (#452) a odložení
 (#512): není to nález, mluví o celé desce a nese u sebe **kdy vznikl**. Tvrdá podmínka č. 5 se tím
 nemění — klíčované `headSha` zůstávají nálezy.

@@ -4110,9 +4110,9 @@ Věci, které se u toho nemají rozbít:
 
 ## Brief na domově — šestá session a druhá bez nástrojů (#516)
 
-**Tři věty o stavu aplikace nad pruhy desky** (návrh, [sekce 58](navrh.html)). Session dostane
-hotový text z `Policy.briefInput` a **přeformuluje** ho; rozhodnutí, co je na tahu, co blokuje
-a co se dá mergnout, je udělané dřív a deterministicky.
+**Až tři pojmenované věty o stavu aplikace nad pruhy desky** (návrh, [sekce 58](navrh.html)).
+Session dostane hotový text z `Policy.briefInput` a **přeformuluje** ho; rozhodnutí, co je na
+tahu, co blokuje a co se dá mergnout, je udělané dřív a deterministicky.
 
 **Mění to tvrdou podmínku č. 2 o řádek v tabulce sad, nic víc**: přibývá šestá session
 s **prázdnou sadou** — tatáž, jakou má překlad nálezů —, `--disallowedTools` je tatáž konstanta
@@ -4130,19 +4130,96 @@ vymýšlejícímu modelu nezabránila v ničem, kdežto chybějící nástroj an
 | `Policy.briefInput(board:snoozed:now:)` | **Jediné místo, kde se skládá materiál.** Čistá funkce, deterministická, bez locale |
 | `Policy.brief(mode:state:last:isLoaded:now:trigger:)` | **Jediné místo, kde se rozhoduje o spuštění.** Výčet důvodů, ne `Bool` |
 | `Policy.briefBlock(mode:state:)` | Co je v bloku vidět. `nil` = **blok se nekreslí vůbec** |
-| `BriefCommand` | Argumenty (prázdná sada, `stream-json`), prompt a defenzivní čtení odpovědi |
+| `BriefPart` / `BriefLine` | Na kterou ze tří otázek řádek odpovídá a co na ni session odpověděla. **Klíč protokolu je ASCII (`ADDED`), popisek v okně český** — dvě různé věci, dvě různá pole |
+| `BriefCommand` | Argumenty (prázdná sada, vynucený model, `stream-json`), prompt a defenzivní čtení odpovědi |
 | `BriefWriting` / `ClaudeBriefWriter` | Protokol s jednou metodou a implementace nad `claude -p`. **Nezná `gh` ani pracovní adresář** |
 | `BriefStore` | Poslední brief v cache (`brief.json`) — podle jeho data se pozná, jestli je dnešek shrnutý |
 | `AppStore+Brief` | Spouštěč, brána, běh a to, co se s výsledkem stane |
 | `BriefBlockView` | Kresba bloku podle `BriefBlock` — čtyři podoby, žádná prázdná |
 
+### Tři pojmenované věty, ne odstavec (#516, po proklikání)
+
+První verze vydala **jeden odstavec na čtyři řádky**, ve kterém byly natěsnané tři různé věci: co
+přibylo, co hoří a co je první na řadě. Četlo se to jako souvislá próza, takže se musel přečíst
+celý, aby z něj vypadla jedna — a tím se ruší celý smysl briefu, totiž že je **levnější než
+přečíst čtyři bloky pod ním**.
+
+Odpověď session je proto **protokol, ne volný text**: tři řádky uvozené klíčem
+(`ADDED:` / `BURNING:` / `NEXT:`), z nichž `BriefCommand.parse` složí `[BriefLine]`.
+
+- **Návěští odpovídá otázce, ne pořadí.** Proto ne odrážky (tři puntíky vypadají jako výčet
+  jednoho druhu věcí) a ne čísla (tvrdila by pořadí důležitosti, které nikdo nerozhodl).
+- **Návěští je sloupec, ne tučný začátek uvnitř věty.** Vlevo zarovnané popisky pevné šířky
+  (`BriefBlockView.labelWidth`) se dají přelétnout okem a vybrat si z nich jeden; lead-in by se
+  pořád četl jako próza — tedy jako to, co se tím ruší.
+- **Řádek, na který ve vstupu odpověď není, se vynechá celý.** To je ta mez proti textu, který
+  tvrdí víc, než data unesou: struktura, jež si vynutí větu na každou otázku, si o vymyšlenou
+  větu přímo říká. Proto `[BriefLine]`, ne trojice polí — jeden i dva řádky jsou platná odpověď,
+  **nula je porucha**.
+- **Pořadí je naše, ne modelovo** (`BriefPart.allCases`). Kdyby o něm rozhodovala odpověď,
+  přeskládal by se blok při každém shrnutí a nedal by se přelétnout okem.
+- **Klíč je ASCII a velkými, popisek český.** Diakritika v klíči je o jeden způsob, jak se dá
+  protokol rozejít, víc: model ji umí napsat bez háčků a řádek by propadl.
+- **Čtení je defenzivní.** Snese `` ``` ``-blok, markdownovou ozdobu návěští (`**ADDED:**`, `-
+  ADDED:`), malá písmena i cizí prózu kolem (zahodí se). **Za klíčem ale musí stát dvojtečka** —
+  bez té podmínky by se návěštím stala každá věta, která tím slovem začíná, a její první slovo by
+  zmizelo. Při dvou stejných klíčích platí **první**: druhá odpověď na tutéž otázku je oprava,
+  kterou nikdo nepotvrdil.
+- **Strop na délku věty je v promptu a nikde se nevynucuje** (`BriefCommand.sentenceLimit`).
+  Zkrátit dlouhou větu po jejím příchodu nejde bez ztráty významu — uříznutý konec umí obrátit,
+  co věta tvrdí. Délka je tvar odpovědi a ten umí ovlivnit jedině model.
+- **Zákaz vypisovat seznamy čísel** je ze stejného důvodu, proč brief vůbec je: čísla pull
+  requestů stojí v pruzích **pod** ním, takže věta, která je zopakuje, nešetří nic.
+
+### Co ta session stojí a proč zrovna tolik (#516)
+
+První verze nechala výběr modelu na `claude`, jako to dělá dotažení textu issue a překlad nálezů.
+Změřený studený běh stál **$0,46** — při `firstTickOfDay` ~14 $ měsíčně za tři věty. Měření
+ukázalo, **kde ty peníze jsou**, a je to nečekané:
+
+| Co | Tokenů | Podíl na účtu |
+|---|---|---|
+| vstup z `Policy.briefInput` (2,7 kB textu) | ~1 000 | **~2 %** |
+| **boot session** — systémový prompt, jména nástrojů, hooky | **42 000 – 48 000** | **~97 %** |
+| odpověď (tři věty + přemýšlení) | 150 – 6 000 | zbytek |
+
+Cena briefu je tedy prakticky `boot × cena zápisu do hodinové cache`, a tu řídí **jedině model**.
+Z toho plynou tři rozhodnutí — [čím se to měřilo](testovani.md#kolik-stojí-jeden-brief-a-kde-ty-peníze-doopravdy-jsou-516):
+
+- **Model se vynucuje (`BriefCommand.model = "haiku"`), a je to zapsaná výjimka z úmluvy
+  u ostatních session.** Brief je přeformulování hotového textu, ne úvaha nad cizím kódem (tatáž
+  třída jako překlad nálezů), a je to **jediná session, která se pouští bez kliknutí a podle
+  kalendáře** — tedy ta, u které nepovšimnutá cena bolí nejvíc. **Změřeno: ~$0,09 místo ~$0,46.**
+  Konfigurovaný model se sem nebere schválně: `GlobalConfig` odpovídá na otázku „se kterým modelem
+  se **kontroluje kód**“, a brief žádný kód nečte.
+- **Strop na velikost vstupu se zamítl, a je to změřené rozhodnutí.** Nabízel se jako úspora, ale
+  ušetřil by ~2 % účtu a zaplatil by se tím nejdražším, co brief má: shrnutím, které **mlčí
+  o části desky, aniž by to přiznalo**.
+- **`--strict-mcp-config` se přidalo.** Session s prázdnou sadou nemůže použít ani jeden ze 43 MCP
+  serverů uživatelova prostředí, ale jejich jména se do systémového promptu stejně zapíšou.
+  Ubere to 5 121 tokenů bootu a ~8 s běhu. **Není to ta velká úspora — tou je model —, ale je
+  zadarmo.**
+
+**Co se tím platí, a je to změřené, ne odhadnuté:** haiku píše sušeji a bez souvislostí, které
+opus dá (`a po novém commitu nálezy zastaraly`), a běží **~60 s místo ~21 s**. Proto je limit
+**tři minuty, ne dvě** (`BriefCommand.timeout`): počet tokenů přemýšlení je napříč běhy rozkolísaný
+(3 564 až 5 924 na tomtéž vstupu) a spoluurčuje ho `effortLevel` z **uživatelova** nastavení, do
+kterého aplikace nevidí.
+
+**Cena je vidět dřív, než se utratí**: věta u přepínače v nastavení jmenuje ~0,09 $ za běh
+i ~2,50 $ měsíčně. Do té doby stálo v nastavení jen „každý brief stojí peníze“, což je u čtrnácti
+dolarů měsíčně text, který tvrdí míň, než data unesou.
+
 ### Co se u toho nemá rozbít
 
 - **Materiál nese stav aplikace, ne kód.** Do vstupu jde: počty z pruhů, řádky viditelných pruhů
-  (repo, číslo, titulek, autor, stav review, kolik blokuje, jestli tam leží rozdělané review,
-  stáří) a blok `Dění`. **Není v něm cesta na disk, adresa pull requestu ani řádek diffu** — a je
+  (repo, číslo, titulek, autor, stav review, **kolik z nálezů blokuje**, jestli tam leží
+  rozdělané review, stáří) a blok `Dění`. **Není v něm cesta na disk, adresa pull requestu ani řádek diffu** — a je
   na to negativní test. Stav review se píše **slovem z výčtu** (`Policy.briefReviewState`), ne
-  `String(describing:)`, protože ten by do promptu pustil jména z kódu.
+  `String(describing:)`, protože ten by do promptu pustil jména z kódu. **A každý údaj musí být
+  jednoznačný sám o sobě**: `blokuje 2` model přečetl jako počet *reviewerů* a napsal to tak
+  i do briefu (změřeno u #516), proto se píše `z toho 2 blokující`. Nejednoznačný **vstup** pustí
+  do briefu tvrzení, kterému žádné pravidlo v promptu nezabrání.
 - **Množina je tatáž jako u desky**, tedy `boardEntries`: cizí i vlastní PR, **bez odložených**
   (#512). Odložené se do vstupu připisují **jen počtem**, jako ve větě pod pozdravem — o tom, co
   jsem odložil, nemá brief mluvit, ale zamlčet, že něco schované je, taky nemá.
@@ -4167,7 +4244,7 @@ vymýšlejícímu modelu nezabránila v ničem, kdežto chybějící nástroj an
   brief je text od modelu a smí se nepovést. Kdyby ho nahradil, byl by vypnutý nebo spadlý brief
   dírou nad deskou.
 - **Denní rozpočet (`autoRunsPerDay`) se nečerpá, a je to rozhodnutí.** Ten limit je pojistka
-  proti řadě patnáctiminutových review a agentů; brief je jeden odstavec bez nástrojů, nejvýš
+  proti řadě patnáctiminutových review a agentů; brief je pár vět bez nástrojů, nejvýš
   jednou za den, takže by v limitu ukrojil místo běhu, na kterém záleží víc. Účet přitom nemlčí:
   cena je na řádku a v bloku `Dneska stálo`.
 - **Brief se neváže na `headSha`** — je to výjimka téhož druhu jako rozhovor nad PR (#452):

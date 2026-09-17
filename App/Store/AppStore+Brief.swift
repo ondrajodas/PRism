@@ -3,7 +3,8 @@ import Foundation
 /// Brief na domově (#516) — **šestá session** a druhá, která nemá jediný nástroj.
 ///
 /// **Čte stav aplikace, ne kód.** Materiál skládá `Policy.briefInput` z toho, co store doopravdy
-/// má (pruhy desky, počet odložených, blok `Dění`); session ho jenom přeformuluje do tří vět.
+/// má (pruhy desky, počet odložených, blok `Dění`); session ho jenom přeformuluje do tří
+/// pojmenovaných vět.
 /// Rozhodovací logika do promptu nepatří — kdyby o tom, co je na tahu, rozhodoval model, byl by to
 /// druhý zdroj pravdy o desce, jen dražší a pokaždé jiný.
 ///
@@ -95,17 +96,17 @@ extension AppStore {
         }
         await recordSpend(answer.usage)
 
-        // **Selhání přebíjí text.** Napůl dopsaný odstavec u vytimeoutované session je horší než
-        // věta o tom, že se to nepovedlo — brief je jeden odstavec, ne rozdělaná práce v souborech.
+        // **Selhání přebíjí text.** Napůl dopsaná věta u vytimeoutované session je horší než hláška
+        // o tom, že se to nepovedlo — brief je pár vět, ne rozdělaná práce v souborech.
         if let failure = answer.failure {
             briefState = .failed(reason: failure)
             return
         }
-        guard let text = answer.text else {
+        guard let lines = answer.lines else {
             briefState = .failed(reason: "Session nevrátila žádný text.")
             return
         }
-        let brief = Brief(text: text, writtenAt: time.now, cost: answer.usage?.cost)
+        let brief = Brief(lines: lines, writtenAt: time.now, cost: answer.usage?.cost)
         briefState = .ready(brief)
         // **Na disk až po úspěchu.** Uložený neúspěch by po restartu vypadal jako brief, a hlavně
         // by automatu tvrdil, že je dnešek shrnutý.
