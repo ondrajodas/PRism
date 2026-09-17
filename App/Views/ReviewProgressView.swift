@@ -24,6 +24,13 @@ struct ReviewProgressView: View {
     /// Cíl skládá **`Policy`, ne view** (`Policy.terminalSession(of:)`), ze stejného důvodu jako
     /// u `showRawSession`: „bez `session_id` a bez pracovního stromu tlačítko není“ je pravidlo.
     var resumeInDrawer: ((TerminalSession) -> Void)?
+    /// Pustí **celé** odložené review teď (#519). `nil` = nejde to (něco běží), nebo to volající
+    /// neumí. Bez parametru na dráhu, protože odklad platí na celý běh — viz `ReviewerLaneView`.
+    var runNow: (() -> Void)?
+    /// „Teď“ pro větu `poběží 23:00` (#519). **Předává se od storu** (`AppStore.time`), aby se
+    /// dráha nemohla rozejít s hodinami, ze kterých se o odkladu rozhodovalo. Výchozí `Date()` je
+    /// jen pro sondy a náhledy — v aplikaci ho přebíjí `ReviewProgressView`.
+    var now = Date()
     /// `owner/repo#412` do podtitulku sheetu.
     var slug = ""
 
@@ -83,7 +90,11 @@ struct ReviewProgressView: View {
                     feed: Policy.stepFeed(of: lane, expansion: expansion),
                     toggleFeed: { expansion = Policy.toggledStepFeed(expansion, of: lane.skill) },
                     showRawSession: rawSession(of: lane),
-                    resumeInDrawer: drawer(of: lane)
+                    resumeInDrawer: drawer(of: lane),
+                    // Jen na odložené dráze: `runNow` je akce nad **celým** během, takže by se
+                    // pod doběhlou dráhou nakreslilo tlačítko, které s ní nemá co dělat.
+                    runNow: lane.isDeferred ? runNow : nil,
+                    now: now
                 )
             }
         }

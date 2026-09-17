@@ -205,6 +205,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     ///
     /// **Globálně, ne per repo**: dlaždice je jedna a mluví o celé frontě.
     var dockBadge: DockBadgeMode
+    /// Velké PR odložit do tichých hodin (#519). **Výchozí vypnuto** — proč, je u `QuietHours`.
+    ///
+    /// **Globálně, ne per repo**, jako `appearance` a `diffLayout`: kdy chci mít na stroji ticho,
+    /// z repozitáře neplyne. Je to jediná hodnota o **automatu**, kterou si repo přebít nesmí —
+    /// režim, sada skillů i přírůstek jsou o tom, *co* se pouští, tohle o mém dni.
+    var quietHours: QuietHours
     /// Co se má hlásit notifikací (#86). Jen globálně — viz `NotificationSettings`.
     var notifications: NotificationSettings
 
@@ -233,6 +239,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         incrementalAfterPush: Bool = true,
         externalEditor: ExternalEditor? = nil,
         dockBadge: DockBadgeMode = .waiting,
+        quietHours: QuietHours = QuietHours(),
         notifications: NotificationSettings = NotificationSettings()
     ) {
         self.sources = sources
@@ -259,6 +266,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.incrementalAfterPush = incrementalAfterPush
         self.externalEditor = externalEditor
         self.dockBadge = dockBadge
+        self.quietHours = quietHours
         self.notifications = notifications
     }
 
@@ -376,6 +384,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // u `incrementalAfterPush` by tady nechránila nic: tam se sráží na `false`, protože
         // bezpečná strana je „přečti víc kódu“, kdežto u odznaku žádná bezpečná strana není.
         dockBadge = (try? container.decode(DockBadgeMode.self, forKey: .dockBadge)) ?? standard.dockBadge
+        // Tolerantně, jako odznak v Docku (#519): `QuietHours` si rozbité klíče srazí sám po
+        // jednotlivých polích, takže se celé okno nezahodí kvůli jedné hodině. Bezpečná strana je
+        // tady navíc v samotném pravidle — nesmyslné okno odklad **vypne**
+        // (`Policy.quietHoursAreUsable`), takže se překlepem nedá review zastavit, jen neodložit.
+        quietHours = try container.decodeIfPresent(QuietHours.self, forKey: .quietHours)
+            ?? standard.quietHours
         // Chybějící klíč = výchozí (všechno zapnuté). Rozbitý obsah řeší `NotificationSettings`
         // sám, po jednotlivých přepínačích — celá sekce se kvůli jednomu překlepu zahazovat
         // nemá, jinak by se s ním vypnulo i to, co je napsané správně.

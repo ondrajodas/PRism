@@ -30,17 +30,16 @@ struct SettingsFieldsRenderTests {
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     ///
-    /// **Od #517 o dvě stě bodů výš.** `Form` je `ScrollView`, takže co se do okna nevejde, se
-    /// **nenakreslí** — a přepínač `Po pushi review jen přírůstku` s vysvětlením pod sekcí
-    /// `Režim review` posunul `Text issue z trackeru` pod dosavadní hranici. Test se tím nezměnil
-    /// v tom, co tvrdí: dvě bitmapy vyšly stejné právě proto, že se pole přestalo kreslit, což je
-    /// zrovna ta vada, kterou má chytat.
+    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta a od #519 o dalších čtyři sta.**
+    /// `Form` je `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — a každá nová sekce
+    /// nad `Text issue z trackeru` ho posunula pod dosavadní hranici (#517 přepínačem `Po pushi
+    /// review jen přírůstku`, #510 sekcí `Agent na vlastním PR`, #519 sekcí `Tiché hodiny` se
+    /// čtyřmi řádky a vysvětlením). Test se tím nezměnil v tom, co tvrdí: dvě bitmapy vyšly stejné
+    /// právě proto, že se pole přestalo kreslit, což je zrovna ta vada, kterou má chytat.
     ///
-    /// **Od #510 o dalších tři sta, ze stejného důvodu a se stejným poučením**: sekce `Agent na
-    /// vlastním PR` (přepínač a odstavec pod ním) posunula `Text issue z trackeru` zase níž a obě
-    /// bitmapy vyšly znovu stejné. Konstanta je proto „kam až stránka sahá“, ne „jak velké je
-    /// okno“ — když na stránku něco přibude, patří to i sem.
-    private static let height: CGFloat = 2100
+    /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
+    /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
+    private static let height: CGFloat = 2500
 
     // MARK: - Text issue z trackeru
 
@@ -64,6 +63,40 @@ struct SettingsFieldsRenderTests {
         let warned = try render("nastroj-varovani") { $0.global.issueTextTool = "get_issue" }
 
         #expect(fetching != warned)
+    }
+
+    // MARK: - Tiché hodiny (#519)
+
+    /// Že sekce `Tiché hodiny` v okně **doopravdy je** a je napojená na konfiguraci. Bez tohohle
+    /// by prošla i stránka, na které se `quietHours` nikde nekreslí — a odklad velkých PR by se dal
+    /// nastavit jedině ručně do souboru, tedy přesně ten stav, ze kterého #389 sekce vyváděl.
+    @Test("Sekce Tiché hodiny se na stránce Review a skilly kreslí")
+    func theQuietHoursSectionIsDrawn() throws {
+        let off = try render("tiche-hodiny-vypnute") { $0.global.quietHours = QuietHours() }
+        let on = try render("tiche-hodiny-zapnute") {
+            $0.global.quietHours = QuietHours(isEnabled: true, lineThreshold: 1500, startHour: 22, endHour: 6)
+        }
+
+        #expect(off != on)
+    }
+
+    /// Práh i hodiny musí být **vidět**, ne jen uložené: pole, které se nakreslí pokaždé stejně, by
+    /// znamenalo, že se nastavená hodnota z okna nedá přečíst — a odklad na 23:00 by od odkladu na
+    /// 3:00 nešlo rozeznat.
+    @Test("Práh i hodina se v poli mění s hodnotou")
+    func theThresholdAndTheHourAreVisible() throws {
+        let standard = try render("tiche-hodiny-vychozi") {
+            $0.global.quietHours = QuietHours(isEnabled: true, lineThreshold: 1500, startHour: 22, endHour: 6)
+        }
+        let stricter = try render("tiche-hodiny-prah") {
+            $0.global.quietHours = QuietHours(isEnabled: true, lineThreshold: 400, startHour: 22, endHour: 6)
+        }
+        let later = try render("tiche-hodiny-hodina") {
+            $0.global.quietHours = QuietHours(isEnabled: true, lineThreshold: 1500, startHour: 1, endHour: 6)
+        }
+
+        #expect(standard != stricter)
+        #expect(standard != later)
     }
 
     // MARK: - Moje loginy
@@ -182,6 +215,52 @@ struct SettingsFieldsRenderTests {
     }
 
     // MARK: - Kreslení
+
+    // MARK: - Přepínač agenta na stránce Notifikace (#511)
+
+    /// Že přepínač `Agent na mém PR doběhl` na stránce **doopravdy je** a je napojený.
+    ///
+    /// Vlastní tvrzení vedle `AgentRunNoticeTests`: ty se ptají `NotificationSettings.allows(_:)`,
+    /// takže by prošly i nad stránkou, kde ten přepínač nikdo nenakreslil — a hláška, kterou nejde
+    /// vypnout, je ta horší polovina té dvojice.
+    @Test("Přepínač agenta na stránce Notifikace je nakreslený a napojený")
+    func theAgentToggleIsDrawn() throws {
+        let on = try renderNotifications("agent-zapnuto") { $0.agentFix = true }
+        let off = try renderNotifications("agent-vypnuto") { $0.agentFix = false }
+
+        #expect(on != off)
+    }
+
+    /// **Vypnutý hlavní vypínač přepínače schová**, ne zašedne — pod ním by to bylo šest řádků,
+    /// které nic neříkají (důvod je o řádek výš, na rozdíl od tlačítek v okně review).
+    @Test("S vypnutými notifikacemi přepínač agenta na stránce není")
+    func theAgentToggleHidesWithNotificationsOff() throws {
+        let on = try renderNotifications("hlavni-zapnuto") { $0.isEnabled = true }
+        let offWithAgent = try renderNotifications("hlavni-vypnuto-agent") {
+            $0.isEnabled = false
+            $0.agentFix = true
+        }
+        let offWithoutAgent = try renderNotifications("hlavni-vypnuto-bez") {
+            $0.isEnabled = false
+            $0.agentFix = false
+        }
+
+        #expect(on != offWithAgent)
+        // **Tohle je to tvrzení**: s vypnutým hlavním vypínačem se stránka nesmí lišit podle
+        // hodnoty, která na ní není vidět.
+        #expect(offWithAgent == offWithoutAgent)
+    }
+
+    private func renderNotifications(
+        _ name: String,
+        _ edit: (inout NotificationSettings) -> Void
+    ) throws -> Data {
+        var configuration = Configuration.standard
+        edit(&configuration.global.notifications)
+        return try bitmap(name) {
+            NotificationSettingsView(settings: SettingsModel(configuration: configuration) { _ in })
+        }
+    }
 
     private func render(_ name: String, _ edit: (inout Configuration) -> Void) throws -> Data {
         var configuration = Configuration.standard

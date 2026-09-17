@@ -18,6 +18,10 @@ enum ReviewerLaneText {
         // `přeskočeno`, ne `nespuštěno` (#518): druhé slovo znamená „ještě na něj nedošlo“, tohle
         // „nedošlo na něj schválně“. Kapsle z návrhu, sekce 46, doslova.
         case .skipped: "přeskočeno"
+        // `odloženo na noc`, ne `ve frontě` (#519): druhé znamená „review běží a tenhle čeká na
+        // slot“, tohle „neběží nic a nezačne to do tichých hodin“. Kapsle z návrhu, sekce 46,
+        // doslova.
+        case .deferred: "odloženo na noc"
         case .missingProgress: "bez průběhu"
         case .queued: "ve frontě"
         case .running: "běží"
@@ -80,9 +84,52 @@ enum ReviewerLaneText {
             // kterém stojí věta **i tlačítko**, a dvě věty o tomtéž pod sebou se přestanou číst
             // obě.
             return nil
+        case .deferred:
+            // `nil` ze stejného důvodu jako u přeskočení (#519): odklad má vlastní blok s větou
+            // **i tlačítkem** `Pustit teď`.
+            return nil
         case .failed:
             return nil
         }
+    }
+
+    // MARK: - Tiché hodiny (#519)
+
+    /// Proč se odložilo, do hlavičky dráhy. **Rozhoduje `Policy`**, tohle je jen průchod — text
+    /// stojí u pravidla, protože se skládá z prahu, podle kterého se rozhodlo.
+    static func deferralNote(_ run: DeferredRun) -> String { Policy.deferralNote(run) }
+
+    /// `poběží 23:00` na pravé straně hlavičky — tam, kde u doběhlé dráhy stojí cena.
+    static func deferralRun(_ run: DeferredRun, now: Date) -> String {
+        Policy.deferralRunLabel(run, now: now)
+    }
+
+    /// Věta pod odloženou dráhou. Říká to, co jinak není odkud vědět: **odklad platí jen na
+    /// automat** a odložený PR se dá pustit kdykoli.
+    ///
+    /// **Odchylka od věty v návrhu (sekce 46), a je zapsaná.** Kresba tam má
+    /// `Otevřít PR teď = pustit hned`, jenže tahle dráha se kreslí **jedině v otevřené záložce** —
+    /// pod tím pravidlem by se `odloženo na noc` nedalo nikdy vidět a věta by lhala v okamžiku,
+    /// kdy si ji člověk čte. Zůstává tedy to, co pravda je: odkládá se jen to, na co se nedívám,
+    /// a cesta ven je tlačítko vedle. Rozbor je v `docs/architektura.md`.
+    ///
+    /// **Dvě podoby, a dvojtečka rozhoduje** — jako u `runAnywayNote` (#518): bez tlačítka (něco
+    /// běží, takže se pustit nedá) by za dvojtečkou nestálo nic a věta by vypadala nedopsaně.
+    static func runNowNote(hasButton: Bool) -> String {
+        hasButton
+            ? "Odkládá se jen to, na co se zrovna nedívám — pustit jde kdykoli:"
+            : "Odkládá se jen to, na co se zrovna nedívám. Odklad platí jen na automat."
+    }
+
+    static let runNow = "Pustit teď"
+
+    /// Nápověda tlačítka. Musí říct **dvě** věci, které z popisky neplynou: pustí se **celé**
+    /// review (odklad padl na celý běh, ne na jednoho revieweera) a **ručně**, takže si nesáhne
+    /// o denní rozpočet automatu.
+    static func runNowHelp(_ run: DeferredRun) -> String {
+        "Pustí celé review teď, místo v \(run.runAt.formatted(date: .omitted, time: .shortened)). "
+            + "Je to ruční spuštění, takže se nepočítá do denního limitu automatu; "
+            + "pravidlo v nastavení tím zůstává, jak je."
     }
 
     // MARK: - Routing (#518)

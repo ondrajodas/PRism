@@ -36,6 +36,13 @@ struct PullRequestRow: View {
     /// v meta řádku. Prázdná znamená „nic nepřibylo“ (nebo se ještě nikdo nedíval) a řádek pak
     /// vypadá jako dřív; bere se z **téhož** `HandoffReport` jako `pending`.
     var activity: ForeignActivity = .none
+    /// Co na vlastním PR dělá agent (#511) — `agent běží · 4 min`, nebo `push čeká na tebe`.
+    /// `nil` = neběží nic a nic nečeká; na cizím PR **nikdy** (rozhoduje `Policy.agentRowPill`).
+    ///
+    /// **Skládá to store, ne řádek**, a je to kvůli hodinám: uplynulý čas se počítá z `time.now`,
+    /// tedy z toho zdroje času, který se v testech dá nastavit. `Date()` uvnitř `body` by z toho
+    /// udělal měření, které se nedá zopakovat.
+    var agent: AgentRowPill?
     /// Odložit (#512) — **jedna hodnota, ne dvojice nabídka + akce**. `nil` znamená „řádek
     /// o odložení neví“ (náhledy, testy), prázdná nabídka uvnitř znamená „nesmí se“ (vlastní PR,
     /// `Policy.canSnooze`). V obou případech se nekreslí **nic**, ne zašedlá položka — ta by
@@ -135,11 +142,24 @@ struct PullRequestRow: View {
             // vedle toho vidím i to, že mezitím spadlo CI. Dvě pilulky vedle sebe by nešly, obě
             // mluví o témže PR a jedna z nich by musela vyhrát bez důvodu.
             //
+            // **Tečky kreslí dráha vždycky, pilulku si bere agent, dokud běží** (#511 nad #509,
+            // slito v PR #581). Slot je jediný a pořadí v něm je *agent → dráha → `N k předání` →
+            // odznak*; že dráha ustoupí, rozhoduje `showsLoopWord`, ne tenhle `if`. Dvě odpovědi
+            // z jiných dat to není: `agent běží · 4 min` i stanice `Push` čtou **tentýž**
+            // `BranchSyncState`, pilulka agenta je jen jeho podrobnější čtení — nese uplynulý čas,
+            // který dráha nemá kde vzít (`OwnLoop.Stop.detail` je jedno slovo, tady `probíhá`).
+            // Tečky u ní zůstávají schválně: odpovídají na „kde v kole to stojí“, a ta otázka se
+            // během agentova běhu neztrácí.
+            //
             // **Bez dráhy zůstává všechno, jak bylo.** Řádek bez storu (náhled, test) ani cizí
             // řádek ji nedostanou, a odznak review je tam pořád ta správná odpověď.
             if let loop = showsLoop {
                 OwnLoopDots(row: loop)
+            }
+            if showsLoopWord, let loop = showsLoop {
                 loopPill(loop)
+            } else if let agent {
+                agentPill(agent)
             } else if let pending = pendingHandoff {
                 handoffPill(pending)
             } else {
@@ -183,6 +203,15 @@ struct PullRequestRow: View {
         guard ownership == .mine, let loop, !loop.dots.isEmpty else { return nil }
         return loop
     }
+
+    /// Říká řádek slovo dráhy (#509), nebo ho v jediném slotu přebil agent (#511)?
+    ///
+    /// **Pojmenované, ne `if` uvnitř `body`**, ze stejného důvodu jako `showsLoop`: pořadí
+    /// v tom slotu je rozhodnutí, ne kresba, a v `body` se testovat nedá.
+    ///
+    /// **Tečky se tím neřídí.** `OwnLoopDots` odpovídá na *kde v kole to stojí* a ta otázka
+    /// během agentova běhu nemizí — tečky stojí **před** slotem, takže se o něj neperou.
+    var showsLoopWord: Bool { showsLoop != nil && agent == nil }
 
     /// Barva proužku na hraně řádku.
     ///
@@ -265,6 +294,28 @@ struct PullRequestRow: View {
             )
             .help("Kde tenhle pull request stojí ve smyčce — celou dráhu ukazuje jeho hlavička")
             .accessibilityLabel("Na tahu: \(loop.word)")
+    }
+
+    /// `agent běží · 4 min` / `push čeká na tebe` (#511).
+    ///
+    /// **Akcent, ne barva nálezu**: na rozdíl od `N k předání` to není práce, která leží, ale
+    /// **něco, co se právě děje nebo právě čeká** — tedy tatáž role, jakou má akcent u odznaku
+    /// `běží`. `Prompt →` se s ním o pozornost nepere: to je tlačítko a stojí za ním.
+    private func agentPill(_ pill: AgentRowPill) -> some View {
+        Text(verbatim: pill.text)
+            .designPill(tint: Palette.accent2, background: Palette.accent2.opacity(0.15))
+            .help(Self.agentHelp(pill))
+            .accessibilityLabel(pill.text)
+    }
+
+    /// Nápověda říká **co dál**, ne co je vidět — text pilulky se v ní neopakuje.
+    private static func agentHelp(_ pill: AgentRowPill) -> String {
+        switch pill {
+        case .running:
+            "Agent opravuje tenhle PR podle cizího review. Co dělá, je vidět v sekci Větev."
+        case .awaitingPush:
+            "Agent nechal commit v kopii repa. Prohlédni si ho a přetlač z panelu — samo nic neodejde."
+        }
     }
 
     /// `Prompt →` u vlastního PR (#331, akce od #333).

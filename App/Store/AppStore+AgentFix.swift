@@ -89,7 +89,7 @@ extension AppStore {
             guard let self else { return }
             await fix(summary, items: items)
             branchSyncTasks[pr] = nil
-            branchSyncActivity[pr] = nil
+            branchSyncTail[pr] = nil
         }
     }
 
@@ -116,8 +116,67 @@ extension AppStore {
         return allowed
     }
 
-    /// Jeden běh: strom, session, a **commit, který udělá aplikace**.
+    /// Jeden běh a **hlášení o tom, jak dopadl** (#511).
+    ///
+    /// **Hlásí se to tady, ne v `accept`**, a je to schválně: konců je pět a rozesety po
+    /// `accept`u i po `catch`ích by se u některého zapomnělo — právě to je ten druh mezery, po
+    /// které agent doběhne a nikdo se to nedozví. Tady je jedno místo, které se ptá **na výsledný
+    /// stav**, tedy na to, co je i v okně.
+    ///
+    /// **Zrušený běh se nehlásí.** `Zrušit` zmáčkl člověk, který je zrovna u počítače a dívá se
+    /// na tu hlášku — banner o vlastním kliknutí je čisté vyrušení. V `Dění` se z téhož důvodu
+    /// řádek nezakládá: dění odpovídá na „co jsem prošvihl“, a tohle jsem neprošvihl.
     private func fix(_ pullRequest: PullRequestSummary, items: Set<String>) async {
+        await runFix(pullRequest, items: items)
+        guard !Task.isCancelled else { return }
+        await reportAgentRun(on: pullRequest.id)
+    }
+
+    /// Co se z výsledného stavu dá o běhu říct. `nil` = tenhle stav o agentovi nemluví.
+    ///
+    /// **`BranchSyncState.failed` se překládá tady, ne v `Policy`**, a je to ta hranice, kvůli
+    /// které `Policy.agentRun(of:)` u něj mlčí: ten stav nenese, kdo ho způsobil (rebase i agent
+    /// končí v témže případu), takže o něm smí tvrdit „agent spadl“ jedině ten, kdo právě agenta
+    /// pustil — a to je tahle metoda.
+    private func agentOutcome(on pr: PRIdentifier) -> AgentRunOutcome? {
+        guard let state = branchSyncStates[pr] else { return nil }
+        if case .failed(let error) = state { return .failed(detail: error.sentence) }
+        return Policy.agentRun(of: state)
+    }
+
+    /// Notifikace a řádek v `Dění` po doběhnutí agenta (#511) — **toutéž branou jako ostatní**
+    /// (#414).
+    ///
+    /// Pořadí je tatáž nesymetrie jako u cizí aktivity: notifikace **před** záznamem, a záznam
+    /// vznikne i tehdy, když se hláška neposlala (vypnutý přepínač, odmítnuté oprávnění) —
+    /// přepínače rozhodují o vyrušení, ne o záznamu. Právě z toho se pak na obrazovce pozná chip
+    /// `bez banneru`.
+    private func reportAgentRun(on pr: PRIdentifier) async {
+        guard let outcome = agentOutcome(on: pr) else { return }
+        let ownership = ownership(of: pr)
+        var delivery: NotificationDelivery?
+        if notifications != nil,
+            let notification = Policy.agentRunNotification(
+                for: pr,
+                ownership: ownership,
+                outcome: outcome
+            ) {
+            delivery = await notify(notification)
+        }
+        await recordActivity(Policy.agentFixEvent(
+            for: pr,
+            ownership: ownership,
+            outcome: outcome,
+            // Jméno stromu, ne cesta — v řádku dění je na sedmdesát znaků cache stejně málo místa
+            // jako v panelu. `nil` znamená „strom neznáme“, a pak se o něm mlčí.
+            worktree: branchSyncStates[pr]?.rebasedBranch?.worktree.lastPathComponent,
+            at: time.now,
+            announced: delivery?.isDelivered == true
+        ))
+    }
+
+    /// Jeden běh: strom, session, a **commit, který udělá aplikace**.
+    private func runFix(_ pullRequest: PullRequestSummary, items: Set<String>) async {
         let id = pullRequest.id
         guard let fixer, let checkout else { return }
         // **Detail se dotahuje tady, ne v rozhlídce.** Spouštěč běží po tiku pollingu, kde je
@@ -145,8 +204,11 @@ extension AppStore {
             return
         }
 
-        branchSyncStates[id] = .fixing(items: items.count)
-        branchSyncActivity[id] = nil
+        // **Začátek běhu je v tom stavu, ne v mapě vedle něj** (#511): z něj se počítá pilulka
+        // `agent běží · 4 min` v řádku `Moje PR`, a razítko, které stav přežije, by počítalo
+        // minuty běhu, který dávno skončil.
+        branchSyncStates[id] = .fixing(items: items.count, since: time.now)
+        branchSyncTail[id] = nil
         do {
             let worktree = try await checkout.agentFixWorktree(for: id, at: detail.headSha)
             // **Hranice cache, a tatáž kontrola jako u pushe a u konfliktů** (`CacheFile.refusal`,
@@ -233,15 +295,24 @@ extension AppStore {
         branchSyncStates[id] = .rebased(branch.reporting(fix: answer))
     }
 
-    /// Co agent zrovna dělá, do druhého řádku u hlášky.
+    /// Co agent zrovna dělá — **živý ocas** pod větou u hlášky (#511, mění #510).
+    ///
+    /// **Kroky, ne text od modelu.** Ze streamu se čtou pokusy o nástroj (`AgentFixProgress`);
+    /// prózu, kterou model mezi nimi píše, aplikace **nečte** (`StreamSummary` ji nedrží) — a
+    /// dotáhnout ji sem by znamenalo sázet do panelu neověřený text session. Co se dá tvrdit, je
+    /// „čte tenhle soubor, upravuje tamten“, a to je zrovna to, kvůli čemu se na běžícího agenta
+    /// kouká: která místa v kódu si vybral.
     private func note(_ progress: AgentFixProgress, about pr: PRIdentifier, worktree: URL) {
         // Došlá událost z běhu, který mezitím skončil, se zahazuje — jinak by po doběhnutí zůstal
         // viset řádek o kroku, který se hlásil naposled (tentýž vzor jako u konfliktů).
         guard branchSyncStates[pr]?.isFixing == true else { return }
         switch progress {
-        case .started: branchSyncActivity[pr] = nil
+        case .started: branchSyncTail[pr] = nil
         case .attemptedTool(let tool):
-            branchSyncActivity[pr] = Policy.writingToolActivity(of: tool, inside: worktree)
+            branchSyncTail[pr] = Policy.agentTail(
+                branchSyncTail[pr] ?? [],
+                appending: Policy.writingToolActivity(of: tool, inside: worktree)
+            )
         }
     }
 }

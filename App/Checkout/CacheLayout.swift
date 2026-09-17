@@ -126,6 +126,16 @@ struct CacheLayout: Sendable, Equatable {
     /// PR, který se sám vrátí do fronty, aniž by se cokoli stalo.
     var snoozedFile: URL { root.appending(path: "snoozed.json") }
 
+    /// Běhy odložené do tichých hodin (#519) — viz `DeferredRunStore`.
+    ///
+    /// **Vedle `snoozed.json`, ne v něm.** Obojí odkládá, ale odpovídá na jinou otázku: odložení PR
+    /// je moje rozhodnutí o tom, co chci vidět, tohle rozhodnutí automatu o tom, kdy se utratí
+    /// session. Jeden soubor by znamenal, že se `Vrátit teď` a `Pustit teď` perou o jeden zápis.
+    ///
+    /// **Mimo dosah eviction**, ze stejného důvodu jako `snoozed.json`: je to pár set bajtů na PR
+    /// a smazat ho kvůli rozpočtu na místo by zahodilo slib, kvůli kterému se to na disk vůbec píše.
+    var deferredFile: URL { root.appending(path: "deferred.json") }
+
     /// Které zadání jsem už předal agentovi (#334) — razítko `(kdy, proti čemu, co)` na PR.
     ///
     /// Vedle nálezů, ne v jejich souborech: razítko patří **pull requestu**, kdežto `reviews/` se

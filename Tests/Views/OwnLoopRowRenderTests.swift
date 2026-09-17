@@ -104,6 +104,43 @@ struct OwnLoopRowRenderTests {
         #expect(!row(loop: nil, pending: 6, ownership: .theirs).promptIsPrimary)
     }
 
+    // MARK: - Jediný slot: agent, nebo dráha
+
+    /// **Slovo dráhy ustoupí běžícímu agentovi** (#511 nad #509, slito v PR #581). Je to jediné
+    /// akcentové místo v řádku a pořadí v něm je *agent → dráha → `N k předání` → odznak*;
+    /// dvě pilulky vedle sebe se v nejužším okně neuživí (měřeno výš).
+    ///
+    /// **Tečky se tím neřídí** — `showsLoop` odpovídá na *kde v kole to stojí* a ta otázka
+    /// během agentova běhu nemizí. Kdyby se `showsLoopWord` a `showsLoop` slily do jedné
+    /// odpovědi, zmizel by z řádku celý pruh pokaždé, když agent běží.
+    @Test("Slovo dráhy ustoupí agentovi, tečky ne")
+    func theAgentTakesTheWordButNotTheDots() {
+        var running = row(loop: loop())
+        running.agent = .running(elapsed: "4 min")
+
+        #expect(!running.showsLoopWord)
+        #expect(running.showsLoop != nil)
+
+        var awaiting = row(loop: loop())
+        awaiting.agent = .awaitingPush
+        #expect(!awaiting.showsLoopWord)
+
+        // Bez agenta slovo zůstává — a na cizím řádku se nekreslí ani jedno.
+        #expect(row(loop: loop()).showsLoopWord)
+        #expect(!row(loop: loop(), ownership: .theirs).showsLoopWord)
+    }
+
+    /// Ani s pilulkou agenta se řádek nezalomí — pořád je to **jedna** pilulka vedle teček,
+    /// tak jako bez něj. Kdyby se kreslily obě, projeví se to zrovna tady.
+    @Test("Řádek s tečkami a pilulkou agenta zůstává v nejužším okně na jedné řádce")
+    func theAgentPillFitsTheNarrowestWindow() {
+        var running = row(loop: loop())
+        running.agent = .running(elapsed: "12 min")
+
+        // 636 bodů je obsah nejužšího okna bez railu, tak jako výš.
+        #expect(height(of: running, width: 636) == height(of: row(loop: loop()), width: 636))
+    }
+
     // MARK: - Jedno mapování stavu na barvu
 
     /// **Tečka si barvu nesází sama.** Kdyby ano, rozešel by se odstín `hotovo` v řádku

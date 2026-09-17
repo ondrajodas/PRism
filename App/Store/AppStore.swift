@@ -769,12 +769,23 @@ final class AppStore {
     /// přežije rodiče a platí tokeny dál.
     var branchSyncTasks: [PRIdentifier: Task<Void, Never>] = [:]
 
-    /// Co session nad konflikty zrovna dělá — druhý řádek u hlášky v panelu (#467). Chybějící
-    /// záznam = zatím nic neřekla.
+    /// Co zapisující session nad tímhle PR dělala — **posledních pár kroků**, ne jen ten poslední
+    /// (#511, mění #467). Chybějící záznam = zatím nic neřekla.
     ///
     /// **Vedle stavu, ne v něm**: mění se při každém tool cally, a přepisovat kvůli tomu
     /// `branchSyncStates` by špinilo i to, co se nemění (pravidlo o hrubé vlastnosti, #472).
-    var branchSyncActivity: [PRIdentifier: String] = [:]
+    ///
+    /// **Jedna mapa pro obě zapisující session, a ocas místo řádky.** Do #511 tu stál jeden řetězec
+    /// (`branchSyncActivity`) a stačil, dokud šlo o slévání konfliktů — to běží kolem deseti minut
+    /// nad **vyjmenovanými** soubory. Agent (#510) běží patnáct, hledá si místo v kódu sám
+    /// a **nikdo ho nespustil**, takže jediná řádka odpovídá na „nezaseklo se to?“, ale ne na „co
+    /// to celou dobu dělá?“. Druhá mapa vedle téhle by byla druhá pravda o jedné věci; ocas je
+    /// nadmnožina, ze které si slévání konfliktů vezme **poslední prvek**
+    /// (`branchSyncActivityLine`) a kreslí se stejně jako dřív.
+    ///
+    /// **Strop drží `Policy.agentTail(_:appending:)`**, ne tahle deklarace, a vyprazdňuje ho konec
+    /// běhu — tedy táž ruka, která ho plní (pravidlo #224).
+    var branchSyncTail: [PRIdentifier: [String]] = [:]
 
     /// Co session zrovna dělá — řádek u prstýnku na místě příští bubliny (#452). Chybějící
     /// záznam = zatím nic neřekla.
@@ -893,6 +904,16 @@ final class AppStore {
     /// počet příspěvků se změnit nemá čím. **V paměti, ne na disku**, jako `headProbes`: po
     /// restartu je prázdné, takže první tik dohoní, co se stalo, když aplikace neběžela.
     var snoozeProbes: [PRIdentifier: Date] = [:]
+
+    /// Běhy odložené do tichých hodin (#519). Nepovinná závislost jako ostatní story — testy,
+    /// které o odklad nestojí, ji nedostanou a pak se neodkládá nic.
+    let deferredRuns: DeferredRunStore?
+
+    /// Odložené běhy, se kterými se pracuje (#519). Disk je **záloha**, ne jediná kopie: tab
+    /// `Průběh` se na ně ptá při každém překreslení, takže se čtou z paměti — z disku jednou při
+    /// startu (`loadDeferredRuns()`), a to **před prvním tikem**, jinak by první tik po restartu
+    /// zaplatil `gh pr view` za odpověď, kterou má na disku.
+    var deferrals: [PRIdentifier: DeferredRun] = [:]
 
     /// Které zadání jsem už předal agentovi (#334). Nepovinná závislost jako ostatní story —
     /// testy, které o razítka nestojí, ji nedostanou a pak je všechno nepředané.
@@ -1069,6 +1090,7 @@ final class AppStore {
         agentFixes: AgentFixLedger = AgentFixLedger(preferences: UserDefaults.standard),
         handoffs: HandoffLedger? = nil,
         snoozeStore: SnoozeStore? = nil,
+        deferredRuns: DeferredRunStore? = nil,
         activityLog: ActivityLog? = nil,
         activityVisits: ActivityVisitLedger = ActivityVisitLedger(preferences: UserDefaults.standard)
     ) {
@@ -1077,6 +1099,7 @@ final class AppStore {
         self.agentFixes = agentFixes
         self.handoffs = handoffs
         self.snoozeStore = snoozeStore
+        self.deferredRuns = deferredRuns
         self.activityLog = activityLog
         self.activityVisits = activityVisits
         self.appearance = appearance
@@ -1130,6 +1153,10 @@ final class AppStore {
             // časovač. Kolik dotazů z toho je, rozhoduje `Policy.snoozeProbe` — na klidný den
             // nula, jinak **jeden na všechna odložená PR**.
             await self?.refreshSnoozes(in: summaries)
+            // Odložené běhy (#519) — **před automatem**, ze stejného důvodu jako rozhlídka výš:
+            // běh, kterému právě došel čas, se má pustit teď, ne za tik. Nic to nestojí (je to
+            // porovnání dvou hodnot nad seznamem z tiku) a **žádný dotaz z toho není**.
+            await self?.releaseDeferredRuns(for: summaries)
             // Až po `forget`: PR, který ze seznamu vypadl, se nemá čím spustit, a běžící
             // automat nad ním se má naopak zrušit.
             await self?.startAutomaticReviews(for: summaries)
@@ -1317,6 +1344,8 @@ final class AppStore {
             handoffs: HandoffLedger(),
             // Odložená PR (#512). Živé jedině tady, jako razítka předání a záznam dění.
             snoozeStore: SnoozeStore(),
+            // Odložené běhy (#519). Živé jedině tady, ze stejného důvodu jako odložení PR.
+            deferredRuns: DeferredRunStore(),
             // Záznam dění (#414). Živý jedině tady — testy ho nedostanou, takže nesahají do cache.
             activityLog: ActivityLog()
         )
@@ -1756,6 +1785,19 @@ final class AppStore {
     /// je to zároveň paměť na to, kde v seznamu člověk byl (`lastOpenedCommit(in:)`).
     var commitDiffs: [PRIdentifier: CommitDiff] = [:]
 
+    /// Commit, který po agentovi zůstal v kopii repa (#511) — **řádek pro prohlížeč commitů**,
+    /// ne prvek seznamu commitů pull requestu.
+    ///
+    /// **Vlastní mapa vedle `commitDiffs`, ne prvek v seznamu z GitHubu.** Ten commit na GitHubu
+    /// **není**, takže by ho seznam nesměl obsahovat ani na okamžik — přimíchaný by se kreslil
+    /// v seznamu, počítal by se do odznaku u záložky a `Policy.headCommit` by o něm musel
+    /// rozhodovat. Takhle se do tabu dostane jedině tehdy, když se na něj přepne
+    /// (`Policy.openCommit(_:in:local:)`).
+    ///
+    /// Chybějící klíč = agent tu nic nenechal, nebo se to ještě nečetlo. Zahazuje se se zahozením
+    /// práce agenta (`discardSync`) a s vypadnutím PR ze seznamu.
+    var agentCommits: [PRIdentifier: PullRequestCommit] = [:]
+
     /// Je v hlavičce rozkliknutého commitu vidět **tělo zprávy** (#317)?
     ///
     /// **Globálně, ne per PR ani per commit** — je to předvolba pohledu, stejně jako
@@ -1934,6 +1976,10 @@ final class AppStore {
         // i notifikace se odložených ptají v tiku, takže by první tik po startu pustil review na
         // PR, který jsem si schoval.
         await loadStoredSnoozes()
+        // **Odložené běhy hned za odložením** (#519) a ze stejného důvodu: čtou se z disku a musí
+        // být v paměti dřív, než tik pošle velké PR do automatu — jinak by se za slib, který na
+        // disku je, ještě jednou zaplatilo `gh pr view`.
+        await loadDeferredRuns()
         await reloadConfiguration()
         // **Před** načtením záznamů: dotažené nálezy se mají objevit hned po startu, ne až
         // po dalším review. Kdyby se dotahovalo potom, `reviewRecords` by je neobsahovaly.
@@ -2449,6 +2495,14 @@ final class AppStore {
         routingSkips = routingSkips.filter {
             wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
         }
+        // Odložené běhy (#519) se z **paměti** pouštějí spolu s nimi: PR, který ze seznamu vypadl,
+        // se nemá čím pustit, takže by dráha slibovala běh, který nikdy nepřijde. **Na disku se
+        // nesmažou** — soubor uklízí lhůta v `DeferredRunStore` a vystřelit odsud nemá jak
+        // (`Policy.deferralsToRelease` bere seznam z tiku). Zápis kvůli PR, který se zavřel na
+        // pět minut, by byl disk za nic.
+        deferrals = deferrals.filter {
+            wantedPullRequests.contains($0.key) || reviewTasks[$0.key] != nil
+        }
 
         // Proč kontrola nálezů selhala (#150), platí k jednomu PR — bez něj v okně není kde to
         // ukázat. Běžící kontrola se naopak **neruší**, stejně jako ruční review: vyžádal si ji
@@ -2509,6 +2563,9 @@ final class AppStore {
         commitDiffs = commitDiffs.filter {
             wantedPullRequests.contains($0.key) || $0.value.content == .loading
         }
+        // Commit agenta (#511) jde s nimi: bez toho by po vrácení PR do seznamu zůstal v mapě
+        // řádek o commitu, který mezitím ze stromu v cache zmizel.
+        agentCommits = agentCommits.filter { wantedPullRequests.contains($0.key) }
 
         // Rozbalený check a jeho detail (#214). Stahování se **ruší**, ne opouští: osmimegový log
         // by dojel do stavu, který už nikdo nečte. Text se u toho zahazuje schválně — nemá přežít

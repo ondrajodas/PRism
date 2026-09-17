@@ -121,6 +121,10 @@ struct HomeView: View {
                     openPrompt: { store.openAgentPrompt(in: pullRequest.id) },
                     pending: handoff.pending,
                     activity: handoff.activity,
+                    // Agent na vlastním PR (#511) — **jeden řádek, jedna podoba**, tedy i tady:
+                    // z pilulky se pozná, že nad PR běží něco, co jsem nespustil, nebo že v kopii repa
+                    // leží commit k přetlačení.
+                    agent: store.agentRowPill(for: pullRequest),
                     // Odložit i tady (#512, oprava po proklikání) — **jeden řádek, jedna podoba**,
                     // z téhož důvodu jako `Prompt →` o řádek výš. Cizí PR s rozdělaným review je
                     // zrovna to, co se odkládá; odložení je o **frontě**, takže z téhle sekce

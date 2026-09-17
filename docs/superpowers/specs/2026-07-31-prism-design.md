@@ -7632,3 +7632,144 @@ věty**, tahle pilulka žádnou cizí větu vedle sebe nemá.
 být o kterékoli z pěti stanic; tečky říkají **kde**, ale ne **co**. Slovo v řádku má proto tvar
 `Push o 4 vzadu` — a testuje se to nad celou maticí, ne na vzorcích: slovo musí začínat jménem
 aktivní stanice, nebo to musí být konec kola.
+
+### Záznam rozhodnutí — běžící agent bydlí v sekci `Větev`, ne na dráze (#511)
+
+**Mění zadání #511, ne rozhodnutí #508.** Issue stálo na větě „stanice *Agent* na dráze (#508)
+ukazuje stav (`běží 4 min` / `hotovo 7 min` / `spadlo`)“ — psalo se ve chvíli, kdy dráha měla sedm
+stanic. Čtvrté kolo #508 stanici `Agent` odebralo a **důvodem byla přesně tahle chybějící věc**:
+neměla živý obsah, který měla dodat #511. Rozhodnutí je tedy dvojznačné z podstaty: buď se stanice
+vrátí i s obsahem, nebo se obsah ukáže jinde.
+
+**Zvažovaly se dvě cesty:**
+
+1. **Vrátit stanici `Agent` s obsahem.** Zamítnuto, a ne kvůli #508, ale kvůli tomu, co se do
+   kapsle vejde. `OwnLoop.Stop.detail` je **jedno slovo** — proto tam u šedých stanic stojí
+   `pozadu`, `konflikt`, `nepřetlačeno`, `zjišťuju`, a proto se u #508 měřilo, že pět kapslí se
+   o šířku hlavičky dělí líp než sedm. Obsah, který #511 dodává, je **čtyřřádkový ocas, věta
+   o výsledku a tři tlačítka**; do kapsle by se vešlo `běží 4 min` a zbytek by stejně musel bydlet
+   jinde. Šestá kapsle by tedy ostatní zúžila a vadu z #508 vrátila v mírnější podobě.
+2. **Ukázat agenta tam, kde ta práce je** — v sekci `Větev`. **Vybráno.** Ta sekce od #510 kreslí
+   všechny čtyři konce běhu, drží `Force push…` i `Zahodit změny`, a je to týž strom, o kterém se
+   mluví. Ocas, věta i třetí tlačítko se tam vejdou při každé šířce panelu.
+
+**Dráha o agentovi nezačala mlčet, a to je to, co tu volbu dělá levnou.** Stanice `Push` čte
+`BranchSyncState`, takže běžící agent je `probíhá` a jeho nepřetlačený commit `nepřetlačeno`
+(rozhodnutí z #510) — commit v kopii repa do obsahu té stanice patří, kdežto do stanice `Agent` by
+patřil jenom proto, že se tak jmenuje. Akce aktivní stanice (`Move.openBranch`) vede do téže sekce,
+takže cesta z dráhy k agentovi je o jedno kliknutí a nevznikla kvůli tomuhle issue.
+
+**Zamítnuto bylo taky vlastní místo pro agenta** (blok pod dráhou, vlastní tab): byl by to třetí
+způsob, jak se v tomhle okně mluví o práci v kopii repa, a dva už jsou dost.
+
+### Záznam rozhodnutí — o testech se v účtu agenta netvrdí nic (#511)
+
+**Ruší půlku zadání z decku.** Deck (stránka *Za mě › Z7*) i issue #511 měly větu *„Agent upravil
+2 soubory ve stromě 499-sync · testy zelené · nic se neodeslalo.“* a notifikaci *„2 soubory, testy
+zelené“*. **Testy ale nikdo nepustil.** Session je pustit nemůže — `Bash` v její sadě není
+(`AgentFixCommand` bere sadu doslova z `ConflictCommand`, #467) — a aplikace je nad jejím výsledkem
+nepouští; #510 to nechalo jako zapsanou mezeru a do promptu dalo větu, že se to **nesmí tvrdit**.
+
+**Věta o zelených testech je proto text, který data neunesou**, a je to nejhorší možná podoba téhle
+chyby: čte se **před nevratnou akcí** (force push) a odpovídá přesně na tu otázku, kvůli které si
+člověk diff otevírá. Kdo jí uvěří, pushne neověřený commit.
+
+**Hlídá to test, ne komentář** (`AgentRunReportTests`): nad všemi pěti výsledky se prochází věta
+v panelu, titulek banneru i další krok a v žádném z těch textů nesmí být `test` ani `zelen`.
+Ověřeno vložením regrese — doplnění `· testy zelené` do věty shodí tři testy ve dvou sadách.
+
+**Co by ta věta stálo pravdivou udělat**, je vlastní issue: aplikace by musela nad stromem `-sync`
+pustit `xcodebuild test` (nebo co si repo řekne), tedy **další podproces, další konfigurace a další
+minuty** — a hlavně rozhodnutí, co se stane s výsledkem, když spadne. Do #511 to nepatří.
+
+### Záznam rozhodnutí — tiché hodiny odkládají běh, ne pull request (#519)
+
+Odklad velkého PR do noci se nabízel jako druhá podoba **odložení PR** (#512): tam už je úložiště
+v cache, blok pod frontou, rozhlídka po tiku i věta v `Dění`. Zahozeno, a je to hranice, ne úspora
+kódu.
+
+**Odpovídají na jinou otázku.** *Odložit PR* je moje rozhodnutí o tom, **co chci vidět** — PR
+z fronty zmizí a musí být poznat, že něco skryté je (proto těch pět vývodů). *Tiché hodiny* jsou
+rozhodnutí automatu o tom, **kdy se utratí session** — PR ve frontě **zůstane**, protože na mě čeká
+dál; odloží se jenom běh. Sloučit to by znamenalo buď schovat PR, na který čekám, nebo mít v jednom
+souboru dva stavy, mezi kterými se `Vrátit teď` a `Pustit teď` perou o jeden zápis.
+
+**Proto ani řádek v tabulce *Které místo chce kterou množinu***. Zúžení jsou dvě osy (autor a
+odložení PR) a obě mluví o seznamu; tohle je vlastnost **jednoho běhu**. Třetí osa by tvrdila, že se
+PR někde schová — a to se nestane nikde.
+
+**Zamítnuto taky per repo.** Režim, jazyk nálezů, limit běhu i přírůstek si repo přebít smí, tohle
+ne: kdy chci mít na stroji ticho, z repozitáře neplyne. Je to tatáž úvaha jako u `appearance`
+a `diffLayout` — vlastnost člověka, který se dívá, ne repozitáře, na který se dívá.
+
+**Výchozí vypnuto, a je to obrácená strana než u #517.** Přírůstek se zapíná ve výchozím stavu,
+protože nic neztrácí — dělá totéž levněji. Odklad **mění, kdy** se výsledek objeví: velké PR, na
+které nikdo nespěchá, se do rána nezreviduje. To je volba o denním režimu, a ta se nemá zapnout tím,
+že si někdo nainstaluje novou verzi.
+
+**Prázdné okno místo ticha pořád.** `22`–`22` jde přečíst obojím způsobem. Rozhodlo, které z těch
+dvou se dá **poznat**: stejná hodnota na obou stranách znamená v praxi nedopsaný konec, a odklad,
+který by z toho udělal ticho po celý den, by review zastavil úplně — a v okně by to vypadalo jako
+porucha automatu, ne jako chyba v nastavení. Tatáž strana jako u ostatních nesmyslných hodnot:
+nesmyslné pravidlo odklad **vypne**, nezastaví review.
+
+**Zmeškaná noc se pouští, ne posouvá.** Aplikace přes noc běžet nemusí (restart je tu po každém
+mergi), takže vyzvednutý odklad umí přijít v deset dopoledne — a tehdy je otázka „pustit, nebo
+odložit na dnešní večer?“. Pouští se: slib `poběží ve 23:00` se plní tím, že se běh **stane**, ne
+tím, že se přesune o den. Kdyby se posouval, dostal by se PR do smyčky, ve které se odkládá
+donekonečna, a v dráze by to vypadalo pořád stejně. Nese to **parametr jednoho spuštění**
+(`honoringQuietHours`), ne pole storu: držený stav, který nikdo neuklidí, je zrovna ten vzor, který
+Copilot v tomhle repu nachází.
+
+**Věta „otevření PR ruší odklad“ se implementovala jen z poloviny, a rozhodl o tom zákres.**
+Otevřený PR se neodkládá; odklad, který už padl, otevření záložky **nespustí**. Důvod je
+strukturální: dráha `odloženo na noc` se kreslí **jedině v otevřené záložce**, takže by ji původní
+pravidlo udělalo nedosažitelnou — `poběží 23:00` i `Pustit teď` z návrhu by se na obrazovku
+nedostaly nikdy. Změřeno na běžící aplikaci: po otevření odloženého PR zbyl na dráhu zlomek
+sekundy, protože tik po startu je hned. **Nakreslený stav, který nejde vidět, je horší než odchylka
+od věty v zadání** — a odchylka je navíc v bezpečném směru: cesta ven je jedno pojmenované
+tlačítko, ne automatické spuštění vyvolané tím, že se člověk podíval. Ostatně `Pustit teď` je
+**ruční** běh, takže nesáhne na denní rozpočet; automatické spuštění při otevření by bylo jediné
+místo v aplikaci, kde *dívat se* stojí session. Věta pod dráhou se proti návrhu mění, zbytek
+zákresu platí doslova.
+
+**Zamítnuto: přidat odloženému PR vlastní stav do řádku fronty.** Řádek by o odkladu řekl dřív než
+tab `Průběh`, jenže je to nová věc na obrazovce a v mockupu zakreslená není — a *jediná schvalovací
+brána v tomhle repu* je zrovna vzhled. Zapsaná mezera: dokud to v návrhu nebude, dozví se člověk
+o odkladu jedině z dráhy v tabu `Průběh`.
+
+### Záznam rozhodnutí — o jediný slot v řádku se agent a dráha dělí pořadím, ne kompromisem (#509 slito s #511)
+
+**Vzniklo to slitím, ne návrhem.** #509 (dráha do řádku) vyšlo z mainu z 6. 9. 2026; než se slilo,
+mergly se #511 a #519. `git` na tom mlčel u obou kousků těla `PullRequestRow.headline`, protože
+každá větev si do téhož `if` řetězce dosadila vlastní první podmínku — a obě dosadily do **jediného
+akcentového slotu** vedle titulku.
+
+**Nároky byly dva a oba zapsané.** #509: *„Dvě pilulky vedle sebe by nešly, obě mluví o témže PR
+a jedna z nich by musela vyhrát bez důvodu.“* #511: *„tři pilulky vedle sebe se v řádku neuživí,
+takže se ukazuje ta, která odpovídá na dnešní otázku — a dokud nad PR běží agent, je to on.“*
+Obě věty jsou pravdivé; rozcházejí se jedině v tom, kdo v tom jednom slotu vyhraje.
+
+**Rozhodnuto: tečky kreslí dráha vždycky, pilulku si bere agent, dokud běží.** Pořadí ve slotu je
+*agent → dráha → `N k předání` → odznak review*. Tři důvody:
+
+1. **Není to druhá odpověď z jiných dat.** `agent běží · 4 min` i stanice `Push` čtou tentýž
+   `BranchSyncState` z téže mapy storu (`branchSyncStates`) — `Policy.agentRowPill` je jeho
+   **podrobnější** čtení, ne konkurenční. Kdyby si každá strana brala vstup odjinud, platilo by
+   pravidlo z #509 (*„dvě skládání jedné smyčky by uměla říct každé něco jiného“*) a vyhrála by
+   dráha; tady nehrozí, že se rozejdou.
+2. **Pilulka agenta nese to jediné, co dráha nemá kde vzít: uplynulý čas.** Stanice `Push` řekne
+   `probíhá`, což je pravda, ale ne odpověď na otázku, kvůli které se na běžícího agenta kouká
+   („čekat, nebo už je něco špatně?“). Opačné pořadí by tu informaci zahodilo úplně — do řádku
+   se po `OwnLoopDots` a `Prompt →` třetí pilulka nevejde (změřeno u #509 v nejužším okně).
+3. **Tečky se s ní neperou, protože odpovídají na jinou otázku.** `dots` říkají *kde v kole to
+   stojí*, pilulka *co je zrovna na tahu*; agentův běh tu první otázku neruší. Zmizet by musely
+   jedině tehdy, kdyby si o slot říkaly — ale ony stojí **před** ním.
+
+**Zamítnuto: nechat dráhu vyhrát a `agentPill` z řádku sundat.** Bylo by to tiché zrušení
+mergnuté a vydané #511 (`v1.1.243`) — a hlavně by `PullRequestRow.agent` zůstalo jako držený stav,
+který nikdo nečte, tedy zrovna ten vzor, který Copilot v tomhle repu opakovaně nachází.
+
+**Zamítnuto: dát agentovi vlastní místo vedle pilulky dráhy.** Dvě pilulky v jednom řádku zakázalo
+#509 měřením, ne vkusem: v nejužším okně by místo nich ustupoval titulek, tedy to jediné, podle
+čeho se PR v seznamu pozná.

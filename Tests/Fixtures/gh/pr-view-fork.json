@@ -1,4 +1,5 @@
 {
+  "additions": 350,
   "author": {
     "id": "U_kgDOCKomwA",
     "is_bot": false,
@@ -7,6 +8,7 @@
   },
   "baseRefName": "trunk",
   "baseRefOid": "40b742f76d68e6b1f472942a6368db4b5d765641",
+  "deletions": 6,
   "body": "Closes #14281",
   "headRefName": "feat/pr-revert-branch-base",
   "headRefOid": "3facd3a4c87d4715d22cc0e0d20dadbdd45d43aa",

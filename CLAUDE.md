@@ -479,7 +479,7 @@ API**, **`BranchPushing`** (#466) jediný, který **zapisuje do remote**, a **`T
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu, obsah dashboardu, geometrie, na kterou se ptá kresba, a **desítky dalších**. Katalog je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
-| `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154) | — |
+| `AppStore` | Drží stav, koordinuje, vynucuje limity paralelismu. **Stav v `AppStore.swift`, metody v `AppStore+*.swift`** (#154). **Odklad velkých PR do tichých hodin platí jen na automat a denní limit neobchází** (#519) | — |
 | `ReviewPublisher` | **Jediná cesta na GitHub API**, devět metod — viz tvrdá podmínka č. 1 | `gh` CLI |
 | `BranchPushing` | **Jediná cesta do remote** (#466): přetlačit větev **vlastního** PR přes `--force-with-lease`, **jedině z potvrzení**. Jedna metoda, dva guardy, tatáž brána. Rebase v tom **není** — ten je lokální práce `RepoCheckoutu` | `git` |
 | `TerminalHost` | Vestavěný terminál (#459) — **víc relací na pull request** (`TerminalSlot`), každá vlastní pty v checkoutu toho PR, VT emulace (`SwiftTerm`) a `SIGKILL` na popředí pty. Do relace umí napsat **jednu řádku** (`▶`), a jen když v ní nic neběží. Na GitHub nesahá a `gh` nezná | login shell přes pty |

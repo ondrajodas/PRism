@@ -112,7 +112,9 @@ co předat**. Do #509 řekl řádek jedině `6 k předání`, tedy stav jediné 
 **Cizí řádek se nemění** — smyčka je „co udělám se svojí větví“. Že se dá PR mergnout, řádek
 netvrdí: na to odpovídá pruh `K merge` a sekce *Větev*, a dvě odpovědi na jednu otázku by se
 rozešly. `CI` a `Review` jsou na neotevřeném PR **duté tečky** (checky a reviewery se dotahují až
-se záložkou) — je to „nevím“, ne „nejde“.
+se záložkou) — je to „nevím“, ne „nejde“. **Dokud nad PR běží agent** (#511), bere si pilulku
+on (`agent běží · 4 min`) a slovo dráhy ustoupí: vedle titulku je jediné takové místo. **Tečky
+zůstávají** — ony říkají, kde v kole to stojí, a ta otázka během agentova běhu nemizí.
 
 **Slévatelnost aplikace zjišťuje sama, bez otevírání záložek** (#572). Do té doby se dotahovala až
 při výběru řádku, takže byl pruh `K merge` po startu prázdný, i když měl člověk vlastních PR
@@ -263,12 +265,31 @@ taky ne. **Do remote se přitom nesáhne**: skončí to ve stavu *přerovnáno, 
 vede jediná cesta ven — `Force push…` s potvrzením, jako od #466. Běhy čerpají **tentýž** denní
 strop `autoRunsPerDay`.
 
+**Od #511 je ten běh vidět, i když u něj nesedím.** Dokud agent pracuje, kreslí sekce `Větev` pod
+větou o stavu **živý ocas** posledních čtyř kroků (`čte …`, `upravuje …`) — patnáctiminutové ticho
+je jinak k nerozeznání od zaseknutého okna. Po doběhnutí je tam věta, která jmenuje **strom
+i to, že se nic neodeslalo** (*Agent upravil 2 soubory ve stromě 499-sync · nic se neodeslalo.*),
+a k ní tři akce: **`Prohlédnout diff agenta`** (diff toho commitu, čte se `git` v kopii repa —
+na GitHubu ten commit není), `Force push…` a `Zahodit změny`. **O testech se v žádné z těch vět
+nemluví**: session je pustit nemůže (nemá `Bash`) a aplikace je nad jejím výsledkem nepouští.
+
+Konec běhu jde **toutéž branou jako ostatní hlášky**: banner s vlastním přepínačem
+`Agent na mém PR doběhl` a řádek v `Dění`, který zůstane, i když je banner vypnutý. V řádku
+`Moje PR` je u toho pilulka `agent běží · 4 min`, po doběhnutí `push čeká na tebe` — je to
+**tentýž jediný slot**, ve kterém jindy stojí `N k předání` nebo odznak review.
+
+**Stanice `Agent` se kvůli tomu na dráhu vlastního PR nevrací.** #508 ji odebralo proto, že
+neměla živý obsah; ten obsah se sem vejde, ale do kapsle na dráze ne — dráha o agentovi mlčet
+nezačala, protože stanice `Push` hlásí `probíhá` i `nepřetlačeno`.
+
 **Notifikace o review jsou cesta pro review requesty**, takže o vlastním PR nedají vědět: „Nový PR
 k review“ o pull requestu, který jsem sám otevřel, je hláška o vlastním pushi, a výsledek review,
 které jsem si sám spustil, je v okně vidět na řádku i v panelu.
 
-**O vlastních PR se hlásí jedna věc, a je to ta opačná** (#335): že se na nich ozval **někdo jiný** —
-kolega odpověděl do vlákna, Copilot dopsal review. Aplikace se proto na diskuzi vlastních PR ptá sama
+**O vlastních PR se hlásí dvě věci** (#335, #511), a obě jsou ten opačný směr. První je, že se na
+nich ozval **někdo jiný** — kolega odpověděl do vlákna, Copilot dopsal review;
+druhá, že na ně **odpověděl agent** (viz výš), a má vlastní přepínač, protože kdo si zapne agenta,
+nemusí chtít vyrušit u každého jeho konce. Aplikace se proto na diskuzi vlastních PR ptá sama
 na pozadí, a je to **záměrně skoupé**: konverzace se tahá jedině u PR, kde se `updatedAt` ze seznamu
 posunul (tedy kde se doopravdy něco stalo), nejvýš **u tří PR za pět minut** a jedině po úspěšném tiku
 pollingu — takže se to vejde do jeho backoffu a při rate limitu se nekouká vůbec. Na klidný den to
@@ -2312,13 +2333,33 @@ zastaral hned další verzí.
    vydá prvních sto souborů a o zkrácení nic neřekne (změřeno na `kubernetes/kubernetes` #141772:
    591 změněných souborů, v odpovědi 100), a routing nad zkráceným seznamem by přeskočil
    revieweera, jehož soubor stojí na sto prvním místě.
-7. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
+7. **Tiché hodiny pro velké PR** (#519) — PR o dvou tisících řádcích se v automatu pouštěl ve tři
+   odpoledne a bral slot menším. Sekce `Tiché hodiny` na stránce `Review a skilly` (přepínač,
+   práh a dvě hodiny, **výchozí vypnuto**) proto velké PR odloží: nad prahem (výchozí **1 500**
+   změněných řádků) a mimo okno (výchozí **22:00–6:00**) se běh naplánuje na nejbližší začátek
+   okna. Práh se bere **z hlavičky PR** (`+` a `−` dohromady), ne z diffu — ten se u velkého PR
+   nemusí ani stáhnout.
+
+   **Platí to jen na automat.** Ruční `Spustit review` odklad nezná a **PR, který mám otevřený,
+   se neodkládá** (člověk na něj čeká). Denní limit ani strop útraty se tím **neobcházejí** —
+   odklad mění, *kdy* se session utratí, ne kolik jich bude. V tabu `Průběh` má dráha kapsli
+   `odloženo na noc`, větu `2 790 řádků nad prahem 1 500 · nikdo na PR nečeká`, vpravo
+   `poběží 23:00` a pod tím `Pustit teď` — **ruční** běh, takže mimo denní limit, a pouští celé
+   review. Odklad, který už padl, se otevřením záložky **nespustí**: kdyby ano, byla by ta dráha
+   k nevidění, protože se kreslí jedině v otevřené záložce.
+
+   **Odložené běhy přežijí restart** (`deferred.json` v cache): noc bez běžící aplikace by jinak
+   nepustila nic a ráno by to vypadalo, že automat nefunguje. Zmeškaná noc se **dožene ráno**, ne
+   posune na další. Okno smí přecházet přes půlnoc; stejná hodnota na obou stranách odklad
+   **vypne**, protože prázdné okno je čitelnější než ticho pořád. Nastavuje se **jen globálně** —
+   kdy chci mít na stroji ticho, z repozitáře neplyne.
+8. **Sběr nálezů** — z `ReportFindings` tool callů ve `stream-json` event streamu.
    Strukturovaná data, ne parsování textu.
-8. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
+9. **Zobrazení** — diff v plné šířce s nálezy jako bubliny na svém `file:line`, plus
    řaditelná tabulka pro nálezy, které ke konkrétnímu řádku nepatří (chybějící testy,
    architektonické poznámky).
 
-9. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
+10. **Notifikace** — aplikace dá vědět, i když se do ní nikdo nedívá: o novém PR ve frontě
    a o doběhlém review. Klik na notifikaci **otevře záložku** toho pull requestu (na tabu, kde jsi
    v něm skončil) a dá okno dopředu. PR, který se mezitím ze seznamu odklidil, se neotevírá —
    a filtr, který ho schoval, klik zruší.

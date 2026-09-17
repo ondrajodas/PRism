@@ -45,9 +45,20 @@ extension Policy {
     ///
     /// Je to tatáž úvaha jako u `headCommit(in:head:)`: o tom, co se ukáže, rozhoduje sha, ne
     /// pozice v poli.
-    static func openCommit(_ sha: String?, in commits: [PullRequestCommit]) -> PullRequestCommit? {
+    ///
+    /// **`local` je commit, který na GitHubu není** (#511) — ten, co po sobě nechal agent v kopii
+    /// repa. Do seznamu se **nepřimíchává**: v tabu je vidět, teprve když se na něj přepne, a řádek
+    /// v seznamu by o něm tvrdil, že je na pull requestu. Hledá se **až po** seznamu, takže shoda
+    /// se skutečným commitem PR vyhraje — sha přetlačeného commitu je táž a tehdy je to už commit
+    /// pull requestu, ne lokální nález.
+    static func openCommit(
+        _ sha: String?,
+        in commits: [PullRequestCommit],
+        local: PullRequestCommit? = nil
+    ) -> PullRequestCommit? {
         guard let sha else { return nil }
-        return commits.first { $0.sha == sha }
+        if let found = commits.first(where: { $0.sha == sha }) { return found }
+        return local?.sha == sha ? local : nil
     }
 
     /// Co je v tabu vidět místo seznamu.
