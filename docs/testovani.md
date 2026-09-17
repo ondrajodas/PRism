@@ -11943,7 +11943,7 @@ i s nálezy, což je přesně ta cena, kterou to pole má.
 
 ## Návrh review (#520) — dvě sady a skoro celá hodnota v tom, co se nestane
 
-`AutoDraftPolicyTests` (**34 testů**) a `AppStoreAutoDraftTests` (**13 testů**). Je to u téhle
+`AutoDraftPolicyTests` (**40 testů**) a `AppStoreAutoDraftTests` (**16 testů**). Je to u téhle
 věci jinak než jinde: návrh **předvyplňuje to, co se pak odesílá**, takže se každá chyba projeví
 jako komentář v rozdělaném review, o kterém jsem nevěděl — a potvrzení ho odešle spolu se
 zbytkem.
@@ -11968,6 +11968,17 @@ zbytkem.
 - **Pilulka v řádku**: razítko má přednost před verdiktem a mluví **i s vypnutou branou** (popisuje
   hotový draft), kdežto živý `návrh: schválit` se s vypnutou branou nekreslí — a jedině nad `approve` (nad `REQUEST_CHANGES` bez převzatého nálezu by slibovala hotový
   verdikt tam, kde je všechno na kliknutí).
+- **Nad posunutou hlavou razítko mlčí** (`Policy.autoDraftStamp`) — a je to nález vlastní revize:
+  po pushi se záznam nevymění, jen se označí `isStale`. Testuje se trojicí: posunutá hlava mlčí,
+  zastaralý záznam mlčí i bez známé hlavy, **neznámá hlava razítko neumlčí**. Regrese ověřena
+  vynecháním porovnání hlavy — padne ten jeden test, který ji hlídá.
+- **Vlastní nejistota reviewera spor nedělá**: `CONFIRMED` + `PLAUSIBLE` od jednoho revieweera vedle
+  `CONFIRMED` od druhého **není** rozpor. Rozhoduje „je si tím místem jistý?“ po reviewerech, ne
+  počet různých verdiktů ve skupině — jinak by pilulka jmenovala člověka, který nic nenamítal.
+- **Za rozdělané review mluví jedině složený návrh** (`speaksForTheDraft`), protože podle toho se
+  v řádku rozhoduje, jestli zmizí pero.
+- **Nápověda u smíšeného návrhu je česky celá** (`Automat převzal 3 z 5 nálezů, …`) — chybějící
+  podstatné jméno je ta vada, kterou překlad plurálem nechytí.
 
 ### `AppStoreAutoDraftTests` — proti skutečnému `ReviewStore` i `ReviewDraftStore`
 
@@ -11989,6 +12000,14 @@ zbytkem.
   čeká.
 - **Razítko i zahození přežijí restart** (druhý store nad toutéž složkou), a zahození **nálezy
   nesundá**.
+- **Po posunu hlavy razítko v okně zmlkne** — `markStaleInMemory` a pak prázdná pilulka, prázdné
+  značky, žádné razítko.
+- **Zahození review razítko shodí, takže se návrh nevrátí.** Tudy chodí i **odeslané** review
+  (`discardDraft`), takže bez toho by se draft po odeslání složil znovu — nejdražší z nálezů vlastní
+  revize.
+- **Odmítnutí mezi rozhodnutím a složením srovná i počty v razítku**: razítko z prvního běhu říká
+  `2 převzaty`, po odmítnutí jednoho nálezu a otevření PR má draft **jeden** komentář a razítko
+  **jeden** převzatý.
 - **Řádek v `Dění`** nese obě čísla a `showsSilentChip` u něj nic nekreslí.
 
 **Ověřeno vložením regrese.** `PLAUSIBLE → .adopt` plus vynechání brány na odmítnutí shodí

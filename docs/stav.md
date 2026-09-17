@@ -9180,12 +9180,22 @@ verdikt je **vlastní** důvod (`bez verdiktu`), ne `PLAUSIBLE`. Rozpor je rozd�
 dvěma různými reviewery na jednom místě — tedy to, co se z dat pozná; sémantický spor aplikace
 přečíst neumí a tvrdit ho z textu by byl odhad.
 
-Přibylo **47 testů** ve dvou nových sadách (34 nad `Policy`, 13 nad store proti skutečnému
+Přibylo **56 testů** ve dvou nových sadách (40 nad `Policy`, 16 nad store proti skutečnému
 `ReviewStore` i `ReviewDraftStore`) a skoro celá jejich hodnota je v tvrzeních o tom, co se
 **nestane**: že se `gh` vůbec nespustilo (a to při **povoleném** odesílání), že se sporný nález
 nepřevzal, že odmítnutý neprošel a že ručně rozepsaný draft zůstal, jak byl. Regrese ověřena
 vložením regrese — `PLAUSIBLE → převzít` plus vynechání brány na odmítnutí shodí 18 tvrzení
 v obou sadách.
+
+**Vlastní revize našla šest reálných věcí a všechny jsou opravené**: razítko po pushi mluvilo až do
+dalšího review (pilulka tvrdila `návrh review · 3 + 2 sporné` nad nálezy z jiného commitu);
+`Zahodit review` i **odeslané** review nechávalo razítko ležet, takže se draft složil znovu; pilulka
+`návrh: schválit` schovávala pero u ručně rozepsaného review a nabízela se i na vlastním PR, kde
+`APPROVE` končí 422; počty v razítku se mohly rozejít s tím, co se doopravdy složilo; a spor se
+hlásil i tam, kde si jeden reviewer jen sám nebyl jistý. K tomu jedna věta v nápovědě bez
+podstatného jména. Před tím vším ještě `sample` odhalil **nekonečnou smyčku překreslení** —
+`Co je sporné ↓` se kreslilo podle toho, jestli jde na nález skočit, a ta otázka **zapisuje do
+storu** (rozbalí soubor).
 
 **Neověřená mezera: PR neprošel Copilotem** (na pokyn uživatele se nepouštěl). A **fokus ani skok
 `Co je sporné ↓` se v harnessu ověřit nedá** — obojí stojí na geometrii diffu, takže to zkouší

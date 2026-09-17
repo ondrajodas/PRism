@@ -264,9 +264,64 @@ struct AppStoreAutoDraftTests {
         record.isStale = true
         store.reviewRecords[pr] = record
 
-        store.materializeAutoDraft(for: pr)
+        await store.materializeAutoDraft(for: pr)
 
         #expect(store.draft(for: pr) == nil)
+    }
+
+    /// **Nález vlastní revize.** Po pushi se záznam nevymění — jen se označí `isStale` —, takže
+    /// bez brány v `Policy.autoDraftStamp` by řádek fronty dál tvrdil `návrh review · 1`
+    /// nad nálezy, které patří jinému commitu.
+    @Test("Po posunu hlavy razítko v okně zmlkne")
+    func stampGoesSilentAfterAPush() async throws {
+        let store = try makeStore(findings: [finding()])
+        await opened(store)
+        await runReview(store)
+        #expect(store.autoDraftPill(for: pr) != nil)
+
+        store.markStaleInMemory(for: pr, current: "bbbb2222")
+
+        #expect(store.autoDraftStamp(for: pr) == nil)
+        #expect(store.autoDraftPill(for: pr) == nil)
+        #expect(store.autoDraftDoubts(for: pr).isEmpty)
+    }
+
+    /// **Nález vlastní revize, a ten nejdražší**: po odeslání review se draft maže — kdyby razítko
+    /// zůstalo, složil by se při dalším načtení diffu znovu, tedy i po tom, co review odešlo.
+    @Test("Zahození review razítko shodí, takže se návrh nevrátí")
+    func discardingTheDraftAlsoForgetsTheStamp() async throws {
+        let store = try makeStore(findings: [finding()])
+        await opened(store)
+        await runReview(store)
+        #expect(store.draft(for: pr) != nil)
+
+        store.discardDraft(for: pr)
+        await settle()
+        await store.materializeAutoDraft(for: pr)
+
+        #expect(store.autoDraftStamp(for: pr) == nil)
+        #expect(store.draft(for: pr) == nil)
+    }
+
+    /// Mezi rozhodnutím a složením uběhne čas — a dá se v něm nález odmítnout. Pruh pak nesmí
+    /// tvrdit víc, než co v panelu leží.
+    @Test("Odmítnutí mezi rozhodnutím a složením srovná i počty v razítku")
+    func alignsTheStampWithWhatWasComposed() async throws {
+        let reviews = ReviewStore(layout: layout, time: FakeTimeSource())
+        let store = try makeStore(
+            findings: [finding(summary: "první"), finding(line: 27, summary: "druhý")],
+            reviews: reviews
+        )
+        await store.loadDetail(for: summary())
+        await runReview(store)
+        #expect(store.autoDraftStamp(for: pr)?.adopted == 2)
+        let first = try #require(store.reviewRecord(for: pr)?.findings.first)
+        await store.dismissFinding(first, as: .invalid, for: pr)
+
+        await store.loadDiff(for: summary())
+
+        #expect(store.draft(for: pr)?.comments.count == 1)
+        #expect(store.autoDraftStamp(for: pr)?.adopted == 1)
     }
 
     // MARK: - Odložené složení

@@ -160,9 +160,18 @@ extension Policy {
 
     /// Neshodnou se na tomhle místě reviewery? `nil` = neshoda tam není, nebo o ní nejde mluvit.
     ///
-    /// **Rozpor je rozdíl ve verdiktu mezi dvěma různými reviewery na jednom místě** — tedy to,
-    /// co se z dat doopravdy pozná. Sémantický spor („jeden chce A, druhý B“) aplikace přečíst
-    /// neumí a tvrdit ho z textu by byl odhad, ne údaj.
+    /// **Rozpor je rozdíl v tom, jestli si je reviewer tím místem jistý** — ne v tom, kolik
+    /// různých verdiktů na něm dohromady leží. Rozhoduje se **po reviewerech**: každý z nich si je
+    /// místem jistý, když na něm má aspoň jeden `CONFIRMED`, a rozpor je teprve tehdy, když se ti
+    /// dva v tomhle rozejdou.
+    ///
+    /// **Počítat verdikty přes celou skupinu nestačí, a je to nález vlastní revize**: reviewer,
+    /// který na jednom řádku napíše `CONFIRMED` i `PLAUSIBLE`, by vedle druhého s `CONFIRMED`
+    /// vyrobil spor — a pilulka by jmenovala člověka, který nic nenamítal. Nejistá věta takového
+    /// reviewera zůstává sporná sama za sebe (`PLAUSIBLE`), to se tím nemění.
+    ///
+    /// Sémantický spor („jeden chce A, druhý B“) aplikace přečíst neumí a tvrdit ho z textu by byl
+    /// odhad, ne údaj.
     ///
     /// Počítá se jen z **platných** nálezů: shoda dvou reviewerů, ze kterých jednomu nevěřím,
     /// není shoda — tatáž úvaha jako u odznaku `2×` (`FindingGroup.agreement`).
@@ -170,14 +179,32 @@ extension Policy {
     /// Jména se **řadí**, aby `php-review ↔ security-review` vyšlo pokaždé stejně; v razítku na
     /// disku by pořadí z pole nálezů znamenalo, že se tentýž spor po dalším běhu zapíše jinak.
     static func disagreement(in group: FindingGroup) -> AutoDraftDoubt? {
-        let active = group.activeFindings
-        let reviewers = Set(active.map(\.reviewer))
-        guard reviewers.count > 1 else { return nil }
-        guard Set(active.map(\.verdict)).count > 1 else { return nil }
-        return .disagreement(reviewers: reviewers.sorted())
+        let byReviewer = Dictionary(grouping: group.activeFindings, by: \.reviewer)
+        guard byReviewer.count > 1 else { return nil }
+        let certainty = Set(byReviewer.values.map { $0.contains { $0.verdict == .confirmed } })
+        guard certainty.count > 1 else { return nil }
+        return .disagreement(reviewers: byReviewer.keys.sorted())
     }
 
     // MARK: - Co je z návrhu vidět
+
+    /// Razítko, o kterém se **smí** mluvit. `nil` = mlčí se.
+    ///
+    /// **Ptá se na hlavu, a je to oprava, ne opatrnost** (nález vlastní revize): po pushi se záznam
+    /// nevymění — `AppStore.markStaleInMemory` ho jen označí `isStale` a razítko v něm zůstane
+    /// ležet až do dalšího review. Bez téhle brány by řádek fronty do té doby tvrdil `návrh review
+    /// · 3 + 2 sporné` nad nálezy, které patří jinému commitu. Je to tatáž dvojice vstupů, jakou
+    /// bere `findingStatuses(of:head:)` a `suggestedVerdict(for:)` — tvrdá podmínka č. 5 platí
+    /// i na to, co se o nálezech **říká**, ne jen na to, co se z nich skládá.
+    ///
+    /// **Neznámá hlava razítko neumlčí**: detail se dotahuje po otevření PR, takže by pruh v panelu
+    /// na okamžik zmizel a zase se objevil. `isStale` je proti tomu odpověď, kterou aplikace má
+    /// i bez detailu.
+    static func autoDraftStamp(of record: ReviewRecord?, head: String?) -> StoredAutoDraft? {
+        guard let record, let stamp = record.autoDraft, !record.isStale else { return nil }
+        guard head == nil || head == record.headSha else { return nil }
+        return stamp
+    }
 
     /// Značky `sporné`, které se u nálezů **smí** nakreslit. Prázdné = nekreslí se nic.
     ///
@@ -186,8 +213,8 @@ extension Policy {
     /// co se nestalo. Razítko naopak znamená „automat se na tyhle nálezy díval a tohle si nevzal“.
     ///
     /// Zahození návrhu razítko maže, takže tudy zhasne i značka u nálezu.
-    static func autoDraftDoubts(of record: ReviewRecord?) -> [FindingKey: AutoDraftDoubt] {
-        record?.autoDraft?.contested ?? [:]
+    static func autoDraftDoubts(of record: ReviewRecord?, head: String?) -> [FindingKey: AutoDraftDoubt] {
+        autoDraftStamp(of: record, head: head)?.contested ?? [:]
     }
 
     /// Pruh v panelu: `Návrh připravený automatem · 21:52 · z 5 nálezů 3 převzaty, 2 sporné`.
@@ -264,6 +291,19 @@ enum AutoDraftPill: Hashable, Sendable {
         }
     }
 
+    /// Mluví pilulka za **rozdělané review**, které v panelu leží?
+    ///
+    /// Rozhoduje o tom, jestli si řádek nechá i pero `rozdělané review` (#309). `.composed` říká
+    /// totéž co pero a víc, takže ho nahradí; `.verdict` je proti tomu tvrzení o **nálezech**
+    /// (nebylo co převzít) a o mojí rozepsané próze neví nic — nález vlastní revize: bez tohohle
+    /// rozlišení mizelo pero nad čistým review, tedy zrovna u draftu, který jsem psal sám.
+    var speaksForTheDraft: Bool {
+        switch self {
+        case .composed: true
+        case .verdict: false
+        }
+    }
+
     /// Nápověda říká **co dál**, ne co je vidět — text pilulky se v ní neopakuje (tatáž úvaha
     /// jako u pilulky agenta, #511).
     var help: String {
@@ -271,7 +311,7 @@ enum AutoDraftPill: Hashable, Sendable {
         case .composed(let adopted, let contested):
             contested == 0
                 ? "Automat převzal \(Plural.czech(adopted, one: "nález", few: "nálezy", many: "nálezů")) do rozdělaného review. Odeslat se pořád potvrzuje v okně s celým payloadem."
-                : "Automat převzal \(adopted) z nálezů, \(contested) nechal jako sporné. Co je sporné a proč, ukáže panel — odeslat se pořád potvrzuje v okně s celým payloadem."
+                : "Automat převzal \(adopted) z \(Plural.czech(adopted + contested, one: "nálezu", few: "nálezů", many: "nálezů")), \(contested) nechal jako sporné. Co je sporné a proč, ukáže panel — odeslat se pořád potvrzuje v okně s celým payloadem."
         case .verdict:
             "Review doběhlo a nezbylo nic k převzetí — verdikt je jen návrh, odesílá se pořád ručně."
         }

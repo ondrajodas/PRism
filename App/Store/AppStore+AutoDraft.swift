@@ -65,8 +65,8 @@ extension AppStore {
             contested: stamp.contested.count
         ))
         // Když je PR zrovna otevřený, je diff po ruce a návrh se složí hned. Jinak počká na
-        // otevření — viz `loadDiff`.
-        materializeAutoDraft(for: pr)
+        // otevření — viz `loadDiff` a `loadDetail`.
+        await materializeAutoDraft(for: pr)
     }
 
     // MARK: - Složení draftu
@@ -91,40 +91,65 @@ extension AppStore {
     /// Jde se přes `adoptFinding`, tedy **tou samou cestou jako kliknutí na `Převzít`**. Druhá
     /// cesta k témuž by znamenala, že se převzatý nález chová jinak podle toho, kdo ho převzal —
     /// a to je zrovna ten rozdíl, který se v odeslaném review nesmí objevit.
-    func materializeAutoDraft(for pr: PRIdentifier) {
+    func materializeAutoDraft(for pr: PRIdentifier) async {
         guard let record = reviewRecords[pr], let stamp = record.autoDraft else { return }
         guard resolved(for: pr.repo).autoDraft else { return }
         guard drafts[pr] == nil else { return }
         guard !record.isStale, head(of: pr) == record.headSha else { return }
         guard case .loaded = diffStates[pr] else { return }
-        guard stamp.adopted > 0 else { return }
 
-        for finding in Policy.autoDraftPlan(of: record).adopt {
+        let plan = Policy.autoDraftPlan(of: record)
+        for finding in plan.adopt {
             adoptFinding(finding, for: pr)
         }
+        await align(stamp, to: plan, for: pr, at: record.headSha)
+    }
+
+    /// Srovná razítko s tím, co se doopravdy složilo.
+    ///
+    /// **Je to oprava, ne úklid** (nález vlastní revize): mezi rozhodnutím a složením uběhne čas —
+    /// klidně hodina, než PR otevřu —, a dá se v něm nález **odmítnout** (#113). Bez tohohle by
+    /// pruh tvrdil `z 5 nálezů 3 převzaty` nad panelem se dvěma komentáři, tedy přesně tu větu,
+    /// která tvrdí víc, než co je vidět.
+    ///
+    /// **Razítko se nepřerazítkuje**: `at` zůstává okamžik, kdy návrh vznikl. Mění se počty, ne to,
+    /// kdy se to stalo. A když se nic nezměnilo, **nezapisuje se nic** — zápis do cache při každém
+    /// otevření PR by byl provoz za nic.
+    private func align(
+        _ stamp: StoredAutoDraft,
+        to plan: AutoDraftPlan,
+        for pr: PRIdentifier,
+        at headSha: String
+    ) async {
+        let composed = StoredAutoDraft(at: stamp.at, adopted: plan.adopt.count, contested: plan.contested)
+        guard composed != stamp, let reviews else { return }
+        reviewRecords[pr] = try? await reviews.saveAutoDraft(composed, for: pr, at: headSha)
+            ?? reviewRecords[pr]
     }
 
     // MARK: - Co je z návrhu vidět
 
-    /// Razítko návrhu pro tenhle PR. `nil` = žádný návrh se neskládal, nebo se zahodil.
+    /// Razítko návrhu pro tenhle PR. `nil` = žádný návrh se neskládal, zahodil se, nebo se hlava
+    /// posunula pod ním (rozhoduje `Policy.autoDraftStamp`, ne tahle metoda).
     func autoDraftStamp(for pr: PRIdentifier) -> StoredAutoDraft? {
-        reviewRecords[pr]?.autoDraft
+        Policy.autoDraftStamp(of: reviewRecords[pr], head: head(of: pr))
     }
 
     /// Značky `sporné` u nálezů. Prázdné = nekreslí se nic.
     func autoDraftDoubts(for pr: PRIdentifier) -> [FindingKey: AutoDraftDoubt] {
-        Policy.autoDraftDoubts(of: reviewRecords[pr])
+        Policy.autoDraftDoubts(of: reviewRecords[pr], head: head(of: pr))
     }
 
     /// Pilulka v řádku fronty. `nil` = řádek o návrhu mlčí.
     ///
-    /// Bere **stejný verdikt jako panel** (`suggestedVerdict`), ne vlastní počítání: dvě odpovědi
-    /// na „co by odešlo“ by se rozešly zrovna u čistého review, tedy tam, kde pilulka `návrh:
-    /// schválit` je to jediné, co řádek o návrhu říká.
+    /// Bere **stejný verdikt jako panel** (`prefillableSuggestion`), ne `suggestedVerdict`: na
+    /// vlastním PR se nepředvyplňuje nic, protože `APPROVE` tam GitHub odmítne (422, změřeno
+    /// u #62) — a pilulka `návrh: schválit` nad takovým PR by slibovala verdikt, který neodejde.
+    /// Je to nález vlastní revize a tatáž brána, jakou má panel (#114).
     func autoDraftPill(for pr: PRIdentifier) -> AutoDraftPill? {
         Policy.autoDraftPill(
             stamp: autoDraftStamp(for: pr),
-            suggestion: suggestedVerdict(for: pr),
+            suggestion: prefillableSuggestion(for: pr),
             isAllowed: resolved(for: pr.repo).autoDraft
         )
     }
@@ -141,14 +166,24 @@ extension AppStore {
     /// (#113). Řádek v `Dění` taky zůstává — je to záznam toho, co se stalo, ne stav.
     func discardAutoDraft(for pr: PRIdentifier) async {
         discardDraft(for: pr)
+        await forgetAutoDraftStamp(for: pr)
+    }
+
+    /// Smaže razítko. **Chodí tudy i obyčejné `Zahodit review` a úspěšné odeslání** —
+    /// `AppStore.discardDraft` si to volá samo.
+    ///
+    /// Je to nález vlastní revize a byla to dvojí tichá vada: po `Zahodit review` i **po odeslaném
+    /// review** zůstávalo razítko ležet, takže při dalším načtení diffu prošel
+    /// `materializeAutoDraft` všemi branami (draft už žádný není) a **složil tytéž komentáře
+    /// znovu**. Stačilo přepnout na jiný PR a zpátky.
+    ///
+    /// **Selhání zápisu se spolkne**: v paměti razítko mizí tak jako tak a nejhorší následek je
+    /// návrh, který se po restartu vrátí. Je to pohodlí, ne výsledek review — poruchu nad
+    /// doběhlým review by to nezasloužilo.
+    func forgetAutoDraftStamp(for pr: PRIdentifier) async {
         guard let reviews, let record = reviewRecords[pr], record.autoDraft != nil else { return }
-        do {
-            reviewRecords[pr] = try await reviews.saveAutoDraft(nil, for: pr, at: record.headSha)
-        } catch {
-            // Smazané razítko, které se nezapsalo, se vrátí po restartu — a s ním i návrh. Je to
-            // pohodlí, ne výsledek review, takže se z toho nedělá porucha; v paměti razítko mizí
-            // tak jako tak, protože `reviewRecords` se srovnává podle disku až při dalším čtení.
-            reviewRecords[pr]?.autoDraft = nil
-        }
+        reviewRecords[pr]?.autoDraft = nil
+        reviewRecords[pr] = (try? await reviews.saveAutoDraft(nil, for: pr, at: record.headSha))
+            ?? reviewRecords[pr]
     }
 }

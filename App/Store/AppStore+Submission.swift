@@ -50,7 +50,10 @@ extension AppStore {
     }
 
     /// Návrh, kterým se smí předvyplnit — na vlastním PR žádný.
-    private func prefillableSuggestion(for pr: PRIdentifier) -> ReviewVerdict? {
+    ///
+    /// `internal`, ne `private`: od #520 se jí ptá i pilulka návrhu v řádku fronty — a dvě odpovědi
+    /// na „smí se předvyplnit?“ by znamenaly, že řádek slibuje verdikt, který panel nenabízí.
+    func prefillableSuggestion(for pr: PRIdentifier) -> ReviewVerdict? {
         Policy.prefillableSuggestion(
             suggestedVerdict(for: pr),
             author: author(of: pr),
@@ -141,6 +144,10 @@ extension AppStore {
         guard drafts[pr] != nil else { return }
         drafts[pr] = nil
         persistDraft(for: pr)
+        // **Razítko návrhu (#520) jde s draftem**, a je to podmínka, ne úklid: kdyby zůstalo, složil
+        // by `materializeAutoDraft` při dalším načtení diffu tytéž komentáře znovu — po zahození
+        // i **po odeslaném review**, protože tudy chodí obojí.
+        Task { await forgetAutoDraftStamp(for: pr) }
     }
 
     /// Uloží draft na disk.

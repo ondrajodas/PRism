@@ -478,12 +478,15 @@ struct PullRequestRow: View {
                 Text(pullRequest.updatedAt, format: .relative(presentation: .named))
             }
             Spacer(minLength: 8)
-            // **Pilulka místo pera** (#520): obojí mluví o tomtéž — *tady leží rozdělané review* —
-            // a pilulka k tomu řekne, kolik z toho je převzaté a kolik zůstalo sporné. Dvě značky
-            // o jedné věci vedle sebe by se četly jako dvě různé.
+            // **Pilulka místo pera** (#520) — ale jedině ta, která za rozdělané review **mluví**
+            // (`AutoDraftPill.speaksForTheDraft`): `návrh review · 3 + 2 sporné` říká totéž co pero
+            // a víc, takže by dvě značky o jedné věci vedle sebe četly jako dvě různé. `návrh:
+            // schválit` je proti tomu tvrzení o **nálezech** a o mojí rozepsané próze neví nic —
+            // nechat ho pero přebít by znamenalo, že neodeslaná ruční práce z fronty zmizí.
             if let autoDraft {
                 autoDraftPill(autoDraft)
-            } else if hasDraft {
+            }
+            if hasDraft, autoDraft?.speaksForTheDraft != true {
                 // **Mint, ne akcent** (#309), a to ze dvou důvodů naráz. Je to **totéž sdělení**
                 // jako `2 review` v souhrnu fronty, a jedna věc nesmí mít v okně dvě barvy.
                 // A v tomhle řádku akcent už něco znamená: `ReviewStateBadge` jím kreslí `běží`,

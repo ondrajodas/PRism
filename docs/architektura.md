@@ -15234,10 +15234,15 @@ z `Policy.suggestedVerdict`. Kdyby se zapsal, vznikl by draft ze samotného dob�
 `StoredAutoDraft` leží na `ReviewRecord`u, tedy u klíče `(PR, headSha)` — stejně jako kontrola
 nálezů (#150) a ze stejného důvodu: je to tvrzení o **těch** nálezech.
 
-Vedlejší účinek je zrovna ten, který chce tvrdá podmínka č. 5: **jak se hlava pohne, návrh zhasne
-sám.** Nový commit znamená nový záznam a v něm razítko není, takže z okna zmizí pilulka ve frontě,
-pruh v panelu i značky `sporné` — a nemusí na to být žádná další kontrola, na kterou by se dalo
-zapomenout.
+Vedlejší účinek je zrovna ten, který chce tvrdá podmínka č. 5: **jak se hlava pohne, návrh
+zhasne.** Nové review znamená nový záznam a v něm razítko není.
+
+**Samo to ale nestačí, a je to nález vlastní revize**: po pushi se záznam v paměti **nevymění** —
+`AppStore.markStaleInMemory` ho jen označí `isStale` a razítko v něm zůstane ležet až do dalšího
+review. Rozhoduje proto `Policy.autoDraftStamp(of:head:)`, kterou čtou **všechny tři** čtenáře
+(pilulka, pruh, značky): zastaralý záznam i hlava, která se s ním rozešla, znamenají mlčení.
+Neznámá hlava naopak mlčení neznamená — detail se dotahuje po otevření PR, takže by pruh na
+okamžik zmizel a zase se objevil.
 
 **Zamítnuto: pole na `ReviewDraft`u.** Nabízelo se, protože razítko mluví o draftu — jenže návrh,
 ze kterého zbyly samé sporné nálezy, **žádný draft nezaloží** (prázdný draft se maže), takže by
@@ -15317,7 +15322,12 @@ schválit` je proti tomu živý výpočet z nálezů, takže ten se s vypnutou v
   se na to spolehnout bez tebe*. Odmítnutý nález značku nedostane.
 - **Pilulka v řádku fronty** — `návrh review · 3 + 2 sporné`, u čistého `návrh: schválit`. Je
   **mint a místo pera**: obojí říká „tady leží neodeslané review“ a jedna věc nesmí mít v okně dvě
-  barvy (#309). Kreslí se **všude, kde se řádek kreslí** (fronta, deska, sekce `Rozdělaná`).
+  barvy (#309). **Pero přebíjí jedině pilulka, která za draft mluví** (`speaksForTheDraft`) — `návrh:
+  schválit` je tvrzení o nálezech a o mojí rozepsané próze neví nic, takže by nad čistým review
+  schovalo pero u draftu, který jsem psal sám (nález vlastní revize). Kreslí se **všude, kde se
+  řádek kreslí** (fronta, deska, sekce `Rozdělaná`), a `návrh: schválit` bere **tentýž** návrh jako
+  panel (`prefillableSuggestion`), takže se na vlastním PR nekreslí vůbec: `APPROVE` tam GitHub
+  odmítne.
 - **Řádek v `Dění`** — vlastní druh `autoDraft`, glyf `square.and.pencil`, akcent. **Banner za ním
   nechodí**: o výsledku review jeden právě přišel a druhý o tomtéž PR v tutéž chvíli je vyrušení
   za nic. Chip `bez banneru` se u něj proto nekreslí.
@@ -15329,10 +15339,20 @@ schválit` je proti tomu živý výpočet z nálezů, takže ten se s vypnutou v
   [jak se to našlo](testovani.md#nekonečné-překreslování-které-našel-sample-520)). Mrtvé tlačítko
   z toho není: přepnutí na `Nálezy` má smysl vždycky a skok se přidá, když se kotva najde.
 
-### Zahození maže obojí
+### Zahození maže obojí — a chodí tudy i odeslání
 
 `Zahodit návrh` smaže **razítko i draft**. Samotné razítko by nechalo v panelu komentáře, o kterých
 by nebylo poznat, odkud jsou; samotný draft by nechal razítko, které by návrh při dalším načtení
 diffu složilo znovu — tedy tlačítko, po kterém se nic nestane. **Nálezy zůstávají**: zahozený návrh
 z nich nesundá nic, to smí jedině odmítnutí (#113). Řádek v `Dění` taky zůstává — je to záznam
 toho, co se stalo, ne stav.
+
+**Razítko shodí i obyčejné `Zahodit review` a úspěšné odeslání**, protože obojí chodí přes
+`AppStore.discardDraft` — a bylo to dvojí tichá vada (nález vlastní revize): draft zmizel, razítko
+zůstalo, a při dalším načtení diffu prošel `materializeAutoDraft` všemi branami a složil tytéž
+komentáře **znovu**. Po odeslaném review to znamenalo draft, který se vrátí sám.
+
+**A počty v razítku se po složení srovnají s tím, co se doopravdy složilo** (`align(_:to:for:at:)`).
+Mezi rozhodnutím a složením uběhne čas — klidně hodina, než PR otevřu —, a dá se v něm nález
+odmítnout; bez toho srovnání by pruh tvrdil `z 5 nálezů 3 převzaty` nad panelem se dvěma
+komentáři. `at` se u toho **nemění**: razítko nese okamžik, kdy návrh vznikl.

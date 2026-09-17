@@ -42,6 +42,19 @@ struct AutoDraftPolicyTests {
         )
     }
 
+    /// Záznam s razítkem, jaké by nad ním složil automat — skládá ho **produkční funkce**, ne
+    /// test: vlastní ruční razítko by ověřovalo kopii pravidla.
+    private func stamped(_ record: ReviewRecord) -> ReviewRecord {
+        var record = record
+        let plan = Policy.autoDraftPlan(of: record)
+        record.autoDraft = StoredAutoDraft(
+            at: Date(timeIntervalSince1970: 1),
+            adopted: plan.adopt.count,
+            contested: plan.contested
+        )
+        return record
+    }
+
     private func draft() -> ReviewDraft {
         ReviewDraft(
             pullRequest: PRIdentifier(repo: RepoID(owner: "cli", name: "cli"), number: 42),
@@ -126,6 +139,23 @@ struct AutoDraftPolicyTests {
         let other = makeFinding(file: "Cart.php", line: 10, verdict: .plausible, reviewer: "security-review")
         var group = FindingGroup(file: "Cart.php", line: 10, findings: [mine, other])
         group.dismissals = makeDismissals([other])
+        #expect(Policy.disagreement(in: group) == nil)
+    }
+
+    /// **Nález vlastní revize.** Reviewer, který na jednom řádku napíše `CONFIRMED` i `PLAUSIBLE`,
+    /// nesmí vyrobit spor s druhým, který je s ním na tom `CONFIRMED` zajedno — pilulka by pak
+    /// jmenovala člověka, který nic nenamítal.
+    @Test("Vlastní nejistota reviewera spor s tím druhým nedělá")
+    func doubtOfOneReviewerIsNotADisagreement() {
+        let group = FindingGroup(
+            file: "Cart.php",
+            line: 10,
+            findings: [
+                makeFinding(file: "Cart.php", line: 10, verdict: .confirmed, summary: "a", reviewer: "php-review"),
+                makeFinding(file: "Cart.php", line: 10, verdict: .plausible, summary: "b", reviewer: "php-review"),
+                makeFinding(file: "Cart.php", line: 10, verdict: .confirmed, summary: "c", reviewer: "security-review"),
+            ]
+        )
         #expect(Policy.disagreement(in: group) == nil)
     }
 
@@ -277,19 +307,39 @@ struct AutoDraftPolicyTests {
 
     @Test("Bez razítka se u nálezů nekreslí žádná značka")
     func noDoubtsWithoutStamp() {
-        #expect(Policy.autoDraftDoubts(of: record([makeReported(verdict: .plausible)])).isEmpty)
+        let record = record([makeReported(verdict: .plausible)])
+        #expect(Policy.autoDraftDoubts(of: record, head: head).isEmpty)
     }
 
     @Test("Razítko vydá značky, které si do něj návrh zapsal")
     func doubtsComeFromStamp() {
-        var record = record([makeReported(file: "Cart.php", line: 10, verdict: .plausible)])
+        let record = stamped(record([makeReported(file: "Cart.php", line: 10, verdict: .plausible)]))
         let key = Policy.key(of: record.findings[0])
-        record.autoDraft = StoredAutoDraft(
-            at: Date(timeIntervalSince1970: 1),
-            adopted: 0,
-            contested: [key: .plausible]
-        )
-        #expect(Policy.autoDraftDoubts(of: record) == [key: .plausible])
+        #expect(Policy.autoDraftDoubts(of: record, head: head) == [key: .plausible])
+    }
+
+    /// **Po pushi se záznam nevymění** — jen se označí `isStale` —, takže bez téhle brány by
+    /// pilulka i značky mluvily o nálezech, které patří jinému commitu (tvrdá podmínka č. 5).
+    @Test("Nad posunutou hlavou razítko mlčí")
+    func stampIsSilentOverAMovedHead() {
+        let record = stamped(record([makeReported(file: "Cart.php", line: 10, verdict: .plausible)]))
+        #expect(Policy.autoDraftStamp(of: record, head: "bbbb2222") == nil)
+        #expect(Policy.autoDraftDoubts(of: record, head: "bbbb2222").isEmpty)
+    }
+
+    @Test("Zastaralý záznam razítko umlčí i bez známé hlavy")
+    func stampIsSilentOverAStaleRecord() {
+        var record = stamped(record([makeReported(file: "Cart.php", line: 10, verdict: .plausible)]))
+        record.isStale = true
+        #expect(Policy.autoDraftStamp(of: record, head: nil) == nil)
+    }
+
+    /// Detail se dotahuje po otevření PR, takže by pruh v panelu na okamžik zmizel a zase se
+    /// objevil.
+    @Test("Neznámá hlava razítko neumlčí")
+    func unknownHeadKeepsTheStamp() {
+        let record = stamped(record([makeReported(file: "Cart.php", line: 10, verdict: .plausible)]))
+        #expect(Policy.autoDraftStamp(of: record, head: nil) != nil)
     }
 
     @Test("Věta pruhu nese obě čísla i ve správných tvarech")
@@ -340,6 +390,18 @@ struct AutoDraftPolicyTests {
         )
         #expect(pill == .composed(adopted: 3, contested: 2))
         #expect(pill?.text == "návrh review · 3 + 2 sporné")
+    }
+
+    @Test("Nápověda u smíšeného návrhu je česky celá")
+    func pillHelpNamesTheFindings() {
+        let pill = Policy.autoDraftPill(stamp: stamp(adopted: 3, contested: 2), suggestion: nil, isAllowed: true)
+        #expect(pill?.help.hasPrefix("Automat převzal 3 z 5 nálezů, 2 nechal jako sporné.") == true)
+    }
+
+    @Test("Za rozdělané review mluví jedině složený návrh")
+    func onlyAComposedProposalSpeaksForTheDraft() {
+        #expect(AutoDraftPill.composed(adopted: 1, contested: 0).speaksForTheDraft)
+        #expect(!AutoDraftPill.verdict(.approve).speaksForTheDraft)
     }
 
     @Test("Bez sporných se druhá půlka pilulky nepíše")
