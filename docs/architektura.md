@@ -5624,15 +5624,116 @@ pull requestu.
 ještě jednou, je `handoffReport(for:)` (bere si ji panel), takže dráha zdvojí `Policy.handoff`. Je
 omezená **jedním** pull requestem (jeho nálezy, vlákna a commity), takže se to k naměřeným 1,5 %
 vlastní práce aplikace v přerovnání okna (#472) chová jako konstanta. **Zdvojený `Policy.mergeOffer`
-odpadl** se stanicí `Merge` (čtvrté kolo). **Změřit se to bude muset u #509**, kde tatáž funkce
-poběží nad **každým řádkem** seznamu — tam je to jiný řád a předfiltr (jako `isMergeReadyForLane`,
-#515) tam nejspíš bude muset být.
+odpadl** se stanicí `Merge` (čtvrté kolo). **U #509 se to změřilo** a předfiltr z toho vyšel jiný, než se čekalo —
+viz *Dráha v řádku seznamu* níž.
 
 **Že se akce kreslí, se v harnessu tvrdit nedá.** SwiftUI `Button` v hostované hierarchii `NSButton`
 **není** a `fittingSize.width` vyjde s tlačítkem i bez něj stejná (435 bodů — přirozenou šířku drží
 věta pod fázemi), takže by to bylo měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“
 (#478). Zbývá **pojmenované rozhodnutí** `OwnLoopView.showsAction` (tentýž vzor jako
 `PullRequestRow.showsPromptAction`, #333) a screenshot, který udělá člověk.
+
+#### Dráha v řádku seznamu (#509)
+
+Tatáž smyčka je od #509 i v **řádku seznamu** — jako **pět teček a jedno slovo**. Otázka, kvůli
+které se u vlastního PR chodilo do prohlížeče (*dá se to už mergnout, a když ne, co brání?*), se
+tím dostala tam, kde se na ni člověk ptá: do fronty, ne až do otevřené záložky. Do #509 řádek
+o vlastním PR řekl jedině `6 k předání` (#334), tedy stav **jediné** z těch pěti stanic.
+
+**Zakreslené je to v mockupu, v sekci 52 vedle dráhy v hlavičce** — pět stavů řádku pod sebou
+(`Zadání 6 k předání`, `Push o 4 vzadu`, `CI 1 neprošel`, `hotovo` a neotevřený PR s dutými
+tečkami). Leží to u dráhy, ne na stránce fronty, protože je to **totéž rozhodnutí menší**: co
+v řádku svítí, se z dráhy odvozuje a rozejít se to nesmí. Nová třída je tam jediná
+(`.s52-dots`) — řádek zůstává `.qrow`, slovo `.pill` a tlačítko `.mini`.
+
+**Skládá to `Policy.ownLoopRow(_:)` nad `Policy.ownLoop`, ne řádek.** Vlastní výčet stanic by
+znamenal dvě odpovědi na jednu otázku: hlavička otevřeného PR by tvrdila `Push · o 4 vzadu`
+a řádek nad tímtéž PR třeba `CI`, protože by se každý zastavil jinde — a to se v okně nepozná
+jinak než tím, že se člověk dívá na obojí naráz. `OwnLoopRow` proto nese jen tři odvozené věci:
+
+| Pole | Odpovídá na | Odkud |
+|---|---|---|
+| `dots` | kde v kole to stojí | `loop.state(of:)` pro každou `Station.allCases` |
+| `word` | co je zrovna na tahu | jméno aktivní stanice a její `detail` |
+| `tone` | jak vážné to je | stav aktivní stanice — barvu z něj dělá `LanePhaseChip` |
+
+**Slovo je `detail`, ne `reason`, a je to obrácení pravidla ze čtvrtého kola #508.** `reason` je
+jedno slovo bez čísla schválně: kreslí se v šedé kapsli **za** zastávkou, tedy vedle věty, která
+mluví o **jiné** stanici, a `o 21 vzadu` se v té poloze čte jako tvrzení o tom, co je na tahu.
+V řádku je to obráceně — pilulka je **jediná** věta o tomhle PR a tečky vedle ní ukazují, které
+stanice se týká. Jméno stanice před detailem stojí ze stejného důvodu: samotné `zjišťuju` nebo
+`spadlo` by mohlo být o kterékoli z těch pěti.
+
+**Dojetá smyčka říká `hotovo`, ne `k merge` — a je to změna proti zákresu** (deck *Směry pro
+PRism*, směr D, poznámka 20). Zákres pohlcoval N4 (*co brání mergi*) tak, že se pilulka měla ptát
+na **slévatelnost**. Na tu ale odpovídá **pruh `K merge` na desce** (#515, `Policy.isMergeReady`
+nad `mergeOffer`) a sekce *Větev* (#465), kdežto dráha na ni neodpovídá schválně — od čtvrtého kola
+#508 nebere `MergeOffer` **ani jako vstup**. `k merge` odsud by tedy byla **druhá odpověď na jednu
+otázku, složená z jiných dat**, a přesně tenhle rozpor je vidět na desce: PR v pruhu `K merge` má
+v řádku `Nálezy nespuštěno`, protože deska vybírá **nejlevnější tah**, kdežto dráha odpovídá na
+**kde v kole jsem** (tatáž hranice, kterou #508 popisuje u `Policy.ownLoop`). `hotovo` je tvrzení,
+které dráha unese: **všech pět stanic je hotových**.
+
+**Hrana řádku bere na vlastním PR barvu ze stanice**, ne ze stavu mého review. Je to tatáž změna
+jako u pilulky: na vlastním PR není otázka *jak dopadlo moje review* (to je první z pěti stanic),
+ale *co s tím ještě je* — a hrana se čte periferně, takže má nést zrovna tu odpověď. PR s čistým
+review a spadlým CI měl do #509 **zelenou** hranu. Na cizím řádku se nemění nic.
+
+**`Prompt →` je plné akcentové tlačítko jen tam, kde je co předat.** Do #509 bylo plné vždycky,
+takže si v bloku `Moje PR` bralo akcent i na řádcích, kde by prompt složil prázdné zadání — a
+akcent, který svítí na všem, přestane ukazovat na cokoli. Rozhoduje `PullRequestRow.promptIsPrimary`
+a stojí na `pendingHandoff`, ne na dráze: zvýrazňuje se **akce**, ne stav. PR se spadlým CI je
+naléhavý, ale prompt z něj složit nejde, dokud není co předat.
+
+**Tečky kreslí `OwnLoopDots` a barvu si nesází.** `LanePhaseChip.dotFill(of:)` a `dotStroke(of:)`
+stojí u kapsle dráhy, protože je to **tentýž stav a tentýž význam**, jen menší kresba; druhá kopie
+by znamenala, že `hotovo` v řádku časem zezelená jinak než `hotovo` v hlavičce. Dutá je tečka
+o stavu, o kterém se nic neví (`idle`, `unknown`) — plná neutrální mezi zelenými by se četla jako
+další odpověď, a `zjišťuju` odpověď není. Šířka pruhu (52 bodů) se **počítá z počtu stanic**, ne
+zapisuje číslem: jednou už stanic ubylo.
+
+**Dvě věci ze zákresu se nepřenesly a obojí je zapsané rozhodnutí:**
+
+- **teček je pět, ne sedm** — přímý důsledek čtvrtého kola #508;
+- **hlavička bloku `1 k merge · 3 na tahu` nevznikla.** Blok `Moje PR` z decku je na dashboardu,
+  který #515 nahradil **pruhy** — a ty ten počet nesou samy (`K merge 2`, `Předat agentovi 2`).
+  Sekce `Moje PR` v railu je `List` bez hlavičky, takže by šlo o **novou věc na obrazovce**, a ta
+  se podle pravidla o mockupu kreslí a schvaluje dřív, než na ni vznikne issue.
+
+**O slot vedle titulku se dráha dělí s pilulkou agenta, a rozhoduje pořadí** (#511 nad #509,
+slito v PR #581). V řádku je **jedno** akcentové místo a pořadí v něm je *agent → dráha →
+`N k předání` → odznak review*; tečky stojí **před** ním, takže se o něj neperou a kreslí se
+vždycky. Není to druhá odpověď z jiných dat: `agent běží · 4 min` (`Policy.agentRowPill`) i stanice
+`Push` čtou tentýž `BranchSyncState` z téže mapy storu — pilulka agenta je jeho **podrobnější**
+čtení a nese uplynulý čas, který dráha nemá kde vzít (`OwnLoop.Stop.detail` je jedno slovo, tady
+`probíhá`). Opačné pořadí by ten čas zahodilo a `PullRequestRow.agent` nechalo jako držený stav,
+který nikdo nečte. Proč se to rozhodlo takhle a co se u toho zamítlo, je
+v [specifikaci](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--o-jediný-slot-v-řádku-se-agent-a-dráha-dělí-pořadím-ne-kompromisem-509-slito-s-511).
+
+**Co to stojí, je změřené na obou koncích** (#275) a čísla jsou
+v [`docs/testovani.md`](testovani.md#co-stojí-dráha-v-každém-řádku-seznamu-509). Podstatný je
+tvar: **`Policy.handoff` je nejdražší vstup dráhy a řádek si ho počítá už dneska** (pilulka #334
+a novinky #335), takže se předává parametrem — `AppStore.ownLoop(for:handoff:)`. Předfiltr, který
+zbyl, je **vlastnictví**, a je na volajícím, hned vedle řádku, který dnes rozhoduje o `handoff`u:
+na cizím řádku se dráha nepočítá vůbec. Naivní podoba (dráha si report spočítá sama) vyšla
+**2,6× dražší** než stav před #509, nasazená **1,65×** — v absolutních číslech 0,88 ms proti
+0,53 ms na průchod seznamem o 23 vlastních PR.
+
+**Seznam tím přibral čtyři hrubé závislosti, a je to vědomé.** `@Observable` sleduje po
+vlastnostech, takže čtení `checks`, `branchStatuses`, `branchSyncStates` a `metadataStates` v těle
+seznamu znamená, že ho zneplatní změna nad **kterýmkoli** pull requestem, ne jen nad tím
+nakresleným. Jemnější dělení tady není: jsou to mapy klíčované PR, tedy tentýž tvar jako
+`reviewRecords` a `conversationStates`, na kterých tělo seznamu stálo už předtím kvůli
+`Policy.handoff`. Deska ty čtyři mapy četla už dneska (`isMergeReadyForLane`), takže přibyly jen
+seznamu a sekci `Rozdělaná`. Cena jednoho takového průchodu je změřená (0,88 ms nad 23 vlastními
+PR) a **jestli se z toho někdy stane problém, měří se čas, ne počty průchodů** (#421).
+
+**Kde je mez, a je to zapsaná mezera.** Poloha větve a slévatelnost jsou v řádku **skutečné** —
+#572 je dotahuje hromadným dotazem na každý tik, takže stanice `Push` mluví i o PR, který nikdo
+neotevřel. Checky a vyžádaní reviewery se ale dotahují **až s detailem záložky**, takže `CI`
+a `Review` jsou na neotevřeném PR `unknown`, tedy **duté tečky**. Je to „nevím“, ne „nejde“
+(#508), a hromadné dotažení checků do téhle změny nepatří: byl by to další dotaz na tik za údaj,
+který se v řádku kreslí jako jedna tečka.
 
 ### Mapa PR — pás pod hlavičkou (#501)
 

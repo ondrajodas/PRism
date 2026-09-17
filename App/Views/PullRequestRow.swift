@@ -52,6 +52,18 @@ struct PullRequestRow: View {
     /// předával jen seznam, takže na desce a v sekci `Rozdělaná` odložit nešlo — a na desce se
     /// přitom o odložených mluví ve větě pod pozdravem. Hlídá to `PullRequestRowSnoozeWiringTests`.
     var snoozeAction: SnoozeAction?
+    /// Dráha vlastního PR zmenšená do řádku (#509) — pět teček a slovo k aktivní stanici.
+    ///
+    /// `nil` = **nekreslí se nic**, ne prázdný pruh teček: řádek bez storu (náhled, test) dráhu
+    /// nemá odkud vzít a pět šedých koleček by tvrdilo, že se na tom PR nic nestalo. Tatáž úvaha
+    /// jako u mapy PR (#502) a u `Prompt →` (#333).
+    ///
+    /// **Skládá ji `Policy.ownLoopRow` nad `Policy.ownLoop`** (#508), ne řádek: dvě skládání
+    /// jedné smyčky by uměla říct každé něco jiného než hlavička téhož PR.
+    ///
+    /// **Kdo řádek kreslí, předává i tohle** — hlídá to `OwnLoopRowRenderTests`, a ze stejného
+    /// důvodu jako u `snoozeAction`: řádek se kreslí na třech místech (#512).
+    var loop: OwnLoopRow?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -64,7 +76,7 @@ struct PullRequestRow: View {
         // musela výška dopočítávat ručně a u dvouřádkového titulku by proužek nedosáhl.
         .overlay(alignment: .leading) {
             Capsule()
-                .fill(ReviewStateAppearance.color(of: reviewState, blocking: row.blocking))
+                .fill(stripe)
                 .frame(width: 3)
         }
         // **Zápis `Bool`u na `Bool`, ne poloha z každého snímku** — `onContinuousHover` je ta
@@ -121,21 +133,32 @@ struct PullRequestRow: View {
             if let map, !map.isEmpty {
                 QueueMapStrip(map: map)
             }
-            // **Na vlastním PR pilulka `N k předání` místo odznaku stavu** (#334, návrh sekce 21).
-            // Do #334 tady stál odznak review i na vlastním řádku — a byla to jediná věta, kterou
-            // se dalo napsat, dokud předání nemělo razítko. Teď se dá napsat ta, na kterou se
-            // u vlastního PR ptám: kolik věcí zbývá předat agentovi. Vedle sebe by nešly: obě
-            // čísla mluví o týchž nálezech, takže by se pod sebou pral „3 nálezy“ s „6 k předání“
-            // a nikdo by nevěděl, které je které.
+            // **Na vlastním PR dráha smyčky místo odznaku stavu** (#509, návrh sekce 52). Tečky
+            // říkají, kde v kole to stojí, pilulka vedle nich to řekne slovem — a je to celá
+            // odpověď na „co s tímhle PR ještě je“, ne jen na „jak dopadlo moje review“.
             //
-            // **Když nezbývá nic, zůstává odznak.** Prázdné místo po pilulce by z vlastního řádku
-            // udělalo řádek, ze kterého nejde poznat, jestli review vůbec běželo.
-            // **Agent přebíjí obojí, a jen na vlastním PR** (#511). Je to tentýž jediný slot
-            // a tatáž úvaha jako u `N k předání` (#334): tři pilulky vedle sebe se v řádku
-            // neuživí, takže se ukazuje ta, která odpovídá na dnešní otázku. A dokud nad PR běží
-            // agent, je to on — `6 k předání` nad běžícím agentem radí práci, kterou zrovna dělá
-            // někdo jiný.
-            if let agent {
+            // **Pohlcuje to pilulku `N k předání`** (#334), a je to postup, ne zrušení: `Zadání`
+            // je jedna z těch pěti stanic, takže se nepředané zadání dozvím pořád — jenom teď
+            // vedle toho vidím i to, že mezitím spadlo CI. Dvě pilulky vedle sebe by nešly, obě
+            // mluví o témže PR a jedna z nich by musela vyhrát bez důvodu.
+            //
+            // **Tečky kreslí dráha vždycky, pilulku si bere agent, dokud běží** (#511 nad #509,
+            // slito v PR #581). Slot je jediný a pořadí v něm je *agent → dráha → `N k předání` →
+            // odznak*; že dráha ustoupí, rozhoduje `showsLoopWord`, ne tenhle `if`. Dvě odpovědi
+            // z jiných dat to není: `agent běží · 4 min` i stanice `Push` čtou **tentýž**
+            // `BranchSyncState`, pilulka agenta je jen jeho podrobnější čtení — nese uplynulý čas,
+            // který dráha nemá kde vzít (`OwnLoop.Stop.detail` je jedno slovo, tady `probíhá`).
+            // Tečky u ní zůstávají schválně: odpovídají na „kde v kole to stojí“, a ta otázka se
+            // během agentova běhu neztrácí.
+            //
+            // **Bez dráhy zůstává všechno, jak bylo.** Řádek bez storu (náhled, test) ani cizí
+            // řádek ji nedostanou, a odznak review je tam pořád ta správná odpověď.
+            if let loop = showsLoop {
+                OwnLoopDots(row: loop)
+            }
+            if showsLoopWord, let loop = showsLoop {
+                loopPill(loop)
+            } else if let agent {
                 agentPill(agent)
             } else if let pending = pendingHandoff {
                 handoffPill(pending)
@@ -162,6 +185,49 @@ struct PullRequestRow: View {
     /// nic nestane, svádí na něj kliknout a hledat, co je rozbité.
     var showsPromptAction: Bool { ownership == .mine && openPrompt != nil }
 
+    /// Dráha, jestli se má kreslit (#509). `nil` = cizí PR, nebo se nedodala.
+    ///
+    /// **Pojmenované, ne `if` uvnitř `body`**, ze stejného důvodu jako `showsPromptAction`: je to
+    /// rozhodnutí o tom, co řádek tvrdí, a v `body` se testovat nedá.
+    ///
+    /// **Ptá se na vlastnictví, i když ho `Policy.ownLoop` hlídá taky.** Není to druhá kontrola,
+    /// je to **předfiltr u kresby**: řádek dostává dráhu odjinud (deska, seznam, sekce
+    /// `Rozdělaná`) a nikde není zapsáno, že mu ji někdo nepodstrčí i k cizímu PR. Tečky na cizím
+    /// řádku by přitom byly tvrzení o práci, kterou nikdo z nás dělat nebude — smyčka je „co
+    /// udělám se **svojí** větví“, tak jako sekce `Větev` (#465).
+    ///
+    /// **Ptá se i na to, jestli je co nakreslit.** Dráha bez stanic by dala prázdný pruh
+    /// v šířce pěti teček — tedy díru, která vypadá jako vada kresby, ne jako odpověď. Je to
+    /// tatáž kontrola, jakou má vedle mapa PR (`if let map, !map.isEmpty`, #502).
+    var showsLoop: OwnLoopRow? {
+        guard ownership == .mine, let loop, !loop.dots.isEmpty else { return nil }
+        return loop
+    }
+
+    /// Říká řádek slovo dráhy (#509), nebo ho v jediném slotu přebil agent (#511)?
+    ///
+    /// **Pojmenované, ne `if` uvnitř `body`**, ze stejného důvodu jako `showsLoop`: pořadí
+    /// v tom slotu je rozhodnutí, ne kresba, a v `body` se testovat nedá.
+    ///
+    /// **Tečky se tím neřídí.** `OwnLoopDots` odpovídá na *kde v kole to stojí* a ta otázka
+    /// během agentova běhu nemizí — tečky stojí **před** slotem, takže se o něj neperou.
+    var showsLoopWord: Bool { showsLoop != nil && agent == nil }
+
+    /// Barva proužku na hraně řádku.
+    ///
+    /// **Na vlastním PR ji od #509 bere aktivní stanice**, ne stav mého review. Je to tatáž
+    /// změna jako u pilulky vedle: na vlastním PR není otázka „jak dopadlo moje review“ (to je
+    /// první z pěti stanic), ale „co s tím ještě je“ — a hrana se čte periferně, takže má nést
+    /// zrovna tu odpověď. PR s čistým review a spadlým CI má proto červenou hranu, ne zelenou.
+    ///
+    /// **Na cizím řádku se nemění nic.** Tam je stav mého review celá odpověď.
+    var stripe: Color {
+        guard let loop = showsLoop else {
+            return ReviewStateAppearance.color(of: reviewState, blocking: row.blocking)
+        }
+        return LanePhaseChip.tint(of: loop.tone)
+    }
+
     /// Kolik zbývá předat, jestli se to má kreslit (#334). `nil` = cizí PR, nebo nezbývá nic.
     ///
     /// Pojmenované, ne `if` uvnitř `body`, ze stejného důvodu jako `showsPromptAction`.
@@ -169,6 +235,17 @@ struct PullRequestRow: View {
         guard ownership == .mine, pending > 0 else { return nil }
         return pending
     }
+
+    /// Je `Prompt →` na tomhle řádku plné akcentové tlačítko (#509)?
+    ///
+    /// **Pojmenované, ne `if` uvnitř `body`**, ze stejného důvodu jako `showsPromptAction` —
+    /// a hlavně proto, že je to tvrzení o **jediném akcentovém místě** v řádku, tedy o věci,
+    /// která se v bloku `Moje PR` pozná jedině tím, že se řádky porovnají mezi sebou.
+    ///
+    /// **Stojí na `pendingHandoff`, ne na dráze.** Zvýrazňuje se akce, ne stav: PR se spadlým CI
+    /// je naléhavý, ale prompt z něj složit nejde, dokud není co předat. Tuhle odpověď má
+    /// `Policy.handoff` a nemá ji nikdo jiný.
+    var promptIsPrimary: Bool { pendingHandoff != nil }
 
     /// `2 nové komentáře od minule` (#335). `nil` = cizí PR, nebo od minule nic — pak v meta řádku
     /// zůstane autor a čas.
@@ -198,6 +275,27 @@ struct PullRequestRow: View {
             .accessibilityLabel("\(pending) k předání agentovi")
     }
 
+    /// Slovo k aktivní stanici dráhy (#509) — `Push o 4 vzadu`, `CI 1 neprošel`, `hotovo`.
+    ///
+    /// **Barvu vydává `LanePhaseChip`, ne tenhle řádek**: je to týž stav a tentýž význam jako
+    /// v kapsli dráhy nad otevřeným PR, takže by druhé mapování znamenalo, že `spadlo` v seznamu
+    /// časem zčervená jinak než `spadlo` v hlavičce.
+    ///
+    /// **Nemá `layoutPriority` ani `fixedSize`, a je to změřené** — pilulka se v nejužším okně
+    /// vejde vedle teček i `Prompt →` a řádek zůstává na jedné řádce (`OwnLoopRowRenderTests`).
+    /// Kdyby se přišpendlila, ustupoval by místo ní titulek, tedy to jediné, podle čeho se PR
+    /// v seznamu pozná.
+    private func loopPill(_ loop: OwnLoopRow) -> some View {
+        Text(verbatim: loop.word)
+            .lineLimit(1)
+            .designPill(
+                tint: LanePhaseChip.tint(of: loop.tone),
+                background: LanePhaseChip.background(of: loop.tone)
+            )
+            .help("Kde tenhle pull request stojí ve smyčce — celou dráhu ukazuje jeho hlavička")
+            .accessibilityLabel("Na tahu: \(loop.word)")
+    }
+
     /// `agent běží · 4 min` / `push čeká na tebe` (#511).
     ///
     /// **Akcent, ne barva nálezu**: na rozdíl od `N k předání` to není práce, která leží, ale
@@ -220,21 +318,26 @@ struct PullRequestRow: View {
         }
     }
 
-    /// `Prompt →` u vlastního PR (#331, akce od #333) — plné akcentové tlačítko z návrhu
-    /// (`.mini.pri`).
+    /// `Prompt →` u vlastního PR (#331, akce od #333).
+    ///
+    /// **Plné akcentové (`.mini.pri`) jen tam, kde je co předat** (#509). Do té změny bylo plné
+    /// vždycky, takže si v bloku `Moje PR` bralo akcent i na řádcích, kde by prompt složil
+    /// prázdné zadání — a akcent, který svítí na všem, přestane ukazovat na cokoli. Tichá obrysová
+    /// podoba (`.mini`) zůstává, protože panel `Zadání` se otevřít **dá** i bez položek: je v něm
+    /// vidět, co se předalo minule.
     ///
     /// **Otevře PR a v něm panel se zadáním, text neskládá.** Sheet by z řádku šel otevřít taky, ale
     /// dal by horší zadání: konverzace se tahá při zobrazení PR, takže z neotevřeného řádku by v textu
     /// nebyla vlákna ani komentáře. Zdůvodnění je u `AppStore.openAgentPrompt(in:)`, a proto tu
     /// **není `disabled`** — navigace udělá vždycky něco.
     ///
-    /// **Odznak stavu review vedle něj zůstává**, ačkoli návrh na tom místě kreslí pilulku
-    /// `6 k předání`. Ta věta se dá napsat, teprve až předání nese razítko (#334); do té doby by šlo
-    /// o počet, který nikdo nepředal. Odznak zatím říká to, co se ví — že reviewer běžel a s jakým
-    /// výsledkem —, a to je zrovna materiál, který prompt ponese.
+    /// **Vedle něj stojí od #509 dráha smyčky**, ne odznak review ani pilulka `6 k předání`.
+    /// Do #334 to byl odznak (jediná věta, kterou šlo napsat, dokud předání nemělo razítko), do
+    /// #509 pilulka `N k předání` (stav **jediné** z pěti stanic) — a od #509 celá dráha, protože
+    /// nepředané zadání je jen jeden z důvodů, proč PR ještě není hotový.
     private var promptButton: some View {
         Button("Prompt →") { openPrompt?() }
-            .buttonStyle(.miniPrimary)
+            .buttonStyle(promptIsPrimary ? .miniPrimary : .mini)
             // Nápověda říká, co se stane — tedy „otevře“, ne „složí“: text se sází teprve v panelu,
             // a nápověda, která slíbí hotové zadání, je tatáž lež jako němé tlačítko.
             .help("Otevřít PR a v něm panel se zadáním pro agenta")

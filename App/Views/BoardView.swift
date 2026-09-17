@@ -372,7 +372,14 @@ struct BoardView: View {
                 // Odložit i na desce (#512, oprava po proklikání) — **jeden řádek, jedna podoba**.
                 // Deska je první obrazovka, kterou vidím, a věta pod pozdravem o odložených mluví;
                 // nabídka, která by tady chyběla, by z toho čísla udělala tvrzení bez cesty dál.
-                snoozeAction: store.snoozeAction(for: entry.pullRequest)
+                snoozeAction: store.snoozeAction(for: entry.pullRequest),
+                // Dráha smyčky (#509) — **jeden řádek, jedna podoba**, z téhož reportu jako
+                // pilulka o pár řádků výš. Vlastnictví se ptá tady, jako u `handoff`u: deska míchá
+                // cizí a vlastní PR v jednom pruhu, takže je to zrovna to místo, kde by se dráha
+                // nad cizím řádkem počítala nejčastěji.
+                loop: ownership == .mine
+                    ? store.ownLoopRow(for: entry.pullRequest, handoff: handoff)
+                    : nil
             )
             // Vlevo nic: proužek stavu má sedět na hraně pruhu, jak ho kreslí návrh.
             .padding(.trailing, 13)
