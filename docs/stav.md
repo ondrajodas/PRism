@@ -9000,7 +9000,7 @@ popsaná v PR.
 drží u ostatních členů v pořadí, v jakém se budou mergovat, řádek nese pilulku `1. v sérii` /
 `2. · stojí na #14451` a přerušovanou čáru na kraji, nad skupinou stojí popisek
 `série · AJDA-563 · 2 PR · review v pořadí ↓`. Hlavička PR ukazuje řetěz
-`větev → větev [#14451 · 1. v sérii] → trunk` a pod souřadnicemi větu *Diff je jen tahle vrstva:
+`větev [3. v sérii] → větev [#14451] → trunk` a pod souřadnicemi větu *Diff je jen tahle vrstva:
 4 soubory nad #14451. Až se #14451 mergne, GitHub přepne základ na trunk a řetěz zmizí sám.*
 **Nic se nepíše** — je to čtení a čisté funkce nad daty.
 
@@ -9032,7 +9032,19 @@ v líném seznamu zůstává `PRIdentifier` (#361); a **odložený člen** ze sk
 pilulka u zbylého zůstane (je to pravda o PR), popisek zmizí, protože `2 PR` nad jedním řádkem
 tvrdí víc, než je vidět.
 
-Přibylo 65 testů ve čtyřech nových sadách (36 nad `Policy.series` a jejími větami, 10 nad
+**Po prvním proklikání se opravil řetěz v hlavičce.** Nesl pilulku `#14451 · 2. v sérii`, kdežto
+řádek téhož PR ve frontě `3. · stojí na #14451` — obojí pravda (hlavička mluvila o base větvi, řádek
+o otevřeném PR), ale vedle sebe to byly dvě odpovědi na jednu otázku a **pořadí otevřeného PR
+z detailu nešlo přečíst vůbec**. Čísla se rozdělila podle toho, **u čí větve stojí**: u hlavy
+`3. v sérii` (jediné pořadí v řetězu), u base větve pouhý odkaz `#14451`, pořadí toho spodního jen
+v nápovědě u jeho čísla. Pilulku dostal i **základ série**. Řetěz od té doby skládá
+`Policy.branchChain(head:base:series:)` a ne kresba, takže se nad tím dá tvrdit test: v pilulkách
+řetězu je **právě jedno** pořadové číslo, patří hlavě a rovná se tomu, které o témž PR říká řádek
+fronty (5 případů, pozice 2 až 6). Zamítnuto bylo odlišit obě čísla barvou (rozdíl je ve významu, ne
+v důrazu) i psát `3. ze 3` (česká předložka se podle číslovky mění — `ze tří`, ale `z pěti`), takže
+počet nese popisek nad skupinou a nápovědy.
+
+Přibylo 74 testů ve čtyřech nových sadách (45 nad `Policy.series` a jejími větami, 10 nad
 předfiltrem, 11 nad tikem, 5 měřených nad kresbou řádku) a tři nad rozšířeným dotazem, k tomu
 jedna fixtura ze živého API (skutečná série `cli/cli`
 #14451–#14453); regrese se ověřila **vložením regrese u čtyř věcí zvlášť**.

@@ -5380,9 +5380,10 @@ tr.sel td.sg { background: var(--accent-weak); }
         <strong>Návrh</strong>: PR, jehož base větev je hlavou jiného otevřeného PR v tomtéž
         repozitáři, je <em>v sérii</em>. Ve frontě drží členové spolu v pořadí, v jakém se budou
         mergovat, s popiskem nad skupinou, přerušovanou čarou na kraji a pilulkou <em>1. v sérii</em>,
-        <em>2. · stojí na #14451</em>. Hlavička ukazuje <b>řetěz větví</b> a pod ním větu, že diff je
-        jen tahle vrstva. <b>Nic se nepíše</b> a <b>nepřibývá volání</b>: větve dorazí týmž dávkovým
-        dotazem, kterým se od sekce 27 zjišťují hlavy.
+        <em>2. · stojí na #14451</em>. Hlavička ukazuje <b>řetěz větví</b>, ve kterém má každá větev
+        za sebou, čí je — <em>2. v sérii</em> u vlastní, <em>#14451</em> u té base —, a pod ním větu,
+        že diff je jen tahle vrstva. <b>Nic se nepíše</b> a <b>nepřibývá volání</b>: větve dorazí
+        týmž dávkovým dotazem, kterým se od sekce 27 zjišťují hlavy.
       </p>
     </div>
 
@@ -5460,9 +5461,10 @@ tr.sel td.sg { background: var(--accent-weak); }
               <span class="state-chip">⬤ Otevřený</span>
               <span><strong>babakks</strong> chce sloučit</span>
               <span class="branch">refresh-token-c1-login</span>
+              <span class="pill run">2. v sérii</span>
               <span>→</span>
               <span class="branch">refresh-token-b-domain</span>
-              <span class="pill run">#14451 · 1. v sérii</span>
+              <span class="pill run">#14451</span>
               <span>→</span>
               <span class="branch">trunk</span>
               <span>·</span>
@@ -5571,6 +5573,21 @@ tr.sel td.sg { background: var(--accent-weak); }
           <b>dvě otevřená PR na téže větvi</b> (která je ta spodní, se z dat říct nedá)
           a <b>nedotažené větve</b>. Ve všech čtyřech se skupina <b>nevytvoří</b>: falešná série by
           poslala člověka číst dva PR v pořadí, které spolu nesouvisí.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">204</span>
+        <span class="body">
+          <b>V hlavičce je jedno pořadí a patří tomu PR, který je otevřený</b>
+          <span>První podoba nesla v řetězu pilulku <em>#14451 · 2. v sérii</em>, kdežto řádek téhož
+          PR ve frontě <em>3. · stojí na #14451</em>. <b>Obojí byla pravda</b> — hlavička mluvila
+          o base větvi, řádek o otevřeném PR —, jenže vedle sebe to byly <b>dvě odpovědi na jednu
+          otázku</b> a z detailu se pořadí otevřeného PR nedalo poznat vůbec. Čísla se proto rozdělila
+          <b>podle toho, u čí větve stojí</b>: u hlavy <em>2. v sérii</em> (tenhle PR, a je to jediné
+          pořadí v řetězu), u base větve pouhý odkaz <em>#14451</em>. Že je <em>#14451</em> v sérii
+          dřív, řekne nápověda — tam to stojí u jeho čísla, takže se to zaměnit nedá. Pilulku má
+          i <b>základ série</b> (<em>1. v sérii</em>), jinak by se z jeho detailu pořadí nedozvěděl
+          nikdo.</span>
         </span>
       </div>
     </div>

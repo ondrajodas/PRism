@@ -507,14 +507,22 @@ extension PullRequestSeriesTests {
         #expect(Policy.seriesPill(placement(2, of: 2, on: "keboola/job-queue#726")) == "2. · stojí na #726")
     }
 
-    /// Pilulka v řetězu větví mluví o **tom spodním** PR, ne o tomhle.
-    @Test("Pilulka v hlavičce pojmenuje spodní PR")
-    func writesTheBasePill() {
-        #expect(Policy.seriesBasePill(placement(1, of: 2, on: nil)) == nil)
-        #expect(
-            Policy.seriesBasePill(placement(2, of: 2, on: "keboola/job-queue#726"))
-                == "#726 · 1. v sérii"
-        )
+    /// Pilulka u **vlastní** větve mluví o tom PR, který je otevřený — a mluví o něm i u základu
+    /// série, kde v řetězu jiná pilulka není.
+    @Test("Pilulka v hlavičce řekne pořadí otevřeného PR")
+    func writesTheHeadPill() {
+        #expect(Policy.seriesHeadPill(placement(1, of: 3, on: nil)) == "1. v sérii")
+        #expect(Policy.seriesHeadPill(placement(3, of: 3, on: "cli/cli#14451")) == "3. v sérii")
+    }
+
+    /// Pilulka u **base** větve je jen odkaz. Pořadí toho spodního v ní stálo do prvního
+    /// proklikání a četlo se jako pořadí otevřeného PR — teď je až ve větě u jeho čísla.
+    @Test("Pilulka u base větve je jen odkaz na spodní PR")
+    func writesTheBaseBadge() throws {
+        #expect(Policy.seriesBaseBadge(placement(1, of: 2, on: nil)) == nil)
+        let badge = try #require(Policy.seriesBaseBadge(placement(3, of: 3, on: "cli/cli#14451")))
+        #expect(badge.text == "#14451")
+        #expect(badge.hint.contains("#14451 — ten je 2. v sérii"))
     }
 
     /// Věta o vrstvě je **jen u horního PR** — diff základu je celý, takže by u něj lhala.
@@ -552,7 +560,87 @@ extension PullRequestSeriesTests {
 
     @Test("Nápověda říká, co z pilulky plyne")
     func writesTheHint() {
-        #expect(Policy.seriesHint(placement(1, of: 3, on: nil)).contains("3 pull requestů"))
+        // Počet členů je v **nápovědě**, ne v pilulce: ve větě se dá napsat bez skloňované
+        // předložky (`ze tří`, ale `z pěti`).
+        #expect(Policy.seriesHint(placement(1, of: 3, on: nil)).contains("celkem jich je 3"))
+        #expect(Policy.seriesHint(placement(1, of: 3, on: nil)).contains("Je to 1. PR v sérii"))
         #expect(Policy.seriesHint(placement(2, of: 2, on: "cli/cli#726")).contains("#726"))
+    }
+
+}
+
+// MARK: - Řetěz větví v hlavičce
+
+extension PullRequestSeriesTests {
+    /// Pořadová čísla v textu: `3. v sérii` → `[3]`, `#14451` → `[]`.
+    ///
+    /// **Bez `Regex`u a bez rozdělování na slova**: hledá se číslo zakončené tečkou, což je přesně
+    /// ten tvar, kterým se dvě čísla v hlavičce dala zaměnit.
+    private func ordinals(in text: String) -> [Int] {
+        text
+            .split(whereSeparator: { !$0.isNumber && $0 != "." })
+            .compactMap { token in
+                guard token.hasSuffix("."), let value = Int(token.dropLast()) else { return nil }
+                return value
+            }
+    }
+
+    @Test("Mimo sérii je řetěz dvoučlenný a bez pilulek")
+    func writesThePlainChain() {
+        let chain = Policy.branchChain(head: "feature/x", base: "main", series: nil)
+
+        #expect(chain.map(\.branch) == ["feature/x", "main"])
+        #expect(chain.allSatisfy { $0.badge == nil })
+        // Identita je **uložené pořadí**, ne jméno větve (#361).
+        #expect(chain.map(\.id) == [0, 1])
+    }
+
+    @Test("Řetěz série pokračuje za base větev, u základu se neprodlužuje")
+    func writesTheSeriesChain() {
+        let top = Policy.branchChain(
+            head: "refresh-token-c-git-credential",
+            base: "refresh-token-b-domain",
+            series: placement(3, of: 3, on: "cli/cli#14451", base: "refresh-token-a-foundation")
+        )
+        #expect(top.map(\.branch) == [
+            "refresh-token-c-git-credential", "refresh-token-b-domain", "refresh-token-a-foundation"
+        ])
+        #expect(top.map { $0.badge?.text } == ["3. v sérii", "#14451", nil])
+        #expect(top.map(\.id) == [0, 1, 2])
+
+        // Základ série: pilulka jen u vlastní větve, za base větví už není co dodat.
+        let bottom = Policy.branchChain(head: "b", base: "trunk", series: placement(1, of: 3, on: nil))
+        #expect(bottom.map(\.branch) == ["b", "trunk"])
+        #expect(bottom.map { $0.badge?.text } == ["1. v sérii", nil])
+
+        // Když se base větev toho spodního nepodařilo zjistit, řetěz se **nedopisuje**.
+        let unknown = Policy.branchChain(head: "c", base: "b", series: placement(2, of: 2, on: "cli/cli#726"))
+        #expect(unknown.map(\.branch) == ["c", "b"])
+        #expect(unknown.map { $0.badge?.text } == ["2. v sérii", "#726"])
+    }
+
+    /// **Nejcennější tvrzení téhle skupiny, a je to zapsaná regrese.** V hlavičce stojí dvě čísla
+    /// o dvou různých pull requestech a musí se dát přiřadit: do prvního proklikání říkala
+    /// hlavička `#14451 · 2. v sérii`, kdežto řádek téhož PR `3. · stojí na #14451` — obojí byla
+    /// pravda a vedle sebe to byly dvě odpovědi na jednu otázku.
+    ///
+    /// Tvrdí se tu tři věci naráz: **pořadí je v řetězu jedno**, patří **hlavě** (tedy otevřenému
+    /// PR) a je to **totéž číslo**, které o něm říká řádek fronty. Pořadí toho spodního se
+    /// v pilulkách nesmí objevit vůbec.
+    @Test("Pořadí otevřeného PR a pořadí jeho základu se nedají zaměnit", arguments: 2...6)
+    func neverConfusesTheTwoPositions(position: Int) throws {
+        let spot = placement(position, of: 6, on: "cli/cli#14451", base: "trunk")
+        let chain = Policy.branchChain(head: "moje-větev", base: "jeho-větev", series: spot)
+
+        let headPill = try #require(chain.first?.badge?.text)
+        let baseBadge = try #require(chain[1].badge)
+
+        #expect(chain.compactMap { $0.badge?.text }.flatMap(ordinals(in:)) == [position])
+        #expect(ordinals(in: headPill) == [position])
+        #expect(baseBadge.text == "#14451")
+        // Pořadí základu je jedině ve větě, a tam stojí u jeho čísla.
+        #expect(baseBadge.hint.contains("#14451 — ten je \(position - 1). v sérii"))
+        // A číslo v hlavičce je totéž, které o témž PR říká řádek fronty.
+        #expect(ordinals(in: Policy.seriesPill(spot)) == [position])
     }
 }

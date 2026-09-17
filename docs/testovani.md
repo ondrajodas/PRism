@@ -11553,6 +11553,16 @@ nepoloží — „nevíme“ se od „nestojí na ničem“ musí poznat.
 | `seriesRefsProbe` nekouká na razítko (ptá se pořád) | `Klidný tik se na nic neptá` (`Policy`) i `Klidný tik se neptá` a `Odpověď bez větví se podruhé neptá` (store) |
 | `headProbe` neodstraňuje duplicity | `Sjednocení nemá duplicity a drží pořadí` (PR v dotazu dvakrát) |
 | fronta nepřeskládá členy (`Policy.grouped` vynecháno) | `Fronta přeskládá sérii od základu nahoru` **a** `Popisek je jeden a sedí nad základem` — popisek nad rozházenou skupinou nevznikne, což je ta stráž, kvůli které se kreslí jedině ve frontě |
+| pilulka u base větve se vrátí do tvaru `#14451 · 2. v sérii` | `Pořadí otevřeného PR a pořadí jeho základu se nedají zaměnit` **všech pět případů** a `Pilulka u base větve je jen odkaz na spodní PR` (změřeno po připomínce k prvnímu proklikání) |
+
+### Dvě čísla v hlavičce se testují tím, že se **nedají** zaměnit
+
+Řetěz v hlavičce nese pořadí otevřeného PR u jeho vlastní větve a `#14451` u té base. **Obě čísla
+byla pravdivá i v té podobě, která mátla** — proto nestačí test na jedno z nich:
+`neverConfusesTheTwoPositions` běží nad pozicemi **2 až 6** a tvrdí naráz, že v pilulkách řetězu je
+**právě jedno** pořadové číslo, že patří **hlavě** a že se rovná tomu, které o témž PR říká
+`Policy.seriesPill` v řádku fronty. Čísla se z textu vytahují **hledáním číslice zakončené tečkou**,
+tedy tvarem, kterým se ta dvě čísla dala zaměnit; `#14451` se do výčtu nedostane.
 
 ### Že se to do řádku vejde, je měření, ne pohled
 

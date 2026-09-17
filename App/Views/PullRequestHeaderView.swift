@@ -23,9 +23,11 @@ struct PullRequestHeaderView: View {
     /// Kde v sérii tenhle PR stojí (#513). `nil` = v žádné není — pak se řetěz větví kreslí jako
     /// dřív, tedy `větev → base`.
     ///
-    /// Kreslí se z toho **pokračování řetězu**: `větev → větev [#726 · 1. v sérii] → main`. Věta
-    /// o tom, že diff je jen ta horní vrstva, stojí **pod** hlavičkou (`AppStore.seriesNote(for:)`),
-    /// protože je dlouhá a v jednom řádku by se ořezala zrovna ona.
+    /// Kreslí se z toho **pokračování řetězu**: `větev [3. v sérii] → větev [#726] → main`. Číslo
+    /// u hlavy je pořadí **tohohle** PR, `#726` u base větve říká, **čí ta větev je** — jediné
+    /// pořadí v řetězu je to první. Věta o tom, že diff je jen ta horní vrstva, stojí **pod**
+    /// hlavičkou (`AppStore.seriesNote(for:)`), protože je dlouhá a v jednom řádku by se ořezala
+    /// zrovna ona.
     var series: SeriesPlacement?
 
     var body: some View {
@@ -122,25 +124,25 @@ struct PullRequestHeaderView: View {
 
     /// `autor chce sloučit větev → base`. Větve jsou v mono, protože je to identifikátor,
     /// který se čte po znacích a občas kopíruje.
+    ///
+    /// U série (#513) je řetěz delší a nese **dvě čísla o dvou různých pull requestech**: pořadí
+    /// toho otevřeného u jeho vlastní větve a `#726` u té base. Co u které větve stojí, rozhoduje
+    /// `Policy.branchChain(head:base:series:)`, ne tenhle `HStack` — ta dvě čísla se vedle sebe
+    /// jednou už spletla a od té doby je to tvrzení, na které je test.
     private func merge(_ detail: PullRequest) -> some View {
         HStack(spacing: 6) {
             Text(verbatim: pullRequest.author)
                 .fontWeight(.medium)
             Text("chce sloučit")
-            branch(detail.headRef)
-            arrow
-            branch(detail.baseRef)
-            // Pokračování řetězu u série (#513): base větev tohohle PR je hlavou jiného otevřeného
-            // PR, takže se za ní řekne **čí** ta větev je a kam se merguje dál. Bez toho by
-            // v hlavičce stálo jméno větve, u kterého se nedá poznat, že jde o pull request, který
-            // se mergne dřív — a právě to je to, co #513 řeší.
-            if let series, let pill = Policy.seriesBasePill(series) {
-                Text(verbatim: pill)
-                    .designPill(tint: Palette.accent, background: Palette.accent.opacity(0.15))
-                    .help(Policy.seriesHint(series))
-                if let base = series.standsOnBase {
-                    arrow
-                    branch(base)
+            ForEach(Policy.branchChain(head: detail.headRef, base: detail.baseRef, series: series)) { link in
+                // Šipka **před** článkem, ne za ním: poslední článek řetězu ji mít nesmí a takhle
+                // se to pozná z pořadí, ne z počtu.
+                if link.id > 0 { arrow }
+                branch(link.branch)
+                if let badge = link.badge {
+                    Text(verbatim: badge.text)
+                        .designPill(tint: Palette.accent, background: Palette.accent.opacity(0.15))
+                        .help(badge.hint)
                 }
             }
         }

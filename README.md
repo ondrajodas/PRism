@@ -341,9 +341,14 @@ drží u ostatních členů, uvnitř od základu nahoru a **na místě toho, kte
 **`série · AJDA-563 · 2 PR · review v pořadí ↓`** (číslo ticketu se odvozuje ze společné části
 titulků, a když společné není, vynechá se).
 
-**Hlavička PR ukazuje řetěz větví** — `moje-větev → jeho-větev [#14451 · 1. v sérii] → main` — a pod
+**Hlavička PR ukazuje řetěz větví** — `moje-větev [3. v sérii] → jeho-větev [#14451] → main` — a pod
 souřadnicemi větu *Diff je jen tahle vrstva: 4 soubory nad #14451. Až se #14451 mergne, GitHub
 přepne základ na main a řetěz zmizí sám.*
+
+**Každá pilulka v řetězu patří té větvi, u které stojí**, a pořadí je v něm jedno: to u hlavy, tedy
+u otevřeného PR. U base větve je jen odkaz `#14451` — že je ten v sérii dřív, řekne nápověda, kde to
+stojí u jeho čísla. Pilulku má i **základ série** (`1. v sérii`), takže se pořadí dá přečíst
+z každého detailu.
 
 **Nic se nepíše a nepřibývá volání.** Větve dorazí **týmž** dávkovým GraphQL dotazem, kterým se
 uvnitř tiku zjišťují hlavy (#420) — tři pole na témže uzlu, tedy pořád **jeden bod z 5000 za

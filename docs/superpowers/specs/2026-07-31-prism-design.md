@@ -7879,3 +7879,41 @@ skupiny, takže se za ni platí rádo.
 širokém 420 bodů by to ukrojilo z titulku, a pilulka `2. · stojí na #14451` říká totéž kratší cestou.
 Odchylka od zákresu je proto zapsaná tady a sekce 57 v `docs/navrh.html` už kreslí to, co aplikace
 doopravdy dělá.
+
+### Záznam rozhodnutí — v hlavičce je jedno pořadí a patří otevřenému PR (#513, po prvním proklikání)
+
+První podoba řetězu nesla u base větve pilulku `#14451 · 2. v sérii` a řádek téhož pull requestu ve
+frontě `3. · stojí na #14451`. **Obojí bylo správně** — hlavička popisovala base větev (#14451 je
+opravdu druhý v sérii), řádek popisoval ten PR, na který se člověk dívá (#14452 je třetí). Jenže
+vedle sebe se ta dvě čísla četla jako **dvě odpovědi na jednu otázku**, a hlavně: **z detailu se
+pořadí otevřeného PR nedalo poznat vůbec**. Našlo se to proklikáním nad `cli/cli#14452`, ne testem,
+a to je na tom to podstatné — obě čísla byla pravdivá, takže by jich žádné tvrzení o jednom z nich
+nechytilo.
+
+**Rozhodnuto: čísla se dělí podle toho, u čí větve stojí.** U hlavy, tedy u větve otevřeného PR,
+stojí `3. v sérii` a je to **jediné pořadí v celém řetězu**; u base větve zůstal **pouhý odkaz**
+`#14451`. Řetěz se pak čte jako `moje větev [3. v sérii] → jeho větev [#14451] → trunk`, tedy každý
+článek s tím, čí je. Pořadí toho spodního nezmizelo — přestěhovalo se do **nápovědy**, kde stojí ve
+větě u jeho čísla (`#14451 — ten je 2. v sérii`) a zaměnit se nedá.
+
+**Pilulku dostal i základ série** (`1. v sérii`), přestože u něj druhá pilulka v řetězu není. Bez ní
+by se pořadí z jeho detailu nedozvěděl nikdo — a zrovna základ je ten PR, který se má číst první.
+
+**Zamítnuto: nechat obě čísla a jen je odlišit** (jinou barvou, jiným tvarem pilulky). Dvě čísla,
+z nichž jedno je o jiném pull requestu, se nedají odlišit tak, aby na ně po zběžném pohledu
+nezbyla mylná odpověď; rozdíl mezi „pořadí tohohle“ a „pořadí toho, na čem stojí“ je rozdíl
+významů, ne důrazů.
+
+**Zamítnuto: `3. ze 3 v sérii`, tedy pořadí s počtem.** Počet je užitečný (poznám, že jsem nahoře),
+ale česká předložka se podle číslovky mění (`ze tří`, `ze dvou`, ale `z pěti`, `z deseti`) a kresba
+by ji skládala od oka. Počet proto nese popisek nad skupinou ve frontě a obě nápovědy, kde je na
+něj místo ve větě (`Je to 3. PR v sérii, celkem jich je 3.`).
+
+**Řetěz skládá `Policy.branchChain(head:base:series:)`, ne kresba.** Do téhle opravy si `HStack`
+v hlavičce skládal větve a pilulky sám, takže se nad tím nedalo nic tvrdit. Teď je to pole
+`BranchChainLink` — větev a `Badge` **u ní** (text s nápovědou **v jednom typu**, aby nemohla vyjít
+pilulka bez věty, která ji vysvětluje) — a test
+(`PullRequestSeriesTests.neverConfusesTheTwoPositions`, pozice 2 až 6) tvrdí tři věci naráz:
+v pilulkách řetězu je **právě jedno** pořadové číslo, patří **hlavě**, a rovná se tomu, které o témž
+PR říká řádek fronty. Ověřeno vložením regrese: vrácení původního tvaru `#14451 · 2. v sérii` shodí
+všech pět případů.

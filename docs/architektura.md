@@ -6929,7 +6929,7 @@ zrovna ve stavu, ve kterém by tichá díra bolela nejvíc.
 
 **PR, jehož base větev je hlavou jiného otevřeného PR v tomtéž repozitáři, je v sérii.** Fronta je
 pak drží pohromadě v pořadí, v jakém se budou mergovat, řádek nese pilulku `1. v sérii` /
-`2. · stojí na #14451` a hlavička řetěz `větev → větev [#14451 · 1. v sérii] → trunk` s větou
+`2. · stojí na #14451` a hlavička řetěz `větev [3. v sérii] → větev [#14451] → trunk` s větou
 o tom, že diff je jen ta horní vrstva. Nakreslené je to v návrhu, [sekce 57](navrh.html).
 
 ### Zadání tvrdilo, že se to pozná z dnešních dat — a bylo to špatně
@@ -7012,6 +7012,31 @@ pilulka (pravda o PR) a popisek zmizí (`2 PR` nad jedním řádkem tvrdí víc,
 řádku svého prvního člena (`PullRequestRow.seriesCaption`), ne jako další položka seznamu — nový
 prvek by musel mít identitu, a tou by bylo pořadí.
 
+### V hlavičce jsou dvě čísla o dvou PR a musí se dát přiřadit
+
+**První podoba nesla v řetězu pilulku `#14451 · 2. v sérii`, kdežto řádek téhož PR ve frontě
+`3. · stojí na #14451`.** Obojí byla pravda — hlavička popisovala **base** větev, řádek **otevřený**
+PR —, jenže vedle sebe se to četlo jako dvě odpovědi na jednu otázku a z detailu se pořadí
+otevřeného PR nedalo poznat vůbec. Našlo se to proklikáním, ne testem.
+
+**Čísla se rozdělila podle toho, u čí větve stojí**, a řetěz skládá `Policy.branchChain(head:base:series:)`,
+ne kresba:
+
+| Článek | Pilulka | O čem mluví |
+|---|---|---|
+| hlava (větev otevřeného PR) | `3. v sérii` (`Policy.seriesHeadPill`) | **tenhle** PR — a je to **jediné pořadí v řetězu** |
+| base větev | `#14451` (`Policy.seriesBaseBadge`) | **čí ta větev je**; pořadí toho PR je až v nápovědě, kde stojí u jeho čísla — text a nápověda vznikají jedním voláním, takže nemůže vyjít pilulka bez věty |
+| base toho spodního | — | jen pokračování řetězu; `nil` = větev se nepodařilo zjistit a **nedopisuje se** |
+
+**Pilulku dostane i základ série** (`1. v sérii`), i když u něj v řetězu žádná druhá není: bez toho
+by se pořadí z jeho detailu nedozvěděl nikdo. **Počet členů v pilulce není** — `3. ze 3` si vynucuje
+skloňovanou předložku (`ze tří`, ale `z pěti`), kterou by kresba skládala od oka; počet nese popisek
+nad skupinou ve frontě a obě nápovědy.
+
+Hlídá to `PullRequestSeriesTests.neverConfusesTheTwoPositions` nad pozicemi 2 až 6: v pilulkách
+řetězu smí být **právě jedno** pořadové číslo, musí patřit hlavě a musí se rovnat tomu, které o témž
+PR říká `Policy.seriesPill` v řádku fronty.
+
 ### Kde to bydlí
 
 | Kus | Co dělá |
@@ -7019,7 +7044,8 @@ prvek by musel mít identitu, a tou by bylo pořadí.
 | `BranchRefs` (`App/Models/`) | jméno hlavy, base a `isCrossRepository`; `livesInBaseRepository` je jediné místo, kde se `nil` čte jako zákaz |
 | `PullRequestHead.refs` | větve z dávkového dotazu — `nil` = odpověď je nenesla |
 | `PullRequestSeries`, `SeriesPlacement` (`App/Policy/`) | skupina od základu nahoru a místo jednoho PR v ní |
-| `Policy.series`, `grouped`, `seriesCaptions`, `seriesPill`, `seriesBasePill`, `seriesNote`, `seriesTicket` | všechna rozhodnutí a všechny věty |
+| `BranchChainLink` (`App/Policy/`) | jeden článek řetězu v hlavičce: větev, pilulka **u ní** a nápověda |
+| `Policy.series`, `grouped`, `seriesCaptions`, `seriesPill`, `seriesHeadPill`, `seriesBaseBadge`, `branchChain`, `seriesNote`, `seriesTicket` | všechna rozhodnutí a všechny věty |
 | `Policy.seriesRefsProbe`, `Policy.headProbe` | koho se tik zeptá a jak se to slije s #420 |
 | `AppStore+Series.swift` | `branchRefs(for:)`, `pullRequestSeries`, `seriesPlacement(for:)`, `queueSeriesCaptions`, `seriesNote(for:)` |
 | `PullRequestRow`, `PullRequestHeaderView`, `PullRequestDetailView` | pilulka a čára, řetěz větví, věta pod souřadnicemi |

@@ -31,6 +31,29 @@ struct SeriesPlacement: Hashable, Sendable {
     let standsOnBase: String?
 }
 
+/// Jeden článek řetězu větví v hlavičce (#513) — `větev [pilulka]`.
+///
+/// **Pilulka patří té větvi, u které stojí, a to je celý důvod, proč je to typ a ne tři `if`y
+/// v kresbě.** V hlavičce jsou po opravě #513 dvě čísla vedle sebe — pořadí otevřeného PR u jeho
+/// vlastní větve a číslo toho spodního u jeho — a dokud si je kresba skládala sama, nedalo se nad
+/// tím tvrdit nic. Takhle se dá vyjmenovat, u které větve které číslo stojí.
+struct BranchChainLink: Hashable, Sendable, Identifiable {
+    /// Pilulka za větví: **text a nápověda dohromady**, ne dvě nezávislé optionaly. Pilulka bez
+    /// nápovědy ani nápověda bez pilulky nedávají smysl, a dvojice polí by tu vazbu jen slíbila.
+    struct Badge: Hashable, Sendable {
+        let text: String
+        let hint: String
+    }
+
+    /// Pořadí v řetězu, a zároveň **uložená identita** pro `ForEach` (#361): jméno větve identitou
+    /// být nemůže, protože se v řetězu teoreticky může zopakovat.
+    let id: Int
+    /// Jméno větve, tak jak ho vrátil GitHub.
+    let branch: String
+    /// `nil` = k téhle větvi není co dodat.
+    var badge: Badge?
+}
+
 extension Policy {
     // MARK: - Rozpoznání
 
@@ -213,22 +236,83 @@ extension Policy {
         return "\(placement.position). · stojí na #\(standsOn.number)"
     }
 
-    /// `#726 · 1. v sérii` (#513) — pilulka **v řetězu větví** v hlavičce. `nil` u základu série.
+    /// `3. v sérii` (#513) — pilulka **u vlastní větve** v hlavičce.
     ///
-    /// **Mluví o tom spodním PR, ne o tomhle.** Řetěz se čte `moje větev → jeho větev → main`,
-    /// takže pilulka sedí u prostředního článku a musí říct, čí ta větev je — jinak by v hlavičce
-    /// stálo jméno větve, u kterého se nedá poznat, že je to pull request, který jde mergnout dřív.
-    static func seriesBasePill(_ placement: SeriesPlacement) -> String? {
-        guard let standsOn = placement.standsOn else { return nil }
-        return "#\(standsOn.number) · \(placement.position - 1). v sérii"
+    /// **Mluví o tom PR, který je otevřený**, a je to oprava první podoby: do prvního proklikání
+    /// nesla hlavička pořadí **toho spodního** (`#14451 · 2. v sérii`) a řádek fronty pořadí
+    /// tohohle (`3. · stojí na #14451`). Obojí byla pravda, jenže vedle sebe se to četlo jako dvě
+    /// odpovědi na jednu otázku — a z detailu se pořadí otevřeného PR nedalo poznat vůbec.
+    /// Čísla se proto rozdělila podle toho, **u čí větve stojí**: tahle pilulka patří k hlavě,
+    /// a hlava je tenhle PR.
+    ///
+    /// **Bez počtu členů, a je to rozhodnutí**: `3. ze 3` by si vynutilo skloňovanou předložku
+    /// (`ze tří`, ale `z pěti`), kterou by kresba skládala od oka. Počet nese popisek nad skupinou
+    /// ve frontě a obě nápovědy níž, kde na něj je místo ve větě.
+    static func seriesHeadPill(_ placement: SeriesPlacement) -> String {
+        "\(placement.position). v sérii"
     }
 
-    /// Nápověda k té pilulce — říká **co z toho plyne**, ne co je vidět.
+    /// `#726` (#513) — pilulka **u base větve** v hlavičce i s nápovědou. `nil` u základu série.
+    ///
+    /// **Jen odkaz, žádné pořadí.** Řetěz se čte `moje větev → jeho větev → main` a tahle pilulka
+    /// odpovídá na jedinou otázku: **čí ta prostřední větev je**. Pořadí toho spodního v ní stálo
+    /// do prvního proklikání a pletlo se s pořadím otevřeného PR o pár bodů vedle; jediné číslo
+    /// v řetězu, které je pořadím, je teď to u hlavy.
+    ///
+    /// **Pořadí toho druhého PR je proto až v nápovědě — a tam smí být**: stojí ve větě u jeho
+    /// čísla, takže se s pořadím otevřeného PR zaměnit nedá. Text a nápověda vznikají **jedním
+    /// voláním**, aby se nedala vydat pilulka bez věty, která ji vysvětluje.
+    static func seriesBaseBadge(_ placement: SeriesPlacement) -> BranchChainLink.Badge? {
+        guard let standsOn = placement.standsOn else { return nil }
+        return BranchChainLink.Badge(
+            text: "#\(standsOn.number)",
+            hint: "Tahle větev je hlava #\(standsOn.number) — ten je \(placement.position - 1). v sérii, takže se merguje dřív než tenhle PR."
+        )
+    }
+
+    /// Nápověda k pilulce u **vlastní** větve — říká **co z toho plyne**, ne co je vidět.
+    ///
+    /// Počet členů je tady, ne v pilulce: ve větě se dá napsat tak, aby se nemusela skloňovat
+    /// předložka.
     static func seriesHint(_ placement: SeriesPlacement) -> String {
+        let spot = "Je to \(placement.position). PR v sérii, celkem jich je \(placement.count)."
         guard let standsOn = placement.standsOn else {
-            return "Základ série \(placement.count) pull requestů — tenhle se merguje první, takže dává smysl číst ho dřív než ty nad ním."
+            return spot + " Základ se merguje první, takže dává smysl číst ho dřív než ty nad ním."
         }
-        return "Stojí na větvi #\(standsOn.number), takže jeho diff je jen vrstva nad ním. Mergovat se budou odspoda."
+        return spot + " Stojí na větvi #\(standsOn.number), takže jeho diff je jen vrstva nad ním. Mergovat se budou odspoda."
+    }
+
+    /// Řetěz větví v hlavičce (#513): `moje větev [3. v sérii] → jeho větev [#726] → main`.
+    ///
+    /// **Každá pilulka patří té větvi, u které stojí**, a to je celý smysl téhle funkce: dokud
+    /// kresba skládala řetěz sama, stálo u prostřední větve pořadí a u hlavy nic — dvě čísla
+    /// o dvou různých PR se tak četla jako jedno. Tady se to dá vyjmenovat a otestovat.
+    ///
+    /// - Parameters:
+    ///   - head: větev toho PR, který je otevřený.
+    ///   - base: kam se merguje.
+    ///   - series: kde v sérii stojí. `nil` = v žádné není, a pak je řetěz dvoučlenný jako do #513.
+    static func branchChain(head: String, base: String, series: SeriesPlacement?) -> [BranchChainLink] {
+        guard let series else {
+            return [
+                BranchChainLink(id: 0, branch: head),
+                BranchChainLink(id: 1, branch: base)
+            ]
+        }
+        var links = [
+            BranchChainLink(
+                id: 0,
+                branch: head,
+                badge: .init(text: seriesHeadPill(series), hint: seriesHint(series))
+            ),
+            BranchChainLink(id: 1, branch: base, badge: seriesBaseBadge(series))
+        ]
+        // Pokračování řetězu: kam se merguje ten spodní PR. `nil` u základu série a tehdy, když se
+        // jeho base větev nepodařilo zjistit — dopsat `main` od oka by bylo tvrzení bez dat.
+        if let next = series.standsOnBase {
+            links.append(BranchChainLink(id: 2, branch: next))
+        }
+        return links
     }
 
     /// Věta pod souřadnicemi v hlavičce (#513). `nil` = k tomuhle PR není co dodat.
