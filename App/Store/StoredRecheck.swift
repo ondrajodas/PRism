@@ -33,6 +33,16 @@ struct StoredRecheck: Hashable, Codable, Sendable {
     /// odpovídá tomu, co je vidět. Uložený počet by po odmítnutí nálezu (#113) přestal platit
     /// a byl by to stav, který nikdo nečte správně.
     let statuses: [FindingKey: RecheckStatus]
+    /// Stav po **mých odeslaných komentářích** (#522). Klíčem je **identita vlákna z GitHubu**,
+    /// ne `FindingKey`: komentář není nález a jeho text se mezi koly mění, kdežto identita ne.
+    ///
+    /// Vlastní mapa, ne přimíchání do `statuses`: dvě klíčování v jedné mapě je tiché
+    /// rozpárování — nález a vlákno by v ní nešly od sebe poznat.
+    ///
+    /// **Že mi někdo do vlákna odpověděl, tady není** a nebude: to je fakt z konverzace (#72),
+    /// který se čte živě. Uložit ho sem by znamenalo zmrazit ho do chvíle posledního běhu a od
+    /// té chvíle o něm v okně lhát.
+    let replyStatuses: [String: RecheckStatus]
     /// Kdy se výsledek zapsal.
     let finishedAt: Date
     /// Co běh stál (#148). `nil` znamená „nevíme“, ne nula — stejná úmluva jako u běhu.
@@ -43,6 +53,7 @@ struct StoredRecheck: Hashable, Codable, Sendable {
         outcome: ReviewRunOutcome,
         sessionID: String?,
         statuses: [FindingKey: RecheckStatus],
+        replyStatuses: [String: RecheckStatus] = [:],
         finishedAt: Date,
         usage: RunUsage? = nil
     ) {
@@ -50,7 +61,26 @@ struct StoredRecheck: Hashable, Codable, Sendable {
         self.outcome = outcome
         self.sessionID = sessionID
         self.statuses = statuses
+        self.replyStatuses = replyStatuses
         self.finishedAt = finishedAt
         self.usage = usage
+    }
+
+    /// Dekóduje se ručně **jen kvůli `replyStatuses`** (#522): syntetizovaný `init(from:)` sahá
+    /// na každý neoptional klíč bez ohledu na výchozí hodnotu, takže by soubor uložený do #522
+    /// (a je jich na disku plno) skončil `keyNotFound` — tedy ztracenou kontrolou kvůli poli,
+    /// které v něm být nemůže. Tatáž úvaha jako u `dismissals` v `ReviewRecord`.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        againstHeadSha = try container.decode(String.self, forKey: .againstHeadSha)
+        outcome = try container.decode(ReviewRunOutcome.self, forKey: .outcome)
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
+        statuses = try container.decode([FindingKey: RecheckStatus].self, forKey: .statuses)
+        replyStatuses = try container.decodeIfPresent(
+            [String: RecheckStatus].self,
+            forKey: .replyStatuses
+        ) ?? [:]
+        finishedAt = try container.decode(Date.self, forKey: .finishedAt)
+        usage = try container.decodeIfPresent(RunUsage.self, forKey: .usage)
     }
 }

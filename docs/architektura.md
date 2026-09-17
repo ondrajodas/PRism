@@ -3711,6 +3711,85 @@ stromu by odpovídala z hlavy. Řídí to `AppStore+Recheck`.
   Vlastní mapa (`recheckTasks`) je proto, že na `reviewTasks` visí chipy reviewerů, pruh průběhu
   i podmnožina k opakování (#149) — kontrola žádný skill nepouští.
 
+### Druhé kolo nad mými komentáři (#522)
+
+Kontrola z #150 dostane k nálezům **druhý seznam: moje odeslané komentáře s kotvou** (soubor,
+řádek, text, identita vlákna), a za každý vydá jeden ze stavů *opraveno v `<sha>`* /
+*odpovězeno* / *bez odpovědi*. Není to nový druh běhu ani druhá session: tentýž prompt, tatáž
+sada nástrojů, **jedno pole odpovědí**. Řídí to `Policy.sentComments(in:)`,
+`Policy.replies(of:head:in:)` a `RecheckCommand`.
+
+**Hranice, kterou model nesmí přejít.** *Odpovězeno* je **fakt z konverzace** (#72) — vlákno,
+ve kterém je komentář někoho jiného. Model rozhoduje jedině mezi *opraveno* a *beze změny*
+(a *nejde říct* je jeho poctivá třetí odpověď). Ta hranice se drží **dvakrát**, a to schválně:
+
+1. **Ve vstupu.** Session se na zodpovězené vlákno **vůbec nezeptá**
+   (`Policy.unansweredComments(in:)`). Verdikt, který se nikdy nemá ukázat, by jinak ležel
+   uložený a čekal, až ho někdo omylem přečte — a platilo by se za něj.
+2. **V promptu.** `Do not judge whether anyone replied to a comment — that is not your question.`
+   Bez té věty je „someone replied, so it is handled“ ta nejpřirozenější odpověď, kterou model
+   může dát.
+
+**Fakt přebíjí tvrzení.** Když je vlákno zodpovězené a model zároveň řekl „opraveno“, vyhraje
+*odpovězeno* (`Policy.replyState(answered:verdict:against:)`). Opačné pořadí by schovalo větu
+kolegy, kterou si mám přečíst, kvůli tomu, že se modelu něco zdálo; takhle se neztrácí nic — ve
+vlákně s odpovědí se o opravě stejně dočtu. **Věta modelu se u stavu z dat neveze**, aby pod
+`odpovězeno` nevypadala jako jeho zdroj.
+
+**Moje = vlákno jsem založil**, tedy první komentář je můj. Odpověď do cizího vlákna mě autorem
+nedělá — je to změřené na `conversation-timeline.json`, kde jsou tři vlákna od Copilota, do
+kterých jsem odpověděl; pravidlo „je v něm můj komentář“ by z nich udělalo moje komentáře.
+**Vyřešená vlákna se neodečítají**: vyřešit smí kdokoli a o kódu to neříká nic, takže by komentář
+z druhého kola mizel kliknutím, ne opravou.
+
+**Párování přes index, ne přes text** (#150), a **index je jeden pro obojí**: nálezy `0…n−1`,
+komentáře od `RecheckMaterial.commentIDOffset`. Je to proto, že `RecheckCommand.parse` čte **jedno**
+pole (první `[` po posledním `]`) — dvě řady indexů od nuly by znamenaly verdikt o komentáři
+přiřazený nálezu s týmž číslem. Posun se počítá **jen v `RecheckMaterial`**.
+
+**Kde to leží.** Verdikty o vláknech jdou do `StoredRecheck.replyStatuses`, tedy do téhož
+uloženého běhu jako verdikty o nálezech — klíčem je **identita vlákna**, ne `FindingKey`. Tím
+**tvrdá podmínka č. 5 platí beze změny a bez nové úvahy**: `StoredRecheck` leží na záznamu
+klíčovaném `(PR, headSha)` a nese `againstHeadSha`, takže se nic nového ke commitu ani k PR
+neklíčuje. Precedenty, které se tím **neotevírají** (rozhovor #452 a odložení #512 se ukládají
+k PR, značka `Prošlo` #500 s otiskem obsahu), se sem proto nevztahují —
+[proč](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--druhé-kolo-se-neukládá-vůbec-522).
+
+**Report se neukládá vůbec.** `Policy.ReviewReplyReport` se skládá až při čtení ze dvou zdrojů:
+z uložené kontroly a ze **živé** konverzace, která se nepersistuje (#63). Z toho plyne, jak se
+chová, když jeden ze zdrojů chybí:
+
+| Stav | Co vyjde |
+|---|---|
+| konverzace se nenačetla | `unknown` — **není to „žádné nemám“**; prázdný seznam je platná odpověď a tahle ne |
+| konverzace je, kontrola neběžela nebo běžela proti jiné hlavě | `current` s `verdicts == nil`: **odpovědi platí dál**, verdikty zhasnou |
+| obojí platí | `current` s oběma osami |
+
+`ReviewReplyTally` k tomu nese **zkrácení stránky vláken** (`missingThreads`, `isTruncated`), jako
+ho nese všechno ostatní, co ze stránkované odpovědi vzniká: bez toho by `2 opravené ze 3` platilo
+o třech vláknech, která dorazila, a mlčelo o těch, která ne. Počet je přes **všechna** vlákna PR —
+kolik z chybějících je mých, se z odpovědi zjistit nedá.
+
+Že se pohybem hlavy hasí **jen jedna osa**, je rozdíl proti `RecheckReport`, který zhasne celý —
+a je to hlavní důvod, proč je `ReviewReplyReport` **vlastní typ vedle něj**, ne jeho rozšíření.
+Další dva jsou jiný klíč (identita vlákna vs. `FindingKey`) a jiný slovník stavů; přidat
+`odpovězeno` do `RecheckStatus.Verdict` by znamenalo stav, který u nálezu nemůže nastat.
+
+**Proč `bez odpovědi` nese tři důvody** (`ReviewReplyDoubt`): `unchanged` je verdikt, `unclear`
+poctivá odpověď a `unknown` znamená, že se nikdo neptal. Slít je dohromady je tatáž chyba jako
+slít `čisté` a `failed` — tři různé věty o tom, co se ví, by z okna udělaly jednu, která neplatí.
+
+**Materiál se skládá z načtené konverzace, kvůli kontrole se nedotahuje.** Konverzace je načtená
+vždycky, když je tlačítko vidět (načítá se s výběrem PR), rozhoduje jedině o tom, **na co se
+zeptat** (osa „odpovězeno“ se čte živě až při zobrazení, takže zastaralým snímkem okno lhát
+nezačne), a další `gh` na každou kontrolu by byl podproces navíc za seznam, který se stejně načte
+znovu. **Brána zůstává u nálezů**: kontrola bez nálezů se dál nenabízí — otevřít ji pro PR, kde
+mám jen komentáře, znamená tlačítko na místě, kde dosud nebylo, a to je kresba (#523).
+
+**Vidět z toho zatím není nic** kromě jedné věty v nápovědě u tlačítka: říká, kolik komentářů se
+veze v téže session, protože session stojí peníze a nápověda o délce promptu nesmí tvrdit míň,
+než co se doopravdy pošle. Kreslí to #523.
+
 ### Review jen přírůstku (#517)
 
 Po pushi se reviewer neptá na celý diff znovu: dostane **rozsah `<minulá hlava>…<hlava>`** a k němu

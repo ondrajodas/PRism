@@ -39,7 +39,21 @@ extension AppStore {
         }
         let findings = record.activeFindings
         guard !findings.isEmpty else { return nil }
-        return RecheckMaterial(headSha: record.headSha, findings: findings)
+        return RecheckMaterial(
+            headSha: record.headSha,
+            findings: findings,
+            // Moje odeslané komentáře (#522) se berou z **načtené** konverzace, kvůli kontrole se
+            // nedotahují. Tři důvody: konverzace je načtená vždycky, když je tlačítko vidět
+            // (načítá se s výběrem PR); rozhoduje jedině o tom, **na co se zeptat**, protože osa
+            // „odpovězeno“ se čte živě až při zobrazení, takže zastaralým snímkem okno lhát
+            // nezačne; a další `gh` na každou kontrolu by byl podproces navíc za seznam, který se
+            // stejně načte znovu.
+            //
+            // **Brána zůstává u nálezů**, ne u komentářů: kontrola bez nálezů se dál nenabízí.
+            // Otevřít ji i pro PR, kde mám jen komentáře, znamená tlačítko na místě, kde dosud
+            // nebylo — a to je kresba, tedy #523.
+            comments: Policy.unansweredComments(in: conversation(for: pr))
+        )
     }
 
     /// Běží nad PR kontrola nálezů?
@@ -52,6 +66,19 @@ extension AppStore {
     /// PR má **teď** — kontrola proti staršímu commitu odznaky nerozsvítí (tvrdá podmínka č. 5).
     func recheckReport(for pr: PRIdentifier) -> Policy.RecheckReport {
         Policy.recheck(of: reviewRecords[pr], head: head(of: pr))
+    }
+
+    /// Co se stalo s **mými odeslanými komentáři** (#522) — druhá osa druhého kola.
+    ///
+    /// Skládá se ze dvou zdrojů a ani jeden z nich se kvůli tomu neukládá navíc: verdikty leží
+    /// v uložené kontrole (a platí jen pro hlavu, proti které běžela — tvrdá podmínka č. 5),
+    /// „odpovězeno“ se čte z **živé** konverzace. Kreslí to #523.
+    func reviewReplyReport(for pr: PRIdentifier) -> Policy.ReviewReplyReport {
+        Policy.replies(
+            of: reviewRecords[pr],
+            head: head(of: pr),
+            in: conversation(for: pr)
+        )
     }
 
     /// Spustí kontrolu nálezů. Opakované zmáčknutí, dokud běží, nic nedělá.
@@ -152,15 +179,23 @@ extension AppStore {
         against headSha: String,
         of material: RecheckMaterial
     ) -> StoredRecheck {
+        // **Jedno pole odpovědí, dva seznamy otázek** (#522): nálezy od nuly, komentáře za nimi.
+        // Strop je proto součet — kdyby se počítaly jen nálezy, `parse` by verdikty o komentářích
+        // zahodil jako vymyšlená `id`.
         let answers = RecheckCommand.parse(
             run.summary.outcome?.text,
-            count: material.findings.count
+            count: material.questionCount
         )
         return StoredRecheck(
             againstHeadSha: headSha,
             outcome: run.outcome,
             sessionID: run.sessionID,
             statuses: Policy.recheckStatuses(answers, of: material.findings),
+            replyStatuses: Policy.replyStatuses(
+                answers,
+                of: material.comments,
+                startingAt: material.commentIDOffset
+            ),
             finishedAt: time.now,
             usage: run.summary.usage
         )
