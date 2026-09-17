@@ -187,7 +187,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// tedy peníze, o které si nikdo neřekl. Vlastnost „samo se neutrácí víc, než jsem si vybral“
     /// drží jedině výchozí vypnuto — je to tatáž třída jako `autoAgent`, jen bez rizika zápisu.
     ///
-    /// Ručnímu spuštění z nabídky nad diffem to **nebrání**, a je to tatáž dělba jako u routingu
+    /// Ručnímu spuštění z lišty nad diffem to **nebrání**, a je to tatáž dělba jako u routingu
     /// (#518) s `Pustit přesto`: brána se týká toho, co si vybírá aplikace, ne toho, o co si člověk
     /// řekne kliknutím.
     ///
@@ -764,7 +764,7 @@ struct ResolvedConfig: Equatable, Sendable {
     /// `Policy.reviewScope` — tady je jen brána, kterou si repo přebít smí.
     let incrementalAfterPush: Bool
     /// Smí automat po review popsat hunky (#524)? **Výchozí `false`** — je to brána proti utrácení
-    /// session navíc, ne předvolba, a ručního spuštění z nabídky nad diffem se netýká.
+    /// session navíc, ne předvolba, a ručního spuštění z lišty nad diffem se netýká.
     let annotatesHunks: Bool
     /// Na kterých cestách se který reviewer pouští (#518). Prázdná mapa = žádné pravidlo, tedy
     /// celá sada jako do #518. Rozhodnutí z toho skládá `Policy.reviewersToRun(files:rules:)`

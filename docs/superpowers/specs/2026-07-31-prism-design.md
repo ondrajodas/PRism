@@ -8132,7 +8132,8 @@ nálezů“; zamítnuto, a jsou k tomu tři důvody, každý sám o sobě dostat
 
 - **Anotace není nález.** V záznamu s nálezy by byla jeden `if` od toho, aby se počítala do odznaků,
   do souhrnu nebo do návrhu verdiktu. Odděleně je to **kontrolovatelné grepem**.
-- **Anotace se pouští i bez review**, ručně z nabídky nad diffem. `ReviewRecord` bez jediného běhu
+- **Anotace se pouští i bez review**, ručně z lišty nad diffem (do proklikání z nabídky, viz záznam
+  rozhodnutí níž). `ReviewRecord` bez jediného běhu
   v `Policy.currentRecords` **vyhraje** nad zastaralým záznamem s nálezy, protože zastaralý není —
   takže by ruční `Popsat změny` na PR, kde reviewer neběžel, **sundalo z okna nálezy z minula**. Je
   to tatáž past, kvůli které nemá vlastní záznam ani kontrola nálezů (#150).
@@ -8152,3 +8153,33 @@ tedy přesně ten text, který tvrdí víc, než data unesou.
 **Soubor je jeden na PR, ne na `(PR, hlava)`.** Užitečná je vždycky jen sada pro dnešní hlavu
 a starší se nesmí ukázat ani jako zastaralá, takže by soubory po starých hlavách byly v cache mrtvé
 místo, které nikdo nečte a nic nemaže. Nový běh ten předchozí **přepíše**.
+
+## Záznam rozhodnutí — `Popsat změny` je tlačítko v liště, ne položka v nabídce (#524)
+
+**Původní rozhodnutí, a zůstává v záznamu:** akce bydlela v nabídce pod `Sbalit vše ▾`, s tímhle
+odůvodněním — *„je to akce, která se na jednom PR pustí jednou, kdežto v liště se soutěží o místo
+s věcmi, které se používají při každém review“*. Tak to bylo zakreslené i v mockupu (sekce 59)
+a tak to šlo do prvního proklikání.
+
+**Změněno po proklikání, a rozhodl to Ondra:** *„nemusí to být ani v tý šipce sbalený, místa tam je
+dost“*. Důvody, které tomu daly za pravdu, jsou dva a oba se dají doložit:
+
+1. **Akce, kterou nikdo nevidí, se nepoužije.** Nabídka `Sbalit vše ▾` je z popisku k nerozeznání
+   od přepínače sbalení — nikoho nenapadne hledat pod ní běh session. Původní argument mlčky
+   předpokládal, že se člověk k akci nějak dostane; četnost použití je argument pro **velikost**
+   prvku, ne pro to, aby byl schovaný.
+2. **Nabídka klik spolkla.** `Menu` se zavře dřív, než se cokoli v okně změní, takže z položky
+   žádný stav vidět není. Právě tím se #524 projevil jako *„tlačítko nic nedělá“* — a bylo to
+   symptomem, ne příčinou: tiché byly i tři další cesty
+   ([rozbor](../../architektura.md#akce-je-v-liště-a-má-tři-stavy--oprava-tichého-konce)).
+
+**Co z té změny plyne dál.** V liště akce musí **sama nést stav**, jinak by se kliknutí zase nemělo
+jak projevit — proto tři stavy (`Popsat změny` / `Popisuji…` / `Popis selhal`) a proto zrušení
+běhu, které do té doby nemělo volajícího. A protože lišta je měřené místo, změřilo se to: celý
+popisek stojí **104 bodů** a **lišta v plné výbavě přetéká v podlahovém okně už bez něj** (819
+proti 572 bodům), což je vlastnost z #219, ne důsledek téhle změny
+([čísla](../../testovani.md#kolik-místa-v-liště-stojí-popsat-změny-524)). Řeší se to tím, že je
+akce **jediný prvek lišty, který v tísni ustoupí** — sráží se na samotnou ikonu, kdežto to, co
+v liště bylo dřív, zůstává. **Zamítnuto** u toho bylo useknutí popisku (`Popsat…` nese půl slova
+a vypadá jako porucha) i práh na šířku okna (byl by to další číslo, které se musí ladit, kdežto
+`ViewThatFits` se ptá na to, co doopravdy zbylo).

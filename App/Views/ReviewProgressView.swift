@@ -112,7 +112,7 @@ struct ReviewProgressView: View {
     }
 
     /// Dráha anotací pod děličem. **Bez `rerun` a bez `copyCommand`**: obojí bere jméno skillu
-    /// a pouští revieweera, kdežto tuhle session se pouští z nabídky nad diffem — tlačítko, které
+    /// a pouští revieweera, kdežto tuhle session se pouští z lišty nad diffem — tlačítko, které
     /// by tady spustilo někoho jiného, je horší než žádné.
     @ViewBuilder private var annotations: some View {
         if let annotationLane {

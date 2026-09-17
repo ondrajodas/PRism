@@ -10782,10 +10782,11 @@ tr.sel td.sg { background: var(--accent-weak); }
         promptu by nestačilo: prompt je prosba, tvar je podmínka.
       </p>
       <p class="muted">
-        <b>Kreslení hunků přijde až v dalším kroku (#525).</b> V #524 je z toho vidět
-        <b>jedna věc</b> — dráha <code>anotace</code> v tabu <em>Průběh</em> a položka
-        <code>Popsat změny</code> v nabídce nad diffem. Kresba níž je proto <b>zadání</b>,
-        ne stav aplikace.
+        <b>Kreslení hunků přijde až v dalším kroku (#525).</b> V #524 jsou z toho vidět
+        <b>dvě věci</b> — dráha <code>anotace</code> v tabu <em>Průběh</em> a tlačítko
+        <code>Popsat změny</code> v liště nad diffem. Kresba věty pod hunkem je proto
+        <b>zadání</b>, ne stav aplikace; lišta a dráha níž naopak kreslí to, co aplikace
+        doopravdy ukazuje.
       </p>
     </div>
 
@@ -10876,20 +10877,57 @@ tr.sel td.sg { background: var(--accent-weak); }
       </div>
 
       <div class="pane new">
-        <div class="tag"><i></i>Nabídka nad diffem · <code>Popsat změny</code></div>
-        <div class="frame flat" style="padding: 12px;">
-          <div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px;">
-            <div>Nálezy pod řádky</div>
-            <div>Sbalit rozbalené úseky</div>
-            <div style="border-top: 1px solid var(--line); margin: 3px 0;"></div>
-            <div><b>Popsat změny</b></div>
+        <div class="tag"><i></i>Lišta nad diffem · tři stavy a k tomu úzké okno</div>
+        <div class="frame flat" style="padding: 0;">
+          <div class="difftools">
+            <div class="segbtn">
+              <span class="on"><span class="g">‖</span>Vedle sebe</span>
+            </div>
+            <span class="sp"></span>
+            <span class="tool">☰ Popsat změny</span>
+            <span class="tool">⌕ Hledat <span class="kbd">⌘F</span></span>
+            <span class="tool">Sbalit vše</span>
+          </div>
+          <div class="difftools">
+            <span class="sp"></span>
+            <span class="tool" style="color: var(--accent);">◜ Popisuji…</span>
+            <span class="tool">⌕ Hledat <span class="kbd">⌘F</span></span>
+            <span class="tool">Sbalit vše</span>
+          </div>
+          <div class="difftools">
+            <span class="sp"></span>
+            <span class="tool" style="color: var(--stale);">⚠ Popis selhal</span>
+            <span class="tool">⌕ Hledat <span class="kbd">⌘F</span></span>
+            <span class="tool">Sbalit vše</span>
+          </div>
+          <!-- Čtvrtá řádka: co z akce zbyde, když se místa nedostává (změřeno, viz próza níž). -->
+          <div class="difftools" style="border-bottom: 0;">
+            <span class="sp"></span>
+            <span class="tool">☰</span>
+            <span class="tool">⌕ Hledat <span class="kbd">⌘F</span></span>
+            <span class="tool">Sbalit vše</span>
           </div>
         </div>
         <p style="font-size: 13.5px; color: var(--ink-2);">
-          <b>V nabídce, ne v liště</b>: je to akce, která se na jednom PR pustí jednou, kdežto
-          v liště se soutěží o místo s věcmi, které se používají při každém review. Sloveso
-          v položce je schválně — samotné <em>„anotace“</em> by vypadalo jako přepínač
-          viditelnosti. Bez zapojené session se položka <b>nekreslí</b>, ne zašedne.
+          <b>V liště, ne v nabídce pod šipkou</b> — <b>změna proti prvnímu zákresu</b>, vyžádaná
+          při proklikání. Nabídka se jmenuje <code>Sbalit vše</code>, takže pod ní akci nikdo
+          nehledá; a hlavně <b>klik spolkne</b>: zavře se dřív, než se cokoli změní, takže z ní
+          není vidět žádný stav. Přesně tím se to projevilo — <em>„tlačítko nic nedělá“</em>.
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Tři stavy, ne jedna položka</b>: v klidu spouští, za běhu <b>ruší</b> (prstýnek, týž
+          jako u běžícího review), po selhání <b>zkouší znovu</b> (okrová, ne červená — nic to
+          neblokuje). Po každém kliknutí se tedy na tomtéž místě něco změní. Celou větu o tom, co
+          se pokazilo, nese <b>nápověda a dráha v tabu Průběh</b>; v liště je na ni místo jen na
+          krátký stav. Bez zapojené session se tlačítko <b>nekreslí</b>, ne zašedne.
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>V úzkém okně ustoupí tahle akce, ne to, co tu bylo dřív.</b> Změřeno: lišta v plné
+          výbavě si v podlahovém okně (štěrbina 572 b) říká o 819 b — tedy <b>přetéká už bez
+          téhle akce</b> —, celý popisek stojí dalších 104 b. Je proto jediný prvek lišty bez
+          pevné šířky: když se místa nedostává, zbude z něj <b>samotná ikona</b> (čtvrtá
+          řádka výš), která má
+          nápovědu a kliká se stejně. Useknuté <code>Popsat…</code> je horší než ikona.
         </p>
       </div>
     </div>

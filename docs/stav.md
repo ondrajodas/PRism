@@ -9152,8 +9152,8 @@ stroj nemá asistenční přístup.
 
 Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov — `změna
 chování`, `refaktor`, `test`, `konfigurace`, `generované`. Kreslení u hunku přijde až v #525;
-z #524 je vidět **dráha `anotace` v tabu `Průběh`** a položka `Popsat změny` v nabídce nad diffem.
-Zákres je sekce 59 v `docs/navrh.html`.
+z #524 je vidět **dráha `anotace` v tabu `Průběh`** a tlačítko `Popsat změny` **v liště nad
+diffem**. Zákres je sekce 59 v `docs/navrh.html`.
 
 **Zadání se změnilo ve dvou větách a obojí je zapsané rozhodnutí.**
 
@@ -9180,8 +9180,22 @@ Anotace bydlí ve **vlastním storu** (`annotations/<owner>/<repo>/<pr>.json`), 
 ruční `Popsat změny` na PR bez review by jinak sundalo z okna nálezy z minula — tatáž past jako
 u #150. Klíčuje se **hlavou**, ne otiskem obsahu jako `Prošlo` (#500), protože se páruje **pořadím
 hunku**; hlavu drží uložený záznam **i běh**, jinak by dráha po pushi tvrdila „popsáno“ o diffu, ze
-kterého se nekreslí nic. Spouští se **ručně z nabídky nad diffem** (bránu nečte) nebo **po
+kterého se nekreslí nic. Spouští se **ručně z lišty nad diffem** (bránu nečte) nebo **po
 automatickém review** za branou `annotatesHunks`, která je ve výchozím stavu **vypnutá**.
+
+**Proklikání změnilo třetí větu zadání a odhalilo čtyři tiché cesty.** Akce měla být položkou
+v nabídce `Sbalit vše ▾`; ze zkoušení vyšlo *„tlačítko nic nedělá“* a byla to pravda — na
+obrazovce, ze které se pouští, se po kliknutí neměnilo **nic**. Sešly se čtyři věci: nabídka klik
+**spolkne** (zavře se dřív, než se cokoli změní), odznak `Průběhu` sedmou session **nepočítal**,
+větu z `annotationFailures` **nečetlo žádné view** a dva `guard … else { return }` byly **tiché**.
+Opravuje se všechno čtyři — tlačítko je teď v liště a má **tři stavy** (spustit / zrušit / zkusit
+znovu), odznak svítí i při popisu změn, selhání se dostane až do dráhy a oba `guard`y hlásí. Tichý
+zůstává jediný, `isTerminating`, a smí být tichý proto, že okno mizí.
+
+**Do lišty se to vejde, ale ne zadarmo, a to se změřilo:** lišta v plné výbavě si v podlahovém okně
+(700 b → štěrbina 572 b) říká o **819 bodů**, tedy **přetéká už bez téhle akce** — vlastnost z #219,
+ne důsledek #524. Celý popisek stojí dalších **104 b**, takže je `Popsat změny` jediný prvek lišty
+bez pevné šířky: v tísni zbude **samotná ikona** a to, co v liště bylo dřív, zůstane.
 
 **Vlastní revize diffu našla skutečnou chybu, a je z třídy „nejtišších“:** guard psaný jako
 `!(value is Bool)` zahazuje JSONová čísla **0 a 1**, protože je Swift bridguje na `Bool` (`42` už
@@ -9189,8 +9203,12 @@ ne). U anotací by to znamenalo, že **hunk 1 nemá nikdy anotaci**. Opraveno p�
 `CFGetTypeID(number) == CFBooleanGetTypeID()`; **tentýž guard stojí i v `StreamParser.line(from:)`**,
 kde bere nález hlášený na řádku 1 — to je mimo rozsah tohohle issue a je na to vlastní úkol.
 
-Přibylo 71 testů v pěti sadách; regrese se ověřila vložením regrese u kontroly tvaru odpovědi.
+Přibylo **74 testů v sedmi sadách** (z toho jedna ruční sonda na kresbu lišty); regrese se ověřila
+vložením regrese třikrát — u kontroly tvaru odpovědi a u **obou** polovin hlášení selhání zvlášť.
 
 **Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl. Vlastní revize diffu
-proběhla a je popsaná v PR. **A kreslení anotací u hunku není součástí #524** — mockup je zadání pro
-#525, ne stav aplikace.
+proběhla a je popsaná v PR. **Druhá neověřená mezera: skutečný klik do okna.** Hostitelská aplikace
+session nemá *Zpřístupnění*, takže `CGEvent` ani `System Events` do okna nedoletí — screenshotem je
+doložené, že tlačítko v liště živé aplikace **stojí**, ale že po kliknutí naskočí běh, musí
+proklikat člověk. **A kreslení anotací u hunku není součástí #524** — mockup je v téhle části zadání
+pro #525, ne stav aplikace.

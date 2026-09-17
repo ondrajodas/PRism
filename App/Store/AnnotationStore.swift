@@ -29,7 +29,7 @@ enum AnnotationStoreError: LocalizedError {
 /// - **Anotace není nález.** Kdyby bydlela v záznamu s nálezy, byla by jeden `if` od toho, aby se
 ///   počítala do odznaků, do souhrnu nebo do návrhu verdiktu. Takhle je oddělení **kontrolovatelné
 ///   grepem**: `HunkAnnotation` se v `App/Store/ReviewRecord.swift` nevyskytuje.
-/// - **Anotace se pouští i bez review.** Ručně z nabídky nad diffem se dá popsat PR, na kterém
+/// - **Anotace se pouští i bez review.** Ručně z lišty nad diffem se dá popsat PR, na kterém
 ///   žádný reviewer neběžel — a `ReviewRecord` bez jediného běhu je přesně ten záznam, který
 ///   v `Policy.currentRecords` **vyhraje** nad zastaralým záznamem s nálezy (protože není
 ///   zastaralý). Nálezy z minula by tím z okna zmizely ve chvíli, kdy si člověk řekne o popis

@@ -616,7 +616,7 @@ final class AppStore {
     /// stav před #524; tak jsou na tom testy, které o anotace nestojí, a nespouští tím `claude`.
     ///
     /// **Není to brána.** Tou je `ResolvedConfig.annotatesHunks` (globálně i per repo, výchozí
-    /// vypnuto) pro automat a kliknutí v nabídce nad diffem pro ruční spuštění — tohle je jen
+    /// vypnuto) pro automat a kliknutí v liště nad diffem pro ruční spuštění — tohle je jen
     /// zapojení session, přesně jako `asker` nebo `fixer`.
     let annotator: (any HunkAnnotating)?
 

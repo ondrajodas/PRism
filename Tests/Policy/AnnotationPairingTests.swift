@@ -310,4 +310,59 @@ struct AnnotationPairingTests {
         #expect(unreadable?.kind == .annotations(hunks: nil, files: nil, dropped: 0))
         #expect(empty?.kind == .annotations(hunks: 0, files: 0, dropped: 0))
     }
+
+    // MARK: - Tichý konec
+
+    /// **Selhání, ze kterého nezbyl ani běh, musí dráhu vyrobit samo.** Bez téhle větve nezbyde po
+    /// kliknutí v tabu `Průběh` nic — a prázdno je k nerozeznání od „neklikalo se“. Přesně tím se
+    /// #524 poprvé projevil: tlačítko šlo zmáčknout a nestalo se nic.
+    @Test("Selhání bez běhu i bez záznamu dráhu vyrobí")
+    func aFailureAloneStillDrawsALane() {
+        let lane = Policy.annotationLane(
+            pass: nil,
+            stored: nil,
+            head: "aaaa1111",
+            failure: "Popis změn se nespustil."
+        )
+
+        #expect(lane?.state == .failed(detail: "Popis změn se nespustil."))
+        #expect(lane?.skill == Policy.annotationLaneName)
+        // Ani tahle dráha nesmí nést počet nálezů — hranice mezi anotací a nálezem platí i tady.
+        #expect(lane?.reportedFindings == nil)
+        #expect(lane?.phases.allSatisfy { $0.state == .failed } == true)
+    }
+
+    /// Selhání je **poslední záchyt, ne přebíječ**: platný záznam ani běh se jím nepřekreslí.
+    /// Věta z minula nad doběhlým popisem by tvrdila, že se to nepovedlo, i když se povedlo.
+    @Test("Selhání nepřebije ani běh, ani platný záznam")
+    func aFailureNeverOverridesTheRealThing() {
+        var pass = AnnotationPass(worktree: nil, headSha: "aaaa1111", startedAt: Date(timeIntervalSince1970: 1))
+        pass.record(.started(sessionID: "s3"))
+
+        let running = Policy.annotationLane(pass: pass, stored: nil, head: "aaaa1111", failure: "stará věta")
+        let recorded = Policy.annotationLane(pass: nil, stored: stored(), head: "aaaa1111", failure: "stará věta")
+
+        #expect(running?.state == .running)
+        #expect(recorded?.state == .finished)
+    }
+
+    /// Prázdná věta dráhu nevyrobí — dráha bez důvodu je to horší z obojího: zabírá místo
+    /// a neřekne nic.
+    @Test("Chybějící i prázdná věta dráhu nevyrobí", arguments: [nil, ""])
+    func anEmptyFailureDrawsNothing(_ failure: String?) {
+        #expect(Policy.annotationLane(pass: nil, stored: nil, head: "aaaa1111", failure: failure) == nil)
+    }
+
+    // MARK: - Ovladač v liště
+
+    /// Tři stavy, ne dva — a **běh přebíjí selhání z minula**: nové spuštění starou větu zahazuje,
+    /// takže dvojice „běží a k tomu selhalo“ znamená selhání z minula.
+    @Test("Stav ovladače rozlišuje klid, běh a selhání")
+    func theControlHasThreeStates() {
+        #expect(Policy.annotationControl(isRunning: false, failure: nil) == .idle)
+        #expect(Policy.annotationControl(isRunning: false, failure: "") == .idle)
+        #expect(Policy.annotationControl(isRunning: false, failure: "spadlo") == .failed(detail: "spadlo"))
+        #expect(Policy.annotationControl(isRunning: true, failure: nil) == .running)
+        #expect(Policy.annotationControl(isRunning: true, failure: "spadlo") == .running)
+    }
 }

@@ -41,12 +41,10 @@ struct DiffToolbar: View {
     var openSearch: (() -> Void)?
     /// Je pruh hledání otevřený? Popisek pak svítí akcentem, aby bylo poznat, odkud se pruh vzal.
     var isSearching = false
-    /// Popsat změny sedmou session (#524). `nil` = **položka se nekreslí** — session není zapojená,
-    /// nebo se neví, nad kterou hlavou by běžela. Zašedlá by slibovala akci, která se zapíná
+    /// Popsat změny sedmou session (#524). `nil` = **nekreslí se nic** — session není zapojená,
+    /// nebo se neví, nad kterou hlavou by běžela. Zašedlé by slibovalo akci, která se zapíná
     /// jinde; je to tatáž úvaha jako u `Otevřít v editoru` (#530).
-    var annotate: (() -> Void)?
-    /// Běží popis změn právě teď? Položka se pak nekliká a řekne to.
-    var isAnnotating = false
+    var annotation: DiffAnnotationActions?
 
     var body: some View {
         HStack(spacing: 9) {
@@ -62,6 +60,7 @@ struct DiffToolbar: View {
             }
             Spacer(minLength: 9)
             warnings
+            annotateButton
             searchButton
             foldMenu
         }
@@ -107,6 +106,104 @@ struct DiffToolbar: View {
         }
     }
 
+    // MARK: - Popis změn
+
+    /// `Popsat změny` (#524) — **v liště, ne v nabídce pod šipkou**.
+    ///
+    /// Do prvního proklikání to byla položka v nabídce `Sbalit vše ▾` s odůvodněním, že se na
+    /// jednom PR pustí jednou a nemá se prát o místo. Vyžádané při zkoušení a je to správně ze
+    /// dvou důvodů: akce, kterou nikdo nevidí, se **nepoužije** (nabídka se jmenuje `Sbalit vše`,
+    /// takže pod ní akci nikdo nehledá), a nabídka navíc ten klik **spolkne** — zavře se dřív,
+    /// než se cokoli změní, takže z ní žádný stav vidět nebyl.
+    ///
+    /// **Tři stavy, ne dva**, a to je ta oprava: v klidu spouští, za běhu **ruší** a po selhání
+    /// zkouší znovu — tedy po každém kliknutí se na tomtéž místě něco změní. Do které z těch tří
+    /// větví se patří, rozhoduje `Policy`, ne tenhle soubor.
+    ///
+    /// **Popisek `Popisuji…` a `Popis selhal` je kratší než `Popsat změny`**, takže se lišta
+    /// spuštěním nerozšíří — ať se v úzkém okně nezačne pod rukou lámat něco jiného.
+    ///
+    /// **A v úzkém okně ustoupí tenhle prvek, ne ty, které tu byly dřív** — proto jako jediný
+    /// v liště **nemá `fixedSize()`** a má **zápornou prioritu rozvržení**. Změřeno: lišta v plné
+    /// výbavě (procházení nálezů, varování o šířce, hledání, sbalení) si v podlahovém okně říká
+    /// o **819 bodů** a má **572**, takže **přetéká už dneska, i bez popisu změn** — je to známá
+    /// vlastnost z #219, ne něco, co přineslo #524. Bez té priority by ale zmizelo `Sbalit vše`,
+    /// tedy věc, která tu byla; s ní se srazí **popisek téhle akce** až na samotnou ikonu, která
+    /// nese `help` a zůstává klikatelná. Čísla a kresba jsou v `docs/testovani.md`, sekce
+    /// *Kolik místa v liště stojí `Popsat změny`*.
+    @ViewBuilder private var annotateButton: some View {
+        if let annotation, !diff.files.isEmpty {
+            Button(action: annotation.state == .running ? annotation.cancel : annotation.start) {
+                // **`ViewThatFits`, ne useknutý popisek**: `Popsat…` je horší než samotná ikona —
+                // nese půl slova a vypadá jako porucha. Buď se vejde celý popisek, nebo zbude
+                // ikona, která má `help` a kliká se stejně.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 5) {
+                        annotateIcon(annotation.state)
+                        Text(verbatim: Self.annotateLabel(annotation.state))
+                            .font(.system(size: 11.5))
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    annotateIcon(annotation.state)
+                }
+                .foregroundStyle(annotateTint(annotation.state))
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .layoutPriority(-1)
+            .help(Self.annotateHelp(annotation.state))
+            .accessibilityLabel(Self.annotateLabel(annotation.state))
+        }
+    }
+
+    /// Ikona stavu. Za běhu **týž prstýnek jako všude jinde v okně** (`SpinningRing`, #350, #442),
+    /// ne systémový `ProgressView`: nekonečná animace ve SwiftUI si vyžádá průchod při každém
+    /// obtažení obrazovky, a druhá kresba téhož by k tomu znamenala, že se „pracuje se“ čte
+    /// v jednom okně dvěma tvary.
+    @ViewBuilder private func annotateIcon(_ state: Policy.AnnotationControl) -> some View {
+        switch state {
+        case .idle:
+            Image(systemName: "text.alignleft").font(.system(size: 11))
+        case .running:
+            SpinningRing(size: 11, lineWidth: 1.6)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle").font(.system(size: 11))
+        }
+    }
+
+    private func annotateTint(_ state: Policy.AnnotationControl) -> Color {
+        switch state {
+        case .idle: Palette.ink2
+        case .running: Palette.accent
+        // Okrová, ne systémová červená: popis změn není nález a jeho selhání nic neblokuje —
+        // tatáž kategorie jako zbytek varování v téhle liště.
+        case .failed: Palette.stale
+        }
+    }
+
+    private static func annotateLabel(_ state: Policy.AnnotationControl) -> String {
+        switch state {
+        case .idle: "Popsat změny"
+        case .running: "Popisuji…"
+        case .failed: "Popis selhal"
+        }
+    }
+
+    /// Nápověda nese **celou větu o tom, co se stalo**. Krátký popisek v liště říká jen stav;
+    /// důvod se musí dát přečíst, a druhé místo, kde stojí celý, je dráha `anotace` v tabu
+    /// `Průběh` — proto na ni tahle věta ukazuje.
+    private static func annotateHelp(_ state: Policy.AnnotationControl) -> String {
+        switch state {
+        case .idle:
+            "Popsat změny — jedna session napíše ke každému hunku větu proč a k souboru druh změny."
+        case .running:
+            "Popis změn běží. Kliknutím ho zrušíš; průběh je v tabu Průběh."
+        case .failed(let detail):
+            "\(detail) Kliknutím to zkusíš znovu; totéž stojí v tabu Průběh."
+        }
+    }
+
     // MARK: - Sbalení a co zbylo
 
     /// Jedno tlačítko, ne dvě. Který ze dvou stavů dává smysl, plyne z toho, co je zrovna
@@ -123,7 +220,7 @@ struct DiffToolbar: View {
     @ViewBuilder private var foldMenu: some View {
         if !diff.files.isEmpty {
             let allFolded = diff.files.allSatisfy(folding.isFolded)
-            if hasFindings || collapseExpansion != nil || annotate != nil {
+            if hasFindings || collapseExpansion != nil {
                 Menu {
                     if hasFindings {
                         // Jmenuje se `Nálezy pod řádky`, ne `Bubliny`: schovává **jen** nálezy,
@@ -141,14 +238,6 @@ struct DiffToolbar: View {
                         Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
                             collapseExpansion()
                         }
-                    }
-                    // Popis změn (#524). **V nabídce, ne v liště**: je to akce, která se na jednom
-                    // PR pustí jednou, kdežto v liště se soutěží o místo s věcmi, které se
-                    // používají při každém review. Sloveso je v položce, protože „anotace“ samotné
-                    // by v nabídce vypadalo jako přepínač viditelnosti.
-                    if let annotate {
-                        Button("Popsat změny", systemImage: "text.alignleft", action: annotate)
-                            .disabled(isAnnotating)
                     }
                 } label: {
                     foldLabel(allFolded)

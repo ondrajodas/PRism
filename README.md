@@ -1835,7 +1835,7 @@ diff, vzhled okna a notifikace jsou vlastnost člověka, ne repozitáře.
 
 **Popis hunků je session navíc a ve výchozím stavu vypnutá** (#524). Zapnutá napíše po
 **automatickém** review ke každému hunku jednu větu *proč* a ke každému souboru druh změny; nálezy
-nehlásí a nemá je čím nahlásit. Brána platí **jen na automat** — ručně se pouští z nabídky nad
+nehlásí a nemá je čím nahlásit. Brána platí **jen na automat** — ručně se pouští tlačítkem v liště nad
 diffem (`Popsat změny`) i u repa, kde je vypnutá. Po pushi anotace zastarají jako nálezy.
 
 **Celá globální konfigurace se dá nastavit z okna** (#389). Poslední dvě hodnoty, které se do té

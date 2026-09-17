@@ -466,7 +466,12 @@ struct PullRequestDetailView: View {
         case .findings: Policy.findingsBadge(of: findingsTally)
         // Puntík, ne počet: „běží“ je stav, ne množství — u dvou reviewerů by dvojka o průběhu
         // neřekla nic.
-        case .progress: store.isReviewing(pullRequest.id) ? .live : nil
+        //
+        // **Popis změn (#524) se do něj počítá**, a je to oprava, ne rozšíření: sedmá session se
+        // pouští z lišty nad diffem a její jediný záznam je dráha v tomhle tabu. Bez puntíku po
+        // kliknutí nesvítilo nic, takže běžící session vypadala jako tlačítko, které nic nedělá.
+        case .progress:
+            store.isReviewing(pullRequest.id) || store.isAnnotating(pullRequest.id) ? .live : nil
         // **Puntík, ne počet zpráv** (#452): číslo v rozhovoru je počet mých otázek, což o tabu
         // neříká nic — a tichá kapsle „4“ vedle `Zeptat se` by vypadala jako čtyři nepřečtené
         // věci. Odznak dostane jedině běžící odpověď, tedy tentýž stav jako u `Průběhu`.
@@ -2135,10 +2140,20 @@ struct PullRequestDetailView: View {
             // scrollu, a není to opatrnost: session popisuje `git diff <base>...HEAD` a anotace
             // se páruje **pořadím hunku** v něm. Rozsah `Od tvé poslední návštěvy` (#284) je jiný
             // seznam souborů s jiným počtem hunků, takže by tatáž čísla ukazovala jinam.
-            annotate: reportsScrollAnchor && store.canAnnotate(pullRequest.id)
-                ? { store.startAnnotating(for: pullRequest.id) }
-                : nil,
-            isAnnotating: store.isAnnotating(pullRequest.id)
+            annotation: annotationActions(enabled: reportsScrollAnchor)
+        )
+    }
+
+    /// Ovladač `Popsat změny` do lišty nad diffem (#524). `nil` = **nekreslí se**.
+    ///
+    /// Stav i obě akce míří na **jeden** pull request, takže se skládají na jednom místě — kdyby
+    /// se stav bral odjinud než akce, uměl by prstýnek točit nad PR, na kterém nic neběží.
+    private func annotationActions(enabled: Bool) -> DiffAnnotationActions? {
+        guard enabled, store.canAnnotate(pullRequest.id) else { return nil }
+        return DiffAnnotationActions(
+            state: store.annotationControl(for: pullRequest.id),
+            start: { store.startAnnotating(for: pullRequest.id) },
+            cancel: { store.cancelAnnotating(for: pullRequest.id) }
         )
     }
 

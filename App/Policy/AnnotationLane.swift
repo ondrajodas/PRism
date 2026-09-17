@@ -29,14 +29,73 @@ extension Policy {
     ///   - stored: co leží na disku.
     ///   - head: hlava, kterou PR má teď. `nil` = detail se ještě nenačetl, takže se o platnosti
     ///     nedá nic tvrdit — a to je **zákaz, ne povolení**.
+    ///   - failure: proč se popis nepovedl. **Poslední záchyt, ne ozdoba**: selhání, které přijde
+    ///     dřív, než běh vůbec vznikne (nezapojená pracovní kopie, nečitelný uložený soubor), nemá
+    ///     ani `pass`, ani `stored` — a bez téhle větve by po kliknutí nezbylo **nic**, tedy stav
+    ///     k nerozeznání od „neklikalo se“. Tichý konec je ta vada, ne to selhání.
     static func annotationLane(
         pass: AnnotationPass?,
         stored: StoredAnnotations?,
-        head: String?
+        head: String?,
+        failure: String? = nil
     ) -> ReviewerLane? {
         if let pass, let head, !head.isEmpty, pass.headSha == head { return lane(of: pass) }
-        guard let stored = annotations(of: stored, head: head) else { return nil }
-        return lane(of: stored)
+        if let stored = annotations(of: stored, head: head) { return lane(of: stored) }
+        guard let failure, !failure.isEmpty else { return nil }
+        return failedLane(detail: failure)
+    }
+
+    /// Dráha za selhání, ze kterého nezbyl ani běh. **Fáze jsou `failed`, ne `unknown`**: běh
+    /// nezačal, takže se o krocích ví všechno — nestal se ani jeden.
+    private static func failedLane(detail: String) -> ReviewerLane {
+        ReviewerLane(
+            skill: annotationLaneName,
+            kind: .annotations(hunks: nil, files: nil, dropped: 0),
+            state: .failed(detail: detail),
+            phases: [
+                ReviewerLane.Phase(title: ReviewerLane.Title.session, detail: nil, state: .failed),
+                ReviewerLane.Phase(title: ReviewerLane.Title.code, detail: nil, state: .failed),
+                ReviewerLane.Phase(title: ReviewerLane.Title.annotations, detail: nil, state: .failed),
+            ],
+            lastTool: nil,
+            finishedAt: nil,
+            reportedFindings: nil,
+            usage: nil,
+            sessionID: nil,
+            worktree: nil,
+            droppedEntries: 0,
+            loadedSkill: nil,
+            intentGap: nil,
+            entries: [],
+            increment: nil,
+            wholeReason: nil,
+            isConfigured: true
+        )
+    }
+
+    /// V jakém stavu je ovladač `Popsat změny` v liště nad diffem (#524).
+    ///
+    /// **Rozhoduje `Policy`, ne view**, a jsou to tři stavy, ne dva: běžící popis se od selhání
+    /// musí poznat a **obojí od klidu** — jinak je kliknutí, po kterém se nic nezmění, k nerozeznání
+    /// od tlačítka, které nic nedělá.
+    ///
+    /// **Běh má přednost před selháním.** Nové spuštění staré selhání zahazuje
+    /// (`AppStore.startAnnotating`), takže dvojice „běží a k tomu selhalo“ může vzniknout jedině
+    /// o jeden překreslovací průchod dřív, než se ta nula zapíše — a pravdou o tom PR je běh.
+    static func annotationControl(isRunning: Bool, failure: String?) -> AnnotationControl {
+        if isRunning { return .running }
+        guard let failure, !failure.isEmpty else { return .idle }
+        return .failed(detail: failure)
+    }
+
+    /// Stav ovladače `Popsat změny` v liště nad diffem.
+    enum AnnotationControl: Equatable, Sendable {
+        /// Nic neběží a nic se nepokazilo — kliknutí popis spustí.
+        case idle
+        /// Session běží — kliknutí ji zruší.
+        case running
+        /// Poslední pokus se nepovedl. Věta je ta, která se v okně ukáže; kliknutí zkusí znovu.
+        case failed(detail: String)
     }
 
     /// Dráha z běhu, který v tomhle sezení proběhl nebo běží.

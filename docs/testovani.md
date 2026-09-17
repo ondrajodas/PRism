@@ -11943,7 +11943,7 @@ i s nálezy, což je přesně ta cena, kterou to pole má.
 
 ## Anotace hunků (#524)
 
-Pět sad, 71 testů. Co je u téhle oblasti nejcennější, plyne z toho, **jak se odpověď sbírá**:
+Sedm sad, 74 testů (z toho jedna ruční sonda). Co je u téhle oblasti nejcennější, plyne z toho, **jak se odpověď sbírá**:
 je to JSON v posledním sdělení (`docs/claude-cli.md`), tedy zrovna to místo, kde sběr umí **tiše
 nefungovat** — session, která si tvar nepřečte, napíše prózu a bez pojmenování by z toho v okně
 vyšlo „diff nemá co popsat“, tedy tvrzení o kódu místo tvrzení o běhu.
@@ -12026,3 +12026,64 @@ se rozšíření muselo napsat sem) i **rovnost s `AskCommand.allowedTools`** (a
 rozejít). Argumenty anotací jsou navíc ve výčtu `everyArgumentList`, takže se na ně vztahují
 i tvrzení „platí pro všechny“ — jedna konstanta zákazů a žádné `gh` v povoleních. Půjčenou sadou se
 to tedy obejít nedá.
+
+### Tichý konec — co se přidalo po proklikání
+
+Při zkoušení vyšlo *„tlačítko nic nedělá“*. Nebyla to jedna vada, ale **čtyři tiché cesty**
+(rozbor je v [`docs/architektura.md`](architektura.md#akce-je-v-liště-a-má-tři-stavy--oprava-tichého-konce)),
+a testy se k nim přidaly tak, aby každá spadla zvlášť:
+
+- **`AnnotationPairingTests`** — že **selhání bez běhu i bez záznamu dráhu vyrobí**; že je to
+  **poslední záchyt, ne přebíječ** (běžící ani doběhlá dráha se jím nepřekreslí); že prázdná věta
+  dráhu **nevyrobí**; a tři stavy ovladače v liště včetně toho, že **běh přebíjí selhání z minula**.
+- **`AppStoreAnnotationsTests`** — že se nezapojená session **nevrací potichu** (věta, dráha
+  i stav ovladače naráz), že ovladač rozlišuje klid / běh / selhání a že **zrušení z lišty** běh
+  doopravdy zastaví a vrátí ho do klidu. To poslední je zároveň jediný volající `cancelAnnotating`:
+  do téhle opravy ho nevolal **nikdo**.
+
+**Ověřeno vložením regrese, obě polovičky zvlášť.** Návrat `guard annotator != nil else { return }`
+shodí tři tvrzení v `AppStoreAnnotationsTests`; vyhození větve s `failure` z `Policy.annotationLane`
+shodí tři tvrzení v `AnnotationPairingTests`. **Zvlášť schválně**: kdyby se selhání hlásilo jen na
+jednom z těch dvou konců, druhý by zůstal tichý a zelený běh by o tom mlčel.
+
+### Kolik místa v liště stojí `Popsat změny` (#524)
+
+`DiffToolbarRoomTests` (4 testy) a k nim ruční sonda `DiffToolbarRoomProbe`
+(`TEST_RUNNER_PRISM_MEASURE=1`, kresba do `TEST_RUNNER_PRISM_RENDER_DIR`). Dělba je ta obvyklá:
+**testy měří, oč si lišta říká, sonda ukazuje, co z toho zbude.** `HStack` přetečení nehlásí, jen
+ho nakreslí, takže se na ně jinak než kresbou přijít nedá.
+
+Měří se **`fittingSize` bez vnějšího `frame(width:)`**, a v tom je celý rozdíl mezi měřením
+a tautologií: **přibitá šířka se vrátí zpátky, ať je uvnitř cokoli** — první pokus vydal `572`
+pro lištu s tlačítkem i bez něj, tedy dvě stejná čísla o dvou různých věcech. To je přesně ten
+druh měřidla, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“.
+
+Co vyšlo (lišta v plné výbavě: procházení nálezů, varování o šířce, hledání, sbalení):
+
+| štěrbina | vyžádáno bez akce | vyžádáno s akcí | co zbylo z akce |
+|---|---|---|---|
+| **572** (podlaha okna 700 − rail 52 − dva proužky po 38) | 819 | 923 | samotná ikona |
+| 900 | 819 | 923 | samotná ikona |
+| 1200 | 819 | 923 | celý popisek |
+
+**Nečekaný výsledek stojí za celou tu tabulku: lišta v plné výbavě v podlahovém okně přetéká už
+dneska, i bez popisu změn** (819 proti 572). Je to změřená vlastnost z #219 (*„v užším okně se
+lišta nevešla“*), ne něco, co přineslo #524 — a sada ji proto **tvrdí testem**, aby se příště
+nečetla jako regrese téhle akce.
+
+Popisek stojí **104 b**, samotná ikona **13 b**. Proto je `Popsat změny` jediný prvek lišty **bez
+`fixedSize()` a se zápornou prioritou rozvržení**: v úzkém okně ustoupí on, ne `Sbalit vše`.
+Změřeno kresbou — bez té priority zmizelo `Sbalit vše` úplně, s ní vypadá lišta na 572 b stejně
+jako bez akce, jen o ikonu posunutá. **`ViewThatFits`, ne useknutý text**: `Popsat…` nese půl slova
+a vypadá jako porucha.
+
+Sonda kreslí i **tři stavy ovladače vedle sebe** (`stav-klid`, `stav-beh`, `stav-selhani`). Je to
+ta část opravy, kterou nad daty tvrdit nejde: že se po kliknutí na tomtéž místě **něco změní**,
+se dá ukázat jedině kresbou.
+
+**Co se ověřit nepovedlo, a je to zapsaná mezera:** skutečný klik do okna. Hostitelská aplikace
+téhle session nemá **Zpřístupnění**, takže `CGEvent` ani `System Events` do okna nedoletí
+(`osascript` hlásí *„nemá povoleno posílání stisknutí kláves“*) — a ze stejného důvodu se nedalo
+okno stáhnout na podlahu tažením za hranu. **Screenshot funguje** (`screencapture -l <id>`), takže
+je doložené, že tlačítko v liště živé aplikace stojí; **že po kliknutí naskočí běh, musí proklikat
+člověk.**

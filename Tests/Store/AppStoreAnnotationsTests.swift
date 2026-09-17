@@ -134,15 +134,62 @@ struct AppStoreAnnotationsTests {
         #expect(annotator.requests.count == 1)
     }
 
-    /// Bez zapojené session se položka v nabídce **nekreslí**. Zašedlá by slibovala akci, která se
+    /// Bez zapojené session se tlačítko v liště **nekreslí**. Zašedlé by slibovalo akci, která se
     /// zapíná jinde — tatáž úvaha jako u `Otevřít v editoru` (#530).
-    @Test("Bez zapojené session se nenabízí a nespouští nic")
-    func withoutAnAnnotatorNothingHappens() async {
+    ///
+    /// **Spuštění se přesto nesmí vrátit potichu** (oprava k #524): tudy se z lišty projít nedá,
+    /// ale kdyby ano, tichý návrat je přesně ten tvar, kterým „tlačítko nic nedělá“ vzniká. Test
+    /// tvrdí obojí — že nic neběží **a** že se o tom dá číst.
+    @Test("Bez zapojené session se nenabízí, ale mlčky se nevrací")
+    func withoutAnAnnotatorTheAttemptIsReported() async {
         let store = store(annotator: nil)
 
         #expect(!store.canAnnotate(pr))
         store.startAnnotating(for: pr)
+
         #expect(!store.isAnnotating(pr))
+        #expect(store.annotationFailure(for: pr) == AppStore.unwiredAnnotationFailure)
+        // A je to vidět tam, kde se o běhu čte: dráha `anotace` v tabu `Průběh`.
+        if case .failed = store.annotationLane(for: pr)?.state {} else {
+            Issue.record("dráha se má nakreslit i tehdy, když běh vůbec nevznikl")
+        }
+        #expect(store.annotationControl(for: pr) == .failed(detail: AppStore.unwiredAnnotationFailure))
+    }
+
+    /// Ovladač v liště má **tři stavy**, ne dva — a po každém kliknutí se musí některý z nich
+    /// změnit. Kdyby se běh od klidu nepoznal, je kliknutí k nerozeznání od tlačítka, které nic
+    /// nedělá; přesně to #524 předvedl.
+    @Test("Ovladač v liště rozlišuje klid, běh a selhání")
+    func theToolbarControlHasThreeStates() async {
+        let annotator = FakeHunkAnnotator(runs: [run()], holdsUntilRelease: true)
+        let store = store(annotator: annotator)
+
+        #expect(store.annotationControl(for: pr) == .idle)
+
+        store.startAnnotating(for: pr)
+        await waitUntil("session naběhne") { !annotator.requests.isEmpty }
+        #expect(store.annotationControl(for: pr) == .running)
+
+        annotator.releaseAll()
+        await waitUntilDone(store)
+        // Doběhlý běh vrací ovladač do klidu — „popsat znovu“ je tatáž akce jako poprvé.
+        #expect(store.annotationControl(for: pr) == .idle)
+    }
+
+    /// Zrušení z lišty musí běh **doopravdy** zastavit a ovladač vrátit do klidu. Tlačítko, které
+    /// se po kliknutí nezmění, je totéž jako tlačítko, které nic nedělá — jen o obrazovku dál.
+    @Test("Zrušení z lišty běh zastaví a ovladač vrátí do klidu")
+    func cancellingFromTheToolbarStopsTheRun() async {
+        let annotator = FakeHunkAnnotator(runs: [run()], holdsUntilRelease: true)
+        let store = store(annotator: annotator)
+
+        store.startAnnotating(for: pr)
+        await waitUntil("session naběhne") { !annotator.requests.isEmpty }
+        store.cancelAnnotating(for: pr)
+        await waitUntilDone(store)
+
+        #expect(store.annotationControl(for: pr) == .idle)
+        #expect(store.annotations(for: pr) == nil)
     }
 
     // MARK: - Brána automatu

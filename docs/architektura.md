@@ -4151,8 +4151,8 @@ pošle ho composerem v `Konverzaci`.
 ### Anotace hunků — sedmá session (#524)
 
 Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov. Kreslení
-u hunku přijde až v #525; v #524 je z toho vidět **dráha `anotace` v tabu `Průběh`** a položka
-`Popsat změny` v nabídce nad diffem. Zákres je [sekce 59 mockupu](navrh.html).
+u hunku přijde až v #525; v #524 je z toho vidět **dráha `anotace` v tabu `Průběh`** a tlačítko
+`Popsat změny` **v liště nad diffem**. Zákres je [sekce 59 mockupu](navrh.html).
 
 **Sedmá session, ale ne šestá sada povolení — a to je to tvrzení.** Běží doslova s
 `AskCommand.allowedTools`, tedy `Read,Grep,Glob,Bash(git:*)`; liší se **promptem a parserem**, ne
@@ -4250,7 +4250,7 @@ odpověď přijde najednou v posledním sdělení.
 
 #### Kdy se pouští
 
-**Ručně** z nabídky nad diffem (`Popsat změny`) — a **bránu to nečte**, tatáž dělba jako
+**Ručně** tlačítkem v liště nad diffem (`Popsat změny`) — a **bránu to nečte**, tatáž dělba jako
 u `Pustit přesto` u routingu (#518): brána rozhoduje o tom, co si vybírá aplikace, ne o tom, o co si
 člověk řekne kliknutím. **Automaticky** jen po **automatickém** review a jen s
 `ResolvedConfig.annotatesHunks`, která je **ve výchozím stavu vypnutá**: je to session navíc na
@@ -4258,10 +4258,54 @@ každou hlavu, tedy peníze, o které si nikdo neřekl. Denní limit automatick�
 se tím **nekrátí** — ten hlídá, kolik **review** se pustí samo, a anotace běží až po review, které
 se do něj už započetlo. Útrata do `SpendLedger` jde, jako u všeho ostatního.
 
-**Položka se bez zapojené session nekreslí, ne zašedne** (tatáž úvaha jako u `Otevřít v editoru`,
+**Tlačítko se bez zapojené session nekreslí, ne zašedne** (tatáž úvaha jako u `Otevřít v editoru`,
 #530), a nabízí se **jen nad celým diffem**: session popisuje `git diff <base>...HEAD` a anotace se
 páruje pořadím hunku v něm, takže nad rozsahem `Od tvé poslední návštěvy` (#284) by tatáž čísla
 ukazovala jinam.
+
+#### Akce je v liště a má tři stavy — oprava tichého konce
+
+**Do prvního proklikání to byla položka v nabídce `Sbalit vše ▾`** s odůvodněním, že se na jednom
+PR pustí jednou a nemá se prát o místo v liště. Při zkoušení z toho vyšlo *„tlačítko nic nedělá“*,
+a měl to být ten výsledek: **na obrazovce, ze které se akce pouští, se po kliknutí neměnilo nic.**
+Sešly se na tom čtyři věci a každá sama o sobě stačila:
+
+1. **Nabídka klik spolkla.** Zavře se dřív, než se cokoli změní — takže z ní žádný stav vidět není,
+   ani ten správný.
+2. **Odznak `Průběhu` sedmou session nepočítal.** `badge(in: .progress)` četl jedině
+   `isReviewing`, takže běžící popis nerozsvítil ani puntík. Jediný záznam přitom leží zrovna
+   v tom tabu.
+3. **`annotationFailures` nečetlo v aplikaci nic.** Store si větu o selhání poctivě psal a **žádné
+   view se na ni neptalo** — je to ten vzor „držený stav, který nikdo nečte“, který Copilot
+   v tomhle repu nachází opakovaně.
+4. **Dva `guard … else { return }` byly tiché.** Nezapojený `annotator`, `checkout` nebo
+   `annotationStore` znamenal návrat bez zvuku.
+
+Opravují se všechny čtyři, a ne tak, aby se selhání nedělo, ale aby **nebylo tiché**: to je ta
+vada (precedens brief #516 — *„když session spadne, blok řekne shrnutí se nepovedlo a nabídne
+znovu — ne prázdno“*). Konkrétně:
+
+- **Ovladač v liště má tři stavy**, o kterých rozhoduje `Policy.annotationControl(isRunning:failure:)`:
+  `Popsat změny` spouští, `Popisuji…` s prstýnkem **ruší** a `Popis selhal` v okrové **zkouší
+  znovu**. Po každém kliknutí se tedy na tomtéž místě něco změní. Stav i obě akce chodí jednou
+  hodnotou (`DiffAnnotationActions`), tedy stejně jako `DiffFoldingActions` — rozdělené by šlo
+  předat běh bez zrušení nebo selhání bez opakování, což jsou zrovna ty dvojice, kterými se tichý
+  konec vyrábí. **Zrušení tím dostalo prvního volajícího**: `cancelAnnotating` do té doby nevolal
+  nikdo.
+- **Odznak `Průběhu` svítí i při popisu změn**, takže je běžící session vidět i z jiného tabu.
+- **Věta o selhání se dostane do dráhy** — `Policy.annotationLane(pass:stored:head:failure:)` ji
+  vydá i tehdy, když nezbyl ani běh, ani uložený záznam. Je to **poslední záchyt, ne přebíječ**:
+  platný běh ani platný záznam se jí nepřekreslí.
+- **Oba tiché `guard`y hlásí** (`AppStore.unwiredAnnotationFailure`, jedna věta pro obě místa).
+  Tichý zůstává **jediný** — `isTerminating`, a smí být tichý proto, že okno mizí.
+
+**Do lišty se to vejde, ale ne zadarmo, a to se změřilo** ([čísla](testovani.md#kolik-místa-v-liště-stojí-popsat-změny-524)).
+Lišta v plné výbavě si v podlahovém okně (700 b → štěrbina **572 b**) říká o **819 bodů**, tedy
+**přetéká už dneska, i bez téhle akce** — je to známá vlastnost z #219, ne něco, co přineslo #524.
+Celý popisek stojí dalších **104 b**. Proto je `Popsat změny` **jediný prvek v liště bez
+`fixedSize()` a se zápornou prioritou rozvržení**: když se místa nedostává, `ViewThatFits` ho
+srazí na **samotnou ikonu** (13 b) a to, co v liště bylo dřív, zůstane, kde bylo. Useknutý
+`Popsat…` by byl horší než ikona — nese půl slova a vypadá jako porucha.
 
 ## Překlad nálezů (`App/Review/`)
 

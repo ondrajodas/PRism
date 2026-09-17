@@ -9,6 +9,14 @@ import Foundation
 /// session —, protože popsat změnu jde jedině **nad kódem**: bez pracovního stromu by session
 /// odpovídala z hlavy.
 extension AppStore {
+    /// Věta pro pokus, který se o kód ani neotřel, protože vrstva pod ním není zapojená.
+    ///
+    /// **Jedna konstanta pro obě místa**, ve kterých se to pozná (`startAnnotating` a `annotate`):
+    /// dvě formulace téhož by znamenaly, že se v okně dá poznat, ve které polovině cesty se to
+    /// zastavilo — a to člověka u okna nezajímá.
+    static let unwiredAnnotationFailure =
+        "Popis změn se nespustil — session na popis změn není v téhle instanci aplikace zapojená."
+
     /// Běží nad PR anotační session?
     func isAnnotating(_ pr: PRIdentifier) -> Bool { annotationTasks[pr] != nil }
 
@@ -21,20 +29,29 @@ extension AppStore {
     }
 
     /// Dráha `anotace` do tabu `Průběh`. `nil` = nekreslí se.
+    ///
+    /// **Selhání jde dovnitř**, ne vedle: pokus, ze kterého nezbyl ani běh, by jinak v `Průběhu`
+    /// nezanechal nic, a prázdno se od „neklikalo se“ nepozná.
     func annotationLane(for pr: PRIdentifier) -> ReviewerLane? {
         Policy.annotationLane(
             pass: annotationProgress[pr],
             stored: hunkAnnotations[pr],
-            head: head(of: pr)
+            head: head(of: pr),
+            failure: annotationFailures[pr]
         )
     }
 
     /// Proč se anotace nepovedly. `nil` = není co hlásit.
     func annotationFailure(for pr: PRIdentifier) -> String? { annotationFailures[pr] }
 
-    /// Dá se popis změn nabídnout? `false` = položka v nabídce nad diffem se **nekreslí**.
+    /// V jakém stavu je ovladač `Popsat změny` v liště nad diffem.
+    func annotationControl(for pr: PRIdentifier) -> Policy.AnnotationControl {
+        Policy.annotationControl(isRunning: isAnnotating(pr), failure: annotationFailures[pr])
+    }
+
+    /// Dá se popis změn nabídnout? `false` = tlačítko v liště nad diffem se **nekreslí**.
     ///
-    /// Zašedlá by slibovala akci, která se zapíná jinde — tatáž úvaha jako u `Otevřít v editoru`
+    /// Zašedlé by slibovalo akci, která se zapíná jinde — tatáž úvaha jako u `Otevřít v editoru`
     /// (#530). Podmínky jsou dvě: session musí být zapojená a hlavu PR musíme znát, protože bez ní
     /// není co anotovat ani čím to klíčovat.
     func canAnnotate(_ pr: PRIdentifier) -> Bool {
@@ -64,9 +81,22 @@ extension AppStore {
     /// s `Pustit přesto`: brána rozhoduje o tom, co si vybírá aplikace, ne o tom, o co si člověk
     /// řekne kliknutím.
     func startAnnotating(for pr: PRIdentifier) {
-        // Během zavírání se nic nespouští (#264) — tatáž brána jako u review.
-        guard !isTerminating, annotator != nil, annotationTasks[pr] == nil else { return }
+        // Během zavírání se nic nespouští (#264) — tatáž brána jako u review. Tohle je **jediný
+        // tichý návrat na téhle cestě**, a smí být tichý proto, že okno mizí: věta, kterou nikdo
+        // nepřečte, je horší než žádná.
+        guard !isTerminating else { return }
+        // Běžící popis se druhým kliknutím **neopakuje ani nehlásí** — tlačítko v liště v té chvíli
+        // nabízí zrušení, takže se sem druhý start dostat nemá.
+        guard annotationTasks[pr] == nil else { return }
         annotationFailures[pr] = nil
+        // **Nezapojená session se hlásí, nevrací se potichu.** Z lišty se sem dostat nedá
+        // (`canAnnotate` tlačítko nekreslí), ale odjinud ano — a tichý návrat je přesně ten tvar,
+        // kterým „tlačítko nic nedělá“ vzniká. Věta o tom, co chybí, je jediné, čím se to od
+        // „nic se neděje“ liší.
+        guard annotator != nil else {
+            annotationFailures[pr] = Self.unwiredAnnotationFailure
+            return
+        }
         annotationTasks[pr] = Task { [weak self] in await self?.annotate(pr) }
     }
 
@@ -78,7 +108,7 @@ extension AppStore {
     /// Popis změn po automatickém review (#524).
     ///
     /// **Jen za zapnutou bránou a jen po automatu.** Ruční `Spustit review` anotace nespouští:
-    /// je to session navíc a kdo si o ni řekne, má na to položku v nabídce nad diffem. Je to
+    /// je to session navíc a kdo si o ni řekne, má na to tlačítko v liště nad diffem. Je to
     /// tatáž úvaha jako u odkladu do tichých hodin (#519), který taky platí jedině na automat.
     func annotateAfterAutomaticReview(of pr: PRIdentifier) {
         guard automaticReviews.contains(pr), resolved(for: pr.repo).annotatesHunks else { return }
@@ -92,7 +122,14 @@ extension AppStore {
             // horší než žádná. Doběhlý průběh si `annotate` zapsal sám, takže se tady nic neztrácí.
             if annotationProgress[pr]?.isFinished == false { annotationProgress[pr] = nil }
         }
-        guard let annotator, let checkout, let annotationStore else { return }
+        // **Druhá polovina téhož**, a nesmí se slít s tou první: pracovní kopie a úložiště se
+        // z `startAnnotating` nekontrolují, takže by tenhle `guard … else { return }` zůstal tichý
+        // i po opravě. Byl tichý a projevilo se to tak, jak se taková věc projevit musí: tlačítko
+        // šlo zmáčknout a nestalo se nic.
+        guard let annotator, let checkout, let annotationStore else {
+            annotationFailures[pr] = Self.unwiredAnnotationFailure
+            return
+        }
 
         do {
             // Hlava se bere **znovu**, ne z paměti — tatáž úvaha jako u kontroly nálezů (#150):
