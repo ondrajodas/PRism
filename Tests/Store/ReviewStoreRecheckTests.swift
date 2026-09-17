@@ -127,4 +127,72 @@ struct ReviewStoreRecheckTests {
         #expect(after == before)
         #expect(after?.runs.map(\.skillID) == ["code-review"])
     }
+
+    // MARK: - Moje odeslané komentáře (#522)
+
+    /// Verdikty o vláknech leží **vedle** verdiktů o nálezech, v mapě klíčované identitou
+    /// vlákna — a přežijí restart stejně jako ony.
+    @Test("Verdikty o vláknech se uloží a přečtou zpátky")
+    func theThreadVerdictsSurviveARestart() async throws {
+        try await store.save(run(headSha: "old1111", findings: [makeReported()]))
+
+        _ = try await store.saveRecheck(
+            StoredRecheck(
+                againstHeadSha: "new2222",
+                outcome: .finished,
+                sessionID: "session-1",
+                statuses: [:],
+                replyStatuses: ["PRRT_1": RecheckStatus(verdict: .resolved, note: "opraveno")],
+                finishedAt: now
+            ),
+            for: pr,
+            at: "old1111"
+        )
+
+        let reopened = ReviewStore(layout: layout, time: FakeTimeSource(start: now))
+        let record = try #require(await reopened.record(for: pr, at: "old1111"))
+        #expect(record.recheck?.replyStatuses["PRRT_1"]?.verdict == .resolved)
+        #expect(record.recheck?.replyStatuses["PRRT_1"]?.note == "opraveno")
+    }
+
+    /// **Soubor uložený do #522 se musí přečíst dál.** Na disku jich leží plno a klíč
+    /// `replyStatuses` v nich být nemůže — syntetizovaný `init(from:)` by na něm skončil
+    /// `keyNotFound`, tedy ztracenou kontrolou i nálezy kvůli poli, které nikdo nezapsal.
+    ///
+    /// Starší tvar se **vyrobí z dnešního záznamu odebráním klíče**, ne opsáním z hlavy:
+    /// napsaný literál by nesl tvar, o kterém si myslím, že na disku je, a ne ten, který tam
+    /// doopravdy leží (kódování `outcome` i data je věcí enkodéru, ne mojí představy).
+    @Test("Kontrola uložená do #522 se přečte dál")
+    func aRecheckSavedBeforeCommentsStillDecodes() async throws {
+        try await store.save(run(headSha: "old1111", findings: [makeReported()]))
+        let record = try await store.saveRecheck(
+            StoredRecheck(
+                againstHeadSha: "new2222",
+                outcome: .finished,
+                sessionID: "session-1",
+                statuses: [:],
+                replyStatuses: ["PRRT_1": RecheckStatus(verdict: .resolved)],
+                finishedAt: now
+            ),
+            for: pr,
+            at: "old1111"
+        )
+
+        let file = layout.reviewFile(for: pr, at: "old1111")
+        var json = try #require(
+            try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        )
+        var recheck = try #require(json["recheck"] as? [String: Any])
+        #expect(recheck["replyStatuses"] != nil)
+        recheck["replyStatuses"] = nil
+        json["recheck"] = recheck
+        try JSONSerialization.data(withJSONObject: json).write(to: file, options: .atomic)
+
+        let reopened = ReviewStore(layout: layout, time: FakeTimeSource(start: now))
+        let older = try #require(await reopened.record(for: pr, at: "old1111"))
+        #expect(older.recheck?.againstHeadSha == "new2222")
+        #expect(older.recheck?.replyStatuses.isEmpty == true)
+        // A nálezy se přitom neztratily — právě o ně by `keyNotFound` připravil.
+        #expect(older.findings.count == record.findings.count)
+    }
 }

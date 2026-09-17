@@ -8944,6 +8944,56 @@ odklad od vypnutého automatu.
 (`COPILOT_PERMISSION_GATE_REASON: ineligible_app`), takže se na tenhle PR na pokyn uživatele
 nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
 
+## #522 — druhé kolo: kontrola z #150 páruje moje odeslané komentáře (M17, Z3)
+
+První issue skupiny „Za mě“ (#522, #523). Do #522 kontrola z #150 řekla, které **nálezy revieweera**
+po pushi autora trvají — a o **mých odeslaných komentářích**, tedy o tom, co v druhém kole čtu
+znovu, neřekla nic. Teď dostane k nálezům druhý seznam (soubor, řádek, text, identita vlákna)
+a za každý komentář vydá jeden ze stavů *opraveno v `<sha>`* / *odpovězeno* / *bez odpovědi*.
+
+**Je to tatáž session, ne nová.** Tentýž prompt, tatáž sada nástrojů (tvrdá podmínka č. 2 se
+nezměnila ani o položku — `SessionToolSetsTests` tvrdí týž literál), **jedno pole odpovědí**:
+nálezy `0…n−1`, komentáře od `RecheckMaterial.commentIDOffset`. Páruje se přes index, ne přes text
+(#150) — text se mezi koly mění.
+
+**Hranice, kterou model nesmí přejít, se drží dvakrát.** *Odpovězeno* je fakt z konverzace (#72),
+ne verdikt: na zodpovězené vlákno se session **vůbec nezeptá**, a prompt to navíc říká výslovně
+(`Do not judge whether anyone replied to a comment`). Kdyby se jen filtrovalo v zobrazení, ležel by
+v úložišti verdikt, který se nikdy nemá ukázat — a platilo by se za něj.
+
+**Dvě rozhodnutí, která v zadání nebyla.** (1) Když je vlákno zodpovězené **a** model řekl
+„opraveno“, vyhraje *odpovězeno*: fakt přebíjí tvrzení, a opačné pořadí by schovalo větu kolegy,
+kterou si mám přečíst. (2) `bez odpovědi` nese **tři** důvody (`beze změny` / `nejde říct` /
+`nikdo se neptal`), protože slít je do jednoho je tatáž chyba jako slít `čisté` a `failed`.
+
+**Tvrdá podmínka č. 5 se nemusela nijak ohýbat, a je to zapsané.** Verdikty o vláknech leží
+v `StoredRecheck.replyStatuses`, tedy v témže uloženém běhu jako verdikty o nálezech — ten už je
+klíčovaný `(PR, headSha)` a nese `againstHeadSha`. **Report se neukládá vůbec**: skládá se při
+čtení z uložené kontroly a ze živé konverzace. Posun hlavy proto zhasne **jen osu modelu**,
+odpovědi platí dál — a právě tím se `ReviewReplyReport` liší od `RecheckReport`, který zhasne celý.
+
+**Na tomhle není v aplikaci co vidět** — kreslí #523. Jediná viditelná drobnost je věta v nápovědě
+u tlačítka `Zkontrolovat nálezy`: říká, kolik komentářů se veze v téže session, protože session
+stojí peníze a nápověda nesmí o délce promptu tvrdit míň, než co se doopravdy pošle.
+
+**Vlastní revize diffu našla jednu chybějící kontrolu**: useknutá stránka vláken (`hasNextPage`)
+nebyla v reportu vidět, takže by `2 opravené ze 3` platilo o třech vláknech, která dorazila,
+a mlčelo o těch, která ne. Report ji teď nese — a **přes všechna vlákna PR, ne jen moje**: kolik
+z chybějících je mých, se z odpovědi zjistit nedá.
+
+Přibylo 37 testů v pěti sadách; regrese se ověřila **vložením regrese u pěti věcí zvlášť** —
+autor vlákna podle prvního komentáře, přednost dat před modelem, ověření hlavy, posun indexu
+a `decodeIfPresent` u nového pole (bez něj se přestane číst **celý** záznam, tedy i nálezy).
+
+**Zákres do `docs/navrh.html` (sekce Z3a) patří k #523, ne sem** — tak to v dávce rozhodl
+orchestrátor. Na #522 není co kreslit (vznikají data a testy), takže zákres vzniká tam, kde vzniká
+i kresba: v #523, které si k tomu vyžádá číslo sekce. Není to tedy dluh tohohle PR, je to **zadání
+pro #523**.
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu
+(`ineligible_app`), takže se na pokyn uživatele nepouštěl. Vlastní revize diffu proběhla a je
+popsaná v PR.
+
 ## #524 — Anotace hunků: sedmá session, která popisuje diff (M17, zákres 59)
 
 Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov — `změna
