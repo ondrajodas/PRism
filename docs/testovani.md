@@ -11404,6 +11404,108 @@ nepošle **žádný**.
 - **Že `gh` s dokumentem o 30 aliasech nenarazí na délku argumentu.** Změřeno bylo 23 aliasů
   (6,8 kB); strop je nad tím s rezervou, ale hranici, kde by to prasklo, se hledat nezkoušelo.
 
+## Dráha vlastního PR v řádku seznamu (#509)
+
+Dvě suity, jedna stráž nad zdrojáky a jedno měření. Nejcennější tvrzení jsou zase ta záporná:
+**na cizím řádku se nekreslí nic**, **tečky nejsou druhý výčet stanic** a **dojetá smyčka neříká
+`k merge`**. Všechna tři se rozbijí potichu — řádek zůstane hezký a bude ukazovat vedle.
+
+### `OwnLoopRowTests` — `Policy` maticí, ne vybranými případy
+
+Řádek se **odvozuje** z `Policy.ownLoop`, takže tvrzení „tečky sedí s dráhou“ a „slovo je
+vyplněné“ musí platit nad vším, co dráha umí vydat. Matice je proto úplná (13 stavů review × 2
+reporty předání × 4 stavy srovnání větve × 5 stavů větve × 4 sady checků × 5 sad reviewerů × 4
+stavy PR = **41 600 vzorků**) a projde se **uvnitř jednoho testu**, ne přes `arguments:`:
+jako parametrizované případy by z toho byly desetitisíce řádků v protokolu běhu a tvrzení je
+přitom jedno. Jméno vzorku (`Sample.description`) se skládá **až při pádu** — u 41 600 vzorků je
+to jinak víc práce než samo měřené volání.
+
+| Co se tvrdí | Proč zrovna to |
+|---|---|
+| stav tečky **je doslova** `loop.state(of:)` | vlastní výčet by dovolil, aby řádek nad tímtéž PR ukazoval jinou stanici než jeho hlavička — a to se v okně nepozná jinak než pohledem na obojí naráz |
+| slovo **nikdy** není prázdné | pilulka bez textu je díra v řádku, ze které se nedá poznat, jestli se něco nespočítalo |
+| slovo začíná **jménem aktivní stanice**, nebo je to `hotovo`/`zavřeno` | samotné `zjišťuju` může být o kterékoli z pěti stanic |
+| odstín **je** stav aktivní stanice a **nikdy `idle`** | aktivní je ta, na které se walk zastavil, takže se o ní vždycky něco ví |
+| dojetá smyčka **neobsahuje slovo `merge`** | slévatelnost tahle funkce nezná; odpovídá na ni pruh `K merge` (#515) a sekce *Větev* (#465) |
+| cizí PR vydá `nil` | tečky nad cizí větví by tvrdily, že se s ní chystám něco dělat |
+
+### `OwnLoopRowRenderTests` — měřená výška, měřená šířka, stráže
+
+Tři třídy tvrzení, dvě z nich se dají pokazit potichu:
+
+- **výška řádku se nemění.** Tečky mají osm bodů a řádek dvě řádky textu, takže se do nich
+  vejdou — kdyby ne, blok `Moje PR` by se posunul a nešlo by poznat, čím. Měří se `fittingSize`
+  mimo obrazovku, ne odhadem z konstant (tatáž konstrukce jako `QueueMapStripTests`);
+- **v nejužším okně (636 bodů obsahu) zůstává řádek na jedné řádce** — i s mapou PR, tečkami,
+  pilulkou a `Prompt →` vedle sebe, a **i s nejdelším slovem**, které dráha umí vydat. Tohle je
+  ta věc, kterou #509 do řádku doopravdy přidává; jestli se nevejde, pozná se to jedině měřením.
+  Pilulka proto **nemá** `layoutPriority` ani `fixedSize`: kdyby se přišpendlila, ustupoval by
+  místo ní titulek, tedy to jediné, podle čeho se PR v seznamu pozná;
+- **pruh teček má pevných 52 × 8 bodů** (#375, #220) a šířka se **počítá z počtu stanic**.
+
+Adresně, ne obrázkem, se k tomu tvrdí: `showsLoop` je `nil` na cizím řádku **i když se mu dráha
+podstrčí** (řádek ji dostává zvenčí, takže se na vlastnictví ptá i on), hrana bere barvu ze
+stanice na vlastním a ze stavu review na cizím, a `Prompt →` je akcentové jedině s nepředanou
+prací.
+
+**Stráž nad zdrojáky čte argumenty volání, ne výskyty v souboru.** Prosté počítání `loop:` (tak to
+dělá `PullRequestRowSnoozeWiringTests` u `snoozeAction:`) by tady vydalo nesmysl: seznam si řádky
+předskládává do `ListRow`, takže v `PullRequestListView.swift` stojí jméno `loop` **třikrát**
+a volání je **jedno**. `Source.constructions(of:)` proto vyzvedne text mezi závorkami každého
+`PullRequestRow(` počítáním závorek. Pojistky jsou dvě: každý vyzvednutý text musí obsahovat
+`pullRequest:` (jinak se závorky rozešly a stráž by zezelenala nad prázdnem) a míst musí být
+**tři** — `BoardView`, `HomeView`, `PullRequestListView`.
+
+### Kde se u #509 ověřila regrese vložením regrese
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| `showsLoop` vrací `loop` bez ptaní na vlastnictví | `Cizí řádek tečky nekreslí, i když mu je někdo podstrčí` |
+| `word` složené z `reason`u místo z `detail`u (tedy bez jména stanice) | `Slovo mluví o té stanici, na které se walk zastavil` i `Slovo je vždycky vyplněné` |
+| `loop:` vyhozené z `BoardView` | `Každé kreslení řádku fronty mu předává dráhu` |
+| `OwnLoopDots` kreslí `Palette.ok` místo `LanePhaseChip.dotFill` | `Barvu tečky vydává LanePhaseChip, ne OwnLoopDots` |
+| dráha se v seznamu bere přes `ownLoop(for:)` (report podruhé) | `Dráha si v seznamu bere už spočítaný report předání` |
+
+### Co stojí dráha v každém řádku seznamu (#509)
+
+`OwnLoopRowMeasurement` — **měření, ne test**; časy se `#expect`em netvrdí a pouští se ručně
+(`TEST_RUNNER_PRISM_MEASURE=1`). Vzniklo z věty zapsané u #508: tam dráha stála v hlavičce
+**jednoho** PR, takže zdvojený `Policy.handoff` byl konstanta — v seznamu poběží nad **každým**
+řádkem.
+
+**Měří se oba konce** (#275), jinak by číslo netvrdilo nic:
+
+- **A** — co seznam dělal **před** #509: `handoffReport(for:)` na každý vlastní řádek;
+- **B** — co dělá **teď**: tentýž report **plus dráha z něj** (`ownLoopRow(for:handoff:)`);
+- **C** — naivní podoba: report **plus dráha, která si ho spočítá znovu** (`ownLoop(for:)`).
+
+Série se prokládá **A/B/C/A/B/C uvnitř jednoho běhu** (#274, vedle běží další sloty) a měří se
+**CPU hlavního vlákna**, ne hodiny. Materiál je na každém PR osm nálezů a čtyři komentáře — bez
+nich by `Policy.handoff` neměl co skládat a měřilo by se prázdno. Medián z pěti vzorků:
+
+| vlastních PR | A · před #509 | B · dráha z reportu | C · dráha počítá report znovu |
+|---|---|---|---|
+| 5 | 0,124 ms | 0,211 ms | 0,317 ms |
+| 23 | **0,527 ms** | **0,879 ms** | **1,386 ms** |
+| 60 | 1,380 ms | 2,248 ms | 3,636 ms |
+
+Na řádek to je **0,023 / 0,038 / 0,060 ms** a je to lineární ve všech třech osách — cena tedy
+neroste jinak než počtem řádků. **Nasazená podoba je 1,65× baseline, naivní 2,6×**, takže
+předání už spočítaného reportu ušetří **60 % toho, co dráha přidává**. Dvacet tři vlastních PR je
+skutečná fronta téhle instalace (změřeno u #572); šedesát je hlava dolů, aby bylo vidět, že křivka
+nezatáčí.
+
+**Předfiltr vyšel jiný, než #508 čekalo.** Ta poznámka mluvila o něčem jako `isMergeReadyForLane`
+(#515), tedy o levné bráně **před** drahým skládáním. Tady stačilo drahou část **nepočítat
+podruhé**: report si řádek skládá tak jako tak. Předfiltr, který zbyl, je **vlastnictví**, a stojí
+u volajícího hned vedle řádku, který o `handoff`u rozhoduje dnes.
+
+**Mez toho měřidla se musí přiznat**: měří **skládání dat pro řádek**, ne průchod tělem
+`PullRequestListView`. Kolik k tomu přidá kresba pěti teček, se tou cestou změřit nedá — sonda by
+musela hostovat celý seznam, a `List` staví řádky líně, takže by měřila hlavně to, kolik jich
+zrovna vzniklo. Zbývá z toho tvrzení o **výšce** řádku (`OwnLoopRowRenderTests`) a snímek běžící
+aplikace.
+
 ## Návrh změny kódu (#528)
 
 Tři suity a jedna sonda. Nejcennější jsou tvrzení o tom, co se **ne**stalo — a jedno z nich je

@@ -8597,6 +8597,76 @@ regresí — tří původních a čtyř po proklikání, mezi nimi i té, která
 nepouštěl** — GitHub má výpadek entitlementu (`ineligible_app`), tatáž příčina jako u #570 a #572.
 Je to **neověřená mezera**; vlastní revize diffu proběhla a je popsaná v PR.
 
+## #509 — Dráha vlastního PR v řádku seznamu: pět teček a jedno slovo
+
+**Tatáž smyčka jako v hlavičce (#508), zmenšená do řádku.** Vlastní PR má vpravo **pět teček**
+a **pilulku se slovem k aktivní stanici** (`Push o 4 vzadu`, `CI 1 neprošel`, `Zadání 6 k předání`,
+`hotovo`); **hrana řádku bere barvu z té stanice** a `Prompt →` je plné akcentové tlačítko **jen
+tam, kde je co předat**. Otázka, kvůli které se u vlastního PR chodilo do prohlížeče — *a co
+vlastně brání?* — je tím ve frontě, ne až v otevřené záložce. Do #509 řekl řádek jedině
+`6 k předání` (#334), tedy stav **jediné** z těch pěti stanic. Cizí řádek se nemění vůbec.
+
+**Skládá to `Policy.ownLoopRow` nad `Policy.ownLoop`, ne řádek.** Vlastní výčet stanic by
+znamenal dvě odpovědi na jednu otázku: řádek by nad tímtéž PR ukázal jinou stanici než jeho
+hlavička, a to se v okně nepozná jinak než pohledem na obojí naráz. Kreslí se **týmiž barvami**
+jako kapsle dráhy (`LanePhaseChip.dotFill`/`dotStroke`), takže druhá kopie mapování stavu na barvu
+nevznikla.
+
+**Pohlcuje N4 z decku (*co brání mergi*) — a s ním se ruší `Policy.mergeBlocker`, který nikdy
+nevznikl.** Slévatelnost dráha nezná schválně (od čtvrtého kola #508 nebere `MergeOffer` ani jako
+vstup) a odpovídá na ni **pruh `K merge` na desce** (#515) a sekce *Větev* (#465). Řádek proto
+říká `hotovo` (všech pět stanic je hotových), **ne `k merge`**, jak měl zákres — bylo by to druhé
+tvrzení o jedné věci, složené z jiných dat.
+
+**Dvě věci ze zákresu se nepřenesly, obojí zapsané v [`docs/architektura.md`](architektura.md):**
+teček je **pět, ne sedm** (přímý důsledek čtvrtého kola #508) a **hlavička bloku
+`1 k merge · 3 na tahu` nevznikla** — blok `Moje PR` z decku je na dashboardu, který #515 nahradil
+pruhy, a ty ten počet nesou samy; sekce `Moje PR` v railu je `List` bez hlavičky, takže by šlo
+o novou věc na obrazovce, a ta se kreslí a schvaluje dřív, než na ni vznikne issue.
+
+**Řádek je od druhého kola zakreslený v mockupu** — v sekci **52** vedle dráhy v hlavičce, pět
+stavů pod sebou (`Zadání 6 k předání`, `Push o 4 vzadu`, `CI 1 neprošel`, `hotovo` a neotevřený PR
+s dutými tečkami). Leží to u dráhy, ne na stránce fronty, protože je to totéž rozhodnutí menší.
+Nová třída je tam **jediná** (`.s52-dots`): řádek zůstává `.qrow`, slovo `.pill` a tlačítko
+`.mini`. V poznámkách 199–204 jsou i **tři rozhodnutí proti zákresu** — pět teček místo sedmi,
+`hotovo` místo `k merge` a hlavička `1 k merge · 3 na tahu`, která nevzniká.
+
+**Cena je změřená na obou koncích** (#275, `OwnLoopRowMeasurement`), protože #508 si to výslovně
+vyžádalo: tam dráha stála v hlavičce **jednoho** PR, v seznamu poběží nad **každým** řádkem.
+Nejdražší vstup (`Policy.handoff`) si řádek počítá už dneska kvůli pilulce a novinkám, takže se
+**předává parametrem** (`AppStore.ownLoop(for:handoff:)`). Nad 23 vlastními PR — skutečná fronta
+téhle instalace — stojí průchod seznamem **0,88 ms** proti 0,53 ms před #509; naivní podoba, kde
+si dráha report spočítá znovu, dala **1,39 ms**. Předání reportu tedy ušetří 60 % toho, co dráha
+přidává, a je to lineární až do šedesáti PR. **Předfiltr vyšel jiný, než #508 čekalo**: ne levná
+brána před drahým skládáním (`isMergeReadyForLane`), ale to drahé nepočítat podruhé.
+
+**Zapsaná mezera: `CI` a `Review` jsou na neotevřeném PR duté tečky.** Poloha větve a slévatelnost
+jsou skutečné (#572 je tahá hromadným dotazem na tik), ale checky a vyžádaní reviewery se
+dotahují až s detailem záložky. Je to „nevím“, ne „nejde“, a hromadné dotažení checků do téhle
+změny nepatří — byl by to další dotaz na tik za údaj, který se v řádku kreslí jako jedna tečka.
+
+**Testů je nad slitým stavem (po #508) 5 699 v 557 sadách**, z toho **+20 ve dvou nových sadách**
+z tohohle PR (`OwnLoopRowTests` maticí přes 41 600 vzorků, `OwnLoopRowRenderTests` měřením výšky
+a stráží nad zdrojáky) a k tomu jedno měření, které se v běhu nepouští. Plný běh zelený (163,8 s,
+jedno známé `Nedočkaná metrika zapíše nález, ne jen nulu`). **První plný běh byl přitom falešně
+červený** — 77 nálezů typu `Nedočkalo se: review doběhne (strop 120 s)` pod souběžným buildem;
+tytéž sady samostatně doběhly za **0,4 s** zeleně. Regrese se ověřila **vložením regrese pětkrát**;
+tabulka je v [`docs/testovani.md`](testovani.md).
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu (`ineligible_app`),
+tatáž příčina jako u #508, #570 a #572. Vlastní revize diffu proběhla a je popsaná v PR.
+**A zákres v `docs/navrh.html` se nepřekresloval**: sekce 52 kreslí dráhu v **hlavičce**, řádek
+seznamu v ní zakreslený není a nová podoba se na vlastní pěst nekreslí.
+
+**Slito s #511 a #519 (17. 9. 2026), a slévání rozhodlo o jedné věci navíc.** Větev vyšla z mainu
+ze 6. 9.; než se slila, přibyla pilulka běžícího agenta (#511) a odklad do tichých hodin (#519).
+`git` na tom mlčel, ale obě změny sahaly do **téhož jediného slotu** vedle titulku. Rozhodnuto:
+pořadí ve slotu je *agent → dráha → `N k předání` → odznak review*, **tečky se kreslí vždycky**.
+Není to druhá odpověď z jiných dat — `agent běží · 4 min` i stanice `Push` čtou tentýž
+`BranchSyncState` —, a pilulka agenta nese uplynulý čas, který dráha nemá kde vzít. Hlídá to
+`OwnLoopRowRenderTests` nad pojmenovanou `PullRequestRow.showsLoopWord`; rozbor je
+v [specifikaci](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--o-jediný-slot-v-řádku-se-agent-a-dráha-dělí-pořadím-ne-kompromisem-509-slito-s-511).
+
 ## #508 — Dráha smyčky vlastního PR: pět stanic v hlavičce
 
 **Pod souřadnicemi vlastního PR stojí dráha s pěti stanicemi** — *Nálezy → Zadání → Push → CI →

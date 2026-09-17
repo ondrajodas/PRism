@@ -129,7 +129,12 @@ struct HomeView: View {
                     // z téhož důvodu jako `Prompt →` o řádek výš. Cizí PR s rozdělaným review je
                     // zrovna to, co se odkládá; odložení je o **frontě**, takže z téhle sekce
                     // řádek nezmizí a rozdělaná práce se neschová.
-                    snoozeAction: store.snoozeAction(for: pullRequest)
+                    snoozeAction: store.snoozeAction(for: pullRequest),
+                    // Dráha smyčky (#509) — **jeden řádek, jedna podoba**, z téhož reportu jako
+                    // pilulka o pár řádků výš. Vlastnictví se ptá tady, jako u `handoff`u.
+                    loop: ownership == .mine
+                        ? store.ownLoopRow(for: pullRequest, handoff: handoff)
+                        : nil
                 )
             }
         }

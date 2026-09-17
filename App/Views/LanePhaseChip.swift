@@ -70,4 +70,31 @@ struct LanePhaseChip: View {
         default: tint(of: state).opacity(0.16)
         }
     }
+
+    /// Výplň tečky dráhy v řádku seznamu (#509, `.rv-step7 i` ze zákresu).
+    ///
+    /// **Bydlí tady, ne v `OwnLoopDots`**, a je to tentýž důvod, kvůli kterému od #508 existuje
+    /// tenhle typ: mapování `PhaseState → barva` má být v okně jedno. Kapsle a tečka kreslí
+    /// **totéž** v jiné velikosti, takže druhá kopie by znamenala, že `hotovo` v řádku časem
+    /// zezelená jinak než `hotovo` v hlavičce. Odstín se proto bere z `tint(of:)`, nesází se
+    /// znovu.
+    ///
+    /// **Dutá je tečka o stavu, o kterém se nic neví** (`idle`, `unknown`) — plná neutrální
+    /// tečka by se mezi zelenými četla jako další odpověď, a `zjišťuju` odpověď není.
+    static func dotFill(of state: ReviewerLane.PhaseState) -> Color {
+        switch state {
+        case .idle, .unknown: Palette.raised
+        default: tint(of: state)
+        }
+    }
+
+    /// Obtažení tečky. U plné je z téhož odstínu jako výplň, takže kruh o okraj nenaroste ani
+    /// opticky — obtažení je tam kvůli duté tečce, která by jinak na tichém podkladu zmizela
+    /// (tatáž past jako u `.lchip i` v návrhu).
+    static func dotStroke(of state: ReviewerLane.PhaseState) -> Color {
+        switch state {
+        case .idle, .unknown: Palette.line
+        default: tint(of: state)
+        }
+    }
 }
