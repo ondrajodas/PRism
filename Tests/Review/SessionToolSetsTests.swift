@@ -3,7 +3,7 @@ import Testing
 
 @testable import PRism
 
-/// **Všechny čtyři sady povolení na jednom místě** (zadání #467).
+/// **Všechny sady povolení na jednom místě** (zadání #467, od #516 jich je šest).
 ///
 /// Do #467 se každá sada tvrdila u svého příkazu (`ClaudeCommandTests`, `IntentTextCommandTests`,
 /// `AskCommandTests`) a čtvrtá k nim přibyla. Čtyři sady znamenají **čtyři místa, kde se dá tvrdá
@@ -19,7 +19,7 @@ struct SessionToolSetsTests {
     /// tvrzení je o **tvaru** pravidla, ne o tom, kde ta cache dneska je.
     private let worktree = URL(filePath: "/cache/PRism/repos/o-r/42-sync")
 
-    // MARK: - Čtyři sady, čtyři literály
+    // MARK: - Šest sad, šest literálů
 
     /// **1. Reviewer** (tvrdá podmínka č. 2): čte kód, hlásí nálezy, načte skill. Žádný `Write`
     /// ani `Edit`, u `Bash` jen `git`.
@@ -89,7 +89,30 @@ struct SessionToolSetsTests {
         #expect(!AgentFixCommand.allowedTools(in: worktree).contains("Bash"))
     }
 
-    /// **6. Anotace hunků** (#524) — **sedmá session, ale žádná nová sada**.
+    /// **6. Brief na domově** (#516) — **prázdná sada**, jako překlad nálezů.
+    ///
+    /// Je to celý rozdíl mezi *čtením nahlas* a *review logikou*: session dostane hotový stav
+    /// aplikace (`Policy.briefInput`) a přeformuluje ho. Bez `Read` se o repozitáři nemá jak
+    /// dozvědět nic — a to je mez, která je vidět z argumentů, ne jen z promptu.
+    ///
+    /// **Tvrdí se literálem i přes argumenty**: prázdný řetězec se dá přehlédnout, takže se ptáme
+    /// i toho seznamu, který doopravdy odejde do CLI.
+    @Test("Brief nemá jediný nástroj")
+    func briefToolSet() {
+        #expect(BriefCommand.allowedTools == "")
+        #expect(Self.value(of: "--allowedTools", in: BriefCommand.arguments(prompt: "x")) == "")
+    }
+
+    /// **Překlad nálezů** — druhá prázdná sada, a do #516 se netvrdila **nikde**.
+    ///
+    /// Přibyla sem s briefem, protože tvrzení „platí pro všechny“ o ní do té doby nevědělo: sada
+    /// je prázdná, ale zákazy se u ní daly rozejít s ostatními, aniž by cokoli spadlo.
+    @Test("Překlad nálezů nemá jediný nástroj")
+    func translationToolSet() {
+        #expect(Self.value(of: "--allowedTools", in: TranslationCommand.arguments(prompt: "x")) == "")
+    }
+
+    /// **7. Anotace hunků** (#524) — **sedmá session, ale žádná nová sada**.
     ///
     /// Do zadání #524 měla mít vlastní sadu s nástrojem `ReportAnnotations`. Nástroj odpadl
     /// (odpovídá se posledním sdělením, viz `AnnotationSchema`) a s ním důvod pro vlastní sadu:
@@ -111,7 +134,7 @@ struct SessionToolSetsTests {
         #expect(allowed?.contains("ReportAnnotations") != true)
     }
 
-    // MARK: - Co platí pro všechny čtyři
+    // MARK: - Co platí pro všechny
 
     /// **Jedna sada zákazů, ne čtyři.** Druhá by byla druhé místo, kde se dá tvrdá podmínka č. 2
     /// porušit — a tvrdí se **literálem**, protože právě `git push` je to, co #466 povolilo
@@ -145,6 +168,7 @@ struct SessionToolSetsTests {
         let readOnly = [
             ClaudeCommand.allowedTools,
             AskCommand.allowedTools,
+            BriefCommand.allowedTools,
             Self.value(
                 of: "--allowedTools",
                 in: IntentTextCommand.arguments(prompt: "x", tool: "mcp__linear__get_issue")
@@ -186,8 +210,8 @@ struct SessionToolSetsTests {
         )
     }
 
-    /// Argumenty všech čtyř session — **na jednom místě**, aby se tvrzení „platí pro všechny“
-    /// nedalo napsat jen o třech z nich.
+    /// Argumenty všech session — **na jednom místě**, aby se tvrzení „platí pro všechny“ nedalo
+    /// napsat jen o některých z nich. Od #516 je v tom výčtu **i to, co má sadu prázdnou**.
     private static func everyArgumentList(worktree: URL) -> [[String]] {
         [
             ClaudeCommand.arguments(prompt: "x"),
@@ -197,6 +221,11 @@ struct SessionToolSetsTests {
             // Pátá session (#510). Bere argumenty od té čtvrté, ale ve výčtu být **musí**: kdyby
             // si je někdy začala skládat sama, mají o tom tvrzení „platí pro všechny“ vědět.
             AgentFixCommand.arguments(prompt: "x", worktree: worktree),
+            // Dvě sady, které nemají **nic** (#516 a překlad nálezů). Ve výčtu být musí: zákazy
+            // jsou u nich jediná věc, která se dá rozejít s ostatními — a nad prázdným povolením
+            // by si toho nikdo nevšiml.
+            BriefCommand.arguments(prompt: "x"),
+            TranslationCommand.arguments(prompt: "x"),
             // Anotace hunků (#524). Skládá si argumenty sama a **povolení si půjčuje od rozhovoru**
             // — tvrzení „platí pro všechny“ ji tedy musí vidět, aby se tou půjčkou nedalo obejít.
             AnnotateCommand.arguments(prompt: "x"),

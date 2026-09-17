@@ -210,9 +210,13 @@ extension Policy {
     ///     (`Policy.lane`) — `stage` se do něj od druhého proklikání #515 nedostane vůbec.
     ///   - isMergeReady: je vlastní PR bez známé překážky? Taky uzávěrem, a s předfiltrem na
     ///     straně storu — bez načteného detailu se `mergeOffer` neskládá vůbec.
+    ///   - series: série PR (#513). Drží skupinu pohromadě **uvnitř pořadí podle závažnosti**;
+    ///     do pruhů zasahovat nemůže, protože rozřazení podle mého tahu je druhá osa (viz
+    ///     `Policy.byUrgency(_:keeping:)`).
     static func board(
         entries: [QueueEntry],
         mine: Set<String> = [],
+        series: [PullRequestSeries] = [],
         handoff: (PRIdentifier) -> HandoffReport = { _ in .never },
         isMergeReady: (PRIdentifier) -> Bool = { _ in false },
         activity: [ActivityEvent] = [],
@@ -220,7 +224,7 @@ extension Policy {
         activityEmpty: ActivityEmptyState? = nil
     ) -> Board {
         var grouped: [WorkLane: [QueueEntry]] = [:]
-        for entry in byUrgency(entries) {
+        for entry in byUrgency(entries, keeping: series) {
             let ownership = self.ownership(of: entry.pullRequest, mine: mine)
             // U cizího PR se na předání ani na merge neptáme — obojí je otázka o **mojí** větvi
             // a uzávěr by kvůli ní sáhl na data, která se u cizího PR nenačítají.

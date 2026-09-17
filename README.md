@@ -153,7 +153,39 @@ nepustí ani tehdy, když na něm review neběželo.
 `Co teď`, jehož akce se přestěhovaly nad pruhy. **Čísla z karet zůstávají v railu a ve stavovém
 řádku**, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z domácí záložky. Osa filtru
 `Jen s blokujícím nálezem`, kterou zapínala karta `Blokuje`, zůstává — odškrtává se v nabídce
-filtru. **Brief ve třech větách nad deskou dodá #516**; do té doby je tam pozdrav.
+filtru.
+
+**Nad deskou stojí od #516 brief ve třech pojmenovaných větách** — `Přibylo`, `Hoří`,
+`První na řadě` — a pozdrav zůstává nad ním. Skládá ho session Claude Code **bez jediného
+nástroje**: dostane hotový stav aplikace (počty z pruhů, řádky viditelných pruhů, počet odložených,
+`Dění`) a jenom ho **přeformuluje**. **Nečte repozitář**, a je to hranice, ne opatrnost — brief
+z kódu už je review logika a ta patří do skillu, ne do aplikace. Pod větami stojí
+`shrnuto 21:48 · 0,09 $ · ze stavu aplikace, ne z kódu` a tlačítko `Shrň znovu`.
+
+**Čísla pull requestů ve větách otevírají záložku** — kliknutím na `#727` se PR otevře stejně jako
+z fronty, z palety ⌘K nebo z `prism://`; je to **tatáž cesta**, ne druhá, takže se otevře i PR,
+který mezitím z fronty vypadl (jako záložka ke čtení). Odkaz ale vznikne **jenom pro pull request,
+který do briefu doopravdy šel**: text je od modelu, takže si číslo umí vymyslet, a odkaz na
+neexistující PR je horší než prostý text. Cíl navíc neurčuje samo číslo — v briefu stojí čísla
+z víc repozitářů —, takže **když se nedá poznat repozitář, zůstane číslo obyčejným textem**. Žádné
+mrtvé tlačítko a žádná hláška.
+
+**Otázka, na kterou ve stavu aplikace odpověď není, mlčí** — řádek se prostě nenakreslí. Struktura,
+která by si vynutila větu na každou ze tří otázek, si o vymyšlenou větu říká, a to je zrovna to,
+čemu se brief vyhýbá.
+
+**Ve výchozím stavu je vypnuto a blok se pak nekreslí vůbec.** V nastavení (`Review a skilly`,
+sekce `Brief na domově`) jsou tři volby: `Vypnuto`, `Na požádání` a `Při prvním tiku dne` — to
+poslední je vedle agenta z #510 jediná cesta, kterou tady session startuje bez kliknutí, a složí
+brief **jednou za den**, jakmile je fronta načtená. Podle čeho se pozná, že je dnešek shrnutý,
+přežívá restart (`brief.json` v cache), takže se za druhý brief o tomtéž neplatí. **Cena každého
+briefu** je na jeho řádku a počítá se do `Dneska stálo` — i u běhu, který text nevrátil. **Stojí
+kolem 0,09 $**, tedy ~2,50 $ měsíčně při `Při prvním tiku dne`, a ta částka je vidět i v nastavení
+u přepínače. Drtivou většinu z ní spolkne **start session**, ne délka shrnutí — proto brief jako
+jediná session **vynucuje levný model** místo toho, aby ho nechal na `claude`
+([měření](docs/testovani.md#kolik-stojí-jeden-brief-a-kde-ty-peníze-doopravdy-jsou-516)). **Když se
+session nepovede**, stojí v bloku `Shrnutí se nepovedlo.`, pod tím důvod a tlačítko `Zkusit znovu`;
+prázdný rámeček by byl k nerozeznání od vypnutého briefu.
 kurzoru, ani hover stav.
 
 **Karty odešly s #515** (do té doby jich bylo pět, viz výš) a rozdíl, který nesly, drží od #515
@@ -327,6 +359,42 @@ protože odložení mluví o frontě, ne o rozdělané práci.
 **Odložit jde jen cizí PR.** U vlastního rozhoduje o tom, kdy se na něj podívám, to, kdy pushnu —
 a blok `Odložené` stojí pod frontou a na domově, takže odložené vlastní PR by ze sekce `Moje PR`
 zmizelo a nikde by se neobjevilo.
+
+## Série PR — stohované pull requesty drží ve frontě pohromadě (#513)
+
+Když někdo rozdělí práci na tři pull requesty a každý postaví na větvi toho předchozího, leží ve
+frontě jako tři nesouvisející řádky — a řazení podle času i podle závažnosti je od sebe klidně
+rozdělí. Přečíst přitom jde jedině odspoda: diff horního PR je **jen vrstva** nad tím spodním.
+
+**PR, jehož base větev je hlavou jiného otevřeného PR v tomtéž repozitáři, je v sérii.** Fronta ho
+drží u ostatních členů, uvnitř od základu nahoru a **na místě toho, který je v pořadí nejvýš** —
+řazení se tím nemění, jen se skupina nerozpadne. Řádek nese pilulku **`1. v sérii`** /
+**`2. · stojí na #14451`** a přerušovanou čáru na kraji; nad skupinou stojí popisek
+**`série · AJDA-563 · 2 PR · review v pořadí ↓`** (číslo ticketu se odvozuje ze společné části
+titulků, a když společné není, vynechá se).
+
+**Hlavička PR ukazuje řetěz větví** — `moje-větev [3. v sérii] → jeho-větev [#14451] → main` — a pod
+souřadnicemi větu *Diff je jen tahle vrstva: 4 soubory nad #14451. Až se #14451 mergne, GitHub
+přepne základ na main a řetěz zmizí sám.*
+
+**Každá pilulka v řetězu patří té větvi, u které stojí**, a pořadí je v něm jedno: to u hlavy, tedy
+u otevřeného PR. U base větve je jen odkaz `#14451` — že je ten v sérii dřív, řekne nápověda, kde to
+stojí u jeho čísla. Pilulku má i **základ série** (`1. v sérii`), takže se pořadí dá přečíst
+z každého detailu.
+
+**Nic se nepíše a nepřibývá volání.** Větve dorazí **týmž** dávkovým GraphQL dotazem, kterým se
+uvnitř tiku zjišťují hlavy (#420) — tři pole na témže uzlu, tedy pořád **jeden bod z 5000 za
+hodinu**; na klidný tik se neptá vůbec. **Série zaniká sama**: po mergi spodního PR přepne GitHub
+base horního na `main` a skupina zmizí bez zásahu.
+
+**Ve čtyřech případech se netvrdí nic** — hlava z forku, neznámý původ hlavy, dvě otevřená PR na
+téže větvi a nedotažené větve. Falešná série by poslala člověka číst dva PR v pořadí, které spolu
+nesouvisí.
+
+**Popisek a čára jsou jen ve frontě.** Na domově a v sekci `Rozdělaná` zůstává pilulka (stát na cizí
+větvi platí v každém seznamu), ale skupina tam pohromadě nedrží: domov řadí do pruhů podle mého tahu
+a ořezává je na pět řádků. A když ze skupiny zbude ve frontě jeden řádek (druhého schoval filtr nebo
+odložení), popisek se nekreslí — *2 PR* nad jedním řádkem tvrdí víc, než je vidět.
 
 ## Dění — co proletělo jako notifikace, zůstane
 

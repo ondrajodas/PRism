@@ -10601,6 +10601,141 @@ model, síť a peníze. V harnessu se tvrdí jedině **hranice** (kam smí psát
 přijme), ne **kvalita**. Odtud věta v popisu PR: sandbox s vlastním PR, komentář z druhého účtu.
 
 
+## Brief na domově: co jde tvrdit v harnessu a co jedině spuštěním (#516)
+
+Šestá session nemá jediný nástroj, takže se u ní **neměří, co udělala s repozitářem** — nic tam
+udělat nemůže. Měří se dvě jiné věci: **co dostala na vstupu** a **kdy se vůbec pustila**. Obojí
+je čistá funkce, takže se testuje výčtem a bez mockování.
+
+| Co se ptá | Kde se to ověří | Čím ne |
+|---|---|---|
+| Je sada prázdná a zákazy tytéž? | `SessionToolSetsTests` — **literálem** i přes seznam argumentů | Tvrzením „neobsahuje `Read`“: prázdná sada se od `Grep` nepozná, když se ptáme jen na jedno jméno |
+| Nese vstup jenom stav aplikace? | `BriefInputTests` — **negativně**: žádné `/Users/`, `https://`, `.swift`, `diff --git`, `@@` | Přečtením promptu okem: text se skládá ze tří míst a poroste |
+| Nespustí se, když nemá? | `AppStoreBriefTests` — **nula běhů** s vypnutou branou, při tiku v režimu `Na požádání`, nad nenačtenou frontou, při zavírání a podruhé týž den | Tvrzením o stavu: „v bloku nic není“ vyjde stejně u vypnuté brány i u rozbitého spouštěče |
+| Pozná se spadlá session od vypnuté? | `AppStoreBriefTests` + `BriefInputTests` — blok má **čtyři různé podoby** a žádná není prázdná | Pohledem na obrazovku: prázdný rámeček a nekreslený blok vypadají skoro stejně |
+| Účtuje se i nepovedený běh? | `AppStoreBriefTests` — `dailySpend` po běhu **bez textu** | Testem šťastné cesty; ten projde i tehdy, když se cena u selhání zahodí |
+| Přežije dnešek restart? | `BriefStoreTests` — **druhá instance** `BriefStore`u nad touž cache | Tvrzením nad jednou instancí: to projde i nad pamětí |
+| Rozebere se odpověď na pojmenované řádky? | `BriefCommandTests` — **výčtem tvarů**, které model umí poslat: ozdoba, malá písmena, próza kolem, dvojí klíč, `CRLF`, ohradníky — **a k tomu jedna odpověď zachycená ze skutečného běhu** (fixtures jsou skutečné výstupy) | Jedním šťastným vstupem: ten projde i nad parserem, který hledá první dvojtečku |
+| Je vynechaný řádek odpověď, ne porucha? | `BriefCommandTests` — jeden řádek je platný výsledek, **nula je `nil`** | Tvrzením „vrátí tři řádky“: to si vynutí právě tu vymyšlenou větu |
+| Jede to na levném modelu? | `BriefCommandTests` — `--model` **i jeho hodnota** | Prohlédnutím argumentů okem: chybějící přepínač vypadá jako „vybere se sám“, což je taky odpověď — jen za 14 $ měsíčně |
+| Odkazuje se jedině na PR, který do briefu šel? | `BriefLinksTests` — **negativně**: neznámé číslo, cizí jméno repa a dvojznačné holé číslo zůstanou textem | Tvrzením „na `#584` se dá kliknout“: to projde i nad funkcí, která odkazuje na cokoli, co vypadá jako číslo |
+| Je seznam cílů tentýž jako text? | `BriefInputTests` — `mentioned` **a** kontrola, že každý z nich v textu doopravdy stojí; `AppStoreBriefTests` — hotový brief ho nese z materiálu | Testem nad samotným seznamem: ten projde i tehdy, když se skládá jinde než text |
+| Nezmění rozdělení na odkazy větu? | `BriefLinksTests` — spany se **složí zpátky doslova** | Porovnáním počtu spanů: ten sedí i nad textem, ze kterého vypadl znak |
+| Jsou ty tři věty k něčemu? | **spuštěním** — cizí model, síť a peníze | Ničím v harnessu |
+
+### Kde se ověřila regrese vložením regrese (#516)
+
+U čtyř vět, na kterých #516 stojí, se chyba **dočasně vrátila** a koukalo se, co spadne:
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| kontrola brány (`mode.isOn`) z `Policy.brief` odebrána | *Vypnutá brána nepustí ani tlačítko, ani tik* a ve store *S vypnutou branou se nespustí žádná session* (dvě tvrzení, mimo jiné to o stavu) |
+| `BriefCommand.allowedTools` změněné na `"Read"` | *Brief nemá jediný nástroj* — **dvě** tvrzení, literál i seznam argumentů |
+| do řádku vstupu přidána adresa pull requestu | *Vstup nenese cestu na disk, URL ani kód* a ve store *Session dostane stav aplikace, ne cesty a kód* |
+| spadlá session nechána ve stavu `never` místo `failed` | *Spadlá session nechá v bloku větu a nabídku, ne prázdno* — tři tvrzení včetně toho, že se tlačítko jmenuje `Zkusit znovu` |
+| `--model` odebrán z `BriefCommand.arguments` (návrat k tomu, co stálo $0,46) | *Model je vynucený a je to ten levný* — **dvě** tvrzení, přítomnost přepínače i hodnota |
+| v `briefTarget` odebrána podmínka jednoznačnosti (první kandidát s tím číslem) | *Dvojznačné holé číslo zůstává textem* a *Cizí jméno repa odkaz nevyrobí, i když je číslo jednoznačné* — obojí, protože bez ní stačí k odkazu **samo číslo** |
+| `Brief.mentioned` dekódován tvrdě (`decode` místo `decodeIfPresent`) | *Brief uložený bez cílů odkazů se přečte, jen bez nich* — soubor se zahodil celý, tedy i razítko dnešního běhu |
+| z `labelled` odebrán požadavek na dvojtečku za klíčem | *Věta, která klíčem jen začíná, není návěští* — `NEXT week bude klid.` se rozebralo na řádek `next` s textem `eek bude klid.`, tedy přesně ta tichá ztráta prvního slova, kvůli které ta podmínka je |
+
+### Dvě věci, na kterých scéna store testu stojí
+
+- **Scéna se načítá tikem, a v režimu `Při prvním tiku dne` tím brief spustí.** Není to nedopatření
+  scény, je to **ta cesta, která je na #516 nová** — jediná session bez kliknutí vedle agenta
+  z #510. Test to proto tvrdí rovnou: po `refresh()` je běh **jeden**, druhý `writeBriefIfDue()`
+  už žádný. Kdo scénu změní, ať tenhle řádek nečte jako šum.
+- **Na běh se musí počkat.** Spouštěč visí na tiku, takže na session **nečeká** (jinak by dvě
+  minuty stál úklid cache i hlášení o zbytku fronty). Test proto čeká sám (`while let task =
+  store.briefTask`), jinak by měřil stav uprostřed běhu.
+
+### Co se ověřit nedá a musí to proklikat člověk
+
+Že tři věty odpovídají tomu, co je na desce, a že se v nich neobjeví nic vymyšleného — to je cizí
+model, síť a peníze. V harnessu se tvrdí jedině **hranice** (co session dostala, kdy se pustila, co
+se z jejího výsledku přijalo), ne **kvalita textu**. Odtud věta v popisu PR.
+
+**Totéž platí o kliknutí na odkaz.** Harness tvrdí, **které číslo se odkazem stane a na co ukazuje**
+(`BriefLinksTests`) a že otevření jde jedinou cestou (`AppStore.openPullRequest`) — ale že klik
+v okně doopravdy otevře záložku, se ověřit nedá: je to `AttributedString` s `.link` a `OpenURLAction`
+na bloku, tedy dvě věci, které se projeví až v běžícím okně. Kdyby se odchycení nepovedlo, odkaz by
+se **otevřel v prohlížeči** místo v záložce — tedy nic rozbitého, jen něco jiného, což je přesně ten
+druh vady, kterou zelený běh nechytí. Proklikne to člověk.
+
+## Kolik stojí jeden brief a kde ty peníze doopravdy jsou (#516)
+
+Po prvním proklikání ukázala aplikace `shrnuto 17:44 · 0,46 $`, tedy **patnáctkrát víc**, než kolik
+odhadovalo hlášení („kolem tří centů“). Odhad vycházel z velikosti vstupu — a právě to byla ta
+chyba: **vstup o účtu nerozhoduje skoro vůbec**.
+
+### Jak se to měřilo
+
+Šest běhů `claude -p` s **týmiž argumenty, jaké skládá `BriefCommand.arguments`**, nad realistickým
+vstupem (2 769 B: čtyři pruhy, 13 pull requestů, 12 řádků dění) z `cwd` `/` — tedy tak, jak session
+startuje z aplikace (`workingDirectory: nil` u GUI procesu). Čísla se čtou z `result` eventu:
+`usage`, `total_cost_usd` a `modelUsage`, ne z odhadu.
+
+**Měří se oba konce** (#275): kolik tokenů odešlo a kolik se vrátilo — jinak by se dalo tvrdit, že
+se ušetřilo, když se práce jen přesunula do delšího přemýšlení.
+
+| Běh | Model | Boot (create + read) | Vstup | Výstup (z toho přemýšlení) | Cena | Čas |
+|---|---|---|---|---|---|---|
+| jak to bylo | opus-5 | **47 676** (16 620 + 31 056) | **2** | 150 (0) | $0,1855 ¹ | 6,8 s |
+| + `--strict-mcp-config` | opus-5 | 42 555 (11 499 + 31 056) | 2 | 1 085 (834) | $0,1577 ¹ | 19,9 s |
+| + `--model haiku` | haiku-4.5 | 42 730 | 10 | 6 084 (5 924) | $0,0621 ¹ | 63,7 s |
+| nová struktura, opus | opus-5 | 42 650 | 2 | 1 281 (1 127) | $0,1635 ¹ | 21,0 s |
+| **nová struktura, haiku** | haiku-4.5 | **39 703** | 10 | 3 683 (3 574) | **$0,0447** ¹ | 32,5 s |
+| `--bare` | — | — | — | — | **$0** | spadlo |
+
+¹ **Tahle čísla jsou z běhů s teplou cache, a proto vypadají levněji, než jaký je skutečný účet.**
+Rozhodující je řádek `cache_creation_input_tokens`: cena studeného běhu je `boot × cena zápisu do
+hodinové cache`. Ověřeno dopočtem — 47 676 × $10/M = **$0,477**, což sedí na uživatelem naměřených
+**$0,46**; u haiku vychází 39 703 × $2/M = **~$0,085**.
+
+### Čtyři věci, které z toho plynou a nejsou zjevné
+
+- **Vstup je ~2 % účtu.** `input_tokens: 2` v tabulce není chyba měření — náš prompt se celý
+  započítá do `cache_creation`, kde tvoří ~1 000 ze 42 000 tokenů. **Strop na velikost vstupu by
+  tedy neušetřil prakticky nic**, a proto se zamítl: zaplatil by se shrnutím, které mlčí o části
+  desky, aniž by to přiznalo.
+- **Platí se hodinová cache, kterou brief nikdy nepoužije.** Zápis do ní stojí **dvojnásobek** ceny
+  vstupu a brief běží **jednou denně** — cache vyprší dávno předtím. Vypnout to nejde žádným
+  přepínačem CLI, takže jediná páka je **cena tokenu**, tedy model.
+- **`--strict-mcp-config` ubere 5 121 tokenů a ~8 s, ne víc.** Zahodí 43 MCP serverů a 100 jmen
+  nástrojů — ale schémata nástrojů jsou stejně odložená (`ToolSearch`), takže v promptu stojí jen
+  jména. Je to tedy zlevnění, které se vyplatí vzít, ne to hledané.
+- **`--bare` je slepá ulička, a měřená.** Vypnul by CLAUDE.md, hooky i plugin sync, ale authentizaci
+  bere **výhradně z `ANTHROPIC_API_KEY` nebo `apiKeyHelperu`** — OAuth ani klíčenku nečte. Na tomhle
+  stroji tedy skončil `api_error`, exit 1, `total_cost_usd: 0`. Nezkoušet znovu.
+
+### Co se za těch 5× levnější zaplatilo
+
+Tentýž vstup, tentýž prompt, vedle sebe:
+
+> **opus** — `BURNING: Nejvíc ti hoří keboola/job-queue #727 se 4 nálezy, z toho 2 blokujícími, a po novém commitu nálezy zastaraly.`
+>
+> **haiku** — `BURNING: Na keboola/job-queue #727 jsou 2 blokující nálezy z 4.`
+
+Obojí je **pravdivé**; opus navíc unese souvislost („a po novém commitu nálezy zastaraly“). Byla to
+vědomá výměna: strukturu z #516 to snese, protože **návěští nese kus významu, který dřív musela
+nést próza**. Kdo to bude měnit zpátky, ať ví, že to je ~14 $ měsíčně proti ~2,50 $.
+
+Haiku k tomu běží **~60 s místo ~21 s**, a je to přemýšlením, ne čekáním. `--effort low` to
+**nespravilo** (3 564 vs 5 924 tokenů přemýšlení ve dvou bězích na tomtéž vstupu — rozdíl je
+v šumu), takže se nepřidalo a limit se místo toho zvedl na tři minuty.
+
+### Nejednoznačný vstup je vada vstupu, ne promptu (#516)
+
+Při měření vyšlo, že brief napsal „blokuje **dva reviewery**“ tam, kde vstup říkal `blokuje 2` —
+a jsou to **blokující nálezy**. Je to tentýž vzor jako *text v UI, který tvrdí víc, než data
+unesou*, jen o krok dřív: **nejednoznačný vstup to tvrzení do briefu teprve pustí**, a žádné
+pravidlo v promptu („nic si nedomýšlej“) tomu nezabrání, protože model nic nedomýšlí — čte, co
+tam stojí. Opraveno na `z toho 2 blokující` a **drží to test v obou směrech** (obsahuje nový tvar,
+neobsahuje starý).
+
+Obecně: u každého údaje ve `briefInput` je otázka **„dá se tohle přečíst dvěma způsoby?“**, a ne
+„je to pravda?“. Na druhou vyjde odpověď ano i u řádku, který brief rozbije.
+
+
 ## Kolik stojí výpis repozitářů organizace (#532)
 
 Změřeno na `keboola` (`gh` 2.x, tenhle stroj, ráno 2. 9. 2026). **Je to to jediné číslo, ze kterého
@@ -11345,6 +11480,23 @@ autora (`author: null`) a odpověď s cizím číslem uvnitř aliasu.
 | předfiltr nekouká na razítko `updatedAt` | `Tichý tik druhý dotaz neposílá` (tři tiky → tři dotazy) a dvě tvrzení v `Policy` |
 | `readiness(of:)` nezahazuje `UNKNOWN` | `Chybějící alias ani nedopočítaná slévatelnost se nezapíší` (mergnuté PR se zapsalo jako odpověď) |
 
+### Cena `Policy.series` se změřila, cache se zamítla
+
+Série se počítá **při čtení**, takže k tomu patří číslo. Změřeno sondou nad tisícem průchodů
+(Debug build, tentýž stroj):
+
+| Fronta | Na průchod |
+|---|---|
+| 20 PR (jedna série) | **153 µs** |
+| 60 PR (jedna série) | **1,0 ms** |
+
+Seznam fronty se z toho poskládá **třemi průchody** (`visibleQueuePullRequests`, `pullRequestSeries`
+pro pilulky, `queueSeriesCaptions`), tedy kolem **půl milisekundy** na jedno sestavení řádků — a to
+se neděje na snímek, ale na změnu stavu. Cache se proto **zamítla**: musela by si říct, co ji
+vyprazdňuje (#224) — seznam z tiku, každý načtený detail a každá rozhlídka po hlavách —, a tři
+invalidace za čtyři procenta snímku se neplatí. Sonda v repu nezůstala; je to měření, ne tvrzení
+o chování.
+
 ### Počet dotazů na fake gateway patří k číslům
 
 `FakeGitHubGateway.mergeReadinessRequests` je **pole polí**, ne plochý seznam — stejně jako
@@ -11461,6 +11613,112 @@ u volajícího hned vedle řádku, který o `handoff`u rozhoduje dnes.
 musela hostovat celý seznam, a `List` staví řádky líně, takže by měřila hlavně to, kolik jich
 zrovna vzniklo. Zbývá z toho tvrzení o **výšce** řádku (`OwnLoopRowRenderTests`) a snímek běžící
 aplikace.
+
+## Série PR: co stojí větve navíc a co drží počet dotazů (#513)
+
+Zadání issue tvrdilo, že se série pozná z dat, která polling už má. **Nepozná** — a to je první věc,
+kterou tahle sekce dokládá; druhá je, kolik stálo to napravit.
+
+### Že fronta větve nezná, je měření, ne domněnka
+
+```bash
+gh search prs --repo cli/cli --state open --json 2>&1 | head -3
+```
+
+`gh search prs --json` nabízí `assignees, author, authorAssociation, body, closedAt, commentsCount,
+createdAt, id, isDraft, isLocked, isPullRequest, labels, number, repository, state, title,
+updatedAt, url` a **žádné pole o větvích** (vypsáno `gh` 2.83.0 dne 17. 9. 2026). Proto je `PullRequestSummary` nemá a proto by `Policy.series(in:refs:)`
+nad cizí frontou vracela prázdno pořád.
+
+### Kolik stojí tři pole navíc v dávkovém dotazu
+
+Živé GitHub API přes `gh` (2.83.0), 17. 9. 2026, MacBook s běžícím Xcode buildem v pozadí. Dotaz je
+**doslova ten, který skládá `PullRequestHeadsQuery`**, jen s přidaným `rateLimit { cost remaining
+nodeCount }`, aby se cena nedohadovala.
+
+| Dotaz | Aliasů | `cost` | Čas | Odpověď | Dokument |
+|---|---|---|---|---|---|
+| s větvemi (`cli/cli` #14451–#14453) | 3 | **1** | 0,61–0,70 s | 1,0 kB | — |
+| s větvemi (20 PR z 6 repozitářů) | 20 | **1** | 3,42–4,78 s | 6,1 kB | 5 200 B |
+| bez větví (tytéž PR, #420) | 20 | **1** | 1,82–3,58 s | 4,1 kB | 4 360 B |
+
+Měřeno **střídavě A/B/A/B** (tři kola), protože jednorázové číslo z živého API nese šum sítě: rozpětí
+obou cest se **překrývají**, takže se z nich nedá tvrdit, že větve dotaz zpomalují. Co se tvrdit dá,
+je zbytek řádku: **cena zůstává 1 bod z 5000/h**, dokument roste o ~42 B na alias a odpověď o ~100 B
+na PR. **Tři pole na témže uzlu tedy nestojí ani volání, ani bod** — a právě proto se nešlo cestou
+druhého dotazu.
+
+### Zamítnutá varianta se taky měří
+
+Druhá cesta by byla dotáhnout větve `fetchDetail`em (`gh pr view --json`) na každý řádek fronty.
+U #572 se **totéž** změřilo na vlastních PR: **46 volání a 29,6 s** proti jednomu volání a ~3 s.
+Nad cizí frontou by to bylo jedno volání na PR **každou minutu** — tedy přesně ta `N+1` past, kvůli
+které dávkový dotaz u #420 vznikl.
+
+### Počet dotazů na fake gateway patří k číslům
+
+`FakeGitHubGateway.headRequests` je **pole polí** (od #420), takže se dá tvrdit obojí — kolik dotazů
+a na koho. Naměřeno v `AppStoreSeriesTests` nad frontou o čtyřech cizích PR:
+
+| Tik | Dotazů | Aliasů v dotazu |
+|---|---|---|
+| první (nic se neví) | **1** | 4 |
+| druhý, nic se nezměnilo | **0** | — |
+| druhý, pohnulo se jedno PR | **1** | **1** (jen to pohnuté) |
+| fronta jen z vlastních PR | **0** | — |
+
+Poslední řádek je hranice, ne úspora: větve vlastních PR nese rozhlídka po slévatelnosti (#572),
+takže by dotaz tudy byl druhé volání za tutéž hodnotu.
+
+### Fixtura je skutečná série z veřejného repa
+
+`Tests/Fixtures/gh/pr-heads-series.json` je nezkrácená odpověď `gh api graphql` na `cli/cli`
+#14451–#14453 (*Refreshable tokens 2/7–4/7* od `babakks`) — **doopravdy stohovaná** PR, kde base
+každého je hlavou toho předchozího. Test nad ní nepočítá jen dekódování: pustí přes ni
+`Policy.series(in:refs:)` a čeká trojici od základu nahoru, tedy tentýž výpočet, jaký dělá okno.
+
+Starší fixtura `pr-heads.json` (#420) zůstává a testuje se proti ní, že odpověď **bez** větví hlavu
+nepoloží — „nevíme“ se od „nestojí na ničem“ musí poznat.
+
+### Kde se ověřila regrese vložením regrese (#513)
+
+| Vložená regrese | Co spadlo |
+|---|---|
+| `series` nekouká na `livesInBaseRepository` (bere i forky) | `Hlava z forku sérii nezaloží`, `Nejistý původ hlavy sérii nezaloží` |
+| `seriesRefsProbe` nekouká na razítko (ptá se pořád) | `Klidný tik se na nic neptá` (`Policy`) i `Klidný tik se neptá` a `Odpověď bez větví se podruhé neptá` (store) |
+| `headProbe` neodstraňuje duplicity | `Sjednocení nemá duplicity a drží pořadí` (PR v dotazu dvakrát) |
+| fronta nepřeskládá členy (`Policy.grouped` vynecháno) | `Fronta přeskládá sérii od základu nahoru` **a** `Popisek je jeden a sedí nad základem` — popisek nad rozházenou skupinou nevznikne, což je ta stráž, kvůli které se kreslí jedině ve frontě |
+| pilulka u base větve se vrátí do tvaru `#14451 · 2. v sérii` | `Pořadí otevřeného PR a pořadí jeho základu se nedají zaměnit` **všech pět případů** a `Pilulka u base větve je jen odkaz na spodní PR` (změřeno po připomínce k prvnímu proklikání) |
+
+### Dvě čísla v hlavičce se testují tím, že se **nedají** zaměnit
+
+Řetěz v hlavičce nese pořadí otevřeného PR u jeho vlastní větve a `#14451` u té base. **Obě čísla
+byla pravdivá i v té podobě, která mátla** — proto nestačí test na jedno z nich:
+`neverConfusesTheTwoPositions` běží nad pozicemi **2 až 6** a tvrdí naráz, že v pilulkách řetězu je
+**právě jedno** pořadové číslo, že patří **hlavě** a že se rovná tomu, které o témž PR říká
+`Policy.seriesPill` v řádku fronty. Čísla se z textu vytahují **hledáním číslice zakončené tečkou**,
+tedy tvarem, kterým se ta dvě čísla dala zaměnit; `#14451` se do výčtu nedostane.
+
+### Že se to do řádku vejde, je měření, ne pohled
+
+Řádek fronty je úzký a od #509 se v něm o místo dělí mapa PR, tečky dráhy, pilulka a `Prompt →`.
+Pilulka série je do toho **další** prvek, takže `SeriesRowRenderTests` měří `fittingSize` mimo
+obrazovku (tatáž konstrukce jako `OwnLoopRowRenderTests`) a tvrdí čtyři věci: pilulka výšku řádku
+nezvedne, v **636 bodech** (obsah nejužšího okna bez railu) zůstane řádek na jedné řádce, **vlastní
+PR v sérii unese pilulku i dráhu naráz** — to je ta nejtěsnější kombinace v celém okně a vznikla
+až slitím dvou větví — a popisek přidá **21 bodů**, tedy jednu řádku, ne roztažený řádek pod sebou.
+
+### Co se v harnessu ověřit nedá
+
+- **Že je popisek nad skupinou ve frontě doopravdy vidět.** Testy tvrdí, že ho
+  `queueSeriesCaptions` vydá a že ho `PullRequestListView` předává; jestli se nakreslí a jak vypadá
+  vedle přerušované čáry, ověří jedině spuštěná aplikace. **Na běžícím okně je zatím doložený
+  jedině pruh desky** (pilulka a čára), protože přepnout rail na sekci `Fronta` jde jen kliknutím
+  a `osascript` ani syntetické `CGEvent` na tomhle stroji asistenční přístup nemají.
+- **Že se kreslený scénář ze zadání dá dneska vyfotit.** `keboola/job-queue` #725–#727 (`AJDA-563
+  [1/3]`–`[3/3]`) **sérií nejsou**: všechna tři mají dneska `baseRefName: main` (ověřeno
+  `gh api repos/keboola/job-queue/pulls/<n>`). Pro pohled na běžící okno se proto do konfigurace
+  slotu přidal zdroj `repo:cli/cli is:pr is:open author:babakks`, kde skutečná série leží.
 
 ## Návrh změny kódu (#528)
 

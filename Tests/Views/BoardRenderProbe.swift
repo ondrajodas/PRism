@@ -64,6 +64,15 @@ struct BoardRenderProbe {
         /// musí kreslit **nad** tichým pruhem, tedy jako **pátý** (třetí proklikání ho vrátilo
         /// z konce; poslední místo bylo špatně přeložený pokyn o posledním *pravidle*).
         case allLanes = "vsechny-pruhy"
+        /// **Brief nad pruhy, hotový** (#516) — tři **pojmenované** věty, razítko s cenou
+        /// a `Shrň znovu`. Scéna
+        /// existuje proto, že brief je **jediný blok desky, jehož výšku určuje cizí text**:
+        /// otázka „vejde se odstavec nad pruhy, aniž by první pruh spadl pod hranu?“ se z čísla
+        /// nepozná.
+        case brief = "brief-hotovo"
+        /// **Brief, který se nepovedl** (#516). Druhá scéna, protože je to podoba, na které
+        /// záleží nejvíc: prázdno by se slilo s vypnutým briefem, který se nekreslí vůbec.
+        case briefFailed = "brief-spadlo"
     }
 
     @Test("Vyrendrovat desku do PNG")
@@ -135,7 +144,7 @@ struct BoardRenderProbe {
         case .everythingDone: 0
         case .single, .mergeWithHandoff: 1
         case .allLanes: 6
-        case .lanes, .activityEmpty: 7
+        case .lanes, .activityEmpty, .brief, .briefFailed: 7
         }
         let queue = (1..<(1 + count)).map { number in
             PullRequestSummary(
@@ -159,6 +168,9 @@ struct BoardRenderProbe {
         // **Bez mých loginů je všechno cizí** (`ownership(ofAuthor:mine:)`), takže scéna
         // o vlastních pruzích je musí nastavit — jinak by vyrendrovala `Přečíst`.
         configuration.global.ownLogins = ["ondrajodas"]
+        // Brána briefu (#516). **V konfiguraci, se kterou store vzniká** — `configuration` je
+        // `private(set)`, a je to správně: brána se mění jedině uloženým nastavením.
+        configuration.global.brief = scenario == .brief || scenario == .briefFailed ? .onDemand : .off
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success(queue)),
             configuration: configuration,
@@ -226,6 +238,26 @@ struct BoardRenderProbe {
         if scenario == .allLanes {
             setUpAllLanes(in: store, ids: queue.map(\.id))
         }
+        // Brief (#516). **Brána i stav se sázejí přímo**, ne přes `writeBrief()`: ta cesta pouští
+        // `claude`, a sonda nemá co utrácet — kreslí se tu podoba bloku, ne běh session.
+        if scenario == .brief || scenario == .briefFailed {
+            store.briefState = scenario == .brief
+                ? .ready(Brief(
+                    // **Nejdelší věta je na stropu z promptu** (`BriefCommand.sentenceLimit`):
+                    // sonda má ukázat tu podobu, na kterou se text zalomí, ne tu pohodlnou.
+                    lines: [
+                        BriefLine(part: .added, text: "Přibyly dva pull requesty do fronty a na keboola/vault #3 už leží jeden nález."),
+                        BriefLine(part: .burning, text: "Nic zatím neblokuje, nejstarší kus fronty ale čeká čtyři hodiny a review na něm ještě neběželo."),
+                        BriefLine(part: .next, text: "Vezmi si keboola/vault #1, kde máš rozepsané review a zbývá ho odeslat."),
+                    ],
+                    writtenAt: Date(),
+                    cost: 0.09,
+                    // **Cíle odkazů, ne rozpoznávání čísel v textu** (#516): klikatelné se stane
+                    // jedině číslo pull requestu, který do briefu doopravdy šel.
+                    mentioned: [PRIdentifier("keboola/vault#1")!, PRIdentifier("keboola/vault#3")!]
+                ))
+                : .failed(reason: "Shrnutí nedoběhlo v limitu 3 minuty.")
+        }
         guard scenario != .activityEmpty else { return store }
         store.activityEvents = Self.events
         return store
@@ -237,7 +269,7 @@ struct BoardRenderProbe {
         switch scenario {
         case .mergeWithHandoff: "ondrajodas"
         case .allLanes: [1, 5, 6].contains(number) ? "ondrajodas" : "odinuv"
-        case .lanes, .single, .everythingDone, .activityEmpty: "odinuv"
+        case .lanes, .single, .everythingDone, .activityEmpty, .brief, .briefFailed: "odinuv"
         }
     }
 

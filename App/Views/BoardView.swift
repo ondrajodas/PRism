@@ -57,6 +57,10 @@ struct BoardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 head(board, snoozed: snoozed.count)
+                // Brief (#516) — **nad pruhy a pod pozdravem**, jak ho kreslí návrh. Jestli se
+                // kreslí vůbec, rozhoduje `Policy.briefBlock`: s vypnutou bránou vrací `nil`
+                // a domov vypadá jako do #516.
+                brief
                 columns(board, snoozed: snoozed)
             }
             .padding(.horizontal, 26)
@@ -91,12 +95,30 @@ struct BoardView: View {
         }
     }
 
+    /// Blok `brief` (#516). Tři věty o stavu aplikace, které složila session **bez nástrojů**.
+    ///
+    /// **Pozdrav zůstává nad ním.** Zákres z decku má obojí: pozdrav s větou o pruzích odpovídá na
+    /// „jak to stojí“ z dat, která aplikace má jistě, kdežto brief je text od modelu — a ten se
+    /// smí nepovést. Kdyby pozdrav nahradil, byl by vypnutý nebo spadlý brief dírou nad deskou.
+    @ViewBuilder private var brief: some View {
+        if let block = Policy.briefBlock(mode: store.configuration.global.brief, state: store.briefState) {
+            BriefBlockView(
+                block: block,
+                write: { store.writeBrief() },
+                // **Tatáž cesta jako `prism://` a `Odkaz` v paletě** (#531): PR ze zdrojů se
+                // otevře beze změny, PR, který mezitím z fronty vypadl, jako záložka ke čtení.
+                open: { store.openPullRequest($0) }
+            )
+        }
+    }
+
     /// Pozdrav podle denní doby. Je to jediné místo v aplikaci, které mluví na člověka —
     /// domov se otevírá jako první věc a „Deska“ nad prázdnou obrazovkou zní jako chybová
     /// hláška.
     ///
-    /// **Zůstává, dokud ho nevystřídá brief** (#516): tři věty složené session ze stavu aplikace
-    /// patří přesně sem, ale jsou to vlastní issue.
+    /// **Zůstává i vedle briefu** (#516), a je to rozhodnutí: pozdrav a věta pod ním mluví
+    /// z dat, která aplikace má jistě, kdežto brief je text od modelu a smí se nepovést. Blok
+    /// s briefem visí **pod** nimi.
     private var greeting: String {
         switch Calendar.current.component(.hour, from: Date()) {
         case 5..<10: "Dobré ráno."
@@ -379,7 +401,11 @@ struct BoardView: View {
                 // nad cizím řádkem počítala nejčastěji.
                 loop: ownership == .mine
                     ? store.ownLoopRow(for: entry.pullRequest, handoff: handoff)
-                    : nil
+                    : nil,
+                // Série (#513) — **pilulka ano, popisek ne**: skupinu drží `Policy.byUrgency`
+                // uvnitř pořadí, ale pruhy jsou druhá osa a strop na pět řádků je třetí, takže
+                // popisek nad skupinou by tvrdil o seznamu víc, než v něm je vidět.
+                series: store.seriesPlacement(for: entry.id)
             )
             // Vlevo nic: proužek stavu má sedět na hraně pruhu, jak ho kreslí návrh.
             .padding(.trailing, 13)

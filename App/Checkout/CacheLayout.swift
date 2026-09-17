@@ -107,6 +107,11 @@ struct CacheLayout: Sendable, Equatable {
     /// rostoucí log — viz `AnnouncedPullRequests`.
     var announcedFile: URL { root.appending(path: "announced.json") }
 
+    /// Poslední brief na domově (#516). Vedle počitadla automatických běhů a ze stejného důvodu:
+    /// píše to aplikace, ne člověk — a drží se **přes restart**, protože podle jeho data se
+    /// rozhoduje, jestli je dnešek už shrnutý (`Policy.brief(mode:…)`).
+    var briefFile: URL { root.appending(path: "brief.json") }
+
     /// Co dneska stálo review (#148). Vedle počitadla automatických běhů a ze stejného
     /// důvodu: píše to aplikace, ne člověk.
     var spendFile: URL { root.appending(path: "spend.json") }

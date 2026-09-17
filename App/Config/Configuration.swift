@@ -219,6 +219,13 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     ///
     /// **Globálně, ne per repo**: dlaždice je jedna a mluví o celé frontě.
     var dockBadge: DockBadgeMode
+    /// Kdy se skládá brief na domově (#516). **Výchozí vypnuto** — proč, je u `BriefMode`.
+    ///
+    /// **Globálně, ne per repo**, jako `quietHours` a `dockBadge`: brief mluví o **celé desce**,
+    /// tedy o všech repozitářích naráz, takže hodnota na repo by neměla co znamenat. Je to rozdíl
+    /// proti `autoAgent`, který se rozhoduje nad jedním pull requestem.
+    var brief: BriefMode
+
     /// Velké PR odložit do tichých hodin (#519). **Výchozí vypnuto** — proč, je u `QuietHours`.
     ///
     /// **Globálně, ne per repo**, jako `appearance` a `diffLayout`: kdy chci mít na stroji ticho,
@@ -254,6 +261,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         annotatesHunks: Bool = false,
         externalEditor: ExternalEditor? = nil,
         dockBadge: DockBadgeMode = .waiting,
+        brief: BriefMode = .off,
         quietHours: QuietHours = QuietHours(),
         notifications: NotificationSettings = NotificationSettings()
     ) {
@@ -282,6 +290,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.annotatesHunks = annotatesHunks
         self.externalEditor = externalEditor
         self.dockBadge = dockBadge
+        self.brief = brief
         self.quietHours = quietHours
         self.notifications = notifications
     }
@@ -404,6 +413,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // u `incrementalAfterPush` by tady nechránila nic: tam se sráží na `false`, protože
         // bezpečná strana je „přečti víc kódu“, kdežto u odznaku žádná bezpečná strana není.
         dockBadge = (try? container.decode(DockBadgeMode.self, forKey: .dockBadge)) ?? standard.dockBadge
+        // **Rozbitá hodnota se srazí na výchozí, a ta je `off`** (#516) — tatáž přísnost jako
+        // u odesílání a u agenta (#510) a opačná než u odznaku v Docku o řádek výš: překlep
+        // v souboru nesmí pustit session, která stojí peníze, a `firstTickOfDay` ji pouští **bez
+        // kliknutí**. Bezpečná strana tady je, a je to „nezačne se nic“.
+        brief = (try? container.decode(BriefMode.self, forKey: .brief)) ?? standard.brief
         // Tolerantně, jako odznak v Docku (#519): `QuietHours` si rozbité klíče srazí sám po
         // jednotlivých polích, takže se celé okno nezahodí kvůli jedné hodině. Bezpečná strana je
         // tady navíc v samotném pravidle — nesmyslné okno odklad **vypne**

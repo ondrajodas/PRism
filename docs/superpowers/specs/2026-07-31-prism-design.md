@@ -7682,6 +7682,169 @@ Ověřeno vložením regrese — doplnění `· testy zelené` do věty shodí t
 pustit `xcodebuild test` (nebo co si repo řekne), tedy **další podproces, další konfigurace a další
 minuty** — a hlavně rozhodnutí, co se stane s výsledkem, když spadne. Do #511 to nepatří.
 
+### Záznam rozhodnutí — brief je čtení nahlas, ne šesté review (#516)
+
+Brief na domově přidává **šestou session** do tabulky v tvrdé podmínce č. 2, a je to jediná změna
+té podmínky: sada je **prázdná**, jako u překladu nálezů, zákazy jsou tatáž konstanta.
+
+**Hranice je „stav aplikace“, ne „kód“, a drží ji chybějící nástroj, ne prompt.** Nabízelo se dát
+session `Read` a `Grep` nad pracovní kopií, aby uměla říct, *co* se v těch PR mění. Zahozeno: tím se
+z briefu stává **review logika**, a ta podle *Co aplikace je* patří do skillu, ne do aplikace —
+aplikace je orchestrátor a prohlížeč. Věta v promptu („nedívej se do kódu“) by tu hranici
+nedržela: model, který sáhne po `Read`, to udělá i s tou větou. Prázdná sada ji drží tak, že sáhnout
+není po čem, a `SessionToolSetsTests` to tvrdí literálem.
+
+**Rozhodnutí, co je na tahu, zůstává v `Policy`.** Vstup skládá `Policy.briefInput` deterministicky
+z pruhů desky; session **jen formuluje**. Kdyby o tom rozhodoval model, byl by to druhý zdroj pravdy
+o desce — dražší, pokaždé jiný a netestovatelný. Vedlejší zisk je, že se dá tvrdit negativně, co ve
+vstupu **není** (cesty, URL, kód).
+
+**Vypnuto ve výchozím stavu, a jsou to tři volby, ne přepínač.** Rozhodují se dvě různé věci: jestli
+se brief skládá vůbec (`off`) a jestli ho smí spustit aplikace sama (`firstTickOfDay`). Přepínač by
+je slil a „zapnuto“ by znamenalo obojí — tedy session za peníze každé ráno, aniž by si o to kdo
+řekl. Je to tatáž třída jako `allowsPublishing` a `autoAgent`: vlastnost „samo nic nezačne“ drží
+jedině výchozí vypnuto.
+
+**Denní rozpočet `autoRunsPerDay` se nečerpá.** Nabízelo se pověsit brief na tentýž limit jako
+automat review a agenta (#510) — argument pro je, že je to taky utrácení bez kliknutí. Zahozeno:
+ten limit je pojistka proti řadě **patnáctiminutových** běhů, kdežto brief je jeden odstavec bez
+nástrojů nejvýš jednou za den. V limitu by ukrojil místo běhu, na kterém záleží víc, a pojistka by
+tím byla slabší, ne silnější. Účet přesto nikde nemlčí: cena je na řádku briefu i v bloku
+`Dneska stálo`.
+
+**Dnešek se posuzuje z uloženého briefu, ne z paměti.** Bez `BriefStore`u by `firstTickOfDay`
+znamenalo „při každém startu aplikace“ — a restart je v tomhle repu po každém mergi. Je to tatáž
+úvaha jako u `AutoRunLedger`: pojistka, kterou obejde restart, není pojistka.
+
+**Pozdrav se nenahrazuje, a je to změna proti poznámce z #515.** `BoardView` si u pozdravu
+poznamenalo, že ho brief vystřídá. Zahozeno nad hotovou obrazovkou: pozdrav a věta o pruzích mluví
+z dat, která aplikace má jistě, kdežto brief je text od modelu — a jeho stavy `vypnuto`, `běží`
+a `nepovedlo se` by nad deskou nechaly díru. Deck to ostatně kreslí stejně: pozdrav nahoře, brief
+pod ním.
+
+**Blok se při vypnutém briefu nekreslí vůbec**, ne zašedle — vypnutý brief se nedělá nikdy, takže
+zašedlé tlačítko by tvrdilo „tady se to dělá, jen teď ne“ (tatáž úmluva jako u akcí na cizím PR).
+Cena toho rozhodnutí je, že **prázdno v tom bloku nesmí nastat jinak**: spadlá session by se s
+vypnutým briefem slila. Proto má `failed` vlastní dvě věty a tlačítko `Zkusit znovu`.
+
+### Záznam rozhodnutí — brief jsou tři pojmenované věty, ne odstavec (#516, po proklikání)
+
+První verze dostala do zadání „napiš přesně tři věty … v jednom odstavci“ a vydala přesně to:
+**souvislou prózu na čtyři řádky**, ve které byly natěsnané tři různé věci — co přibylo, co hoří,
+co je první na řadě. Při proklikání se ukázalo, že takový špalek se musí přečíst **celý**, aby z něj
+vypadla jedna věc, a tím padá to jediné, čím se brief platí: že je **levnější než přečíst čtyři
+bloky pod ním**.
+
+Odpověď session je proto **protokol**, ne volný text: tři řádky uvozené klíčem (`ADDED:`,
+`BURNING:`, `NEXT:`), z nichž `BriefCommand.parse` složí `[BriefLine]` a blok je kreslí jako
+sloupec návěští a sloupec vět.
+
+**Zvažované a zahozené podoby:**
+
+- **Odrážky.** Tři puntíky vypadají jako výčet **jednoho druhu** věcí — a tohle jsou tři různé
+  otázky. Puntík navíc neřekne, na kterou se odpovídá, takže se stejně musí číst všechny.
+- **Čísla vlevo.** Tvrdila by **pořadí důležitosti**, které nikdo nerozhodl; „co přibylo“ není
+  důležitější než „co hoří“, jsou to jiné otázky.
+- **Tučné návěští jako lead-in uvnitř věty** (`**Hoří** — …`). Nejmenší zásah, ale text zůstane
+  odstavcem: oko nemá kam skočit a čte se to pořád jako próza. Sloupec pevné šířky je to, co
+  dovolí popisky **přelétnout** a vybrat si jeden.
+
+**Část, na kterou nejsou data, mlčí — a je to hlavní mez celého rozhodnutí.** Struktura si umí
+vynutit větu tam, kde pro ni nejsou podklady, a tím by z ní vzniklo přesně to, co Copilot v tomhle
+repu nachází opakovaně: text, který tvrdí víc, než data unesou. Proto `[BriefLine]` a ne trojice
+polí, proto to zadání session **výslovně dovoluje**, a proto je nula řádků **porucha**, ne prázdný
+brief.
+
+**Strop na délku a zákaz seznamů jsou v promptu, ne v `Policy`.** Uvažovalo se oříznout dlouhou
+větu při čtení odpovědi; zahozeno, protože uříznutý konec umí obrátit, co věta tvrdí — blok by pak
+tvrdil něco jiného než session. Délka je **tvar odpovědi**, a ten umí ovlivnit jedině model.
+Zákaz vypisovat čísla PR má tentýž kořen jako celý brief: ta čísla stojí v pruzích **pod** ním.
+
+### Záznam rozhodnutí — brief má vynucený levný model (#516, po změření ceny)
+
+Ostatní session model nevolí: `IntentTextCommand` to má zapsané jako rozhodnutí („`--model` by byla
+jen třetí odpověď na otázku, se kterým modelem aplikace mluví“). Brief z té úmluvy **vystupuje**,
+a je to změna vynucená měřením, ne názorem.
+
+Naměřeno: jeden brief stál **$0,46**, tedy ~14 $ měsíčně při `firstTickOfDay` za tři věty. Měření
+ukázalo, kde ty peníze jsou — **náš vstup je ~2 % účtu**, zbytek je boot session (~42 tisíc tokenů
+systémového promptu a jmen nástrojů) zapsaná do **hodinové cache, kterou brief nikdy nepoužije**,
+protože běží jednou denně. Cena je tedy prakticky `boot × cena tokenu`, a tu řídí jedině model.
+[Čísla a postup](../../testovani.md#kolik-stojí-jeden-brief-a-kde-ty-peníze-doopravdy-jsou-516).
+
+**Proč zrovna brief tu výjimku dostane** (a ne dotažení textu issue, kde se cena vědomě přijala):
+
+1. Je to **přeformulování hotového textu**, ne úvaha nad cizím kódem — tatáž třída jako překlad
+   nálezů. Co je na tahu, rozhodla `Policy`; model nic neposuzuje.
+2. Je to **jediná session, která se pouští bez kliknutí a podle kalendáře**. U dotažení issue stojí
+   za během vždycky review, které si člověk pustil; tady se platí za to, že aplikace ráno běží.
+3. Změřeno **~$0,09 místo ~$0,46**.
+
+**Zamítnuté varianty, všechny změřené:**
+
+- **Strop na velikost `briefInput`.** Ušetřil by ~2 % účtu a zaplatil by se briefem, který mlčí
+  o části desky, aniž by to přiznal.
+- **`--bare`.** Vypnul by CLAUDE.md, hooky i plugin sync, ale bere authentizaci výhradně
+  z `ANTHROPIC_API_KEY`/`apiKeyHelperu` — OAuth ani klíčenku nečte. Na tomhle stroji `api_error`,
+  exit 1.
+- **`--effort low`.** Přemýšlení haiku nezkrotilo (rozdíl je v šumu), takže se místo něj zvedl
+  limit na tři minuty.
+- **`sonnet` jako kompromis.** Dopočteno ~$0,25 za studený běh, tedy ~2× místo ~5×; za to, co by
+  navíc dal, se nevyplatí.
+
+**Co se přijalo:** haiku píše sušeji a bez souvislostí, které opus unese, a běží ~60 s místo ~21 s.
+Strukturu z téhož issue to snese, protože **návěští nese kus významu, který dřív musela nést próza**
+— obě změny se tu drží navzájem. **Konfigurovaný model se nebere**: `GlobalConfig` odpovídá na
+otázku „se kterým modelem se kontroluje kód“, a brief žádný kód nečte.
+
+**A ta cena musí být vidět dřív, než se utratí.** Do nastavení proto přibyla částka (~0,09 $ za běh,
+~2,50 $ měsíčně), ne jen věta „každý brief stojí peníze“ — ta u čtrnácti dolarů měsíčně sama tvrdí
+míň, než data unesou.
+
+**Brief se neváže na `headSha`.** Je to výjimka téhož druhu jako rozhovor nad PR (#452) a odložení
+(#512): není to nález, mluví o celé desce a nese u sebe **kdy vznikl**. Tvrdá podmínka č. 5 se tím
+nemění — klíčované `headSha` zůstávají nálezy.
+
+### Záznam rozhodnutí — cíle odkazů v briefu se skládají ze vstupu, ne z odpovědi (#516, po proklikání)
+
+Čísla ve třech větách jsou od téhle změny **klikatelná** a otevírají záložku toho pull requestu.
+Otázka nebyla jestli, ale **odkud se vezme cíl**, a odpověď je mez proti tomu, aby text od modelu
+rozhodoval o tom, kam aplikace klikem půjde.
+
+**Zamítnuto: rozpoznávat `#\d+` v hotové odpovědi a otevřít PR toho čísla.** Je to nejkratší cesta
+a má dvě díry, z nichž každá sama stačí:
+
+1. **Text je od modelu.** Může napsat číslo, které na desce není, nebo si ho vymyslet — a odkaz na
+   neexistující pull request je horší než prostý text: klikne se na něj a otevře se záložka nad
+   ničím. Prázdná sada nástrojů brání tomu, aby se session o cizím repozitáři **dozvěděla**, ne
+   tomu, aby napsala číslo.
+2. **Samo číslo cíl neurčuje.** V briefu stojí čísla z víc repozitářů (`ondrajodas/PRism #584`
+   i `keboola/job-queue #725`), takže `#584` bez dalšího neříká, který PR to je. Tohle je ten
+   hlavní důvod: ani bezchybný model by tu dvojznačnost neodstranil.
+
+**Přijato: uzavřeným seznamem cílů je to, co do briefu doopravdy šlo.** `Policy.briefInput` proto
+vrací `BriefMaterial` — text **a** seznam pull requestů —, a obojí vzniká **jednou procházkou** přes
+tytéž pruhy desky. Dvě funkce nad týmž materiálem se rozešly zrovna tam, kde na tom záleží; jeden
+typ se rozejít nemá jak. V odpovědi se pak hledá jen to, **kde** odkaz stojí, ne na co ukazuje.
+
+**Rozhodování je výčet, ne heuristika** (`Policy.briefSpans`): jméno repozitáře před číslem vybírá
+cíl, **cizí jméno je odmítnutí, ne nejbližší podobný**, a bez jména rozhoduje **jednoznačnost**
+čísla v seznamu. Když se odkaz složit nedá, zůstane **prostý text** — žádné mrtvé tlačítko a žádná
+hláška; věta se čte dál stejně.
+
+**Odkazem je jen číslo, ne celé `owner/name #584`.** Zvýrazněné číslo uvnitř věty se čte jako próza;
+podtržené dvacetiznakové jméno repozitáře by z věty udělalo odkaz s textem kolem. Tlačítko na konci
+řádku se zahodilo ze stejného důvodu jako odstavec místo tří vět: přidávalo by do bloku prvek navíc
+tam, kde je celý smysl v tom, aby se blok přečetl rychleji než čtyři bloky pod ním.
+
+**Otevírá se jedinou cestou** (`AppStore.openPullRequest`), tedy toutéž jako `prism://`, `Odkaz`
+v paletě ⌘K a klik ve frontě (#531). Druhá cesta by se s tou první rozešla přesně v tom, co je na ní
+jediné zajímavé: PR, který mezitím z fronty vypadl, se má otevřít **jako záložka ke čtení**, ne jako
+prázdno. Proto se seznam cílů **ukládá s briefem**, ne dopočítává z dnešní desky — brief je snímek
+jedné chvíle a odkaz dopočítaný o tik později by zmizel nebo přeskočil jinam. Uložený brief se čte
+**tolerantně**: brief bez seznamu je pořád platný brief a tvrdé dekódování by kvůli chybějícímu
+klíči zahodilo razítko dnešního běhu, za který se pak zaplatí znovu.
+
 ### Záznam rozhodnutí — tiché hodiny odkládají běh, ne pull request (#519)
 
 Odklad velkého PR do noci se nabízel jako druhá podoba **odložení PR** (#512): tam už je úložiště
@@ -7811,6 +7974,112 @@ v zobrazení.
 
 **Brána kontroly zůstala u nálezů** (#150), i když by šlo pustit ji i na PR, kde mám jen
 komentáře. Tlačítko na místě, kde dosud nebylo, je kresba — a ta patří do #523, ne sem.
+
+### Záznam rozhodnutí — série PR se poznává z rozšířeného dotazu na hlavy (#513)
+
+**Zadání issue bylo fakticky špatně a opravilo se před implementací.** Stálo v něm, že se série
+pozná porovnáním „base větve proti hlavám ostatních otevřených PR — obojí je v hlavičkách, které
+polling dotahuje“. Ověřeno na CLI: `gh search prs --json` **žádné pole o větvích nenabízí**, takže
+je `PullRequestSummary` nemá ani jako pole a fronta o nich neví nic. Větve nese jedině `PullRequest`
+(detail z `gh pr view`) a ten se dotahuje třemi cestami, z nichž **ani jedna nepokrývá cizí frontu**:
+detail vybraného PR, PR přijatý odkazem a hlavičky z #572, které `Policy.mergeReadinessProbe`
+filtruje na `ownedBy: .mine`. Kreslený scénář je přitom právě **cizí** série, takže by
+`Policy.series(in:refs:)` nad dnešními daty vracela prázdno vždycky a funkce by ve frontě nebyla
+vidět nikdy.
+
+**Vybráno (17. 9. 2026): rozšířit dávkový dotaz na hlavy** (`PullRequestHeadsQuery`, #420)
+o `headRefName`, `baseRefName` a `isCrossRepository` a pustit ho **přes frontu**. Jsou to tři pole
+na **témže uzlu**, takže nepřibývá ani volání, ani bod (změřeno: dvacet aliasů s větvemi pořád
+1 bod z 5000/h). Předfiltr dostal protějšek (`Policy.seriesRefsProbe`) **stejnou školou jako
+`snoozeProbe`**: neznáme větve, nebo se posunul `updatedAt`. Na klidný tik z toho vyjde nula dotazů,
+na pohnutý jeden — oba předfiltry slévá `Policy.headProbe(stale:refs:)` do jednoho seznamu, protože
+se ptají na týž uzel téhož dotazu.
+
+**Zamítnuto: omezit sérii na PR s načteným detailem.** Levné (nula nových polí, nula nových dotazů),
+ale kreslený scénář — cizí série ve frontě — by nefungoval: detail se u cizího PR dotáhne teprve
+tehdy, když ho člověk otevře, tedy až potom, co mu fronta měla poradit, který z nich číst první.
+Funkce, která je vidět jedině po ručním otevření obou PR, je nakreslená nula.
+
+**Rozsah tím vyrostl ze `S` na `M`**, a je to vědomé: přibyl nový předfiltr, nová mapa ve storu
+a rozhlídka přes celou frontu. Odhad v decku *Směry pro PRism* (`cena: S · 1 PR`) tím přestal platit.
+
+**Zamítnuto také: držet větve na disku.** Uložená jména by po restartu tvrdila sérii, která se
+mezitím rozpadla mergnutím spodního PR — a série zaniká právě tím, že GitHub přepne base horního na
+`main`. Mapa proto žije v paměti (`probedBranchRefs`) a uklízí se spolu s razítky dotazů.
+
+### Záznam rozhodnutí — popisek série je tvrzení o seznamu, pilulka o pull requestu (#513)
+
+Zadání nechalo otevřené, kde se skupinový popisek kreslí. `PullRequestRow` se kreslí na **třech**
+místech (fronta, deska, sekce `Rozdělaná`) a od #512 to hlídá stráž nad zdrojáky, takže odpověď
+„všude“ by byla pohodlná a nepravdivá.
+
+**Rozhodnuto: pilulka všude, popisek a přerušovaná čára jedině ve frontě.** Pilulka `1. v sérii`
+odpovídá na otázku o **pull requestu** — stát na cizí větvi platí bez ohledu na to, ve kterém
+seznamu ten řádek zrovna je. Popisek a čára naopak tvrdí něco **o seznamu**: že spolu tyhle řádky
+sousedí a čtou se shora dolů. To drží jedině fronta, protože jediná členy přeskládá
+(`visibleQueuePullRequests` → `Policy.grouped`); deska rozřazuje do pruhů podle mého tahu a ořezává
+je na pět řádků, sekce `Rozdělaná` je výběr podle draftu. Čára kolem skupiny, ve které chybí
+prostřední řádek, by obtáhla cizí PR.
+
+**Stráží to funkce, ne pozornost**: `Policy.seriesCaptions(in:series:)` počítá popisky nad tím, co
+se doopravdy kreslí, a vydá je jedině tehdy, když v seznamu leží **aspoň dva** členové té série
+a leží **vedle sebe**. Ověřeno vložením regrese: když se z fronty odstraní přeskládání, popisek
+zmizí sám.
+
+**Odložený člen** (druhá osa z #512) tím má odpověď, kterou zadání ještě neznalo: ze skupiny prostě
+vypadne. Pilulka u zbylého řádku zůstává — `2. · stojí na #14451` je pravda i tehdy, když je
+#14451 odložený a leží v bloku `Odložené` pod frontou —, popisek zmizí, protože `2 PR` nad jedním
+řádkem tvrdí víc, než je vidět. Série sama se přitom počítá nad **plným** seznamem, tedy
+i s odloženými: je to vlastnost pull requestu, ne pohledu.
+
+**Identita řádků v líném seznamu se nemění ani o prvek** (#361). Popisek se kreslí **uvnitř** řádku
+svého prvního člena (`PullRequestRow.seriesCaption`), ne jako další položka seznamu — nová položka
+by musela mít identitu a tou by bylo **pořadí**, tedy zrovna ten vzor, který #361 z okna vyhnalo.
+Cena je, že kliknutí na popisek vybere první PR skupiny; to je správná odpověď na kliknutí do
+skupiny, takže se za ni platí rádo.
+
+**Řetěz větví zůstal jen v hlavičce.** Deck kreslil v řádku fronty i `→ main` / `→ #726`; v řádku
+širokém 420 bodů by to ukrojilo z titulku, a pilulka `2. · stojí na #14451` říká totéž kratší cestou.
+Odchylka od zákresu je proto zapsaná tady a sekce 57 v `docs/navrh.html` už kreslí to, co aplikace
+doopravdy dělá.
+
+### Záznam rozhodnutí — v hlavičce je jedno pořadí a patří otevřenému PR (#513, po prvním proklikání)
+
+První podoba řetězu nesla u base větve pilulku `#14451 · 2. v sérii` a řádek téhož pull requestu ve
+frontě `3. · stojí na #14451`. **Obojí bylo správně** — hlavička popisovala base větev (#14451 je
+opravdu druhý v sérii), řádek popisoval ten PR, na který se člověk dívá (#14452 je třetí). Jenže
+vedle sebe se ta dvě čísla četla jako **dvě odpovědi na jednu otázku**, a hlavně: **z detailu se
+pořadí otevřeného PR nedalo poznat vůbec**. Našlo se to proklikáním nad `cli/cli#14452`, ne testem,
+a to je na tom to podstatné — obě čísla byla pravdivá, takže by jich žádné tvrzení o jednom z nich
+nechytilo.
+
+**Rozhodnuto: čísla se dělí podle toho, u čí větve stojí.** U hlavy, tedy u větve otevřeného PR,
+stojí `3. v sérii` a je to **jediné pořadí v celém řetězu**; u base větve zůstal **pouhý odkaz**
+`#14451`. Řetěz se pak čte jako `moje větev [3. v sérii] → jeho větev [#14451] → trunk`, tedy každý
+článek s tím, čí je. Pořadí toho spodního nezmizelo — přestěhovalo se do **nápovědy**, kde stojí ve
+větě u jeho čísla (`#14451 — ten je 2. v sérii`) a zaměnit se nedá.
+
+**Pilulku dostal i základ série** (`1. v sérii`), přestože u něj druhá pilulka v řetězu není. Bez ní
+by se pořadí z jeho detailu nedozvěděl nikdo — a zrovna základ je ten PR, který se má číst první.
+
+**Zamítnuto: nechat obě čísla a jen je odlišit** (jinou barvou, jiným tvarem pilulky). Dvě čísla,
+z nichž jedno je o jiném pull requestu, se nedají odlišit tak, aby na ně po zběžném pohledu
+nezbyla mylná odpověď; rozdíl mezi „pořadí tohohle“ a „pořadí toho, na čem stojí“ je rozdíl
+významů, ne důrazů.
+
+**Zamítnuto: `3. ze 3 v sérii`, tedy pořadí s počtem.** Počet je užitečný (poznám, že jsem nahoře),
+ale česká předložka se podle číslovky mění (`ze tří`, `ze dvou`, ale `z pěti`, `z deseti`) a kresba
+by ji skládala od oka. Počet proto nese popisek nad skupinou ve frontě a obě nápovědy, kde je na
+něj místo ve větě (`Je to 3. PR v sérii, celkem jich je 3.`).
+
+**Řetěz skládá `Policy.branchChain(head:base:series:)`, ne kresba.** Do téhle opravy si `HStack`
+v hlavičce skládal větve a pilulky sám, takže se nad tím nedalo nic tvrdit. Teď je to pole
+`BranchChainLink` — větev a `Badge` **u ní** (text s nápovědou **v jednom typu**, aby nemohla vyjít
+pilulka bez věty, která ji vysvětluje) — a test
+(`PullRequestSeriesTests.neverConfusesTheTwoPositions`, pozice 2 až 6) tvrdí tři věci naráz:
+v pilulkách řetězu je **právě jedno** pořadové číslo, patří **hlavě**, a rovná se tomu, které o témž
+PR říká řádek fronty. Ověřeno vložením regrese: vrácení původního tvaru `#14451 · 2. v sérii` shodí
+všech pět případů.
 
 ## Záznam rozhodnutí — anotace hunků odpovídají posledním sdělením, ne nástrojem (#524)
 

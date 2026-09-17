@@ -66,6 +66,21 @@ extension PullRequestHeadsQueryTests {
         #expect(document.contains("oid"))
     }
 
+    /// Větve (#513) jsou **v témže dotazu**, ne ve druhém: `headRefName` a `baseRefName` leží na
+    /// témže uzlu jako `headRefOid`, takže je odpověď nese bez volání navíc (změřeno: dvacet aliasů
+    /// s větvemi pořád **1 bod z 5000/h**). `isCrossRepository` je součást téhož rozhodnutí —
+    /// hlava z forku pojmenovává větev cizího repozitáře a spárovat se s ní nesmí nic.
+    @Test("Dotaz si říká o větve i o původ hlavy")
+    func asksForTheBranches() {
+        let document = PullRequestHeadsQuery.document(for: 1)
+
+        #expect(document.contains("headRefName"))
+        #expect(document.contains("baseRefName"))
+        #expect(document.contains("isCrossRepository"))
+        // Pořád **jeden** dokument a jeden dotaz — dvě rozhlídky se sem vejdou obě (#513).
+        #expect(PullRequestHeadsQuery.arguments(for: ids).count { $0.hasPrefix("query=") } == 1)
+    }
+
     /// Alias je **pozice v dotazu**, ne `owner/name#číslo`: ve jménech repozitářů jsou pomlčky
     /// a tečky, které v GraphQL jménu být nesmí. Odpověď se proto páruje se vstupním polem.
     @Test("Alias je platné GraphQL jméno")
@@ -150,5 +165,56 @@ extension PullRequestHeadsQueryTests {
         )
 
         #expect(response.heads(of: [ids[0]])[ids[0]] == PullRequestHead(sha: "aaaa1111", committedAt: nil))
+    }
+}
+
+// MARK: - Větve pro sérii (#513)
+
+extension PullRequestHeadsQueryTests {
+    /// Skutečná odpověď z živého API — **skutečná série** v `cli/cli` (*Refreshable tokens*,
+    /// #14451–#14453), kde base každého PR je hlavou toho předchozího.
+    private var stack: [PRIdentifier] {
+        [PRIdentifier("cli/cli#14451")!, PRIdentifier("cli/cli#14452")!, PRIdentifier("cli/cli#14453")!]
+    }
+
+    @Test("Odpověď nese větve i původ hlavy")
+    func readsTheBranches() throws {
+        let heads = try response("pr-heads-series.json").heads(of: stack)
+
+        #expect(heads[stack[0]]?.refs?.head == "babakks/refresh-token-b-domain")
+        #expect(heads[stack[1]]?.refs?.base == "babakks/refresh-token-b-domain")
+        #expect(heads[stack[1]]?.refs?.isCrossRepository == false)
+        #expect(heads[stack[1]]?.refs?.livesInBaseRepository == true)
+    }
+
+    /// Na těch datech se **série doopravdy pozná** — je to tentýž výpočet, jaký dělá okno, jen nad
+    /// fixturou: base #14452 je hlava #14451 a base #14453 je hlava #14452.
+    @Test("Z odpovědi vyjde trojice od základu nahoru")
+    func findsTheSeriesInTheAnswer() throws {
+        let heads = try response("pr-heads-series.json").heads(of: stack)
+        let summaries = stack.map { id in
+            PullRequestSummary(
+                id: id,
+                title: "Refreshable tokens",
+                author: "babakks",
+                url: URL(string: "https://github.com/cli/cli/pull/\(id.number)")!,
+                updatedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                state: .open
+            )
+        }
+
+        let series = Policy.series(in: summaries, refs: { heads[$0]?.refs })
+
+        #expect(series.map(\.members) == [stack])
+    }
+
+    /// Odpověď **bez** větví (starší fixtura z #420) dá hlavu bez nich, ne rozbitý dotaz na celou
+    /// frontu: „nevíme“ se od „nestojí na ničem“ musí poznat.
+    @Test("Odpověď bez větví hlavu nepoloží")
+    func survivesAnAnswerWithoutBranches() throws {
+        let heads = try response("pr-heads.json").heads(of: ids)
+
+        #expect(heads.count == 3)
+        #expect(heads[ids[0]]?.refs == nil)
     }
 }
