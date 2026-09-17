@@ -2314,8 +2314,24 @@ struct PullRequestDetailView: View {
             many: "nálezů"
         )
         return "Pustí session, která projde \(findings) z commitu "
-            + "\(material.headSha.prefix(7)) a řekne, co nové commity spravily. "
-            + "Nálezy tím nemizí — sundá je jedině tvoje odmítnutí."
+            + "\(material.headSha.prefix(7))\(sentComments(in: material)) a řekne, co nové "
+            + "commity spravily. Nálezy tím nemizí — sundá je jedině tvoje odmítnutí."
+    }
+
+    /// Kolik **mých komentářů** se veze v téže session (#522).
+    ///
+    /// Musí to být vidět, protože je to session za peníze: nápověda, která mluví jen o nálezech,
+    /// by o tom, na co se běh ptá, tvrdila míň, než co se mu doopravdy pošle. Bez komentářů
+    /// zůstává věta slovo od slova tatáž jako do #522.
+    private nonisolated static func sentComments(in material: RecheckMaterial) -> String {
+        guard !material.comments.isEmpty else { return "" }
+        let comments = Plural.czech(
+            material.comments.count,
+            one: "nezodpovězený komentář",
+            few: "nezodpovězené komentáře",
+            many: "nezodpovězených komentářů"
+        )
+        return " a \(comments) ode mě"
     }
 
     /// Vlastní rámeček místo `GroupBox`u: ten je AppKit kontejner a `ImageRenderer` ho

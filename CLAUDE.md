@@ -464,6 +464,13 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    text nálezu (ne celý řádek) a `blokuje` u něj zůstává
    ([rozbor](docs/architektura.md#kontrola-nálezů-z-minula-150)).
 
+   **Druhé kolo nad mými komentáři (#522) tu podmínku taky drží, a bez nové úvahy**: verdikty
+   o vláknech leží v **témže** `StoredRecheck` (`replyStatuses`, klíčem je identita vlákna), takže
+   se nic nového ke commitu ani k PR neklíčuje — `ReviewReplyReport` se **neukládá vůbec**. Posun
+   hlavy proto zhasne **jen osu modelu**; `odpovězeno` je fakt z konverzace (#72) a platí dál.
+   **Model rozhoduje jedině mezi `opraveno` a `beze změny`**, a na zodpovězené vlákno se ho aplikace
+   **vůbec neptá** ([rozbor](docs/architektura.md#druhé-kolo-nad-mými-komentáři-522)).
+
 ## Architektura
 
 Deset modulů. Pět, které sahají do vnějšího světa, je za protokolem, aby byly v testech
@@ -475,7 +482,7 @@ API**, **`BranchPushing`** (#466) jediný, který **zapisuje do remote**, a **`T
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, metadata a syrový diff (celý i mezi dvěma commity), login účtu, labely a vyžádané reviewery, hlavy víc PR jedním dotazem, slévatelnost větve — a od #572 **hlavičku i slévatelnost vlastních PR jedním dotazem**, aby deska uměla `K merge` bez otevřené záložky ([měření](docs/testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572)) —, **repozitáře organizace** (#532 — nejdražší čtení v aplikaci), **otevřené PR jednoho repa** (#533) a **co repozitář o mergi říká** (#556 — chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i jeho zahození, **zápis slitých souborů do indexu a dokončení rebase** i **commit práce agenta** (#510) — commituje aplikace, ne session, **je předchozí hlava předkem té dnešní** (#517) a **cesty, které PR mění** (#518 — podklad routingu). **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula — a k tomu pět session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467) a **agent na vlastním PR** (#510) — poslední dvě **smí měnit soubory**, ta poslední se pouští **bez kliknutí** | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula (od #522 se ptá i na **moje odeslané komentáře**, jedním polem odpovědí a beze změny sady) — a k tomu pět session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467) a **agent na vlastním PR** (#510) — poslední dvě **smí měnit soubory**, ta poslední se pouští **bez kliknutí** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu, obsah dashboardu, geometrie, na kterou se ptá kresba, a **desítky dalších**. Katalog je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |

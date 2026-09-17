@@ -363,4 +363,140 @@ struct AppStoreRecheckTests {
         #expect(store.recheckFailures[pr] != nil)
         #expect(store.reviewRecord(for: pr)?.recheck == nil)
     }
+
+    // MARK: - Moje odeslané komentáře (#522)
+
+    /// Konverzace, ve které jsem založil dvě vlákna a do jednoho mi odpověděl autor.
+    private func myThreads() -> Conversation {
+        func thread(_ id: String, line: Int, replies: [String]) -> ReviewThread {
+            let authors = ["ondrajodas"] + replies
+            return ReviewThread(
+                id: id,
+                path: "Cart.swift",
+                line: line,
+                originalLine: line,
+                side: .right,
+                isResolved: false,
+                isOutdated: false,
+                comments: ConversationPage(
+                    items: authors.enumerated().map { index, author in
+                        ThreadComment(
+                            id: "\(id)-\(index)",
+                            author: author,
+                            body: "co se stane u nuly?",
+                            createdAt: Date(timeIntervalSince1970: 1_000_000 + Double(index)),
+                            url: URL(string: "https://github.com/cli/cli/pull/42#r\(index)")!
+                        )
+                    },
+                    total: authors.count,
+                    hasNextPage: false
+                )
+            )
+        }
+        return Conversation(
+            viewer: "ondrajodas",
+            reviews: ConversationPage(items: [], total: 0, hasNextPage: false),
+            threads: ConversationPage(
+                items: [thread("t1", line: 21, replies: []), thread("t2", line: 34, replies: ["autor"])],
+                total: 2,
+                hasNextPage: false
+            ),
+            comments: ConversationPage(items: [], total: 0, hasNextPage: false)
+        )
+    }
+
+    private func store(
+        reviewer: FakeReviewRunner,
+        reviews: ReviewStore,
+        conversation: Conversation
+    ) -> AppStore {
+        AppStore(
+            gateway: FakeGitHubGateway(
+                always: .success([summary]),
+                detail: .success(detail(headSha: "new2222")),
+                conversations: [.success(conversation)]
+            ),
+            time: time,
+            checkout: FakeRepoCheckout(),
+            reviewer: reviewer,
+            reviews: reviews
+        )
+    }
+
+    /// Kontrola pošle do jedné session nálezy **i** moje nezodpovězené komentáře a verdikty si
+    /// rozdělí podle indexu: `0` patří nálezu, `1` prvnímu komentáři.
+    @Test("Komentáře jedou v téže session a verdikty se uloží k vláknům")
+    func theCommentsRideAlongInTheSameSession() async throws {
+        let reviews = reviewStore()
+        let finding = try await storedFindings(in: reviews)
+        let reviewer = FakeReviewRunner(
+            resultText: """
+                [{"id": 0, "status": "still-applies"},
+                 {"id": 1, "status": "resolved", "note": "the zero case is handled now"}]
+                """
+        )
+        let store = store(reviewer: reviewer, reviews: reviews, conversation: myThreads())
+        await prepared(store)
+        await store.loadConversation(for: summary)
+
+        store.startRecheck(for: pr)
+        await waitUntilIdle(store)
+
+        // Jedna session, jeden požadavek — komentáře nejsou druhý běh.
+        #expect(reviewer.requests.count == 1)
+        let request = try #require(reviewer.requests.first)
+        #expect(request.key.kind == .recheck)
+        // Zodpovězené vlákno se **nepředkládá**: o něm rozhodují data, ne model.
+        #expect(request.recheck?.comments.map(\.threadID) == ["t1"])
+        #expect(request.recheck?.commentIDOffset == 1)
+
+        let record = try #require(store.reviewRecord(for: pr))
+        #expect(record.recheck?.statuses[Policy.key(of: finding)]?.verdict == .stillApplies)
+        #expect(record.recheck?.replyStatuses["t1"]?.verdict == .resolved)
+        #expect(record.recheck?.replyStatuses["t2"] == nil)
+    }
+
+    /// **Nejcennější tvrzení #522**: „odpovězeno“ nepochází z modelu. Session o vlákně `t2`
+    /// nedostane ani zmínku, a přesto ho report označí za zodpovězené — protože to ví konverzace.
+    @Test("Odpovězeno nepochází z modelu")
+    func answeredDoesNotComeFromTheModel() async throws {
+        let reviews = reviewStore()
+        _ = try await storedFindings(in: reviews)
+        let reviewer = FakeReviewRunner(resultText: #"[{"id": 1, "status": "still-applies"}]"#)
+        let store = store(reviewer: reviewer, reviews: reviews, conversation: myThreads())
+        await prepared(store)
+        await store.loadConversation(for: summary)
+
+        store.startRecheck(for: pr)
+        await waitUntilIdle(store)
+
+        let prompt = try #require(reviewer.requests.first?.recheck).comments.map(\.threadID)
+        #expect(!prompt.contains("t2"))
+
+        guard case .current(let tally) = store.reviewReplyReport(for: pr) else {
+            Issue.record("čekal se platný report")
+            return
+        }
+        #expect(tally.entries.map(\.comment.threadID) == ["t1", "t2"])
+        #expect(tally.entries.map(\.state) == [.unanswered(.unchanged), .answered])
+        #expect(tally.answered == 1)
+    }
+
+    /// Bez načtené konverzace se prompt kontroly **nezmění**: běží přesně to, co běželo do #522.
+    @Test("Bez konverzace se kontrola chová jako do #522")
+    func withoutAConversationTheRecheckIsUnchanged() async throws {
+        let reviews = reviewStore()
+        _ = try await storedFindings(in: reviews)
+        let reviewer = FakeReviewRunner(resultText: #"[{"id": 0, "status": "resolved"}]"#)
+        let store = store(reviewer: reviewer, reviews: reviews)
+        await prepared(store)
+
+        store.startRecheck(for: pr)
+        await waitUntilIdle(store)
+
+        #expect(reviewer.requests.first?.recheck?.comments.isEmpty == true)
+        #expect(store.reviewRecord(for: pr)?.recheck?.replyStatuses.isEmpty == true)
+        // A report o mých komentářích neví nic — není to „žádné nemám“.
+        #expect(store.reviewReplyReport(for: pr) == .unknown)
+    }
 }

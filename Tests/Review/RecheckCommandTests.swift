@@ -207,4 +207,118 @@ struct RecheckCommandTests {
         #expect(RecheckCommand.parse("Nevím.", count: 2).isEmpty)
         #expect(RecheckCommand.parse("[]", count: 2).isEmpty)
     }
+
+    // MARK: - Moje odeslané komentáře (#522)
+
+    private let comments = [
+        SentComment(
+            threadID: "PRRT_1",
+            path: "Cart.swift",
+            line: 21,
+            body: "Co se stane, když je množství nula?"
+        ),
+        SentComment(
+            threadID: "PRRT_2",
+            path: "Cart.php",
+            line: nil,
+            body: "Tohle by mělo být za konstantou."
+        ),
+    ]
+
+    private var withComments: RecheckMaterial {
+        RecheckMaterial(headSha: "old1111", findings: material.findings, comments: comments)
+    }
+
+    /// **Bez komentářů se prompt nezměnil ani o písmeno.** Je to podmínka, ne estetika: kontrola
+    /// z #150 běží dál na PR, kde jsem nic neodeslal, a jiná formulace by u ní znamenala jinou
+    /// přísnost, aniž by se o to kdokoli řekl.
+    @Test("Bez komentářů zůstává prompt kontroly beze změny")
+    func withoutCommentsThePromptIsUnchanged() {
+        let prompt = RecheckCommand.prompt(for: material, baseSha: "base2222")
+
+        #expect(prompt.contains("For every finding decide whether the new commits resolved it."))
+        #expect(prompt.contains("the listed findings and nothing else"))
+        #expect(prompt.contains("one object per finding"))
+        #expect(!prompt.contains("My comments"))
+        #expect(!prompt.contains("one object per item"))
+    }
+
+    /// Komentáře jdou do promptu **za nálezy a se `id`, které na ně navazuje** — jedno pole
+    /// odpovědí, takže druhá řada indexů od nuly by znamenala verdikt o komentáři přiřazený
+    /// nálezu s týmž číslem.
+    @Test("Komentáře mají id navazující na nálezy")
+    func commentIDsContinueAfterTheFindings() {
+        let prompt = RecheckCommand.prompt(for: withComments, baseSha: "base2222")
+
+        #expect(withComments.commentIDOffset == 2)
+        #expect(withComments.questionCount == 4)
+        #expect(prompt.contains("My comments"))
+        #expect(prompt.contains(#""id":2"#))
+        #expect(prompt.contains(#""id":3"#))
+        #expect(prompt.contains("Co se stane, když je množství nula?"))
+        #expect(prompt.contains(#""file":"Cart.swift""#))
+        #expect(prompt.contains(#""line":21"#))
+    }
+
+    /// **Hranice, kterou model nesmí přejít**: o tom, jestli mi někdo odpověděl, rozhodují data
+    /// (#72). Prompt to říká výslovně — bez té věty je „someone replied, so it is handled“
+    /// nejpřirozenější odpověď, kterou může dát.
+    @Test("Prompt zakáže soudit, jestli někdo odpověděl")
+    func thePromptForbidsJudgingReplies() {
+        let prompt = RecheckCommand.prompt(for: withComments, baseSha: "base2222")
+
+        #expect(prompt.contains("Do not judge whether anyone replied"))
+        #expect(prompt.contains("decide whether the new commits addressed what it asks about"))
+    }
+
+    /// Tvar odpovědi zůstává **týž** — `parse` je jeden a čte jedno pole. Mění se jediné slovo,
+    /// podstatné jméno položky, protože seznam už není jen z nálezů.
+    @Test("Tvar odpovědi se s komentáři nemění")
+    func theAnswerShapeStaysTheSame() {
+        let prompt = RecheckCommand.prompt(for: withComments, baseSha: "base2222")
+
+        #expect(prompt.contains("one object per item"))
+        #expect(prompt.contains(#""status""#))
+        #expect(prompt.contains("still-applies"))
+        #expect(prompt.contains("unclear"))
+        // Zákazy z #150 platí u obou podob beze změny.
+        #expect(prompt.contains("do not call ReportFindings"))
+        #expect(prompt.contains("no comments on GitHub"))
+    }
+
+    /// Identita vlákna se modelu **neposílá**: k odpovědi ji nepotřebuje (páruje se `id`)
+    /// a byla by to adresa, na kterou se dá na GitHubu psát.
+    @Test("Identita vlákna do promptu nejde")
+    func theThreadIdentityStaysOutOfThePrompt() {
+        let prompt = RecheckCommand.prompt(for: withComments, baseSha: "base2222")
+
+        #expect(!prompt.contains("PRRT_1"))
+        #expect(!prompt.contains("PRRT_2"))
+    }
+
+    @Test("Prompt s komentáři je pořád jeden řádek")
+    func thePromptWithCommentsIsASingleLine() {
+        let prompt = RecheckCommand.prompt(for: withComments, baseSha: "base2222")
+
+        #expect(!prompt.contains("\n"))
+        #expect(!prompt.contains("  "))
+    }
+
+    /// Kotva bez řádku (zastaralé vlákno, kterému zmizel i `originalLine`) klíč **vynechá**,
+    /// místo aby poslala `null` — `null` by se v promptu četlo jako „řádek číslo nic“.
+    @Test("Komentář bez řádku klíč vynechá")
+    func aCommentWithoutALineOmitsTheKey() {
+        let json = RecheckCommand.json(of: [comments[1]], startingAt: 0)
+
+        #expect(json.contains(#""file":"Cart.php""#))
+        #expect(!json.contains(#""line""#))
+    }
+
+    /// Přírůstkové review (#517) se ptá dál **jen na nálezy**, takže jeho tvar zůstává slovo od
+    /// slova ten původní. Sdílený zdroj formátu se tím nerozešel.
+    @Test("Formát pro nálezy zůstává týž jako do #522")
+    func theFindingsOnlyFormatIsUnchanged() {
+        #expect(RecheckCommand.verdictFormat == RecheckCommand.verdictFormat(of: "finding"))
+        #expect(RecheckCommand.verdictFormat.contains("one object per finding"))
+    }
 }

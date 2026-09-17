@@ -2402,6 +2402,15 @@ Vyřešený nález je poznat na první pohled: **shrnutí je přeškrtnuté** a 
 u nálezu, který jsem **odmítl** sám, a ty dva stavy se nesmí plést. A když nález blokuje, zůstává
 u něj `blokuje` i nadále: „vyřešeno“ je tvrzení modelu, kdežto to, že se PR pořád nemerguje, je fakt.
 
+**Od #522 se v téže session veze druhý seznam: moje odeslané komentáře** — vlákna, která jsem
+na PR založil. Za každé z nich pak aplikace ví, co se s ním stalo: *opraveno v `<sha>`*,
+*odpovězeno* nebo *bez odpovědi*. Hranice mezi tím, co tvrdí model, a tím, co je fakt, je ostrá:
+že mi někdo odpověděl, se bere **z konverzace**, ne od modelu — na zodpovězené vlákno se session
+vůbec neptá a v promptu to má i napsané. Model rozhoduje jedině mezi *opraveno* a *beze změny*,
+a *nejde říct* je jeho poctivá třetí odpověď. Když je vlákno zodpovězené a model zároveň tvrdí
+„opraveno“, vyhraje *odpovězeno*: fakt přebíjí tvrzení. **V okně z toho zatím není vidět nic než
+věta v nápovědě u tlačítka** (kolik komentářů se veze v téže session) — kreslí se to až v #523.
+
 Tři věci, které z toho **neplynou**. Odznak nálezy **nemaže ani neschovává** — je to tvrzení
 modelu, ne fakt, a sundat nález smí jedině odmítnutí (#113), za kterým stojí člověk. Kontrola se
 **nenabízí**, dokud není uložený záznam proti staršímu commitu, protože bez nálezů by se session

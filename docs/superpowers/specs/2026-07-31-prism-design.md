@@ -7773,3 +7773,41 @@ který nikdo nečte, tedy zrovna ten vzor, který Copilot v tomhle repu opakovan
 **Zamítnuto: dát agentovi vlastní místo vedle pilulky dráhy.** Dvě pilulky v jednom řádku zakázalo
 #509 měřením, ne vkusem: v nejužším okně by místo nich ustupoval titulek, tedy to jediné, podle
 čeho se PR v seznamu pozná.
+
+### Záznam rozhodnutí — druhé kolo se neukládá vůbec (#522)
+
+Zadání #522 chtělo `ReviewReplyReport` jako **nový typ vedle `RecheckReport`** a k tomu rozhodnutí,
+jestli se ukládá k `headSha`, nebo k PR. **Odpověď je „ani jedno“: report se neukládá.** Skládá se
+až při čtení ze dvou zdrojů — z `StoredRecheck` (ten leží na záznamu klíčovaném `(PR, headSha)`
+a nese `againstHeadSha`) a ze **živé** konverzace, která se nepersistuje vůbec (#63). Verdikty
+o vláknech jdou do `StoredRecheck.replyStatuses`, tedy do téhož uloženého běhu, který je vydal.
+
+Tím **tvrdá podmínka č. 5 platí beze změny a bez nové úvahy**: nic nového se ke commitu ani k PR
+neklíčuje. Precedenty, které se u jiných issue otevíraly (rozhovor #452 a odložení #512 se ukládají
+k PR, značka `Prošlo` #500 nese otisk obsahu), se sem proto nevztahují — všechny tři vznikly
+z toho, že se ukládala **nová věc**; tady se nová věc neukládá.
+
+**Zamítnuto: ukládat i „odpovězeno“.** Znamenalo by to zmrazit stav konverzace do chvíle
+posledního běhu a od té chvíle o něm v okně lhát — odpověď kolegy, která přijde hodinu po kontrole,
+by se neukázala, dokud se nezaplatí další session. Živé čtení navíc dovoluje to, co je na celém
+issue nejcennější: `odpovězeno` platí i na PR, nad kterým kontrola **nikdy neběžela**.
+
+**Zamítnuto: rozšířit `RecheckReport`.** Tři důvody a každý sám o sobě stačí. (1) **Jiná
+platnost** — `RecheckReport` zhasne celý, jakmile se pohne hlava, protože všechno v něm je tvrzení
+modelu; tady je jedna osa fakt, který posunem hlavy nezastarává, a společné `outdated` by ho
+schovalo taky. (2) **Jiný klíč** — nálezy `Policy.key(of:)`, komentáře identita vlákna; dvě
+klíčování v jedné mapě je přesně to tiché rozpárování, kvůli kterému `FindingKey` existuje.
+(3) **Jiný slovník stavů** — `odpovězeno` u nálezu nemůže nastat, takže by v `RecheckStatus.Verdict`
+vznikla hodnota, která polovinu svých použití nemá.
+
+**Fakt přebíjí tvrzení, a je to rozhodnutí proti pořadí v zadání.** Zadání vyjmenovává stavy
+`opraveno v <sha>` / `odpovězeno` / `bez odpovědi`, což se dá číst jako priorita. Rozhodnuto
+opačně: když je vlákno zodpovězené **a** model řekl „opraveno“, vyhraje `odpovězeno`. Kdyby
+vyhrálo `opraveno`, schovala by aplikace větu kolegy, kterou si mám přečíst, kvůli tomu, že se
+modelu něco zdálo — a to je ztráta, kterou nejde nijak poznat. Opačně se neztrácí nic: ve vlákně
+s odpovědí se o opravě stejně dočtu. Vedlejší, ale podstatný důsledek: **model se ptá jedině tam,
+kde data mlčí**, což se dá zkontrolovat už ve vstupu (`Policy.unansweredComments(in:)`), ne až
+v zobrazení.
+
+**Brána kontroly zůstala u nálezů** (#150), i když by šlo pustit ji i na PR, kde mám jen
+komentáře. Tlačítko na místě, kde dosud nebylo, je kresba — a ta patří do #523, ne sem.
