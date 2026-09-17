@@ -11940,3 +11940,99 @@ i s nálezy, což je přesně ta cena, kterou to pole má.
   nepřečtená odpověď vyjde jako `bez odpovědi`, ne jako `opraveno`.
 - **Že session na zodpovězené vlákno nenarazí jinudy** (třeba přes `git log`). Prompt to zakazuje
   větou, ne branou — brána je ve vstupu, tedy v tom, že se takové vlákno vůbec nepředkládá.
+
+## Návrh review (#520) — dvě sady a skoro celá hodnota v tom, co se nestane
+
+`AutoDraftPolicyTests` (**34 testů**) a `AppStoreAutoDraftTests` (**13 testů**). Je to u téhle
+věci jinak než jinde: návrh **předvyplňuje to, co se pak odesílá**, takže se každá chyba projeví
+jako komentář v rozdělaném review, o kterém jsem nevěděl — a potvrzení ho odešle spolu se
+zbytkem.
+
+### `AutoDraftPolicyTests` — výčet, protože je to čistá funkce
+
+- **Pět odpovědí na jeden nález**, každá z jiného důvodu: `CONFIRMED` → převzít, `PLAUSIBLE` →
+  sporný, **chybějící verdikt** → sporný s **vlastním** důvodem (`bez verdiktu`), rozpor na místě
+  → sporný, odmítnutý → **ani jedno**. Ta poslední je nejcennější: odmítnutý nález se nesmí ani
+  převzít, ani nabídnout jako sporný, protože o něm rozhodl člověk (#113).
+- **Rozpor se počítá z platných nálezů a jen mezi různými reviewery**: shodné verdikty rozpor
+  nedělají, jeden reviewer si neodporuje ani dvěma nálezy na řádku, a odmítnutý nález do rozporu
+  nemluví (jinak by „shoda dvou, ze kterých jednomu nevěřím“ vyšla jako spor).
+- **Osm odpovědí na celý PR**: složí se / vypnutá brána / vlastní PR / posunutá hlava / zastaralý
+  záznam / **neznámá hlava** / bez záznamu / rozepsaný draft / není co navrhnout. Neznámá hlava je
+  **zákaz, ne povolení** — a to je ta věta, která se rozbije potichu.
+- **Návrh ze samých sporných nálezů se skládá** (žádný komentář z něj nevznikne, ale pruh v panelu
+  musí mít co vysvětlit).
+- **Věta pruhu vypisuje obě čísla i ve správných tvarech** — `z 1 nálezu 1 převzat, 0 sporných`
+  vedle `z 3 nálezů 0 převzato, 3 sporné`. Kdyby se druhá půlka u nuly vynechávala, četl by se
+  návrh jako hotový.
+- **Pilulka v řádku**: razítko má přednost před verdiktem a mluví **i s vypnutou branou** (popisuje
+  hotový draft), kdežto živý `návrh: schválit` se s vypnutou branou nekreslí — a jedině nad `approve` (nad `REQUEST_CHANGES` bez převzatého nálezu by slibovala hotový
+  verdikt tam, kde je všechno na kliknutí).
+
+### `AppStoreAutoDraftTests` — proti skutečnému `ReviewStore` i `ReviewDraftStore`
+
+- **Nic se neodeslalo**, a měří se to tím, že se `gh` **vůbec nespustilo** (počítací skript místo
+  binárky, jako u komentářů a labelů). Odesílání je v té scéně **povolené schválně**: s vypnutým
+  by to tvrzení neznamenalo nic, protože cestu ven zavírá `Policy.sendBlock` dřív.
+- **S vypnutou branou se nesloží nic** — žádné razítko, žádný draft, žádná pilulka. Výchozí stav.
+- **Vypnutí volby zastaví i odložené složení**: razítko z prvního běhu zůstane, ale po vypnutí
+  volby (toutéž cestou jako v okně, `updateConfiguration`) načtený diff draft **nezaloží**.
+  Razítko naopak mluví dál — pilulku vydá i s vypnutou branou, protože popisuje, co v panelu leží.
+- **Ručně rozepsaný draft zůstane, jak byl** (tělo se nepřepíše, komentář nepřibude, razítko
+  nevznikne).
+- **Odmítnutý nález se do návrhu nedostane**: druhý běh nad záznamem, ve kterém je nález odmítnutý,
+  nesloží ani razítko, ani draft.
+- **Nad posunutou hlavou se návrh nesloží** — razítko z jiné hlavy draft nezaloží (tvrdá podmínka
+  č. 5 ze strany návrhu).
+- **Bez načteného diffu draft nevznikne, po otevření PR ano** — a je to **řádkový** komentář
+  (`comments.first?.line == 26`, prázdné tělo), ne odkaz do těla review. To je celý důvod, proč se
+  čeká.
+- **Razítko i zahození přežijí restart** (druhý store nad toutéž složkou), a zahození **nálezy
+  nesundá**.
+- **Řádek v `Dění`** nese obě čísla a `showsSilentChip` u něj nic nekreslí.
+
+**Ověřeno vložením regrese.** `PLAUSIBLE → .adopt` plus vynechání brány na odmítnutí shodí
+**18 tvrzení v obou sadách** — mezi nimi test odmítnutého nálezu, kterému se v draftu objevil
+komentář `falešný` s `origin: .finding`. Tedy přesně ten výsledek, kterému se to pravidlo vyhýbá.
+
+### Nekonečné překreslování, které našel `sample` (#520)
+
+**Okno po otevření pull requestu jelo na 100 % hlavního vlákna a nepřijalo ani Apple event
+`quit`** — `bin/run.sh` proto odmítl spustit nový build („Nepovedlo se požádat PRism-c
+o ukončení: časový limit události AppleEvent vypršel“). Ten symptom je důležitější než chyba
+sama: **aplikace, která se nedá ukončit Apple eventem, není zaseknutá náhodou** — buď se něčeho
+ptá modálem, nebo nestíhá vybírat události.
+
+**Našlo se to dvěma vzorky a jedním srovnáním**, ne čtením kódu:
+
+1. `sample <pid> 3` nad podezřelou instancí: **1383 z 1383** vzorků hlavního vlákna leželo
+   v `GraphHost.flushTransactions` → `ViewBodyAccessor.updateBody` → `PullRequestDetailView.body`.
+   Tedy ne „pomalé kreslení“, ale **smyčka**: graf se po každém průchodu zneplatnil sám.
+2. Druhý vzorek téže instance v klidu (bez otevřeného PR) skončil
+   v `_BlockUntilNextEventMatchingListInMode`, tedy **nečinný** — z toho je vidět, že to není
+   animace ani polling.
+3. **Srovnání se základem větve**: `git stash`, build, tentýž `tabs.json` i tentýž záznam nálezů
+   v cache slotu — a hlavní vlákno **nečinné**. Tím padla poslední možnost, že to dělá vyrobený
+   stav a ne kód.
+
+**Příčina byla zápis do storu z těla view.** `PullRequestDetailView.anchor(inFile:line:)` na konci
+**rozbaluje soubor** (`store.unfold(…)`) — je to správně pro *skok*, ale volalo to
+`firstContestedFinding`, tedy výpočet uvnitř `body`. Každé překreslení tak zapsalo stav, který
+překreslení vyvolal.
+
+**Oprava je v tom, co o tlačítku rozhoduje**: `Co je sporné ↓` se kreslí podle toho, **jestli
+sporný nález je**, ne jestli se na něj dá skočit. Klik pak vždycky přepne panel na `Nálezy`
+a skok přidá, když se kotva najde — tedy žádné mrtvé tlačítko a žádný zápis při kreslení.
+
+**Je to tatáž třída jako pravidlo o `@State` ve zpětné vazbě z každého snímku** (#358), jen o krok
+dál: tam jde o zápis do `@State` z `onContinuousHover`, tady o zápis do **storu** z `body`. Grep na
+to není — pozná se to `sample`m, a proto je to zapsané tady.
+
+### Co se v harnessu ověřit nedá
+
+- **Že se pruh v panelu doopravdy nakreslí nad bannerem o zastarání** — obojí naráz je stav, do
+  kterého se v testu nedá dostat bez posunuté hlavy, a ta zároveň zavírá skládání. Ověřuje to
+  člověk na běžící aplikaci.
+- **Že `Co je sporné ↓` skočí na správný nález a že se bez sporného nálezu nenakreslí.** Obojí
+  stojí na geometrii diffu (viz *Kam skok posadí cílový řádek*) a na tom, co složí
+  `PullRequestDetailView`; zapsaná mezera, ověřuje ji člověk na běžící aplikaci.

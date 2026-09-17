@@ -1827,9 +1827,11 @@ Chování se řídí souborem `config.json` v `~/Library/Application Support/PRi
 PR, **další „moje“ loginy** (`ownLogins`, #330), **organizace k prohledávání**
 (`searchOrganizations`, #532), **jméno MCP nástroje, kterým se čte text issue**
 (`issueTextTool`, #345), sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
-review, jazyk nálezů, povolení odesílání, notifikace, výchozí pohled na diff, vzhled okna, interval
+review, jazyk nálezů, povolení odesílání, **skládání návrhu review** (`autoDraft`, #520),
+notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
-může přebít režim (`manual`/`automatic`), povolení odesílání, jazyk nálezů, skilly, kategorie
+může přebít režim (`manual`/`automatic`), povolení odesílání, skládání návrhu review, jazyk nálezů,
+skilly, kategorie
 i časový limit — a nic víc: prompt, pohled na diff, vzhled okna a notifikace jsou vlastnost
 člověka, ne repozitáře.
 
@@ -2239,6 +2241,39 @@ repa, do kterého vešel před minutou.
 z nastavení; výpis rep velké organizace je věc desítek sekund), pull requesty repa se dotáhnou
 **jednou, při vstupu do repa**. Když v cache ještě nic není, skupina `Repozitáře` se nekreslí —
 dotáhne se otevřením stránky `Zdroje PR` v nastavení.
+
+### Návrh review — jisté nálezy převzaté, sporné zvlášť (#520)
+
+**Po doběhnutí všech reviewerů složí aplikace rozdělané review sama.** Převezme nálezy, u kterých
+si je reviewer jistý (`CONFIRMED`) a nikdo mu na tom místě neodporuje; ostatní nechá **sporné**
+a u každého napíše proč — `PLAUSIBLE`, `bez verdiktu`, nebo jména reviewerů, kteří se neshodli
+(`php-review ↔ security-review`). Panel se pak otevře s pruhem `Návrh připravený automatem ·
+21:52 · z 5 nálezů 3 převzaty, 2 sporné` a s tlačítky `Zahodit návrh` a `Co je sporné ↓`; v řádku
+fronty stojí pilulka `návrh review · 3 + 2 sporné`, u čistého review `návrh: schválit`, a v `Dění`
+přibude řádek. Zakreslené je to v mockupu, [sekce 62](docs/navrh.html#s62).
+
+**Nic se tím neodesílá.** Návrh končí tam, kde končí i to, co naklikám sám — v rozdělaném review.
+Ven se dostane jedině potvrzením s celým payloadem (viz níž) a **verdikt zůstává návrhem**: do
+draftu se nezapisuje, jen se jím předvyplní. Mění se jediné — kdo draft naplnil —, a je to napsané
+v pruhu i v `Dění`.
+
+**Sporné se nesmí ztratit**, a je to ta věta, na které to celé stojí: když se část nálezů převezme
+sama a část ne, musí být z okna poznat **které a proč**. Proto má každý sporný nález v panelu
+značku s důvodem a pruh vypisuje **obě čísla**, i když je jedno z nich nula.
+
+**Odmítnutý nález se nepřevezme a ani se nenabídne jako sporný** — o něm už rozhodl člověk. Návrh
+naopak **nikdy nesundá nález**; `Zahodit návrh` smaže jen to, co složil, a panel je pak prázdný
+jako bez téhle volby.
+
+**Ve výchozím stavu je vypnuto** (`autoDraft`, globálně i per repo — `Skládat` / `Neskládat` /
+`Podle globálního nastavení`), jako odesílání a agent. A **jak se hlava PR pohne, návrh zhasne**:
+razítko leží u nálezů, takže s novým commitem zmizí pilulka, pruh i značky sporných — nic se nemá
+jak složit proti kódu, který v PR není.
+
+**Komentáře vzniknou, až je načtený diff.** Rozhodnutí padne hned po reviewerech (proto je pilulka
+ve frontě vidět dřív, než PR otevřu), ale kam převzatý nález patří, rozhodují hunky — bez diffu by
+se z každého stal odkaz do těla review místo komentáře u řádku. Panel se proto doplní ve chvíli,
+kdy se PR otevře.
 
 ### Odeslání review
 

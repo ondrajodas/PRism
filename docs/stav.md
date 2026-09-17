@@ -9147,3 +9147,46 @@ jedna fixtura ze živého API (skutečná série `cli/cli`
 a **popisek nad skupinou ve frontě je doložený jedině rendrem mockupu a testy** — na běžícím okně
 se dá vyfotit pruh desky, ale přepnutí railu na sekci `Fronta` vyžaduje kliknutí, na které tenhle
 stroj nemá asistenční přístup.
+
+## #520 — návrh review: jisté nálezy převzaté, sporné zvlášť (M17, Z1, zákres 62)
+
+Po doběhnutí **všech** reviewerů složí aplikace rozdělané review sama. Převezme nálezy, u kterých
+si je reviewer jistý (`CONFIRMED`) a nikdo mu na tom místě neodporuje; ostatní nechá jako
+**sporné** i s důvodem. Panel se otevře s pruhem `Návrh připravený automatem · 21:52 · z 5 nálezů
+3 převzaty, 2 sporné` a s tlačítky `Zahodit návrh` a `Co je sporné ↓`, řádek fronty nese pilulku
+`návrh review · 3 + 2 sporné` (u čistého `návrh: schválit`) a v `Dění` přibude řádek. Zapíná se
+`autoDraft` globálně i per repo a **ve výchozím stavu je vypnuto**.
+
+**Jediná cesta ven se nemění ani o písmeno.** Návrh končí v `ReviewDraft`, tedy tam, kde končí
+i to, co naklikám sám; ven jde pořád jedině přes `ReviewPublishing.submit` z potvrzení s celým
+payloadem. Grepy z `CLAUDE.md` vydávají **týchž sedm souborů** a `SingleWayOutTests` se nezměnily.
+**Verdikt zůstává návrhem** (#114) — do draftu se nezapisuje.
+
+**Razítko bydlí u nálezů, ne u draftu**, tedy u dvojice `(PR, hlava)` jako kontrola nálezů (#150).
+Vedlejší účinek je zrovna ten, který chce tvrdá podmínka č. 5: **jak se hlava pohne, návrh zhasne
+sám** — nový commit znamená nový záznam a v něm razítko není, takže zmizí pilulka, pruh i značky
+`sporné`. Pole na `ReviewDraft`u se zamítlo, protože návrh ze samých sporných nálezů žádný draft
+nezakládá — a právě ten stav je potřeba vysvětlit nejvíc.
+
+**Dvě fáze, a je to kvůli diffu.** Rozhodnutí padne hned po reviewerech (z uložených nálezů, bez
+volání navíc), komentáře vzniknou, až je načtený diff: bez něj by se ze **všech** nálezů staly
+odkazy do těla review místo komentářů u řádků. Dotahovat detail a diff hned po review se zamítlo —
+detail je další čtyři volání a diffy všech reviewovaných PR by ležely v paměti, i když se na ně
+nikdo nepodívá.
+
+**Co je jisté, rozhoduje `Policy` výčtem**, ne `if` ve view ani věta v promptu. Odmítnutý nález
+(#113) se ani nepřevezme, ani nenabídne jako sporný; rozpor na místě přebíjí verdikt; a chybějící
+verdikt je **vlastní** důvod (`bez verdiktu`), ne `PLAUSIBLE`. Rozpor je rozdíl ve verdiktu mezi
+dvěma různými reviewery na jednom místě — tedy to, co se z dat pozná; sémantický spor aplikace
+přečíst neumí a tvrdit ho z textu by byl odhad.
+
+Přibylo **47 testů** ve dvou nových sadách (34 nad `Policy`, 13 nad store proti skutečnému
+`ReviewStore` i `ReviewDraftStore`) a skoro celá jejich hodnota je v tvrzeních o tom, co se
+**nestane**: že se `gh` vůbec nespustilo (a to při **povoleném** odesílání), že se sporný nález
+nepřevzal, že odmítnutý neprošel a že ručně rozepsaný draft zůstal, jak byl. Regrese ověřena
+vložením regrese — `PLAUSIBLE → převzít` plus vynechání brány na odmítnutí shodí 18 tvrzení
+v obou sadách.
+
+**Neověřená mezera: PR neprošel Copilotem** (na pokyn uživatele se nepouštěl). A **fokus ani skok
+`Co je sporné ↓` se v harnessu ověřit nedá** — obojí stojí na geometrii diffu, takže to zkouší
+člověk na běžící aplikaci.

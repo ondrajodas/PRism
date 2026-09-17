@@ -109,7 +109,9 @@ extension Policy {
     static func isReported(_ kind: ActivityEvent.Kind, on ownership: PullRequestOwnership) -> Bool {
         switch kind {
         case .newPullRequest, .reReview, .findings, .clean, .failure, .staleFindings, .leftQueue,
-             .returnedFromSnooze:
+             .returnedFromSnooze, .autoDraft:
+            // Návrh review (#520) se skládá jedině na **cizím** PR — na vlastním ho `Policy.autoDraft`
+            // odmítne první odpovědí, protože review na vlastní PR GitHub nepustí.
             ownership == .theirs
         case .foreignActivity, .agentFix:
             // **Agent běží jedině na vlastním PR** (`Policy.agentFix` vrací `notMine` jako první
@@ -153,6 +155,10 @@ extension Policy {
         // žádný vlastní tab nemá, kreslí se **nad** pruhem záložek, takže ji `Přehled` otevře
         // stejně jako kterýkoli jiný — a `Přehled` k ní přidá to, co se o PR ví.
         case .agentFix: .tab(.overview)
+        // **Návrh review vede na `Přehled`** (#520), ne na `Nálezy`: pruh s návrhem i sporné nálezy
+        // jsou v **panelu**, a ten se v tabu `Nálezy` nekreslí vůbec (`PullRequestTab.showsReviewPanel`).
+        // Řádek, který otevře tab bez panelu, by mířil vedle toho, o čem mluví.
+        case .autoDraft: .tab(.overview)
         // Zastaralé nálezy vedou na `Commity`, ne na `Nálezy`: rozhodnutí, co s nimi, se dělá
         // podle toho, co v těch commitech přišlo.
         case .staleFindings: .tab(.commits)
@@ -172,7 +178,10 @@ extension Policy {
         // je“, ne na „jak to dopadlo“ — to nese věta v řádku. Zeleně by se spadlý běh tvářil jako
         // úspěch, červeně by se hotová oprava tvářila jako porucha, a akcent je to, co obojí
         // spojuje: **na tomhle PR na tebe něco čeká**.
-        case .agentFix: .accent
+        // Akcent ze stejného důvodu jako u agenta: **na tomhle PR na tebe něco čeká**. Barva
+        // výsledku (červená u nálezů, zelená u čista) by tvrdila něco o kódu — a o tom mluví
+        // vlastní řádek, který přišel hned vedle.
+        case .agentFix, .autoDraft: .accent
         case .findings, .failure: .critical
         case .clean: .ok
         case .staleFindings: .stale
@@ -196,6 +205,7 @@ extension Policy {
         case .failure: "xmark"
         case .foreignActivity: "bubble.left"
         case .agentFix: "wand.and.stars"
+        case .autoDraft: "square.and.pencil"
         case .staleFindings: "clock.arrow.circlepath"
         case .leftQueue: "minus"
         case .returnedFromSnooze: "alarm"
@@ -213,7 +223,9 @@ extension Policy {
         case .newPullRequest, .reReview, .findings, .clean, .failure, .foreignActivity,
              .agentFix:
             return true
-        case .staleFindings, .leftQueue, .returnedFromSnooze: return false
+        // Návrh review (#520) je dopočítaný jako zastaralé nálezy: banner za něj nechodí nikdy,
+        // takže chip `bez banneru` by tvrdil, že něco nedorazilo.
+        case .staleFindings, .leftQueue, .returnedFromSnooze, .autoDraft: return false
         }
     }
 
@@ -349,6 +361,35 @@ extension Policy {
             headline: agentRunHeadline(outcome),
             detail: agentRunSentence(outcome, worktree: worktree),
             wasAnnounced: announced
+        )
+    }
+
+    /// Řádek o tom, že aplikace složila návrh review (#520). `nil` = nehlásí se.
+    ///
+    /// **Detail nese obě čísla**, ne jen to hezčí: „3 převzaty“ bez „2 sporné“ by na ose tvrdilo,
+    /// že je hotovo — a to je ta jediná věc, kterou tenhle řádek umí pokazit. Skládá je
+    /// `Policy.autoDraftTally`, tedy **tatáž funkce jako pruh v panelu**: dvě skládání téhož by
+    /// znamenala, že řádek v `Dění` říká o témž návrhu něco jiného než okno nad ním.
+    ///
+    /// **Banner za tím nechodí** (`showsSilentChip` ho u tohohle druhu nekreslí): o výsledku review
+    /// jeden právě přišel a druhý o tomtéž PR v tutéž chvíli je vyrušení za nic. Dohledat se to má,
+    /// vyrušit ne — přesně ta dvojice, kvůli které tahle obrazovka existuje.
+    static func autoDraftEvent(
+        for pr: PRIdentifier,
+        ownership: PullRequestOwnership = .theirs,
+        at: Date,
+        adopted: Int,
+        contested: Int
+    ) -> ActivityEvent? {
+        guard isReported(.autoDraft, on: ownership) else { return nil }
+        return ActivityEvent(
+            id: identity(.autoDraft, pr, at: at),
+            kind: .autoDraft,
+            pullRequest: pr,
+            at: at,
+            headline: "Návrh review připraven",
+            detail: autoDraftTally(adopted: adopted, contested: contested),
+            wasAnnounced: false
         )
     }
 

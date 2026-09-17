@@ -139,6 +139,42 @@ actor ReviewStore {
         return record
     }
 
+    /// Uloží razítko návrhu review (#520) — nebo ho `nil`em **smaže** (`Zahodit návrh`).
+    ///
+    /// Zapisuje se do záznamu **těch nálezů**, ze kterých návrh vznikl, tedy stejně jako
+    /// u kontroly: `headSha` je commit, na kterém nálezy stojí.
+    ///
+    /// Chybějící soubor je **chyba**, ne prázdný záznam, a je to tatáž úvaha jako u kontroly
+    /// a u odmítnutí: nálezy, ze kterých se návrh složil, byly vidět v okně, takže na disku být
+    /// musí — a nový prázdný záznam by je všechny zahodil.
+    ///
+    /// **Jedna metoda na zápis i na smazání**, ne dvě: obojí je tentýž zápis jedné hodnoty
+    /// a dvě cesty k ní by znamenaly dvě místa, kde se dá zapomenout na hranici cache.
+    @discardableResult
+    func saveAutoDraft(
+        _ stamp: StoredAutoDraft?,
+        for pullRequest: PRIdentifier,
+        at headSha: String
+    ) throws -> ReviewRecord {
+        let url = layout.reviewFile(for: pullRequest, at: headSha)
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
+        }
+        // Odkaz **i cesta ven** jsou totéž co chybějící soubor (#106, hranice doplněna u #458) —
+        // tvrdá podmínka č. 3 platí i pro zápis jedné hodnoty do cizího souboru.
+        guard CacheFile.refusal(for: url, in: layout) == nil else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
+        }
+
+        var record = try read(at: url)
+        guard record.pullRequest == pullRequest else {
+            throw ReviewStoreError.recordNotFound(pullRequest, headSha: headSha)
+        }
+        record.autoDraft = stamp
+        try write(record, to: url)
+        return record
+    }
+
     /// Odmítne nález jako falešně pozitivní (#113) a vrátí záznam, jak po tom vypadá.
     ///
     /// Soubor se hledá podle `finding.headSha`, ne podle parametru: nález si commit nese sám

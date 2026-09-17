@@ -130,6 +130,18 @@ private struct RepositoryDetailView: View {
                 }
                 .pickerStyle(.radioGroup)
 
+                // Tříhodnotový jako agent (#520) a ze stejného důvodu: `false` u repa není totéž
+                // jako `nil` — repo, ve kterém návrh skládat nechci, si to podrží i po přepnutí
+                // globálního defaultu. Leží pod agentem, protože je to tatáž třída otázky („co
+                // aplikace udělá sama“), jen o rozdělaném review místo o souborech.
+                Picker("Návrh review po reviewerech", selection: config.autoDraft) {
+                    Text("Podle globálního nastavení (\(draftName(settings.draft.global.autoDraft)))")
+                        .tag(Bool?.none)
+                    Text("Skládat").tag(Bool?.some(true))
+                    Text("Neskládat").tag(Bool?.some(false))
+                }
+                .pickerStyle(.radioGroup)
+
                 mergeMethodPicker
 
                 // Tříhodnotový jako odesílání (#517), a ze stejného důvodu: `false` u repa není
@@ -409,6 +421,10 @@ private struct RepositoryDetailView: View {
 
     private func agentName(_ enabled: Bool) -> String {
         enabled ? "pouštět" : "nepouštět"
+    }
+
+    private func draftName(_ enabled: Bool) -> String {
+        enabled ? "skládat" : "neskládat"
     }
 
     private func incrementName(_ enabled: Bool) -> String {

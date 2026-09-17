@@ -260,6 +260,11 @@ struct PullRequestListView: View {
                 // z pilulky se pozná, že nad PR běží něco, co jsem nespustil, nebo že v kopii repa
                 // leží commit k přetlačení.
                 agent: store.agentRowPill(for: row.pullRequest),
+                // Návrh review (#520) — **jeden řádek, jedna podoba**, tedy i tady: z pilulky se
+                // pozná, že po reviewerech leží v panelu připravený návrh a kolik z něj zůstalo
+                // sporné. Brána i razítko jsou za `AppStore.autoDraftPill`, takže s vypnutou
+                // volbou se nekreslí nic.
+                autoDraft: store.autoDraftPill(for: row.id),
                 // Odložit (#512) — jedna hodnota z jednoho místa (`AppStore.snoozeAction(for:)`),
                 // stejně jako na desce a v sekci `Rozdělaná`. Brána `Policy.canSnooze` je uvnitř,
                 // takže na vlastním řádku přijde prázdná nabídka a nenakreslí se nic.

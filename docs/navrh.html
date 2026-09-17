@@ -3081,6 +3081,32 @@ tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
 }
 .rv-brief .meta .sp { flex: 1; }
 
+/* ---- sekce 62: návrh review nad nálezy -------------------------------------------
+   Po doběhnutí reviewerů složí aplikace **návrh** rozdělaného review (#520): jisté nálezy
+   převezme, sporné nechá na kliknutí. Zákres přišel z decku „Směry pro PRism“ (stránka
+   *Za mě › Z1 Review na jedno přečtení*).
+
+   **Vlastní třída, protože existující nestačila.** Nejblíž byl `.rv-brief` — taky pruh, taky
+   akcentový, taky o práci, kterou udělala aplikace za mě. Jenže ten leží **v obsahu desky**
+   a je 13 b prózy s pevným sloupcem návěští; tohle je **hlavička panelu 300 b širokého**,
+   tedy jedna věta, která se musí zalomit, a pod ní dvě tlačítka. Přebít `.rv-brief` v úzkém
+   místě by znamenalo, že se zpětně překreslí i sekce 58.
+
+   Pruh je **akcentová plocha**, ne akcentová linka vlevo jako u briefu: v panelu je nad ním
+   hlavička a pod ním verdikt s tlačítky, takže linka na kraji by splynula s proužkem panelu.
+   Tlačítka jsou existující `.mini` — je to tatáž třída akce jako `Shrň znovu` v briefu.
+
+   `.meta` se **nedefinuje naholo** (past z #390), proto `.rv-autonote .acts`. A `flex-direction`
+   musí být **vypsaný**, ze stejného důvodu jako u `.frow .acts`: naholo psané `.acts` výš už
+   jednu má (`column`) a bez přepsání by se z tlačítek staly dva pruhy přes celou šířku pruhu —
+   tak to vyšlo v prvním renderu. */
+.rv-autonote {
+  border-radius: var(--radius-sm); background: var(--accent-weak);
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 6px;
+}
+.rv-autonote .txt { font-size: 11.5px; color: var(--accent); line-height: 1.45; }
+.rv-autonote .acts { display: flex; flex-direction: row; gap: 8px; }
+
 /* ---- sekce 47: itinerář review --------------------------------------------------
    Levý sloupec přestal být strom cest a stal se dráhou se zastávkami (#506). Zákres přišel
    z decku „Směry pro PRism“ (stránka *Směry › A Itinerář review*) a tady jsou jen ty čtyři
@@ -15530,6 +15556,182 @@ Secret Client
           <span>Surová session (sekce 20) o sobě říká totéž a platí to dál: čte se, nepíše se do
           toho. Rozdíl je, že tady se <b>ptám</b> — a odpovídá session, která má vyjmenovaná
           práva. Živý terminál je jiná věc a je v sekci 34.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="s62">
+    <div class="section-head">
+      <div class="eyebrow">62 — Nálezy · návrh review od automatu</div>
+      <h2>Po reviewerech leží v panelu návrh — a je z něj poznat, co si nevzal</h2>
+      <p class="muted">
+        <b>Dnes</b> reviewer doběhne a panel je prázdný: každý nález se převezme kliknutím.
+        Na PR s pěti nálezy je to pět rozhodnutí dřív, než se cokoli odešle — a u čtyř z nich
+        je odpověď zřejmá.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: po doběhnutí <b>všech</b> reviewerů složí aplikace rozdělané review sama.
+        Převezme nálezy, u kterých si je reviewer jistý (<code>CONFIRMED</code>) a nikdo mu na tom
+        místě neodporuje; ostatní označí <b>sporné</b> a nechá na kliknutí. Nad panelem stojí pruh
+        <code>Návrh připravený automatem · 21:52 · z 5 nálezů 3 převzaty, 2 sporné</code>
+        s tlačítky <code>Zahodit návrh</code> a <code>Co je sporné ↓</code>.
+      </p>
+      <p class="muted">
+        <b>Odeslání se nemění ani o písmeno.</b> Návrh končí tam, kde končí i to, co naklikám sám —
+        v rozdělaném review. Ven se dostane jedině potvrzením s celým payloadem, a <b>verdikt
+        zůstává návrhem</b> (sekce 25): do draftu se nezapisuje, jen se jím předvyplní.
+      </p>
+      <p class="muted">
+        <b>Sporné se nesmí ztratit</b>, a je to ta jediná věta, na které celá sekce stojí. Když se
+        část nálezů převezme sama a část ne, musí být z okna poznat <b>které a proč</b> — jinak
+        by se odeslalo víc, než jsem četl. Proto značka u nálezu nese <b>důvod</b>
+        (<code>PLAUSIBLE</code>, <code>bez verdiktu</code>,
+        <code>php-review ↔ security-review</code>) a pruh vypisuje <b>obě čísla</b>, i když je
+        jedno z nich nula.
+      </p>
+      <p class="muted">
+        <b>Odmítnutý nález se nepřevezme a ani se nenabídne jako sporný</b> (sekce 30): o něm už
+        rozhodl člověk. Návrh naopak <b>nikdy nesundá nález</b> — to smí jedině odmítnutí.
+        <b>Ve výchozím stavu je vypnuto</b>, globálně i per repo, jako odesílání a agent.
+      </p>
+    </div>
+
+    <h3>Panel po doběhnutí reviewerů</h3>
+    <div class="duo">
+      <div class="pane">
+        <div class="tag"><i></i>Dnes · prázdný panel, pět kliknutí</div>
+        <div class="panel" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div class="verdicts">
+            <div class="vbtn">Schválit</div>
+            <div class="vbtn on">Změny</div>
+            <div class="vbtn">Komentář</div>
+          </div>
+          <div class="composer" style="margin: 0; border: 0; padding: 0;">
+            <div class="ta">Souhrn k celému PR. Nálezy mimo diff se sem přidají jako odkaz na kód.</div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-3);">
+            Komentář přidáš tlačítkem, které se objeví na řádku diffu, nebo převzetím nálezu z bubliny.
+          </div>
+        </div>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · tři převzaté, dva sporné</div>
+        <div class="panel" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div class="rv-autonote">
+            <div class="txt">Návrh připravený automatem · 21:52 · z 5 nálezů 3 převzaty, 2 sporné</div>
+            <div class="acts">
+              <span class="mini">Zahodit návrh</span>
+              <span class="mini">Co je sporné ↓</span>
+            </div>
+          </div>
+          <div class="verdicts">
+            <div class="vbtn">Schválit</div>
+            <div class="vbtn on">Změny</div>
+            <div class="vbtn">Komentář</div>
+          </div>
+          <div style="font-size: 11px; color: var(--ink-2);">Komentáře k řádkům · 3</div>
+          <div style="font-size: 11px; color: var(--ink-3); font-family: var(--mono);">
+            SecretClient.php:81 · Cart.php:26 · Order.php:5
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Pruh je nad bannerem o zastarání, ne pod ním.</b> Vysvětluje, <b>odkud je všechno pod
+          ním</b>, kdežto banner mluví o tom, že to nejde odeslat — a obojí naráz je legitimní stav.
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Kreslí se i nad prázdným panelem.</b> Návrh, ve kterém zbyly samé sporné nálezy, žádný
+          komentář nezaloží — a pruh je pak to jediné, co vysvětlí, proč v panelu nic není.
+        </p>
+      </div>
+    </div>
+
+    <h3>Karta nálezu, který si návrh nevzal</h3>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Sporný · a je vidět proč</div>
+        <div class="fcard warn">
+          <div class="top">
+            <span class="cat">correctness</span>
+            <span class="cat">·</span>
+            <span class="cat">php-review</span>
+          </div>
+          <div class="sum">Nová výjimka <code>SecretNotFound</code> nemá test</div>
+          <div class="top" style="padding-top: 0;">
+            <span class="pill stale">sporné</span>
+            <span class="cat">PLAUSIBLE</span>
+          </div>
+          <div class="loc">src/Vault/SecretClient.php:81</div>
+        </div>
+        <div class="fcard crit">
+          <div class="top">
+            <span class="cat">security</span>
+            <span class="cat">·</span>
+            <span class="cat">security-review</span>
+          </div>
+          <div class="sum">Token se loguje v plain textu</div>
+          <div class="top" style="padding-top: 0;">
+            <span class="pill stale">sporné</span>
+            <span class="cat">php-review ↔ security-review</span>
+          </div>
+          <div class="loc">src/Vault/SecretClient.php:94</div>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="tag"><i></i>Řádek fronty · co o návrhu říká</div>
+        <div class="panel" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+            <span style="flex: 1;">keboola/vault #85</span>
+            <span class="pill mint">návrh review · 3 + 2 sporné</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+            <span style="flex: 1;">keboola/job-queue #727</span>
+            <span class="pill mint">návrh: schválit</span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Mint, a místo pera</b> (sekce 40): obojí říká totéž — <em>tady leží neodeslané
+          review</em> —, jen pilulka k tomu dodá, kolik z něj je převzaté a kolik sporné. Dvě
+          značky o jedné věci vedle sebe by se četly jako dvě různé.
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <code>návrh: schválit</code> je <b>čisté review</b>: převzít nebylo co, takže žádný draft
+          nevznikl a zbývá jen návrh verdiktu. Nad <code>REQUEST_CHANGES</code> bez jediného
+          převzatého nálezu se pilulka <b>nekreslí</b> — slíbila by hotový verdikt tam, kde je
+          všechno na kliknutí.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">107</span>
+        <span class="body">
+          <b>Nesahá to na jedinou cestu ven</b>
+          <span>Návrh je předvyplnění, ne odeslání. Review odchází pořád jedině přes potvrzení
+          s celým payloadem a s kontrolou hlavy (sekce 26); tady se mění jedině to, <b>kdo draft
+          naplnil</b> — a je to napsané v pruhu i v <code>Dění</code>.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">108</span>
+        <span class="body">
+          <b>Hlava návrh zhasne</b>
+          <span>Razítko návrhu leží u nálezů, tedy u dvojice <code>(PR, hlava)</code>. Nový commit
+          znamená nové nálezy — a s nimi zmizí pilulka ve frontě, pruh v panelu i značky
+          <code>sporné</code>. Nic se nemá jak složit proti kódu, který v PR není.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">109</span>
+        <span class="body">
+          <b>Draft počká na diff</b>
+          <span>Rozhodnutí padne hned po reviewerech, ale komentáře vzniknou, až je načtený diff:
+          bez něj by se z <b>každého</b> nálezu stal odkaz do těla review místo komentáře u řádku.
+          Do té doby je v řádku fronty pilulka a v <code>Dění</code> řádek — panel se doplní, jak
+          se PR otevře.</span>
         </span>
       </div>
     </div>

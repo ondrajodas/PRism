@@ -14,13 +14,22 @@ extension AppStore {
     /// ukázat diff, ve kterém chybí nový commit — je dražší.
     func loadDiff(for pullRequest: PullRequestSummary) async {
         let id = pullRequest.id
-        guard !hasCurrentDiff(for: pullRequest) else { return }
+        guard !hasCurrentDiff(for: pullRequest) else {
+            // Diff je z paměti, ale **razítko návrhu mohlo přibýt mezitím** (#520): review doběhlo,
+            // zatímco byl tab zavřený, a `updatedAt` se kvůli tomu nezměnilo. Bez tohohle volání by
+            // se návrh složil teprve po dalším pushi, tedy tehdy, kdy už neplatí.
+            materializeAutoDraft(for: id)
+            return
+        }
         diffStates[id] = .loading
 
         do {
             let text = try await gateway.fetchDiff(id: id)
             diffStates[id] = .loaded(DiffParser.parse(text), updatedAt: pullRequest.updatedAt)
             revealFindingsOutsideTheDiff(for: id)
+            // Teprve teď se dá návrh review (#520) složit: kam převzatý nález patří, rozhodují
+            // hunky. Bez razítka, s rozepsaným draftem nebo nad posunutou hlavou se nestane nic.
+            materializeAutoDraft(for: id)
             // Nový diff = jiné otisky souborů, takže se stav značek `Prošlo` (#500) musí složit
             // znovu — tohle je ta chvíle, kdy se ze značky stane `změněno od prošlého`.
             refreshReadStates(for: id)

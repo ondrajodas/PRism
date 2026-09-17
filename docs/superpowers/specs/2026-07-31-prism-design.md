@@ -8080,3 +8080,45 @@ pilulka bez věty, která ji vysvětluje) — a test
 v pilulkách řetězu je **právě jedno** pořadové číslo, patří **hlavě**, a rovná se tomu, které o témž
 PR říká řádek fronty. Ověřeno vložením regrese: vrácení původního tvaru `#14451 · 2. v sérii` shodí
 všech pět případů.
+
+## Záznam rozhodnutí — návrh review skládá aplikace, odesílá pořád člověk (#520)
+
+Po doběhnutí všech reviewerů složí aplikace rozdělané review sama (Z1 z decku „Směry pro PRism“).
+Čtyři rozhodnutí, která zadání nechalo otevřená, plus dvě zamítnuté varianty.
+
+**Razítko návrhu bydlí u nálezů, ne u draftu.** `StoredAutoDraft` leží na `ReviewRecord`u, tedy
+u dvojice `(PR, hlava)` — stejně jako kontrola nálezů (#150), protože je to tvrzení o **těch**
+nálezech. Vedlejší účinek je ta nejlevnější možná podoba tvrdé podmínky č. 5: nová hlava znamená
+nový záznam a v něm razítko není, takže návrh **zhasne sám** a není na to žádná kontrola, na kterou
+by se dalo zapomenout.
+
+**Zamítnuto: pole na `ReviewDraft`u.** Nabízelo se, protože razítko mluví o draftu — jenže návrh,
+ze kterého zbyly samé sporné nálezy, žádný draft nezaloží (prázdný draft se maže). Právě ten stav
+je přitom potřeba vysvětlit nejvíc: panel je prázdný a bez pruhu by to vypadalo, že se nestalo nic.
+
+**Rozhodnutí padne hned, komentáře počkají na diff.** Kam převzatý nález patří, rozhoduje
+`Policy.draftTarget` podle hunků, takže bez načteného diffu by se ze **všech** nálezů staly odkazy
+do těla review. Mezi rozhodnutím a složením je proto stav *rozhodnuto, nesloženo*: pilulka ve
+frontě a řádek v `Dění` už jsou, panel se doplní, jak se PR otevře. **Zamítnuto: dotáhnout detail
+a diff hned po review** — detail je další čtyři volání (checky, commity, labely) a diffy všech
+reviewovaných PR by ležely v paměti, i když se na ně nikdo nepodívá.
+
+**„Už převzato ručně“ je odpověď na celý PR, ne na jednotlivý nález.** Existující draft zavírá
+skládání celé (`AutoDraftRefusal.draftExists`), místo aby se doplňovalo, co v něm ještě není. Je to
+o řád silnější tvrzení a dá se otestovat jednou větou: **co jsem začal psát já, aplikace nepřepíše
+ani o komentář**. Cena je jediná — po ručním rozepsání se návrh nesloží ani pro nálezy, kterých se
+moje věta netýká; to je bezpečná strana.
+
+**Rozpor mezi reviewery je rozdíl ve verdiktu na jednom místě**, ne rozdíl významů. Sémantický spor
+(„jeden chce A, druhý B“) aplikace přečíst neumí a tvrdit ho z textu by byl odhad vydávaný za údaj.
+Co se z dat pozná, je `CONFIRMED` proti `PLAUSIBLE` od dvou různých reviewerů na témže `file:line` —
+a to je zároveň přesně ten případ, kvůli kterému deck kreslí důvod `php-review ↔ security-review`.
+
+**Chybějící verdikt má vlastní důvod, ne `PLAUSIBLE`.** „Nejsem si jistý“ a „neřekl jsem“ jsou dvě
+různé věty; slít je do jedné by znamenalo napsat v okně něco, co reviewer nenapsal — tatáž úvaha,
+kvůli které `FindingVerdict` neznámou hodnotu nehádá.
+
+**Zamítnuto: nechat automat sundat nález, o kterém si je jistý, že neplatí.** Návrh nálezy **nikdy
+nesundává** — to smí jedině odmítnutí (#113), za kterým stojí člověk. Sporný nález proto z okna
+nemizí, jen se nepřevezme; a odmítnutý se ani nepřevezme, ani nenabídne jako sporný, protože
+o něm už rozhodnuto je.

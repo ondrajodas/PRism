@@ -319,6 +319,11 @@ extension AppStore {
             )
             reviewPhases[pr] = nil
             await notifyAboutFinishedReview(of: pr)
+            // Návrh review (#520) — **jen tady, ne za chybovými cestami**: skládá se z toho, co
+            // reviewery našli, takže po spadlém checkoutu ani po chybě GitHubu není z čeho.
+            // Hlava se předává z **čerstvě dotaženého detailu**, ne z okna; proč, je u metody.
+            // Ve výchozím stavu je brána vypnutá, takže se nestane nic.
+            await planAutoDraft(for: pr, at: detail.headSha)
         } catch is CancellationError {
             // Zrušení není selhání — stav se srovná podle disku, ne do chyby.
             //

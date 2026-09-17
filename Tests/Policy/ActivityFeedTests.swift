@@ -162,7 +162,11 @@ extension ActivityFeedTests {
     @Test("Chip bez banneru dostanou jen druhy, které banner umí")
     func silentChipOnlyWhereABannerIsPossible() {
         for kind in ActivityEvent.Kind.allCases {
-            let computed = kind == .staleFindings || kind == .leftQueue || kind == .returnedFromSnooze
+            // Dopočítané druhy — banner za ně nechodí nikdy. Od #520 je mezi nimi i návrh review:
+            // o výsledku review jeden banner právě přišel a druhý o tomtéž PR v tutéž chvíli je
+            // vyrušení za nic.
+            let computed = kind == .staleFindings || kind == .leftQueue
+                || kind == .returnedFromSnooze || kind == .autoDraft
             #expect(Policy.showsSilentChip(kind, announced: false) == !computed)
             // Doručený banner chip nedostane nikdy — o tom, že nepřišel, není co říct.
             #expect(!Policy.showsSilentChip(kind, announced: true))

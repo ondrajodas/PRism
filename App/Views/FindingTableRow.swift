@@ -55,7 +55,8 @@ struct FindingTableRow: Identifiable, Hashable {
         sort: FindingTableSort?,
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
         dismissals: [FindingKey: FindingDismissal] = [:],
-        rechecks: [FindingKey: RecheckStatus] = [:]
+        rechecks: [FindingKey: RecheckStatus] = [:],
+        doubts: [FindingKey: AutoDraftDoubt] = [:]
     ) -> [FindingTableRow] {
         let sorted = Policy.sorted(findings, by: sort, categories: categories, dismissals: dismissals)
         return Policy.groups(of: sorted, dismissals: dismissals, rechecks: rechecks)
@@ -67,7 +68,13 @@ struct FindingTableRow: Identifiable, Hashable {
                         group.findings,
                         blocking: categories,
                         dismissals: group.dismissals,
-                        rechecks: group.rechecks
+                        rechecks: group.rechecks,
+                        // **Celá mapa, nefiltrovaná podle skupiny** (#520), na rozdíl od odmítnutí
+                        // a kontroly: ty jsou hodnotou ve `FindingGroup`, kterou drží `DiffRow`
+                        // v líném seznamu, takže se u nich filtruje kvůli překreslování. Tenhle
+                        // řádek žádnou skupinu nedrží a `FindingRow.preserving` si z mapy stejně
+                        // bere jen klíče svých nálezů.
+                        doubts: doubts
                     ),
                     isBlocking: group.activeFindings.contains {
                         Policy.isBlocking($0, categories: categories)
