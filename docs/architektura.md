@@ -4947,7 +4947,7 @@ Výsledky review na disku: jeden JSON soubor na `(repo, PR, headSha)` pod
 
 | Typ | Co je |
 |---|---|
-| `ReviewStore` | Aktor: `save`, `dismiss`, `restore`, `markCurrent`, `load`, `delete`, `cleanUp`. Atomický zápis |
+| `ReviewStore` | Aktor: `save`, `dismiss`, `restore`, `markCurrent`, `load`, `delete`, `cleanUp`, **`reviewerTallies`** (#514, čtení). Atomický zápis |
 | `ReviewStoreError` | Jediná vlastní chyba: záznam, do kterého se má zapsat, na disku není |
 | `AutoRunLedger` | Aktor: kolik review dnes spustil automat. **Na disku**, aby limit nešel obejít restartem |
 | `AnnouncedPullRequests` | Aktor: které PR se už ohlásily jako nové (#85). **Snímek** poslední fronty na disku, ne rostoucí log |
@@ -5048,6 +5048,88 @@ Věci, které se u toho nemají rozbít:
   historie repa — `save` i `markCurrent` běží často. Jméno ale není pravda: tou zůstává
   `pullRequest` uvnitř souboru, který se stejně ověří. Pomlčka je součást prefixu, takže
   `42-` nesedí na `421-`; je na to test.
+
+### Součet odmítnutí po reviewerech (#514)
+
+Blok `Reviewery · 30 dní` na domově a tabulka `Jak si reviewery vedou` v Nastavení. Odpovídají na
+**„který reviewer v kterém repu hlásí věci, co neplatí“** — tedy na to, do kterého skillu sáhnout.
+Zákres je v [`docs/navrh.html`](navrh.html), sekce 61.
+
+**Je to součet nad tím, co je na disku, ne počitadlo.** Vědomě opačné rozhodnutí než u útraty
+(`SpendLedger`, kde je počitadlo správně), a důvod je v povaze těch dvou čísel: utracené peníze
+zůstanou utracené, i když záznam zahodím, kdežto **odmítnutí je ten záznam**. Počitadlo vedle něj
+by se s uloženými daty umělo rozejít a nešlo by poznat, které z těch dvou čísel je pravda.
+
+| Kde | Co drží |
+|---|---|
+| `Policy.reviewerTallies(from:now:)` | Fold všech záznamů na `[ReviewerTally]` — **jediné místo, kde se součet skládá** |
+| `Policy.reviewerSignal(of:)` | Věta pod pruhem v bloku (`9 z 14 neplatí → skill`) |
+| `Policy.reviewerShare(of:)` | Procento do tabulky v Nastavení (`64 % neplatí`) |
+| `Policy.skillFolder(of:in:)` | Cesta pro `Otevřít skill ↗`; `nil` = tlačítko se nekreslí |
+| `ReviewStore.reviewerTallies(now:)` | Čtení výpisu a zavolání toho foldu |
+| `AppStore.reviewerTallies` | Snímek, ne getter — viz níž |
+| `ReviewerTallyRowsView`, `ReviewerTallyTable` | Kresba; `ReviewerBarSegment` drží dílky pruhu i legendu, aby se barvy nemohly rozejít |
+
+**Čtyři kategorie, ne dvě**, a rozdíl mezi dvěma z nich je celé jádro:
+
+- `neplatí` — odmítnuto jako `FindingDismissal.Reason.invalid`. Signál o **skillu**.
+- `nepatří sem` — odmítnuto jako `.irrelevant`. Signál o **pravidlech repa**. Slít je do jednoho
+  „odmítnuto“ by zahodilo zrovna tu půlku, kvůli které se na blok kouká.
+- `převzato` — neodmítnuto a **případ je uzavřený**: záznam je `isStale` (hlava se posunula), PR
+  zmizel ze seznamu (`closedAt`), nebo nález přenesl přírůstkový běh (`Finding.carriedFrom`, #517).
+  Ve všech třech případech jsem se o nálezu rozhodl tím, že jsem ho neodmítl.
+- `nerozhodnuto` — neodmítnuto na **živé** hlavě. Může být prostě nepřečtený, a ten se za schválení
+  vydávat nesmí: jinak by reviewera chválilo to, že se na jeho nálezy nikdo nepodíval.
+
+**Nález se počítá jednou za pull request, ne jednou za soubor.** Přírůstkové review přenáší nálezy
+z minulé hlavy na dnešní (#517), takže týž nález leží ve dvou záznamech jednoho PR — bez slití by
+dvakrát vážil ten, na kterém reviewer trval, tedy zrovna nejspolehlivější z nich. Slívá se podle
+`Policy.key(of:)`, tedy **toutéž identitou, kterou se páruje odmítnutí**, a při shodě vyhrává
+silnější stav (`Disposition: Comparable`).
+
+**Čte se celý výpis, ne `Policy.currentRecords`.** Odmítnutí leží u nálezu, tedy u hlavy, na které
+vznikl, a **odmítnutý nález se na novou hlavu nepřenáší** (#517) — nad současnými záznamy by tedy
+z bloku zmizel každý důvod zapsaný před posledním pushem.
+
+**„30 dní“ je filtr, ne vlastnost úklidu**, a je to past, do které se dá spadnout tiše.
+`ReviewStore.defaultRetention` je taky třicet dní, jenže se měří **od chvíle, kdy PR zmizel ze
+sledovaného seznamu** (`closedAt`) — záznam otevřeného PR leží na disku libovolně dlouho. Blok
+proto ořezává sám, a to podle `StoredReviewRun.finishedAt`. **Období, ve kterém nic není, blok
+nedostane**: nekreslí se vůbec, jako prázdný pruh desky (#515) nebo `Odložené` (#512).
+
+**Práh je jeden a je nad součtem obou důvodů** (`Policy.reviewerDismissalThreshold`, 0,5, ostře).
+Který z nich se pak ve větě pojmenuje, je druhá otázka — a při shodě vyhrává `neplatí`, protože ta
+věta míří na to, co se opravit dá.
+
+**K tomu je podlaha na počet** (`Policy.reviewerSignalFloor`, pět), a je to vlastní rozhodnutí:
+`3 ze 4 neplatí → skill` se čte stejně naléhavě jako `9 ze 14`, přitom je to jedno kliknutí od
+`2 ze 4`. Věta s imperativem začíná dávat smysl teprve tam, kde se čtyři nálezy nevyplatí přečíst.
+Pod podlahou se **nekreslí prázdno**, ale prostý součet (`1 z 4 převzato`) — řádek, který zmlkne
+úplně, vypadá jako chybějící data. **Tabulka v Nastavení práh ani podlahu nezná**: je to výpis, ne
+výstraha, takže pojmenuje to, čeho je nejvíc.
+
+**`AppStore.reviewerTallies` je snímek, ne getter**, protože přepočet sahá na disk — getter by ho
+pustil při každém překreslení domova. Přepočítává se na **třech** místech, a všechna tři jsou
+chvíle, kdy se ta data doopravdy mění: po načtení nálezů při startu, po doběhlém review
+(`AppStore+Review.store(_:for:saving:)`) a po odmítnutí či jeho zrušení — to poslední **jen po
+úspěšném zápisu**. Na tik pollingu ne: polling s odmítnutími nehýbá. Cena je změřená, viz
+[`docs/testovani.md`](testovani.md#kolik-stojí-součet-odmítnutí-514).
+
+**`Otevřít skill ↗` potřebuje cestu z konfigurace** (`GlobalConfig.skillFolders`, klíč je id
+skillu). Skill se pouští jménem, takže aplikace jeho složku odjinud nezná. Bez zapsané cesty se
+tlačítko **nekreslí vůbec**, ne zašedle — zašedlé tvrdí „tady se to dělá, jen teď ne“, kdežto
+u skillu bez cesty se to nedá nikdy. **Editor pro ty cesty v okně není a je to záměr**: mockup
+kreslí tabulku s tlačítkem, ne políčka na cesty, a co v něm nakreslené není, se do okna nepřidává.
+
+**Co se u toho nemá rozbít:**
+
+- **Nic se odsud nemění.** Blok i tabulka jsou čtení; jediná akce je otevření složky ve Finderu.
+  `ReviewStoreTests` na to má tvrzení nad **bajty souboru**, ne nad chováním.
+- **Legenda a pruh berou barvy z jednoho místa** (`ReviewerBarSegment`). Legenda, která se rozejde
+  s pruhem, dovolí přečíst opak toho, co je nakreslené.
+- **Věta se v úzkém sloupci nesmí ořezat.** Pravý sloupec domova má v okně na jeho minimu kolem
+  210 bodů, takže `5 z 11 nepatří sem → pravidla repa` se tam vedle jména a pruhu nevejde — řádek
+  se proto **složí pod sebe** (`ViewThatFits`), místo aby se z věty utrhl cíl, na který ukazuje.
 
 ## Katalog repozitářů (#532)
 
@@ -5439,7 +5521,7 @@ na `.task` okna, takže zavření okna ji zruší.
 | `ReviewTabsView` | Pruh záložek v hlavičce: domů, otevřená review s tečkou stavu a křížkem (#180). Nápověda u **domácí** záložky nese zkratky pruhu `⌃Tab` / `⌃⇧Tab` (#245) — na `ScrollView`u se `.help` neprojeví |
 | `SidebarRail` | Svislý rail vlevo — `Přehled`, `Fronta` s odznakem, **`Moje PR` s odznakem** (#331), `Rozdělaná` (#180) a pod oddělovačem **cyklící přepínač vzhledu okna** (#278), který sekce railu není. Šířka zůstává 52 bodů a pátá položka se do ní vejde; odznak u `Moje PR` počítá **práci, ne PR**. Od #366 je odznak **červený (`--crit`)**, od #526 sedí **v rohu ikony** (ven z jejího rámu, aby zůstala celá) a aktivní sekci značí **pruh 2 body na hraně railu** — viz *Odznak v railu* a *Odznak v rohu a pruh aktivní sekce* |
 | `HomeView` | Obsah domácí záložky podle railu. Nad deskou **bez toolbaru** — hlavičku si kreslí sám (#181). Od #331 dostává `openSettings` jako **uzávěr z těla okna**, protože prázdná sekce `Moje PR` bez zdroje nabízí nastavení otevřít |
-| `BoardView` | Domácí záložka (#515) — **deska pruhů podle mého tahu**. Nahradila `DashboardView` z #181: karty odešly celé (`Policy.board`, `WorkLane`), věta pod pozdravem mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a levý sloupec drží **jen neprázdné pruhy** (`Board.visibleLanes`, z proklikání #515) v pořadí od hotového k rozdělanému (`K merge` první); když není ani jeden, stojí místo nich blok `Všechno vyřízené` (`Policy.boardEmpty`). Řádek je **týž `PullRequestRow`** jako v seznamu (#172), ne třetí podoba; vlastní PR pozná šipka v mintu a `Prompt →`. Vpravo v hlavičce pruhu je **akce nad celým pruhem** (`LaneAction`) — potvrzení si nechává jedině `Pustit review na N`, protože je to jediná, která utratí víc než jednu session. Tichý pruh (`Čeká na ostatní`) je ztlumený na 0,7, má strop **dva** řádky místo pěti a místo akce popisek `nic k udělání`; patka pruhu **rozbaluje na místě**, nepřepíná do sekce (pruh míchá cizí a vlastní PR, takže žádná sekce nemá tutéž množinu). Pravý sloupec drží od #515 **dva** bloky: `Dění` (#443, od #515 **osm** řádků — `Policy.activityRowLimit`) a `Dneska stálo` jako malý blok s částkou v hlavičce; legenda reviewerů odešla s kartami a `Reviewery` postaví #514 |
+| `BoardView` | Domácí záložka (#515) — **deska pruhů podle mého tahu**. Nahradila `DashboardView` z #181: karty odešly celé (`Policy.board`, `WorkLane`), věta pod pozdravem mluví o pruzích (`8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`) a levý sloupec drží **jen neprázdné pruhy** (`Board.visibleLanes`, z proklikání #515) v pořadí od hotového k rozdělanému (`K merge` první); když není ani jeden, stojí místo nich blok `Všechno vyřízené` (`Policy.boardEmpty`). Řádek je **týž `PullRequestRow`** jako v seznamu (#172), ne třetí podoba; vlastní PR pozná šipka v mintu a `Prompt →`. Vpravo v hlavičce pruhu je **akce nad celým pruhem** (`LaneAction`) — potvrzení si nechává jedině `Pustit review na N`, protože je to jediná, která utratí víc než jednu session. Tichý pruh (`Čeká na ostatní`) je ztlumený na 0,7, má strop **dva** řádky místo pěti a místo akce popisek `nic k udělání`; patka pruhu **rozbaluje na místě**, nepřepíná do sekce (pruh míchá cizí a vlastní PR, takže žádná sekce nemá tutéž množinu). Pravý sloupec drží od #515 **dva** bloky: `Dění` (#443, od #515 **osm** řádků — `Policy.activityRowLimit`) a `Dneska stálo` jako malý blok s částkou v hlavičce; legenda reviewerů odešla s kartami a na jejím místě je od #514 blok **`Reviewery · 30 dní`** (`ReviewerTallyRowsView`, strop `Policy.reviewerTallyBoardLimit`, odkaz v hlavičce vede do **Nastavení**, ne do railu — proto si `BoardView` bere `openSettings` shora) |
 | `DashboardTick` | Co je v pravém horním koutu hlavičky: `poslední tik 09:41 · za 43s znovu`, nebo `ptám se…` (#237). Výčet, ne `String` — odpočet musí zůstat samostatné view |
 | `DashboardCountdown` | Samotný odpočet — `za 43s znovu`, **bez mezery mezi číslem a jednotkou** (#260). Formát je náš (systémový mezeru má a nejde vyndat), takt dává `TimelineView`, takže se přepočítává jen tenhle `Text`. Text i rozvrh jsou statické funkce, aby se daly otestovat |
 | `SpendSparkline` | Sloupcový graf útraty za posledních sedm dní; dnešek zvýrazněný, prázdný den zůstává v řadě (#181). Od #515 **vlastní soubor** — `DashboardView` odešel a graf kreslí blok `Dneska stálo` |
@@ -10499,6 +10581,7 @@ Věci, které se u toho nemají rozbít:
 | `Policy.byUrgency(_:)`, `Policy.urgency(of:)` | Pořadí řádků na domácí záložce (#181, #331, od #515 uvnitř pruhů) — podle závažnosti, ne podle času (`QueueEntry`). Vlastní PR se řadí **tou samou funkcí**: blokující nález je i u nich to, co si žádá pozornost první. Od #515 se řadí **jednou nad celým seznamem** a pruhy si z něj berou pořadí — řez nad špatně seřazeným vstupem by tiše ukázal jiných pět |
 | `Policy.lane(of:ownership:handoff:isMergeReady:)`, `Policy.isMergeReady(_:)` | Do kterého pruhu pull request patří (#515, `WorkLane`). **Právě jeden pruh na PR** — `switch` je vyčerpávající a návrat není optional; testuje se **vyčerpávajícím výčtem** (13 stavů × 2 × 2 × 2 × **5 stavů předání** × 2 = 1 040), protože rozřazení je věc, kterou se dá pokazit potichu. Pořadí priorit: draft přebíjí všechno (ručně psaná práce), běžící review je `waiting` (jinak by pruh `Přečíst` hlásil víc, než co jeho akce pustí), cizí PR se dělí na `notStarted → read` a zbytek `→ decide`, vlastní **na `isMergeReady → merge`** a teprve pak `awaitsMove → handOff`, zbytek `waiting`. **Slévatelnost přebíjí předání vždycky** (druhé proklikání #515 — ruší výjimku pro `HandoffReport.Stage.changed`, kterou tu měla první oprava, a s ní `HandoffReport.outranksMerge`): stav předání se do rozřazování **nedostane vůbec** a je na to tvrzení nad celou mřížkou vstupů. Z reportu se čte jedině `awaitsMove`, tedy **tatáž otázka jako odznak `Moje PR` v railu**. `isMergeReady(_:)` staví na `mergeOffer(…)` a bere z něj jednu výjimku: **zavřená brána odesílání není překážka pull requestu** (`MergeObstacle.isPublishingGate`) — s výchozím vypnutým odesíláním by jinak byl pruh `K merge` navždycky prázdný |
 | `Policy.laneAction(of:count:)`, `Policy.laneRowLimit(_:)`, `Policy.laneSlice(_:of:expanded:)`, `Policy.canOpenFirstOnBoard(count:isPaletteOpen:)` | Akce nad pruhem a strop na řádky (#515, `LaneAction`, `LaneSlice`). Akce nese **počet z vlastního pruhu**, takže se to, co je na tlačítku, nemá čím rozejít s tím, co akce udělá; **potvrzení má jedině `runReviews`** (jediná, která utratí víc než jednu session) a **prázdný pruh akci nedostane vůbec**. Zkratky jsou rozdané tak, aby na jednu kombinaci byla nejvýš jedna akce (#151, #184): `⏎` pruhu `Rozhodnout` (`isPrimary`), `⌘⇧R` review, `⌘⇧D` draftu — `K merge` má tutéž akci bez klávesy. Strop je **pět, tichý pruh dva**, a je to strop **o kresbě, ne o množině** (#371); patka **rozbaluje na místě**, protože žádná sekce railu nemá tutéž množinu jako pruh |
+| `Policy.reviewerTallies(from:now:)`, `Policy.reviewerSignal(of:)`, `Policy.reviewerShare(of:)`, `Policy.skillFolder(of:in:)`, `Policy.reviewerTallyWindow`, `Policy.reviewerDismissalThreshold`, `Policy.reviewerSignalFloor`, `Policy.reviewerTallyBoardLimit` | Součet odmítnutí po reviewerech (#514, `ReviewerTally`, `ReviewerSignal`) — blok `Reviewery · 30 dní` na domově a tabulka v Nastavení. **Čistá funkce nad tím, co je na disku**; čtyři kategorie, nález se počítá **jednou za PR** (slití podle `Policy.key(of:)` kvůli #517), okno je **filtr podle `finishedAt`**, ne lhůta úklidu. Práh je **jeden a nad součtem obou důvodů**, k tomu **podlaha na počet** — pod ní věta mlčí a zůstane prostý součet. Podíl v tabulce práh nezná. Rozbor je [výš](#součet-odmítnutí-po-reviewerech-514) |
 | `Policy.dashboardActivity(_:since:empty:)`, `Policy.activityRowLimit` | Blok `Dění` na domácí záložce (#443, `DashboardActivity`): nadpis s počtem **nepřečtených z celého záznamu**, osm nejnovějších řádků, patka `Zobrazit celé dění +122 →` a jedna věta místo řádků, když je prázdno. Strop byl do #515 tentýž jako u front (pět); od #515 je **osm** a vlastní — pravý sloupec drží dva bloky místo tří, kdežto levý šest pruhů místo dvou bloků. Patku nese **`BlockFooter`** (do #515 `DashboardBlock.Footer`, který odešel s kartami) — druhá kresba patky by se s tou první rozešla. Značka poslední návštěvy jde dovnitř jako **vstup**, blok ji nikdy neposouvá |
 | `Policy.shortReviewerNames(of:)` | Jméno revieweera do úzkého místa (#182) — zkrátí `plugin:skill`, ale jen když zůstane jednoznačné |
 | `Policy.resumeCommand(sessionID:)`, `Policy.terminalSession(of:)` | Čím se session obnoví a jestli ji dráha umí pustit v Terminálu (#453) → `TerminalSession`. **Jeden příkaz pro obojí** — `⧉` ho kopíruje, `▶` pouští. `nil` = tlačítko se **nekreslí**, a podmínkou je `session_id` **i pracovní strom**: `claude --resume` hledá vlákno podle adresáře, takže bez něj by okno jen oznámilo, že takové vlákno nezná |

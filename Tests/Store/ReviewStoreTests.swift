@@ -462,6 +462,53 @@ struct ReviewStoreTests {
         return outside
     }
 
+    // MARK: - Součet po reviewerech (#514)
+
+    @Test("Součet po reviewerech je čtení — na disku se po něm nezmění ani bajt")
+    func theReviewerTallyChangesNothingOnDisk() async throws {
+        let store = store()
+        try await store.save(run())
+        try await store.dismiss(
+            #require(store.record(for: pullRequest, at: "aaaa1111")?.findings.first),
+            as: .invalid,
+            in: pullRequest
+        )
+        let url = layout.reviewFile(for: pullRequest, at: "aaaa1111")
+        let before = try Data(contentsOf: url)
+        let modifiedBefore = try FileManager.default
+            .attributesOfItem(atPath: url.path(percentEncoded: false))[.modificationDate] as? Date
+
+        let tallies = try await store.reviewerTallies(now: time.now)
+
+        #expect(tallies.count == 1)
+        #expect(tallies.first?.invalid == 1)
+        // Nejcennější půlka: po čtení je soubor **týž**. Kdyby se součet někdy zapisoval zpátky
+        // (třeba jako cache v záznamu), spadne to tady.
+        #expect(try Data(contentsOf: url) == before)
+        #expect(try FileManager.default
+            .attributesOfItem(atPath: url.path(percentEncoded: false))[.modificationDate] as? Date
+            == modifiedBefore)
+    }
+
+    @Test("Součet čte i zastaralé záznamy, ne jen ten aktuální")
+    func theTallyReadsStaleRecordsToo() async throws {
+        let store = store()
+        try await store.save(run(headSha: "aaaa1111", findings: ["starý nález"]))
+        // Odmítnutí u **staré** hlavy — přenést se nepřenáší (#517), takže s `currentRecords`
+        // by z výpisu zmizelo.
+        try await store.dismiss(
+            #require(store.record(for: pullRequest, at: "aaaa1111")?.findings.first),
+            as: .irrelevant,
+            in: pullRequest
+        )
+        try await store.save(run(headSha: "bbbb2222", findings: ["nový nález"]))
+
+        let tally = try #require(try await store.reviewerTallies(now: time.now).first)
+
+        #expect(tally.irrelevant == 1)
+        #expect(tally.total == 2)
+    }
+
     /// Odkaz na svém místě v cache, ukazující ven. Vrací cíl.
     @discardableResult
     private func makeSymlinkedRecord() throws -> URL {

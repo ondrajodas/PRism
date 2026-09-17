@@ -9147,3 +9147,44 @@ jedna fixtura ze živého API (skutečná série `cli/cli`
 a **popisek nad skupinou ve frontě je doložený jedině rendrem mockupu a testy** — na běžícím okně
 se dá vyfotit pruh desky, ale přepnutí railu na sekci `Fronta` vyžaduje kliknutí, na které tenhle
 stroj nemá asistenční přístup.
+
+## #514 — Reviewery · 30 dní: co se z čího hlášení odmítá (M16, zákres 61)
+
+Blok `Reviewery · 30 dní` v pravém sloupci domova a tabulka `Jak si reviewery vedou` v Nastavení ›
+`Review a skilly`. Za každou dvojici **reviewer × repo** pruh *převzato / neplatí / nepatří sem /
+nerozhodnuto* a věta, když odmítnutí přesáhnou polovinu — `9 z 14 neplatí → skill`,
+`5 z 11 nepatří sem → pravidla repa`. Data existovala od #113 (důvod u každého odmítnutého nálezu),
+jen se nikde nesčítala.
+
+**Blok stojí na místě, kde byly `Nálezy podle reviewera` — jenže ty odešly už s #515**, tedy
+o dvě issue dřív, ne tímhle PR. Co s nimi odešlo, je `ReviewerShareOfFindings` a
+`Policy.reviewerShares`: **sedmidenní součet nálezů po reviewerech**, legenda `barva · jméno ·
+počet`. Odpovídal na „kolik toho kdo našel“; jinde v aplikaci to číslo **není** a tenhle blok ho
+nevrací — odpovídá na „kolik z toho platilo“, což je ta otázka, kvůli které se na takové číslo
+kouká. **Zpátky se vrací jedno tvrzení, které s legendou odešlo** (#383): že **nula neznamená
+čisto**. Tady ho nese rozdíl `nerozhodnuto` proti `převzato` — nález, na který se nikdo nepodíval,
+se za schválení nevydává.
+
+**Součet je čistá funkce nad diskem, ne počitadlo** — vědomě opačné rozhodnutí než u útraty
+(`SpendLedger`): utracené peníze zůstanou utracené i po zahození záznamu, kdežto odmítnutí **je**
+ten záznam. Přepočítává se na třech místech (start, doběhlé review, odmítnutí a jeho zrušení) a
+stojí **~24 ms** nad cache o 2,6 MB; čísla i to, proč rozhoduje objem a ne počet souborů, jsou
+v [`docs/testovani.md`](testovani.md#kolik-stojí-součet-odmítnutí-514).
+
+**Čtyři rozhodnutí, která zadání nechalo otevřená** (podrobně ve specifikaci): `převzato` je nález
+neodmítnutý nad **uzavřeným případem** (posunutá hlava, zavřený PR, přenesený nález), kdežto na živé
+hlavě je `nerozhodnuto`; **nález se počítá jednou za PR**, ne za soubor, protože přírůstkové review
+(#517) tentýž nález nechává ve dvou záznamech; věta má kromě prahu na podíl i **podlahu na počet**
+(pět), protože `3 ze 4 neplatí → skill` je jedno kliknutí od `2 ze 4`; a **cesty ke složkám skillů
+se zapisují do `config.json`** (`skillFolders`), ne editorem v okně — mockup kreslí tabulku
+s tlačítkem, ne políčka na cesty.
+
+Přibylo 30 testů ve čtyřech nových sadách (14 nad `Policy.reviewerTallies`, 15 nad větou, podílem
+a cestou ke skillu, 6 nad kresbou, 2 nad diskem a 2 nad storem) a jedno měření. **Regrese se
+ověřila vložením u tří věcí zvlášť** — a test na větu přitom **třikrát vyšel zeleně i s regresí
+uvnitř**; proč a čím se to spravilo, je v [`docs/testovani.md`](testovani.md#reviewertallyrendertests--a-jak-se-to-měřidlo-třikrát-lhalo).
+
+**Neověřené mezery: PR neprošel Copilotem** (na pokyn uživatele se nepouštěl) a **ve slotu neležela
+žádná skutečná odmítnutí**, takže se stav pro screenshot vyrobil ručním zápisem do cache slotu —
+neplyne z toho nic o tom, jak blok vypadá nad daty z ostrého provozu, jen to, že se z uložených
+záznamů složí a nakreslí.

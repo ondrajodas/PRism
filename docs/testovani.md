@@ -11940,3 +11940,90 @@ i s nálezy, což je přesně ta cena, kterou to pole má.
   nepřečtená odpověď vyjde jako `bez odpovědi`, ne jako `opraveno`.
 - **Že session na zodpovězené vlákno nenarazí jinudy** (třeba přes `git log`). Prompt to zakazuje
   větou, ne branou — brána je ve vstupu, tedy v tom, že se takové vlákno vůbec nepředkládá.
+
+## Součet odmítnutí po reviewerech (#514)
+
+Blok `Reviewery · 30 dní` na domově a tabulka v Nastavení. Rozhodování je v `Policy`, takže se dá
+otestovat **výčtem nad čistou funkcí**; zbytek je otázka na obrázek nebo na disk.
+
+### `ReviewerTallyTests` — čtyři kategorie, okno a slití
+
+Vstupem jsou **uložené záznamy**, tedy přesně to, co má funkce sečíst; běhy se skládají přes
+`ReviewRun`, takže přenesené nálezy (#517) vyrábí `StoredReviewRun.init`, ne test. Nejcennější
+tvrzení tu jsou ta, která říkají, že se něco **ne**stalo:
+
+- **Období, ve kterém nic není, nevydá prázdný řádek.** Běh starší než okno se zahodí celý, ne
+  započítá jako nula — řádek `0 nálezů` by v bloku vypadal jako reviewer, který nic nenašel.
+- **Přenesený nález ležící ve dvou záznamech se nezapočítá dvakrát.** Regrese ověřena vložením:
+  když se klíč slití rozšíří o `headSha`, spadne to (`total` 6 místo 3) — a s ním i tvrzení, že
+  **odmítnutí zapsané u starší hlavy přebíjí nerozhodnuto u té dnešní** (`total` 4 místo 2).
+- **Nález na živé hlavě je `nerozhodnuto`, ne `převzato`.** Opačná strana téhož: zastaralá hlava,
+  zavřený PR a přenesený nález jsou `převzato`.
+- **Okno se měří od `finishedAt`**, ne od lhůty úklidu — je na to dvojice 29 a 31 dní.
+
+### `ReviewerSignalTests` — věta a podíl výčtem
+
+Práh se ověřuje **z obou stran a ostře**: 7 ze 14 mlčí, 8 ze 14 mluví. Podlaha taky: 3 ze 4 mlčí,
+4 z 5 mluví. Podíl v tabulce se tvrdí **čtyřmi řádky ze zákresu** (`64 % neplatí`, `86 % převzato`,
+`45 % nepatří sem`, `82 % převzato`) — jsou to jediná čísla, u kterých je vidět i to zaokrouhlení.
+
+### `ReviewerTallyRenderTests` — a jak se to měřidlo třikrát lhalo
+
+Že se blok a tabulka doopravdy kreslí **z dat**, se dá tvrdit jedině z pixelů (accessibility tree
+se v hostovaném okně nenaplní, viz *Jak si zkontrolovat, jak view vypadá*). Test na **větu** ale
+třikrát vyšel zeleně i s vloženou regresí „kresli pořád neutrální větu“, a pokaždé z jiného důvodu
+— je to učebnicový případ pravidla *měřidlo, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“,
+netvrdí nic* (#478):
+
+1. **`neplatí` proti `nepatří sem` nad celým řádkem.** Ty dva se liší i **barvou dílku v pruhu**,
+   takže bitmapy vyšly různé i s větou, která se z `Policy` nebrala.
+2. **Týž poměr pod a nad podlahou** (1 : 3 proti 2 : 6). Pruh byl pixel na pixel týž, jenže
+   **neutrální věta se v těch dvou stavech taky liší** (`1 z 4` proti `2 z 8`).
+3. **Výřez na pravých 200 bodů.** Pruh je 92 bodů a stojí hned vlevo od věty, takže se do výřezu
+   vejde taky — a jeho poloha se navíc mění s délkou věty.
+
+Co drží: **stejný součet i stejné `převzato`** (0 z 9) a výřez na **posledních 55 bodů** řádku.
+Neutrální věta pak zní v obou stavech doslova stejně, kdežto věta z `Policy` řekne jednou
+`9 z 9 neplatí → skill` a jednou `9 z 9 nepatří sem → pravidla repa`; pruh je od pravého okraje
+dál než kratší z těch dvou vět. S vloženou regresí vyšly bitmapy **shodné (3 160 bajtů)** a test
+padá. Ostatní tvrzení téhle sady jsou slabší, ale poctivá: pruh se mění s čísly, tabulka bez dat
+vypadá jinak než s nimi, `Otevřít skill ↗` se objeví teprve se zapsanou cestou a **cesta k cizímu
+skillu nepřidá nic** (rovnost bitmap).
+
+### `ReviewStoreTests` a `AppStoreDismissalTests` — že je to čtení
+
+- **Po součtu se na disku nezmění ani bajt** — porovnává se obsah souboru **i** jeho
+  `modificationDate`. Kdyby se součet někdy zapisoval zpátky (třeba jako cache v záznamu), spadne
+  to tady.
+- **Součet čte i zastaralé záznamy**, ne jen aktuální: odmítnutí u staré hlavy se nepřenáší, takže
+  nad `currentRecords` by z výpisu zmizelo.
+- **Doběhlé review i odmítnutí se do součtu promítnou hned**, bez restartu — a **za neúspěšným
+  zápisem se nepřepočítává**, takže součet zůstane tím, co se naposledy povedlo přečíst.
+
+### Kolik stojí součet odmítnutí (#514)
+
+`AppStore.refreshReviewerTallies()` přidává **druhý průchod výpisem `reviews/`** — ke startu a ke
+každému odmítnutí. Změřeno `ReviewerTallyMeasurement` (`TEST_RUNNER_PRISM_MEASURE=1`) nad vzorkem
+o velikosti skutečné cache (17. 9. 2026 na hlavní instanci: **33 souborů, 2,6 MB**), střídavě
+A/B/A/B, medián z pěti:
+
+| | čtení a dekódování (`load()`) | fold (`Policy.reviewerTallies`) |
+|---|---|---|
+| 33 souborů / 372 kB | 3,0 ms | 1,6 ms |
+| 33 souborů / 2,5 MB | 11,5 ms | 12,2 ms |
+
+**Rozhoduje objem, ne počet souborů**: sedminásobek bajtů při témže počtu souborů zdražil obojí
+zhruba sedmkrát. Celý přepočet tedy stojí **~24 ms** a běží na aktoru, ne na hlavním vlákně —
+takže se za jedno místo, kde se součet skládá, platí jedním průchodem navíc při startu a čtvrt
+desetinou vteřiny na kliknutí. **Zlevnit by šlo jedině dekódování** (užší `Codable` nepomůže,
+`JSONDecoder` dokument parsuje celý); fold je nad tím lineární a přesouvat ho do počitadla by
+znamenalo druhé číslo, které se umí rozejít s diskem — viz [`docs/architektura.md`](architektura.md#součet-odmítnutí-po-reviewerech-514).
+
+### Co se v harnessu ověřit nedá
+
+- **Že se řádek v úzkém sloupci složí a čte.** Výška se změřit dá (je na to test), ale jestli to
+  vypadá jako řádek a ne jako dva, se pozná na obrazovce.
+- **Že `Otevřít skill ↗` doopravdy otevře Finder.** `NSWorkspace` se v testu nevolá; ověřuje se
+  jen to, že se tlačítko kreslí právě tehdy, když je cesta zapsaná.
+- **Že čísla nad skutečnou cache dávají smysl.** Ve slotu žádná odmítnutí neleží, takže se stav
+  vyrábí ručně — co z toho neplyne, je napsané v popisu PR.

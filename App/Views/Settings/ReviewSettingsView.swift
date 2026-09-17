@@ -6,6 +6,9 @@ import SwiftUI
 /// **kdy** se review pouští, **co** se pouští a **co z toho je vážné**.
 struct ReviewSettingsView: View {
     @Bindable var settings: SettingsModel
+    /// Součet odmítnutí po reviewerech (#514) — **snímek ze storu, ne z draftu**: je to údaj
+    /// o tom, co leží na disku, ne rozepsaná hodnota, kterou formulář ukládá.
+    var tallies: [ReviewerTally] = []
 
     var body: some View {
         Form {
@@ -103,6 +106,22 @@ struct ReviewSettingsView: View {
                 Text("Skilly podle programovacího jazyka")
             } footer: {
                 Text("Při review se z obsahu repa pozná, čím je psané, a použije se sada odsud. Rozhoduje to, **které skilly se spustí** — ne jazyk, ve kterém reviewer píše nálezy. Jazyk, který tu není, bere sadu výš.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Pod sadami skillů, ne nad ně (#514): je to odpověď na otázku, kterou si člověk
+            // položí **až nad nimi** — „který z těch skillů mi vlastně k něčemu je“. Nad nimi by
+            // to byla statistika nad sadou, kterou ještě nikdo nevybral.
+            Section {
+                ReviewerTallyTable(
+                    tallies: tallies,
+                    skillFolders: settings.draft.global.skillFolders
+                )
+            } header: {
+                Text("Jak si reviewery vedou")
+            } footer: {
+                Text("Z odmítnutí za posledních 30 dní, tedy z toho, co leží na disku — **nic se nepočítá při běhu**. `Neplatí` je věc **skillu** (reviewer se mýlí), `nepatří sem` věc **pravidel repa** (má pravdu, jen to sem nepatří). `Převzato` je nález, který jsem nechal platit a jehož případ je uzavřený; `nerozhodnuto` ten, který na živé hlavě pořád leží. `Otevřít skill ↗` se kreslí jen u skillu, ke kterému je v `config.json` v `skillFolders` zapsaná cesta.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

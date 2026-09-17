@@ -122,6 +122,16 @@ final class AppStore {
     /// který to je, rozhoduje `Policy.currentRecords(from:)`.
     var reviewRecords: [PRIdentifier: ReviewRecord] = [:]
 
+    /// Součet odmítnutí po reviewerech za posledních třicet dní (#514).
+    ///
+    /// **Snímek, ne getter**, a je to jiná úvaha než u `board`: ten se počítá z toho, co store
+    /// drží v paměti, kdežto tohle je čtení **celého** výpisu `reviews/` z disku — getter by ho
+    /// pustil při každém překreslení domova. Kdy se přepočítává, je u
+    /// `AppStore.refreshReviewerTallies()`.
+    ///
+    /// Prázdné pole znamená „za třicet dní se nic nenašlo“, a blok se pak **nekreslí vůbec**.
+    var reviewerTallies: [ReviewerTally] = []
+
     /// Diff **per PR**. Co v mapě není, se ještě nenačítalo.
     var diffStates: [PRIdentifier: DiffState] = [:]
 
@@ -2202,6 +2212,36 @@ final class AppStore {
         guard let loaded = try? await reviews.load() else { return }
         reviewRecords = Policy.currentRecords(from: loaded.records)
         unreadableReviewFiles = loaded.unreadable
+        await refreshReviewerTallies()
+    }
+
+    /// Přepočte součet odmítnutí po reviewerech (#514).
+    ///
+    /// **Přepočítává se celý, neinkrementuje se.** Je to čistá funkce nad tím, co je na disku
+    /// (`ReviewStore.reviewerTallies(now:)`), takže se s uloženými daty nemá jak rozejít —
+    /// počitadlo přičítané při odmítnutí by se s nimi rozejít umělo a nešlo by poznat, které
+    /// z těch dvou čísel je pravda.
+    ///
+    /// **Volá se ze tří míst a všechna tři jsou chvíle, kdy se ta data doopravdy mění**: po
+    /// načtení nálezů při startu, po odmítnutí nebo jeho zrušení (#113) a po doběhlém review,
+    /// které přineslo nové nálezy. Na tik pollingu ne — polling s odmítnutími nehýbá a čtení
+    /// celého výpisu každou minutu by bylo „čtení všeho tam, kde stačí předfiltr“.
+    ///
+    /// Že se při startu projde výpis **dvakrát** (tady a v `load()` o pár řádků výš), je vědomá
+    /// cena za to, že se součet skládá na jednom místě: měřeno nad 33 soubory / 2,6 MB cache, viz
+    /// `docs/testovani.md`.
+    func refreshReviewerTallies() async {
+        guard let reviews else { return }
+        // **Hodiny ze storu, ne `Date()`**: okno třiceti dní se měří proti nim, takže vlastní
+        // `.now` by nad fake hodinami v testu vyřadilo každý běh a součet by vyšel prázdný —
+        // tedy zeleně vypadající měřidlo, které netvrdí nic.
+        //
+        // **Selhání čtení nechá předchozí snímek na místě**, nevynuluje ho: prázdný blok se čte
+        // jako „za třicet dní se nic nenašlo“, a to je nad nepřečteným výpisem lež. Hlásit se to
+        // nemusí — o nepřečtených souborech mluví `unreadableReviewFiles` pod seznamem a druhá
+        // hláška o téže věci by od té první nebyla k rozeznání.
+        guard let tallies = try? await reviews.reviewerTallies(now: time.now) else { return }
+        reviewerTallies = tallies
     }
 
     /// Co dneska stálo review (#148). `nil` = nemáme kde vzít (bez `SpendLedger`u v testech).
