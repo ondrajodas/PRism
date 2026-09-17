@@ -8183,3 +8183,78 @@ akce **jediný prvek lišty, který v tísni ustoupí** — sráží se na samot
 v liště bylo dřív, zůstává. **Zamítnuto** u toho bylo useknutí popisku (`Popsat…` nese půl slova
 a vypadá jako porucha) i práh na šířku okna (byl by to další číslo, které se musí ladit, kdežto
 `ViewThatFits` se ptá na to, co doopravdy zbylo).
+
+## Záznam rozhodnutí — věta *proč* je vlastní řádek diffu, a kde není souřadnice, není ani věta (#525)
+
+**Rozhodnutí.** Anotace hunku se kreslí jako `DiffRow.annotation`, tedy **vlastní řádek mezi bloky**
+— tentýž druh řádku jako hlavička hunku. Do `NSTextView` se nevkládá nic a **řádek se objeví jedině
+tam, kde se kreslí i souřadnice `@@ … @@`**.
+
+**Proč.** Blok kódu si výšku měří sám a z té výšky se počítá skok na nález (`DiffRow.blockSpot`,
+`Policy.jumpAnchorY`) i poloha karet v okraji (#503). Text vložený dovnitř by tedy neposunul jen
+sebe, ale i všechno, co na výšce bloku visí — a projevilo by se to tím, že `⌥↓` míří vedle, tedy
+potichu. Zadání #525 to vyjmenovává jako tvrdou mez a odvolává se na #469.
+
+**Co z toho plyne a je to cena, ne opomenutí.** Když rozbalený kontext hunk slil s tím nad ním
+(`merged(_:)`), jdou řádky nepřetržitě za sebou; věta uprostřed by jeden blok rozťala na dva, tedy
+změnila přesně tu geometrii, kvůli které to celé stojí takhle. **Takový hunk věta nedostane** a vrátí
+se, jak se kontext sbalí (`Zobrazit jen diff`). **Zamítnutá varianta**: posadit ji nad slitý hunk
+„ať se neztratí“ — ztratit se dá i tím, že stojí o padesát řádků výš, než kam patří.
+
+**Jak se to hlídá.** Dvěma různými cestami, ne jednou dvakrát: složení bloků nad modelem
+(`DiffAnnotationRowTests`) a **změřená výška nakreslených bloků** (`DiffAnnotationRoomTests`),
+k tomu druhá otázka z #478 — vedle stojí test, že se blok o větu **odsune dolů**, aby se poznalo,
+že měřidlo vůbec něco měří ([rozbor](../../testovani.md#věta-nad-hunkem-a-geometrie-bloků-525)).
+
+## Záznam rozhodnutí — viditelnost vět je v nabídce, ačkoli akce je v liště (#525)
+
+**Rozhodnutí.** Přepínač `Anotace u hunků` je **v nabídce** pod `Sbalit vše ▾`, přestože se
+`Popsat změny` u #524 z téže nabídky **do lišty** přestěhovalo.
+
+**Proč to není protimluv.** Rozhoduje, **co ten ovladač je**, ne kde stál dřív. `Popsat změny` je
+**akce**: po každém kliknutí se musí na tomtéž místě něco změnit (spustit / zrušit / zkusit znovu),
+a nabídka klik **spolkne** — zavře se dřív, než se cokoli změní, což je přesně ta vada, kterou #524
+opravovalo. Viditelnost vět je proti tomu **volba pohledu**, která se nastaví a nechá být, tedy
+tatáž kategorie jako `Nálezy pod řádky` hned pod ní — a stejně jako ona žije v `UserDefaults`, ne
+ve storu.
+
+**Tři věci, které z toho vyplynuly.** Jmenuje se `Anotace u hunků`, ne `Popis změn` — jedno slovo
+pro akci i pro viditelnost jejího výsledku je záměna, kterou #219 z téhle lišty vyháněl. **Vypnuto
+znamená žádný řádek, ne schovaný**: `Policy.hunkAnnotations(of:in:isOn:)` vydá prázdnou mapu, takže
+se seznam řádků složí, jako by anotace nebyly. A **kapsli druhu změny přepínač neschová** — to je
+jedno slovo v hlavičce, která stojí tak jako tak; schovat obojí jedním přepínačem by znamenalo
+vypínat dvě různé věci.
+
+## Záznam rozhodnutí — stavový řádek nese počet vět, ne počet session (#525)
+
+**Rozhodnutí.** Ve stavovém řádku stojí `Anotace · 4 věty · proti 4f2ac91`. Zákres měl na tom místě
+`1 session`.
+
+**Proč se to změnilo.** Session je nad jednou hlavou **vždycky jedna** (`StoredAnnotations` je jeden
+soubor na PR a nový běh ten předchozí přepíše), takže by to byla konstanta — a konstanta v pruhu,
+kde se soutěží o místo, netvrdí nic. Počet vět se naopak mění a odpovídá na otázku, kterou si člověk
+u popsaného diffu klade: **je popsaný celý, nebo čtyři hunky z třiceti?**
+
+**Co zůstalo ze zákresu doslova, a je to ta polovina, kvůli které to stojí za místo v pruhu:**
+`proti <hlava>`. Anotace platí jedině proti jedné hlavě a po pushi se **nekreslí vůbec**, takže bez
+vypsané hlavy by *„popis tu není“* nešlo odlišit od *„popis propadl pushem“*. **Záznam bez jediné
+věty se nepíše** — `0 vět` by tvrdilo, že je co číst; že session doběhla a nic nenapsala, patří do
+dráhy `anotace` v tabu `Průběh`, kde se o běhu mluví celou větou.
+
+## Záznam rozhodnutí — druh změny vstupuje do pořadí itineráře, do barvení mapy ne (#525)
+
+**Rozhodnutí.** Druh změny bere **itinerář** (`Policy.risk(of:markers:threadPaths:kind:)`) jako
+další vstup; **mapa PR (#501) jím nebarví** a je to odloženo do vlastního issue.
+
+**Proč u itineráře ano.** Nepřidává to na obrazovku nic — žádný nadpis, žádnou kapsli, jen jiné
+pořadí — a rozhoduje **tam, kde cesta jen hádá**: `isConfigurationPath` je výčet jmen a přípon,
+takže vygenerovaný `Schema.g.swift` nechytá, kdežto `config/routes.json`, který mění chování, pošle
+na konec. Nález a vlákno druh **nepřebije** (práce, o které už někdo něco řekl, se čte první) a nový
+soubor zůstane nový.
+
+**Proč u mapy ne, i když to zadání připouštělo.** Pás má **sedm pojmenovaných tónů a legendu**
+(`Policy.mapLegend`, jedno místo pro kresbu i pro vzorky), takže pět druhů znamená **pět nových tónů
+a pět řádků legendy** — tedy novou věc na obrazovce. Ta podle pravidla z `CLAUDE.md` patří napřed do
+mockupu a ke schválení; sekce 59 kreslí větu, kapsli, nabídku a stavový řádek, barvení mapy ne.
+Udělat to „na vlastní pěst“ by znamenalo obejít jedinou schvalovací bránu v tomhle repu kvůli
+větě, která v zadání stojí jako *„může“*.

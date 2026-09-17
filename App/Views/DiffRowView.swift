@@ -107,6 +107,10 @@ struct DiffRowView: View {
             // dvojice nakreslí **týmž blokem** jako každá jiná. Jedna cesta ke kreslení dvojice,
             // ne druhá vedle ní.
             pairBlock(id, DiffPairBlock(left: [left], right: [right], ids: [id]))
+        case .annotation(_, let annotation):
+            // Věta *proč* pod souřadnicí hunku (#525). **Bez kopírovacího menu**: hunk se kopíruje
+            // z hlavičky nad ní a věta o něm jeho obsah není.
+            DiffAnnotationRowView(annotation: annotation)
         case .expander(_, let expander):
             DiffExpanderView(
                 expander: expander,

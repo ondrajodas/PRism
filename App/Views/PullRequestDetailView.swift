@@ -1447,7 +1447,11 @@ struct PullRequestDetailView: View {
                 markers: markers,
                 // Vlákna s kotvou v diffu — vlákno na zmizelém řádku patří do `Konverzace`,
                 // ne do pořadí čtení souborů.
-                threadPaths: Set(store.anchoredThreads(for: pullRequest.id).map(\.path))
+                threadPaths: Set(store.anchoredThreads(for: pullRequest.id).map(\.path)),
+                // Druh změny z anotací (#525) — bere ho **řazení**, ne kresba: sloupec žádnou
+                // novou kapsli nedostal. Rozhoduje o tom, co heuristika podle cesty jen hádá
+                // (generované soubory, `.json`, který mění chování), viz `Policy.risk`.
+                annotations: store.annotations(for: pullRequest.id)
             ),
             itinerary: itinerary,
             markers: markers,
@@ -2140,7 +2144,12 @@ struct PullRequestDetailView: View {
             // scrollu, a není to opatrnost: session popisuje `git diff <base>...HEAD` a anotace
             // se páruje **pořadím hunku** v něm. Rozsah `Od tvé poslední návštěvy` (#284) je jiný
             // seznam souborů s jiným počtem hunků, takže by tatáž čísla ukazovala jinam.
-            annotation: annotationActions(enabled: reportsScrollAnchor)
+            annotation: annotationActions(enabled: reportsScrollAnchor),
+            // Kresba anotací (#525) jde **za toutéž bránou a ze stejného důvodu** jako akce nad
+            // ní: párování stojí na pořadí hunku v celém diffu. `nil` na ostatních pohledech tedy
+            // není opatrnost, ale jediná pravdivá odpověď — o hunku číslo 3 v rozsahu „co přibylo“
+            // věta z celého diffu netvrdí nic.
+            annotations: reportsScrollAnchor ? store.annotations(for: pullRequest.id) : nil
         )
     }
 

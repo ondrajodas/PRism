@@ -19,6 +19,11 @@ struct DiffFileHeaderView: View {
     /// Otevření souboru v editoru (#530). `nil` = **není zvolený editor**, takže se tlačítko
     /// nekreslí vůbec — ne zašedle, viz `EditorActions`.
     var editor: EditorActions?
+    /// Druh změny z anotací (#525). `nil` = **kapsle se nekreslí**: session soubor nepopsala,
+    /// anotace neplatí pro dnešní hlavu, nebo je to obrazovka, která anotace nemá (diff commitu,
+    /// rozsahový diff). Vybírá ho `Policy.changeKind(of:in:)`; **ze jména souboru se druh
+    /// neodvozuje** — `generované` u `composer.lock` je dohad, ne to, co někdo přečetl.
+    var changeKind: FileChangeKind?
 
     /// Hledání v tomhle diffu (#152) — **prostředím, ne parametrem**: počet výskytů se mění při
     /// každém písmenu, takže předávat ho argumentem by znamenalo přeložit při každém znaku tělo
@@ -75,6 +80,7 @@ struct DiffFileHeaderView: View {
             if let badge = badge {
                 pill(badge, color: Palette.ink2)
             }
+            changeKindPill
             stalePill
             if file.change == .renamed, let oldPath = file.oldPath {
                 Text(verbatim: "← \(oldPath)")
@@ -92,6 +98,22 @@ struct DiffFileHeaderView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)
+    }
+
+    /// Druh změny (#525) — kapsle vedle odznaku změny, jak ji má zákres (sekce 59).
+    ///
+    /// **`změna chování` akcentem, zbytek nejtišším tónem v řádku** (`--ink-3`, tedy `.pill.quiet`
+    /// z návrhu). Je to tvrzení **session**, ne gitu: `nový` a `binární` vedle jsou fakta z diffu,
+    /// tohle je čtení někoho jiného, takže nemá být hlasitější než ona. Výjimka je jediná a je to
+    /// ta, kvůli které celá kapsle existuje — do souboru, který mění chování, se kouká napřed.
+    ///
+    /// **Barvu vydává `Policy`**, ne `switch` tady: kdo přidá šestý druh, projde testem popisků
+    /// a barvu dostane spolu s ním.
+    @ViewBuilder private var changeKindPill: some View {
+        if let changeKind {
+            let chip = Policy.changeKindChip(of: changeKind)
+            pill(chip.label, color: chip.isProminent ? Palette.accent : Palette.ink3)
+        }
     }
 
     /// `změněno od prošlého` (#500) — kapsle u cesty, v okrové `--stale`, tedy tam a v té barvě,

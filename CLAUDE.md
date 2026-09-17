@@ -662,6 +662,10 @@ protože většina se v harnessu neprojeví.
   neomezenost seznamu není důvod ten vzor snést. Diff kreslí **pevný `VStack`**, blok kódu má
   živý `NSTextView` jen v pásu kolem výřezu (`Policy.mountBand(visible:)`); `List` je změřený
   a **zamítnutý** ([čísla i ablace](docs/architektura.md#pevný-seznam-a-nasazování-bloků-469)).
+- **Co se plete mezi bloky kódu, nesmí měnit jejich geometrii** (#525) — věta *proč* u hunku je
+  **vlastní řádek** jako hlavička hunku, ne vložka do `NSTextView`, a **kde se nekreslí souřadnice
+  hunku, nekreslí se ani věta**; měří se to na nakresleném bloku
+  ([rozbor](docs/architektura.md#věta-je-vlastní-řádek-diffu-ne-vložka-do-bloku-kódu)).
 - **Nevyjednává se ani počet prvků** (#252) — plochu, gesto a geometrii nad blokem kódu počítá
   **jednou** `DiffGutterGeometry`. A co se při scrollování mění, **nesmí být ve `@State`**
   ([rozbor](docs/architektura.md#appdiff)).

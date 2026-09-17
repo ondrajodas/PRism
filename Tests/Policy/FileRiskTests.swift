@@ -197,4 +197,126 @@ struct FileRiskTests {
         // `.yml` chytí přípona, ne tečka v cestě — a je to správný výsledek.
         #expect(Policy.isConfigurationPath(".github/workflows/push.yml"))
     }
+
+    // MARK: - Druh změny z anotací (#525)
+
+    private func annotations(_ kinds: [String: FileChangeKind]) -> StoredAnnotations {
+        StoredAnnotations(
+            pullRequest: PRIdentifier(repo: RepoID(owner: "ondrajodas", name: "PRism"), number: 525),
+            headSha: "aaaa1111",
+            hunks: [],
+            files: kinds.map { FileAnnotation(file: $0.key, kind: $0.value) },
+            outcome: .finished,
+            sessionID: nil,
+            answered: true,
+            dropped: 0,
+            finishedAt: Date(timeIntervalSince1970: 1),
+            usage: nil
+        )
+    }
+
+    /// **`generované` klasifikuje jako konfiguraci, i když to z cesty poznat nejde.** Výčet jmen
+    /// a přípon vygenerovaný `.swift` nechytá — a to je zrovna soubor, který se čte naposledy.
+    @Test("Generovaný soubor jde mezi konfiguraci, i když se tak nejmenuje")
+    func aGeneratedFileRanksAsConfiguration() {
+        let file = ItineraryFileFactory.file("App/Generated/Schema.g.swift")
+        #expect(Policy.risk(of: file, markers: [:], threadPaths: []) == .other)
+        #expect(
+            Policy.risk(
+                of: file,
+                markers: [:],
+                threadPaths: [],
+                kind: .generated
+            ) == .configuration
+        )
+    }
+
+    /// **A naopak: `změna chování` konfiguraci podle přípony přebije.** `.json`, o kterém session
+    /// řekne, že mění chování, je kód — heuristika ho posílala na konec seznamu.
+    @Test("Změna chování přebije konfiguraci podle přípony", arguments: [
+        FileChangeKind.behaviour, .refactor, .test,
+    ])
+    func behaviourBeatsTheExtension(kind: FileChangeKind) {
+        let file = ItineraryFileFactory.file("config/routes.json")
+        #expect(Policy.risk(of: file, markers: [:], threadPaths: []) == .configuration)
+        #expect(Policy.risk(of: file, markers: [:], threadPaths: [], kind: kind) == .other)
+    }
+
+    /// **Nález a vlákno druh nepřebije.** Práce, o které už někdo něco řekl, se čte první — tatáž
+    /// úvaha, proč je `configuration` až čtvrtá v klasifikaci.
+    @Test("Nález ani vlákno druh změny nepřebije")
+    func findingsAndThreadsOutrankTheKind() {
+        let file = ItineraryFileFactory.file("composer.lock")
+        #expect(
+            Policy.risk(
+                of: file,
+                markers: ["composer.lock": .blocking],
+                threadPaths: [],
+                kind: .generated
+            ) == .blocking
+        )
+        #expect(
+            Policy.risk(
+                of: file,
+                markers: [:],
+                threadPaths: ["composer.lock"],
+                kind: .generated
+            ) == .thread
+        )
+    }
+
+    /// **Nový soubor druhem nezmizí**: `added` znamená „čte se celý“, což platí bez ohledu na to,
+    /// co v něm je. Druh ho posune jedině na konec, když je to generované nebo konfigurace.
+    @Test("Nový soubor zůstane nový, i když mění chování")
+    func anAddedFileStaysAdded() {
+        let file = ItineraryFileFactory.file("src/Vault/SecretNotFound.php", change: .added)
+        #expect(Policy.risk(of: file, markers: [:], threadPaths: [], kind: .behaviour) == .added)
+        #expect(Policy.risk(of: file, markers: [:], threadPaths: [], kind: .test) == .added)
+        #expect(Policy.risk(of: file, markers: [:], threadPaths: [], kind: .generated) == .configuration)
+    }
+
+    /// **Anotace se ptají po souboru, ne po cestě**: druh může přijít i pod **starou** cestou
+    /// přejmenovaného souboru, a je to pravda o tomtéž souboru.
+    @Test("Druh pod starou cestou přejmenovaného souboru platí")
+    func theKindUnderTheOldPathCounts() {
+        let renamed = FileDiff(
+            oldPath: "src/Vault/Client.php",
+            newPath: "src/Vault/SecretClient.php",
+            change: .renamed,
+            isBinary: false,
+            hunks: []
+        )
+        let items = Policy.filesByRisk(
+            [renamed],
+            annotations: annotations(["src/Vault/Client.php": .generated])
+        )
+        #expect(items.map(\.risk) == [.configuration])
+    }
+
+    /// Bez anotací se řadí **jako do #525** — tedy jen podle cesty a stavu souboru.
+    @Test("Bez anotací se pořadí nemění")
+    func withoutAnnotationsTheOrderStands() {
+        #expect(
+            paths(Policy.filesByRisk(files, markers: markers, annotations: nil))
+                == paths(Policy.filesByRisk(files, markers: markers))
+        )
+    }
+
+    /// Druh, který session nepřidělila, pořadí nemění ani u ostatních souborů — chybějící záznam
+    /// je „nevím“, ne „ostatní“.
+    @Test("Druh u jednoho souboru ostatními nehýbá")
+    func oneKindDoesNotMoveTheRest() {
+        let items = Policy.filesByRisk(
+            files,
+            markers: markers,
+            annotations: annotations(["tests/SecretClientTest.php": .test])
+        )
+        #expect(paths(items) == [
+            "src/Vault/SecretClient.php",
+            "src/Vault/Encryptor.php",
+            "src/Vault/SecretNotFound.php",
+            "tests/SecretClientTest.php",
+            "bundle(3)",
+        ])
+    }
 }
