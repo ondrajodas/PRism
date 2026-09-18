@@ -55,18 +55,14 @@ struct DiffToolbar: View {
     var showAnnotations: Binding<Bool> = .constant(true)
 
     var body: some View {
-        HStack(spacing: 9) {
-            DiffLayoutPicker(selection: $layout)
-            // Procházení stojí **hned vedle pohledu**, tedy vlevo: je to jediná věc v liště,
-            // která se používá při každém review, kdežto zbytek se nastaví a nechá být.
-            if let stepFinding, !navigation.isEmpty {
-                FindingNavigationView(
-                    navigation: navigation,
-                    onlyBlocking: $onlyBlocking,
-                    step: stepFinding
-                )
-            }
-            Spacer(minLength: 9)
+        // **Vlastní `Layout`, ne `HStack`** (#593). Do #593 rozhodovalo o tom, co v tísni
+        // ustoupí, to, který prvek zapomněl `fixedSize()` — a lišta v plné výbavě přetéká
+        // v podlahovém okně o víc než dvě stě bodů. Kdo v jakém pořadí ustupuje a na co se
+        // srazí, je výčet v `Policy`; tenhle soubor kreslí obě podoby a `DiffToolbarLayout`
+        // změří a **předá** šířku (#220, #236).
+        DiffToolbarLayout {
+            layoutPicker
+            findingNavigation
             warnings
             annotateButton
             searchButton
@@ -81,6 +77,37 @@ struct DiffToolbar: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineSoft).frame(height: 1) }
     }
 
+    // MARK: - Pohled a procházení
+
+    /// Pohled a procházení stojí vlevo: procházení je jediná věc v liště, která se používá při
+    /// každém review, kdežto zbytek se nastaví a nechá být.
+    ///
+    /// **Přepínač ustupuje jako poslední** (`Policy.diffToolbarLadder`), a to na samotné ikony;
+    /// popisky segmentů jsou celý důvod, proč to není `Picker(.segmented)` (#219).
+    ///
+    /// Není `private`, protože se na tomhle prvku **měří** (`DiffToolbarRoomTests`) — a měřit se
+    /// musí to, co aplikace doopravdy kreslí (#236).
+    @ViewBuilder var layoutPicker: some View {
+        ViewThatFits(in: .horizontal) {
+            DiffLayoutPicker(selection: $layout, form: .full)
+            DiffLayoutPicker(selection: $layout, form: .icon)
+        }
+        .diffToolbarItem(.layout)
+    }
+
+    /// Procházení nálezů (#187) — **jediný prvek lišty, který neustoupí nikdy**
+    /// (`Policy.diffToolbarFloor(.navigation) == .full`).
+    @ViewBuilder var findingNavigation: some View {
+        if let stepFinding, !navigation.isEmpty {
+            FindingNavigationView(
+                navigation: navigation,
+                onlyBlocking: $onlyBlocking,
+                step: stepFinding
+            )
+            .diffToolbarItem(.navigation)
+        }
+    }
+
     // MARK: - Hledání
 
     /// `⌕ Hledat ⌘F` (#152) — **popisek s kapslí klávesy, ne pole**: pole je v pruhu pod lištou,
@@ -89,29 +116,43 @@ struct DiffToolbar: View {
     ///
     /// Existuje, aby se hledání dalo najít **myší**. Zkratku kreslí `Policy`, ne literál vedle
     /// klávesy (#441).
-    @ViewBuilder private var searchButton: some View {
+    ///
+    /// **Sražená podoba je samotná lupa** (#593) — popisek se zkratkou ustupuje jako druhý
+    /// v pořadí (`Policy.diffToolbarLadder`), protože hledání má zkratku `⌘F`: popisek je pomůcka
+    /// k nalezení myší, ne jediná cesta. Lupa navíc nepotřebuje vysvětlení.
+    @ViewBuilder var searchButton: some View {
         if let openSearch, !diff.files.isEmpty {
             Button(action: openSearch) {
-                HStack(spacing: 5) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
-                    Text(verbatim: "Hledat")
-                        .font(.system(size: 11.5))
-                    Text(verbatim: Policy.windowShortcut(.findInDiff).display)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Palette.ink3)
-                        .padding(.horizontal, 5)
-                        .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line) }
+                ViewThatFits(in: .horizontal) {
+                    searchLabel(withText: true)
+                    searchLabel(withText: false)
                 }
                 .foregroundStyle(isSearching ? Palette.accent : Palette.ink2)
-                .lineLimit(1)
-                .fixedSize()
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .help(Policy.shortcutHelp("Hledat v diffu", .findInDiff))
             .accessibilityLabel("Hledat v diffu")
+            .diffToolbarItem(.search)
         }
+    }
+
+    private func searchLabel(withText: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+            if withText {
+                Text(verbatim: "Hledat")
+                    .font(.system(size: 11.5))
+                Text(verbatim: Policy.windowShortcut(.findInDiff).display)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Palette.ink3)
+                    .padding(.horizontal, 5)
+                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(Palette.line) }
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 
     // MARK: - Popis změn
@@ -131,15 +172,12 @@ struct DiffToolbar: View {
     /// **Popisek `Popisuji…` a `Popis selhal` je kratší než `Popsat změny`**, takže se lišta
     /// spuštěním nerozšíří — ať se v úzkém okně nezačne pod rukou lámat něco jiného.
     ///
-    /// **A v úzkém okně ustoupí tenhle prvek, ne ty, které tu byly dřív** — proto jako jediný
-    /// v liště **nemá `fixedSize()`** a má **zápornou prioritu rozvržení**. Změřeno: lišta v plné
-    /// výbavě (procházení nálezů, varování o šířce, hledání, sbalení) si v podlahovém okně říká
-    /// o **819 bodů** a má **572**, takže **přetéká už dneska, i bez popisu změn** — je to známá
-    /// vlastnost z #219, ne něco, co přineslo #524. Bez té priority by ale zmizelo `Sbalit vše`,
-    /// tedy věc, která tu byla; s ní se srazí **popisek téhle akce** až na samotnou ikonu, která
-    /// nese `help` a zůstává klikatelná. Čísla a kresba jsou v `docs/testovani.md`, sekce
-    /// *Kolik místa v liště stojí `Popsat změny`*.
-    @ViewBuilder private var annotateButton: some View {
+    /// **A v úzkém okně ustoupí tenhle prvek první** — od #593 ne zápornou prioritou rozvržení,
+    /// ale tím, že stojí v čele `Policy.diffToolbarLadder`: je to nejmladší přírůstek lišty,
+    /// na jednom PR se pustí jednou a stav nese i samotná ikona. Sražená podoba je ta ikona
+    /// (`Policy.diffToolbarFloor(.annotate) == .icon`), nese `help` a zůstává klikatelná. Čísla
+    /// jsou v `docs/testovani.md`, sekce *Kolik si který prvek lišty bere*.
+    @ViewBuilder var annotateButton: some View {
         if let annotation, !diff.files.isEmpty {
             Button(action: annotation.state == .running ? annotation.cancel : annotation.start) {
                 // **`ViewThatFits`, ne useknutý popisek**: `Popsat…` je horší než samotná ikona —
@@ -159,9 +197,9 @@ struct DiffToolbar: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .layoutPriority(-1)
             .help(Self.annotateHelp(annotation.state))
             .accessibilityLabel(Self.annotateLabel(annotation.state))
+            .diffToolbarItem(.annotate)
         }
     }
 
@@ -225,52 +263,92 @@ struct DiffToolbar: View {
     /// podmíněné (nálezy musí existovat, anotace taky, kontext musí být rozbalený), takže na PR,
     /// na kterém review neběželo a nikdo nic nerozbalil — tedy na tom, co člověk vidí jako
     /// první — by šipka otevírala prázdné okénko. Šipku si `Menu` kreslí samo, zakázat ji nejde.
-    @ViewBuilder private var foldMenu: some View {
+    @ViewBuilder var foldMenu: some View {
         if !diff.files.isEmpty {
             let allFolded = diff.files.allSatisfy(folding.isFolded)
             if hasFindings || hasAnnotations || collapseExpansion != nil {
-                Menu {
-                    if hasAnnotations {
-                        // Jmenuje se `Anotace u hunků`, ne `Popis změn`: tak se jmenuje **akce**
-                        // v liště, a jedno slovo pro akci i pro viditelnost jejího výsledku je
-                        // přesně ta záměna, kterou #219 z téhle lišty vyháněl (`Nálezy` vedle
-                        // `Nálezů`). `u hunků` říká, **kde** to je — na rozdíl od nálezů se
-                        // vypnutá anotace nikam nepřestěhuje, zmizí.
-                        Toggle("Anotace u hunků", isOn: showAnnotations)
-                    }
-                    if hasFindings {
-                        // Jmenuje se `Nálezy pod řádky`, ne `Bubliny`: schovává **jen** nálezy,
-                        // kdežto „bubliny“ jsou od #64 i vlákna konverzace. A ne holé `Nálezy` —
-                        // tak se jmenuje přepínač panelu o kus vedle. **Nápověda tu není**:
-                        // položky menu na macOS tooltip neukazují, takže by to byl mrtvý text.
-                        //
-                        // **`pod` místo `u`** (#503): od té doby je to volba **místa**, ne
-                        // viditelnosti — vypnuté nálezy nezmizí, stojí v okraji vpravo vedle
-                        // svého řádku. `u řádků` by o tom lhalo, protože v okraji jsou u řádků
-                        // taky.
-                        Toggle("Nálezy pod řádky", isOn: $showBubbles)
-                    }
-                    if let collapseExpansion {
-                        Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
-                            collapseExpansion()
-                        }
-                    }
-                } label: {
-                    foldLabel(allFolded)
-                } primaryAction: {
-                    toggleFold(allFolded)
+                // **`ViewThatFits` kolem celé nabídky, ne kolem jejího popisku** (#593), a je to
+                // změřená oprava: `Menu` svému popisku šířku **nepředává**, takže `ViewThatFits`
+                // uvnitř vybral vždycky tu první podobu (naměřeno `full 51, floor 50`, tedy
+                // ustoupení o jediný bod). Dvě nabídky jako dvě podoby změří `ViewThatFits`
+                // správně — vzniká z nich vždycky jen jedna.
+                ViewThatFits(in: .horizontal) {
+                    foldMenuButton(allFolded) { foldLabel(allFolded) }
+                    foldMenuButton(allFolded) { foldIcon(allFolded) }
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help(foldHelp(allFolded))
+                .diffToolbarItem(.fold)
             } else {
                 Button { toggleFold(allFolded) } label: {
-                    foldLabel(allFolded).contentShape(.rect)
+                    foldContent(allFolded).contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .help(foldHelp(allFolded))
+                .diffToolbarItem(.fold)
             }
         }
+    }
+
+    /// Nabídka pod šipkou s daným popiskem. **`fixedSize()` tu být musí** — bez něj si `Menu`
+    /// neřekne ani o šipku, kterou si sám kreslí, a popisek se usekne.
+    @ViewBuilder private func foldMenuButton(
+        _ allFolded: Bool,
+        @ViewBuilder label: () -> some View
+    ) -> some View {
+        Menu {
+            if hasAnnotations {
+                // Jmenuje se `Anotace u hunků`, ne `Popis změn`: tak se jmenuje **akce**
+                // v liště, a jedno slovo pro akci i pro viditelnost jejího výsledku je
+                // přesně ta záměna, kterou #219 z téhle lišty vyháněl (`Nálezy` vedle
+                // `Nálezů`). `u hunků` říká, **kde** to je — na rozdíl od nálezů se
+                // vypnutá anotace nikam nepřestěhuje, zmizí.
+                Toggle("Anotace u hunků", isOn: showAnnotations)
+            }
+            if hasFindings {
+                // Jmenuje se `Nálezy pod řádky`, ne `Bubliny`: schovává **jen** nálezy,
+                // kdežto „bubliny“ jsou od #64 i vlákna konverzace. A ne holé `Nálezy` —
+                // tak se jmenuje přepínač panelu o kus vedle. **Nápověda tu není**:
+                // položky menu na macOS tooltip neukazují, takže by to byl mrtvý text.
+                //
+                // **`pod` místo `u`** (#503): od té doby je to volba **místa**, ne
+                // viditelnosti — vypnuté nálezy nezmizí, stojí v okraji vpravo vedle
+                // svého řádku. `u řádků` by o tom lhalo, protože v okraji jsou u řádků
+                // taky.
+                Toggle("Nálezy pod řádky", isOn: $showBubbles)
+            }
+            if let collapseExpansion {
+                Button("Zobrazit jen diff", systemImage: "arrow.down.right.and.arrow.up.left") {
+                    collapseExpansion()
+                }
+            }
+        } label: {
+            label()
+        } primaryAction: {
+            toggleFold(allFolded)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(foldHelp(allFolded))
+    }
+
+    /// Popisek, nebo sražená ikona (#593) — podoba pro **obyčejné tlačítko**, tedy tam, kde
+    /// nabídka pod šipkou není. Nabídka se sráží jinak, viz `foldMenu`.
+    private func foldContent(_ allFolded: Bool) -> some View {
+        ViewThatFits(in: .horizontal) {
+            foldLabel(allFolded)
+            foldIcon(allFolded)
+        }
+    }
+
+    /// Sražená podoba `Sbalit vše` (#593) — **šipky, ne zkratka popisku**: stav nese směr stejně
+    /// dobře jako slovo, kdežto `Sbalit…` by neslo půl slova. Celou větu drží `help`, který na
+    /// tlačítku i na nabídce je tak jako tak.
+    private func foldIcon(_ allFolded: Bool) -> some View {
+        Image(systemName: allFolded
+            ? "arrow.down.left.and.arrow.up.right"
+            : "arrow.up.right.and.arrow.down.left")
+            .font(.system(size: 11))
+            .foregroundStyle(Palette.ink2)
+            .fixedSize()
     }
 
     /// **Bez vlastní šipky**, i když ji návrh u popisku kreslí: `Menu` s primární akcí si vedle
@@ -281,6 +359,7 @@ struct DiffToolbar: View {
             .font(.system(size: 11.5))
             .foregroundStyle(Palette.ink2)
             .lineLimit(1)
+            .fixedSize()
     }
 
     private func foldHelp(_ allFolded: Bool) -> String {
@@ -295,22 +374,17 @@ struct DiffToolbar: View {
 
     /// Tři věci, které se hlásí jen tehdy, když nesedí. Stojí vpravo za mezerou, jak je má
     /// návrh — ne vlevo mezi akcemi.
-    @ViewBuilder private var warnings: some View {
-        if diff.unrecognizedLines > 0 {
-            warning(
-                "\(Plural.czech(diff.unrecognizedLines, one: "řádek", few: "řádky", many: "řádků")) "
-                    + "diffu se nepodařilo přečíst"
-            )
+    ///
+    /// **Text skládá `Policy`, ne tenhle soubor** (#593): každé varování má vedle celé věty
+    /// i sraženou podobu a nápovědu, protože v tísni se zkracuje — a co z lišty ubude, musí být
+    /// v nápovědě. Do #593 měla varování `fixedSize()` a v tísni neustupovala vůbec, takže
+    /// přetékala za hranu lišty.
+    @ViewBuilder var warnings: some View {
+        if let unreadable = Policy.unreadableLinesWarning(diff.unrecognizedLines) {
+            warning(unreadable).diffToolbarItem(.unreadable)
         }
-        if missingThreads > 0 {
-            // Sloveso je **v tvarech**: „2 vlákna se nevešlo“ je špatně česky.
-            let count = Plural.czech(
-                missingThreads,
-                one: "vlákno konverzace se nevešlo",
-                few: "vlákna konverzace se nevešla",
-                many: "vláken konverzace se nevešlo"
-            )
-            warning("\(count) — otevři PR na GitHubu")
+        if let missing = Policy.missingThreadsWarning(missingThreads) {
+            warning(missing).diffToolbarItem(.missingThreads)
         }
         widthGauge
     }
@@ -320,7 +394,7 @@ struct DiffToolbar: View {
     /// Ukazuje se **jen tehdy, když je slib porušený** — nad 120 znaků je to číslo, které nikoho
     /// nezajímá, kdežto pod ním je to jediné vysvětlení, proč se řádky lámou. Měří se skutečné
     /// okno, ne tabulka ze zadání: ta platí pro jeden displej a jedno nastavení.
-    @ViewBuilder private var widthGauge: some View {
+    @ViewBuilder var widthGauge: some View {
         let characters = Policy.charactersPerSide(
             contentWidth: contentWidth,
             characterWidth: Self.characterWidth,
@@ -328,21 +402,44 @@ struct DiffToolbar: View {
             // Skutečná šířka sloupců vlevo, ne odhad — kreslí je `DiffLineView`.
             gutter: DiffLineView.contentInset(for: layout)
         )
-        if contentWidth > 0, characters < Policy.promisedCharactersPerSide {
-            warning("\(characters) znaků na stranu")
+        if let gauge = Policy.diffWidthWarning(characters: characters, contentWidth: contentWidth) {
+            warning(gauge)
                 .monospacedDigit()
-                .help("Aplikace slibuje \(Policy.promisedCharactersPerSide) znaků. Pomůže složit sloupce nebo přepnout na pohled pod sebou.")
+                .diffToolbarItem(.width)
         }
     }
 
     /// Okrová, ne systémová oranžová (#216): je to upozornění bez naléhavosti, tedy tatáž
     /// kategorie jako zastarání. Vedle červeného blokujícího nálezu by se systémová oranžová
     /// četla jako druhý stupeň téže škály.
-    private func warning(_ text: String) -> some View {
+    ///
+    /// **Tři podoby, ne dvě** (#593): celá věta, věta sražená na číslo (`Policy.diffToolbarFloor`
+    /// u varování vydává `short`) a — až docela nakonec — **samotný trojúhelník**.
+    ///
+    /// Ta třetí je tu proto, že varování jsou jediné prvky, ze kterých `Policy` v největší tísni
+    /// **ubírá** (obě vzácná varování naráz v podlahovém okně; viz `DiffToolbarRoomTests`). Bez
+    /// ní by z `3 řádky` zbylo `3…`, tedy půl slova, které vypadá jako porucha — tatáž úvaha jako
+    /// u `Popsat změny` (#524). Celou větu drží nápověda ve **všech třech** podobách, takže se
+    /// zkrácením nic nezatají.
+    private func warning(_ warning: Policy.DiffToolbarWarning) -> some View {
+        ViewThatFits(in: .horizontal) {
+            warningLabel(warning.full)
+            warningLabel(warning.short)
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 11.5))
+                .foregroundStyle(Palette.stale)
+                .fixedSize()
+        }
+        .help(warning.help)
+        .accessibilityLabel(warning.full)
+    }
+
+    private func warningLabel(_ text: String) -> some View {
         Label(text, systemImage: "exclamationmark.triangle")
             .font(.system(size: 11.5))
             .foregroundStyle(Palette.stale)
             .lineLimit(1)
+            .fixedSize()
     }
 
     /// Šířka jednoho znaku písma, kterým se sází kód. Mono písmo má všechny znaky stejně široké,

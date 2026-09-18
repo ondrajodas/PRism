@@ -659,6 +659,11 @@ protože většina se v harnessu neprojeví.
   `filling()`, o to zúží prostředí** (`narrowingWidth(by:)`, **jedna** konstanta na obojí);
   `filling()` je přibití, ne pružnost
   ([rozbor](docs/architektura.md#kdo-paduje-kolem-filling-musí-o-to-zúžit-prostředí-546)).
+- **Kdo se do lišty nevejde, ustupuje podle vyjmenovaného pořadí, ne podle toho, kdo zapomněl
+  `fixedSize()`** (#593) — sražené podoby, strany a pořadí drží `Policy` (`diffToolbarFloor`,
+  `diffToolbarLadder`, `diffToolbarRoom`), měří a předává `DiffToolbarLayout`, kreslí obě podoby
+  `DiffToolbar`. **Procházení nálezů neustupuje** a **vlevo se neusekává nic**
+  ([rozbor](docs/architektura.md#lišta-nad-diffem-ustupuje-podle-pořadí-593)).
 - **Pružná výška v řádku líného seznamu je zakázaná taky, ale z jiného měření** (#375) — jen
   **v řádku**, ne plošně; ohraničené formy jsou
   [vyjmenované](docs/architektura.md#šířka-v-okně-appviewsavailablewidthswift).

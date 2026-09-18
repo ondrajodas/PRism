@@ -10,6 +10,14 @@ import SwiftUI
 /// 11,5 bodu, poloměry 7 (rám) a 5 (segment).
 struct DiffLayoutPicker: View {
     @Binding var selection: DiffLayout
+    /// Jak se přepínač kreslí, když se lišta nevejde (#593). `full` = segmenty s popisky,
+    /// `icon` = samotné ikony.
+    ///
+    /// **Ustupuje jako poslední ze všech prvků lišty** (`Policy.diffToolbarLadder`), právě proto,
+    /// že popisky jsou celý důvod, proč to není `Picker(.segmented)`. Když na něj ale řada dojde,
+    /// je pořád lepší nechat ikony a `help` než přepínač useknout — a ten, kdo si okno stáhl na
+    /// podlahu, ví, co v liště je.
+    var form: Policy.DiffToolbarForm = .full
 
     var body: some View {
         HStack(spacing: 2) {
@@ -23,7 +31,6 @@ struct DiffLayoutPicker: View {
         .fixedSize()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Pohled na diff")
-        .help("Kreslit diff vedle sebe (starý a nový obsah proti sobě), nebo pod sebou")
     }
 
     private func segment(_ option: DiffLayout) -> some View {
@@ -34,9 +41,11 @@ struct DiffLayoutPicker: View {
             HStack(spacing: 5) {
                 Image(systemName: option.symbol)
                     .font(.system(size: 10))
-                Text(verbatim: option.displayName)
-                    .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
-                    .lineLimit(1)
+                if form != .icon {
+                    Text(verbatim: option.displayName)
+                        .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
+                        .lineLimit(1)
+                }
             }
             .foregroundStyle(isActive ? Palette.ink : Palette.ink2)
             .padding(.horizontal, 9)
@@ -45,6 +54,10 @@ struct DiffLayoutPicker: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        // **Nápověda u segmentu, ne u celého přepínače** (#593): ve sražené podobě je jediné, co
+        // jméno pohledu nese, a nápověda nad oběma segmenty by pak neřekla, který je který.
+        .help(option.help)
+        .accessibilityLabel(option.displayName)
         .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
     }
 

@@ -8330,7 +8330,45 @@ proti 572 bodům), což je vlastnost z #219, ne důsledek téhle změny
 akce **jediný prvek lišty, který v tísni ustoupí** — sráží se na samotnou ikonu, kdežto to, co
 v liště bylo dřív, zůstává. **Zamítnuto** u toho bylo useknutí popisku (`Popsat…` nese půl slova
 a vypadá jako porucha) i práh na šířku okna (byl by to další číslo, které se musí ladit, kdežto
-`ViewThatFits` se ptá na to, co doopravdy zbylo).
+`ViewThatFits` se ptá na to, co doopravdy zbylo). **To „jediný prvek“ vydrželo do #593** — viz
+záznam rozhodnutí níž; chování `Popsat změny` se nezměnilo, jen přestalo být výjimkou.
+
+## Záznam rozhodnutí — o ustupování v liště diffu rozhoduje pořadí, ne `layoutPriority` (#593)
+
+**Rozhodnutí.** Lišta nad diffem není `HStack`, ale **vlastní `Layout`** (`DiffToolbarLayout`).
+Každý prvek má v `Policy` **sraženou podobu** (`full` / `short` / `icon`), **stranu** a **místo
+v pořadí ustupování** (`Policy.diffToolbarLadder`). `Layout` prvky **změří** a šířku jim **předá**;
+`Policy.diffToolbarRoom` z měření vybírá. Pořadí je: `annotate`, `search`, `fold`, `width`,
+`missingThreads`, `unreadable`, `layout` — a **`navigation` v něm není**.
+
+**Proč.** Do #593 ustupoval jediný prvek, a to tím, že jako jediný zapomněl `fixedSize()`. To není
+rozhodnutí, to je shoda okolností: kdyby kdokoli přidal do lišty další prvek bez `fixedSize()`,
+srazily by se **oba** a o tom, který dřív, by rozhodovalo, v jakém pořadí se do lišty dostaly.
+Změřeno navíc, že samotné to jedno ustoupení **nestačí**: v podlahovém okně chybí 351 bodů
+a `Popsat změny` má odkud dát 82 ([čísla](../../testovani.md#kolik-si-který-prvek-lišty-bere-524-593)).
+
+**Věta, která pořadí drží:** *akce ustupují dřív než informace a věta dřív než číslo.* Proto jsou
+v čele tři akce (dvě z nich mají zkratku nebo obecně známý symbol), pak se zkracují varování — vždy
+tak, aby **zůstalo číslo** a věta se dala přečíst z nápovědy — a **přepínač pohledu je poslední**,
+protože jeho popisky jsou to, co #219 z lišty vydobylo. `navigation` neustupuje vůbec: je to jediná
+věc v liště, která se používá při každém review.
+
+**Co se zamítlo.**
+
+- **Nejlepší vejití** (srazit ten prvek, který deficit pokryje nejúsporněji) místo pořadí. Vyšlo by
+  to v podlahovém okně o 29 bodů lépe, ale lišta by se skládala jinak při každé šířce a nedalo by
+  se říct, **co ustoupí dřív** — a přesně tahle nepředvídatelnost je vada, kterou #593 opravuje.
+- **Práh na šířku okna** (pod X bodů kreslit ikony). Další číslo k ladění a lhalo by, jak se lišta
+  plní: prvky se v ní objevují a mizí podle stavu PR, takže táž šířka znamená různou tísni.
+- **Sražení `navigation`** (počitadlo jako `2/7`). Uspoří ~55 bodů, což deficit nepokryje, takže by
+  se přepínač pohledu srazil **stejně** — jen by k tomu navíc zmizel údaj, na který se při
+  procházení kouká.
+- **Přesun prvku z lišty jinam** (mockup, sekce `s63`). Z měření nevyšlo: **pořadí ustupování
+  stačí** a v žádné šířce od 572 výš se nic neusekává, dokud nejsou obě vzácná varování naráz.
+  Zákres se proto nekreslil a číslo sekce zůstalo volné.
+- **`.clipped()` na liště** jako pojistka proti kresbě za hranou. Ořez by půlku slova nebo ikony
+  utnul potichu; místo toho se z nejširšího prvku **ubírá** (nikdy pod 22 bodů) a varování mají
+  třetí podobu, samotný trojúhelník.
 
 ## Záznam rozhodnutí — věta *proč* je vlastní řádek diffu, a kde není souřadnice, není ani věta (#525)
 
