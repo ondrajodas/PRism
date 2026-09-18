@@ -10,6 +10,12 @@ struct AnnotationRequest: Sendable, Equatable {
     let worktree: URL
     /// Commit, proti kterému se diffuje.
     let baseSha: String
+    /// Jazyk, ve kterém má session psát věty (#592).
+    ///
+    /// **Putuje s požadavkem, ne s anotátorem**, a je to tatáž úvaha jako u `timeout`u: hodnota je
+    /// z konfigurace **toho repa** (`findingsLanguage`, override per repo), takže ji umí složit
+    /// jedině store. Closure na anotátoru by čtla jedině globální nastavení a repo by přehlédla.
+    let language: FindingsLanguage
     /// Za jak dlouho se session zabije.
     ///
     /// **Tentýž limit jako review** (#320), ne vlastní číslo — a je to tatáž úvaha jako u kontroly

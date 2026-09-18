@@ -1,0 +1,183 @@
+```json
+{
+  "hunks": [
+    {
+      "file": ".env",
+      "hunk": 1,
+      "why": "Odstraní konfigurační proměnnou BILLING_ENABLED, která již není potřebná po deaktivaci integraci se Billing API."
+    },
+    {
+      "file": "CLAUDE.md",
+      "hunk": 1,
+      "why": "Aktualizuje dokumentaci: odstraní zmínku o billing path, protože AppLifecycleManager již nepouží billing integraci.",
+      "source": "z commitu 52c40dbd"
+    },
+    {
+      "file": "CLAUDE.md",
+      "hunk": 2,
+      "why": "Odstraní z dokumentace zmínky o billing funkcionality u AppLifecycleManager a AppRunSync.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "CLAUDE.md",
+      "hunk": 3,
+      "why": "Odstraní Billing API ze seznamu externích integrací služby.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "CLAUDE.md",
+      "hunk": 4,
+      "why": "Odstraní BILLING_ENABLED z dokumentace konfiguračních proměnných.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "CLAUDE.md",
+      "hunk": 5,
+      "why": "Aktualizuje popis AppLifecycleManager: odstraní zmínku o billing path v dokumentaci pracovního toku.",
+      "source": "z commitu 52c40dbd"
+    },
+    {
+      "file": "README.md",
+      "hunk": 1,
+      "why": "Odstraní zmínku o Billing API z popisu autentizace a seznam autentizačních tokenů.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "README.md",
+      "hunk": 2,
+      "why": "Odstraní dokumentaci permisí pro billing:manage, která již nejsou potřebné.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "composer.json",
+      "hunk": 1,
+      "why": "Odstraní závislost na keboola/billing-api-php-client, která již není potřebná.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "composer.lock",
+      "hunk": 1,
+      "why": "Odstraní definici balíčku keboola/billing-api-php-client ze zámku závislostí.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "config/services.yaml",
+      "hunk": 1,
+      "why": "Odstraní registraci služby AppRunReporter a konfiguraci Billing API klienta.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "config/services.yaml",
+      "hunk": 2,
+      "why": "Odstraní konfiguraci Keboola\\BillingApi\\ClientFactory a ManageClient služeb.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "src/Entity/AppRun.php",
+      "hunk": 1,
+      "why": "Přidá komentář, že reportedToBilling se již nezapisuje, ale sloupec a stávající data se ponechávají; odstraní getter a setter metody pro zpětnou kompatibilitu.",
+      "source": "z commitu 4d9954ab"
+    },
+    {
+      "file": "src/Provisioning/AppLifecycleManager.php",
+      "hunk": 1,
+      "why": "Odstraní AppRunReporter import a závislost; odstraní try-catch blok, který hlásil běh aplikace do Billing API.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "src/Provisioning/AppRunReporter.php",
+      "hunk": 1,
+      "why": "Smaže celý soubor, který obsahoval logiku pro hlášení běhů aplikací do Billing API.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "src/Provisioning/Watch/AppRun/AppRunWatcher.php",
+      "hunk": 1,
+      "why": "Odstraní AppRunReporter dependency a všechny operace hlášení do Billing API; zjednoduší logiku pro nastavení stoppedAt.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "tests/Unit/Entity/AppRunTest.php",
+      "hunk": 1,
+      "why": "Odstraní parametr reportedToBilling z inicializace AppRun a testy pro getter/setter metody.",
+      "source": "z commitu 4d9954ab"
+    },
+    {
+      "file": "tests/Unit/Provisioning/AppLifecycleManagerTest.php",
+      "hunk": 1,
+      "why": "Odstraní expectRunBilling parametr z testovacích dat; odstraní AppRunReporter mock a celý test pro error při reportování.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "tests/Unit/Provisioning/AppRunReporterTest.php",
+      "hunk": 1,
+      "why": "Smaže celý testovací soubor, který ověřoval funkcionality AppRunReporter.",
+      "source": "z commitu 23f14b32"
+    },
+    {
+      "file": "tests/Unit/Provisioning/Watch/AppRun/AppRunWatcherTest.php",
+      "hunk": 1,
+      "why": "Odstraní AppRunReporter mocks z testů; odstraní testovací scénáře pro billing logiku; aktualizuje očekávané počty volání save() a zjednoduší testy synchronizace.",
+      "source": "z commitu 23f14b32"
+    }
+  ],
+  "files": [
+    {
+      "file": ".env",
+      "kind": "configuration"
+    },
+    {
+      "file": "CLAUDE.md",
+      "kind": "configuration"
+    },
+    {
+      "file": "README.md",
+      "kind": "configuration"
+    },
+    {
+      "file": "composer.json",
+      "kind": "configuration"
+    },
+    {
+      "file": "composer.lock",
+      "kind": "generated"
+    },
+    {
+      "file": "config/services.yaml",
+      "kind": "configuration"
+    },
+    {
+      "file": "src/Entity/AppRun.php",
+      "kind": "refactor"
+    },
+    {
+      "file": "src/Provisioning/AppLifecycleManager.php",
+      "kind": "refactor"
+    },
+    {
+      "file": "src/Provisioning/AppRunReporter.php",
+      "kind": "refactor"
+    },
+    {
+      "file": "src/Provisioning/Watch/AppRun/AppRunWatcher.php",
+      "kind": "refactor"
+    },
+    {
+      "file": "tests/Unit/Entity/AppRunTest.php",
+      "kind": "test"
+    },
+    {
+      "file": "tests/Unit/Provisioning/AppLifecycleManagerTest.php",
+      "kind": "test"
+    },
+    {
+      "file": "tests/Unit/Provisioning/AppRunReporterTest.php",
+      "kind": "test"
+    },
+    {
+      "file": "tests/Unit/Provisioning/Watch/AppRun/AppRunWatcherTest.php",
+      "kind": "test"
+    }
+  ]
+}
+```

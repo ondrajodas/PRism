@@ -621,6 +621,11 @@ Naměřená čísla, zamítnuté varianty a slepé uličky u každého pravidla 
   `CFBundleDevelopmentRegion = cs` a `CFBundleLocalizations = [cs]`. Bez toho spadne
   `Locale.current` na vývojový jazyk a formátované hodnoty (relativní časy, čísla) vyjdou
   anglicky vedle českých popisků.
+- **Jazyk textu, který píše session, určuje aplikace, ne obsah vstupu** (#592) — anotace hunků
+  berou `findingsLanguage` (volbu `Jazyk nálezů`) a vyslovuje se to **jednou větou v promptu**
+  (`AnnotationSchema.language(_:)`), ne přívlastkem v popisu pole: tam jazyk stál do #592 a u diffu
+  plného cizojazyčného textu **neplatil** ([měření](docs/claude-cli.md#jazyk-v-popisu-pole-neplatí-592),
+  [rozbor](docs/architektura.md#jazyk-vět-určuje-nastavení-ne-diff-592)).
 - **Do `App/` patří jen zdrojáky.** Buildable folder zkopíruje všechno, co neumí
   zkompilovat, do `.app` jako resource. Konfigurace bundle (`Info.plist`,
   `PRism.entitlements`) proto leží v kořeni repa.

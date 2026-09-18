@@ -37,20 +37,48 @@ struct AppStoreAnnotationsTests {
         )
     }
 
+    /// Překladač nálezů, který si jen pamatuje, že ho někdo zavolal (#592).
+    ///
+    /// Je tu kvůli **negativnímu tvrzení**: anotace se nepřekládá, takže tenhle fake má po celém
+    /// běhu zůstat nedotčený. Kdyby se překlad k anotacím jednou přilepil, byla by to druhá
+    /// session na tutéž věc — a zaplacená by byla dvakrát.
+    final class FakeTranslator: FindingTranslating, @unchecked Sendable {
+        private let lock = NSLock()
+        private var recorded: [FindingsLanguage] = []
+
+        var languages: [FindingsLanguage] { lock.withLock { recorded } }
+
+        func translate(
+            _ findings: [ReportedFinding],
+            to language: FindingsLanguage
+        ) async throws -> [FindingTranslation?] {
+            lock.withLock { recorded.append(language) }
+            return findings.map { _ in nil }
+        }
+    }
+
     private func store(
         annotator: FakeHunkAnnotator? = FakeHunkAnnotator(),
         annotatesHunks: Bool = false,
         headSha: String = "aaaa1111",
-        annotationStore: AnnotationStore? = nil
+        annotationStore: AnnotationStore? = nil,
+        findingsLanguage: FindingsLanguage = .czech,
+        repositoryLanguage: FindingsLanguage? = nil,
+        translator: FakeTranslator? = nil
     ) -> AppStore {
         var configuration = Configuration.standard
         configuration.global.annotatesHunks = annotatesHunks
+        configuration.global.findingsLanguage = findingsLanguage
+        if let repositoryLanguage {
+            configuration.setRepository(RepositoryConfig(findingsLanguage: repositoryLanguage), for: pr.repo)
+        }
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([]), detail: .success(detail(headSha: headSha))),
             configuration: configuration,
             time: time,
             checkout: FakeRepoCheckout(),
             reviewer: FakeReviewRunner(),
+            translator: translator,
             annotator: annotator,
             annotationStore: annotationStore ?? AnnotationStore(layout: layout),
             cacheLayout: layout
@@ -103,6 +131,74 @@ struct AppStoreAnnotationsTests {
         #expect(store.annotations(for: pr)?.hunks.count == 1)
         #expect(store.annotations(for: pr)?.files.first?.kind == .behaviour)
         #expect(try await AnnotationStore(layout: layout).load(for: pr)?.headSha == "aaaa1111")
+    }
+
+    // MARK: - Jazyk vět (#592)
+
+    /// Jazyk vět je **`findingsLanguage` toho repa**, ne vlastní volba a ne globální nastavení:
+    /// override per repo musí přebít, jako u nálezů. Skládá ho store, protože jedině on ví, nad
+    /// jakým repem session běží.
+    @Test("Zadání nese jazyk z konfigurace toho repa")
+    func requestCarriesTheRepositoryLanguage() async {
+        let annotator = FakeHunkAnnotator(runs: [run()])
+        let store = store(annotator: annotator, findingsLanguage: .czech, repositoryLanguage: .english)
+
+        store.startAnnotating(for: pr)
+        await waitUntilDone(store)
+
+        #expect(annotator.requests.first?.language == .english)
+    }
+
+    /// **Kvůli jazyku se nespouští druhá session, a to je to tvrzení.** U nálezů překlad je (#94),
+    /// protože jich je hodně a `category` u nich musí zůstat anglickým slugem; anotace se píše
+    /// ve svém jazyce rovnou.
+    ///
+    /// Test tvrdí obojí naráz: překladač zůstal **nedotčený** a věta se uložila **doslova tak, jak
+    /// dorazila** — tedy že po ní nikdo nešel ani potichu. Rozbilo by se to bez hlesu: přeložená
+    /// anotace vypadá správně, jen je dvakrát zaplacená.
+    @Test("Anotace se nepřekládá a druhá session kvůli jazyku nenaběhne")
+    func annotationsAreNeverTranslated() async throws {
+        let translator = FakeTranslator()
+        let annotator = FakeHunkAnnotator(
+            runs: [
+                run(hunks: [HunkAnnotation(file: "a.php", hunk: 1, why: "věta z běhu", source: nil)])
+            ]
+        )
+        let store = store(annotator: annotator, findingsLanguage: .czech, translator: translator)
+
+        store.startAnnotating(for: pr)
+        await waitUntilDone(store)
+
+        #expect(translator.languages.isEmpty)
+        #expect(store.annotations(for: pr)?.hunks.map(\.why) == ["věta z běhu"])
+        #expect(try await AnnotationStore(layout: layout).load(for: pr)?.hunks.map(\.why) == ["věta z běhu"])
+    }
+
+    /// **Přepnutí jazyka na uloženou anotaci nesáhne.** Přepsat se bez nového běhu nedá (a ten
+    /// stojí peníze), takže stará věta v cizím jazyce **dožije** do příští hlavy. Nesmí se ale
+    /// stát, že ji přepnutí potichu zahodí nebo že si aplikace kvůli němu pustí session sama.
+    @Test("Anotace uložená v jiném jazyce přepnutím nezmizí ani nepřeběhne")
+    func storedAnnotationsSurviveALanguageSwitch() async throws {
+        let annotator = FakeHunkAnnotator(
+            runs: [run(hunks: [HunkAnnotation(file: "a.php", hunk: 1, why: "Временно указывает", source: nil)])]
+        )
+        let store = store(annotator: annotator, findingsLanguage: .english)
+
+        store.startAnnotating(for: pr)
+        await waitUntilDone(store)
+        #expect(annotator.requests.first?.language == .english)
+
+        // Druhý store nad **tou samou cache**, jen s přepnutým jazykem — tak to vypadá po změně
+        // v nastavení a restartu.
+        let secondAnnotator = FakeHunkAnnotator(runs: [run()])
+        let after = self.store(annotator: secondAnnotator, findingsLanguage: .czech)
+        await after.loadAnnotations(for: pr)
+
+        #expect(after.annotations(for: pr)?.hunks.map(\.why) == ["Временно указывает"])
+        // A **nikdo nic nepustil**: přečtení uložených anotací session nespouští, takže ruská věta
+        // se nepřepíše ani potichu. Bez tohohle tvrzení by komentář výš říkal víc než test.
+        #expect(secondAnnotator.requests.isEmpty)
+        #expect(!after.isAnnotating(pr))
     }
 
     /// **Ruční spuštění bránu nečte**, a je to tatáž dělba jako u routingu (#518) s `Pustit přesto`:

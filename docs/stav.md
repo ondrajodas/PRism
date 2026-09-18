@@ -9393,3 +9393,33 @@ proběhla a je popsaná v PR. **Druhá: snímek běžící aplikace nad skutečn
 ve slotu nedoběhl (v zásuvce běžel `claude --resume`, takže se aplikace zeptala a dialog zůstal
 stát; session nemá *Zpřístupnění*, takže na něj nejde kliknout) a druhá instance z `build.noindex`
 frontu nenačte. **Proklikání zbývá na člověka.**
+
+## #592 — Jazyk anotací hunků určuje nastavení, ne model (Průběžné)
+
+Hotovo. Vyšlo to z proklikání #524/#525 na ostrých datech: v cache ležely anotace pro dva PR
+a **v různých jazycích** — `keboola/sandboxes-service#717` česky, `keboola/job-queue#727` **rusky**
+(*„Временно указывает…“*, `source`: *„коммит 3c4d82eb“*). Jazyk přitom nikdo neurčoval: stál jako
+přívlastek v popisu pole ve schématu a u diffu plného cizojazyčného textu **neplatil**.
+
+**Rozhodnuto: jazyk se bere z `findingsLanguage`**, tedy z volby `Jazyk nálezů` včetně override per
+repo, a vyslovuje se **jednou větou v promptu** (`AnnotationSchema.language(_:)`), která k tomu
+říká, **proti čemu platí** — jazyk je nastavení aplikace, ne vlastnost čteného kódu. Zamítnuté
+varianty (natvrdo česky; nechat to na modelu a jen to přiznat v dokumentaci) jsou v záznamu
+rozhodnutí ve specifikaci. Druhá cesta **nepřibyla**: žádná nová konstanta, žádná nová volba
+v nastavení a **žádná druhá session** — jazyk je na stejné cestě jako `timeout`, tedy v zadání, které
+skládá store.
+
+**Uložené anotace v cizím jazyce dožijí.** Přepsat se bez nového běhu nedají (a ten stojí peníze),
+přeložit je nemá co, a zastarají s hlavou jako všechno ostatní u anotací. Tvrdí to dva testy, které
+říkají, že se **nic nestalo**: překladač zůstal nedotčený a věta se uložila doslova; přepnutí jazyka
+uloženou větu nezahodí ani nespustí session samo.
+
+Fixtures jsou **skutečné odpovědi obou běhů** (`Tests/Fixtures/annotations/`), protože jiné se bez
+zaplacené session nesehnají — a parser na nich tvrdí, že jazyk **nepoznává ani nesahá na text**.
+Přibylo 7 testů; tvrdé podmínky č. 2 a č. 5 se nezměnily ani o položku (sada anotací je dál
+`AskCommand.allowedTools`, klíčování hlavou zůstává).
+
+**Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl (výpadek 18. 9.);
+vlastní revize diffu proběhla a je popsaná v PR. **Druhá: že nová věta drží i na tom diffu, který
+rusky vyšel.** Ověřit to znamená zaplatit session nad `keboola/job-queue#727`; harness tvrdí jen to,
+co je v promptu.

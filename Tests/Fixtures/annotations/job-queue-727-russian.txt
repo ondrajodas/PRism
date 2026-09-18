@@ -1,0 +1,44 @@
+```json
+{
+  "hunks": [
+    {
+      "file": "libs/flow-result/composer.json",
+      "hunk": 1,
+      "why": "Временно указывает на ветку разработки для проверки на канаре вместо стабильной версии",
+      "source": "коммит 3c4d82eb"
+    },
+    {
+      "file": "libs/flow-result/src/Task/DelayHelper.php",
+      "hunk": 1,
+      "why": "Добавляет поддержку чтения сохраненной задержки из объекта работы, с запасным вариантом на вычисление из временных меток для старых работ",
+      "source": "коммит a03c892d"
+    },
+    {
+      "file": "libs/flow-result/tests/Task/DelayHelperTest.php",
+      "hunk": 1,
+      "why": "Переименовывает тест и адаптирует его для мокирования getRequestedDelay, который всегда возвращает null для проверки запасного пути вычисления",
+      "source": "коммит a03c892d"
+    },
+    {
+      "file": "libs/flow-result/tests/Task/DelayHelperTest.php",
+      "hunk": 2,
+      "why": "Добавляет новый тест, который проверяет, что сохраненная задержка имеет приоритет и временные метки не консультируются",
+      "source": "коммит a03c892d"
+    }
+  ],
+  "files": [
+    {
+      "file": "libs/flow-result/composer.json",
+      "kind": "configuration"
+    },
+    {
+      "file": "libs/flow-result/src/Task/DelayHelper.php",
+      "kind": "behaviour"
+    },
+    {
+      "file": "libs/flow-result/tests/Task/DelayHelperTest.php",
+      "kind": "test"
+    }
+  ]
+}
+```

@@ -4262,6 +4262,44 @@ u nálezu: kategorie se váže na sadu, kterou si píše člověk v nastavení, 
 čeho bude itinerář řadit a mapa barvit — a řadit se dá jedině podle výčtu. Neznámá hodnota se
 **nehádá**, položka se zahodí a započítá.
 
+#### Jazyk vět určuje nastavení, ne diff (#592)
+
+Do #592 jazyk **nikdo neurčoval**, i když to tak z kódu vypadalo: stál jako **přívlastek v popisu
+pole** (`why`: *„one sentence in Czech“*). Naostro vyšly u dvou PR **dva různé jazyky** — u
+`keboola/sandboxes-service#717` česky, u `keboola/job-queue#727` **rusky** (*„Временно указывает…“*).
+Rozdíl nebyl v nastavení ani v promptu, ale v tom, co session v diffu viděla; měření je
+v [`docs/claude-cli.md`](claude-cli.md#jazyk-v-popisu-pole-neplatí-592).
+
+**Jazyk se bere z `findingsLanguage`, vlastní volbu nedostal** — a to je to rozhodnutí. Je to tatáž
+otázka jako u nálezů („v jakém jazyce je próza v okně“), takže druhá volba vedle by znamenala dvě
+pravdy o jednom okně; anotace se navíc od #525 kreslí **uvnitř diffu** vedle českých popisků, tedy
+přesně tam, kde se rozpor vidí na jeden pohled. Override per repo platí, protože prochází
+`ResolvedConfig`em; zamítnuté varianty jsou v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--jazyk-anotací-určuje-nastavení-nálezů-ne-model-592).
+
+Skládá se to ze čtyř věcí a každá je kontrolovatelná:
+
+- **Jedna věta, jedno místo.** `AnnotationSchema.language(_:)` je jediný text, kde se jazyk
+  vyslovuje; popisy polí jazyk **nenesou** (`AnnotateCommandTests` to tvrdí nad `everyField`
+  a počtem výskytů jména jazyka v promptu). Dvě místa by se rozešla první úpravou věty.
+- **Věta jmenuje pole z výčtu, ne ručně.** Rozhoduje příznak `Field.isProse`, takže pole, které
+  jako věta přibude, dostane jazyk samo — a `file`, `hunk` ani `kind` v té větě stát nesmí: druh
+  změny je **anglický slug z uzavřeného výčtu**, podle kterého se řadí a barví.
+- **Věta je v promptu poslední.** Má platit i proti tomu, co session v kódu viděla, takže za ní už
+  nic nemluví — tatáž úvaha jako u věty o přírůstku v `Policy.reviewPromptCore` (#517). Zákaz
+  zápisu a odeslání tím **neslábne**: drží ho `--disallowedTools`, ne pořadí vět.
+- **Jazyk putuje se zadáním, ne s anotátorem.** `AnnotationRequest.language` skládá store
+  (`resolved(for:).findingsLanguage`), jako `timeout` — closure na `ClaudeHunkAnnotator`u by čtla
+  jedině globální nastavení a override repa by přehlédla. Čte se **teď**, při startu session, takže
+  se přepnutí projeví na dalším běhu.
+
+**Anotace se nepřekládá, a to je to negativní tvrzení.** Nálezy mají vlastní překladovou session
+(#94), protože jich je hodně a `category` u nich musí zůstat anglickým slugem; anotace je věta pro
+mě, žádný slug v ní není, a druhá session by zdvojnásobila cenu textu o řád kratšího než nález.
+Uložená anotace v cizím jazyce proto **dožije**: přepsat se bez nového běhu nedá a přeložit ji nemá
+co — zastará s hlavou, jako všechno ostatní u anotací. Hlídají to dva testy, které tvrdí, že se
+**nic nestalo**: překladač zůstal nedotčený a věta se uložila doslova, a přepnutí jazyka uloženou
+větu nezahodí ani nespustí session samo.
+
 #### Vlastní store, ne pole v `ReviewRecord`u
 
 `AnnotationStore` je jeden JSON na PR pod `annotations/`. Tři důvody, každý sám o sobě stačí:

@@ -153,6 +153,12 @@ extension AppStore {
                     headSha: detail.headSha,
                     worktree: worktree,
                     baseSha: detail.baseSha,
+                    // Jazyk vět (#592) — **`findingsLanguage` toho repa**, ne vlastní volba: je to
+                    // tatáž otázka jako u nálezů, tedy v jakém jazyce je próza v okně. Čte se
+                    // **teď**, jako u překladu nálezů, takže se přepnutí projeví na dalším běhu
+                    // a **uložené anotace zpětně nepřepisuje** — přeložit je nemá co (žádná druhá
+                    // session) a zastarají s hlavou, jako všechno ostatní u anotací.
+                    language: resolved(for: pr.repo).findingsLanguage,
                     // **Tentýž limit jako review** (#320) — proč, je u `AnnotationRequest.timeout`.
                     timeout: resolved(for: pr.repo).reviewTimeout
                 ),

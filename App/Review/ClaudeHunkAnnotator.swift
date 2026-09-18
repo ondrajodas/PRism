@@ -42,7 +42,12 @@ struct ClaudeHunkAnnotator: HunkAnnotating {
         let events = runner.stream(
             claude,
             arguments: AnnotateCommand.arguments(
-                prompt: AnnotateCommand.prompt(baseSha: request.baseSha),
+                prompt: AnnotateCommand.prompt(
+                    baseSha: request.baseSha,
+                    // Jazyk **ze zadání**, ne z vlastní closury (#592): rozhoduje o něm konfigurace
+                    // toho repa, kterou zná store.
+                    language: request.language
+                ),
                 model: model()
             ),
             // **Tytéž proměnné jako u revieweera**: strom stojí nad partial klonem, takže

@@ -8406,3 +8406,47 @@ a pět řádků legendy** — tedy novou věc na obrazovce. Ta podle pravidla z 
 mockupu a ke schválení; sekce 59 kreslí větu, kapsli, nabídku a stavový řádek, barvení mapy ne.
 Udělat to „na vlastní pěst“ by znamenalo obejít jedinou schvalovací bránu v tomhle repu kvůli
 větě, která v zadání stojí jako *„může“*.
+
+### Záznam rozhodnutí — jazyk anotací určuje nastavení nálezů, ne model (#592)
+
+Anotace hunků (#524) si jazyk vybíraly samy: ve schématu stál jako **přívlastek v popisu pole**
+(`why`: *„one sentence in Czech“*), a to u diffu plného cizojazyčného textu **neplatilo** —
+`keboola/job-queue#727` vyšel rusky, `keboola/sandboxes-service#717` týž den česky. Zadání issue
+nechalo otevřené, **kdo jazyk určuje**, a nabídlo tři možnosti.
+
+**Rozhodnuto: `findingsLanguage`, vyslovené jednou větou v promptu.** Je to tatáž otázka jako
+u nálezů — *v jakém jazyce je próza v okně* —, takže vlastní volba vedle by byla druhá pravda
+o jednom okně; anotace se navíc od #525 kreslí **uvnitř diffu** vedle českých popisků, tedy přesně
+tam, kde se rozpor vidí naráz. Věta je v promptu **poslední** a říká, **proti čemu platí**: *„ať je
+diff, commity, komentáře i identifikátory v jakémkoli jazyce; jazyk odpovědi je nastavení
+aplikace, ne vlastnost čteného kódu“*. Bez té druhé poloviny je to prosba, kterou obsah vstupu
+přebije — a přesně tak to do #592 skončilo.
+
+**Zamítnuto: natvrdo česky.** Vypadá to jako nejmenší změna a odpovídalo by to pravidlu
+*uživatelské texty jsou české*. Jenže `Jazyk nálezů` se dá přepnout na angličtinu, a pak by v okně
+stály **anglické nálezy nad českými anotacemi ve stejném diffu** — dvě pravdy o jednom textu,
+o kterých rozhodují dvě různá místa. Konstanta by k tomu byla ta druhá cesta, kterou issue
+výslovně zakazuje.
+
+**Zamítnuto: nechat to na modelu a jen to přiznat v dokumentaci.** Je to jediná varianta, která nic
+nestojí, a proto se posuzovala poctivě — padla na tom, že **anotace není citát**. U nálezu by se
+originální jazyk dal obhájit (reviewer píše, v čem je nejsilnější, a překlad je vrstva nad tím),
+kdežto anotace je **věta aplikace o cizím kódu**, kreslená mezi české popisky. Přiznat v dokumentaci,
+že si jazyk vybírá diff, znamená napsat, že okno mluví jazykem vstupu.
+
+**Zamítnuto: překladová session jako u nálezů.** Nálezů je hodně a `category` u nich musí zůstat
+anglickým slugem, takže se překládají po doběhnutí (#94). Anotace je proti tomu jedna věta bez
+slugu — druhá session by zdvojnásobila cenu textu o řád kratšího a přinesla další místo, kde se
+text přepisuje. **Píše se proto v cílovém jazyce rovnou**, a tím se rozhodl i osud toho, co už
+v cache leží: **dožije**. Přepsat se bez nového běhu nedá a přeložit se nemá čím, takže stará ruská
+věta zmizí až s další hlavou — což je u anotací normální konec života, ne výjimka.
+
+**Jazyk putuje v zadání, ne v anotátoru.** `ClaudeHunkAnnotator` má na model closure do globální
+konfigurace a nabízelo se přidat druhou; jazyk má ale **override per repo**, takže by closure
+tichounce ignorovala nastavení toho repa. Skládá ho proto store do `AnnotationRequest`u, jako
+`timeout` — a čte ho **při startu session**, takže přepnutí platí od dalšího běhu a na uložené
+záznamy nesahá.
+
+**Věta jmenuje pole z výčtu.** Rozhoduje příznak `Field.isProse`, ne seznam jmen vedle schématu:
+pole, které jako věta přibude, dostane jazyk samo, a `file`, `hunk` ani `kind` ho nedostanou —
+druh změny je anglický slug z uzavřeného výčtu, podle kterého aplikace řadí a barví.

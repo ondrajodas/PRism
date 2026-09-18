@@ -383,6 +383,36 @@ z toho plynou a které se **musí projevit v okně**:
   proto drží **`answered` vedle prázdných seznamů**; je to tatáž úmluva jako `calledReportFindings`
   u revieweera, jen tady s větší cenou za její vynechání.
 
+### Jazyk v popisu pole neplatí (#592)
+
+**Změřeno na dvou ostrých bězích téhož dne, týmž promptem a týmž modelem.** Jazyk odpovědi stál
+tehdy jedině v popisu pole ve schématu — `why`: *„one sentence in Czech saying why this change is
+here“* — a `source` k tomu měl **české příklady** (*„z commitu <subject>“*). Vyšlo z toho:
+
+| Běh | Diff | Věty |
+|---|---|---|
+| `keboola/sandboxes-service#717` | PHP, popisy a commity česky | **česky** |
+| `keboola/job-queue#727` | PHP, hodně cizojazyčného textu okolo | **rusky** — *„Временно указывает на ветку разработки…“*, `source`: *„коммит 3c4d82eb“* |
+
+Obě odpovědi jsou v repu jako fixture (`Tests/Fixtures/annotations/`), protože jsou to **skutečné
+výstupy** a jiné takové se bez zaplacené session nesehnají.
+
+Tři věci, které z toho plynou:
+
+- **Přívlastek v popisu tvaru je slabší než samostatná věta.** Popis pole odpovídá na „co do něj
+  patří“, a model ho tak čte — jazyk v něm je vedlejší poznámka, kterou obsah vstupu přebije.
+- **Prosba bez protikladu neplatí.** *„Napiš to česky“* diff v cizím jazyce nepřebije; teprve věta,
+  která **říká, proti čemu platí** (*„ať je diff, commity, komentáře i identifikátory v jakémkoli
+  jazyce; jazyk odpovědi je nastavení aplikace, ne vlastnost čteného kódu“*), dává modelu důvod
+  rozhodnout se jinak, než co vidí.
+- **Příklady v promptu jsou taky vstup.** České literály v popisu `source` jazyk **nevynutily**
+  a v anglickém zadání matou dvakrát; jsou proto přepsané na popis tvaru bez ukázky v konkrétním
+  jazyce.
+
+Ověřit to na ostrých datech znovu **stojí session na PR**; harness tvrdí jen to, co je v promptu
+(`AnnotateCommandTests`). **Že nová věta drží i na diffu, který do #592 vyšel rusky, je tedy
+neověřená mezera** — pozná se to na prvním běhu nad `keboola/job-queue#727`.
+
 ## Slévání konfliktů (#467) — čtvrtá session, a první, která píše
 
 Sada je `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)`, zákazy jsou **tatáž konstanta**
