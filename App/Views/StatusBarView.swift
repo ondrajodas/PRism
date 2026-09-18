@@ -30,6 +30,10 @@ struct StatusBarView: View {
             // pracovat), tohle je stav **té práce**. Obojí se kreslí jen nad otevřeným pull
             // requestem, takže se na domácí záložce neposouvá nic.
             ItineraryStatusView(store: store)
+            // Anotace hunků (#525) — **za průběhem review**: ten je stav *mojí* práce, tohle je
+            // tvrzení o **datech v diffu** (je popsaný, a proti které hlavě). Kreslí se jen nad
+            // otevřeným PR, který popis má, takže se na domácí záložce neposouvá nic.
+            AnnotationStatusView(store: store)
             Spacer(minLength: 0)
             // Vlevo od útraty a puntíků: souhrn je o **práci**, ne o tom, jestli aplikace funguje.
             // `nil` = nemá se co sčítat (nenačtený seznam, prázdná fronta) — viz `queueSummary`.
