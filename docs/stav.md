@@ -9603,16 +9603,34 @@ nese hlášení subagenta.
 
 | Issue | Štítek | Skutečně | Volání nástrojů | Kola s překladačem | Tokeny | Kolo navíc |
 |---|---|---|---|---|---|---|
-| #597 | `model:opus` | Opus | ~45 (včetně mergu a releasu) | 0 — jen dokumentace | **neměřeno** | ne |
-| #599 | `model:opus` | Opus | ~38 (včetně mergu a releasu) | 0 — jen dokumentace | **doplní orchestrátor** | ne |
+| #597 | `model:opus` | Opus | 50 (včetně mergu a releasu) | 0 — jen dokumentace | **192 869** | ne |
+| #599 | `model:opus` | Opus | 46 (včetně mergu a releasu) | 0 — jen dokumentace | **195 508** | ne |
 
 **Změřená mezera hned v prvním záznamu, a #599 ji zavřelo:** tabulka původně počítala s tím, že
 *„hlášení subagenta spotřebu nese“* — jenže **subagent svou spotřebu tokenů zevnitř nevidí**.
 Volání nástrojů a kola s překladačem si spočítat umí, tokeny ne; ty zná harness, tedy
 orchestrátor. Sloupec `Tokeny` proto **vyplňuje orchestrátor při zápisu hlášení**, ne subagent —
-u #597 se to už nedoplní a zůstává v něm `neměřeno`. Je to tentýž druh chyby jako měřidlo z #478:
+u #597 to šlo doplnit zpětně, protože hlášení o skončení subagenta v kontextu orchestrátora
+zůstává. Je to tentýž druh chyby jako měřidlo z #478:
 kdyby se to nechalo na subagentovi, vyplnil by odhad a tabulka by vypadala zeleně, ať postup
 funguje, nebo ne.
+
+**Počet volání si subagent počítá hůř, než si myslí.** U obou záznamů se rozešel s tím, co vidí
+harness: #597 hlásilo „~45“ proti 50 a #599 „~38“ proti 46 — obojí je odhad psaný **dřív, než
+dráha skončila**, tedy před mergem, releasem a úklidem slotu. **Do tabulky patří číslo z hlášení
+o skončení, ne z textu subagenta**, a je to táž hranice jako u tokenů: měří se to, co je vidět
+zvenčí. Sloupec `Volání nástrojů` tedy vyplňuje orchestrátor taky; subagentovi zbývají **kola
+s překladačem**, která zevnitř vidí přesně.
+
+**První dva záznamy jsou drahé, a je to užitečné zjištění, ne selhání.** Dvě issues, ve kterých
+se nezměnil jediný řádek kódu a nespustil jediný build, stály **192 869** a **195 508** tokenů —
+řádově tolik co implementační issues naměřené na Mullionu (237 tisíc a 226 tisíc). Cena tedy
+neleží jen v kolech s překladačem, jak předpokládá úvaha z #597, ale i v **přečteném kontextu**:
+`docs/paralelni-vyvoj.md` má 38 kB, `CLAUDE.md` 84 kB a `docs/stav.md` 763 kB, takže i „jen
+dokumentace“ znamená velký vstup posílaný znovu každý turn. **Pravidlo *odkazy na konkrétní
+sekce, ne na celé soubory* je tím pádem měřitelně to nejdůležitější, co z #597 vzešlo** — agent
+#599 z 763kB souboru přečetl ~120 řádků. Co z toho plyne pro volbu modelu, se pozná až na
+záznamech, kde se doopravdy staví: **dokumentační issue levné není**.
 
 **Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
 vlastní revize diffu proběhla a je popsaná v PR. U tohohle issue je to obzvlášť nepříjemné,
