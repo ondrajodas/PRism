@@ -896,6 +896,12 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi
 se dotáhne sám** — nález bez svého kódu se nedá posoudit. Skok kamkoli v diffu je **stromem souborů** vlevo.
 `Zobrazit jen diff` se schovalo do nabídky u `Rozbalit vše` (#219).
 
+**V úzkém okně se lišta nad diffem sráží podle pořadí, ne podle náhody** (#593). Popisky ustupují
+jeden po druhém: nejdřív `Popsat změny`, pak `Hledat`, `Sbalit vše` a varování o šířce (z
+`45 znaků na stranu` je `45 znaků`), a jako poslední přepínač pohledu, ze kterého zbudou ikony.
+**Procházení nálezů neustoupí nikdy** a nic z lišty nezmizí — co se srazí, zůstane klikatelné
+a celou větu drží nápověda.
+
 **Hledat v diffu jde na ⌘F** (#152). Pod lištou se otevře pruh: pole, počet výskytů (`4 z 17`),
 šipky `⌘G` / `⌘⇧G` (v poli i `⏎` a `⇧⏎`), kapsle `Aa` na rozlišování velikosti a `✕` s `esc`. Skok
 míří **na řádek, ne na jeho okolí** — výskyt přistane ve třetině shora, a v pohledu vedle sebe se
@@ -2321,6 +2327,34 @@ jak složit proti kódu, který v PR není.
 ve frontě vidět dřív, než PR otevřu), ale kam převzatý nález patří, rozhodují hunky — bez diffu by
 se z každého stal odkaz do těla review místo komentáře u řádku. Panel se proto doplní ve chvíli,
 kdy se PR otevře.
+
+### Tělo návrhu review v mém hlasu (#521)
+
+**K složenému návrhu napíše tělo review osmá session** — jeden odstavec, mým hlasem. Dostane
+hotové nálezy z návrhu (převzaté i sporné) a **posledních deset mých odeslaných těl review** jako
+vzor stylu; **kód nečte a číst ho nemá čím**, protože nemá jediný nástroj. Pruh nad panelem k tomu
+dostane druhou řádku: `Tělo je podle tvých posledních review (7).`
+
+**Je to text v composeru, nic víc.** Editovatelný, přepsatelný, a odejde jedině tím potvrzením
+s celým payloadem — na odesílání se tím nemění ani písmeno. Odstavec se staví **nad** to, co v těle
+review už leží (odkazy na kód u nálezů, které GitHub u řádku nepustí), takže nic nepřepíše.
+
+**Když se to nepovede, composer zůstane prázdný a pruh to řekne**: `Tělo se nenapsalo, composer
+zůstal prázdný.` i s důvodem. Půlka odstavce je u textu, který odchází na GitHub pod mým jménem,
+horší než věta o tom, že se to nepovedlo. A **než odstavec dorazí, můžu začít psát sám** — pak se
+nepřepíše nic a pruh řekne `Tělo si píšeš sám`.
+
+**Vzorek hlasu se sbírá čtením**, ne evidencí odeslaných review: moje odeslaná těla se berou
+z konverzací, které aplikace načte při otevření PR, a leží v `review-voice.json` v cache
+(nejnovějších deset). Co je na GitHubu, je to, co jsem doopravdy odeslal — včetně review odeslaných
+odjinud než z téhle aplikace. **Nový uživatel žádné uložené review nemá**, takže se tělo píše
+neutrálně a pruh to řekne.
+
+**Vlastní volbu to nemá** — jede na `autoDraft` (#520, výchozí vypnuto), protože tělo je část
+návrhu, ne samostatná funkce. **Cena** je v `Průběhu` na vlastní dráze `tělo review` (dvě fáze,
+`session` a `píše tělo` — víc jich session bez nástrojů mít nemůže) a počítá se do `Dneska stálo`,
+i u běhu, který text nevrátil. Návrh ze samých sporných nálezů draft nezakládá, takže se u něj tělo
+**nepíše** — pruh nad prázdným panelem stačí.
 
 ### Odeslání review
 

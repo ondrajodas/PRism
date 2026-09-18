@@ -12286,10 +12286,88 @@ shodí tři tvrzení v `AppStoreAnnotationsTests`; vyhození větve s `failure` 
 shodí tři tvrzení v `AnnotationPairingTests`. **Zvlášť schválně**: kdyby se selhání hlásilo jen na
 jednom z těch dvou konců, druhý by zůstal tichý a zelený běh by o tom mlčel.
 
-### Kolik místa v liště stojí `Popsat změny` (#524)
+### Kolik si který prvek lišty bere (#524, #593)
 
-`DiffToolbarRoomTests` (4 testy) a k nim ruční sonda `DiffToolbarRoomProbe`
-(`TEST_RUNNER_PRISM_MEASURE=1`, kresba do `TEST_RUNNER_PRISM_RENDER_DIR`). Dělba je ta obvyklá:
+`DiffToolbarRoomTests` (14 testů), `DiffToolbarLadderTests` (14 testů nad `Policy`) a k tomu ruční
+sonda `DiffToolbarRoomProbe` (`TEST_RUNNER_PRISM_MEASURE=1`, kresba do
+`TEST_RUNNER_PRISM_RENDER_DIR`). Dělba mezi nimi je podle toho, **co která umí dokázat**:
+`DiffToolbarLadderTests` vyčerpává **rozhodnutí** nad čísly, `DiffToolbarRoomTests` ta čísla
+**měří na tom, co aplikace doopravdy kreslí** (#236) a **v pásmu šířek**, sonda ukazuje, jak to
+vypadá.
+
+#### Kolik si který prvek bere (#593)
+
+Měří to `DiffToolbarMeasuring` v `Tests/Support/` — a **tou cestou, kterou prvky měří aplikace**:
+volá `DiffToolbarLayout.measures(of:)` doslova, jen si výsledek zachytí. Druhá kopie toho měření
+v `Tests/` by měřila něco jiného než lišta.
+
+| prvek | celý | sražený | podoba | uspoří |
+|---|---|---|---|---|
+| přepínač pohledu | 200 | 69 | `icon` | 131 |
+| **procházení nálezů** | **234** | **234** | `full` | **—** |
+| `3 řádky diffu se nepodařilo přečíst` | 210 | 63 | `short` | 147 |
+| `2 vlákna konverzace se nevešla — otevři PR na GitHubu` | 324 | 68 | `short` | 256 |
+| `45 znaků na stranu` | 127 | 73 | `short` | 54 |
+| `Popsat změny` | 95 | 13 | `icon` | 82 |
+| `Hledat ⌘F` | 82 | 13 | `icon` | 69 |
+| `Sbalit vše` **s nabídkou** | 94 | 51 | `icon` | 43 |
+| `Sbalit vše` bez nabídky | 53 | 13 | `icon` | 40 |
+
+K tomu **28 b vodorovného odsazení** a **mezery**: 9 uvnitř každé skupiny a 27 mezi skupinami,
+tedy 63 u plné výbavy (dva prvky vlevo, čtyři vpravo). Součet **hlídá test** proti živé liště
+(*Lišta si říká přesně o součet svých prvků, mezery a odsazení*) — jinak by se v číslech výš
+měřilo něco jiného než ta lišta.
+
+Co z toho vyjde na pásmu šířek (štěrbina **572 b** je podlahové okno 700 − rail 52 − dva složené
+proužky po 38):
+
+| šířka | vyžádáno | co ustoupí | zbyde volných |
+|---|---|---|---|
+| **572** | 923 | popis změn, hledání, sbalení, ukazatel šířky **a přepínač pohledu** (na ikony) | 28 |
+| 700 | 923 | popis změn, hledání, sbalení, ukazatel šířky — **přepínač zůstane celý** | 25 |
+| 900 | 923 | jen popis změn | 59 |
+| 1 400 | 923 | nic | 477 |
+
+**Přepínač ustupuje až v podlahovém okně, a stojí to 131 bodů na to, aby se pokrylo 102** — jinak
+to nejde: po ustoupení všeho ostatního chybí právě těch 102 a jediný, kdo je má odkud vzít, je on
+(procházení nálezů neustupuje). Je to **cena za předvídatelnost**: pořadí rozhoduje, ne nejlepší
+vejití.
+
+#### Že se nic nekreslí za hranou, tvrdí bitmapa
+
+`fittingSize` o přetečení **mlčí** a `HStack` ho nehlásí — jen ho nakreslí. Postup: lišta se
+přibije na šířku štěrbiny a **hostitel je o 200 bodů širší**, takže co přeteče, dopadne do té volné
+plochy a v bitmapě to je vidět. Do bitmapy široké jako lišta by se přetečení **oříznulo** a měřidlo
+by vydalo tutéž hodnotu pro „funguje“ i „nefunguje“ (#478).
+
+**Bitmapa je v pixelech, ne v bodech** — na Retině dvojnásobek. První verze toho měření tvrdila
+přetečení o 571 bodů nad lištou, která se vejde; poměr se proto přepočítává změřenou šířkou
+hostitele.
+
+**Ověřeno vložením regrese.** S prázdným `Policy.diffToolbarLadder` (tedy bez ustupování) spadne
+**14 tvrzení ve dvou sadách**, mezi nimi ta o kresbě: inkoust sahá 91 bodů za hranu lišty v 572 a
+6 bodů v 700. Zbytek — ubírání z nejširšího prvku — přetečení sice zmenší, ale neodstraní, takže
+měřidlo rozdíl **naměří**.
+
+#### Co to stojí navíc (#275)
+
+Vlastní `Layout` se každého prvku ptá **dvakrát** (celý a sražený), kdežto `HStack` se ptal jednou
+— kdyby se tím přerovnání prodražilo, bylo by to zlevnění, které práci jen přesune jinam. Změřeno
+střídavě A/B/A/B (#274), 400 přerovnání mezi 572 a 900 body:
+
+| rozvržení | 400 přerovnání |
+|---|---|
+| `DiffToolbarLayout` | **1,449 s** |
+| `HStack` se `Spacer`em (podoba do #593) | 1,567 s |
+
+Tedy ~3,6 ms na jedno přerovnání u obojího a **vlastní `Layout` není dražší** — druhá otázka se
+utopí v práci, kterou si SwiftUI a AppKit udělají tak jako tak. Sonda to umí přeměřit
+(*Změř, co stojí přerovnání lišty proti HStacku*); referenční `HStack` je v ní **jen k měření**,
+aplikace ho takhle nekreslí.
+
+#### Kolik místa stojí `Popsat změny` (#524)
+
+Dělba je ta obvyklá:
 **testy měří, oč si lišta říká, sonda ukazuje, co z toho zbude.** `HStack` přetečení nehlásí, jen
 ho nakreslí, takže se na ně jinak než kresbou přijít nedá.
 
@@ -12311,11 +12389,13 @@ dneska, i bez popisu změn** (819 proti 572). Je to změřená vlastnost z #219 
 lišta nevešla“*), ne něco, co přineslo #524 — a sada ji proto **tvrdí testem**, aby se příště
 nečetla jako regrese téhle akce.
 
-Popisek stojí **104 b**, samotná ikona **13 b**. Proto je `Popsat změny` jediný prvek lišty **bez
-`fixedSize()` a se zápornou prioritou rozvržení**: v úzkém okně ustoupí on, ne `Sbalit vše`.
-Změřeno kresbou — bez té priority zmizelo `Sbalit vše` úplně, s ní vypadá lišta na 572 b stejně
+Popisek stojí **95 b**, samotná ikona **13 b**. Do #593 byl proto `Popsat změny` jediný prvek lišty
+**bez `fixedSize()` a se zápornou prioritou rozvržení**: v úzkém okně ustoupil on, ne `Sbalit vše`.
+Změřeno kresbou — bez té priority zmizelo `Sbalit vše` úplně, s ní vypadala lišta na 572 b stejně
 jako bez akce, jen o ikonu posunutá. **`ViewThatFits`, ne useknutý text**: `Popsat…` nese půl slova
-a vypadá jako porucha.
+a vypadá jako porucha. **Od #593 to zařizuje pořadí ustupování**, ne priorita rozvržení jednoho
+prvku (viz výš) — `Popsat změny` v tom pořadí stojí **první**, takže se chování nemění, jen
+přestává být výjimkou.
 
 Sonda kreslí i **tři stavy ovladače vedle sebe** (`stav-klid`, `stav-beh`, `stav-selhani`). Je to
 ta část opravy, kterou nad daty tvrdit nejde: že se po kliknutí na tomtéž místě **něco změní**,
@@ -12449,3 +12529,110 @@ by bylo falešně červené z důvodu, který s #523 nesouvisí — což se při
   `Text` + `Text`.
 - **Že kliknutí na `Schválit` doopravdy otevře sheet** — sheet je `@State` ve `ContentView`u
   a store o něm neví. Store tvrdí jen to, že `submission(for:)` je nenulové.
+
+## Tělo návrhu review (#521) — čtyři sady a to nejcennější je zase negativní
+
+Kód: `Tests/Review/ReviewBodyCommandTests.swift` (argumenty, prompt, parser),
+`Tests/Policy/ReviewBodyInputTests.swift` (zadání a sběr hlasu),
+`Tests/Policy/ReviewBodyLaneTests.swift` (věta v pruhu, dráha v `Průběhu`),
+`Tests/Store/AppStoreReviewBodyTests.swift` (celá cesta) a osmá položka
+v `Tests/Review/SessionToolSetsTests.swift`.
+
+### Co se tvrdí a proč zrovna to
+
+**Nejcennější tvrzení téhle oblasti je negativní a stojí dvakrát**, v `Policy` i ve storu: **ve
+vstupu pro osmou session není cesta na disk.** Typ `ReviewBodyRequest` cestu nemá kam napsat, ale
+materiál se skládá z nálezů — a ty cestu k **souboru** nesou, takže je to místo, kde by cesta do
+cache mohla prosáknout. Tvrdí se proto, že v zadání není ani kořen cache, ani `/Users/`, ani
+`worktree`, a **zároveň** že cesta *uvnitř* repozitáře (`src/Vault/SecretClient.php:81`) v něm být
+**má** — bez ní by odstavec nemohl jmenovat soubor, takže samotné „neobsahuje nic“ by prošlo i nad
+zadáním, ze kterého vypadly nálezy.
+
+Ve storu k tomu přibývají čtyři tvrzení o tom, co se **nestalo**:
+
+- **`gh` se ani nespustilo**, a to při **povoleném** odesílání. S vypnutým by to netvrdilo nic,
+  protože cestu ven zavírá `Policy.sendBlock` dřív — je to tentýž počítací `gh` skript jako u #520.
+- **S vypnutou branou `autoDraft` se session nepustila ani jednou** (`FakeReviewBodyWriter.runs`).
+- **Bez převzatého nálezu se tělo nepíše**: návrh ze samých sporných nálezů draft nezakládá (#520)
+  a tělo to nemá změnit.
+- **Podruhé nad týmž razítkem se session nepustí.** Tvrdí se to **přímým druhým voláním**
+  `startReviewBody`, ne druhým otevřením PR — to by se zastavilo dřív, o bránu „draft už existuje“,
+  a test by procházel, i kdyby tahle brána nebyla. Je to případ pravidla z #478: měřidlo, které by
+  vydalo tutéž hodnotu pro „funguje“ i „nefunguje“, netvrdí nic.
+
+### Prompt se testuje, protože u session bez nástrojů je jediná mez
+
+`ReviewBodyCommandTests` tvrdí, že v promptu stojí všechna čtyři zákazová pravidla (sporné,
+domýšlení, verdikt, vzor stylu) i číselný strop. U session, která nemá jediný nástroj, je prompt
+**jediná** věc, která tvar odpovědi ovlivňuje — smazat z něj větu o sporných nálezech je změna
+chování, která by v žádném jiném testu nespadla.
+
+K tomu dvě tvrzení o argumentech: **`--model` v nich není** (zapsané rozhodnutí, opačné než
+u briefu — bez tohohle by se `--model haiku` dalo přidat „pro konzistenci“ a nikdo by si nevšiml,
+že se tím zlevnilo zrovna to napodobování hlasu) a **jde se streamem**, protože cena je v `result`
+eventu.
+
+### Parser: co se snese a co se schválně nedělá
+
+Snese se ```-blok kolem odpovědi (model ho přidává, i když se zakáže) a okrajové prázdné řádky.
+**Nesnese se** zkrácení: dlouhá odpověď projde celá, protože uříznutý konec by u textu odesílaného
+na GitHub uměl obrátit, co odstavec tvrdí. Naopak **vnitřní prázdný řádek zůstává** — na rozdíl od
+briefu, který si řádky filtruje ze seznamu vět; tady je výsledkem odstavec a odsazení je součást
+textu, který odejde.
+
+### Hlas: filtr se testuje jedním případem na každou ze tří podmínek
+
+Jedna konverzace se čtyřmi review vydá **jediný** vzorek: cizí vypadne, rozdělané (`pending`)
+vypadne, `LGTM` vypadne na krátkost. Kdyby prosáklo cizí review, psal by návrh mým jménem cizím
+hlasem — a nespadlo by u toho nic.
+
+Slití se testuje na tom, co se dá pokazit potichu: **strop deseti**, **přepis podle `id`** (tělo
+review se dá na GitHubu editovat, takže vzorek z doby před opravou je text, který už nikde nestojí)
+a **stabilní pořadí při shodném `submittedAt`** — bez něj by se desítka po každém načtení
+přeskládala a zadání by se měnilo bez důvodu.
+
+### Tři stavy pruhu, a ten prostřední se rozbije potichu
+
+`ReviewBodyLaneTests` jde vyčerpávajícím výčtem: napsané tělo, **neutrální tělo** (nula vzorků),
+spadlá session a můj vlastní text. Ten druhý je ten, který se rozbije potichu — nic by nespadlo,
+jen by okno tvrdilo „podle tvých posledních review (0)“, tedy pravý opak toho, co se stalo.
+
+U `handWritten` se tvrdí, že dráha zůstává **doběhlá**, ne červená: session doběhla a peníze stála,
+nestal se jedině zápis. Červená dráha by posílala hledat poruchu, která není.
+
+### Cena a razítko na disku
+
+Že se cena nese **i u nepovedeného běhu**, se tvrdí proti **skutečnému** `SpendLedger` nad dočasnou
+složkou (bez něj by se `recordSpend` vrátil rovnou a tvrzení by bylo prázdné). A že selhání
+**přežije restart**, se tvrdí druhým storem nad tímtéž `ReviewStore` — jinak by se session pustila
+po každém dalším otevření PR.
+
+### Že je to vidět, se tvrdí z pixelů (#521)
+
+`Tests/Views/ReviewBodyRenderTests.swift` — pátá sada, a zavírá mezeru, kterou `Policy` testy
+nezavřou: ty by prošly i nad pruhem, který druhou řádku vůbec nenapojil. Rozdíl bitmap
+(`NSHostingView` v okně mimo obrazovku, `cacheDisplay`, okno **bez animace** podle #462), ne čtení
+textu — accessibility tree se v hostovaném okně nenaplní.
+
+Tvrdí se čtyři věci: **tři stavy pruhu se kreslí různě** (kdyby se `bodyNote` nenapojil, byly by
+bitmapy shodné), **bez těla je pruh doslova týž jako před #521** (žádné prázdné místo pod první
+větou — srovnává se proti `AutoDraftNoteView` postavenému bez `bodyNote`), **druhá řádka pruh
+zvýší** (`if let` může projít, aniž by se řádka do pruhu vešla) a **doběhlá dráha se od nepoužité
+liší**, i když jsou obě `finished`, tedy stejně barevné.
+
+Snímky se dají pustit na disk `TEST_RUNNER_PRISM_RENDER_DIR=<složka>`, touž cestou jako sondy —
+a **prefix `TEST_RUNNER_` je podmínka**: bez něj `xcodebuild` prostředí shellu do testovacího hosta
+nepropustí a render tiše nenapíše nic (žádná řádka `RENDER`, testy zelené).
+
+### Falešná červená pod souběžným buildem (#521)
+
+Plný běh nad touhle větví vydal 224, při druhém průchodu 107 issues — všechno **`Nedočkalo se …
+strop 120 s`** v suitách `AppStore*` a `HealthMonitor`, tedy vzor z [*Čekání na jev*](#čekání-na-jev-296).
+Doklad je izolovaný běh **týchž** suit: `test-without-building -only-testing:…` nad
+`AppStoreSpendTests`, `AppStoreIntentTests`, `AppStoreAnnotationsTests`, `AppStoreRoutingTests`,
+`AppStoreDismissalTests`, `AppStoreProgressTests` prošel **61 testů za 2,8 s**, a druhá skupina
+(`AppStoreDismissalTests`, `AppStoreRerunTests`, `AppStoreRoutingTests`,
+`AppStoreNotificationGateTests`, `AppStoreReviewNotificationTests`, `AppStoreTimeoutTests`,
+`HealthMonitorTests`, `AppStoreReviewBodyTests`) **69 testů za 0,3 s**. Ve stejné chvíli běžely na
+stroji dva `swift-frontend` z jiného slotu a `load average` byl **11**. Čtyři sady #521 prošly
+i v tom plném běhu.

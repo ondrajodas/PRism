@@ -9294,6 +9294,67 @@ storu** (rozbalí soubor).
 `Co je sporné ↓` se v harnessu ověřit nedá** — obojí stojí na geometrii diffu, takže to zkouší
 člověk na běžící aplikaci.
 
+## #521 — tělo návrhu review v mém hlasu: osmá session (M17, Z1, zákres 62)
+
+Ke složenému návrhu (#520) napíše **tělo** review osmá session — jeden odstavec, mým hlasem.
+Dostane hotové nálezy z návrhu (převzaté i sporné) a **posledních deset mých odeslaných těl
+review** jako vzor stylu; kód nečte. Pruh nad panelem k tomu dostal druhou řádku (`Tělo je podle
+tvých posledních review (7).`) a v tabu `Průběh` přibyla dráha `tělo review` s cenou. Zákres nese
+sekce 62, kterou přenesla #520 — do mockupu se nekreslilo.
+
+**Tvrdá podmínka č. 2 se rozšířila o osmou session a třetí prázdnou sadu.** `--allowedTools` je
+prázdný (konstanta, ne literál u volajícího) a `--disallowedTools` je tatáž konstanta jako
+u ostatních sedmi. `SessionToolSetsTests` tvrdí obojí **literálem i přes argumenty**, a nová
+položka je i ve výčtu „platí pro všechny“. Sady ostatních session se nezměnily ani o položku.
+
+**Je to text v composeru, nic víc.** Odstavec končí v `ReviewDraft.body` a odejde jedině přes
+potvrzení s celým payloadem; na odesílání se nemění ani písmeno. Staví se **nad** to, co v těle
+review už leží (odkazy na kód u nálezů mimo hunky), takže nic nepřepíše.
+
+**Razítko je v razítku návrhu, ne vedle něj** (`StoredAutoDraft.body`) — tedy u dvojice
+`(PR, hlava)`. Tvrdá podmínka č. 5 se tím drží: nová hlava zhasne pruh i s větou o hlasu naráz
+s pilulkou. Druhé razítko vedle by bylo druhé místo, kde se dá na hlavu zapomenout, a přesně to už
+jednou #520 stálo opravu. Ukládá se **kolik vzorků, proč to nedopadlo, cena a kdy** — ne text:
+ten leží v composeru, kde ho jdu přepsat.
+
+**Rozhodnutí, která zadání nechalo otevřená:**
+
+- **Vlastní bránu to nemá**, jede na `autoDraft` z #520 (výchozí vypnuto). Tělo je část návrhu, ne
+  samostatná funkce — druhá volba by znamenala stav „návrh ano, tělo ne“, o kterém by v okně nebylo
+  poznat, že je úmyslný.
+- **Model se nevynucuje, a je to opačné rozhodnutí než u briefu** (#516). Tahle session se pouští
+  jedině za doběhlým review, tedy za během, který právě stál dolary — a napodobit hlas je to
+  jediné, co má udělat; u briefu drželo strukturu za haiku návěští `ADDED`/`BURNING`/`NEXT`, tady
+  žádná není.
+- **Verdikt se do zadání vůbec nedává.** Prompt zakazuje verdikt psát, takže přiložit ho
+  k materiálu by znamenalo dát session údaj, který se v odpovědi nesmí použít.
+- **Hlas se sbírá čtením konverzací, ne evidencí odeslaných review.** Co leží na GitHubu, je to, co
+  jsem doopravdy odeslal — včetně review odeslaných odjinud a včetně pozdějších editací. Leží to
+  v `review-voice.json` v kořeni cache, nejnovějších deset, deduplikované podle `id` review.
+- **Tři stavy pruhu, ne dva.** Napsané tělo, **neutrální** (nový uživatel bez uložených review)
+  a **spadlá session** — u té zůstává composer prázdný a pruh to řekne. Přibyl k tomu čtvrtý,
+  který zadání nepředvídalo: **`Tělo si píšeš sám`**, když do composeru začnu psát dřív, než
+  odstavec dorazí. Není to selhání session (doběhla a peníze stála), takže dráha zůstává doběhlá,
+  ne červená.
+- **Bez převzatého nálezu se tělo nepíše.** Návrh ze samých sporných nálezů draft nezakládá (#520)
+  a tělo by v něm bylo jediným obsahem — v řádku fronty by přibylo „je co poslat“ nad návrhem,
+  který schválně nic nepřevzal.
+- **Dráha v `Průběhu` má dvě fáze, ne tři.** Session bez nástrojů nemá jak projít kód, takže
+  `prochází kód` by byl krok, který se nemá jak stát. `sessionID` ani `worktree` se nedrží: bez
+  pracovního stromu by `Surová session` slibovala přepis, ke kterému se nedá dojít.
+
+Přibylo **41 testů** ve čtyřech nových sadách plus osmá položka v `SessionToolSetsTests`, a to
+nejcennější je zase negativní a stojí dvakrát (v `Policy` i ve storu): **ve vstupu pro session není
+cesta na disk**. Ve storu k tomu: `gh` se ani nespustilo (při **povoleném** odesílání), s vypnutou
+branou se session nepustila ani jednou, bez převzatého nálezu se nepsalo nic a podruhé nad týmž
+razítkem se nespustí — to poslední se tvrdí **přímým druhým voláním**, protože druhé otevření PR by
+se zastavilo o bránu z #520 a test by procházel i bez téhle brány.
+
+**Neověřená mezera: PR neprošel Copilotem** (výpadek 18. 9., na pokyn uživatele se nepouštěl).
+A **plný běh testů byl pod souběžným buildem jiného slotu falešně červený** (224, resp. 107 issues,
+všechno `Nedočkalo se … strop 120 s` v `AppStore*` a `HealthMonitor`); doklad je izolovaný běh
+týchž suit — 61 testů za 2,8 s a 69 testů za 0,3 s. Čtyři sady #521 prošly i v tom plném běhu.
+
 ## #524 — Anotace hunků: sedmá session, která popisuje diff (M17, zákres 59)
 
 Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov — `změna
@@ -9430,3 +9491,41 @@ pole neplatil; čísla jsou v [`docs/claude-cli.md`](claude-cli.md#samostatná-v
 vlastní revize diffu proběhla a je popsaná v PR. **Druhá: tentýž běh s češtinou.** Změřený je
 mechanismus, ne konkrétní jazyk — běh, který ověří, že po přepnutí na natvrdo českou větu vyjdou
 věty česky i s `Jazyk nálezů` na angličtině, stojí dalších ~0,06 $ a zbývá na proklikání.
+
+## #593 — Lišta nad diffem ustupuje podle pořadí, ne podle náhody (Průběžné, bez zákresu)
+
+Vyšlo to z měření u #524: **lišta v plné výbavě si v podlahovém okně (700 b → štěrbina 572 b)
+říká o 923 bodů a přetéká už bez nové akce.** Do #593 se v tísni srazil **jediný prvek** —
+`Popsat změny`, a to jen proto, že jako jediný neměl `fixedSize()`. O pořadí ustupování tedy
+rozhodovalo, v jakém pořadí se prvky do lišty přidávaly, a samotné to jedno ustoupení navíc
+nestačilo: chybělo 351 bodů, `Popsat změny` má odkud dát 82.
+
+**Hotovo:** lišta je vlastní `Layout` (`DiffToolbarLayout`), který prvky **změří** a šířku jim
+**předá** (#220, #236). Rozhodnutí je výčet v `Policy`: sražená podoba (`full` / `short` / `icon`),
+strana a **pořadí ustupování** — `annotate`, `search`, `fold`, `width`, `missingThreads`,
+`unreadable`, `layout`. Vede ho jedna věta: *akce ustupují dřív než informace a věta dřív než
+číslo.* **Procházení nálezů neustupuje vůbec** a **vlevo se neusekává nic**.
+
+**Na obrazovce:** v podlahovém okně zbudou z `Popsat změny`, `Hledat` a `Sbalit vše` ikony,
+z `45 znaků na stranu` je `45 znaků` a z přepínače pohledu jsou ikony bez popisků — a zbyde 28
+bodů volných. V 700 b už přepínač popisky udrží, v 900 ustoupí jen popis změn, ve 1 400 nic.
+Co z lišty ubude, drží **nápověda**; u přepínače se proto přesunula k jednotlivým segmentům
+(`DiffLayout.help`).
+
+**Mockup se nekreslil a přidělená sekce `s63` zůstala volná** — z měření vyšlo, že pořadí
+ustupování stačí a žádný prvek se z lišty přesouvat nemusí.
+
+**Změnilo se jedno rozhodnutí proti zadání.** Varování mají **tři** podoby, ne dvě: celou větu,
+číslo a samotný trojúhelník. Ta třetí je tam kvůli jedinému stavu, ve kterém ustoupení nestačí
+(obě vzácná varování naráz) — bez ní by ze `3 řádky` zbylo `3…`, tedy půl slova, které vypadá
+jako porucha.
+
+Přibylo **28 testů ve dvou sadách** (`DiffToolbarLadderTests` nad `Policy`, `DiffToolbarRoomTests`
+nad kresbou v pásmu šířek) a sonda umí vyfotit lištu na čtyřech šířkách. **Že se nic nekreslí za
+hranou, tvrdí bitmapa** — lišta se přibije na šířku štěrbiny a hostitel je o 200 bodů širší, takže
+přetečení se neoříznulo. Regrese ověřena vložením regrese: s prázdným pořadím ustupování spadne 14
+tvrzení a inkoust sahá 91 bodů za hranu. Změřil se i **druhý konec** (#275): 400 přerovnání stojí
+1,449 s s vlastním `Layoutem` proti 1,567 s s `HStackem`, tedy dražší to není.
+
+**Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
+vlastní revize diffu proběhla a je popsaná v PR.

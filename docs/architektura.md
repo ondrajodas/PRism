@@ -4398,13 +4398,64 @@ znovu — ne prázdno“*). Konkrétně:
 - **Oba tiché `guard`y hlásí** (`AppStore.unwiredAnnotationFailure`, jedna věta pro obě místa).
   Tichý zůstává **jediný** — `isTerminating`, a smí být tichý proto, že okno mizí.
 
-**Do lišty se to vejde, ale ne zadarmo, a to se změřilo** ([čísla](testovani.md#kolik-místa-v-liště-stojí-popsat-změny-524)).
+**Do lišty se to vejde, ale ne zadarmo, a to se změřilo** ([čísla](testovani.md#kolik-si-který-prvek-lišty-bere-524-593)).
 Lišta v plné výbavě si v podlahovém okně (700 b → štěrbina **572 b**) říká o **819 bodů**, tedy
 **přetéká už dneska, i bez téhle akce** — je to známá vlastnost z #219, ne něco, co přineslo #524.
-Celý popisek stojí dalších **104 b**. Proto je `Popsat změny` **jediný prvek v liště bez
-`fixedSize()` a se zápornou prioritou rozvržení**: když se místa nedostává, `ViewThatFits` ho
-srazí na **samotnou ikonu** (13 b) a to, co v liště bylo dřív, zůstane, kde bylo. Useknutý
-`Popsat…` by byl horší než ikona — nese půl slova a vypadá jako porucha.
+Celý popisek stojí dalších **95 b**. `Popsat změny` bylo do #593 **jediný prvek v liště bez
+`fixedSize()` a se zápornou prioritou rozvržení**, takže se srazilo na **samotnou ikonu** (13 b)
+a to, co v liště bylo dřív, zůstalo, kde bylo. Useknutý `Popsat…` by byl horší než ikona — nese
+půl slova a vypadá jako porucha. **Od #593 to není vlastnost tohohle jednoho tlačítka, ale pořadí,
+ve kterém ustupuje celá lišta** (viz *Lišta nad diffem ustupuje podle pořadí* níž).
+
+### Lišta nad diffem ustupuje podle pořadí (#593)
+
+Ta výše změřená věta — *lišta v plné výbavě si v podlahovém okně říká o 923 bodů do štěrbiny 572*
+— byla do #593 vlastnost, se kterou se nedalo nic dělat: **srazit se umělo jedině `Popsat změny`**,
+protože to byl jediný prvek bez `fixedSize()`. O tom, co v tísni ustoupí, tedy rozhodovalo, v jakém
+pořadí se prvky do lišty přidávaly. #593 z toho dělá **výčet**, a rozdělení zodpovědností je
+obvyklé: `Policy` rozhoduje, kresba kreslí obě podoby, `Layout` měří a **předává** šířku.
+
+| kde | co drží |
+|---|---|
+| `Policy.DiffToolbarItem` | osm prvků, o kterých se rozhoduje |
+| `Policy.diffToolbarFloor(_:)` | **na co se prvek srazí** — `full`, `short`, `icon` |
+| `Policy.diffToolbarSide(_:)` | vlevo (pohled, procházení), nebo vpravo |
+| `Policy.diffToolbarLadder` | **pořadí ustupování**, sedm prvků; `navigation` v něm není |
+| `Policy.diffToolbarRoom(available:measures:)` | šířka pro každý prvek, kdo ustoupil, kdo se usekl |
+| `DiffToolbarLayout` | změří podviews (`.unspecified` a `full - 1`) a šířku **předá** |
+| `DiffToolbar` | kreslí **obě podoby** každého prvku (`ViewThatFits`) |
+
+**Pořadí vede jedna věta: akce ustupují dřív než informace a věta dřív než číslo.** Tedy
+`annotate` (nejmladší přírůstek, stav nese i ikona) → `search` (má `⌘F`, lupa se nevysvětluje) →
+`fold` (pohodlí, stav unese šipka) → `width` (číslo zůstane, ubude `na stranu`) →
+`missingThreads`, `unreadable` (nejdřív ta delší věta) → **`layout` jako poslední**, protože
+popisky segmentů jsou to, co #219 z lišty vydobylo. **`navigation` v pořadí není** — je to jediná
+věc v liště, která se používá při každém review, a srazit se dá jedině tak, že přestane dělat to,
+proč tam je.
+
+**Čtyři věci, na kterých to stojí, a každá je změřitelná:**
+
+- **Rozměr se měří na tom, na čem se kreslí** (#236). `Layout` se každého podview zeptá dvakrát:
+  `.unspecified` dá celou podobu, **`full - 1`** tu sraženou. Ta druhá otázka je past: proposal
+  **0** by sraženou podobu vybral taky, ale vrátil by její **minimum** (u zkráceného textu šířku
+  výpustky), kdežto `full - 1` je pro ni štědrý, takže odpoví svým ideálem.
+- **`Menu` svému popisku šířku nepředává.** `ViewThatFits` **uvnitř** popisku nabídky `Sbalit vše`
+  ustoupil o jediný bod (změřeno `full 51, floor 50`), takže se `ViewThatFits` obaluje **celá
+  nabídka**: dvě nabídky jako dvě podoby, vzniká z nich vždycky jen jedna. Hlídá to test
+  (*Co má podle Policy ustoupit, to je i v kresbě užší*), protože vyhlásit ustoupení a nenakreslit
+  ho je právě ta vada, kterou #593 opravuje.
+- **Nic se nekreslí za hranou.** Když se lišta nevejde ani po celém ustoupení — a to je **jediný
+  stav: obě vzácná varování naráz** —, ubírá `Policy` z **nejširšího prvku vpravo** a nikdy pod
+  `Policy.diffToolbarItemFloor` (22 b). Vlevo se neusekává nic. Varování mají proto **tři** podoby,
+  ne dvě: celou větu, číslo a **samotný trojúhelník**; bez té třetí by ze `3 řádky` zbylo `3…`,
+  tedy půl slova.
+- **Co ubude z lišty, je v nápovědě.** Věty varování skládá `Policy.unreadableLinesWarning(_:)`,
+  `Policy.missingThreadsWarning(_:)` a `Policy.diffWidthWarning(characters:contentWidth:)` — vždy
+  celá věta, sražená podoba a `help`. Nápověda přepínače pohledu se přesunula **k segmentům**
+  (`DiffLayout.help`): nad oběma by ve sražené podobě neřekla, který je který.
+
+Kolik si který prvek bere, jak vypadá lišta na pásmu šířek a co stojí přerovnání proti `HStacku`,
+je v [`docs/testovani.md`](testovani.md#kolik-si-který-prvek-lišty-bere-524-593).
 
 ### Anotace v diffu — kresba (#525)
 
@@ -15806,3 +15857,149 @@ komentáře **znovu**. Po odeslaném review to znamenalo draft, který se vrát�
 Mezi rozhodnutím a složením uběhne čas — klidně hodina, než PR otevřu —, a dá se v něm nález
 odmítnout; bez toho srovnání by pruh tvrdil `z 5 nálezů 3 převzaty` nad panelem se dvěma
 komentáři. `at` se u toho **nemění**: razítko nese okamžik, kdy návrh vznikl.
+
+## Tělo návrhu review — osmá session (#521)
+
+Ke složenému návrhu (#520) napíše **tělo** review osmá session — jeden odstavec, mým hlasem. Pruh
+nad panelem k tomu dostane druhou řádku (`Tělo je podle tvých posledních review (7).`) a v tabu
+`Průběh` přibude dráha `tělo review` s cenou.
+
+Kód: `App/Review/ReviewBodyCommand.swift` (argumenty, prompt, parser),
+`App/Review/ReviewBodyWriting.swift` (protokol), `App/Review/ClaudeReviewBodyWriter.swift` (běh),
+`App/Policy/ReviewBodyInput.swift` (zadání), `App/Policy/ReviewVoice.swift` (sběr hlasu),
+`App/Policy/ReviewBodyLane.swift` (věta v pruhu a dráha), `App/Models/AutoDraftBody.swift`,
+`App/Models/ReviewVoiceSample.swift`, `App/Store/ReviewVoiceLedger.swift`,
+`App/Store/AppStore+ReviewBody.swift`. Zákres nese sekce **62** návrhu (přenesla ji #520).
+
+### Prázdná sada je tady nejsilnější mez, jakou aplikace má
+
+Session nemá **jediný nástroj** (`ReviewBodyCommand.allowedTools == ""`), jako překlad nálezů
+a brief (#516) — a `--disallowedTools` je tatáž konstanta jako u ostatních sedmi. Nad prázdným
+povolením nezavírá nic, co by nebylo zavřené, a **právě proto tam je**: tvrdá podmínka „na GitHub se
+nic neposílá“ nemá stát na tom, že je povolený seznam zrovna prázdný.
+
+Je to hranice, ne opatrnost, a u téhle session platí o stupeň důrazněji než u briefu: **tělo review
+odchází na GitHub pod mým jménem**. Session bez nástrojů se o repozitáři nemá jak dozvědět nic, takže
+v tom odstavci nemůže stát nic, co jí zadání neřeklo. Prompt k tomu zakazuje čtyři věci a každá
+zavírá jednu cestu, jak by text mohl tvrdit víc, než co je v panelu: **sporné se nesmí vydávat za
+vyřízené**, **žádné nové nálezy**, **žádný verdikt v textu** (zůstává návrhem, #114) a **vzorky jsou
+vzor stylu, ne obsahu**.
+
+### Verdikt se do zadání nedává, a je to rozhodnutí
+
+Prompt zakazuje verdikt psát, takže přiložit ho k materiálu by znamenalo dát session údaj, který
+se v odpovědi nesmí použít — tedy pozvat model k obejití pravidla. Tón plyne z nálezů samotných:
+blokující se v zadání pozná (`blokuje` slovem, ne číslem — poučení z #516, kde `blokuje 2` vydalo
+v briefu větu o dvou reviewerech).
+
+### Model se nevynucuje — opačné rozhodnutí než u briefu
+
+Brief má `--model haiku` a je to změřená výjimka (#516). Tady se model **nevybírá**, a stojí to na
+dvou věcech:
+
+1. **Pouští se jedině za doběhlým review**, tedy za během, který právě stál dolary — ne podle
+   kalendáře a bez kliknutí. Session, u které nepovšimnutá cena bolí nejvíc, je brief; tahle je
+   o řád vzácnější a účet už za sebou má.
+2. **Napodobit hlas je to jediné, co má udělat.** Brief přeformuluje hotový text a haiku na to
+   stačilo, protože návěští `ADDED`/`BURNING`/`NEXT` nesla kus významu za něj. Tady není žádná
+   struktura, která by za model udržela styl.
+
+`--strict-mcp-config` zůstává, protože je to zadarmo: bez něj `claude` nabootuje MCP servery
+z uživatelova prostředí, ze kterých session s prázdnou sadou nemůže použít ani jeden (~5 100 tokenů
+a ~8 s, změřeno u #516).
+
+### Hlas se sbírá čtením, ne evidencí odeslaných review
+
+Vzorky jsou **moje odeslaná těla review z načtených konverzací** (`Policy.reviewVoiceSamples`),
+ne záznam o tom, co odeslala tahle aplikace. Rozdíl je v tom, co je pravda: co leží na GitHubu, je
+to, co jsem doopravdy odeslal — včetně review odeslaných odjinud a včetně pozdějších editací.
+Sbírá to `AppStore.recordReviewVoice(from:)` z `loadConversation`, tedy z jediného místa, kam
+konverzace dorazí.
+
+Filtr stojí na třech věcech a každá je vlastní tvrzení: **je to moje** (`Conversation.isMine`, tedy
+přihlášený účet z odpovědi GitHubu, ne jméno v konfiguraci), **je to odeslané** (`submittedAt`;
+rozdělané `pending` review se ještě může celé změnit) a **má co ukázat**
+(`Policy.reviewVoiceMinimum`, 40 znaků). To poslední je potřeba, protože **schválení bez komentáře
+je čtvrtina vzorku** (`cli/cli#11451`): prázdná a jednoslovná těla by z desítky vytlačila ta, ze
+kterých se hlas dá přečíst — a `LGTM` se jako vzor nad třemi nálezy odeslat nedá.
+
+Stav ledgeru: `review-voice.json` v **kořeni cache**, mimo dosah eviction (jako brief a záznam
+dění), nejnovějších `Policy.reviewVoiceLimit` (deset). **Deduplikuje se podle `id` review, ne podle
+textu**, a novější zápis přebíjí starší, protože tělo review se dá na GitHubu editovat. Pořadí je
+od nejnovějšího a **je součástí odpovědi**: hlas se v čase mění, takže nejnovější vzorek je ten
+nejpravdivější. Při shodném `submittedAt` (dávka) rozhoduje `id`, aby se desítka po každém načtení
+nepřeskládala.
+
+**Klíčem není hlava ani pull request**, a je to jediné místo v téhle oblasti, kde tvrdá podmínka
+č. 5 neplatí — protože vzorek hlasu není nález ani tvrzení o kódu, je to moje próza.
+
+### Razítko je tam, kde razítko návrhu, ne vedle něj
+
+`AutoDraftBody` leží v `StoredAutoDraft.body`, tedy uvnitř razítka návrhu — u dvojice
+`(PR, headSha)`. Tvrdá podmínka č. 5 se tím **drží, ne obchází**: nová hlava znamená nový záznam,
+ve kterém razítko není, takže z okna zmizí pruh i s větou o hlasu naráz s pilulkou a značkami
+sporných. Druhé razítko vedle by bylo druhé místo, kde se dá na hlavu zapomenout — a přesně to už
+jednou #520 stálo opravu.
+
+**Neukládá se text**, jen `samples`, `failure`, `usage` a `finishedAt`. Odstavec leží
+v `ReviewDraft.body`, tedy tam, kde ho jdu přepsat; druhá kopie by se s composerem uměla rozejít.
+
+**Zapisuje se i selhání**, a to razítko je to, co drží **cenu**: dokud v něm nic není, pokládá se
+tělo za nenapsané a session by se po každém dalším otevření PR pustila znovu.
+
+### Tři stavy, ne dva — a `handWritten` není porucha
+
+`AutoDraftBody.Failure` má dva případy a `nil` je třetí stav:
+
+- **`nil`** — odstavec v composeru leží. Pruh řekne, z kolika mých review se bral hlas; **nula má
+  vlastní větu** (`Tělo je napsané neutrálně`), protože „podle tvých posledních review (0)“ by
+  tvrdilo pravý opak toho, co se stalo.
+- **`session(detail:)`** — session to nedopsala. **Composer zůstává prázdný a pruh to řekne.**
+  Půlka odstavce je u textu odesílaného na GitHub horší než věta o tom, že se to nepovedlo.
+- **`handWritten`** — než odstavec dorazil, začal jsem do composeru psát sám. **Není to selhání
+  session**: ta doběhla a peníze stála, nestal se jedině zápis — a ten se nestal schválně (*co jsem
+  začal psát já, aplikace nepřepíše ani o komentář*, tatáž věta, na které stojí brána `draftExists`
+  u #520). Dráha v `Průběhu` proto zůstává **doběhlá**, ne červená; jen `kind` nese `used: false`,
+  takže věta pod ní netvrdí, že je tělo podle mého hlasu.
+
+### Pět bran, a pátá drží vlastnost z #520
+
+`AppStore.startReviewBody(for:plan:)`: zapojená session, nezavírá se aplikace, neběží už jedna,
+razítko o těle ještě nemluví — a **draft se doopravdy složil**. Ta poslední existuje proto, že
+návrh ze samých sporných nálezů žádný draft nezakládá (#520): tělo by v něm bylo jediným obsahem,
+takže by v řádku fronty přibylo „je co poslat“ nad návrhem, který schválně nic nepřevzal. Nad
+prázdným panelem mluví pruh, a to stačí.
+
+Vlastní bránu v konfiguraci to **nemá**: jede na `autoDraft` (#520, výchozí vypnuto), protože tělo
+je část návrhu, ne samostatná funkce. Druhá volba by znamenala stav „návrh ano, tělo ne“, o kterém
+by v okně nebylo poznat, že je úmyslný.
+
+### Odstavec se staví nad to, co v těle leží
+
+`prependDraftBody` — nahoru, ne dolů, a **nepřepisuje se**. V těle už můžou být odkazy na kód
+(nálezy, které GitHub u řádku nepustí, tam skládá `appendDraftBodyItem`); odstavec je souhrn, takže
+patří před ně, a `setDraftBody` by je smazal. To jsou převzaté nálezy, ne ozdoba.
+
+### Dráha v `Průběhu` má dvě fáze, ne tři
+
+`Policy.reviewBodyLane` skládá dráhu mimo `Policy.lanes`, jako anotace (#524) a ze stejného důvodu:
+`lanes` vypisuje tytéž reviewery jako chipy v pruhu běhu, a osmá session mezi ně nepatří — nálezy
+nehlásí (`reportedFindings` u ní zůstává navěky `nil`).
+
+**Dvě fáze** (`session`, `píše tělo`) místo tří, a je to tvrzení, ne zkratka: session nemá jediný
+nástroj, takže fáze `prochází kód` by u ní byla krok, který se nemá jak stát.
+
+**`sessionID` ani `worktree` se nedrží.** Bez pracovního stromu nemá `Policy.rawSessionTarget` ani
+`Policy.terminalSession` z čeho cíl složit, takže by tlačítko `Surová session` slibovalo přepis, ke
+kterému se nedá dojít — a údaj, ze kterého v okně nic neplyne, je jen další pole, které se umí
+rozejít s pravdou.
+
+**Hlavu dráha nehlídá sama**, bere razítko přes `AppStore.autoDraftStamp(for:)`, tedy už po
+kontrole hlavy — druhá kontrola nad touž hodnotou by byla druhé místo, kde se dá zapomenout.
+
+### Cena
+
+Do `SpendLedger` jde **vždycky**, i když text nedorazil (`recordSpend` z `writeReviewBody`), jako
+u briefu: zabitá session peníze stála taky a útrata, která se ztratí právě u nepovedeného běhu, je
+o účtu lež. Vedle toho leží `usage` v razítku, aby dráha v `Průběhu` přežila restart — stejně jako
+u anotací.

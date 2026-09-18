@@ -110,6 +110,9 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         /// Třetí fáze anotační dráhy (#524). **Vlastní popisek, ne `hlásí nálezy`**: sedmá session
         /// nálezy nehlásí a nemá je čím nahlásit, takže by ten popisek tvrdil něco, co data neunesou.
         static let annotations = "píše anotace"
+        /// Druhá (a **poslední**) fáze dráhy těla review (#521). Vlastní popisek ze stejného důvodu
+        /// jako u anotací: osmá session nálezy nehlásí, píše odstavec.
+        static let body = "píše tělo"
     }
 
     /// Čí je ta dráha (#524).
@@ -126,6 +129,15 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         /// se to dá ukázat: výpis kroků anotační dráha nemá, takže `droppedEntries` (což jsou
         /// zahozené kroky osy, ne položky odpovědi) by o tom mlčelo.
         case annotations(hunks: Int?, files: Int?, dropped: Int)
+        /// Osmá session (#521). Nese **počet vzorků hlasu**, které šly do zadání — protože právě
+        /// v tom se dvě doběhlé dráhy liší: tělo podle pěti mých review a tělo napsané neutrálně
+        /// jsou dva různé výsledky a věta pod dráhou je má rozlišit. `reportedFindings` u ní
+        /// zůstává navěky `nil`: odstavec **není nález**.
+        ///
+        /// `used` říká, jestli ten odstavec v composeru **doopravdy leží**. Doběhlá session, jejíž
+        /// text se nepoužil (začal jsem psát sám), je pořád doběhlá — ale věta pod dráhou nesmí
+        /// tvrdit, že tělo je podle mého hlasu, když v composeru je moje vlastní věta.
+        case reviewBody(samples: Int, used: Bool)
     }
 
     let skill: String

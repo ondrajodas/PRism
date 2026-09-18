@@ -8330,7 +8330,45 @@ proti 572 bodům), což je vlastnost z #219, ne důsledek téhle změny
 akce **jediný prvek lišty, který v tísni ustoupí** — sráží se na samotnou ikonu, kdežto to, co
 v liště bylo dřív, zůstává. **Zamítnuto** u toho bylo useknutí popisku (`Popsat…` nese půl slova
 a vypadá jako porucha) i práh na šířku okna (byl by to další číslo, které se musí ladit, kdežto
-`ViewThatFits` se ptá na to, co doopravdy zbylo).
+`ViewThatFits` se ptá na to, co doopravdy zbylo). **To „jediný prvek“ vydrželo do #593** — viz
+záznam rozhodnutí níž; chování `Popsat změny` se nezměnilo, jen přestalo být výjimkou.
+
+## Záznam rozhodnutí — o ustupování v liště diffu rozhoduje pořadí, ne `layoutPriority` (#593)
+
+**Rozhodnutí.** Lišta nad diffem není `HStack`, ale **vlastní `Layout`** (`DiffToolbarLayout`).
+Každý prvek má v `Policy` **sraženou podobu** (`full` / `short` / `icon`), **stranu** a **místo
+v pořadí ustupování** (`Policy.diffToolbarLadder`). `Layout` prvky **změří** a šířku jim **předá**;
+`Policy.diffToolbarRoom` z měření vybírá. Pořadí je: `annotate`, `search`, `fold`, `width`,
+`missingThreads`, `unreadable`, `layout` — a **`navigation` v něm není**.
+
+**Proč.** Do #593 ustupoval jediný prvek, a to tím, že jako jediný zapomněl `fixedSize()`. To není
+rozhodnutí, to je shoda okolností: kdyby kdokoli přidal do lišty další prvek bez `fixedSize()`,
+srazily by se **oba** a o tom, který dřív, by rozhodovalo, v jakém pořadí se do lišty dostaly.
+Změřeno navíc, že samotné to jedno ustoupení **nestačí**: v podlahovém okně chybí 351 bodů
+a `Popsat změny` má odkud dát 82 ([čísla](../../testovani.md#kolik-si-který-prvek-lišty-bere-524-593)).
+
+**Věta, která pořadí drží:** *akce ustupují dřív než informace a věta dřív než číslo.* Proto jsou
+v čele tři akce (dvě z nich mají zkratku nebo obecně známý symbol), pak se zkracují varování — vždy
+tak, aby **zůstalo číslo** a věta se dala přečíst z nápovědy — a **přepínač pohledu je poslední**,
+protože jeho popisky jsou to, co #219 z lišty vydobylo. `navigation` neustupuje vůbec: je to jediná
+věc v liště, která se používá při každém review.
+
+**Co se zamítlo.**
+
+- **Nejlepší vejití** (srazit ten prvek, který deficit pokryje nejúsporněji) místo pořadí. Vyšlo by
+  to v podlahovém okně o 29 bodů lépe, ale lišta by se skládala jinak při každé šířce a nedalo by
+  se říct, **co ustoupí dřív** — a přesně tahle nepředvídatelnost je vada, kterou #593 opravuje.
+- **Práh na šířku okna** (pod X bodů kreslit ikony). Další číslo k ladění a lhalo by, jak se lišta
+  plní: prvky se v ní objevují a mizí podle stavu PR, takže táž šířka znamená různou tísni.
+- **Sražení `navigation`** (počitadlo jako `2/7`). Uspoří ~55 bodů, což deficit nepokryje, takže by
+  se přepínač pohledu srazil **stejně** — jen by k tomu navíc zmizel údaj, na který se při
+  procházení kouká.
+- **Přesun prvku z lišty jinam** (mockup, sekce `s63`). Z měření nevyšlo: **pořadí ustupování
+  stačí** a v žádné šířce od 572 výš se nic neusekává, dokud nejsou obě vzácná varování naráz.
+  Zákres se proto nekreslil a číslo sekce zůstalo volné.
+- **`.clipped()` na liště** jako pojistka proti kresbě za hranou. Ořez by půlku slova nebo ikony
+  utnul potichu; místo toho se z nejširšího prvku **ubírá** (nikdy pod 22 bodů) a varování mají
+  třetí podobu, samotný trojúhelník.
 
 ## Záznam rozhodnutí — věta *proč* je vlastní řádek diffu, a kde není souřadnice, není ani věta (#525)
 
@@ -8460,3 +8498,72 @@ věta zmizí až s další hlavou — což je u anotací normální konec život
 **Věta jmenuje pole z výčtu.** Rozhoduje příznak `Field.isProse`, ne seznam jmen vedle schématu:
 pole, které jako věta přibude, dostane jazyk samo, a `file`, `hunk` ani `kind` ho nedostanou —
 druh změny je anglický slug z uzavřeného výčtu, podle kterého aplikace řadí a barví.
+
+### Záznam rozhodnutí — tělo návrhu review nemá vlastní volbu (#521)
+
+Nabízelo se dát osmé session vlastní bránu v konfiguraci, jako má brief (`GlobalConfig.brief`)
+i agent (`autoAgent`). **Zamítnuto**: tělo je **část návrhu review**, ne samostatná funkce. Vlastní
+volba by vyrobila stav *návrh ano, tělo ne*, o kterém by v okně nebylo poznat, že je úmyslný — pruh
+nad složeným návrhem by mlčel o tom, proč je composer prázdný, a od spadlé session by to nešlo
+rozeznat. Brána je proto `autoDraft` (#520), a ta je ve výchozím stavu vypnutá, takže vlastnost
+*samo se nic nepředvyplní* platí dál beze změny.
+
+Cena se tím neschovává: je na dráze `tělo review` v tabu `Průběh` a počítá se do `Dneska stálo`,
+i u běhu, který text nevrátil.
+
+### Záznam rozhodnutí — model se u těla review nevynucuje, ačkoli u briefu ano (#521)
+
+`BriefCommand.model` je `haiku` a je to změřená výjimka z úmluvy *model se nevolí* (#516). U osmé
+session se ta výjimka **nepřebírá**, a nejsou to dvě různá řešení téhož problému — jsou to dva různé
+problémy:
+
+1. **Brief se pouští podle kalendáře a bez kliknutí** (`firstTickOfDay`), takže je to ta session,
+   u které nepovšimnutá cena bolí nejvíc. Tělo review se pouští **jedině za doběhlým review**, tedy
+   za během, který právě stál dolary; je o řád vzácnější a účet už za sebou má.
+2. **Brief přeformuluje hotový text**, a strukturu za haiku udržela návěští `ADDED`/`BURNING`/`NEXT`
+   — kus významu nesla ta návěští, ne próza. Tělo review žádnou takovou strukturu nemá: je to jeden
+   odstavec, jehož **jediným** úkolem je napodobit můj hlas, a odchází na GitHub pod mým jménem.
+
+Kdyby se ukázalo, že to za opus nestojí, je to změna jedné konstanty — a měřit se u toho má **výstup
+vedle výstupu**, jako u #516, ne jen cena.
+
+### Záznam rozhodnutí — verdikt se do zadání pro tělo review nedává (#521)
+
+Prompt osmé session zakazuje psát verdikt (zůstává návrhem, #114). Nabízelo se přiložit ho
+k materiálu jako kontext pro tón odstavce. **Zamítnuto**: dát session údaj, který se v odpovědi
+nesmí použít, je pozvánka k obejití pravidla — a je to tatáž třída chyby jako nejednoznačný vstup
+z #516 (`blokuje 2` vydalo v briefu větu o dvou reviewerech). Tón plyne z nálezů samotných:
+blokující se v zadání pozná, a to slovem.
+
+### Záznam rozhodnutí — vzorek hlasu se sbírá čtením konverzací, ne evidencí odeslaných review (#521)
+
+Zadání #521 říká, že deset mých posledních těl review *je na disku (v konverzacích jako
+`SubmittedReview`)*. `Conversation` se ale **nepersistuje** — načítá se při zobrazení PR a zahazuje
+se s ním —, takže doslovně to místo neexistovalo a bylo potřeba rozhodnout, odkud se vzorky vezmou.
+
+Zvažovaly se dvě cesty. **Evidence vlastních odeslaných review** (zapsat tělo ve chvíli, kdy ho
+aplikace odešle) je levná, ale odpovídá na jinou otázku: neví o review odeslaných z prohlížeče ani
+o pozdějších editacích, a u nového uživatele by se plnila roky. **Sběr z načtených konverzací**
+(`AppStore.recordReviewVoice(from:)` v `loadConversation`) proti tomu čte to, co na GitHubu
+doopravdy leží, a nestojí ani jedno volání navíc — konverzace se načítá tak jako tak.
+
+Vybral se sběr čtením, s ledgerem v cache (`review-voice.json`, nejnovějších deset, dedup podle
+`id` review). Cena té volby je, že se hlas sejde postupně, jak si pull requesty otevírám; první
+tělo se proto může napsat neutrálně, a **pruh nad panelem to musí říct** — což je taky ta věta, kvůli
+které má nula vzorků vlastní stav a ne jen menší číslo v té první.
+
+### Záznam rozhodnutí — „začal jsem psát sám“ je čtvrtý stav, ne selhání session (#521)
+
+Zadání počítalo se třemi stavy: tělo napsané podle mého hlasu, tělo neutrální (nový uživatel)
+a spadlá session s prázdným composerem. Při implementaci vyšel čtvrtý, který zadání nepředvídalo:
+session píše minutu, takže **můžu do composeru začít psát dřív, než odstavec dorazí**.
+
+Pravidlo z #520 je jednoznačné — *co jsem začal psát já, aplikace nepřepíše ani o komentář* (brána
+`draftExists`) —, takže se odstavec **zahodí**. Otázka byla, co se o tom zapíše. Zapsat to jako
+selhání session by bylo nepravdivé dvakrát: session doběhla a **peníze stála**, takže by červená
+dráha v `Průběhu` posílala hledat poruchu, která není. Nezapsat nic nejde: razítko je to, co drží
+cenu, a prázdné by znamenalo další session po příštím otevření PR.
+
+Proto `AutoDraftBody.Failure.handWritten`: vlastní případ, vlastní věta v pruhu (`Tělo si píšeš
+sám — automat do composeru nesáhl.`) a **doběhlá** dráha, jejíž `kind` nese `used: false` — aby
+věta pod ní netvrdila, že je tělo podle mého hlasu.

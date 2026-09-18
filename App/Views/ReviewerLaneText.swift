@@ -66,6 +66,9 @@ enum ReviewerLaneText {
         case .queued:
             return "Nezačalo — čeká na volný slot."
         case .running:
+            // Dráha těla review (#521) **žádné kroky mít nemůže** — osmá session nemá jediný
+            // nástroj. „První krok ještě nepřišel“ by u ní slibovalo něco, co se nemá jak stát.
+            if case .reviewBody = lane.kind { return "Píše odstavec do composeru; nástroje nemá." }
             guard let tool = lane.lastTool else { return "Session naběhla, první krok ještě nepřišel." }
             guard let detail = tool.shortened(inside: lane.worktree), !detail.isEmpty else {
                 return "Právě: \(tool.name)"
@@ -191,6 +194,12 @@ enum ReviewerLaneText {
         if case .annotations(let hunks, let files, let dropped) = lane.kind {
             return annotated(hunks: hunks, files: files, dropped: dropped)
         }
+        // Dráha těla review (#521) mluví o **odstavci, ne o nálezech**, a ze stejného důvodu jako
+        // anotace: `reportedFindings` u ní zůstává `nil`, takže bez vlastní věty by pod doběhlou
+        // dráhou stálo „nálezy vůbec nenahlásilo“.
+        if case .reviewBody(let samples, let used) = lane.kind {
+            return wroteBody(samples: samples, used: used)
+        }
         guard let count = lane.reportedFindings else {
             return "Doběhlo, ale nálezy vůbec nenahlásilo — to není totéž jako čisto."
         }
@@ -213,6 +222,22 @@ enum ReviewerLaneText {
         return "Doběhlo · \(Plural.czech(hunks, one: "anotace", few: "anotace", many: "anotací"))"
             + " · \(Plural.czech(files, one: "soubor", few: "soubory", many: "souborů")) s druhem změny."
             + dropText(dropped)
+    }
+
+    /// Doběhlá session, která napsala tělo review (#521). Rozlišuje **dva** stavy, protože třetí
+    /// se sem nedostane: doběhlá session bez textu se do razítka zapíše jako selhání
+    /// (`ClaudeReviewBodyWriter`), takže `finished` znamená, že odstavec v composeru leží.
+    ///
+    /// **Nula vzorků má vlastní větu.** „Tělo podle 0 tvých review“ by tvrdilo pravý opak toho, co
+    /// se stalo — a neutrálně napsané tělo je legitimní výsledek, ne polovičatý.
+    private static func wroteBody(samples: Int, used: Bool) -> String {
+        guard used else {
+            return "Doběhlo, ale odstavec se nepoužil — v composeru je tvůj vlastní text."
+        }
+        guard samples > 0 else { return "Doběhlo · tělo napsané neutrálně, bez ukázek tvého hlasu." }
+        return "Doběhlo · tělo podle "
+            + Plural.czech(samples, one: "tvého review", few: "tvých review", many: "tvých review")
+            + "."
     }
 
     /// Kolik položek odpovědi se zahodilo. **Prázdné, dokud není co hlásit** — a je to **jediné
