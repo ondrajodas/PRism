@@ -9421,7 +9421,12 @@ zaplacené session nesehnají — a parser na nich tvrdí, že jazyk **nepoznáv
 Přibylo 8 testů; tvrdé podmínky č. 2 a č. 5 se nezměnily ani o položku (sada anotací je dál
 `AskCommand.allowedTools`, klíčování hlavou zůstává).
 
+**Naostro doměřeno při proklikání**: oba PR se popsaly znovu (0,062 $ a 20,1 s u
+`keboola/job-queue#727`) a **věty vyšly v jazyce, o který si aplikace řekla** — tedy i u toho PR,
+ze kterého předtím vyšly ruské. Samostatná věta s protikladem tedy drží tam, kde přívlastek v popisu
+pole neplatil; čísla jsou v [`docs/claude-cli.md`](claude-cli.md#samostatná-věta-drží--doměřeno-na-těch-samých-dvou-pr-592).
+
 **Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl (výpadek 18. 9.);
-vlastní revize diffu proběhla a je popsaná v PR. **Druhá: že nová věta drží i na tom diffu, který
-rusky vyšel.** Ověřit to znamená zaplatit session nad `keboola/job-queue#727`; harness tvrdí jen to,
-co je v promptu.
+vlastní revize diffu proběhla a je popsaná v PR. **Druhá: tentýž běh s češtinou.** Změřený je
+mechanismus, ne konkrétní jazyk — běh, který ověří, že po přepnutí na natvrdo českou větu vyjdou
+věty česky i s `Jazyk nálezů` na angličtině, stojí dalších ~0,06 $ a zbývá na proklikání.

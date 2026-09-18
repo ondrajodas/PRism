@@ -409,9 +409,24 @@ Tři věci, které z toho plynou:
   a v anglickém zadání matou dvakrát; jsou proto přepsané na popis tvaru bez ukázky v konkrétním
   jazyce.
 
-Ověřit to na ostrých datech znovu **stojí session na PR**; harness tvrdí jen to, co je v promptu
-(`AnnotateCommandTests`). **Že nová věta drží i na diffu, který do #592 vyšel rusky, je tedy
-neověřená mezera** — pozná se to na prvním běhu nad `keboola/job-queue#727`.
+#### Samostatná věta drží — doměřeno na těch samých dvou PR (#592)
+
+**Po nasazení věty se oba PR popsaly znovu, naostro, v jedné instanci a týž den.** Věta tehdy ještě
+brala jazyk z `findingsLanguage`, které bylo v té konfiguraci `en`, takže se dala změřit ta jediná
+věc, na které záleží: **poslechne model větu i proti tomu, co vidí v diffu?**
+
+| Běh | Co se žádalo | Věty | Cena |
+|---|---|---|---|
+| `keboola/job-queue#727` (hlava `3c4d82eb`) | anglicky | **anglicky**, 4 hunky, 3 soubory, `answered`, `dropped 0` | 0,062 $, 20,1 s, 3 turny |
+| `keboola/sandboxes-service#717` | anglicky | **anglicky**, 20 hunků, 14 souborů | tentýž řád |
+
+**To je ten rozdíl proti stavu do #592**: `keboola/job-queue#727` je právě ten diff, ze kterého
+předtím vyšly **ruské** věty, a se samostatnou větou odpověděl v jazyce, o který si aplikace řekla.
+Dva jazyky na dvou PR se tím srovnaly na jeden.
+
+**Co tím ověřené není:** že to platí i pro **češtinu** (od #592 se žádá natvrdo česky — tatáž věta,
+jiné slovo). Změřený je mechanismus, ne konkrétní jazyk; další běh nad týmž PR to ukáže a stojí
+zhruba **0,06 $ a 20 s**.
 
 ## Slévání konfliktů (#467) — čtvrtá session, a první, která píše
 
