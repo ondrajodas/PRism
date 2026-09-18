@@ -1299,6 +1299,8 @@ footer.end {
    TAB PŘEHLED
    ============================================================ */
 .work.two { grid-template-columns: 1fr 300px; }
+/* Složená hrana (#505, sekce 43) — 28 bodů místo 300, `Policy.marginColumnWidth(form: .rail)`. */
+.work.rail { grid-template-columns: 1fr 28px; }
 
 .ovpane {
   min-width: 0; background: var(--panel);
@@ -3066,6 +3068,38 @@ a.jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 tr.mgn-crit td.code { border-right: 3px solid var(--crit); }
 tr.mgn-find td.code { border-right: 3px solid var(--find); }
 tr.mgn-note td.code { border-right: 3px solid var(--ink-3); }
+
+/* ---- sekce 43: složená hrana (#505) ----
+   Druhá podoba téhož okraje — 28 bodů se značkami místo 300bodové kolony
+   (`DiffMarginForm.rail`, `App/Views/DiffMarginRailView.swift`). Tři třídy navíc, stejné jméno
+   druhu jako u `.fcard`:
+
+   1. `.mgn-rail` — na `.side.mgn` dodává jen šířku (28px, `Policy.marginColumnWidth(form: .rail)`)
+      a vystředění puntíků; hranu a pozadí drží `.side`, `.mgn` dává `position: relative`.
+   2. `.mgn-dot` — sama značka: 15bodový čtverec (puntík 7 + 4 body vzduchu na každou stranu,
+      `DiffMarginDotView.size`) s puntíkem uprostřed v barvě druhu (`crit`/`warn`/`info`, tatáž
+      škála jako `.fcard`). `.here` dostane rámeček kurzoru procházení (`⌥↓`) **kolem** puntíku,
+      ne přes něj — barva druhu musí zůstat vidět. **Jiný rámeček než `.mgn-card.here`**: kurzor
+      na hraně je `--ink-3` a 1 bod, ne akcent a 2 body — dvě různá tvrzení (kurzor procházení
+      proti zvýraznění z tabulky nálezů) mají v kódu tutéž barvu jen na hraně, ne v koloně.
+   3. `.mgn-rail-count` — patka s součtem nálezů **v okraji**, mimo posun a mimo ořez: platí pro
+      celý okraj, i když je zrovna vidět jen pár značek. Je to **tentýž počet**, jaký nese
+      hlavička souboru a lišta nad diffem (`Policy.marginRailFindings`) — patka ho jen opakuje
+      tam, kde se z kresby spočítat nedá. */
+.mgn-rail { width: 28px; padding: 0; display: flex; flex-direction: column; align-items: center; }
+.mgn-dot {
+  width: 15px; height: 15px; box-sizing: border-box; margin: 0; flex: none;
+  display: grid; place-items: center; border-radius: 5px; cursor: pointer;
+}
+.mgn-dot i { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--crit); }
+.mgn-dot.warn i { background: var(--find); }
+.mgn-dot.info i { background: var(--ink-3); }
+.mgn-dot.here { box-shadow: inset 0 0 0 1px var(--ink-3); }
+.mgn-rail-count {
+  margin-top: auto; width: 100%; text-align: center; padding: 5px 0;
+  font-family: var(--mono); font-size: 10px; color: var(--ink-2);
+  border-top: 1px solid var(--line-soft);
+}
 
 /* ---- sekce 45: deska podle mého tahu --------------------------------------------
    Domov přeskládaný na pruhy podle **tahu** (#515). Zákres přišel z decku „Směry pro PRism“
@@ -10597,6 +10631,61 @@ tr.sel td.sg { background: var(--accent-weak); }
       </div>
     </div>
 
+    <div class="pane new">
+      <div class="tag"><i></i>Táž plocha složená na hranu (#505) — kód dostane 272 bodů zpátky, značky se rozbalí kliknutím</div>
+      <div class="frame flat">
+        <div class="work rail">
+          <div class="diffpane">
+            <div class="fhead">
+              <span>▾</span>
+              <span class="path"><span>src/Vault/</span><b>Encryptor.php</b></span>
+              <span class="pill crit">1 blokuje</span>
+              <span class="sp"></span>
+              <span class="rv-num" style="color: var(--ok);">+31</span>
+              <span class="rv-num" style="color: var(--crit);">−12</span>
+              <span class="rv-viewed"><span class="box"></span>Prošlo</span>
+            </div>
+            <table class="diff">
+              <tr class="hunk"><td colspan="3">@@ -36,9 +36,12 @@ final class Encryptor</td></tr>
+              <tr><td class="ln">36</td><td class="sg"></td><td class="code"><span class="k">final class</span> <span class="fn">Encryptor</span></td></tr>
+              <tr><td class="ln">37</td><td class="sg"></td><td class="code">{</td></tr>
+              <tr class="add"><td class="ln">38</td><td class="sg">＋</td><td class="code">    <span class="k">private const int</span> MAX_TTL = <span class="st">3600</span>;</td></tr>
+              <tr><td class="ln">39</td><td class="sg"></td><td class="code"></td></tr>
+              <tr><td class="ln">40</td><td class="sg"></td><td class="code">    <span class="k">public function</span> <span class="fn">__construct</span>(</td></tr>
+              <tr class="add mgn-crit"><td class="ln">41</td><td class="sg">＋</td><td class="code">        <span class="k">private readonly int</span> $ttl = <mark class="w">self::MAX_TTL</mark>,</td></tr>
+              <tr class="add mgn-find"><td class="ln">42</td><td class="sg">＋</td><td class="code">        <span class="k">private readonly</span> \<span class="fn">DateTimeImmutable</span> $rotatedAt,</td></tr>
+              <tr><td class="ln">43</td><td class="sg"></td><td class="code">    ) {</td></tr>
+              <tr><td class="ln">44</td><td class="sg"></td><td class="code">    }</td></tr>
+              <tr class="hunk"><td colspan="3">@@ -55,7 +58,9 @@ final class Encryptor</td></tr>
+              <tr class="add"><td class="ln">58</td><td class="sg">＋</td><td class="code">    <span class="k">public function</span> <span class="fn">encrypt</span>(<span class="k">string</span> $plain, <span class="k">string</span> $key): <span class="k">string</span></td></tr>
+              <tr class="add"><td class="ln">59</td><td class="sg">＋</td><td class="code">    {</td></tr>
+              <tr class="del"><td class="ln">60</td><td class="sg">−</td><td class="code">        <span class="k">return</span> <span class="fn">sodium_crypto_secretbox</span>($plain, <mark class="w">$<span class="vr">this</span>-&gt;nonce</mark>, $key);</td></tr>
+              <tr class="add mgn-note"><td class="ln">60</td><td class="sg">＋</td><td class="code">        <span class="k">return</span> <span class="fn">sodium_crypto_secretbox</span>($plain, <mark class="w">$<span class="vr">this</span>-&gt;<span class="fn">nonce</span>()</mark>, $key);</td></tr>
+              <tr><td class="ln">61</td><td class="sg"></td><td class="code">    }</td></tr>
+              <tr><td class="ln">62</td><td class="sg"></td><td class="code"></td></tr>
+            </table>
+          </div>
+          <aside class="side mgn mgn-rail">
+            <div class="mgn-dot here" style="margin-top: 121px;" title="1 nález, řádek 41 · blokuje"><i></i></div>
+            <div class="mgn-dot warn" style="margin-top: 4px;" title="1 nález, řádek 42"><i></i></div>
+            <div class="mgn-dot info" style="margin-top: 118px;" title="1 nález, řádek 60"><i></i></div>
+            <div class="mgn-rail-count" title="3 nálezy v okraji">3</div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Klik na značku rozbalí tutéž kartu jako v koloně — popover, ne druhá kresba</div>
+      <div class="popover">
+        <div class="fcard crit">
+          <div class="top"><span class="pill crit">blokuje</span><span class="cat">correctness · CONFIRMED · security-review</span></div>
+          <div class="sum">Horní mez TTL je pevná konstanta; u tenantů s vlastní politikou rotace ji nejde přebít.</div>
+          <div class="acts"><span class="mini pri">Převzít do review</span><span class="mini">Neplatí</span><span class="mini">Nepatří sem</span></div>
+        </div>
+      </div>
+    </div>
+
     <div class="notes">
       <div class="note">
         <span class="num">139</span>
@@ -10643,12 +10732,36 @@ tr.sel td.sg { background: var(--accent-weak); }
       <div class="note">
         <span class="num">143</span>
         <span class="body">
-          <b>Karta mimo pás kolem výřezu se nekreslí</b>
+          <b>Karta mimo pás kolem výřezu se kreslí jako značka</b>
           <span>Bloky kódu mají živý <code>NSTextView</code> jen v pásu kolem výřezu (#469) a karty
-          se řídí <b>tímtéž pásem</b>: mimo něj se nekreslí vůbec. Polohu svého řádku si přitom
-          drží, takže se karta po návratu do pásu neobjeví někde na nule. Změřeno, že to není
-          ozdoba: bez pásu stálo projíždění 1,65 s CPU proti 1,47 s nad tímtéž diffem bez nálezů,
-          s pásem 1,56 s.</span>
+          se řídí <b>tímtéž pásem</b>: mimo něj se nekreslí jako karta. Do #505 tam nebylo nic —
+          karta mimo pás byla nález, o kterém nebyla na obrazovce ani stopa. Od #505
+          (<code>Policy.marginDots</code>) tam stojí <b>značka</b>, stejná jako na složené hraně
+          vedle: puntík v barvě druhu, klik ji rozbalí jako popover. Polohu svého řádku si karta
+          i značka drží, takže se karta po návratu do pásu neobjeví někde na nule. Změřeno, že pás
+          není ozdoba: bez něj stálo projíždění 1,65 s CPU proti 1,47 s nad tímtéž diffem bez
+          nálezů, s pásem 1,56 s.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">144</span>
+        <span class="body">
+          <b>Hrana je domov, ne odklad — a je to druhý typ, ne týž s <code>if</code>em</b>
+          <span>Do #505 měl okraj dva stavy: kolonu o 300 bodech, nebo nic — a „nic“ znamenalo, že
+          nález přebírá panel vpravo, tedy <b>další</b> třistabodová kolona. V úzkém okně se tedy
+          za nález platilo vždycky stejně, ať se rozhodlo jakkoli. Hrana (28 b) je mezi: kód dostane
+          zpátky 272 bodů a na obrazovce zůstane vidět, <b>kde</b> nálezy jsou — je to pořád domov
+          (<code>DiffMarginForm.hasHome</code>), takže se kvůli ní panel nerozkládá.
+          Puntík stojí na výšce svého řádku v barvě druhu (<code>--crit</code> / <code>--find</code>
+          / <code>--ink-3</code>, tatáž škála jako u <code>.fcard</code>); rámeček kolem něj patří
+          kurzoru procházení <code>⌥↓</code> — <b>kolem</b> puntíku, ne přes něj, a je to
+          <code>--ink-3</code>, ne akcent jako u zvýraznění karty v koloně (<code>.mgn-card.here</code>).
+          Klik rozbalí <b>tutéž</b> kartu jako v koloně, jako popover: karta v popoveru se od té
+          v koloně nesmí lišit, jinak by jedna podoba okraje nabízela akci, kterou druhá nemá.
+          Počet dole se veze <b>mimo</b> výřez, takže platí pro celý okraj, i když je vidět jen
+          pár značek. Je to <b>tentýž počet</b>, jaký nese hlavička souboru a lišta nad diffem
+          (<code>Policy.marginRailFindings</code>) — patka ho jen opakuje tam, kde se z kresby
+          spočítat nedá.</span>
         </span>
       </div>
     </div>

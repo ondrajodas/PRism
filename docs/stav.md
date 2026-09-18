@@ -9605,6 +9605,14 @@ nese hlášení subagenta.
 |---|---|---|---|---|---|---|
 | #597 | `model:opus` | Opus | 50 (včetně mergu a releasu) | 0 — jen dokumentace | **192 869** | ne |
 | #599 | `model:opus` | Opus | 46 (včetně mergu a releasu) | 0 — jen dokumentace | **195 508** | ne |
+| #505 | `model:opus` | Opus | 210 | 24 | **526 251** | ne |
+
+**U #505 se subagentův odhad rozešel s hlášením o skončení víc než dřív, a rozdíl se nevysvětlil.**
+Subagent si napočítal **90** volání nástrojů, hlášení o skončení dráhy jich nese **210** — u #597
+a #599 byl týž druh rozdílu malý (45 proti 50, 38 proti 46) a vysvětlil ho odhad psaný před koncem
+dráhy, tady je víc než dvojnásobný. Zapsáno jako **nevysvětlený rozdíl**, ne domyšlená příčina.
+Je to zároveň první záznam v téhle tabulce, ve kterém se doopravdy buildilo (24 kol s překladačem
+proti nule u obou dokumentačních issues), a nejdražší dosud naměřený.
 
 **Změřená mezera hned v prvním záznamu, a #599 ji zavřelo:** tabulka původně počítala s tím, že
 *„hlášení subagenta spotřebu nese“* — jenže **subagent svou spotřebu tokenů zevnitř nevidí**.
