@@ -66,8 +66,9 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
 - **Víc issues naráz se dělá souběžně, ne za sebou** (#231). Když přijde seznam, posuď, co je
   na sobě nezávislé, přiděl slot a pusť na každé nezávislé issue **subagenta ve vlastním
   worktree**. Postup je v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md) a **přečti si ho
-  dřív, než subagenta pustíš** — slot mu přiděluje orchestrátor a bez něj by subagent přepsal
-  aplikaci, se kterou zrovna pracuju, i s její cache. U **jednoho** issue se nic nemění.
+  dřív, než subagenta pustíš** — slot **i model** mu přiděluje orchestrátor (#597), a bez slotu by
+  subagent přepsal aplikaci, se kterou zrovna pracuju, i s její cache. U **jednoho** issue se nic
+  nemění.
 
   **Subagent dotáhne issue až do konce** (#247): PR, Copilot, merge, zavření issue, release
   a **úklid své aplikace** (`./bin/slot-cleanup.sh` ve svém stromě, #398). **Odepřené povolení
@@ -120,6 +121,13 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
   Příkazy, dvě jména, pod kterými Copilot píše, a proč „generated no new comments“ neznamená,
   že nic nenašel, jsou v [`docs/github-cli.md`](docs/github-cli.md#copilot-jako-reviewer) —
   **přečti si to, než výsledek budeš číst.**
+- **U `model:sonnet` je Copilot povinný, ne volitelný** (#597), a jde k němu **Opusova revize
+  diffu**: Copilot hlídá pět vzorů z
+  [`github-cli.md`](docs/github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně), silný model
+  to, co Copilot z principu nevidí — **chybějící věci a porušené tvrdé podmínky**. Pořadí
+  **vlastní revize → Copilot → Opusova revize → merge** se nepřehazuje a kdo tu revizi dělá,
+  rozhoduje **velikost diffu**
+  ([§5](docs/paralelni-vyvoj.md#revize-před-mergem--kdo-reviduje-co)).
 - **Copilot je kontrola, ne hledání — stačí jedno kolo.** Pusť ho jednou, nálezy projdi (řekni,
   co je reálné a co šum), reálné oprav a **mergni podle vlastního uvážení**. Další kolo si
   vyžádej jen tehdy, když ten první průchod odhalil něco **strukturálního**, ne
@@ -194,6 +202,12 @@ v [`docs/navrh.md`](docs/navrh.md#proč-brána-sedí-u-zakládání-issue-ne-až
 kontrola, kam patří složka, jaký stav blokuje, jak se jmenuje typ. Rozhodni, implementuj
 a **zapiš rozhodnutí i s důvodem** do specifikace: záznam rozhodnutí je to, co dovoluje
 pozdější korekci.
+
+**Platí to pro silný model** (#597). Na `model:sonnet` je zadání opačné: **když zjistíš, že se tu
+něco rozhoduje, zastav a ohlas to.** Není to selhání, je to **důkaz špatného zařazení**. Eskalace
+přitom musí být **kontrolovatelná, ne subjektivní** — neposuzuj vlastní schopnosti, pravidlo zní
+**sáhls na tvrdou podmínku? Zastav**, a ty jsou vyjmenované níž. Jak se model volí a proč, je
+v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md#volbu-modelu-přiděluje-orchestrátor-597).
 
 **Žádná schvalovací brána na návrh.** Nepředkládej návrh a nečekej na „ano“ — ani když si
 to vynucuje skill (typicky `superpowers:brainstorming` se svým hard gate). Tohle je výslovná

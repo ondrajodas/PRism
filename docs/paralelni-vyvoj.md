@@ -163,6 +163,57 @@ obálku, `diff` proti repu — a je to jedna minuta, která chytá obě poloviny
 i duplicitní kotvu. Postup dopsal do `navrh.md` agent od #500 a agent od #533 ho použil
 s výsledkem „souhlasí znak po znaku“.
 
+### Volbu modelu přiděluje orchestrátor (#597)
+
+**Model patří do zadání, stejně jako slot a číslo sekce** — subagent si ho nepočítá sám. Důvod je
+jiný než u čísla sekce: tam šlo o srážku dvou agentů, tady o to, že **volba modelu je rozhodnutí o
+ceně celé dávky**, a to je informace, kterou má orchestrátor a subagent ne.
+
+**Týdenní limity se počítají po modelech** a silný model je spotřebovává řádově rychleji, takže
+cíl není „míň tokenů celkem“, ale **míň Opusových tokenů** — aby se za týden stihlo víc práce.
+Drahé přitom nejsou napsané řádky, ale **kola s překladačem a nabalený kontext**, který se posílá
+znovu každý turn: měřeno na sesterském projektu Mullionu vyšlo jedno issue na 237 tisíc tokenů a
+102 volání nástrojů, druhé na 226 tisíc a 113 volání. **Revize diffu je proti tomu málo kol a málo
+kontextu** — a přesně na tom ten postup stojí.
+
+**Sonnet píše, Opus reviduje, Sonnet opravuje.** Klíčová vlastnost: **Opus se nikdy nedostane do
+build loopu.** Přečte diff jednou a vydá krátký text. Kdyby opravu psal sám, platí se celý
+nabalený kontext i všechna kola a úspora je pryč.
+
+Z toho plyne podmínka na reviewera: **nález musí jít aplikovat bez úsudku.** Ne „tohle je špatně“,
+ale *„v souboru X nahraď A za B, protože Z“*. A z toho plyne užitečný signál: **nález, který se
+nedá napsat jako aplikovatelná instrukce, znamená, že issue bylo zařazené špatně** — rozhoduje se
+v něm něco, co Sonnet rozhodovat neměl.
+
+**Strop jsou dvě kola.** Když je potřeba třetí, issue **přebírá Opus** a zapíše se to do
+[`stav.md`](stav.md) do rubriky špatných zařazení. Cena je tím shora omezená a zároveň z toho
+padají data, podle kterých se kritérium opraví.
+
+**Kritérium: model volí tvar úkolu, ne jeho velikost.** Silný model, když platí aspoň jedno:
+
+1. **Issue sahá na tvrdou podmínku z [`CLAUDE.md`](../CLAUDE.md).** Ty podmínky jsou vlastně
+   seznam věcí, které selhávají **tiše** — a revize diffu je nechytá, protože chyba je v tom, **co
+   tam není**, ne v tom, co tam je.
+2. **Uvnitř issue se ještě rozhoduje** — tvar protokolu, politika, architektura. Ne implementace
+   hotového rozhodnutí.
+3. **Je to neznámé API s pastmi.**
+
+Sonnet tam, kde **návrh a zadání výsledek plně určují** a hotovo se dá zkontrolovat. **Užitečný
+test pro PRism: je to nakreslené v `docs/navrh.html`?** Když ano a zákres je odsouhlasený, není co
+špatně navrhnout — je to implementace obrázku. Když ne, rozhoduje se.
+
+**Štítky `model:opus` a `model:sonnet` jsou výchozí hodnota, ne rozsudek.** Nosí je issue, aby
+zařazení přežilo session, ve které vzniklo; **orchestrátor je v zadání přebíjí**, protože vidí na
+celou dávku. Přiřazují se **přes REST s rozestupem ~0,5 s**:
+
+```bash
+gh api repos/{owner}/{repo}/issues/597/labels -X POST -f 'labels[]=model:opus'
+```
+
+**Hromadné `gh issue edit` v cyklu tiše selhává** na rychlostním limitu GitHubu — na Mullionu se
+takhle z 61 issues přiřadila 2 a nic to neohlásilo. **Ověřuje se proto zpětným přečtením počtů, ne
+návratovými kódy.** Značí se jedině **otevřená** issues; zavřená historie ne.
+
 ### Rozvrh se zapisuje do milníku, ne jen do kontextu
 
 **Větší objem práce — orientačně tři a víc issues, které patří k sobě — dostane vlastní
@@ -268,6 +319,14 @@ a v zadání tohle:
 - **číslo sekce v mockupu**, když issue kreslí do `docs/navrh.html` — dosazené v zadání, ne
   „další volné“ (§1). A s ním pokyn, že **po mergi publikuje znovu ze slitého stavu**,
   protože publikování není merge a to druhé publikování je povinný krok, ne úklid,
+- **model a proč** ([§1](#volbu-modelu-přiděluje-orchestrátor-597)). U `model:sonnet` musí v
+  zadání **stát, že se v issue nic nerozhoduje** — jinak agent tu hranici nepozná a bude ji hledat
+  sám. A s tím pokyn, že **když na rozhodování narazí, zastaví a ohlásí to**: není to selhání, je
+  to důkaz špatného zařazení,
+- **odkazy na konkrétní sekce, ne na celé soubory.** Pravidlo *odkaz, ne převyprávění* platí dál
+  (kopie pravidla se s originálem rozejde), ale „přečti si `CLAUDE.md`“ je u tisícřádkového
+  souboru něco jiného než „přečti si tvrdé podmínky 2 a 3“. **Tohle je největší jednotlivá
+  úspora** a platí pro **oba** modely — ten text se posílá znovu **každý turn**, ne jednou,
 - pokyn, že platí `CLAUDE.md` — včetně dokumentace ve stejném commitu a vlastní revize diffu
   před pushem,
 - **pauzu na proklikání před mergem** i s tím, co má v hlášení stát (§4). Patří to do zadání ze
@@ -402,6 +461,26 @@ v platnosti. Pauza počet takových issues zmenšuje, nenuluje ho.
 **Merguje si každý subagent sám**, jakmile je jeho PR zelený, Copilot vyřízený (#247) a člověk
 změnu proklikal (#256, §4) — čeká se tedy na práci a na jedno slovo, ne na frontu. Pořadí se
 **neurčuje předem**: kdo je dřív hotov, jde dřív.
+
+### Revize před mergem — kdo reviduje co
+
+**Pořadí je dané a nepřehazuje se:** vlastní revize → Copilot → Opusova revize → merge. Copilot je
+levnější a chytá **jinou třídu nálezů** — pět vzorů z
+[`github-cli.md`](github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně) —, kdežto Opusova
+revize hlídá to, co Copilot z principu nevidí: **chybějící věci a porušené tvrdé podmínky**. V
+PRismu ho tedy **doplňuje, ne nahrazuje**; na Mullionu, kde Copilot dostupný není, ho nahradit
+musí. U `model:sonnet` je proto Copilot **povinný**, ne volitelný.
+
+**Kdo tu Opusovu revizi dělá, rozhoduje velikost diffu, ne důležitost issue:**
+
+- **malý diff → orchestrátor.** Má kontext načtený, takže ho to stojí jedno přečtení.
+- **velký nebo strukturální diff → vyhrazený reviewer agent na Opusu.** Orchestrátorův kontext
+  musí přežít **celý projekt**, a velký diff je to nejdražší, co do něj jde vpustit: posílá se pak
+  znovu každý turn až do konce dávky.
+
+Reviewer vydá **aplikovatelné instrukce, ne posudek**
+([§1](#volbu-modelu-přiděluje-orchestrátor-597)) a **opravu píše zpátky Sonnet**. Strop jsou dvě
+kola; třetí znamená, že issue přebírá Opus a že zařazení bylo špatné.
 
 **Merguje se z pracovního stromu, a `gh pr merge` v něm skončí nenulově** — hlásí `fatal: 'main'
 is already used by worktree`, a **merge na GitHubu přesto proběhne**. Padá na tom **lokální** krok
