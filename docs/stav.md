@@ -9455,7 +9455,7 @@ ve slotu nedoběhl (v zásuvce běžel `claude --resume`, takže se aplikace zep
 stát; session nemá *Zpřístupnění*, takže na něj nejde kliknout) a druhá instance z `build.noindex`
 frontu nenačte. **Proklikání zbývá na člověka.**
 
-## #592 — Jazyk anotací hunků určuje nastavení, ne model (Průběžné)
+## #592 — Anotace hunků jsou česky natvrdo, ne podle `Jazyka nálezů` (Průběžné)
 
 Hotovo. Vyšlo to z proklikání #524/#525 na ostrých datech: v cache ležely anotace pro dva PR
 a **v různých jazycích** — `keboola/sandboxes-service#717` česky, `keboola/job-queue#727` **rusky**
@@ -9529,3 +9529,79 @@ tvrzení a inkoust sahá 91 bodů za hranu. Změřil se i **druhý konec** (#275
 
 **Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
 vlastní revize diffu proběhla a je popsaná v PR.
+
+## #597 — Volba modelu patří do zadání: Sonnet píše, Opus reviduje (Průběžné)
+
+Hotovo, a je to **dokumentace a konfigurace repa** — v `App/` ani v `Tests/` se nezměnil jediný
+řádek, na obrazovce tedy není co vidět a mockupem to neprochází.
+
+**Postup vznikl na sesterském projektu Mullionu a tohle je jeho převzetí, ne doslovný přepis.**
+Důvod je účetní: **týdenní limity se počítají po modelech** a silný model je spotřebovává řádově
+rychleji, takže cíl není „míň tokenů celkem“, ale **míň Opusových tokenů**. Drahá přitom není
+práce sama, ale **kola s překladačem a nabalený kontext** posílaný znovu každý turn — na Mullionu
+vyšlo jedno issue na 237 tisíc tokenů a 102 volání nástrojů, druhé na 226 tisíc a 113 volání.
+Revize diffu je proti tomu jedno přečtení, a na tom ten postup stojí: **Sonnet píše, Opus
+reviduje, Sonnet opravuje**, a **Opus se nikdy nedostane do build loopu**.
+
+Zapsané je to na tři místa: kritérium, postup a strop dvou kol do [`paralelni-vyvoj.md`, *Volbu
+modelu přiděluje orchestrátor*](paralelni-vyvoj.md#volbu-modelu-přiděluje-orchestrátor-597), dělba
+revizí do jeho [§5](paralelni-vyvoj.md#revize-před-mergem--kdo-reviduje-co) a **věty pravidel s
+odkazem** do `CLAUDE.md` (*Rozhodování* a *Pracovní postup*). `CLAUDE.md` tím narostl z 82 815 B
+na 83 908 B, tedy o **1 093 B** — strop je ~100 kB.
+
+**Čím se PRism liší od Mullionu:** Copilot tu funguje, takže Opusova revize ho **doplňuje, ne
+nahrazuje** — Copilot hlídá [pět vzorů](github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně),
+silný model **chybějící věci a porušené tvrdé podmínky**. Pořadí **vlastní revize → Copilot →
+Opusova revize → merge** se proto nepřehazuje. Druhý rozdíl: PRism má **hotový návrh na většinu
+obrazovek**, takže by měl vyjít na poměr lepší než mullionských 38 : 21 ve prospěch silného modelu
+— ale **je to odhad, ne měření**, a proto je níž plán, jak ho změřit.
+
+**Štítky:** `model:opus` (5B47E0) a `model:sonnet` (1A7F37) v repu existují a přiřazují se **přes
+REST s rozestupem ~0,5 s**; `gh issue edit` v cyklu tiše selhává na rychlostním limitu. Otevřená
+issues byla v den zavedení **dvě** a obě dostala `model:opus`: **#505** (kresba okraje v úzkém
+okně — rozhoduje se v něm) a **#597** samo (mění pravidla). `model:sonnet` tedy dnes nenese
+**žádné** issue, a to je očekávaný stav: hodnota štítků začíná u issues, která teprve vzniknou.
+Ověřeno **zpětným přečtením počtů**, ne návratovými kódy.
+
+### Plán měření — co se udělá s příští dávkou
+
+**Tracker je dnes prázdný a všechny milníky uzavřené**, takže se pokus nemá kde odehrát a tohle je
+**zadání na příště, ne splněný krok**. Až přijde dávka aspoň tří issues:
+
+1. **Vybrat jeden milník, kde je práce převážně určená a dopad chyby malý.** Tedy issue, která má
+   zákres v `docs/navrh.html` nebo jinak plně určené zadání.
+2. **Pustit tam jako `model:sonnet` i pár issues, která bych zařadil jako silná** — jinak se změří
+   jen to, že snadné je snadné.
+3. **Změřit, jestli revize chytá, nebo jestli přepisování sní úsporu**: kolik kol bylo potřeba,
+   kolik nálezů šlo napsat jako aplikovatelná instrukce a kolikrát se sáhlo na strop dvou kol.
+4. **Výsledek sem**, do rubriky níž.
+
+**Netestovat to na základech, na kterých staví zbytek.** Tam se chyba nezaplatí jedním přepsáním,
+ale tím, že se na ní staví dalších padesát issues — a proto šlo tohle issue samo na silný model.
+
+### Rubrika: kde štítek nesedl
+
+Kam se zapisuje **špatné zařazení** — issue, u kterého bylo potřeba třetí kolo, nebo u kterého
+`model:sonnet` narazil na rozhodování. Bez téhle rubriky zůstane kritérium dojmem napořád.
+
+| Issue | Štítek | Co nesedlo | Jak se kritérium opravilo |
+|---|---|---|---|
+| — | — | Zatím žádný záznam | — |
+
+### Spotřeba tokenů po issue
+
+| Issue | Model | Volání nástrojů | Tokeny | Kolo navíc |
+|---|---|---|---|---|
+| #597 | Opus | ~45 (včetně mergu a releasu) | **neměřeno** (viz níž) | ne |
+
+**Změřená mezera hned v prvním záznamu:** tabulka počítá s tím, že *„hlášení subagenta spotřebu
+nese“* — jenže **subagent svou spotřebu tokenů zevnitř nevidí**. Volání nástrojů si spočítat umí,
+tokeny ne; ty zná harness, tedy orchestrátor. Sloupec `Tokeny` proto **vyplňuje orchestrátor při
+zápisu hlášení**, ne subagent, a dokud se to nezařídí, bude v něm stát `neměřeno`. Je to tentýž
+druh chyby jako měřidlo z #478: kdyby se to nechalo na subagentovi, vyplnil by odhad a tabulka by
+vypadala zeleně.
+
+**Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
+vlastní revize diffu proběhla a je popsaná v PR. U tohohle issue je to obzvlášť nepříjemné,
+protože zavádí pravidlo *u `model:sonnet` je Copilot povinný* — to pravidlo se tím **nemění**,
+dnešní výjimka je provozní stav, ne návrh.
