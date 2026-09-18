@@ -8406,3 +8406,72 @@ a pět řádků legendy** — tedy novou věc na obrazovce. Ta podle pravidla z 
 mockupu a ke schválení; sekce 59 kreslí větu, kapsli, nabídku a stavový řádek, barvení mapy ne.
 Udělat to „na vlastní pěst“ by znamenalo obejít jedinou schvalovací bránu v tomhle repu kvůli
 větě, která v zadání stojí jako *„může“*.
+
+### Záznam rozhodnutí — tělo návrhu review nemá vlastní volbu (#521)
+
+Nabízelo se dát osmé session vlastní bránu v konfiguraci, jako má brief (`GlobalConfig.brief`)
+i agent (`autoAgent`). **Zamítnuto**: tělo je **část návrhu review**, ne samostatná funkce. Vlastní
+volba by vyrobila stav *návrh ano, tělo ne*, o kterém by v okně nebylo poznat, že je úmyslný — pruh
+nad složeným návrhem by mlčel o tom, proč je composer prázdný, a od spadlé session by to nešlo
+rozeznat. Brána je proto `autoDraft` (#520), a ta je ve výchozím stavu vypnutá, takže vlastnost
+*samo se nic nepředvyplní* platí dál beze změny.
+
+Cena se tím neschovává: je na dráze `tělo review` v tabu `Průběh` a počítá se do `Dneska stálo`,
+i u běhu, který text nevrátil.
+
+### Záznam rozhodnutí — model se u těla review nevynucuje, ačkoli u briefu ano (#521)
+
+`BriefCommand.model` je `haiku` a je to změřená výjimka z úmluvy *model se nevolí* (#516). U osmé
+session se ta výjimka **nepřebírá**, a nejsou to dvě různá řešení téhož problému — jsou to dva různé
+problémy:
+
+1. **Brief se pouští podle kalendáře a bez kliknutí** (`firstTickOfDay`), takže je to ta session,
+   u které nepovšimnutá cena bolí nejvíc. Tělo review se pouští **jedině za doběhlým review**, tedy
+   za během, který právě stál dolary; je o řád vzácnější a účet už za sebou má.
+2. **Brief přeformuluje hotový text**, a strukturu za haiku udržela návěští `ADDED`/`BURNING`/`NEXT`
+   — kus významu nesla ta návěští, ne próza. Tělo review žádnou takovou strukturu nemá: je to jeden
+   odstavec, jehož **jediným** úkolem je napodobit můj hlas, a odchází na GitHub pod mým jménem.
+
+Kdyby se ukázalo, že to za opus nestojí, je to změna jedné konstanty — a měřit se u toho má **výstup
+vedle výstupu**, jako u #516, ne jen cena.
+
+### Záznam rozhodnutí — verdikt se do zadání pro tělo review nedává (#521)
+
+Prompt osmé session zakazuje psát verdikt (zůstává návrhem, #114). Nabízelo se přiložit ho
+k materiálu jako kontext pro tón odstavce. **Zamítnuto**: dát session údaj, který se v odpovědi
+nesmí použít, je pozvánka k obejití pravidla — a je to tatáž třída chyby jako nejednoznačný vstup
+z #516 (`blokuje 2` vydalo v briefu větu o dvou reviewerech). Tón plyne z nálezů samotných:
+blokující se v zadání pozná, a to slovem.
+
+### Záznam rozhodnutí — vzorek hlasu se sbírá čtením konverzací, ne evidencí odeslaných review (#521)
+
+Zadání #521 říká, že deset mých posledních těl review *je na disku (v konverzacích jako
+`SubmittedReview`)*. `Conversation` se ale **nepersistuje** — načítá se při zobrazení PR a zahazuje
+se s ním —, takže doslovně to místo neexistovalo a bylo potřeba rozhodnout, odkud se vzorky vezmou.
+
+Zvažovaly se dvě cesty. **Evidence vlastních odeslaných review** (zapsat tělo ve chvíli, kdy ho
+aplikace odešle) je levná, ale odpovídá na jinou otázku: neví o review odeslaných z prohlížeče ani
+o pozdějších editacích, a u nového uživatele by se plnila roky. **Sběr z načtených konverzací**
+(`AppStore.recordReviewVoice(from:)` v `loadConversation`) proti tomu čte to, co na GitHubu
+doopravdy leží, a nestojí ani jedno volání navíc — konverzace se načítá tak jako tak.
+
+Vybral se sběr čtením, s ledgerem v cache (`review-voice.json`, nejnovějších deset, dedup podle
+`id` review). Cena té volby je, že se hlas sejde postupně, jak si pull requesty otevírám; první
+tělo se proto může napsat neutrálně, a **pruh nad panelem to musí říct** — což je taky ta věta, kvůli
+které má nula vzorků vlastní stav a ne jen menší číslo v té první.
+
+### Záznam rozhodnutí — „začal jsem psát sám“ je čtvrtý stav, ne selhání session (#521)
+
+Zadání počítalo se třemi stavy: tělo napsané podle mého hlasu, tělo neutrální (nový uživatel)
+a spadlá session s prázdným composerem. Při implementaci vyšel čtvrtý, který zadání nepředvídalo:
+session píše minutu, takže **můžu do composeru začít psát dřív, než odstavec dorazí**.
+
+Pravidlo z #520 je jednoznačné — *co jsem začal psát já, aplikace nepřepíše ani o komentář* (brána
+`draftExists`) —, takže se odstavec **zahodí**. Otázka byla, co se o tom zapíše. Zapsat to jako
+selhání session by bylo nepravdivé dvakrát: session doběhla a **peníze stála**, takže by červená
+dráha v `Průběhu` posílala hledat poruchu, která není. Nezapsat nic nejde: razítko je to, co drží
+cenu, a prázdné by znamenalo další session po příštím otevření PR.
+
+Proto `AutoDraftBody.Failure.handWritten`: vlastní případ, vlastní věta v pruhu (`Tělo si píšeš
+sám — automat do composeru nesáhl.`) a **doběhlá** dráha, jejíž `kind` nese `used: false` — aby
+věta pod ní netvrdila, že je tělo podle mého hlasu.

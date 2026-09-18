@@ -3,7 +3,9 @@ import Testing
 
 @testable import PRism
 
-/// **Všechny sady povolení na jednom místě** (zadání #467, od #516 jich je šest).
+/// **Všechny sady povolení na jednom místě** (zadání #467). Od #521 je session **osm** a sad
+/// **pět** — a jedna z nich je prázdná, takže se o ni dělí tři session (překlad nálezů, brief
+/// a tělo návrhu review).
 ///
 /// Do #467 se každá sada tvrdila u svého příkazu (`ClaudeCommandTests`, `IntentTextCommandTests`,
 /// `AskCommandTests`) a čtvrtá k nim přibyla. Čtyři sady znamenají **čtyři místa, kde se dá tvrdá
@@ -19,7 +21,7 @@ struct SessionToolSetsTests {
     /// tvrzení je o **tvaru** pravidla, ne o tom, kde ta cache dneska je.
     private let worktree = URL(filePath: "/cache/PRism/repos/o-r/42-sync")
 
-    // MARK: - Šest sad, šest literálů
+    // MARK: - Sady, každá literálem
 
     /// **1. Reviewer** (tvrdá podmínka č. 2): čte kód, hlásí nálezy, načte skill. Žádný `Write`
     /// ani `Edit`, u `Bash` jen `git`.
@@ -134,6 +136,21 @@ struct SessionToolSetsTests {
         #expect(allowed?.contains("ReportAnnotations") != true)
     }
 
+    /// **8. Tělo návrhu review** (#521) — **třetí prázdná sada**, po překladu nálezů a briefu.
+    ///
+    /// Je to tatáž hranice jako u briefu, jen nad jiným materiálem: session dostane hotové nálezy
+    /// a moje starší těla review (`Policy.reviewBodyInput`) a **formuluje**. Bez `Read` se
+    /// o repozitáři nemá jak dozvědět nic — a u textu, který odchází na GitHub pod mým jménem, je
+    /// to ta nejsilnější mez, jakou aplikace má.
+    ///
+    /// **Tvrdí se literálem i přes argumenty**, jako u briefu: prázdný řetězec se dá přehlédnout,
+    /// takže se ptáme i toho seznamu, který doopravdy odejde do CLI.
+    @Test("Tělo návrhu review nemá jediný nástroj")
+    func reviewBodyToolSet() {
+        #expect(ReviewBodyCommand.allowedTools == "")
+        #expect(Self.value(of: "--allowedTools", in: ReviewBodyCommand.arguments(prompt: "x")) == "")
+    }
+
     // MARK: - Co platí pro všechny
 
     /// **Jedna sada zákazů, ne čtyři.** Druhá by byla druhé místo, kde se dá tvrdá podmínka č. 2
@@ -169,6 +186,7 @@ struct SessionToolSetsTests {
             ClaudeCommand.allowedTools,
             AskCommand.allowedTools,
             BriefCommand.allowedTools,
+            ReviewBodyCommand.allowedTools,
             Self.value(
                 of: "--allowedTools",
                 in: IntentTextCommand.arguments(prompt: "x", tool: "mcp__linear__get_issue")
@@ -226,6 +244,9 @@ struct SessionToolSetsTests {
             // by si toho nikdo nevšiml.
             BriefCommand.arguments(prompt: "x"),
             TranslationCommand.arguments(prompt: "x"),
+            // Tělo návrhu review (#521) — třetí prázdná sada, a ve výčtu být **musí** ze stejného
+            // důvodu: nad prázdným povolením jsou zákazy to jediné, co se dá rozejít s ostatními.
+            ReviewBodyCommand.arguments(prompt: "x"),
             // Anotace hunků (#524). Skládá si argumenty sama a **povolení si půjčuje od rozhovoru**
             // — tvrzení „platí pro všechny“ ji tedy musí vidět, aby se tou půjčkou nedalo obejít.
             AnnotateCommand.arguments(prompt: "x"),

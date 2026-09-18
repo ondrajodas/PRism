@@ -693,6 +693,7 @@ struct PullRequestDetailView: View {
             conversation: store.conversationState(for: pullRequest.id),
             draftUnavailable: draftUnavailable,
             autoDraftNote: autoDraftNote,
+            autoDraftBodyNote: store.reviewBodyNote(for: pullRequest.id),
             autoDraftActions: autoDraftActions,
             autoDraftDoubts: autoDraftDoubts,
             draftActions: draftActions,
@@ -1922,7 +1923,11 @@ struct PullRequestDetailView: View {
             // Dráha `anotace` (#524) — **zvlášť, ne mezi dráhami reviewerů**: `Policy.lanes`
             // vypisuje tytéž reviewery jako chipy nad tabem, takže sedmá session mezi ně nepatří.
             // `nil` = na tomhle PR se nepopisovalo, takže se nekreslí nic.
-            annotationLane: store.annotationLane(for: pullRequest.id)
+            annotationLane: store.annotationLane(for: pullRequest.id),
+            // Dráha `tělo review` (#521) — **zvlášť, ze stejného důvodu jako anotace**: osmá
+            // session nálezy nehlásí, takže mezi reviewery nepatří. `nil` = na tomhle PR se tělo
+            // nepsalo.
+            reviewBodyLane: store.reviewBodyLane(for: pullRequest.id)
         )
     }
 

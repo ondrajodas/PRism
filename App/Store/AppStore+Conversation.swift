@@ -25,6 +25,9 @@ extension AppStore {
         do {
             let conversation = try await gateway.fetchConversation(id: id)
             conversationStates[id] = .loaded(conversation, updatedAt: pullRequest.updatedAt)
+            // Vzorek hlasu pro osmou session (#521). **Sbírá se čtením**: co je na GitHubu, je to,
+            // co jsem doopravdy odeslal — a tohle je jediné místo, kam konverzace dorazí.
+            await recordReviewVoice(from: conversation)
         } catch is CancellationError {
             // Maže se **jen** rozdělaný stav: mezitím spuštěné načtení už mohlo doběhnout
             // a to se přepsat nesmí. Stejné pravidlo jako u diffu.

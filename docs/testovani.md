@@ -12449,3 +12449,110 @@ by bylo falešně červené z důvodu, který s #523 nesouvisí — což se při
   `Text` + `Text`.
 - **Že kliknutí na `Schválit` doopravdy otevře sheet** — sheet je `@State` ve `ContentView`u
   a store o něm neví. Store tvrdí jen to, že `submission(for:)` je nenulové.
+
+## Tělo návrhu review (#521) — čtyři sady a to nejcennější je zase negativní
+
+Kód: `Tests/Review/ReviewBodyCommandTests.swift` (argumenty, prompt, parser),
+`Tests/Policy/ReviewBodyInputTests.swift` (zadání a sběr hlasu),
+`Tests/Policy/ReviewBodyLaneTests.swift` (věta v pruhu, dráha v `Průběhu`),
+`Tests/Store/AppStoreReviewBodyTests.swift` (celá cesta) a osmá položka
+v `Tests/Review/SessionToolSetsTests.swift`.
+
+### Co se tvrdí a proč zrovna to
+
+**Nejcennější tvrzení téhle oblasti je negativní a stojí dvakrát**, v `Policy` i ve storu: **ve
+vstupu pro osmou session není cesta na disk.** Typ `ReviewBodyRequest` cestu nemá kam napsat, ale
+materiál se skládá z nálezů — a ty cestu k **souboru** nesou, takže je to místo, kde by cesta do
+cache mohla prosáknout. Tvrdí se proto, že v zadání není ani kořen cache, ani `/Users/`, ani
+`worktree`, a **zároveň** že cesta *uvnitř* repozitáře (`src/Vault/SecretClient.php:81`) v něm být
+**má** — bez ní by odstavec nemohl jmenovat soubor, takže samotné „neobsahuje nic“ by prošlo i nad
+zadáním, ze kterého vypadly nálezy.
+
+Ve storu k tomu přibývají čtyři tvrzení o tom, co se **nestalo**:
+
+- **`gh` se ani nespustilo**, a to při **povoleném** odesílání. S vypnutým by to netvrdilo nic,
+  protože cestu ven zavírá `Policy.sendBlock` dřív — je to tentýž počítací `gh` skript jako u #520.
+- **S vypnutou branou `autoDraft` se session nepustila ani jednou** (`FakeReviewBodyWriter.runs`).
+- **Bez převzatého nálezu se tělo nepíše**: návrh ze samých sporných nálezů draft nezakládá (#520)
+  a tělo to nemá změnit.
+- **Podruhé nad týmž razítkem se session nepustí.** Tvrdí se to **přímým druhým voláním**
+  `startReviewBody`, ne druhým otevřením PR — to by se zastavilo dřív, o bránu „draft už existuje“,
+  a test by procházel, i kdyby tahle brána nebyla. Je to případ pravidla z #478: měřidlo, které by
+  vydalo tutéž hodnotu pro „funguje“ i „nefunguje“, netvrdí nic.
+
+### Prompt se testuje, protože u session bez nástrojů je jediná mez
+
+`ReviewBodyCommandTests` tvrdí, že v promptu stojí všechna čtyři zákazová pravidla (sporné,
+domýšlení, verdikt, vzor stylu) i číselný strop. U session, která nemá jediný nástroj, je prompt
+**jediná** věc, která tvar odpovědi ovlivňuje — smazat z něj větu o sporných nálezech je změna
+chování, která by v žádném jiném testu nespadla.
+
+K tomu dvě tvrzení o argumentech: **`--model` v nich není** (zapsané rozhodnutí, opačné než
+u briefu — bez tohohle by se `--model haiku` dalo přidat „pro konzistenci“ a nikdo by si nevšiml,
+že se tím zlevnilo zrovna to napodobování hlasu) a **jde se streamem**, protože cena je v `result`
+eventu.
+
+### Parser: co se snese a co se schválně nedělá
+
+Snese se ```-blok kolem odpovědi (model ho přidává, i když se zakáže) a okrajové prázdné řádky.
+**Nesnese se** zkrácení: dlouhá odpověď projde celá, protože uříznutý konec by u textu odesílaného
+na GitHub uměl obrátit, co odstavec tvrdí. Naopak **vnitřní prázdný řádek zůstává** — na rozdíl od
+briefu, který si řádky filtruje ze seznamu vět; tady je výsledkem odstavec a odsazení je součást
+textu, který odejde.
+
+### Hlas: filtr se testuje jedním případem na každou ze tří podmínek
+
+Jedna konverzace se čtyřmi review vydá **jediný** vzorek: cizí vypadne, rozdělané (`pending`)
+vypadne, `LGTM` vypadne na krátkost. Kdyby prosáklo cizí review, psal by návrh mým jménem cizím
+hlasem — a nespadlo by u toho nic.
+
+Slití se testuje na tom, co se dá pokazit potichu: **strop deseti**, **přepis podle `id`** (tělo
+review se dá na GitHubu editovat, takže vzorek z doby před opravou je text, který už nikde nestojí)
+a **stabilní pořadí při shodném `submittedAt`** — bez něj by se desítka po každém načtení
+přeskládala a zadání by se měnilo bez důvodu.
+
+### Tři stavy pruhu, a ten prostřední se rozbije potichu
+
+`ReviewBodyLaneTests` jde vyčerpávajícím výčtem: napsané tělo, **neutrální tělo** (nula vzorků),
+spadlá session a můj vlastní text. Ten druhý je ten, který se rozbije potichu — nic by nespadlo,
+jen by okno tvrdilo „podle tvých posledních review (0)“, tedy pravý opak toho, co se stalo.
+
+U `handWritten` se tvrdí, že dráha zůstává **doběhlá**, ne červená: session doběhla a peníze stála,
+nestal se jedině zápis. Červená dráha by posílala hledat poruchu, která není.
+
+### Cena a razítko na disku
+
+Že se cena nese **i u nepovedeného běhu**, se tvrdí proti **skutečnému** `SpendLedger` nad dočasnou
+složkou (bez něj by se `recordSpend` vrátil rovnou a tvrzení by bylo prázdné). A že selhání
+**přežije restart**, se tvrdí druhým storem nad tímtéž `ReviewStore` — jinak by se session pustila
+po každém dalším otevření PR.
+
+### Že je to vidět, se tvrdí z pixelů (#521)
+
+`Tests/Views/ReviewBodyRenderTests.swift` — pátá sada, a zavírá mezeru, kterou `Policy` testy
+nezavřou: ty by prošly i nad pruhem, který druhou řádku vůbec nenapojil. Rozdíl bitmap
+(`NSHostingView` v okně mimo obrazovku, `cacheDisplay`, okno **bez animace** podle #462), ne čtení
+textu — accessibility tree se v hostovaném okně nenaplní.
+
+Tvrdí se čtyři věci: **tři stavy pruhu se kreslí různě** (kdyby se `bodyNote` nenapojil, byly by
+bitmapy shodné), **bez těla je pruh doslova týž jako před #521** (žádné prázdné místo pod první
+větou — srovnává se proti `AutoDraftNoteView` postavenému bez `bodyNote`), **druhá řádka pruh
+zvýší** (`if let` může projít, aniž by se řádka do pruhu vešla) a **doběhlá dráha se od nepoužité
+liší**, i když jsou obě `finished`, tedy stejně barevné.
+
+Snímky se dají pustit na disk `TEST_RUNNER_PRISM_RENDER_DIR=<složka>`, touž cestou jako sondy —
+a **prefix `TEST_RUNNER_` je podmínka**: bez něj `xcodebuild` prostředí shellu do testovacího hosta
+nepropustí a render tiše nenapíše nic (žádná řádka `RENDER`, testy zelené).
+
+### Falešná červená pod souběžným buildem (#521)
+
+Plný běh nad touhle větví vydal 224, při druhém průchodu 107 issues — všechno **`Nedočkalo se …
+strop 120 s`** v suitách `AppStore*` a `HealthMonitor`, tedy vzor z [*Čekání na jev*](#čekání-na-jev-296).
+Doklad je izolovaný běh **týchž** suit: `test-without-building -only-testing:…` nad
+`AppStoreSpendTests`, `AppStoreIntentTests`, `AppStoreAnnotationsTests`, `AppStoreRoutingTests`,
+`AppStoreDismissalTests`, `AppStoreProgressTests` prošel **61 testů za 2,8 s**, a druhá skupina
+(`AppStoreDismissalTests`, `AppStoreRerunTests`, `AppStoreRoutingTests`,
+`AppStoreNotificationGateTests`, `AppStoreReviewNotificationTests`, `AppStoreTimeoutTests`,
+`HealthMonitorTests`, `AppStoreReviewBodyTests`) **69 testů za 0,3 s**. Ve stejné chvíli běžely na
+stroji dva `swift-frontend` z jiného slotu a `load average` byl **11**. Čtyři sady #521 prošly
+i v tom plném běhu.

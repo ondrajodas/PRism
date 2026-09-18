@@ -41,6 +41,13 @@ struct ReviewProgressView: View {
     /// oddělená děličem, protože je to jiná otázka nad týmž PR: ne „co našli reviewery“, ale
     /// „co se v tom diffu děje“.
     var annotationLane: ReviewerLane?
+    /// Dráha osmé session (#521). `nil` = na tomhle PR se tělo review nepsalo.
+    ///
+    /// **Vlastní parametr, ne položka v `lanes`**, ze stejného důvodu jako u anotací: `Policy.lanes`
+    /// vypisuje tytéž reviewery jako chipy v pruhu běhu, a osmá session mezi ně nepatří — nálezy
+    /// nehlásí. Kreslí se **pod** nimi, za týmž děličem jako anotace: obojí je jiná otázka nad
+    /// týmž PR, ne další reviewer.
+    var reviewBodyLane: ReviewerLane?
 
     /// Které dráhy mají rozbalený výpis kroků (#325).
     ///
@@ -68,7 +75,7 @@ struct ReviewProgressView: View {
 
     var body: some View {
         Group {
-            if lanes.isEmpty, annotationLane == nil {
+            if lanes.isEmpty, annotationLane == nil, reviewBodyLane == nil {
                 empty
             } else {
                 ScrollView {
@@ -106,6 +113,7 @@ struct ReviewProgressView: View {
                 )
             }
             annotations
+            reviewBody
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -126,6 +134,25 @@ struct ReviewProgressView: View {
                 feed: .none,
                 toggleFeed: {},
                 resumeInDrawer: drawer(of: annotationLane),
+                now: now
+            )
+        }
+    }
+
+    /// Dráha těla review pod děličem (#521). **Bez `rerun`, `copyCommand`, `showRawSession`
+    /// i `resumeInDrawer`**: první dvě pouští revieweera podle jména skillu, druhé dvě chtějí
+    /// pracovní strom — a osmá session žádný nemá (`Policy.reviewBodyLane`). Tlačítko, které by
+    /// otevřelo cizí session, je horší než žádné.
+    @ViewBuilder private var reviewBody: some View {
+        if let reviewBodyLane {
+            Divider().padding(.vertical, 3)
+            ReviewerLaneView(
+                lane: reviewBodyLane,
+                shortName: reviewBodyLane.skill,
+                // **Bez výpisu kroků**: session bez nástrojů žádné kroky nedělá, takže
+                // `Policy.stepFeed` by nad prázdnými událostmi vydal `.none` — říká se to rovnou.
+                feed: .none,
+                toggleFeed: {},
                 now: now
             )
         }

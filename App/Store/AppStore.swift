@@ -611,6 +611,26 @@ final class AppStore {
     /// dřív, než první doběhne — o tom ale rozhoduje `briefState`, ne existence tasku.
     var briefTask: Task<Void, Never>?
 
+    /// Tělo návrhu review v mém hlasu (#521) — **osmá session a třetí bez nástrojů**. `nil` =
+    /// **tělo se nepíše**, tedy stav před #521; tak jsou na tom testy, které o něj nestojí,
+    /// a nespouští tím `claude`.
+    ///
+    /// **Není to brána.** Tou je `ResolvedConfig.autoDraft` (#520, výchozí vypnuto) — tělo je část
+    /// návrhu review, ne samostatná volba. Tady je jen zapojení session, jako `briefWriter`.
+    let reviewBodyWriter: (any ReviewBodyWriting)?
+
+    /// Posledních deset mých odeslaných těl review (#521) — vzorek hlasu. `nil` = nesbírá se, takže
+    /// se tělo píše neutrálně (a pruh nad panelem to řekne).
+    let reviewVoice: ReviewVoiceLedger?
+
+    /// Běžící session, která píše tělo review (#521) — jedna na PR, jako u anotací.
+    var reviewBodyTasks: [PRIdentifier: Task<Void, Never>] = [:]
+
+    /// Kolik vzorků hlasu šlo do **běžícího** zadání (#521). **Jen v paměti a jen na dobu běhu**:
+    /// po doběhnutí je ta hodnota v razítku (`AutoDraftBody.samples`), a druhá kopie by se s ním
+    /// uměla rozejít. Chybějící klíč = neběží nic.
+    var reviewBodySamples: [PRIdentifier: Int] = [:]
+
     /// Uložené rozhovory (#452). `nil` = neukládá se, tedy rozhovor zanikne se zavřením aplikace.
     let asks: AskStore?
 
@@ -1137,6 +1157,8 @@ final class AppStore {
         fixer: (any AgentFixing)? = nil,
         briefWriter: (any BriefWriting)? = nil,
         briefStore: BriefStore? = nil,
+        reviewBodyWriter: (any ReviewBodyWriting)? = nil,
+        reviewVoice: ReviewVoiceLedger? = nil,
         asks: AskStore? = nil,
         askContexts: AskContextStore? = nil,
         readMarkStore: ReadMarkStore? = nil,
@@ -1215,6 +1237,8 @@ final class AppStore {
         self.fixer = fixer
         self.briefWriter = briefWriter
         self.briefStore = briefStore
+        self.reviewBodyWriter = reviewBodyWriter
+        self.reviewVoice = reviewVoice
         self.asks = asks
         self.askContexts = askContexts
         self.readMarkStore = readMarkStore
@@ -1403,6 +1427,16 @@ final class AppStore {
             ),
             // Poslední brief (#516). Živý jedině tady — testy ho nedostanou, takže do cache nesahají.
             briefStore: BriefStore(),
+            // Tělo návrhu review v mém hlasu (#521) — **osmá session a třetí s prázdnou sadou**.
+            // Streamem kvůli ceně a přes tentýž registr běžících session (#351) jako zbytek. Cesta
+            // k `gh` se jí **nepředává**: session bez nástrojů nemá `git`, takže credential helper
+            // nepotřebuje. Brána je `autoDraft` z #520 (výchozí vypnuto), tady je jen zapojení.
+            reviewBodyWriter: ClaudeReviewBodyWriter(
+                claude: toolPaths.claude,
+                runner: SubprocessStreamer(sessions: .shared)
+            ),
+            // Vzorek hlasu (#521) — jeden malý JSON v kořeni cache slotu. Živý jedině tady.
+            reviewVoice: ReviewVoiceLedger(),
             asks: AskStore(),
             askContexts: AskContextStore(),
             // Značky `Prošlo` (#500) — jeden malý JSON na PR, čte se až při otevření diffu.
@@ -2570,6 +2604,10 @@ final class AppStore {
         hunkAnnotations = hunkAnnotations.filter { wantedPullRequests.contains($0.key) }
         annotationProgress = annotationProgress.filter { wantedPullRequests.contains($0.key) }
         annotationFailures = annotationFailures.filter { wantedPullRequests.contains($0.key) }
+        // Počet vzorků běžícího těla review (#521) jde tou samou cestou: u PR mimo chtěnou množinu
+        // nikdo dráhu nekreslí. Razítko na disku **zůstává** — je to zaplacená session. Běžící se
+        // **neruší**, stejně jako u anotací: doběhne a zapíše se, ať už PR ve frontě je, nebo ne.
+        reviewBodySamples = reviewBodySamples.filter { wantedPullRequests.contains($0.key) }
         // Mapa PR pro řádek fronty (#502) jde tou samou cestou a ze stejného důvodu jako diff,
         // ze kterého vzniká: u PR mimo chtěnou množinu ji nikdo nekreslí. Je to
         // `@ObservationIgnored` cache, takže tenhle zápis nikoho nebudí — na rozdíl od map výš

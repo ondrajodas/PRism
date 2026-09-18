@@ -112,6 +112,16 @@ struct CacheLayout: Sendable, Equatable {
     /// rozhoduje, jestli je dnešek už shrnutý (`Policy.brief(mode:…)`).
     var briefFile: URL { root.appending(path: "brief.json") }
 
+    /// Posledních deset **mých** odeslaných těl review (#521) — vzorek hlasu pro osmou session.
+    ///
+    /// **V kořeni cache, mimo dosah eviction**, jako brief a záznam dění: není to pracovní kopie
+    /// pull requestu, ale materiál, který se sbírá napříč nimi a přežívá i zavřené PR. Velikost
+    /// drží strop na počtu vzorků (`Policy.reviewVoiceLimit`), ne rozpočet na místo.
+    ///
+    /// **Klíčem není hlava ani pull request**, a je to jediná výjimka z tvrdé podmínky č. 5, která
+    /// tu výjimkou být nemusí: vzorek hlasu není nález ani tvrzení o kódu — je to moje próza.
+    var reviewVoiceFile: URL { root.appending(path: "review-voice.json") }
+
     /// Co dneska stálo review (#148). Vedle počitadla automatických běhů a ze stejného
     /// důvodu: píše to aplikace, ne člověk.
     var spendFile: URL { root.appending(path: "spend.json") }
