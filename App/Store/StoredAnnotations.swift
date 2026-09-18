@@ -47,4 +47,8 @@ struct StoredAnnotations: Codable, Hashable, Sendable {
 
     /// Je v záznamu vůbec co ukázat?
     var isEmpty: Bool { hunks.isEmpty && files.isEmpty }
+
+    /// Je co schovat přepínačem `Anotace u hunků` (#525)? Záznam **jen** s druhy změny ho nemá —
+    /// kapsle v hlavičce souboru se přepínačem neřídí, viz `Policy.hunkAnnotations(of:in:isOn:)`.
+    var hasHunkAnnotations: Bool { !hunks.isEmpty }
 }

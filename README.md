@@ -1838,6 +1838,12 @@ diff, vzhled okna a notifikace jsou vlastnost člověka, ne repozitáře.
 nehlásí a nemá je čím nahlásit. Brána platí **jen na automat** — ručně se pouští tlačítkem v liště nad
 diffem (`Popsat změny`) i u repa, kde je vypnutá. Po pushi anotace zastarají jako nálezy.
 
+**V diffu je z toho vidět čtvero** (#525): věta *proč* **pod souřadnicí hunku**, kapsle druhu změny
+(`změna chování`, `refaktor`, `test`, `konfigurace`, `generované`) **v hlavičce souboru**, přepínač
+`Anotace u hunků` v nabídce nad diffem a `Anotace · 4 věty · proti 4f2ac91` ve stavovém řádku. Druh
+změny k tomu bere **pořadí souborů v itineráři**. Anotace z jiné hlavy se **nenakreslí vůbec**, ani
+jako zastaralé — pořadí hunku je poziční, takže by po pushi ukazovaly vedle.
+
 **Celá globální konfigurace se dá nastavit z okna** (#389). Poslední dvě hodnoty, které se do té
 doby daly napsat jedině ručně do souboru, dostaly pole na stránkách, kam podle své otázky patří —
 a to je celé rozhodnutí, které za tím je: `issueTextTool` je věc **review** a `ownLogins` věc

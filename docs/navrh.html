@@ -10782,11 +10782,11 @@ tr.sel td.sg { background: var(--accent-weak); }
         promptu by nestačilo: prompt je prosba, tvar je podmínka.
       </p>
       <p class="muted">
-        <b>Kreslení hunků přijde až v dalším kroku (#525).</b> V #524 jsou z toho vidět
-        <b>dvě věci</b> — dráha <code>anotace</code> v tabu <em>Průběh</em> a tlačítko
-        <code>Popsat změny</code> v liště nad diffem. Kresba věty pod hunkem je proto
-        <b>zadání</b>, ne stav aplikace; lišta a dráha níž naopak kreslí to, co aplikace
-        doopravdy ukazuje.
+        <b>Dělá se to na dvakrát.</b> #524 postavilo session a je z něj vidět dráha
+        <code>anotace</code> v tabu <em>Průběh</em> a tlačítko <code>Popsat změny</code> v liště
+        nad diffem; <b>#525 to kreslí v diffu</b> — věta pod souřadnicí hunku, kapsle druhu
+        v hlavičce souboru, přepínač v nabídce nad diffem a jeden údaj ve stavovém řádku. Celá
+        sekce tedy od #525 kreslí to, co aplikace doopravdy ukazuje.
       </p>
     </div>
 
@@ -10805,7 +10805,7 @@ tr.sel td.sg { background: var(--accent-weak); }
           <div class="fhead">
             <span>▾</span>
             <span class="path"><span>src/Vault/</span><b>SecretClient.php</b></span>
-            <span class="pill">změna chování</span>
+            <span class="pill run">změna chování</span>
             <span class="sp"></span>
             <span class="rv-num" style="color: var(--ok);">+18</span>
             <span class="rv-num" style="color: var(--crit);">−6</span>
@@ -10836,11 +10836,11 @@ tr.sel td.sg { background: var(--accent-weak); }
         <div class="tag"><i></i>Strom souborů · pět druhů</div>
         <div class="frame flat" style="padding: 12px;">
           <div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px;">
-            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">SecretClient.php</span><span class="pill">změna chování</span></div>
-            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">Encryptor.php</span><span class="pill">refaktor</span></div>
-            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">SecretClientTest.php</span><span class="pill">test</span></div>
-            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">composer.json</span><span class="pill">konfigurace</span></div>
-            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">composer.lock</span><span class="pill">generované</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">SecretClient.php</span><span class="pill run">změna chování</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">Encryptor.php</span><span class="pill quiet">refaktor</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">SecretClientTest.php</span><span class="pill quiet">test</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">composer.json</span><span class="pill quiet">konfigurace</span></div>
+            <div style="display: flex; gap: 7px; align-items: baseline;"><span style="flex: 1;">composer.lock</span><span class="pill quiet">generované</span></div>
           </div>
         </div>
         <p style="font-size: 13.5px; color: var(--ink-2);">
@@ -10932,6 +10932,56 @@ tr.sel td.sg { background: var(--accent-weak); }
       </div>
     </div>
 
+    <h3>Vypnout a poznat, proti čemu to platí (#525)</h3>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Nabídka nad diffem · volby, které se nastaví a nechají být</div>
+        <div class="frame flat" style="padding: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; max-width: 260px;">
+            <div style="display: flex; gap: 8px;"><span>✓</span><span style="flex: 1;">Anotace u hunků</span></div>
+            <div style="display: flex; gap: 8px;"><span>✓</span><span style="flex: 1;">Nálezy pod řádky</span></div>
+            <div style="border-top: 1px solid var(--line); margin: 2px 0;"></div>
+            <div style="display: flex; gap: 8px;"><span style="color: var(--ink-3);">⤡</span><span style="flex: 1;">Zobrazit jen diff</span></div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Přepínač je v nabídce, akce v liště — a je to vědomě naopak.</b>
+          <code>Popsat změny</code> se u #524 z nabídky do lišty přestěhovalo, protože je to
+          <b>akce</b>, po které se musí něco změnit, a nabídka klik spolkne. Viditelnost vět je
+          proti tomu <b>volba pohledu</b>, která se nastaví a nechá být — tedy tatáž kategorie
+          jako <code>Nálezy pod řádky</code> hned pod ní. Jmenuje se <code>Anotace u hunků</code>,
+          ne <code>Popis změn</code>: jedno slovo pro akci i pro viditelnost jejího výsledku je
+          přesně ta záměna, kterou #219 z téhle lišty vyháněl. <b>Vypnuto = žádný řádek</b>,
+          ne schovaný — seznam řádků diffu se složí tak, jako by anotace nebyly.
+          <b>Kapsli druhu změny přepínač neschová</b>: to je jedno slovo v hlavičce, která tam
+          stojí tak jako tak. A na PR bez anotací položka v nabídce <b>není</b>.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Stavový řádek · proti které hlavě to platí</div>
+        <div class="frame flat" style="padding: 0;">
+          <div class="statusbar">
+            <span class="sitem plain">Krok 4 z 9 · 12 min</span>
+            <span class="sitem plain">Anotace · 4 věty · proti 4f2ac91</span>
+            <span class="sp"></span>
+            <span class="sitem">≥ 3,12 $</span>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b><code>proti 4f2ac91</code> je ta polovina, kvůli které to stojí za místo v pruhu.</b>
+          Anotace platí jedině proti jedné hlavě a po pushi se <b>nekreslí vůbec</b> (poznámka 201),
+          takže bez vypsané hlavy by <em>„popis tu není“</em> nešlo odlišit od <em>„popis propadl
+          pushem“</em>. Tichý údaj bez kapsle, jako průběh review vedle: je to běžný stav, ne
+          upozornění. <b>Záznam bez jediné věty se nepíše</b> — <code>0 vět</code> by tvrdilo, že je
+          co číst; že session doběhla a nic nenapsala, patří do dráhy <code>anotace</code>
+          v <em>Průběhu</em>, kde se o běhu mluví celou větou. A <b>o datech, ne o kresbě</b>: se
+          schovanými větami se údaj nemění, protože odpověď na <em>„je tenhle diff popsaný“</em>
+          je stejná.
+        </p>
+      </div>
+    </div>
+
     <div class="notes">
       <div class="note">
         <span class="num">201</span>
@@ -10964,6 +11014,18 @@ tr.sel td.sg { background: var(--accent-weak); }
           vlastnost „samo se neutrácí víc, než jsem si vybral“ drží jedině výchozí vypnuto. Brána
           je globální i per repo a týká se <b>automatu</b>; ručně se <code>Popsat změny</code>
           pouští i tam, kde je vypnutý. Tatáž dělba jako u <em>Pustit přesto</em> u routingu.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">204</span>
+        <span class="body">
+          <b>Věta nesahá na geometrii bloku kódu (#525)</b>
+          <span>Je to <b>vlastní řádek mezi bloky</b>, ne vložka do <code>NSTextView</code>: blok
+          si výšku měří sám a text vložený dovnitř by ji posunul — a s ní i skok na nález a karty
+          v okraji. Cena je zapsaná: <b>kde není souřadnice hunku, není ani věta</b>. Rozbalený
+          kontext hunky slévá a řádky pak jdou nepřetržitě za sebou, takže věta uprostřed by jeden
+          blok rozťala na dva; vrátí se, jak se kontext sbalí (<code>Zobrazit jen diff</code>).
+          Že se výška bloků nemění, se <b>měří</b> na nakresleném bloku, netvrdí.</span>
         </span>
       </div>
     </div>

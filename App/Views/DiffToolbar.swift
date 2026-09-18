@@ -45,6 +45,14 @@ struct DiffToolbar: View {
     /// nebo se neví, nad kterou hlavou by běžela. Zašedlé by slibovalo akci, která se zapíná
     /// jinde; je to tatáž úvaha jako u `Otevřít v editoru` (#530).
     var annotation: DiffAnnotationActions?
+    /// Má tenhle diff věty *proč* u hunků (#525)? `false` = přepínač v nabídce **není** — položka,
+    /// po které se nic nestane, je tatáž vada jako zašedlé tlačítko.
+    var hasAnnotations = false
+    /// Kreslit věty u hunků (#525). **V nabídce, ne v liště**, a je to opačné rozhodnutí než
+    /// u `Popsat změny` o kus vedle: tohle je volba pohledu, která se nastaví a nechá být, kdežto
+    /// ta akce mění stav po každém kliknutí — a nabídka klik spolkne. Podrobněji u
+    /// `DiffView.showAnnotations`.
+    var showAnnotations: Binding<Bool> = .constant(true)
 
     var body: some View {
         HStack(spacing: 9) {
@@ -209,19 +217,27 @@ struct DiffToolbar: View {
     /// Jedno tlačítko, ne dvě. Který ze dvou stavů dává smysl, plyne z toho, co je zrovna
     /// na obrazovce — dvě tlačítka by znamenala, že je jedno z nich pořád k ničemu.
     ///
-    /// Nabídka pod šipkou drží volby, které se nastaví a nechají být: bubliny nálezů pod řádky
-    /// a sbalení rozbaleného kontextu. V liště zabíraly místo, o které se v užším okně soutěží
-    /// s věcmi, které se používají při každém review.
+    /// Nabídka pod šipkou drží volby, které se nastaví a nechají být: bubliny nálezů pod řádky,
+    /// věty u hunků (#525) a sbalení rozbaleného kontextu. V liště zabíraly místo, o které se
+    /// v užším okně soutěží s věcmi, které se používají při každém review.
     ///
-    /// **Když by nabídka byla prázdná, kreslí se obyčejné tlačítko.** Obě položky jsou
-    /// podmíněné (nálezy musí existovat, kontext musí být rozbalený), takže na PR, na kterém
-    /// review neběželo a nikdo nic nerozbalil — tedy na tom, co člověk vidí jako první — by
-    /// šipka otevírala prázdné okénko. Šipku si `Menu` kreslí samo, zakázat ji nejde.
+    /// **Když by nabídka byla prázdná, kreslí se obyčejné tlačítko.** Všechny položky jsou
+    /// podmíněné (nálezy musí existovat, anotace taky, kontext musí být rozbalený), takže na PR,
+    /// na kterém review neběželo a nikdo nic nerozbalil — tedy na tom, co člověk vidí jako
+    /// první — by šipka otevírala prázdné okénko. Šipku si `Menu` kreslí samo, zakázat ji nejde.
     @ViewBuilder private var foldMenu: some View {
         if !diff.files.isEmpty {
             let allFolded = diff.files.allSatisfy(folding.isFolded)
-            if hasFindings || collapseExpansion != nil {
+            if hasFindings || hasAnnotations || collapseExpansion != nil {
                 Menu {
+                    if hasAnnotations {
+                        // Jmenuje se `Anotace u hunků`, ne `Popis změn`: tak se jmenuje **akce**
+                        // v liště, a jedno slovo pro akci i pro viditelnost jejího výsledku je
+                        // přesně ta záměna, kterou #219 z téhle lišty vyháněl (`Nálezy` vedle
+                        // `Nálezů`). `u hunků` říká, **kde** to je — na rozdíl od nálezů se
+                        // vypnutá anotace nikam nepřestěhuje, zmizí.
+                        Toggle("Anotace u hunků", isOn: showAnnotations)
+                    }
                     if hasFindings {
                         // Jmenuje se `Nálezy pod řádky`, ne `Bubliny`: schovává **jen** nálezy,
                         // kdežto „bubliny“ jsou od #64 i vlákna konverzace. A ne holé `Nálezy` —

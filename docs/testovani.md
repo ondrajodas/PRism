@@ -12087,3 +12087,46 @@ téhle session nemá **Zpřístupnění**, takže `CGEvent` ani `System Events` 
 okno stáhnout na podlahu tažením za hranu. **Screenshot funguje** (`screencapture -l <id>`), takže
 je doložené, že tlačítko v liště živé aplikace stojí; **že po kliknutí naskočí běh, musí proklikat
 člověk.**
+
+### Věta nad hunkem a geometrie bloků (#525)
+
+Čtyři sady, dohromady **44 testů**, a dělba mezi nimi je podle toho, **co která umí dokázat**:
+
+| sada | co tvrdí |
+|---|---|
+| `AnnotationDrawingTests` (16) | `Policy` výčtem: popisky pěti druhů, akcent jedině u `změna chování`, přepínač, věta stavového řádku |
+| `DiffAnnotationRowTests` (13) | **složení** řádků a bloků diffu v obou pohledech |
+| `DiffAnnotationRoomTests` (4) | **změřená** výška nakreslených bloků a rozdíl bitmap |
+| `FileRiskTests` (+7, #525) | druh změny v pořadí itineráře |
+
+**Nejcennější je tvrzení, že se geometrie bloků *nezměnila*** — je to ta tvrdá mez z #469 a rozbije
+se potichu: nic nespadne, jen skok na nález (`DiffRow.blockSpot`) a karty v okraji (#503) začnou
+mířit vedle. Tvrdí se **dvěma různými cestami**, ne jednou dvakrát:
+
+1. **Nad modelem** (`DiffAnnotationRowTests`): identity bloků a počty řádků v nich jsou s anotacemi
+   i bez nich **tytéž** — v `unified` i ve `split`, a k tomu nad **rozbaleným** kontextem, kde jsou
+   bloky nejdelší. Měřidlo je vedle: `#expect(!without.isEmpty)`, jinak by „stejné seznamy“ platilo
+   i o dvou prázdných.
+2. **Na nakresleném bloku** (`DiffAnnotationRoomTests`): výšky **všech** `DiffTextView` v hostované
+   hierarchii, srovnané podle změřené polohy (ne podle pořadí podviews — to je věc SwiftUI a dalo
+   by se tím tvrzení splnit přeskládáním). K tomu druhá otázka z #478: **naměřilo by to rozdíl,
+   kdyby ta chyba byla?** Proto je vedle test, že se první blok o větu **odsune dolů**, a rozdíl
+   bitmap „s větou ≠ bez věty“.
+
+**Ověřeno vložením regrese, dvakrát.** Věta posazená **doprostřed hunku** (za druhý řádek místo za
+hlavičku) shodí **16 tvrzení** — mezi nimi výšky bloků (`[260, 196, 180, 130]` proti
+`[36, 228, 36, 164, 36, 148, 36, 98]`, tedy osm bloků místo čtyř) i složení v obou pohledech.
+Ignorovaný přepínač (`isOn` bez efektu) shodí **4 tvrzení** ve dvou sadách — jedno v `Policy`,
+tři nad seznamem řádků; kdyby bylo jen jedno z toho, „vypnuto“ by se dalo splnit na půl cesty.
+
+**Kapsli druhu změny tvrdí bitmapa, ne accessibility tree** (ten se v hostovaném okně nenaplní,
+změřeno u `DashboardCountdownRedrawTests`): hlavička bez druhu ≠ s druhem, a `změna chování` ≠
+`generované`, takže se akcent od tichého tónu **pozná i jinak než délkou slova**.
+
+**Co se ověřit nepovedlo, a je to zapsaná mezera:** snímek běžící aplikace nad **skutečnými**
+anotacemi. `bin/run.sh` v tomhle slotu nedoběhl — v zásuvce běžel `claude --resume`, takže se
+aplikace na ukončení zeptala (což je záměr, viz *Příkazy* v `CLAUDE.md`) a dialog zůstal stát;
+hostitelská session nemá **Zpřístupnění**, takže se na něj nedá kliknout. Druhá instance z
+`build.noindex` (týž slot, tedy tatáž cache) se spustit dá a **okno se vyfotit dá**, ale frontu
+nenačte — zůstane na `Načítám frontu…` a `gh` si nezavolá ani jednou, takže v ní žádný diff není.
+**Proklikání tedy zbývá na člověka**; doloženo je měření výše a render zákresu vedle.

@@ -96,6 +96,26 @@ extension Policy {
         return result
     }
 
+    /// Anotace, které se v diffu doopravdy **nakreslí** (#525) — tedy `annotations(of:in:)`
+    /// a k tomu přepínač `Anotace u hunků` z nabídky nad diffem.
+    ///
+    /// **Vypnuto = prázdná mapa, ne schovaný řádek**: seznam řádků diffu se pak skládá přesně
+    /// tak, jako by anotace nebyly, takže vypnutý přepínač nemůže nechat po větách ani mezeru.
+    /// A je to tady, ne `if` v `DiffView`u: „co se kreslí“ je odpověď nad daty.
+    ///
+    /// **Pilulka druhu změny v hlavičce souboru se tím neřídí** a je to rozhodnutí, ne opomenutí:
+    /// přepínač je o **řádcích nad hunky**, tedy o tom, co odsouvá kód dolů. Druh je jedno slovo
+    /// v hlavičce, která tak jako tak stojí, a schovat ho spolu s větami by znamenalo vypnout
+    /// dvě různé věci jedním přepínačem.
+    static func hunkAnnotations(
+        of stored: StoredAnnotations?,
+        in file: FileDiff,
+        isOn: Bool
+    ) -> [Int: HunkAnnotation] {
+        guard isOn else { return [:] }
+        return annotations(of: stored, in: file)
+    }
+
     /// Druh změny u jednoho souboru. `nil` = session ho neurčila, nebo anotace neplatí.
     static func changeKind(of stored: StoredAnnotations?, in file: FileDiff) -> FileChangeKind? {
         stored?.files.first { matches($0.file, file) }?.kind
