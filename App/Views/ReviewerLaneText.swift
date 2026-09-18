@@ -74,10 +74,20 @@ enum ReviewerLaneText {
         case .finished:
             return finished(lane)
         case .timedOut:
+            // **Zabitá anotační session nepřináší nic**, na rozdíl od revieweera: odpověď je
+            // poslední sdělení (`AnnotationSchema`), do kterého se nedostala. Věta o „tom, co do té
+            // doby dorazilo“ by tady tvrdila víc, než data unesou — a to je zrovna ten vzor, který
+            // se v tomhle repu hlídá.
+            guard case .reviewer = lane.kind else {
+                return "Vypršel čas a session byla zabita. Odpověď nestihla, takže z ní není nic."
+            }
             return "Vypršel čas a session byla zabita. Nálezy, které do té doby dorazily, zůstaly."
         case .interrupted:
             return "Skončilo s aplikací; nálezy se dotáhly z transcriptu."
         case .stopped:
+            guard case .reviewer = lane.kind else {
+                return "Nedoběhlo — běh někdo zrušil. Co dorazilo, se neuložilo."
+            }
             return "Nedoběhlo — běh někdo zrušil. Co v ose je, je všechno, co dorazilo."
         case .skipped:
             // `nil` jako u spadlé session, a ze stejného důvodu: přeskočení má vlastní blok, ve
@@ -175,11 +185,44 @@ enum ReviewerLaneText {
     /// seznam, nebo nenahlásila nic. To poslední **není čisto** — reviewer, který `ReportFindings`
     /// nezavolal, o kódu neřekl nic, a věta „nic nenašel“ by tvrdila víc, než data unesou.
     private static func finished(_ lane: ReviewerLane) -> String {
+        // Anotační dráha (#524) mluví o **anotacích, ne o nálezech** — a je to poslední vrstva,
+        // ve které se ta hranice dá porušit: `reportedFindings` u ní zůstává `nil`, takže bez
+        // vlastní věty by pod doběhlým popisem stálo „nálezy vůbec nenahlásilo“.
+        if case .annotations(let hunks, let files, let dropped) = lane.kind {
+            return annotated(hunks: hunks, files: files, dropped: dropped)
+        }
         guard let count = lane.reportedFindings else {
             return "Doběhlo, ale nálezy vůbec nenahlásilo — to není totéž jako čisto."
         }
         guard count > 0 else { return "Doběhlo a nahlásilo prázdný seznam, tedy čisto." }
         return "Doběhlo · \(Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů"))."
+    }
+
+    /// Doběhlá anotační session (#524). Rozlišuje **tři** stavy jako u revieweera, jen o něčem
+    /// jiném: popsala něco, poslala prázdné seznamy, nebo neodpověděla ve tvaru, který jde přečíst.
+    /// To poslední **není „diff je nezajímavý“** — a je to u odpovědi posledním sdělením ten
+    /// nejpravděpodobnější způsob, jak se sběr pokazí potichu (`docs/claude-cli.md`), takže to
+    /// věta musí říct rovnou.
+    private static func annotated(hunks: Int?, files: Int?, dropped: Int) -> String {
+        guard let hunks, let files else {
+            return "Doběhlo, ale odpověď se nedala přečíst — to není totéž jako diff bez čeho psát."
+        }
+        guard hunks > 0 || files > 0 else {
+            return "Doběhlo a nahlásilo prázdné seznamy — k tomuhle diffu nemá co dodat."
+        }
+        return "Doběhlo · \(Plural.czech(hunks, one: "anotace", few: "anotace", many: "anotací"))"
+            + " · \(Plural.czech(files, one: "soubor", few: "soubory", many: "souborů")) s druhem změny."
+            + dropText(dropped)
+    }
+
+    /// Kolik položek odpovědi se zahodilo. **Prázdné, dokud není co hlásit** — a je to **jediné
+    /// místo, kde se to dá ukázat**: anotační dráha nemá výpis kroků, takže `droppedEntries`
+    /// (zahozené kroky osy) o tom mlčí. Bez téhle věty je anotace bez povinného pole k nerozeznání
+    /// od hunku, který session schválně nepopsala — tentýž důvod jako u `droppedFindings`.
+    private static func dropText(_ dropped: Int) -> String {
+        guard dropped > 0 else { return "" }
+        return " · \(Plural.czech(dropped, one: "položka", few: "položky", many: "položek"))"
+            + " se nepodařilo přečíst."
     }
 
     /// Popisky obou cest do terminálu (#453).

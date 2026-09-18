@@ -107,9 +107,32 @@ struct ReviewerLane: Identifiable, Equatable, Sendable {
         /// Jediná fáze přeskočené dráhy (#518). Věta z návrhu, sekce 46, doslova — a říká **čí to
         /// rozhodnutí bylo**: „nepustilo se“ samotné by znělo jako porucha.
         static let routed = "nepustilo se — pravidlo repa"
+        /// Třetí fáze anotační dráhy (#524). **Vlastní popisek, ne `hlásí nálezy`**: sedmá session
+        /// nálezy nehlásí a nemá je čím nahlásit, takže by ten popisek tvrdil něco, co data neunesou.
+        static let annotations = "píše anotace"
+    }
+
+    /// Čí je ta dráha (#524).
+    ///
+    /// **Musí to být v typu, ne v jméně skillu.** Text pod dráhou mluví o tom, co běh nahlásil,
+    /// a u anotací je to jiná věta — `reportedFindings` u nich zůstává navěky `nil`, protože
+    /// anotace **není nález**. Kdyby se to rozhodovalo porovnáním `skill == "anotace"`, byla by
+    /// hranice mezi anotací a nálezem v řetězci, který si může někdo pojmenovat skill.
+    enum Kind: Equatable, Sendable {
+        /// Reviewer z nastavené sady.
+        case reviewer
+        /// Sedmá session (#524). Nese, co nahlásila — **hunky a soubory, nikdy nálezy** — a kolik
+        /// položek se nepodařilo přečíst. `dropped` je tu proto, že dráha je **jediné místo**, kde
+        /// se to dá ukázat: výpis kroků anotační dráha nemá, takže `droppedEntries` (což jsou
+        /// zahozené kroky osy, ne položky odpovědi) by o tom mlčelo.
+        case annotations(hunks: Int?, files: Int?, dropped: Int)
     }
 
     let skill: String
+    /// Čí ta dráha je (#524). `var` s výchozí hodnotou **jen kvůli memberwise initu** — šest
+    /// konstruktorů reviewerských drah níž se tím nemění ani o parametr; tatáž úvaha jako
+    /// u `FileDiff.blobs`.
+    var kind: Kind = .reviewer
     let state: State
     /// Nikdy prázdné — i běh, který jen čeká na slot, má jednu fázi.
     let phases: [Phase]

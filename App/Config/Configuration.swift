@@ -180,6 +180,20 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// **Per repo se přebít dá** (jako režim nebo limit): velké repo s dlouhými PR z toho těží
     /// nejvíc, malé se v prvním kole přečte celé tak jako tak.
     var incrementalAfterPush: Bool
+    /// Popisovat po automatickém review hunky větou *proč* (#524)? Ve výchozím stavu **ne**.
+    ///
+    /// **Vypnuto schválně, a je to jiná strana než u `incrementalAfterPush`.** Přírůstek je
+    /// zlevnění toho, co aplikace dělá tak jako tak; anotace je **session navíc na každou hlavu**,
+    /// tedy peníze, o které si nikdo neřekl. Vlastnost „samo se neutrácí víc, než jsem si vybral“
+    /// drží jedině výchozí vypnuto — je to tatáž třída jako `autoAgent`, jen bez rizika zápisu.
+    ///
+    /// Ručnímu spuštění z lišty nad diffem to **nebrání**, a je to tatáž dělba jako u routingu
+    /// (#518) s `Pustit přesto`: brána se týká toho, co si vybírá aplikace, ne toho, o co si člověk
+    /// řekne kliknutím.
+    ///
+    /// **Per repo se přebít dá** (jako režim nebo limit): u repa, kde čtu cizí kód poprvé, se to
+    /// vyplatí, u vlastního ne.
+    var annotatesHunks: Bool
     /// V čem se otevírají soubory z kopie v cache (#530). **Výchozí `nil` = tlačítko se nekreslí.**
     ///
     /// Je to jediná hodnota v tomhle souboru, jejíž prázdno znamená **„tahle akce v okně není“**,
@@ -244,6 +258,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         model: String?,
         issueTextTool: String? = nil,
         incrementalAfterPush: Bool = true,
+        annotatesHunks: Bool = false,
         externalEditor: ExternalEditor? = nil,
         dockBadge: DockBadgeMode = .waiting,
         brief: BriefMode = .off,
@@ -272,6 +287,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.model = model
         self.issueTextTool = issueTextTool
         self.incrementalAfterPush = incrementalAfterPush
+        self.annotatesHunks = annotatesHunks
         self.externalEditor = externalEditor
         self.dockBadge = dockBadge
         self.brief = brief
@@ -381,6 +397,10 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         incrementalAfterPush = container.contains(.incrementalAfterPush)
             ? ((try? container.decode(Bool.self, forKey: .incrementalAfterPush)) ?? false)
             : standard.incrementalAfterPush
+        // **Rozbitá hodnota se srazí na výchozí, a ta je `false`** (#524) — tatáž přísnost jako
+        // u odesílání a u agenta: překlep v souboru nesmí začít utrácet session navíc.
+        annotatesHunks = (try? container.decode(Bool.self, forKey: .annotatesHunks))
+            ?? standard.annotatesHunks
         // Chybějící klíč **i rozbitá hodnota** znamenají `nil`, tedy „tlačítko se nekreslí“ (#530)
         // — a je to tentýž princip jako všude jinde, tedy srazit se na **bezpečnou stranu**. Ta je
         // tady shodou okolností i výchozí: neznámé jméno editoru nesmí podstrčit jiný, protože
@@ -455,6 +475,10 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// kterého chci po pushi vždycky celé review, si to má podržet i po přepnutí globálního
     /// defaultu.
     var incrementalAfterPush: Bool?
+    /// `nil` = ber globální (#524). Vyplněná hodnota znamená „řekl jsem si o tohle“ — a `false`
+    /// u repa se proto **nesmaže** jako „shodné s globálním“, přesně jako u odesílání a u agenta:
+    /// repo, u kterého anotace platit nechci, si to má podržet i po přepnutí globálního defaultu.
+    var annotatesHunks: Bool?
     /// Na kterých cestách se který reviewer pouští (#518). Klíčem je skill, hodnotou vzory cest
     /// (`src/Auth/**`, `*.env*`, `composer.lock`) — jejich význam je u `Policy.pathMatches`.
     ///
@@ -479,6 +503,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         blockingCategories: [String]? = nil,
         reviewTimeoutMinutes: Int? = nil,
         incrementalAfterPush: Bool? = nil,
+        annotatesHunks: Bool? = nil,
         reviewerPaths: [String: [String]]? = nil
     ) {
         self.mode = mode
@@ -490,6 +515,7 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
         self.blockingCategories = blockingCategories
         self.reviewTimeoutMinutes = reviewTimeoutMinutes
         self.incrementalAfterPush = incrementalAfterPush
+        self.annotatesHunks = annotatesHunks
         self.reviewerPaths = reviewerPaths
     }
 
@@ -553,6 +579,14 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
                 ?? false
         } else {
             incrementalAfterPush = nil
+        }
+        // Jako na globální úrovni (#524): chybějící klíč je „ber globální“, kdežto **rozbitá
+        // hodnota se srazí na `false`**, tedy na „neutrácet“. Vzít u ní globální hodnotu by
+        // znamenalo, že překlep v repu, u kterého jsem si anotace zakázal, je zapne.
+        if container.contains(.annotatesHunks) {
+            annotatesHunks = (try? container.decode(Bool.self, forKey: .annotatesHunks)) ?? false
+        } else {
+            annotatesHunks = nil
         }
         // Routing (#518) — **rozbitá hodnota se bere jako „nic jsem neřekl“**, tedy jako u jazyka
         // nálezů a na opačnou stranu než u režimu. Tady je totiž bezpečná strana ta druhá: chybný
@@ -655,6 +689,7 @@ struct Configuration: Codable, Equatable, Sendable {
                 minutes: overrides?.reviewTimeoutMinutes ?? global.reviewTimeoutMinutes
             ),
             incrementalAfterPush: overrides?.incrementalAfterPush ?? global.incrementalAfterPush,
+            annotatesHunks: overrides?.annotatesHunks ?? global.annotatesHunks,
             // Routing (#518) nemá globální úroveň, takže se nic nepřebíjí — prázdná mapa je
             // „žádné pravidlo“, tedy stav, ve kterém se pouští celá sada jako do #518. Proč
             // globální mapa nevznikla, je u `RepositoryConfig.reviewerPaths`.
@@ -728,6 +763,9 @@ struct ResolvedConfig: Equatable, Sendable {
     /// Smí se po pushi ptát jen na přírůstek (#517)? Rozhodnutí z toho skládá
     /// `Policy.reviewScope` — tady je jen brána, kterou si repo přebít smí.
     let incrementalAfterPush: Bool
+    /// Smí automat po review popsat hunky (#524)? **Výchozí `false`** — je to brána proti utrácení
+    /// session navíc, ne předvolba, a ručního spuštění z lišty nad diffem se netýká.
+    let annotatesHunks: Bool
     /// Na kterých cestách se který reviewer pouští (#518). Prázdná mapa = žádné pravidlo, tedy
     /// celá sada jako do #518. Rozhodnutí z toho skládá `Policy.reviewersToRun(files:rules:)`
     /// — tady je jen surová konfigurace, i s prázdnými řádky z tabulky nastavení.
