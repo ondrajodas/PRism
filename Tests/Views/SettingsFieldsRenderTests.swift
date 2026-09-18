@@ -30,19 +30,26 @@ struct SettingsFieldsRenderTests {
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     ///
-    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta, od #519 o dalších čtyři sta a od
-    /// #516 o dalších tři sta** — ta poslední porce **není novou sekcí**, ale **delším vysvětlením**
-    /// u té stávající (`Brief na domově` dostalo odstavec o ceně). Do téhle konstanty se tedy
-    /// nepromítá jen to, co na stránku přibude, ale i to, co na ní **naroste**.
+    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta, od #519 o dalších čtyři sta, od
+    /// #516 o dalších tři sta a od #520 o dalších sedm set** — ta předposlední porce **není novou
+    /// sekcí**, ale **delším vysvětlením** u té stávající (`Brief na domově` dostalo odstavec
+    /// o ceně). Do téhle konstanty se tedy nepromítá jen to, co na stránku přibude, ale i to, co
+    /// na ní **naroste**.
+    ///
+    /// **Ta poslední porce je za dvě věci naráz, a přišlo se na ni až slitím** (#520 + #524): sekce
+    /// `Návrh review po reviewerech` a k tomu přepínač `Po review popsat hunky` s odstavcem
+    /// vysvětlení v `Režim review`. Ani jedna z nich sama pod hranici pole neposunula — teprve
+    /// obojí, a je to doklad, že tahle konstanta patří ke **stránce**, ne ke změně, která ji zvedla.
     /// `Form` je `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — a každá nová sekce
     /// nad `Text issue z trackeru` ho posunula pod dosavadní hranici (#517 přepínačem `Po pushi
     /// review jen přírůstku`, #510 sekcí `Agent na vlastním PR`, #519 sekcí `Tiché hodiny` se
-    /// čtyřmi řádky a vysvětlením). Test se tím nezměnil v tom, co tvrdí: dvě bitmapy vyšly stejné
+    /// čtyřmi řádky a vysvětlením, #520 sekcí `Návrh review po reviewerech` a #524 přepínačem
+    /// `Po review popsat hunky`). Test se tím nezměnil v tom, co tvrdí: dvě bitmapy vyšly stejné
     /// právě proto, že se pole přestalo kreslit, což je zrovna ta vada, kterou má chytat.
     ///
     /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
     /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
-    private static let height: CGFloat = 2800
+    private static let height: CGFloat = 3500
 
     // MARK: - Text issue z trackeru
 

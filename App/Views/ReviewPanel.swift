@@ -65,6 +65,11 @@ struct ReviewPanel: View {
     var conversation: ConversationState?
     /// Proč se do draftu nedá psát. `nil` = dá se.
     var draftUnavailable: String?
+    /// Věta o návrhu review, který složila aplikace (#520). `nil` = žádný neleží.
+    var autoDraftNote: String?
+    var autoDraftActions = AutoDraftActions()
+    /// Značky `sporné` u nálezů (#520). Prázdné = návrh se neskládal, takže se nekreslí nic.
+    var autoDraftDoubts: [FindingKey: AutoDraftDoubt] = [:]
     var draftActions = DraftActions()
     var jumpToComment: (ReviewDraftComment) -> Void = { _ in }
     /// Labely a vyžádaní reviewery (#392). `nil` = ještě se nenačetly; prázdný snímek je platná
@@ -424,6 +429,19 @@ struct ReviewPanel: View {
                 isStale: isDraftStale,
                 isOwnPullRequest: isOwnPullRequest,
                 unavailable: draftUnavailable,
+                autoDraftNote: autoDraftNote,
+                // **Přepnutí segmentu skládá panel, ne pruh** (#520): `tab` drží on, takže by ho
+                // pruh nemohl změnit bez toho, aby se mu binding protáhl skrz. Skok na nález
+                // zůstává volajícímu — panel neví, kde v diffu to místo je.
+                autoDraftActions: AutoDraftActions(
+                    discard: autoDraftActions.discard,
+                    showContested: autoDraftActions.showContested.map { show in
+                        {
+                            tab = .findings
+                            show()
+                        }
+                    }
+                ),
                 actions: draftActions,
                 jump: jumpToComment
             )
@@ -508,7 +526,8 @@ struct ReviewPanel: View {
             of: findings,
             blocking: blockingCategories,
             dismissals: dismissals,
-            rechecks: rechecks
+            rechecks: rechecks,
+            doubts: autoDraftDoubts
         )
     }
 

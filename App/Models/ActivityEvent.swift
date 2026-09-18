@@ -40,6 +40,15 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
         /// „agent na to review odpověděl“ — přitom druhé se stane jedině tehdy, když si to někdo
         /// zapnul, a je to zrovna ta věc, kterou chce po návratu k počítači vidět.
         case agentFix
+        /// **Aplikace složila návrh review** (#520) — a je to druhý druh dění, který mluví o práci
+        /// naší aplikace, ne o tom, co udělal někdo jiný.
+        ///
+        /// Vlastní druh vedle `findings`: ta říká, **co reviewer našel**, tohle **co s tím
+        /// aplikace udělala**. Slít je do jednoho by znamenalo, že se na ose nedá odlišit „přišly
+        /// nálezy“ od „nálezy jsou převzaté a čekají na odeslání“ — a druhé se stane jedině tehdy,
+        /// když si to někdo zapnul. **Dopočítané**: banner za něj nechodí, protože o výsledku
+        /// review už jeden přišel a druhý o tomtéž PR v tutéž chvíli je čisté vyrušení.
+        case autoDraft
         /// **Autor odpověděl na moje review** (#523) — na cizím PR se pohnulo to, na co jsem se
         /// ptal já.
         ///

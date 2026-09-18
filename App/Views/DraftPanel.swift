@@ -26,6 +26,10 @@ struct DraftPanel: View {
     var isOwnPullRequest = false
     /// Proč se do draftu nedá psát. `nil` = dá se.
     var unavailable: String?
+    /// Věta o návrhu, který složila aplikace (#520). `nil` = žádný návrh se neskládal, nebo se
+    /// zahodil — pak se pruh **nekreslí vůbec**, ne prázdný.
+    var autoDraftNote: String?
+    var autoDraftActions = AutoDraftActions()
     var actions = DraftActions()
     var jump: (ReviewDraftComment) -> Void = { _ in }
 
@@ -55,6 +59,12 @@ struct DraftPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
+                // **Úplně nahoře, nad bannerem o zastarání** (#520): pruh vysvětluje, **odkud je
+                // všechno pod ním**, kdežto banner mluví o tom, že to nejde odeslat. Kdo čte panel
+                // shora dolů, potřebuje to v tomhle pořadí — a obojí naráz je legitimní stav.
+                if let autoDraftNote {
+                    AutoDraftNoteView(note: autoDraftNote, actions: autoDraftActions)
+                }
                 if isStale { staleBanner }
                 if let unavailable { unavailableNote(unavailable) }
                 topRow

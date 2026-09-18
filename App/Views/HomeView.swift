@@ -125,6 +125,11 @@ struct HomeView: View {
                     // z pilulky se pozná, že nad PR běží něco, co jsem nespustil, nebo že v kopii repa
                     // leží commit k přetlačení.
                     agent: store.agentRowPill(for: pullRequest),
+                    // Návrh review (#520) — **jeden řádek, jedna podoba**, tedy i tady: z pilulky se
+                    // pozná, že po reviewerech leží v panelu připravený návrh a kolik z něj zůstalo
+                    // sporné. Brána i razítko jsou za `AppStore.autoDraftPill`, takže s vypnutou
+                    // volbou se nekreslí nic.
+                    autoDraft: store.autoDraftPill(for: pullRequest.id),
                     // Odložit i tady (#512, oprava po proklikání) — **jeden řádek, jedna podoba**,
                     // z téhož důvodu jako `Prompt →` o řádek výš. Cizí PR s rozdělaným review je
                     // zrovna to, co se odkládá; odložení je o **frontě**, takže z téhle sekce

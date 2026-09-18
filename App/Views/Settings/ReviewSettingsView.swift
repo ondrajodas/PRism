@@ -53,6 +53,8 @@ struct ReviewSettingsView: View {
 
             agent
 
+            autoDraft
+
             brief
 
             // Vlastní sekce, ne řádek v `Režim review` (#519): tamty čtyři hodnoty si repo smí
@@ -179,6 +181,25 @@ struct ReviewSettingsView: View {
             Text("Brief na domově")
         } footer: {
             Text("Výchozí stav je **vypnuto** a blok se pak na domově nekreslí vůbec. Když se zapne, složí až tři věty — co přibylo, co hoří a co si vzít první — session Claude Code **bez jediného nástroje**: dostane hotový stav aplikace (pruhy desky, počty, dění) a jenom ho přeformuluje. Nečte repozitář, nesahá na disk ani na GitHub. `Na požádání` čeká na tlačítko, `Při prvním tiku dne` k tomu složí brief jednou denně, jakmile je fronta načtená.\n\n**Jeden brief stojí kolem 0,09 $** (změřeno; drtivou většinu z toho spolkne start session, ne délka shrnutí). Při `Při prvním tiku dne` je to zhruba **2,50 $ měsíčně**. Cena každého běhu je na řádku pod briefem a počítá se do `Dneska stálo`; do denního limitu automatických běhů se **nezapočítává**.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Návrh review (#520) — **brána, ne předvolba**.
+    ///
+    /// Leží mezi agentem a briefem, protože je to tatáž otázka jako u agenta („co aplikace udělá,
+    /// aniž bych na to klikl“), jen o mém rozdělaném review místo o souborech v kopii repa.
+    ///
+    /// **Text musí říct, kde ta hranice končí**, jako u odesílání a u agenta: předvyplní se to,
+    /// co pak odesílám — a odesílání se tím nemění, pořád je za potvrzením s celým payloadem.
+    private var autoDraft: some View {
+        Section {
+            Toggle("Složit návrh review po doběhnutí reviewerů", isOn: $settings.draft.global.autoDraft)
+        } header: {
+            Text("Návrh review")
+        } footer: {
+            Text("Výchozí stav je **vypnuto**. Když se zapne, převezme aplikace po doběhnutí **všech** reviewerů do rozdělaného review nálezy, u kterých si je reviewer jistý (`CONFIRMED`) a nikdo mu neodporuje. Ostatní zůstanou **sporné** — u nálezu je vidět značka i důvod a převzít je jde kliknutím. Odmítnutý nález se nepřevezme nikdy. **Nic se tím neodesílá**: review odchází pořád jedině z potvrzení, ve kterém je celý payload, a verdikt zůstává návrhem. Návrh se dá zahodit jedním tlačítkem a panel je pak prázdný jako bez téhle volby. Repo si to může přebít.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

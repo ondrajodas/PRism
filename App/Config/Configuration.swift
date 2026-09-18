@@ -116,6 +116,18 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     /// **Globálně i per repo**, ze stejného důvodu jako odesílání: je to vlastnost **repa** (v tomhle
     /// repu chci po Copilotovi opravit samo, ve firemním ne), ne toho, kdo se dívá.
     var autoAgent: Bool
+    /// Složí aplikace po doběhnutí reviewerů **návrh review** sama (#520)? Ve výchozím stavu
+    /// **ne**.
+    ///
+    /// **Je to brána, ne pohodlí**, a je to tatáž třída jako `allowsPublishing` a `autoAgent`:
+    /// aplikace za mě předvyplní, co se pak odesílá. Odeslání se tím **nemění ani o písmeno** —
+    /// pořád jedině `ReviewPublishing.submit`, pořád s potvrzením a celým payloadem (tvrdá
+    /// podmínka č. 1). Výchozí vypnuto drží vlastnost „samo se nic nepředvyplní“: dokud si o to
+    /// někdo výslovně neřekne, otevře se panel prázdný jako do #520.
+    ///
+    /// **Globálně i per repo**, ze stejného důvodu jako odesílání a agent: v tomhle repu chci mít
+    /// nálezy převzaté předem, ve firemním ne.
+    var autoDraft: Bool
     /// Jazyk, do kterého se nálezy překládají, než se ukážou. **Ne** jazyk, ve kterém je
     /// reviewer píše — jeho prompt o jazyku mlčí. Výchozí čeština, protože okno je české
     /// a anglické nálezy vedle českých popisků působily jako dva slepené nástroje.
@@ -248,6 +260,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         allowsPublishing: Bool = false,
         mergeMethod: MergeMethod = .squash,
         autoAgent: Bool = false,
+        autoDraft: Bool = false,
         findingsLanguage: FindingsLanguage = .czech,
         diffLayout: DiffLayout = .unified,
         appearance: AppearanceMode = .system,
@@ -277,6 +290,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.allowsPublishing = allowsPublishing
         self.mergeMethod = mergeMethod
         self.autoAgent = autoAgent
+        self.autoDraft = autoDraft
         self.findingsLanguage = findingsLanguage
         self.diffLayout = diffLayout
         self.appearance = appearance
@@ -363,6 +377,11 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // u odesílání a ze stejného důvodu: překlep v souboru nesmí pustit session, která píše do
         // souborů, a to bez jediného kliknutí.
         autoAgent = (try? container.decode(Bool.self, forKey: .autoAgent)) ?? standard.autoAgent
+        // **Rozbitá hodnota se srazí na výchozí, a ta je `false`** (#520) — tatáž přísnost jako
+        // u odesílání a u agenta: překlep v souboru nesmí začít předvyplňovat to, co se pak
+        // odesílá. Nejhorší následek je panel prázdný jako do #520, tedy chování, na které je
+        // aplikace zvyklá.
+        autoDraft = (try? container.decode(Bool.self, forKey: .autoDraft)) ?? standard.autoDraft
         findingsLanguage = (try? container.decode(FindingsLanguage.self, forKey: .findingsLanguage))
             ?? standard.findingsLanguage
         // Tolerantně jako jazyk nálezů, ne přísně jako režim nebo odesílání: nejhorší
@@ -459,6 +478,10 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
     /// u repa se proto **nesmaže** jako „shodné s globálním“, přesně jako u odesílání: repo, ve
     /// kterém agenta spouštět nechci, si to má podržet i po přepnutí globálního defaultu.
     var autoAgent: Bool?
+    /// `nil` = ber globální (#520). Vyplněná hodnota znamená „řekl jsem si o tohle“ — a `false`
+    /// u repa se proto **nesmaže** jako „shodné s globálním“, přesně jako u odesílání a u agenta:
+    /// repo, ve kterém návrh skládat nechci, si to má podržet i po přepnutí globálního defaultu.
+    var autoDraft: Bool?
     /// `nil` = ber globální. U firemního repa s mezinárodním týmem dává smysl angličtina,
     /// i když je zbytek fronty český.
     var findingsLanguage: FindingsLanguage?
@@ -561,6 +584,14 @@ struct RepositoryConfig: Codable, Equatable, Sendable {
             autoAgent = (try? container.decode(Bool.self, forKey: .autoAgent)) ?? false
         } else {
             autoAgent = nil
+        }
+        // Jako u agenta (#520): chybějící klíč je „ber globální“, ale **rozbitá hodnota se srazí
+        // na `false`**. Vzít u ní globální hodnotu by znamenalo, že překlep v repu, ve kterém se
+        // návrh někdo pokoušel vypnout, ho při globálním zapnutí nechá zapnutý.
+        if container.contains(.autoDraft) {
+            autoDraft = (try? container.decode(Bool.self, forKey: .autoDraft)) ?? false
+        } else {
+            autoDraft = nil
         }
         // Na rozdíl od režimu se rozbitá hodnota bere jako „nic jsem neřekl“: špatný jazyk
         // znamená prózu v jiném jazyce, ne spuštěné review, o které nikdo nežádal.
@@ -679,6 +710,7 @@ struct Configuration: Codable, Equatable, Sendable {
             allowsPublishing: overrides?.allowsPublishing ?? global.allowsPublishing,
             mergeMethod: overrides?.mergeMethod ?? global.mergeMethod,
             autoAgent: overrides?.autoAgent ?? global.autoAgent,
+            autoDraft: overrides?.autoDraft ?? global.autoDraft,
             findingsLanguage: overrides?.findingsLanguage ?? global.findingsLanguage,
             skills: Self.nonBlank(overrides?.skills ?? global.skills),
             blockingCategories: Set(Self.nonBlank(overrides?.blockingCategories ?? global.blockingCategories)),
@@ -754,6 +786,9 @@ struct ResolvedConfig: Equatable, Sendable {
     /// Smí se na vlastním PR v tomhle repu pustit agent sám (#510)? **Výchozí `false`** — je to
     /// brána, tedy tatáž třída jako `allowsPublishing`, ne předvolba.
     let autoAgent: Bool
+    /// Skládá se v tomhle repu návrh review sám (#520)? **Výchozí `false`** — je to brána, tedy
+    /// tatáž třída jako `allowsPublishing` a `autoAgent`, ne předvolba.
+    let autoDraft: Bool
     let findingsLanguage: FindingsLanguage
     let skills: [String]
     let blockingCategories: Set<String>

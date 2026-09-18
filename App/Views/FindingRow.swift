@@ -33,19 +33,27 @@ struct FindingRow: Identifiable, Hashable, Sendable {
     /// (v hlavičce se ve 300 bodech zkrátil, viz `FindingCardView`). „Vyřešeno“ je tvrzení
     /// modelu, takže z nálezu nesmí ubrat nic než pozornost.
     let recheck: RecheckStatus?
+    /// Proč si nález nevzal návrh review (#520). `nil` = vzal si ho, nebo se žádný neskládal.
+    ///
+    /// **Neřadí ani neschovává**, jako `recheck`: je to značka, kterou karta kreslí pod textem.
+    /// Sporný nález dál platí, dál blokuje a dál se dá převzít kliknutím — návrh z něj nesundává
+    /// nic (to smí jedině odmítnutí, #113).
+    let doubt: AutoDraftDoubt?
 
     /// Nálezy v pořadí, ve kterém je řadí `Policy`.
     static func rows(
         of findings: [Finding],
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
         dismissals: [FindingKey: FindingDismissal] = [:],
-        rechecks: [FindingKey: RecheckStatus] = [:]
+        rechecks: [FindingKey: RecheckStatus] = [:],
+        doubts: [FindingKey: AutoDraftDoubt] = [:]
     ) -> [FindingRow] {
         preserving(
             Policy.sorted(findings, categories: categories, dismissals: dismissals),
             blocking: categories,
             dismissals: dismissals,
-            rechecks: rechecks
+            rechecks: rechecks,
+            doubts: doubts
         )
     }
 
@@ -58,11 +66,12 @@ struct FindingRow: Identifiable, Hashable, Sendable {
         _ findings: [Finding],
         blocking categories: Set<String> = Policy.defaultBlockingCategories,
         dismissals: [FindingKey: FindingDismissal] = [:],
-        rechecks: [FindingKey: RecheckStatus] = [:]
+        rechecks: [FindingKey: RecheckStatus] = [:],
+        doubts: [FindingKey: AutoDraftDoubt] = [:]
     ) -> [FindingRow] {
         findings.enumerated().map { index, finding in
-            // Klíč se skládá **jednou** pro obě mapy: `Policy.key(of:)` sype řetězec, takže
-            // dvojí složení na nález je práce navíc při každém překreslení panelu.
+            // Klíč se skládá **jednou** pro všechny tři mapy: `Policy.key(of:)` sype řetězec, takže
+            // trojí složení na nález je práce navíc při každém překreslení panelu.
             let key = Policy.key(of: finding)
             return FindingRow(
                 id: index,
@@ -74,7 +83,8 @@ struct FindingRow: Identifiable, Hashable, Sendable {
                 summary: finding.summary,
                 isBlocking: Policy.isBlocking(finding, categories: categories),
                 dismissal: dismissals[key],
-                recheck: rechecks[key]
+                recheck: rechecks[key],
+                doubt: doubts[key]
             )
         }
     }
