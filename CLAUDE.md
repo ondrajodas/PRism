@@ -124,9 +124,10 @@ malý*](docs/superpowers/specs/2026-07-31-prism-design.md#claudemd-se-drží-mal
 - **U `model:sonnet` je Copilot povinný, ne volitelný** (#597), a jde k němu **Opusova revize
   diffu**: Copilot hlídá pět vzorů z
   [`github-cli.md`](docs/github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně), silný model
-  to, co Copilot z principu nevidí — **chybějící věci a porušené tvrdé podmínky**. Pořadí
-  **vlastní revize → Copilot → Opusova revize → merge** se nepřehazuje a kdo tu revizi dělá,
-  rozhoduje **velikost diffu**
+  to, co Copilot z principu nevidí — **chybějící věci a porušené tvrdé podmínky**. Pořadí je
+  **vlastní revize → Copilot → Opusova revize → oprava → Copilot nad opravou → merge** (#599)
+  a nepřehazuje se; to druhé kolo je **jen na téhle dráze**, takže pravidlo *stačí jedno kolo*
+  níž platí beze změny. Kdo tu revizi dělá, rozhoduje **velikost diffu**
   ([§5](docs/paralelni-vyvoj.md#revize-před-mergem--kdo-reviduje-co)).
 - **Copilot je kontrola, ne hledání — stačí jedno kolo.** Pusť ho jednou, nálezy projdi (řekni,
   co je reálné a co šum), reálné oprav a **mergni podle vlastního uvážení**. Další kolo si
@@ -201,12 +202,14 @@ v [`docs/navrh.md`](docs/navrh.md#proč-brána-sedí-u-zakládání-issue-ne-až
 **Návrhová rozhodnutí děláš sám.** Neptej se na potvrzení u každého detailu — kde žije
 kontrola, kam patří složka, jaký stav blokuje, jak se jmenuje typ. Rozhodni, implementuj
 a **zapiš rozhodnutí i s důvodem** do specifikace: záznam rozhodnutí je to, co dovoluje
-pozdější korekci.
+pozdější korekci. **Platí to na silném modelu — a který běží, poznáš z prvního řádku zadání,
+odsud ne** (#599).
 
-**Platí to pro silný model** (#597). Na `model:sonnet` je zadání opačné: **když zjistíš, že se tu
-něco rozhoduje, zastav a ohlas to.** Není to selhání, je to **důkaz špatného zařazení**. Eskalace
-přitom musí být **kontrolovatelná, ne subjektivní** — neposuzuj vlastní schopnosti, pravidlo zní
-**sáhls na tvrdou podmínku? Zastav**, a ty jsou vyjmenované níž. Jak se model volí a proč, je
+**Na `model:sonnet` je zadání opačné** (#597), a rozhoduje mezi ním a odstavcem výš týž první
+řádek: **když zjistíš, že se tu něco rozhoduje, zastav a ohlas to.** Není to selhání, je to
+**důkaz špatného zařazení**. Eskalace přitom musí být **kontrolovatelná, ne subjektivní** —
+neposuzuj vlastní schopnosti, pravidlo zní **sáhls na tvrdou podmínku? Zastav**, a ty jsou
+vyjmenované níž. Jak se model volí a proč, je
 v [`docs/paralelni-vyvoj.md`](docs/paralelni-vyvoj.md#volbu-modelu-přiděluje-orchestrátor-597).
 
 **Žádná schvalovací brána na návrh.** Nepředkládej návrh a nečekej na „ano“ — ani když si

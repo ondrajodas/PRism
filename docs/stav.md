@@ -9552,7 +9552,9 @@ na 83 908 B, tedy o **1 093 B** — strop je ~100 kB.
 **Čím se PRism liší od Mullionu:** Copilot tu funguje, takže Opusova revize ho **doplňuje, ne
 nahrazuje** — Copilot hlídá [pět vzorů](github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně),
 silný model **chybějící věci a porušené tvrdé podmínky**. Pořadí **vlastní revize → Copilot →
-Opusova revize → merge** se proto nepřehazuje. Druhý rozdíl: PRism má **hotový návrh na většinu
+Opusova revize → merge** se proto nepřehazuje — a **#599 ho na konci dotáhlo** o druhé kolo
+Copilota nad opravou, protože jinak se merguje diff, který Copilot v té podobě neviděl. Druhý
+rozdíl: PRism má **hotový návrh na většinu
 obrazovek**, takže by měl vyjít na poměr lepší než mullionských 38 : 21 ve prospěch silného modelu
 — ale **je to odhad, ne měření**, a proto je níž plán, jak ho změřit.
 
@@ -9583,25 +9585,91 @@ ale tím, že se na ní staví dalších padesát issues — a proto šlo tohle 
 
 Kam se zapisuje **špatné zařazení** — issue, u kterého bylo potřeba třetí kolo, nebo u kterého
 `model:sonnet` narazil na rozhodování. Bez téhle rubriky zůstane kritérium dojmem napořád.
+**Kola počítá orchestrátor** (#599): subagent dostává opravu v nové session, takže vlastní kola
+nevidí a třetí by nepoznal. Klíčem je dvojice `štítek` / `skutečně` z tabulky níž — rozdíl mezi
+nimi je to, co se dá spočítat.
 
-| Issue | Štítek | Co nesedlo | Jak se kritérium opravilo |
-|---|---|---|---|
-| — | — | Zatím žádný záznam | — |
+| Issue | Štítek | Skutečně | Co nesedlo | Jak se kritérium opravilo |
+|---|---|---|---|---|
+| — | — | — | Zatím žádný záznam | — |
 
 ### Spotřeba tokenů po issue
 
-| Issue | Model | Volání nástrojů | Tokeny | Kolo navíc |
-|---|---|---|---|---|
-| #597 | Opus | ~45 (včetně mergu a releasu) | **neměřeno** (viz níž) | ne |
+**Sloupec `Model` je od #599 rozdělený na `štítek` a `skutečně`**, protože to jsou **dva zdroje
+pravdy**: štítek nosí issue, skutečnou volbu dává zadání a orchestrátor štítek přebíjí. Bez toho
+rozdělení nejde zpětně poznat, jestli issue běželo na štítku, nebo na přebití — a rubrika špatných
+zařazení výš pak nestojí nad daty, ale nad pamětí. `Tokeny` **vyplňuje orchestrátor**, zbytek řádku
+nese hlášení subagenta.
 
-**Změřená mezera hned v prvním záznamu:** tabulka počítá s tím, že *„hlášení subagenta spotřebu
-nese“* — jenže **subagent svou spotřebu tokenů zevnitř nevidí**. Volání nástrojů si spočítat umí,
-tokeny ne; ty zná harness, tedy orchestrátor. Sloupec `Tokeny` proto **vyplňuje orchestrátor při
-zápisu hlášení**, ne subagent, a dokud se to nezařídí, bude v něm stát `neměřeno`. Je to tentýž
-druh chyby jako měřidlo z #478: kdyby se to nechalo na subagentovi, vyplnil by odhad a tabulka by
-vypadala zeleně.
+| Issue | Štítek | Skutečně | Volání nástrojů | Kola s překladačem | Tokeny | Kolo navíc |
+|---|---|---|---|---|---|---|
+| #597 | `model:opus` | Opus | ~45 (včetně mergu a releasu) | 0 — jen dokumentace | **neměřeno** | ne |
+| #599 | `model:opus` | Opus | ~38 (včetně mergu a releasu) | 0 — jen dokumentace | **doplní orchestrátor** | ne |
+
+**Změřená mezera hned v prvním záznamu, a #599 ji zavřelo:** tabulka původně počítala s tím, že
+*„hlášení subagenta spotřebu nese“* — jenže **subagent svou spotřebu tokenů zevnitř nevidí**.
+Volání nástrojů a kola s překladačem si spočítat umí, tokeny ne; ty zná harness, tedy
+orchestrátor. Sloupec `Tokeny` proto **vyplňuje orchestrátor při zápisu hlášení**, ne subagent —
+u #597 se to už nedoplní a zůstává v něm `neměřeno`. Je to tentýž druh chyby jako měřidlo z #478:
+kdyby se to nechalo na subagentovi, vyplnil by odhad a tabulka by vypadala zeleně, ať postup
+funguje, nebo ne.
 
 **Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
 vlastní revize diffu proběhla a je popsaná v PR. U tohohle issue je to obzvlášť nepříjemné,
 protože zavádí pravidlo *u `model:sonnet` je Copilot povinný* — to pravidlo se tím **nemění**,
 dnešní výjimka je provozní stav, ne návrh.
+
+## #599 — Pět děr, které postup s volbou modelu nechal otevřené (Průběžné)
+
+Hotovo, a je to zase **jen dokumentace** — v `App/` ani v `Tests/` se nezměnil jediný řádek, na
+obrazovce tedy není co vidět a mockupem to neprochází. Postup *Sonnet píše, Opus reviduje, Sonnet
+opravuje* zavedlo #597; agent, který ho zaváděl, u něj **vyjmenoval pět děr** — ne v textu, ale
+v postupu samém — a tohle issue je zavírá. Bez nich byl postup zapsaný, ale **nevyhodnotitelný**.
+
+**Čtyři z pěti jsou zápis hotového rozhodnutí:**
+
+1. **Spotřebu tokenů vyplňuje orchestrátor, ne subagent.** Subagent ji **zevnitř nevidí** — zná ji
+   harness. Do hlášení proto dává **počet volání nástrojů a počet kol s překladačem**, což vidět
+   má. Věta v rubrice spotřeby výš, která tvrdila opak, je opravená.
+2. **Tabulka spotřeby má sloupce `štítek` a `skutečně`** místo jednoho `Model`. Štítek nosí issue,
+   skutečnou volbu dává zadání a orchestrátor štítek přebíjí — jsou to **dva zdroje pravdy**
+   a rubrika špatných zařazení bez nich stojí nad pamětí, ne nad daty. Přibyl i sloupec
+   **`Kola s překladačem`**, protože je to druhá věc, kterou subagent vidět má.
+3. **Strop dvou kol počítá orchestrátor.** Sonnet dostává opravu typicky v **nové session**, takže
+   vlastní kola nevidí a třetí by nepoznal. Třetí kolo znamená **převzetí issue silným modelem**
+   plus zápis do rubriky špatných zařazení. Bez určeného počítače je strop přání.
+4. **Model stojí na prvním řádku zadání, vedle slotu.** `CLAUDE.md` má po #597 tři řádky od sebe
+   dvě opačná pravidla — *rozhodni sám* a *na `model:sonnet` zastav a ohlas* — a rozhoduje mezi
+   nimi **proměnná, kterou ten soubor nevidí**. U obou teď stojí věta, která říká, čím se mezi nimi
+   rozhoduje, a [§3](paralelni-vyvoj.md#3-zadání-subagenta) má model jako **první** položku zadání.
+   Je to tentýž případ jako číslo sekce v mockupu: co si má subagent domýšlet, domyslí si špatně.
+
+### Páté: poslední push Copilota neviděl — vybralo se druhé kolo
+
+Pořadí z #597 končilo *Opusova revize → merge*, takže oprava psaná po té revizi šla do mainu, aniž
+by ji Copilot v té podobě viděl. Nové pořadí je **vlastní revize → Copilot → Opusova revize →
+oprava → Copilot nad opravou → merge** a je sjednocené na všech třech místech, kde stálo
+(`CLAUDE.md`, [§5](paralelni-vyvoj.md#revize-před-mergem--kdo-reviduje-co), odstavec o rozdílech
+proti Mullionu výš).
+
+Rozhodlo jedno pozorování: nezkontrolovaná část diffu není náhodná, je to **ta nejrizikovější** —
+píše ji **týž slabý model**, kvůli kterému je Copilot na téhle dráze povinný, a Opusovy nálezy jsou
+z definice **chybějící věci**, tedy přidaný kód, což je přesně třída, ve které pět Copilotových
+vzorů vzniká. Druhé kolo přitom vidí **jen tu opravu** a **neplatí se z naší kvóty**. Meze jsou
+tři: jen dráha `model:sonnet` (pravidlo *stačí jedno kolo* se **nemění ani o slovo**), jen když
+oprava sáhla na kód, a shora strop dvou kol. Když druhé kolo nedoběhne, merge to neblokuje —
+opravný diff projde vlastní revizí a zapíše se **neověřená mezera**.
+
+Zahodily se dvě varianty a obě jsou i s důvodem v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--copilot-běží-i-nad-opravou-po-opusově-revizi-599):
+*nechat, jak to je a jen to přiznat* (přiznání samo nic nehlídá — ale zbytek té varianty zůstal
+jako **záložní cesta** pro nedoběhlé kolo) a *přehodit pořadí* tak, aby Copilot běžel poslední
+(silný model by pak četl diff, ve kterém těch pět vzorů ještě stojí, a část jeho drahého textu by
+padla na to, co Copilot udělá zadarmo — přímo proti cíli #597).
+
+`CLAUDE.md` tím narostl z 83 908 B na 84 206 B, tedy o **298 B**; strop je ~100 kB.
+
+**Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
+vlastní revize diffu proběhla a je popsaná v PR. Je to podruhé za sebou a u tohohle issue zvlášť
+ironické, protože přidává **druhé** kolo Copilota — pravidlo se tím ale **nemění**, dnešní výpadek
+je provozní stav, ne návrh.
