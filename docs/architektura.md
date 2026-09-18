@@ -4262,7 +4262,7 @@ u nálezu: kategorie se váže na sadu, kterou si píše člověk v nastavení, 
 čeho bude itinerář řadit a mapa barvit — a řadit se dá jedině podle výčtu. Neznámá hodnota se
 **nehádá**, položka se zahodí a započítá.
 
-#### Jazyk vět určuje nastavení, ne diff (#592)
+#### Jazyk vět je český natvrdo (#592)
 
 Do #592 jazyk **nikdo neurčoval**, i když to tak z kódu vypadalo: stál jako **přívlastek v popisu
 pole** (`why`: *„one sentence in Czech“*). Naostro vyšly u dvou PR **dva různé jazyky** — u
@@ -4270,27 +4270,27 @@ pole** (`why`: *„one sentence in Czech“*). Naostro vyšly u dvou PR **dva r�
 Rozdíl nebyl v nastavení ani v promptu, ale v tom, co session v diffu viděla; měření je
 v [`docs/claude-cli.md`](claude-cli.md#jazyk-v-popisu-pole-neplatí-592).
 
-**Jazyk se bere z `findingsLanguage`, vlastní volbu nedostal** — a to je to rozhodnutí. Je to tatáž
-otázka jako u nálezů („v jakém jazyce je próza v okně“), takže druhá volba vedle by znamenala dvě
-pravdy o jednom okně; anotace se navíc od #525 kreslí **uvnitř diffu** vedle českých popisků, tedy
-přesně tam, kde se rozpor vidí na jeden pohled. Override per repo platí, protože prochází
-`ResolvedConfig`em; zamítnuté varianty jsou v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--jazyk-anotací-určuje-nastavení-nálezů-ne-model-592).
+**Jazyk je česky, natvrdo, a `findingsLanguage` s ním nehýbe** — a to je to rozhodnutí. Anotace se
+od #525 kreslí **uvnitř diffu vedle českých popisků**, takže je to **text v okně**, a na ten platí
+pravidlo *uživatelské texty jsou české a bundle to musí vědět* (`CFBundleDevelopmentRegion = cs`).
+**Nález je proti tomu obsah review**, který může odejít na GitHub anglicky — proto má
+`findingsLanguage` smysl u nálezů a u anotací ne. První podoba #592 brala jazyk z konfigurace; proč
+se to po proklikání otočilo, je v [záznamu rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--anotace-jsou-česky-natvrdo-592-po-proklikání).
 
 Skládá se to ze čtyř věcí a každá je kontrolovatelná:
 
-- **Jedna věta, jedno místo.** `AnnotationSchema.language(_:)` je jediný text, kde se jazyk
-  vyslovuje; popisy polí jazyk **nenesou** (`AnnotateCommandTests` to tvrdí nad `everyField`
-  a počtem výskytů jména jazyka v promptu). Dvě místa by se rozešla první úpravou věty.
+- **Jedna věta, jedno místo.** `AnnotationSchema.language` je jediný text, kde se jazyk vyslovuje;
+  popisy polí jazyk **nenesou** (`AnnotateCommandTests` to tvrdí nad `everyField` a počtem výskytů
+  slova v promptu). Dvě místa by se rozešla první úpravou věty.
+- **Konstanta, ne funkce s parametrem.** Co nemá parametr, nedá se nastavením rozhodit — a cesta
+  anotací o `findingsLanguage` **nesmí ani vědět**. Tvrdí se to **nad zdrojáky** (pět souborů,
+  zhuštěný text bez komentářů), protože za běhu není co proměnit.
 - **Věta jmenuje pole z výčtu, ne ručně.** Rozhoduje příznak `Field.isProse`, takže pole, které
   jako věta přibude, dostane jazyk samo — a `file`, `hunk` ani `kind` v té větě stát nesmí: druh
   změny je **anglický slug z uzavřeného výčtu**, podle kterého se řadí a barví.
 - **Věta je v promptu poslední.** Má platit i proti tomu, co session v kódu viděla, takže za ní už
   nic nemluví — tatáž úvaha jako u věty o přírůstku v `Policy.reviewPromptCore` (#517). Zákaz
   zápisu a odeslání tím **neslábne**: drží ho `--disallowedTools`, ne pořadí vět.
-- **Jazyk putuje se zadáním, ne s anotátorem.** `AnnotationRequest.language` skládá store
-  (`resolved(for:).findingsLanguage`), jako `timeout` — closure na `ClaudeHunkAnnotator`u by čtla
-  jedině globální nastavení a override repa by přehlédla. Čte se **teď**, při startu session, takže
-  se přepnutí projeví na dalším běhu.
 
 **Anotace se nepřekládá, a to je to negativní tvrzení.** Nálezy mají vlastní překladovou session
 (#94), protože jich je hodně a `category` u nich musí zůstat anglickým slugem; anotace je věta pro

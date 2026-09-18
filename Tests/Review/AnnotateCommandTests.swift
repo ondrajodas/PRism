@@ -252,7 +252,7 @@ struct AnnotateCommandTests {
     /// odkud vzít a session by vysvětlovala kód z něj samotného.
     @Test("Prompt pošle session pro diff i pro commity")
     func promptCarriesBothSources() {
-        let prompt = AnnotateCommand.prompt(baseSha: "base123", language: .czech)
+        let prompt = AnnotateCommand.prompt(baseSha: "base123")
 
         #expect(prompt.contains("git diff base123...HEAD"))
         #expect(prompt.contains("git log base123..HEAD"))
@@ -264,31 +264,68 @@ struct AnnotateCommandTests {
 
     // MARK: - Jazyk vět (#592)
 
-    /// Jazyk **je v promptu**, a to podle nastavení. Do #592 stál jako přívlastek v popisu pole
+    /// Prompt žádá **češtinu, vždycky**. Do #592 stál jazyk jako přívlastek v popisu pole
     /// (`why`: *„one sentence in Czech“*) a u diffu plného cizojazyčného textu neplatil — naostro
     /// z toho vyšly ruské věty.
-    @Test("Prompt vyslovuje jazyk z nastavení", arguments: FindingsLanguage.allCases)
-    func promptSaysTheLanguage(_ language: FindingsLanguage) {
-        let prompt = AnnotateCommand.prompt(baseSha: "base123", language: language)
+    ///
+    /// **Věta k tomu musí říct, proti čemu platí.** Bez druhé poloviny je to zbožné přání, které
+    /// cizojazyčný diff přebije; to je celý rozdíl proti stavu do #592.
+    @Test("Prompt žádá češtinu a říká, proti čemu to platí")
+    func promptAsksForCzechAgainstTheCode() {
+        let prompt = AnnotateCommand.prompt(baseSha: "base123")
 
-        #expect(prompt.contains("in \(language.promptName), whatever language the diff"))
-        // A **platí proti kódu, ne jen obecně**: bez druhé poloviny věty je to zbožné přání, které
-        // diff v cizím jazyce přebije.
+        #expect(prompt.contains("in Czech, whatever language the diff"))
         #expect(prompt.contains("not a property of the code you are reading"))
-        for other in FindingsLanguage.allCases where other != language {
-            #expect(
-                !prompt.contains("in \(other.promptName), whatever language"),
-                "prompt žádá i \(other.promptName)"
-            )
+    }
+
+    /// **`Jazyk nálezů` s větou nehýbe** (#592, po proklikání) — anotace je text v okně vedle
+    /// českých popisků, ne obsah review, který může odejít na GitHub anglicky.
+    ///
+    /// Tvrdí se to **nad zdrojáky**, protože za běhu není co proměnit: konstanta nemá parametr,
+    /// takže test „pro obě hodnoty vyjde totéž“ by nešel napsat jinak než tautologicky. Cesta
+    /// anotací proto o `findingsLanguage` **nesmí ani vědět** — a je to výčet souborů, ne úsudek.
+    ///
+    /// Komentáře se odečítají: o `findingsLanguage` se v dokumentaci u téhle cesty mluví
+    /// (vysvětluje se, proč tam **není**), a vysvětlení nemá test zakazovat. Hledá se
+    /// v **zhuštěném** textu, jako u ostatních stráží v repu.
+    @Test("Cesta anotací o jazyku nálezů neví")
+    func theAnnotationPathNeverReadsTheFindingsLanguage() throws {
+        let files = [
+            "App/Policy/AnnotationSchema.swift",
+            "App/Review/AnnotateCommand.swift",
+            "App/Review/ClaudeHunkAnnotator.swift",
+            "App/Review/HunkAnnotating.swift",
+            "App/Store/AppStore+Annotations.swift",
+        ]
+
+        for path in files {
+            let code = try Self.condensedCode(at: path)
+            #expect(!code.contains("findingsLanguage"), "\(path) čte jazyk nálezů")
+            #expect(!code.contains("FindingsLanguage"), "\(path) o jazyku nálezů ví")
         }
     }
 
+    /// Kód souboru bez komentářů a **bez jediné mezery** — mezera uvnitř výrazu je ve Swiftu volná,
+    /// takže stráž nad surovým textem by `resolved(for: repo) . findingsLanguage` pustila.
+    private static func condensedCode(at path: String) throws -> String {
+        let repository = URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let text = try String(contentsOf: repository.appending(path: path), encoding: .utf8)
+        // `TextLines`, ne `split(separator: "\n")` — pravidlo repa platí i v testech.
+        return TextLines.content(text)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+            .filter { !$0.isWhitespace }
+    }
+
     /// **Jazyk se vyslovuje na jednom místě.** Kdyby stál i v popisu pole, byly by o jazyku dvě
-    /// pravdy — a rozešly by se první úpravou věty. Tvrdí se to počtem výskytů jména jazyka
-    /// v celém promptu: jedna věta, jedno slovo.
+    /// pravdy — a rozešly by se první úpravou věty. Tvrdí se to počtem výskytů slova v celém
+    /// promptu: jedna věta, jedno slovo.
     @Test("Jméno jazyka stojí v promptu jednou a v popisu polí vůbec")
     func languageIsSaidInOnePlace() {
-        let prompt = AnnotateCommand.prompt(baseSha: "base123", language: .czech)
+        let prompt = AnnotateCommand.prompt(baseSha: "base123")
 
         #expect(prompt.components(separatedBy: "Czech").count - 1 == 1)
         for field in AnnotationSchema.everyField {
@@ -308,7 +345,7 @@ struct AnnotateCommandTests {
     func languageSentenceNamesTheProseFields() {
         #expect(AnnotationSchema.proseFields.map(\.name) == ["why", "source"])
 
-        let sentence = AnnotationSchema.language(.czech)
+        let sentence = AnnotationSchema.language
         for field in AnnotationSchema.everyField {
             #expect(
                 sentence.contains("`\(field.name)`") == field.isProse,

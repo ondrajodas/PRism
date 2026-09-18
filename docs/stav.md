@@ -9401,13 +9401,15 @@ a **v různých jazycích** — `keboola/sandboxes-service#717` česky, `keboola
 (*„Временно указывает…“*, `source`: *„коммит 3c4d82eb“*). Jazyk přitom nikdo neurčoval: stál jako
 přívlastek v popisu pole ve schématu a u diffu plného cizojazyčného textu **neplatil**.
 
-**Rozhodnuto: jazyk se bere z `findingsLanguage`**, tedy z volby `Jazyk nálezů` včetně override per
-repo, a vyslovuje se **jednou větou v promptu** (`AnnotationSchema.language(_:)`), která k tomu
-říká, **proti čemu platí** — jazyk je nastavení aplikace, ne vlastnost čteného kódu. Zamítnuté
-varianty (natvrdo česky; nechat to na modelu a jen to přiznat v dokumentaci) jsou v záznamu
-rozhodnutí ve specifikaci. Druhá cesta **nepřibyla**: žádná nová konstanta, žádná nová volba
-v nastavení a **žádná druhá session** — jazyk je na stejné cestě jako `timeout`, tedy v zadání, které
-skládá store.
+**Rozhodnuto: anotace jsou česky natvrdo** a vyslovuje se to **jednou konstantní větou v promptu**
+(`AnnotationSchema.language`), která k tomu říká, **proti čemu platí** — jazyk je nastavení
+aplikace, ne vlastnost čteného kódu. **Rozhodnutí se během issue otočilo**: první podoba brala jazyk
+z `findingsLanguage`, po proklikání se ukázalo, že to je jiná otázka. Anotace se od #525 kreslí
+**uvnitř diffu vedle českých popisků**, takže je to **text v okně** (pravidlo *uživatelské texty
+jsou české*), kdežto nález je **obsah review**, který může odejít na GitHub anglicky. Zamítnuté
+varianty i s tou první podobou jsou v záznamu rozhodnutí ve specifikaci. Druhá cesta **nepřibyla**:
+žádná nová konstanta, žádná volba v nastavení a **žádná druhá session** — a cesta anotací
+o `findingsLanguage` **neví vůbec**, což tvrdí stráž nad zdrojáky.
 
 **Uložené anotace v cizím jazyce dožijí.** Přepsat se bez nového běhu nedají (a ten stojí peníze),
 přeložit je nemá co, a zastarají s hlavou jako všechno ostatní u anotací. Tvrdí to dva testy, které
@@ -9416,7 +9418,7 @@ uloženou větu nezahodí ani nespustí session samo.
 
 Fixtures jsou **skutečné odpovědi obou běhů** (`Tests/Fixtures/annotations/`), protože jiné se bez
 zaplacené session nesehnají — a parser na nich tvrdí, že jazyk **nepoznává ani nesahá na text**.
-Přibylo 7 testů; tvrdé podmínky č. 2 a č. 5 se nezměnily ani o položku (sada anotací je dál
+Přibylo 8 testů; tvrdé podmínky č. 2 a č. 5 se nezměnily ani o položku (sada anotací je dál
 `AskCommand.allowedTools`, klíčování hlavou zůstává).
 
 **Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl (výpadek 18. 9.);

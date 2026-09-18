@@ -40,7 +40,7 @@ enum AnnotationSchema {
         let isRequired: Bool
         /// Co do něj patří. Jde to do promptu doslova, takže je to anglicky jako zbytek zadání.
         ///
-        /// **Jazyk odpovědi tady stát nesmí** (#592) — viz `language(_:)`.
+        /// **Jazyk odpovědi tady stát nesmí** (#592) — viz `language`.
         let meaning: String
         let values: [String]?
         /// Píše se do něj **próza pro mě**, tedy text, o kterém rozhoduje věta o jazyku (#592)?
@@ -119,23 +119,28 @@ enum AnnotationSchema {
 
     /// Věta o jazyku odpovědi (#592) — **jediné místo, kde se jazyk anotací vyslovuje**.
     ///
-    /// Do #592 stál jazyk **v popisu pole** (`why`: *„one sentence in Czech“*) a u pull requestu,
+    /// **Česky, natvrdo, bez ohledu na `findingsLanguage`** — a je to rozhodnutí z proklikání, ne
+    /// opomenutí. Anotace se od #525 kreslí **uvnitř diffu vedle českých popisků**, takže je to
+    /// **text v okně**, a na ten platí pravidlo *uživatelské texty jsou české* (`Info.plist`:
+    /// `CFBundleDevelopmentRegion = cs`). Nález je proti tomu **obsah review**, který může odejít
+    /// na GitHub anglicky — proto má `findingsLanguage` smysl u nálezů a u anotací ne. První
+    /// podoba #592 to brala z konfigurace; proč se to otočilo, je v záznamu rozhodnutí ve
+    /// specifikaci.
+    ///
+    /// Do #592 jazyk stál **v popisu pole** (`why`: *„one sentence in Czech“*) a u pull requestu,
     /// jehož diff je plný cizojazyčného textu, **neplatil**: naostro z toho vyšly ruské věty
     /// (`keboola/job-queue#727`; měření je v `docs/claude-cli.md`). Přívlastek uvnitř popisu tvaru
     /// je slabší než samostatná věta, a hlavně **neříká, proti čemu platí** — proto ta druhá
     /// polovina věty: jazyk je **volba aplikace, ne vlastnost čteného kódu**.
     ///
-    /// **Jazyk se bere z `findingsLanguage`, vlastní volbu nemá**, a je to to rozhodnutí: je to
-    /// tatáž otázka („v jakém jazyce je próza v okně“), takže druhá volba vedle by znamenala dvě
-    /// pravdy o jednom okně — a anotace se od #525 kreslí **uvnitř diffu** vedle českých popisků.
-    /// Proč ne natvrdo česky a proč se **nepřekládá** (tedy žádná druhá session), je v záznamu
-    /// rozhodnutí ve specifikaci.
-    static func language(_ language: FindingsLanguage) -> String {
+    /// **Konstanta, ne funkce s parametrem**: co nemá parametr, nemá jak záviset na nastavení.
+    /// A **nepřekládá se** — žádná druhá session; proč, je u `AnnotateCommand.prompt(baseSha:)`.
+    static var language: String {
         let named = proseFields.map { "`\($0.name)`" }.joined(separator: " and ")
         return """
-            Write \(named) in \(language.promptName), whatever language the diff, its commit \
-            messages, its comments and its identifiers are written in: the language of the answer \
-            is a setting of this application, not a property of the code you are reading. \
+            Write \(named) in Czech, whatever language the diff, its commit messages, its \
+            comments and its identifiers are written in: the language of the answer is a setting \
+            of this application, not a property of the code you are reading. \
             The other fields are paths and values from the lists above and stay as they are.
             """
     }

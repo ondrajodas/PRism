@@ -8407,26 +8407,38 @@ mockupu a ke schválení; sekce 59 kreslí větu, kapsli, nabídku a stavový ř
 Udělat to „na vlastní pěst“ by znamenalo obejít jedinou schvalovací bránu v tomhle repu kvůli
 větě, která v zadání stojí jako *„může“*.
 
-### Záznam rozhodnutí — jazyk anotací určuje nastavení nálezů, ne model (#592)
+### Záznam rozhodnutí — anotace jsou česky natvrdo (#592, po proklikání)
 
 Anotace hunků (#524) si jazyk vybíraly samy: ve schématu stál jako **přívlastek v popisu pole**
 (`why`: *„one sentence in Czech“*), a to u diffu plného cizojazyčného textu **neplatilo** —
 `keboola/job-queue#727` vyšel rusky, `keboola/sandboxes-service#717` týž den česky. Zadání issue
 nechalo otevřené, **kdo jazyk určuje**, a nabídlo tři možnosti.
 
-**Rozhodnuto: `findingsLanguage`, vyslovené jednou větou v promptu.** Je to tatáž otázka jako
-u nálezů — *v jakém jazyce je próza v okně* —, takže vlastní volba vedle by byla druhá pravda
-o jednom okně; anotace se navíc od #525 kreslí **uvnitř diffu** vedle českých popisků, tedy přesně
-tam, kde se rozpor vidí naráz. Věta je v promptu **poslední** a říká, **proti čemu platí**: *„ať je
-diff, commity, komentáře i identifikátory v jakémkoli jazyce; jazyk odpovědi je nastavení
-aplikace, ne vlastnost čteného kódu“*. Bez té druhé poloviny je to prosba, kterou obsah vstupu
-přebije — a přesně tak to do #592 skončilo.
+**Rozhodnuto: česky natvrdo, vyslovené jednou konstantní větou v promptu.** Anotace se od #525
+kreslí **uvnitř diffu vedle českých popisků**, takže je to **text v okně** — a na ten platí pravidlo
+*uživatelské texty jsou české a bundle to musí vědět* (`CFBundleDevelopmentRegion = cs`). **Nález je
+proti tomu obsah review**, který může odejít na GitHub anglicky; proto má `findingsLanguage` smysl
+u nálezů a u anotací ne. Věta je v promptu **poslední** a říká, **proti čemu platí**: *„ať je diff,
+commity, komentáře i identifikátory v jakémkoli jazyce; jazyk odpovědi je nastavení aplikace, ne
+vlastnost čteného kódu“*. Bez té druhé poloviny je to prosba, kterou obsah vstupu přebije — a přesně
+tak to do #592 skončilo.
 
-**Zamítnuto: natvrdo česky.** Vypadá to jako nejmenší změna a odpovídalo by to pravidlu
-*uživatelské texty jsou české*. Jenže `Jazyk nálezů` se dá přepnout na angličtinu, a pak by v okně
-stály **anglické nálezy nad českými anotacemi ve stejném diffu** — dvě pravdy o jednom textu,
-o kterých rozhodují dvě různá místa. Konstanta by k tomu byla ta druhá cesta, kterou issue
-výslovně zakazuje.
+**Otočené rozhodnutí — první podoba brala jazyk z `findingsLanguage`.** Stálo to na úvaze, že je to
+tatáž otázka („v jakém jazyce je próza v okně“), takže vlastní volba vedle by byla druhá pravda
+o jednom okně; jazyk se skládal ve storu a putoval v `AnnotationRequest`u jako `timeout`.
+**Neplatí to, a důvod je v tom, co ta volba znamená**: `findingsLanguage` rozhoduje o **obsahu
+review**, tedy o textu, který může odejít na GitHub, kde angličtina dává smysl. Anotace nikam
+neodchází — kreslí se v okně, které je celé české, takže s tou volbou nemá společné nic než slovo
+„jazyk“. Přepnutý `Jazyk nálezů` by tedy nesrovnal dvě pravdy, ale **zavedl je**: české popisky
+v diffu a cizojazyčné věty mezi nimi. Zamítnuto po proklikání, na pokyn uživatele; z první podoby
+zůstalo všechno ostatní — jedno místo, jedna cesta, věta říkající, proti čemu platí, a žádná druhá
+session.
+
+**Konstanta je silnější tvrzení než parametr.** Co nemá parametr, nedá se nastavením rozhodit, takže
+po otočení nezbyl jen literál místo hodnoty: cesta anotací o `findingsLanguage` **neví vůbec**
+a hlídá to **stráž nad zdrojáky** (pět souborů, zhuštěný text bez komentářů). Za běhu by se to
+tvrdit nedalo — konstanta nemá co proměnit, takže test „pro obě hodnoty vyjde totéž“ by byl
+tautologie.
 
 **Zamítnuto: nechat to na modelu a jen to přiznat v dokumentaci.** Je to jediná varianta, která nic
 nestojí, a proto se posuzovala poctivě — padla na tom, že **anotace není citát**. U nálezu by se
@@ -8441,11 +8453,9 @@ text přepisuje. **Píše se proto v cílovém jazyce rovnou**, a tím se rozhod
 v cache leží: **dožije**. Přepsat se bez nového běhu nedá a přeložit se nemá čím, takže stará ruská
 věta zmizí až s další hlavou — což je u anotací normální konec života, ne výjimka.
 
-**Jazyk putuje v zadání, ne v anotátoru.** `ClaudeHunkAnnotator` má na model closure do globální
-konfigurace a nabízelo se přidat druhou; jazyk má ale **override per repo**, takže by closure
-tichounce ignorovala nastavení toho repa. Skládá ho proto store do `AnnotationRequest`u, jako
-`timeout` — a čte ho **při startu session**, takže přepnutí platí od dalšího běhu a na uložené
-záznamy nesahá.
+**V zadání ani v anotátoru jazyk není.** V první podobě ho skládal store do `AnnotationRequest`u
+(closure na `ClaudeHunkAnnotator`u by přehlédla override per repo); po otočení odpadlo obojí —
+`AnnotationRequest` pole na jazyk **nemá** a nejlevnější podoba pravidla je ta, kde není co předávat.
 
 **Věta jmenuje pole z výčtu.** Rozhoduje příznak `Field.isProse`, ne seznam jmen vedle schématu:
 pole, které jako věta přibude, dostane jazyk samo, a `file`, `hunk` ani `kind` ho nedostanou —

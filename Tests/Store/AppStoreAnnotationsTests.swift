@@ -63,15 +63,11 @@ struct AppStoreAnnotationsTests {
         headSha: String = "aaaa1111",
         annotationStore: AnnotationStore? = nil,
         findingsLanguage: FindingsLanguage = .czech,
-        repositoryLanguage: FindingsLanguage? = nil,
         translator: FakeTranslator? = nil
     ) -> AppStore {
         var configuration = Configuration.standard
         configuration.global.annotatesHunks = annotatesHunks
         configuration.global.findingsLanguage = findingsLanguage
-        if let repositoryLanguage {
-            configuration.setRepository(RepositoryConfig(findingsLanguage: repositoryLanguage), for: pr.repo)
-        }
         let store = AppStore(
             gateway: FakeGitHubGateway(always: .success([]), detail: .success(detail(headSha: headSha))),
             configuration: configuration,
@@ -135,18 +131,32 @@ struct AppStoreAnnotationsTests {
 
     // MARK: - Jazyk vět (#592)
 
-    /// Jazyk vět je **`findingsLanguage` toho repa**, ne vlastní volba a ne globální nastavení:
-    /// override per repo musí přebít, jako u nálezů. Skládá ho store, protože jedině on ví, nad
-    /// jakým repem session běží.
-    @Test("Zadání nese jazyk z konfigurace toho repa")
-    func requestCarriesTheRepositoryLanguage() async {
+    /// **Zadání jazyk nenese, a to je to tvrzení** (#592, po proklikání). Anotace se kreslí v diffu
+    /// vedle českých popisků, takže je to text v okně — česky vždycky. `findingsLanguage` je volba
+    /// o obsahu review, který může odejít na GitHub anglicky, a do téhle cesty nepatří.
+    ///
+    /// Tenhle test hlídá **spodní konec** cesty: ať je `Jazyk nálezů` nastavený jakkoli, session
+    /// dostane totéž zadání. Že o jazyku neví ani prompt, tvrdí `AnnotateCommandTests` nad
+    /// zdrojáky — za běhu není co proměnit, protože konstanta parametr nemá.
+    @Test("Jazyk nálezů zadáním session nehýbe", arguments: FindingsLanguage.allCases)
+    func theFindingsLanguageNeverReachesTheRequest(_ language: FindingsLanguage) async {
         let annotator = FakeHunkAnnotator(runs: [run()])
-        let store = store(annotator: annotator, findingsLanguage: .czech, repositoryLanguage: .english)
+        let store = store(annotator: annotator, findingsLanguage: language)
 
         store.startAnnotating(for: pr)
         await waitUntilDone(store)
 
-        #expect(annotator.requests.first?.language == .english)
+        #expect(
+            annotator.requests == [
+                AnnotationRequest(
+                    pullRequest: pr,
+                    headSha: "aaaa1111",
+                    worktree: annotator.requests.first?.worktree ?? URL(filePath: "/"),
+                    baseSha: "bbbb2222",
+                    timeout: Configuration.standard.resolved(for: pr.repo).reviewTimeout
+                )
+            ]
+        )
     }
 
     /// **Kvůli jazyku se nespouští druhá session, a to je to tvrzení.** U nálezů překlad je (#94),
@@ -186,7 +196,6 @@ struct AppStoreAnnotationsTests {
 
         store.startAnnotating(for: pr)
         await waitUntilDone(store)
-        #expect(annotator.requests.first?.language == .english)
 
         // Druhý store nad **tou samou cache**, jen s přepnutým jazykem — tak to vypadá po změně
         // v nastavení a restartu.

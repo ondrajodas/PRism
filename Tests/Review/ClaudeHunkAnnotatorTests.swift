@@ -20,7 +20,6 @@ struct ClaudeHunkAnnotatorTests {
             headSha: "aaaa1111",
             worktree: URL(filePath: "/tmp/prism/worktrees/cli/cli/42-aaaa1111"),
             baseSha: "bbbb2222",
-            language: .czech,
             timeout: .seconds(600)
         )
     }
