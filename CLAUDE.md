@@ -690,6 +690,11 @@ protože většina se v harnessu neprojeví.
   `diffToolbarLadder`, `diffToolbarRoom`), měří a předává `DiffToolbarLayout`, kreslí obě podoby
   `DiffToolbar`. **Procházení nálezů neustupuje** a **vlevo se neusekává nic**
   ([rozbor](docs/architektura.md#lišta-nad-diffem-ustupuje-podle-pořadí-593)).
+- **Okraj s nálezy ustupuje po schodech, ne příznakem** (#505) — tři podoby (`DiffMarginForm`:
+  kolona 300 b, hrana 28 b, nic), práh **i** šířky drží `Policy` (`diffSideColumns`,
+  `marginColumnWidth(form:)`). **Hrana je domov**, takže se kvůli ní panel nerozkládá, a **co se
+  nekreslí jako karta, kreslí se jako značka** (`Policy.marginDots` — i karta mimo nasazený pás)
+  ([rozbor](docs/architektura.md#složená-hrana-okraje-505)).
 - **Pružná výška v řádku líného seznamu je zakázaná taky, ale z jiného měření** (#375) — jen
   **v řádku**, ne plošně; ohraničené formy jsou
   [vyjmenované](docs/architektura.md#šířka-v-okně-appviewsavailablewidthswift).

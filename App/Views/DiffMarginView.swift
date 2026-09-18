@@ -25,6 +25,11 @@ import SwiftUI
 ///    karty samy nepřekládají. Kdyby se `top` četl tady, přeložilo by se při každém snímku tělo
 ///    okraje i všech jeho karet — je to tentýž vzorec jako `DiffPinnedHeader` (#469).
 ///
+/// **Od #505 kreslí okraj i značky, ne jen karty.** Karta mimo nasazený pás (#469) se do té doby
+/// nekreslila **vůbec**, tedy bez jakékoli stopy; od #505 je na hraně puntík, který se kliknutím
+/// rozbalí (`DiffMarginDotView`). Rozhoduje o tom `Policy.marginDots`, protože je to tatáž otázka,
+/// na kterou odpovídá složená hrana (`DiffMarginRailView`) — jen z druhé strany.
+///
 /// **Karty se kreslí `FindingBubbleView`em, ne vlastní kartou.** Nález je tentýž nález, jen o kus
 /// vedle: odznaky, shoda dvou reviewerů, stav z kontroly (#150), odmítnutí (#113) i řada akcí
 /// `Převzít · Neplatí · Nepatří sem` (#283) se v okraji nesmí chovat jinak než v bublině. Druhá
@@ -65,7 +70,7 @@ struct DiffMarginView: View {
     /// **Čte se z `Policy`**, protože podle téhož čísla se rozhoduje, jestli se kolona do okna
     /// vejde (`Policy.diffSideColumns`). Dvě pravdy o jedné šířce znamenají, že se rozhodnutí
     /// a kresba rozejdou — a přesně tím vznikla vada z proklikání #503.
-    static let width = Policy.marginColumnWidth(shown: true)
+    static let width = Policy.marginColumnWidth(form: .cards)
     /// Mezera mezi odstrčenými kartami (návrh: `margin-top: 8px`).
     private static let gap = 8.0
     /// Odsazení karty od hran okraje (návrh: `.mgn { padding: 0 10px }`).
@@ -86,14 +91,21 @@ struct DiffMarginView: View {
         // sundal dvě třetiny toho, co si okraj bral.
         let band = viewport.band
         let placed = placements
+        let mounted = Set(placed.filter { Policy.isBlockMounted($0.span, band: band) }.map(\.id))
+        // **Co se nekreslí jako karta, kreslí se jako značka na hraně** (#505) — do té doby po
+        // kartě mimo pás nezbyla na obrazovce ani stopa. Rozhoduje `Policy`; kresba jí dodá jen
+        // to, co se bez geometrie zjistit nedá.
+        let dotted = Set(Policy.marginDots(of: cards, mounted: mounted, form: .cards).map(\.id))
         ZStack(alignment: .topLeading) {
             // Prázdná plocha drží šířku i výšku i tehdy, když všechny karty odscrollovaly pryč.
             // Bez ní by okraj splaskl na nejvyšší kartu a linka na hraně by končila v prázdnu.
             Color.clear
             ForEach(placed) { spot in
-                if Policy.isBlockMounted(spot.span, band: band) {
+                if mounted.contains(spot.id) {
                     connector(of: spot)
                     card(of: spot)
+                } else if dotted.contains(spot.id) {
+                    dot(of: spot)
                 }
             }
         }
@@ -193,6 +205,24 @@ struct DiffMarginView: View {
         .offset(y: spot.top)
     }
 
+    /// Značka na hraně okraje místo karty, která se nekreslí (#505).
+    ///
+    /// Stojí **na výšce spojnice**, ne na horní hraně karty: je to totéž místo, ze kterého by
+    /// čárka vedla do kódu, takže se značka po návratu do pásu promění v kartu tam, kde byla.
+    private func dot(of spot: Placed) -> some View {
+        DiffMarginDotView(
+            card: spot.card,
+            // Rámeček dostane i značka, na kterou se skočilo z tabulky nálezů — jako karta o kus
+            // vedle (`card(of:)`), jinak by skok na kartu mimo pás skončil u puntíku, který se od
+            // ostatních nijak neliší.
+            isCurrent: isCurrent(spot.card) || highlighted?.matches(spot.card.group) == true,
+            blockingCategories: blockingCategories,
+            findingActions: findingActions,
+            draft: drafts[spot.card.path] ?? FileDraftActions()
+        )
+        .offset(y: spot.top + Self.connectorY - DiffMarginDotView.size / 2)
+    }
+
     private func isCurrent(_ card: DiffMarginCard) -> Bool {
         guard let current else { return false }
         return FindingPlace(card.group) == current
@@ -207,7 +237,11 @@ struct DiffMarginView: View {
 /// okraje, platilo by se při každém snímku za překlad všech karet.
 ///
 /// `offset` je navíc geometrická transformace, ne rozvržení: děti se kvůli němu nepřeměřují.
-private struct DiffMarginScroll: ViewModifier {
+///
+/// **Od #505 ho bere i složená hrana** (`DiffMarginRailView`), a je to důvod, proč není privátní:
+/// obě podoby okraje se vezou s výřezem stejně, a druhý modifikátor o téže věci by znamenal druhé
+/// místo, kde se `top` čte.
+struct DiffMarginScroll: ViewModifier {
     let viewport: DiffViewport
 
     func body(content: Content) -> some View {

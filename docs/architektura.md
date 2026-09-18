@@ -2349,6 +2349,64 @@ obsah zahodí a postaví znovu (#472/#476), kdežto projíždění tu změnu nem
 to má na ostrých datech, ne na vyrobené scéně — jak, je
 v [`docs/testovani.md`](testovani.md#okraj-na-ostrých-datech-503-druhé-kolo).
 
+### Složená hrana okraje (#505)
+
+**Okraj má od #505 tři podoby, ne dvě** (`DiffMarginForm`): kolona s kartami (300 b, #503),
+**složená hrana se značkami** (28 b) a nic. Do #505 to byl příznak — kolona, nebo prázdno —, jenže
+„prázdno“ znamenalo, že nález přebírá **panel vpravo**, tedy další třistabodová kolona. V úzkém
+okně se tedy za nález platilo vždycky stejně, ať se rozhodlo jakkoli.
+
+**Kde to bydlí.** `Policy.diffSideColumns` (práh), `Policy.marginColumnWidth(form:)` (tři šířky),
+`Policy.marginDots(of:mounted:form:)` (které karty se kreslí jako značka),
+`App/Views/DiffMarginRailView.swift` (hrana) a `App/Views/DiffMarginDotView.swift` (jedna značka
+i s popoverem). Kolonu kreslí dál `DiffMarginView`.
+
+**Rozložená kolona a složená hrana jsou dva typy, ne jedno tělo s `if`em** — tentýž vzorec jako
+`ItineraryColumnView` a `ItineraryRailView` (#506) a ze stejného důvodu: v každém z nich má **každý
+vstup význam**. Hrana nepotřebuje změřené výšky karet ani spojnice, kolona nepotřebuje patku
+s počtem. Sdílí se dvě věci, a obě schválně: modifikátor posunu (`DiffMarginScroll`, aby se
+`viewport.top` dál četl na jednom místě) a značka (`DiffMarginDotView`).
+
+**Žebřík ustupování má od #505 čtyři příčky, ne tři** — kód nikdy, pak strom, **pak kolona na
+hranu** a teprve potom hrana pryč. Čtvrtá příčka je ta stará: s ní se rozloží panel, který nález
+převezme. Tři důsledky, na kterých to stojí:
+
+- **Práh je v obou pohledech týž.** Do #505 se `Vedle sebe` kolony drželo i hluboko pod podlahou
+  kódu (`minimumCodeWidth`), protože panel je v tom pohledu složený (#188) a zahodit okraj znamenalo
+  nález schovat. S hranou ta volba odpadá, takže se rozhoduje jedinou podmínkou.
+- **Hrana je domov** (`DiffMarginForm.hasHome`), takže se kvůli ní panel **nerozkládá**. Kdyby se
+  rozkládal, bylo by úzké okno hůř na tom než před #505: 300 bodů panelu **a** 28 bodů hrany.
+- **Bez změřené šířky se hrana nekreslí nikdy.** `available == nil` znamená „nikdo nezměřil“
+  (náhledy, sondy), a to není úzké okno — okraj tam zůstává kolonou, jako do #505.
+
+**Značka je jedno pravidlo pro dvě situace**: *karta, která se nekreslí jako karta, se kreslí jako
+značka*. Na složené hraně nejsou karty žádné, takže značku dostanou všechny; v rozložené koloně ji
+dostanou karty **mimo nasazený pás** (#469) — a ty do #505 neměly na obrazovce ani stopu, což je
+nález, o kterém se nikdo nedozví. Rozhoduje o tom `Policy.marginDots`; kresba jí dodá jen to, co se
+bez geometrie zjistit nedá (které karty jsou nasazené).
+
+**Kde značky stojí, počítá tatáž funkce jako u karet** (`Policy.marginTops`), jen s výškou značky
+místo změřené výšky karty. Plyne z toho obojí, co se od ní čeká: značka, jejíž řádek ještě žádný
+blok neohlásil, jde **za předchozí** (zmizet nesmí), a dvě značky na sobě se rozestoupí. U běžné
+rozteče řádků nenastane ani jedno.
+
+**Značky se vezou s výřezem, počet ne.** Puntík stojí na výšce svého řádku, takže po odscrollování
+zmizí z obrazovky stejně jako řádek sám — počet nálezů v patce hrany je proto jediné místo, ze
+kterého se dá přečíst, kolik jich celkem je, a ten se nevozí. Patka leží **mimo ořez i mimo posun**.
+
+**Karta se ze značky otevírá popoverem, a je to výjimka z #483 s důvodem.** Pravidlo *co přesahuje
+rodiče, ořízne každý ořezávající předek* tady platí dvojnásob: hrana je 28 bodů široká a
+`.clipped()`, takže karta o 300 bodech nemá kudy ven. Popover je vlastní okno, takže ho neořízne
+nic; že bere fokus, je u kliknutí správně — u našeptávače emotikonů to byl důvod, proč se zamítl,
+protože tam se přitom píše. V popoveru stojí **tatáž `FindingBubbleView`** jako v okraji a v téže
+šířce, takže se akce `Převzít · Neplatí · Nepatří sem` ani text nemohou rozejít.
+
+**Značky se usadí o průchod později, stejně jako karty** — a je to vlastnost hlášení, ne vada:
+blok hlásí polohy svých řádků z **rozvržení textového view**, tedy až když se doopravdy kreslí.
+V okně se kreslí pořád, takže to není vidět; v offscreen sondě to vidět **bylo** (značky stály
+nastohované u horní hrany) a stálo to jednu opravu měřidla, viz
+[`docs/testovani.md`](testovani.md#jak-se-hrana-vyfotila-505).
+
 ### Výchozí stav diffu jsou bubliny pod řádky (#548)
 
 **Nález stojí ve výchozím stavu jako bublina pod svým řádkem; okraj s kartami (#503) je za

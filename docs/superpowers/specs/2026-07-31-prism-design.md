@@ -8602,3 +8602,37 @@ diff, ve kterém těch pět vzorů **ještě stojí** — část jeho krátkého
 na nálezy, které Copilot udělá zadarmo. To jde přímo proti cíli #597 (*míň Opusových tokenů*,
 ne míň tokenů celkem), a proto to #597 nedoporučilo už tehdy; tímhle rozhodnutím se na tom nic
 nemění.
+
+### Záznam rozhodnutí — složená hrana okraje je domov, ne mezistav (#505)
+
+**Rozhodnutí:** okraj s nálezy má tři podoby (`DiffMarginForm`), složená hrana o **28 bodech** se
+počítá do tvrdé podmínky *nález nikdy nezůstane bez domova*, a **panel se kvůli ní nerozkládá**.
+
+**Proč to není zjednodušení.** Do #505 byl okraj příznak: kolona 300 b, nebo nic. „Nic“ ale
+neznamenalo, že se ušetří — nález převzal **panel vpravo**, tedy další třistabodová kolona. V úzkém
+okně se tedy za nález platilo vždycky stejně a rozhodovalo se jen o tom, na které straně. Hrana je
+první možnost, která tu cenu doopravdy sráží: 28 bodů místo 300, a je z ní vidět **kde** nálezy
+jsou. Kdyby se s hranou panel rozkládal, bylo by úzké okno hůř na tom než před #505 (300 + 28).
+
+**Zamítnuto: nechat práh jen pro `Vedle sebe`.** #503 mělo pro každý pohled vlastní větev, protože
+v `Pod sebou` byl panel po ruce a ve `Vedle sebe` ne. S hranou ten rozdíl mizí — v obou pohledech
+existuje levná odpověď —, takže se rozhoduje **jedinou** podmínkou: *spadl by kód pod
+`minimumCodeWidth`?* Dvě větve by znamenaly dvě pravidla o jedné věci.
+
+**Zamítnuto: nechat značky ohraničené pásem kolem výřezu** (#469). Pás existuje kvůli živým
+`NSTextView`ům; značka je puntík bez textu, bez měření a bez dětí. Hrana ho proto nečte vůbec,
+a `Policy.marginDots` naopak pás používá **obráceně** — v rozložené koloně dělá ze *zahozené* karty
+značku. Tím se dodělalo to, co u #503 zbylo otevřené: karta mimo pás do té doby nebyla na obrazovce
+**nijak**, a nález, o kterém není ani stopa, vypadá jako čistý pull request.
+
+**Zamítnuto: kreslit kartu na hraně vlastní úzkou podobou** místo popoveru. Karta je
+`FindingBubbleView` se čtyřmi akcemi a dvěma odznaky; druhá kresba téhož by se rozešla, a rozejít se
+tu znamená, že jedna podoba okraje nabízí akci, kterou druhá nemá. Popover je proti pravidlu z #483
+(*co přesahuje rodiče, ořízne ořezávající předek*) **výjimka s důvodem**: hrana je 28 bodů a
+`.clipped()`, takže karta nemá kudy ven, a popover je vlastní okno. Že bere fokus, je u kliknutí
+správně — u našeptávače emotikonů to byl důvod k zamítnutí právě proto, že se tam přitom píše.
+
+**Proč zrovna 28 bodů.** Značka je sedmibodový puntík (tatáž velikost, jakou má značka v bublině),
+kolem něj 4 body na každou stranu, aby se vešel rámeček kurzoru procházení `⌥↓` — tedy 15 —, a
+6 bodů zbývá na odsazení od dělicí linky a od hrany okna. Míň znamená oříznutý rámeček kurzoru, víc
+je kolona, která nic neveze.

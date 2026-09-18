@@ -1010,6 +1010,16 @@ nálezu —, kdežto bublina zabere místo jen tam, kde nález je. Zakotvený n�
 nález **bez řádku** visí u hlavičky souboru vždycky a vlákna konverzace se přepínačem
 neschovávají.
 
+**V úzkém okně se okraj složí na hranu se značkami, nezmizí** (#505). Kolona o 300 bodech se do
+malého okna nevejde a ve `Vedle sebe` se ta plocha ještě dělí na dvě strany — na podlaze okna (700)
+z ní zbývalo **šest znaků na stranu**. Od #505 se proto kolona složí na **hranu 28 bodů**: puntík
+v barvě druhu stojí na výšce svého řádku, pod kurzorem procházení (`⌥↓`) má rámeček, dole je počet
+nálezů a **klik puntík rozbalí do karty** jako popover — s týmiž akcemi, jaké má karta v okraji.
+Kódu se tím vrátí 272 bodů (na podlaze okna 6 → 23 znaků na stranu ve `Vedle sebe`) a panel vpravo
+se kvůli tomu **nerozkládá**: hrana je pro nález plnohodnotný domov. Zahodí se teprve tehdy, když se
+nevejde ani ona. **Jako značka se kreslí i karta mimo nasazený pás** v rozložené koloně — do #505 po
+ní na obrazovce nezbyla ani stopa.
+
 **Blokující nález je rozbalený rovnou, ostatní jsou značka na hraně řádku** (#185). Značka je
 pruh s odznaky, kategorií, reviewerem a náhledem textu — kliknutím se rozbalí celá bublina
 i s akcemi, druhým kliknutím se zavře. Rozbalit všechny by z diffu udělalo seznam nálezů

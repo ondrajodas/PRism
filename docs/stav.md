@@ -9691,3 +9691,82 @@ padla na to, co Copilot udělá zadarmo — přímo proti cíli #597).
 vlastní revize diffu proběhla a je popsaná v PR. Je to podruhé za sebou a u tohohle issue zvlášť
 ironické, protože přidává **druhé** kolo Copilota — pravidlo se tím ale **nemění**, dnešní výpadek
 je provozní stav, ne návrh.
+
+## #505 — Okraj v úzkém okně: složení na hranu se značkami (Průběžné, zákres 43)
+
+**Tohle issue ruší důvod svého vlastního odkladu.** U #548 se #504 i #505 odložily z M14 do
+`Průběžné` s odůvodněním, že okraj je od té doby vypnutý a dělat pro něj práci je práce naslepo.
+Naměřeno tam bylo, že okraj stojí **300 b** a ve `Vedle sebe` sráží 49 → 31 znaků na stranu.
+#505 je přesně ta oprava, po které ta cena v úzkém okně mizí, takže **odklad tímhle končí**;
+#504 (seznam nálezů v panelu zaniká) zůstává v `Průběžné` beze změny.
+
+**Okraj má tři podoby, ne dvě** (`DiffMarginForm`): kolona s kartami (300 b), **hrana se značkami**
+(28 b) a nic. Do #505 to byl příznak, a „nic“ znamenalo, že nález přebírá **panel vpravo**, tedy
+další třistabodová kolona — v úzkém okně se tedy za nález platilo vždycky stejně, ať se rozhodlo
+jakkoli. Žebřík ustupování má proto nově čtyři příčky: kód nikdy → strom → **kolona na hranu** →
+hrana pryč (a teprve s ní se rozloží panel).
+
+**Práh je v obou pohledech týž, a je to změna proti #503.** Do #505 se `Vedle sebe` kolony drželo
+i hluboko pod podlahou kódu, protože panel je v tom pohledu složený (#188) a zahodit okraj znamenalo
+nález schovat; úzká kolona kódu byla menší škoda. S hranou ta volba odpadá, takže se rozhoduje
+jedinou podmínkou: *spadl by kód pod `minimumCodeWidth`?*
+
+**Hrana je domov, takže se kvůli ní panel nerozkládá** (`DiffMarginForm.hasHome`). Kdyby se
+rozkládal, bylo by úzké okno hůř na tom než před #505 — 300 bodů panelu **a** 28 bodů hrany.
+Tvrdá podmínka *nález nikdy nezůstane bez domova* platí beze změny, jen se do domova počítá i hrana.
+
+**Kolik to je v číslech** (`CharactersPerSideProbe.theRailTable`, znak 8,036 b). Na podlaze okna
+(700) ve `Vedle sebe` **6 → 23 znaků na stranu**, v `Pod sebou` 16 → 50; v okně 784 je to 11 → 28,
+respektive 26 → 60. **Nad prahem se nemění nic** — měření z #548 (1 100 / `Vedle sebe`, 49 → 31)
+platí po #505 beze změny, protože se tam kolona pořád vejde. Celá tabulka i s tím, proč 784 /
+`Pod sebou` vyjde s okrajem **širší** než s bublinami (složí se itinerář), je
+v [`docs/testovani.md`](testovani.md#kolik-znaků-na-stranu-hrana-vrátí-505).
+
+**Značka je jedno pravidlo pro dvě situace**: *karta, která se nekreslí jako karta, se kreslí jako
+značka* (`Policy.marginDots`). Na hraně nejsou karty žádné, takže značku dostanou všechny;
+v rozložené koloně ji dostanou karty **mimo nasazený pás** (#469) — a ty do #505 neměly na obrazovce
+ani stopu, což je nález, o kterém se nikdo nedozví. Tím se zároveň dodělává to, co u #503 zbylo
+otevřené, a mění se poznámka 143 v zákresu (sekce 43 mluví o tom, že se taková karta nekreslí
+vůbec).
+
+**Zákres se dokresluje zvlášť, ne v tomhle PR.** Sekce 43 složenou hranu nakreslenou nemá — zákres
+téhle skupiny je v decku *Směry › B Nálezy jako marginálie* (odsouhlaseno 2. 9. 2026) a do
+`navrh.html` ho přenášelo #503, které tenhle stav nekreslilo. Dokreslení sekce 43 i oprava poznámky
+143 jde **samostatným zadáním** a publikuje se z něj; merge #505 to schválně nedrželo, protože
+schvalovací brána u zakládání issue proběhla nad tím deckem.
+
+**Klik na značku otevře kartu popoverem, a je to vědomá výjimka z #483.** Hrana je 28 bodů široká
+a ořezaná, takže karta o 300 bodech nemá kudy ven; popover je vlastní okno, takže ho neořízne nic.
+Že bere fokus, je u kliknutí správně — u našeptávače emotikonů to byl důvod, proč se zamítl, protože
+tam se přitom píše. V popoveru stojí **tatáž `FindingBubbleView`** a v téže šířce.
+
+**Rozložená kolona a složená hrana jsou dva typy, ne jedno tělo s `if`em** — tentýž vzorec jako
+`ItineraryColumnView`/`ItineraryRailView` (#506). Sdílí se dvě věci a obě schválně: modifikátor
+posunu (`DiffMarginScroll`, aby se `viewport.top` dál četl na jednom místě — stráž
+`DiffMarginScrollReadTests` zůstává beze změny) a značka (`DiffMarginDotView`).
+
+**Oprava měřidla, která vypadla ze sondy.** Prvních pět renderů vyfotilo značky **nastohované
+u horní hrany**, ačkoli kolona na téže scéně stála správně. Příčina není v okraji: blok hlásí polohy
+svých řádků z **rozvržení textového view**, tedy až když se doopravdy kreslí — a `settle()` je
+odmlka v `Task`u, která žádné kreslení nevyvolá. Kolona to nepoznala, protože si karty samy měří
+výšku a tím si průchody vynutí. Šestnáct kol po 100 ms tedy nepomohlo vůbec, `host.display()` uvnitř
+každého kola pomohlo hned. V okně ten stav nenastane — tam se kreslí pořád. Je to týž vzorec jako
+#478, jen místo čísla obrázek.
+
+**Lišta nad diffem (#593) a okraj se nepotkají** — bylo to na seznamu k rozmyšlení. Lišta stojí
+v `VStack`u **nad** celým `HStack`em s kódem i okrajem, takže její šířka na podobě okraje nezávisí
+a žebřík z #593 zůstává beze změny. Poznámka u #503 (*v okně na podlaze se lišta diffu ořezává
+uvnitř své kolony, což patří k #505*) tím tedy **není** vyřízená: mluví o liště, ne o koloně kódu,
+a #593 ji vyřešilo svým ustupováním.
+
+Testů **6329** v 602 suitách; nové jsou čtyři sady tvrzení nad `Policy` (práh přes pásmo šířek,
+značky, kotva ve `Vedle sebe` a popisky) a dvě sondy (`theRailTable`, rozšířené `drawTheMargin`).
+**Ověřeno vložením regrese, obou polovin zvlášť.** Co se v nich hlídá a jak se měřilo, je
+v [`docs/testovani.md`](testovani.md#složená-hrana-okraje-505).
+
+**Neověřená mezera: PR neprošel Copilotem** — výpadek, na pokyn uživatele se nepouštěl; vlastní
+revize diffu proběhla a je popsaná v PR. A **druhá**: plný běh testů je na tomhle stroji dnes
+červený i na čistém `main` (42 pádů na `main` proti 53 a 81 ve dvou bězích větve, ověřeno
+detached checkoutem téhož stromu). **Všechny pády jsou `Nedočkalo se` se stropem 120 s** a všechny
+v sadách kolem `AppStore` a review, ani jeden v diffu — týž běh v izolaci trvá desetiny sekundy.
+Zelené jsou proto jen dotčené suity spuštěné izolovaně (75 testů v 7 suitách).
