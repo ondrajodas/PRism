@@ -56,16 +56,33 @@ extension Policy {
     ///
     /// Cizí vlákna se do množiny nedostanou vůbec, i když v nich odpověď je: byla by to identita,
     /// kterou nikdo nečte, protože do druhého kola takové vlákno nepatří.
+    ///
+    /// **Od #523 je to klíčová množina `latestReplies(in:)`, ne druhý průchod vlákny.** Kdo
+    /// odpověděl a co napsal, potřebuje kresba karty; kdyby se ta dvě rozhodnutí počítala zvlášť,
+    /// mohl by se objevit řádek `odpověděl …` u vlákna, které je v druhém kole vedené jako
+    /// nezodpovězené — a to je přesně ten tichý rozchod, kterému se #522 vyhýbá.
     static func answeredThreadIDs(in conversation: Conversation) -> Set<String> {
-        var answered: Set<String> = []
+        Set(latestReplies(in: conversation).keys)
+    }
+
+    /// **Nejnovější cizí odpověď** v každém mém vlákně, klíčovaná identitou vlákna (#523).
+    ///
+    /// Nejnovější, ne první: v okně je vidět jedna věta a ta má být ta, po které se člověk
+    /// rozhoduje, jestli se do vlákna vracet. Tatáž volba jako u `activityDetail(_:)`, kde
+    /// o větě v banneru rozhoduje datum.
+    ///
+    /// Vlákno **bez komentářů** i vlákno, které jsem nezaložil, se přeskakuje — jinak by se do
+    /// druhého kola dostala cizí diskuze.
+    static func latestReplies(in conversation: Conversation) -> [String: ThreadComment] {
+        var replies: [String: ThreadComment] = [:]
         for thread in conversation.threads.items {
             guard let opener = thread.comments.items.first, conversation.isMine(opener) else {
                 continue
             }
-            if thread.comments.items.contains(where: { !conversation.isMine($0) }) {
-                answered.insert(thread.id)
-            }
+            let foreign = thread.comments.items.filter { !conversation.isMine($0) }
+            guard let newest = foreign.max(by: { $0.createdAt < $1.createdAt }) else { continue }
+            replies[thread.id] = newest
         }
-        return answered
+        return replies
     }
 }

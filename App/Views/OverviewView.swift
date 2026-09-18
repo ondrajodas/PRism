@@ -31,6 +31,13 @@ struct OverviewView: View {
     var showAdded: (() -> Void)?
     /// „Přečteno“ — viz `SinceLastVisitView`.
     var dismissChanges: (() -> Void)?
+    /// Druhé kolo (#523). `nil` = nekreslí se — na vlastním PR, bez načtené konverzace, nebo když
+    /// na PR žádné moje vlákno není. Rozhoduje `Policy.replyCard`, ne tenhle typ.
+    var replyCard: ReviewReplyCard?
+    /// Předepsat schválení a otevřít potvrzení. **Nic neodesílá.**
+    var prescribeApproval: (() -> Void)?
+    /// Otevřít vlákno, které v druhém kole zbývá.
+    var openRemainingReply: ((String) -> Void)?
 
     let pullRequest: PullRequestSummary
 
@@ -80,6 +87,15 @@ struct OverviewView: View {
     /// co #291 hlásilo z běžící aplikace. Bez scrollu se přetečení nakreslí a dá se spočítat.
     @ViewBuilder var content: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // **Druhé kolo stojí nad pruhem od minule** (#523): ten odpovídá na „co přibylo“,
+            // karta na „co se stalo s tím, na co jsem se ptal“ — a z druhého je hotová akce.
+            if let replyCard {
+                ReviewReplyCardView(
+                    card: replyCard,
+                    approve: prescribeApproval,
+                    openRemaining: openRemainingReply
+                )
+            }
             // Posunutá hlava se počítá jako změna i bez událostí: po rebase jsou commity
             // starší než moje návštěva, takže se do `changes` nedostanou, ale kód je jiný.
             if !changes.isEmpty || movedHead != nil {

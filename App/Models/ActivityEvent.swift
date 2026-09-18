@@ -40,6 +40,14 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
         /// „agent na to review odpověděl“ — přitom druhé se stane jedině tehdy, když si to někdo
         /// zapnul, a je to zrovna ta věc, kterou chce po návratu k počítači vidět.
         case agentFix
+        /// **Autor odpověděl na moje review** (#523) — na cizím PR se pohnulo to, na co jsem se
+        /// ptal já.
+        ///
+        /// Vlastní druh vedle `findings` i `foreignActivity`: první mluví o tom, co našel **náš
+        /// reviewer**, druhý o dění na **mém** PR. Tohle je třetí směr a je to zrovna ta věc,
+        /// kvůli které se do PR po týdnu vrací — bez vlastního řádku by se na ose nedalo odlišit
+        /// „přišly commity“ od „ty commity opravily, co jsem hlásil“.
+        case replyRound
         /// Hlava se posunula pod uloženými nálezy (tvrdá podmínka č. 5). **Dopočítané** — banner
         /// za to nechodí, protože zastaralé nálezy nemají vyrušovat; dohledat se ale mají.
         case staleFindings

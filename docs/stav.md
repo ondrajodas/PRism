@@ -9038,6 +9038,58 @@ páka je model, ne délka vstupu.
 parseru (`BriefCommandTests`), takže se to nerozpadne potichu — ale jak taková kratší odpověď
 vypadá nad deskou, viděl harness, ne člověk.
 
+## #523 — druhé kolo: karta, notifikace a předepsané schválení (M17, Z3a, zákres 60)
+
+Druhá issue skupiny „Za mě“ a **kresba nad daty z #522**. V `Přehledu` cizího PR stojí nad pruhem
+*Od tvé poslední návštěvy* karta **Odpověď na tvoje review z 29. 8.**: řádek na každý můj odeslaný
+komentář (`✓ opraveno v 9c1de02` / `↩ odpověděl sykora-ji: „…“` / `○ bez odpovědi · řádek beze
+změny`), pruh `návrh: Komentář · 1 bez odpovědi` a dvě tlačítka. Když nic nezbývá, je návrh
+*Schválit*, tělo je předepsané (*„Díky, všech 5 opraveno.“*) a klik otevře **týž sheet jako dnes**.
+
+**Schválení je návrh, ne akce.** Tlačítko zapíše verdikt a tělo do `ReviewDraft` — tedy do souboru
+v cache — a otevře potvrzení toutéž cestou jako `Odeslat` v panelu. Tvrdá podmínka č. 1 se nemění
+ani o metodu: grepy dál vydají **sedm** souborů u `ReviewPublishing` a **tři** u `BranchPushing`,
+`ReviewVerdict` zůstává návrh z nálezů. Návrh druhého kola je proto **vlastní typ**, kde
+`Komentář` je plnohodnotná odpověď („neschvaluju, protože něco zbývá“).
+
+**Tři rozhodnutí, která v zadání nebyla.** (1) **Přes nezodpovězený bod se nepředepisuje ani
+věta** — tlačítko se jmenuje `Schválit i tak` a tělo zůstane prázdné: poděkovat za bod, který
+zbyl, znamená položit člověku do úst nepravdu. (2) **Useknutá stránka vláken bere schválení taky**,
+i když nezodpovězený bod není — o části PR se neví nic; tentýž směr opatrnosti jako u zahozeného
+nálezu. (3) **Chybějící data se přiznají** třemi různými větami (useknutá stránka, kontrola
+neběžela, kontrola nedoběhla), protože každá se spravuje jinde.
+
+**Změna proti zákresu: dvě karty nad sebou, ne jedna.** Z3 kreslil druhé kolo jako *podobu* pruhu
+`.since`. Slít je doopravdy by sundalo odrážku o přepsané historii, odznak `nálezy zastaraly`
+i obě tlačítka toho pruhu — a po pushi autora platí nejvíc. Karta druhého kola je proto
+**akcentová** (`--stale` znamená „platilo to, dneska už ne“, tahle „je co udělat“) a stojí nad
+pruhem; tak je i zakreslená v sekci 60. Zapsané v [záznamu
+rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--karta-druhého-kola-stojí-vedle-pruhu-od-minule-523).
+
+**Hláška jde toutéž branou jako ostatní** (#414): banner *„sykora-ji opravil 3 z 5“* + *„1 bez
+odpovědi“* a řádek v `Dění` (`replyRound`, vede na `Přehled`). Nehlásí se **na vlastním PR**, **bez
+mého vlákna** a **když se nepohnulo nic**. Přepínač je **sedmý a vlastní** (`Autor odpověděl na
+moje review`) s vlastní `replacementGroup` — že autor opravil tři body, nemá přebít výsledek
+našeho revieweera.
+
+**Zákres do `docs/navrh.html` je sekce 60** (číslo přidělil orchestrátor v dávce) — tedy Z3a, které
+#522 schválně nekreslilo. Artifact se z tohohle PR **nepublikoval**, publikuje se ze slitého stavu
+po mergi (#537).
+
+Přibylo 30 testů ve třech sadách; regrese se ověřila **vložením regrese dvakrát** — u návrhu
+verdiktu (padne šest z devíti buněk mřížky a k tomu dva pojmenované testy) a u brány na vlastní PR
+(padne v `Policy` i ve storu).
+
+**Ověřeno snímkem běžící aplikace** ve slotu `a`, položeným vedle renderu sekce 60 headless
+Chromem. Stav se musel **vyrobit**: ve slotu není cizí PR, na kterém bych měl odeslaná vlákna,
+takže `replyCard(for:)` dočasně vracela předepsanou kartu z proměnné prostředí (do commitu se to
+nedostalo). **Z toho neplyne nic o párování** — jen to, jak se karta kreslí. Našlo to přitom
+chybu, kterou testy nevidí: `Text("… \(Text(…))")` vybere `Text(String)`, takže se do razítka
+vysázelo `Text(storage: SwiftUI…)`.
+
+**Neověřená mezera: PR neprošel Copilotem.** GitHub má výpadek entitlementu, takže se na pokyn
+uživatele nepouštěl. Vlastní revize diffu proběhla a je popsaná v PR.
+
 ## #522 — druhé kolo: kontrola z #150 páruje moje odeslané komentáře (M17, Z3)
 
 První issue skupiny „Za mě“ (#522, #523). Do #522 kontrola z #150 řekla, které **nálezy revieweera**
