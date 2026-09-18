@@ -86,13 +86,17 @@ extension AppStore {
         // v cache. Rozdělaný rebase v něm je stav, o kterém okno mluví (`unresolved`), takže se tím
         // nic tichého nenechává.
         for sync in branchSyncTasks.values { sync.cancel() }
+        // A anotace hunků (#524). Je to `claude -p` jako ostatní — bez zabití by přežila aplikaci
+        // a platila tokeny dál na `launchd`, což je celý problém z #264.
+        for annotation in annotationTasks.values { annotation.cancel() }
         // A brief (#516). Je to `claude -p` jako ostatní — bez nástrojů, ale se stejným účtem:
         // session, která přežije zavřenou aplikaci, platí tokeny dál.
         briefTask?.cancel()
 
         var remaining = Self.terminationChecks
         while !reviewTasks.isEmpty || !recheckTasks.isEmpty || !askTasks.isEmpty
-            || !branchSyncTasks.isEmpty || briefTask != nil, remaining > 0 {
+            || !branchSyncTasks.isEmpty || !annotationTasks.isEmpty || briefTask != nil,
+            remaining > 0 {
             remaining -= 1
             // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake
             // hodiny čekání přeskočí, a test, který má tvrdit, že po zavření nic neběží, by
@@ -318,6 +322,10 @@ extension AppStore {
                 ancestry: ancestry
             )
             reviewPhases[pr] = nil
+            // Anotace hunků (#524) — **po review, jedině po automatu a jedině za zapnutou bránou**.
+            // Vlastní task, takže se s ní nezdrží ani uložení nálezů, ani notifikace: je to session
+            // navíc a review na ni nečeká.
+            annotateAfterAutomaticReview(of: pr)
             await notifyAboutFinishedReview(of: pr)
             // Návrh review (#520) — **jen tady, ne za chybovými cestami**: skládá se z toho, co
             // reviewery našli, takže po spadlém checkoutu ani po chybě GitHubu není z čeho.

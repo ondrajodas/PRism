@@ -108,6 +108,21 @@ struct DiffView: View {
     /// `nil` = **tuhle obrazovku nikdo neposlouchá**, takže se ani neměří: rozsahový diff (#284),
     /// diff commitu (#317) ani náhled o itineráři nic neříkají.
     var reportContentEnd: ((Bool) -> Void)?
+    /// Popsat změny sedmou session (#524) — **tlačítko v liště nad diffem**. `nil` = **nekreslí
+    /// se**: na tuhle obrazovku akce nepatří (diff commitu, rozsahový diff, náhled), nebo session
+    /// není zapojená a hlava PR se nezná.
+    var annotation: DiffAnnotationActions?
+    /// Anotace hunků, které pro tenhle diff **platí** (#525). `nil` = nekreslí se ani věty pod
+    /// souřadnicemi hunků, ani kapsle druhu změny v hlavičkách souborů.
+    ///
+    /// Platnost proti dnešní hlavě rozhodl volající (`AppStore.annotations(for:)` →
+    /// `Policy.annotations(of:head:)`), tady se už jen kreslí — tvrdá podmínka č. 5 se tedy drží
+    /// **nad daty**, ne v kresbě.
+    ///
+    /// **Jen nad celým diffem**, za toutéž bránou jako tlačítko `Popsat změny`: anotace se páruje
+    /// **pořadím hunku** v `git diff <base>...HEAD`, takže v rozsahu `Od tvé poslední návštěvy`
+    /// (#284) i v diffu commitu (#317) by tatáž čísla ukazovala jinam.
+    var annotations: StoredAnnotations?
 
     /// Šířka, kterou diff dostal — okno bez railu, **bez levého sloupce** a bez panelu vpravo
     /// (#220, od #506 bez sloupce). Odsud se počítá kolona kódu; o kolonách samotných rozhoduje
@@ -131,6 +146,18 @@ struct DiffView: View {
     ///
     /// Předvolba pohledu napříč pull requesty, takže patří do `UserDefaults`, ne do store.
     @AppStorage("showInlineFindingBubbles") private var showBubbles = true
+    /// Kreslit věty *proč* pod souřadnicemi hunků (#525)? **Zapnuto** — když si někdo popis změn
+    /// zaplatil, má ho vidět; vypíná se tehdy, když se v diffu čte kód po řádcích a věty odsouvají
+    /// kolonu dolů.
+    ///
+    /// **V nabídce, ne v liště, a je to opačné rozhodnutí než u `Popsat změny`** (to se u #524
+    /// z nabídky do lišty přestěhovalo). Rozdíl je v tom, co ten ovladač je: `Popsat změny` je
+    /// **akce**, po které se pokaždé změní stav (spustí, ruší, zkusí znovu) — a nabídka klik
+    /// spolkne, takže z ní ten stav nebyl vidět. Tohle je **volba pohledu**, která se nastaví
+    /// a nechá být, tedy tatáž kategorie jako `Nálezy pod řádky` hned nad ní.
+    ///
+    /// Předvolba napříč pull requesty, takže `UserDefaults`, ne store — jako `showBubbles`.
+    @AppStorage("showHunkAnnotations") private var showAnnotations = true
     /// Výška viditelné části diffu — z ní se počítá, kam skočí nález. Čte se jen měřením
     /// (`onGeometryChange`), takže do rozvržení nezasahuje: `GeometryReader` by naopak sám
     /// zabral místo a v tomhle okně už jednou nadělal škodu.
@@ -647,7 +674,11 @@ struct DiffView: View {
             // a schovat ho spolu s nálezy by ho připravilo o to hlavní. Totéž platí o mých
             // rozdělaných komentářích — ty se schovat nesmí o důvod víc, protože se odešlou.
             threads: threads,
-            comments: comments
+            comments: comments,
+            // Věty *proč* pod souřadnicemi hunků (#525). Párování i přepínač rozhoduje `Policy`
+            // — prázdná mapa znamená „nekreslit“, takže vypnuté anotace skládají **týž** seznam
+            // řádků jako diff bez nich.
+            annotations: Policy.hunkAnnotations(of: annotations, in: file, isOn: showAnnotations)
         )
         // Kotvy jednou za soubor, ne pro každý řádek: `Policy.commentableSide` ověřuje
         // příslušnost k hunku hledáním, takže po řádcích je to kvadratické.
@@ -749,7 +780,15 @@ struct DiffView: View {
             // `nil`, když hledání nikdo nedodal (náhledy, sondy) — popisek se pak nekreslí, místo
             // aby otevíral pruh, který nemá kde vzniknout.
             openSearch: search.open,
-            isSearching: search.isOpen
+            isSearching: search.isOpen,
+            // Popis změn (#524). `nil`, když ho nikdo nedodal (náhledy, sondy) nebo když session
+            // není zapojená — tlačítko se pak v liště **nekreslí**.
+            annotation: annotation,
+            // Přepínač vět u hunků (#525) se v nabídce ukáže jedině tehdy, **když je co schovat** —
+            // tatáž podmínka jako u `Nálezy pod řádky`. Na nepopsaném PR by to byla položka, po
+            // které se nic nestane.
+            hasAnnotations: annotations?.hasHunkAnnotations == true,
+            showAnnotations: $showAnnotations
         )
     }
 
@@ -762,7 +801,10 @@ struct DiffView: View {
             toggle: { folding.toggle(file) },
             read: read.map { $0.state(of: file) },
             toggleRead: read.map { actions in { actions.toggle(file) } },
-            editor: editor
+            editor: editor,
+            // Druh změny (#525) — **nezávisle na přepínači vět**: je to jedno slovo v hlavičce,
+            // která tak jako tak stojí, viz `Policy.hunkAnnotations(of:in:isOn:)`.
+            changeKind: Policy.changeKind(of: annotations, in: file)
         )
     }
 

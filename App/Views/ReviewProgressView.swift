@@ -33,6 +33,14 @@ struct ReviewProgressView: View {
     var now = Date()
     /// `owner/repo#412` do podtitulku sheetu.
     var slug = ""
+    /// Dráha sedmé session (#524). `nil` = na tomhle PR se nepopisovalo.
+    ///
+    /// **Vlastní parametr, ne položka v `lanes`**, a je to podmínka: `Policy.lanes` vypisuje tytéž
+    /// reviewery jako chipy v pruhu běhu (je na to test), takže sedmá session mezi ně nepatří —
+    /// nálezy nehlásí a chip by u ní musel ukazovat počet, který nemá. Kreslí se **pod** nimi,
+    /// oddělená děličem, protože je to jiná otázka nad týmž PR: ne „co našli reviewery“, ale
+    /// „co se v tom diffu děje“.
+    var annotationLane: ReviewerLane?
 
     /// Které dráhy mají rozbalený výpis kroků (#325).
     ///
@@ -60,7 +68,7 @@ struct ReviewProgressView: View {
 
     var body: some View {
         Group {
-            if lanes.isEmpty {
+            if lanes.isEmpty, annotationLane == nil {
                 empty
             } else {
                 ScrollView {
@@ -97,9 +105,30 @@ struct ReviewProgressView: View {
                     now: now
                 )
             }
+            annotations
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
+    }
+
+    /// Dráha anotací pod děličem. **Bez `rerun` a bez `copyCommand`**: obojí bere jméno skillu
+    /// a pouští revieweera, kdežto tuhle session se pouští z lišty nad diffem — tlačítko, které
+    /// by tady spustilo někoho jiného, je horší než žádné.
+    @ViewBuilder private var annotations: some View {
+        if let annotationLane {
+            Divider().padding(.vertical, 3)
+            ReviewerLaneView(
+                lane: annotationLane,
+                shortName: annotationLane.skill,
+                // **Bez výpisu kroků**: dráha anotací osu nedrží (proč, je u `AnnotationPass`),
+                // takže `Policy.stepFeed` by nad prázdnými událostmi stejně vydal `.none` —
+                // říká se to rovnou, ať je z volání vidět, že tam šipka nebude.
+                feed: .none,
+                toggleFeed: {},
+                resumeInDrawer: drawer(of: annotationLane),
+                now: now
+            )
+        }
     }
 
     /// Akce, která dráze otevře přepis surové session. `nil` = není co otevřít.

@@ -1830,10 +1830,21 @@ PR, **další „moje“ loginy** (`ownLogins`, #330), **organizace k prohledáv
 review, jazyk nálezů, povolení odesílání, **skládání návrhu review** (`autoDraft`, #520),
 notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
-může přebít režim (`manual`/`automatic`), povolení odesílání, skládání návrhu review, jazyk nálezů,
-skilly, kategorie
-i časový limit — a nic víc: prompt, pohled na diff, vzhled okna a notifikace jsou vlastnost
-člověka, ne repozitáře.
+může přebít režim (`manual`/`automatic`), povolení odesílání, **skládání návrhu review**,
+jazyk nálezů, skilly, kategorie, časový limit i **popis hunků po review**
+(`annotatesHunks`, #524) — a nic víc: prompt, pohled na diff, vzhled okna a notifikace jsou
+vlastnost člověka, ne repozitáře.
+
+**Popis hunků je session navíc a ve výchozím stavu vypnutá** (#524). Zapnutá napíše po
+**automatickém** review ke každému hunku jednu větu *proč* a ke každému souboru druh změny; nálezy
+nehlásí a nemá je čím nahlásit. Brána platí **jen na automat** — ručně se pouští tlačítkem v liště nad
+diffem (`Popsat změny`) i u repa, kde je vypnutá. Po pushi anotace zastarají jako nálezy.
+
+**V diffu je z toho vidět čtvero** (#525): věta *proč* **pod souřadnicí hunku**, kapsle druhu změny
+(`změna chování`, `refaktor`, `test`, `konfigurace`, `generované`) **v hlavičce souboru**, přepínač
+`Anotace u hunků` v nabídce nad diffem a `Anotace · 4 věty · proti 4f2ac91` ve stavovém řádku. Druh
+změny k tomu bere **pořadí souborů v itineráři**. Anotace z jiné hlavy se **nenakreslí vůbec**, ani
+jako zastaralé — pořadí hunku je poziční, takže by po pushi ukazovaly vedle.
 
 **Celá globální konfigurace se dá nastavit z okna** (#389). Poslední dvě hodnoty, které se do té
 doby daly napsat jedině ručně do souboru, dostaly pole na stránkách, kam podle své otázky patří —
@@ -3139,7 +3150,9 @@ App/                      zdrojáky aplikace — target PRism
                           a rozhovor nad PR (#452 — třetí vyjmenovaná session, užší sada
                           nástrojů, --resume a materiál v souboru vedle stromu);
                           review jen přírůstku po pushi (#517 — rozsah v promptu, nálezy z minula
-                          v souboru vedle stromu, sada nástrojů beze změny)
+                          v souboru vedle stromu, sada nástrojů beze změny);
+                          anotace hunků (#524 — sedmá session, sada půjčená doslova od rozhovoru,
+                          odpověď JSONem v posledním sdělení a schéma bez pole pro závažnost)
   Polling/                obnovování seznamu v intervalu, backoff, neaktuální data
   Store/                  AppStore — stav, který kreslí okno (stav v AppStore.swift, metody v AppStore+*.swift);
                           ReviewStore a ReviewDraftStore — nálezy a rozdělaná review na disku;
@@ -3148,6 +3161,7 @@ App/                      zdrojáky aplikace — target PRism
                           ActivityLog a ActivityVisitLedger — záznam dění se stropem 200 položek
                           a značka poslední návštěvy té sekce (#414);
                           AskStore — rozhovory z tabu Zeptat se, klíčované PR, ne commitem (#452);
+                          AnnotationStore — věty *proč* u hunků, jeden JSON na PR, klíčované hlavou (#524);
                           RepositoryCatalog a RepositoryCatalogStore — seznamy repozitářů organizací
                           v cache s denní obnovou (#532);
                           odznak v Docku a přihlašovací položka (#529 — obojí za protokolem,

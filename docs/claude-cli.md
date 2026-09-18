@@ -349,6 +349,40 @@ Dvě věci, které z toho plynou a nejsou zjevné:
   je cena u **každé** odpovědi v okně vidět a počítá se do `Dneska stálo`; strop se nedává, protože
   za každou otázkou stojí člověk.
 
+## Anotace hunků (#524) — nástroj, který si aplikace nevymyslí
+
+**Sada je táž jako u rozhovoru výš, doslova.** `--allowedTools Read,Grep,Glob,Bash(git:*)`,
+zákazy `ClaudeCommand.disallowedTools`, `--resume` se **nepoužívá**. Sedmá session tedy nepřidává
+šestou sadu povolení; liší se **promptem a tím, jak se čte odpověď**.
+
+### `ReportAnnotations` si session nezavolá, protože žádný takový nástroj není
+
+Zadání #524 počítalo s vlastním nástrojem `ReportAnnotations`, definovaným „stejně jako
+`ReportFindings`“. **Tak to nejde, a je to změřené.** Běh s tím jménem v `--allowedTools`:
+
+- nástroj se **nezavolal ani jednou**;
+- session ho **třikrát hledala přes `ToolSearch`** — jméno v povoleních vypadá jako odložený
+  nástroj, ale nic za ním není;
+- a nakonec odpověděla **prostým textem**.
+
+Důvod je ten, že `ReportFindings` **není nástroj CLI** — obsluhuje ho harness review skillu.
+Nástroj, který si „definuje aplikace“, by v `claude` musel být **MCP server**, tedy **další proces,
+který by PRism spouštěl**; to je nová hranice pod tvrdou podmínkou č. 1 i č. 2 a zahodilo se to.
+Jméno v `--allowedTools` samo o sobě **nic neregistruje**.
+
+### Odpověď je JSON v `result` eventu — a právě tam umí sběr tiše nefungovat
+
+Čte se tedy **poslední sdělení**, jako u kontroly nálezů (#150) a překladu: `AnnotateCommand.parse`
+vykrojí text od prvního `{` po poslední `}` a dekóduje objekt se dvěma seznamy. Dvě věci, které
+z toho plynou a které se **musí projevit v okně**:
+
+- **Zabitá session `result` nepošle**, takže po ní nezbyde **nic** — ani částečná odpověď. Reviewer
+  hlásí `ReportFindings` průběžně, tahle session ne.
+- **Odpověď mimo tvar se nedá odlišit od prázdné**, pokud se to nepojmenuje. Session, která si popis
+  nepřečte, napíše prózu — a prázdné seznamy by se pak četly jako „diff nemá co popsat“. Aplikace
+  proto drží **`answered` vedle prázdných seznamů**; je to tatáž úmluva jako `calledReportFindings`
+  u revieweera, jen tady s větší cenou za její vynechání.
+
 ## Slévání konfliktů (#467) — čtvrtá session, a první, která píše
 
 Sada je `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)`, zákazy jsou **tatáž konstanta**

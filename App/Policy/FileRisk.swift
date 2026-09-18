@@ -99,10 +99,27 @@ extension Policy {
     ///   - markers: značky nálezů (`Policy.fileMarkers`), klíčované `displayPath`em. Odmítnuté
     ///     nálezy odfiltroval volající, jako u stromu (#113).
     ///   - threadPaths: cesty, na kterých visí vlákno.
+    ///   - kind: druh změny z anotací (#525). `nil` = session soubor nepopsala, nebo anotace
+    ///     neplatí — pak se rozhoduje jako do #525, tedy jenom podle cesty a stavu souboru.
+    ///
+    /// **Druh změny rozhoduje jedině tam, kde cesta hádá** (#525), a jsou to dvě věty:
+    ///
+    /// 1. **`generované` a `konfigurace` klasifikují jako `configuration`**, i když to z cesty
+    ///    poznat nejde. `isConfigurationPath` je výčet jmen a přípon, takže vygenerovaný
+    ///    `Schema.g.swift` ani `api.pb.go` nechytá — a to jsou přesně soubory, které se čtou
+    ///    naposledy.
+    /// 2. **`změna chování`, `refaktor` a `test` konfiguraci naopak přebijí.** `.json`, o kterém
+    ///    session řekne, že mění chování, je kód: `config/routes.json` se číst má, a heuristika
+    ///    podle přípony ho posílala na konec.
+    ///
+    /// **Nález a vlákno druh nepřebije**, protože ty jsou práce, o které už někdo něco řekl —
+    /// tedy tatáž úvaha, proč je `configuration` až čtvrtá. A **nový soubor druhem nezmizí**:
+    /// `added` znamená „čte se celý“, což platí bez ohledu na to, co v něm je.
     static func risk(
         of file: FileDiff,
         markers: [String: FileMarker],
-        threadPaths: Set<String>
+        threadPaths: Set<String>,
+        kind: FileChangeKind? = nil
     ) -> FileRisk {
         let path = file.displayPath
         switch markers[path] {
@@ -111,7 +128,11 @@ extension Policy {
         case nil: break
         }
         if threadPaths.contains(path) { return .thread }
-        if isConfigurationPath(path) { return .configuration }
+        switch kind {
+        case .generated, .configuration: return .configuration
+        case .behaviour, .refactor, .test: break
+        case nil: if isConfigurationPath(path) { return .configuration }
+        }
         if file.change == .added { return .added }
         return .other
     }
@@ -163,14 +184,26 @@ extension Policy {
     /// Skládaná položka vznikne, **až když je konfigurací víc než jedna** (`configurationBundleFloor`):
     /// nad jediným `composer.lock` by rozbalovací řádek `1 konfigurace a lock` byl klik navíc
     /// k témuž souboru.
+    ///
+    /// **Anotace (#525) se ptají po souboru, ne po cestě**: druh může přijít i pod **starou**
+    /// cestou přejmenovaného souboru, a to rozhoduje `Policy.changeKind(of:in:)` — jedno místo pro
+    /// kapsli v hlavičce i pro tohle pořadí, aby se nemohly rozejít. `nil` = anotace neplatí nebo
+    /// nejsou, tedy pořadí jako do #525.
     static func filesByRisk(
         _ files: [FileDiff],
         markers: [String: FileMarker] = [:],
-        threadPaths: Set<String> = []
+        threadPaths: Set<String> = [],
+        annotations: StoredAnnotations? = nil
     ) -> [ItineraryFileItem] {
         var groups: [FileRisk: [FileDiff]] = [:]
         for file in files {
-            groups[risk(of: file, markers: markers, threadPaths: threadPaths), default: []].append(file)
+            let risk = risk(
+                of: file,
+                markers: markers,
+                threadPaths: threadPaths,
+                kind: changeKind(of: annotations, in: file)
+            )
+            groups[risk, default: []].append(file)
         }
         for (risk, group) in groups {
             groups[risk] = group.sorted { $0.displayPath < $1.displayPath }

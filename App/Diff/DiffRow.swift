@@ -26,6 +26,17 @@ enum DiffRow: Identifiable {
     case pair(String, left: DiffLine?, right: DiffLine?)
     /// Skrytý úsek mimo hunky, který se dá dotáhnout.
     case expander(String, DiffExpander)
+    /// Věta *proč* pod souřadnicí hunku nad sebou (#525).
+    ///
+    /// **Vlastní řádek mezi bloky, ne vložka do `NSTextView`** (#469): blok kódu si výšku měří
+    /// sám a text vložený dovnitř by ji posunul — tedy skok na nález i karty v okraji by mířily
+    /// vedle. Jako řádek seznamu je to totéž co hlavička hunku: blok ukončí a nic v něm nezmění.
+    ///
+    /// **Kreslí se jedině tam, kde se kreslí i hlavička hunku.** Když rozbalený kontext hunk slil
+    /// s tím nad ním (`merged(_:)`), jdou řádky nepřetržitě za sebou a věta uprostřed by jeden
+    /// blok rozťala na dva — tedy změna geometrie, kterou #525 zakazuje. Vrátí se, jak se kontext
+    /// zase sbalí.
+    case annotation(String, HunkAnnotation)
     /// Nálezy k řádku nad sebou. `anchored: false` znamená, že řádek v diffu není a
     /// bublina visí u hlavičky souboru — schovat ji by znamenalo, že ji nikdo neuvidí.
     case finding(String, FindingGroup, anchored: Bool)
@@ -57,7 +68,8 @@ enum DiffRow: Identifiable {
         switch self {
         case .hunk(let id, _), .line(let id, _), .pair(let id, _, _), .expander(let id, _),
              .note(let id, _), .finding(let id, _, _), .thread(let id, _),
-             .draftComments(let id, _, _), .block(let id, _), .pairBlock(let id, _): id
+             .draftComments(let id, _, _), .block(let id, _), .pairBlock(let id, _),
+             .annotation(let id, _): id
         }
     }
 
@@ -109,6 +121,9 @@ enum DiffRow: Identifiable {
     ///     okrajem by jinak zmizel úplně.
     ///   - threads: vlákna konverzace napříč diffem; vybírají se stejně jako nálezy.
     ///   - comments: moje rozdělané komentáře napříč diffem; vybírají se stejně.
+    ///   - annotations: věty *proč* u hunků tohohle souboru (#525), klíčované **indexem hunku od
+    ///     nuly**. Vybírá je `Policy.hunkAnnotations(of:in:isOn:)` — odsud se jen kreslí, takže
+    ///     prázdná mapa znamená i „přepínač je vypnutý“ i „anotace neplatí pro tuhle hlavu“.
     static func rows(
         of file: FileDiff,
         layout: DiffLayout = .unified,
@@ -117,7 +132,8 @@ enum DiffRow: Identifiable {
         findings: [FindingGroup] = [],
         inlineFindings: Bool = true,
         threads: [ReviewThread] = [],
-        comments: [ReviewDraftComment] = []
+        comments: [ReviewDraftComment] = [],
+        annotations: [Int: HunkAnnotation] = [:]
     ) -> [DiffRow] {
         // I zkratka projde přes `withBubbles`: nález na binárce nebo na souboru beze změny
         // obsahu se jinak z diffu ztratí úplně — a tiše zmizelý nález vypadá jako čistý PR.
@@ -160,6 +176,12 @@ enum DiffRow: Identifiable {
             // v souboru jsme.
             if !merged(gap) {
                 rows.append(.hunk(id(of: file, "h\(index)"), hunk))
+                // Věta *proč* **pod souřadnicí**, jak ji má zákres (sekce 59) — a jedině tam,
+                // kde souřadnice je: se slitým hunkem by rozťala souvislý blok kódu na dva,
+                // tedy změnila geometrii, kterou #525 měnit nesmí. Viz `DiffRow.annotation`.
+                if let annotation = annotations[index] {
+                    rows.append(.annotation(id(of: file, "a\(index)"), annotation))
+                }
             }
             for (position, line) in hunk.lines.enumerated() {
                 rows.append(.line(id(of: file, "h\(index)l\(position)"), line))

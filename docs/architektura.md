@@ -4209,6 +4209,274 @@ Co je v okně a proč zrovna tak:
 vrací týž seznam a `SingleWayOutTests` procházejí beze změny. Kdo z odpovědi chce komentář na PR,
 pošle ho composerem v `Konverzaci`.
 
+### Anotace hunků — sedmá session (#524)
+
+Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov. Kreslení
+u hunku přijde až v #525; v #524 je z toho vidět **dráha `anotace` v tabu `Průběh`** a tlačítko
+`Popsat změny` **v liště nad diffem**. Zákres je [sekce 59 mockupu](navrh.html).
+
+**Sedmá session, ale ne šestá sada povolení — a to je to tvrzení.** Běží doslova s
+`AskCommand.allowedTools`, tedy `Read,Grep,Glob,Bash(git:*)`; liší se **promptem a parserem**, ne
+právy. Zadání #524 mělo vlastní sadu s nástrojem `ReportAnnotations`, ten ale odpadl (níž), a druhá
+konstanta s týmž obsahem by byla jen druhé místo, kde se dá tvrdá podmínka č. 2 porušit. Delegace
+je tu ze stejného důvodu jako u agenta (#510), který si sadu půjčuje od slévání konfliktů.
+
+#### Odpovídá se posledním sdělením, ne nástrojem — a co to stálo
+
+**`ReportAnnotations` se zahodil.** Nástroj, který si „definuje aplikace“, v `claude` CLI
+neexistuje jinak než jako **MCP server** — tedy jako **další proces, který by PRism spouštěl**, a to
+je nová hranice pod tvrdou podmínkou č. 1 i č. 2. Změřeno na běhu se jménem nástroje
+v `--allowedTools`: session si `ReportAnnotations` **nezavolala**, třikrát ho zkusila najít přes
+`ToolSearch` a nakonec odpověděla textem. `ReportFindings` je v tom výjimka jen zdánlivě — sbírá se
+ze **streamu**, tedy z pokusu o nástroj, který taky nikdo neobsluhuje.
+
+Odpověď je proto **JSON v `result` eventu**, čte ho `AnnotateCommand.parse` a precedens je
+**kontrola nálezů** (#150) a **rozhovor nad PR** (#452). Čte se defenzivně: vykrojí se od prvního
+`{` po poslední `}`, takže projde i odpověď v ```-bloku nebo s větou kolem.
+
+**Cena je vidět ve dvou místech a ani jedno se nezamlčuje:**
+
+- **Zabitá session nepřinese nic.** Do posledního sdělení se nedostala, takže po ní nezbyde ani
+  půlka — na rozdíl od revieweera, kterému zabití vezme jen zbytek. Dráha o tom mluví vlastní větou
+  (`ReviewerLaneText`), ne tou o „nálezech, které do té doby dorazily“.
+- **Sběr umí tiše nefungovat.** Session, která si tvar nepřečte, napíše prózu — a prázdné seznamy
+  by se od toho nedaly odlišit. Proto je `answered` **vlastní pole** vedle prázdných seznamů
+  (`AnnotateCommand.Answer`, `AnnotationRun`, `StoredAnnotations`) a proto je nejcennější test
+  téhle oblasti ten, který tvrdí, že se **nesebralo nic**.
+
+#### Hranice mezi anotací a nálezem je v tvaru schématu
+
+Zadání #524 mělo tuhle hranici v **tvaru nástroje**; s nástrojem ta věta padá a nahrazuje ji **tvar
+schématu, které aplikace parsuje** (`AnnotationSchema`). Drží ji tři vrstvy, každá sama o sobě:
+
+1. **Ve schématu není pole pro závažnost** — ani verdikt, kategorie nebo blokující příznak. Model
+   nemá kam ji napsat a parser ji nemá odkud přečíst. Hlídá to `AnnotateCommandTests` nad
+   `everyField` a `severityWords`; `category` je mezi zakázanými slovy schválně, protože je to
+   u nálezu slug s vazbou na blokující sadu.
+2. **`ReportFindings` v sadě není**, takže se session nemá kam zapsat, ani kdyby chtěla.
+3. **`AnnotationRun` nemá pole pro nález**, takže by se výsledek neměl kudy protáhnout.
+
+**Popis do promptu se z výčtu polí skládá, nepíše ručně** — jinak by vzniklo pole, o kterém ví
+parser a ne model, nebo naopak. A **druh změny je uzavřený výčet**, na rozdíl od `category`
+u nálezu: kategorie se váže na sadu, kterou si píše člověk v nastavení, kdežto druh je to, podle
+čeho bude itinerář řadit a mapa barvit — a řadit se dá jedině podle výčtu. Neznámá hodnota se
+**nehádá**, položka se zahodí a započítá.
+
+#### Vlastní store, ne pole v `ReviewRecord`u
+
+`AnnotationStore` je jeden JSON na PR pod `annotations/`. Tři důvody, každý sám o sobě stačí:
+
+- **Anotace není nález.** V záznamu s nálezy by byla jeden `if` od toho, aby se počítala do odznaků,
+  do souhrnu nebo do návrhu verdiktu. Takhle je oddělení **kontrolovatelné grepem**:
+  `HunkAnnotation` se v `App/Store/ReviewRecord.swift` nevyskytuje.
+- **Anotace se pouští i bez review.** Ručně se dá popsat PR, na kterém žádný reviewer neběžel —
+  a `ReviewRecord` bez jediného běhu v `Policy.currentRecords` **vyhraje** nad zastaralým záznamem
+  s nálezy, protože zastaralý není. Nálezy z minula by tím z okna zmizely ve chvíli, kdy si člověk
+  řekne o popis změn; je to tatáž past, kvůli které nemá vlastní záznam ani kontrola nálezů (#150).
+- **`AppStore.reviewRecords[pr]` je ten *současný* záznam**, tedy klidně ten pro starší hlavu —
+  anotace pro tu dnešní by v něm neměly kde být.
+
+#### Klíčuje se hlavou, ne otiskem obsahu
+
+Opačné rozhodnutí než u značky `Prošlo` (#500), a jsou k němu tři důvody:
+
+- **Anotace se nepočítá z obsahu hunku.** Věta vzniká z commitů, z popisu PR a z kódu kolem, takže
+  by ji otisk udržel při životě i tehdy, když se odpověď změnila. `Prošlo` je naopak tvrzení o tom,
+  **co jsem přečetl**, a to na ničem jiném než na bajtech nezávisí.
+- **Páruje se pořadím hunku**, ne textem (`Policy.annotations(of:in:)`). Úryvek kódu by se musel
+  v diffu hledat a řádek, který je v souboru dvakrát (`}` na konci metody), by větu posadil k cizímu
+  hunku. Index je ale poziční: první push, který přidá hunk nad ní, posune všechny ostatní — a otisk
+  by tu chybu nechytil, protože obsah hunku se nezměnil, jen jeho číslo.
+- **Zastarat má stejně jako nálezy**, přesně jak říká zadání.
+
+**Hlavu proto drží i průběh**, ne jen uložený záznam (`AnnotationPass.headSha`): dráha z běhu nad
+starou hlavou by v tabu `Průběh` tvrdila „popsáno, 14 anotací“ o diffu, ze kterého se v okně nekreslí
+nic. Rozhoduje `Policy.annotationLane(pass:stored:head:)`. **Soubor je ale jeden na PR, ne na
+`(PR, hlava)`** — užitečná je vždycky jen sada pro dnešní hlavu a starší se nesmí ukázat ani jako
+zastaralá, takže by soubory po starých hlavách byly v cache mrtvé místo; nový běh ten předchozí
+**přepíše**.
+
+#### Dráha `anotace` stojí pod reviewery, ne mezi nimi
+
+`Policy.lanes` vypisuje **tytéž reviewery jako `Policy.chips`** (je na to test) a chip u nich nese
+**počet nálezů**. Sedmá session žádný nemá, takže mezi ně nepatří; `ReviewProgressView` ji bere
+zvlášť (`annotationLane`) a kreslí pod děličem. `ReviewerLane.reportedFindings` u ní zůstává navěky
+`nil` a co nahlásila, nese **`ReviewerLane.Kind.annotations(hunks:files:)`** — rozhodovat to podle
+`skill == "anotace"` by znamenalo hranici v řetězci, který si může někdo pojmenovat skill.
+
+**Osu kroků dráha nedrží** a `AnnotationPass` se **neukládá**: po restartu má z dráhy zbýt to, co
+leží na disku, tedy výsledek, ne průběh. Fáze jsou u uloženého výsledku proto `done`, ne `unknown` —
+u anotací se nic neztratilo. A **fáze `píše anotace` skočí z prázdné rovnou na hotovou**, protože
+odpověď přijde najednou v posledním sdělení.
+
+#### Kdy se pouští
+
+**Ručně** tlačítkem v liště nad diffem (`Popsat změny`) — a **bránu to nečte**, tatáž dělba jako
+u `Pustit přesto` u routingu (#518): brána rozhoduje o tom, co si vybírá aplikace, ne o tom, o co si
+člověk řekne kliknutím. **Automaticky** jen po **automatickém** review a jen s
+`ResolvedConfig.annotatesHunks`, která je **ve výchozím stavu vypnutá**: je to session navíc na
+každou hlavu, tedy peníze, o které si nikdo neřekl. Denní limit automatických běhů (`AutoRunLedger`)
+se tím **nekrátí** — ten hlídá, kolik **review** se pustí samo, a anotace běží až po review, které
+se do něj už započetlo. Útrata do `SpendLedger` jde, jako u všeho ostatního.
+
+**Tlačítko se bez zapojené session nekreslí, ne zašedne** (tatáž úvaha jako u `Otevřít v editoru`,
+#530), a nabízí se **jen nad celým diffem**: session popisuje `git diff <base>...HEAD` a anotace se
+páruje pořadím hunku v něm, takže nad rozsahem `Od tvé poslední návštěvy` (#284) by tatáž čísla
+ukazovala jinam.
+
+#### Akce je v liště a má tři stavy — oprava tichého konce
+
+**Do prvního proklikání to byla položka v nabídce `Sbalit vše ▾`** s odůvodněním, že se na jednom
+PR pustí jednou a nemá se prát o místo v liště. Při zkoušení z toho vyšlo *„tlačítko nic nedělá“*,
+a měl to být ten výsledek: **na obrazovce, ze které se akce pouští, se po kliknutí neměnilo nic.**
+Sešly se na tom čtyři věci a každá sama o sobě stačila:
+
+1. **Nabídka klik spolkla.** Zavře se dřív, než se cokoli změní — takže z ní žádný stav vidět není,
+   ani ten správný.
+2. **Odznak `Průběhu` sedmou session nepočítal.** `badge(in: .progress)` četl jedině
+   `isReviewing`, takže běžící popis nerozsvítil ani puntík. Jediný záznam přitom leží zrovna
+   v tom tabu.
+3. **`annotationFailures` nečetlo v aplikaci nic.** Store si větu o selhání poctivě psal a **žádné
+   view se na ni neptalo** — je to ten vzor „držený stav, který nikdo nečte“, který Copilot
+   v tomhle repu nachází opakovaně.
+4. **Dva `guard … else { return }` byly tiché.** Nezapojený `annotator`, `checkout` nebo
+   `annotationStore` znamenal návrat bez zvuku.
+
+Opravují se všechny čtyři, a ne tak, aby se selhání nedělo, ale aby **nebylo tiché**: to je ta
+vada (precedens brief #516 — *„když session spadne, blok řekne shrnutí se nepovedlo a nabídne
+znovu — ne prázdno“*). Konkrétně:
+
+- **Ovladač v liště má tři stavy**, o kterých rozhoduje `Policy.annotationControl(isRunning:failure:)`:
+  `Popsat změny` spouští, `Popisuji…` s prstýnkem **ruší** a `Popis selhal` v okrové **zkouší
+  znovu**. Po každém kliknutí se tedy na tomtéž místě něco změní. Stav i obě akce chodí jednou
+  hodnotou (`DiffAnnotationActions`), tedy stejně jako `DiffFoldingActions` — rozdělené by šlo
+  předat běh bez zrušení nebo selhání bez opakování, což jsou zrovna ty dvojice, kterými se tichý
+  konec vyrábí. **Zrušení tím dostalo prvního volajícího**: `cancelAnnotating` do té doby nevolal
+  nikdo.
+- **Odznak `Průběhu` svítí i při popisu změn**, takže je běžící session vidět i z jiného tabu.
+- **Věta o selhání se dostane do dráhy** — `Policy.annotationLane(pass:stored:head:failure:)` ji
+  vydá i tehdy, když nezbyl ani běh, ani uložený záznam. Je to **poslední záchyt, ne přebíječ**:
+  platný běh ani platný záznam se jí nepřekreslí.
+- **Oba tiché `guard`y hlásí** (`AppStore.unwiredAnnotationFailure`, jedna věta pro obě místa).
+  Tichý zůstává **jediný** — `isTerminating`, a smí být tichý proto, že okno mizí.
+
+**Do lišty se to vejde, ale ne zadarmo, a to se změřilo** ([čísla](testovani.md#kolik-místa-v-liště-stojí-popsat-změny-524)).
+Lišta v plné výbavě si v podlahovém okně (700 b → štěrbina **572 b**) říká o **819 bodů**, tedy
+**přetéká už dneska, i bez téhle akce** — je to známá vlastnost z #219, ne něco, co přineslo #524.
+Celý popisek stojí dalších **104 b**. Proto je `Popsat změny` **jediný prvek v liště bez
+`fixedSize()` a se zápornou prioritou rozvržení**: když se místa nedostává, `ViewThatFits` ho
+srazí na **samotnou ikonu** (13 b) a to, co v liště bylo dřív, zůstane, kde bylo. Useknutý
+`Popsat…` by byl horší než ikona — nese půl slova a vypadá jako porucha.
+
+### Anotace v diffu — kresba (#525)
+
+#524 postavilo session, #525 to kreslí: **věta *proč* pod souřadnicí hunku**, **kapsle druhu změny
+v hlavičce souboru**, **přepínač v nabídce nad diffem** a **jeden údaj ve stavovém řádku**. Zákres
+je [sekce 59 mockupu](navrh.html); do něj #525 dokreslilo tóny kapslí, nabídku a stavový řádek.
+
+#### Věta je vlastní řádek diffu, ne vložka do bloku kódu
+
+Je to **tvrdá mez z #469** a celý zbytek se odvíjí od ní: blok kódu si výšku měří sám
+(`DiffTextView.sizeThatFits`) a z té výšky se počítá skok na nález (`DiffRow.blockSpot`,
+`Policy.jumpAnchorY`) i poloha karet v okraji (#503). Text vložený **dovnitř** textového view by
+tedy neposunul jen sám sebe, ale i všechno, co na výšce bloku visí.
+
+Věta je proto **`DiffRow.annotation`**, tedy tentýž druh řádku jako hlavička hunku: blok ukončí
+a nic v něm nezmění. `blocked(_:)` i `blockedPairs(_:)` ji propouštějí beze změny, takže v obou
+pohledech stojí na stejném místě a **složení bloků zůstává na znak stejné**.
+
+**Cena je zapsaná: kde není souřadnice hunku, není ani věta.** Když rozbalený kontext hunk slil
+s tím nad ním (`merged(_:)` v `DiffRow`), jdou řádky nepřetržitě za sebou — a věta uprostřed by
+jeden blok rozťala na dva, tedy změnila přesně tu geometrii, kvůli které to celé stojí takhle.
+Vrátí se, jak se kontext sbalí (`Zobrazit jen diff`). Zamítnutá varianta byla posadit ji nad
+slitý hunk „ať se neztratí“: ztratit se dá i tím, že se objeví o padesát řádků výš, než kam patří.
+
+Měří se to **na nakresleném bloku, netvrdí nad modelem** —
+[`DiffAnnotationRoomTests`](testovani.md#věta-nad-hunkem-a-geometrie-bloků-525).
+
+#### Kdo rozhoduje, co se kreslí
+
+| Otázka | Kdo odpovídá |
+|---|---|
+| Platí anotace pro dnešní hlavu? | `Policy.annotations(of:head:)` (#524) — volá `AppStore.annotations(for:)` |
+| Které věty patří kterému hunku? | `Policy.annotations(of:in:)` (#524) — index, ne text |
+| Kreslí se věty vůbec? | `Policy.hunkAnnotations(of:in:isOn:)` — přepínač z nabídky |
+| Jaký druh má soubor? | `Policy.changeKind(of:in:)` (#524) |
+| Jak se druh jmenuje a jak svítí? | `Policy.changeKindChip(of:)` |
+| Co říká stavový řádek? | `Policy.annotationStatus(of:)` |
+| Kam soubor patří v itineráři? | `Policy.risk(of:markers:threadPaths:kind:)` |
+
+**Do `DiffView`u chodí `StoredAnnotations?`, ne rozbalená mapa** — a chodí tam **jen nad celým
+diffem**, za toutéž bránou jako tlačítko `Popsat změny`: párování stojí na pořadí hunku
+v `git diff <base>...HEAD`, takže v rozsahu `Od tvé poslední návštěvy` (#284) ani v diffu commitu
+(#317) by tatáž čísla neukazovala na totéž. `nil` je tam jediná pravdivá odpověď, ne opatrnost.
+
+#### Přepínač je v nabídce, akce v liště — a je to vědomě naopak
+
+`Popsat změny` se u #524 z nabídky **do lišty** přestěhovalo, protože je to **akce**: po každém
+kliknutí se musí na tomtéž místě něco změnit, a nabídka klik spolkne (zavře se dřív, než se
+cokoli změní). Viditelnost vět je proti tomu **volba pohledu**, která se nastaví a nechá být —
+tedy tatáž kategorie jako `Nálezy pod řádky` hned pod ní, a `@AppStorage`, ne stav ve storu.
+
+Tři věci k tomu:
+
+- **Jmenuje se `Anotace u hunků`, ne `Popis změn`.** Jedno slovo pro akci i pro viditelnost jejího
+  výsledku je přesně ta záměna, kterou #219 z téhle lišty vyháněl (`Nálezy` vedle `Nálezů`).
+- **Vypnuto = žádný řádek, ne schovaný.** `Policy.hunkAnnotations` vydá prázdnou mapu, takže se
+  seznam řádků složí přesně tak, jako by anotace nebyly — po vypnutí nemůže zbýt ani mezera.
+- **Kapsli druhu přepínač neschová.** Přepínač je o řádcích nad hunky, tedy o tom, co odsouvá kód
+  dolů; druh je jedno slovo v hlavičce, která tam stojí tak jako tak. Proto se `hunkAnnotations`
+  ptá na přepínač a `changeKind` ne.
+
+Na PR bez vět položka v nabídce **není** (`StoredAnnotations.hasHunkAnnotations`) — tatáž podmínka
+jako u `Nálezy pod řádky`, a ze stejného důvodu: položka, po které se nic nestane, je zašedlé
+tlačítko v jiném kabátě.
+
+#### `změna chování` akcentem, zbytek nejtišším tónem
+
+`Policy.changeKindChip(of:)` vydá popisek i to, jestli kapsle svítí. Akcent má **jedině**
+`změna chování` — to je ten jediný druh z pěti, kvůli kterému se do souboru kouká napřed; ostatní
+berou `--ink-3`, tedy `.pill.quiet` z návrhu. Je to **tišší než `nový` a `binární`** vedle,
+a schválně: ty jsou fakta z gitu, tohle je čtení session.
+
+**Ze jména souboru se druh neodvozuje.** `generované` u `composer.lock` by byl dohad — kapsle
+tvrdí, co session přečetla, a soubor, který nepopsala, kapsli nemá.
+
+#### Stavový řádek: `Anotace · 4 věty · proti 4f2ac91`
+
+`proti <hlava>` je ta polovina, kvůli které to stojí za místo v pruhu: anotace platí jedině proti
+jedné hlavě a po pushi se **nekreslí vůbec**, takže bez vypsané hlavy by *„popis tu není“* nešlo
+odlišit od *„popis propadl pushem“*. Kreslí ho `AnnotationStatusView` — vlastní view, ne řádek ve
+`StatusBarView`, tatáž úvaha jako u `ItineraryStatusView` (sledují se jen ty vlastnosti store,
+které ten `Text` čte).
+
+**Mluví o datech, ne o kresbě**: se schovanými větami se nemění, protože odpověď na „je tenhle diff
+popsaný“ je stejná. A **záznam bez jediné věty se nepíše** — `0 vět` by tvrdilo, že je co číst; že
+session doběhla a nic nenapsala, patří do dráhy `anotace` v tabu `Průběh`.
+
+#### Itinerář: druh rozhoduje tam, kde cesta hádá
+
+`Policy.risk(of:markers:threadPaths:kind:)` bere druh změny jako **další vstup, ne jako novou
+skupinu** — sloupec itineráře žádnou kapsli ani nadpis navíc nedostal. Dvě věty:
+
+1. **`generované` a `konfigurace` klasifikují jako `configuration`**, i když to z cesty poznat
+   nejde: `isConfigurationPath` je výčet jmen a přípon, takže `Schema.g.swift` ani `api.pb.go`
+   nechytá — a to jsou přesně soubory, které se čtou naposledy.
+2. **`změna chování`, `refaktor` a `test` konfiguraci podle přípony přebijí.** `.json`, o kterém
+   session řekne, že mění chování, je kód; heuristika ho posílala na konec seznamu.
+
+**Nález ani vlákno druh nepřebije** (práce, o které už někdo něco řekl, se čte první) a **nový
+soubor zůstane nový** — `added` znamená „čte se celý“, což platí bez ohledu na obsah. Soubor pod
+**starou** cestou přejmenování se najde taky, protože se ptá `Policy.changeKind(of:in:)`, tedy
+totéž místo jako kapsle v hlavičce.
+
+**Mapa PR (#501) druhem nebarví, a je to vědomá mezera, ne opomenutí.** Zadání #525 ji připouští
+(*„může barvit druhem, když nálezy nejsou“*), jenže pás má **sedm pojmenovaných tónů a legendu**
+(`Policy.mapLegend`), takže pět druhů znamená pět nových tónů a pět řádků legendy — tedy nová věc
+na obrazovce, která v zákresu nakreslená není. Sekce 59 kreslí větu, kapsli, nabídku a stavový
+řádek; barvení mapy se proto odložilo do vlastního issue i s překreslením legendy.
+
+
 ## Překlad nálezů (`App/Review/`)
 
 Nálezy se do jazyka z nastavení překládají **až po doběhnutí review**, ne instrukcí

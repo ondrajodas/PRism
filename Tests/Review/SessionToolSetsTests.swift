@@ -112,6 +112,28 @@ struct SessionToolSetsTests {
         #expect(Self.value(of: "--allowedTools", in: TranslationCommand.arguments(prompt: "x")) == "")
     }
 
+    /// **7. Anotace hunků** (#524) — **sedmá session, ale žádná nová sada**.
+    ///
+    /// Do zadání #524 měla mít vlastní sadu s nástrojem `ReportAnnotations`. Nástroj odpadl
+    /// (odpovídá se posledním sdělením, viz `AnnotationSchema`) a s ním důvod pro vlastní sadu:
+    /// zbyla by z ní **druhá konstanta s týmž obsahem**, tedy druhé místo, kde se dá tvrdá
+    /// podmínka č. 2 porušit. Anotace se od rozhovoru liší **promptem a parserem**, ne právy.
+    ///
+    /// Tvrdí se **oba směry**, jako u páté session: literál (aby se rozšíření muselo napsat sem)
+    /// i rovnost s rozhovorem (aby se ty dvě nedaly rozejít).
+    @Test("Anotace hunků běží s toutéž sadou jako rozhovor nad PR")
+    func annotateToolSet() {
+        let allowed = Self.value(of: "--allowedTools", in: AnnotateCommand.arguments(prompt: "x"))
+
+        #expect(allowed == "Read,Grep,Glob,Bash(git:*)")
+        #expect(allowed == AskCommand.allowedTools)
+        // **`ReportFindings` v ní není**: anotace není nález a nemá se kam zapsat, ani kdyby chtěla.
+        #expect(allowed?.contains("ReportFindings") != true)
+        // A `ReportAnnotations` v ní taky ne — nástroj, který aplikace nespouští, by v povoleních
+        // znamenal, že se na něj session bude marně ptát.
+        #expect(allowed?.contains("ReportAnnotations") != true)
+    }
+
     // MARK: - Co platí pro všechny
 
     /// **Jedna sada zákazů, ne čtyři.** Druhá by byla druhé místo, kde se dá tvrdá podmínka č. 2
@@ -204,6 +226,9 @@ struct SessionToolSetsTests {
             // by si toho nikdo nevšiml.
             BriefCommand.arguments(prompt: "x"),
             TranslationCommand.arguments(prompt: "x"),
+            // Anotace hunků (#524). Skládá si argumenty sama a **povolení si půjčuje od rozhovoru**
+            // — tvrzení „platí pro všechny“ ji tedy musí vidět, aby se tou půjčkou nedalo obejít.
+            AnnotateCommand.arguments(prompt: "x"),
         ]
     }
 

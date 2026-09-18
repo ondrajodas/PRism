@@ -12056,6 +12056,196 @@ to není — pozná se to `sample`m, a proto je to zapsané tady.
   stojí na geometrii diffu (viz *Kam skok posadí cílový řádek*) a na tom, co složí
   `PullRequestDetailView`; zapsaná mezera, ověřuje ji člověk na běžící aplikaci.
 
+## Anotace hunků (#524)
+
+Sedm sad, 74 testů (z toho jedna ruční sonda). Co je u téhle oblasti nejcennější, plyne z toho, **jak se odpověď sbírá**:
+je to JSON v posledním sdělení (`docs/claude-cli.md`), tedy zrovna to místo, kde sběr umí **tiše
+nefungovat** — session, která si tvar nepřečte, napíše prózu a bez pojmenování by z toho v okně
+vyšlo „diff nemá co popsat“, tedy tvrzení o kódu místo tvrzení o běhu.
+
+### `AnnotateCommandTests` — že se nesebralo nic
+
+Sada je postavená kolem jediného rozdílu: **prázdné seznamy** (`answered == true`) versus
+**nepřečtená odpověď** (`answered == false`). Parametrizovaný test prochází šest podob odpovědi,
+ze kterých se nesmí sebrat nic — próza, prázdný řetězec, **pole místo objektu**, objekt s cizím
+klíčem, `hunks` jako řetězec a nevalidní JSON —, a k tomu `nil`, tedy zabitou session bez `result`
+eventu. Regrese se ověřila **vložením regrese**: po odstranění kontroly tvaru padly tři z těch šesti
+případů (u zbylých tří odpověď neobsahuje `{`, takže je zahodí už vykrojení).
+
+Zbytek sady tvrdí schéma a vadné položky:
+
+- **ve schématu není pole pro závažnost** — nad `everyField` × `severityWords`, tedy výčtem, ne
+  úsudkem; je tam i `category`, protože u nálezu je to slug s vazbou na blokující sadu;
+- **popis do promptu se skládá z výčtu polí** — v instrukci musí stát každé jméno pole i každá
+  hodnota uzavřeného výčtu, jinak by vzniklo pole, o kterém ví parser a ne model;
+- **vadná položka se zahodí a započítá**, aby se tichá ztráta dala odlišit od nepopsané části diffu;
+- **index hunku, který není kladné celé číslo, neprojde** — parametrizovaně přes `true`, `2.5`,
+  `0`, `-1`, `null` a `""`.
+
+**Ten test na `true` našel skutečnou chybu, a je to ta nejtišší podoba téhle třídy.** Guard psaný
+jako `!(value is Bool)` (tak, jak stojí i v `StreamParser.line(from:)`) zahazuje **`0` a `1`** —
+Swift je z `__NSCFNumber` bridguje na `Bool`, kdežto `42` už ne. U anotací by to znamenalo, že
+**hunk 1 nemá nikdy anotaci**. Rozlišit se to dá jedině podle skutečného typu
+(`CFGetTypeID(number) == CFBooleanGetTypeID()`); změřeno samostatným skriptem nad
+`JSONSerialization`.
+
+### `ClaudeHunkAnnotatorTests` — co po zabité session zbyde
+
+Nad `FakeProcessStreamer`, tedy celou cestou od streamu k výsledku. Nejcennější je tvrzení, že po
+**zabité** session nezbyde nic, a to i tehdy, když už něco psala: scénář `timeout(after:)` pošle
+`init` event a assistant text s kusem JSONu, a přesto musí vyjít `answered == false` a prázdné
+seznamy. Session id se přitom **uchová** — `claude --resume` se na zabitý běh navázat dá.
+
+K tomu: pořadí událostí průběhu (session → krok → počty **až s odpovědí**), a to negativní —
+**nepřečtená odpověď událost nevydá vůbec**, tedy ani `annotated(0, 0)`, protože nula by v dráze
+tvrdila „nemá co dodat“.
+
+### `AnnotationPairingTests` — párování a platnost
+
+Čisté funkce `Policy`, vyčerpávajícím výčtem. Dvě tvrzení, která se rozbijí potichu:
+
+- **páruje se pořadím hunku, ne textem** — a index mimo rozsah se **zahodí**, neposadí na kraj;
+  u přejmenovaného souboru sedí nové i staré jméno, cizí cesta se nespáruje vůbec;
+- **anotace z jiné hlavy se nevydá** (tvrdá podmínka č. 5), a **neznámá hlava je zákaz, ne
+  povolení** — parametrizovaně přes `nil` i `""`.
+
+K tomu tvrzení o dráze, které tu hranici drží v poslední vrstvě: **`reportedFindings` u ní zůstává
+`nil`** u běžící i doběhlé session, a **doběhlá session bez čitelné odpovědi má v dráze `nil`, ne
+nulu**.
+
+### `AnnotationStoreTests` — proti skutečnému disku
+
+Nad dočasnou složkou, jako `ReadMarkStore`: round trip i s otiskem a počtem zahozených položek,
+**přepis** novým během, cizí anotace v souboru, symlink, rozbitý soubor a cesta bez commitu
+v názvu. A **prázdný i nečitelný běh se uloží taky** — bez souboru by se „zkusilo se to a nevyšlo“
+nedalo odlišit od „nikdy neběželo“, tedy od stavu, který si vyžádá běh druhý.
+
+### `AppStoreAnnotationsTests` — brána a to, že z anotace nevznikne nález
+
+Nejcennější je tady test, který tvrdí, že po popsání změn **není ani jeden nález**: prázdné
+`reviewRecords`, prázdné chipy a na disku soubor **jedině** pod `annotations/`, nic pod `reviews/`.
+Je to jediné místo, kde se ta hranice dá tvrdit naráz o všech třech vrstvách.
+
+Kolem toho brána: automat **bez** zapnuté `annotatesHunks` nepopíše nic, ruční review nepopíše nic
+ani se zapnutou, kliknutí popíše **i u repa, kde je vypnutá**. A co se nesmí stát: zrušený běh
+neuloží nic a uklidí po sobě průběh, dvě kliknutí za sebou pustí jednu session, po pushi se uložené
+anotace **přestanou vydávat** — včetně dráhy —, ale z paměti ani z disku se přitom **nic nemaže**.
+
+**Zabitá session se přesto uloží**, s `answered == false` a `outcome == .timedOut`; je to ten
+záznam, který brání tomu, aby se příští otevření PR zaplatilo znovu.
+
+### `SessionToolSetsTests` — šestý test, ale žádná šestá sada
+
+Anotace dostaly vlastní test, který tvrdí **oba směry**: literál `Read,Grep,Glob,Bash(git:*)` (aby
+se rozšíření muselo napsat sem) i **rovnost s `AskCommand.allowedTools`** (aby se ty dvě nedaly
+rozejít). Argumenty anotací jsou navíc ve výčtu `everyArgumentList`, takže se na ně vztahují
+i tvrzení „platí pro všechny“ — jedna konstanta zákazů a žádné `gh` v povoleních. Půjčenou sadou se
+to tedy obejít nedá.
+
+### Tichý konec — co se přidalo po proklikání
+
+Při zkoušení vyšlo *„tlačítko nic nedělá“*. Nebyla to jedna vada, ale **čtyři tiché cesty**
+(rozbor je v [`docs/architektura.md`](architektura.md#akce-je-v-liště-a-má-tři-stavy--oprava-tichého-konce)),
+a testy se k nim přidaly tak, aby každá spadla zvlášť:
+
+- **`AnnotationPairingTests`** — že **selhání bez běhu i bez záznamu dráhu vyrobí**; že je to
+  **poslední záchyt, ne přebíječ** (běžící ani doběhlá dráha se jím nepřekreslí); že prázdná věta
+  dráhu **nevyrobí**; a tři stavy ovladače v liště včetně toho, že **běh přebíjí selhání z minula**.
+- **`AppStoreAnnotationsTests`** — že se nezapojená session **nevrací potichu** (věta, dráha
+  i stav ovladače naráz), že ovladač rozlišuje klid / běh / selhání a že **zrušení z lišty** běh
+  doopravdy zastaví a vrátí ho do klidu. To poslední je zároveň jediný volající `cancelAnnotating`:
+  do téhle opravy ho nevolal **nikdo**.
+
+**Ověřeno vložením regrese, obě polovičky zvlášť.** Návrat `guard annotator != nil else { return }`
+shodí tři tvrzení v `AppStoreAnnotationsTests`; vyhození větve s `failure` z `Policy.annotationLane`
+shodí tři tvrzení v `AnnotationPairingTests`. **Zvlášť schválně**: kdyby se selhání hlásilo jen na
+jednom z těch dvou konců, druhý by zůstal tichý a zelený běh by o tom mlčel.
+
+### Kolik místa v liště stojí `Popsat změny` (#524)
+
+`DiffToolbarRoomTests` (4 testy) a k nim ruční sonda `DiffToolbarRoomProbe`
+(`TEST_RUNNER_PRISM_MEASURE=1`, kresba do `TEST_RUNNER_PRISM_RENDER_DIR`). Dělba je ta obvyklá:
+**testy měří, oč si lišta říká, sonda ukazuje, co z toho zbude.** `HStack` přetečení nehlásí, jen
+ho nakreslí, takže se na ně jinak než kresbou přijít nedá.
+
+Měří se **`fittingSize` bez vnějšího `frame(width:)`**, a v tom je celý rozdíl mezi měřením
+a tautologií: **přibitá šířka se vrátí zpátky, ať je uvnitř cokoli** — první pokus vydal `572`
+pro lištu s tlačítkem i bez něj, tedy dvě stejná čísla o dvou různých věcech. To je přesně ten
+druh měřidla, které vydá tutéž hodnotu pro „funguje“ i „nefunguje“.
+
+Co vyšlo (lišta v plné výbavě: procházení nálezů, varování o šířce, hledání, sbalení):
+
+| štěrbina | vyžádáno bez akce | vyžádáno s akcí | co zbylo z akce |
+|---|---|---|---|
+| **572** (podlaha okna 700 − rail 52 − dva proužky po 38) | 819 | 923 | samotná ikona |
+| 900 | 819 | 923 | samotná ikona |
+| 1200 | 819 | 923 | celý popisek |
+
+**Nečekaný výsledek stojí za celou tu tabulku: lišta v plné výbavě v podlahovém okně přetéká už
+dneska, i bez popisu změn** (819 proti 572). Je to změřená vlastnost z #219 (*„v užším okně se
+lišta nevešla“*), ne něco, co přineslo #524 — a sada ji proto **tvrdí testem**, aby se příště
+nečetla jako regrese téhle akce.
+
+Popisek stojí **104 b**, samotná ikona **13 b**. Proto je `Popsat změny` jediný prvek lišty **bez
+`fixedSize()` a se zápornou prioritou rozvržení**: v úzkém okně ustoupí on, ne `Sbalit vše`.
+Změřeno kresbou — bez té priority zmizelo `Sbalit vše` úplně, s ní vypadá lišta na 572 b stejně
+jako bez akce, jen o ikonu posunutá. **`ViewThatFits`, ne useknutý text**: `Popsat…` nese půl slova
+a vypadá jako porucha.
+
+Sonda kreslí i **tři stavy ovladače vedle sebe** (`stav-klid`, `stav-beh`, `stav-selhani`). Je to
+ta část opravy, kterou nad daty tvrdit nejde: že se po kliknutí na tomtéž místě **něco změní**,
+se dá ukázat jedině kresbou.
+
+**Co se ověřit nepovedlo, a je to zapsaná mezera:** skutečný klik do okna. Hostitelská aplikace
+téhle session nemá **Zpřístupnění**, takže `CGEvent` ani `System Events` do okna nedoletí
+(`osascript` hlásí *„nemá povoleno posílání stisknutí kláves“*) — a ze stejného důvodu se nedalo
+okno stáhnout na podlahu tažením za hranu. **Screenshot funguje** (`screencapture -l <id>`), takže
+je doložené, že tlačítko v liště živé aplikace stojí; **že po kliknutí naskočí běh, musí proklikat
+člověk.**
+
+### Věta nad hunkem a geometrie bloků (#525)
+
+Čtyři sady, dohromady **44 testů**, a dělba mezi nimi je podle toho, **co která umí dokázat**:
+
+| sada | co tvrdí |
+|---|---|
+| `AnnotationDrawingTests` (16) | `Policy` výčtem: popisky pěti druhů, akcent jedině u `změna chování`, přepínač, věta stavového řádku |
+| `DiffAnnotationRowTests` (13) | **složení** řádků a bloků diffu v obou pohledech |
+| `DiffAnnotationRoomTests` (4) | **změřená** výška nakreslených bloků a rozdíl bitmap |
+| `FileRiskTests` (+7, #525) | druh změny v pořadí itineráře |
+
+**Nejcennější je tvrzení, že se geometrie bloků *nezměnila*** — je to ta tvrdá mez z #469 a rozbije
+se potichu: nic nespadne, jen skok na nález (`DiffRow.blockSpot`) a karty v okraji (#503) začnou
+mířit vedle. Tvrdí se **dvěma různými cestami**, ne jednou dvakrát:
+
+1. **Nad modelem** (`DiffAnnotationRowTests`): identity bloků a počty řádků v nich jsou s anotacemi
+   i bez nich **tytéž** — v `unified` i ve `split`, a k tomu nad **rozbaleným** kontextem, kde jsou
+   bloky nejdelší. Měřidlo je vedle: `#expect(!without.isEmpty)`, jinak by „stejné seznamy“ platilo
+   i o dvou prázdných.
+2. **Na nakresleném bloku** (`DiffAnnotationRoomTests`): výšky **všech** `DiffTextView` v hostované
+   hierarchii, srovnané podle změřené polohy (ne podle pořadí podviews — to je věc SwiftUI a dalo
+   by se tím tvrzení splnit přeskládáním). K tomu druhá otázka z #478: **naměřilo by to rozdíl,
+   kdyby ta chyba byla?** Proto je vedle test, že se první blok o větu **odsune dolů**, a rozdíl
+   bitmap „s větou ≠ bez věty“.
+
+**Ověřeno vložením regrese, dvakrát.** Věta posazená **doprostřed hunku** (za druhý řádek místo za
+hlavičku) shodí **16 tvrzení** — mezi nimi výšky bloků (`[260, 196, 180, 130]` proti
+`[36, 228, 36, 164, 36, 148, 36, 98]`, tedy osm bloků místo čtyř) i složení v obou pohledech.
+Ignorovaný přepínač (`isOn` bez efektu) shodí **4 tvrzení** ve dvou sadách — jedno v `Policy`,
+tři nad seznamem řádků; kdyby bylo jen jedno z toho, „vypnuto“ by se dalo splnit na půl cesty.
+
+**Kapsli druhu změny tvrdí bitmapa, ne accessibility tree** (ten se v hostovaném okně nenaplní,
+změřeno u `DashboardCountdownRedrawTests`): hlavička bez druhu ≠ s druhem, a `změna chování` ≠
+`generované`, takže se akcent od tichého tónu **pozná i jinak než délkou slova**.
+
+**Co se ověřit nepovedlo, a je to zapsaná mezera:** snímek běžící aplikace nad **skutečnými**
+anotacemi. `bin/run.sh` v tomhle slotu nedoběhl — v zásuvce běžel `claude --resume`, takže se
+aplikace na ukončení zeptala (což je záměr, viz *Příkazy* v `CLAUDE.md`) a dialog zůstal stát;
+hostitelská session nemá **Zpřístupnění**, takže se na něj nedá kliknout. Druhá instance z
+`build.noindex` (týž slot, tedy tatáž cache) se spustit dá a **okno se vyfotit dá**, ale frontu
+nenačte — zůstane na `Načítám frontu…` a `gh` si nezavolá ani jednou, takže v ní žádný diff není.
+**Proklikání tedy zbývá na člověka**; doloženo je měření výše a render zákresu vedle.
+
 ## Karta druhého kola, hláška a předepsané schválení (#523)
 
 Kresba nad daty z #522. Tři sady, a **většina tvrzení je negativních**: že se nic neodeslalo, že

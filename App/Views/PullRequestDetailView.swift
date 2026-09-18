@@ -247,6 +247,11 @@ struct PullRequestDetailView: View {
         // identifikátor, ne celé shrnutí — nový commit značky **nezneplatní**, jen z nich udělá
         // `změněno od prošlého`, a to se pozná z otisku v diffu.
         .task(id: pullRequest.id) { await store.loadReadMarks(for: pullRequest.id) }
+        // Anotace hunků (#524) tou samou cestou a ze stejného důvodu: jsou vidět jedině v diffu,
+        // takže by se při startu dekódovalo všechno, co kdy někdo popsal. Klíčem je identifikátor,
+        // ne shrnutí — o tom, jestli uložený záznam pro dnešní hlavu platí, rozhoduje
+        // `Policy.annotations(of:head:)`, ne to, kdy se načetl.
+        .task(id: pullRequest.id) { await store.loadAnnotations(for: pullRequest.id) }
         // Skok z palety (#184). Klíčem je **žádost i to, jak dopadl diff**: paleta umí skočit do
         // PR, jehož záložka se právě otevřela, takže diff v tu chvíli ještě není — a bez druhé
         // části klíče by se úloha po jeho dorazení už nespustila.
@@ -461,7 +466,12 @@ struct PullRequestDetailView: View {
         case .findings: Policy.findingsBadge(of: findingsTally)
         // Puntík, ne počet: „běží“ je stav, ne množství — u dvou reviewerů by dvojka o průběhu
         // neřekla nic.
-        case .progress: store.isReviewing(pullRequest.id) ? .live : nil
+        //
+        // **Popis změn (#524) se do něj počítá**, a je to oprava, ne rozšíření: sedmá session se
+        // pouští z lišty nad diffem a její jediný záznam je dráha v tomhle tabu. Bez puntíku po
+        // kliknutí nesvítilo nic, takže běžící session vypadala jako tlačítko, které nic nedělá.
+        case .progress:
+            store.isReviewing(pullRequest.id) || store.isAnnotating(pullRequest.id) ? .live : nil
         // **Puntík, ne počet zpráv** (#452): číslo v rozhovoru je počet mých otázek, což o tabu
         // neříká nic — a tichá kapsle „4“ vedle `Zeptat se` by vypadala jako čtyři nepřečtené
         // věci. Odznak dostane jedině běžící odpověď, tedy tentýž stav jako u `Průběhu`.
@@ -1503,7 +1513,11 @@ struct PullRequestDetailView: View {
                 markers: markers,
                 // Vlákna s kotvou v diffu — vlákno na zmizelém řádku patří do `Konverzace`,
                 // ne do pořadí čtení souborů.
-                threadPaths: Set(store.anchoredThreads(for: pullRequest.id).map(\.path))
+                threadPaths: Set(store.anchoredThreads(for: pullRequest.id).map(\.path)),
+                // Druh změny z anotací (#525) — bere ho **řazení**, ne kresba: sloupec žádnou
+                // novou kapsli nedostal. Rozhoduje o tom, co heuristika podle cesty jen hádá
+                // (generované soubory, `.json`, který mění chování), viz `Policy.risk`.
+                annotations: store.annotations(for: pullRequest.id)
             ),
             itinerary: itinerary,
             markers: markers,
@@ -1904,7 +1918,11 @@ struct PullRequestDetailView: View {
             // Hodiny z **téhož zdroje**, ze kterého se o odkladu rozhodovalo — jinak by dráha
             // uměla tvrdit `poběží 23:00` proti jinému „teď“, než jaké platí v plánovači.
             now: store.time.now,
-            slug: "\(pullRequest.repo)#\(pullRequest.number)"
+            slug: "\(pullRequest.repo)#\(pullRequest.number)",
+            // Dráha `anotace` (#524) — **zvlášť, ne mezi dráhami reviewerů**: `Policy.lanes`
+            // vypisuje tytéž reviewery jako chipy nad tabem, takže sedmá session mezi ně nepatří.
+            // `nil` = na tomhle PR se nepopisovalo, takže se nekreslí nic.
+            annotationLane: store.annotationLane(for: pullRequest.id)
         )
     }
 
@@ -2188,7 +2206,30 @@ struct PullRequestDetailView: View {
                 : nil,
             reportContentEnd: reportsScrollAnchor
                 ? { contentEnd.note($0, of: pullRequest.id, in: .filesChanged) }
-                : nil
+                : nil,
+            // Popis změn (#524) — **jen nad celým diffem**, tedy za toutéž bránou jako kotva
+            // scrollu, a není to opatrnost: session popisuje `git diff <base>...HEAD` a anotace
+            // se páruje **pořadím hunku** v něm. Rozsah `Od tvé poslední návštěvy` (#284) je jiný
+            // seznam souborů s jiným počtem hunků, takže by tatáž čísla ukazovala jinam.
+            annotation: annotationActions(enabled: reportsScrollAnchor),
+            // Kresba anotací (#525) jde **za toutéž bránou a ze stejného důvodu** jako akce nad
+            // ní: párování stojí na pořadí hunku v celém diffu. `nil` na ostatních pohledech tedy
+            // není opatrnost, ale jediná pravdivá odpověď — o hunku číslo 3 v rozsahu „co přibylo“
+            // věta z celého diffu netvrdí nic.
+            annotations: reportsScrollAnchor ? store.annotations(for: pullRequest.id) : nil
+        )
+    }
+
+    /// Ovladač `Popsat změny` do lišty nad diffem (#524). `nil` = **nekreslí se**.
+    ///
+    /// Stav i obě akce míří na **jeden** pull request, takže se skládají na jednom místě — kdyby
+    /// se stav bral odjinud než akce, uměl by prstýnek točit nad PR, na kterém nic neběží.
+    private func annotationActions(enabled: Bool) -> DiffAnnotationActions? {
+        guard enabled, store.canAnnotate(pullRequest.id) else { return nil }
+        return DiffAnnotationActions(
+            state: store.annotationControl(for: pullRequest.id),
+            start: { store.startAnnotating(for: pullRequest.id) },
+            cancel: { store.cancelAnnotating(for: pullRequest.id) }
         )
     }
 

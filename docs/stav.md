@@ -9252,3 +9252,103 @@ storu** (rozbalí soubor).
 **Neověřená mezera: PR neprošel Copilotem** (na pokyn uživatele se nepouštěl). A **fokus ani skok
 `Co je sporné ↓` se v harnessu ověřit nedá** — obojí stojí na geometrii diffu, takže to zkouší
 člověk na běžící aplikaci.
+
+## #524 — Anotace hunků: sedmá session, která popisuje diff (M17, zákres 59)
+
+Ke každému hunku jedna věta *proč* a ke každému souboru **druh změny** z pěti slov — `změna
+chování`, `refaktor`, `test`, `konfigurace`, `generované`. Kreslení u hunku přijde až v #525;
+z #524 je vidět **dráha `anotace` v tabu `Průběh`** a tlačítko `Popsat změny` **v liště nad
+diffem**. Zákres je sekce 59 v `docs/navrh.html`.
+
+**Zadání se změnilo ve dvou větách a obojí je zapsané rozhodnutí.**
+
+První: **vlastní nástroj `ReportAnnotations` se zahodil.** Nástroj, který si „definuje aplikace“,
+v `claude` CLI neexistuje jinak než jako **MCP server** — tedy jako další proces, který by PRism
+spouštěl, a to je nová hranice pod tvrdou podmínkou č. 1 i č. 2. Změřeno: session si nástroj
+**nezavolala**, třikrát ho zkusila najít přes `ToolSearch` a nakonec odpověděla textem. Odpovídá se
+proto **JSON v posledním sdělení**, jako u kontroly nálezů (#150) a rozhovoru (#452).
+
+Druhá plyne z první: **hranice mezi anotací a nálezem není v tvaru nástroje, ale v tvaru schématu,
+které aplikace parsuje** — a v tom, že anotace **nemá pole pro závažnost**. Drží ji tři nezávislé
+vrstvy: schéma bez toho pole, sada bez `ReportFindings` a `AnnotationRun` bez pole pro nález.
+
+**Sedmá session, ale žádná šestá sada povolení.** Anotace běží doslova s
+`AskCommand.allowedTools` (`Read,Grep,Glob,Bash(git:*)`) a liší se **promptem a parserem**, ne
+právy; vlastní konstanta s týmž obsahem by byla druhé místo, kde se dá tvrdá podmínka č. 2 porušit.
+Je to tatáž delegace jako u agenta (#510), který si sadu půjčuje od slévání konfliktů.
+
+**Co cesta přes poslední sdělení stála:** zabitá session nepřinese **nic** (do posledního sdělení se
+nedostala) a sběr umí **tiše nefungovat**, takže je „odpověď se nedala přečíst“ **vlastní stav**
+(`answered`) vedle prázdných seznamů, ne totéž. Obojí je v okně poznat na dráze.
+
+Anotace bydlí ve **vlastním storu** (`annotations/<owner>/<repo>/<pr>.json`), ne v `ReviewRecord`u:
+ruční `Popsat změny` na PR bez review by jinak sundalo z okna nálezy z minula — tatáž past jako
+u #150. Klíčuje se **hlavou**, ne otiskem obsahu jako `Prošlo` (#500), protože se páruje **pořadím
+hunku**; hlavu drží uložený záznam **i běh**, jinak by dráha po pushi tvrdila „popsáno“ o diffu, ze
+kterého se nekreslí nic. Spouští se **ručně z lišty nad diffem** (bránu nečte) nebo **po
+automatickém review** za branou `annotatesHunks`, která je ve výchozím stavu **vypnutá**.
+
+**Proklikání změnilo třetí větu zadání a odhalilo čtyři tiché cesty.** Akce měla být položkou
+v nabídce `Sbalit vše ▾`; ze zkoušení vyšlo *„tlačítko nic nedělá“* a byla to pravda — na
+obrazovce, ze které se pouští, se po kliknutí neměnilo **nic**. Sešly se čtyři věci: nabídka klik
+**spolkne** (zavře se dřív, než se cokoli změní), odznak `Průběhu` sedmou session **nepočítal**,
+větu z `annotationFailures` **nečetlo žádné view** a dva `guard … else { return }` byly **tiché**.
+Opravuje se všechno čtyři — tlačítko je teď v liště a má **tři stavy** (spustit / zrušit / zkusit
+znovu), odznak svítí i při popisu změn, selhání se dostane až do dráhy a oba `guard`y hlásí. Tichý
+zůstává jediný, `isTerminating`, a smí být tichý proto, že okno mizí.
+
+**Do lišty se to vejde, ale ne zadarmo, a to se změřilo:** lišta v plné výbavě si v podlahovém okně
+(700 b → štěrbina 572 b) říká o **819 bodů**, tedy **přetéká už bez téhle akce** — vlastnost z #219,
+ne důsledek #524. Celý popisek stojí dalších **104 b**, takže je `Popsat změny` jediný prvek lišty
+bez pevné šířky: v tísni zbude **samotná ikona** a to, co v liště bylo dřív, zůstane.
+
+**Vlastní revize diffu našla skutečnou chybu, a je z třídy „nejtišších“:** guard psaný jako
+`!(value is Bool)` zahazuje JSONová čísla **0 a 1**, protože je Swift bridguje na `Bool` (`42` už
+ne). U anotací by to znamenalo, že **hunk 1 nemá nikdy anotaci**. Opraveno přes
+`CFGetTypeID(number) == CFBooleanGetTypeID()`; **tentýž guard stojí i v `StreamParser.line(from:)`**,
+kde bere nález hlášený na řádku 1 — to je mimo rozsah tohohle issue a je na to vlastní úkol.
+
+Přibylo **74 testů v sedmi sadách** (z toho jedna ruční sonda na kresbu lišty); regrese se ověřila
+vložením regrese třikrát — u kontroly tvaru odpovědi a u **obou** polovin hlášení selhání zvlášť.
+
+**Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl. Vlastní revize diffu
+proběhla a je popsaná v PR. **Druhá neověřená mezera: skutečný klik do okna.** Hostitelská aplikace
+session nemá *Zpřístupnění*, takže `CGEvent` ani `System Events` do okna nedoletí — screenshotem je
+doložené, že tlačítko v liště živé aplikace **stojí**, ale že po kliknutí naskočí běh, musí
+proklikat člověk. **A kreslení anotací u hunku není součástí #524** — mockup je v téhle části zadání
+pro #525, ne stav aplikace.
+
+## #525 — Anotace v diffu: věta pod hunkem, druh v hlavičce (M17, zákres 59)
+
+Hotovo. Session z #524 psala věty, které **nebylo kde vidět** (*„ty anotace se pustí, ale nikde je
+nevidím“* — naostro 0,06 $, 27,4 s, 4 anotace, 3 soubory s druhem). #525 to kreslí: **věta *proč*
+pod souřadnicí hunku**, **kapsle druhu změny v hlavičce souboru**, **přepínač `Anotace u hunků`**
+v nabídce nad diffem a **`Anotace · 4 věty · proti 4f2ac91`** ve stavovém řádku. Druh změny k tomu
+bere **pořadí souborů v itineráři** (#506).
+
+**Tvrdá mez byla geometrie, ne kresba.** Věta je **vlastní řádek diffu** (`DiffRow.annotation`),
+tedy tentýž druh řádku jako hlavička hunku — ne vložka do `NSTextView`, protože z výšky bloku se
+počítá skok na nález i poloha karet v okraji (#469, #503). Cena je zapsaná: **kde není souřadnice
+hunku, není ani věta** — rozbalený kontext hunky slévá a věta uprostřed by souvislý blok rozťala na
+dva. Vrátí se, jak se kontext sbalí.
+
+**Změnily se dvě věci proti zadání.** (1) Stavový řádek měl podle zákresu nést `1 session`; je
+z něj **počet vět**, protože session je nad jednou hlavou vždycky jedna a konstanta v pruhu netvrdí
+nic. (2) **Mapa PR druhem nebarví** — zadání to připouštělo („může“), ale pás má sedm pojmenovaných
+tónů a legendu, takže pět druhů znamená pět nových tónů a pět řádků legendy, tedy novou věc na
+obrazovce, která v zákresu není. Odloženo do vlastního issue i s překreslením legendy.
+
+**Přepínač je v nabídce, akce v liště — vědomě naopak.** `Popsat změny` se u #524 z nabídky do
+lišty přestěhovalo, protože je to akce, po které se musí něco změnit (a nabídka klik spolkne);
+viditelnost vět je volba pohledu, tedy tatáž kategorie jako `Nálezy pod řádky`. **Kapsli druhu
+přepínač neschová**: to je jedno slovo v hlavičce, která stojí tak jako tak.
+
+Přibylo **44 testů ve čtyřech sadách**; geometrie se **měří na nakresleném bloku**, netvrdí se nad
+modelem, a regrese se ověřila vložením regrese dvakrát (věta doprostřed hunku shodí 16 tvrzení,
+ignorovaný přepínač 4).
+
+**Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl; vlastní revize diffu
+proběhla a je popsaná v PR. **Druhá: snímek běžící aplikace nad skutečnými anotacemi.** `bin/run.sh`
+ve slotu nedoběhl (v zásuvce běžel `claude --resume`, takže se aplikace zeptala a dialog zůstal
+stát; session nemá *Zpřístupnění*, takže na něj nejde kliknout) a druhá instance z `build.noindex`
+frontu nenačte. **Proklikání zbývá na člověka.**

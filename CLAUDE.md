@@ -359,7 +359,7 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    |---|---|
    | reviewer a **kontrola nálezů z minula** (#150), která bere **tytéž konstanty** | `Read,Grep,Glob,Bash(git:*),ReportFindings,Skill` |
    | **dotažení textu issue** (#345) — `ToolSearch` být **musí**, bez něj se MCP nástroj nedá zavolat | `ToolSearch` + **jeden čtecí MCP nástroj** (jméno v konfiguraci, `issueTextTool`) |
-   | **rozhovor nad PR** (#452, tab `Zeptat se`) — **užší než reviewerova**: bez `ReportFindings` (nemá co hlásit) a bez `Skill` | `Read,Grep,Glob,Bash(git:*)` |
+   | **rozhovor nad PR** (#452, tab `Zeptat se`) **a anotace hunků** (#524) — **užší než reviewerova**: bez `ReportFindings` (nemá co hlásit) a bez `Skill`; **anotace si ji půjčují doslova** a liší se **promptem a parserem**, ne právy | `Read,Grep,Glob,Bash(git:*)` |
    | **slévání konfliktů** (#467) **a agent na vlastním PR** (#510) — **jediné, které smí měnit soubory**, a **jediné bez `Bash`e**; sada je jedna, sdílená doslova | `Read,Grep,Glob,Write(//<strom>/**),Edit(//<strom>/**)` |
    | překlad nálezů | prázdná |
    | **brief na domově** (#516) — **čte stav aplikace nahlas, ne kód**: vstup skládá `Policy.briefInput`, session jen formuluje. Vypnuto ve výchozím stavu, cena je na řádku. **Jediná session s vynuceným modelem**, a je to změřená výjimka, ne opomenutí ([rozbor](docs/architektura.md#brief-na-domově--šestá-session-a-druhá-bez-nástrojů-516)) | prázdná |
@@ -396,8 +396,9 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    o položku** ([rozbor](docs/architektura.md#slévání-konfliktů--čtvrtá-session-467)).
 
    ```bash
-   # Výčet k posouzení: sedm míst — čtyři sady, **dvě** prázdné (překlad nálezů a brief, #516)
-   # a jedna delegace (#510: agent bere sadu i argumenty od slévání konfliktů).
+   # Výčet k posouzení: osm míst — čtyři sady, **dvě** prázdné (překlad nálezů a brief, #516)
+   # a **dvě** delegace (#510: agent bere sadu i argumenty od slévání konfliktů; #524: anotace
+   # berou sadu od rozhovoru).
    grep -rn 'allowedTools' App/Review | grep -vE ':[0-9]+: *///?'
    # Pozor: grep na `Write(` **vyjde prázdný** — rozsah se skládá interpolací, takže ten řetězec
    # v kódu nestojí. Kdo chce ověřit, že je scoped, musí se zeptat funkce (`SessionToolSetsTests`).
@@ -458,6 +459,14 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    `<základ>..<hlava>`. Tři stavy, ne dva; rozhoduje `Policy.fileReviewState(mark:blobs:)`
    a **`nil == nil` je `prošlo`** ([proč](docs/architektura.md#značka-prošlo-u-souboru-500)).
 
+   **Anotace hunků (#524) tu podmínku drží nejpřísněji ze všech, a je to opačné rozhodnutí než
+   u `Prošlo`.** Klíčem je **hlava**, ne otisk obsahu, protože se anotace páruje **pořadím hunku**
+   — po pushi by neukazovala na starý kód, ale na **cizí**. Z jiné hlavy se proto neukáže
+   **vůbec**, ani jako zastaralá, a platí to **i na dráhu v `Průběhu`**: hlavu drží uložený záznam
+   (`StoredAnnotations.headSha`) **i běh** (`AnnotationPass.headSha`). Rozhoduje
+   `Policy.annotations(of:head:)` a `Policy.annotationLane`
+   ([rozbor](docs/architektura.md#anotace-hunků--sedmá-session-524)).
+
    **Přírůstkové review (#517) tu podmínku drží nad dvěma sha, ne obchází ji.** Nález přenesený
    z minulého kola se na dnešní hlavu **přepíše** (`Finding.headSha`) a nese **odkud přišel**
    (`Finding.carriedFrom`); **do klíče nálezu původ nepatří** (`Policy.key(of:)`). Přenášejí se
@@ -490,7 +499,7 @@ API**, **`BranchPushing`** (#466) jediný, který **zapisuje do remote**, a **`T
 |---|---|---|
 | `GitHubGateway` | Vypsat PR ze zdrojů, sloučit a deduplikovat, metadata a syrový diff (celý i mezi dvěma commity), login účtu, labely a vyžádané reviewery, hlavy víc PR jedním dotazem (od #513 **i s větvemi** — podklad série PR), slévatelnost větve — a od #572 **hlavičku i slévatelnost vlastních PR jedním dotazem**, aby deska uměla `K merge` bez otevřené záložky ([měření](docs/testovani.md#kolik-stojí-slévatelnost-vlastních-pr-572)) —, **repozitáře organizace** (#532 — nejdražší čtení v aplikaci), **otevřené PR jednoho repa** (#533) a **co repozitář o mergi říká** (#556 — chybějící příznak = „nevím“). **Pořád bez zápisu** | `gh` CLI |
 | `RepoCheckout` | Bare partial clone do cache, detached worktree na review, uklízení a eviction, **rebase větve nad základem** ve vlastním stromě (`<pr>-sync`) i jeho zahození, **zápis slitých souborů do indexu a dokončení rebase** i **commit práce agenta** (#510) — commituje aplikace, ne session, **je předchozí hlava předkem té dnešní** (#517) a **cesty, které PR mění** (#518 — podklad routingu). **Pořád bez zápisu do remote** | `git` |
-| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula (od #522 se ptá i na **moje odeslané komentáře**, jedním polem odpovědí a beze změny sady) — a k tomu šest session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467), **agent na vlastním PR** (#510) a **brief na domově** (#516) — dvě z nich **smí měnit soubory**, agent se pouští **bez kliknutí** a brief nemá **jediný nástroj** | `claude` CLI |
+| `ReviewRunner` | Spustit headless session na skill, parsovat `stream-json`, vytáhnout nálezy z `ReportFindings` a odpovědi na pokusy o nástroje. Dvě podoby běhu — review (od #517 nad celým diffem, nebo **jen nad přírůstkem**) a kontrola nálezů z minula (od #522 se ptá i na **moje odeslané komentáře**, jedním polem odpovědí a beze změny sady) — a k tomu sedm session, které o review nic nevědí: překlad nálezů, text issue (#345), **rozhovor nad PR** (#452), **slévání konfliktů** (#467), **agent na vlastním PR** (#510), **brief na domově** (#516) a **anotace hunků** (#524) — dvě z nich **smí měnit soubory**, agent se pouští **bez kliknutí**, brief nemá **jediný nástroj** a anotace odpovídají **posledním sdělením, ne nástrojem** | `claude` CLI |
 | `ReviewStore` | Persistence — `Codable` v JSON, soubor na `(repo, pr, headSha)` | disk |
 | `Policy` | **Čisté funkce, žádné I/O.** Každé rozhodnutí, které jde vyjádřit nad daty: stav řádku, blokující příznak, návrh verdiktu, řazení, filtr seznamu, hledání v paletě ⌘K, složení promptu, obsah dashboardu, geometrie, na kterou se ptá kresba, a **desítky dalších**. Katalog je v [`docs/architektura.md`](docs/architektura.md#policy-apppolicy) — hledej podle jména funkce | — |
 | `Config` | Globální default + override per repo, tolerantní čtení `config.json` | disk |
@@ -660,6 +669,10 @@ protože většina se v harnessu neprojeví.
   neomezenost seznamu není důvod ten vzor snést. Diff kreslí **pevný `VStack`**, blok kódu má
   živý `NSTextView` jen v pásu kolem výřezu (`Policy.mountBand(visible:)`); `List` je změřený
   a **zamítnutý** ([čísla i ablace](docs/architektura.md#pevný-seznam-a-nasazování-bloků-469)).
+- **Co se plete mezi bloky kódu, nesmí měnit jejich geometrii** (#525) — věta *proč* u hunku je
+  **vlastní řádek** jako hlavička hunku, ne vložka do `NSTextView`, a **kde se nekreslí souřadnice
+  hunku, nekreslí se ani věta**; měří se to na nakresleném bloku
+  ([rozbor](docs/architektura.md#věta-je-vlastní-řádek-diffu-ne-vložka-do-bloku-kódu)).
 - **Nevyjednává se ani počet prvků** (#252) — plochu, gesto a geometrii nad blokem kódu počítá
   **jednou** `DiffGutterGeometry`. A co se při scrollování mění, **nesmí být ve `@State`**
   ([rozbor](docs/architektura.md#appdiff)).
