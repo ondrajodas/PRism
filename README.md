@@ -1862,6 +1862,13 @@ vlastnost člověka, ne repozitáře.
 nehlásí a nemá je čím nahlásit. Brána platí **jen na automat** — ručně se pouští tlačítkem v liště nad
 diffem (`Popsat změny`) i u repa, kde je vypnutá. Po pushi anotace zastarají jako nálezy.
 
+**Věty jsou vždycky česky** (#592) — `Jazyk nálezů` s nimi **nehýbe**: anotace se kreslí uvnitř
+diffu vedle českých popisků, takže je to text v okně, kdežto nález je obsah review, který může odejít
+na GitHub anglicky. Píšou se česky **rovnou**, nepřekládají se, takže kvůli jazyku neběží druhá
+session. Do #592 si jazyk vybíral model podle toho, co v diffu viděl, a u PR plného cizojazyčného
+textu z toho vyšly ruské věty. **Staré anotace se nepřepisují**: přepsat se bez nového běhu nedají,
+takže v cizím jazyce dožijí do příští hlavy.
+
 **V diffu je z toho vidět čtvero** (#525): věta *proč* **pod souřadnicí hunku**, kapsle druhu změny
 (`změna chování`, `refaktor`, `test`, `konfigurace`, `generované`) **v hlavičce souboru**, přepínač
 `Anotace u hunků` v nabídce nad diffem a `Anotace · 4 věty · proti 4f2ac91` ve stavovém řádku. Druh
@@ -2789,7 +2796,7 @@ jinak by po startu vypadala jako nová celá historie.
 | | |
 |---|---|
 | **Reviewery** | Běží nezávisle a paralelně. Texty nálezů se mezi nimi neslučují — nesouhlas dvou reviewerů je informace. Shoda na stejném `file:line` se označí odznakem `2×`. |
-| **Jazyk nálezů** | Volba v nastavení, ne natvrdo. Řeší se **překladem po doběhnutí**, ne instrukcí v promptu: psát rovnou česky měřitelně ubírá nálezy. Reviewer píše v jazyce, ve kterém je nejsilnější; jazyk je věc zobrazení. |
+| **Jazyk nálezů** | Volba v nastavení, ne natvrdo. Řeší se **překladem po doběhnutí**, ne instrukcí v promptu: psát rovnou česky měřitelně ubírá nálezy. Reviewer píše v jazyce, ve kterém je nejsilnější; jazyk je věc zobrazení. **Anotací hunků se ta volba netýká** (#592): ty jsou česky natvrdo, protože se kreslí v okně vedle českých popisků — nález je obsah review, anotace je text aplikace. Píšou se česky rovnou a nepřekládají se; překlad by u jedné věty bez slugu jen zdvojnásobil cenu. |
 | **Závažnost** | Aplikace nevymýšlí vlastní škálu. Seskupuje podle `category` z výstupu reviewera a odvozuje jediný blokující boolean (`verdict == CONFIRMED` a `category` v blokující sadě). Z toho vypadne návrh verdiktu. |
 | **Falešně pozitivní nálezy** | Normální provoz, ne chyba. Jeden nález se dá odmítnout jako `neplatný` nebo `irelevantní` a ostatní platí dál; do verdiktu a do řádku seznamu se nepočítá, ale z okna nezmizí — sbalí se. Označení bydlí na záznamu, ne na nálezu, aby ho nesmazalo opakované review týmž skillem, a platí jen pro ten commit: nálezy jsou klíčované head commitem. |
 | **Oprávnění** | Reviewer je read-only: `Write` ani `Edit` nemá povolené a `git push` s `gh` jsou výslovně zakázané. Ověřeno spuštěním, včetně toho, že zákaz platí i na `git push` s vypsanou URL — bez něj by session uměla pushnout do mého repozitáře, protože `origin` v cache míří na skutečné repo. |

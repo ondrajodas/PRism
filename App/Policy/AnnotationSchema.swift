@@ -39,14 +39,29 @@ enum AnnotationSchema {
         let name: String
         let isRequired: Bool
         /// Co do něj patří. Jde to do promptu doslova, takže je to anglicky jako zbytek zadání.
+        ///
+        /// **Jazyk odpovědi tady stát nesmí** (#592) — viz `language`.
         let meaning: String
         let values: [String]?
+        /// Píše se do něj **próza pro mě**, tedy text, o kterém rozhoduje věta o jazyku (#592)?
+        ///
+        /// Příznak, ne výčet jmen vedle: věta o jazyku se skládá z těch polí, která ho mají, takže
+        /// pole, které jako věta přibude, dostane jazyk **samo** — a druhé místo, kde se jazyk
+        /// vyslovuje, nemá jak vzniknout.
+        let isProse: Bool
 
-        init(_ name: String, required: Bool, meaning: String, values: [String]? = nil) {
+        init(
+            _ name: String,
+            required: Bool,
+            meaning: String,
+            values: [String]? = nil,
+            prose: Bool = false
+        ) {
             self.name = name
             isRequired = required
             self.meaning = meaning
             self.values = values
+            isProse = prose
         }
     }
 
@@ -65,13 +80,16 @@ enum AnnotationSchema {
         Field(
             Key.why,
             required: true,
-            meaning: "one sentence in Czech saying why this change is here — what it does, not what is wrong with it"
+            meaning: "one sentence saying why this change is here — what it does, not what is wrong with it",
+            prose: true
         ),
         Field(
             Key.source,
             required: false,
-            meaning: "where you know it from, in Czech — for example \"z commitu <subject>\" "
-                + "or \"popis PR to nezmiňuje\"; leave it out when you have no source"
+            meaning: "where you know it from — for example the subject of the commit it comes from, "
+                + "or that the pull request description does not mention it; leave it out when you "
+                + "have no source",
+            prose: true
         ),
     ]
 
@@ -92,6 +110,40 @@ enum AnnotationSchema {
 
     /// Všechna pole schématu na jednom místě — nad tímhle se tvrdí, že tam závažnost není.
     static var everyField: [Field] { hunkFields + fileFields }
+
+    /// Pole, do kterých session píše prózu — tedy ta, o kterých rozhoduje věta o jazyku (#592).
+    ///
+    /// **Odvozuje se z příznaku, nevypisuje se jmény**: kdo přidá pole s větou, dostane ho ve větě
+    /// o jazyku, a kdo přidá pole s cestou nebo s uzavřeným výčtem, ho tam nedostane.
+    static var proseFields: [Field] { everyField.filter(\.isProse) }
+
+    /// Věta o jazyku odpovědi (#592) — **jediné místo, kde se jazyk anotací vyslovuje**.
+    ///
+    /// **Česky, natvrdo, bez ohledu na `findingsLanguage`** — a je to rozhodnutí z proklikání, ne
+    /// opomenutí. Anotace se od #525 kreslí **uvnitř diffu vedle českých popisků**, takže je to
+    /// **text v okně**, a na ten platí pravidlo *uživatelské texty jsou české* (`Info.plist`:
+    /// `CFBundleDevelopmentRegion = cs`). Nález je proti tomu **obsah review**, který může odejít
+    /// na GitHub anglicky — proto má `findingsLanguage` smysl u nálezů a u anotací ne. První
+    /// podoba #592 to brala z konfigurace; proč se to otočilo, je v záznamu rozhodnutí ve
+    /// specifikaci.
+    ///
+    /// Do #592 jazyk stál **v popisu pole** (`why`: *„one sentence in Czech“*) a u pull requestu,
+    /// jehož diff je plný cizojazyčného textu, **neplatil**: naostro z toho vyšly ruské věty
+    /// (`keboola/job-queue#727`; měření je v `docs/claude-cli.md`). Přívlastek uvnitř popisu tvaru
+    /// je slabší než samostatná věta, a hlavně **neříká, proti čemu platí** — proto ta druhá
+    /// polovina věty: jazyk je **volba aplikace, ne vlastnost čteného kódu**.
+    ///
+    /// **Konstanta, ne funkce s parametrem**: co nemá parametr, nemá jak záviset na nastavení.
+    /// A **nepřekládá se** — žádná druhá session; proč, je u `AnnotateCommand.prompt(baseSha:)`.
+    static var language: String {
+        let named = proseFields.map { "`\($0.name)`" }.joined(separator: " and ")
+        return """
+            Write \(named) in Czech, whatever language the diff, its commit messages, its \
+            comments and its identifiers are written in: the language of the answer is a setting \
+            of this application, not a property of the code you are reading. \
+            The other fields are paths and values from the lists above and stay as they are.
+            """
+    }
 
     /// Slova, kterými by se závažnost do schématu dostala. **Výčet, ne úsudek**: stráž má vydat
     /// odpověď i tomu, kdo pole přidává za rok a o #524 neví.

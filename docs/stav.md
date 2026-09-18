@@ -9455,6 +9455,43 @@ ve slotu nedoběhl (v zásuvce běžel `claude --resume`, takže se aplikace zep
 stát; session nemá *Zpřístupnění*, takže na něj nejde kliknout) a druhá instance z `build.noindex`
 frontu nenačte. **Proklikání zbývá na člověka.**
 
+## #592 — Jazyk anotací hunků určuje nastavení, ne model (Průběžné)
+
+Hotovo. Vyšlo to z proklikání #524/#525 na ostrých datech: v cache ležely anotace pro dva PR
+a **v různých jazycích** — `keboola/sandboxes-service#717` česky, `keboola/job-queue#727` **rusky**
+(*„Временно указывает…“*, `source`: *„коммит 3c4d82eb“*). Jazyk přitom nikdo neurčoval: stál jako
+přívlastek v popisu pole ve schématu a u diffu plného cizojazyčného textu **neplatil**.
+
+**Rozhodnuto: anotace jsou česky natvrdo** a vyslovuje se to **jednou konstantní větou v promptu**
+(`AnnotationSchema.language`), která k tomu říká, **proti čemu platí** — jazyk je nastavení
+aplikace, ne vlastnost čteného kódu. **Rozhodnutí se během issue otočilo**: první podoba brala jazyk
+z `findingsLanguage`, po proklikání se ukázalo, že to je jiná otázka. Anotace se od #525 kreslí
+**uvnitř diffu vedle českých popisků**, takže je to **text v okně** (pravidlo *uživatelské texty
+jsou české*), kdežto nález je **obsah review**, který může odejít na GitHub anglicky. Zamítnuté
+varianty i s tou první podobou jsou v záznamu rozhodnutí ve specifikaci. Druhá cesta **nepřibyla**:
+žádná nová konstanta, žádná volba v nastavení a **žádná druhá session** — a cesta anotací
+o `findingsLanguage` **neví vůbec**, což tvrdí stráž nad zdrojáky.
+
+**Uložené anotace v cizím jazyce dožijí.** Přepsat se bez nového běhu nedají (a ten stojí peníze),
+přeložit je nemá co, a zastarají s hlavou jako všechno ostatní u anotací. Tvrdí to dva testy, které
+říkají, že se **nic nestalo**: překladač zůstal nedotčený a věta se uložila doslova; přepnutí jazyka
+uloženou větu nezahodí ani nespustí session samo.
+
+Fixtures jsou **skutečné odpovědi obou běhů** (`Tests/Fixtures/annotations/`), protože jiné se bez
+zaplacené session nesehnají — a parser na nich tvrdí, že jazyk **nepoznává ani nesahá na text**.
+Přibylo 8 testů; tvrdé podmínky č. 2 a č. 5 se nezměnily ani o položku (sada anotací je dál
+`AskCommand.allowedTools`, klíčování hlavou zůstává).
+
+**Naostro doměřeno při proklikání**: oba PR se popsaly znovu (0,062 $ a 20,1 s u
+`keboola/job-queue#727`) a **věty vyšly v jazyce, o který si aplikace řekla** — tedy i u toho PR,
+ze kterého předtím vyšly ruské. Samostatná věta s protikladem tedy drží tam, kde přívlastek v popisu
+pole neplatil; čísla jsou v [`docs/claude-cli.md`](claude-cli.md#samostatná-věta-drží--doměřeno-na-těch-samých-dvou-pr-592).
+
+**Neověřená mezera: PR neprošel Copilotem** — na pokyn uživatele se nepouštěl (výpadek 18. 9.);
+vlastní revize diffu proběhla a je popsaná v PR. **Druhá: tentýž běh s češtinou.** Změřený je
+mechanismus, ne konkrétní jazyk — běh, který ověří, že po přepnutí na natvrdo českou větu vyjdou
+věty česky i s `Jazyk nálezů` na angličtině, stojí dalších ~0,06 $ a zbývá na proklikání.
+
 ## #593 — Lišta nad diffem ustupuje podle pořadí, ne podle náhody (Průběžné, bez zákresu)
 
 Vyšlo to z měření u #524: **lišta v plné výbavě si v podlahovém okně (700 b → štěrbina 572 b)

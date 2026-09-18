@@ -261,4 +261,132 @@ struct AnnotateCommandTests {
         // totéž co sada, ne míň.
         #expect(prompt.contains("no `gh` commands"))
     }
+
+    // MARK: - Jazyk vět (#592)
+
+    /// Prompt žádá **češtinu, vždycky**. Do #592 stál jazyk jako přívlastek v popisu pole
+    /// (`why`: *„one sentence in Czech“*) a u diffu plného cizojazyčného textu neplatil — naostro
+    /// z toho vyšly ruské věty.
+    ///
+    /// **Věta k tomu musí říct, proti čemu platí.** Bez druhé poloviny je to zbožné přání, které
+    /// cizojazyčný diff přebije; to je celý rozdíl proti stavu do #592.
+    @Test("Prompt žádá češtinu a říká, proti čemu to platí")
+    func promptAsksForCzechAgainstTheCode() {
+        let prompt = AnnotateCommand.prompt(baseSha: "base123")
+
+        #expect(prompt.contains("in Czech, whatever language the diff"))
+        #expect(prompt.contains("not a property of the code you are reading"))
+    }
+
+    /// **`Jazyk nálezů` s větou nehýbe** (#592, po proklikání) — anotace je text v okně vedle
+    /// českých popisků, ne obsah review, který může odejít na GitHub anglicky.
+    ///
+    /// Tvrdí se to **nad zdrojáky**, protože za běhu není co proměnit: konstanta nemá parametr,
+    /// takže test „pro obě hodnoty vyjde totéž“ by nešel napsat jinak než tautologicky. Cesta
+    /// anotací proto o `findingsLanguage` **nesmí ani vědět** — a je to výčet souborů, ne úsudek.
+    ///
+    /// Komentáře se odečítají: o `findingsLanguage` se v dokumentaci u téhle cesty mluví
+    /// (vysvětluje se, proč tam **není**), a vysvětlení nemá test zakazovat. Hledá se
+    /// v **zhuštěném** textu, jako u ostatních stráží v repu.
+    @Test("Cesta anotací o jazyku nálezů neví")
+    func theAnnotationPathNeverReadsTheFindingsLanguage() throws {
+        let files = [
+            "App/Policy/AnnotationSchema.swift",
+            "App/Review/AnnotateCommand.swift",
+            "App/Review/ClaudeHunkAnnotator.swift",
+            "App/Review/HunkAnnotating.swift",
+            "App/Store/AppStore+Annotations.swift",
+        ]
+
+        for path in files {
+            let code = try Self.condensedCode(at: path)
+            #expect(!code.contains("findingsLanguage"), "\(path) čte jazyk nálezů")
+            #expect(!code.contains("FindingsLanguage"), "\(path) o jazyku nálezů ví")
+        }
+    }
+
+    /// Kód souboru bez komentářů a **bez jediné mezery** — mezera uvnitř výrazu je ve Swiftu volná,
+    /// takže stráž nad surovým textem by `resolved(for: repo) . findingsLanguage` pustila.
+    private static func condensedCode(at path: String) throws -> String {
+        let repository = URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let text = try String(contentsOf: repository.appending(path: path), encoding: .utf8)
+        // `TextLines`, ne `split(separator: "\n")` — pravidlo repa platí i v testech.
+        return TextLines.content(text)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+            .filter { !$0.isWhitespace }
+    }
+
+    /// **Jazyk se vyslovuje na jednom místě.** Kdyby stál i v popisu pole, byly by o jazyku dvě
+    /// pravdy — a rozešly by se první úpravou věty. Tvrdí se to počtem výskytů slova v celém
+    /// promptu: jedna věta, jedno slovo.
+    @Test("Jméno jazyka stojí v promptu jednou a v popisu polí vůbec")
+    func languageIsSaidInOnePlace() {
+        let prompt = AnnotateCommand.prompt(baseSha: "base123")
+
+        #expect(prompt.components(separatedBy: "Czech").count - 1 == 1)
+        for field in AnnotationSchema.everyField {
+            for language in FindingsLanguage.allCases {
+                #expect(
+                    !field.meaning.contains(language.promptName),
+                    "popis pole `\(field.name)` si drží jazyk sám"
+                )
+            }
+        }
+    }
+
+    /// Věta o jazyku **vypisuje pole z výčtu**, nepíše jejich jména ručně: pole, které jako věta
+    /// přibude, tím dostane jazyk samo. A **pole, která prózu nenesou**, v ní stát nesmí — cesta
+    /// ani `kind` se nepřekládají.
+    @Test("Věta o jazyku jmenuje pole s prózou a jen je")
+    func languageSentenceNamesTheProseFields() {
+        #expect(AnnotationSchema.proseFields.map(\.name) == ["why", "source"])
+
+        let sentence = AnnotationSchema.language
+        for field in AnnotationSchema.everyField {
+            #expect(
+                sentence.contains("`\(field.name)`") == field.isProse,
+                "pole `\(field.name)` je ve větě o jazyku, ač prózu nenese (nebo naopak)"
+            )
+        }
+    }
+
+    // MARK: - Čtení odpovědi je na jazyku nezávislé
+
+    /// **Skutečné odpovědi ze dvou běhů téhož dne** — obě přes `Fixture`, ne literálem. Jedna vyšla
+    /// česky, druhá rusky (`keboola/job-queue#727`), a je to ten běh, ze kterého #592 vzniklo.
+    ///
+    /// Tvrzení je **negativní**: parser jazyk **nepoznává ani nesahá na text**. Věta dojde do
+    /// `HunkAnnotation.why` doslova, ať je v jakémkoli jazyce — takže **uložená ruská anotace se
+    /// nepřekládá, ani po přepnutí nastavení**; zastará s hlavou, jako všechno ostatní u anotací.
+    @Test("Odpověď se přečte doslova, ať je v jakémkoli jazyce")
+    func readsTheAnswerVerbatimInAnyLanguage() throws {
+        let russian = AnnotateCommand.parse(try Fixture.text("annotations/job-queue-727-russian.txt"))
+
+        #expect(russian.answered)
+        #expect(russian.dropped == 0)
+        #expect(russian.hunks.count == 4)
+        #expect(
+            russian.hunks.first?.why
+                == "Временно указывает на ветку разработки для проверки на канаре вместо стабильной версии"
+        )
+        #expect(russian.hunks.first?.source == "коммит 3c4d82eb")
+
+        let czech = AnnotateCommand.parse(
+            try Fixture.text("annotations/sandboxes-service-717-czech.txt")
+        )
+
+        #expect(czech.answered)
+        #expect(czech.dropped == 0)
+        #expect(
+            czech.hunks.first?.why
+                == "Odstraní konfigurační proměnnou BILLING_ENABLED, která již není potřebná po deaktivaci integraci se Billing API."
+        )
+        // Druhá polovina téhož: **druh změny zůstává anglickým slugem z výčtu**, protože podle něj
+        // aplikace řadí a barví. Věta o jazyku se ho proto netýká.
+        #expect(czech.files.first?.kind == .configuration)
+    }
 }

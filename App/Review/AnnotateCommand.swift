@@ -53,6 +53,17 @@ enum AnnotateCommand {
     /// protože je jich hodně a `category` u nich musí zůstat anglicky jako slug s vazbou na
     /// blokující sadu. Anotace je proti tomu **věta pro mě**, žádný slug v ní není a druhá session
     /// by zdvojnásobila cenu u textu o řád kratšího než nález.
+    ///
+    /// **Jazyk je poslední věta promptu** (#592, `AnnotationSchema.language`), ne přívlastek
+    /// v popisu pole: v popisu tvaru stál do #592 a u diffu plného cizojazyčného textu **neplatil**.
+    /// Poslední je proto, že věta o jazyku má platit i proti tomu, co session viděla v kódu — je to
+    /// tatáž úvaha jako u věty o přírůstku v `Policy.reviewPromptCore` (#517), kde platí ta
+    /// poslední. Zákaz zápisu tím **neslábne**: drží ho `--disallowedTools`, ne pořadí vět
+    /// v promptu (viz `ReviewPromptTemplate`).
+    ///
+    /// **Parametr na jazyk tu není schválně** (#592, po proklikání): anotace je text v okně vedle
+    /// českých popisků, ne obsah review, takže `findingsLanguage` do téhle cesty nepatří. Co nemá
+    /// parametr, nedá se nastavením rozhodit — a druhá cesta k jazyku tím nemá kde vzniknout.
     static func prompt(baseSha: String) -> String {
         """
         You are explaining a pull request that is checked out here — not reviewing it. \
@@ -61,7 +72,8 @@ enum AnnotateCommand {
         of fetching the pull request. \
         \(AnnotationSchema.instruction) \
         Do not run anything that writes or sends: no commits, no pushes, no `gh` commands, \
-        no comments on GitHub.
+        no comments on GitHub. \
+        \(AnnotationSchema.language)
         """
     }
 

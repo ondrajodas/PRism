@@ -153,6 +153,9 @@ extension AppStore {
                     headSha: detail.headSha,
                     worktree: worktree,
                     baseSha: detail.baseSha,
+                    // **Jazyk se tu neresolvuje** (#592): věty jsou česky vždycky, protože se
+                    // kreslí v diffu vedle českých popisků. `findingsLanguage` je volba o obsahu
+                    // review, který může odejít na GitHub — do téhle cesty nepatří.
                     // **Tentýž limit jako review** (#320) — proč, je u `AnnotationRequest.timeout`.
                     timeout: resolved(for: pr.repo).reviewTimeout
                 ),

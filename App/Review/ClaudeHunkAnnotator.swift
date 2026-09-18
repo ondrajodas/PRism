@@ -42,6 +42,8 @@ struct ClaudeHunkAnnotator: HunkAnnotating {
         let events = runner.stream(
             claude,
             arguments: AnnotateCommand.arguments(
+                // **Jazyk v zadání není** (#592): věty jsou česky vždycky, takže se o něm
+                // nerozhoduje ani tady, ani ve storu — je to konstanta v promptu.
                 prompt: AnnotateCommand.prompt(baseSha: request.baseSha),
                 model: model()
             ),

@@ -8445,6 +8445,60 @@ mockupu a ke schválení; sekce 59 kreslí větu, kapsli, nabídku a stavový ř
 Udělat to „na vlastní pěst“ by znamenalo obejít jedinou schvalovací bránu v tomhle repu kvůli
 větě, která v zadání stojí jako *„může“*.
 
+### Záznam rozhodnutí — anotace jsou česky natvrdo (#592, po proklikání)
+
+Anotace hunků (#524) si jazyk vybíraly samy: ve schématu stál jako **přívlastek v popisu pole**
+(`why`: *„one sentence in Czech“*), a to u diffu plného cizojazyčného textu **neplatilo** —
+`keboola/job-queue#727` vyšel rusky, `keboola/sandboxes-service#717` týž den česky. Zadání issue
+nechalo otevřené, **kdo jazyk určuje**, a nabídlo tři možnosti.
+
+**Rozhodnuto: česky natvrdo, vyslovené jednou konstantní větou v promptu.** Anotace se od #525
+kreslí **uvnitř diffu vedle českých popisků**, takže je to **text v okně** — a na ten platí pravidlo
+*uživatelské texty jsou české a bundle to musí vědět* (`CFBundleDevelopmentRegion = cs`). **Nález je
+proti tomu obsah review**, který může odejít na GitHub anglicky; proto má `findingsLanguage` smysl
+u nálezů a u anotací ne. Věta je v promptu **poslední** a říká, **proti čemu platí**: *„ať je diff,
+commity, komentáře i identifikátory v jakémkoli jazyce; jazyk odpovědi je nastavení aplikace, ne
+vlastnost čteného kódu“*. Bez té druhé poloviny je to prosba, kterou obsah vstupu přebije — a přesně
+tak to do #592 skončilo.
+
+**Otočené rozhodnutí — první podoba brala jazyk z `findingsLanguage`.** Stálo to na úvaze, že je to
+tatáž otázka („v jakém jazyce je próza v okně“), takže vlastní volba vedle by byla druhá pravda
+o jednom okně; jazyk se skládal ve storu a putoval v `AnnotationRequest`u jako `timeout`.
+**Neplatí to, a důvod je v tom, co ta volba znamená**: `findingsLanguage` rozhoduje o **obsahu
+review**, tedy o textu, který může odejít na GitHub, kde angličtina dává smysl. Anotace nikam
+neodchází — kreslí se v okně, které je celé české, takže s tou volbou nemá společné nic než slovo
+„jazyk“. Přepnutý `Jazyk nálezů` by tedy nesrovnal dvě pravdy, ale **zavedl je**: české popisky
+v diffu a cizojazyčné věty mezi nimi. Zamítnuto po proklikání, na pokyn uživatele; z první podoby
+zůstalo všechno ostatní — jedno místo, jedna cesta, věta říkající, proti čemu platí, a žádná druhá
+session.
+
+**Konstanta je silnější tvrzení než parametr.** Co nemá parametr, nedá se nastavením rozhodit, takže
+po otočení nezbyl jen literál místo hodnoty: cesta anotací o `findingsLanguage` **neví vůbec**
+a hlídá to **stráž nad zdrojáky** (pět souborů, zhuštěný text bez komentářů). Za běhu by se to
+tvrdit nedalo — konstanta nemá co proměnit, takže test „pro obě hodnoty vyjde totéž“ by byl
+tautologie.
+
+**Zamítnuto: nechat to na modelu a jen to přiznat v dokumentaci.** Je to jediná varianta, která nic
+nestojí, a proto se posuzovala poctivě — padla na tom, že **anotace není citát**. U nálezu by se
+originální jazyk dal obhájit (reviewer píše, v čem je nejsilnější, a překlad je vrstva nad tím),
+kdežto anotace je **věta aplikace o cizím kódu**, kreslená mezi české popisky. Přiznat v dokumentaci,
+že si jazyk vybírá diff, znamená napsat, že okno mluví jazykem vstupu.
+
+**Zamítnuto: překladová session jako u nálezů.** Nálezů je hodně a `category` u nich musí zůstat
+anglickým slugem, takže se překládají po doběhnutí (#94). Anotace je proti tomu jedna věta bez
+slugu — druhá session by zdvojnásobila cenu textu o řád kratšího a přinesla další místo, kde se
+text přepisuje. **Píše se proto v cílovém jazyce rovnou**, a tím se rozhodl i osud toho, co už
+v cache leží: **dožije**. Přepsat se bez nového běhu nedá a přeložit se nemá čím, takže stará ruská
+věta zmizí až s další hlavou — což je u anotací normální konec života, ne výjimka.
+
+**V zadání ani v anotátoru jazyk není.** V první podobě ho skládal store do `AnnotationRequest`u
+(closure na `ClaudeHunkAnnotator`u by přehlédla override per repo); po otočení odpadlo obojí —
+`AnnotationRequest` pole na jazyk **nemá** a nejlevnější podoba pravidla je ta, kde není co předávat.
+
+**Věta jmenuje pole z výčtu.** Rozhoduje příznak `Field.isProse`, ne seznam jmen vedle schématu:
+pole, které jako věta přibude, dostane jazyk samo, a `file`, `hunk` ani `kind` ho nedostanou —
+druh změny je anglický slug z uzavřeného výčtu, podle kterého aplikace řadí a barví.
+
 ### Záznam rozhodnutí — tělo návrhu review nemá vlastní volbu (#521)
 
 Nabízelo se dát osmé session vlastní bránu v konfiguraci, jako má brief (`GlobalConfig.brief`)
