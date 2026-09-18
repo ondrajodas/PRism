@@ -43,6 +43,14 @@ struct PullRequestRow: View {
     /// tedy z toho zdroje času, který se v testech dá nastavit. `Date()` uvnitř `body` by z toho
     /// udělal měření, které se nedá zopakovat.
     var agent: AgentRowPill?
+    /// Co řádek říká o návrhu review (#520) — `návrh review · 3 + 2 sporné`, u čistého
+    /// `návrh: schválit`. `nil` = **nekreslí se nic**: vypnutá brána, žádný návrh, nebo o něm
+    /// řádek neví (náhled, test).
+    ///
+    /// **Skládá to store, ne řádek**, jako u pilulky agenta: rozhoduje o ní razítko na záznamu
+    /// a brána z konfigurace, a obojí je za `Policy.autoDraftPill`. Dvě skládání by znamenala,
+    /// že fronta říká o témž návrhu něco jiného než panel.
+    var autoDraft: AutoDraftPill?
     /// Odložit (#512) — **jedna hodnota, ne dvojice nabídka + akce**. `nil` znamená „řádek
     /// o odložení neví“ (náhledy, testy), prázdná nabídka uvnitř znamená „nesmí se“ (vlastní PR,
     /// `Policy.canSnooze`). V obou případech se nekreslí **nic**, ne zašedlá položka — ta by
@@ -375,6 +383,19 @@ struct PullRequestRow: View {
     /// + `border-left: 2px`, mezi čarou a proužkem stavu zbývají 2 body).
     private static let spineInset: Double = 7
 
+    /// `návrh review · 3 + 2 sporné` (#520) — pilulka z návrhu (`.pill.mint`).
+    ///
+    /// **Mint, jako pero, které nahradila** (#309): je to **totéž sdělení** — něco tu leží
+    /// neodeslané —, a jedna věc nesmí mít v okně dvě barvy. Akcent by se v tomhle řádku pral
+    /// s `běží` z `ReviewStateBadge`, tedy s „něco se tu právě děje“.
+    private func autoDraftPill(_ pill: AutoDraftPill) -> some View {
+        Text(verbatim: pill.text)
+            .lineLimit(1)
+            .designPill(tint: Palette.mint, background: Palette.mint.opacity(0.15))
+            .help(pill.help)
+            .accessibilityLabel(pill.text)
+    }
+
     /// `agent běží · 4 min` / `push čeká na tebe` (#511).
     ///
     /// **Akcent, ne barva nálezu**: na rozdíl od `N k předání` to není práce, která leží, ale
@@ -457,7 +478,15 @@ struct PullRequestRow: View {
                 Text(pullRequest.updatedAt, format: .relative(presentation: .named))
             }
             Spacer(minLength: 8)
-            if hasDraft {
+            // **Pilulka místo pera** (#520) — ale jedině ta, která za rozdělané review **mluví**
+            // (`AutoDraftPill.speaksForTheDraft`): `návrh review · 3 + 2 sporné` říká totéž co pero
+            // a víc, takže by dvě značky o jedné věci vedle sebe četly jako dvě různé. `návrh:
+            // schválit` je proti tomu tvrzení o **nálezech** a o mojí rozepsané próze neví nic —
+            // nechat ho pero přebít by znamenalo, že neodeslaná ruční práce z fronty zmizí.
+            if let autoDraft {
+                autoDraftPill(autoDraft)
+            }
+            if hasDraft, autoDraft?.speaksForTheDraft != true {
                 // **Mint, ne akcent** (#309), a to ze dvou důvodů naráz. Je to **totéž sdělení**
                 // jako `2 review` v souhrnu fronty, a jedna věc nesmí mít v okně dvě barvy.
                 // A v tomhle řádku akcent už něco znamená: `ReviewStateBadge` jím kreslí `běží`,

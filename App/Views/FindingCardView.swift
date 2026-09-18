@@ -29,6 +29,7 @@ struct FindingCardView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             recheck
+            contested
             footer
         }
         .padding(.vertical, 8)
@@ -154,6 +155,31 @@ struct FindingCardView: View {
                 Spacer(minLength: 0)
             }
             .help(status.help)
+        }
+    }
+
+    /// Nevzal si ho návrh review (#520) — **vlastní řádek pod textem**, ne odznak v hlavičce, a je
+    /// to tatáž úvaha jako u kontroly nálezů: v 300 bodech panelu se vedle `blokuje`, kategorie
+    /// a revieweera nevejde ani slovo, natož důvod.
+    ///
+    /// **Barva `stale`**, jak to kreslí návrh: je to tentýž druh sdělení jako u zastaralých nálezů
+    /// — *tohle platí, ale nesmí se na to spolehnout bez tebe*. Zelená ani červená by tvrdily, jak
+    /// nález dopadl, a o tom sporná značka neříká nic.
+    ///
+    /// **Odmítnutý nález značku nedostane**, jako u kontroly: o něm rozhodl člověk a návrh si ho
+    /// z definice nebere (`Policy.autoDraftPick`), takže by druhý stav vedle sebe jen mátl.
+    @ViewBuilder private var contested: some View {
+        if row.dismissal == nil, let doubt = row.doubt {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                pill("sporné", tint: Palette.stale)
+                // Jeden řádek: karta je náhled. Celá věta je v nápovědě, takže se nic neztrácí.
+                Text(verbatim: doubt.label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .help(doubt.help)
         }
     }
 

@@ -396,6 +396,11 @@ struct BoardView: View {
                 // z pilulky se pozná, že nad PR běží něco, co jsem nespustil, nebo že v kopii repa
                 // leží commit k přetlačení.
                 agent: store.agentRowPill(for: entry.pullRequest),
+                // Návrh review (#520) — **jeden řádek, jedna podoba**, tedy i tady: z pilulky se
+                // pozná, že po reviewerech leží v panelu připravený návrh a kolik z něj zůstalo
+                // sporné. Brána i razítko jsou za `AppStore.autoDraftPill`, takže s vypnutou
+                // volbou se nekreslí nic.
+                autoDraft: store.autoDraftPill(for: entry.id),
                 // Odložit i na desce (#512, oprava po proklikání) — **jeden řádek, jedna podoba**.
                 // Deska je první obrazovka, kterou vidím, a věta pod pozdravem o odložených mluví;
                 // nabídka, která by tady chyběla, by z toho čísla udělala tvrzení bez cesty dál.

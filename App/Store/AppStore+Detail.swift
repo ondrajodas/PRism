@@ -89,6 +89,11 @@ extension AppStore {
     /// `return` je přesně to místo, na které se dá zapomenout.
     func loadDetail(for pullRequest: PullRequestSummary) async {
         await refreshDetail(for: pullRequest)
+        // Návrh review (#520) — **i tady, ne jen po diffu**: detail a diff se dotahují dvěma
+        // souběžnými `.task`y, takže když diff dorazí první, je hlava ještě neznámá a návrh by se
+        // nesložil vůbec. Ať dorazí cokoli později, složí ho ten pozdější; obě cesty jdou přes
+        // tytéž brány, takže se nic nesloží dvakrát.
+        await materializeAutoDraft(for: pullRequest.id)
         // Až tady, protože hlavu i commity zná teprve dotažený detail — a bez commitů by řádek
         // nemohl říct, kolik jich přišlo.
         await noteStaleFindingsActivity(for: pullRequest.id)

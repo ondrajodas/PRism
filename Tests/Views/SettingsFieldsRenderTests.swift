@@ -30,26 +30,32 @@ struct SettingsFieldsRenderTests {
     private static let width: CGFloat = 509
     /// Vyšší než okno: nové sekce jsou až za těmi, které na stránce byly dřív.
     ///
-    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta, od #519 o dalších čtyři sta a od
-    /// #516 o dalších tři sta** — ta poslední porce **není novou sekcí**, ale **delším vysvětlením**
-    /// u té stávající (`Brief na domově` dostalo odstavec o ceně). Do téhle konstanty se tedy
-    /// nepromítá jen to, co na stránku přibude, ale i to, co na ní **naroste**.
+    /// **Od #517 o dvě stě bodů výš, od #510 o dalších tři sta, od #519 o dalších čtyři sta, od
+    /// #516 o dalších tři sta a od #520 o dalších sedm set** — ta předposlední porce **není novou
+    /// sekcí**, ale **delším vysvětlením** u té stávající (`Brief na domově` dostalo odstavec
+    /// o ceně). Do téhle konstanty se tedy nepromítá jen to, co na stránku přibude, ale i to, co
+    /// na ní **naroste**.
+    ///
+    /// **Ta poslední porce je za dvě věci naráz, a přišlo se na ni až slitím** (#520 + #524): sekce
+    /// `Návrh review po reviewerech` a k tomu přepínač `Po review popsat hunky` s odstavcem
+    /// vysvětlení v `Režim review`. Ani jedna z nich sama pod hranici pole neposunula — teprve
+    /// obojí, a je to doklad, že tahle konstanta patří ke **stránce**, ne ke změně, která ji zvedla.
     /// `Form` je `ScrollView`, takže co se do okna nevejde, se **nenakreslí** — a každá nová sekce
     /// nad `Text issue z trackeru` ho posunula pod dosavadní hranici (#517 přepínačem `Po pushi
     /// review jen přírůstku`, #510 sekcí `Agent na vlastním PR`, #519 sekcí `Tiché hodiny` se
-    /// čtyřmi řádky a vysvětlením). Test se tím nezměnil v tom, co tvrdí: dvě bitmapy vyšly stejné
+    /// čtyřmi řádky a vysvětlením, #520 sekcí `Návrh review po reviewerech` a #524 přepínačem
+    /// `Po review popsat hunky`). Test se tím nezměnil v tom, co tvrdí: dvě bitmapy vyšly stejné
     /// právě proto, že se pole přestalo kreslit, což je zrovna ta vada, kterou má chytat.
     ///
     /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
     /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
     ///
-    /// **Od #514 o dalších čtyři sta, a poprvé to nezpůsobila jedna změna, ale jejich slití.**
-    /// Sada `Jak si reviewery vedou` (#514) i sekce z #524 se každá zvlášť nad 2800 body ještě
-    /// vešly — obě větve měly tenhle test zelený —, teprve dohromady pole vytlačily. **Změřeno
-    /// půlením, ne odhadem**: nad slitým stavem je zeleno už od 2850, takže těch 3200 je
-    /// **rezerva**, ne potřebná výška. Když tedy zčervená příště, nemusí to znamenat, že se něco
-    /// pokazilo v posledním diffu.
-    private static let height: CGFloat = 3200
+    /// **A od #514 o dalších pět set, ze stejného důvodu podruhé za sebou** — sada
+    /// `Jak si reviewery vedou` v `Review a skilly`. Že to slití zvedá, je tedy pravidlo, ne
+    /// náhoda: každá z těch tří změn (#514, #520, #524) byla na své větvi zelená a hranici
+    /// překročilo až to, co z nich vzniklo v `mainu`. **Měří se proto půlením nad slitým stavem,
+    /// ne odhadem z diffu.**
+    private static let height: CGFloat = 4000
 
     // MARK: - Text issue z trackeru
 

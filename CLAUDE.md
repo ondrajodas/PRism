@@ -287,7 +287,10 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    se zkratkou **`⌥↵`**, barvu vybírá aplikace (`Policy.labelColor`) a **přebarvit ani smazat
    label odsud nejde**. A composer komentáře **nesmí splynout s tabem `Moje review`**
    ([proč](docs/architektura.md#labely-a-reviewery-v-panelu-392)). **`ReviewVerdict` je pořád jen
-   návrh a sám nic neodesílá** (od #114 se jím **předvyplňuje** verdikt v panelu). A pravidlo, že
+   návrh a sám nic neodesílá** (od #114 se jím **předvyplňuje** verdikt v panelu). **Od #520
+   předvyplňuje aplikace i nálezy** (`autoDraft`, výchozí vypnuto) — je to **draft, ne odeslání**,
+   a sporné se u toho **nesmí ztratit**
+   ([rozbor](docs/architektura.md#návrh-review--jisté-nálezy-převzaté-sporné-zvlášť-520)). A pravidlo, že
    **mergnutý PR jde ještě dočíst a zavřít ho má člověk, ne tik pollingu**, se **neruší**.
 
    **Terminál pod tuhle podmínku nespadá, a je to hranice, ne výjimka** (#453, #459, #460).
@@ -446,6 +449,10 @@ odkaz a čte se **dřív**, než se podmínka obchází.
    k `headSha`**, protože rozhovor není nález. **Odložení PR (#512) je druhá taková výjimka**:
    push ho nemá zneplatnit, nýbrž **splnit**, takže hlava v něm figuruje jako **měřidlo podmínky**,
    ne jako klíč záznamu ([proč](docs/superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--odložení-pr-se-ukládá-k-pr-ne-k-headsha-512)).
+
+   **Razítko návrhu review (#520) tu podmínku drží, ne obchází**: leží na `ReviewRecord`u, tedy
+   u `(PR, headSha)` jako kontrola nálezů — nová hlava znamená nový záznam, takže návrh **zhasne
+   sám** ([rozbor](docs/architektura.md#razítko-bydlí-u-nálezů-ne-u-draftu)).
 
    **Značka `Prošlo` u souboru (#500) je ta podmínka nad souborem, ne výjimka z ní.** Ukládá se
    **k PR**, ale nese **otisk obsahu** — sha z `index` řádky diffu, celou dvojici

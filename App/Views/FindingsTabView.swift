@@ -23,6 +23,12 @@ struct FindingsTabView: View {
     /// v rozbalené bublině (tedy tou samou sazbou jako u kódu) a věta o počtech visí nad tabulkou
     /// v hlavičce PR, která je vidět ve všech tabech.
     var rechecks: [FindingKey: RecheckStatus] = [:]
+    /// Proč si nálezy nevzal návrh review (#520). Prázdné = žádný se neskládal.
+    ///
+    /// **V tabulce je značka jen v rozbalené bublině**, ze stejného důvodu jako u kontroly:
+    /// sbalený řádek má spočítanou šířku sloupců a značka by si vzala místo shrnutí, kvůli
+    /// kterému se tabulka čte. V panelu, kde jsou karty, je značka vidět rovnou.
+    var doubts: [FindingKey: AutoDraftDoubt] = [:]
     var blockingCategories: Set<String> = Policy.defaultBlockingCategories
     var isRunning = false
     /// Zahodí uložené nálezy. `nil` = není co zahodit, tlačítko se nekreslí.
@@ -218,7 +224,8 @@ struct FindingsTabView: View {
             sort: sort,
             blocking: blockingCategories,
             dismissals: dismissals,
-            rechecks: rechecks
+            rechecks: rechecks,
+            doubts: doubts
         )
     }
 

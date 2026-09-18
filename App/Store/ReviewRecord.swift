@@ -42,6 +42,14 @@ struct ReviewRecord: Codable, Hashable, Sendable {
     /// Nálezy tím **nemizí ani se nepřeskupují**: jediné, co kontrola dělá, je odznak u nálezu
     /// a věta v hlavičce. Sundat nález smí jedině odmítnutí (#113), za kterým stojí člověk.
     var recheck: StoredRecheck?
+    /// Co si o **těchhle** nálezech rozhodl automat, když z nich skládal návrh review (#520).
+    /// `nil` = neskládal — vypnutá brána, vlastní PR, nebo nebylo co navrhnout.
+    ///
+    /// Bydlí to tady ze stejného důvodu jako `recheck`: je to tvrzení o těchhle nálezech, takže
+    /// patří k nim. **A drží to tvrdou podmínku č. 5 bez jediné kontroly navíc** — nová hlava
+    /// znamená nový záznam a v něm razítko není, takže návrh zhasne sám: zmizí pilulka ve frontě,
+    /// pruh v panelu i značky `sporné` u nálezů. Podrobnosti u `StoredAutoDraft`.
+    var autoDraft: StoredAutoDraft?
 
     init(
         pullRequest: PRIdentifier,
@@ -50,7 +58,8 @@ struct ReviewRecord: Codable, Hashable, Sendable {
         isStale: Bool = false,
         closedAt: Date? = nil,
         dismissals: [FindingKey: FindingDismissal] = [:],
-        recheck: StoredRecheck? = nil
+        recheck: StoredRecheck? = nil,
+        autoDraft: StoredAutoDraft? = nil
     ) {
         self.pullRequest = pullRequest
         self.headSha = headSha
@@ -59,6 +68,7 @@ struct ReviewRecord: Codable, Hashable, Sendable {
         self.closedAt = closedAt
         self.dismissals = dismissals
         self.recheck = recheck
+        self.autoDraft = autoDraft
     }
 
     /// Dekóduje se ručně **jen kvůli `dismissals`**: syntetizovaný `init(from:)` sahá na
@@ -78,6 +88,10 @@ struct ReviewRecord: Codable, Hashable, Sendable {
             forKey: .dismissals
         ) ?? [:]
         recheck = try container.decodeIfPresent(StoredRecheck.self, forKey: .recheck)
+        // Razítko návrhu (#520) je optional ze stejného důvodu jako `recheck` — a je to důležitější
+        // než u něj: záznamů bez tohohle klíče je na disku **všechno, co vzniklo do #520**, takže
+        // neopatrné `decode` by znamenalo ztracené nálezy kvůli poli, které v souboru být nemůže.
+        autoDraft = try container.decodeIfPresent(StoredAutoDraft.self, forKey: .autoDraft)
     }
 
     /// Nálezy ze všech reviewerů dohromady. Neslučují se — každý si nese, kdo ho našel.

@@ -692,6 +692,9 @@ struct PullRequestDetailView: View {
             handoff: ownership == .mine ? store.handoffReport(for: pullRequest.id) : .never,
             conversation: store.conversationState(for: pullRequest.id),
             draftUnavailable: draftUnavailable,
+            autoDraftNote: autoDraftNote,
+            autoDraftActions: autoDraftActions,
+            autoDraftDoubts: autoDraftDoubts,
             draftActions: draftActions,
             jumpToComment: jumpToComment,
             // Labely a reviewery (#392) — dvě sekce nad segmenty, které platí pro celý PR.
@@ -854,6 +857,58 @@ struct PullRequestDetailView: View {
     /// mluví o **kontrole**, ne o odznacích.
     private var findingStatuses: [FindingKey: RecheckStatus] {
         Policy.findingStatuses(of: store.reviewRecord(for: pullRequest.id), head: store.head(of: pullRequest.id))
+    }
+
+    /// Značky `sporné` u nálezů (#520) — **jedna mapa do panelu i do tabulky**, ze stejného
+    /// důvodu jako `findingStatuses`: dvě čtení by znamenala, že karta v panelu a bublina
+    /// v tabulce říkají o témž nálezu každá něco jiného.
+    private var autoDraftDoubts: [FindingKey: AutoDraftDoubt] {
+        store.autoDraftDoubts(for: pullRequest.id)
+    }
+
+    /// Věta o návrhu review (#520). `nil` = žádný neleží, takže se pruh v panelu nekreslí.
+    ///
+    /// **Hodiny se formátují tady, ne v `Policy`**: jdou přes locale, takže v čisté funkci by se
+    /// nedaly testovat (tatáž dělba jako u `Policy.briefMeta`).
+    private var autoDraftNote: String? {
+        guard let stamp = store.autoDraftStamp(for: pullRequest.id) else { return nil }
+        return Policy.autoDraftNote(
+            at: stamp.at.formatted(.dateTime.hour().minute()),
+            adopted: stamp.adopted,
+            contested: stamp.contested.count
+        )
+    }
+
+    /// Co se dá udělat s návrhem (#520). Skládá se tady, jako `metadataActions` — panel dostane
+    /// hodnotu a `AppStore` nezná.
+    ///
+    /// **`Co je sporné ↓` se kreslí podle toho, jestli sporný nález vůbec je** — ne podle toho,
+    /// jestli se na něj dá v diffu skočit. Je to oprava změřená `sample`m: ptát se na kotvu
+    /// znamená projít `anchor(inFile:line:)`, a ten **rozbaluje soubor**, tedy **zapisuje do
+    /// storu**. Z těla view z toho byla nekonečná smyčka překreslení — okno jelo na 100 %
+    /// hlavního vlákna a nepřijalo ani Apple event `quit`.
+    ///
+    /// Mrtvé tlačítko z toho není: klik **vždycky** přepne panel na `Nálezy`, kde jsou značky
+    /// `sporné` vidět, a skok na místo v diffu je to, co se k tomu přidá, když se kotva najde
+    /// (`jump(to:)` nad nenalezeným místem neudělá nic).
+    private var autoDraftActions: AutoDraftActions {
+        let id = pullRequest.id
+        let contested = firstContestedFinding
+        return AutoDraftActions(
+            discard: { Task { await store.discardAutoDraft(for: id) } },
+            showContested: contested.map { finding in { jump(to: finding) } }
+        )
+    }
+
+    /// První sporný nález (#520). Pořadí je **to z panelu** (`Policy.sorted`),
+    /// aby „první“ znamenalo totéž, co je nahoře v seznamu.
+    ///
+    /// **Na kotvu se tady neptá** (viz `autoDraftActions`) — je to čtení nad daty, nic víc.
+    private var firstContestedFinding: Finding? {
+        let doubts = autoDraftDoubts
+        guard !doubts.isEmpty else { return nil }
+        return Policy.sorted(visibleFindings, categories: blockingCategories, dismissals: dismissals)
+            .first { doubts[Policy.key(of: $0)] != nil }
     }
 
     /// Odmítnutí nálezu (#113) — jedno místo pro bubliny u kódu i pro tabulku v panelu.
@@ -1796,6 +1851,7 @@ struct PullRequestDetailView: View {
             findings: visibleFindings,
             dismissals: dismissals,
             rechecks: findingStatuses,
+            doubts: autoDraftDoubts,
             blockingCategories: blockingCategories,
             isRunning: store.isReviewing(pullRequest.id),
             clear: record == nil ? nil : { try await store.clearFindings(for: pullRequest.id) },
