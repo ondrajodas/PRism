@@ -30,6 +30,16 @@ struct AutoDraftNoteView: View {
     /// Celá věta `Návrh připravený automatem · 21:52 · z 5 nálezů 3 převzaty, 2 sporné`.
     /// Skládá ji `Policy.autoDraftNote`, ne tenhle pruh — týmiž počty mluví i řádek v `Dění`.
     let note: String
+    /// Druhá řádka: **odkud je tělo review** (#521). `nil` = pruh o těle mlčí — tělo se nepsalo,
+    /// nebo je razítko z doby před #521.
+    ///
+    /// Skládá ji `Policy.reviewBodyNote`, ne tenhle pruh, ze stejného důvodu jako tu první: je to
+    /// rozhodnutí o tom, co se smí tvrdit, ne formátování.
+    ///
+    /// **Vlastní řádka, ne delší první věta.** První mluví o **nálezech** (co se převzalo a co
+    /// zůstalo sporné), druhá o **próze** — a splynutí by znamenalo, že se nad prázdným composerem
+    /// čte jako jedna zpráva, ve které je počet nálezů i selhání session dohromady.
+    var bodyNote: String?
     var actions = AutoDraftActions()
 
     @State private var isConfirmingDiscard = false
@@ -47,6 +57,20 @@ struct AutoDraftNoteView: View {
             // ale že tu něco leží připravené — tatáž role, jakou má akcent u pilulky agenta.
             .foregroundStyle(Palette.accent)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let bodyNote {
+                // **Bez ikony a odsazená pod text první řádky** (velikost ikony `Label`u v `.caption`
+                // je 16 bodů): druhá ikona vedle první by z pruhu udělala dvě zprávy, a to je zrovna
+                // to, čemu se tady vyhýbáme — je to **jedna** zpráva o dvou vrstvách návrhu.
+                Text(verbatim: bodyNote)
+                    .font(.caption)
+                    // Sekundární, ne akcentní: první řádka je to, co pruh **tvrdí**, tahle to
+                    // doplňuje. Dvě stejně výrazné řádky se přestanou číst obě.
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             HStack(spacing: 8) {
                 discardButton
@@ -91,9 +115,19 @@ struct AutoDraftNoteView: View {
     VStack(spacing: 12) {
         AutoDraftNoteView(
             note: Policy.autoDraftNote(at: "21:52", adopted: 3, contested: 2),
+            bodyNote: Policy.reviewBodyNote(AutoDraftBody(samples: 7)),
             actions: AutoDraftActions(showContested: {})
         )
-        AutoDraftNoteView(note: Policy.autoDraftNote(at: "08:04", adopted: 0, contested: 3))
+        AutoDraftNoteView(
+            note: Policy.autoDraftNote(at: "08:04", adopted: 0, contested: 3),
+            bodyNote: Policy.reviewBodyNote(AutoDraftBody(samples: 0))
+        )
+        AutoDraftNoteView(
+            note: Policy.autoDraftNote(at: "08:04", adopted: 2, contested: 0),
+            bodyNote: Policy.reviewBodyNote(
+                AutoDraftBody(samples: 4, failure: .session(detail: "Tělo review nedoběhlo v limitu 3 minuty."))
+            )
+        )
     }
     .padding()
     .frame(width: 300)

@@ -67,6 +67,8 @@ struct ReviewPanel: View {
     var draftUnavailable: String?
     /// Věta o návrhu review, který složila aplikace (#520). `nil` = žádný neleží.
     var autoDraftNote: String?
+    /// Druhá řádka pruhu — **odkud je tělo review** (#521). `nil` = pruh o těle mlčí.
+    var autoDraftBodyNote: String?
     var autoDraftActions = AutoDraftActions()
     /// Značky `sporné` u nálezů (#520). Prázdné = návrh se neskládal, takže se nekreslí nic.
     var autoDraftDoubts: [FindingKey: AutoDraftDoubt] = [:]
@@ -430,6 +432,7 @@ struct ReviewPanel: View {
                 isOwnPullRequest: isOwnPullRequest,
                 unavailable: draftUnavailable,
                 autoDraftNote: autoDraftNote,
+                autoDraftBodyNote: autoDraftBodyNote,
                 // **Přepnutí segmentu skládá panel, ne pruh** (#520): `tab` drží on, takže by ho
                 // pruh nemohl změnit bez toho, aby se mu binding protáhl skrz. Skok na nález
                 // zůstává volajícímu — panel neví, kde v diffu to místo je.

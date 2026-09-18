@@ -92,10 +92,14 @@ extension AppStore {
         // A brief (#516). Je to `claude -p` jako ostatní — bez nástrojů, ale se stejným účtem:
         // session, která přežije zavřenou aplikaci, platí tokeny dál.
         briefTask?.cancel()
+        // A tělo návrhu review (#521). Je to `claude -p` jako ostatní — bez nástrojů, ale se
+        // stejným účtem: session, která přežije zavřenou aplikaci, platí tokeny dál.
+        for body in reviewBodyTasks.values { body.cancel() }
 
         var remaining = Self.terminationChecks
         while !reviewTasks.isEmpty || !recheckTasks.isEmpty || !askTasks.isEmpty
-            || !branchSyncTasks.isEmpty || !annotationTasks.isEmpty || briefTask != nil,
+            || !branchSyncTasks.isEmpty || !annotationTasks.isEmpty || briefTask != nil
+            || !reviewBodyTasks.isEmpty,
             remaining > 0 {
             remaining -= 1
             // `Task.sleep`, ne `time.sleep`: čeká se na skutečný proces, ne na rozvrh. Fake

@@ -29,6 +29,8 @@ struct DraftPanel: View {
     /// Věta o návrhu, který složila aplikace (#520). `nil` = žádný návrh se neskládal, nebo se
     /// zahodil — pak se pruh **nekreslí vůbec**, ne prázdný.
     var autoDraftNote: String?
+    /// Druhá řádka pruhu — **odkud je tělo review** (#521). `nil` = pruh o těle mlčí.
+    var autoDraftBodyNote: String?
     var autoDraftActions = AutoDraftActions()
     var actions = DraftActions()
     var jump: (ReviewDraftComment) -> Void = { _ in }
@@ -63,7 +65,11 @@ struct DraftPanel: View {
                 // všechno pod ním**, kdežto banner mluví o tom, že to nejde odeslat. Kdo čte panel
                 // shora dolů, potřebuje to v tomhle pořadí — a obojí naráz je legitimní stav.
                 if let autoDraftNote {
-                    AutoDraftNoteView(note: autoDraftNote, actions: autoDraftActions)
+                    AutoDraftNoteView(
+                        note: autoDraftNote,
+                        bodyNote: autoDraftBodyNote,
+                        actions: autoDraftActions
+                    )
                 }
                 if isStale { staleBanner }
                 if let unavailable { unavailableNote(unavailable) }

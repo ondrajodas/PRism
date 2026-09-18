@@ -103,6 +103,10 @@ extension AppStore {
             adoptFinding(finding, for: pr)
         }
         await align(stamp, to: plan, for: pr, at: record.headSha)
+        // **Tělo až za složeným draftem** (#521): odstavec mluví o převzatých nálezech, takže
+        // nemá vzniknout dřív, než ty nálezy v panelu leží. Nečeká se na to — session píše minutu
+        // a tohle běží uvnitř načítání diffu.
+        startReviewBody(for: pr, plan: plan)
     }
 
     /// Srovná razítko s tím, co se doopravdy složilo.
@@ -121,7 +125,16 @@ extension AppStore {
         for pr: PRIdentifier,
         at headSha: String
     ) async {
-        let composed = StoredAutoDraft(at: stamp.at, adopted: plan.adopt.count, contested: plan.contested)
+        let composed = StoredAutoDraft(
+            at: stamp.at,
+            adopted: plan.adopt.count,
+            contested: plan.contested,
+            // **Tělo se přenáší, nezahazuje** (#521). Dnes tudy chodí jedině razítko bez těla
+            // (skládání běží dřív, než osmá session doběhne), ale vynechané pole by bylo past
+            // s odkladem: první další volající, který srovná počty po napsaném těle, by větu
+            // o hlasu potichu smazal.
+            body: stamp.body
+        )
         guard composed != stamp, let reviews else { return }
         reviewRecords[pr] = (try? await reviews.saveAutoDraft(composed, for: pr, at: headSha))
             ?? reviewRecords[pr]

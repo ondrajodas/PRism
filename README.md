@@ -2315,6 +2315,34 @@ ve frontě vidět dřív, než PR otevřu), ale kam převzatý nález patří, r
 se z každého stal odkaz do těla review místo komentáře u řádku. Panel se proto doplní ve chvíli,
 kdy se PR otevře.
 
+### Tělo návrhu review v mém hlasu (#521)
+
+**K složenému návrhu napíše tělo review osmá session** — jeden odstavec, mým hlasem. Dostane
+hotové nálezy z návrhu (převzaté i sporné) a **posledních deset mých odeslaných těl review** jako
+vzor stylu; **kód nečte a číst ho nemá čím**, protože nemá jediný nástroj. Pruh nad panelem k tomu
+dostane druhou řádku: `Tělo je podle tvých posledních review (7).`
+
+**Je to text v composeru, nic víc.** Editovatelný, přepsatelný, a odejde jedině tím potvrzením
+s celým payloadem — na odesílání se tím nemění ani písmeno. Odstavec se staví **nad** to, co v těle
+review už leží (odkazy na kód u nálezů, které GitHub u řádku nepustí), takže nic nepřepíše.
+
+**Když se to nepovede, composer zůstane prázdný a pruh to řekne**: `Tělo se nenapsalo, composer
+zůstal prázdný.` i s důvodem. Půlka odstavce je u textu, který odchází na GitHub pod mým jménem,
+horší než věta o tom, že se to nepovedlo. A **než odstavec dorazí, můžu začít psát sám** — pak se
+nepřepíše nic a pruh řekne `Tělo si píšeš sám`.
+
+**Vzorek hlasu se sbírá čtením**, ne evidencí odeslaných review: moje odeslaná těla se berou
+z konverzací, které aplikace načte při otevření PR, a leží v `review-voice.json` v cache
+(nejnovějších deset). Co je na GitHubu, je to, co jsem doopravdy odeslal — včetně review odeslaných
+odjinud než z téhle aplikace. **Nový uživatel žádné uložené review nemá**, takže se tělo píše
+neutrálně a pruh to řekne.
+
+**Vlastní volbu to nemá** — jede na `autoDraft` (#520, výchozí vypnuto), protože tělo je část
+návrhu, ne samostatná funkce. **Cena** je v `Průběhu` na vlastní dráze `tělo review` (dvě fáze,
+`session` a `píše tělo` — víc jich session bez nástrojů mít nemůže) a počítá se do `Dneska stálo`,
+i u běhu, který text nevrátil. Návrh ze samých sporných nálezů draft nezakládá, takže se u něj tělo
+**nepíše** — pruh nad prázdným panelem stačí.
+
 ### Odeslání review
 
 **Dvě kliknutí, dvě různá tlačítka.** `Odeslat review…` v tabu `Moje review` nic neodesílá —

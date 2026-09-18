@@ -21,11 +21,25 @@ struct StoredAutoDraft: Codable, Hashable, Sendable {
     /// (#113) — dva klíče na jeden nález by znamenaly, že se značka `sporné` po dalším běhu
     /// rozpáruje a potichu zmizí.
     let contested: [FindingKey: AutoDraftDoubt]
+    /// Co osmá session udělala s **tělem** review (#521). `nil` = nepsalo se — buď se ještě
+    /// nedoběhlo, nebo session není zapojená.
+    ///
+    /// **Volitelné pole, ne druhý soubor**, a je to rozhodnutí: tělo návrhu platí pro **tytéž
+    /// nálezy** jako razítko, takže mu má zhasnout naráz s ním. Druhé razítko vedle by znamenalo
+    /// druhé místo, kde se dá zapomenout na hlavu — a pruh by po pushi mluvil o hlasu nad panelem,
+    /// ve kterém už nic není.
+    var body: AutoDraftBody?
 
-    init(at: Date, adopted: Int, contested: [FindingKey: AutoDraftDoubt]) {
+    init(
+        at: Date,
+        adopted: Int,
+        contested: [FindingKey: AutoDraftDoubt],
+        body: AutoDraftBody? = nil
+    ) {
         self.at = at
         self.adopted = adopted
         self.contested = contested
+        self.body = body
     }
 
     /// Kolik nálezů měl návrh v ruce — `z 5 nálezů 3 převzaty, 2 sporné`.

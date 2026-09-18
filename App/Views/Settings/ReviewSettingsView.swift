@@ -212,13 +212,17 @@ struct ReviewSettingsView: View {
     ///
     /// **Text musí říct, kde ta hranice končí**, jako u odesílání a u agenta: předvyplní se to,
     /// co pak odesílám — a odesílání se tím nemění, pořád je za potvrzením s celým payloadem.
+    ///
+    /// **Od #521 zapíná i osmou session** (tělo review v mém hlasu), a je to vědomě **jeden**
+    /// přepínač: tělo je část návrhu, ne samostatná funkce. Text to proto musí říct — knoflík,
+    /// který pouští session a nepřizná to, je horší než knoflík navíc.
     private var autoDraft: some View {
         Section {
             Toggle("Složit návrh review po doběhnutí reviewerů", isOn: $settings.draft.global.autoDraft)
         } header: {
             Text("Návrh review")
         } footer: {
-            Text("Výchozí stav je **vypnuto**. Když se zapne, převezme aplikace po doběhnutí **všech** reviewerů do rozdělaného review nálezy, u kterých si je reviewer jistý (`CONFIRMED`) a nikdo mu neodporuje. Ostatní zůstanou **sporné** — u nálezu je vidět značka i důvod a převzít je jde kliknutím. Odmítnutý nález se nepřevezme nikdy. **Nic se tím neodesílá**: review odchází pořád jedině z potvrzení, ve kterém je celý payload, a verdikt zůstává návrhem. Návrh se dá zahodit jedním tlačítkem a panel je pak prázdný jako bez téhle volby. Repo si to může přebít.")
+            Text("Výchozí stav je **vypnuto**. Když se zapne, převezme aplikace po doběhnutí **všech** reviewerů do rozdělaného review nálezy, u kterých si je reviewer jistý (`CONFIRMED`) a nikdo mu neodporuje. Ostatní zůstanou **sporné** — u nálezu je vidět značka i důvod a převzít je jde kliknutím. Odmítnutý nález se nepřevezme nikdy. **Nic se tím neodesílá**: review odchází pořád jedině z potvrzení, ve kterém je celý payload, a verdikt zůstává návrhem. Návrh se dá zahodit jedním tlačítkem a panel je pak prázdný jako bez téhle volby. **Tělo review k tomu napíše session bez nástrojů** (#521) — podle tvých posledních odeslaných review, a je to text v composeru, který jde přepsat; co stál, je vidět v `Průběhu`. Repo si to může přebít.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
