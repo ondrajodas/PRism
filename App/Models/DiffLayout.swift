@@ -31,4 +31,14 @@ enum DiffLayout: String, CaseIterable, Codable, Hashable, Sendable {
         case .split: "rectangle.split.2x1"
         }
     }
+
+    /// Nápověda u segmentu v liště. Stojí **u každého segmentu zvlášť**, ne u celého přepínače:
+    /// od #593 se přepínač v tísni srazí na samotné ikony, a pak je nápověda jediné, co jméno
+    /// pohledu nese (`Policy.diffToolbarFloor(.layout)`).
+    var help: String {
+        switch self {
+        case .unified: "Pod sebou — odebrané a přidané řádky v jednom sloupci"
+        case .split: "Vedle sebe — starý obsah vlevo, nový vpravo"
+        }
+    }
 }

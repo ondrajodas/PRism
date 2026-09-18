@@ -4360,13 +4360,64 @@ znovu — ne prázdno“*). Konkrétně:
 - **Oba tiché `guard`y hlásí** (`AppStore.unwiredAnnotationFailure`, jedna věta pro obě místa).
   Tichý zůstává **jediný** — `isTerminating`, a smí být tichý proto, že okno mizí.
 
-**Do lišty se to vejde, ale ne zadarmo, a to se změřilo** ([čísla](testovani.md#kolik-místa-v-liště-stojí-popsat-změny-524)).
+**Do lišty se to vejde, ale ne zadarmo, a to se změřilo** ([čísla](testovani.md#kolik-si-který-prvek-lišty-bere-524-593)).
 Lišta v plné výbavě si v podlahovém okně (700 b → štěrbina **572 b**) říká o **819 bodů**, tedy
 **přetéká už dneska, i bez téhle akce** — je to známá vlastnost z #219, ne něco, co přineslo #524.
-Celý popisek stojí dalších **104 b**. Proto je `Popsat změny` **jediný prvek v liště bez
-`fixedSize()` a se zápornou prioritou rozvržení**: když se místa nedostává, `ViewThatFits` ho
-srazí na **samotnou ikonu** (13 b) a to, co v liště bylo dřív, zůstane, kde bylo. Useknutý
-`Popsat…` by byl horší než ikona — nese půl slova a vypadá jako porucha.
+Celý popisek stojí dalších **95 b**. `Popsat změny` bylo do #593 **jediný prvek v liště bez
+`fixedSize()` a se zápornou prioritou rozvržení**, takže se srazilo na **samotnou ikonu** (13 b)
+a to, co v liště bylo dřív, zůstalo, kde bylo. Useknutý `Popsat…` by byl horší než ikona — nese
+půl slova a vypadá jako porucha. **Od #593 to není vlastnost tohohle jednoho tlačítka, ale pořadí,
+ve kterém ustupuje celá lišta** (viz *Lišta nad diffem ustupuje podle pořadí* níž).
+
+### Lišta nad diffem ustupuje podle pořadí (#593)
+
+Ta výše změřená věta — *lišta v plné výbavě si v podlahovém okně říká o 923 bodů do štěrbiny 572*
+— byla do #593 vlastnost, se kterou se nedalo nic dělat: **srazit se umělo jedině `Popsat změny`**,
+protože to byl jediný prvek bez `fixedSize()`. O tom, co v tísni ustoupí, tedy rozhodovalo, v jakém
+pořadí se prvky do lišty přidávaly. #593 z toho dělá **výčet**, a rozdělení zodpovědností je
+obvyklé: `Policy` rozhoduje, kresba kreslí obě podoby, `Layout` měří a **předává** šířku.
+
+| kde | co drží |
+|---|---|
+| `Policy.DiffToolbarItem` | osm prvků, o kterých se rozhoduje |
+| `Policy.diffToolbarFloor(_:)` | **na co se prvek srazí** — `full`, `short`, `icon` |
+| `Policy.diffToolbarSide(_:)` | vlevo (pohled, procházení), nebo vpravo |
+| `Policy.diffToolbarLadder` | **pořadí ustupování**, sedm prvků; `navigation` v něm není |
+| `Policy.diffToolbarRoom(available:measures:)` | šířka pro každý prvek, kdo ustoupil, kdo se usekl |
+| `DiffToolbarLayout` | změří podviews (`.unspecified` a `full - 1`) a šířku **předá** |
+| `DiffToolbar` | kreslí **obě podoby** každého prvku (`ViewThatFits`) |
+
+**Pořadí vede jedna věta: akce ustupují dřív než informace a věta dřív než číslo.** Tedy
+`annotate` (nejmladší přírůstek, stav nese i ikona) → `search` (má `⌘F`, lupa se nevysvětluje) →
+`fold` (pohodlí, stav unese šipka) → `width` (číslo zůstane, ubude `na stranu`) →
+`missingThreads`, `unreadable` (nejdřív ta delší věta) → **`layout` jako poslední**, protože
+popisky segmentů jsou to, co #219 z lišty vydobylo. **`navigation` v pořadí není** — je to jediná
+věc v liště, která se používá při každém review, a srazit se dá jedině tak, že přestane dělat to,
+proč tam je.
+
+**Čtyři věci, na kterých to stojí, a každá je změřitelná:**
+
+- **Rozměr se měří na tom, na čem se kreslí** (#236). `Layout` se každého podview zeptá dvakrát:
+  `.unspecified` dá celou podobu, **`full - 1`** tu sraženou. Ta druhá otázka je past: proposal
+  **0** by sraženou podobu vybral taky, ale vrátil by její **minimum** (u zkráceného textu šířku
+  výpustky), kdežto `full - 1` je pro ni štědrý, takže odpoví svým ideálem.
+- **`Menu` svému popisku šířku nepředává.** `ViewThatFits` **uvnitř** popisku nabídky `Sbalit vše`
+  ustoupil o jediný bod (změřeno `full 51, floor 50`), takže se `ViewThatFits` obaluje **celá
+  nabídka**: dvě nabídky jako dvě podoby, vzniká z nich vždycky jen jedna. Hlídá to test
+  (*Co má podle Policy ustoupit, to je i v kresbě užší*), protože vyhlásit ustoupení a nenakreslit
+  ho je právě ta vada, kterou #593 opravuje.
+- **Nic se nekreslí za hranou.** Když se lišta nevejde ani po celém ustoupení — a to je **jediný
+  stav: obě vzácná varování naráz** —, ubírá `Policy` z **nejširšího prvku vpravo** a nikdy pod
+  `Policy.diffToolbarItemFloor` (22 b). Vlevo se neusekává nic. Varování mají proto **tři** podoby,
+  ne dvě: celou větu, číslo a **samotný trojúhelník**; bez té třetí by ze `3 řádky` zbylo `3…`,
+  tedy půl slova.
+- **Co ubude z lišty, je v nápovědě.** Věty varování skládá `Policy.unreadableLinesWarning(_:)`,
+  `Policy.missingThreadsWarning(_:)` a `Policy.diffWidthWarning(characters:contentWidth:)` — vždy
+  celá věta, sražená podoba a `help`. Nápověda přepínače pohledu se přesunula **k segmentům**
+  (`DiffLayout.help`): nad oběma by ve sražené podobě neřekla, který je který.
+
+Kolik si který prvek bere, jak vypadá lišta na pásmu šířek a co stojí přerovnání proti `HStacku`,
+je v [`docs/testovani.md`](testovani.md#kolik-si-který-prvek-lišty-bere-524-593).
 
 ### Anotace v diffu — kresba (#525)
 

@@ -896,6 +896,12 @@ kliknutí; když se mezera rozbalí celá, hunky se slijí a hlavička mezi nimi
 se dotáhne sám** — nález bez svého kódu se nedá posoudit. Skok kamkoli v diffu je **stromem souborů** vlevo.
 `Zobrazit jen diff` se schovalo do nabídky u `Rozbalit vše` (#219).
 
+**V úzkém okně se lišta nad diffem sráží podle pořadí, ne podle náhody** (#593). Popisky ustupují
+jeden po druhém: nejdřív `Popsat změny`, pak `Hledat`, `Sbalit vše` a varování o šířce (z
+`45 znaků na stranu` je `45 znaků`), a jako poslední přepínač pohledu, ze kterého zbudou ikony.
+**Procházení nálezů neustoupí nikdy** a nic z lišty nezmizí — co se srazí, zůstane klikatelné
+a celou větu drží nápověda.
+
 **Hledat v diffu jde na ⌘F** (#152). Pod lištou se otevře pruh: pole, počet výskytů (`4 z 17`),
 šipky `⌘G` / `⌘⇧G` (v poli i `⏎` a `⇧⏎`), kapsle `Aa` na rozlišování velikosti a `✕` s `esc`. Skok
 míří **na řádek, ne na jeho okolí** — výskyt přistane ve třetině shora, a v pohledu vedle sebe se

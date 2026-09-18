@@ -9454,3 +9454,41 @@ proběhla a je popsaná v PR. **Druhá: snímek běžící aplikace nad skutečn
 ve slotu nedoběhl (v zásuvce běžel `claude --resume`, takže se aplikace zeptala a dialog zůstal
 stát; session nemá *Zpřístupnění*, takže na něj nejde kliknout) a druhá instance z `build.noindex`
 frontu nenačte. **Proklikání zbývá na člověka.**
+
+## #593 — Lišta nad diffem ustupuje podle pořadí, ne podle náhody (Průběžné, bez zákresu)
+
+Vyšlo to z měření u #524: **lišta v plné výbavě si v podlahovém okně (700 b → štěrbina 572 b)
+říká o 923 bodů a přetéká už bez nové akce.** Do #593 se v tísni srazil **jediný prvek** —
+`Popsat změny`, a to jen proto, že jako jediný neměl `fixedSize()`. O pořadí ustupování tedy
+rozhodovalo, v jakém pořadí se prvky do lišty přidávaly, a samotné to jedno ustoupení navíc
+nestačilo: chybělo 351 bodů, `Popsat změny` má odkud dát 82.
+
+**Hotovo:** lišta je vlastní `Layout` (`DiffToolbarLayout`), který prvky **změří** a šířku jim
+**předá** (#220, #236). Rozhodnutí je výčet v `Policy`: sražená podoba (`full` / `short` / `icon`),
+strana a **pořadí ustupování** — `annotate`, `search`, `fold`, `width`, `missingThreads`,
+`unreadable`, `layout`. Vede ho jedna věta: *akce ustupují dřív než informace a věta dřív než
+číslo.* **Procházení nálezů neustupuje vůbec** a **vlevo se neusekává nic**.
+
+**Na obrazovce:** v podlahovém okně zbudou z `Popsat změny`, `Hledat` a `Sbalit vše` ikony,
+z `45 znaků na stranu` je `45 znaků` a z přepínače pohledu jsou ikony bez popisků — a zbyde 28
+bodů volných. V 700 b už přepínač popisky udrží, v 900 ustoupí jen popis změn, ve 1 400 nic.
+Co z lišty ubude, drží **nápověda**; u přepínače se proto přesunula k jednotlivým segmentům
+(`DiffLayout.help`).
+
+**Mockup se nekreslil a přidělená sekce `s63` zůstala volná** — z měření vyšlo, že pořadí
+ustupování stačí a žádný prvek se z lišty přesouvat nemusí.
+
+**Změnilo se jedno rozhodnutí proti zadání.** Varování mají **tři** podoby, ne dvě: celou větu,
+číslo a samotný trojúhelník. Ta třetí je tam kvůli jedinému stavu, ve kterém ustoupení nestačí
+(obě vzácná varování naráz) — bez ní by ze `3 řádky` zbylo `3…`, tedy půl slova, které vypadá
+jako porucha.
+
+Přibylo **28 testů ve dvou sadách** (`DiffToolbarLadderTests` nad `Policy`, `DiffToolbarRoomTests`
+nad kresbou v pásmu šířek) a sonda umí vyfotit lištu na čtyřech šířkách. **Že se nic nekreslí za
+hranou, tvrdí bitmapa** — lišta se přibije na šířku štěrbiny a hostitel je o 200 bodů širší, takže
+přetečení se neoříznulo. Regrese ověřena vložením regrese: s prázdným pořadím ustupování spadne 14
+tvrzení a inkoust sahá 91 bodů za hranu. Změřil se i **druhý konec** (#275): 400 přerovnání stojí
+1,449 s s vlastním `Layoutem` proti 1,567 s s `HStackem`, tedy dražší to není.
+
+**Neověřená mezera: PR neprošel Copilotem** — výpadek 18. 9., na pokyn uživatele se nepouštěl;
+vlastní revize diffu proběhla a je popsaná v PR.
