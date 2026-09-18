@@ -2487,8 +2487,20 @@ na PR založil. Za každé z nich pak aplikace ví, co se s ním stalo: *opraven
 že mi někdo odpověděl, se bere **z konverzace**, ne od modelu — na zodpovězené vlákno se session
 vůbec neptá a v promptu to má i napsané. Model rozhoduje jedině mezi *opraveno* a *beze změny*,
 a *nejde říct* je jeho poctivá třetí odpověď. Když je vlákno zodpovězené a model zároveň tvrdí
-„opraveno“, vyhraje *odpovězeno*: fakt přebíjí tvrzení. **V okně z toho zatím není vidět nic než
-věta v nápovědě u tlačítka** (kolik komentářů se veze v téže session) — kreslí se to až v #523.
+„opraveno“, vyhraje *odpovězeno*: fakt přebíjí tvrzení.
+
+**Od #523 je to vidět v `Přehledu`** jako karta **Odpověď na tvoje review z 29. 8.**, hned nad
+pruhem *Od tvé poslední návštěvy*. Řádek na každý můj komentář (`✓ ř. 81 · prázdný fallback otočen
+na výjimku — opraveno v 9c1de02`, `↩ … — odpověděl sykora-ji: „…“`, `○ … — bez odpovědi · řádek
+beze změny`), pod nimi pruh `návrh: Komentář · 1 bez odpovědi` a dvě tlačítka: `Otevřít zbývající
+(ř. 60)` a `Schválit i tak`. Když nic nezbývá, je návrh `Schválit`, tělo review je předepsané
+(*„Díky, všech 5 opraveno.“*) a kliknutí otevře **týž potvrzovací sheet jako `Odeslat` v panelu** —
+odeslat se odtud nedá nic. **Aplikace neschvaluje přes nezodpovězený bod**: s jedním zbývajícím je
+návrh `Komentář` a tělo se nepředepisuje vůbec. Rozepsanou větu předpis nikdy nepřepíše.
+
+Karta se kreslí **jen na cizím PR** (schválení vlastního GitHub odmítne) a **přiznává, o čem
+neví**: že se stránka vláken usekla, že kontrola proti téhle hlavě neběžela, nebo že nedoběhla —
+tři různé věty. Přebytek opravených bodů se **počítá, neořezává** (`+ 2 další opravené body`).
 
 Tři věci, které z toho **neplynou**. Odznak nálezy **nemaže ani neschovává** — je to tvrzení
 modelu, ne fakt, a sundat nález smí jedině odmítnutí (#113), za kterým stojí člověk. Kontrola se
@@ -2509,6 +2521,7 @@ Co přijde a co v tom bude:
 | Review našlo nálezy | `3 nálezy · 1 blokuje`, pod tím nejzávažnější nález (`correctness: …`) a na třetím řádku `owner/repo#123` |
 | Review našlo nálezy, ale nic nezastavuje merge | `3 nálezy · nic neblokuje` |
 | Review je čisté | `Čisté review` a `Reviewer nenašel žádný nález.` |
+| Autor odpověděl na moje review (#523) | `sykora-ji opravil 3 z 5`, pod tím `1 bez odpovědi` a `owner/repo#123`. Chodí po kontrole nálezů na cizím PR, kde mám odeslaná vlákna; když se nepohnulo nic, nechodí |
 | Review se nepovedlo | `Review se nepovedlo` a pod tím důvod, se kterým se dá něco dělat — spadlá session, timeout bez nálezů, selhaná pracovní kopie |
 | Na **mém** PR se ozval někdo jiný | `2 nové komentáře a 1 review`, pod tím ta nejnovější věta (`odinuv: opravdu to potřebuje ten mutex?`) a na třetím řádku `owner/repo#123` |
 
