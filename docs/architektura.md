@@ -3790,6 +3790,67 @@ mám jen komentáře, znamená tlačítko na místě, kde dosud nebylo, a to je 
 veze v téže session, protože session stojí peníze a nápověda o délce promptu nesmí tvrdit míň,
 než co se doopravdy pošle. Kreslí to #523.
 
+### Karta druhého kola, hláška a předepsané schválení (#523)
+
+Data z #522 se kreslí v `Přehledu` jako karta **Odpověď na tvoje review z 29. 8.** (návrh, sekce
+60): řádek na komentář, pruh s návrhem verdiktu a dvě tlačítka. Skládá ji `Policy.replyCard`
+(`App/Policy/ReviewReplyCard.swift`), kreslí `ReviewReplyCardView`, drát vede přes
+`AppStore+Replies`.
+
+**Vlastní vrstva nad reportem, ne jeho rozšíření.** Report nese fakta a čte ho i notifikace;
+karta z nich skládá **návrh** a **předepsané tělo**, tedy tvrzení, které se dá vyslovit jedině
+v okně. Kdyby popisky tlačítek ležely v reportu, vozily by se do banneru.
+
+**Schválení je návrh, ne akce — tvrdá podmínka č. 1 se nemění ani o metodu.**
+`AppStore.prescribeReplyApproval(for:)` dělá právě dvě věci a obě jsou zápis do `ReviewDraft`,
+tedy do souboru v cache: doplní verdikt `APPROVE` a — **jen když je tělo prázdné** — předepsanou
+větu (`Policy.prescribedBody`). Potvrzení otevírá view toutéž cestou jako tlačítko `Odeslat`
+v panelu (`store.submission(for:)`), takže odeslat smí dál jedině `ReviewPublishing` po dvou
+kliknutích nad celým payloadem. `ReviewVerdict` zůstává návrh **z nálezů**; návrh druhého kola
+je proto **vlastní typ** (`Policy.ReviewReplyProposal`), kde `Komentář` je plnohodnotná odpověď
+(„neschvaluju, protože něco zbývá“) — v `ReviewVerdict` schválně není.
+
+**Návrh rozhoduje jediná podmínka: zbývá něco bez odpovědi?** `opraveno` a `odpovězeno` jsou obojí
+vyřízený bod, takže jejich poměr do návrhu nemluví — do **těla** ano: věta se skládá z obou čísel,
+protože `všech 5 opraveno` nad čtyřmi opravami a jednou odpovědí je tvrzení navíc. **Přes
+nezodpovězený bod se tělo nepředepisuje vůbec** a tlačítko se jmenuje `Schválit i tak`: poděkovat
+za bod, který zůstal bez odpovědi, znamená položit člověku do úst větu, která není pravda.
+
+**Useknutá stránka vláken bere schválení taky** (`isTruncated` nebo `missingThreads > 0`), i když
+nezodpovězený bod není: o části PR se neví nic. Je to tentýž směr opatrnosti, kvůli kterému bere
+approve celému PR jediný zahozený nález (`suggestedVerdict`). A **chybějící data se přiznají**
+(`Policy.ReviewReplyCaveat`) — useknutá stránka, chybějící kontrola a kontrola, která nedoběhla,
+jsou **tři různé věty**, protože každá se spravuje jinde.
+
+**Kdy se karta nekreslí vůbec**: na **vlastním** PR (schválení vlastního PR GitHub odmítne —
+tatáž brána jako u `prefillableSuggestion`, #114), nad **nenačtenou** konverzací (`unknown` není
+„žádné nemám“) a bez jediného mého vlákna.
+
+**Dvě karty nad sebou, ne jedna — a je to změna proti zákresu Z3.** Ten kreslil druhé kolo jako
+*podobu* pruhu `.since`. Slít je doopravdy do jedné by sundalo odrážku o přepsané historii, odznak
+`nálezy zastaraly` i obě tlačítka toho pruhu. Karta druhého kola je proto **akcentová**:
+`--stale` znamená „platilo to, dneska už ne“, tahle znamená „je co udělat“ — a dvě okrové karty
+nad sebou by splynuly v jednu.
+[Záznam rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--karta-druhého-kola-stojí-vedle-pruhu-od-minule-523).
+
+**Řádky se řadí `opraveno → odpovězeno → bez odpovědi`** a **sčítá se jedině přebytek opravených**
+(`Policy.replyCardFixedLimit`, pět; `.lchip.more` #390 je precedens). Strop je jen na nich
+schválně: `odpovězeno` nese větu kolegy a `bez odpovědi` je důvod, proč se na kartu kouká. Co se
+nevejde do šířky, se **zalamuje, neořezává** — včetně sha v razítku hlavičky.
+
+**Hláška jde toutéž branou jako ostatní** (#414). `Policy.replyRoundNotification` a
+`Policy.replyRoundActivity` vydají banner *„sykora-ji opravil 3 z 5“* + *„1 bez odpovědi“* a řádek
+v `Dění` (`ActivityEvent.Kind.replyRound`, vede na `Přehled`). Spouští je
+`AppStore.notifyAboutReplyRound(on:)` **za uložením kontroly** — dřív se osa `opraveno` nemá odkud
+vzít. Tři věci, které se z toho nehlásí: **vlastní PR**, **PR bez mého vlákna** a běh, po kterém
+se **nepohnulo nic** (zpráva „nic nového“ je první důvod, proč si člověk hlášky vypne). Přepínač
+je **vlastní** (`NotificationEvent.replies`) a má vlastní `replacementGroup`: že autor opravil tři
+body, nemá přebít výsledek našeho revieweera na tomtéž PR.
+
+**`Otevřít zbývající (ř. 60)`** přepne do `Konverzace` a vlákno **rozbalí**
+(`AppStore.revealReplyThread`) — cíl, na kterém není co přečíst, je k nerozeznání od skoku, který
+se nepovedl (tatáž úvaha jako u `revealFinding`).
+
 ### Review jen přírůstku (#517)
 
 Po pushi se reviewer neptá na celý diff znovu: dostane **rozsah `<minulá hlava>…<hlava>`** a k němu

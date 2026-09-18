@@ -3439,6 +3439,51 @@ tr.sel td.sg { background: var(--accent-weak); }
    tlačítko nehledá. */
 .sg-apply { margin-left: auto; font-size: 11px; color: var(--ink-3); }
 
+/* --- karta druhého kola (sekce 60) ----------------------------------------------------
+   **Vlastní šasi vedle `.since`, ne jeho varianta.** Návrh Z3 kreslil druhé kolo *jako podobu*
+   pruhu od minule; v okně stojí obě karty nad sebou, protože ta první odpovídá na „co přibylo“
+   (a nese odrážku o přepsané historii, odznak `nálezy zastaraly` a obě svá tlačítka), kdežto
+   tahle na „co se stalo s tím, na co jsem se ptal“. Dvě okrové karty nad sebou by navíc splynuly
+   v jednu — proto je tahle **akcentová**: `--stale` znamená „platilo to, dneska už ne“, tohle
+   znamená „je co udělat“.
+
+   Jméno je `rpl-`, ne `rv-`: `.rv-list`, `.rv-row` a `.rv-av` už patří sekci reviewerů v panelu
+   (#390) a naholo psané jméno, které si někdo bere jako vnořené, je past z téhož issue. */
+.rpl {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.rpl .hd { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 620; }
+.rpl .hd .g { color: var(--accent); }
+/* Čas se v okně **přepočítává sám** (`před 12 min`), tady stojí staticky — a nese `prověřeno`,
+   ne `push`: karta ví, kdy běžela **naše kontrola** a proti jaké hlavě, ne kdy kdo pushnul. */
+.rpl .hd .when { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); font-weight: 400; }
+.rpl-rows { display: flex; flex-direction: column; gap: 3px; }
+/* Řádek je **jeden odstavec, ne tři sloupce**: v `Přehledu` úzkém 128 bodů (viz sekce 02) by se
+   tři pružné části zalomily každá zvlášť a z řádku by byly tři odstavce. Zalomí se proto jako
+   věta — a **neořezává se**, protože co se nevejde, je zrovna to, kvůli čemu se na kartu kouká. */
+.rpl-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.rpl-row .g { width: 13px; flex: none; text-align: center; font-size: 10px; font-weight: 600; }
+.rpl-row.ok  .g { color: var(--ok); }
+.rpl-row.acc .g { color: var(--accent); }
+/* Ztlumená, ne červená: `bez odpovědi` **není porucha** a už vůbec ne „ignoroval mě“. */
+.rpl-row.idle .g { color: var(--ink-3); }
+.rpl-row b { color: var(--ink); font-weight: 580; }
+.rpl-row .m { color: var(--ink-3); }
+/* Přebytek **opravených** se počítá, neořezává (tentýž precedens jako `.lchip.more`, #390).
+   Strop je jedině na nich: `odpovězeno` nese větu kolegy a `bez odpovědi` je důvod, proč se na
+   kartu kouká — složit je do počtu by schovalo tu polovinu, která něco chce. */
+.rpl-more { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+/* Čeho karta neví, se **říká**, ne mlčí — useknutá stránka vláken, chybějící kontrola, kontrola,
+   která nedoběhla. Tři různé věty, protože každá se spravuje jinde. */
+.rpl-cav { font-size: 11px; color: var(--ink-3); }
+.rpl-acts { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.rpl-acts .sp { flex: 1; }
+
 /* --- úzké okno -------------------------------------------------- */
 @media (max-width: 1040px) {
   .doc { grid-template-columns: minmax(0, 1fr); }
@@ -7921,6 +7966,208 @@ tr.sel td.sg { background: var(--accent-weak); }
           <code>3 b × N</code> a <code>2 b × (N − 1)</code> se šířkou pásu odporují (u 300 souborů
           1 498 bodů proti osmi stům), takže by ze pásu byla tečkovaná linka. Shlukování ani strop
           na počet segmentů se <b>nedělají</b> — znamenaly by, že soubor v pásu není.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="section" id="s60">
+    <div class="section-head">
+      <div class="eyebrow">60 — Přehled PR · druhé kolo za minutu (Z3a)</div>
+      <h2>Co autor udělal s mým review — a předepsané schválení, když nic nezbývá</h2>
+      <p class="muted">
+        <b>Dnes</b> (po #522) aplikace <b>umí spárovat</b> moje odeslané komentáře s tím, co se
+        s nimi stalo: <em>opraveno</em> (verdikt kontroly nad novými commity), <em>odpovězeno</em>
+        (fakt z konverzace) a <em>bez odpovědi</em> ve třech podobách. Z okna z toho ale není
+        vidět <b>nic</b> — data leží v záznamu a nikdo je nekreslí.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: karta <em>Odpověď na tvoje review</em> nad pruhem <em>Od tvé poslední
+        návštěvy</em>, řádek na komentář, pruh s návrhem verdiktu a dvě tlačítka. Když nic
+        nezbývá, je návrh <em>Schválit</em>, tělo je předepsané (<em>„Díky, všech 5 opraveno.“</em>)
+        a kliknutí otevře <b>týž sheet jako dnes</b>. Se zbývajícím bodem je návrh <em>Komentář</em>
+        a hlavní tlačítko je <code>Otevřít zbývající</code> — <b>aplikace neschvaluje přes
+        nezodpovězený bod</b>.
+      </p>
+      <p class="muted">
+        <b>Dvě karty, ne jedna — a je to změna proti zákresu Z3.</b> Ten kreslil druhé kolo jako
+        <em>podobu</em> pruhu <code>.since</code>. Slít je doopravdy do jedné by ale sundalo
+        odrážku o přepsané historii, odznak <code>nálezy zastaraly</code> i obě tlačítka toho pruhu
+        — a zrovna po pushi autora platí nejvíc. Stojí proto nad sebou, a druhá je
+        <b>akcentová</b>: <code>--stale</code> znamená „platilo to, dneska už ne“, tahle karta
+        znamená „je co udělat“. Dvě okrové karty nad sebou by navíc splynuly v jednu.
+      </p>
+    </div>
+
+    <div class="pane new">
+      <div class="tag"><i></i>Návrh · Přehled po pushi autora — druhé kolo nad pruhem od minule</div>
+      <div class="frame flat" style="padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+        <div class="rpl">
+          <div class="hd">
+            <span class="g">↩</span>
+            <span>Odpověď na tvoje review z 29. 8.</span>
+            <span class="when">prověřeno před 12 min · 9c1de02</span>
+          </div>
+          <div class="rpl-rows">
+            <div class="rpl-row ok"><span class="g">✓</span><span class="rpl-more">+ 2 další opravené body</span></div>
+            <div class="rpl-row ok"><span class="g">✓</span><span><b>ř. 81</b> · prázdný fallback otočen na výjimku <span class="m">— opraveno v 9c1de02</span></span></div>
+            <div class="rpl-row ok"><span class="g">✓</span><span><b>ř. 41</b> · TTL jde přebít z konfigurace <span class="m">— opraveno v 4b7e1a0</span></span></div>
+            <div class="rpl-row acc"><span class="g">↩</span><span><b>ř. 119</b> · batch endpoint pro předehřev <span class="m">— odpověděl sykora-ji: „necháme na AJDA-570“</span></span></div>
+            <div class="rpl-row idle"><span class="g">○</span><span><b>ř. 60</b> · nonce z konstruktoru <span class="m">— bez odpovědi · řádek beze změny</span></span></div>
+          </div>
+          <div class="rpl-acts">
+            <span class="pill run">návrh: Komentář · 1 bez odpovědi</span>
+            <span class="sp"></span>
+            <span class="mini pri">Otevřít zbývající (ř. 60)</span>
+            <span class="mini">Schválit i tak</span>
+          </div>
+        </div>
+
+        <div class="since">
+          <div class="hd">
+            <span>⟲</span>
+            <span>Od tvé poslední návštěvy</span>
+            <span class="when">včera 18:42</span>
+            <span class="x" title="Označit za přečtené">×</span>
+          </div>
+          <ul>
+            <li><b>2 nové commity</b> od sykora-ji — poslední <code>9c1de02</code></li>
+          </ul>
+          <div class="row">
+            <span class="pill stale">nálezy zastaraly</span>
+            <span class="mini pri">Pustit review znovu</span>
+            <span class="mini">Ukázat, co přibylo</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · když nic nezbývá</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="rpl">
+            <div class="hd">
+              <span class="g">↩</span>
+              <span>Odpověď na tvoje review z 29. 8.</span>
+              <span class="when">prověřeno před 3 min · 9c1de02</span>
+            </div>
+            <div class="rpl-rows">
+              <div class="rpl-row ok"><span class="g">✓</span><span><b>ř. 81</b> · prázdný fallback otočen na výjimku <span class="m">— opraveno v 9c1de02</span></span></div>
+              <div class="rpl-row ok"><span class="g">✓</span><span><b>ř. 60</b> · nonce z konstruktoru <span class="m">— opraveno v 9c1de02</span></span></div>
+            </div>
+            <div class="rpl-acts">
+              <span class="pill run">návrh: Schválit</span>
+              <span class="sp"></span>
+              <span class="mini pri">Schválit</span>
+            </div>
+          </div>
+          <p style="margin-top: 12px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+            Tělo je předepsané: <em>„Díky, všech 2 opraveno.“</em> Kliknutí otevře <b>týž sheet jako
+            dnes</b> (sekce 08) — pre-flight hlavy, celý payload a dvě kliknutí. Rozepsanou větu
+            předpis <b>nepřepíše</b>.
+          </p>
+        </div>
+      </div>
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · když se o všem neví</div>
+        <div class="frame flat" style="padding: 14px;">
+          <div class="rpl">
+            <div class="hd">
+              <span class="g">↩</span>
+              <span>Odpověď na tvoje review</span>
+            </div>
+            <div class="rpl-rows">
+              <div class="rpl-row idle"><span class="g">○</span><span><b>ř. 60</b> · nonce z konstruktoru <span class="m">— bez odpovědi · kontrola se k tomu nevyjádřila</span></span></div>
+            </div>
+            <div class="rpl-cav">Vlákna se do odpovědi nevešla celá — o 4 dalších se tady nemluví.</div>
+            <div class="rpl-cav">Kontrola nálezů proti téhle hlavě neběžela, takže <code>opraveno</code> odsud vyjít nemůže. Pusť ji z tabu Nálezy.</div>
+            <div class="rpl-acts">
+              <span class="pill run">návrh: Komentář · 1 bez odpovědi</span>
+              <span class="sp"></span>
+              <span class="mini pri">Otevřít zbývající (ř. 60)</span>
+              <span class="mini">Schválit i tak</span>
+            </div>
+          </div>
+          <p style="margin-top: 12px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5;">
+            <b>Chybějící data se přiznají</b>, nemlčí: useknutá stránka vláken, chybějící kontrola
+            a kontrola, která nedoběhla, jsou <b>tři různé věty</b>. Bez nich by <em>2 opravené ze
+            3</em> platilo o vláknech, která dorazila, a o těch ostatních by tvrdilo, že nejsou.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <h3>Že se něco pohnulo, se dá poznat i od stolu</h3>
+    <p class="muted">
+      Banner má <b>vlastní přepínač</b> (<em>„Autor odpověděl na moje review“</em>) vedle těch
+      o výsledku review: kdo chce vědět, jak dopadl náš reviewer, nemusí chtít vyrušit u každého
+      pushe autora — a naopak. Řádek v <em>Dění</em> vzniká <b>i bez banneru</b> a pozná se to
+      chipem <code>bez banneru</code>. Když se nepohnulo nic, <b>nechodí nic</b>.
+    </p>
+    <div class="pane new">
+      <div class="tag"><i></i>Banner · titulek, co zbývá, PR</div>
+      <div class="frame flat" style="padding: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 3px; font-size: 12.5px;">
+          <b>sykora-ji opravil 3 z 5</b>
+          <span style="color: var(--ink-2);">1 bez odpovědi</span>
+          <span style="color: var(--ink-3); font-family: var(--mono); font-size: 11.5px;">keboola/job-queue#727</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">183</span>
+        <span class="body">
+          <b>Schválení je návrh, ne akce</b>
+          <span>Tlačítko <code>Schválit</code> zapíše <b>verdikt a tělo do draftu</b> — tedy do
+          souboru v cache — a otevře potvrzení. Odeslat smí dál jedině <code>ReviewPublishing</code>
+          na výslovný pokyn a s celým payloadem na očích; tvrdá podmínka č. 1 se nemění ani
+          o metodu. <code>ReviewVerdict</code> zůstává návrh z <b>nálezů</b>, takže návrh druhého
+          kola je vlastní typ: <code>Komentář</code> je v něm plnohodnotná odpověď („neschvaluju,
+          protože něco zbývá“), kdežto v <code>ReviewVerdict</code> schválně není.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">184</span>
+        <span class="body">
+          <b>Přes nezodpovězený bod se nepředepisuje ani věta</b>
+          <span>Se zbývajícím bodem je tlačítko <code>Schválit i tak</code> — <b>jiné tlačítko</b>,
+          i když dělá totéž — a tělo se <b>nepředepisuje vůbec</b>. Poděkovat za bod, který zůstal
+          bez odpovědi, znamená položit člověku do úst větu, která není pravda. Věta se navíc
+          skládá z <b>obou</b> čísel: <em>všech 5 opraveno</em> nad čtyřmi opravami a jednou
+          odpovědí by bylo tvrzení navíc.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">185</span>
+        <span class="body">
+          <b>Tři podoby „bez odpovědi“ se neslijí</b>
+          <span><em>řádek beze změny</em> je verdikt, <em>z kódu to nejde říct</em> je poctivá
+          třetí odpověď (#522) a <em>kontrola se k tomu nevyjádřila</em> není ani jedno — neběžela,
+          běžela proti jiné hlavě, nebo na ten index nedorazila odpověď. A <b>ani jedna neznamená
+          „ignoroval mě“</b>, proto je značka ztlumená, ne červená.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">186</span>
+        <span class="body">
+          <b>Useknutá stránka bere schválení</b>
+          <span>Když se vlákna do odpovědi nevešla celá, je návrh <code>Komentář</code>, i když
+          nezodpovězený bod není: o části PR se neví nic a <em>Schválit</em> by tvrdilo víc, než
+          data unesou. Je to tentýž směr opatrnosti, kvůli kterému bere approve celému PR jediný
+          zahozený nález.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">187</span>
+        <span class="body">
+          <b>Na vlastním PR karta není vůbec</b>
+          <span>Ne zašedlá — <em>odpověď na tvoje review</em> je otázka o cizí práci a schválení
+          vlastního PR GitHub odmítne (422). Tatáž brána jako u předvyplněného verdiktu (#114).
+          Banner ani řádek v <em>Dění</em> odtud taky nechodí.</span>
         </span>
       </div>
     </div>

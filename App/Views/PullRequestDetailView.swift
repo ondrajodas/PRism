@@ -1429,6 +1429,17 @@ struct PullRequestDetailView: View {
             rerun: { store.startReview(for: pullRequest.id) },
             showAdded: showAdded,
             dismissChanges: { store.markChangesAsSeen(for: pullRequest.id) },
+            // Druhé kolo (#523). Karta se skládá **při čtení** z uložené kontroly a živé
+            // konverzace, takže se po odpovědi kolegy opraví bez dalšího běhu.
+            replyCard: store.replyCard(for: pullRequest.id),
+            // **Předepíše draft a otevře týž sheet jako `Odeslat` v panelu** — nic neodesílá.
+            // `submission(for:)` vrátí `nil`, když odeslat nejde, takže nad zastaralým draftem
+            // se potvrzení neotevře ani omylem (tvrdá podmínka č. 1).
+            prescribeApproval: {
+                store.prescribeReplyApproval(for: pullRequest.id)
+                submission = store.submission(for: pullRequest)
+            },
+            openRemainingReply: { store.revealReplyThread($0, in: pullRequest.id) },
             pullRequest: pullRequest,
             // Zastávka `Popis a záměr` v itineráři (#506). Zapisuje store, protože `@State`
             // detailu by přetekl na jiný pull request — tentýž důvod jako u sbalování a značek.

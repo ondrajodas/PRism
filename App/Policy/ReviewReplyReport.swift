@@ -35,7 +35,10 @@ extension Policy {
         guard let conversation else { return .unknown }
 
         let comments = sentComments(in: conversation)
-        let answered = answeredThreadIDs(in: conversation)
+        // **Jedna množina, ne dvě** (#523): „je vlákno zodpovězené“ a „kdo v něm odpověděl“ je
+        // tatáž otázka, takže se odpovídá z jednoho průchodu. Dva by se uměly rozejít a v okně by
+        // z toho byl řádek `bez odpovědi` s větou kolegy pod sebou.
+        let replies = latestReplies(in: conversation)
         let recheck = currentRecheck(of: record, head: head)
 
         var entries: [ReviewReplyEntry] = []
@@ -44,7 +47,8 @@ extension Policy {
         var unanswered = 0
 
         for comment in comments {
-            let isAnswered = answered.contains(comment.threadID)
+            let reply = replies[comment.threadID]
+            let isAnswered = reply != nil
             let status = recheck?.replyStatuses[comment.threadID]
             let state = replyState(
                 answered: isAnswered,
@@ -62,7 +66,11 @@ extension Policy {
                     state: state,
                     // Věta modelu se veze **jen tam, kde model rozhodl**. U `odpovězeno` je stav
                     // z dat, takže vysvětlení od modelu pod ním by vypadalo jako jeho zdroj.
-                    note: isAnswered ? nil : status?.note
+                    note: isAnswered ? nil : status?.note,
+                    // A naopak: odpověď kolegy se veze jen tam, kde odpověď **je** (#523). Je to
+                    // ta věta, kvůli které se do vlákna jde zpátky, takže by ji karta musela
+                    // dohledávat v konverzaci znovu — a to je druhé místo, kde se dá splést.
+                    reply: reply
                 )
             )
         }
@@ -201,6 +209,22 @@ extension Policy {
         let state: ReviewReplyState
         /// Věta, kterou to kontrola odůvodnila. `nil` u stavu z dat i tam, kde model mlčel.
         let note: String?
+        /// **Nejnovější cizí odpověď** ve vlákně (#523). `nil` právě tehdy, když stav není
+        /// `odpovězeno` — kdo odpověděl a co napsal, je to jediné, čím se ten stav dá v okně
+        /// doložit.
+        let reply: ThreadComment?
+
+        init(
+            comment: SentComment,
+            state: ReviewReplyState,
+            note: String? = nil,
+            reply: ThreadComment? = nil
+        ) {
+            self.comment = comment
+            self.state = state
+            self.note = note
+            self.reply = reply
+        }
     }
 
     /// Stav jednoho odeslaného komentáře v druhém kole.

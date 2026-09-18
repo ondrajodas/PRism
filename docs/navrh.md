@@ -39,12 +39,12 @@ nic cizího neleží, #533 že kopie „souhlasí znak po znaku“. Proti soubor
 porovnává tehdy, když je otázka „leží na adrese něco, co v repu není“ — vlastní nemergnutá sekce
 se v tom diffu ukáže legitimně a je to ta jediná odchylka, která tam smí být.
 
-Je to jedna HTML stránka: tokeny v `:root` a pod nimi **59** sekcí (poslední přišla se #520 —
-návrh review nad nálezy, **číslo 62**; před ní přidalo #516 brief na domově s **číslem 58**,
-#513 sérii PR ve frontě s **číslem 57**, #511 běžícího agenta v sekci `Větev` s **číslem 56**
-a #510 agenta na vlastním PR s **číslem 55** — číslo sekce a jejich počet spolu nesouvisí,
-protože čísla se v dávce přidělují dopředu; u #520 byl ten rozdíl **tři**, protože souběžně
-běžely sloty se `s59`, `s60` a `s61`).
+Je to jedna HTML stránka: tokeny v `:root` a pod nimi **60** sekcí (poslední přišla se #520 —
+návrh review nad nálezy, **číslo 62**; před ní přidalo #523 druhé kolo nad mými komentáři
+s **číslem 60**, #516 brief na domově s **číslem 58**, #513 sérii PR ve frontě s **číslem 57**,
+#511 běžícího agenta v sekci `Větev` s **číslem 56** a #510 agenta na vlastním PR s **číslem 55**
+— číslo sekce a jejich počet spolu nesouvisí, protože čísla se v dávce přidělují dopředu; u #520
+je ten rozdíl **dva**, protože `s59` a `s61` si vzali sousedi ze stejné dávky).
 To číslo patří ke
 každému zákresu, který sekci přidává, a **čte se grepem, ne po paměti** — do #442/#443 tu
 stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekci 39 přidalo
@@ -52,8 +52,8 @@ stálo 28, kdežto sekcí bylo 30, u #500 tu stálo 38 nad devětatřiceti (sekc
 přidalo #517 a číslo nezvedlo (nález Copilota), a u **#526 tu stálo 48 nad devětačtyřiceti**
 — sekce 49 přišla s #529 a číslo zůstalo zase stát. **Sekci 47 přidalo #506** (itinerář review)
 a číslo zvedlo v témže commitu — stejně jako **sekci 54** u #528, **sekci 53** u #512,
-**sekci 55** u #510, **sekci 56** u #511, **sekci 57** u #513 a **sekci 58** u #516
-— **sekci 62** u #520 — o číslo se u dávky nehádá,
+**sekci 55** u #510, **sekci 56** u #511, **sekci 57** u #513, **sekci 58** u #516,
+**sekci 60** u #523 a **sekci 62** u #520 — o číslo se u dávky nehádá,
 přiděluje ho orchestrátor
 (#537), takže tenhle údaj patří tomu, kdo sekci kreslí:
 

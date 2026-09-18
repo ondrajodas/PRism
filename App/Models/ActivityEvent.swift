@@ -49,6 +49,14 @@ struct ActivityEvent: Codable, Hashable, Sendable, Identifiable {
         /// když si to někdo zapnul. **Dopočítané**: banner za něj nechodí, protože o výsledku
         /// review už jeden přišel a druhý o tomtéž PR v tutéž chvíli je čisté vyrušení.
         case autoDraft
+        /// **Autor odpověděl na moje review** (#523) — na cizím PR se pohnulo to, na co jsem se
+        /// ptal já.
+        ///
+        /// Vlastní druh vedle `findings` i `foreignActivity`: první mluví o tom, co našel **náš
+        /// reviewer**, druhý o dění na **mém** PR. Tohle je třetí směr a je to zrovna ta věc,
+        /// kvůli které se do PR po týdnu vrací — bez vlastního řádku by se na ose nedalo odlišit
+        /// „přišly commity“ od „ty commity opravily, co jsem hlásil“.
+        case replyRound
         /// Hlava se posunula pod uloženými nálezy (tvrdá podmínka č. 5). **Dopočítané** — banner
         /// za to nechodí, protože zastaralé nálezy nemají vyrušovat; dohledat se ale mají.
         case staleFindings

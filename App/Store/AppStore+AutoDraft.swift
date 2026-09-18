@@ -123,7 +123,7 @@ extension AppStore {
     ) async {
         let composed = StoredAutoDraft(at: stamp.at, adopted: plan.adopt.count, contested: plan.contested)
         guard composed != stamp, let reviews else { return }
-        reviewRecords[pr] = try? await reviews.saveAutoDraft(composed, for: pr, at: headSha)
+        reviewRecords[pr] = (try? await reviews.saveAutoDraft(composed, for: pr, at: headSha))
             ?? reviewRecords[pr]
     }
 
