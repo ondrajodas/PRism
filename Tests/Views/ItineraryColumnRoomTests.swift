@@ -51,7 +51,7 @@ struct ItineraryColumnRoomTests {
     /// všech tabů, takže ho odečítá rozvržení detailu a diff dostane štěrbinu, ve které už není.
     /// Odečtení `tree` na téhle řádce je tedy to, co v okně dělá `HStack` v `content`.
     private func codeWidth(tree: Double, margin: Bool) -> Double {
-        let columns = DiffSideColumns(tree: true, panel: false, margin: margin)
+        let columns = DiffSideColumns(tree: true, panel: false, margin: margin ? .cards : .hidden)
         return Policy.diffCodeColumnWidth(available: tabWidth - tree, columns: columns) ?? 0
     }
 
@@ -121,7 +121,7 @@ struct ItineraryColumnRoomTests {
     func theColumnStillFitsNextToTheFindingMargin() {
         let columns = Policy.diffSideColumns(layout: .unified, hasMargin: true, available: tabWidth)
         #expect(columns.tree)
-        #expect(columns.margin)
+        #expect(columns.margin == .cards)
         // A v okně na podlaze `RootView`u (700) se složí — jako do #506, jen o kus dřív.
         let narrow = Policy.diffSideColumns(layout: .unified, hasMargin: true, available: 700)
         #expect(!narrow.tree)
@@ -146,14 +146,14 @@ struct ItineraryColumnRoomTests {
         #expect(!Policy.diffSideColumns(layout: .unified, hasMargin: false, available: boundary - 1).tree)
         // S okrajem karet je to o 300 bodů výš — a `RootView` má podlahu 700, takže tuhle hranici
         // člověk doopravdy překročí.
-        let withMargin = boundary + Policy.marginColumnWidth(shown: true)
+        let withMargin = boundary + Policy.marginColumnWidth(form: .cards)
         #expect(withMargin == 920)
         #expect(Policy.diffSideColumns(layout: .unified, hasMargin: true, available: withMargin).tree)
         #expect(!Policy.diffSideColumns(layout: .unified, hasMargin: true, available: withMargin - 1).tree)
         // Do #506 se v okně 900 sloupec vešel; od #506 se složí. Je to **jediná** změna chování,
         // kterou ta šířka přinesla, a je vidět v okně, ne jen v čísle.
         #expect(900 < withMargin)
-        #expect(900 > floor + before + Policy.marginColumnWidth(shown: true))
+        #expect(900 > floor + before + Policy.marginColumnWidth(form: .cards))
     }
 
     /// **Čísla v dokumentaci platí pro změřenou šířku znaku** (8,04 bodu) — jediné místo, kde se

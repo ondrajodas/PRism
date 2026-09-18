@@ -8598,6 +8598,95 @@ karty z testu přečíst nedá. Sonda `drawTheMargin` proto kreslí **skutečný
 dvou stavech (okraj / bubliny za přepínačem) a ve třech posunech; přepínač si podává **vlastní
 doménou** `UserDefaults` (`ScratchDefaults`, #411), protože je to `@AppStorage`.
 
+### Složená hrana okraje (#505)
+
+Tři věci a každá jiným způsobem — práh nad daty, kotva nad modelem diffu a značky nad výčtem.
+
+**Práh se testuje přes pásmo šířek, ne u jedné** (#236; `DiffColumnFitTests`), a tvrzení jsou
+o **vlastnostech výsledku**, ne o opsaném vzorci:
+
+- *Podoba okraje s rostoucí šířkou neklesá* — měří se **šířkou** kolony
+  (`Policy.marginColumnWidth(form:)`), tedy tímtéž číslem, podle kterého se rozhoduje. Kdyby se
+  tvrdilo pořadím ve `switch`i, platilo by to jen v testu.
+- *Pásmo projde kolonou, hranou i zahozeným okrajem* — tvrzení bez něj **neváží nic** (#478): test,
+  který hranu nikdy neuvidí, zůstane zelený i tehdy, kdyby se okraj skládat přestal. Kvůli téhle
+  jedné větě přibyla do pásma šířka **60**: nad podlahou okna se hrana vejde pokaždé, takže poslední
+  mez (*ani hrana se nevejde*) se jinak neukáže.
+- *Kolona stojí jen nad podlahou kódu* a *hrana panel nerozloží* — dvě poloviny toho, proč #505
+  vzniklo.
+- *Nález nikdy nezůstane bez domova* platí dál, jen se do domova počítá i hrana
+  (`DiffMarginForm.hasHome`).
+
+**Kotva ve `Vedle sebe` je vyčerpaný výčet tří případů** (`DiffMarginTests`): čistá náhrada, smazání
+bez náhrady a přidání. Materiál je jeden soubor, ve kterém jsou **obě nedvojice naráz** — dvojice
+bez pravé strany (smazání) i bez levé (přidání) —, a to jde jedině tak, že přidaný řádek stojí **za
+kontextem**: párování uzavírá blok kontextem (`DiffPairing`), takže jinak by se přidaný řádek spároval
+se smazaným. Past je v materiálu schválně: `staré C` má **staré** číslo 13 a na **novém** řádku 13
+stojí kontext `mezi`, takže kdyby se kotva hledala podle staré strany, přistála by o řádek vedle —
+na kódu, o kterém nález nemluví.
+
+**Počet značek se tvrdí nad `Policy.marginDots`**, ne nad kresbou: v rozložené koloně je jich přesně
+tolik, kolik karet je mimo nasazený pás, na složené hraně tolik, kolik je karet. K tomu dvě tvrzení
+o tom, že se něco **nestane**: nasazená kolona značky nemá (jinak by u karty stál puntík o téže věci)
+a zahozený okraj taky ne.
+
+**Ověřeno vložením regrese**, obou polovin zvlášť: s prahem vráceným na *okraj pryč* místo *okraj na
+hranu* padnou čtyři tvrzení (`Vedle sebe má nález domov`, `Strom jde první`, `Pásmo projde…`,
+`Šířka kolony…`), s `marginDots` v koloně vracejícím prázdno padne páté (`V koloně mají značku karty
+mimo pás`).
+
+#### Jak se hrana vyfotila (#505)
+
+Sonda `drawTheMargin` dostala od #505 **štěrbinu jako vstup** (`DiffMarginProbe.slot`): bez ní se
+`Policy.diffSideColumns` rozhoduje jen podle pohledu, takže by hrana na obrázek nikdy nepřišla.
+Kreslí se čtyři scény — kolona (štěrbina 1 420), hrana v obou pohledech (560, tedy pod prahem) a
+bubliny.
+
+**A stálo to opravu měřidla, která je poučná i mimo sondu.** Prvních pět běhů vyfotilo značky
+**nastohované u horní hrany**, ačkoli kolona na téže scéně stála správně. Příčina není v okraji:
+blok hlásí polohy svých řádků z **rozvržení textového view**, tedy až když se doopravdy **kreslí** —
+a `await settle()` je odmlka v `Task`u, která žádné kreslení nevyvolá. Kolona to nepoznala, protože
+si karty **samy měří výšku**, a tím si další průchody vynutí; hrana neměří nic. Šestnáct kol po
+100 ms (1,6 s) tedy nepomohlo ani trochu, kdežto `host.display()` **uvnitř** každého kola pomohlo
+hned. V okně ten stav nenastane — tam se kreslí pořád.
+
+Je to týž vzorec jako u #478: měřidlo vydávalo tutéž hodnotu pro *funguje* i *nefunguje*, jen tady
+místo čísla obrázek — a obrázek vady, která v aplikaci není, je horší než žádný.
+
+#### Kolik znaků na stranu hrana vrátí (#505)
+
+`CharactersPerSideProbe.theRailTable` — tabulka přes pásmo **oken** (ne kolon), pro každé tři stavy
+téže scény: bubliny, okraj jako **pevná** kolona a okraj **podle prahu** (od #505). Je to tentýž
+způsob měření jako u #548, jen z druhé strany: tam se měřilo, co okraj bere, tady, kolik se ho
+složením vrátí. Znak 8,036 b, gutter 84 b (`Vedle sebe`) a 136 b (`Pod sebou`).
+
+**Prostřední sloupec je „co stojí kolona“, ne doslovný stav do #505** — a rozdíl je jen v `Pod
+sebou`: tam okraj do #505 na úzkém okně **padal** a přebíral ho rozložený panel, takže se tatáž
+plocha ubrala vlevo místo vpravo. Ve `Vedle sebe` je ten sloupec doslova stav do #505, protože se
+tam kolona držela, dokud se vešla fyzicky.
+
+| Okno | Pohled | Podoba od #505 | Bubliny | Kolona natvrdo | Od #505 |
+|---|---|---|---|---|---|
+| 700 | `Vedle sebe` | hrana | 24 | **6** | **23** |
+| 700 | `Pod sebou` | hrana | 53 | 16 | **50** |
+| 784 | `Vedle sebe` | hrana | 29 | 11 | **28** |
+| 784 | `Pod sebou` | hrana | 35 | 26 | **60** |
+| 900 | `Vedle sebe` | kolona | 37 | 18 | 18 |
+| 1 100 | `Vedle sebe` | kolona | 49 | 30 | 30 |
+| 1 303 | `Vedle sebe` | kolona | 62 | 43 | 43 |
+| 1 512 | `Vedle sebe` | kolona | 75 | 56 | 56 |
+
+**Šest znaků na stranu je to číslo, kvůli kterému #505 vzniklo**: v okně na podlaze `RootView`u
+(700) si kolona brala 300 bodů z plochy, která se ještě dělí na dvě strany. Nad prahem se
+**nemění nic** — a to je ta druhá polovina tvrzení: měření z #548 (živé okno 1 100 × 700,
+`Vedle sebe`, **49 → 31 znaků**) platí po #505 **beze změny**, protože se tam kolona pořád vejde.
+Sonda u téhož okna počítá 49 → **30**; ten jeden znak je tatáž zapsaná mezera jako u #548 —
+rozložený panel v živém okně vychází na 302–310 b místo konstanty 300.
+
+Jeden řádek je neintuitivní a patří k rozhodnutí: **784 / `Pod sebou` má s okrajem víc znaků než
+s bublinami** (60 proti 35). Není to chyba měřidla — s okrajem se složí **itinerář** (260 b), kdežto
+s bublinami zůstává rozložený, takže kód dostane 226 bodů navíc a hrana mu vezme 28.
+
 ### Výchozí stav diffu jsou bubliny pod řádky (#548)
 
 `DiffBubbleDefaultTests` — jedna `@AppStorage` hodnota, na které visí kolona kódu, panel vpravo

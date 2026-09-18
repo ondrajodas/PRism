@@ -277,6 +277,156 @@ struct DiffMarginTests {
         let columns = Policy.diffSideColumns(layout: sample.layout, hasMargin: sample.margin)
         #expect(columns.tree == sample.tree)
         #expect(columns.panel == sample.panel)
+        // **Bez změřené šířky se okraj nikdy neskládá na hranu** (#505): hrana je odpověď na
+        // úzké okno, a „nikdo nezměřil“ není úzké okno.
+        #expect(columns.margin == (sample.margin ? .cards : .hidden))
+    }
+
+    // MARK: - Značky na hraně (#505)
+
+    /// **Složená hrana kreslí jako značku všechny karty.** Je to celý smysl hrany: kolona se
+    /// nevejde, ale kde nálezy jsou, zůstane vidět.
+    @Test("Na složené hraně má značku každá karta")
+    func theRailMarksEveryCard() {
+        let cards = Self.threeCards()
+        let dots = Policy.marginDots(of: cards, mounted: [], form: .rail)
+        #expect(dots.map(\.id) == cards.map(\.id))
+        // A **pás do toho nemluví**: hrana se rozhoduje podle podoby, ne podle toho, co je zrovna
+        // nasazené — značka je puntík bez textu, tedy nic z toho, kvůli čemu se pás zavedl (#469).
+        #expect(
+            Policy.marginDots(of: cards, mounted: Set(cards.map(\.id)), form: .rail).count == cards.count
+        )
+    }
+
+    /// **V rozložené koloně dostane značku to, co se nekreslí jako karta** — tedy karty mimo
+    /// nasazený pás (#469). Do #505 po nich nezbyla na obrazovce ani stopa.
+    @Test("V koloně mají značku karty mimo pás")
+    func theColumnMarksWhatItDoesNotDraw() {
+        let cards = Self.threeCards()
+        let mounted: Set<String> = [cards[1].id]
+        let dots = Policy.marginDots(of: cards, mounted: mounted, form: .cards)
+        #expect(dots.map(\.id) == [cards[0].id, cards[2].id])
+        // **Počet značek = počet karet mimo pás**, což je to tvrzení, kvůli kterému to vzniklo.
+        #expect(dots.count == cards.count - mounted.count)
+    }
+
+    /// **Všechno nasazené znamená žádnou značku** — jinak by u karty stál puntík o téže věci.
+    @Test("Nasazená kolona značky nemá")
+    func theMountedColumnHasNoDots() {
+        let cards = Self.threeCards()
+        #expect(Policy.marginDots(of: cards, mounted: Set(cards.map(\.id)), form: .cards).isEmpty)
+    }
+
+    /// **Zahozený okraj nekreslí nic, ani značky.** Je to ten stav, ve kterém nález přebírá panel
+    /// (`diffSideColumns` u něj rozkládá panel), takže značka na nulové šířce by byla nekliknutelná.
+    @Test("Zahozený okraj značky nemá")
+    func theHiddenMarginHasNoDots() {
+        #expect(Policy.marginDots(of: Self.threeCards(), mounted: [], form: .hidden).isEmpty)
+    }
+
+    /// Popisek značky je **jedna věta pro tooltip i pro VoiceOver** — dvě by se rozešly.
+    @Test("Popisek značky nese počet, řádek i to, jestli blokuje")
+    func theDotHintSaysWhatItIs() {
+        let cards = Self.threeCards()
+        #expect(Policy.marginDotHint(of: cards[0]) == "1 nález, řádek 1 · blokuje")
+        #expect(Policy.marginDotHint(of: cards[2]) == "1 nález, řádek 5 · odmítnuto")
+    }
+
+    /// **Patka hrany počítá nálezy, ne značky** — na jednom řádku jich může být víc. Kdyby počítala
+    /// značky, tvrdila by o témže PR jiné číslo než hlavička souboru a lišta nad diffem.
+    @Test("Počet v patce hrany sčítá nálezy, ne místa")
+    func theRailCountsFindingsNotPlaces() {
+        let cards = Self.threeCards()
+        #expect(Policy.marginRailCount(of: cards) == "3")
+        #expect(Policy.marginRailHint(of: cards) == "3 nálezy v okraji")
+
+        // Tatáž tři místa, jen na prvním jsou nálezy dva — značky zůstanou tři, počet je čtyři.
+        var doubled = cards
+        doubled[0] = DiffMarginCard(
+            id: cards[0].id,
+            group: FindingGroup(
+                file: "src/Handler.swift",
+                line: 1,
+                findings: [Self.finding(), Self.finding(category: "robustness")]
+            ),
+            path: cards[0].path,
+            line: cards[0].line,
+            severity: .blocking
+        )
+        #expect(Policy.marginDots(of: doubled, mounted: [], form: .rail).count == 3)
+        #expect(Policy.marginRailCount(of: doubled) == "4")
+        #expect(Policy.marginRailHint(of: doubled) == "4 nálezy v okraji")
+        #expect(Policy.marginDotHint(of: doubled[0]) == "2 nálezy, řádek 1 · blokuje")
+    }
+
+    // MARK: - Kotva ve Vedle sebe (#505)
+
+    /// **Nález na odebraném řádku se kotví na řádek, který ho nahradil.**
+    ///
+    /// Vyčerpané výčtem tří případů, protože každý z nich by se dal pokazit jinak: čistá náhrada
+    /// (odebraný řádek má na nové straně protějšek), **smazání bez náhrady** (nemá) a **přidání**
+    /// (protějšek na staré straně nemá). Karta se v okraji hledá podle **nového** čísla řádku
+    /// a v pohledu vedle sebe ho nese **pravá** strana dvojice — tady se tvrdí, že to dohromady
+    /// vydá řádek náhrady, a ne třeba řádek o kus níž.
+    @Test("Vedle sebe: kotva sedí na novou stranu dvojice", arguments: [
+        (line: 11, left: "staré A", right: "nové A"),
+        (line: 12, left: "staré B", right: "nové B"),
+        (line: 14, left: String?.none, right: "úplně nový"),
+    ])
+    func theSplitAnchorSitsOnTheReplacement(sample: (line: Int, left: String?, right: String)) throws {
+        let file = try #require(DiffParser.parse(Self.replaced()).files.first)
+        let cards = Policy.marginCards(
+            of: [FindingGroup(file: "Cart.php", line: sample.line, findings: [Self.finding()])],
+            in: [DiffMarginSource(file: file, revealed: RevealedLines(), isFolded: false)]
+        )
+        #expect(cards.map(\.line) == [sample.line])
+
+        let marks = Policy.marginMarks(of: cards, in: file.displayPath)
+        let row = try #require(
+            DiffRow.rows(of: file, layout: .split).first { row in
+                guard case .pair(_, _, let right) = row else { return false }
+                return right?.newNumber == sample.line
+            }
+        )
+        guard case .pair(_, let left, let right) = row else {
+            Issue.record("řádek \(sample.line) není dvojice")
+            return
+        }
+        #expect(marks[sample.line] != nil, "značka na nové straně chybí")
+        #expect(right?.text == sample.right)
+        #expect(left?.text == sample.left, "kotva sedí na jiné dvojici, než na tu s náhradou")
+    }
+
+    /// **Smazání bez náhrady kartu nedostane** — a je to ta cennější půlka výčtu. Odebraný řádek
+    /// na nové straně protějšek nemá, takže se karta nemá k čemu zarovnat; nález zůstane bublinou
+    /// u hlavičky souboru, přesně jako nález bez řádku.
+    @Test("Vedle sebe: smazání bez náhrady kartu nemá")
+    func theDeletionWithoutAReplacementHasNoCard() throws {
+        let file = try #require(DiffParser.parse(Self.replaced()).files.first)
+        // `staré C` se smazalo bez náhrady — na nové straně dvojice nestojí nic.
+        let deleted = try #require(
+            DiffRow.rows(of: file, layout: .split).compactMap { row -> DiffLine? in
+                guard case .pair(_, let left, let right) = row, right == nil else { return nil }
+                return left
+            }.first
+        )
+        #expect(deleted.text == "staré C")
+        #expect(deleted.newNumber == nil, "smazaný řádek má nové číslo, pak už to není smazání")
+
+        // **Značka se hledá podle nového čísla na pravé straně dvojice**, takže na tuhle ukázat
+        // nemůže žádná. Že to není samozřejmost, drží materiál: `staré C` má **staré** číslo 13
+        // a na novém čísle 13 stojí kontextový řádek `mezi` — kdyby se četla stará strana, karta
+        // by přistála o řádek vedle, na kódu, o kterém nález nemluví.
+        #expect(deleted.oldNumber == 13)
+        let everyNewLine = file.hunks.flatMap(\.lines).compactMap(\.newNumber)
+        let cards = Policy.marginCards(
+            of: everyNewLine.map { FindingGroup(file: "Cart.php", line: $0, findings: [Self.finding()]) },
+            in: [DiffMarginSource(file: file, revealed: RevealedLines(), isFolded: false)]
+        )
+        let marks = Policy.marginMarks(of: cards, in: file.displayPath)
+        #expect(marks.count == Set(everyNewLine).count, "kreslený řádek zůstal bez značky")
+        #expect(marks[13] != nil, "značka na novém řádku 13 chybí")
+        #expect(Set(marks.keys) == Set(everyNewLine), "značka sedí na čísle, které nová strana nemá")
     }
 
     // MARK: - Materiál
@@ -344,6 +494,61 @@ struct DiffMarginTests {
          let x = 1
          let y = 2
          let z = 3
+
+        """
+    }
+
+    /// Tři karty na řádcích 1, 3 a 5 — materiál pro značky. Skládají se **přes `Policy`**, ne
+    /// ručně: klíč karty se jinde v aplikaci skládá týmž voláním, takže by ruční literál mohl
+    /// tvrdit o značkách něco, co o kartách neplatí.
+    private static func threeCards() -> [DiffMarginCard] {
+        [
+            DiffMarginCard(
+                id: Policy.marginKey(path: "src/Handler.swift", line: 1),
+                group: FindingGroup(file: "src/Handler.swift", line: 1, findings: [finding()]),
+                path: "src/Handler.swift",
+                line: 1,
+                severity: .blocking
+            ),
+            DiffMarginCard(
+                id: Policy.marginKey(path: "src/Handler.swift", line: 3),
+                group: FindingGroup(file: "src/Handler.swift", line: 3, findings: [finding()]),
+                path: "src/Handler.swift",
+                line: 3,
+                severity: .finding
+            ),
+            DiffMarginCard(
+                id: Policy.marginKey(path: "src/Handler.swift", line: 5),
+                group: FindingGroup(file: "src/Handler.swift", line: 5, findings: [finding()]),
+                path: "src/Handler.swift",
+                line: 5,
+                severity: .dismissed
+            ),
+        ]
+    }
+
+    /// Soubor pro výčet kotev ve `Vedle sebe`: dvě čisté náhrady, jedno smazání bez náhrady
+    /// a jedno přidání bez protějšku.
+    ///
+    /// **Přidaný řádek stojí za kontextem schválně.** Párování uzavírá blok kontextem, takže
+    /// `úplně nový` vedle prvního bloku skončit nemůže — a je to jediný způsob, jak v jednom
+    /// souboru dostat obě nedvojice naráz: dvojici bez pravé strany i dvojici bez levé.
+    private static func replaced() -> String {
+        """
+        diff --git a/Cart.php b/Cart.php
+        index 1111111..2222222 100644
+        --- a/Cart.php
+        +++ b/Cart.php
+        @@ -10,6 +10,6 @@
+         před
+        -staré A
+        -staré B
+        -staré C
+        +nové A
+        +nové B
+         mezi
+        +úplně nový
+         za
 
         """
     }

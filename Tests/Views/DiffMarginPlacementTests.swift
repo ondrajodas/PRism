@@ -107,9 +107,10 @@ struct DiffMarginPlacementTests {
 
     /// **Jak okraj vypadá** — sonda, ne test: bez `PRISM_RENDER_DIR` nedělá nic.
     ///
-    /// Kreslí se **skutečný `DiffView`** s nálezy, ve třech stavech: karty v okraji (nový stav),
-    /// bubliny pod řádky (starý, za přepínačem) a odscrollovaný okraj, ze kterého se pozná, že se
-    /// karty vezou s řádkem. Čísla o tom neřeknou nic.
+    /// Kreslí se **skutečný `DiffView`** s nálezy: karty v okraji (široké okno), **složená hrana
+    /// se značkami** (#505, úzké okno, oba pohledy), bubliny pod řádky (stav za přepínačem) a ke
+    /// každému odscrollovaná podoba, ze které se pozná, že se karty i značky vezou s řádkem.
+    /// Čísla o tom neřeknou nic.
     ///
     /// ```bash
     /// TEST_RUNNER_PRISM_MEASURE=1 TEST_RUNNER_PRISM_RENDER_DIR=/tmp/render \
@@ -123,14 +124,24 @@ struct DiffMarginPlacementTests {
         // Přepínač `Nálezy pod řádky` je `@AppStorage`, takže se pro sondu nastavuje **ve vlastní
         // doméně** (#411): do `UserDefaults.standard` se z testů nesahá.
         let defaults = try ScratchDefaults("diffMargin")
-        for inline in [false, true] {
-            defaults.store.set(inline, forKey: "showInlineFindingBubbles")
+        // **Štěrbina je vstup sondy, ne rozměr okna náhodou**: podle ní se rozhoduje, jestli okraj
+        // stojí jako kolona, nebo jako hrana (#505). 560 je pod prahem v obou pohledech.
+        let cases: [(slug: String, inline: Bool, slot: Double, layout: DiffLayout)] = [
+            ("okraj", false, 1_420, .unified),
+            ("hrana", false, 560, .unified),
+            ("hrana-vedle", false, 560, .split),
+            ("bubliny", true, 1_420, .unified),
+        ]
+        for scenario in cases {
+            defaults.store.set(scenario.inline, forKey: "showInlineFindingBubbles")
             let host = NSHostingView(rootView: DiffMarginProbe(
                 diff: diff,
                 findings: DiffMarginMaterial.findings(),
-                store: defaults.store
+                store: defaults.store,
+                layout: scenario.layout,
+                slot: scenario.slot
             ))
-            host.frame = NSRect(x: 0, y: 0, width: 1512, height: 874)
+            host.frame = NSRect(x: 0, y: 0, width: scenario.slot, height: 874)
             let window = NSWindow(
                 contentRect: host.frame,
                 styleMask: [.borderless],
@@ -149,10 +160,44 @@ struct DiffMarginPlacementTests {
             await waitUntil("diff se rozvrhne") {
                 (Self.tallestScroller(in: host)?.documentView?.frame.height ?? 0) > 0
             }
-            for _ in 0..<8 { await settle() }
+            // **A počká se i na rámečky řádků**, ne jen na výšku obsahu: teprve z nich blok
+            // ohlásí, kde jeho řádky leží (`DiffMarginAnchors`) — a bez toho hlášení stojí značky
+            // i karty tam, kde je posadil odhad.
+            await waitUntil("blok ohlásí rámečky řádků") {
+                host.firstDescendant(ofType: DiffTextView.self)?.frame(ofLine: 0) != nil
+            }
+            // **Mezi koly se kreslí, ne jen čeká** (#505). Blok hlásí polohy svých řádků
+            // z rozvržení textového view, tedy **až když se doopravdy kreslí** — a odmlka
+            // v `Task`u žádné kreslení nevyvolá. Karty si to vynutí samy (měří si výšku, a tím
+            // sáhnou do stavu), kdežto hrana nic neměří: bez `display()` sonda fotila stav, ve
+            // kterém polohy ještě nikdo neposlal, a značky stály nastohované u horní hrany.
+            // V okně ten stav nenastane — tam se kreslí pořád.
+            for _ in 0..<16 {
+                host.display()
+                await settle()
+            }
 
-            let slug = inline ? "bubliny" : "okraj"
+            let slug = scenario.slug
             let scroller = Self.tallestScroller(in: host)
+            print(String(
+                format: "SONDA %@: štěrbina %.0f, %@, okraj %@, kolona %.0f b",
+                slug,
+                scenario.slot,
+                scenario.layout == .split ? "vedle sebe" : "pod sebou",
+                String(describing: Policy.diffSideColumns(
+                    layout: scenario.layout,
+                    hasMargin: !scenario.inline,
+                    available: scenario.slot
+                ).margin),
+                Policy.diffCodeColumnWidth(
+                    available: scenario.slot,
+                    columns: Policy.diffSideColumns(
+                        layout: scenario.layout,
+                        hasMargin: !scenario.inline,
+                        available: scenario.slot
+                    )
+                ) ?? 0
+            ))
             for offset in [0.0, 260.0, 620.0] {
                 if let scroller {
                     scroller.contentView.scroll(to: NSPoint(x: 0, y: offset))
@@ -316,6 +361,11 @@ struct DiffMarginProbe: View {
     /// Doména, ze které si `@AppStorage` bere přepínač `Nálezy pod řádky`. Vlastní, ne procesní
     /// (#411).
     let store: UserDefaults
+    var layout: DiffLayout = .unified
+    /// Štěrbina, kterou diff dostane. **Bez ní se `Policy.diffSideColumns` rozhoduje jen podle
+    /// pohledu** (#503, `nil` = nikdo nezměřil), takže by sonda složenou hranu (#505) nikdy
+    /// neukázala — okraj by ve všech šířkách zůstal kolonou.
+    var slot: Double?
 
     @State private var target: String?
 
@@ -348,9 +398,14 @@ struct DiffMarginProbe: View {
                     )
                 }
             ),
-            layout: .constant(.unified)
+            layout: .constant(layout)
         )
         .background(Palette.background)
+        // Obojí naráz a touž hodnotou: `availableWidth` je štěrbina diffu, `sideColumnsWidth`
+        // šířka, o kterou se dělí kolony (#506). Sonda hostí `DiffView` **bez** itineráře, takže
+        // je to v ní totéž číslo — v okně se liší o šířku sloupce.
+        .availableWidth(slot.map { CGFloat($0) })
+        .sideColumnsWidth(slot.map { CGFloat($0) })
         // Přepínač `Nálezy pod řádky` je `@AppStorage`; sonda si ho podává vlastní doménou, ne
         // parametrem — je to tatáž cesta, jakou ho čte aplikace.
         .defaultAppStorage(store)

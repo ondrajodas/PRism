@@ -273,10 +273,11 @@ struct DiffView: View {
                         // takže se ta mezera odečte od štěrbiny — a `Policy.diffCodeColumnWidth`
                         // ji odečítá taky, aby předaná šířka byla ta, kterou `HStack` doopravdy dá.
                         .padding(.trailing, Policy.codeColumnTrailingGap)
-                    // Okraj s kartami nálezů (#503) — třetí kolona z návrhu
-                    // (`210px 1fr 300px`), a **jen když je co do ní postavit**: okraj bez karet
-                    // je ubraná šířka bez informace.
-                    margin(cards: columns.margin ? cards : [])
+                    // Okraj s nálezy (#503) — třetí kolona z návrhu (`210px 1fr 300px`), a
+                    // **jen když je co do ní postavit**: okraj bez karet je ubraná šířka bez
+                    // informace. Od #505 je to buď ta kolona, nebo **hrana se značkami** — o tom,
+                    // co se vejde, rozhodlo `Policy.diffSideColumns` o kus výš.
+                    margin(cards: cards, form: columns.margin)
                 }
             }
             .background(alignment: .topLeading) { searchShortcut }
@@ -573,26 +574,48 @@ struct DiffView: View {
         }
     }
 
-    /// Okraj vpravo s kartami nálezů (#503).
+    /// Okraj vpravo s nálezy — **rozložená kolona s kartami (#503), nebo složená hrana se
+    /// značkami (#505)**.
     ///
     /// **Bez karet se nekreslí vůbec**, ani jako prázdná kolona: tři sta bodů bez informace ubírá
     /// diffu šířku, o které #182 spočítalo, že ji potřebuje. Prázdný okraj by navíc vypadal jako
-    /// druhý složený panel.
-    @ViewBuilder private func margin(cards: [DiffMarginCard]) -> some View {
+    /// druhý složený panel. Do #505 to byla celá odpověď; od #505 je mezi „kolona“ a „nic“ ještě
+    /// hrana, o které rozhoduje `Policy.diffSideColumns` podle šířky — tady se jen kreslí.
+    ///
+    /// Obě podoby dostanou **tytéž karty**: která se ukáže jako karta a která jako značka, není
+    /// věc toho, co se do okraje pošle (`Policy.marginDots`).
+    @ViewBuilder private func margin(cards: [DiffMarginCard], form: DiffMarginForm) -> some View {
         if !cards.isEmpty {
-            DiffMarginView(
-                cards: cards,
-                anchors: marginAnchors,
-                viewport: viewport,
-                // **Změřená výška, ne pružný rámec** (#220): `viewportHeight` je plocha, kterou
-                // dostal diff, tedy přesně tolik, kolik má mít okraj vedle něj.
-                height: viewportHeight,
-                blockingCategories: blockingCategories,
-                findingActions: findingActions,
-                drafts: marginDrafts(for: cards),
-                highlighted: highlighted,
-                current: current
-            )
+            switch form {
+            case .hidden:
+                EmptyView()
+            case .rail:
+                DiffMarginRailView(
+                    cards: cards,
+                    anchors: marginAnchors,
+                    viewport: viewport,
+                    height: viewportHeight,
+                    blockingCategories: blockingCategories,
+                    findingActions: findingActions,
+                    drafts: marginDrafts(for: cards),
+                    current: current,
+                    highlighted: highlighted
+                )
+            case .cards:
+                DiffMarginView(
+                    cards: cards,
+                    anchors: marginAnchors,
+                    viewport: viewport,
+                    // **Změřená výška, ne pružný rámec** (#220): `viewportHeight` je plocha, kterou
+                    // dostal diff, tedy přesně tolik, kolik má mít okraj vedle něj.
+                    height: viewportHeight,
+                    blockingCategories: blockingCategories,
+                    findingActions: findingActions,
+                    drafts: marginDrafts(for: cards),
+                    highlighted: highlighted,
+                    current: current
+                )
+            }
         }
     }
 

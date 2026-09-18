@@ -191,7 +191,7 @@ struct DiffColumnFitProbe {
                     ? Self.expandedPanelFloor : Self.collapsedPanelWidth)
             )
             let panelWidth = store.isReviewPanelExpanded ? Self.expandedPanelFloor : Self.collapsedPanelWidth
-            let needed = Policy.marginColumnWidth(shown: columns.margin) + panelWidth
+            let needed = Policy.marginColumnWidth(form: columns.margin) + panelWidth
             // **Průnik, ne součet** — to je ta otázka, na kterou rámec scrolleru sám neodpoví.
             let edges = stripEdges()
             let overlapRight = edges.map { frame.maxX - $0.right } ?? .nan
@@ -204,8 +204,17 @@ struct DiffColumnFitProbe {
                 edges.map { String(format: "%.0f", $0.right) } ?? "?",
                 overlapLeft.isNaN ? "?" : String(format: "%.0f", overlapLeft),
                 overlapRight.isNaN ? "?" : String(format: "%.0f", overlapRight),
-                columns.margin ? "ano" : "ne"
+                Self.formName(columns.margin)
             )
+        }
+
+        /// Jak se okraj v sondě vypíše (#505) — tři podoby, ne „ano/ne“.
+        static func formName(_ form: DiffMarginForm) -> String {
+            switch form {
+            case .hidden: "ne"
+            case .rail: "hrana"
+            case .cards: "karty"
+            }
         }
 
         /// Šířka railu a mez panelu — **jen na skládání očekávání v sondě**. Rail je AppKitu
@@ -384,6 +393,53 @@ struct CharactersPerSideProbe {
             )
             print(String(format: "SONDA kolona %6.0f b → vedle sebe %3d znaků | pod sebou %3d znaků",
                          content, split, unified))
+        }
+    }
+
+    /// **Co složená hrana (#505) vrátí kódu** — tabulka znaků na stranu přes pásmo **oken**, ne
+    /// kolon: pro každé okno tři stavy, ve kterých se tatáž scéna dá vidět (bubliny, okraj do
+    /// #505 jako pevná kolona, okraj od #505 podle prahu).
+    ///
+    /// Je to tentýž způsob měření jako u #548 (*bubliny mají o 300 b víc*), jen z druhé strany:
+    /// tam se měřilo, co okraj bere, tady, kolik se ho složením vrátí.
+    @Test("Tabulka znaků na stranu s hranou a bez ní (#505)")
+    func theRailTable() {
+        let characterWidth = TestWait.settledFontMetric(
+            .characterWidth,
+            of: .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        )
+        func characters(_ column: Double, _ layout: DiffLayout) -> Int {
+            Policy.charactersPerSide(
+                contentWidth: column,
+                characterWidth: characterWidth,
+                layout: layout,
+                gutter: DiffLineView.contentInset(for: layout)
+            )
+        }
+        // Okno bez railu (56) a bez složeného proužku panelu (38) je štěrbina tabu; z ní se ještě
+        // odečte itinerář, o jehož šířce rozhoduje `Policy` ze **společné** šířky (#506).
+        for window in [700.0, 784.0, 900.0, 1_100.0, 1_303.0, 1_512.0] {
+            let shared = window - 56 - 38
+            for layout in [DiffLayout.split, .unified] {
+                let columns = Policy.diffSideColumns(layout: layout, hasMargin: true, available: shared)
+                let bubbles = Policy.diffSideColumns(layout: layout, hasMargin: false, available: shared)
+                let slot = shared - Policy.treeColumnWidth(expanded: columns.tree)
+                let bubbleSlot = shared - Policy.treeColumnWidth(expanded: bubbles.tree)
+                // Podoba do #505: kolona se držela, dokud se vešla fyzicky.
+                let forced = DiffSideColumns(tree: columns.tree, panel: columns.panel, margin: .cards)
+                let now = Policy.diffCodeColumnWidth(available: slot, columns: columns) ?? 0
+                let before = Policy.diffCodeColumnWidth(available: slot, columns: forced) ?? 0
+                let without = Policy.diffCodeColumnWidth(available: bubbleSlot, columns: bubbles) ?? 0
+                print(String(
+                    format: "SONDA okno %6.0f %@ | okraj %-6@ | bubliny %3d | do #505 %3d | od #505 %3d znaků",
+                    window,
+                    layout == .split ? "vedle sebe" : "pod sebou ",
+                    String(describing: columns.margin),
+                    characters(without, layout),
+                    characters(before, layout),
+                    characters(now, layout)
+                ))
+            }
         }
     }
 }

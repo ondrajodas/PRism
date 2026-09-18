@@ -55,15 +55,35 @@ struct DiffMarginSource: Sendable {
     let isFolded: Bool
 }
 
-/// Které postranní sloupce diffu jsou rozložené (#188, rozšířeno #503).
+/// V jaké podobě okraj stojí (#505).
+///
+/// **Tři stavy, ne dva, a je to celý rozdíl proti #503.** Tam byl okraj příznak: buď kolona
+/// o 300 bodech, nebo nic — a „nic“ znamenalo, že nález přebírá panel vpravo, tedy **další**
+/// třistabodová kolona. V úzkém okně se tím kód mačkal ať se rozhodlo jakkoli. Od #505 mezi tím
+/// stojí **hrana**: 28 bodů se značkami, na kterých je vidět, **kde** karty jsou, a klik značku
+/// rozbalí do karty jako popover. Ustupuje se tedy o 272 bodů, ne o celý nález.
+enum DiffMarginForm: Hashable, Sendable {
+    /// Okraj se nekreslí vůbec — buď nejsou karty, nebo se nevejde ani hrana.
+    case hidden
+    /// Složená hrana se značkami (#505). Domov pro nález to pořád je, takže se kvůli ní
+    /// **nemusí rozkládat panel**.
+    case rail
+    /// Rozložená kolona s kartami (#503).
+    case cards
+
+    /// Je pro nález v okraji domov? Odpověď na tvrdou podmínku „nález nikdy nezůstane bez
+    /// domova“ — hrana se do ní počítá, prázdno ne.
+    var hasHome: Bool { self != .hidden }
+}
+
+/// Které postranní sloupce diffu jsou rozložené (#188, rozšířeno #503, o hranu #505).
 struct DiffSideColumns: Hashable, Sendable {
     let tree: Bool
     let panel: Bool
-    /// Kreslí se okraj s kartami? **Není to totéž jako „karty existují“** (#503, oprava
-    /// z proklikání): karty mohou být, a okraj se přesto nevejde — pak se nekreslí, protože
-    /// třistabodová kolona, na kterou není místo, si ho vezme obsahu a schová ho pod proužek
-    /// panelu.
-    let margin: Bool
+    /// V jaké podobě stojí okraj s nálezy. **Není to totéž jako „karty existují“** (#503, oprava
+    /// z proklikání): karty mohou být, a kolona se přesto nevejde — pak se od #505 složí na hranu,
+    /// a teprve když se nevejde ani ta, nekreslí se nic.
+    let margin: DiffMarginForm
 }
 
 /// Co z rozhodnutí o kolonách se má **doopravdy uplatnit** (#506, čtvrté kolo).
@@ -160,6 +180,52 @@ extension Policy {
         return cards
     }
 
+    /// Popisek značky na hraně (#505) — `2 nálezy, řádek 41 · blokuje`.
+    ///
+    /// **Jedna věta pro `help` i pro VoiceOver**: bublina v tooltipu a věta, kterou přečte
+    /// odečítač, nesmí říkat jinou věc o téže značce. Číslo řádku se sází `verbatim` (není to
+    /// množství, takže se neskupinuje po tisících), počet nálezů naopak formátovaně.
+    static func marginDotHint(of card: DiffMarginCard) -> String {
+        let count = card.group.findings.count
+        let what = Plural.czech(count, one: "nález", few: "nálezy", many: "nálezů")
+        let state = switch card.severity {
+        case .blocking: " · blokuje"
+        case .finding: ""
+        case .dismissed: " · odmítnuto"
+        }
+        return "\(what), řádek \(card.line)\(state)"
+    }
+
+    /// Kolik nálezů hrana veze — popisek do její patky (#505).
+    ///
+    /// **Na hraně je vidět jen to, co je zrovna ve výřezu**: značky se vezou s řádky, takže nad
+    /// dvacetisouborovým diffem jich je většina mimo obrazovku. Počet v patce je tedy jediné
+    /// místo, ze kterého se dá přečíst, **kolik jich je celkem** — a proto se s výřezem neveze.
+    ///
+    /// **Počítají se nálezy, ne značky**, a je v tom rozdíl: na jednom řádku jich může být víc
+    /// (skupina, kterou karta ukazuje jako `2×`), takže značek je nejvýš tolik co nálezů. Je to
+    /// tentýž počet, o kterém mluví hlavička souboru i lišta nad diffem — kdyby patka počítala
+    /// značky, tvrdila by o témže PR jiné číslo než ony.
+    static func marginRailFindings(of cards: [DiffMarginCard]) -> Int {
+        cards.reduce(0) { $0 + $1.group.findings.count }
+    }
+
+    /// Týž počet jako text do patky. Sází se `verbatim` — je to počítadlo, ne množství
+    /// k formátování, a v 28 bodech se stejně vejde jedině číslo.
+    static func marginRailCount(of cards: [DiffMarginCard]) -> String {
+        "\(marginRailFindings(of: cards))"
+    }
+
+    /// Celá věta k tomu počtu — pro `help` a pro VoiceOver, kde samotné číslo nic neříká.
+    static func marginRailHint(of cards: [DiffMarginCard]) -> String {
+        Plural.czech(
+            marginRailFindings(of: cards),
+            one: "nález v okraji",
+            few: "nálezy v okraji",
+            many: "nálezů v okraji"
+        )
+    }
+
     /// Klíč karty. Jedno místo pro obě strany — okraj i blok kódu.
     static func marginKey(path: String, line: Int) -> String { "\(path)|\(line)" }
 
@@ -230,11 +296,13 @@ extension Policy {
     /// 1. **Kód nikdy** — je to důvod, proč je okno otevřené.
     /// 2. **Strom jde první**, protože je nejlevnější: `⌘1` ho vrátí a v liště je pořád popover
     ///    se stejným seznamem, takže se tím nic nedozvíme méně.
-    /// 3. **Okraj až potom, a nikdy tak, aby nález zůstal bez domova.** Zahodit okraj znamená
-    ///    schovat nález, takže se s ním zároveň **rozloží panel**, který ho převezme
-    ///    (`panel` níž). Ve `Vedle sebe` se proto okraj drží, i když na kód zbývá pod podlahu —
-    ///    úzká kolona kódu je menší škoda než nález, který na obrazovce není; zahodí se teprve
-    ///    tehdy, když se ta kolona nevejde **fyzicky**.
+    /// 3. **Okraj se potom složí na hranu, ne zahodí** (#505). Do #505 tady byl jediný krok —
+    ///    okraj pryč a panel místo něj —, takže se za nález platilo buď 300 body vlevo, nebo 300
+    ///    body vpravo; hrana je 28. Je to pořád domov (`DiffMarginForm.hasHome`), takže se panel
+    ///    skládat nepřestane, a platí to **v obou pohledech stejně**: do #505 se `Vedle sebe`
+    ///    drželo kolony i pod podlahou kódu, protože jediná další možnost bylo nález schovat.
+    /// 4. **A teprve hrana padá tak, aby nález zůstal bez domova** — když se nevejde **fyzicky**.
+    ///    S ní se pak **rozloží panel**, který karty převezme (`panel` níž).
     ///
     /// **Zahození okraje rozloží panel, a přesto to nekmitá** — což je ta neintuitivní část.
     /// `available` je šířka **po** odečtení panelu (měří ji detail PR), takže rozhodnutí mění svůj
@@ -261,27 +329,33 @@ extension Policy {
     ) -> DiffSideColumns {
         let wide = layout != .split
         guard let available, available > 0 else {
-            return DiffSideColumns(tree: wide, panel: wide && !hasMargin, margin: hasMargin)
+            return DiffSideColumns(
+                tree: wide,
+                panel: wide && !hasMargin,
+                margin: hasMargin ? .cards : .hidden
+            )
         }
         let floor = minimumCodeWidth(layout: layout)
         var tree = wide
-        var margin = hasMargin
+        var margin: DiffMarginForm = hasMargin ? .cards : .hidden
         func codeWidth() -> Double {
-            available - treeColumnWidth(expanded: tree) - marginColumnWidth(shown: margin)
+            available - treeColumnWidth(expanded: tree) - marginColumnWidth(form: margin)
         }
         if codeWidth() < floor { tree = false }
-        // **Pod sebou** stačí, že se kód dostal pod podlahu — panel okraj převezme a je v něm
-        // na nález víc místa než v úzké koloně vedle kódu.
-        if wide, codeWidth() < floor { margin = false }
-        // **Vedle sebe** se okraj drží, dokud se vejde fyzicky: hlídá se, že po něm zbyde na kód
+        // **Práh složení** (#505): kolona se složí na hranu, jakmile by kód spadl pod podlahu —
+        // v obou pohledech stejně. Do #505 se tady `Vedle sebe` kolony drželo i hluboko pod
+        // podlahou, protože jediná další možnost byla nález schovat; s hranou ta volba odpadá.
+        if margin == .cards, codeWidth() < floor { margin = .rail }
+        // A hrana padá teprve tehdy, když se nevejde **fyzicky**: hlídá se, že po ní zbyde na kód
         // aspoň něco, ne že zbyde podlaha.
-        if codeWidth() <= 0 { margin = false }
+        if codeWidth() <= 0 { margin = .hidden }
         return DiffSideColumns(
             tree: tree,
             // **Karty rozhodují víc než pohled**: když se okraj nekreslí a nálezy jsou, panel je
             // jejich jediný domov a musí být rozložený — i ve `Vedle sebe`, kde by ho #188 jinak
-            // složilo. Bez karet platí #188 beze změny.
-            panel: hasMargin ? !margin : wide,
+            // složilo. **Složená hrana domov je** (#505), takže ta se panelu netýká. Bez karet
+            // platí #188 beze změny.
+            panel: hasMargin ? !margin.hasHome : wide,
             margin: margin
         )
     }
@@ -311,7 +385,7 @@ extension Policy {
     /// zahodí — tahle podlaha je druhá pojistka, ne to rozhodnutí.
     static func diffCodeColumnWidth(available: Double?, columns: DiffSideColumns) -> Double? {
         guard let available else { return nil }
-        let sides = marginColumnWidth(shown: columns.margin) + codeColumnTrailingGap
+        let sides = marginColumnWidth(form: columns.margin) + codeColumnTrailingGap
         return max(available - sides, 0)
     }
 
@@ -368,9 +442,45 @@ extension Policy {
         expanded ? 260 : 34
     }
 
-    /// Šířka okraje s kartami z návrhu (`300px`), nebo nula, když se nekreslí.
-    static func marginColumnWidth(shown: Bool) -> Double {
-        shown ? 300 : 0
+    /// Šířka okraje podle toho, v jaké podobě stojí (#505).
+    ///
+    /// Rozložená kolona je z návrhu (`300px`, sekce 43). **Hrana je 28 bodů** a je to změřená
+    /// mez, ne kulaté číslo: značka je sedmibodový puntík (tatáž, jakou má `FindingBubbleView`
+    /// ve svém pruhu), kolem něj je rámeček kurzoru procházení `⌥↓` s 4 body vzduchu na každou
+    /// stranu, tedy 15 — a 6 bodů zbývá na odsazení od dělicí linky a od hrany okna, aby puntík
+    /// nestál na lince. Míň by znamenalo, že se rámeček kurzoru ořízne, víc už je kolona, která
+    /// nic neveze.
+    static func marginColumnWidth(form: DiffMarginForm) -> Double {
+        switch form {
+        case .hidden: 0
+        case .rail: 28
+        case .cards: 300
+        }
+    }
+
+    /// Které karty se kreslí **jako značka na hraně**, ne jako karta (#505).
+    ///
+    /// Jsou to dva různé důvody a jedno pravidlo: *karta, která se nekreslí jako karta, se kreslí
+    /// jako značka*. Zmizet nesmí ani jedna — nález, o kterém není na obrazovce ani stopa, vypadá
+    /// jako čistý pull request.
+    ///
+    /// - **Složená hrana** (`.rail`) nekreslí jako kartu **žádnou**, takže značku dostanou
+    ///   všechny; klik kartu rozbalí jako popover.
+    /// - **Rozložená kolona** (`.cards`) kreslí karty jen v pásu kolem výřezu (#469) — a to, co je
+    ///   mimo něj, zůstávalo do #505 bez jakékoli stopy. Tady se to dodělává: mimo pás je značka.
+    ///
+    /// - Parameter mounted: klíče karet, které se doopravdy kreslí jako karta. Skládá je kresba
+    ///   ze změřených poloh a pásu (`Policy.isBlockMounted`) — geometrie patří tam, rozhodnutí sem.
+    static func marginDots(
+        of cards: [DiffMarginCard],
+        mounted: Set<String>,
+        form: DiffMarginForm
+    ) -> [DiffMarginCard] {
+        switch form {
+        case .hidden: []
+        case .rail: cards
+        case .cards: cards.filter { !mounted.contains($0.id) }
+        }
     }
 
     /// Barva hrany karty a pruhu u řádku. Odmítnutá skupina ztichne, blokující křičí — **tatáž

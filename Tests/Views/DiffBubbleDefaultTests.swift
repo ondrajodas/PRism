@@ -145,52 +145,40 @@ struct DiffBubbleDefaultTests {
         }
     }
 
-    /// **Kolona kódu je s bublinami o 300 b širší než s okrajem — tam, kde se okraj kreslí.**
+    /// **Kolona kódu je s bublinami širší přesně o okraj — ať okraj stojí v kterékoli podobě.**
     ///
-    /// Na podlaze okna to neplatí a je to správně: v `Pod sebou` při štěrbině 610 automatika okraj
-    /// zahodí **a k tomu složí strom**, takže s okrajem vyjde kolona naopak širší. Rozhoduje tedy
-    /// `columns.margin`, ne šířka okna — a aspoň jedna šířka z pásma musí okraj doopravdy
-    /// nakreslit, jinak tvrzení nic neváží (#478).
-    @Test("Šířka kolony: bubliny mají o okraj víc, kde se okraj vejde")
+    /// Do #505 tady byla výjimka: na podlaze okna (štěrbina 610, `Pod sebou`) automatika okraj
+    /// **zahodila** a k tomu složila strom, takže s okrajem vyšla kolona naopak širší a tvrzení
+    /// se muselo vázat na `columns.margin`, ne na šířku okna. Od #505 ta výjimka **není** —
+    /// okraj se místo zahození složí na hranu, strom se rozhodne v obou stavech stejně a rozdíl
+    /// je 28 bodů místo 300. Žebřík je tím napříč celým pásmem jeden.
+    @Test("Šířka kolony: bubliny mají o okraj víc, v obou jeho podobách")
     func theCodeColumnIsWiderByTheMargin() throws {
-        var drawn = 0
+        var seen: Set<DiffMarginForm> = []
         for slot in Self.slots {
             for layout in [DiffLayout.split, .unified] {
                 let withMargin = Policy.diffSideColumns(layout: layout, hasMargin: true, available: slot)
                 let withBubbles = Policy.diffSideColumns(layout: layout, hasMargin: false, available: slot)
                 let marginColumn = try #require(Policy.diffCodeColumnWidth(available: slot, columns: withMargin))
                 let bubbleColumn = try #require(Policy.diffCodeColumnWidth(available: slot, columns: withBubbles))
-                guard withMargin.margin else {
-                    // **Okraj se nevejde**, takže ho automatika zahodí **a k tomu složí strom** —
-                    // a s okrajem vyjde kolona naopak širší. Je to jediný takový bod v pásmu
-                    // (610 v `Pod sebou`) a pin je na něm schválně: tvrzení níž se váže na
-                    // `columns.margin`, ne na šířku okna.
-                    #expect(
-                        bubbleColumn <= marginColumn,
-                        """
-                        Štěrbina \(slot) \(layout): okraj se nekreslí, a přesto vyšla kolona \
-                        s bublinami (\(bubbleColumn) b) širší než ta s okrajem (\(marginColumn) b) \
-                        — pak už automatika neustupuje tak, jak je popsané.
-                        """
-                    )
-                    continue
-                }
-                drawn += 1
+                seen.insert(withMargin.margin)
                 #expect(
                     withMargin.tree == withBubbles.tree,
                     "Štěrbina \(slot) \(layout): strom se liší, rozdíl kolon pak není jen okraj"
                 )
                 #expect(
-                    bubbleColumn - marginColumn == Policy.marginColumnWidth(shown: true),
+                    bubbleColumn - marginColumn == Policy.marginColumnWidth(form: withMargin.margin),
                     """
                     Štěrbina \(slot) \(layout): s bublinami \(bubbleColumn) b, s okrajem \
                     \(marginColumn) b — rozdíl \(bubbleColumn - marginColumn) b místo \
-                    \(Policy.marginColumnWidth(shown: true)).
+                    \(Policy.marginColumnWidth(form: withMargin.margin)).
                     """
                 )
             }
         }
-        #expect(drawn > 0, "V žádné šířce z pásma se okraj nekreslí — tvrzení výš neváží nic.")
+        // **Obě podoby musí v pásmu doopravdy nastat**, jinak tvrzení výš neváží nic (#478):
+        // kolona na širokých oknech, hrana na podlaze.
+        #expect(seen == [.rail, .cards], "V pásmu se ukázalo jen \(seen)")
     }
 
     // MARK: - Panel vpravo
