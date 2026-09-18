@@ -8567,3 +8567,38 @@ cenu, a prázdné by znamenalo další session po příštím otevření PR.
 Proto `AutoDraftBody.Failure.handWritten`: vlastní případ, vlastní věta v pruhu (`Tělo si píšeš
 sám — automat do composeru nesáhl.`) a **doběhlá** dráha, jejíž `kind` nese `used: false` — aby
 věta pod ní netvrdila, že je tělo podle mého hlasu.
+
+### Záznam rozhodnutí — Copilot běží i nad opravou po Opusově revizi (#599)
+
+Postup z #597 zněl *vlastní revize → Copilot → Opusova revize → merge*. Když ale Opus něco najde
+a Sonnet to opraví, Copilot už se nepouští (*stačí jedno kolo*) — takže **diff, který se doopravdy
+merguje, Copilot v té podobě nikdy neviděl**. #597 tu díru pojmenovalo a nechalo otevřenou; tady
+se zavírá.
+
+**Vybralo se druhé kolo Copilota nad opravou**, tedy pořadí *vlastní revize → Copilot → Opusova
+revize → oprava → Copilot nad opravou → merge*. Rozhodlo jedno pozorování: nezkontrolovaná část
+diffu není náhodná, je to **ta nejrizikovější**. Opravu píše **týž slabý model**, kvůli kterému je
+Copilot na téhle dráze vůbec povinný, a Opusovy nálezy jsou z definice **chybějící věci** — tedy
+přidaný kód, a to je přesně třída, ve které [pět vzorů](../../github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně) vzniká. Navíc Copilot
+vidí jen nový diff, takže to druhé kolo posuzuje **jen tu opravu**, a **neplatí se z naší kvóty**:
+cena je čas, ne Opusovy tokeny, což je přesně ten zdroj, který celý postup z #597 šetří.
+
+Meze jsou tři, aby se z toho nestalo kolotočové vyžadování: jde **jen o dráhu `model:sonnet`**
+(na silném modelu krok *Opusova revize → oprava* neexistuje, takže pravidlo *stačí jedno kolo*
+zůstává nedotčené), **jen když oprava sáhla na kód**, a shora to drží **strop dvou kol**, takže
+Copilot běží nejvýš třikrát. Když druhé kolo nedoběhne, merge to neblokuje — opravný diff projde
+vlastní revizí a zapíše se **neověřená mezera**.
+
+**Zahodilo se *nechat, jak to je* a jen to přiznat.** Je to nejlevnější varianta a tvrzení by
+šlo napsat pravdivě („Copilot viděl diff před poslední opravou“), ale přiznání samo nic nehlídá.
+Vyjmout z levné kontroly zrovna tu část diffu, kterou napsal nejslabší článek řetězu, znamená
+nechat povinnost Copilota platit jen tam, kde na ní tolik nezáleží. Zbytek té varianty ale
+**zůstal v platnosti jako záložní cesta**: přesně tohle se udělá, když se druhé kolo nepodaří
+spustit — s tím rozdílem, že je to pak pojmenovaná mezera, ne tichý výchozí stav.
+
+**Zahodilo se i přehození pořadí** na *vlastní revize → Opusova revize → oprava → Copilot →
+merge*. Copilot by finální diff viděl a druhé kolo by nebylo potřeba, jenže silný model by četl
+diff, ve kterém těch pět vzorů **ještě stojí** — část jeho krátkého a drahého textu by tedy padla
+na nálezy, které Copilot udělá zadarmo. To jde přímo proti cíli #597 (*míň Opusových tokenů*,
+ne míň tokenů celkem), a proto to #597 nedoporučilo už tehdy; tímhle rozhodnutím se na tom nic
+nemění.

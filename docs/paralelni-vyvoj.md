@@ -185,9 +185,19 @@ ale *„v souboru X nahraď A za B, protože Z“*. A z toho plyne užitečný s
 nedá napsat jako aplikovatelná instrukce, znamená, že issue bylo zařazené špatně** — rozhoduje se
 v něm něco, co Sonnet rozhodovat neměl.
 
-**Strop jsou dvě kola.** Když je potřeba třetí, issue **přebírá Opus** a zapíše se to do
-[`stav.md`](stav.md) do rubriky špatných zařazení. Cena je tím shora omezená a zároveň z toho
-padají data, podle kterých se kritérium opraví.
+**Strop jsou dvě kola a počítá je orchestrátor** (#599). Subagent je počítat neumí, a není to
+nedbalost: opravu dostává typicky v **nové session**, takže vlastní kola nevidí a každé mu připadá
+jako první. Počitadlo proto drží ten, kdo vidí na celou dráhu issue. **Třetí kolo se nepouští** —
+znamená, že issue **přebírá Opus**, a zapíše se to do [`stav.md`](stav.md) do rubriky špatných
+zařazení. Cena je tím shora omezená a zároveň z toho padají data, podle kterých se kritérium
+opraví. Bez určeného počítače je strop přání.
+
+**Spotřebu tokenů vyplňuje taky orchestrátor** (#599). Subagent ji **zevnitř nevidí** — zná ji
+harness, ne on. Do hlášení proto dává **počet volání nástrojů a počet kol s překladačem**, což
+vidět má, a sloupec `Tokeny` v [`stav.md`](stav.md) plní orchestrátor při zápisu toho hlášení.
+Kdyby se nechal na subagentovi, vyplnil by odhad — a tabulka plná odhadů vypadá zeleně, ať postup
+funguje, nebo ne. Je to tentýž druh měřidla jako
+v [#478](testovani.md#kolečko-v-zásuvce-478--co-jde-tvrdit-bez-pty).
 
 **Kritérium: model volí tvar úkolu, ne jeho velikost.** Silný model, když platí aspoň jedno:
 
@@ -311,6 +321,12 @@ Subagent dostane worktree (`isolation: "worktree"`) — **výjimka je strom po s
 kde se nový nezakládá a zadání se liší ve třech věcech (viz *Co dělá orchestrátor — a co ne*) —
 a v zadání tohle:
 
+- **model, a na prvním řádku zadání** (#599) — vedle slotu, ne někde v textu. `CLAUDE.md` drží
+  dvě opačná pravidla (*rozhodni sám* proti *zastav a ohlas*) a rozhoduje mezi nimi právě model —
+  tedy **proměnná, kterou ten soubor nevidí**. Bez ní si ta dvě pravidla protiřečí a agent si
+  vybere. Je to tentýž případ jako [číslo sekce v
+  mockupu](#číslo-sekce-v-mockupu-přiděluje-orchestrátor): co si má subagent domýšlet, domyslí si
+  špatně,
 - **slot** jako první příkaz (viz výš),
 - **`./bin/slot-config.sh`** jako způsob, jak si připravit konfiguraci, když bude appku
   spouštět (#262) — nikdy ne vlastní `jq` filtr v zadání. Filtr v zadání je druhá kopie očisty
@@ -319,10 +335,10 @@ a v zadání tohle:
 - **číslo sekce v mockupu**, když issue kreslí do `docs/navrh.html` — dosazené v zadání, ne
   „další volné“ (§1). A s ním pokyn, že **po mergi publikuje znovu ze slitého stavu**,
   protože publikování není merge a to druhé publikování je povinný krok, ne úklid,
-- **model a proč** ([§1](#volbu-modelu-přiděluje-orchestrátor-597)). U `model:sonnet` musí v
-  zadání **stát, že se v issue nic nerozhoduje** — jinak agent tu hranici nepozná a bude ji hledat
-  sám. A s tím pokyn, že **když na rozhodování narazí, zastaví a ohlásí to**: není to selhání, je
-  to důkaz špatného zařazení,
+- **proč zrovna ten model** ([§1](#volbu-modelu-přiděluje-orchestrátor-597)). U `model:sonnet`
+  musí v zadání **stát, že se v issue nic nerozhoduje** — jinak agent tu hranici nepozná a bude
+  ji hledat sám. A s tím pokyn, že **když na rozhodování narazí, zastaví a ohlásí to**: není to
+  selhání, je to důkaz špatného zařazení,
 - **odkazy na konkrétní sekce, ne na celé soubory.** Pravidlo *odkaz, ne převyprávění* platí dál
   (kopie pravidla se s originálem rozejde), ale „přečti si `CLAUDE.md`“ je u tisícřádkového
   souboru něco jiného než „přečti si tvrdé podmínky 2 a 3“. **Tohle je největší jednotlivá
@@ -338,7 +354,10 @@ a v zadání tohle:
   orchestrátorovi*. Patří to do zadání ze stejného důvodu jako pauza — **co není v zadání, to
   subagent neudělá**, a to je zjištění z #256,
 - **kde končí jeho práce**: issue je hotové, PR mergnutý, release vydaný a **jeho aplikace
-  uklizená** (viz krok 5).
+  uklizená** (viz krok 5),
+- **co má stát v hlášení**: kromě obvyklého shrnutí **počet volání nástrojů a počet kol
+  s překladačem** (#599). Spotřebu tokenů **nepíše ani odhadem** — vyplňuje ji orchestrátor
+  ([§1](#volbu-modelu-přiděluje-orchestrátor-597)).
 
 Co subagent dělá: implementaci, testy, vlastní revizi diffu, dokumentaci, commit, push, PR,
 reakci na Copilota — pak **pauzu na proklikání** a po ní **merge, zavření issue a release**. Na
@@ -464,12 +483,36 @@ změnu proklikal (#256, §4) — čeká se tedy na práci a na jedno slovo, ne n
 
 ### Revize před mergem — kdo reviduje co
 
-**Pořadí je dané a nepřehazuje se:** vlastní revize → Copilot → Opusova revize → merge. Copilot je
-levnější a chytá **jinou třídu nálezů** — pět vzorů z
-[`github-cli.md`](github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně) —, kdežto Opusova
+**Pořadí je dané a nepřehazuje se:** vlastní revize → Copilot → **Opusova revize → oprava →
+Copilot nad opravou** → merge (#599). Copilot je levnější a chytá **jinou třídu nálezů** — pět
+vzorů z [`github-cli.md`](github-cli.md#co-copilot-v-tomhle-repu-nachází-opakovaně) —, kdežto Opusova
 revize hlídá to, co Copilot z principu nevidí: **chybějící věci a porušené tvrdé podmínky**. V
 PRismu ho tedy **doplňuje, ne nahrazuje**; na Mullionu, kde Copilot dostupný není, ho nahradit
 musí. U `model:sonnet` je proto Copilot **povinný**, ne volitelný.
+
+**Druhé kolo Copilota nad opravou není výjimka z pravidla *stačí jedno kolo*, je to konec téhle
+dráhy** (#599). Bez něj se merguje diff, který Copilot v té podobě **nikdy neviděl** — a je to ta
+horší polovina diffu: opravu po Opusově revizi píše **týž slabý model** a Opusovy nálezy jsou
+z definice **chybějící věci**, tedy přidaný kód. To je přesně třída, ve které těch pět vzorů
+vzniká, takže nechat poslední změnu před mergem bez levné kontroly by vyprázdnilo důvod, proč je
+Copilot na téhle dráze vůbec povinný. A Copilot **vidí jen nový diff**, takže druhé kolo posuzuje
+**jen tu opravu**: je to nejlevnější možná kontrola a **neplatí se z naší kvóty**, nýbrž časem.
+
+Meze má tři, aby z toho nebylo kolotočové vyžadování:
+
+- **Jen na dráze `model:sonnet`.** Na silném modelu krok *Opusova revize → oprava* neexistuje,
+  takže se pravidlo *stačí jedno kolo* z [`CLAUDE.md`](../CLAUDE.md) **nemění ani o slovo**.
+- **Jen když oprava sáhla na kód.** Nenašlo-li se nic, nebo se opravila jen próza, druhé kolo se
+  nepouští.
+- **Shora to drží strop dvou kol**, takže Copilot běží nejvýš třikrát.
+
+**Když druhé kolo nedoběhne, merge to neblokuje.** [Spotřebovaný request mrtvým
+jobem](github-cli.md#když-se-request-spotřebuje-mrtvým-jobem) stojí čtyři a půl hodiny ticha a
+ruční cesta ven je destruktivní; místo čekání se opravný diff projde **vlastní revizí** — těch pět
+vzorů grepem — a do popisu PR i do [`stav.md`](stav.md) se to napíše jako **neověřená mezera**.
+Tvrzení „diff prošel Copilotem“ je pak nepravdivé **pojmenovaně**, ne potichu, což je celý rozdíl
+proti zamítnuté variantě *nechat, jak to je*
+([záznam rozhodnutí](superpowers/specs/2026-07-31-prism-design.md#záznam-rozhodnutí--copilot-běží-i-nad-opravou-po-opusově-revizi-599)).
 
 **Kdo tu Opusovu revizi dělá, rozhoduje velikost diffu, ne důležitost issue:**
 
@@ -480,7 +523,8 @@ musí. U `model:sonnet` je proto Copilot **povinný**, ne volitelný.
 
 Reviewer vydá **aplikovatelné instrukce, ne posudek**
 ([§1](#volbu-modelu-přiděluje-orchestrátor-597)) a **opravu píše zpátky Sonnet**. Strop jsou dvě
-kola; třetí znamená, že issue přebírá Opus a že zařazení bylo špatné.
+kola a **počítá je orchestrátor** ([§1](#volbu-modelu-přiděluje-orchestrátor-597)); třetí
+znamená, že issue přebírá Opus a že zařazení bylo špatné.
 
 **Merguje se z pracovního stromu, a `gh pr merge` v něm skončí nenulově** — hlásí `fatal: 'main'
 is already used by worktree`, a **merge na GitHubu přesto proběhne**. Padá na tom **lokální** krok
