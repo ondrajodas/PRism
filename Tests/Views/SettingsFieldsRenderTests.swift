@@ -42,7 +42,14 @@ struct SettingsFieldsRenderTests {
     ///
     /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
     /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
-    private static let height: CGFloat = 2800
+    ///
+    /// **Od #514 o dalších čtyři sta, a poprvé to nezpůsobila jedna změna, ale jejich slití.**
+    /// Sada `Jak si reviewery vedou` (#514) i sekce z #524 se každá zvlášť nad 2800 body ještě
+    /// vešly — obě větve měly tenhle test zelený —, teprve dohromady pole vytlačily. **Změřeno
+    /// půlením, ne odhadem**: nad slitým stavem je zeleno už od 2850, takže těch 3200 je
+    /// **rezerva**, ne potřebná výška. Když tedy zčervená příště, nemusí to znamenat, že se něco
+    /// pokazilo v posledním diffu.
+    private static let height: CGFloat = 3200
 
     // MARK: - Text issue z trackeru
 

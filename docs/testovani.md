@@ -12019,6 +12019,23 @@ desetinou vteřiny na kliknutí. **Zlevnit by šlo jedině dekódování** (už�
 `JSONDecoder` dokument parsuje celý); fold je nad tím lineární a přesouvat ho do počitadla by
 znamenalo druhé číslo, které se umí rozejít s diskem — viz [`docs/architektura.md`](architektura.md#součet-odmítnutí-po-reviewerech-514).
 
+### A `SettingsFieldsRenderTests` dostaly vyšší okno — poprvé kvůli slití, ne kvůli jedné změně
+
+Konstanta „kam až stránka sahá“ šla z **2800 na 3200** bodů. `Form` je `ScrollView`, takže co se
+do okna nevejde, se **nenakreslí** — a sekce `Text issue z trackeru` se posunula pod dosavadní
+hranici, takže dvě bitmapy vyšly **stejné** (1 079 390 bajtů obě). Test tedy spadl na to, co má
+chytat.
+
+**Novinka je v tom, čí to byla vina.** Do teď ten test zvedla vždycky jedna změna (#517, #510,
+#519, #516). Tady měla sada `Jak si reviewery vedou` (#514) i sekce z #524 tenhle test na **své**
+větvi zelený a pole vytlačilo teprve jejich **slití** v `mainu`. Z toho plyne návod: až zčervená
+příště, nemusí být příčina v posledním diffu — a **plný běh nad slitým stavem je proto podmínka,
+ne formalita** (doloženo: na samotné větvi #514 byla tahle sada zelená ve třech plných bězích za
+sebou).
+
+**Výška je změřená půlením, ne odhadnutá**: nad slitým stavem je zeleno už od **2850**, takže
+3200 je rezerva na tři další sekce, ne potřebná výška.
+
 ### Co se v harnessu ověřit nedá
 
 - **Že se řádek v úzkém sloupci složí a čte.** Výška se změřit dá (je na to test), ale jestli to
