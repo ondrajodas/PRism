@@ -109,7 +109,9 @@ extension Policy {
     static func isReported(_ kind: ActivityEvent.Kind, on ownership: PullRequestOwnership) -> Bool {
         switch kind {
         case .newPullRequest, .reReview, .findings, .clean, .failure, .staleFindings, .leftQueue,
-             .returnedFromSnooze:
+             .returnedFromSnooze, .replyRound:
+            // **Druhé kolo (#523) patří k cizím PR**: „odpověď na tvoje review“ je otázka o cizí
+            // práci a na vlastním PR by z ní byl řádek o tom, že jsem si odpověděl sám.
             ownership == .theirs
         case .foreignActivity, .agentFix:
             // **Agent běží jedině na vlastním PR** (`Policy.agentFix` vrací `notMine` jako první
@@ -132,6 +134,7 @@ extension Policy {
         case .failure: .failure
         case .activity: .foreignActivity
         case .agentFix: .agentFix
+        case .replies: .replyRound
         }
     }
 
@@ -153,6 +156,10 @@ extension Policy {
         // žádný vlastní tab nemá, kreslí se **nad** pruhem záložek, takže ji `Přehled` otevře
         // stejně jako kterýkoli jiný — a `Přehled` k ní přidá to, co se o PR ví.
         case .agentFix: .tab(.overview)
+        // **Druhé kolo vede na `Přehled`** (#523), protože tam je karta `Odpověď na tvoje review`
+        // — tedy celý ten rozpis, o kterém řádek mluví. `Konverzace` by ukázala vlákna, ale ne to,
+        // co s nimi udělaly commity.
+        case .replyRound: .tab(.overview)
         // Zastaralé nálezy vedou na `Commity`, ne na `Nálezy`: rozhodnutí, co s nimi, se dělá
         // podle toho, co v těch commitech přišlo.
         case .staleFindings: .tab(.commits)
@@ -173,6 +180,9 @@ extension Policy {
         // úspěch, červeně by se hotová oprava tvářila jako porucha, a akcent je to, co obojí
         // spojuje: **na tomhle PR na tebe něco čeká**.
         case .agentFix: .accent
+        // Tentýž důvod jako u agenta: puntík odpovídá na „co to je“, ne „jak to dopadlo“.
+        // Zeleně by se řádek s jedním zbývajícím bodem tvářil jako hotovo.
+        case .replyRound: .accent
         case .findings, .failure: .critical
         case .clean: .ok
         case .staleFindings: .stale
@@ -196,6 +206,7 @@ extension Policy {
         case .failure: "xmark"
         case .foreignActivity: "bubble.left"
         case .agentFix: "wand.and.stars"
+        case .replyRound: "arrowshape.turn.up.left"
         case .staleFindings: "clock.arrow.circlepath"
         case .leftQueue: "minus"
         case .returnedFromSnooze: "alarm"
@@ -211,7 +222,7 @@ extension Policy {
         guard !announced else { return false }
         switch kind {
         case .newPullRequest, .reReview, .findings, .clean, .failure, .foreignActivity,
-             .agentFix:
+             .agentFix, .replyRound:
             return true
         case .staleFindings, .leftQueue, .returnedFromSnooze: return false
         }
@@ -498,7 +509,10 @@ extension Policy {
     /// **Deterministická**, aby přežila uložení a načtení a aby se dvě všimnutí téže věci slila.
     /// Okamžik se píše jako počet sekund od referenčního data, ne přes locale — je to klíč, ne text
     /// pro člověka.
-    private static func identity(_ kind: ActivityEvent.Kind, _ pr: PRIdentifier, at: Date) -> String {
+    /// **Není `private` od #523**: skládá ji i `replyRoundActivity`, která bydlí ve vlastním
+    /// souboru (druhé kolo má vlastní notifikaci i vlastní řádek). Druhé skládání téhož klíče by
+    /// znamenalo dvě pravidla, podle kterých se položky slévají.
+    static func identity(_ kind: ActivityEvent.Kind, _ pr: PRIdentifier, at: Date) -> String {
         "\(kind.rawValue)|\(pr)|\(at.timeIntervalSinceReferenceDate)"
     }
 

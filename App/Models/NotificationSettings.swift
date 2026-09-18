@@ -32,6 +32,14 @@ enum NotificationEvent: String, Codable, CaseIterable, Hashable, Sendable {
     /// **vypíná zvlášť**: kdo si zapne agenta, nemusí chtít vyrušit u každého jeho konce, a kdo si
     /// vypne hlášky o cizích komentářích, nemá tím přijít o zprávu, že v cache leží commit.
     case agentFix
+    /// **Autor odpověděl na moje review** (#523) — na cizím PR se pohnulo to, na co jsem se ptal
+    /// já: commity opravily část mých komentářů, na část kolega odpověděl.
+    ///
+    /// **Vlastní případ, ne sedmý odstín výsledku review.** `findings`, `clean` a `failure` mluví
+    /// o tom, co našel **náš reviewer**; tohle je zpráva o **cizí práci na mém review**, a hlavně
+    /// se to vypíná zvlášť: kdo chce vědět, jak dopadl reviewer, nemusí chtít vyrušit u každého
+    /// pushe autora — a naopak.
+    case replies
 
     /// Co se navzájem nahrazuje, když jedna hláška ještě visí (#87).
     ///
@@ -53,6 +61,9 @@ enum NotificationEvent: String, Codable, CaseIterable, Hashable, Sendable {
         // druhá z nich je zrovna ten podnět, na který ten agent reagoval, takže by se přepsala
         // příčina výsledkem.
         case .agentFix: "agent"
+        // **Vlastní skupina.** Že autor opravil tři body, nemá přebít výsledek našeho reviewera
+        // na tomtéž PR — jsou to dvě různé věci a obě mají zůstat na obrazovce.
+        case .replies: "replies"
         }
     }
 }
@@ -86,6 +97,10 @@ struct NotificationSettings: Codable, Equatable, Sendable {
     /// pouští (`autoAgent`), je přitom **vypnutá**, takže nad nezapnutým agentem tenhle přepínač
     /// nic nedělá.
     var agentFix: Bool
+    /// Autor odpověděl na moje review (#523). **Výchozí zapnuto** jako u zbytku: je to zpráva
+    /// „druhé kolo se dá dodělat za minutu“, tedy přesně ten druh vyrušení, kvůli kterému
+    /// notifikace jsou. Chodí jedině tam, kde jsem na cizím PR odeslal řádkové komentáře.
+    var replies: Bool
 
     init(
         isEnabled: Bool = true,
@@ -94,7 +109,8 @@ struct NotificationSettings: Codable, Equatable, Sendable {
         clean: Bool = true,
         failure: Bool = true,
         activity: Bool = true,
-        agentFix: Bool = true
+        agentFix: Bool = true,
+        replies: Bool = true
     ) {
         self.isEnabled = isEnabled
         self.newPullRequest = newPullRequest
@@ -103,6 +119,7 @@ struct NotificationSettings: Codable, Equatable, Sendable {
         self.failure = failure
         self.activity = activity
         self.agentFix = agentFix
+        self.replies = replies
     }
 
     /// Smí se tahle událost ohlásit?
@@ -118,6 +135,7 @@ struct NotificationSettings: Codable, Equatable, Sendable {
         case .failure: return failure
         case .activity: return activity
         case .agentFix: return agentFix
+        case .replies: return replies
         }
     }
 
@@ -138,5 +156,6 @@ struct NotificationSettings: Codable, Equatable, Sendable {
         failure = (try? container.decode(Bool.self, forKey: .failure)) ?? standard.failure
         activity = (try? container.decode(Bool.self, forKey: .activity)) ?? standard.activity
         agentFix = (try? container.decode(Bool.self, forKey: .agentFix)) ?? standard.agentFix
+        replies = (try? container.decode(Bool.self, forKey: .replies)) ?? standard.replies
     }
 }

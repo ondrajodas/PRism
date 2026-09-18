@@ -7975,6 +7975,45 @@ v zobrazení.
 **Brána kontroly zůstala u nálezů** (#150), i když by šlo pustit ji i na PR, kde mám jen
 komentáře. Tlačítko na místě, kde dosud nebylo, je kresba — a ta patří do #523, ne sem.
 
+### Záznam rozhodnutí — karta druhého kola stojí vedle pruhu od minule (#523)
+
+Zákres Z3 kreslí druhé kolo **v šasi `.since`**, s tagem „karta *Od tvé poslední návštěvy* po
+pushi autora“ — tedy jako *podobu* toho pruhu, ne jako druhou kartu. **Rozhodnuto jinak: dvě karty
+nad sebou.**
+
+Důvod je v tom, co by se slitím ztratilo. Pruh od minule nese kromě odrážek o commitech ještě
+**odrážku o přepsané historii**, odznak **`nálezy zastaraly`** a dvě tlačítka (`Pustit review
+znovu`, `Ukázat, co přibylo`) — a všechno to platí **nejvíc právě po pushi autora**, tedy přesně
+ve chvíli, kdy by ho karta druhého kola nahradila. Zákres to nekreslí proto, že kreslí jednu věc
+najednou, ne proto, že by to mělo zmizet.
+
+Cena je jedna karta navíc v `Přehledu`. Zaplatila se **tónem**: karta druhého kola je akcentová,
+ne okrová. `--stale` znamená „platilo to, dneska už ne“ (to je přesně věta pruhu od minule), kdežto
+tahle karta znamená „je co udělat“ — a pruh s návrhem verdiktu v ní je `.pill.run`, tedy akcent
+i v zákresu. Dvě stejně okrové karty nad sebou by navíc splynuly v jednu, což je opak toho, kvůli
+čemu se rozdělily.
+
+**Zakresleno v sekci 60** (`docs/navrh.html`), takže návrh a aplikace se neliší — mění se zákres,
+ne implementace.
+
+**Zamítnuto: razítko v hlavičce jako „push dnes 9:12 · 2 commity · 9c1de02“.** Zákres to tak
+kreslí, jenže karta o **pushi** neví nic — ví, kdy běžela **naše kontrola** a proti jaké hlavě.
+Počet commitů by se musel vzít z `VisitChanges`, tedy z „od tvé poslední návštěvy“, což je jiná
+osa a v kartě by tvrdila víc, než data unesou (a zároveň by opakovala odrážku z pruhu pod ní).
+Razítko proto říká `prověřeno před 12 minutami · 9c1de02`.
+
+**Zamítnuto: přidat `comment` do `ReviewVerdict`.** Ten typ je návrh **z nálezů** a `comment` v něm
+schválně není („je to vědomé nerozhoduju, tedy pravý opak návrhu odvozeného z nálezů“). V druhém
+kole je `Komentář` naopak plnohodnotná odpověď — *neschvaluju, protože něco zbývá*. Přidat ho do
+`ReviewVerdict` by rozbilo tu první větu a `suggestedVerdict` by najednou uměl vrátit hodnotu,
+kterou dodnes vrátit nesmí. Návrh druhého kola je proto vlastní typ
+(`Policy.ReviewReplyProposal`).
+
+**Zamítnuto: předepsat tělo i u `Schválit i tak`.** Bylo by to pohodlné a je to špatně: jediná
+věta, kterou by šlo napsat pravdivě, by musela zbývající bod pojmenovat — a to už není předpis,
+to je text, který za člověka rozhoduje, jak se k tomu bodu postaví. `Schválit i tak` je vědomé
+rozhodnutí jít proti návrhu, takže tělo zůstane prázdné a napíše si ho člověk.
+
 ### Záznam rozhodnutí — série PR se poznává z rozšířeného dotazu na hlavy (#513)
 
 **Zadání issue bylo fakticky špatně a opravilo se před implementací.** Stálo v něm, že se série
