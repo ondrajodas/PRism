@@ -12047,6 +12047,26 @@ a skok přidá, když se kotva najde — tedy žádné mrtvé tlačítko a žád
 dál: tam jde o zápis do `@State` z `onContinuousHover`, tady o zápis do **storu** z `body`. Grep na
 to není — pozná se to `sample`m, a proto je to zapsané tady.
 
+### Co našlo teprve slití s `main`em
+
+**`SettingsFieldsRenderTests` musely dostat vyšší okno** (2800 → 3500 bodů) — potřetí týž případ
+jako u #517 a #519. `Form` je `ScrollView`, takže co se do okna nevejde, se **nenakreslí**, a sekce
+`Text issue z trackeru` je na stránce poslední. Nové tady je **jak se to stalo**: sekci
+`Návrh review po reviewerech` přidalo #520 a přepínač `Po review popsat hunky` s odstavcem
+vysvětlení #524, a **ani jedna z nich pole pod hranici sama neposunula** — teprve obojí. Vlastní
+plný běh tedy zčervenal až **nad slitým stavem**, na kterém se ani jedna větev před mergem
+neměřila. Je to zároveň důvod, proč ta konstanta patří ke **stránce**, ne ke změně: kdo ji zvedá
+podle „co jsem přidal já“, netrefí ji v dávce nikdy.
+
+**Spadlo to na to, co má test chytat** (dvě bitmapy vyšly stejné, protože se pole přestalo
+kreslit), ne na vlastní konstantu — takže se z toho nedá udělat oprava tím, že se tvrzení oslabí.
+
+**A operátorová oprava z téhož běhu**: `reviewRecords[pr] = try? await saveAutoDraft(…) ?? …`
+se parsuje jako `try? (save() ?? …)`, takže selhání zápisu razítka **nespadlo na starý záznam, ale
+na `nil`** — tedy by vyhodilo z paměti celý `ReviewRecord` včetně nálezů. Vydal to **warning
+překladače** (`left side of nil coalescing operator '??' has non-optional type`), ne test; sesterská
+metoda `forgetAutoDraftStamp` tu závorku má, takže šlo o překlep proti vlastnímu vzoru.
+
 ### Co se v harnessu ověřit nedá
 
 - **Že se pruh v panelu doopravdy nakreslí nad bannerem o zastarání** — obojí naráz je stav, do
