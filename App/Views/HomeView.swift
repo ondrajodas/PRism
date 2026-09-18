@@ -55,7 +55,7 @@ struct HomeView: View {
         // Uzávěr, ne odkaz `store.openTab(_:)`: od #409 bere `openTab` i tab, na kterém se má PR
         // otevřít, a odkaz na metodu s výchozím parametrem se ve Swiftu složit nedá. Deska tab
         // nejmenuje — řádek vede na PR, ne do jeho záložky.
-        case .overview: BoardView(store: store, open: { store.openTab($0) })
+        case .overview: BoardView(store: store, open: { store.openTab($0) }, openSettings: openSettings)
         case .queue: PullRequestListView(store: store, scope: .queue)
         // Tentýž seznam nad druhou množinou (#331) — filtr, řazení i detail se použijí beze
         // změny. Druhé view by znamenalo dvě podoby jednoho řádku.

@@ -56,6 +56,19 @@ struct GlobalConfig: Codable, Equatable, Sendable {
     var skills: [String]
     /// Výchozí sada podle rozpoznaného jazyka projektu. Prázdná mapa = detekce nic nemění.
     var skillsByLanguage: [ProjectLanguage: [String]]
+    /// Kde na disku leží složka kterého skillu (#514). Klíč je id skillu, hodnota cesta.
+    ///
+    /// **Jediné, k čemu to je, je `Otevřít skill ↗`** v tabulce `Jak si reviewery vedou`. Skill
+    /// se pouští jménem (nástroj `Skill` si ho najde sám), takže aplikace jeho složku odjinud
+    /// nezná a znát ji nepotřebuje — tohle je zkratka do Finderu, ne cesta k spouštění. Skill,
+    /// který tu není, tlačítko **nedostane** (ne zašedlé), viz `Policy.skillFolder(of:in:)`.
+    ///
+    /// **Editor v okně to nemá schválně.** Zákres (sekce 61) kreslí v Nastavení tabulku
+    /// s tlačítkem, ne políčka na cesty — a co v mockupu nakreslené není, se do okna nepřidává.
+    /// Píše se to tedy do `config.json`; je to hodnota, kterou člověk nastaví jednou.
+    ///
+    /// **Globálně, ne per repo**: kde leží složka skillu, je fakt o tomhle stroji, ne o repozitáři.
+    var skillFolders: [String: String]
     var blockingCategories: [String]
     /// Psaná půlka zadání pro reviewera (#281) se zástupnými texty `{{skill}}` a `{{baseSha}}`.
     ///
@@ -253,6 +266,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         searchOrganizations: [String] = [],
         skills: [String],
         skillsByLanguage: [ProjectLanguage: [String]] = [:],
+        skillFolders: [String: String] = [:],
         blockingCategories: [String],
         reviewPrompt: String = ReviewPromptTemplate.standard,
         reviewTimeoutMinutes: Int = ReviewTimeout.standardMinutes,
@@ -283,6 +297,7 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         self.searchOrganizations = searchOrganizations
         self.skills = skills
         self.skillsByLanguage = skillsByLanguage
+        self.skillFolders = skillFolders
         self.blockingCategories = blockingCategories
         self.reviewPrompt = reviewPrompt
         self.reviewTimeoutMinutes = reviewTimeoutMinutes
@@ -330,6 +345,12 @@ struct GlobalConfig: Codable, Equatable, Sendable {
         // tam měly běžet.
         skillsByLanguage = try container.decodeIfPresent([ProjectLanguage: [String]].self, forKey: .skillsByLanguage)
             ?? standard.skillsByLanguage
+        // Rozbitá mapa se hlásí ze stejného důvodu jako rozbité `skillsByLanguage`: tiše
+        // podstrčené prázdno by znamenalo, že u skillu, ke kterému je cesta zapsaná, tlačítko
+        // `Otevřít skill ↗` prostě není — a to vypadá jako vlastnost aplikace, ne jako překlep
+        // v souboru.
+        skillFolders = try container.decodeIfPresent([String: String].self, forKey: .skillFolders)
+            ?? standard.skillFolders
         blockingCategories = try container.decodeIfPresent([String].self, forKey: .blockingCategories)
             ?? standard.blockingCategories
         // Chybějící klíč = výchozí text. **Hodnota jiného typu položí celé čtení** — `try`, ne

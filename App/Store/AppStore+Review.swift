@@ -768,6 +768,10 @@ extension AppStore {
         if let translated = await translated(run, for: pr.repo) {
             reviewRecords[pr] = try await reviews.save(translated)
         }
+        // Nové nálezy patří do součtu po reviewerech (#514) — jinak by blok na domově až do
+        // restartu tvrdil čísla z doby před tímhle během. Přepočet je tu **jednou, za oběma
+        // zápisy**: překlad je druhý zápis **téhož** běhu, takže výpis po něm dá totéž.
+        await refreshReviewerTallies()
     }
 
     /// `internal`, ne `private`, aby měření ceny jedné události průběhu (#350) sypalo do storu

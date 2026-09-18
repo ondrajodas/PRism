@@ -178,6 +178,47 @@ struct AppStoreDismissalTests {
         #expect(store.reviewRecord(for: pr)?.dismissals.isEmpty == true)
     }
 
+    // MARK: - Součet po reviewerech (#514)
+
+    @Test("Doběhlé review se do součtu promítne hned, odmítnutí taky")
+    func theTallyFollowsTheDiskWithoutARestart() async throws {
+        let store = store(reviews(), findings: [blocking("a"), blocking("b")])
+        await runReview(store)
+
+        // Po běhu: dva nálezy na živé hlavě, tedy dvakrát nerozhodnuto.
+        var tally = try #require(store.reviewerTallies.first)
+        #expect(tally.total == 2)
+        #expect(tally.undecided == 2)
+
+        let finding = try #require(store.reviewRecord(for: pr)?.findings.first)
+        await store.dismissFinding(finding, as: .invalid, for: pr)
+
+        tally = try #require(store.reviewerTallies.first)
+        #expect(tally.invalid == 1)
+        #expect(tally.undecided == 1)
+
+        // A zpátky — vrácení nálezu mezi platné jde toutéž cestou.
+        await store.restoreFinding(finding, for: pr)
+
+        #expect(store.reviewerTallies.first?.invalid == 0)
+    }
+
+    @Test("Neúspěšné odmítnutí součtem nehne — za selháním se nepřepočítává")
+    func aFailedDismissalLeavesTheTallyAlone() async throws {
+        let store = store(reviews(), findings: [blocking()])
+        await runReview(store)
+        let finding = try #require(store.reviewRecord(for: pr)?.findings.first)
+        let before = store.reviewerTallies
+        #expect(!before.isEmpty)
+        try FileManager.default.removeItem(at: layout.reviewFile(for: pr, at: finding.headSha))
+
+        await store.dismissFinding(finding, as: .invalid, for: pr)
+
+        // Soubor je pryč, takže nový výpočet by vydal prázdno — a právě proto se za selháním
+        // nepřepočítává: součet zůstává tím, co se naposledy povedlo přečíst.
+        #expect(store.reviewerTallies == before)
+    }
+
     private func summary() -> PullRequestSummary {
         PullRequestSummary(
             id: pr,

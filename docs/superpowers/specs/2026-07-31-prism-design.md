@@ -8120,6 +8120,73 @@ v pilulkách řetězu je **právě jedno** pořadové číslo, patří **hlavě*
 PR říká řádek fronty. Ověřeno vložením regrese: vrácení původního tvaru `#14451 · 2. v sérii` shodí
 všech pět případů.
 
+### Záznam rozhodnutí — `převzato` je nález nad uzavřeným případem, ne nález bez odmítnutí (#514)
+
+Zákres T5 má v pruhu čtyři dílky (*převzato / neplatí / nepatří sem / nerozhodnuto*) a nechává
+otevřené, čím se ty dva neodmítnuté od sebe liší — v datech je totiž **jen jeden** stav „nikdo to
+neodmítl“.
+
+**Rozhodnuto: `převzato` je nález, který jsem neodmítl a jehož případ je uzavřený** — záznam je
+`isStale` (hlava PR se posunula), PR zmizel ze sledovaného seznamu (`closedAt`), nebo nález přenesl
+přírůstkový běh (`Finding.carriedFrom`, #517). Ve všech třech případech nad tím nálezem něco
+proběhlo a já ho nesundal, takže jsem se o něm rozhodl mlčky. **`nerozhodnuto` je nález na živé
+hlavě**, tedy stav, ve kterém může být prostě nepřečtený.
+
+Důvod je v tom, co by ta druhá varianta tvrdila. Kdyby `převzato` znamenalo prostě „neodmítnuto“,
+byl by pruh u čerstvě doběhlého review **celý zelený** — a blok by reviewera chválil za to, že se
+na jeho nálezy ještě nikdo nepodíval. To je zrovna ten tvar chyby, kterému se aplikace vyhýbá
+všude jinde (`unknown` u čtení kódu, `bez odpovědi` u kontroly nálezů): **nevím se nesmí slít se
+souhlasím**.
+
+**Zamítnuto: `převzato` = kontrola nálezů řekla `vyřešeno`** (`RecheckStatus.Verdict.resolved`).
+Bylo by to nejsilnější tvrzení z dostupných — kód se doopravdy změnil —, jenže kontrola běží jen
+někdy, takže by drtivá většina nálezů skončila v `nerozhodnuto` a pruh by o reviewerovi neřekl nic.
+Měřidlo, které nad běžným provozem vydá pořád tutéž hodnotu, netvrdí nic (#478).
+
+**Zamítnuto taky: `převzato` = nález, který odešel v review.** Aplikace si nepamatuje, které nálezy
+šly do odeslaného review — draft se po odeslání zahazuje —, takže by se ten stav musel začít
+ukládat. To je nové pole v `ReviewRecord` kvůli jednomu bloku, a hlavně **počitadlo**: ze součtu
+nad tím, co na disku je, by se stal zápis, který se s ním umí rozejít.
+
+### Záznam rozhodnutí — věta má kromě prahu na podíl i podlahu na počet (#514)
+
+Zadání říká „věta, když je odmítnutí přes polovinu“ a **jeden práh v `Policy`**. Práh na podíl
+tedy je jeden (`Policy.reviewerDismissalThreshold`, 0,5, ostře, nad **součtem obou důvodů**).
+K němu ale přibyla druhá konstanta, a je to vlastní rozhodnutí, ne druhý práh na totéž:
+**`Policy.reviewerSignalFloor` = 5**, počet nálezů, pod kterým věta mlčí.
+
+Důvod: `3 ze 4 neplatí → skill` se čte **stejně naléhavě** jako `9 ze 14`, přitom je to jedno
+kliknutí od `2 ze 4`, tedy od stavu, ve kterém by věta zmizela. Věta přitom neříká jen číslo — má
+šipku a posílá **něco udělat** (opravit skill, přepsat pravidla repa). Imperativ nad čtyřmi nálezy
+je text, který tvrdí víc, než data unesou.
+
+Proč zrovna pět: nad čtyřmi nálezy je **pruh nad větou celý příběh** — jsou to čtyři věty, které se
+prostě přečtou, takže věta nic nešetří. Teprve tam, kde se seznam číst nevyplatí, začíná dávat smysl
+ho shrnout do imperativu. Pod podlahou se přitom **nekreslí prázdno, ale prostý součet**
+(`1 z 4 převzato`): řádek, který zmlkne úplně, vypadá jako chybějící data.
+
+**Tabulka v Nastavení práh ani podlahu nezná** a je to vědomý rozdíl: je to plný výpis, ne výstraha,
+takže pojmenuje to, čeho je nejvíc (`75 % neplatí` i nad čtyřmi nálezy). Kdo se dívá do tabulky,
+ptá se „jak to dopadá“, ne „co mám opravit teď“.
+
+### Záznam rozhodnutí — cesty ke složkám skillů jdou do `config.json`, ne do editoru v okně (#514)
+
+`Otevřít skill ↗` má otevřít složku skillu, „když ji aplikace zná z nastavení“. Aplikace ji ale
+neznala vůbec: skill se pouští **jménem** (nástroj `Skill` si ho najde sám), takže v konfiguraci
+žádná cesta nebyla.
+
+**Rozhodnuto: nový globální klíč `skillFolders`** (id skillu → cesta), **bez editoru v okně**.
+Editor by byl **nová obrazovka, kterou mockup nekreslí** — zákres 61 má v Nastavení tabulku
+s tlačítkem, ne políčka na cesty —, a přidávat do okna něco, co v návrhu není, je v tomhle repu
+jediná schvalovací brána. Klíč se tedy píše ručně do `config.json`; je to hodnota, kterou člověk
+nastaví jednou, a chová se jako `issueTextTool` do #389.
+
+**Skill bez zapsané cesty tlačítko nedostane vůbec, ne zašedle.** Zašedlé tlačítko tvrdí „tady se
+to dělá, jen teď ne“, kdežto u skillu bez cesty se to nedá nikdy — tatáž úvaha jako u akcí na cizím
+PR (`Policy.MetadataEditing.absent`). Relativní cesta se odmítá: proti čemu by byla relativní, se
+z GUI aplikace bez zděděného `PATH` říct nedá. Vlnovka se naopak **rozbaluje**, protože
+`~/.claude/skills/…` je to, co člověk do souboru napíše.
+
 ## Záznam rozhodnutí — návrh review skládá aplikace, odesílá pořád člověk (#520)
 
 Po doběhnutí všech reviewerů složí aplikace rozdělané review sama (Z1 z decku „Směry pro PRism“).

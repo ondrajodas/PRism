@@ -63,6 +63,10 @@ extension AppStore {
         do {
             reviewRecords[pr] = try await write(reviews)
             dismissalFailure = nil
+            // Součet po reviewerech (#514) se přepočítá **jen po úspěšném zápisu**: je to čistá
+            // funkce nad diskem, takže po selhání by vydala totéž co předtím — a přepočet za
+            // neúspěchem by tvrdil, že se něco změnilo.
+            await refreshReviewerTallies()
         } catch {
             dismissalFailure = "Posouzení nálezu se nepodařilo uložit. \(error.localizedDescription)"
         }

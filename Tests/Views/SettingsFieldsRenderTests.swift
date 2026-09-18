@@ -49,7 +49,13 @@ struct SettingsFieldsRenderTests {
     ///
     /// Konstanta je proto „kam až stránka sahá“, ne „jak velké je okno“ — když na stránku něco
     /// přibude, patří to i sem. A je to i **návod, jak ten test číst**, až příště zčervená.
-    private static let height: CGFloat = 3500
+    ///
+    /// **A od #514 o dalších pět set, ze stejného důvodu podruhé za sebou** — sada
+    /// `Jak si reviewery vedou` v `Review a skilly`. Že to slití zvedá, je tedy pravidlo, ne
+    /// náhoda: každá z těch tří změn (#514, #520, #524) byla na své větvi zelená a hranici
+    /// překročilo až to, co z nich vzniklo v `mainu`. **Měří se proto půlením nad slitým stavem,
+    /// ne odhadem z diffu.**
+    private static let height: CGFloat = 4000
 
     // MARK: - Text issue z trackeru
 

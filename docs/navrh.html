@@ -453,6 +453,55 @@ code {
 .block > .more-rows:hover { background: var(--panel-3); }
 .block > .more-rows .count { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
 
+/* --- blok `Reviewery · 30 dní` v pravém sloupci (sekce 61, #514) ----------------------
+   **Vlastní komponenta, ne `.leg`**, a je to rozhodnutí, ne nová kresba pro novou sekci.
+   Legenda reviewerů, která na tomhle místě stávala do #515 (`.leg` v sekcích 01 a 21), byla
+   svislý seznam `barva · jméno · počet` — tedy jedno číslo na řádek. Tady jsou na řádku čtyři
+   a rozhoduje jejich **poměr**, takže by se `.leg` musel přebít v každé ze tří buněk; a pruhu
+   ze čtyř dílků by stejně chyběla vlastní třída.
+
+   `.rv-bar` je taky vlastní, ne `.spectrum` z řádku fronty: ten je **74 b pevně a bez mezer**,
+   protože kreslí rozložení nálezů v jednom PR na plochu, kde se vedle něj nic neptá. Tady se
+   pruhy mezi řádky **porovnávají**, takže mají mezeru mezi dílky (jinak dva sousední odstíny
+   splynou) a šířku podle místa: v bloku `1fr`, v tabulce v Nastavení 120 b.
+
+   Jména jsou `rv-*`, protože prefix v dokumentu už drží komponenty o reviewerech (`.rv-list`,
+   `.rv-row`, `.rv-av`, `.rv-brief`) — a žádné z těch tří jmen si nikdo nebere jako **vnořené**,
+   takže je můžou stát naholo (past z #390). */
+.rv-stat {
+  display: grid; grid-template-columns: 1.3fr 1fr auto; gap: 12px; align-items: center;
+  padding: 8px 13px; border-bottom: 1px solid var(--line-soft); font-size: 12px;
+}
+.rv-stat:last-child { border-bottom: 0; }
+.rv-stat .who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rv-stat .who b { font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+.rv-stat .who span { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+/* Věta je vpravo a **nezalamuje se**: `9 z 14 neplatí → skill` rozdělené na dva řádky by šipku
+   utrhlo od cíle, na který ukazuje. V okně se proto v úzkém sloupci **celý řádek složí pod
+   sebe** (jméno nahoru, pruh s větou dolů) — v mockupu je jen ta široká podoba, protože rám
+   okna je tu 1060 b a užší se nekreslí nikde. */
+.rv-stat .verdict { font-size: 11.5px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+/* `warn` je `--crit` u **obou** důvodů: v bloku jde o to, že se něco ozývá. Že je to zrovna
+   `nepatří sem`, řekne slovo ve větě — a v tabulce v Nastavení nese `--stale` i barva. */
+.rv-stat .verdict.warn { color: var(--crit); }
+.rv-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--panel-3); gap: 1px; }
+.rv-bar i { display: block; height: 100%; }
+.rv-bar i.ok { background: var(--ok); }
+.rv-bar i.crit { background: var(--crit); }
+.rv-bar i.stale { background: var(--stale); }
+/* `nerozhodnuto` je ztlumená neutrální, ne pátá barva: není to stav nálezu, je to jeho
+   nepřítomnost. Plná `--ink-3` by v řadě se třemi sémantickými odstíny vypadala jako čtvrtý. */
+.rv-bar i.idle { background: var(--ink-3); opacity: .5; }
+/* Legenda **pod řádky**, ne v hlavičce: čte se až s pruhem nad sebou a čtyři popisky se vedle
+   nadpisu a odkazu do Nastavení nevejdou. Zalamuje se, protože v okně na jeho minimu má pravý
+   sloupec kolem 210 b. */
+.rv-barlegend {
+  display: flex; gap: 14px; padding: 8px 13px; font-size: 11px; color: var(--ink-3);
+  border-top: 1px solid var(--line-soft); flex-wrap: wrap;
+}
+.rv-barlegend span { display: inline-flex; align-items: center; gap: 5px; }
+.rv-barlegend i { width: 10px; height: 8px; border-radius: 2px; display: inline-block; }
+
 /* --- labely a vyžádané reviewery v pravém panelu (#390) -------------------------------
    Kreslí se jako **dvě sekce v pravém panelu** (`.pl-sec`, nad segmenty), ne jako řádek
    v hlavičce PR a ne jako třetí segment vedle `Nálezů` — obojí i se změřenými čísly je
@@ -4969,8 +5018,8 @@ tr.sel td.sg { background: var(--accent-weak); }
               </div>
 
               <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0;">
-                <!-- Pravý sloupec: dění a útrata. Blok `Nálezy podle reviewera` z něj odchází
-                     s karty — `Reviewery` postaví #514. -->
+                <!-- Pravý sloupec: dění a útrata. Blok `Nálezy podle reviewera` z něj odešel
+                     s kartami; na jeho místě je od #514 blok `Reviewery · 30 dní` — sekce 61. -->
                 <div class="block">
                   <header>
                     <span>Dění · 30 nových</span>
@@ -5908,6 +5957,162 @@ tr.sel td.sg { background: var(--accent-weak); }
           dřív, řekne nápověda — tam to stojí u jeho čísla, takže se to zaměnit nedá. Pilulku má
           i <b>základ série</b> (<em>1. v sérii</em>), jinak by se z jeho detailu pořadí nedozvěděl
           nikdo.</span>
+        </span>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="section" id="s61">
+    <div class="section-head">
+      <div class="eyebrow">61 — Přehled a Nastavení · co reviewery odmítají</div>
+      <h2>Důvod odmítnutí se ukládá u každého nálezu, ale nikde se nesčítá</h2>
+      <p class="muted">
+        <b>Dnes</b> se u odmítnutého nálezu ukládá, jestli <em>Neplatí</em> nebo <em>Nepatří sem</em>
+        (#113), a záznamy leží na disku. Nikde se ale nesčítají — takže se nedá říct, který reviewer
+        v kterém repu hlásí věci, co neplatí, a tedy <b>kam sáhnout</b>. Blok
+        <em>Nálezy podle reviewera</em>, který na tomhle místě pravého sloupce stával, počítal jen
+        nálezy, ne to, co se s nimi stalo; odešel s kartami v <a href="#s45">sekci 45</a>.
+      </p>
+      <p class="muted">
+        <b>Návrh</b>: tentýž kus obrazovky, jiná otázka. Za každou dvojici <b>reviewer × repo</b>
+        pruh <em>převzato / neplatí / nepatří sem / nerozhodnuto</em> a vpravo věta. V Nastavení, na
+        stránce <em>Review a skilly</em>, plná tabulka s procenty a s odkazem na složku skillu.
+        <b>Aplikace tím nezískává review logiku</b> — ta zůstává ve skillu; ukázat data, která
+        říkají, <b>který skill opravit</b>, je čtení.
+      </p>
+      <p class="muted">
+        <b>Dva důvody jsou dva signály, a věta to musí říct.</b> <em>Neplatí</em> znamená, že se
+        reviewer mýlí — opravit to jde <b>ve skillu</b>. <em>Nepatří sem</em> znamená, že má pravdu,
+        jen hlásí, co tenhle repozitář nechce — a to patří do <b>pravidel repa</b>. Slít je do
+        jednoho „odmítnuto“ by zahodilo zrovna tu půlku, kvůli které se na blok kouká.
+      </p>
+      <p class="muted">
+        <b>Věta mlčí, dokud ji data neunesou.</b> Ozve se, teprve když odmítnutí (oba důvody
+        dohromady) <b>přesáhnou polovinu</b> nálezů — a pojmenuje ten <b>častější</b> z nich.
+        <b>A pod pěti nálezy mlčí i tak</b>: <em>3 ze 4 neplatí → skill</em> se čte stejně naléhavě
+        jako <em>9 ze 14</em>, přitom je to jedno kliknutí od <em>2 ze 4</em>. Pod tou hranicí
+        zůstane prostý součet (<em>1 z 4 převzato</em>) — řádek, který zmlkne úplně, vypadá jako
+        chybějící data.
+      </p>
+      <p class="muted">
+        <b>„30 dní“ je filtr, ne vlastnost úklidu.</b> Záznamy se sice uklízejí po třiceti dnech, ale
+        <b>od chvíle, kdy PR zmizel ze sledovaného seznamu</b> — záznam otevřeného PR tedy leží na
+        disku libovolně dlouho. Blok proto ořezává sám, podle toho, <b>kdy běh doběhl</b>.
+        <b>Období, ve kterém nic není, blok nedostane</b>: nekreslí se vůbec, jako prázdný pruh
+        desky nebo blok <em>Odložené</em>. Rámeček s nulou nad prázdnou historií vypadá jako
+        porucha, přitom je to stav po čistém startu.
+      </p>
+    </div>
+
+    <h3>Blok v pravém sloupci domova</h3>
+    <div class="duo">
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · na místě, kde stával blok Nálezy podle reviewera</div>
+        <div class="block">
+          <header><span>Reviewery · 30 dní</span><span class="more">podrobně v Nastavení →</span></header>
+          <div class="rv-stat">
+            <div class="who"><b>security-review</b><span>job-queue · 14 nálezů</span></div>
+            <div class="rv-bar"><i class="ok" style="flex: 3;"></i><i class="crit" style="flex: 9;"></i><i class="stale" style="flex: 2;"></i></div>
+            <div class="verdict warn">9 z 14 neplatí → skill</div>
+          </div>
+          <div class="rv-stat">
+            <div class="who"><b>code-review</b><span>job-queue · 11 nálezů</span></div>
+            <div class="rv-bar"><i class="ok" style="flex: 5;"></i><i class="crit" style="flex: 1;"></i><i class="stale" style="flex: 5;"></i></div>
+            <div class="verdict warn">5 z 11 nepatří sem → pravidla repa</div>
+          </div>
+          <div class="rv-stat">
+            <div class="who"><b>code-review</b><span>PRism · 38 nálezů</span></div>
+            <div class="rv-bar"><i class="ok" style="flex: 31;"></i><i class="crit" style="flex: 3;"></i><i class="stale" style="flex: 2;"></i><i class="idle" style="flex: 2;"></i></div>
+            <div class="verdict">31 z 38 převzato</div>
+          </div>
+          <div class="rv-barlegend"><span><i style="background: var(--ok);"></i>převzato</span><span><i style="background: var(--crit);"></i>neplatí</span><span><i style="background: var(--stale);"></i>nepatří sem</span><span><i style="background: var(--ink-3); opacity: .5;"></i>nerozhodnuto</span></div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Nahoře je ten, u kterého je nejvíc co opravit</b> — řadí se podle <b>podílu</b>
+          odmítnutých, ne podle jejich počtu: pět odmítnutých ze šesti je horší než deset ze sta.
+          Do bloku se vejdou <b>čtyři</b> řádky, zbytek je v Nastavení — a odkaz na ně stojí
+          v hlavičce, takže se schovaný zbytek nedá přehlédnout.
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Řádek je dvojice reviewer × repo</b>, ne jen reviewer. Tentýž skill se na dvou repech
+          chová jinak, protože se liší kód i pravidla; jeden slitý řádek by zahodil právě ten
+          rozdíl. Jméno repa se proto sází <b>bez vlastníka</b> (<code>job-queue</code>, ne
+          <code>keboola/job-queue</code>) — do 210 bodů pravého sloupce se celé nevejde a vlastník
+          je ta půlka, která se opakuje.
+        </p>
+      </div>
+
+      <div class="pane new">
+        <div class="tag"><i></i>Návrh · Nastavení › Review a skilly › Jak si reviewery vedou</div>
+        <div class="frame flat">
+          <div class="set-body">
+            <div class="set-sec">
+              <span class="t">Jak si reviewery vedou</span>
+              <span class="note">Z odmítnutí za 30 dní, z toho, co leží na disku. <em>Neplatí</em> je věc skillu, <em>nepatří sem</em> věc pravidel repa. Nic se nepočítá při běhu — je to součet nad uloženými záznamy.</span>
+              <div class="set-card">
+                <div class="set-row"><span class="lbl" style="font-family: var(--mono); font-size: 11.5px;">security-review</span><span class="val"><span class="mono">job-queue</span><span class="rv-bar" style="width: 120px;"><i class="ok" style="flex: 3;"></i><i class="crit" style="flex: 9;"></i><i class="stale" style="flex: 2;"></i></span><span style="color: var(--crit);">64 % neplatí</span><span class="mini">Otevřít skill ↗</span></span></div>
+                <div class="set-row"><span class="lbl" style="font-family: var(--mono); font-size: 11.5px;">security-review</span><span class="val"><span class="mono">vault</span><span class="rv-bar" style="width: 120px;"><i class="ok" style="flex: 6;"></i><i class="crit" style="flex: 1;"></i></span><span>86 % převzato</span><span class="mini">Otevřít skill ↗</span></span></div>
+                <div class="set-row"><span class="lbl" style="font-family: var(--mono); font-size: 11.5px;">code-review</span><span class="val"><span class="mono">job-queue</span><span class="rv-bar" style="width: 120px;"><i class="ok" style="flex: 5;"></i><i class="crit" style="flex: 1;"></i><i class="stale" style="flex: 5;"></i></span><span style="color: var(--stale);">45 % nepatří sem</span></span></div>
+                <div class="set-row"><span class="lbl" style="font-family: var(--mono); font-size: 11.5px;">code-review</span><span class="val"><span class="mono">PRism</span><span class="rv-bar" style="width: 120px;"><i class="ok" style="flex: 31;"></i><i class="crit" style="flex: 3;"></i><i class="stale" style="flex: 2;"></i><i class="idle" style="flex: 2;"></i></span><span>82 % převzato</span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Třetí a čtvrtý řádek tlačítko nemají, a je to ten stav, ne opomenutí v kresbě.</b>
+          <code>Otevřít skill ↗</code> se kreslí jedině u skillu, ke kterému aplikace zná cestu ke
+          složce — a <b>ne zašedle</b>: zašedlé tlačítko tvrdí „tady se to dělá, jen teď ne“,
+          kdežto u skillu bez zapsané cesty se to nedá nikdy.
+        </p>
+        <p style="font-size: 13.5px; color: var(--ink-2);">
+          <b>Tabulka práh nezná</b> — je to výpis, ne výstraha, takže pojmenuje to, <b>čeho je
+          nejvíc</b>, a barvu nese ten konkrétní důvod (<code>--crit</code> u <em>neplatí</em>,
+          <code>--stale</code> u <em>nepatří sem</em>). Věta v bloku je proti tomu upozornění, takže
+          tam je <code>--crit</code> u obou.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <span class="num">205</span>
+        <span class="body">
+          <b>Data už jsou, chyběl součet</b>
+          <span>Důvod u každého odmítnutého nálezu a záznamy review na disku. Součet je <b>čistá
+          funkce</b> nad tím, co tam leží — žádné počitadlo, které by se s uloženými daty umělo
+          rozejít. Je to vědomě opačné rozhodnutí než u útraty: <b>utracené peníze zůstanou
+          utracené</b>, i když záznam zahodím, kdežto odmítnutí <b>je</b> ten záznam.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">206</span>
+        <span class="body">
+          <b>Nález se počítá jednou za pull request</b>
+          <span>Přírůstkové review přenáší nálezy z minulé hlavy na dnešní, takže týž nález leží ve
+          <b>dvou souborech</b> jednoho PR. Bez slití by dvakrát vážil zrovna ten, na kterém
+          reviewer trval — tedy nejspolehlivější z nich. Odmítnutí zapsané u <b>starší</b> hlavy
+          přitom platí dál: odmítnutý nález se nepřenáší, takže jinak by z výpisu zmizel každý
+          důvod zapsaný před posledním pushem.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">207</span>
+        <span class="body">
+          <b>Uzavřený případ je <em>převzato</em>, živý <em>nerozhodnuto</em></b>
+          <span>Nález, který visí na hlavě, která už není, nebo na PR, který ze seznamu zmizel, jsem
+          buď předal, nebo nechal projít — o obojím jsem se rozhodl tím, že jsem ho neodmítl. Nález
+          na živé hlavě může být ale prostě <b>nepřečtený</b>, a ten se za schválení vydávat nesmí:
+          jinak by reviewera chválilo to, že se na jeho nálezy nikdo nepodíval.</span>
+        </span>
+      </div>
+      <div class="note">
+        <span class="num">208</span>
+        <span class="body">
+          <b>Nic se odsud nemění</b>
+          <span>Blok i tabulka jsou <b>čtení</b>. Jediná akce je <code>Otevřít skill ↗</code>, která
+          otevře složku ve Finderu. „Chytřejší review patří do skillu“ platí dál — tohle jen
+          ukazuje, <b>do kterého</b>.</span>
         </span>
       </div>
     </div>

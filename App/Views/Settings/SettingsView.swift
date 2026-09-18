@@ -175,7 +175,7 @@ struct SettingsView: View {
                 catalog: store.repositoryCatalog,
                 time: store.time
             )
-        case .review: ReviewSettingsView(settings: settings)
+        case .review: ReviewSettingsView(settings: settings, tallies: store.reviewerTallies)
         case .diff: DiffSettingsView(settings: settings)
         case .publishing: PublishingSettingsView(settings: settings)
         case .notifications: NotificationSettingsView(settings: settings)

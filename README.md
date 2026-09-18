@@ -138,10 +138,24 @@ není vyřízená fronta**, takže do stažení seznamu se říká `Načítám f
 **na pruh, ne na pozici**: `⏎` patří `Rozhodnout`, a když je ten pruh skrytý, klávesu nepřevezme
 pruh, který zbyl nahoře.
 
-**Pravý sloupec drží dva bloky**: `Dění` (#443 — od #515 osm nejnovějších řádků toho, co se na pull
-requestech stalo, a cesta do celé sekce) a `Dneska stálo` s grafem útraty za posledních sedm dní.
-Věta pod pozdravem mluví o pruzích — `8 věcí na tahu · 4 čekají na ostatní · 1 se dá mergnout`.
-Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla.
+**Pravý sloupec drží tři bloky**: `Dění` (#443 — od #515 osm nejnovějších řádků toho, co se na pull
+requestech stalo, a cesta do celé sekce), **`Reviewery · 30 dní`** (#514) a `Dneska stálo` s grafem
+útraty za posledních sedm dní. Věta pod pozdravem mluví o pruzích — `8 věcí na tahu · 4 čekají na
+ostatní · 1 se dá mergnout`. Nic se pro to nedotahuje; všechna ta čísla už v aplikaci byla.
+
+**`Reviewery · 30 dní` (#514) říká, kolik z čího hlášení obstálo.** Za každou dvojici
+**reviewer × repo** pruh *převzato / neplatí / nepatří sem / nerozhodnuto* a vpravo věta — a když
+odmítnutí přesáhnou polovinu nálezů, pojmenuje ten častější důvod i s cílem:
+`9 z 14 neplatí → skill`, `5 z 11 nepatří sem → pravidla repa`. **Dva důvody jsou dva signály**:
+*neplatí* znamená, že se reviewer mýlí (opravit to jde ve skillu), *nepatří sem*, že má pravdu, jen
+hlásí, co tenhle repozitář nechce. **Pod pěti nálezy věta mlčí** a zůstane prostý součet — `3 ze 4
+neplatí → skill` je jedno kliknutí od `2 ze 4`. Blok se **nekreslí vůbec**, když za třicet dní nic
+neleží, a plnou tabulku s procenty a s `Otevřít skill ↗` má Nastavení › `Review a skilly`.
+
+Je to **součet nad tím, co leží na disku** — u každého odmítnutého nálezu se od #113 ukládá důvod
+—, ne počitadlo, které by se s uloženými daty umělo rozejít; nic se nepočítá při běhu a nic se
+odsud nemění. „30 dní“ je přitom **filtr podle toho, kdy běh doběhl**, ne lhůta úklidu: ta se měří
+od chvíle, kdy PR zmizel ze seznamu, takže záznam otevřeného PR leží na disku libovolně dlouho.
 
 **Deska je pohled, ne množina.** Rail dál nabízí `Frontu` a `Moje PR` jako seznamy podle autora
 a #332 platí beze změny: hromadné spuštění review, notifikace i automat čtou dál **jen cizí** PR.
@@ -149,7 +163,8 @@ Akce nad pruhem `Přečíst` je tatáž věc, jakou store spouštěl odjakživa,
 nepustí ani tehdy, když na něm review neběželo.
 
 **Co #515 zrušilo**: pět karet (`Čeká na mě`, `Blokuje`, `Moje PR`, `Rozdělaná review`,
-`Dneska stálo` jako karta), blok `Nálezy podle reviewera` (`Reviewery` postaví #514) a blok
+`Dneska stálo` jako karta), blok `Nálezy podle reviewera` (na jeho místě je od #514
+`Reviewery · 30 dní` — jiná otázka, ne návrat sedmidenního součtu nálezů) a blok
 `Co teď`, jehož akce se přestěhovaly nad pruhy. **Čísla z karet zůstávají v railu a ve stavovém
 řádku**, tedy tam, kde jsou vidět ze všech obrazovek, ne jen z domácí záložky. Osa filtru
 `Jen s blokujícím nálezem`, kterou zapínala karta `Blokuje`, zůstává — odškrtává se v nabídce
@@ -1826,7 +1841,8 @@ nepovedlo a kdy se to zjišťovalo.
 Chování se řídí souborem `config.json` v `~/Library/Application Support/PRism/`: zdroje
 PR, **další „moje“ loginy** (`ownLogins`, #330), **organizace k prohledávání**
 (`searchOrganizations`, #532), **jméno MCP nástroje, kterým se čte text issue**
-(`issueTextTool`, #345), sada skillů, **prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
+(`issueTextTool`, #345), sada skillů, **cesty ke složkám skillů** (`skillFolders`, #514),
+**prompt review**, **časový limit běhu**, blokující kategorie, výchozí režim
 review, jazyk nálezů, povolení odesílání, **skládání návrhu review** (`autoDraft`, #520),
 notifikace, výchozí pohled na diff, vzhled okna, interval
 pollingu, kolik session smí běžet naráz, denní strop automatu, rozpočet cache a model. Repozitář si
@@ -1868,6 +1884,19 @@ a to je celé rozhodnutí, které za tím je: `issueTextTool` je věc **review**
 
 `appearance` v nastavení schválně **není** — přepíná se v railu (#278) a druhé místo by se s ním
 rozešlo.
+
+**`skillFolders` (#514) je jediná globální hodnota, která pole v okně nemá — a je to záměr.** Je to
+mapa `id skillu → cesta ke složce` a slouží jedinému tlačítku: `Otevřít skill ↗` v tabulce
+`Jak si reviewery vedou` (Nastavení › `Review a skilly`). Skill se pouští **jménem**, takže jeho
+složku aplikace odjinud nezná; zákres té tabulky ale kreslí tlačítko, ne políčka na cesty — a co
+v návrhu nakreslené není, se do okna nepřidává. Píše se to tedy ručně do souboru:
+
+```json
+"skillFolders": { "code-review:code-review": "~/.claude/skills/code-review" }
+```
+
+Vlnovka se rozbaluje, relativní cesta se odmítá, a **skill, ke kterému cesta zapsaná není,
+tlačítko nedostane vůbec** — ne zašedle.
 
 **Organizace k prohledávání** (#532) jsou na stránce `Zdroje PR`, pod `Moje loginy` — je to seznam
 míst, ve kterých se hledají **repozitáře podle jména**, ne další zdroj fronty. Kreslí se jako

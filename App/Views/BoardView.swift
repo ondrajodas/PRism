@@ -15,6 +15,10 @@ struct BoardView: View {
     @Bindable var store: AppStore
     /// Otevře PR jako záložku — kliknutí do pruhu je tu hlavní pohyb.
     let open: (PRIdentifier) -> Void
+    /// Otevře okno nastavení (#514) — blok `Reviewery` je jediné místo desky, které vede jinam
+    /// než do railu. **Chodí shora**, protože `Settings` scénu umí otevřít jedině view
+    /// z environmentu, ne store; je to tatáž cesta, jakou to má prázdný stav `Moje PR`.
+    var openSettings: () -> Void = {}
 
     /// Ptá se potvrzení na hromadné spuštění review.
     ///
@@ -204,6 +208,7 @@ struct BoardView: View {
                 // nic není, nekreslí se a sloupec vypadá jako dřív.
                 snoozedBlock(snoozed)
                 activity(board.activity)
+                reviewersBlock
                 spendBlock
             }
         }
@@ -536,6 +541,52 @@ struct BoardView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Reviewery (#514)
+
+    /// Blok `Reviewery · 30 dní` — kolik z čího hlášení obstálo.
+    ///
+    /// **Je to ten blok, který v pravém sloupci stával jako `Nálezy podle reviewera`, jen jiná
+    /// otázka.** Ten počítal, kolik čeho reviewer našel, a odešel s kartami v #515; tenhle
+    /// odpovídá na „kolik z toho platilo“, tedy na to, kvůli čemu se na takové číslo kouká.
+    ///
+    /// **Nekreslí se, když za třicet dní nic není** — jako prázdný pruh desky (#515) a blok
+    /// `Odložené` (#512). Rámeček s nulou nad prázdnou historií vypadá jako porucha, přitom to
+    /// je stav po čistém startu.
+    ///
+    /// **Strop jako u ostatních bloků a cesta k celku v hlavičce**: v Nastavení je plná tabulka
+    /// s procenty, takže odkaz v hlavičce je ta odpověď na „a co zbytek“.
+    @ViewBuilder private var reviewersBlock: some View {
+        let tallies = store.reviewerTallies
+        if !tallies.isEmpty {
+            let shown = Array(tallies.prefix(Policy.reviewerTallyBoardLimit))
+            // **Počet v hlavičce jedině tehdy, když se něco nevešlo** — a je to odchylka od
+            // zákresu o jedno číslo, ne o kresbu: návrh počet nemá, protože kreslí tři řádky ze
+            // tří. Jenže bez něj by dvanáct dvojic `reviewer × repo` vypadalo jako čtyři a odkaz
+            // `podrobně v Nastavení` by byl jediná stopa po zbytku — tedy tvrzení o seznamu, které
+            // v něm není vidět. Když je vidět všechno, hlavička sedí na návrh doslova.
+            block(
+                "Reviewery · 30 dní",
+                count: tallies.count > shown.count ? tallies.count : nil,
+                action: { settingsLink }
+            ) {
+                ReviewerTallyRowsView(tallies: shown)
+            }
+        }
+    }
+
+    /// Odkaz vpravo v hlavičce bloku `Reviewery`. **Vlastní, ne `sectionLink`**: ten přepíná rail
+    /// uvnitř okna, kdežto tohle otevře jiné okno — a `RailSection.switchHelp` by o něm mluvil
+    /// nepravdu.
+    private var settingsLink: some View {
+        Button(action: openSettings) {
+            Text(verbatim: "podrobně v Nastavení →")
+                .font(.system(size: 11.5, weight: .medium))
+                .lineLimit(1)
+        }
+        .buttonStyle(AccentLinkButtonStyle())
+        .help("Otevře Nastavení › Review a skilly, kde je plná tabulka")
     }
 
     // MARK: - Dění

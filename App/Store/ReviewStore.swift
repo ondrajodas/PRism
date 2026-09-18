@@ -280,6 +280,25 @@ actor ReviewStore {
         return loaded
     }
 
+    /// Součet odmítnutí po reviewerech (#514) — **jediné místo, kde se skládá**.
+    ///
+    /// Čte se **celý výpis**, ne `Policy.currentRecords`: odmítnutí leží u nálezu, tedy u hlavy,
+    /// na které vznikl, a odmítnutý nález se navíc na novou hlavu nepřenáší (#517). Nad
+    /// současnými záznamy by tedy z bloku zmizel každý důvod zapsaný před posledním pushem — a to
+    /// je zrovna ta část, kvůli které blok vznikl.
+    ///
+    /// **Vrací se jenom součet**, ne záznamy: je to pár řádků na dvojici `(repo, reviewer)`, takže
+    /// z aktoru neodchází celý výpis kvůli osmi číslům.
+    ///
+    /// Nečitelný **soubor** se přeskakuje a nepočítá — kolik jich je, hlásí `load()` při startu
+    /// a druhé číslo o téže věci by v okně bylo k nerozeznání od prvního. Selhání **celého čtení**
+    /// se naopak hlásí (`throws`, ne `try?`): prázdný součet se v okně čte jako „za třicet dní se
+    /// nic nenašlo“, a to je nad nepřečteným výpisem lež. Co s tím volající udělá, je u
+    /// `AppStore.refreshReviewerTallies()`.
+    func reviewerTallies(now: Date) throws -> [ReviewerTally] {
+        Policy.reviewerTallies(from: try load().records, now: now)
+    }
+
     /// Úklid: záznamy PR, které už ve sledovaném seznamu nejsou, po lhůtě zmizí.
     ///
     /// - Parameter openPullRequests: co je teď v seznamu. Pouštět to smí jen po **úspěšném**
